@@ -19,6 +19,7 @@ create-update-environment:
 create-environment: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 create-environment: SELECTED_ENVIRONMENT_FILE_NAME = ${ENVIRONMENT_FILE_NAME}
 create-environment: create-update-environment
+	micromamba run --name ${ENVIRONMENT_NAME} poetry install
 
 check-format: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 check-format:
