@@ -4,4 +4,3 @@ dependencies:
   - git==2.47.*
   - poetry=2.0.*
   - gh=2.66.*
-  - python=3.13.*
