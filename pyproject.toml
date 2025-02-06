@@ -1,0 +1,18 @@
+[project]
+name = "oceanbench"
+version = "0.0.1-alpha"
+description = ""
+authors = [
+    {name = "Simon Lyobard",email = "slyobard@mercator-ocean.fr"},
+    {name = "Mathis Bertin",email = "mbertin@mercator-ocean.fr"},
+    {name = "Quentin Gaudel",email = "qgaudel@mercator-ocean.fr"},
+]
+readme = "README.md"
+requires-python = "3.13.*"
+dependencies = [
+    "click (>=8.1.8,<9.0.0)"
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
