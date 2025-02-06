@@ -9,7 +9,7 @@ SHELL := /bin/bash
 MICROMAMBA_ACTIVATE=eval "$$(micromamba shell hook --shell=bash)" && micromamba activate
 ACTIVATE_ENVIRONMENT=${MICROMAMBA_ACTIVATE} ${ENVIRONMENT_NAME}
 
-create-update-environment:
+_create-update-environment:
 	export CONDARC=.condarc
 	export PIP_CONFIG_FILE=pip.conf
 	(micromamba env update --file ${SELECTED_ENVIRONMENT_FILE_NAME} --name ${SELECTED_ENVIRONMENT_NAME} \
@@ -18,7 +18,7 @@ create-update-environment:
 
 create-environment: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 create-environment: SELECTED_ENVIRONMENT_FILE_NAME = ${ENVIRONMENT_FILE_NAME}
-create-environment: create-update-environment
+create-environment: _create-update-environment
 	micromamba run --name ${ENVIRONMENT_NAME} poetry install
 
 check-format: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
