@@ -2,9 +2,11 @@ from pathlib import Path
 import click
 
 from oceanbench.command_line_interface.common_options import (
-    latitude_option,
     lead_option,
-    longitude_option,
+    maximum_latitude_option,
+    maximum_longitude_option,
+    minimum_latitude_option,
+    minimum_longitude_option,
     output_path_option,
 )
 from oceanbench.core.process.calc_density_core import calc_density_core
@@ -17,20 +19,26 @@ from oceanbench.core.process.calc_density_core import calc_density_core
     required=True,
 )
 @lead_option
-@longitude_option
-@latitude_option
+@minimum_latitude_option
+@maximum_latitude_option
+@minimum_longitude_option
+@maximum_longitude_option
 @output_path_option
 def calc_density(
-    dataset_path: Path,
+    glonet_dataset_path: Path,
     lead: int,
-    latitude: float,
-    longitude: float,
+    minimum_latitude: float,
+    maximum_latitude: float,
+    minimum_longitude: float,
+    maximum_longitude: float,
     output_path: Path,
 ):
     return calc_density_core(
-        dataset_path=dataset_path,
+        dataset_path=glonet_dataset_path,
         lead=lead,
-        lat=latitude,
-        lon=longitude,
+        minimum_latitude=minimum_latitude,
+        maximum_latitude=maximum_latitude,
+        minimum_longitude=minimum_longitude,
+        maximum_longitude=maximum_longitude,
         output_path=output_path,
     )
