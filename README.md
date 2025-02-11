@@ -17,12 +17,12 @@ oceanbench plot plot-pointwise-evaluation --rmse-path glonet.npy --depth 2
 ### Density
 Get density:
 ```sh
-oceanbench process calc-density --glonet-dataset-path ~/Downloads/glonet-data/glonet/2024-01-03.nc --minimum-longitude -100 --maximum-longitude -40 --minimum-latitude 40.24 --maximum-latitude 40.26 --lead 0
+oceanbench process calc-density --glonet-dataset-path ~/Downloads/glonet-data/glonet/2024-01-03.nc --minimum-longitude -100 --maximum-longitude -40 --minimum-latitude 15 --maximum-latitude 50 --lead 0
 ```
 
 Plot density:
 ```sh
-oceanbench plot plot-density --density-datasets-path output.nc
+oceanbench plot plot-density --density-dataset-path output.nc
 ```
 
 ## Proposed architecture for the package
