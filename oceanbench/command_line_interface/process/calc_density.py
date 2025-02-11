@@ -1,6 +1,12 @@
 from pathlib import Path
 import click
 
+from oceanbench.command_line_interface.common_options import (
+    latitude_option,
+    lead_option,
+    longitude_option,
+    output_path_option,
+)
 from oceanbench.core.process.calc_density_core import calc_density_core
 
 
@@ -10,24 +16,10 @@ from oceanbench.core.process.calc_density_core import calc_density_core
     type=click.Path(exists=True, path_type=Path),
     required=True,
 )
-@click.option(
-    "--lead",
-    type=click.INT,
-)
-@click.option(
-    "--latitude",
-    type=click.FLOAT,
-)
-@click.option(
-    "--longitude",
-    type=click.FLOAT,
-)
-@click.option(
-    "-o",
-    "--output-path",
-    type=click.Path(path_type=Path),
-    default=Path("./output.nc"),
-)
+@lead_option
+@longitude_option
+@latitude_option
+@output_path_option
 def calc_density(
     dataset_path: Path,
     lead: int,

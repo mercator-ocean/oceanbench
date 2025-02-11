@@ -1,6 +1,7 @@
 from pathlib import Path
 import click
 
+from oceanbench.command_line_interface.common_options import lead_option, output_path_option
 from oceanbench.core.process.calc_geo_core import calc_geo_core
 
 
@@ -10,20 +11,12 @@ from oceanbench.core.process.calc_geo_core import calc_geo_core
     type=click.Path(exists=True, path_type=Path),
     required=True,
 )
-@click.option(
-    "--lead",
-    type=click.INT,
-)
+@lead_option
 @click.option(
     "--variable",
     type=click.STRING,
 )
-@click.option(
-    "-o",
-    "--output-path",
-    type=click.Path(path_type=Path),
-    default=Path("./output.nc"),
-)
+@output_path_option
 def calc_geo(
     dataset_path: Path,
     lead: int,
