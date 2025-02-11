@@ -254,6 +254,40 @@ unicode = ["unicodedata2 (>=15.1.0)"]
 woff = ["brotli (>=1.0.1)", "brotlicffi (>=0.8.0)", "zopfli (>=0.1.4)"]
 
 [[package]]
+name = "gsw"
+version = "3.6.19"
+description = "Gibbs Seawater Oceanographic Package of TEOS-10"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "gsw-3.6.19-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:5ed8b28fc4371197f3d680bd0706098ca82de3caed83fcde0f7ea181d06fd859"},
+    {file = "gsw-3.6.19-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:5b92a2c6dbda72d93d44fb616dfda9715b5209ee510c44b3a87980b094484f19"},
+    {file = "gsw-3.6.19-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:21a1e64233f178954a3be86d47dd7ea65bb0143a1d1f933445da554693cfc3c8"},
+    {file = "gsw-3.6.19-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ab63ddf958edf293471a362e1d61b6b15e6977c5a67f2c58313d5c1d301e8d7f"},
+    {file = "gsw-3.6.19-cp310-cp310-win_amd64.whl", hash = "sha256:36bbabd321666e792785700c52cef8b89fc335767918fbf707c1c74a1147eb29"},
+    {file = "gsw-3.6.19-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:818a2cbe610b9ab34fc05144ea02d836fc85e646f784e992821a5be36474f0dd"},
+    {file = "gsw-3.6.19-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:037fc1f9dff0176c83ffe1c283ca764771246d9c00b91263dcee5479b91f3dad"},
+    {file = "gsw-3.6.19-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b27fe8cd46bb76a501809e2b12ac7bc6cd343512fc9a15f3e4b20115d11397f8"},
+    {file = "gsw-3.6.19-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fdedb58ab2f0a33cc5c00e1de672cb37621ec975232b9df1dbae5c1e89f1c57e"},
+    {file = "gsw-3.6.19-cp311-cp311-win_amd64.whl", hash = "sha256:e660b0218806e1651a776b311eb63c17d8175259cf31f226894dd0c024d56942"},
+    {file = "gsw-3.6.19-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:5dff941ad55d2342b037ae3afdf74fd08ddb4f6db76a66fc543c9110e738606b"},
+    {file = "gsw-3.6.19-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:6ae0000fe6a4802c2767ccb4cc77fc21c1e80d39fd5102f9ecae66ad9607a92d"},
+    {file = "gsw-3.6.19-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:320b93696d54659d7c0ded7a46911074a5000b65189d6f2d74e9d1f203476d64"},
+    {file = "gsw-3.6.19-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5a570e4439725e8d2667e1037a053a7911128e76aee15882a058a459cf806cac"},
+    {file = "gsw-3.6.19-cp312-cp312-win_amd64.whl", hash = "sha256:bcf0eb380f22eb22e44c9521db78be760a1126fbffd1af21b317726968eca90c"},
+    {file = "gsw-3.6.19-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:4ea4050b02bfce185d418c2a3130cce852403e80e0f00e7f4c8d61e26217005e"},
+    {file = "gsw-3.6.19-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:0c93f1e4856c37a1eb261c5dfe13d5340a0e29fa1e5ac15dc999c0a5d12c2c14"},
+    {file = "gsw-3.6.19-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:623899a96d1c0063ee020bd2ee6553f997b801a59f5271930ddd05e28305255a"},
+    {file = "gsw-3.6.19-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:779f81ecd4d68c036446d1951a899f55a707aa1333a687abdd13468360ba8da5"},
+    {file = "gsw-3.6.19-cp39-cp39-win_amd64.whl", hash = "sha256:ee5a2b2c33cc7a051090988fad0387c629acf2c0be8a00ba9959f440e6d045a5"},
+    {file = "gsw-3.6.19.tar.gz", hash = "sha256:3595b686458d852444ae6f1946d260a7c8f16ba457e9061aa953cf417927423f"},
+]
+
+[package.dependencies]
+numpy = ">=1.21"
+
+[[package]]
 name = "kiwisolver"
 version = "1.4.8"
 description = "A fast implementation of the Cassowary constraint solver"
@@ -815,4 +849,4 @@ viz = ["cartopy", "matplotlib", "nc-time-axis", "seaborn"]
 [metadata]
 lock-version = "2.1"
 python-versions = "3.13.*"
-content-hash = "e83a19d68cae723399ca089d4da004c61f8ae0537430ee53866bb0f036740aee"
+content-hash = "b8724967985ee6381f0092eb09755a940f971afd9610bcdeb76c437a78d22399"

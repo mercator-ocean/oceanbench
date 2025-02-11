@@ -1,7 +1,7 @@
 from pathlib import Path
 import click
 
-from oceanbench.core.pointwise_evaluation import glonet_pointwise_evaluation
+from oceanbench.core.evaluate.rmse_core import glonet_pointwise_evaluation_core
 
 
 @click.command()
@@ -19,4 +19,4 @@ from oceanbench.core.pointwise_evaluation import glonet_pointwise_evaluation
 )
 @click.option("-o", "--output-rmse", type=click.Path(path_type=Path), default=Path("."))
 def pointwise_evaluation(glonet_datasets_path: Path, glorys_datasets_path: Path, output_rmse: Path):
-    return glonet_pointwise_evaluation(glonet_datasets_path, glorys_datasets_path, output_rmse)
+    return glonet_pointwise_evaluation_core(glonet_datasets_path, glorys_datasets_path, output_rmse)

@@ -55,7 +55,7 @@ def get_glonet_rmse_for_given_days(
     return glonet_rmse
 
 
-def glonet_pointwise_evaluation(glonet_datasets_path: Path, glorys_datasets_path: Path, output_rmse: Path):
+def glonet_pointwise_evaluation_core(glonet_datasets_path: Path, glorys_datasets_path: Path, output_rmse: Path):
     click.echo("Getting glonet pointwise evaluation")
     wednesdays_2024 = _get_wednesdays(2024)
 
