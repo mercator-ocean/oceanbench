@@ -1,5 +1,30 @@
 # Oceanbench
 
+## Usage examples
+
+### RMSE
+Get RMSE:
+```sh
+oceanbench evaluate pointwise-evaluation --glonet-datasets-path ~/Downloads/glonet-data/glonet --glorys-datasets-path ~/Downloads/glonet-data/glorys14
+```
+Each folder needs to have a least one dataset, with the format `YYYY-MM-DD.nc`
+
+Then you can plot the RMSE with:
+```sh
+oceanbench plot plot-pointwise-evaluation --rmse-path glonet.npy --depth 2
+```
+
+### Density
+Get density:
+```sh
+oceanbench process calc-density --glonet-dataset-path ~/Downloads/glonet-data/glonet/2024-01-03.nc --minimum-longitude -100 --maximum-longitude -40 --minimum-latitude 40.24 --maximum-latitude 40.26 --lead 0
+```
+
+Plot density:
+```sh
+oceanbench plot plot-density --density-datasets-path output.nc
+```
+
 ## Proposed architecture for the package
 
 ```sh

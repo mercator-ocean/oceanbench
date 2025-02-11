@@ -5,7 +5,7 @@ import xarray
 
 
 def plot_density_core(dataset_path: Path, plot_output_path: Path, show_plot: bool):
-    dataset = xarray.open_dataset(dataset_path)
+    dataset = xarray.open_dataarray(dataset_path)
 
     _, ax = pyplot.subplots(1, 2, figsize=(8, 4))
     im = dataset[:, 0, :].plot(ax=ax[0])
@@ -14,7 +14,7 @@ def plot_density_core(dataset_path: Path, plot_output_path: Path, show_plot: boo
     ax[0].invert_yaxis()
 
     im = dataset[0].plot(ax=ax[1])
-    colorbar = im.colorbar
+    colorbar = im.colorbar  # TODO: not working
     colorbar.set_label("density GS $kg/m^{3}$")
 
     pyplot.tight_layout()

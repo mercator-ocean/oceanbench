@@ -1,5 +1,7 @@
 import click
 
+from oceanbench.command_line_interface.process.calc_density import calc_density
+from oceanbench.command_line_interface.process.calc_geo import calc_geo
 from oceanbench.command_line_interface.process.calc_mld import calc_mld
 
 
@@ -9,3 +11,5 @@ def process():
 
 
 process.add_command(calc_mld)
+process.add_command(calc_density)
+process.add_command(calc_geo)

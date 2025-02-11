@@ -3,11 +3,19 @@ import gsw
 import xarray
 
 
-def calc_density_core(dataset_path: Path, lead: int, lat: float, lon: float, output_path: Path):
+def calc_density_core(
+    dataset_path: Path,
+    lead: int,
+    minimum_latitude: float,
+    maximum_latitude: float,
+    minimum_longitude: float,
+    maximum_longitude: float,
+    output_path: Path,
+):
     dataset = xarray.open_dataset(dataset_path)
     ds = dataset.isel(
-        lat=(dataset["lat"] > lat[0]) & (dataset["lat"] < lat[1]),
-        lon=(dataset["lon"] > lon[0]) & (dataset["lon"] < lon[1]),
+        lat=(dataset["lat"] > minimum_latitude) & (dataset["lat"] < maximum_latitude),
+        lon=(dataset["lon"] > minimum_longitude) & (dataset["lon"] < maximum_longitude),
     )
     temperature = ds["thetao"][lead]
     salinity = ds["so"][lead]
