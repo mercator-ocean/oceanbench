@@ -60,47 +60,21 @@ def glonet_pointwise_evaluation(glonet_datasets_path: Path, glorys_datasets_path
     wednesdays_2024 = _get_wednesdays(2024)
 
     gnet = {"uo": [], "vo": [], "so": [], "thetao": [], "zos": []}
-
+    variables_withouth_zos = ["uo", "vo", "so", "thetao"]
     mindepth = 0
     maxdepth = 21
     for depth in range(mindepth, maxdepth):
         print(f"{depth=}")
-        gnet["uo"].append(
-            get_glonet_rmse_for_given_days(
-                depth,
-                "uo",
-                wednesdays_2024,
-                glonet_datasets_path,
-                glorys_datasets_path,
+        for variable in variables_withouth_zos:
+            gnet[variable].append(
+                get_glonet_rmse_for_given_days(
+                    depth,
+                    variable,
+                    wednesdays_2024,
+                    glonet_datasets_path,
+                    glorys_datasets_path,
+                )
             )
-        )
-        gnet["vo"].append(
-            get_glonet_rmse_for_given_days(
-                depth,
-                "vo",
-                wednesdays_2024,
-                glonet_datasets_path,
-                glorys_datasets_path,
-            )
-        )
-        gnet["so"].append(
-            get_glonet_rmse_for_given_days(
-                depth,
-                "so",
-                wednesdays_2024,
-                glonet_datasets_path,
-                glorys_datasets_path,
-            )
-        )
-        gnet["thetao"].append(
-            get_glonet_rmse_for_given_days(
-                depth,
-                "thetao",
-                wednesdays_2024,
-                glonet_datasets_path,
-                glorys_datasets_path,
-            )
-        )
         if depth < 1:
             gnet["zos"].append(
                 get_glonet_rmse_for_given_days(
@@ -111,4 +85,5 @@ def glonet_pointwise_evaluation(glonet_datasets_path: Path, glorys_datasets_path
                     glorys_datasets_path,
                 )
             )
+
     numpy.save(output_rmse / "glonet.npy", gnet)
