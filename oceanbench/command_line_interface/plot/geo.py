@@ -1,7 +1,7 @@
 from pathlib import Path
 import click
 
-from oceanbench.core.plot.geo import plot_geo_core
+from oceanbench.core.plot.geo_core import plot_geo_core
 
 
 @click.command(help="Plot the MLD")

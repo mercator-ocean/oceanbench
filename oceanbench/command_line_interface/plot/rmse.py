@@ -1,7 +1,7 @@
 from pathlib import Path
 import click
 
-from oceanbench.core.plot.rmse import (
+from oceanbench.core.plot.rmse_core import (
     plot_depth_rmse_average_on_time,
     plot_temporal_rmse_for_average_depth,
     plot_temporal_rmse_for_depth,

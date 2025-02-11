@@ -1,7 +1,7 @@
 from pathlib import Path
 import click
 
-from oceanbench.core.plot.density import plot_density_core
+from oceanbench.core.plot.density_core import plot_density_core
 
 
 @click.command(help="Plot the MLD")

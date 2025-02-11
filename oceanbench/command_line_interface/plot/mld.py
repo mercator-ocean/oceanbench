@@ -1,7 +1,7 @@
 from pathlib import Path
 import click
 
-from oceanbench.core.plot.mld import plot_mld_core
+from oceanbench.core.plot.mld_core import plot_mld_core
 
 
 @click.command(help="Plot the MLD")
