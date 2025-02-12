@@ -10,7 +10,6 @@ authors = [
 readme = "README.md"
 requires-python = "3.13.*"
 dependencies = [
-    "click (>=8.1.8,<9.0.0)",
     "xarray (>=2025.1.2,<2026.0.0)",
     "matplotlib (>=3.10.0,<4.0.0)",
     "netcdf4 (>=1.7.2,<2.0.0)",
@@ -21,6 +20,3 @@ dependencies = [
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
-
-[project.scripts]
-oceanbench = "oceanbench.cli:run"

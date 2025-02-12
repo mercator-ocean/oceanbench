@@ -4,8 +4,7 @@ from matplotlib import pyplot
 import xarray
 
 
-def plot_density_core(dataset_path: Path, plot_output_path: Path, show_plot: bool):
-    dataarray = xarray.open_dataarray(dataset_path)
+def plot_density_core(dataarray: xarray.DataArray, plot_output_path: Path, show_plot: bool):
     _, ax = pyplot.subplots(1, 2, figsize=(8, 4))
     im = dataarray[:, 0, :].plot(ax=ax[0])
     colorbar = im.colorbar

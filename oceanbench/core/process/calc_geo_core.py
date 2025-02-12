@@ -3,7 +3,7 @@ import numpy
 import xarray
 
 
-def calc_geo_core(glonet_path: Path, var: str, lead: int, output_path: Path) -> xarray.Dataset:
+def calc_geo_core(glonet_path: Path, var: str, lead: int) -> xarray.Dataset:
     dataset = xarray.open_dataset(glonet_path)
 
     ssh = dataset[var][lead].values
@@ -32,5 +32,4 @@ def calc_geo_core(glonet_path: Path, var: str, lead: int, output_path: Path) -> 
     dataset["u_geo"] = (("lat", "lon"), u_geo)
     dataset["v_geo"] = (("lat", "lon"), v_geo)
 
-    dataset.to_netcdf(output_path)
     return dataset
