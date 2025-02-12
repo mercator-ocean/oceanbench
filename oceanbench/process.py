@@ -1,7 +1,8 @@
 from pathlib import Path
 
-
+from oceanbench.core.process.calc_mld_core import calc_mld_core
 from oceanbench.core.process.calc_density_core import calc_density_core
+from oceanbench.core.process.calc_geo_core import calc_geo_core
 
 
 def calc_density(
@@ -22,3 +23,21 @@ def calc_density(
         maximum_longitude=maximum_longitude,
         output_path=output_path,
     )
+
+
+def calc_geo(
+    dataset_path: Path,
+    lead: int,
+    variable: str,
+    output_path: Path,
+):
+    return calc_geo_core(
+        dataset_path=dataset_path,
+        lead=lead,
+        var=variable,
+        output_path=output_path,
+    )
+
+
+def calc_mld(glonet_dataset_path: Path, lead: int, output_path: Path):
+    return calc_mld_core(glonet_dataset_path, lead, output_path)
