@@ -54,24 +54,3 @@ oceanbench/
 ```
 
 Each folder of the `oceanbench/command_line_interface/` corresponds to an `oceanbench` command (`evaluate`, `plot`, `process`). In these folders, we define the command line interface with `Click` that calls a core function in `oceanbench/core/`. The idea is to decoupled the logic from the CLI to the core domain.
-
-### The common_options.py file
-
-Contains de list of reusable options for `Click`.
-Each option is named `<OPTION_NAME>_option` and can be called with `@<OPTION_NAME>_option` as a decorator of a command. Then pass the `<OPTION_NAME>` to the parameters of the command function.
-
-For example, define your option like this:
-```python
-def foo_bar_option(function):
-    return click.option(
-        "--foo-bar",
-        help="A useful helper.",
-    )(function)
-```
-
-And call it like that:
-```python
-@foo_bar_option
-def my_command(foo_bar):
-    ...
-```

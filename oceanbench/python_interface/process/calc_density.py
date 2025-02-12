@@ -1,29 +1,9 @@
 from pathlib import Path
-import click
 
-from oceanbench.command_line_interface.common_options import (
-    lead_option,
-    maximum_latitude_option,
-    maximum_longitude_option,
-    minimum_latitude_option,
-    minimum_longitude_option,
-    output_path_option,
-)
+
 from oceanbench.core.process.calc_density_core import calc_density_core
 
 
-@click.command(help="Calculate mld")
-@click.option(
-    "--glonet-dataset-path",
-    type=click.Path(exists=True, path_type=Path),
-    required=True,
-)
-@lead_option
-@minimum_latitude_option
-@maximum_latitude_option
-@minimum_longitude_option
-@maximum_longitude_option
-@output_path_option
 def calc_density(
     glonet_dataset_path: Path,
     lead: int,
