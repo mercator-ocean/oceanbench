@@ -6,11 +6,10 @@ import xarray
 from matplotlib import pyplot
 
 
-def plot_temporal_rmse_for_depth(rmse_path: Path, depth: int, plot_output_path: Path, show_plot: bool):
+def plot_temporal_rmse_for_depth(glonet, depth: int, plot_output_path: Path, show_plot: bool):
     seaborn.reset_defaults()
     seaborn.set_context("talk", font_scale=0.7)
 
-    glonet = numpy.load(rmse_path, allow_pickle=True)
     _, ax = pyplot.subplots(2, 3, figsize=(15, 6))
 
     variables = ["uo", "vo", "so", "thetao", "zos"]

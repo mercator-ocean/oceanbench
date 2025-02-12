@@ -1,7 +1,7 @@
 import datetime
 import multiprocessing
 from pathlib import Path
-from typing import List
+from typing import Any, List
 
 import numpy
 import xarray
@@ -54,7 +54,7 @@ def get_glonet_rmse_for_given_days(
     return glonet_rmse
 
 
-def glonet_pointwise_evaluation_core(glonet_datasets_path: Path, glorys_datasets_path: Path, output_rmse: Path):
+def glonet_pointwise_evaluation_core(glonet_datasets_path: Path, glorys_datasets_path: Path) -> numpy.ndarray[Any]:
     wednesdays_2024 = _get_wednesdays(2024)
 
     gnet = {"uo": [], "vo": [], "so": [], "thetao": [], "zos": []}
@@ -83,5 +83,4 @@ def glonet_pointwise_evaluation_core(glonet_datasets_path: Path, glorys_datasets
                     glorys_datasets_path,
                 )
             )
-
-    numpy.save(output_rmse / "glonet.npy", gnet)
+    return numpy.array(gnet)

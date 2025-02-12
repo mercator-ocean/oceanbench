@@ -10,9 +10,8 @@ def calc_density_core(
     maximum_latitude: float,
     minimum_longitude: float,
     maximum_longitude: float,
-    output_path: Path,
-):
-    dataset = xarray.open_dataset(dataset_path)
+) -> xarray.Dataset:
+    dataset = xarray.open_dataset(dataset_path, engine="netcdf4")
     ds = dataset.isel(
         lat=(dataset["lat"] > minimum_latitude) & (dataset["lat"] < maximum_latitude),
         lon=(dataset["lon"] > minimum_longitude) & (dataset["lon"] < maximum_longitude),
@@ -62,5 +61,4 @@ def calc_density_core(
         vectorize=True,
     )
 
-    density.to_netcdf(output_path)
     return density

@@ -4,7 +4,7 @@ import gsw
 import xarray
 
 
-def calc_mld_core(glonet_path: Path, lead: int, output_path: Path) -> xarray.Dataset:
+def calc_mld_core(glonet_path: Path, lead: int) -> xarray.Dataset:
     glonet_dataset = xarray.open_dataset(glonet_path)
     density_threshold = 0.03  # kg/m^3 threshold for MLD definition
     temperature = glonet_dataset["thetao"][lead]
@@ -26,5 +26,4 @@ def calc_mld_core(glonet_path: Path, lead: int, output_path: Path) -> xarray.Dat
     glonet_dataset["MLD"] = mld_depth
     glonet_dataset["MLD"] = glonet_dataset["MLD"].where(temperature_mask)
 
-    glonet_dataset.to_netcdf(output_path)
     return glonet_dataset

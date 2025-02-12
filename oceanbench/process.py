@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import xarray
+
 from oceanbench.core.process.calc_mld_core import calc_mld_core
 from oceanbench.core.process.calc_density_core import calc_density_core
 from oceanbench.core.process.calc_geo_core import calc_geo_core
@@ -12,8 +14,7 @@ def calc_density(
     maximum_latitude: float,
     minimum_longitude: float,
     maximum_longitude: float,
-    output_path: Path,
-):
+) -> xarray.Dataset:
     return calc_density_core(
         dataset_path=glonet_dataset_path,
         lead=lead,
@@ -21,7 +22,6 @@ def calc_density(
         maximum_latitude=maximum_latitude,
         minimum_longitude=minimum_longitude,
         maximum_longitude=maximum_longitude,
-        output_path=output_path,
     )
 
 
@@ -29,15 +29,16 @@ def calc_geo(
     dataset_path: Path,
     lead: int,
     variable: str,
-    output_path: Path,
-):
+) -> xarray.Dataset:
     return calc_geo_core(
         dataset_path=dataset_path,
         lead=lead,
         var=variable,
-        output_path=output_path,
     )
 
 
-def calc_mld(glonet_dataset_path: Path, lead: int, output_path: Path):
-    return calc_mld_core(glonet_dataset_path, lead, output_path)
+def calc_mld(glonet_dataset_path: Path, lead: int) -> xarray.Dataset:
+    return calc_mld_core(
+        glonet_dataset_path=glonet_dataset_path,
+        lead=lead,
+    )

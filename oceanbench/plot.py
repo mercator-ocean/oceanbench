@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import xarray
+
 from oceanbench.core.plot.density_core import plot_density_core
 from oceanbench.core.plot.geo_core import plot_geo_core
 from oceanbench.core.plot.mld_core import plot_mld_core
@@ -10,9 +12,9 @@ from oceanbench.core.plot.rmse_core import (
 )
 
 
-def plot_density(density_dataset_path: Path, plot_output_path: Path, show_plot: bool):
+def plot_density(density_dataarray: xarray.DataArray, plot_output_path: Path, show_plot: bool):
     return plot_density_core(
-        dataset_path=density_dataset_path,
+        dataarray=density_dataarray,
         plot_output_path=plot_output_path,
         show_plot=show_plot,
     )
