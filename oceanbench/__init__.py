@@ -1,6 +1,6 @@
-import evaluate
-import process
-import plot
+from . import evaluate
+from . import process
+from . import plot
 
 __all__ = [
     "evaluate",
