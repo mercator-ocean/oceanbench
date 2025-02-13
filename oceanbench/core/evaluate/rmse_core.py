@@ -6,6 +6,8 @@ from typing import Any, List
 import numpy
 import xarray
 
+from oceanbench.process import get_particle_file
+
 
 def _get_wednesdays(year: int) -> List[datetime.date]:
     d = datetime.date(year, 1, 1)
@@ -84,3 +86,42 @@ def glonet_pointwise_evaluation_core(glonet_datasets_path: Path, glorys_datasets
                 )
             )
     return numpy.array(gnet)
+
+
+def get_euclidean_distance_core(
+    first_dataset: xarray.Dataset,
+    second_dataset: xarray.Dataset,
+    minimum_latitude: float,
+    maximum_latitude: float,
+    minimum_longitude: float,
+    maximum_longitude: float,
+):
+    get_particle_file(
+        first_dataset.isel(depth=0),
+        minimum_latitude=minimum_latitude,
+        maximum_latitude=maximum_latitude,
+        minimum_longitude=minimum_longitude,
+        maximum_longitude=maximum_longitude,
+    )
+    get_particle_file(
+        second_dataset.isel(depth=0),
+        minimum_latitude=minimum_latitude,
+        maximum_latitude=maximum_latitude,
+        minimum_longitude=minimum_longitude,
+        maximum_longitude=maximum_longitude,
+    )
+    gnet_traj = xarray.open_dataset("gnet_traj.nc")
+    ref_traj = xarray.open_dataset("ref_traj.nc")
+
+    # euclidean distance
+    e_d = numpy.sqrt(
+        ((gnet_traj.x.data - ref_traj.x.data) * 111.32) ** 2
+        + (
+            111.32
+            * numpy.cos(numpy.radians(gnet_traj.lat.data).reshape(1, gnet_traj.lat.shape[0], 1))
+            * (gnet_traj.y.data - ref_traj.y.data)
+        )
+        ** 2
+    )
+    e_d = numpy.nanmean(e_d, axis=(1, 2))
+    return e_d

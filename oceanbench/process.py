@@ -5,6 +5,7 @@ import xarray
 from oceanbench.core.process.calc_mld_core import calc_mld_core
 from oceanbench.core.process.calc_density_core import calc_density_core
 from oceanbench.core.process.calc_geo_core import calc_geo_core
+from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
 
 
 def calc_density(
@@ -41,4 +42,18 @@ def calc_mld(glonet_dataset_path: Path, lead: int) -> xarray.Dataset:
     return calc_mld_core(
         glonet_dataset_path=glonet_dataset_path,
         lead=lead,
+    )
+
+
+def get_particle_file(
+    dataset: xarray.Dataset,
+    minimum_latitude: float,
+    maximum_latitude: float,
+    minimum_longitude: float,
+    maximum_longitude: float,
+) -> xarray.Dataset:
+    return get_particle_file_core(
+        dataset=dataset,
+        latzone=[minimum_latitude, maximum_latitude],
+        lonzone=[minimum_longitude, maximum_longitude],
     )

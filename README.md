@@ -34,6 +34,28 @@ oceanbench.plot.plot_density(
 )
 ```
 
+### Euclidean distance
+```python
+from oceanbench.evaluate import get_euclidean_distance
+from oceanbench.plot import plot_euclidean_distance
+
+import xarray
+
+glonet_dataset = xarray.open_dataset("glonet/2024-01-03.nc")
+glorys_dataset = xarray.open_dataset("glorys14/2024-01-03.nc")
+
+euclidean_distance = get_euclidean_distance(
+    first_dataset=glonet_dataset,
+    second_dataset=glorys_dataset,
+    minimum_latitude=466,
+    maximum_latitude=633,
+    minimum_longitude=400,
+    maximum_longitude=466,
+)
+
+plot_euclidean_distance(euclidean_distance)
+```
+
 ## Proposed architecture for the package
 
 ```sh

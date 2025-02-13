@@ -64,7 +64,10 @@ def plot_temporal_rmse_for_average_depth(rmse_path: Path, plot_output_path: Path
 
 
 def plot_depth_rmse_average_on_time(
-    rmse_path: Path, glonet_datasets_path: Path, plot_output_path: Path, show_plot: bool
+    rmse_path: Path,
+    glonet_datasets_path: Path,
+    plot_output_path: Path,
+    show_plot: bool,
 ):
     gdepth = xarray.open_dataset(glonet_datasets_path).depth.values
 
@@ -87,3 +90,19 @@ def plot_depth_rmse_average_on_time(
 
     if show_plot:
         pyplot.show()
+
+
+def plot_euclidean_distance_core(e_d):
+    _, ax = pyplot.subplots(1, 1, figsize=(4, 4))
+
+    ax.plot(e_d, label="glonet", linestyle="-")
+    ax.grid(True, which="both", linestyle="--", linewidth=0.5)
+    ax.legend()
+    ax.set_title("euclidean distance")
+    ax.set_xlabel("Forecast Day")
+    ax.set_ylabel("RMSE [km]")
+    ax.set_xticks([0, 2, 4, 6, 8])
+    ax.set_xticklabels(["1 ", "3 ", "5 ", "7 ", "9 "], rotation=0)
+
+    pyplot.tight_layout()
+    pyplot.show()
