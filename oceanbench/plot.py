@@ -7,6 +7,7 @@ from oceanbench.core.plot.geo_core import plot_geo_core
 from oceanbench.core.plot.mld_core import plot_mld_core
 from oceanbench.core.plot.rmse_core import (
     plot_depth_rmse_average_on_time,
+    plot_euclidean_distance_core,
     plot_temporal_rmse_for_average_depth,
     plot_temporal_rmse_for_depth,
 )
@@ -43,3 +44,7 @@ def plot_pointwise_evaluation_depth_for_average_time(
     show_plot: bool,
 ):
     return plot_depth_rmse_average_on_time(rmse_path, glonet_datasets_path, plot_output_path, show_plot)
+
+
+def plot_euclidean_distance(euclidean_distance):
+    return plot_euclidean_distance_core(euclidean_distance)
