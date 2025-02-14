@@ -88,6 +88,17 @@ glonet = xarray.open_dataset("data/glonet/2024-01-03.nc")
 plot_vortocity(glonet)
 ```
 
+### Mass conservation
+```python
+import xarray
+
+from oceanbench.process import mass_conservation
+
+glonet = xarray.open_dataset("data/glonet/2024-01-03.nc")
+mean_div_time_series = mass_conservation(glonet, 0, deg_resolution=0.25)  # should be close to zero
+print(mean_div_time_series.data)  #time-dependent scores
+```
+
 ## Proposed architecture for the package
 
 ```sh
