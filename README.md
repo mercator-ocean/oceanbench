@@ -68,6 +68,16 @@ _, gglonet_sc = analyze_energy_cascade(glonet, "uo", 0, 1 / 4)
 plot_energy_cascade(gglonet_sc)
 ```
 
+### Kinetic energy
+```python
+import xarray
+
+from oceanbench.plot import plot_kinetic_energy
+
+glonet = xarray.open_dataset("data/glonet/2024-01-03.nc")
+plot_kinetic_energy(glonet)
+```
+
 ## Proposed architecture for the package
 
 ```sh

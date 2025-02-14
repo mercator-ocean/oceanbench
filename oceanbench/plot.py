@@ -4,6 +4,7 @@ import xarray
 
 from oceanbench.core.plot.density_core import plot_density_core
 from oceanbench.core.plot.geo_core import plot_geo_core
+from oceanbench.core.plot.kinetic_energy_core import plot_kinetic_energy_core
 from oceanbench.core.plot.mld_core import plot_mld_core
 from oceanbench.core.plot.rmse_core import (
     plot_depth_rmse_average_on_time,
@@ -14,7 +15,11 @@ from oceanbench.core.plot.rmse_core import (
 )
 
 
-def plot_density(density_dataarray: xarray.DataArray, plot_output_path: Path, show_plot: bool):
+def plot_density(
+    density_dataarray: xarray.DataArray,
+    plot_output_path: Path,
+    show_plot: bool,
+):
     return plot_density_core(
         dataarray=density_dataarray,
         plot_output_path=plot_output_path,
@@ -53,3 +58,7 @@ def plot_euclidean_distance(euclidean_distance):
 
 def plot_energy_cascade(gglonet_sc):
     return plot_energy_cascade_core(gglonet_sc)
+
+
+def plot_kinetic_energy(dataset: xarray.Dataset):
+    return plot_kinetic_energy_core(dataset)

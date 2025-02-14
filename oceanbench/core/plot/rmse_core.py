@@ -109,7 +109,7 @@ def plot_euclidean_distance_core(e_d):
 
 
 def plot_energy_cascade_core(gglonet_sc):
-    f, ax = pyplot.subplots(1, 1, figsize=(8, 3))
+    _, ax = pyplot.subplots(1, 1, figsize=(8, 3))
 
     ax.plot(gglonet_sc, label="glonet")
     # ax[1].legend()
