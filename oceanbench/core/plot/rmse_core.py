@@ -106,3 +106,20 @@ def plot_euclidean_distance_core(e_d):
 
     pyplot.tight_layout()
     pyplot.show()
+
+
+def plot_energy_cascade_core(gglonet_sc):
+    f, ax = pyplot.subplots(1, 1, figsize=(8, 3))
+
+    ax.plot(gglonet_sc, label="glonet")
+    # ax[1].legend()
+    ax.grid(True, which="both", linestyle="--", linewidth=0.5)
+    # ax[0].set_title(var)
+    ax.set_xlabel("Forecast Day")
+    ax.set_ylabel("Small-Scale Energy")
+    ax.set_xticks([0, 2, 4, 6, 8])
+    ax.set_xticklabels(["1 ", "3 ", "5 ", "7 ", "9 "], rotation=0)
+    ax.set_title("Global")
+
+    pyplot.tight_layout()
+    pyplot.show()

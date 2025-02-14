@@ -123,3 +123,63 @@ def get_euclidean_distance_core(
     )
     e_d = numpy.nanmean(e_d, axis=(1, 2))
     return e_d
+
+
+def analyze_energy_cascade_core(
+    glonet: xarray.Dataset,
+    var,
+    depth,
+    spatial_resolution=None,
+    small_scale_cutoff_km=100,
+):
+
+    def compute_radial_spectrum(power_spectrum):
+        ny, nx = power_spectrum.shape
+        y, x = numpy.ogrid[:ny, :nx]
+        center = (ny // 2, nx // 2)
+        r = numpy.sqrt((y - center[0]) ** 2 + (x - center[1]) ** 2).astype(int)
+
+        radial_spectrum = numpy.zeros(r.max() + 1)
+        for i in range(r.max() + 1):
+            radial_spectrum[i] = power_spectrum[r == i].mean()
+
+        return radial_spectrum
+
+    def fill_nans(data):
+        nan_mask = numpy.isnan(data)
+        if nan_mask.any():
+            filled_data = numpy.copy(data)
+            filled_data[nan_mask] = numpy.nanmean(data)
+            return filled_data
+        return data
+
+    #####
+    vorticity = glonet[var][:, depth, :, :]
+    n_times, _, _ = vorticity.shape
+
+    time_spectra = []
+
+    # process each time step
+    for t in range(n_times):
+        vorticity_clean = fill_nans(vorticity[t, :, :])
+        vorticity_fft = numpy.fft.fft2(vorticity_clean)
+        power_spectrum = numpy.abs(numpy.fft.fftshift(vorticity_fft)) ** 2
+        radial_spectrum = compute_radial_spectrum(power_spectrum)
+        time_spectra.append(radial_spectrum)
+
+    time_spectra = numpy.array(time_spectra)
+
+    # define the small-scale cutoff based on spatial resolution
+    if spatial_resolution:
+        # Determine the cutoff wavenumber corresponding to small_scale_cutoff_km
+        grid_spacing_km = spatial_resolution * 111  # 1deg ~ 111 km
+        small_scale_cutoff_index = int(small_scale_cutoff_km / grid_spacing_km)
+    else:
+        small_scale_cutoff_index = len(time_spectra[0]) // 2  # default: high-wavenumber half
+
+    # compute small-scale energy fraction
+    small_scale_energy = time_spectra[:, small_scale_cutoff_index:].sum(axis=1)
+    total_energy = time_spectra.sum(axis=1)
+    small_scale_fraction = small_scale_energy / total_energy
+
+    return time_spectra, small_scale_fraction
