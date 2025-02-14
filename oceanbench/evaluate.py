@@ -1,10 +1,11 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numpy
 import xarray
 
 from oceanbench.core.evaluate.rmse_core import (
+    analyze_energy_cascade_core,
     get_euclidean_distance_core,
     glonet_pointwise_evaluation_core,
 )
@@ -36,4 +37,20 @@ def get_euclidean_distance(
         maximum_latitude=maximum_latitude,
         minimum_longitude=minimum_longitude,
         maximum_longitude=maximum_longitude,
+    )
+
+
+def analyze_energy_cascade(
+    dataset: xarray.Dataset,
+    var: str,
+    depth: float,
+    spatial_resolution: Optional[float] = None,
+    small_scale_cutoff_km: Optional[float] = 100,
+):
+    return analyze_energy_cascade_core(
+        glonet=dataset,
+        var=var,
+        depth=depth,
+        spatial_resolution=spatial_resolution,
+        small_scale_cutoff_km=small_scale_cutoff_km,
     )

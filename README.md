@@ -56,6 +56,18 @@ euclidean_distance = get_euclidean_distance(
 plot_euclidean_distance(euclidean_distance)
 ```
 
+### Energy cascading
+```python
+import xarray
+from oceanbench.evaluate import analyze_energy_cascade
+from oceanbench.plot import plot_energy_cascade
+
+glonet = xarray.open_dataset("data/glonet/2024-01-03.nc")
+_, gglonet_sc = analyze_energy_cascade(glonet, "uo", 0, 1 / 4)
+
+plot_energy_cascade(gglonet_sc)
+```
+
 ## Proposed architecture for the package
 
 ```sh
