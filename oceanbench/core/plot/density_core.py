@@ -1,10 +1,8 @@
-from pathlib import Path
-
 from matplotlib import pyplot
 import xarray
 
 
-def plot_density_core(dataarray: xarray.DataArray, plot_output_path: Path, show_plot: bool):
+def plot_density_core(dataarray: xarray.DataArray):
     _, ax = pyplot.subplots(1, 2, figsize=(8, 4))
     im = dataarray[:, 0, :].plot(ax=ax[0])
     colorbar = im.colorbar
@@ -17,7 +15,4 @@ def plot_density_core(dataarray: xarray.DataArray, plot_output_path: Path, show_
     colorbar.set_label("density GS $kg/m^{3}$")
 
     pyplot.tight_layout()
-    pyplot.savefig(plot_output_path)
-
-    if show_plot:
-        pyplot.show()
+    pyplot.show()

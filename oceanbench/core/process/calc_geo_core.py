@@ -1,11 +1,8 @@
-from pathlib import Path
 import numpy
 import xarray
 
 
-def calc_geo_core(glonet_path: Path, var: str, lead: int) -> xarray.Dataset:
-    dataset = xarray.open_dataset(glonet_path)
-
+def calc_geo_core(dataset: xarray.Dataset, var: str, lead: int) -> xarray.Dataset:
     ssh = dataset[var][lead].values
     lat = dataset["lat"].values
     lon = dataset["lon"].values

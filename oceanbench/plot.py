@@ -16,24 +16,22 @@ from oceanbench.core.plot.rmse_core import (
 from oceanbench.core.plot.vortocity_core import plot_vortocity_core
 
 
-def plot_density(
-    density_dataarray: xarray.DataArray,
-    plot_output_path: Path,
-    show_plot: bool,
-):
+def plot_density(dataarray: xarray.DataArray):
     return plot_density_core(
-        dataarray=density_dataarray,
-        plot_output_path=plot_output_path,
-        show_plot=show_plot,
+        dataarray=dataarray,
     )
 
 
-def plot_geo(geo_datasets_path: Path):
-    return plot_geo_core(geo_datasets_path)
+def plot_geo(dataset: xarray.Dataset):
+    return plot_geo_core(
+        dataset=dataset,
+    )
 
 
-def plot_mld(mld_datasets_path: Path):
-    return plot_mld_core(mld_datasets_path)
+def plot_mld(dataset: xarray.Dataset):
+    return plot_mld_core(
+        dataset=dataset,
+    )
 
 
 def plot_pointwise_evaluation(rmse_path: Path, depth: int, plot_output_path: Path, show_plot: bool):

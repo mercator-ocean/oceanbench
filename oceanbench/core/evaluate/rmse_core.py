@@ -56,7 +56,9 @@ def get_glonet_rmse_for_given_days(
     return glonet_rmse
 
 
-def glonet_pointwise_evaluation_core(glonet_datasets_path: Path, glorys_datasets_path: Path) -> numpy.ndarray[Any]:
+def glonet_pointwise_evaluation_core(
+    glonet_datasets_path: xarray.Dataset, glorys_datasets_path: xarray.Dataset
+) -> numpy.ndarray[Any]:
     wednesdays_2024 = _get_wednesdays(2024)
 
     gnet = {"uo": [], "vo": [], "so": [], "thetao": [], "zos": []}
