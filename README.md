@@ -3,16 +3,47 @@
 ## Usage examples
 
 ### RMSE
-Get and plot RMSE:
+Plot temporal RMSE for depth 2:
 ```python
+import xarray
 import oceanbench
-from pathlib import Path
 
+glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
+glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
 nparray = oceanbench.evaluate.pointwise_evaluation(
-    glonet_datasets_path="data/glonet",
-    glorys_datasets_path="data/glorys14",
+    glonet_datasets=[glonet_dataset],
+    glorys_datasets=[glorys_dataset],
 )
-oceanbench.plot.plot_pointwise_evaluation(nparray, 2, Path("output.png"), True)
+oceanbench.plot.plot_pointwise_evaluation(rmse_dataarray=nparray, depth=2)
+```
+
+Plot temporal RMSE averaged over all depths:
+```python
+import xarray
+import oceanbench
+
+glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
+glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
+nparray = oceanbench.evaluate.pointwise_evaluation(
+    glonet_datasets=[glonet_dataset],
+    glorys_datasets=[glorys_dataset],
+)
+oceanbench.plot.plot_pointwise_evaluation_for_average_depth(rmse_dataarray=nparray)
+```
+
+Plot depth rmses (averaged over all lead time):
+```python
+import xarray
+import oceanbench
+
+glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
+glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
+nparray = oceanbench.evaluate.pointwise_evaluation(
+    glonet_datasets=[glonet_dataset],
+    glorys_datasets=[glorys_dataset],
+)
+dataset_depth_values = glonet_dataset.depth.values
+oceanbench.plot.plot_pointwise_evaluation_depth_for_average_time(rmse_dataarray=nparray, dataset_depth_values=dataset_depth_values)
 ```
 
 ### MLD

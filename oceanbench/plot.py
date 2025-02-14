@@ -1,5 +1,6 @@
-from pathlib import Path
+from typing import Any
 
+import numpy
 import xarray
 
 from oceanbench.core.plot.density_core import plot_density_core
@@ -34,21 +35,27 @@ def plot_mld(dataset: xarray.Dataset):
     )
 
 
-def plot_pointwise_evaluation(rmse_path: Path, depth: int, plot_output_path: Path, show_plot: bool):
-    return plot_temporal_rmse_for_depth(rmse_path, depth, plot_output_path, show_plot)
+def plot_pointwise_evaluation(rmse_dataarray: numpy.ndarray[Any], depth: int):
+    return plot_temporal_rmse_for_depth(
+        rmse_dataarray=rmse_dataarray,
+        depth=depth,
+    )
 
 
-def plot_pointwise_evaluation_for_average_depth(rmse_path: Path, plot_output_path: Path, show_plot: bool):
-    return plot_temporal_rmse_for_average_depth(rmse_path, plot_output_path, show_plot)
+def plot_pointwise_evaluation_for_average_depth(rmse_dataarray: numpy.ndarray[Any]):
+    return plot_temporal_rmse_for_average_depth(
+        rmse_dataarray=rmse_dataarray,
+    )
 
 
 def plot_pointwise_evaluation_depth_for_average_time(
-    rmse_path: Path,
-    glonet_datasets_path: Path,
-    plot_output_path: Path,
-    show_plot: bool,
+    rmse_dataarray: numpy.ndarray[Any],
+    dataset_depth_values: numpy.ndarray,
 ):
-    return plot_depth_rmse_average_on_time(rmse_path, glonet_datasets_path, plot_output_path, show_plot)
+    return plot_depth_rmse_average_on_time(
+        rmse_dataarray=rmse_dataarray,
+        dataset_depth_values=dataset_depth_values,
+    )
 
 
 def plot_euclidean_distance(euclidean_distance):

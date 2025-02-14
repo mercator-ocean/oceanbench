@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 import numpy
 import xarray
@@ -11,11 +11,11 @@ from oceanbench.core.evaluate.rmse_core import (
 
 
 def pointwise_evaluation(
-    glonet_datasets_path: xarray.Dataset, glorys_datasets_path: xarray.Dataset
+    glonet_datasets: List[xarray.Dataset], glorys_datasets: List[xarray.Dataset]
 ) -> numpy.ndarray[Any]:
     return glonet_pointwise_evaluation_core(
-        glonet_datasets_path=glonet_datasets_path,
-        glorys_datasets_path=glorys_datasets_path,
+        glonet_datasets=glonet_datasets,
+        glorys_datasets=glorys_datasets,
     )
 
 
