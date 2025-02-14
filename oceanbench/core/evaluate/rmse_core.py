@@ -96,22 +96,20 @@ def get_euclidean_distance_core(
     minimum_longitude: float,
     maximum_longitude: float,
 ):
-    get_particle_file(
+    gnet_traj = get_particle_file(
         first_dataset.isel(depth=0),
         minimum_latitude=minimum_latitude,
         maximum_latitude=maximum_latitude,
         minimum_longitude=minimum_longitude,
         maximum_longitude=maximum_longitude,
     )
-    get_particle_file(
+    ref_traj = get_particle_file(
         second_dataset.isel(depth=0),
         minimum_latitude=minimum_latitude,
         maximum_latitude=maximum_latitude,
         minimum_longitude=minimum_longitude,
         maximum_longitude=maximum_longitude,
     )
-    gnet_traj = xarray.open_dataset("gnet_traj.nc")
-    ref_traj = xarray.open_dataset("ref_traj.nc")
 
     # euclidean distance
     e_d = numpy.sqrt(

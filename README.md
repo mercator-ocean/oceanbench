@@ -9,8 +9,8 @@ import oceanbench
 from pathlib import Path
 
 nparray = oceanbench.evaluate.pointwise_evaluation(
-    glonet_datasets_path="~/Downloads/glonet-data/glonet",
-    glorys_datasets_path="~/Downloads/glonet-data/glorys14",
+    glonet_datasets_path="data/glonet",
+    glorys_datasets_path="data/glorys14",
 )
 oceanbench.plot.plot_pointwise_evaluation(nparray, 2, Path("output.png"), True)
 ```
@@ -22,7 +22,7 @@ import oceanbench
 from pathlib import Path
 
 dataarray = oceanbench.process.calc_density(
-    glonet_dataset_path=Path("~/Downloads/glonet-data/glonet/2024-01-03.nc"),
+    glonet_dataset_path=Path("data/glonet/2024-01-03.nc"),
     lead=1,
     minimum_longitude=-100,
     maximum_longitude=-40,
@@ -41,8 +41,8 @@ from oceanbench.plot import plot_euclidean_distance
 
 import xarray
 
-glonet_dataset = xarray.open_dataset("glonet/2024-01-03.nc")
-glorys_dataset = xarray.open_dataset("glorys14/2024-01-03.nc")
+glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
+glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
 
 euclidean_distance = get_euclidean_distance(
     first_dataset=glonet_dataset,

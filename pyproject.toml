@@ -10,12 +10,13 @@ authors = [
 readme = "README.md"
 requires-python = "3.13.*"
 dependencies = [
-    "xarray (>=2025.1.2,<2026.0.0)",
+    "xarray==2025.1.2",
     "matplotlib (>=3.10.0,<4.0.0)",
     "netcdf4 (>=1.7.2,<2.0.0)",
     "seaborn (>=0.13.2,<0.14.0)",
     "gsw (>=3.6.19,<4.0.0)",
     "parcels (>=3.1.2,<4.0.0)",
+    "zarr==2.18.4",
 ]
 
 [build-system]
