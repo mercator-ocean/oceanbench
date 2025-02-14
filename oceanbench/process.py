@@ -6,6 +6,7 @@ from oceanbench.core.process.calc_mld_core import calc_mld_core
 from oceanbench.core.process.calc_density_core import calc_density_core
 from oceanbench.core.process.calc_geo_core import calc_geo_core
 from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
+from oceanbench.core.process.utils import mass_conservation_core
 
 
 def calc_density(
@@ -57,3 +58,7 @@ def get_particle_file(
         latzone=[minimum_latitude, maximum_latitude],
         lonzone=[minimum_longitude, maximum_longitude],
     )
+
+
+def mass_conservation(dataset: xarray.Dataset, depth: float, deg_resolution: float = 0.25) -> xarray.DataArray:
+    return mass_conservation_core(dataset=dataset, depth=depth, deg_resolution=deg_resolution)
