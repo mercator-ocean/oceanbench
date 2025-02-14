@@ -78,6 +78,16 @@ glonet = xarray.open_dataset("data/glonet/2024-01-03.nc")
 plot_kinetic_energy(glonet)
 ```
 
+### Vorticity
+```python
+import xarray
+
+from oceanbench.plot import plot_vortocity
+
+glonet = xarray.open_dataset("data/glonet/2024-01-03.nc")
+plot_vortocity(glonet)
+```
+
 ## Proposed architecture for the package
 
 ```sh
