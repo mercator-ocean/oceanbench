@@ -1,80 +1,81 @@
 # Oceanbench
 
-## Usage examples
+<!-- BEGINNING of a block automatically generated with make update-readme -->
+## Oceanbench analysis example with GLONET forecasts
 
-### RMSE
-Plot temporal RMSE for depth 2:
+### Installation
+
+
 ```python
-import xarray
-import oceanbench
+!git clone git@github.com:mercator-ocean/oceanbench.git
+```
 
+
+```python
+!cd oceanbench/ && pip install --editable .
+```
+
+
+```python
+import oceanbench
+import xarray
+```
+
+### Fetch dataset to benchmark and reference dataset (GLORYS)
+
+
+```python
+!mc cp -r s3/project-oceanbench/glo data/
+```
+
+
+```python
 glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
 glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
+```
+
+### RMSE analysis
+
+
+```python
 nparray = oceanbench.evaluate.pointwise_evaluation(
     glonet_datasets=[glonet_dataset],
     glorys_datasets=[glorys_dataset],
 )
 oceanbench.plot.plot_pointwise_evaluation(rmse_dataarray=nparray, depth=2)
-```
-
-Plot temporal RMSE averaged over all depths:
-```python
-import xarray
-import oceanbench
-
-glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
-glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
-nparray = oceanbench.evaluate.pointwise_evaluation(
-    glonet_datasets=[glonet_dataset],
-    glorys_datasets=[glorys_dataset],
-)
 oceanbench.plot.plot_pointwise_evaluation_for_average_depth(rmse_dataarray=nparray)
+oceanbench.plot.plot_pointwise_evaluation_depth_for_average_time(rmse_dataarray=nparray, dataset_depth_values=glonet_dataset.depth.values)
 ```
 
-Plot depth rmses (averaged over all lead time):
-```python
-import xarray
-import oceanbench
+### MLD analysis
 
-glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
-glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
-nparray = oceanbench.evaluate.pointwise_evaluation(
-    glonet_datasets=[glonet_dataset],
-    glorys_datasets=[glorys_dataset],
+
+```python
+dataset = oceanbench.process.calc_mld(
+    dataset=glonet_dataset,
+    lead=1,
 )
-dataset_depth_values = glonet_dataset.depth.values
-oceanbench.plot.plot_pointwise_evaluation_depth_for_average_time(rmse_dataarray=nparray, dataset_depth_values=dataset_depth_values)
-```
-
-### MLD
-```python
-import xarray
-import oceanbench
-
-dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
-dataset = oceanbench.process.calc_mld(dataset=dataset, lead=1)
 oceanbench.plot.plot_mld(dataset=dataset)
 ```
 
-### Geo
-```python
-import xarray
-import oceanbench
+### Geo analysis
 
-dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
-dataset = oceanbench.process.calc_geo(dataset=dataset, lead=1, variable="zos")
+
+```python
+dataset = oceanbench.process.calc_geo(
+    dataset=glonet_dataset,
+    lead=1,
+    variable="zos",
+)
 oceanbench.plot.plot_geo(dataset=dataset)
 ```
 
-### Density
-Get density:
-```python
-import xarray
-import oceanbench
+### Density analysis
 
-dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
+
+```python
 dataarray = oceanbench.process.calc_density(
-    dataset=dataset,
+    dataset=glonet_dataset,
     lead=1,
     minimum_longitude=-100,
     maximum_longitude=-40,
@@ -84,17 +85,11 @@ dataarray = oceanbench.process.calc_density(
 oceanbench.plot.plot_density(dataarray=dataarray)
 ```
 
-### Euclidean distance
+### Euclidean distance analysis
+
+
 ```python
-from oceanbench.evaluate import get_euclidean_distance
-from oceanbench.plot import plot_euclidean_distance
-
-import xarray
-
-glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
-glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
-
-euclidean_distance = get_euclidean_distance(
+euclidean_distance = oceanbench.evaluate.get_euclidean_distance(
     first_dataset=glonet_dataset,
     second_dataset=glorys_dataset,
     minimum_latitude=466,
@@ -103,73 +98,37 @@ euclidean_distance = get_euclidean_distance(
     maximum_longitude=466,
 )
 
-plot_euclidean_distance(euclidean_distance)
+oceanbench.plot.plot_euclidean_distance(euclidean_distance)
 ```
 
-### Energy cascading
+### Energy cascading analysis
+
+
 ```python
-import xarray
-from oceanbench.evaluate import analyze_energy_cascade
-from oceanbench.plot import plot_energy_cascade
+_, gglonet_sc = oceanbench.evaluate.analyze_energy_cascade(glonet_dataset, "uo", 0, 1 / 4)
 
-glonet = xarray.open_dataset("data/glonet/2024-01-03.nc")
-_, gglonet_sc = analyze_energy_cascade(glonet, "uo", 0, 1 / 4)
-
-plot_energy_cascade(gglonet_sc)
+oceanbench.plot.plot_energy_cascade(gglonet_sc)
 ```
 
-### Kinetic energy
+### Kinetic energy analysis
+
+
 ```python
-import xarray
-
-from oceanbench.plot import plot_kinetic_energy
-
-glonet = xarray.open_dataset("data/glonet/2024-01-03.nc")
-plot_kinetic_energy(glonet)
+oceanbench.plot.plot_kinetic_energy(glonet_dataset)
 ```
 
-### Vorticity
+### Vorticity analysis
+
+
 ```python
-import xarray
-
-from oceanbench.plot import plot_vortocity
-
-glonet = xarray.open_dataset("data/glonet/2024-01-03.nc")
-plot_vortocity(glonet)
+oceanbench.plot.plot_vortocity(glonet_dataset)
 ```
 
-### Mass conservation
+### Mass conservation analysis
+
+
 ```python
-import xarray
-
-from oceanbench.process import mass_conservation
-
-glonet = xarray.open_dataset("data/glonet/2024-01-03.nc")
-mean_div_time_series = mass_conservation(glonet, 0, deg_resolution=0.25)  # should be close to zero
+mean_div_time_series = oceanbench.process.mass_conservation(glonet_dataset, 0, deg_resolution=0.25)  # should be close to zero
 print(mean_div_time_series.data)  #time-dependent scores
 ```
-
-## Proposed architecture for the package
-
-```sh
-oceanbench/
-├── core # Set of core domain functions and utilities
-│   ├── evaluate
-│   │   └── rmse_core.py
-│   ├── __init__.py
-│   ├── plot
-│   │   ├── density_core.py
-│   │   ├── geo_core.py
-│   │   ├── mld_core.py
-│   │   └── rmse_core.py
-│   └── process
-│       ├── calc_density_core.py
-│       ├── calc_geo_core.py
-│       └── calc_mld_core.py
-├── __init__.py
-├── evaluate.py # Python interface for evaluate module
-├── plot.py # Python interface for plot module
-└── process.py # Python interface for process module
-```
-
-The `evaluate.py`, `plot.py` and `process.py` files are the entry-points of each module.
+<!-- END of a block automatically generated with make update-readme -->
