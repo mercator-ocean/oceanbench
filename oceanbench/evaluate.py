@@ -1,5 +1,4 @@
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 import numpy
 import xarray
@@ -11,14 +10,12 @@ from oceanbench.core.evaluate.rmse_core import (
 )
 
 
-def pointwise_evaluation(glonet_datasets_path: Path | str, glorys_datasets_path: Path | str) -> numpy.ndarray[Any]:
-    if isinstance(glonet_datasets_path, str):
-        glonet_datasets_path = Path(glonet_datasets_path)
-    if isinstance(glorys_datasets_path, str):
-        glorys_datasets_path = Path(glorys_datasets_path)
+def pointwise_evaluation(
+    glonet_datasets: List[xarray.Dataset], glorys_datasets: List[xarray.Dataset]
+) -> numpy.ndarray[Any]:
     return glonet_pointwise_evaluation_core(
-        glonet_datasets_path=glonet_datasets_path,
-        glorys_datasets_path=glorys_datasets_path,
+        glonet_datasets=glonet_datasets,
+        glorys_datasets=glorys_datasets,
     )
 
 

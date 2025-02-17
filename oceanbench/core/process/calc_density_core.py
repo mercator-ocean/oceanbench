@@ -1,17 +1,15 @@
-from pathlib import Path
 import gsw
 import xarray
 
 
 def calc_density_core(
-    dataset_path: Path,
+    dataset: xarray.Dataset,
     lead: int,
     minimum_latitude: float,
     maximum_latitude: float,
     minimum_longitude: float,
     maximum_longitude: float,
 ) -> xarray.Dataset:
-    dataset = xarray.open_dataset(dataset_path, engine="netcdf4")
     ds = dataset.isel(
         lat=(dataset["lat"] > minimum_latitude) & (dataset["lat"] < maximum_latitude),
         lon=(dataset["lon"] > minimum_longitude) & (dataset["lon"] < maximum_longitude),

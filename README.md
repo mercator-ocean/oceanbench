@@ -3,35 +3,85 @@
 ## Usage examples
 
 ### RMSE
-Get and plot RMSE:
+Plot temporal RMSE for depth 2:
 ```python
+import xarray
 import oceanbench
-from pathlib import Path
 
+glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
+glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
 nparray = oceanbench.evaluate.pointwise_evaluation(
-    glonet_datasets_path="data/glonet",
-    glorys_datasets_path="data/glorys14",
+    glonet_datasets=[glonet_dataset],
+    glorys_datasets=[glorys_dataset],
 )
-oceanbench.plot.plot_pointwise_evaluation(nparray, 2, Path("output.png"), True)
+oceanbench.plot.plot_pointwise_evaluation(rmse_dataarray=nparray, depth=2)
+```
+
+Plot temporal RMSE averaged over all depths:
+```python
+import xarray
+import oceanbench
+
+glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
+glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
+nparray = oceanbench.evaluate.pointwise_evaluation(
+    glonet_datasets=[glonet_dataset],
+    glorys_datasets=[glorys_dataset],
+)
+oceanbench.plot.plot_pointwise_evaluation_for_average_depth(rmse_dataarray=nparray)
+```
+
+Plot depth rmses (averaged over all lead time):
+```python
+import xarray
+import oceanbench
+
+glonet_dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
+glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
+nparray = oceanbench.evaluate.pointwise_evaluation(
+    glonet_datasets=[glonet_dataset],
+    glorys_datasets=[glorys_dataset],
+)
+dataset_depth_values = glonet_dataset.depth.values
+oceanbench.plot.plot_pointwise_evaluation_depth_for_average_time(rmse_dataarray=nparray, dataset_depth_values=dataset_depth_values)
+```
+
+### MLD
+```python
+import xarray
+import oceanbench
+
+dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
+dataset = oceanbench.process.calc_mld(dataset=dataset, lead=1)
+oceanbench.plot.plot_mld(dataset=dataset)
+```
+
+### Geo
+```python
+import xarray
+import oceanbench
+
+dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
+dataset = oceanbench.process.calc_geo(dataset=dataset, lead=1, variable="zos")
+oceanbench.plot.plot_geo(dataset=dataset)
 ```
 
 ### Density
 Get density:
 ```python
+import xarray
 import oceanbench
-from pathlib import Path
 
+dataset = xarray.open_dataset("data/glonet/2024-01-03.nc")
 dataarray = oceanbench.process.calc_density(
-    glonet_dataset_path=Path("data/glonet/2024-01-03.nc"),
+    dataset=dataset,
     lead=1,
     minimum_longitude=-100,
     maximum_longitude=-40,
     minimum_latitude=-15,
     maximum_latitude=50,
 )
-oceanbench.plot.plot_density(
-    density_dataarray=dataarray, plot_output_path="plot.png", show_plot=True
-)
+oceanbench.plot.plot_density(dataarray=dataarray)
 ```
 
 ### Euclidean distance
