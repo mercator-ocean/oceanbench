@@ -3,9 +3,11 @@ name = "oceanbench"
 version = "0.0.1-alpha"
 description = ""
 authors = [
-    {name = "Simon Lyobard",email = "slyobard@mercator-ocean.fr"},
     {name = "Mathis Bertin",email = "mbertin@mercator-ocean.fr"},
+    {name = "Anass El Aouni",email = "aelaouni@mercator-ocean.fr"},
     {name = "Quentin Gaudel",email = "qgaudel@mercator-ocean.fr"},
+    {name = "Simon Lyobard",email = "slyobard@mercator-ocean.fr"},
+    {name = "Charly Regnier",email = "cregnier@mercator-ocean.fr"},
 ]
 readme = "README.md"
 requires-python = "3.13.*"
