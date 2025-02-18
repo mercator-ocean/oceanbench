@@ -26,3 +26,13 @@ check-format:
 	${ACTIVATE_ENVIRONMENT}
 	pre-commit install
 	pre-commit run --all-files --show-diff-on-failure
+
+update-readme: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+update-readme:
+	${ACTIVATE_ENVIRONMENT}
+	jupyter nbconvert --ClearMetadataPreprocessor.enabled=True --ClearOutput.enabled=True --to markdown assets/glonet-example.ipynb
+	lead="<!-- BEGINNING of a block automatically generated with make update-readme -->"
+	tail="<!-- END of a block automatically generated with make update-readme -->"
+	sed -i -e "/^$${lead}/,/^$${tail}/{ /^$${lead}/{p; r assets/glonet-example.md
+	}; /^$${tail}/p; d }" README.md
+	rm assets/glonet-example.md
