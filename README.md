@@ -117,6 +117,7 @@ oceanbench.plot.plot_energy_cascade(gglonet_sc)
 
 
 ```python
+oceanbench.derived_quantities.kinetic_energy(glonet_dataset)
 oceanbench.plot.plot_kinetic_energy(glonet_dataset)
 ```
 
@@ -124,6 +125,7 @@ oceanbench.plot.plot_kinetic_energy(glonet_dataset)
 
 
 ```python
+oceanbench.derived_quantities.vortocity(glonet_dataset)
 oceanbench.plot.plot_vortocity(glonet_dataset)
 ```
 

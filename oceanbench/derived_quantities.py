@@ -1,10 +1,15 @@
+from numpy import number
 import xarray
 
 from oceanbench.core.process.calc_mld_core import calc_mld_core
 from oceanbench.core.process.calc_density_core import calc_density_core
 from oceanbench.core.process.calc_geo_core import calc_geo_core
 from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
-from oceanbench.core.process.utils import mass_conservation_core
+from oceanbench.core.process.utils import (
+    compute_kinetic_energy_core,
+    compute_vorticity_core,
+    mass_conservation_core,
+)
 
 
 def density(
@@ -64,3 +69,11 @@ def mass_conservation(
     return mass_conservation_core(
         dataset=dataset, depth=depth, deg_resolution=deg_resolution
     )
+
+
+def kinetic_energy(dataset: xarray.Dataset) -> number:
+    return compute_kinetic_energy_core(dataset)
+
+
+def vorticity(dataset: xarray.Dataset) -> xarray.DataArray:
+    return compute_vorticity_core(dataset)
