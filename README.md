@@ -41,13 +41,13 @@ glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
 
 
 ```python
-nparray = oceanbench.metrics.pointwise_evaluation(
+nparray = oceanbench.metrics.rmse(
     glonet_datasets=[glonet_dataset],
     glorys_datasets=[glorys_dataset],
 )
-oceanbench.plot.plot_pointwise_evaluation(rmse_dataarray=nparray, depth=2)
-oceanbench.plot.plot_pointwise_evaluation_for_average_depth(rmse_dataarray=nparray)
-oceanbench.plot.plot_pointwise_evaluation_depth_for_average_time(rmse_dataarray=nparray, dataset_depth_values=glonet_dataset.depth.values)
+oceanbench.plot.plot_rmse(rmse_dataarray=nparray, depth=2)
+oceanbench.plot.plot_rmse_for_average_depth(rmse_dataarray=nparray)
+oceanbench.plot.plot_rmse_depth_for_average_time(rmse_dataarray=nparray, dataset_depth_values=glonet_dataset.depth.values)
 ```
 
 ### MLD analysis

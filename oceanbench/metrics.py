@@ -10,7 +10,7 @@ from oceanbench.core.evaluate.rmse_core import (
 )
 
 
-def pointwise_evaluation(
+def rmse(
     glonet_datasets: List[xarray.Dataset], glorys_datasets: List[xarray.Dataset]
 ) -> numpy.ndarray[Any]:
     return glonet_pointwise_evaluation_core(
