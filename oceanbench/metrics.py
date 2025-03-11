@@ -11,7 +11,8 @@ from oceanbench.core.evaluate.rmse_core import (
 
 
 def rmse(
-    glonet_datasets: List[xarray.Dataset], glorys_datasets: List[xarray.Dataset]
+    glonet_datasets: List[xarray.Dataset],
+    glorys_datasets: List[xarray.Dataset],
 ) -> numpy.ndarray[Any]:
     return glonet_pointwise_evaluation_core(
         glonet_datasets=glonet_datasets,
@@ -19,7 +20,7 @@ def rmse(
     )
 
 
-def get_euclidean_distance(
+def euclidean_distance(
     first_dataset: xarray.Dataset,
     second_dataset: xarray.Dataset,
     minimum_latitude: float,
@@ -37,7 +38,7 @@ def get_euclidean_distance(
     )
 
 
-def analyze_energy_cascade(
+def energy_cascade(
     dataset: xarray.Dataset,
     var: str,
     depth: float,
