@@ -54,7 +54,7 @@ oceanbench.plot.plot_rmse_depth_for_average_time(rmse_dataarray=nparray, dataset
 
 
 ```python
-dataset = oceanbench.process.calc_mld(
+dataset = oceanbench.derived_quantities.calc_mld(
     dataset=glonet_dataset,
     lead=1,
 )
@@ -65,7 +65,7 @@ oceanbench.plot.plot_mld(dataset=dataset)
 
 
 ```python
-dataset = oceanbench.process.calc_geo(
+dataset = oceanbench.derived_quantities.calc_geo(
     dataset=glonet_dataset,
     lead=1,
     variable="zos",
@@ -77,7 +77,7 @@ oceanbench.plot.plot_geo(dataset=dataset)
 
 
 ```python
-dataarray = oceanbench.process.calc_density(
+dataarray = oceanbench.derived_quantities.calc_density(
     dataset=glonet_dataset,
     lead=1,
     minimum_longitude=-100,
@@ -131,7 +131,7 @@ oceanbench.plot.plot_vortocity(glonet_dataset)
 
 
 ```python
-mean_div_time_series = oceanbench.process.mass_conservation(glonet_dataset, 0, deg_resolution=0.25)  # should be close to zero
+mean_div_time_series = oceanbench.derived_quantities.mass_conservation(glonet_dataset, 0, deg_resolution=0.25)  # should be close to zero
 print(mean_div_time_series.data)  #time-dependent scores
 ```
 <!-- END of a block automatically generated with make update-readme -->
