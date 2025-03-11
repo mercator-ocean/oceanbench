@@ -54,18 +54,18 @@ oceanbench.plot.plot_rmse_depth_for_average_time(rmse_dataarray=nparray, dataset
 
 
 ```python
-dataset = oceanbench.derived_quantities.calc_mld(
+dataset = oceanbench.derived_quantities.mld(
     dataset=glonet_dataset,
     lead=1,
 )
 oceanbench.plot.plot_mld(dataset=dataset)
 ```
 
-### Geo analysis
+### Geostrophic current analysis
 
 
 ```python
-dataset = oceanbench.derived_quantities.calc_geo(
+dataset = oceanbench.derived_quantities.geostraphic_currents(
     dataset=glonet_dataset,
     lead=1,
     variable="zos",
@@ -77,7 +77,7 @@ oceanbench.plot.plot_geo(dataset=dataset)
 
 
 ```python
-dataarray = oceanbench.derived_quantities.calc_density(
+dataarray = oceanbench.derived_quantities.density(
     dataset=glonet_dataset,
     lead=1,
     minimum_longitude=-100,

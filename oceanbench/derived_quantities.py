@@ -7,7 +7,7 @@ from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
 from oceanbench.core.process.utils import mass_conservation_core
 
 
-def calc_density(
+def density(
     dataset: xarray.Dataset,
     lead: int,
     minimum_latitude: float,
@@ -25,7 +25,7 @@ def calc_density(
     )
 
 
-def calc_geo(
+def geostrophic_currents(
     dataset: xarray.Dataset,
     lead: int,
     variable: str,
@@ -37,7 +37,7 @@ def calc_geo(
     )
 
 
-def calc_mld(dataset: xarray.Dataset, lead: int) -> xarray.Dataset:
+def mld(dataset: xarray.Dataset, lead: int) -> xarray.Dataset:
     return calc_mld_core(
         dataset=dataset,
         lead=lead,
@@ -58,5 +58,9 @@ def get_particle_file(
     )
 
 
-def mass_conservation(dataset: xarray.Dataset, depth: float, deg_resolution: float = 0.25) -> xarray.DataArray:
-    return mass_conservation_core(dataset=dataset, depth=depth, deg_resolution=deg_resolution)
+def mass_conservation(
+    dataset: xarray.Dataset, depth: float, deg_resolution: float = 0.25
+) -> xarray.DataArray:
+    return mass_conservation_core(
+        dataset=dataset, depth=depth, deg_resolution=deg_resolution
+    )
