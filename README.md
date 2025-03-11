@@ -41,7 +41,7 @@ glorys_dataset = xarray.open_dataset("data/glorys14/2024-01-03.nc")
 
 
 ```python
-nparray = oceanbench.evaluate.pointwise_evaluation(
+nparray = oceanbench.metrics.pointwise_evaluation(
     glonet_datasets=[glonet_dataset],
     glorys_datasets=[glorys_dataset],
 )
@@ -92,7 +92,7 @@ oceanbench.plot.plot_density(dataarray=dataarray)
 
 
 ```python
-euclidean_distance = oceanbench.evaluate.get_euclidean_distance(
+euclidean_distance = oceanbench.metrics.get_euclidean_distance(
     first_dataset=glonet_dataset,
     second_dataset=glorys_dataset,
     minimum_latitude=466,
@@ -108,7 +108,7 @@ oceanbench.plot.plot_euclidean_distance(euclidean_distance)
 
 
 ```python
-_, gglonet_sc = oceanbench.evaluate.analyze_energy_cascade(glonet_dataset, "uo", 0, 1 / 4)
+_, gglonet_sc = oceanbench.metrics.analyze_energy_cascade(glonet_dataset, "uo", 0, 1 / 4)
 
 oceanbench.plot.plot_energy_cascade(gglonet_sc)
 ```
