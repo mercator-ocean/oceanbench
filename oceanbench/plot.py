@@ -35,20 +35,20 @@ def plot_mld(dataset: xarray.Dataset):
     )
 
 
-def plot_pointwise_evaluation(rmse_dataarray: numpy.ndarray[Any], depth: int):
+def plot_rmse(rmse_dataarray: numpy.ndarray[Any], depth: int):
     return plot_temporal_rmse_for_depth(
         rmse_dataarray=rmse_dataarray,
         depth=depth,
     )
 
 
-def plot_pointwise_evaluation_for_average_depth(rmse_dataarray: numpy.ndarray[Any]):
+def plot_rmse_for_average_depth(rmse_dataarray: numpy.ndarray[Any]):
     return plot_temporal_rmse_for_average_depth(
         rmse_dataarray=rmse_dataarray,
     )
 
 
-def plot_pointwise_evaluation_depth_for_average_time(
+def plot_rmse_depth_for_average_time(
     rmse_dataarray: numpy.ndarray[Any],
     dataset_depth_values: numpy.ndarray,
 ):

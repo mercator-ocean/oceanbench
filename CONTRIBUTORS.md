@@ -18,9 +18,9 @@ oceanbench/
 │       ├── calc_geo_core.py
 │       └── calc_mld_core.py
 ├── __init__.py
-├── evaluate.py # Python interface for evaluate module
+├── metrics.py # Python interface for metrics module
 ├── plot.py # Python interface for plot module
-└── process.py # Python interface for process module
+└── derived_quantities.py # Python interface for derived_quantities module
 ```
 
-The `evaluate.py`, `plot.py` and `process.py` files are the entry-points of each module.
+The `metrics.py`, `plot.py` and `derived_quantities.py` files are the entry-points of each module.

@@ -1,9 +1,9 @@
-from . import evaluate
-from . import process
+from . import metrics
+from . import derived_quantities
 from . import plot
 
 __all__ = [
-    "evaluate",
-    "process",
+    "metrics",
+    "derived_quantities",
     "plot",
 ]
