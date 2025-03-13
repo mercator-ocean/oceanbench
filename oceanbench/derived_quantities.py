@@ -4,7 +4,6 @@ import xarray
 from oceanbench.core.process.calc_mld_core import calc_mld_core
 from oceanbench.core.process.calc_density_core import calc_density_core
 from oceanbench.core.process.calc_geo_core import calc_geo_core
-from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
 from oceanbench.core.process.utils import (
     compute_kinetic_energy_core,
     compute_vorticity_core,
@@ -13,7 +12,7 @@ from oceanbench.core.process.utils import (
 
 
 def density(
-    dataset: xarray.Dataset,
+    candidate_dataset: xarray.Dataset,
     lead: int,
     minimum_latitude: float,
     maximum_latitude: float,
@@ -21,7 +20,7 @@ def density(
     maximum_longitude: float,
 ) -> xarray.Dataset:
     return calc_density_core(
-        dataset=dataset,
+        dataset=candidate_dataset,
         lead=lead,
         minimum_latitude=minimum_latitude,
         maximum_latitude=maximum_latitude,
@@ -31,49 +30,37 @@ def density(
 
 
 def geostrophic_currents(
-    dataset: xarray.Dataset,
+    candidate_dataset: xarray.Dataset,
     lead: int,
     variable: str,
 ) -> xarray.Dataset:
     return calc_geo_core(
-        dataset=dataset,
+        dataset=candidate_dataset,
         lead=lead,
         var=variable,
     )
 
 
-def mld(dataset: xarray.Dataset, lead: int) -> xarray.Dataset:
+def mld(candidate_dataset: xarray.Dataset, lead: int) -> xarray.Dataset:
     return calc_mld_core(
-        dataset=dataset,
+        dataset=candidate_dataset,
         lead=lead,
     )
 
 
-def get_particle_file(
-    dataset: xarray.Dataset,
-    minimum_latitude: float,
-    maximum_latitude: float,
-    minimum_longitude: float,
-    maximum_longitude: float,
-) -> xarray.Dataset:
-    return get_particle_file_core(
-        dataset=dataset,
-        latzone=[minimum_latitude, maximum_latitude],
-        lonzone=[minimum_longitude, maximum_longitude],
-    )
-
-
 def mass_conservation(
-    dataset: xarray.Dataset, depth: float, deg_resolution: float = 0.25
+    candidate_dataset: xarray.Dataset,
+    depth: float,
+    deg_resolution: float = 0.25,
 ) -> xarray.DataArray:
     return mass_conservation_core(
-        dataset=dataset, depth=depth, deg_resolution=deg_resolution
+        dataset=candidate_dataset, depth=depth, deg_resolution=deg_resolution
     )
 
 
-def kinetic_energy(dataset: xarray.Dataset) -> number:
-    return compute_kinetic_energy_core(dataset)
+def kinetic_energy(candidate_dataset: xarray.Dataset) -> number:
+    return compute_kinetic_energy_core(candidate_dataset)
 
 
-def vorticity(dataset: xarray.Dataset) -> xarray.DataArray:
-    return compute_vorticity_core(dataset)
+def vorticity(candidate_dataset: xarray.Dataset) -> xarray.DataArray:
+    return compute_vorticity_core(candidate_dataset)

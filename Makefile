@@ -36,3 +36,8 @@ update-readme:
 	sed -i -e "/^$${lead}/,/^$${tail}/{ /^$${lead}/{p; r assets/glonet-example.md
 	}; /^$${tail}/p; d }" README.md
 	rm assets/glonet-example.md
+
+test: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+test:
+	${ACTIVATE_ENVIRONMENT}
+	python tests/glonet_sample_evaluation.py
