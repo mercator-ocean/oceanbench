@@ -14,7 +14,7 @@ from oceanbench.core.plot.rmse_core import (
     plot_temporal_rmse_for_average_depth,
     plot_temporal_rmse_for_depth,
 )
-from oceanbench.core.plot.vortocity_core import plot_vortocity_core
+from oceanbench.core.plot.vorticity_core import plot_vorticity_core
 
 
 def plot_density(dataarray: xarray.DataArray):
@@ -62,13 +62,13 @@ def plot_euclidean_distance(euclidean_distance):
     return plot_euclidean_distance_core(euclidean_distance)
 
 
-def plot_energy_cascade(gglonet_sc):
-    return plot_energy_cascade_core(gglonet_sc)
+def plot_energy_cascade(dataset_sc):
+    return plot_energy_cascade_core(dataset_sc)
 
 
 def plot_kinetic_energy(dataset: xarray.Dataset):
     return plot_kinetic_energy_core(dataset)
 
 
-def plot_vortocity(dataset: xarray.Dataset):
-    return plot_vortocity_core(dataset)
+def plot_vorticity(dataset: xarray.Dataset):
+    return plot_vorticity_core(dataset)

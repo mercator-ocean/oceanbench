@@ -4,47 +4,74 @@ from typing import Any, List
 import numpy
 import xarray
 
-from oceanbench.process import get_particle_file
+from oceanbench.core.references.glorys import glorys_datasets
+from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
 
 
-def get_rmse_glonet(forecast, ref, var, lead, level):
+def _get_rmse(forecast, ref, var, lead, level):
     cpu_count = multiprocessing.cpu_count()
     with multiprocessing.Pool(cpu_count) as _:
         if var == "zos":
-            mask = ~numpy.isnan(forecast[var][lead]) & ~numpy.isnan(ref[var][level, lead])
-            rmse = numpy.sqrt(numpy.mean((forecast[var][lead].data[mask] - ref[var][level, lead].data[mask]) ** 2))
-        else:
-            mask = ~numpy.isnan(forecast[var][lead, level].data) & ~numpy.isnan(ref[var][lead, level].data)
+            mask = ~numpy.isnan(forecast[var][lead]) & ~numpy.isnan(
+                ref[var][level, lead]
+            )
             rmse = numpy.sqrt(
-                numpy.mean((forecast[var][lead, level].data[mask] - ref[var][lead, level].data[mask]) ** 2)
+                numpy.mean(
+                    (
+                        forecast[var][lead].data[mask]
+                        - ref[var][level, lead].data[mask]
+                    )
+                    ** 2
+                )
+            )
+        else:
+            mask = ~numpy.isnan(
+                forecast[var][lead, level].data
+            ) & ~numpy.isnan(ref[var][lead, level].data)
+            rmse = numpy.sqrt(
+                numpy.mean(
+                    (
+                        forecast[var][lead, level].data[mask]
+                        - ref[var][lead, level].data[mask]
+                    )
+                    ** 2
+                )
             )
     return rmse
 
 
-def get_glonet_rmse_for_given_days(
+def _get_rmse_for_given_days(
     depthg,
     var,
-    glonet_datasets: List[xarray.Dataset],
+    datasets: List[xarray.Dataset],
     glorys_datasets: List[xarray.Dataset],
 ):
     j = 0
     nweeks = 1
     aa = numpy.zeros((nweeks, 10))
 
-    for glonet, glorys in zip(glonet_datasets, glorys_datasets):
+    for dataset, glorys_dataset in zip(datasets, glorys_datasets):
         for i in range(0, 10):
-            aa[j, i] = get_rmse_glonet(glonet, glorys, var, i, depthg)
+            aa[j, i] = _get_rmse(dataset, glorys_dataset, var, i, depthg)
         j = j + 1
         if j > nweeks - 1:
             break
-    glonet_rmse = aa.mean(axis=0)
-    return glonet_rmse
+    rmse = aa.mean(axis=0)
+    return rmse
 
 
-def glonet_pointwise_evaluation_core(
-    glonet_datasets: List[xarray.Dataset],
-    glorys_datasets: List[xarray.Dataset],
-) -> numpy.ndarray[Any]:
+def pointwise_evaluation_glorys_core(
+    candidate_datasets: List[xarray.Dataset],
+) -> numpy.ndarray[Any, Any]:
+    return _pointwise_evaluation_core(
+        candidate_datasets, glorys_datasets(candidate_datasets)
+    )
+
+
+def _pointwise_evaluation_core(
+    candidate_datasets: List[xarray.Dataset],
+    reference_datasets: List[xarray.Dataset],
+) -> numpy.ndarray[Any, Any]:
     gnet = {"uo": [], "vo": [], "so": [], "thetao": [], "zos": []}
     variables_withouth_zos = ["uo", "vo", "so", "thetao"]
     mindepth = 0
@@ -53,55 +80,74 @@ def glonet_pointwise_evaluation_core(
         print(f"{depth=}")
         for variable in variables_withouth_zos:
             gnet[variable].append(
-                get_glonet_rmse_for_given_days(
+                _get_rmse_for_given_days(
                     depth,
                     variable,
-                    glonet_datasets,
-                    glorys_datasets,
+                    candidate_datasets,
+                    reference_datasets,
                 )
             )
         if depth < 1:
             gnet["zos"].append(
-                get_glonet_rmse_for_given_days(
+                _get_rmse_for_given_days(
                     depth,
                     "zos",
-                    glonet_datasets,
-                    glorys_datasets,
+                    candidate_datasets,
+                    reference_datasets,
                 )
             )
     return numpy.array(gnet)
 
 
-def get_euclidean_distance_core(
-    first_dataset: xarray.Dataset,
-    second_dataset: xarray.Dataset,
+def get_euclidean_distance_glorys_core(
+    candidate_dataset: xarray.Dataset,
     minimum_latitude: float,
     maximum_latitude: float,
     minimum_longitude: float,
     maximum_longitude: float,
 ):
-    gnet_traj = get_particle_file(
-        first_dataset.isel(depth=0),
-        minimum_latitude=minimum_latitude,
-        maximum_latitude=maximum_latitude,
-        minimum_longitude=minimum_longitude,
-        maximum_longitude=maximum_longitude,
+    return _get_euclidean_distance_core(
+        candidate_dataset,
+        glorys_datasets([candidate_dataset])[0],
+        minimum_latitude,
+        maximum_latitude,
+        minimum_longitude,
+        maximum_longitude,
     )
-    ref_traj = get_particle_file(
-        second_dataset.isel(depth=0),
-        minimum_latitude=minimum_latitude,
-        maximum_latitude=maximum_latitude,
-        minimum_longitude=minimum_longitude,
-        maximum_longitude=maximum_longitude,
+
+
+def _get_euclidean_distance_core(
+    candidate_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    minimum_latitude: float,
+    maximum_latitude: float,
+    minimum_longitude: float,
+    maximum_longitude: float,
+):
+    candidate_trajectory = get_particle_file_core(
+        dataset=candidate_dataset.isel(depth=0),
+        latzone=[minimum_latitude, maximum_latitude],
+        lonzone=[minimum_longitude, maximum_longitude],
+    )
+
+    reference_trajectory = get_particle_file_core(
+        dataset=reference_dataset.isel(depth=0),
+        latzone=[minimum_latitude, maximum_latitude],
+        lonzone=[minimum_longitude, maximum_longitude],
     )
 
     # euclidean distance
     e_d = numpy.sqrt(
-        ((gnet_traj.x.data - ref_traj.x.data) * 111.32) ** 2
+        ((candidate_trajectory.x.data - reference_trajectory.x.data) * 111.32)
+        ** 2
         + (
             111.32
-            * numpy.cos(numpy.radians(gnet_traj.lat.data).reshape(1, gnet_traj.lat.shape[0], 1))
-            * (gnet_traj.y.data - ref_traj.y.data)
+            * numpy.cos(
+                numpy.radians(candidate_trajectory.lat.data).reshape(
+                    1, candidate_trajectory.lat.shape[0], 1
+                )
+            )
+            * (candidate_trajectory.y.data - reference_trajectory.y.data)
         )
         ** 2
     )
@@ -110,7 +156,7 @@ def get_euclidean_distance_core(
 
 
 def analyze_energy_cascade_core(
-    glonet: xarray.Dataset,
+    candidate_dataset: xarray.Dataset,
     var,
     depth,
     spatial_resolution=None,
@@ -138,7 +184,7 @@ def analyze_energy_cascade_core(
         return data
 
     #####
-    vorticity = glonet[var][:, depth, :, :]
+    vorticity = candidate_dataset[var][:, depth, :, :]
     n_times, _, _ = vorticity.shape
 
     time_spectra = []
@@ -159,7 +205,9 @@ def analyze_energy_cascade_core(
         grid_spacing_km = spatial_resolution * 111  # 1deg ~ 111 km
         small_scale_cutoff_index = int(small_scale_cutoff_km / grid_spacing_km)
     else:
-        small_scale_cutoff_index = len(time_spectra[0]) // 2  # default: high-wavenumber half
+        small_scale_cutoff_index = (
+            len(time_spectra[0]) // 2
+        )  # default: high-wavenumber half
 
     # compute small-scale energy fraction
     small_scale_energy = time_spectra[:, small_scale_cutoff_index:].sum(axis=1)

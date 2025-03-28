@@ -5,7 +5,9 @@ import seaborn
 from matplotlib import pyplot
 
 
-def plot_temporal_rmse_for_depth(rmse_dataarray: numpy.ndarray[Any], depth: int):
+def plot_temporal_rmse_for_depth(
+    rmse_dataarray: numpy.ndarray[Any, Any], depth: int
+):
     seaborn.reset_defaults()
     seaborn.set_context("talk", font_scale=0.7)
 
@@ -15,9 +17,11 @@ def plot_temporal_rmse_for_depth(rmse_dataarray: numpy.ndarray[Any], depth: int)
     for index, variable in enumerate(variables):
         i = index // 3
         j = index % 3
-        glonet_v = numpy.array(rmse_dataarray.item()[variable])[depth if variable != "zos" else 0]
+        dataset_v = numpy.array(rmse_dataarray.item()[variable])[
+            depth if variable != "zos" else 0
+        ]
 
-        ax[i, j].plot(glonet_v, label="glonet", linestyle="-")
+        ax[i, j].plot(dataset_v, label="dataset", linestyle="-")
         ax[i, j].grid(True, which="both", linestyle="--", linewidth=0.5)
         ax[i, j].legend()
         ax[i, j].set_title(variable)
@@ -39,9 +43,9 @@ def plot_temporal_rmse_for_average_depth(rmse_dataarray: numpy.ndarray[Any]):
     for index, variable in enumerate(variables):
         i = index // 3
         j = index % 3
-        glonet_v = numpy.array(rmse_dataarray.item()[variable]).mean(axis=0)
+        dataset_v = numpy.array(rmse_dataarray.item()[variable]).mean(axis=0)
 
-        ax[i, j].plot(glonet_v, label="glonet", linestyle="-")
+        ax[i, j].plot(dataset_v, label="dataset", linestyle="-")
         ax[i, j].grid(True, which="both", linestyle="--", linewidth=0.5)
         ax[i, j].legend()
         ax[i, j].set_title(variable)
@@ -62,10 +66,14 @@ def plot_depth_rmse_average_on_time(
 
     variables = ["uo", "vo", "so", "thetao"]
     for index, variable in enumerate(variables):
-        glonet_v = numpy.array(rmse_dataarray.item()[variable]).mean(axis=1)
-        ax[index].plot(glonet_v, dataset_depth_values, label="glonet", linestyle="-")
+        dataset_v = numpy.array(rmse_dataarray.item()[variable]).mean(axis=1)
+        ax[index].plot(
+            dataset_v, dataset_depth_values, label="dataset", linestyle="-"
+        )
         ax[index].grid(True, which="both", linestyle="--", linewidth=0.5)
-        ax[index].set_xlabel("RMSE [m/s]" if variable != "thetao" else "RMSE [°C]")
+        ax[index].set_xlabel(
+            "RMSE [m/s]" if variable != "thetao" else "RMSE [°C]"
+        )
         ax[index].set_ylabel("Depth [$m$]")
         ax[index].set_title(f"{variable}")
         ax[index].legend()
@@ -78,7 +86,7 @@ def plot_depth_rmse_average_on_time(
 def plot_euclidean_distance_core(e_d):
     _, ax = pyplot.subplots(1, 1, figsize=(4, 4))
 
-    ax.plot(e_d, label="glonet", linestyle="-")
+    ax.plot(e_d, label="dataset", linestyle="-")
     ax.grid(True, which="both", linestyle="--", linewidth=0.5)
     ax.legend()
     ax.set_title("euclidean distance")
@@ -91,10 +99,10 @@ def plot_euclidean_distance_core(e_d):
     pyplot.show()
 
 
-def plot_energy_cascade_core(gglonet_sc):
+def plot_energy_cascade_core(dataset_sc):
     _, ax = pyplot.subplots(1, 1, figsize=(8, 3))
 
-    ax.plot(gglonet_sc, label="glonet")
+    ax.plot(dataset_sc, label="dataset")
     # ax[1].legend()
     ax.grid(True, which="both", linestyle="--", linewidth=0.5)
     # ax[0].set_title(var)

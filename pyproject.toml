@@ -10,7 +10,7 @@ authors = [
     {name = "Charly Regnier",email = "cregnier@mercator-ocean.fr"},
 ]
 readme = "README.md"
-requires-python = "3.13.*"
+requires-python = ">=3.13"
 dependencies = [
     "xarray==2025.1.2",
     "matplotlib (>=3.10.0,<4.0.0)",
@@ -19,6 +19,7 @@ dependencies = [
     "gsw (>=3.6.19,<4.0.0)",
     "parcels (>=3.1.2,<4.0.0)",
     "zarr==2.18.4",
+    "copernicusmarine==2.0.1",
 ]
 
 [build-system]
