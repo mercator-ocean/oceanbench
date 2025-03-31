@@ -30,14 +30,21 @@ check-format:
 update-readme: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 update-readme:
 	${ACTIVATE_ENVIRONMENT}
-	jupyter nbconvert --ClearMetadataPreprocessor.enabled=True --ClearOutput.enabled=True --to markdown assets/glonet-example.ipynb
+	python -c 'import oceanbench; oceanbench.generate_notebook_to_evaluate("assets/glonet_sample.py", "assets/glonet_sample.ipynb")'
+	jupyter nbconvert --ClearMetadataPreprocessor.enabled=True --ClearOutput.enabled=True --to markdown assets/glonet_sample.ipynb
 	lead="<!-- BEGINNING of a block automatically generated with make update-readme -->"
 	tail="<!-- END of a block automatically generated with make update-readme -->"
-	sed -i -e "/^$${lead}/,/^$${tail}/{ /^$${lead}/{p; r assets/glonet-example.md
+	sed -i -e "/^$${lead}/,/^$${tail}/{ /^$${lead}/{p; r assets/glonet_sample.md
 	}; /^$${tail}/p; d }" README.md
-	rm assets/glonet-example.md
+	rm assets/glonet_sample.md
 
-test: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
-test:
+evaluate: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+evaluate:
 	${ACTIVATE_ENVIRONMENT}
-	python tests/glonet_sample_evaluation.py
+	jupyter nbconvert --execute --to notebook $(NOTEBOOK_PATH)
+
+tests: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+tests:
+	${ACTIVATE_ENVIRONMENT}
+	$(MAKE) evaluate NOTEBOOK_PATH=assets/glonet_sample.ipynb
+	diff assets/glonet_sample-report.ipynb tests/assets/glonet_sample-report.ipynb
