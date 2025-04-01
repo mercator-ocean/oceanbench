@@ -41,10 +41,11 @@ update-readme:
 evaluate: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 evaluate:
 	${ACTIVATE_ENVIRONMENT}
-	jupyter nbconvert --execute --to notebook $(NOTEBOOK_PATH)
+	jupyter nbconvert --execute --to notebook $(NOTEBOOK_PATH) --output $(OUTPUT_NAME)
 
-tests: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
-tests:
+run-tests: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+run-tests:
 	${ACTIVATE_ENVIRONMENT}
-	$(MAKE) evaluate NOTEBOOK_PATH=assets/glonet_sample.ipynb
-	diff assets/glonet_sample-report.ipynb tests/assets/glonet_sample-report.ipynb
+	pip install --editable .
+	$(MAKE) evaluate NOTEBOOK_PATH=assets/glonet_sample.ipynb OUTPUT_NAME=glonet_sample.report.ipynb
+	diff assets/glonet_sample.report.ipynb tests/assets/glonet_sample.report.ipynb
