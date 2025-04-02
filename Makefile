@@ -2,6 +2,8 @@ PROJECT_NAME = oceanbench
 
 ENVIRONMENT_NAME = ${PROJECT_NAME}
 ENVIRONMENT_FILE_NAME = conda_environment.yaml
+TEST_ENVIRONMENT_NAME = ${PROJECT_NAME}_test
+TEST_ENVIRONMENT_FILE_NAME = conda_environment_test.yaml
 .ONESHELL:
 .SHELLFLAGS = -ec
 SHELL := /bin/bash
@@ -20,6 +22,10 @@ create-environment: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 create-environment: SELECTED_ENVIRONMENT_FILE_NAME = ${ENVIRONMENT_FILE_NAME}
 create-environment: _create-update-environment
 	micromamba run --name ${ENVIRONMENT_NAME} poetry install
+
+create-test-environment: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+create-test-environment: SELECTED_ENVIRONMENT_FILE_NAME = ${TEST_ENVIRONMENT_FILE_NAME}
+create-test-environment: create-update-environment
 
 check-format: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 check-format:
@@ -43,7 +49,7 @@ evaluate:
 	${ACTIVATE_ENVIRONMENT}
 	jupyter nbconvert --execute --to notebook $(NOTEBOOK_PATH) --output $(OUTPUT_NAME)
 
-run-tests: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
