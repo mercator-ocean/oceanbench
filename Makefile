@@ -9,7 +9,7 @@ TEST_ENVIRONMENT_FILE_NAME = conda_environment_test.yaml
 SHELL := /bin/bash
 
 MICROMAMBA_ACTIVATE=eval "$$(micromamba shell hook --shell=bash)" && micromamba activate
-ACTIVATE_ENVIRONMENT=${MICROMAMBA_ACTIVATE} ${ENVIRONMENT_NAME}
+ACTIVATE_ENVIRONMENT=${MICROMAMBA_ACTIVATE} ${SELECTED_ENVIRONMENT_NAME}
 
 _create-update-environment:
 	export CONDARC=.condarc
