@@ -44,7 +44,7 @@ update-readme:
 	}; /^$${tail}/p; d }" README.md
 	rm assets/glonet_sample.md
 
-evaluate: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+evaluate: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate:
 	${ACTIVATE_ENVIRONMENT}
 	jupyter nbconvert --execute --to notebook $(NOTEBOOK_PATH) --output $(OUTPUT_NAME)

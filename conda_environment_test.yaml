@@ -2,3 +2,4 @@ dependencies:
   - python==3.13.*
   - pip
   - gcc
+  - jupyter==1.1.*
