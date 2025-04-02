@@ -53,9 +53,7 @@ def mass_conservation(
     depth: float,
     deg_resolution: float = 0.25,
 ) -> xarray.DataArray:
-    return mass_conservation_core(
-        dataset=candidate_dataset, depth=depth, deg_resolution=deg_resolution
-    )
+    return mass_conservation_core(dataset=candidate_dataset, depth=depth, deg_resolution=deg_resolution)
 
 
 def kinetic_energy(candidate_dataset: xarray.Dataset) -> number:

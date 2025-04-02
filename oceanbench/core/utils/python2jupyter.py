@@ -35,23 +35,15 @@ def _python_to_jupyter_notebook(python_code: str) -> nbformat.NotebookNode:
     for line in python_code.split("\n"):
         if line.strip().startswith("# "):
             if current_cell_content and current_cell_type != "markdown":
-                cells.append(
-                    _new_cell(current_cell_content, current_cell_type)
-                )
+                cells.append(_new_cell(current_cell_content, current_cell_type))
                 current_cell_content = ""
             current_cell_type = "markdown"
         elif line.strip() != "":
             if current_cell_content and current_cell_type != "code":
-                cells.append(
-                    _new_cell(current_cell_content, current_cell_type)
-                )
+                cells.append(_new_cell(current_cell_content, current_cell_type))
                 current_cell_content = ""
             current_cell_type = "code"
-        new_line = (
-            line.removeprefix("# ")
-            if current_cell_type == "markdown"
-            else line
-        )
+        new_line = line.removeprefix("# ") if current_cell_type == "markdown" else line
         current_cell_content += new_line + "\n"
 
     if current_cell_content:

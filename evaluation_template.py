@@ -63,9 +63,7 @@ oceanbench.plot.plot_euclidean_distance(euclidean_distance)
 
 # #### Energy cascading analysis
 
-_, gglonet_sc = oceanbench.metrics.energy_cascade(
-    candidate_dataset, "uo", 0, 1 / 4
-)
+_, gglonet_sc = oceanbench.metrics.energy_cascade(candidate_dataset, "uo", 0, 1 / 4)
 oceanbench.plot.plot_energy_cascade(gglonet_sc)
 
 # #### Kinetic energy analysis
