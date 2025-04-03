@@ -7,7 +7,7 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: mamba-org/setup-micromamba@v2
         with:
           micromamba-version: '1.5.6-0'
           micromamba-binary-path: ${{ runner.temp }}/bin/micromamba
@@ -20,5 +20,7 @@ jobs:
         run: poetry install
         shell: micromamba-shell {0}
       - name: Check format
-        run: make check-format
+        run: |
+          pre-commit install
+          pre-commit run --all-files --show-diff-on-failure
         shell: micromamba-shell {0}
