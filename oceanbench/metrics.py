@@ -1,7 +1,7 @@
-from typing import Any, List, Optional
+from typing import List, Optional
 
-import numpy
 import xarray
+from . import plot
 
 from oceanbench.core.evaluate.rmse_core import (
     analyze_energy_cascade_core,
@@ -12,39 +12,47 @@ from oceanbench.core.evaluate.rmse_core import (
 
 def rmse_to_glorys(
     candidate_datasets: List[xarray.Dataset],
-) -> numpy.ndarray[Any, Any]:
-    return pointwise_evaluation_glorys_core(
+):
+    nparray = pointwise_evaluation_glorys_core(
         candidate_datasets=candidate_datasets,
+    )
+    plot.plot_rmse(rmse_dataarray=nparray, depth=2)
+    plot.plot_rmse_for_average_depth(rmse_dataarray=nparray)
+    plot.plot_rmse_depth_for_average_time(
+        rmse_dataarray=nparray,
+        dataset_depth_values=candidate_datasets[0].depth.values,
     )
 
 
 def euclidean_distance_to_glorys(
-    candidate_dataset: xarray.Dataset,
-    minimum_latitude: float,
-    maximum_latitude: float,
-    minimum_longitude: float,
-    maximum_longitude: float,
+    candidate_datasets: List[xarray.Dataset],
+    minimum_latitude: float = 466,
+    maximum_latitude: float = 633,
+    minimum_longitude: float = 400,
+    maximum_longitude: float = 466,
 ):
-    return get_euclidean_distance_glorys_core(
-        candidate_dataset=candidate_dataset,
+    euclidean_distance = get_euclidean_distance_glorys_core(
+        candidate_dataset=candidate_datasets[0],
         minimum_latitude=minimum_latitude,
         maximum_latitude=maximum_latitude,
         minimum_longitude=minimum_longitude,
         maximum_longitude=maximum_longitude,
     )
+    plot.plot_euclidean_distance(euclidean_distance)
 
 
 def energy_cascade(
-    candidate_dataset: xarray.Dataset,
-    var: str,
-    depth: float,
-    spatial_resolution: Optional[float] = None,
-    small_scale_cutoff_km: Optional[float] = 100,
+    candidate_datasets: List[xarray.Dataset],
+    var: str = "uo",
+    depth: float = 0,
+    spatial_resolution: Optional[float] = 1 / 4,
+    small_scale_cutoff_km: int = 100,
 ):
-    return analyze_energy_cascade_core(
-        candidate_dataset=candidate_dataset,
+    _, gglonet_sc = analyze_energy_cascade_core(
+        candidate_dataset=candidate_datasets[0],
         var=var,
         depth=depth,
         spatial_resolution=spatial_resolution,
         small_scale_cutoff_km=small_scale_cutoff_km,
     )
+    plot.plot_energy_cascade(gglonet_sc)
