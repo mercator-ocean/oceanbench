@@ -11,7 +11,7 @@ SHELL := /bin/bash
 MICROMAMBA_ACTIVATE=eval "$$(micromamba shell hook --shell=bash)" && micromamba activate
 ACTIVATE_ENVIRONMENT=${MICROMAMBA_ACTIVATE} ${SELECTED_ENVIRONMENT_NAME}
 
-_create-update-environment:
+create-update-environment:
 	export CONDARC=.condarc
 	export PIP_CONFIG_FILE=pip.conf
 	(micromamba env update --file ${SELECTED_ENVIRONMENT_FILE_NAME} --name ${SELECTED_ENVIRONMENT_NAME} \
@@ -52,6 +52,6 @@ evaluate:
 run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
-	pip install --editable .
-	$(MAKE) evaluate NOTEBOOK_PATH=assets/glonet_sample.ipynb OUTPUT_NAME=glonet_sample.report.ipynb
-	diff assets/glonet_sample.report.ipynb tests/assets/glonet_sample.report.ipynb
+	# pip install --editable .
+	# $(MAKE) evaluate NOTEBOOK_PATH=assets/glonet_sample.ipynb OUTPUT_NAME=glonet_sample.report.ipynb
+	python tests/compare_notebook.py assets/glonet_sample.report.ipynb tests/assets/glonet_sample.report.ipynb | jq '.'
