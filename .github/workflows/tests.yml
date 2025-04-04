@@ -25,6 +25,7 @@ jobs:
         run: make run-tests
         shell: micromamba-shell {0}
       - name: Archive glonet_sample test report
+        if: ${{ failure()  }}
         uses: actions/upload-artifact@v4
         with:
           name: glonet_sample.report.ipynb
