@@ -16,11 +16,6 @@ jobs:
           condarc-file: .condarc
           cache-environment: true
           post-cleanup: 'all'
-      - name: Poetry install
-        run: poetry install
-        shell: micromamba-shell {0}
       - name: Check format
-        run: |
-          pre-commit install
-          pre-commit run --all-files --show-diff-on-failure
+        run: make check-format
         shell: micromamba-shell {0}
