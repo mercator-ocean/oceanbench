@@ -2,6 +2,10 @@ from datetime import datetime, timedelta
 from typing import List
 from xarray import Dataset, open_dataset
 import copernicusmarine
+import logging
+
+logger = logging.getLogger("copernicusmarine")
+logger.setLevel(level=logging.WARNING)
 
 
 def _glorys_subset(start_datetime: datetime) -> Dataset:

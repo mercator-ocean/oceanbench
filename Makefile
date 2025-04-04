@@ -52,6 +52,6 @@ evaluate:
 run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
-	# pip install --editable .
-	# $(MAKE) evaluate NOTEBOOK_PATH=assets/glonet_sample.ipynb OUTPUT_NAME=glonet_sample.report.ipynb
+	pip install --editable .
+	$(MAKE) evaluate NOTEBOOK_PATH=assets/glonet_sample.ipynb OUTPUT_NAME=glonet_sample.report.ipynb
 	python tests/compare_notebook.py assets/glonet_sample.report.ipynb tests/assets/glonet_sample.report.ipynb | jq '.'
