@@ -35,8 +35,7 @@ def compare_notebook_files(file1_path, file2_path):
             diff = DeepDiff(filtered_json_data1, filtered_json_data2)
 
             if diff:
-                print(json.dumps(diff))
-                # print(diff)
+                print(json.dumps(diff, indent=2))
                 sys.exit(1)
             else:
                 print("{}")

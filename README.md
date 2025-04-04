@@ -12,7 +12,7 @@ Running Oceanbench uses the [Copernicus Marine Toolbox](https://github.com/merca
 
 > If you're running Oceanbench in a non-interactive way, please follow the [Copernicus Marine Toolbox documentation](https://toolbox-docs.marine.copernicus.eu/en/v2.0.1/usage/quickoverview.html#copernicus-marine-toolbox-login) to login to the Copernicus Marine Service before running the bench.
 
-## Example of OceanBench evaluation of GLONET sample
+## Example of OceanBench evaluation against GLONET sample
 
 The following section exposes the evaluation code of the `oceanbench` library, against a sample of the GLONET system.
 Its content is available as a notebook to download [here](https://raw.githubusercontent.com/mercator-ocean/oceanbench/refs/heads/main/assets/glonet_sample.ipynb), or you can [launch it in EDITO](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-python-ocean-science?name=oceanbench&s3=region-bb0d481d&resources.requests.cpu=%C2%AB4000m%C2%BB&resources.requests.memory=%C2%AB4Gi%C2%BB&resources.limits.cpu=%C2%AB7200m%C2%BB&resources.limits.memory=%C2%AB28Gi%C2%BB&init.personalInit=%C2%ABhttps%3A%2F%2Fgitlab.mercator-ocean.fr%2Fpub%2Fedito-infra%2Fconfiguration%2F-%2Fraw%2Fmain%2Fscripts%2Fopen-jupyter-notebook-url.sh%C2%BB&init.personalInitArgs=%C2%ABhttps%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.ipynb%C2%BB&persistence.size=%C2%AB30Gi%C2%BB&git.repository=«https%3A%2F%2Fgithub.com%2Fmercator-ocean%2Foceanbench.git»&autoLaunch=true).

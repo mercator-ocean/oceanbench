@@ -3,6 +3,5 @@ dependencies:
   - pip
   - gcc
   - jupyter==1.1.*
-  - jq
   - pip:
       - deepdiff==8.4.2
