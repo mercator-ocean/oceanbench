@@ -41,6 +41,7 @@ def get_particle_file_core(dataset: xarray.Dataset, latzone, lonzone) -> xarray.
         # dt=-timedelta(minutes=60),#backward
         dt=timedelta(minutes=60),
         output_file=output_file,
+        verbose_progress=False,
     )
     ds = xarray.open_zarr("tst.zarr")
     plats = ds.lat.values

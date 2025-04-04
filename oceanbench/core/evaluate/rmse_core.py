@@ -12,30 +12,12 @@ def _get_rmse(forecast, ref, var, lead, level):
     cpu_count = multiprocessing.cpu_count()
     with multiprocessing.Pool(cpu_count) as _:
         if var == "zos":
-            mask = ~numpy.isnan(forecast[var][lead]) & ~numpy.isnan(
-                ref[var][level, lead]
-            )
-            rmse = numpy.sqrt(
-                numpy.mean(
-                    (
-                        forecast[var][lead].data[mask]
-                        - ref[var][level, lead].data[mask]
-                    )
-                    ** 2
-                )
-            )
+            mask = ~numpy.isnan(forecast[var][lead]) & ~numpy.isnan(ref[var][level, lead])
+            rmse = numpy.sqrt(numpy.mean((forecast[var][lead].data[mask] - ref[var][level, lead].data[mask]) ** 2))
         else:
-            mask = ~numpy.isnan(
-                forecast[var][lead, level].data
-            ) & ~numpy.isnan(ref[var][lead, level].data)
+            mask = ~numpy.isnan(forecast[var][lead, level].data) & ~numpy.isnan(ref[var][lead, level].data)
             rmse = numpy.sqrt(
-                numpy.mean(
-                    (
-                        forecast[var][lead, level].data[mask]
-                        - ref[var][lead, level].data[mask]
-                    )
-                    ** 2
-                )
+                numpy.mean((forecast[var][lead, level].data[mask] - ref[var][lead, level].data[mask]) ** 2)
             )
     return rmse
 
@@ -63,9 +45,7 @@ def _get_rmse_for_given_days(
 def pointwise_evaluation_glorys_core(
     candidate_datasets: List[xarray.Dataset],
 ) -> numpy.ndarray[Any, Any]:
-    return _pointwise_evaluation_core(
-        candidate_datasets, glorys_datasets(candidate_datasets)
-    )
+    return _pointwise_evaluation_core(candidate_datasets, glorys_datasets(candidate_datasets))
 
 
 def _pointwise_evaluation_core(
@@ -138,15 +118,10 @@ def _get_euclidean_distance_core(
 
     # euclidean distance
     e_d = numpy.sqrt(
-        ((candidate_trajectory.x.data - reference_trajectory.x.data) * 111.32)
-        ** 2
+        ((candidate_trajectory.x.data - reference_trajectory.x.data) * 111.32) ** 2
         + (
             111.32
-            * numpy.cos(
-                numpy.radians(candidate_trajectory.lat.data).reshape(
-                    1, candidate_trajectory.lat.shape[0], 1
-                )
-            )
+            * numpy.cos(numpy.radians(candidate_trajectory.lat.data).reshape(1, candidate_trajectory.lat.shape[0], 1))
             * (candidate_trajectory.y.data - reference_trajectory.y.data)
         )
         ** 2
@@ -205,9 +180,7 @@ def analyze_energy_cascade_core(
         grid_spacing_km = spatial_resolution * 111  # 1deg ~ 111 km
         small_scale_cutoff_index = int(small_scale_cutoff_km / grid_spacing_km)
     else:
-        small_scale_cutoff_index = (
-            len(time_spectra[0]) // 2
-        )  # default: high-wavenumber half
+        small_scale_cutoff_index = len(time_spectra[0]) // 2  # default: high-wavenumber half
 
     # compute small-scale energy fraction
     small_scale_energy = time_spectra[:, small_scale_cutoff_index:].sum(axis=1)

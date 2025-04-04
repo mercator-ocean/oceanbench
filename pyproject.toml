@@ -20,6 +20,8 @@ dependencies = [
     "parcels (>=3.1.2,<4.0.0)",
     "zarr==2.18.4",
     "copernicusmarine==2.0.1",
+    "requests (>=2.27.1)",
+    "aiohttp (>=3.0.0)"
 ]
 
 [build-system]

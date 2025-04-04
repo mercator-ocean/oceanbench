@@ -1,0 +1,32 @@
+name: Run tests
+on: [push]
+jobs:
+  tests:
+    runs-on: self-hosted
+    timeout-minutes: 30
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.5.6-0'
+          micromamba-binary-path: ${{ runner.temp }}/bin/micromamba
+          environment-file: conda_environment_test.yaml
+          environment-name: oceanbench_test
+          condarc-file: .condarc
+          cache-environment: true
+          post-cleanup: 'all'
+      - name: Run tests
+        env:
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+        run: make run-tests
+        shell: micromamba-shell {0}
+      - name: Archive glonet_sample test report
+        if: ${{ failure()  }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: glonet_sample.report.ipynb
+          path: assets/glonet_sample.report.ipynb

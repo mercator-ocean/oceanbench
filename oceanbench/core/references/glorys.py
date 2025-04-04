@@ -2,6 +2,10 @@ from datetime import datetime, timedelta
 from typing import List
 from xarray import Dataset, open_dataset
 import copernicusmarine
+import logging
+
+logger = logging.getLogger("copernicusmarine")
+logger.setLevel(level=logging.WARNING)
 
 
 def _glorys_subset(start_datetime: datetime) -> Dataset:
@@ -15,9 +19,7 @@ def _glorys_subset(start_datetime: datetime) -> Dataset:
 
 
 def _to_1_4(glorys_dataset: Dataset) -> Dataset:
-    initial_datetime = datetime.fromisoformat(
-        str(glorys_dataset["time"][0].values)
-    ) - timedelta(days=1)
+    initial_datetime = datetime.fromisoformat(str(glorys_dataset["time"][0].values)) - timedelta(days=1)
     initial_datetime_string = initial_datetime.strftime("%Y-%m-%d")
     return open_dataset(
         f"https://minio.dive.edito.eu/project-oceanbench/public/glorys14/{initial_datetime_string}.zarr",
@@ -26,9 +28,7 @@ def _to_1_4(glorys_dataset: Dataset) -> Dataset:
 
 
 def _glorys_datasets(candidate_dataset: Dataset) -> Dataset:
-    start_datetime = datetime.fromisoformat(
-        str(candidate_dataset["time"][0].values)
-    )
+    start_datetime = datetime.fromisoformat(str(candidate_dataset["time"][0].values))
     return _to_1_4(_glorys_subset(start_datetime))
 
 
