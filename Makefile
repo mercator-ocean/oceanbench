@@ -20,7 +20,7 @@ create-update-environment:
 
 create-environment: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 create-environment: SELECTED_ENVIRONMENT_FILE_NAME = ${ENVIRONMENT_FILE_NAME}
-create-environment: _create-update-environment
+create-environment: create-update-environment
 	micromamba run --name ${ENVIRONMENT_NAME} poetry install
 
 create-test-environment: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
@@ -33,9 +33,10 @@ check-format:
 	pre-commit install
 	pre-commit run --all-files --show-diff-on-failure
 
-update-readme: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+update-readme: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 update-readme:
 	${ACTIVATE_ENVIRONMENT}
+	pip install --editable .
 	python -c 'import oceanbench; oceanbench.generate_notebook_to_evaluate("assets/glonet_sample.py", "assets/glonet_sample.ipynb")'
 	jupyter nbconvert --ClearMetadataPreprocessor.enabled=True --ClearOutput.enabled=True --to markdown assets/glonet_sample.ipynb
 	lead="<!-- BEGINNING of a block automatically generated with make update-readme -->"
@@ -43,6 +44,13 @@ update-readme:
 	sed -i -e "/^$${lead}/,/^$${tail}/{ /^$${lead}/{p; r assets/glonet_sample.md
 	}; /^$${tail}/p; d }" README.md
 	rm assets/glonet_sample.md
+
+check-readme-update: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+check-readme-update:
+	${ACTIVATE_ENVIRONMENT}
+	mv assets/glonet_sample.ipynb assets/glonet_sample.old.ipynb
+	$(MAKE) update-readme
+	python tests/compare_notebook.py assets/glonet_sample.old.ipynb assets/glonet_sample.ipynb
 
 evaluate: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate:
