@@ -2,7 +2,7 @@ import oceanbench
 
 # ### Open candidate datasets
 
-# > Insert here the code that opens the candidate datasets as `candidate_datasets: xarray.Dataset`
+# > Insert here the code that opens the candidate datasets as `candidate_datasets: List[xarray.Dataset]`
 
 import xarray
 from typing import List
