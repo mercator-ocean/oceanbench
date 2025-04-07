@@ -24,14 +24,15 @@ import oceanbench
 
 ### Open candidate datasets
 
-> Insert here the code that opens the candidate datasets as `candidate_datasets: xarray.Dataset`
+> Insert here the code that opens the candidate datasets as `candidate_datasets: List[xarray.Dataset]`
 
 
 ```
 # Open GLONET forecast sample with xarray
 import xarray
+from typing import List
 
-candidate_datasets = [
+candidate_datasets: List[xarray.Dataset] = [
     xarray.open_dataset(
         "https://minio.dive.edito.eu/project-glonet/public/glonet_reforecast_2024/2024-01-03.zarr",
         engine="zarr",
@@ -46,45 +47,35 @@ candidate_datasets = [
 
 
 ```
-oceanbench.metrics.rmse_to_glorys(
-    candidate_datasets=candidate_datasets,
-)
+oceanbench.metrics.rmse_to_glorys(candidate_datasets)
 ```
 
 #### Mixed Layer Depth (MLD) analysis
 
 
 ```
-oceanbench.derived_quantities.mld(
-    candidate_datasets=candidate_datasets,
-)
+oceanbench.derived_quantities.mld(candidate_datasets)
 ```
 
 #### Geostrophic current analysis
 
 
 ```
-oceanbench.derived_quantities.geostrophic_currents(
-    candidate_datasets=candidate_datasets,
-)
+oceanbench.derived_quantities.geostrophic_currents(candidate_datasets)
 ```
 
 #### Density analysis
 
 
 ```
-oceanbench.derived_quantities.density(
-    candidate_datasets=candidate_datasets,
-)
+oceanbench.derived_quantities.density(candidate_datasets)
 ```
 
 #### Euclidean distance to GLORYS reference
 
 
 ```
-oceanbench.metrics.euclidean_distance_to_glorys(
-    candidate_datasets=candidate_datasets,
-)
+oceanbench.metrics.euclidean_distance_to_glorys(candidate_datasets)
 ```
 
 #### Energy cascading analysis
