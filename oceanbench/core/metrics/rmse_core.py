@@ -1,11 +1,15 @@
+from functools import partial
 import multiprocessing
-from typing import Any, List
+from typing import List
 
 import numpy
 import xarray
+import pandas
 
 from oceanbench.core.references.glorys import glorys_datasets
 from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
+from oceanbench.core.utils.score import Score
+from IPython.display import display, HTML
 
 
 def _get_rmse(forecast, ref, var, lead, level):
@@ -27,7 +31,7 @@ def _get_rmse_for_given_days(
     var,
     datasets: List[xarray.Dataset],
     glorys_datasets: List[xarray.Dataset],
-):
+) -> numpy.ndarray:
     j = 0
     nweeks = 1
     aa = numpy.zeros((nweeks, 10))
@@ -44,22 +48,68 @@ def _get_rmse_for_given_days(
 
 def pointwise_evaluation_glorys_core(
     candidate_datasets: List[xarray.Dataset],
-) -> numpy.ndarray[Any, Any]:
-    return _pointwise_evaluation_core(candidate_datasets, glorys_datasets(candidate_datasets))
+    display_html: bool,
+) -> Score:
+    variable_evaluations = _pointwise_evaluation_core(candidate_datasets, glorys_datasets(candidate_datasets))
+    if display_html:
+        _display_html(variable_evaluations)
+    return variable_evaluations
+
+
+def _display_variable_html(
+    variable_evaluations: dict[str, list[numpy.ndarray]],
+    variable_name: str,
+):
+
+    variable_evaluation = numpy.array(variable_evaluations[variable_name])
+    display(HTML(f'<h1 style="color:red; text-align:center;">Surface {variable_name} score</h1>'))
+    df = pandas.DataFrame(
+        [
+            ["Lead Day " + str(i + 1) for i in range(10)],
+            variable_evaluation[0, :],
+        ]
+    )
+    df.index = ["", "Score"]
+    df.style.set_properties(**{"border": "1px solid black", "text-align": "center"})
+    if variable_name != "zos":
+        display(HTML(f'<h1 style="color:red; text-align:center;">50m {variable_name} score</h1>'))
+        df = pandas.DataFrame(
+            [
+                ["Lead Day " + str(i + 1) for i in range(10)],
+                variable_evaluation[1, :],
+            ]
+        )
+        df.index = ["", "Score"]
+        df.style.set_properties(**{"border": "1px solid black", "text-align": "center"})
+
+
+def _display_html(variable_evaluations: dict[str, list[numpy.ndarray]]):
+    list(
+        map(
+            partial(_display_variable_html, variable_evaluations),
+            ["uo", "vo", "thetao", "so", "zos"],
+        )
+    )
 
 
 def _pointwise_evaluation_core(
     candidate_datasets: List[xarray.Dataset],
     reference_datasets: List[xarray.Dataset],
-) -> numpy.ndarray[Any, Any]:
-    gnet = {"uo": [], "vo": [], "so": [], "thetao": [], "zos": []}
+) -> dict[str, list[numpy.ndarray]]:
+    rmse_by_variable: dict[str, list[numpy.ndarray]] = {
+        "uo": [],
+        "vo": [],
+        "so": [],
+        "thetao": [],
+        "zos": [],
+    }
     variables_withouth_zos = ["uo", "vo", "so", "thetao"]
     mindepth = 0
-    maxdepth = 21
+    maxdepth = 1
     for depth in range(mindepth, maxdepth):
         print(f"{depth=}")
         for variable in variables_withouth_zos:
-            gnet[variable].append(
+            rmse_by_variable[variable].append(
                 _get_rmse_for_given_days(
                     depth,
                     variable,
@@ -68,7 +118,7 @@ def _pointwise_evaluation_core(
                 )
             )
         if depth < 1:
-            gnet["zos"].append(
+            rmse_by_variable["zos"].append(
                 _get_rmse_for_given_days(
                     depth,
                     "zos",
@@ -76,7 +126,7 @@ def _pointwise_evaluation_core(
                     reference_datasets,
                 )
             )
-    return numpy.array(gnet)
+    return rmse_by_variable
 
 
 def get_euclidean_distance_glorys_core(

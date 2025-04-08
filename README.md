@@ -20,6 +20,8 @@ Its content is available as a notebook to download [here](https://raw.githubuser
 <!-- BEGINNING of a block automatically generated with make update-readme -->
 ```
 import oceanbench
+
+oceanbench.__version__
 ```
 
 ### Open candidate datasets
@@ -47,7 +49,7 @@ candidate_datasets: List[xarray.Dataset] = [
 
 
 ```
-oceanbench.metrics.rmse_to_glorys(candidate_datasets)
+oceanbench.metrics.rmse_to_glorys(candidate_datasets, display_html=True)
 ```
 
 #### Mixed Layer Depth (MLD) analysis
