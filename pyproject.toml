@@ -19,6 +19,7 @@ dependencies = [
     "gsw (>=3.6.19,<4.0.0)",
     "parcels (>=3.1.2,<4.0.0)",
     "zarr==2.18.4",
+    "numcodecs==0.15.1",
     "copernicusmarine==2.0.1",
     "requests (>=2.27.1)",
     "aiohttp (>=3.0.0)"

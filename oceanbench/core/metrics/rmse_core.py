@@ -56,27 +56,38 @@ def pointwise_evaluation_glorys_core(
     return variable_evaluations
 
 
+def _lead_day_labels(daily_scores: list[float]) -> list[str]:
+    return list(
+        map(
+            lambda day_index: f"Lead day {day_index}",
+            range(1, len(daily_scores) + 1),
+        )
+    )
+
+
 def _display_variable_html(
     variable_evaluations: dict[str, list[numpy.ndarray]],
     variable_name: str,
 ):
 
-    variable_evaluation = numpy.array(variable_evaluations[variable_name])
+    variable_scores = numpy.array(variable_evaluations[variable_name])
+    daily_score_depth_0 = variable_scores[0, :]
     display(HTML(f'<h1 style="color:red; text-align:center;">Surface {variable_name} score</h1>'))
     df = pandas.DataFrame(
         [
-            ["Lead Day " + str(i + 1) for i in range(10)],
-            variable_evaluation[0, :],
+            _lead_day_labels(daily_score_depth_0),
+            daily_score_depth_0,
         ]
     )
     df.index = ["", "Score"]
     df.style.set_properties(**{"border": "1px solid black", "text-align": "center"})
     if variable_name != "zos":
+        daily_score_depth_1 = variable_scores[1, :]
         display(HTML(f'<h1 style="color:red; text-align:center;">50m {variable_name} score</h1>'))
         df = pandas.DataFrame(
             [
-                ["Lead Day " + str(i + 1) for i in range(10)],
-                variable_evaluation[1, :],
+                _lead_day_labels(daily_score_depth_1),
+                daily_score_depth_1,
             ]
         )
         df.index = ["", "Score"]
@@ -105,7 +116,7 @@ def _pointwise_evaluation_core(
     }
     variables_withouth_zos = ["uo", "vo", "so", "thetao"]
     mindepth = 0
-    maxdepth = 1
+    maxdepth = 21
     for depth in range(mindepth, maxdepth):
         print(f"{depth=}")
         for variable in variables_withouth_zos:
