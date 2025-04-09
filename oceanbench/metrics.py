@@ -3,6 +3,7 @@ from typing import List, Optional
 import xarray
 
 from . import plot
+from pandas import DataFrame
 
 from oceanbench.core.metrics.rmse_core import (
     analyze_energy_cascade_core,
@@ -13,9 +14,9 @@ from oceanbench.core.metrics.rmse_core import (
 
 def rmse_to_glorys(
     candidate_datasets: List[xarray.Dataset],
-    display_html: bool,
-):
-    return pointwise_evaluation_glorys_core(candidate_datasets=candidate_datasets, display_html=display_html)
+    pretty: bool,
+) -> DataFrame:
+    return pointwise_evaluation_glorys_core(candidate_datasets=candidate_datasets, pretty=pretty)
 
 
 def euclidean_distance_to_glorys(

@@ -49,7 +49,7 @@ candidate_datasets: List[xarray.Dataset] = [
 
 
 ```
-oceanbench.metrics.rmse_to_glorys(candidate_datasets, display_html=True)
+oceanbench.metrics.rmse_to_glorys(candidate_datasets, pretty=True)
 ```
 
 #### Mixed Layer Depth (MLD) analysis

@@ -1,4 +1,3 @@
-from functools import partial
 import multiprocessing
 from typing import List
 
@@ -8,29 +7,30 @@ import pandas
 
 from oceanbench.core.references.glorys import glorys_datasets
 from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
-from oceanbench.core.utils.score import Score
-from IPython.display import display, HTML
+from itertools import product
 
 
-def _get_rmse(forecast, ref, var, lead, level):
+def _get_rmse(forecast, ref, var, lead, depth_level):
     cpu_count = multiprocessing.cpu_count()
     with multiprocessing.Pool(cpu_count) as _:
         if var == "zos":
-            mask = ~numpy.isnan(forecast[var][lead]) & ~numpy.isnan(ref[var][level, lead])
-            rmse = numpy.sqrt(numpy.mean((forecast[var][lead].data[mask] - ref[var][level, lead].data[mask]) ** 2))
-        else:
-            mask = ~numpy.isnan(forecast[var][lead, level].data) & ~numpy.isnan(ref[var][lead, level].data)
+            mask = ~numpy.isnan(forecast[var][lead]) & ~numpy.isnan(ref[var][depth_level, lead])
             rmse = numpy.sqrt(
-                numpy.mean((forecast[var][lead, level].data[mask] - ref[var][lead, level].data[mask]) ** 2)
+                numpy.mean((forecast[var][lead].data[mask] - ref[var][depth_level, lead].data[mask]) ** 2)
+            )
+        else:
+            mask = ~numpy.isnan(forecast[var][lead, depth_level].data) & ~numpy.isnan(ref[var][lead, depth_level].data)
+            rmse = numpy.sqrt(
+                numpy.mean((forecast[var][lead, depth_level].data[mask] - ref[var][lead, depth_level].data[mask]) ** 2)
             )
     return rmse
 
 
-def _get_rmse_for_given_days(
-    depthg,
-    var,
+def _compute_rmse(
     datasets: List[xarray.Dataset],
     glorys_datasets: List[xarray.Dataset],
+    variable_name: str,
+    depth_level: int,
 ) -> numpy.ndarray:
     j = 0
     nweeks = 1
@@ -38,7 +38,7 @@ def _get_rmse_for_given_days(
 
     for dataset, glorys_dataset in zip(datasets, glorys_datasets):
         for i in range(0, 10):
-            aa[j, i] = _get_rmse(dataset, glorys_dataset, var, i, depthg)
+            aa[j, i] = _get_rmse(dataset, glorys_dataset, variable_name, i, depth_level)
         j = j + 1
         if j > nweeks - 1:
             break
@@ -48,12 +48,12 @@ def _get_rmse_for_given_days(
 
 def pointwise_evaluation_glorys_core(
     candidate_datasets: List[xarray.Dataset],
-    display_html: bool,
-) -> Score:
-    variable_evaluations = _pointwise_evaluation_core(candidate_datasets, glorys_datasets(candidate_datasets))
-    if display_html:
-        _display_html(variable_evaluations)
-    return variable_evaluations
+    pretty: bool,
+) -> pandas.DataFrame:
+    score = _pointwise_evaluation_core(candidate_datasets, glorys_datasets(candidate_datasets))
+    if pretty:
+        score.style.set_properties(**{"border": "1px solid black", "text-align": "center"})
+    return score
 
 
 def _lead_day_labels(daily_scores: list[float]) -> list[str]:
@@ -65,79 +65,42 @@ def _lead_day_labels(daily_scores: list[float]) -> list[str]:
     )
 
 
-def _display_variable_html(
-    variable_evaluations: dict[str, list[numpy.ndarray]],
-    variable_name: str,
-):
+VARIABLE_LABELS = {
+    "thetao": "temperature",
+    "so": "salinity",
+    "zos": "height",
+    "vo": "northward velocity",
+    "uo": "eastward velocity",
+}
 
-    variable_scores = numpy.array(variable_evaluations[variable_name])
-    daily_score_depth_0 = variable_scores[0, :]
-    display(HTML(f'<h1 style="color:red; text-align:center;">Surface {variable_name} score</h1>'))
-    df = pandas.DataFrame(
-        [
-            _lead_day_labels(daily_score_depth_0),
-            daily_score_depth_0,
-        ]
-    )
-    df.index = ["", "Score"]
-    df.style.set_properties(**{"border": "1px solid black", "text-align": "center"})
-    if variable_name != "zos":
-        daily_score_depth_1 = variable_scores[1, :]
-        display(HTML(f'<h1 style="color:red; text-align:center;">50m {variable_name} score</h1>'))
-        df = pandas.DataFrame(
-            [
-                _lead_day_labels(daily_score_depth_1),
-                daily_score_depth_1,
-            ]
-        )
-        df.index = ["", "Score"]
-        df.style.set_properties(**{"border": "1px solid black", "text-align": "center"})
+DEPTH_LABELS = {
+    0: "Surface",
+    1: "50m",
+}
 
 
-def _display_html(variable_evaluations: dict[str, list[numpy.ndarray]]):
-    list(
-        map(
-            partial(_display_variable_html, variable_evaluations),
-            ["uo", "vo", "thetao", "so", "zos"],
-        )
-    )
+def _variale_depth_label(variable_name: str, depth_level: int) -> str:
+    return f"{DEPTH_LABELS[depth_level]} {VARIABLE_LABELS[variable_name]}"
 
 
 def _pointwise_evaluation_core(
     candidate_datasets: List[xarray.Dataset],
     reference_datasets: List[xarray.Dataset],
-) -> dict[str, list[numpy.ndarray]]:
-    rmse_by_variable: dict[str, list[numpy.ndarray]] = {
-        "uo": [],
-        "vo": [],
-        "so": [],
-        "thetao": [],
-        "zos": [],
+) -> pandas.DataFrame:
+    all_combinations = list(product(VARIABLE_LABELS.keys(), DEPTH_LABELS.keys()))
+    scores = {
+        _variale_depth_label(variable_name, depth_level): list(
+            _compute_rmse(
+                candidate_datasets,
+                reference_datasets,
+                variable_name,
+                depth_level,
+            )
+        )
+        for (variable_name, depth_level) in all_combinations
     }
-    variables_withouth_zos = ["uo", "vo", "so", "thetao"]
-    mindepth = 0
-    maxdepth = 21
-    for depth in range(mindepth, maxdepth):
-        print(f"{depth=}")
-        for variable in variables_withouth_zos:
-            rmse_by_variable[variable].append(
-                _get_rmse_for_given_days(
-                    depth,
-                    variable,
-                    candidate_datasets,
-                    reference_datasets,
-                )
-            )
-        if depth < 1:
-            rmse_by_variable["zos"].append(
-                _get_rmse_for_given_days(
-                    depth,
-                    "zos",
-                    candidate_datasets,
-                    reference_datasets,
-                )
-            )
-    return rmse_by_variable
+    score_with_lead_days = {"": _lead_day_labels(next(iter(scores.values())))} | scores
+    return pandas.DataFrame(score_with_lead_days).T
 
 
 def get_euclidean_distance_glorys_core(
