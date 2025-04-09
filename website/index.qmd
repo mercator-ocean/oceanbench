@@ -1,0 +1,76 @@
+---
+title: "OceanBench"
+format:
+  html:
+    code-fold: true
+    theme: none
+    css: styles.css
+---
+
+Welcome to OceanBench.
+
+
+
+```{python}
+# | classes: plain
+
+import pandas as pd
+import numpy as np
+from IPython.display import display, HTML
+
+df = pd.read_csv("test.csv", index_col=0)
+
+variables = ["uo", "vo", "so", "thetao", "zos"]
+models = ["test", "toto", "tutu"]
+lead_day_indexes = [
+    "Lead day 1",
+    "Lead day 3",
+    "Lead day 5",
+    "Lead day 7",
+    "Lead day 10",
+]
+
+html_table = "<table>"
+html_table_caption = "<caption>Model scores</caption>"
+html_table_head = (
+    "<thead><tr class='sticky'>"
+    + "<th class='sticky' style='background: #f5f5f5'>Model</th>"
+    + "".join(
+        [
+            f"<td colspan='{len(lead_day_indexes)}'>{variable}</td>"
+            for variable in variables
+        ]
+    )
+    + "</tr></thead>"
+)
+html_table_body = "<tbody>"
+
+for model in models:
+    html_model_row = f"<tr><th class='sticky' style='background: #f5f5f5'>{model}</th>"
+    for variable in variables:
+        df = pd.read_csv(f"{model}.csv", index_col=0)
+        values = df.loc[variable]
+        html_model_row += "".join(
+            [
+                f"<td>{values[lead_day_index].item()}</td>"
+                for lead_day_index in lead_day_indexes
+            ]
+        )
+    html_model_row += "</tr>"
+    html_table_body += html_model_row
+
+html_table_body += "</tbody>"
+
+html_table_footer = (
+    "<tfoot><tr class='sticky'>"
+    + "<th class='sticky' style='background: #f5f5f5'>Lead time</th>"
+    + "".join(
+        [f"<td>{lead_day_index}</td>" for lead_day_index in lead_day_indexes]
+        * len(variables)
+    )
+    + "</tr></tfoot>"
+)
+
+html_table = f"<table>{html_table_caption}{html_table_head}{html_table_body}{html_table_footer}</table>"
+display(HTML(html_table))
+```

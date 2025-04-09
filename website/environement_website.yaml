@@ -1,0 +1,5 @@
+name: oceanbench-website
+dependencies:
+  - great_tables=0.17.*
+  - jupyter=1.1.1
+  - pandas=2.2.3

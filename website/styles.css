@@ -1,0 +1,16 @@
+caption {
+  position: sticky;
+  left: 0;
+}
+
+tr.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+th.sticky,
+td.sticky {
+  position: sticky;
+  left: 0;
+}
