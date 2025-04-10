@@ -1,5 +1,6 @@
+from functools import partial
 import multiprocessing
-from typing import List
+from typing import List, Optional
 
 import numpy
 import xarray
@@ -9,41 +10,92 @@ from oceanbench.core.references.glorys import glorys_datasets
 from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
 from itertools import product
 
+DEPTH_STANDARD_NAME = "depth"
+TIME_STANDARD_NAME = "time"
 
-def _get_rmse(forecast, ref, var, lead, depth_level):
+
+def _get_variable_name_from_standard_name(dataset: xarray.Dataset, standard_name: str) -> Optional[str]:
+    for variable_name in dataset.variables:
+        if hasattr(dataset[variable_name], "standard_name") and dataset[variable_name].standard_name == standard_name:
+            return str(variable_name)
+    return None
+
+
+def _rmse(data, reference_data):
+    mask = ~numpy.isnan(data) & ~numpy.isnan(reference_data)
+    rmse = numpy.sqrt(numpy.mean((data[mask] - reference_data[mask]) ** 2))
+    return rmse
+
+
+def _select_variable_day_and_depth(
+    dataset: xarray.Dataset,
+    variable_name: str,
+    depth_level_meter: float,
+    lead_day: int,
+) -> xarray.DataArray:
+    depth_name = _get_variable_name_from_standard_name(dataset, DEPTH_STANDARD_NAME)
+    time_name = _get_variable_name_from_standard_name(dataset, TIME_STANDARD_NAME)
+    new_dataset = dataset[variable_name].isel({time_name: lead_day})
+    return (
+        new_dataset.sel({depth_name: depth_level_meter}) if depth_name in dataset[variable_name].coords else new_dataset
+    )
+
+
+def _get_rmse(
+    candidate_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    variable_name: str,
+    depth_level_meter: float,
+    lead_day: int,
+) -> float:
     cpu_count = multiprocessing.cpu_count()
     with multiprocessing.Pool(cpu_count) as _:
-        if var == "zos":
-            mask = ~numpy.isnan(forecast[var][lead]) & ~numpy.isnan(ref[var][depth_level, lead])
-            rmse = numpy.sqrt(
-                numpy.mean((forecast[var][lead].data[mask] - ref[var][depth_level, lead].data[mask]) ** 2)
-            )
-        else:
-            mask = ~numpy.isnan(forecast[var][lead, depth_level].data) & ~numpy.isnan(ref[var][lead, depth_level].data)
-            rmse = numpy.sqrt(
-                numpy.mean((forecast[var][lead, depth_level].data[mask] - ref[var][lead, depth_level].data[mask]) ** 2)
-            )
-    return rmse
+        candidate_dataarray = _select_variable_day_and_depth(
+            candidate_dataset, variable_name, depth_level_meter, lead_day
+        )
+        reference_dataarray = _select_variable_day_and_depth(
+            reference_dataset, variable_name, depth_level_meter, lead_day
+        )
+        return _rmse(candidate_dataarray.data, reference_dataarray.data)
+
+
+LEAD_DAYS_COUNT = 10
+
+
+def get_week_rmse(
+    dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    variable_name: str,
+    depth_level_meter: float,
+) -> list[float]:
+    return list(
+        map(
+            partial(
+                _get_rmse,
+                dataset,
+                reference_dataset,
+                variable_name,
+                depth_level_meter,
+            ),
+            range(LEAD_DAYS_COUNT),
+        )
+    )
 
 
 def _compute_rmse(
     datasets: List[xarray.Dataset],
-    glorys_datasets: List[xarray.Dataset],
+    reference_datasets: List[xarray.Dataset],
     variable_name: str,
-    depth_level: int,
+    depth_level_meter: float,
 ) -> numpy.ndarray:
-    j = 0
-    nweeks = 1
-    aa = numpy.zeros((nweeks, 10))
 
-    for dataset, glorys_dataset in zip(datasets, glorys_datasets):
-        for i in range(0, 10):
-            aa[j, i] = _get_rmse(dataset, glorys_dataset, variable_name, i, depth_level)
-        j = j + 1
-        if j > nweeks - 1:
-            break
-    rmse = aa.mean(axis=0)
-    return rmse
+    all_rmse = numpy.array(
+        [
+            get_week_rmse(dataset, glorys_dataset, variable_name, depth_level_meter)
+            for dataset, glorys_dataset in zip(datasets, reference_datasets)
+        ]
+    )
+    return all_rmse.mean(axis=0)
 
 
 def pointwise_evaluation_glorys_core(
@@ -70,13 +122,13 @@ VARIABLE_LABELS = {
 }
 
 DEPTH_LABELS = {
-    0: "Surface",
-    1: "50m",
+    4.940250e-01: "Surface",
+    4.737369e01: "50m",
 }
 
 
-def _variale_depth_label(variable_name: str, depth_level: int) -> str:
-    return f"{DEPTH_LABELS[depth_level]} {VARIABLE_LABELS[variable_name]}"
+def _variale_depth_label(variable_name: str, depth_level_meter: float) -> str:
+    return f"{DEPTH_LABELS[depth_level_meter]} {VARIABLE_LABELS[variable_name]}"
 
 
 def _pointwise_evaluation_core(
@@ -85,15 +137,17 @@ def _pointwise_evaluation_core(
 ) -> pandas.DataFrame:
     all_combinations = list(product(VARIABLE_LABELS.keys(), DEPTH_LABELS.keys()))
     scores = {
-        _variale_depth_label(variable_name, depth_level): list(
+        _variale_depth_label(variable_name, depth_level_meter): list(
             _compute_rmse(
                 candidate_datasets,
                 reference_datasets,
                 variable_name,
-                depth_level,
+                depth_level_meter,
             )
         )
-        for (variable_name, depth_level) in all_combinations
+        for (variable_name, depth_level_meter) in all_combinations
+        if _get_variable_name_from_standard_name(candidate_datasets[0], DEPTH_STANDARD_NAME)
+        in candidate_datasets[0][variable_name].coords
     }
     score_dataframe = pandas.DataFrame(scores)
     score_dataframe.index = _lead_day_labels(len(score_dataframe))
