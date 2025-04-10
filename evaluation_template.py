@@ -15,7 +15,7 @@ candidate_datasets: List[xarray.Dataset] = ...
 
 # #### Root Mean Square Error (RMSE) compared to GLORYS
 
-oceanbench.metrics.rmse_to_glorys(candidate_datasets, pretty=True)
+oceanbench.metrics.rmse_to_glorys(candidate_datasets)
 
 # #### Mixed Layer Depth (MLD) analysis
 

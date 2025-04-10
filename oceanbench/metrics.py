@@ -14,9 +14,8 @@ from oceanbench.core.metrics.rmse_core import (
 
 def rmse_to_glorys(
     candidate_datasets: List[xarray.Dataset],
-    pretty: bool,
 ) -> DataFrame:
-    return pointwise_evaluation_glorys_core(candidate_datasets=candidate_datasets, pretty=pretty)
+    return pointwise_evaluation_glorys_core(candidate_datasets=candidate_datasets)
 
 
 def euclidean_distance_to_glorys(

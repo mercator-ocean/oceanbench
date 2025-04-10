@@ -48,19 +48,15 @@ def _compute_rmse(
 
 def pointwise_evaluation_glorys_core(
     candidate_datasets: List[xarray.Dataset],
-    pretty: bool,
 ) -> pandas.DataFrame:
-    score = _pointwise_evaluation_core(candidate_datasets, glorys_datasets(candidate_datasets))
-    if pretty:
-        score.style.set_properties(**{"border": "1px solid black", "text-align": "center"})
-    return score
+    return _pointwise_evaluation_core(candidate_datasets, glorys_datasets(candidate_datasets))
 
 
-def _lead_day_labels(daily_scores: list[float]) -> list[str]:
+def _lead_day_labels(day_count) -> list[str]:
     return list(
         map(
             lambda day_index: f"Lead day {day_index}",
-            range(1, len(daily_scores) + 1),
+            range(1, day_count + 1),
         )
     )
 
@@ -99,8 +95,9 @@ def _pointwise_evaluation_core(
         )
         for (variable_name, depth_level) in all_combinations
     }
-    score_with_lead_days = {"": _lead_day_labels(next(iter(scores.values())))} | scores
-    return pandas.DataFrame(score_with_lead_days).T
+    score_dataframe = pandas.DataFrame(scores)
+    score_dataframe.index = _lead_day_labels(len(score_dataframe))
+    return score_dataframe.T
 
 
 def get_euclidean_distance_glorys_core(
