@@ -3,7 +3,7 @@ import xarray
 
 
 def calc_geo_core(dataset: xarray.Dataset, var: str, lead: int) -> xarray.Dataset:
-    ssh = dataset[var][lead].values
+    ssh = dataset[var].values
     lat = dataset["lat"].values
     lon = dataset["lon"].values
 
@@ -26,7 +26,7 @@ def calc_geo_core(dataset: xarray.Dataset, var: str, lead: int) -> xarray.Datase
     u_geo = -g / f[:, numpy.newaxis] * dssh_dy
     v_geo = g / f[:, numpy.newaxis] * dssh_dx
 
-    dataset["u_geo"] = (("lat", "lon"), u_geo)
-    dataset["v_geo"] = (("lat", "lon"), v_geo)
+    dataset["u_geo"] = (("time","lat", "lon"), u_geo)
+    dataset["v_geo"] = (("time","lat", "lon"), v_geo)
 
     return dataset

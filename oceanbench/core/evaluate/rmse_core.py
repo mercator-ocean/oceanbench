@@ -12,8 +12,8 @@ def _get_rmse(forecast, ref, var, lead, level):
     cpu_count = multiprocessing.cpu_count()
     with multiprocessing.Pool(cpu_count) as _:
         if var == "zos":
-            mask = ~numpy.isnan(forecast[var][lead]) & ~numpy.isnan(ref[var][level, lead])
-            rmse = numpy.sqrt(numpy.mean((forecast[var][lead].data[mask] - ref[var][level, lead].data[mask]) ** 2))
+            mask = ~numpy.isnan(forecast[var][lead]) & ~numpy.isnan(ref[var][lead])
+            rmse = numpy.sqrt(numpy.mean((forecast[var][lead].data[mask] - ref[var][level].data[mask]) ** 2))
         else:
             mask = ~numpy.isnan(forecast[var][lead, level].data) & ~numpy.isnan(ref[var][lead, level].data)
             rmse = numpy.sqrt(

@@ -5,8 +5,8 @@ import xarray
 
 def calc_mld_core(dataset: xarray.Dataset, lead: int) -> xarray.Dataset:
     density_threshold = 0.03  # kg/m^3 threshold for MLD definition
-    temperature = dataset["thetao"][lead]
-    salinity = dataset["so"][lead]
+    temperature = dataset["thetao"]
+    salinity = dataset["so"]
     depth = dataset["depth"]
     lat = dataset["lat"]
     lon = dataset["lon"]
