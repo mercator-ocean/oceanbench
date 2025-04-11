@@ -1,5 +1,11 @@
-name: Run tests
-on: [push]
+name: Evaluate challenger
+on:
+  workflow_dispatch:
+    inputs:
+      challengerPythonFileName:
+        description: 'Challenger python file name in the "challenger_datasets" directory'
+        required: true
+        type: string
 jobs:
   tests:
     runs-on: self-hosted
@@ -22,11 +28,12 @@ jobs:
         env:
           COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
           COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
-        run: make run-tests
+          CHALLENGER_PYTHON_FILE_PATH: challenger_datasets/${{ inputs.challengerPythonFileName  }}
+          CHALLENGER_REPORT_NAME: ${{ inputs.challengerPythonFileName }}.report.ipynb
+        run: make evaluate-challenger
         shell: micromamba-shell {0}
-      - name: Archive glonet_sample test report
-        if: ${{ failure()  }}
+      - name: Archive evaluation report
         uses: actions/upload-artifact@v4
         with:
-          name: assets/new_glonet_sample.report.ipynb
-          path: assets/new_glonet_sample.report.ipynb
+          name: challenger_datasets/${{ inputs.challengerPythonFileName }}.report.ipynb
+          path: challenger_datasets/${{ inputs.challengerPythonFileName }}.report.ipynb
