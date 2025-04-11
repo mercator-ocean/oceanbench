@@ -1,0 +1,16 @@
+project:
+  type: website
+  pre-render: prepare.py
+website:
+  title: "OceanBench"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - about.qmd
+format:
+  html:
+    theme:
+      - default
+    css: styles.css
+    toc: true
