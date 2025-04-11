@@ -181,3 +181,4 @@ data/*
 
 # Quarto website
 website/_site
+website/_result_tables

@@ -1,5 +1,6 @@
 project:
   type: website
+  pre-render: prepare.py
 website:
   title: "OceanBench"
   navbar:
