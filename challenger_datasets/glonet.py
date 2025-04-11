@@ -70,16 +70,6 @@ def generate_dates(start_date_str, end_date_str, delta_days):
     ]
 
 
-start_date_str = "2024-01-03"
-end_date_str = "2024-07-17"
-delta_days = 7
-
-print(generate_dates(start_date_str, end_date_str, delta_days))
-
-dates_list = generate_dates(start_date_str, end_date_str, delta_days)
-print(dates_list)
-
-
 def _open_dataset(date_string: str) -> xarray.Dataset:
     return _add_climate_forecast_attributes(
         xarray.open_dataset(
