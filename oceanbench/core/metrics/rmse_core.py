@@ -124,9 +124,9 @@ def _lead_day_labels(day_count) -> list[str]:
 
 
 VARIABLE_LABELS = {
+    "zos": "height",
     "thetao": "temperature",
     "so": "salinity",
-    "zos": "height",
     "vo": "northward velocity",
     "uo": "eastward velocity",
 }
@@ -156,7 +156,7 @@ def _variable_and_depth_combinations(
 ) -> list[tuple[str, float]]:
     return list(
         (variable_name, depth_level_meter)
-        for (variable_name, depth_level_meter) in product(VARIABLE_LABELS.keys(), DEPTH_LABELS.keys())
+        for (depth_level_meter, variable_name) in product(DEPTH_LABELS.keys(), VARIABLE_LABELS.keys())
         if (_has_depths(dataset, variable_name) or _is_surface(depth_level_meter))
     )
 
