@@ -2,48 +2,48 @@ import oceanbench
 
 oceanbench.__version__
 
-# ### Open candidate datasets
+# ### Open challenger datasets
 
-# > Insert here the code that opens the candidate datasets as `candidate_datasets: List[xarray.Dataset]`
+# > Insert here the code that opens the challenger datasets as `challenger_datasets: List[xarray.Dataset]`
 
 import xarray
 from typing import List
 
-candidate_datasets: List[xarray.Dataset] = ...
+challenger_datasets: List[xarray.Dataset] = ...
 
-# ### Evaluation of candidate datasets using OceanBench
+# ### Evaluation of challenger datasets using OceanBench
 
 # #### Root Mean Square Error (RMSE) compared to GLORYS
 
-oceanbench.metrics.rmse_to_glorys(candidate_datasets)
+oceanbench.metrics.rmse_to_glorys(challenger_datasets)
 
 # #### Mixed Layer Depth (MLD) analysis
 
-oceanbench.derived_quantities.mld(candidate_datasets)
+oceanbench.derived_quantities.mld(challenger_datasets)
 
 # #### Geostrophic current analysis
 
-oceanbench.derived_quantities.geostrophic_currents(candidate_datasets)
+oceanbench.derived_quantities.geostrophic_currents(challenger_datasets)
 
 # #### Density analysis
 
-oceanbench.derived_quantities.density(candidate_datasets)
+oceanbench.derived_quantities.density(challenger_datasets)
 
 # #### Euclidean distance to GLORYS reference
 
-oceanbench.metrics.euclidean_distance_to_glorys(candidate_datasets)
+oceanbench.metrics.euclidean_distance_to_glorys(challenger_datasets)
 
 # #### Energy cascading analysis
 
-oceanbench.metrics.energy_cascade(candidate_datasets)
+oceanbench.metrics.energy_cascade(challenger_datasets)
 
 # #### Kinetic energy analysis
 
-oceanbench.derived_quantities.kinetic_energy(candidate_datasets)
+oceanbench.derived_quantities.kinetic_energy(challenger_datasets)
 
 # #### Vorticity analysis
-oceanbench.derived_quantities.vorticity(candidate_datasets)
+oceanbench.derived_quantities.vorticity(challenger_datasets)
 
 # #### Mass conservation analysis
 
-oceanbench.derived_quantities.mass_conservation(candidate_datasets)
+oceanbench.derived_quantities.mass_conservation(challenger_datasets)

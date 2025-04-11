@@ -11,7 +11,7 @@ from oceanbench.core.process.utils import (
 
 
 def density(
-    candidate_datasets: List[xarray.Dataset],
+    challenger_datasets: List[xarray.Dataset],
     lead: int = 1,
     minimum_latitude: float = -100,
     maximum_latitude: float = -40,
@@ -19,7 +19,7 @@ def density(
     maximum_longitude: float = 50,
 ):
     dataarray = calc_density_core(
-        dataset=candidate_datasets[0],
+        dataset=challenger_datasets[0],
         lead=lead,
         minimum_latitude=minimum_latitude,
         maximum_latitude=maximum_latitude,
@@ -30,42 +30,42 @@ def density(
 
 
 def geostrophic_currents(
-    candidate_datasets: List[xarray.Dataset],
+    challenger_datasets: List[xarray.Dataset],
     lead: int = 1,
     variable: str = "zos",
 ):
     dataset = calc_geo_core(
-        dataset=candidate_datasets[0],
+        dataset=challenger_datasets[0],
         lead=lead,
         var=variable,
     )
     plot.plot_geo(dataset=dataset)
 
 
-def mld(candidate_datasets: List[xarray.Dataset], lead: int = 1):
+def mld(challenger_datasets: List[xarray.Dataset], lead: int = 1):
     dataset = calc_mld_core(
-        dataset=candidate_datasets[0],
+        dataset=challenger_datasets[0],
         lead=lead,
     )
     plot.plot_mld(dataset=dataset)
 
 
 def mass_conservation(
-    candidate_datasets: List[xarray.Dataset],
+    challenger_datasets: List[xarray.Dataset],
     depth: float = 0,
     deg_resolution: float = 0.25,
 ):
     mean_div_time_series = mass_conservation_core(
-        dataset=candidate_datasets[0],
+        dataset=challenger_datasets[0],
         depth=depth,
         deg_resolution=deg_resolution,
     )
     print(mean_div_time_series.data)  # time-dependent scores
 
 
-def kinetic_energy(candidate_datasets: List[xarray.Dataset]):
-    plot.plot_kinetic_energy(candidate_datasets[0])
+def kinetic_energy(challenger_datasets: List[xarray.Dataset]):
+    plot.plot_kinetic_energy(challenger_datasets[0])
 
 
-def vorticity(candidate_datasets: List[xarray.Dataset]):
-    plot.plot_vorticity(candidate_datasets[0])
+def vorticity(challenger_datasets: List[xarray.Dataset]):
+    plot.plot_vorticity(challenger_datasets[0])

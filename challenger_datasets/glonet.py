@@ -89,4 +89,4 @@ def _open_dataset(date_string: str) -> xarray.Dataset:
     )
 
 
-candidate_datasets: List[xarray.Dataset] = list(map(_open_dataset, generate_dates("2024-01-03", "2024-07-10", 7)))
+challenger_datasets: List[xarray.Dataset] = list(map(_open_dataset, generate_dates("2024-01-03", "2024-07-10", 7)))
