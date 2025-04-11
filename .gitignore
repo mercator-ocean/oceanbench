@@ -178,7 +178,3 @@ cython_debug/
 
 # Data
 data/*
-
-# Quarto website
-website/_site
-website/_result_tables

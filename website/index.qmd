@@ -30,7 +30,7 @@ variables = [
     "Surface eastward velocity",
     "50m eastward velocity",
 ]
-models = ["glonet"]
+models = ["glonet", "glonet", "glonet"]
 lead_day_indexes = ["1", "3", "5", "7", "9"]
 
 html_table = "<table>"
