@@ -8,7 +8,7 @@ def generate_evaluation_notebook_file(
     notebook = _generate_template_notebook()
     with open(python_file_path, "r", encoding="utf8") as file:
         code = file.read()
-        new_notebook = _replace_code_to_open_candidate_datasets(code, notebook)
+        new_notebook = _replace_code_to_open_challenger_datasets(code, notebook)
         nbformat.write(new_notebook, output_notebook_file_path)
 
 
@@ -55,7 +55,7 @@ def _python_to_jupyter_notebook(python_code: str) -> nbformat.NotebookNode:
     return notebook
 
 
-def _replace_code_to_open_candidate_datasets(
+def _replace_code_to_open_challenger_datasets(
     python_code: str, notebook: nbformat.NotebookNode
 ) -> nbformat.NotebookNode:
     notebook["cells"][2]["source"] = python_code

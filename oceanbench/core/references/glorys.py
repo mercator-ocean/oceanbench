@@ -96,10 +96,10 @@ def _to_1_4(glorys_dataset: Dataset) -> Dataset:
     )
 
 
-def _glorys_datasets(candidate_dataset: Dataset) -> Dataset:
-    start_datetime = datetime.fromisoformat(str(candidate_dataset["time"][0].values))
+def _glorys_datasets(challenger_dataset: Dataset) -> Dataset:
+    start_datetime = datetime.fromisoformat(str(challenger_dataset["time"][0].values))
     return _to_1_4(_glorys_subset(start_datetime))
 
 
-def glorys_datasets(candidate_datasets: List[Dataset]) -> List[Dataset]:
-    return list(map(_glorys_datasets, candidate_datasets))
+def glorys_datasets(challenger_datasets: List[Dataset]) -> List[Dataset]:
+    return list(map(_glorys_datasets, challenger_datasets))

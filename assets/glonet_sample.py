@@ -60,7 +60,7 @@ def _add_climate_forecast_attributes(
     )
 
 
-candidate_datasets: List[xarray.Dataset] = [
+challenger_datasets: List[xarray.Dataset] = [
     _add_climate_forecast_attributes(
         xarray.open_dataset(
             "https://minio.dive.edito.eu/project-glonet/public/glonet_reforecast_2024/2024-01-03.zarr",

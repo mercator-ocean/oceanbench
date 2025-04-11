@@ -13,20 +13,20 @@ from oceanbench.core.metrics.rmse_core import (
 
 
 def rmse_to_glorys(
-    candidate_datasets: List[xarray.Dataset],
+    challenger_datasets: List[xarray.Dataset],
 ) -> DataFrame:
-    return pointwise_evaluation_glorys_core(candidate_datasets=candidate_datasets)
+    return pointwise_evaluation_glorys_core(challenger_datasets=challenger_datasets)
 
 
 def euclidean_distance_to_glorys(
-    candidate_datasets: List[xarray.Dataset],
+    challenger_datasets: List[xarray.Dataset],
     minimum_latitude: float = 466,
     maximum_latitude: float = 633,
     minimum_longitude: float = 400,
     maximum_longitude: float = 466,
 ):
     euclidean_distance = get_euclidean_distance_glorys_core(
-        candidate_dataset=candidate_datasets[0],
+        challenger_dataset=challenger_datasets[0],
         minimum_latitude=minimum_latitude,
         maximum_latitude=maximum_latitude,
         minimum_longitude=minimum_longitude,
@@ -36,14 +36,14 @@ def euclidean_distance_to_glorys(
 
 
 def energy_cascade(
-    candidate_datasets: List[xarray.Dataset],
+    challenger_datasets: List[xarray.Dataset],
     var: str = "uo",
     depth: float = 0,
     spatial_resolution: Optional[float] = 1 / 4,
     small_scale_cutoff_km: int = 100,
 ):
     _, gglonet_sc = analyze_energy_cascade_core(
-        candidate_dataset=candidate_datasets[0],
+        challenger_dataset=challenger_datasets[0],
         var=var,
         depth=depth,
         spatial_resolution=spatial_resolution,

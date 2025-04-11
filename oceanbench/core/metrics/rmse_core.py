@@ -52,7 +52,7 @@ def _select_variable_day_and_depth(
 
 
 def _get_rmse(
-    candidate_dataset: xarray.Dataset,
+    challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     variable_name: str,
     depth_level_meter: float,
@@ -60,13 +60,13 @@ def _get_rmse(
 ) -> float:
     cpu_count = multiprocessing.cpu_count()
     with multiprocessing.Pool(cpu_count) as _:
-        candidate_dataarray = _select_variable_day_and_depth(
-            candidate_dataset, variable_name, depth_level_meter, lead_day
+        challenger_dataarray = _select_variable_day_and_depth(
+            challenger_dataset, variable_name, depth_level_meter, lead_day
         )
         reference_dataarray = _select_variable_day_and_depth(
             reference_dataset, variable_name, depth_level_meter, lead_day
         )
-        return _rmse(candidate_dataarray.data, reference_dataarray.data)
+        return _rmse(challenger_dataarray.data, reference_dataarray.data)
 
 
 LEAD_DAYS_COUNT = 10
@@ -109,9 +109,9 @@ def _compute_rmse(
 
 
 def pointwise_evaluation_glorys_core(
-    candidate_datasets: List[xarray.Dataset],
+    challenger_datasets: List[xarray.Dataset],
 ) -> pandas.DataFrame:
-    return _pointwise_evaluation_core(candidate_datasets, glorys_datasets(candidate_datasets))
+    return _pointwise_evaluation_core(challenger_datasets, glorys_datasets(challenger_datasets))
 
 
 def _lead_day_labels(day_count) -> list[str]:
@@ -162,14 +162,14 @@ def _variable_and_depth_combinations(
 
 
 def _pointwise_evaluation_core(
-    candidate_datasets: List[xarray.Dataset],
+    challenger_datasets: List[xarray.Dataset],
     reference_datasets: List[xarray.Dataset],
 ) -> pandas.DataFrame:
-    all_combinations = _variable_and_depth_combinations(candidate_datasets[0])
+    all_combinations = _variable_and_depth_combinations(challenger_datasets[0])
     scores = {
         _variale_depth_label(variable_name, depth_level_meter): list(
             _compute_rmse(
-                candidate_datasets,
+                challenger_datasets,
                 reference_datasets,
                 variable_name,
                 depth_level_meter,
@@ -183,15 +183,15 @@ def _pointwise_evaluation_core(
 
 
 def get_euclidean_distance_glorys_core(
-    candidate_dataset: xarray.Dataset,
+    challenger_dataset: xarray.Dataset,
     minimum_latitude: float,
     maximum_latitude: float,
     minimum_longitude: float,
     maximum_longitude: float,
 ):
     return _get_euclidean_distance_core(
-        candidate_dataset,
-        glorys_datasets([candidate_dataset])[0],
+        challenger_dataset,
+        glorys_datasets([challenger_dataset])[0],
         minimum_latitude,
         maximum_latitude,
         minimum_longitude,
@@ -200,15 +200,15 @@ def get_euclidean_distance_glorys_core(
 
 
 def _get_euclidean_distance_core(
-    candidate_dataset: xarray.Dataset,
+    challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     minimum_latitude: float,
     maximum_latitude: float,
     minimum_longitude: float,
     maximum_longitude: float,
 ):
-    candidate_trajectory = get_particle_file_core(
-        dataset=candidate_dataset.isel(depth=0),
+    challenger_trajectory = get_particle_file_core(
+        dataset=challenger_dataset.isel(depth=0),
         latzone=[minimum_latitude, maximum_latitude],
         lonzone=[minimum_longitude, maximum_longitude],
     )
@@ -221,11 +221,11 @@ def _get_euclidean_distance_core(
 
     # euclidean distance
     e_d = numpy.sqrt(
-        ((candidate_trajectory.x.data - reference_trajectory.x.data) * 111.32) ** 2
+        ((challenger_trajectory.x.data - reference_trajectory.x.data) * 111.32) ** 2
         + (
             111.32
-            * numpy.cos(numpy.radians(candidate_trajectory.lat.data).reshape(1, candidate_trajectory.lat.shape[0], 1))
-            * (candidate_trajectory.y.data - reference_trajectory.y.data)
+            * numpy.cos(numpy.radians(challenger_trajectory.lat.data).reshape(1, challenger_trajectory.lat.shape[0], 1))
+            * (challenger_trajectory.y.data - reference_trajectory.y.data)
         )
         ** 2
     )
@@ -234,7 +234,7 @@ def _get_euclidean_distance_core(
 
 
 def analyze_energy_cascade_core(
-    candidate_dataset: xarray.Dataset,
+    challenger_dataset: xarray.Dataset,
     var,
     depth,
     spatial_resolution=None,
@@ -262,7 +262,7 @@ def analyze_energy_cascade_core(
         return data
 
     #####
-    vorticity = candidate_dataset[var][:, depth, :, :]
+    vorticity = challenger_dataset[var][:, depth, :, :]
     n_times, _, _ = vorticity.shape
 
     time_spectra = []
