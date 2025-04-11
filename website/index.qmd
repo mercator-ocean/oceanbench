@@ -74,3 +74,22 @@ html_table_footer = (
 html_table = f"<table>{html_table_caption}{html_table_head}{html_table_body}{html_table_footer}</table>"
 display(HTML(html_table))
 ```
+
+
+```{python}
+from bs4 import BeautifulSoup
+import json
+
+with open("../assets/glonet_sample.report.ipynb") as f:
+    toto = json.load(f)
+    print(toto)
+
+def get_tables(htmldoc):
+    soup = BeautifulSoup(htmldoc)
+    return soup.find('table')
+
+with open("../assets/res.html") as f:
+    soup = BeautifulSoup(f.read())
+    print(soup.tbody)
+    # print(soup)
+```
