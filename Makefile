@@ -37,20 +37,20 @@ update-readme: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 update-readme:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
-	python -c 'import oceanbench; oceanbench.generate_notebook_to_evaluate("assets/glonet_sample.py", "assets/glonet_sample.ipynb")'
-	jupyter nbconvert --ClearMetadataPreprocessor.enabled=True --ClearOutput.enabled=True --to markdown assets/glonet_sample.ipynb
+	jupyter nbconvert --ClearMetadataPreprocessor.enabled=True --ClearOutput.enabled=True --to markdown assets/glonet_sample.report.ipynb
 	lead="<!-- BEGINNING of a block automatically generated with make update-readme -->"
 	tail="<!-- END of a block automatically generated with make update-readme -->"
-	sed -i -e "/^$${lead}/,/^$${tail}/{ /^$${lead}/{p; r assets/glonet_sample.md
+	sed -i -e "/^$${lead}/,/^$${tail}/{ /^$${lead}/{p; r assets/glonet_sample.report.md
 	}; /^$${tail}/p; d }" README.md
-	rm assets/glonet_sample.md
+	rm assets/glonet_sample.report.md
 
 check-readme-update: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 check-readme-update:
 	${ACTIVATE_ENVIRONMENT}
-	mv assets/glonet_sample.ipynb assets/glonet_sample.old.ipynb
+	mv assets/glonet_sample.report.ipynb assets/glonet_sample.report.old.ipynb
 	$(MAKE) update-readme
-	python tests/compare_notebook.py assets/glonet_sample.old.ipynb assets/glonet_sample.ipynb
+	python tests/compare_notebook.py assets/glonet_sample.report.old.ipynb assets/glonet_sample.report.ipynb
+	rm assets/glonet_sample.report.old.ipynb
 
 evaluate: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate:
@@ -61,5 +61,7 @@ run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
-	$(MAKE) evaluate NOTEBOOK_PATH=assets/glonet_sample.ipynb OUTPUT_NAME=glonet_sample.report.ipynb
-	python tests/compare_notebook.py tests/assets/glonet_sample.report.ipynb assets/glonet_sample.report.ipynb
+	python -c 'import oceanbench; oceanbench.generate_notebook_to_evaluate("assets/glonet_sample.py", "assets/glonet_sample.ipynb")'
+	$(MAKE) evaluate NOTEBOOK_PATH=assets/glonet_sample.ipynb OUTPUT_NAME=new_glonet_sample.report.ipynb
+	rm assets/glonet_sample.ipynb
+	python tests/compare_notebook.py assets/glonet_sample.report.ipynb assets/new_glonet_sample.report.ipynb

@@ -62,7 +62,7 @@ def _get_rmse(
 LEAD_DAYS_COUNT = 10
 
 
-def get_week_rmse(
+def get_rmse_for_all_lead_days(
     dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     variable_name: str,
@@ -87,11 +87,11 @@ def _compute_rmse(
     reference_datasets: List[xarray.Dataset],
     variable_name: str,
     depth_level_meter: float,
-) -> numpy.ndarray:
+) -> numpy.ndarray[float]:
 
     all_rmse = numpy.array(
         [
-            get_week_rmse(dataset, glorys_dataset, variable_name, depth_level_meter)
+            get_rmse_for_all_lead_days(dataset, glorys_dataset, variable_name, depth_level_meter)
             for dataset, glorys_dataset in zip(datasets, reference_datasets)
         ]
     )
@@ -131,11 +131,29 @@ def _variale_depth_label(variable_name: str, depth_level_meter: float) -> str:
     return f"{DEPTH_LABELS[depth_level_meter]} {VARIABLE_LABELS[variable_name]}"
 
 
+def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
+    return _get_variable_name_from_standard_name(dataset, DEPTH_STANDARD_NAME) in dataset[variable_name].coords
+
+
+def _is_surface(depth_level_meter: float) -> bool:
+    return depth_level_meter == list(DEPTH_LABELS.keys())[0]
+
+
+def _variable_and_depth_combinations(
+    dataset: xarray.Dataset,
+) -> list[tuple[str, float]]:
+    return list(
+        (variable_name, depth_level_meter)
+        for (variable_name, depth_level_meter) in product(VARIABLE_LABELS.keys(), DEPTH_LABELS.keys())
+        if (_has_depths(dataset, variable_name) or _is_surface(depth_level_meter))
+    )
+
+
 def _pointwise_evaluation_core(
     candidate_datasets: List[xarray.Dataset],
     reference_datasets: List[xarray.Dataset],
 ) -> pandas.DataFrame:
-    all_combinations = list(product(VARIABLE_LABELS.keys(), DEPTH_LABELS.keys()))
+    all_combinations = _variable_and_depth_combinations(candidate_datasets[0])
     scores = {
         _variale_depth_label(variable_name, depth_level_meter): list(
             _compute_rmse(
@@ -146,8 +164,6 @@ def _pointwise_evaluation_core(
             )
         )
         for (variable_name, depth_level_meter) in all_combinations
-        if _get_variable_name_from_standard_name(candidate_datasets[0], DEPTH_STANDARD_NAME)
-        in candidate_datasets[0][variable_name].coords
     }
     score_dataframe = pandas.DataFrame(scores)
     score_dataframe.index = _lead_day_labels(len(score_dataframe))
