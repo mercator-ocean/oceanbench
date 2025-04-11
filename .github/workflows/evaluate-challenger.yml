@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       challengerPythonFileName:
-        description: 'Challenger python file name in the "challenger_datasets" directory'
+        description: 'Challenger python file name in the "challenger_datasets" directory without ".py" extension'
         required: true
         type: string
 jobs:
@@ -28,7 +28,7 @@ jobs:
         env:
           COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
           COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
-          CHALLENGER_PYTHON_FILE_PATH: challenger_datasets/${{ inputs.challengerPythonFileName  }}
+          CHALLENGER_PYTHON_FILE_PATH: challenger_datasets/${{ inputs.challengerPythonFileName  }}.py
           CHALLENGER_REPORT_NAME: ${{ inputs.challengerPythonFileName }}.report.ipynb
         run: make evaluate-challenger
         shell: micromamba-shell {0}
