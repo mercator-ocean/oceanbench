@@ -11,7 +11,7 @@ SHELL := /bin/bash
 MICROMAMBA_ACTIVATE=eval "$$(micromamba shell hook --shell=bash)" && micromamba activate
 ACTIVATE_ENVIRONMENT=${MICROMAMBA_ACTIVATE} ${SELECTED_ENVIRONMENT_NAME}
 
-create-update-environment:
+_create-update-environment:
 	export CONDARC=.condarc
 	export PIP_CONFIG_FILE=pip.conf
 	(micromamba env update --file ${SELECTED_ENVIRONMENT_FILE_NAME} --name ${SELECTED_ENVIRONMENT_NAME} \
@@ -20,12 +20,12 @@ create-update-environment:
 
 create-environment: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 create-environment: SELECTED_ENVIRONMENT_FILE_NAME = ${ENVIRONMENT_FILE_NAME}
-create-environment: create-update-environment
+create-environment: _create-update-environment
 	micromamba run --name ${ENVIRONMENT_NAME} poetry install
 
 create-test-environment: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 create-test-environment: SELECTED_ENVIRONMENT_FILE_NAME = ${TEST_ENVIRONMENT_FILE_NAME}
-create-test-environment: create-update-environment
+create-test-environment: _create-update-environment
 
 check-format: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 check-format:
@@ -33,16 +33,24 @@ check-format:
 	pre-commit install
 	pre-commit run --all-files --show-diff-on-failure
 
-evaluate: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
-evaluate:
+_generate-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+_generate-notebook:
 	${ACTIVATE_ENVIRONMENT}
-	jupyter nbconvert --execute --to notebook $(NOTEBOOK_PATH) --output $(OUTPUT_NAME)
+	pip install --editable .
+	python -c 'import oceanbench; oceanbench.generate_notebook_to_evaluate("$(PYTHON_FILE_PATH)", "$(NOTEBOOK_PATH)")'
+
+_evaluate-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+_evaluate-notebook:
+	${ACTIVATE_ENVIRONMENT}
+	jupyter nbconvert --execute --to notebook $(NOTEBOOK_PATH) --output $(REPORT_NAME)
+
+evaluate-challenger: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+evaluate-challenger:
+	$(MAKE) _generate-notebook PYTHON_FILE_PATH=$(CHALLENGER_PYTHON_FILE_PATH) NOTEBOOK_PATH=$(CHALLENGER_PYTHON_FILE_PATH).ipynb
+	$(MAKE) _evaluate-notebook NOTEBOOK_PATH=$(CHALLENGER_PYTHON_FILE_PATH).ipynb REPORT_NAME=$(CHALLENGER_REPORT_NAME)
+	rm $(CHALLENGER_PYTHON_FILE_PATH).ipynb
 
 run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
-	${ACTIVATE_ENVIRONMENT}
-	pip install --editable .
-	python -c 'import oceanbench; oceanbench.generate_notebook_to_evaluate("assets/glonet_sample.py", "assets/glonet_sample.ipynb")'
-	$(MAKE) evaluate NOTEBOOK_PATH=assets/glonet_sample.ipynb OUTPUT_NAME=new_glonet_sample.report.ipynb
-	rm assets/glonet_sample.ipynb
+	$(MAKE) evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/glonet_sample.py CHALLENGER_REPORT_NAME=new_glonet_sample.report.ipynb
 	python tests/compare_notebook.py assets/glonet_sample.report.ipynb assets/new_glonet_sample.report.ipynb

@@ -1,0 +1,39 @@
+name: Evaluate challenger
+on:
+  workflow_dispatch:
+    inputs:
+      challengerPythonFileName:
+        description: 'Challenger python file name in the "challenger_datasets" directory'
+        required: true
+        type: string
+jobs:
+  evaluate-challenger:
+    runs-on: self-hosted
+    timeout-minutes: 30
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.5.6-0'
+          micromamba-binary-path: ${{ runner.temp }}/bin/micromamba
+          environment-file: conda_environment_test.yaml
+          environment-name: oceanbench_test
+          condarc-file: .condarc
+          cache-environment: true
+          post-cleanup: 'all'
+      - name: Evaluate challenger
+        env:
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+          CHALLENGER_PYTHON_FILE_PATH: challenger_datasets/${{ inputs.challengerPythonFileName  }}
+          CHALLENGER_REPORT_NAME: ${{ inputs.challengerPythonFileName }}.report.ipynb
+        run: make evaluate-challenger
+        shell: micromamba-shell {0}
+      - name: Archive evaluation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.challengerPythonFileName }}.report.ipynb
+          path: challenger_datasets/${{ inputs.challengerPythonFileName }}.report.ipynb

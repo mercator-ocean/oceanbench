@@ -1,3 +1,4 @@
+from datetime import datetime
 from functools import partial
 import multiprocessing
 from typing import List, Optional
@@ -35,10 +36,19 @@ def _select_variable_day_and_depth(
 ) -> xarray.DataArray:
     depth_name = _get_variable_name_from_standard_name(dataset, DEPTH_STANDARD_NAME)
     time_name = _get_variable_name_from_standard_name(dataset, TIME_STANDARD_NAME)
-    new_dataset = dataset[variable_name].isel({time_name: lead_day})
-    return (
-        new_dataset.sel({depth_name: depth_level_meter}) if depth_name in dataset[variable_name].coords else new_dataset
-    )
+    try:
+        new_dataset = dataset[variable_name].isel({time_name: lead_day})
+        return (
+            new_dataset.sel({depth_name: depth_level_meter})
+            if depth_name in dataset[variable_name].coords
+            else new_dataset
+        )
+    except Exception as exception:
+        start_datetime = datetime.fromisoformat(str(dataset[time_name][0].values))
+        details = (
+            f"start_datetime={start_datetime}, variable={variable_name}, depth={depth_level_meter}, lead_day={lead_day}"
+        )
+        raise Exception(f"Could not select data: {details}") from exception
 
 
 def _get_rmse(
@@ -91,8 +101,8 @@ def _compute_rmse(
 
     all_rmse = numpy.array(
         [
-            get_rmse_for_all_lead_days(dataset, glorys_dataset, variable_name, depth_level_meter)
-            for dataset, glorys_dataset in zip(datasets, reference_datasets)
+            get_rmse_for_all_lead_days(dataset, reference_dataset, variable_name, depth_level_meter)
+            for dataset, reference_dataset in zip(datasets, reference_datasets)
         ]
     )
     return all_rmse.mean(axis=0)
