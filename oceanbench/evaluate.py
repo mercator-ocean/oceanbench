@@ -1,4 +1,4 @@
-from oceanbench.core.utils.python2jupyter import (
+from oceanbench.core.python2jupyter import (
     generate_evaluation_notebook_file,
 )
 

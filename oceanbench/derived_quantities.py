@@ -2,7 +2,6 @@ from typing import List
 from . import plot
 import xarray
 
-from oceanbench.core.process.calc_mld_core import calc_mld_core
 from oceanbench.core.process.calc_density_core import calc_density_core
 from oceanbench.core.process.calc_geo_core import calc_geo_core
 from oceanbench.core.process.utils import (
@@ -40,14 +39,6 @@ def geostrophic_currents(
         var=variable,
     )
     plot.plot_geo(dataset=dataset)
-
-
-def mld(challenger_datasets: List[xarray.Dataset], lead: int = 1):
-    dataset = calc_mld_core(
-        dataset=challenger_datasets[0],
-        lead=lead,
-    )
-    plot.plot_mld(dataset=dataset)
 
 
 def mass_conservation(
