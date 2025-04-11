@@ -1,9 +1,11 @@
 from typing import List, Optional
 
 import xarray
-from . import plot
 
-from oceanbench.core.evaluate.rmse_core import (
+from . import plot
+from pandas import DataFrame
+
+from oceanbench.core.metrics.rmse_core import (
     analyze_energy_cascade_core,
     get_euclidean_distance_glorys_core,
     pointwise_evaluation_glorys_core,
@@ -12,16 +14,8 @@ from oceanbench.core.evaluate.rmse_core import (
 
 def rmse_to_glorys(
     candidate_datasets: List[xarray.Dataset],
-):
-    nparray = pointwise_evaluation_glorys_core(
-        candidate_datasets=candidate_datasets,
-    )
-    plot.plot_rmse(rmse_dataarray=nparray, depth=2)
-    plot.plot_rmse_for_average_depth(rmse_dataarray=nparray)
-    plot.plot_rmse_depth_for_average_time(
-        rmse_dataarray=nparray,
-        dataset_depth_values=candidate_datasets[0].depth.values,
-    )
+) -> DataFrame:
+    return pointwise_evaluation_glorys_core(candidate_datasets=candidate_datasets)
 
 
 def euclidean_distance_to_glorys(

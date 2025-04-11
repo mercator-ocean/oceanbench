@@ -1,6 +1,3 @@
-from typing import Any
-
-import numpy
 import xarray
 
 from oceanbench.core.plot.density_core import plot_density_core
@@ -8,11 +5,8 @@ from oceanbench.core.plot.geo_core import plot_geo_core
 from oceanbench.core.plot.kinetic_energy_core import plot_kinetic_energy_core
 from oceanbench.core.plot.mld_core import plot_mld_core
 from oceanbench.core.plot.rmse_core import (
-    plot_depth_rmse_average_on_time,
     plot_energy_cascade_core,
     plot_euclidean_distance_core,
-    plot_temporal_rmse_for_average_depth,
-    plot_temporal_rmse_for_depth,
 )
 from oceanbench.core.plot.vorticity_core import plot_vorticity_core
 
@@ -32,29 +26,6 @@ def plot_geo(dataset: xarray.Dataset):
 def plot_mld(dataset: xarray.Dataset):
     return plot_mld_core(
         dataset=dataset,
-    )
-
-
-def plot_rmse(rmse_dataarray: numpy.ndarray[Any], depth: int):
-    return plot_temporal_rmse_for_depth(
-        rmse_dataarray=rmse_dataarray,
-        depth=depth,
-    )
-
-
-def plot_rmse_for_average_depth(rmse_dataarray: numpy.ndarray[Any]):
-    return plot_temporal_rmse_for_average_depth(
-        rmse_dataarray=rmse_dataarray,
-    )
-
-
-def plot_rmse_depth_for_average_time(
-    rmse_dataarray: numpy.ndarray[Any],
-    dataset_depth_values: numpy.ndarray,
-):
-    return plot_depth_rmse_average_on_time(
-        rmse_dataarray=rmse_dataarray,
-        dataset_depth_values=dataset_depth_values,
     )
 
 

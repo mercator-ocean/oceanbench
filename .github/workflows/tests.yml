@@ -28,5 +28,5 @@ jobs:
         if: ${{ failure()  }}
         uses: actions/upload-artifact@v4
         with:
-          name: glonet_sample.report.ipynb
-          path: assets/glonet_sample.report.ipynb
+          name: new_glonet_sample.report.ipynb
+          path: assets/new_glonet_sample.report.ipynb
