@@ -32,6 +32,26 @@ TIME_CLIMATE_FORECAST_ATTRIBUTES = {
     "axis": "T",
 }
 
+TEMPERATURE_CLIMATE_FORECAST_ATTRIBUTES = {
+    "standard_name": "sea_water_potential_temperature",
+}
+
+SALINITY_CLIMATE_FORECAST_ATTRIBUTES = {
+    "standard_name": "sea_water_salinity",
+}
+
+HEIGHT_CLIMATE_FORECAST_ATTRIBUTES = {
+    "standard_name": "sea_surface_height_above_geoid",
+}
+
+NORTHWARD_VELOCITY_CLIMATE_FORECAST_ATTRIBUTES = {
+    "standard_name": "northward_sea_water_velocity",
+}
+
+EASTWARD_VELOCITY_CLIMATE_FORECAST_ATTRIBUTES = {
+    "standard_name": "eastward_sea_water_velocity",
+}
+
 
 def _update_variable_attributes(
     dataset: xarray.Dataset,
@@ -48,12 +68,17 @@ def _add_climate_forecast_attributes(
     return reduce(
         _update_variable_attributes,
         zip(
-            ["lat", "lon", "depth", "time"],
+            ["lat", "lon", "depth", "time", "thetao", "so", "zos", "vo", "uo"],
             [
                 LATITUDE_CLIMATE_FORECAST_ATTRIBUTES,
                 LONGITUDE_CLIMATE_FORECAST_ATTRIBUTES,
                 DEPTH_CLIMATE_FORECAST_ATTRIBUTES,
                 TIME_CLIMATE_FORECAST_ATTRIBUTES,
+                TEMPERATURE_CLIMATE_FORECAST_ATTRIBUTES,
+                SALINITY_CLIMATE_FORECAST_ATTRIBUTES,
+                HEIGHT_CLIMATE_FORECAST_ATTRIBUTES,
+                NORTHWARD_VELOCITY_CLIMATE_FORECAST_ATTRIBUTES,
+                EASTWARD_VELOCITY_CLIMATE_FORECAST_ATTRIBUTES,
             ],
         ),
         dataset,

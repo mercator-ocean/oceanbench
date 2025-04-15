@@ -13,13 +13,13 @@ challenger_datasets: List[xarray.Dataset] = ...
 
 # ### Evaluation of challenger datasets using OceanBench
 
-# #### Root Mean Square Error (RMSE) compared to GLORYS
+# #### Root Mean Square Error (RMSE) compared to GLORYS variables
 
-oceanbench.metrics.rmse_to_glorys(challenger_datasets)
+oceanbench.metrics.rmse_compared_to_glorys_variables(challenger_datasets)
 
-# #### Mixed Layer Depth (MLD) analysis
+# #### Root Mean Square Error (RMSE) compared to GLORYS Mixed Layer Depth (MLD)
 
-oceanbench.derived_quantities.mld(challenger_datasets)
+oceanbench.metrics.rmse_compared_to_glorys_mixed_layer_depth(challenger_datasets)
 
 # #### Geostrophic current analysis
 

@@ -5,17 +5,24 @@ import xarray
 from . import plot
 from pandas import DataFrame
 
-from oceanbench.core.metrics.rmse_core import (
+from oceanbench.core.metrics import (
     analyze_energy_cascade_core,
     get_euclidean_distance_glorys_core,
-    pointwise_evaluation_glorys_core,
 )
 
+from oceanbench.core import metrics
 
-def rmse_to_glorys(
+
+def rmse_compared_to_glorys_variables(
     challenger_datasets: List[xarray.Dataset],
 ) -> DataFrame:
-    return pointwise_evaluation_glorys_core(challenger_datasets=challenger_datasets)
+    return metrics.rmse_compared_to_glorys_variables(challenger_datasets=challenger_datasets)
+
+
+def rmse_compared_to_glorys_mixed_layer_depth(
+    challenger_datasets: List[xarray.Dataset],
+) -> DataFrame:
+    return metrics.rmse_compared_to_glorys_mixed_layer_depth(challenger_datasets=challenger_datasets)
 
 
 def euclidean_distance_to_glorys(
