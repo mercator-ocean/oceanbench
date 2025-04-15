@@ -13,16 +13,22 @@ from oceanbench.core.metrics import (
 from oceanbench.core import metrics
 
 
-def rmse_compared_to_glorys_variables(
+def rmse_of_variables_compared_to_glorys(
     challenger_datasets: List[xarray.Dataset],
 ) -> DataFrame:
-    return metrics.rmse_compared_to_glorys_variables(challenger_datasets=challenger_datasets)
+    return metrics.rmse_of_variables_compared_to_glorys(challenger_datasets=challenger_datasets)
 
 
-def rmse_compared_to_glorys_mixed_layer_depth(
+def rmse_of_mixed_layer_depth_compared_to_glorys(
     challenger_datasets: List[xarray.Dataset],
 ) -> DataFrame:
-    return metrics.rmse_compared_to_glorys_mixed_layer_depth(challenger_datasets=challenger_datasets)
+    return metrics.rmse_of_mixed_layer_depth_compared_to_glorys(challenger_datasets=challenger_datasets)
+
+
+def rmse_of_geostrophic_currents_compared_to_glorys(
+    challenger_datasets: List[xarray.Dataset],
+) -> DataFrame:
+    return metrics.rmse_of_geostrophic_currents_compared_to_glorys(challenger_datasets=challenger_datasets)
 
 
 def euclidean_distance_to_glorys(

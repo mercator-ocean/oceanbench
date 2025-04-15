@@ -24,6 +24,8 @@ VARIABLE_LABELS = {
     Variable.NORTHWARD_VELOCITY: "northward velocity",
     Variable.EASTWARD_VELOCITY: "eastward velocity",
     Variable.MIXED_LAYER_DEPTH: "mixed layer depth",
+    Variable.NORTHWARD_GEOSTROPHIC_VELOCITY: "northward geostrophic velocity",
+    Variable.EASTWARD_GEOSTROPHIC_VELOCITY: "eastward geostrophic velocity",
 }
 
 
