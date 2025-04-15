@@ -1,3 +1,4 @@
 /.quarto/
-/_site
-/_result_tables
+/_site/
+/_result_tables/
+/index_files/

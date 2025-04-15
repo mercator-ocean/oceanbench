@@ -1,5 +1,0 @@
-name: oceanbench-website
-dependencies:
-  - jupyter=1.1.1
-  - pandas=2.2.3
-  - beautifulsoup4=4.13.3

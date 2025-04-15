@@ -1,5 +1,6 @@
 import json
 from bs4 import BeautifulSoup
+from pathlib import Path
 
 models = ["glonet"]
 
@@ -8,12 +9,13 @@ def find_result_html(model: str) -> str:
     input_notebook = open(f"../assets/{model}_sample.report.ipynb")
     raw_notebook = json.load(input_notebook)
     for cell in raw_notebook["cells"]:
-        if "oceanbench.metrics.rmse_to_glorys(candidate_datasets)" in cell["source"]:
+        if "oceanbench.metrics.rmse_to_glorys(challenger_datasets)" in cell["source"]:
             html_output = cell["outputs"][0]["data"]["text/html"]
             cleaned_html_output = "".join([line.removesuffix("\n") for line in html_output])
             return cleaned_html_output
 
 
+Path("_result_tables").mkdir(parents=True, exist_ok=True)
 for model in models:
     scores = {}
     result = find_result_html(model)
@@ -23,5 +25,5 @@ for model in models:
     for row in rows:
         variable = row.find("th").string
         scores[variable] = {k: v.string for k, v in enumerate(row.find_all("td"))}
-    output = open(f"_result_tables/{model}.json", "w")
+    output = open(f"_result_tables/{model}.json", "w+")
     json.dump(scores, output)
