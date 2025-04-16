@@ -11,9 +11,34 @@ format:
 Welcome to OceanBench.
 
 ```{python}
+import json
+
+glonet_scores = json.load(open(f"_result_tables/glonet.json"))
+
 def get_variables_from_glonet():
-    glonet_scores = json.load(open(f"_result_tables/glonet.json"))
     return glonet_scores.keys()
+
+def get_reference_value(variable: str, index: str) -> float:
+    return glonet_scores[variable][index]
+```
+
+```{python}
+import matplotlib as mpl
+
+cmap = mpl.colormaps["bwr"]
+
+
+def get_color(reference_value, compared_value):
+    max_diff_distance = 1
+    # constraint the difference between -max_diff_distance and max_diff_distance
+    constraint_diff = max(
+        -max_diff_distance,
+        min(max_diff_distance, compared_value - reference_value),
+    )
+    # normalize the difference between 0 and 1
+    normalized_diff = (constraint_diff + max_diff_distance) / (max_diff_distance * 2)
+    return mpl.colors.rgb2hex(cmap(normalized_diff))
+
 ```
 
 ```{python}
@@ -25,7 +50,7 @@ from IPython.display import display, HTML
 import json
 
 variables = get_variables_from_glonet()
-models = ["glonet", "glonet", "glonet"]
+models = ["glonet", "dummy", "dummy2"]
 lead_day_indexes = ["1", "3", "5", "7", "9"]
 
 html_table = "<table>"
@@ -52,7 +77,7 @@ for model in models:
         values = scores[variable]
         html_model_row += "".join(
             [
-                f"<td>{'{:.2f}'.format(values[lead_day_index])}</td>"
+                f"<td style='background-color:{get_color(get_reference_value(variable, lead_day_index), values[lead_day_index])}'>{'{:.2f}'.format(values[lead_day_index])}</td>"
                 for lead_day_index in lead_day_indexes
             ]
         )

@@ -19,7 +19,7 @@ Path("_result_tables").mkdir(parents=True, exist_ok=True)
 for model in models:
     scores = {}
     result = find_result_html(model)
-    soup = BeautifulSoup(result)
+    soup = BeautifulSoup(result, features="html.parser")
     tbody = soup.find("tbody")
     rows = tbody.find_all("tr")
     for row in rows:
