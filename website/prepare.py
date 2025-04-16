@@ -24,6 +24,6 @@ for model in models:
     rows = tbody.find_all("tr")
     for row in rows:
         variable = row.find("th").string
-        scores[variable] = {k: float(v.string) for k, v in enumerate(row.find_all("td"))}
+        scores[variable] = {(k + 1): float(v.string) for k, v in enumerate(row.find_all("td"))}
     output = open(f"_result_tables/{model}.json", "w+")
     json.dump(scores, output)

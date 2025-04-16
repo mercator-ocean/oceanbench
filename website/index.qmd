@@ -59,7 +59,7 @@ import json
 
 
 models = ["glonet", "dummy", "dummy2"]
-lead_day_indexes = ["1", "3", "5", "7", "9"]
+lead_day_indexes = ["1", "3", "5", "7", "10"]
 
 html_table = "<table>"
 html_table_caption = "<caption>Model scores</caption>"
