@@ -1,3 +1,10 @@
+thead tr th:first-child,
+tbody tr td:first-child {
+  width: 8em;
+  min-width: 8em;
+  max-width: 8em;
+  word-break: break-all;
+}
 caption {
   position: sticky;
   left: 0;
@@ -13,4 +20,14 @@ th.sticky,
 td.sticky {
   position: sticky;
   left: 0;
+}
+
+th,
+td:nth-child(5n + 1) {
+  border-right: solid #517699;
+}
+
+tfoot tr td:not(:first-child) {
+  font-size: small;
+  text-align: center;
 }
