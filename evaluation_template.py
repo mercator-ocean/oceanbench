@@ -21,17 +21,17 @@ oceanbench.metrics.rmse_of_variables_compared_to_glorys(challenger_datasets)
 
 oceanbench.metrics.rmse_of_mixed_layer_depth_compared_to_glorys(challenger_datasets)
 
-# #### Root Mean Square Error (RMSE) of geostrophic current compared to GLORYS
+# #### Root Mean Square Error (RMSE) of geostrophic currents compared to GLORYS
 
 oceanbench.metrics.rmse_of_geostrophic_currents_compared_to_glorys(challenger_datasets)
+
+# #### Deviation of Lagrangian trajectories compared to GLORYS
+
+oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys(challenger_datasets)
 
 # #### Density analysis
 
 oceanbench.derived_quantities.density(challenger_datasets)
-
-# #### Euclidean distance to GLORYS reference
-
-oceanbench.metrics.euclidean_distance_to_glorys(challenger_datasets)
 
 # #### Energy cascading analysis
 

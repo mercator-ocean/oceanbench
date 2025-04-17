@@ -19,7 +19,7 @@ class Variable(Enum):
     NORTHWARD_GEOSTROPHIC_VELOCITY = "v_geo"
     EASTWARD_GEOSTROPHIC_VELOCITY = "u_geo"
 
-    def variable_name_from_dataset(self, dataset: xarray.Dataset) -> Optional[str]:
+    def variable_name_from_dataset(self, dataset: xarray.Dataset) -> str:
         return (
             self.value.variable_name_from_dataset_standard_names(dataset)
             if isinstance(self.value, StandardVariable)
