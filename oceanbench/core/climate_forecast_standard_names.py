@@ -20,12 +20,12 @@ class StandardVariable(Enum):
     NORTHWARD_VELOCITY = "northward_sea_water_velocity"
     EASTWARD_VELOCITY = "eastward_sea_water_velocity"
 
-    def variable_name_from_dataset_standard_names(self, dataset: xarray.Dataset) -> Optional[str]:
+    def variable_name_from_dataset_standard_names(self, dataset: xarray.Dataset) -> str:
         return _get_variable_name_from_standard_name(dataset, self.value)
 
 
-def _get_variable_name_from_standard_name(dataset: xarray.Dataset, standard_name: str) -> Optional[str]:
+def _get_variable_name_from_standard_name(dataset: xarray.Dataset, standard_name: str) -> str:
     for variable_name in dataset.variables:
         if hasattr(dataset[variable_name], "standard_name") and dataset[variable_name].standard_name == standard_name:
             return str(variable_name)
-    return None
+    raise Exception(f"No variable with standard name {standard_name} found in dataset")

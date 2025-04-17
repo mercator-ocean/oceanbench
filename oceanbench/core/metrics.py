@@ -10,7 +10,10 @@ from oceanbench.core.references.glorys import glorys_datasets
 
 import numpy
 
-from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
+from oceanbench.core.lagrangian_trajectory import (
+    Zone,
+    deviation_of_lagrangian_trajectories,
+)
 
 
 def rmse_of_variables_compared_to_glorys(
@@ -54,55 +57,14 @@ def rmse_of_geostrophic_currents_compared_to_glorys(
     )
 
 
-def get_euclidean_distance_glorys_core(
-    challenger_dataset: xarray.Dataset,
-    minimum_latitude: float,
-    maximum_latitude: float,
-    minimum_longitude: float,
-    maximum_longitude: float,
-):
-    return _get_euclidean_distance_core(
-        challenger_dataset,
-        glorys_datasets([challenger_dataset])[0],
-        minimum_latitude,
-        maximum_latitude,
-        minimum_longitude,
-        maximum_longitude,
+def deviation_of_lagrangian_trajectories_compared_to_glorys(
+    challenger_datasets: List[xarray.Dataset],
+) -> pandas.DataFrame:
+    return deviation_of_lagrangian_trajectories(
+        challenger_datasets=challenger_datasets,
+        reference_datasets=glorys_datasets(challenger_datasets),
+        zone=Zone.SMALL_ATLANTIC_NEWYORK_TO_NOUADHIBOU,
     )
-
-
-def _get_euclidean_distance_core(
-    challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
-    minimum_latitude: float,
-    maximum_latitude: float,
-    minimum_longitude: float,
-    maximum_longitude: float,
-):
-    challenger_trajectory = get_particle_file_core(
-        dataset=challenger_dataset.isel(depth=0),
-        latzone=[minimum_latitude, maximum_latitude],
-        lonzone=[minimum_longitude, maximum_longitude],
-    )
-
-    reference_trajectory = get_particle_file_core(
-        dataset=reference_dataset.isel(depth=0),
-        latzone=[minimum_latitude, maximum_latitude],
-        lonzone=[minimum_longitude, maximum_longitude],
-    )
-
-    # euclidean distance
-    e_d = numpy.sqrt(
-        ((challenger_trajectory.x.data - reference_trajectory.x.data) * 111.32) ** 2
-        + (
-            111.32
-            * numpy.cos(numpy.radians(challenger_trajectory.lat.data).reshape(1, challenger_trajectory.lat.shape[0], 1))
-            * (challenger_trajectory.y.data - reference_trajectory.y.data)
-        )
-        ** 2
-    )
-    e_d = numpy.nanmean(e_d, axis=(1, 2))
-    return e_d
 
 
 def analyze_energy_cascade_core(

@@ -15,6 +15,7 @@ from oceanbench.core.dataset_utils import (
     get_variable,
     select_variable_day_and_depth,
 )
+from oceanbench.core.lead_day_utils import lead_day_labels
 
 
 VARIABLE_LABELS = {
@@ -88,21 +89,19 @@ def _compute_rmse(
 ) -> numpy.ndarray:
 
     all_rmse = numpy.array(
-        [
-            _get_rmse_for_all_lead_days(dataset, reference_dataset, variable, depth_level)
-            for dataset, reference_dataset in zip(datasets, reference_datasets)
-        ]
-    )
-    return all_rmse.mean(axis=0)
-
-
-def _lead_day_labels(day_count) -> list[str]:
-    return list(
-        map(
-            lambda day_index: f"Lead day {day_index}",
-            range(1, day_count + 1),
+        list(
+            map(
+                partial(
+                    _get_rmse_for_all_lead_days,
+                    variable=variable,
+                    depth_level=depth_level,
+                ),
+                datasets,
+                reference_datasets,
+            )
         )
     )
+    return all_rmse.mean(axis=0)
 
 
 def _variale_depth_label(dataset: xarray.Dataset, variable: Variable, depth_level: DepthLevel) -> str:
@@ -149,5 +148,5 @@ def rmse(
         for (variable, depth_level) in all_combinations
     }
     score_dataframe = pandas.DataFrame(scores)
-    score_dataframe.index = _lead_day_labels(len(score_dataframe))
+    score_dataframe.index = lead_day_labels(1, LEAD_DAYS_COUNT)
     return score_dataframe.T
