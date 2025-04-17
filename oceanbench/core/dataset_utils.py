@@ -16,6 +16,8 @@ class Variable(Enum):
     NORTHWARD_VELOCITY = StandardVariable.NORTHWARD_VELOCITY
     EASTWARD_VELOCITY = StandardVariable.EASTWARD_VELOCITY
     MIXED_LAYER_DEPTH = "MLD"
+    NORTHWARD_GEOSTROPHIC_VELOCITY = "v_geo"
+    EASTWARD_GEOSTROPHIC_VELOCITY = "u_geo"
 
     def variable_name_from_dataset(self, dataset: xarray.Dataset) -> Optional[str]:
         return (

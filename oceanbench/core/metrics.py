@@ -4,6 +4,7 @@ import xarray
 from typing import List
 
 from oceanbench.core.derived_quantities import add_mixed_layer_depth
+from oceanbench.core.derived_quantities import add_geostrophic_currents
 from oceanbench.core.rmse import Variable, rmse
 from oceanbench.core.references.glorys import glorys_datasets
 
@@ -12,7 +13,7 @@ import numpy
 from oceanbench.core.process.lagrangian_analysis import get_particle_file_core
 
 
-def rmse_compared_to_glorys_variables(
+def rmse_of_variables_compared_to_glorys(
     challenger_datasets: List[xarray.Dataset],
 ) -> pandas.DataFrame:
     return rmse(
@@ -28,7 +29,7 @@ def rmse_compared_to_glorys_variables(
     )
 
 
-def rmse_compared_to_glorys_mixed_layer_depth(
+def rmse_of_mixed_layer_depth_compared_to_glorys(
     challenger_datasets: List[xarray.Dataset],
 ) -> pandas.DataFrame:
     return rmse(
@@ -36,6 +37,19 @@ def rmse_compared_to_glorys_mixed_layer_depth(
         reference_datasets=add_mixed_layer_depth(glorys_datasets(challenger_datasets)),
         variables=[
             Variable.MIXED_LAYER_DEPTH,
+        ],
+    )
+
+
+def rmse_of_geostrophic_currents_compared_to_glorys(
+    challenger_datasets: List[xarray.Dataset],
+) -> pandas.DataFrame:
+    return rmse(
+        challenger_datasets=add_geostrophic_currents(challenger_datasets),
+        reference_datasets=add_geostrophic_currents(glorys_datasets(challenger_datasets)),
+        variables=[
+            Variable.NORTHWARD_GEOSTROPHIC_VELOCITY,
+            Variable.EASTWARD_GEOSTROPHIC_VELOCITY,
         ],
     )
 

@@ -3,7 +3,6 @@ from . import plot
 import xarray
 
 from oceanbench.core.process.calc_density_core import calc_density_core
-from oceanbench.core.process.calc_geo_core import calc_geo_core
 from oceanbench.core.process.utils import (
     mass_conservation_core,
 )
@@ -26,19 +25,6 @@ def density(
         maximum_longitude=maximum_longitude,
     )
     plot.plot_density(dataarray=dataarray)
-
-
-def geostrophic_currents(
-    challenger_datasets: List[xarray.Dataset],
-    lead: int = 1,
-    variable: str = "zos",
-):
-    dataset = calc_geo_core(
-        dataset=challenger_datasets[0],
-        lead=lead,
-        var=variable,
-    )
-    plot.plot_geo(dataset=dataset)
 
 
 def mass_conservation(

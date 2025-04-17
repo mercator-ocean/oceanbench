@@ -25,8 +25,5 @@ def add_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     mixed_layer_depth_index = mask.argmax(dim=Dimension.DEPTH.dimension_name_from_dataset(dataset))
     mixed_layer_depth_depth = depth.isel(depth=mixed_layer_depth_index)
     temperature_mask = numpy.isfinite(temperature.isel(depth=0))
-    mld_name = Variable.MIXED_LAYER_DEPTH.value
-    dataset[mld_name] = mixed_layer_depth_depth
-    dataset[mld_name] = dataset[mld_name].where(temperature_mask)
 
-    return dataset
+    return dataset.assign({Variable.MIXED_LAYER_DEPTH.value: mixed_layer_depth_depth.where(temperature_mask)})
