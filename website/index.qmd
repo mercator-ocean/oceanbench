@@ -2,13 +2,51 @@
 title: "OceanBench"
 format:
   html:
-    code-fold: true
+    echo: false
     theme: none
     css: styles.css
+    page-layout: full
 ---
 
 Welcome to OceanBench.
 
+```{python}
+import json
+
+glonet_scores = json.load(open(f"_result_tables/glonet.json"))
+
+
+def get_variables_from_glonet():
+    return glonet_scores.keys()
+
+
+def get_reference_value(variable: str, index: str) -> float:
+    return glonet_scores[variable][index]
+
+
+variables = get_variables_from_glonet()
+```
+
+```{python}
+import matplotlib as mpl
+
+cmap = mpl.colormaps["bwr"]
+max_diff_distance = 1
+
+
+def get_color(reference_value, compared_value):
+    # constraint the difference between -max_diff_distance and max_diff_distance
+    constraint_diff = max(
+        -max_diff_distance,
+        min(max_diff_distance, compared_value - reference_value),
+    )
+    # normalize the difference between 0 and 1
+    normalized_diff = (constraint_diff + max_diff_distance) / (
+        max_diff_distance * 2
+    )
+    return mpl.colors.rgb2hex(cmap(normalized_diff))
+
+```
 
 
 ```{python}
@@ -19,25 +57,15 @@ import numpy as np
 from IPython.display import display, HTML
 import json
 
-variables = [
-    "Surface temperature",
-    "50m temperature",
-    "Surface salinity",
-    "50m salinity",
-    "Surface height",
-    "Surface northward velocity",
-    "50m northward velocity",
-    "Surface eastward velocity",
-    "50m eastward velocity",
-]
-models = ["glonet", "glonet", "glonet"]
-lead_day_indexes = ["1", "3", "5", "7", "9"]
+
+models = ["glonet", "dummy", "dummy2"]
+lead_day_indexes = ["1", "3", "5", "7", "10"]
 
 html_table = "<table>"
 html_table_caption = "<caption>Model scores</caption>"
 html_table_head = (
     "<thead><tr class='sticky'>"
-    + "<th class='sticky' style='background: #f5f5f5'>Model</th>"
+    + "<th class='sticky' style='background: #f5f5f5'>Models</th>"
     + "".join(
         [
             f"<td colspan='{len(lead_day_indexes)}'>{variable}</td>"
@@ -57,7 +85,7 @@ for model in models:
         values = scores[variable]
         html_model_row += "".join(
             [
-                f"<td>{values[lead_day_index]}</td>"
+                f"<td style='background-color:{get_color(get_reference_value(variable, lead_day_index), values[lead_day_index])}'>{'{:.2f}'.format(values[lead_day_index])}</td>"
                 for lead_day_index in lead_day_indexes
             ]
         )
@@ -68,7 +96,7 @@ html_table_body += "</tbody>"
 
 html_table_footer = (
     "<tfoot><tr class='sticky'>"
-    + "<th class='sticky' style='background: #f5f5f5'>Lead time</th>"
+    + "<th class='sticky' style='background: #f5f5f5'>Lead day</th>"
     + "".join(
         [f"<td>{lead_day_index}</td>" for lead_day_index in lead_day_indexes]
         * len(variables)
