@@ -9,7 +9,7 @@ def find_result_html(model: str) -> str:
     input_notebook = open(f"../assets/{model}_sample.report.ipynb")
     raw_notebook = json.load(input_notebook)
     for cell in raw_notebook["cells"]:
-        if "oceanbench.metrics.rmse_compared_to_glorys_variables(challenger_datasets)" in cell["source"]:
+        if "oceanbench.metrics.rmsd_compared_to_glorys_variables(challenger_datasets)" in cell["source"]:
             html_output = cell["outputs"][0]["data"]["text/html"]
             cleaned_html_output = "".join([line.removesuffix("\n") for line in html_output])
             return cleaned_html_output
