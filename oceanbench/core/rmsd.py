@@ -38,13 +38,13 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
 }
 
 
-def _rmse(data, reference_data):
+def _rmsd(data, reference_data):
     mask = ~numpy.isnan(data) & ~numpy.isnan(reference_data)
-    rmse = numpy.sqrt(numpy.mean((data[mask] - reference_data[mask]) ** 2))
-    return rmse
+    rmsd = numpy.sqrt(numpy.mean((data[mask] - reference_data[mask]) ** 2))
+    return rmsd
 
 
-def _get_rmse(
+def _get_rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     variable: Variable,
@@ -55,13 +55,13 @@ def _get_rmse(
     with multiprocessing.Pool(cpu_count) as _:
         challenger_dataarray = select_variable_day_and_depth(challenger_dataset, variable, depth_level, lead_day)
         reference_dataarray = select_variable_day_and_depth(reference_dataset, variable, depth_level, lead_day)
-        return _rmse(challenger_dataarray.data, reference_dataarray.data)
+        return _rmsd(challenger_dataarray.data, reference_dataarray.data)
 
 
 LEAD_DAYS_COUNT = 10
 
 
-def _get_rmse_for_all_lead_days(
+def _get_rmsd_for_all_lead_days(
     dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     variable: Variable,
@@ -70,7 +70,7 @@ def _get_rmse_for_all_lead_days(
     return list(
         map(
             partial(
-                _get_rmse,
+                _get_rmsd,
                 dataset,
                 reference_dataset,
                 variable,
@@ -81,18 +81,18 @@ def _get_rmse_for_all_lead_days(
     )
 
 
-def _compute_rmse(
+def _compute_rmsd(
     datasets: List[xarray.Dataset],
     reference_datasets: List[xarray.Dataset],
     variable: Variable,
     depth_level: DepthLevel,
 ) -> numpy.ndarray:
 
-    all_rmse = numpy.array(
+    all_rmsd = numpy.array(
         list(
             map(
                 partial(
-                    _get_rmse_for_all_lead_days,
+                    _get_rmsd_for_all_lead_days,
                     variable=variable,
                     depth_level=depth_level,
                 ),
@@ -101,7 +101,7 @@ def _compute_rmse(
             )
         )
     )
-    return all_rmse.mean(axis=0)
+    return all_rmsd.mean(axis=0)
 
 
 def _variale_depth_label(dataset: xarray.Dataset, variable: Variable, depth_level: DepthLevel) -> str:
@@ -130,7 +130,7 @@ def _variable_and_depth_combinations(
     )
 
 
-def rmse(
+def rmsd(
     challenger_datasets: List[xarray.Dataset],
     reference_datasets: List[xarray.Dataset],
     variables: List[Variable],
@@ -138,7 +138,7 @@ def rmse(
     all_combinations = _variable_and_depth_combinations(challenger_datasets[0], variables)
     scores = {
         _variale_depth_label(challenger_datasets[0], variable, depth_level): list(
-            _compute_rmse(
+            _compute_rmsd(
                 challenger_datasets,
                 reference_datasets,
                 variable,

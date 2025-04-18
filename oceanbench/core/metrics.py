@@ -5,7 +5,7 @@ from typing import List
 
 from oceanbench.core.derived_quantities import add_mixed_layer_depth
 from oceanbench.core.derived_quantities import add_geostrophic_currents
-from oceanbench.core.rmse import Variable, rmse
+from oceanbench.core.rmsd import Variable, rmsd
 from oceanbench.core.references.glorys import glorys_datasets
 
 import numpy
@@ -16,10 +16,10 @@ from oceanbench.core.lagrangian_trajectory import (
 )
 
 
-def rmse_of_variables_compared_to_glorys(
+def rmsd_of_variables_compared_to_glorys(
     challenger_datasets: List[xarray.Dataset],
 ) -> pandas.DataFrame:
-    return rmse(
+    return rmsd(
         challenger_datasets=challenger_datasets,
         reference_datasets=glorys_datasets(challenger_datasets),
         variables=[
@@ -32,10 +32,10 @@ def rmse_of_variables_compared_to_glorys(
     )
 
 
-def rmse_of_mixed_layer_depth_compared_to_glorys(
+def rmsd_of_mixed_layer_depth_compared_to_glorys(
     challenger_datasets: List[xarray.Dataset],
 ) -> pandas.DataFrame:
-    return rmse(
+    return rmsd(
         challenger_datasets=add_mixed_layer_depth(challenger_datasets),
         reference_datasets=add_mixed_layer_depth(glorys_datasets(challenger_datasets)),
         variables=[
@@ -44,10 +44,10 @@ def rmse_of_mixed_layer_depth_compared_to_glorys(
     )
 
 
-def rmse_of_geostrophic_currents_compared_to_glorys(
+def rmsd_of_geostrophic_currents_compared_to_glorys(
     challenger_datasets: List[xarray.Dataset],
 ) -> pandas.DataFrame:
-    return rmse(
+    return rmsd(
         challenger_datasets=add_geostrophic_currents(challenger_datasets),
         reference_datasets=add_geostrophic_currents(glorys_datasets(challenger_datasets)),
         variables=[

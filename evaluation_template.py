@@ -13,17 +13,17 @@ challenger_datasets: List[xarray.Dataset] = ...
 
 # ### Evaluation of challenger datasets using OceanBench
 
-# #### Root Mean Square Error (RMSE) of variables compared to GLORYS
+# #### Root Mean Square Deviation (RMSD) of variables compared to GLORYS
 
-oceanbench.metrics.rmse_of_variables_compared_to_glorys(challenger_datasets)
+oceanbench.metrics.rmsd_of_variables_compared_to_glorys(challenger_datasets)
 
-# #### Root Mean Square Error (RMSE) of Mixed Layer Depth (MLD) compared to GLORYS
+# #### Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLORYS
 
-oceanbench.metrics.rmse_of_mixed_layer_depth_compared_to_glorys(challenger_datasets)
+oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glorys(challenger_datasets)
 
-# #### Root Mean Square Error (RMSE) of geostrophic currents compared to GLORYS
+# #### Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS
 
-oceanbench.metrics.rmse_of_geostrophic_currents_compared_to_glorys(challenger_datasets)
+oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glorys(challenger_datasets)
 
 # #### Deviation of Lagrangian trajectories compared to GLORYS
 
