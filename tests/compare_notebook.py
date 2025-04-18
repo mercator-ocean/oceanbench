@@ -38,11 +38,13 @@ def compare_notebook_files(file1_path, file2_path):
             diff = DeepDiff(filtered_json_data1, filtered_json_data2)
 
             if diff:
-                print(json.dumps(diff, indent=2))
+                # Convertir en JSON string avec gestion des types non sérialisables
+                print(diff.to_json(indent=2))
                 sys.exit(1)
             else:
                 print("{}")
                 sys.exit(0)
+
     except FileNotFoundError as e:
         print(f"Error: One of the files was not found. {e}")
         sys.exit(1)

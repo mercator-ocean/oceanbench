@@ -88,7 +88,7 @@ def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
         {Dimension.LEAD_DAY_INDEX.key(): list(range(LEAD_DAYS_COUNT))}
     )
     dataset_with_depth_selected = dataset_with_lead_day_labels.sel(
-        {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}
+        {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}, method="nearest"
     )
     dataset_with_depth_labels = _assign_depth_dimension(dataset_with_depth_selected)
     return dataset_with_depth_labels
