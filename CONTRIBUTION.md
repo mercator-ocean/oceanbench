@@ -1,0 +1,108 @@
+# Report an issue or propose an evolution
+
+Feel free to open an issue to discuss a particular change or evolution; however, please be advised that we may not respond to your request or may provide a negative response.
+
+# Contribute
+
+## Contribution process
+
+All submissions, including submissions by project members, require review.
+
+## Reproducibility and automation
+
+We use Micromamba virtual environment manager.
+We aim at automating as much as possible everything.
+Checkout the [Makefile](Makefile) and CI/Actions to discover what is done automatically and what you can do manually in that project.
+
+## Library life cycle
+
+The library source code is under the `oceanbench` directory:
+```
+└── oceanbench
+    ├── core
+    │   ├── ...
+    │   ├── derived_quantities.py # internal entrypoint
+    │   ├── metrics.py # internal entrypoint
+    │   └── plot.py # internal entrypoint
+    ├── derived_quantities.py # python lib interface
+    ├── evaluate.py # python lib interface
+    ├── metrics.py # python lib interface
+    └── plot.py # python lib interface
+```
+
+The main objective of the library is to be use as part of a notebook that execution is used as an evaluation reports.
+On new version release, the participating models are re-evaluated.
+The OceanBench maintainers stored the versioned evaluation reports of all participating models on [EDITO](https://datalab.dive.edito.eu/my-files/project-oceanbench/public/evaluation-reports/).
+
+### Version management
+
+We are using semantic versioning X.Y.Z → MAJOR.MINOR.PATCH → for example 1.0.2. We follow the SEMVER principles:
+
+>Given a version number MAJOR.MINOR.PATCH, increment the:
+>
+>- MAJOR version when you make incompatible API changes
+>- MINOR version when you add functionality in a backward compatible manner
+>- PATCH version when you make backward compatible bug fixes
+>
+>Additional labels for pre-release and build metadata are available as extensions to the MAJOR.MINOR.PATCH format.
+
+## Website life cycle
+
+The website source code is under the `website` directory.
+The `main` branch is automatically deployed on OceanBench website.
+The website parse and display a given version of the evaluation reports stored on [EDITO](https://datalab.dive.edito.eu/my-files/project-oceanbench/public/evaluation-reports/).
+
+## Development environment
+
+Create a conda environment:
+
+```sh
+make create-environment
+```
+
+After any implementation:
+
+- add test/ documentation on new functionality if relevant
+
+- add necessary module to "pyproject.toml" in [tool.poetry.dependencies] section
+
+- run pre-commit before committing:
+
+``` sh
+pre-commit run --all-files
+```
+or
+```
+make check-format
+```
+
+- run tests
+
+## Tests
+
+### Run tests on Linux
+
+Create a test conda environment:
+
+```sh
+make create-test-environment
+```
+
+Then activate this test environment:
+
+```sh
+conda activate copernicusmarine_test
+```
+
+Export credentials to local variables (if you don't use `moi`, simply put your own credentials):
+
+```sh
+export COPERNICUSMARINE_SERVICE_USERNAME=$(moi read-secret --name COPERNICUSMARINE_SERVICE_USERNAME)
+export COPERNICUSMARINE_SERVICE_PASSWORD=$(moi read-secret --name COPERNICUSMARINE_SERVICE_PASSWORD)
+```
+
+Finally run the tests:
+
+```sh
+make run-tests
+```
