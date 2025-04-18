@@ -28,22 +28,3 @@ oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glorys(challenger_da
 # #### Deviation of Lagrangian trajectories compared to GLORYS
 
 oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys(challenger_datasets)
-
-# #### Density analysis
-
-oceanbench.derived_quantities.density(challenger_datasets)
-
-# #### Energy cascading analysis
-
-oceanbench.metrics.energy_cascade(challenger_datasets)
-
-# #### Kinetic energy analysis
-
-oceanbench.derived_quantities.kinetic_energy(challenger_datasets)
-
-# #### Vorticity analysis
-oceanbench.derived_quantities.vorticity(challenger_datasets)
-
-# #### Mass conservation analysis
-
-oceanbench.derived_quantities.mass_conservation(challenger_datasets)
