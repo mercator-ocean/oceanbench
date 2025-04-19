@@ -53,10 +53,10 @@ def add_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
         }
     )
 
-    return dataset.isel({Dimension.LATITUDE.dimension_name_from_dataset(dataset): not_on_equator})
+    return _exclude_equator(dataset_with_geostrophic_current)
 
 
 def _exclude_equator(dataset: xarray.Dataset) -> xarray.Dataset:
     latitude = get_dimension(dataset, Dimension.LATITUDE)
     not_on_equator = (latitude < -0.5) | (latitude > 0.5)
-    return dataset.isel({"lat": not_on_equator})
+    return dataset.isel({Dimension.LATITUDE.dimension_name_from_dataset(dataset): not_on_equator})
