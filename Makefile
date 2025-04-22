@@ -37,20 +37,27 @@ _generate-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 _generate-notebook:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
-	python -c 'import oceanbench; oceanbench.generate_notebook_to_evaluate("$(PYTHON_FILE_PATH)", "$(NOTEBOOK_PATH)")'
+	python -c 'import oceanbench; oceanbench.generate_notebook_to_evaluate("$(PYTHON_FILE_PATH)", "$(NOTEBOOK_NAME)")'
 
 _evaluate-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 _evaluate-notebook:
 	${ACTIVATE_ENVIRONMENT}
-	jupyter nbconvert --execute --to notebook $(NOTEBOOK_PATH) --output $(REPORT_NAME)
+	jupyter nbconvert --execute --to notebook $(NOTEBOOK_NAME) --inplace --allow-errors
+
+_upload-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+_upload-notebook:
+	${ACTIVATE_ENVIRONMENT}
+	s3cmd put $(NOTEBOOK_NAME) s3://$(OUTPUT_BUCKET)/$(OUTPUT_PREFIX)/$(NOTEBOOK_NAME) --access_key=$(AWS_ACCESS_KEY_ID) --secret_key=$(AWS_SECRET_ACCESS_KEY) --access_token=$(AWS_SESSION_TOKEN) --host=$(AWS_S3_ENDPOINT) --host-bucket=$(AWS_S3_ENDPOINT)
 
 evaluate-challenger: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-challenger:
-	$(MAKE) _generate-notebook PYTHON_FILE_PATH=$(CHALLENGER_PYTHON_FILE_PATH) NOTEBOOK_PATH=$(CHALLENGER_PYTHON_FILE_PATH).ipynb
-	$(MAKE) _evaluate-notebook NOTEBOOK_PATH=$(CHALLENGER_PYTHON_FILE_PATH).ipynb REPORT_NAME=$(CHALLENGER_REPORT_NAME)
-	rm $(CHALLENGER_PYTHON_FILE_PATH).ipynb
+	$(MAKE) _generate-notebook PYTHON_FILE_PATH=$(CHALLENGER_PYTHON_FILE_PATH) NOTEBOOK_NAME=$(CHALLENGER_REPORT_NAME)
+	$(MAKE) _evaluate-notebook NOTEBOOK_NAME=$(CHALLENGER_REPORT_NAME)
+	version=`python -c 'import oceanbench; print(oceanbench.__version__)'`
+	$(MAKE) _upload-notebook NOTEBOOK_NAME=$(CHALLENGER_REPORT_NAME) OUTPUT_BUCKET=project-oceanbench OUTPUT_PREFIX="public/evaluation-reports/$${version}"
 
 run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
-	$(MAKE) evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/glonet_sample.py CHALLENGER_REPORT_NAME=new_glonet_sample.report.ipynb
-	python tests/compare_notebook.py assets/glonet_sample.report.ipynb assets/new_glonet_sample.report.ipynb
+	${ACTIVATE_ENVIRONMENT}
+	$(MAKE) evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/glonet_sample.py CHALLENGER_REPORT_NAME=glonet_sample.report.ipynb
+	python tests/compare_notebook.py assets/glonet_sample.report.ipynb glonet_sample.report.ipynb
