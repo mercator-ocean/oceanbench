@@ -1,0 +1,45 @@
+{
+  "customInput": {
+    "CodeURI": {
+      "NotUsed": {
+        "environmentVariableName": "OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH"
+      }
+    },
+    "OutputName": {
+      "NotUsed": {
+        "environmentVariableName": "OCEANBENCH_OUTPUT_NOTEBOOK_FILE_NAME"
+      }
+    },
+    "OutputBucket": {
+      "NotUsed": {
+        "environmentVariableName": "OCEANBENCH_OUTPUT_BUCKET"
+      }
+    },
+    "OutputPrefix": {
+      "NotUsed": {
+        "environmentVariableName": "OCEANBENCH_OUTPUT_PREFIX"
+      }
+    },
+    "CopernicusMarineUsername": {
+      "NotUsed": {
+        "environmentVariableName": "COPERNICUSMARINE_USERNAME"
+      }
+    },
+    "CopernicusMarinePassword": {
+      "NotUsed": {
+        "environmentVariableName": "COPERNICUSMARINE_PASSWORD"
+      }
+    }
+  },
+  "copernicusMarineCredentials": false,
+  "description": "Evaluate your ocean model on OceanBench.",
+  "icon": "https://minio.dive.edito.eu/project-oceanbench/public/oceanbench-logo.png",
+  "home": "https://github.com/mercator-ocean/oceanbench/",
+  "keywords": [
+    "Inference",
+    "Forecast",
+    "AI",
+    "Benchmark"
+  ],
+  "appVersion": "0.0.2"
+}

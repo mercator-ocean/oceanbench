@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-name: Publish OceanBench to PyPI and TestPyPI
+name: Publish OceanBench to PyPI and EDITO
 on: push
 jobs:
   build:
@@ -25,8 +25,8 @@ jobs:
         with:
           name: python-package-distributions
           path: dist/
-  publish-to-pypi:
-    name: Publish to PyPI
+  publish:
+    name: Publish to PyPI and EDITO
     if: ${{ startsWith(github.event.head_commit.message, 'OceanBench Release') && github.ref == 'refs/heads/main' }}
     needs:
       - build
