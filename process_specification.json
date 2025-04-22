@@ -1,0 +1,25 @@
+{
+  "customInput": {
+    "Challenger datasets": {
+      "Challenger python file path": {
+        "environmentVariableName": "CHALLENGER_PYTHON_FILE_PATH"
+      }
+    },
+    "Output": {
+      "Challenger report name": {
+        "environmentVariableName": "CHALLENGER_REPORT_NAME"
+      }
+    }
+  },
+  "copernicusMarineCredentials": true,
+  "description": "Evaluate your ocean model on OceanBench.",
+  "icon": "https://www.mercator-ocean.eu/wp-content/uploads/2017/06/favicon-512x512-300x300.png",
+  "home": "https://github.com/mercator-ocean/oceanbench/",
+  "keywords": [
+    "Inference",
+    "Forecast",
+    "AI",
+    "Benchmark"
+  ],
+  "appVersion": "0.0.1"
+}
