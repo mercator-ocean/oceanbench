@@ -7,6 +7,8 @@ import logging
 
 import xarray
 
+from oceanbench.core.resolution import is_quarter_degree_dataset
+
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
@@ -124,7 +126,8 @@ def _to_1_4(glorys_dataset: Dataset) -> Dataset:
 
 def _glorys_datasets(challenger_dataset: Dataset) -> Dataset:
     start_datetime = datetime.fromisoformat(str(challenger_dataset["time"][0].values))
-    return _to_1_4(_glorys_subset(start_datetime))
+    glorys_dataset = _glorys_subset(start_datetime)
+    return _to_1_4(glorys_dataset) if is_quarter_degree_dataset(challenger_dataset) else glorys_dataset
 
 
 def glorys_datasets(challenger_datasets: List[Dataset]) -> List[Dataset]:
