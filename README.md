@@ -59,7 +59,7 @@ git clone git@github.com:mercator-ocean/oceanbench.git && cd oceanbench/ && pip 
 #### Execute on EDITO
 
 You can open and manually execute the example notebook in EDITO datalab by clicking here:
-[![Link to open resource in EDITO](https://dive.edito.eu/badges/Open-in-EDITO.svg)](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-python-ocean-science?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.report.ipynb»)
+[![Link to open resource in EDITO](https://dive.edito.eu/badges/Open-in-EDITO.svg)](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-python-ocean-science?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fscripts%2Fopen-jupyter-notebook-url-edito.sh»&init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.report.ipynb»)
 
 ### Programmatically
 
@@ -74,6 +74,20 @@ oceanbench.evaluate_challenger("path/to/file/opening/the/challenger/datasets.py"
 ```
 
 More details in the [documentation](https://oceanbench.readthedocs.io/en/latest/source/oceanbench.html#oceanbench.evaluate_challenger).
+
+#### EDITO
+
+You can launch the evaluation of your system in EDITO datalab by clicking here:
+[![Link to launch resource in EDITO](https://dive.edito.eu/badges/Launch-on-EDITO.svg)](https://datalab.dive.edito.eu/process-launcher/process-playground/oceanbench-evaluation?name=oceanbench-evaluation&s3=region-bb0d481d&resources.requests.cpu=%C2%AB4000m%C2%BB&resources.requests.memory=%C2%AB8Gi%C2%BB&resources.limits.cpu=%C2%AB7200m%C2%BB&resources.limits.memory=%C2%AB28Gi%C2%BB&vault.enabled=false)
+
+
+#### Docker
+
+You can evaluate your system using Docker by running:
+
+```sh
+docker run docker.mercator-ocean.fr/moi-docker/contributions/process-contribution/project-oceanbench/oceanbench-evaluation:<RELEASE_VERSION>
+```
 
 ### Dependency on the Copernicus Marine Service
 
