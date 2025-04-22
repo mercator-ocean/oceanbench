@@ -8,6 +8,8 @@ from xarray import Dataset, open_mfdataset
 import logging
 
 
+from oceanbench.core.resolution import is_quarter_degree_dataset
+
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
@@ -15,20 +17,37 @@ from oceanbench.core.dataset_utils import Dimension
 
 
 def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
-    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
+    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime(
+        "%Y%m%d"
+    )
     return f"https://minio.dive.edito.eu/project-glonet/public/glorys14_refull_2024/{first_day}.zarr"
 
 
-def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
+def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
 
-    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    first_day_datetimes = challenger_dataset[
+        Dimension.FIRST_DAY_DATETIME.key()
+    ].values
     return open_mfdataset(
         list(map(_glorys_1_4_path, first_day_datetimes)),
         engine="zarr",
-        preprocess=lambda dataset: dataset.rename({"time": Dimension.LEAD_DAY_INDEX.key()}).assign(
-            {Dimension.LEAD_DAY_INDEX.key(): range(10)}
-        ),
+        preprocess=lambda dataset: dataset.rename(
+            {"time": Dimension.LEAD_DAY_INDEX.key()}
+        ).assign({Dimension.LEAD_DAY_INDEX.key(): range(10)}),
         combine="nested",
         concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
         parallel=True,
     ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+
+
+def _glorys_reanalysis_dataset_1_12(
+    challenger_dataset: Dataset,
+) -> Dataset: ...
+
+
+def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
+    return (
+        _glorys_reanalysis_dataset_1_4(challenger_dataset)
+        if is_quarter_degree_dataset(challenger_dataset)
+        else _glorys_reanalysis_dataset_1_12(challenger_dataset)
+    )
