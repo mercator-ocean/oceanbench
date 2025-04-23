@@ -22,11 +22,15 @@ jobs:
         env:
           COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
           COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
         run: make run-tests
         shell: micromamba-shell {0}
       - name: Archive glonet_sample test report
         if: ${{ failure()  }}
         uses: actions/upload-artifact@v4
         with:
-          name: new_glonet_sample.report.ipynb
-          path: assets/new_glonet_sample.report.ipynb
+          name: glonet_sample.report.ipynb
+          path: glonet_sample.report.ipynb
