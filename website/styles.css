@@ -1,33 +1,30 @@
-thead tr th:first-child,
-tbody tr td:first-child {
-  width: 8em;
-  min-width: 8em;
-  max-width: 8em;
-  word-break: break-all;
-}
-caption {
-  position: sticky;
-  left: 0;
+table.model-names {
+  background-color: #f5f5f5 !important;
+  width: auto;
 }
 
-tr.sticky {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+.row {
+  display: flex;
+  flex-direction: row;
 }
 
-th.sticky,
-td.sticky {
-  position: sticky;
-  left: 0;
+.row .variables {
+  display: flex;
+  flex-direction: row;
+  overflow-x: scroll;
 }
 
-th,
-td:nth-child(5n + 1) {
-  border-right: solid #517699;
-}
-
-tfoot tr td:not(:first-child) {
-  font-size: small;
+.row .variables table {
+  margin-left: 10px;
+  margin-right: 10px;
   text-align: center;
+  line-height: f;
+}
+
+table {
+  border: 1px solid #517699 !important;
+}
+
+tfoot tr td {
+  font-size: small;
 }
