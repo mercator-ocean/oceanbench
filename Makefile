@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 PROJECT_NAME = oceanbench
 
 ENVIRONMENT_NAME = ${PROJECT_NAME}
@@ -32,6 +36,12 @@ check-format:
 	${ACTIVATE_ENVIRONMENT}
 	pre-commit install
 	pre-commit run --all-files --show-diff-on-failure
+
+reuse-annotate: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+reuse-annotate:
+	${ACTIVATE_ENVIRONMENT}
+	reuse annotate --year 2025 --copyright "Mercator Ocean International <https://www.mercator-ocean.eu/>" --license EUPL-1.2 --recursive . --skip-unrecognised
+	reuse download --all
 
 _generate-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 _generate-notebook:
