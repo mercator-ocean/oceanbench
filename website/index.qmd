@@ -15,7 +15,7 @@ Welcome to OceanBench.
 # | classes: plain
 
 from IPython.display import display, HTML
-from helpers.table import get_html_table
+from helpers.table import get_html_tables
 from helpers.notebook_score_parser import get_model_score_from_notebook, get_model_score_from_file
 
 REFERENCE_SCORE = get_model_score_from_notebook("https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/0.0.1-alpha/glonet.report.ipynb")
@@ -26,7 +26,8 @@ depths = list(REFERENCE_SCORE.depths.keys())
 other_scores = [dummy_score]
 
 
+
 for depth in depths:
     display(HTML(f"<h3>Model scores for {depth} (real value: {REFERENCE_SCORE.depths[depth].real_value})</h3>"))
-    display(HTML(get_html_table(REFERENCE_SCORE, depth, other_scores)))
+    display(HTML(get_html_tables(REFERENCE_SCORE, depth, other_scores)))
 ```
