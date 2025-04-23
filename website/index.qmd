@@ -22,13 +22,17 @@ from IPython.display import display, HTML
 from helpers.table import get_html_tables
 from helpers.notebook_score_parser import get_model_score_from_notebook, get_model_score_from_file
 
-REFERENCE_SCORE = get_model_score_from_notebook("https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/0.0.1-alpha/glonet.report.ipynb")
+REFERENCE_SCORE = get_model_score_from_notebook(
+    "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/0.0.1a0/glonet.report.ipynb", "GLONET"
+)
 
-dummy_score = get_model_score_from_file("_result_tables/dummy.json")
+glonet_sample = get_model_score_from_notebook(
+    "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/0.0.1a0/glonet_sample.report.ipynb",
+    "GLONET_sample",
+)
 
 depths = list(REFERENCE_SCORE.depths.keys())
-other_scores = [dummy_score]
-
+other_scores = [glonet_sample]
 
 
 for depth in depths:

@@ -10,7 +10,7 @@ import json
 
 def get_raw_html_report_score_table(raw_notebook) -> str:
     for cell in raw_notebook["cells"]:
-        if "oceanbench.metrics.rmse_to_glorys(challenger_datasets)" in cell["source"]:
+        if "oceanbench.metrics.rmsd_of_variables_compared_to_glorys(challenger_datasets)" in cell["source"]:
             html_output = cell["outputs"][0]["data"]["text/html"]
             cleaned_html_output = "".join([line.removesuffix("\n") for line in html_output])
             return cleaned_html_output
@@ -49,10 +49,10 @@ def _get_notebook(path: str):
             return json.load(file)
 
 
-def get_model_score_from_notebook(notebook_path: str) -> ModelScore:
+def get_model_score_from_notebook(notebook_path: str, name: str) -> ModelScore:
     raw_report = _get_notebook(notebook_path)
     score_table = get_raw_html_report_score_table(raw_report)
-    model_score = _convert_raw_html_report_score_table_to_model_score(score_table, "glonet_sample")
+    model_score = _convert_raw_html_report_score_table_to_model_score(score_table, name)
     return model_score
 
 
