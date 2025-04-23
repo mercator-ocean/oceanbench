@@ -7,6 +7,10 @@ website:
       - href: index.qmd
         text: Home
       - about.qmd
+  repo-url: https://github.com/mercator-ocean/oceanbench
+  repo-actions: [edit, source, issue]
+  repo-subdir: website
+  repo-link-target: _blank
 format:
   html:
     theme:
