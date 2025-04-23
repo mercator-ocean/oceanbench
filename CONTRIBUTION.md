@@ -1,8 +1,29 @@
+<!--
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
 # Report an issue or propose an evolution
 
 Feel free to open an issue to discuss a particular change or evolution; however, please be advised that we may not respond to your request or may provide a negative response.
 
 # Contribute
+
+## REUSE and licensing
+
+This repository follows the [REUSE software](https://reuse.software) recommendations.
+Especially, Mercator Ocean International is the copyright holder, and files are published under the [EUPL-1.2](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12) license.
+
+## Git workflow
+
+This repository relies on a git workflow using rebase on the `main` branch.
+Please rebase your pull requests on `main` and squash your commit into a single one.
+
+More info:
+- [A Git Workflow Using Rebase](https://medium.com/singlestone/a-git-workflow-using-rebase-1b1210de83e5)
+- [Merging vs. rebasing](https://www.atlassian.com/git/tutorials/merging-vs-rebasing)
+- [Official Git rebase documentation](https://git-scm.com/book/en/v2/Git-Branching-Rebasing)
 
 ## Contribution process
 
@@ -101,7 +122,7 @@ export COPERNICUSMARINE_SERVICE_USERNAME=$(moi read-secret --name COPERNICUSMARI
 export COPERNICUSMARINE_SERVICE_PASSWORD=$(moi read-secret --name COPERNICUSMARINE_SERVICE_PASSWORD)
 ```
 
-Finally run the tests:
+Finally, run the tests:
 
 ```sh
 make run-tests

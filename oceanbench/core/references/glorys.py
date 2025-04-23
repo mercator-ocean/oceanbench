@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 from datetime import datetime, timedelta
 from typing import List
 from xarray import Dataset, open_dataset

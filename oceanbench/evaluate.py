@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 from oceanbench.core.python2jupyter import (
     generate_evaluation_notebook_file,
 )

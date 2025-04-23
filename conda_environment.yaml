@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 dependencies:
   - pre-commit=4.1.*
   - pip=25.0.*
@@ -5,3 +9,5 @@ dependencies:
   - poetry=2.0.*
   - gh=2.66.*
   - jupyter==1.1.*
+  - pip:
+      - reuse==5.0.2
