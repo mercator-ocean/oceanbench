@@ -9,8 +9,6 @@ title: "OceanBench"
 format:
   html:
     echo: false
-    theme: none
-    css: styles.css
     page-layout: full
 ---
 
