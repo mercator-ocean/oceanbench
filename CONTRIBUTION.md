@@ -10,10 +10,19 @@ Feel free to open an issue to discuss a particular change or evolution; however,
 
 # Contribute
 
+All submissions, including submissions by project members, require review.
+
 ## REUSE and licensing
 
 This repository follows the [REUSE software](https://reuse.software) recommendations.
 By contributing, you accept that Mercator Ocean International is the copyright holder of all files, and that files are published under the [EUPL-1.2](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12) license.
+
+## Developer Certificate of Origin and sign off agreement
+
+This repository use the [Developer Certificate of Origin from the Linux Foundation](https://developercertificate.org/).
+Commit signoff is required.
+Before signing off on a commit, you should ensure that your commit is in compliance with the rules and licensing governing the repository.
+For commits made via the Git command line interface, you must sign off on the commit using the `--signoff` option. For more information, see the [Git documentation](https://git-scm.com/docs/git-commit).
 
 ## Git workflow
 
@@ -25,9 +34,6 @@ More info:
 - [Merging vs. rebasing](https://www.atlassian.com/git/tutorials/merging-vs-rebasing)
 - [Official Git rebase documentation](https://git-scm.com/book/en/v2/Git-Branching-Rebasing)
 
-## Contribution process
-
-All submissions, including submissions by project members, require review.
 
 ## Reproducibility and automation
 
