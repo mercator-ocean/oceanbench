@@ -13,7 +13,7 @@ Feel free to open an issue to discuss a particular change or evolution; however,
 ## REUSE and licensing
 
 This repository follows the [REUSE software](https://reuse.software) recommendations.
-Especially, Mercator Ocean International is the copyright holder, and files are published under the [EUPL-1.2](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12) license.
+By contributing, you accept that Mercator Ocean International is the copyright holder of all files, and that files are published under the [EUPL-1.2](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12) license.
 
 ## Git workflow
 
