@@ -41,13 +41,15 @@ def _get_variable_table_body_row_cells(
     depth_label: str,
     variable_label: str,
     data: dict[str, float],
+    is_reference: bool,
 ) -> str:
     table_cells = []
     for lead_day_index in LEAD_DAY_INDEXES:
         value = data[lead_day_index]
         reference_value = _get_score_value(reference_score, depth_label, variable_label, lead_day_index)
         color = get_color(reference_value, value)
-        table_cells.append(f"<td style='background-color:{color}'>{'{:.2f}'.format(value)}</td>")
+        style = "" if is_reference else f"background-color:{color}; color: black"
+        table_cells.append(f"<td style='{style}'>{'{:.2f}'.format(value)}</td>")
     return "".join(table_cells)
 
 
@@ -56,13 +58,20 @@ def _get_variable_table_body_row(
     reference_score: ModelScore,
     depth_label: str,
     score: ModelScore,
+    is_reference: bool,
 ) -> str:
     if depth_label in score.depths:
         html_model_row = "<tr>"
         variables = score.depths[depth_label].variables
         if variable_label in variables:
             data = variables[variable_label].data
-            html_model_row += _get_variable_table_body_row_cells(reference_score, depth_label, variable_label, data)
+            html_model_row += _get_variable_table_body_row_cells(
+                reference_score=reference_score,
+                depth_label=depth_label,
+                variable_label=variable_label,
+                data=data,
+                is_reference=is_reference,
+            )
         else:
             html_model_row += "<td>NaN</td>" * len(LEAD_DAY_INDEXES)
         html_model_row += "</tr>"
@@ -82,6 +91,7 @@ def _get_variable_table_body(
         reference_score=reference_score,
         depth_label=depth_label,
         score=reference_score,
+        is_reference=True,
     )
     for other_score in other_scores:
         html_model_row = _get_variable_table_body_row(
@@ -89,6 +99,7 @@ def _get_variable_table_body(
             reference_score=reference_score,
             depth_label=depth_label,
             score=other_score,
+            is_reference=False,
         )
         html_table_body += html_model_row
     html_table_body += "</tbody>"
