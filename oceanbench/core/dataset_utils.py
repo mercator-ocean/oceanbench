@@ -30,6 +30,9 @@ class Variable(Enum):
             else self.value
         )
 
+    def key(self) -> str:
+        return self.value.value if isinstance(self.value, StandardVariable) else self.value
+
 
 class Dimension(Enum):
     DEPTH = StandardDimension.DEPTH
@@ -39,6 +42,9 @@ class Dimension(Enum):
 
     def dimension_name_from_dataset(self, dataset: xarray.Dataset) -> Optional[str]:
         return self.value.dimension_name_from_dataset_standard_names(dataset)
+
+    def key(self) -> str:
+        return self.value.value
 
 
 class DepthLevel(Enum):

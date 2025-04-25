@@ -4,7 +4,6 @@
 
 from enum import Enum
 import xarray
-from typing import Optional
 
 
 class StandardDimension(Enum):
@@ -13,7 +12,7 @@ class StandardDimension(Enum):
     LATITUDE = "latitude"
     LONGITUDE = "longitude"
 
-    def dimension_name_from_dataset_standard_names(self, dataset: xarray.Dataset) -> Optional[str]:
+    def dimension_name_from_dataset_standard_names(self, dataset: xarray.Dataset) -> str:
         return _get_variable_name_from_standard_name(dataset, self.value)
 
 
@@ -33,3 +32,15 @@ def _get_variable_name_from_standard_name(dataset: xarray.Dataset, standard_name
         if hasattr(dataset[variable_name], "standard_name") and dataset[variable_name].standard_name == standard_name:
             return str(variable_name)
     raise Exception(f"No variable with standard name {standard_name} found in dataset")
+
+
+def remane_dataset_with_standard_names(
+    dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    mapping = {
+        variable_name: dataset[variable_name].standard_name
+        for variable_name in dataset.variables
+        if hasattr(dataset[variable_name], "standard_name")
+    }
+
+    return dataset.rename(mapping)
