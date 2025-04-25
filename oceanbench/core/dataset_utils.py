@@ -2,10 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from datetime import datetime
 from enum import Enum
-from typing import Optional
-import xarray
 
 from oceanbench.core.climate_forecast_standard_names import (
     StandardDimension,
@@ -14,31 +11,29 @@ from oceanbench.core.climate_forecast_standard_names import (
 
 
 class Variable(Enum):
-    HEIGHT = StandardVariable.HEIGHT
-    TEMPERATURE = StandardVariable.TEMPERATURE
-    SALINITY = StandardVariable.SALINITY
-    NORTHWARD_VELOCITY = StandardVariable.NORTHWARD_VELOCITY
-    EASTWARD_VELOCITY = StandardVariable.EASTWARD_VELOCITY
-    MIXED_LAYER_DEPTH = "MLD"
-    NORTHWARD_GEOSTROPHIC_VELOCITY = "v_geo"
-    EASTWARD_GEOSTROPHIC_VELOCITY = "u_geo"
+    SEA_SURFACE_HEIGHT_ABOVE_GEOID = StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID
+    SEA_WATER_POTENTIAL_TEMPERATURE = StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE
+    SEA_WATER_SALINITY = StandardVariable.SEA_WATER_SALINITY
+    NORTHWARD_SEA_WATER_VELOCITY = StandardVariable.NORTHWARD_SEA_WATER_VELOCITY
+    EASTWARD_SEA_WATER_VELOCITY = StandardVariable.EASTWARD_SEA_WATER_VELOCITY
+    MIXED_LAYER_DEPTH = StandardVariable.MIXED_LAYER_THICKNESS
+    GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY = StandardVariable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY
+    GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY = StandardVariable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY
 
-    def variable_name_from_dataset(self, dataset: xarray.Dataset) -> str:
-        return (
-            self.value.variable_name_from_dataset_standard_names(dataset)
-            if isinstance(self.value, StandardVariable)
-            else self.value
-        )
+    def key(self) -> str:
+        return self.value.value
 
 
 class Dimension(Enum):
     DEPTH = StandardDimension.DEPTH
-    TIME = StandardDimension.TIME
     LATITUDE = StandardDimension.LATITUDE
     LONGITUDE = StandardDimension.LONGITUDE
+    TIME = StandardDimension.TIME
+    LEAD_DAY_INDEX = "lead_day_index"
+    FIRST_DAY_DATETIME = "first_day_datetime"
 
-    def dimension_name_from_dataset(self, dataset: xarray.Dataset) -> Optional[str]:
-        return self.value.dimension_name_from_dataset_standard_names(dataset)
+    def key(self) -> str:
+        return self.value.value if isinstance(self.value, StandardDimension) else self.value
 
 
 class DepthLevel(Enum):
@@ -46,35 +41,3 @@ class DepthLevel(Enum):
     MINUS_50_METERS = 4.737369e01
     MINUS_200_METERS = 2.224752e02
     MINUS_550_METERS = 5.410889e02
-
-
-def get_variable(dataset: xarray.Dataset, variable: Variable) -> xarray.DataArray:
-    return dataset[variable.variable_name_from_dataset(dataset)]
-
-
-def get_dimension(dataset: xarray.Dataset, dimension: Dimension) -> xarray.DataArray:
-    return dataset[dimension.dimension_name_from_dataset(dataset)]
-
-
-def select_variable_day_and_depth(
-    dataset: xarray.Dataset,
-    variable: Variable,
-    depth_level: DepthLevel,
-    lead_day: int,
-) -> xarray.DataArray:
-    depth_name = StandardDimension.DEPTH.dimension_name_from_dataset_standard_names(dataset)
-    time_name = StandardDimension.TIME.dimension_name_from_dataset_standard_names(dataset)
-    try:
-        new_dataset = get_variable(dataset, variable).isel({time_name: lead_day})
-        return (
-            new_dataset.sel({depth_name: depth_level.value})
-            if depth_name in get_variable(dataset, variable).coords
-            else new_dataset
-        )
-    except Exception as exception:
-        start_datetime = datetime.fromisoformat(str(get_variable(dataset, variable)[0].values))
-        details = (
-            f"start_datetime={start_datetime}, variable={variable.value},"
-            + f" depth={depth_level.value}, lead_day={lead_day}"
-        )
-        raise Exception(f"Could not select data: {details}") from exception
