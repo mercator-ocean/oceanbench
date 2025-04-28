@@ -22,6 +22,7 @@ class StandardVariable(Enum):
     SALINITY = "sea_water_salinity"
     NORTHWARD_VELOCITY = "northward_sea_water_velocity"
     EASTWARD_VELOCITY = "eastward_sea_water_velocity"
+    MIXED_LAYER_THICKNESS = "ocean_mixed_layer_thickness"
 
     def variable_name_from_dataset_standard_names(self, dataset: xarray.Dataset) -> str:
         return _get_variable_name_from_standard_name(dataset, self.value)

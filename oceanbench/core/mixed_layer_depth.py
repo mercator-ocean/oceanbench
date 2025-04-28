@@ -27,7 +27,9 @@ def add_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     delta_density = potential_density - surface_density
     mask = delta_density >= density_threshold
     mixed_layer_depth_index = mask.argmax(dim=Dimension.DEPTH.dimension_name_from_dataset(dataset))
-    mixed_layer_depth_depth = depth.isel(depth=mixed_layer_depth_index)
+    mixed_layer_depth_depth = depth.isel(depth=mixed_layer_depth_index).assign_attrs(
+        {"standard_name": "ocean_mixed_layer_thickness"}
+    )
     temperature_mask = numpy.isfinite(temperature.isel(depth=0))
 
     return dataset.assign({Variable.MIXED_LAYER_DEPTH.value: mixed_layer_depth_depth.where(temperature_mask)})

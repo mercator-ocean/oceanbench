@@ -49,9 +49,7 @@ def _harmonised_dataset(dataset: xarray.Dataset, variables: list[Variable]) -> x
     dataset_with_depth_selected = dataset_with_lead_day_labels.sel(
         {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}
     )
-    dataset_with_depth_labels = dataset_with_depth_selected.assign(
-        {Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]}
-    )
+    dataset_with_depth_labels = _assign_depth_dimension(dataset_with_depth_selected)
     dataset_with_variable_selected = dataset_with_depth_labels[[variable.key() for variable in variables]]
     return dataset_with_variable_selected
 
@@ -81,7 +79,12 @@ def _variale_depth_label(dataset: xarray.Dataset, variable: str, depth_label: st
     ).capitalize()
 
 
+def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
+    return dataset.assign({Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]})
+
+
 def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> pandas.DataFrame:
+    dataset_with_depth = dataset if dataset.get(Dimension.DEPTH.key()) else _assign_depth_dimension(dataset)
     indexes_of_variables_sorted: list[tuple[str, str]] = [
         (depth_level, variable.key()) for depth_level in DEPTH_LABELS.values() for variable in variables
     ]
@@ -89,10 +92,10 @@ def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> 
         (depth_level, variable.key())
         for depth_level in DEPTH_LABELS.values()
         for variable in variables
-        if depth_level != DEPTH_LABELS[DepthLevel.SURFACE] and not _has_depths(dataset, variable.key())
+        if depth_level != DEPTH_LABELS[DepthLevel.SURFACE] and not _has_depths(dataset_with_depth, variable.key())
     ]
     dataframe_3d: pandas.DataFrame = (
-        dataset.to_dataframe()
+        dataset_with_depth.to_dataframe()
         .reset_index()
         .pivot(index=[Dimension.TIME.key()], columns=[Dimension.DEPTH.key()])
         .set_index([lead_day_labels(1, LEAD_DAYS_COUNT)])
@@ -103,7 +106,7 @@ def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> 
     )
     return dataframe_3d.set_index(
         dataframe_3d.index.map(
-            lambda depth_variable: _variale_depth_label(dataset, depth_variable[1], depth_variable[0])
+            lambda depth_variable: _variale_depth_label(dataset_with_depth, depth_variable[1], depth_variable[0])
         )
     )
 
