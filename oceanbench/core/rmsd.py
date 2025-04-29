@@ -18,7 +18,6 @@ from oceanbench.core.dataset_utils import (
     DepthLevel,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
-from multiprocessing import Pool
 
 VARIABLE_LABELS: dict[str, str] = {
     Variable.HEIGHT.key(): "surface height",
@@ -83,34 +82,25 @@ def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
     return dataset.assign({Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]})
 
 
+def _select_dataset_variable_and_depth(dataset: xarray.Dataset, variable_name: str, depth_level: str) -> numpy.ndarray:
+    return (
+        dataset[variable_name].sel({Dimension.DEPTH.key(): depth_level}).values
+        if _has_depths(dataset, variable_name)
+        else dataset[variable_name].values
+    )
+
+
 def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> pandas.DataFrame:
     dataset_with_depth = _assign_depth_dimension(dataset) if dataset.get(Dimension.DEPTH.key()) is None else dataset
-    indexes_of_variables_sorted: list[tuple[str, str]] = [
-        (depth_level, variable.key()) for depth_level in DEPTH_LABELS.values() for variable in variables
-    ]
-    print("ya", indexes_of_variables_sorted)
-    indexes_of_variables_without_depth: list[tuple[str, str]] = [
-        (depth_level, variable.key())
+    values_2d: dict[str, numpy.ndarray] = {
+        _variable_depth_label(dataset_with_depth, variable.key(), depth_level): _select_dataset_variable_and_depth(
+            dataset_with_depth, variable.key(), depth_level
+        )
         for depth_level in DEPTH_LABELS.values()
         for variable in variables
-        if depth_level != DEPTH_LABELS[DepthLevel.SURFACE] and not _has_depths(dataset_with_depth, variable.key())
-    ]
-    print("yo", indexes_of_variables_without_depth)
-    dataframe_3d: pandas.DataFrame = (
-        dataset_with_depth.to_dataframe()
-        .reset_index()
-        .pivot(index=[Dimension.TIME.key()], columns=[Dimension.DEPTH.key()])
-        .set_index([lead_day_labels(1, LEAD_DAYS_COUNT)])
-        .T.rename_axis(columns=None)
-        .swaplevel(0, 1)
-        .set_index([indexes_of_variables_sorted])
-        .drop(index=indexes_of_variables_without_depth)
-    )
-    return dataframe_3d.set_index(
-        dataframe_3d.index.map(
-            lambda depth_variable: _variable_depth_label(dataset_with_depth, depth_variable[1], depth_variable[0])
-        )
-    )
+        if depth_level == DEPTH_LABELS[DepthLevel.SURFACE] or _has_depths(dataset_with_depth, variable.key())
+    }
+    return pandas.DataFrame(values_2d).set_index([lead_day_labels(1, LEAD_DAYS_COUNT)]).T
 
 
 def rmsd(
@@ -121,12 +111,5 @@ def rmsd(
     harmonise = partial(_harmonised_dataset, variables=variables)
     harmonised_challenger_datasets = map(harmonise, challenger_datasets)
     harmonised_reference_datasets = map(harmonise, reference_datasets)
-    # with Pool() as pool:
-    #     rmsds = pool.starmap(
-    #         _rmsd,
-    #         zip(harmonised_challenger_datasets, harmonised_reference_datasets),
-    #     )
-    #     return _to_pretty_dataframe(_mean_of_all_datasets(rmsds), variables)
     rmsds = map(_rmsd, harmonised_challenger_datasets, harmonised_reference_datasets)
-    # return _to_pretty_dataframe(_mean_of_all_datasets(rmsds), variables)
-    return _mean_of_all_datasets(rmsds)
+    return _to_pretty_dataframe(_mean_of_all_datasets(rmsds), variables)
