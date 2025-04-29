@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from functools import partial
-import multiprocessing
 from typing import Iterable, List
 
 import numpy
@@ -59,12 +58,9 @@ def _rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
 ) -> xarray.Dataset:
-    print(f"Computing RMSD on {multiprocessing.current_process()}...")
-    toto = numpy.sqrt(
+    return numpy.sqrt(
         ((challenger_dataset - reference_dataset) ** 2).mean(dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()])
     )
-    print(f"RMSD on {multiprocessing.current_process()} computed")
-    return toto
 
 
 def _mean_of_all_datasets(
@@ -114,11 +110,9 @@ def rmsd(
     variables: List[Variable],
 ) -> pandas.DataFrame:
     harmonise = partial(_harmonised_dataset, variables=variables)
-    print("Harmonizing...")
     harmonised_challenger_datasets = list(map(harmonise, challenger_datasets))
     harmonised_reference_datasets = list(map(harmonise, reference_datasets))
-    print("Harmonized")
-    with Pool(processes=4) as pool:
+    with Pool(processes=2) as pool:
         rmsds = pool.starmap(
             _rmsd,
             zip(harmonised_challenger_datasets, harmonised_reference_datasets),
