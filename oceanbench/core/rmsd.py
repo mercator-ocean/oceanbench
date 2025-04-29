@@ -18,7 +18,7 @@ from oceanbench.core.dataset_utils import (
     DepthLevel,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
-
+from multiprocessing import Pool
 
 VARIABLE_LABELS: dict[str, str] = {
     Variable.HEIGHT.key(): "surface height",
@@ -73,7 +73,7 @@ def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
     return Dimension.DEPTH.key() in dataset[variable_name].coords
 
 
-def _variale_depth_label(dataset: xarray.Dataset, variable: str, depth_label: str) -> str:
+def _variable_depth_label(dataset: xarray.Dataset, variable: str, depth_label: str) -> str:
     return (
         f"{depth_label} {VARIABLE_LABELS[variable]}" if _has_depths(dataset, variable) else VARIABLE_LABELS[variable]
     ).capitalize()
@@ -88,12 +88,14 @@ def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> 
     indexes_of_variables_sorted: list[tuple[str, str]] = [
         (depth_level, variable.key()) for depth_level in DEPTH_LABELS.values() for variable in variables
     ]
+    print("ya", indexes_of_variables_sorted)
     indexes_of_variables_without_depth: list[tuple[str, str]] = [
         (depth_level, variable.key())
         for depth_level in DEPTH_LABELS.values()
         for variable in variables
         if depth_level != DEPTH_LABELS[DepthLevel.SURFACE] and not _has_depths(dataset_with_depth, variable.key())
     ]
+    print("yo", indexes_of_variables_without_depth)
     dataframe_3d: pandas.DataFrame = (
         dataset_with_depth.to_dataframe()
         .reset_index()
@@ -106,7 +108,7 @@ def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> 
     )
     return dataframe_3d.set_index(
         dataframe_3d.index.map(
-            lambda depth_variable: _variale_depth_label(dataset_with_depth, depth_variable[1], depth_variable[0])
+            lambda depth_variable: _variable_depth_label(dataset_with_depth, depth_variable[1], depth_variable[0])
         )
     )
 
@@ -119,5 +121,12 @@ def rmsd(
     harmonise = partial(_harmonised_dataset, variables=variables)
     harmonised_challenger_datasets = map(harmonise, challenger_datasets)
     harmonised_reference_datasets = map(harmonise, reference_datasets)
+    # with Pool() as pool:
+    #     rmsds = pool.starmap(
+    #         _rmsd,
+    #         zip(harmonised_challenger_datasets, harmonised_reference_datasets),
+    #     )
+    #     return _to_pretty_dataframe(_mean_of_all_datasets(rmsds), variables)
     rmsds = map(_rmsd, harmonised_challenger_datasets, harmonised_reference_datasets)
-    return _to_pretty_dataframe(_mean_of_all_datasets(rmsds), variables)
+    # return _to_pretty_dataframe(_mean_of_all_datasets(rmsds), variables)
+    return _mean_of_all_datasets(rmsds)
