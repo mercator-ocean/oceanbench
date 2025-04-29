@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from functools import partial
+import multiprocessing
 from typing import Iterable, List
 
 import numpy
@@ -18,6 +19,7 @@ from oceanbench.core.dataset_utils import (
     DepthLevel,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
+from multiprocessing import Pool
 
 VARIABLE_LABELS: dict[str, str] = {
     Variable.HEIGHT.key(): "surface height",
@@ -57,9 +59,12 @@ def _rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
 ) -> xarray.Dataset:
-    return numpy.sqrt(
+    print(f"Computing RMSD on {multiprocessing.current_process()}...")
+    toto = numpy.sqrt(
         ((challenger_dataset - reference_dataset) ** 2).mean(dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()])
     )
+    print(f"RMSD on {multiprocessing.current_process()} computed")
+    return toto
 
 
 def _mean_of_all_datasets(
@@ -109,7 +114,13 @@ def rmsd(
     variables: List[Variable],
 ) -> pandas.DataFrame:
     harmonise = partial(_harmonised_dataset, variables=variables)
-    harmonised_challenger_datasets = map(harmonise, challenger_datasets)
-    harmonised_reference_datasets = map(harmonise, reference_datasets)
-    rmsds = map(_rmsd, harmonised_challenger_datasets, harmonised_reference_datasets)
-    return _to_pretty_dataframe(_mean_of_all_datasets(rmsds), variables)
+    print("Harmonizing...")
+    harmonised_challenger_datasets = list(map(harmonise, challenger_datasets))
+    harmonised_reference_datasets = list(map(harmonise, reference_datasets))
+    print("Harmonized")
+    with Pool(processes=4) as pool:
+        rmsds = pool.starmap(
+            _rmsd,
+            zip(harmonised_challenger_datasets, harmonised_reference_datasets),
+        )
+        return _to_pretty_dataframe(_mean_of_all_datasets(rmsds), variables)
