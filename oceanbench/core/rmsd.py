@@ -84,7 +84,7 @@ def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
 
 
 def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> pandas.DataFrame:
-    dataset_with_depth = dataset if dataset.get(Dimension.DEPTH.key()) else _assign_depth_dimension(dataset)
+    dataset_with_depth = _assign_depth_dimension(dataset) if dataset.get(Dimension.DEPTH.key()) is None else dataset
     indexes_of_variables_sorted: list[tuple[str, str]] = [
         (depth_level, variable.key()) for depth_level in DEPTH_LABELS.values() for variable in variables
     ]
