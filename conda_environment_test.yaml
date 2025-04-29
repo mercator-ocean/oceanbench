@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 dependencies:
-  - python==3.13.*
+  - python==3.13.2
   - pip=25.0.*
   - gcc
   - jupyter==1.1.*
