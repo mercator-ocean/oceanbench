@@ -4,7 +4,7 @@
 
 from datetime import datetime
 from typing import List
-from xarray import Dataset, open_dataset
+from xarray import Dataset, open_zarr
 import logging
 
 
@@ -14,9 +14,9 @@ logger.setLevel(level=logging.WARNING)
 
 def _glorys_1_4(start_datetime: datetime) -> Dataset:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return open_dataset(
-        f"https://minio.dive.edito.eu/project-glonet/public/glorys14_full_2024/{start_datetime_string}.zarr",
-        engine="zarr",
+    return open_zarr(
+        f"https://minio.dive.edito.eu/project-glonet/public/glorys14_refull_2024/{start_datetime_string}.zarr",
+        consolidated=True,
     )
 
 

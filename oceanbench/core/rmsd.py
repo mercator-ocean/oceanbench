@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from functools import partial
-from typing import Iterable, List
 
 import numpy
 import xarray
@@ -18,7 +17,6 @@ from oceanbench.core.dataset_utils import (
     DepthLevel,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
-from multiprocessing import Pool
 
 VARIABLE_LABELS: dict[str, str] = {
     Variable.HEIGHT.key(): "surface height",
@@ -43,6 +41,11 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
 LEAD_DAYS_COUNT = 10
 
 
+def _harmonised_datasets(datasets: list[xarray.Dataset], variables: list[Variable]) -> xarray.Dataset:
+    harmonise = partial(_harmonised_dataset, variables=variables)
+    return xarray.concat(map(harmonise, datasets), dim="forecast_number")
+
+
 def _harmonised_dataset(dataset: xarray.Dataset, variables: list[Variable]) -> xarray.Dataset:
     standard_dataset = remane_dataset_with_standard_names(dataset)
     dataset_with_lead_day_labels = standard_dataset.assign({Dimension.TIME.key(): list(range(LEAD_DAYS_COUNT))})
@@ -61,12 +64,6 @@ def _rmsd(
     return numpy.sqrt(
         ((challenger_dataset - reference_dataset) ** 2).mean(dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()])
     )
-
-
-def _mean_of_all_datasets(
-    datasets: Iterable[xarray.Dataset],
-) -> xarray.Dataset:
-    return xarray.concat(datasets, dim="ensemble").mean(dim="ensemble")
 
 
 def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
@@ -105,16 +102,22 @@ def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> 
 
 
 def rmsd(
-    challenger_datasets: List[xarray.Dataset],
-    reference_datasets: List[xarray.Dataset],
-    variables: List[Variable],
+    challenger_datasets: list[xarray.Dataset],
+    reference_datasets: list[xarray.Dataset],
+    variables: list[Variable],
 ) -> pandas.DataFrame:
-    harmonise = partial(_harmonised_dataset, variables=variables)
-    harmonised_challenger_datasets = list(map(harmonise, challenger_datasets))
-    harmonised_reference_datasets = list(map(harmonise, reference_datasets))
-    with Pool(processes=2) as pool:
-        rmsds = pool.starmap(
-            _rmsd,
-            zip(harmonised_challenger_datasets, harmonised_reference_datasets),
-        )
-        return _to_pretty_dataframe(_mean_of_all_datasets(rmsds), variables)
+    harmonised_challenger_dataset = _harmonised_datasets(challenger_datasets, variables)
+    harmonised_reference_dataset = _harmonised_datasets(reference_datasets, variables)
+    return _to_pretty_dataframe(
+        _rmsd(harmonised_challenger_dataset, harmonised_reference_dataset).mean(dim="forecast_number"),
+        variables,
+    )
+    # return _to_pretty_dataframe(
+    #     xarray.apply_ufunc(
+    #         _rmsd,
+    #         harmonised_challenger_dataset,
+    #         harmonised_reference_dataset,
+    #         dask="parallelized",
+    #     ).mean(dim="forecast_number"),
+    #     variables,
+    # )
