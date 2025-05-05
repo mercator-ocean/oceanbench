@@ -4,12 +4,10 @@ SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-
 SPDX-License-Identifier: EUPL-1.2
 -->
 
-<h1 align="center">OceanBench</h1>
+# OceanBench
 
-<div align="center">
-  <a href="https://en.wikipedia.org/wiki/Linux"><img src="https://img.shields.io/badge/platform-linux-lightgrey" alt="Supported Platforms" /></a>
-  <a href="https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12"><img src="https://img.shields.io/badge/licence-EUPL-lightblue" alt="Licence" /></a>
-</div>
+[![Supported Platforms](https://img.shields.io/badge/platform-linux-lightgrey)](https://en.wikipedia.org/wiki/Linux)
+[![License](https://img.shields.io/badge/licence-EUPL-lightblue)](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12)
 
 OceanBench is a benchmarking tool to evaluate ocean models against reference ocean analysis datasets as well as observations.
 
@@ -23,7 +21,7 @@ The definitions of the methods used to evaluate models are available on the Ocea
 
 ## Evaluate your model with OceanBench
 
-Checkout [this notebook](https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.report.ipynb) that evaluates a sample (single forecast) of the GLONET system on OceanBench.
+Checkout [this notebook](https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.report.ipynb) that evaluates a sample (two forecasts) of the GLONET system on OceanBench.
 The resulting executed notebook is used as the evaluation report of the model, and its content is used to fulfil the OceanBench score table.
 
 You can replace the cell that open the challenger datasets with your code and execute the notebook.

@@ -19,7 +19,7 @@ By contributing, you accept that Mercator Ocean International is the copyright h
 
 ## Developer Certificate of Origin and sign off agreement
 
-This repository use the [Developer Certificate of Origin from the Linux Foundation](https://developercertificate.org/).
+This repository uses the [Developer Certificate of Origin from the Linux Foundation](https://developercertificate.org/).
 Commit signoff is required.
 Before signing off on a commit, you should ensure that your commit is in compliance with the rules and licensing governing the repository.
 For commits made via the Git command line interface, you must sign off on the commit using the `--signoff` option. For more information, see the [Git documentation](https://git-scm.com/docs/git-commit).
@@ -30,10 +30,10 @@ This repository relies on a git workflow using rebase on the `main` branch.
 Please rebase your pull requests on `main` and squash your commit into a single one.
 
 More info:
+
 - [A Git Workflow Using Rebase](https://medium.com/singlestone/a-git-workflow-using-rebase-1b1210de83e5)
 - [Merging vs. rebasing](https://www.atlassian.com/git/tutorials/merging-vs-rebasing)
 - [Official Git rebase documentation](https://git-scm.com/book/en/v2/Git-Branching-Rebasing)
-
 
 ## Reproducibility and automation
 
@@ -44,7 +44,8 @@ Checkout the [Makefile](Makefile) and CI/Actions to discover what is done automa
 ## Library life cycle
 
 The library source code is under the `oceanbench` directory:
-```
+
+```sh
 └── oceanbench
     ├── core
     │   ├── ...
@@ -98,8 +99,10 @@ After any implementation:
 ``` sh
 pre-commit run --all-files
 ```
+
 or
-```
+
+```sh
 make check-format
 ```
 
