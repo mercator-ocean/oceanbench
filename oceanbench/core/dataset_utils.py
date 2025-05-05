@@ -12,6 +12,10 @@ from oceanbench.core.climate_forecast_standard_names import (
     StandardVariable,
 )
 
+from oceanbench.core.climate_forecast_standard_names import (
+    remane_dataset_with_standard_names,
+)
+
 
 class Variable(Enum):
     HEIGHT = StandardVariable.HEIGHT
@@ -84,3 +88,28 @@ def select_variable_day_and_depth(
             + f" depth={depth_level.value}, lead_day={lead_day}"
         )
         raise Exception(f"Could not select data: {details}") from exception
+
+
+LEAD_DAYS_COUNT = 10
+
+
+def assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
+    return dataset.assign({Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]})
+
+
+DEPTH_LABELS: dict[DepthLevel, str] = {
+    DepthLevel.SURFACE: "surface",
+    DepthLevel.MINUS_50_METERS: "50m",
+    DepthLevel.MINUS_200_METERS: "200m",
+    DepthLevel.MINUS_550_METERS: "550m",
+}
+
+
+def harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
+    standard_dataset = remane_dataset_with_standard_names(dataset)
+    dataset_with_lead_day_labels = standard_dataset.assign({Dimension.TIME.key(): list(range(LEAD_DAYS_COUNT))})
+    dataset_with_depth_selected = dataset_with_lead_day_labels.sel(
+        {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}
+    )
+    dataset_with_depth_labels = assign_depth_dimension(dataset_with_depth_selected)
+    return dataset_with_depth_labels

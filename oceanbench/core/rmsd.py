@@ -2,19 +2,17 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from functools import partial
-
 import numpy
 import xarray
 import pandas
 
-from oceanbench.core.climate_forecast_standard_names import (
-    remane_dataset_with_standard_names,
-)
 from oceanbench.core.dataset_utils import (
+    DEPTH_LABELS,
+    LEAD_DAYS_COUNT,
     Variable,
     Dimension,
     DepthLevel,
+    assign_depth_dimension,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
 
@@ -30,40 +28,13 @@ VARIABLE_LABELS: dict[str, str] = {
 }
 
 
-DEPTH_LABELS: dict[DepthLevel, str] = {
-    DepthLevel.SURFACE: "surface",
-    DepthLevel.MINUS_50_METERS: "50m",
-    DepthLevel.MINUS_200_METERS: "200m",
-    DepthLevel.MINUS_550_METERS: "550m",
-}
-
-
-LEAD_DAYS_COUNT = 10
-
-
-def _harmonised_datasets(datasets: list[xarray.Dataset], variables: list[Variable]) -> xarray.Dataset:
-    harmonise = partial(_harmonised_dataset, variables=variables)
-    return xarray.concat(map(harmonise, datasets), dim="forecast_number")
-
-
-def _harmonised_dataset(dataset: xarray.Dataset, variables: list[Variable]) -> xarray.Dataset:
-    standard_dataset = remane_dataset_with_standard_names(dataset)
-    dataset_with_lead_day_labels = standard_dataset.assign({Dimension.TIME.key(): list(range(LEAD_DAYS_COUNT))})
-    dataset_with_depth_selected = dataset_with_lead_day_labels.sel(
-        {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}
-    )
-    dataset_with_depth_labels = _assign_depth_dimension(dataset_with_depth_selected)
-    dataset_with_variable_selected = dataset_with_depth_labels[[variable.key() for variable in variables]]
-    return dataset_with_variable_selected
-
-
 def _rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
 ) -> xarray.Dataset:
     return numpy.sqrt(
         ((challenger_dataset - reference_dataset) ** 2).mean(dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()])
-    )
+    ).mean(dim="start_datetime")
 
 
 def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
@@ -76,10 +47,6 @@ def _variable_depth_label(dataset: xarray.Dataset, variable: str, depth_label: s
     ).capitalize()
 
 
-def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
-    return dataset.assign({Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]})
-
-
 def _select_dataset_variable_and_depth(dataset: xarray.Dataset, variable_name: str, depth_level: str) -> numpy.ndarray:
     return (
         dataset[variable_name].sel({Dimension.DEPTH.key(): depth_level}).values
@@ -89,7 +56,7 @@ def _select_dataset_variable_and_depth(dataset: xarray.Dataset, variable_name: s
 
 
 def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> pandas.DataFrame:
-    dataset_with_depth = _assign_depth_dimension(dataset) if dataset.get(Dimension.DEPTH.key()) is None else dataset
+    dataset_with_depth = assign_depth_dimension(dataset) if dataset.get(Dimension.DEPTH.key()) is None else dataset
     values_2d: dict[str, numpy.ndarray] = {
         _variable_depth_label(dataset_with_depth, variable.key(), depth_level): _select_dataset_variable_and_depth(
             dataset_with_depth, variable.key(), depth_level
@@ -101,23 +68,19 @@ def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> 
     return pandas.DataFrame(values_2d).set_index([lead_day_labels(1, LEAD_DAYS_COUNT)]).T
 
 
+def _select_variables(dataset: xarray.Dataset, variables: list[Variable]) -> xarray.Dataset:
+    return dataset[[variable.key() for variable in variables]]
+
+
 def rmsd(
-    challenger_datasets: list[xarray.Dataset],
-    reference_datasets: list[xarray.Dataset],
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
     variables: list[Variable],
 ) -> pandas.DataFrame:
-    harmonised_challenger_dataset = _harmonised_datasets(challenger_datasets, variables)
-    harmonised_reference_dataset = _harmonised_datasets(reference_datasets, variables)
     return _to_pretty_dataframe(
-        _rmsd(harmonised_challenger_dataset, harmonised_reference_dataset).mean(dim="forecast_number"),
+        _rmsd(
+            _select_variables(challenger_dataset, variables),
+            _select_variables(reference_dataset, variables),
+        ),
         variables,
     )
-    # return _to_pretty_dataframe(
-    #     xarray.apply_ufunc(
-    #         _rmsd,
-    #         harmonised_challenger_dataset,
-    #         harmonised_reference_dataset,
-    #         dask="parallelized",
-    #     ).mean(dim="forecast_number"),
-    #     variables,
-    # )

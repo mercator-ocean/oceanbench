@@ -2,8 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from typing import List
-
 import xarray
 
 from pandas import DataFrame
@@ -12,24 +10,24 @@ from oceanbench.core import metrics
 
 
 def rmsd_of_variables_compared_to_glorys(
-    challenger_datasets: List[xarray.Dataset],
+    challenger_dataset: xarray.Dataset,
 ) -> DataFrame:
-    return metrics.rmsd_of_variables_compared_to_glorys(challenger_datasets=challenger_datasets)
+    return metrics.rmsd_of_variables_compared_to_glorys(challenger_dataset=challenger_dataset)
 
 
 def rmsd_of_mixed_layer_depth_compared_to_glorys(
-    challenger_datasets: List[xarray.Dataset],
+    challenger_dataset: xarray.Dataset,
 ) -> DataFrame:
-    return metrics.rmsd_of_mixed_layer_depth_compared_to_glorys(challenger_datasets=challenger_datasets)
+    return metrics.rmsd_of_mixed_layer_depth_compared_to_glorys(challenger_dataset=challenger_dataset)
 
 
 def rmsd_of_geostrophic_currents_compared_to_glorys(
-    challenger_datasets: List[xarray.Dataset],
+    challenger_dataset: xarray.Dataset,
 ) -> DataFrame:
-    return metrics.rmsd_of_geostrophic_currents_compared_to_glorys(challenger_datasets=challenger_datasets)
+    return metrics.rmsd_of_geostrophic_currents_compared_to_glorys(challenger_dataset=challenger_dataset)
 
 
 def deviation_of_lagrangian_trajectories_compared_to_glorys(
-    challenger_datasets: List[xarray.Dataset],
+    challenger_dataset: xarray.Dataset,
 ) -> DataFrame:
-    return metrics.deviation_of_lagrangian_trajectories_compared_to_glorys(challenger_datasets=challenger_datasets)
+    return metrics.deviation_of_lagrangian_trajectories_compared_to_glorys(challenger_dataset=challenger_dataset)

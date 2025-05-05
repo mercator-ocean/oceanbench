@@ -49,7 +49,7 @@ LEAD_DAY_STOP = 9
 
 
 def deviation_of_lagrangian_trajectories(
-    challenger_datasets: list[xarray.Dataset],
+    challenger_dataset: list[xarray.Dataset],
     reference_datasets: list[xarray.Dataset],
     zone: Zone,
 ) -> pandas.DataFrame:
@@ -60,7 +60,7 @@ def deviation_of_lagrangian_trajectories(
                     _deviation_of_lagrangian_trajectories,
                     zone=zone,
                 ),
-                challenger_datasets,
+                challenger_dataset,
                 reference_datasets,
             )
         )

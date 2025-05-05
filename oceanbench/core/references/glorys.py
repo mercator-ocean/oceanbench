@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from datetime import datetime
-from typing import List
-from xarray import Dataset, open_zarr
+import numpy
+from xarray import Dataset, open_mfdataset
 import logging
 
 
@@ -12,18 +12,19 @@ logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
 
-def _glorys_1_4(start_datetime: datetime) -> Dataset:
-    start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return open_zarr(
-        f"https://minio.dive.edito.eu/project-glonet/public/glorys14_refull_2024/{start_datetime_string}.zarr",
-        consolidated=True,
-    )
+def _glorys_1_4_path(start_datetime: numpy.datetime64) -> str:
+    start_datetime_string = datetime.fromisoformat(str(start_datetime)).strftime("%Y%m%d")
+    return f"https://minio.dive.edito.eu/project-glonet/public/glorys14_refull_2024/{start_datetime_string}.zarr"
 
 
-def _glorys_datasets(challenger_dataset: Dataset) -> Dataset:
-    start_datetime = datetime.fromisoformat(str(challenger_dataset["time"][0].values))
-    return _glorys_1_4(start_datetime)
+def glorys_dataset(challenger_dataset: Dataset) -> Dataset:
 
-
-def glorys_datasets(challenger_datasets: List[Dataset]) -> List[Dataset]:
-    return list(map(_glorys_datasets, challenger_datasets))
+    start_datetimes = challenger_dataset["start_datetime"].values
+    return open_mfdataset(
+        list(map(_glorys_1_4_path, start_datetimes)),
+        engine="zarr",
+        preprocess=lambda dataset: dataset.assign(time=range(10)),
+        combine="nested",
+        concat_dim="start_datetime",
+        parallel=True,
+    ).assign(start_datetime=start_datetimes)

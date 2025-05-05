@@ -1,14 +1,21 @@
 # Open GLONET forecast sample with xarray
+from datetime import datetime
 import xarray
-from typing import List
 
-challenger_datasets: List[xarray.Dataset] = [
-    xarray.open_dataset(
-        "https://minio.dive.edito.eu/project-glonet/public/glonet_full_2024/20240103.zarr",
-        engine="zarr",
-    ),
-    xarray.open_dataset(
-        "https://minio.dive.edito.eu/project-glonet/public/glonet_full_2024/20240110.zarr",
-        engine="zarr",
-    ),
-]
+challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
+    [
+        "https://minio.dive.edito.eu/project-glonet/public/glonet_refull_2024/20240103.zarr",
+        "https://minio.dive.edito.eu/project-glonet/public/glonet_refull_2024/20240110.zarr",
+    ],
+    engine="zarr",
+    preprocess=lambda dataset: dataset.assign(time=range(10)),
+    combine="nested",
+    concat_dim="start_datetime",
+    parallel=True,
+).assign(
+    start_datetime=[
+        datetime.fromisoformat("2024-01-03"),
+        datetime.fromisoformat("2024-01-10"),
+    ]
+)
+challenger_dataset
