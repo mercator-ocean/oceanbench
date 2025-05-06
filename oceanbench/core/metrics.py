@@ -37,8 +37,8 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
     return rmsd(
-        challenger_dataset=add_mixed_layer_depth(challenger_dataset),
-        reference_dataset=add_mixed_layer_depth(glorys_dataset(challenger_dataset)),
+        challenger_dataset=harmonise_dataset(add_mixed_layer_depth(challenger_dataset)),
+        reference_dataset=harmonise_dataset(add_mixed_layer_depth(glorys_dataset(challenger_dataset))),
         variables=[
             Variable.MIXED_LAYER_DEPTH,
         ],
@@ -49,8 +49,8 @@ def rmsd_of_geostrophic_currents_compared_to_glorys(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
     return rmsd(
-        challenger_dataset=add_geostrophic_currents(challenger_dataset),
-        reference_dataset=add_geostrophic_currents(glorys_dataset(challenger_dataset)),
+        challenger_dataset=harmonise_dataset(add_geostrophic_currents(challenger_dataset)),
+        reference_dataset=harmonise_dataset(add_geostrophic_currents(glorys_dataset(challenger_dataset))),
         variables=[
             Variable.NORTHWARD_GEOSTROPHIC_VELOCITY,
             Variable.EASTWARD_GEOSTROPHIC_VELOCITY,
@@ -63,6 +63,6 @@ def deviation_of_lagrangian_trajectories_compared_to_glorys(
 ) -> pandas.DataFrame:
     return deviation_of_lagrangian_trajectories(
         challenger_dataset=challenger_dataset,
-        reference_datasets=glorys_dataset(challenger_dataset),
+        reference_dataset=glorys_dataset(challenger_dataset),
         zone=Zone.SMALL_ATLANTIC_NEWYORK_TO_NOUADHIBOU,
     )
