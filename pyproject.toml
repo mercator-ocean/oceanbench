@@ -14,7 +14,7 @@ authors = [
     {name = "Charly Regnier",email = "cregnier@mercator-ocean.fr"},
 ]
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12.9"
 dependencies = [
     "xarray==2025.1.2",
     "matplotlib (>=3.10.0,<4.0.0)",
