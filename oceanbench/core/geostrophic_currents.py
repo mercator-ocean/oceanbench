@@ -39,7 +39,8 @@ def add_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     northward_geostrophic_velocity = g / f_safe[:, numpy.newaxis] * dssh_dx
 
     dimensions = (
-        Dimension.TIME.dimension_name_from_dataset(dataset),
+        "start_datetime",
+        "time",
         Dimension.LATITUDE.dimension_name_from_dataset(dataset),
         Dimension.LONGITUDE.dimension_name_from_dataset(dataset),
     )
