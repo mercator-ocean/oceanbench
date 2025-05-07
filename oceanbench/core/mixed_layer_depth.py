@@ -15,14 +15,6 @@ from oceanbench.core.dataset_utils import (
 
 
 def compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
-    # return xarray.apply_ufunc(
-    #     _add_mixed_layer_depth,
-    #     dataset,
-    #     input_core_dims=[["start_datetime"]],  # specify the input dimension
-    #     output_core_dims=[[Variable.MIXED_LAYER_DEPTH.key()]],
-    #     vectorize=True,  # allow parallelization
-    #     dask="parallelized",  # use Dask for parallelization
-    # )
     return _compute_mixed_layer_depth(dataset)
 
 

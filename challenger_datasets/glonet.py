@@ -16,7 +16,7 @@ def _dataset_path(start_datetime: datetime) -> str:
     return f"https://minio.dive.edito.eu/project-glonet/public/glonet_refull_2024/{start_datetime_string}.zarr"
 
 
-start_datetimes: list[datetime] = generate_dates("2024-01-03", "2024-07-10", 7)
+start_datetimes: list[datetime] = generate_dates("2024-01-03", "2024-12-25", 7)
 challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
     list(map(_dataset_path, start_datetimes)),
     engine="zarr",
