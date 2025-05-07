@@ -14,7 +14,7 @@ from oceanbench.core.dataset_utils import (
 )
 
 
-def add_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
+def compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     # return xarray.apply_ufunc(
     #     _add_mixed_layer_depth,
     #     dataset,
@@ -23,7 +23,7 @@ def add_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     #     vectorize=True,  # allow parallelization
     #     dask="parallelized",  # use Dask for parallelization
     # )
-    return _add_mixed_layer_depth(dataset)
+    return _compute_mixed_layer_depth(dataset)
 
 
 def compute_absolute_salinity(
@@ -43,7 +43,7 @@ def compute_potential_density(
     return gsw.pot_rho_t_exact(absolute_salinity, temperature, depth, 0).compute()
 
 
-def _add_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
+def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     density_threshold = 0.03  # kg/m^3 threshold for MLD definition
     temperature = get_variable(dataset, Variable.TEMPERATURE)
     salinity = get_variable(dataset, Variable.SALINITY)
@@ -61,4 +61,7 @@ def _add_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     )
     temperature_mask = numpy.isfinite(temperature.isel({Dimension.DEPTH.key(): 0}))
 
-    return dataset.assign({Variable.MIXED_LAYER_DEPTH.key(): mixed_layer_depth_depth.where(temperature_mask)})
+    return xarray.Dataset(
+        data_vars={Variable.MIXED_LAYER_DEPTH.key(): mixed_layer_depth_depth.where(temperature_mask)},
+        coords=dataset.coords,
+    )

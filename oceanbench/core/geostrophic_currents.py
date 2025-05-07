@@ -13,7 +13,7 @@ from oceanbench.core.dataset_utils import (
 )
 
 
-def add_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
+def compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     sea_surface_height = get_variable(dataset, Variable.HEIGHT)
     latitude = get_dimension(dataset, Dimension.LATITUDE).values
     longitude = get_dimension(dataset, Dimension.LONGITUDE).values
@@ -45,8 +45,8 @@ def add_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
         Dimension.LONGITUDE.dimension_name_from_dataset(dataset),
     )
 
-    dataset_with_geostrophic_current = dataset.assign(
-        {
+    geostrophic_currents = xarray.Dataset(
+        data_vars={
             Variable.EASTWARD_GEOSTROPHIC_VELOCITY.value: (
                 dimensions,
                 eastward_geostrophic_velocity,
@@ -55,10 +55,11 @@ def add_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
                 dimensions,
                 northward_geostrophic_velocity,
             ),
-        }
+        },
+        coords=dataset.coords,
     )
 
-    return _exclude_equator(dataset_with_geostrophic_current)
+    return _exclude_equator(geostrophic_currents)
 
 
 def _exclude_equator(dataset: xarray.Dataset) -> xarray.Dataset:
