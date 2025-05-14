@@ -4,6 +4,7 @@
 
 import numpy
 import xarray
+import dask
 
 from oceanbench.core.climate_forecast_standard_names import (
     remane_dataset_with_standard_names,
@@ -23,7 +24,9 @@ def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
 
 
 def _compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
-    sea_surface_height = dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
+    sea_surface_height = dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()].chunk(
+        {Dimension.FIRST_DAY_DATETIME.key(): 2}
+    )
     latitude = dataset[Dimension.LATITUDE.key()].values
     longitude = dataset[Dimension.LONGITUDE.key()].values
 
@@ -39,8 +42,8 @@ def _compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     dx = numpy.gradient(longitude) * (numpy.pi / 180) * R * numpy.cos(latitude_radian[:, numpy.newaxis])
     dy = numpy.gradient(latitude)[:, numpy.newaxis] * (numpy.pi / 180) * R
 
-    dssh_dx = numpy.gradient(sea_surface_height, axis=-1) / dx
-    dssh_dy = numpy.gradient(sea_surface_height, axis=-2) / dy
+    dssh_dx = dask.array.gradient(sea_surface_height, axis=-1) / dx
+    dssh_dy = dask.array.gradient(sea_surface_height, axis=-2) / dy
 
     g = 9.81  # gravity
 

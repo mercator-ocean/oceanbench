@@ -38,7 +38,7 @@ def _compute_potential_density(
     temperature: xarray.DataArray,
     depth: xarray.DataArray,
 ) -> xarray.DataArray:
-    return gsw.pot_rho_t_exact(absolute_salinity, temperature, depth, 0).compute()
+    return gsw.pot_rho_t_exact(absolute_salinity, temperature, depth, 0)
 
 
 def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
@@ -54,12 +54,24 @@ def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     delta_density = potential_density - surface_density
     mask = delta_density >= density_threshold
     mixed_layer_depth_index = mask.argmax(dim=Dimension.DEPTH.key())
-    mixed_layer_depth_depth = depth.isel({Dimension.DEPTH.key(): mixed_layer_depth_index}).assign_attrs(
+    print("pre-map_blocks")
+
+    def select_depth(index):
+        return depth.isel({Dimension.DEPTH.key(): index})
+
+    mixed_layer_depth_depth = xarray.map_blocks(select_depth, mixed_layer_depth_index).assign_attrs(
         {"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value}
     )
+    print("post-map_blocks")
     temperature_mask = numpy.isfinite(temperature.isel({Dimension.DEPTH.key(): 0}))
 
-    return xarray.Dataset(
-        data_vars={Variable.MIXED_LAYER_DEPTH.key(): mixed_layer_depth_depth.where(temperature_mask)},
+    print("pre-mask")
+    masked_mixed_layer_depth = mixed_layer_depth_depth.where(temperature_mask)
+
+    print("pre-return")
+    dataset_res = xarray.Dataset(
+        data_vars={Variable.MIXED_LAYER_DEPTH.key(): masked_mixed_layer_depth},
         coords=dataset.coords,
     )
+    print(dataset_res)
+    return dataset_res
