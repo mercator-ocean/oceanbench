@@ -71,3 +71,17 @@ run-tests:
 	${ACTIVATE_ENVIRONMENT}
 	$(MAKE) evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/glonet_sample.py CHALLENGER_REPORT_NAME=glonet_sample.report.ipynb
 	python tests/compare_notebook.py assets/glonet_sample.report.ipynb glonet_sample.report.ipynb
+
+_release: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+_release:
+	${ACTIVATE_ENVIRONMENT}
+	BUMP_TYPE=${BUMP_TYPE} ./release.sh
+
+release-patch: BUMP_TYPE = patch
+release-patch: _release
+
+release-minor: BUMP_TYPE = minor
+release-minor: _release
+
+release-major: BUMP_TYPE = major
+release-major: _release
