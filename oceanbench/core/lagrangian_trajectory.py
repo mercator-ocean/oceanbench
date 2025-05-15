@@ -17,6 +17,7 @@ from parcels import (
 )
 from parcels.kernel import shutil
 import xarray
+import dask
 
 from oceanbench.core.climate_forecast_standard_names import (
     remane_dataset_with_standard_names,
@@ -72,7 +73,7 @@ def _deviation_of_lagrangian_trajectories(
     reference_dataset: xarray.Dataset,
     zone: Zone,
 ) -> pandas.DataFrame:
-    deviations = numpy.array(
+    deviations = dask.array.array(
         _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, zone)
     ).mean(axis=0)
     # print(deviations)
@@ -142,18 +143,18 @@ def _one_deviation_of_lagrangian_trajectories(
         zone=zone,
     )
 
-    euclidean_distance = numpy.sqrt(
+    euclidean_distance = dask.array.sqrt(
         ((challenger_trajectories.x.data - reference_trajectories.x.data) * 111.32) ** 2
         + (
             111.32
-            * numpy.cos(
-                numpy.radians(challenger_trajectories.lat.data).reshape(1, challenger_trajectories.lat.shape[0], 1)
+            * dask.array.cos(
+                dask.array.radians(challenger_trajectories.lat.data).reshape(1, challenger_trajectories.lat.shape[0], 1)
             )
             * (challenger_trajectories.y.data - reference_trajectories.y.data)
         )
         ** 2
     )
-    return numpy.nanmean(euclidean_distance, axis=(1, 2))
+    return dask.array.nanmean(euclidean_distance, axis=(1, 2))
 
 
 def _zone_dimensions(dataset: xarray.Dataset, zone: Zone) -> tuple[Any, Any]:
@@ -167,7 +168,7 @@ def _zone_dimensions(dataset: xarray.Dataset, zone: Zone) -> tuple[Any, Any]:
 
 
 def _particle_initial_positions(latitudes, longitudes):
-    longitude_mesh, latitude_mesh = numpy.meshgrid(longitudes, latitudes)
+    longitude_mesh, latitude_mesh = dask.array.meshgrid(longitudes, latitudes)
     particle_latitudes = latitude_mesh.flatten()
 
     particle_longitudes = longitude_mesh.flatten()
