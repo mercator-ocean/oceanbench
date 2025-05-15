@@ -74,6 +74,13 @@ We are using semantic versioning X.Y.Z → MAJOR.MINOR.PATCH → for example 1.0
 >
 >Additional labels for pre-release and build metadata are available as extensions to the MAJOR.MINOR.PATCH format.
 
+Using this version management, it is possible to publish a new release with one of the following command:
+```sh
+make release-major
+make release-minor
+make release-patch
+```
+
 ## Website life cycle
 
 The website source code is under the `website` directory.
