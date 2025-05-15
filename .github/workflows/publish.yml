@@ -3,10 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 name: Publish OceanBench to PyPI and TestPyPI
-on:
-  push:
-    branches:
-      - "main"
+on: push
 jobs:
   build:
     name: Build distribution
@@ -30,7 +27,7 @@ jobs:
           path: dist/
   publish-to-pypi:
     name: Publish to PyPI
-    if: startsWith(github.event.head_commit.message, 'OceanBench Release')
+    if: ${{ startsWith(github.event.head_commit.message, 'OceanBench Release') && github.ref == 'refs/heads/main' }}
     needs:
       - build
     runs-on: ubuntu-latest
