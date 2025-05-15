@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import numpy
 import gsw
 import xarray
+import dask
 
 from oceanbench.core.climate_forecast_standard_names import (
     StandardVariable,
@@ -42,7 +42,6 @@ def _compute_potential_density(
 
 
 def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
-    print(f"{dataset=}")
     density_threshold = 0.03  # kg/m^3 threshold for MLD definition
     temperature = dataset[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()]
     print(f"{type(temperature.data)=}")
@@ -56,27 +55,16 @@ def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     delta_density = potential_density - surface_density
     mask = delta_density >= density_threshold
     mixed_layer_depth_index = mask.argmax(dim=Dimension.DEPTH.key())
-    print("pre-map_blocks")
 
-    def select_depth(index):
-        return depth.isel({Dimension.DEPTH.key(): index})
-
-    print(f"{type(depth.data)=}")
-    mixed_layer_depth_depth = xarray.DataArray(
-        depth.values[mixed_layer_depth_index.values],
-        coords=mixed_layer_depth_index.coords,
-        dims=mixed_layer_depth_index.dims,
-        attrs={"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value}
+    dask_depth = xarray.DataArray(dask.array.array(dataset.depth))
+    mixed_layer_depth_depth = dask_depth.isel({Dimension.DEPTH.key(): mixed_layer_depth_index}).assign_attrs(
+        {"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value}
     )
-    print("post-map_blocks")
     temperature_mask = xarray.ufuncs.isfinite(temperature.isel({Dimension.DEPTH.key(): 0}))
 
-    print("pre-mask")
     masked_mixed_layer_depth = mixed_layer_depth_depth.where(temperature_mask)
 
-    dataset_res = xarray.Dataset(
+    return xarray.Dataset(
         data_vars={Variable.MIXED_LAYER_DEPTH.key(): masked_mixed_layer_depth},
         coords=dataset.coords,
     )
-    print(dataset_res)
-    return dataset_res

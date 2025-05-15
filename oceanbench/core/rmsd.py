@@ -103,7 +103,6 @@ def rmsd(
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
 ) -> pandas.DataFrame:
-    print("Starting RMSD")
     return _to_pretty_dataframe(
         _rmsd(
             _select_variables(_harmonise_dataset(challenger_dataset), variables),
