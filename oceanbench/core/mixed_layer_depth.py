@@ -42,6 +42,7 @@ def _compute_potential_density(
 
 
 def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
+    print(f"{dataset=}")
     density_threshold = 0.03  # kg/m^3 threshold for MLD definition
     temperature = dataset[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()]
     print(f"{type(temperature.data)=}")
@@ -61,21 +62,18 @@ def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
         return depth.isel({Dimension.DEPTH.key(): index})
 
     print(f"{type(depth.data)=}")
-    depth_values = depth  # assumes 1D depth
-    mixed_layer_depth_depth = xarray.apply_ufunc(
-        lambda i: depth_values[i],
-        mixed_layer_depth_index,
-        vectorize=True,
-        dask="parallelized",
-        output_dtypes=[depth.dtype],
-    ).assign_attrs({"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value})
+    mixed_layer_depth_depth = xarray.DataArray(
+        depth.values[mixed_layer_depth_index.values],
+        coords=mixed_layer_depth_index.coords,
+        dims=mixed_layer_depth_index.dims,
+        attrs={"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value}
+    )
     print("post-map_blocks")
     temperature_mask = xarray.ufuncs.isfinite(temperature.isel({Dimension.DEPTH.key(): 0}))
 
     print("pre-mask")
     masked_mixed_layer_depth = mixed_layer_depth_depth.where(temperature_mask)
 
-    print("pre-return")
     dataset_res = xarray.Dataset(
         data_vars={Variable.MIXED_LAYER_DEPTH.key(): masked_mixed_layer_depth},
         coords=dataset.coords,
