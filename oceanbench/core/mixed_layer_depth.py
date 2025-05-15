@@ -44,7 +44,6 @@ def _compute_potential_density(
 def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     density_threshold = 0.03  # kg/m^3 threshold for MLD definition
     temperature = dataset[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()]
-    print(f"{type(temperature.data)=}")
     salinity = dataset[Variable.SEA_WATER_SALINITY.key()]
     depth = dataset[Dimension.DEPTH.key()]
     latitude = dataset[Dimension.LATITUDE.key()]
@@ -56,7 +55,7 @@ def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     mask = delta_density >= density_threshold
     mixed_layer_depth_index = mask.argmax(dim=Dimension.DEPTH.key())
 
-    dask_depth = xarray.DataArray(dask.array.array(dataset.depth))
+    dask_depth = xarray.DataArray(dask.array.array(depth), dims=depth.dims)
     mixed_layer_depth_depth = dask_depth.isel({Dimension.DEPTH.key(): mixed_layer_depth_index}).assign_attrs(
         {"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value}
     )
