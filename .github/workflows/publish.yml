@@ -29,34 +29,15 @@ jobs:
         with:
           name: python-package-distributions
           path: dist/
-  # publish-to-pypi:
-  #   name: Publish to PyPI
-  #   if: startsWith(github.event.head_commit.message, 'OceanBench Release')
-  #   needs:
-  #     - build
-  #   runs-on: ubuntu-latest
-  #   environment:
-  #     name: pypi
-  #     url: https://pypi.org/p/oceanbench
-  #   permissions:
-  #     id-token: write
-  #   steps:
-  #     - name: Download all the dists
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: python-package-distributions
-  #         path: dist/
-  #     - name: Publish distribution to PyPI
-  #       uses: pypa/gh-action-pypi-publish@release/v1
-  publish-to-testpypi:
-    name: Publish to TestPyPI
+  publish-to-pypi:
+    name: Publish to PyPI
     if: startsWith(github.event.head_commit.message, 'OceanBench Release')
     needs:
       - build
     runs-on: ubuntu-latest
     environment:
-      name: testpypi
-      url: https://test.pypi.org/p/oceanbench
+      name: pypi
+      url: https://pypi.org/p/oceanbench
     permissions:
       id-token: write
     steps:
@@ -65,7 +46,5 @@ jobs:
         with:
           name: python-package-distributions
           path: dist/
-      - name: Publish distribution to TestPyPI
+      - name: Publish distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
