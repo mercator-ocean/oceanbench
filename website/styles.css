@@ -5,7 +5,6 @@
  */
 
 table.model-names {
-  background-color: #f5f5f5 !important;
   width: auto;
 }
 
@@ -24,11 +23,6 @@ table.model-names {
   margin-left: 10px;
   margin-right: 10px;
   text-align: center;
-  line-height: f;
-}
-
-table {
-  border: 1px solid #517699 !important;
 }
 
 tfoot tr td {

@@ -2,40 +2,33 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from datetime import datetime, timedelta
-from typing import List
-from xarray import Dataset, open_dataset
-import copernicusmarine
+from datetime import datetime
+import numpy
+from xarray import Dataset, open_mfdataset
 import logging
 
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
-
-def _glorys_subset(start_datetime: datetime) -> Dataset:
-    return copernicusmarine.open_dataset(
-        dataset_id="cmems_mod_glo_phy_myint_0.083deg_P1D-m",
-        dataset_version="202311",
-        variables=["thetao", "zos", "uo", "vo", "so"],
-        start_datetime=start_datetime,
-        end_datetime=start_datetime + timedelta(days=10),
-    )
+from oceanbench.core.dataset_utils import Dimension
 
 
-def _to_1_4(glorys_dataset: Dataset) -> Dataset:
-    initial_datetime = datetime.fromisoformat(str(glorys_dataset["time"][0].values))
-    initial_datetime_string = initial_datetime.strftime("%Y%m%d")
-    return open_dataset(
-        f"https://minio.dive.edito.eu/project-glonet/public/glorys14_full_2024/{initial_datetime_string}.zarr",
+def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
+    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
+    return f"https://minio.dive.edito.eu/project-glonet/public/glorys14_refull_2024/{first_day}.zarr"
+
+
+def glorys_dataset(challenger_dataset: Dataset) -> Dataset:
+
+    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    return open_mfdataset(
+        list(map(_glorys_1_4_path, first_day_datetimes)),
         engine="zarr",
-    )
-
-
-def _glorys_datasets(challenger_dataset: Dataset) -> Dataset:
-    start_datetime = datetime.fromisoformat(str(challenger_dataset["time"][0].values))
-    return _to_1_4(_glorys_subset(start_datetime))
-
-
-def glorys_datasets(challenger_datasets: List[Dataset]) -> List[Dataset]:
-    return list(map(_glorys_datasets, challenger_datasets))
+        preprocess=lambda dataset: dataset.rename({"time": Dimension.LEAD_DAY_INDEX.key()}).assign(
+            {Dimension.LEAD_DAY_INDEX.key(): range(10)}
+        ),
+        combine="nested",
+        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
+        parallel=True,
+    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})

@@ -4,19 +4,31 @@
 
 import numpy
 import xarray
+import dask
 
+from oceanbench.core.climate_forecast_standard_names import (
+    remane_dataset_with_standard_names,
+)
 from oceanbench.core.dataset_utils import (
     Dimension,
     Variable,
-    get_dimension,
-    get_variable,
 )
 
 
-def add_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
-    sea_surface_height = get_variable(dataset, Variable.HEIGHT)
-    latitude = get_dimension(dataset, Dimension.LATITUDE).values
-    longitude = get_dimension(dataset, Dimension.LONGITUDE).values
+def compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
+    return _compute_geostrophic_currents(_harmonise_dataset(dataset))
+
+
+def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
+    return remane_dataset_with_standard_names(dataset)
+
+
+def _compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
+    sea_surface_height = dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()].chunk(
+        {Dimension.FIRST_DAY_DATETIME.key(): 2}
+    )
+    latitude = dataset[Dimension.LATITUDE.key()].values
+    longitude = dataset[Dimension.LONGITUDE.key()].values
 
     latitude_radian = numpy.deg2rad(latitude)
 
@@ -30,8 +42,8 @@ def add_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     dx = numpy.gradient(longitude) * (numpy.pi / 180) * R * numpy.cos(latitude_radian[:, numpy.newaxis])
     dy = numpy.gradient(latitude)[:, numpy.newaxis] * (numpy.pi / 180) * R
 
-    dssh_dx = numpy.gradient(sea_surface_height, axis=-1) / dx
-    dssh_dy = numpy.gradient(sea_surface_height, axis=-2) / dy
+    dssh_dx = dask.array.gradient(sea_surface_height, axis=-1) / dx
+    dssh_dy = dask.array.gradient(sea_surface_height, axis=-2) / dy
 
     g = 9.81  # gravity
 
@@ -39,28 +51,30 @@ def add_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     northward_geostrophic_velocity = g / f_safe[:, numpy.newaxis] * dssh_dx
 
     dimensions = (
-        Dimension.TIME.dimension_name_from_dataset(dataset),
-        Dimension.LATITUDE.dimension_name_from_dataset(dataset),
-        Dimension.LONGITUDE.dimension_name_from_dataset(dataset),
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
     )
 
-    dataset_with_geostrophic_current = dataset.assign(
-        {
-            Variable.EASTWARD_GEOSTROPHIC_VELOCITY.value: (
+    geostrophic_currents = xarray.Dataset(
+        data_vars={
+            Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): (
                 dimensions,
                 eastward_geostrophic_velocity,
             ),
-            Variable.NORTHWARD_GEOSTROPHIC_VELOCITY.value: (
+            Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): (
                 dimensions,
                 northward_geostrophic_velocity,
             ),
-        }
+        },
+        coords=dataset.coords,
     )
 
-    return _exclude_equator(dataset_with_geostrophic_current)
+    return _exclude_equator(geostrophic_currents)
 
 
 def _exclude_equator(dataset: xarray.Dataset) -> xarray.Dataset:
-    latitude = get_dimension(dataset, Dimension.LATITUDE)
+    latitude = dataset[Dimension.LATITUDE.key()]
     not_on_equator = (latitude < -0.5) | (latitude > 0.5)
-    return dataset.isel({Dimension.LATITUDE.dimension_name_from_dataset(dataset): not_on_equator})
+    return dataset.isel({Dimension.LATITUDE.key(): not_on_equator})

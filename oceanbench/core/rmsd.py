@@ -2,37 +2,30 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from functools import partial
-import multiprocessing
-from typing import List
-
 import numpy
 import xarray
 import pandas
 
-from itertools import product
-
+from oceanbench.core.climate_forecast_standard_names import (
+    remane_dataset_with_standard_names,
+)
 from oceanbench.core.dataset_utils import (
     Variable,
     Dimension,
     DepthLevel,
-    get_variable,
-    select_variable_day_and_depth,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
 
-
-VARIABLE_LABELS = {
-    Variable.HEIGHT: "surface height",
-    Variable.TEMPERATURE: "temperature",
-    Variable.SALINITY: "salinity",
-    Variable.NORTHWARD_VELOCITY: "northward velocity",
-    Variable.EASTWARD_VELOCITY: "eastward velocity",
-    Variable.MIXED_LAYER_DEPTH: "mixed layer depth",
-    Variable.NORTHWARD_GEOSTROPHIC_VELOCITY: "northward geostrophic velocity",
-    Variable.EASTWARD_GEOSTROPHIC_VELOCITY: "eastward geostrophic velocity",
+VARIABLE_LABELS: dict[str, str] = {
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "surface height",
+    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): "temperature",
+    Variable.SEA_WATER_SALINITY.key(): "salinity",
+    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): "northward velocity",
+    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): "eastward velocity",
+    Variable.MIXED_LAYER_DEPTH.key(): "mixed layer depth",
+    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): "northward geostrophic velocity",
+    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): "eastward geostrophic velocity",
 }
-
 
 DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.SURFACE: "surface",
@@ -42,115 +35,78 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
 }
 
 
-def _rmsd(data, reference_data):
-    mask = ~numpy.isnan(data) & ~numpy.isnan(reference_data)
-    rmsd = numpy.sqrt(numpy.mean((data[mask] - reference_data[mask]) ** 2))
-    return rmsd
-
-
-def _get_rmsd(
-    challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
-    variable: Variable,
-    depth_level: DepthLevel,
-    lead_day: int,
-) -> float:
-    cpu_count = multiprocessing.cpu_count()
-    with multiprocessing.Pool(cpu_count) as _:
-        challenger_dataarray = select_variable_day_and_depth(challenger_dataset, variable, depth_level, lead_day)
-        reference_dataarray = select_variable_day_and_depth(reference_dataset, variable, depth_level, lead_day)
-        return _rmsd(challenger_dataarray.data, reference_dataarray.data)
-
-
 LEAD_DAYS_COUNT = 10
 
 
-def _get_rmsd_for_all_lead_days(
-    dataset: xarray.Dataset,
+def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
+    return dataset.assign({Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]})
+
+
+def _rmsd(
+    challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    variable: Variable,
-    depth_level: DepthLevel,
-) -> list[float]:
-    return list(
-        map(
-            partial(
-                _get_rmsd,
-                dataset,
-                reference_dataset,
-                variable,
-                depth_level,
-            ),
-            range(LEAD_DAYS_COUNT),
-        )
-    )
+) -> xarray.Dataset:
+    return numpy.sqrt(
+        ((challenger_dataset - reference_dataset) ** 2).mean(dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()])
+    ).mean(dim=Dimension.FIRST_DAY_DATETIME.key())
 
 
-def _compute_rmsd(
-    datasets: List[xarray.Dataset],
-    reference_datasets: List[xarray.Dataset],
-    variable: Variable,
-    depth_level: DepthLevel,
-) -> numpy.ndarray:
-
-    all_rmsd = numpy.array(
-        list(
-            map(
-                partial(
-                    _get_rmsd_for_all_lead_days,
-                    variable=variable,
-                    depth_level=depth_level,
-                ),
-                datasets,
-                reference_datasets,
-            )
-        )
-    )
-    return all_rmsd.mean(axis=0)
+def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
+    return Dimension.DEPTH.key() in dataset[variable_name].coords
 
 
-def _variale_depth_label(dataset: xarray.Dataset, variable: Variable, depth_level: DepthLevel) -> str:
+def _variable_depth_label(dataset: xarray.Dataset, variable: str, depth_label: str) -> str:
     return (
-        f"{DEPTH_LABELS[depth_level]} {VARIABLE_LABELS[variable]}"
-        if _has_depths(dataset, variable)
-        else VARIABLE_LABELS[variable]
+        f"{depth_label} {VARIABLE_LABELS[variable]}" if _has_depths(dataset, variable) else VARIABLE_LABELS[variable]
     ).capitalize()
 
 
-def _has_depths(dataset: xarray.Dataset, variable: Variable) -> bool:
-    return Dimension.DEPTH.dimension_name_from_dataset(dataset) in get_variable(dataset, variable).coords
-
-
-def _is_surface(depth_level: DepthLevel) -> bool:
-    return depth_level == DepthLevel.SURFACE
-
-
-def _variable_and_depth_combinations(
-    dataset: xarray.Dataset, variables: list[Variable]
-) -> list[tuple[Variable, DepthLevel]]:
-    return list(
-        (variable, depth_level)
-        for (depth_level, variable) in product(list(DepthLevel), variables)
-        if (_has_depths(dataset, variable) or _is_surface(depth_level))
+def _select_dataset_variable_and_depth(dataset: xarray.Dataset, variable_name: str, depth_level: str) -> numpy.ndarray:
+    return (
+        dataset[variable_name].sel({Dimension.DEPTH.key(): depth_level}).values
+        if _has_depths(dataset, variable_name)
+        else dataset[variable_name].values
     )
 
 
-def rmsd(
-    challenger_datasets: List[xarray.Dataset],
-    reference_datasets: List[xarray.Dataset],
-    variables: List[Variable],
-) -> pandas.DataFrame:
-    all_combinations = _variable_and_depth_combinations(challenger_datasets[0], variables)
-    scores = {
-        _variale_depth_label(challenger_datasets[0], variable, depth_level): list(
-            _compute_rmsd(
-                challenger_datasets,
-                reference_datasets,
-                variable,
-                depth_level,
-            )
+def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> pandas.DataFrame:
+    dataset_with_depth = _assign_depth_dimension(dataset) if dataset.get(Dimension.DEPTH.key()) is None else dataset
+    values_2d: dict[str, numpy.ndarray] = {
+        _variable_depth_label(dataset_with_depth, variable.key(), depth_level): _select_dataset_variable_and_depth(
+            dataset_with_depth, variable.key(), depth_level
         )
-        for (variable, depth_level) in all_combinations
+        for depth_level in DEPTH_LABELS.values()
+        for variable in variables
+        if depth_level == DEPTH_LABELS[DepthLevel.SURFACE] or _has_depths(dataset_with_depth, variable.key())
     }
-    score_dataframe = pandas.DataFrame(scores)
-    score_dataframe.index = lead_day_labels(1, LEAD_DAYS_COUNT)
-    return score_dataframe.T
+    return pandas.DataFrame(values_2d).set_index([lead_day_labels(1, LEAD_DAYS_COUNT)]).T
+
+
+def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
+    standard_dataset = remane_dataset_with_standard_names(dataset)
+    dataset_with_lead_day_labels = standard_dataset.assign(
+        {Dimension.LEAD_DAY_INDEX.key(): list(range(LEAD_DAYS_COUNT))}
+    )
+    dataset_with_depth_selected = dataset_with_lead_day_labels.sel(
+        {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}
+    )
+    dataset_with_depth_labels = _assign_depth_dimension(dataset_with_depth_selected)
+    return dataset_with_depth_labels
+
+
+def _select_variables(dataset: xarray.Dataset, variables: list[Variable]) -> xarray.Dataset:
+    return dataset[[variable.key() for variable in variables]]
+
+
+def rmsd(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    variables: list[Variable],
+) -> pandas.DataFrame:
+    return _to_pretty_dataframe(
+        _rmsd(
+            _select_variables(_harmonise_dataset(challenger_dataset), variables),
+            _select_variables(_harmonise_dataset(reference_dataset), variables),
+        ),
+        variables,
+    )

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import Enum
 from functools import partial
 from typing import Any
@@ -18,7 +18,10 @@ from parcels import (
 from parcels.kernel import shutil
 import xarray
 
-from oceanbench.core.dataset_utils import Dimension, Variable, get_dimension
+from oceanbench.core.climate_forecast_standard_names import (
+    remane_dataset_with_standard_names,
+)
+from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.lead_day_utils import lead_day_labels
 
 import logging
@@ -49,41 +52,93 @@ LEAD_DAY_STOP = 9
 
 
 def deviation_of_lagrangian_trajectories(
-    challenger_datasets: list[xarray.Dataset],
-    reference_datasets: list[xarray.Dataset],
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
     zone: Zone,
 ) -> pandas.DataFrame:
-    scores = numpy.array(
-        list(
-            map(
-                partial(
-                    _deviation_of_lagrangian_trajectories,
-                    zone=zone,
-                ),
-                challenger_datasets,
-                reference_datasets,
-            )
-        )
+    return _deviation_of_lagrangian_trajectories(
+        _harmonise_dataset(challenger_dataset),
+        _harmonise_dataset(reference_dataset),
+        zone,
     )
-    score_dataframe = pandas.DataFrame(
-        {"Surface Lagrangian trajectory deviation (km)": scores.mean(axis=0)[LEAD_DAY_START - 1 : LEAD_DAY_STOP]}
-    )
-    score_dataframe.index = lead_day_labels(LEAD_DAY_START, LEAD_DAY_STOP)
-    return score_dataframe.T
+
+
+def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
+    return remane_dataset_with_standard_names(dataset)
 
 
 def _deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     zone: Zone,
+) -> pandas.DataFrame:
+    deviations = numpy.array(
+        _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, zone)
+    ).mean(axis=0)
+    # print(deviations)
+    score_dataframe = pandas.DataFrame(
+        {"Surface Lagrangian trajectory deviation (km)": deviations[LEAD_DAY_START - 1 : LEAD_DAY_STOP]}
+    )
+    score_dataframe.index = lead_day_labels(LEAD_DAY_START, LEAD_DAY_STOP)
+    return score_dataframe.T
+
+
+def _rebuild_time(
+    first_day_datetime: numpy.datetime64,
+    dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    first_day = datetime.fromisoformat(str(first_day_datetime))
+    return (
+        dataset.sel({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetime})
+        .rename({Dimension.LEAD_DAY_INDEX.key(): Dimension.TIME.key()})
+        .assign(
+            {
+                Dimension.TIME.key(): [
+                    first_day + timedelta(days=int(i)) for i in dataset[Dimension.LEAD_DAY_INDEX.key()].values
+                ]
+            }
+        )
+    )
+
+
+def _split_dataset(dataset: xarray.Dataset) -> list[xarray.Dataset]:
+    return list(
+        map(
+            partial(_rebuild_time, dataset=dataset),
+            dataset[Dimension.FIRST_DAY_DATETIME.key()].values,
+        )
+    )
+
+
+def _all_deviation_of_lagrangian_trajectories(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    zone: Zone,
+):
+    return list(
+        map(
+            partial(
+                _one_deviation_of_lagrangian_trajectories,
+                zone=zone,
+            ),
+            _split_dataset(challenger_dataset),
+            _split_dataset(reference_dataset),
+        )
+    )
+
+
+def _one_deviation_of_lagrangian_trajectories(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    zone: Zone,
 ):
     challenger_trajectories = _get_particle_dataset(
-        dataset=challenger_dataset.isel({Dimension.DEPTH.dimension_name_from_dataset(challenger_dataset): 0}),
+        dataset=challenger_dataset.isel({Dimension.DEPTH.key(): 0}),
         zone=zone,
     )
 
     reference_trajectories = _get_particle_dataset(
-        dataset=reference_dataset.isel({Dimension.DEPTH.dimension_name_from_dataset(reference_dataset): 0}),
+        dataset=reference_dataset.isel({Dimension.DEPTH.key(): 0}),
         zone=zone,
     )
 
@@ -102,14 +157,12 @@ def _deviation_of_lagrangian_trajectories(
 
 
 def _zone_dimensions(dataset: xarray.Dataset, zone: Zone) -> tuple[Any, Any]:
-    latitude_name = Dimension.LATITUDE.dimension_name_from_dataset(dataset)
-    longitude_name = Dimension.LONGITUDE.dimension_name_from_dataset(dataset)
-    latitudes = dataset.sel({latitude_name: slice(zone.value.minimum_latitude, zone.value.maximum_latitude)})[
-        latitude_name
-    ].data
-    longitudes = dataset.sel({longitude_name: slice(zone.value.minimum_longitude, zone.value.maximum_longitude)})[
-        longitude_name
-    ].data
+    latitudes = dataset.sel(
+        {Dimension.LATITUDE.key(): slice(zone.value.minimum_latitude, zone.value.maximum_latitude)}
+    )[Dimension.LATITUDE.key()].data
+    longitudes = dataset.sel(
+        {Dimension.LONGITUDE.key(): slice(zone.value.minimum_longitude, zone.value.maximum_longitude)}
+    )[Dimension.LONGITUDE.key()].data
     return latitudes, longitudes
 
 
@@ -123,13 +176,13 @@ def _particle_initial_positions(latitudes, longitudes):
 
 def _build_field_set(dataset) -> FieldSet:
     variable_mapping = {
-        "U": Variable.EASTWARD_VELOCITY.variable_name_from_dataset(dataset),
-        "V": Variable.NORTHWARD_VELOCITY.variable_name_from_dataset(dataset),
+        "U": Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        "V": Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
     }
     dimension_mapping = {
-        "lat": Dimension.LATITUDE.dimension_name_from_dataset(dataset),
-        "lon": Dimension.LONGITUDE.dimension_name_from_dataset(dataset),
-        "time": Dimension.TIME.dimension_name_from_dataset(dataset),
+        "lat": Dimension.LATITUDE.key(),
+        "lon": Dimension.LONGITUDE.key(),
+        "time": Dimension.TIME.key(),
     }
     return FieldSet.from_xarray_dataset(
         dataset,
@@ -144,7 +197,7 @@ def _get_all_particles_positions(
     particle_initial_latitudes,
     particle_initial_longitudes,
 ) -> tuple[Any, Any]:
-    first_day = get_dimension(dataset, Dimension.TIME)[0]
+    first_day = dataset[Dimension.TIME.key()][0]
     particle_set = ParticleSet.from_list(
         fieldset=field_set,  # the fields on which the particles are advected
         pclass=JITParticle,  # the type of particles (JITParticle or ScipyParticle)
@@ -189,7 +242,7 @@ def _get_particle_dataset(dataset: xarray.Dataset, zone: Zone) -> xarray.Dataset
             "y": (["time", "lat", "lon"], y),
         },
         coords={
-            "time": get_dimension(dataset, Dimension.TIME)[0:LEAD_DAY_STOP],
+            "time": dataset[Dimension.TIME.key()][0:LEAD_DAY_STOP],
             "lat": latitudes,
             "lon": longitudes,
         },

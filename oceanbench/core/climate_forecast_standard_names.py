@@ -4,7 +4,6 @@
 
 from enum import Enum
 import xarray
-from typing import Optional
 
 
 class StandardDimension(Enum):
@@ -13,23 +12,25 @@ class StandardDimension(Enum):
     LATITUDE = "latitude"
     LONGITUDE = "longitude"
 
-    def dimension_name_from_dataset_standard_names(self, dataset: xarray.Dataset) -> Optional[str]:
-        return _get_variable_name_from_standard_name(dataset, self.value)
-
 
 class StandardVariable(Enum):
-    HEIGHT = "sea_surface_height_above_geoid"
-    TEMPERATURE = "sea_water_potential_temperature"
-    SALINITY = "sea_water_salinity"
-    NORTHWARD_VELOCITY = "northward_sea_water_velocity"
-    EASTWARD_VELOCITY = "eastward_sea_water_velocity"
+    SEA_SURFACE_HEIGHT_ABOVE_GEOID = "sea_surface_height_above_geoid"
+    SEA_WATER_POTENTIAL_TEMPERATURE = "sea_water_potential_temperature"
+    SEA_WATER_SALINITY = "sea_water_salinity"
+    NORTHWARD_SEA_WATER_VELOCITY = "northward_sea_water_velocity"
+    EASTWARD_SEA_WATER_VELOCITY = "eastward_sea_water_velocity"
+    MIXED_LAYER_THICKNESS = "ocean_mixed_layer_thickness"
+    GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY = "geostrophic_northward_sea_water_velocity"
+    GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY = "geostrophic_eastward_sea_water_velocity"
 
-    def variable_name_from_dataset_standard_names(self, dataset: xarray.Dataset) -> str:
-        return _get_variable_name_from_standard_name(dataset, self.value)
 
+def remane_dataset_with_standard_names(
+    dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    mapping = {
+        variable_name: dataset[variable_name].standard_name
+        for variable_name in dataset.variables
+        if hasattr(dataset[variable_name], "standard_name")
+    }
 
-def _get_variable_name_from_standard_name(dataset: xarray.Dataset, standard_name: str) -> str:
-    for variable_name in dataset.variables:
-        if hasattr(dataset[variable_name], "standard_name") and dataset[variable_name].standard_name == standard_name:
-            return str(variable_name)
-    raise Exception(f"No variable with standard name {standard_name} found in dataset")
+    return dataset.rename(mapping)

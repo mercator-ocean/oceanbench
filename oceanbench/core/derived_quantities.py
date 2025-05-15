@@ -8,13 +8,13 @@ from oceanbench.core import mixed_layer_depth
 from oceanbench.core import geostrophic_currents
 
 
-def add_mixed_layer_depth(
-    datasets: list[xarray.Dataset],
-) -> list[xarray.Dataset]:
-    return list(map(mixed_layer_depth.add_mixed_layer_depth, datasets))
+def compute_mixed_layer_depth(
+    dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    return mixed_layer_depth.compute_mixed_layer_depth(dataset)
 
 
-def add_geostrophic_currents(
-    datasets: list[xarray.Dataset],
-) -> list[xarray.Dataset]:
-    return list(map(geostrophic_currents.add_geostrophic_currents, datasets))
+def compute_geostrophic_currents(
+    dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    return geostrophic_currents.compute_geostrophic_currents(dataset)
