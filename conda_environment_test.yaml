@@ -6,7 +6,5 @@ dependencies:
   - python==3.13.2
   - pip=25.0.*
   - gcc
-  - jupyter==1.1.*
-  - s3cmd==2.4.0
   - pip:
       - deepdiff==8.4.2

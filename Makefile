@@ -43,28 +43,11 @@ reuse-annotate:
 	reuse annotate --year 2025 --copyright "Mercator Ocean International <https://www.mercator-ocean.eu/>" --license EUPL-1.2 --recursive . --skip-unrecognised
 	reuse download --all
 
-_generate-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
-_generate-notebook:
-	${ACTIVATE_ENVIRONMENT}
-	pip install --editable .
-	python -c 'import oceanbench; oceanbench.generate_notebook_to_evaluate("$(PYTHON_FILE_PATH)", "$(NOTEBOOK_NAME)")'
-
-_evaluate-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
-_evaluate-notebook:
-	${ACTIVATE_ENVIRONMENT}
-	jupyter nbconvert --execute --to notebook $(NOTEBOOK_NAME) --inplace --allow-errors
-
-_upload-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
-_upload-notebook:
-	${ACTIVATE_ENVIRONMENT}
-	s3cmd put $(NOTEBOOK_NAME) s3://$(OUTPUT_BUCKET)/$(OUTPUT_PREFIX)/$(NOTEBOOK_NAME) --access_key=$(AWS_ACCESS_KEY_ID) --secret_key=$(AWS_SECRET_ACCESS_KEY) --access_token=$(AWS_SESSION_TOKEN) --host=$(AWS_S3_ENDPOINT) --host-bucket=$(AWS_S3_ENDPOINT)
-
 evaluate-challenger: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-challenger:
-	$(MAKE) _generate-notebook PYTHON_FILE_PATH=$(CHALLENGER_PYTHON_FILE_PATH) NOTEBOOK_NAME=$(CHALLENGER_REPORT_NAME)
-	$(MAKE) _evaluate-notebook NOTEBOOK_NAME=$(CHALLENGER_REPORT_NAME)
-	version=`python -c 'import oceanbench; print(oceanbench.__version__)'`
-	$(MAKE) _upload-notebook NOTEBOOK_NAME=$(CHALLENGER_REPORT_NAME) OUTPUT_BUCKET=project-oceanbench OUTPUT_PREFIX="public/evaluation-reports/$${version}"
+	${ACTIVATE_ENVIRONMENT}
+	pip install --editable .
+	python -c 'import oceanbench; oceanbench.evaluate_challenger("$(CHALLENGER_PYTHON_FILE_PATH)", "$(CHALLENGER_REPORT_NAME)", "$(OUTPUT_BUCKET)", "$(OUTPUT_PREFIX)")'
 
 run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:

@@ -3,11 +3,11 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from . import metrics
-from .evaluate import generate_notebook_to_evaluate
+from .evaluate import evaluate_challenger
 from .version import __version__
 
 __all__ = [
     "metrics",
-    "generate_notebook_to_evaluate",
+    "evaluate_challenger",
     "__version__",
 ]
