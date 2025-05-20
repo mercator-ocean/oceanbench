@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Update website
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - website/**
+jobs:
+  update-website:
+    runs-on: ubuntu-latest
+    steps:
+      - name: curl /update
+        run: curl https://oceanbench.lab.dive.edito.eu/update
