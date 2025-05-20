@@ -13,7 +13,7 @@ def generate_dates(start_date_str, end_date_str, delta_days) -> list[datetime]:
 
 def _dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-glonet/public/glonet_refull_2024/{start_datetime_string}.zarr"
+    return f"https://minio.dive.edito.eu/project-oceanbench/public/glonet_full_2024/{start_datetime_string}.zarr"
 
 
 first_day_datetimes: list[datetime] = generate_dates("2024-01-03", "2024-12-25", 7)
