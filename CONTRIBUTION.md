@@ -128,7 +128,7 @@ make create-test-environment
 Then activate this test environment:
 
 ```sh
-conda activate copernicusmarine_test
+conda activate oceanbench_test
 ```
 
 Export credentials to local variables (if you don't use `moi`, simply put your own credentials):

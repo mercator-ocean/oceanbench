@@ -19,7 +19,7 @@ SPDX-License-Identifier: EUPL-1.2
 [![REUSE status](https://api.reuse.software/badge/github.com/mercator-ocean/oceanbench/)](https://api.reuse.software/info/github.com/mercator-ocean/oceanbench/)
 [![Documentation](https://img.shields.io/readthedocs/oceanbench/latest?logo=readthedocs)](https://oceanbench.readthedocs.io)
 
-OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis datasets as well as observations.
+OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis datasets (such as 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030) and [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024) as well as observations.
 
 ## Score table and model comparison
 
@@ -27,7 +27,7 @@ The official score table is available on the [OceanBench website](https://oceanb
 
 ## Definitions of evaluation methods
 
-The definitions of the methods used to evaluate models are available on the [OceanBench website](https://oceanbench.lab.dive.edito.eu) and in the tool [documentation](https://oceanbench.readthedocs.io).
+The definitions of the methods used to evaluate models are available on the [OceanBench website](https://oceanbench.lab.dive.edito.eu) and in the [package reference documentation](https://oceanbench.readthedocs.io).
 
 ## Evaluate your model with OceanBench
 
@@ -56,9 +56,9 @@ pip install oceanbench
 git clone git@github.com:mercator-ocean/oceanbench.git && cd oceanbench/ && pip install --editable .
 ```
 
-#### Run on EDITO
+#### Execute on EDITO
 
-You can open the example notebook in EDITO by clicking here:
+You can open and manually execute the example notebook in EDITO datalab by clicking here:
 [![Link to open resource in EDITO](https://dive.edito.eu/badges/Open-in-EDITO.svg)](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-python-ocean-science?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.report.ipynb»)
 
 ## Dependency on the Copernicus Marine Service

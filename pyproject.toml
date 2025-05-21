@@ -7,11 +7,7 @@ name = "oceanbench"
 version = "0.0.1"
 description = ""
 authors = [
-    {name = "Mathis Bertin",email = "mbertin@mercator-ocean.fr"},
-    {name = "Anass El Aouni",email = "aelaouni@mercator-ocean.fr"},
-    {name = "Quentin Gaudel",email = "qgaudel@mercator-ocean.fr"},
-    {name = "Simon Lyobard",email = "slyobard@mercator-ocean.fr"},
-    {name = "Charly Regnier",email = "cregnier@mercator-ocean.fr"},
+    {name = "Mercator Ocean International",email = "digital-ocean-dev@mercator-ocean.eu"},
 ]
 readme = "README.md"
 requires-python = ">=3.12.9"
