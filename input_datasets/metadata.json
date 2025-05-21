@@ -1,0 +1,902 @@
+{
+  "@context": {
+    "@language": "en",
+    "@vocab": "https://schema.org/",
+    "arrayShape": "cr:arrayShape",
+    "citeAs": "cr:citeAs",
+    "column": "cr:column",
+    "conformsTo": "dct:conformsTo",
+    "cr": "http://mlcommons.org/croissant/",
+    "rai": "http://mlcommons.org/croissant/RAI/",
+    "data": {
+      "@id": "cr:data",
+      "@type": "@json"
+    },
+    "dataBiases": "cr:dataBiases",
+    "dataCollection": "cr:dataCollection",
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "dct": "http://purl.org/dc/terms/",
+    "examples": {
+      "@id": "cr:examples",
+      "@type": "@json"
+    },
+    "extract": "cr:extract",
+    "field": "cr:field",
+    "fileProperty": "cr:fileProperty",
+    "fileObject": "cr:fileObject",
+    "fileSet": "cr:fileSet",
+    "format": "cr:format",
+    "includes": "cr:includes",
+    "isArray": "cr:isArray",
+    "isLiveDataset": "cr:isLiveDataset",
+    "jsonPath": "cr:jsonPath",
+    "key": "cr:key",
+    "md5": "cr:md5",
+    "parentField": "cr:parentField",
+    "path": "cr:path",
+    "personalSensitiveInformation": "cr:personalSensitiveInformation",
+    "recordSet": "cr:recordSet",
+    "references": "cr:references",
+    "regex": "cr:regex",
+    "repeated": "cr:repeated",
+    "replace": "cr:replace",
+    "sc": "https://schema.org/",
+    "separator": "cr:separator",
+    "source": "cr:source",
+    "subField": "cr:subField",
+    "transform": "cr:transform"
+  },
+  "@type": "sc:Dataset",
+  "name": "input-datasets-for-oceanbench-challenger-evaluation",
+  "license": "https://creativecommons.org/licenses/by/4.0/",
+  "description": "Initial states (GLO2 nowcasts) and forcing (IFS) datasets for OceanBench challengers to produce forecast datasets to evaluate in the benchmark",
+  "conformsTo": "http://mlcommons.org/croissant/1.0",
+  "url": "https://example.com/dataset/recipes/minimal-recommended",
+  "keywords": [
+    "Datasets",
+    "Nowcasts",
+    "Forcing",
+    "Ocean",
+    "Forecast",
+    "OceanBench",
+    "Zarr",
+    "NetCDF"
+  ],
+  "distribution": [
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240221.nc",
+      "name": "IFS_20240221.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240221.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "e15f06b6a7621b95bc450cb34e838486"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241030.nc",
+      "name": "IFS_20241030.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241030.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "c6a8eb4d3525369a6b832f6ab8c912ca"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240814.nc",
+      "name": "IFS_20240814.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240814.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "23c89b6802a8068f9a463fb040f9996a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241113.nc",
+      "name": "IFS_20241113.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241113.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "2596b08d15724970d3a1ad47826a509e"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240410.nc",
+      "name": "IFS_20240410.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240410.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "27ba6654f705072d35b029359f426790"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240619.nc",
+      "name": "IFS_20240619.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240619.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "3f3583a1609a6f72f0cfbafa3e574f1c"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240626.nc",
+      "name": "IFS_20240626.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240626.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "ca813acb62797d26b54494199ebae7a7"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240605.nc",
+      "name": "IFS_20240605.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240605.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "bde2dd85c77a8aa0a26be312f2b216f1"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240529.nc",
+      "name": "IFS_20240529.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240529.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "61e0ef48d1d15e9af0290ea5429a9f82"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240515.nc",
+      "name": "IFS_20240515.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240515.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "696608318a7d4ead1e490c16325abd17"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240417.nc",
+      "name": "IFS_20240417.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240417.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "00045208de478c8b2ba996ec18951b77"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241106.nc",
+      "name": "IFS_20241106.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241106.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "dbd2de0a6dc4eba973af9977ad9fd4a7"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240612.nc",
+      "name": "IFS_20240612.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240612.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "ebf6d01aac38fe5776f0ae5471f25101"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240124.nc",
+      "name": "IFS_20240124.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240124.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "627a0f8ae7c19a14a5676a1c3fd43a18"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240925.nc",
+      "name": "IFS_20240925.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240925.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "1bdaec151f95ee3171870302784db64e"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241211.nc",
+      "name": "IFS_20241211.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241211.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "6b392d677bf6ad552e9594b03acc4dcb"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241225.nc",
+      "name": "IFS_20241225.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241225.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "9392c414bac07d1d9ccb28e708281c88"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241204.nc",
+      "name": "IFS_20241204.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241204.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "96c281a4fff1fe7580a8b6929ae0f4e6"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241127.nc",
+      "name": "IFS_20241127.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241127.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "6b5de3974c67577d8e86cd53c9fc862e"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240403.nc",
+      "name": "IFS_20240403.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240403.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "013a167e1d7336f76173bdfdb92cebf0"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240131.nc",
+      "name": "IFS_20240131.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240131.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "8bff0e50a952d0818710270ab241296b"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240306.nc",
+      "name": "IFS_20240306.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240306.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "577da7856a3ff1269208ba659755806d"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240313.nc",
+      "name": "IFS_20240313.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240313.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "94e447c15db408fc8fe0a4e6f2cb3544"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240117.nc",
+      "name": "IFS_20240117.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240117.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "e2361e6bea9d99357cd4f0ef4ddce29a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240110.nc",
+      "name": "IFS_20240110.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240110.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "bbc4a367b011c9d35fad4d9d402aba70"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240214.nc",
+      "name": "IFS_20240214.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240214.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "027c3d740f6545b9d95daf169869769c"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240703.nc",
+      "name": "IFS_20240703.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240703.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "eca4d9f7fdc6e26bc30d9d8248c9db2d"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240522.nc",
+      "name": "IFS_20240522.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240522.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "1e9897ca8a156304c95d6f3ecd6aaa44"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240807.nc",
+      "name": "IFS_20240807.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240807.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "880ca95175f589822d09183d31b330c9"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240911.nc",
+      "name": "IFS_20240911.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240911.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "bee17b08c9febc4f1a079d070b3005a4"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240327.nc",
+      "name": "IFS_20240327.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240327.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "2ce5508c15373ea8495891f3d895f69b"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240424.nc",
+      "name": "IFS_20240424.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240424.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "0d79595f8b8f009600db246fdabede20"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240207.nc",
+      "name": "IFS_20240207.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240207.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "c6bc0816232ae86dcb6b050bd4df7ad1"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240724.nc",
+      "name": "IFS_20240724.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240724.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "3212608b0dc4f3f5bd0ac0cc08ed3afe"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240904.nc",
+      "name": "IFS_20240904.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240904.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "cb9a463f87606ec3ce62e231ca7e9443"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241218.nc",
+      "name": "IFS_20241218.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241218.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "02aad1d47b8275c4ead5a39fd91c8441"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241002.nc",
+      "name": "IFS_20241002.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241002.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "eb9822d380cc0d009a6d2f28eb016026"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240501.nc",
+      "name": "IFS_20240501.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240501.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "0df747a14493825be0705439103f9d78"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240228.nc",
+      "name": "IFS_20240228.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240228.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "307d692b5e6caa9fc546eb01cf1d9843"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240918.nc",
+      "name": "IFS_20240918.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240918.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "71ab70a058912fd9440e16b2cbdc3373"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241023.nc",
+      "name": "IFS_20241023.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241023.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "123db9302091bac1927eb80b2a1f2577"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240717.nc",
+      "name": "IFS_20240717.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240717.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "e2a1ea87867023fdea824480368cfadc"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240710.nc",
+      "name": "IFS_20240710.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240710.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "eb3122608256c4190793f1b5929b5ea4"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240103.nc",
+      "name": "IFS_20240103.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240103.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "a7263adffd01ade25b98f8d46f7bf5e7"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241120.nc",
+      "name": "IFS_20241120.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241120.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "df0c444915facee4e318e43fdbb229b8"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240320.nc",
+      "name": "IFS_20240320.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240320.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "7c08fc6b751a70b397601a7192eccd55"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240821.nc",
+      "name": "IFS_20240821.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240821.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "c833d276511f9fc0da75563c35a8eec2"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240731.nc",
+      "name": "IFS_20240731.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240731.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "eb266e0ee168054496de84f51c9c4789"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241016.nc",
+      "name": "IFS_20241016.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241016.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "37629511c24515dbe67aad97c7deb052"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240828.nc",
+      "name": "IFS_20240828.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240828.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "3ecf5f18018540ce0bbb83b0fb9b322a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20241009.nc",
+      "name": "IFS_20241009.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20241009.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "c8440bfc23775bf72578b7fb3d256a63"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "IFS_20240508.nc",
+      "name": "IFS_20240508.nc",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240508.nc",
+      "encodingFormat": "application/x-netcdf",
+      "md5": "0c2c41081d4abcdbdaf81593b3c1d46d"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240306.zarr",
+      "name": "GLO12_NOWCAST_20240306.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240306.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241225.zarr",
+      "name": "GLO12_NOWCAST_20241225.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241225.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240403.zarr",
+      "name": "GLO12_NOWCAST_20240403.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240403.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240221.zarr",
+      "name": "GLO12_NOWCAST_20240221.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240221.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240821.zarr",
+      "name": "GLO12_NOWCAST_20240821.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240821.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240410.zarr",
+      "name": "GLO12_NOWCAST_20240410.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240410.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240724.zarr",
+      "name": "GLO12_NOWCAST_20240724.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240724.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241120.zarr",
+      "name": "GLO12_NOWCAST_20241120.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241120.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241204.zarr",
+      "name": "GLO12_NOWCAST_20241204.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241204.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240117.zarr",
+      "name": "GLO12_NOWCAST_20240117.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240117.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240710.zarr",
+      "name": "GLO12_NOWCAST_20240710.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240710.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240228.zarr",
+      "name": "GLO12_NOWCAST_20240228.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240228.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240918.zarr",
+      "name": "GLO12_NOWCAST_20240918.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240918.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240207.zarr",
+      "name": "GLO12_NOWCAST_20240207.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240207.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240807.zarr",
+      "name": "GLO12_NOWCAST_20240807.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240807.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240814.zarr",
+      "name": "GLO12_NOWCAST_20240814.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240814.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240103.zarr",
+      "name": "GLO12_NOWCAST_20240103.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240103.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240515.zarr",
+      "name": "GLO12_NOWCAST_20240515.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240515.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240911.zarr",
+      "name": "GLO12_NOWCAST_20240911.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240911.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240320.zarr",
+      "name": "GLO12_NOWCAST_20240320.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240320.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240828.zarr",
+      "name": "GLO12_NOWCAST_20240828.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240828.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240703.zarr",
+      "name": "GLO12_NOWCAST_20240703.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240703.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240619.zarr",
+      "name": "GLO12_NOWCAST_20240619.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240619.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240424.zarr",
+      "name": "GLO12_NOWCAST_20240424.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240424.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240110.zarr",
+      "name": "GLO12_NOWCAST_20240110.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240110.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241127.zarr",
+      "name": "GLO12_NOWCAST_20241127.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241127.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240131.zarr",
+      "name": "GLO12_NOWCAST_20240131.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240131.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241023.zarr",
+      "name": "GLO12_NOWCAST_20241023.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241023.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240612.zarr",
+      "name": "GLO12_NOWCAST_20240612.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240612.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240529.zarr",
+      "name": "GLO12_NOWCAST_20240529.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240529.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240124.zarr",
+      "name": "GLO12_NOWCAST_20240124.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240124.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240925.zarr",
+      "name": "GLO12_NOWCAST_20240925.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240925.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241218.zarr",
+      "name": "GLO12_NOWCAST_20241218.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241218.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240501.zarr",
+      "name": "GLO12_NOWCAST_20240501.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240501.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240417.zarr",
+      "name": "GLO12_NOWCAST_20240417.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240417.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240522.zarr",
+      "name": "GLO12_NOWCAST_20240522.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240522.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241030.zarr",
+      "name": "GLO12_NOWCAST_20241030.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241030.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240717.zarr",
+      "name": "GLO12_NOWCAST_20240717.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240717.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240508.zarr",
+      "name": "GLO12_NOWCAST_20240508.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240508.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241113.zarr",
+      "name": "GLO12_NOWCAST_20241113.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241113.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240605.zarr",
+      "name": "GLO12_NOWCAST_20240605.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240605.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241002.zarr",
+      "name": "GLO12_NOWCAST_20241002.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241002.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241106.zarr",
+      "name": "GLO12_NOWCAST_20241106.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241106.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240904.zarr",
+      "name": "GLO12_NOWCAST_20240904.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240904.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241016.zarr",
+      "name": "GLO12_NOWCAST_20241016.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241016.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240313.zarr",
+      "name": "GLO12_NOWCAST_20240313.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240313.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240214.zarr",
+      "name": "GLO12_NOWCAST_20240214.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240214.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241211.zarr",
+      "name": "GLO12_NOWCAST_20241211.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241211.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240327.zarr",
+      "name": "GLO12_NOWCAST_20240327.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240327.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20241009.zarr",
+      "name": "GLO12_NOWCAST_20241009.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241009.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240731.zarr",
+      "name": "GLO12_NOWCAST_20240731.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240731.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "GLO12_NOWCAST_20240626.zarr",
+      "name": "GLO12_NOWCAST_20240626.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240626.zarr",
+      "encodingFormat": "application/x-zarr",
+      "md5": "n/a"
+    }
+  ]
+}
