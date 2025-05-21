@@ -6,7 +6,7 @@
 OceanBench documentation
 ========================
 
-OceanBench is a benchmarking tool to evaluate ocean models against reference ocean analysis datasets as well as observations.
+OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis datasets as well as observations.
 
 
 .. toctree::
