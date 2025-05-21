@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+
+version: "2"
+build:
+  os: ubuntu-24.04
+  tools:
+    python: "mambaforge-22.9"
+sphinx:
+  configuration: docs/conf.py
+conda:
+  environment: conda_environment.yaml
+python:
+  install:
+    - method: pip
+      path: .
