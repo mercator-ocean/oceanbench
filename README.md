@@ -4,16 +4,21 @@ SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-
 SPDX-License-Identifier: EUPL-1.2
 -->
 
-# OceanBench
+
+<div align="center">
+  <img src="https://minio.dive.edito.eu/project-oceanbench/public/oceanbench-logo-with-name.svg" alt="OceanBench logo" height="100"/>
+</div>
+
+# OceanBench: Evaluating ocean forecasting systems
 
 [![The latest version of OceanBench can be found on PyPI.](https://img.shields.io/pypi/v/oceanbench.svg)](https://pypi.org/project/oceanbench/)
-[![Link to discover EDITO](https://dive.edito.eu/badges/Powered-by-EDITO.svg)](https://dive.edito.eu/)
+[![Link to discover EDITO](https://dive.edito.eu/badges/Powered-by-EDITO.svg)](https://dive.edito.eu)
 [![Information on what versions of Python OceanBench supports can be found on PyPI.](https://img.shields.io/pypi/v/oceanbench.svg)](https://img.shields.io/pypi/pyversions/oceanbench.svg)
 [![Information on what kind of operating systems OceanBench can be installed on.](https://img.shields.io/badge/platform-linux-lightgrey)](https://en.wikipedia.org/wiki/Linux)
 [![Information on the OceanBench licence.](https://img.shields.io/badge/licence-EUPL-lightblue)](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12)
 [![REUSE status](https://api.reuse.software/badge/github.com/mercator-ocean/oceanbench/)](https://api.reuse.software/info/github.com/mercator-ocean/oceanbench/)
 
-OceanBench is a benchmarking tool to evaluate ocean models against reference ocean analysis datasets as well as observations.
+OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis datasets as well as observations.
 
 ## Score table and model comparison
 
@@ -69,3 +74,20 @@ Please first read contribution instructions [here](CONTRIBUTION.md).
 ## License
 
 Licensed under the [EUPL-1.2](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12) license.
+
+## About
+
+Implemented by:
+
+<a href="https://mercator-ocean.eu"><img src="https://www.nemo-ocean.eu/wp-content/uploads/MOI.png" alt="Mercator Ocean logo" height="100"/></a>
+
+As part of a fruitful collaboration with:
+
+<a href="https://www.ocean-climat.fr"><img src="https://www.cnrs.fr/sites/default/files/image/VISU-PPRsmol.jpg" alt="PPR logo" height="100"/></a>
+<a href="https://www.imt-atlantique.fr"><img src="https://www.imt-atlantique.fr/sites/default/files/ecole/IMT_Atlantique_logo.png" alt="IMTA logo" height="100"/></a>
+<a href="https://www.univ-grenoble-alpes.fr"><img src="https://www.grenoble-inp.fr/medias/photo/logo-uga-carrousel_1575017090994-png" alt="UGA logo" height="100"/></a>
+<a href="https://igeo.ucm-csic.es/"><img src="https://igeo.ufrj.br/wp-content/uploads/2022/10/image-1.png" alt="IGEO logo" height="100"/></a>
+
+Powered by:
+
+<a href="https://dive.edito.eu"><img src="https://datalab.dive.edito.eu/custom-resources/logos/Full_EU_DTO_Banner.jpeg" alt="EU DTO banner" height="100"/></a>
