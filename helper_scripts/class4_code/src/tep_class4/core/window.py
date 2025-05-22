@@ -5,12 +5,14 @@ Window filters
 Selects data values included or excluded by specific criteria.
 
 """
+
 import datetime as dt
 import numpy as np
 
 
 class Window(object):
     """Window filter"""
+
     def __init__(self, start, end):
         self.start = start
         self.end = end
@@ -26,11 +28,11 @@ class Window(object):
 
 class TimeWindow(Window):
     """Time window"""
+
     @classmethod
     def fromtext(cls, start, end, fmt="%Y%m%d"):
         """construct from strings of a particular format"""
-        return cls(dt.datetime.strptime(start, fmt),
-                   dt.datetime.strptime(end, fmt))
+        return cls(dt.datetime.strptime(start, fmt), dt.datetime.strptime(end, fmt))
 
     @classmethod
     def frominterval(cls, start, interval):
@@ -40,6 +42,7 @@ class TimeWindow(Window):
 
 class EmptyWindow(object):
     """Empty window"""
+
     @staticmethod
     def inside(values):
         """always returns true"""

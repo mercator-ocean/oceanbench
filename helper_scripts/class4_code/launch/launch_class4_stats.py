@@ -1,6 +1,7 @@
 import subprocess
 import sys
 
+
 def main():
     # Check for required input parameters
     if len(sys.argv) != 5:
@@ -27,6 +28,7 @@ def main():
         print("Run submitted successfully.")
     except subprocess.CalledProcessError as e:
         print(f"Error submitting job: {e}")
+
 
 if __name__ == "__main__":
     main()
