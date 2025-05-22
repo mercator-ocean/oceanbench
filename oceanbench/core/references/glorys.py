@@ -19,7 +19,7 @@ def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
     return f"https://minio.dive.edito.eu/project-glonet/public/glorys14_refull_2024/{first_day}.zarr"
 
 
-def glorys_dataset(challenger_dataset: Dataset) -> Dataset:
+def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
 
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     return open_mfdataset(

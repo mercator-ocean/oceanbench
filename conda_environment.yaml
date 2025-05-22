@@ -13,4 +13,5 @@ dependencies:
       - reuse==5.0.2
       - sphinx==8.2.3
       - toml==0.10.2
-      - sphinx_rtd_theme==3.0.2
+      - sphinx-copybutton==0.5.2
+      - furo==2024.8.6

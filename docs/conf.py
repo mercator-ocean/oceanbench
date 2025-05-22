@@ -4,6 +4,7 @@
 
 import sys
 from pathlib import Path
+from sphinx.builders.html import StandaloneHTMLBuilder
 
 sys.path.insert(0, str(Path("..").resolve()))
 
@@ -17,24 +18,55 @@ sys.path.insert(0, str(Path("..").resolve()))
 
 project = "OceanBench"
 copyright = "2025, Mercator Ocean International"
-author = "Mathis Bertin, Anass El Aouni, Quentin Gaudel, Simon Lyobard, Charly Regnier"
+author = "Mercator Ocean International"
 version = "0.0.1"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ["sphinx.ext.apidoc", "sphinx_rtd_theme"]
+extensions = ["sphinx.ext.apidoc", "sphinx_rtd_theme", "sphinx_copybutton"]
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
+pygments_style = "sphinx"
+pygments_dark_style = "monokai"
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = "sphinx_rtd_theme"
+html_theme = "furo"
 html_static_path = ["_static"]
+html_favicon = "https://minio.dive.edito.eu/project-oceanbench/public/oceanbench-logo.png"
+html_css_files = ["css/custom.css"]
 
 apidoc_modules = [
     {"path": "../oceanbench", "destination": "source/"},
+]
+html_logo = "https://minio.dive.edito.eu/project-oceanbench/public/oceanbench-logo.png"
+
+html_theme_options = {
+    "light_css_variables": {"color-brand-primary": "#002a49"},
+}
+
+html_sidebars = {
+    "**": [
+        "sidebar/brand.html",
+        "sidebar/search.html",
+        "sidebar/scroll-start.html",
+        "sidebar/navigation.html",
+        "sidebar/ethical-ads.html",
+        "sidebar/scroll-end.html",
+        "sidebar/github.html",
+    ]
+}
+
+# -- Options for different image types -------------------------------------------
+# https://stackoverflow.com/questions/45969711/sphinx-doc-how-do-i-render-an-animated-gif-when-building-for-html-but-a-png-wh
+
+StandaloneHTMLBuilder.supported_image_types = [
+    "image/svg+xml",
+    "image/gif",
+    "image/png",
+    "image/jpeg",
 ]

@@ -2,9 +2,13 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+"""
+This module exposes the package python API to evaluate a challenger.
+"""
+
 from . import metrics
-from .evaluate import evaluate_challenger
-from .version import __version__
+from .core.evaluate import evaluate_challenger
+from .core.version import __version__
 
 __all__ = [
     "metrics",

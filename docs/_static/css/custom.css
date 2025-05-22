@@ -1,0 +1,24 @@
+/*
+ * SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+ *
+ * SPDX-License-Identifier: EUPL-1.2
+ */
+
+.sidebar-brand-text {
+    font-size: 1.2rem;
+}
+
+.sidebar-logo {
+    max-width: 70%;
+}
+
+.github-link {
+    margin-bottom: 1em;
+}
+
+a:visited,
+a:active,
+a:hover,
+a:visited:hover {
+    color: var(--color-brand-primary);
+}
