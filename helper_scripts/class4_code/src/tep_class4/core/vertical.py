@@ -7,10 +7,12 @@ module. The module is a wrapper of the Fortran library FITPACK. However, it
 does not preserve or indeed handle masked arrays elegantly.
 
 """
+
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
 from window import Window, EmptyWindow
 import sys
+
 
 class Vertical2DInterpolator(object):
     """Vertical section interpolator
@@ -28,6 +30,7 @@ class Vertical2DInterpolator(object):
 
     :returns: interpolator function
     """
+
     def __init__(self, depths, field):
         self.depths = depths
         self.field = field
@@ -47,8 +50,7 @@ class Vertical2DInterpolator(object):
                 model_levels = self.depths
             else:
                 model_levels = self.depths[iprofile]
-            interpolator = Vertical1DInterpolator(model_levels,
-                                                  model_values)
+            interpolator = Vertical1DInterpolator(model_levels, model_values)
             result.append(interpolator(observed_levels))
         return np.ma.MaskedArray(result)
 
@@ -63,8 +65,9 @@ class Vertical1DInterpolator(object):
     :param depths: 1D array
     :param field: 1D array
     """
+
     def __init__(self, depths, field):
-        assert len(depths) > 0, 'must specify at least 1 level'
+        assert len(depths) > 0, "must specify at least 1 level"
         depths, field = self.match(depths, field)
         self._interpolator = self.select_interpolator(depths, field)
         self.window = self.select_window(depths)
@@ -74,8 +77,7 @@ class Vertical1DInterpolator(object):
         """combine masks from both depths and field"""
         depths, field = np.ma.masked_invalid(np.ma.asarray(depths)), np.ma.masked_invalid(np.ma.asarray(field))
         common = depths.mask | field.mask
-        return (np.ma.masked_array(depths, common),
-                np.ma.masked_array(field, common))
+        return (np.ma.masked_array(depths, common), np.ma.masked_array(field, common))
 
     @staticmethod
     def select_window(depths):
@@ -104,19 +106,17 @@ class Vertical1DInterpolator(object):
         :returns: interpolator chosen from above table
         """
         ## Todo : add log
-        #print ('Nombre de noeuds {}'.format(self.knots(depths)))
+        # print ('Nombre de noeuds {}'.format(self.knots(depths)))
         if self.knots(depths) < 2:
             # Masked data interpolator
             return lambda x: np.ma.masked_all(len(x))
         if self.knots(depths) < 4:
             # Linear spline interpolator
-            #print "Linear spline interpolator"
-            return InterpolatedUnivariateSpline(depths.compressed(),
-                                                field.compressed(), k=1)
+            # print "Linear spline interpolator"
+            return InterpolatedUnivariateSpline(depths.compressed(), field.compressed(), k=1)
         # Cubic spline interpolator
-        #print "Cubic spline interpolator"
-        return InterpolatedUnivariateSpline(depths.compressed(),
-                                            field.compressed())
+        # print "Cubic spline interpolator"
+        return InterpolatedUnivariateSpline(depths.compressed(), field.compressed())
 
     @staticmethod
     def knots(depths):
@@ -140,8 +140,7 @@ class Vertical1DInterpolator(object):
     def masked_interpolate(self, observed_depths):
         """performs interpolation on valid data while preserving mask"""
         result = np.ma.masked_all(observed_depths.shape)
-        points, values = (~observed_depths.mask,
-                          observed_depths.compressed())
+        points, values = (~observed_depths.mask, observed_depths.compressed())
         result[points] = self._interpolator(values)
         return result
 
@@ -160,16 +159,14 @@ class Section(Vertical2DInterpolator):
     :param depths: array shaped ([N,] Z) where N is the number of profiles
                    and Z represents the model levels
     """
+
     def __init__(self, values, depths):
-        assert np.shape(values)[-1] == np.shape(depths)[-1], \
-            "values and depths must have same levels"
+        assert np.shape(values)[-1] == np.shape(depths)[-1], "values and depths must have same levels"
         # Note: changed interface from (depths, values) to (values, depths)
         super(Section, self).__init__(depths, values)
 
     def __repr__(self):
-        return "{}(values={},\ndepths={})".format(self.__class__.__name__,
-                                                  repr(self.values),
-                                                  repr(self.depths))
+        return "{}(values={},\ndepths={})".format(self.__class__.__name__, repr(self.values), repr(self.depths))
 
     @property
     def values(self):
@@ -185,9 +182,9 @@ class Section(Vertical2DInterpolator):
         """
         if isinstance(observed_depths, list):
             observed_depths = np.asarray(observed_depths)
-        message = ("observed depths has incorrect first dimension: "
-                   "{} != {}").format(observed_depths.shape[0],
-                                      self.field.shape[0])
+        message = ("observed depths has incorrect first dimension: " "{} != {}").format(
+            observed_depths.shape[0], self.field.shape[0]
+        )
         assert observed_depths.shape[0] == self.field.shape[0], message
         return self(observed_depths)
 
@@ -202,6 +199,7 @@ class Column(Vertical1DInterpolator):
     :param field: array shaped (N,) representing the water column values
     :param depths: array shaped (N,) representing the water column depths
     """
+
     def __init__(self, values, depths):
         # Note: changed interface from (depths, values) to (values, depths)
         super(Column, self).__init__(depths, values)
