@@ -24,7 +24,7 @@ version = "0.0.1"
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ["sphinx.ext.apidoc", "sphinx_rtd_theme", "sphinx_copybutton"]
+extensions = ["sphinx.ext.apidoc", "sphinx_copybutton"]
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
