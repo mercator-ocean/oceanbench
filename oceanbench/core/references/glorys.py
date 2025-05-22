@@ -32,3 +32,9 @@ def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
         concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
         parallel=True,
     ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+
+
+def glorys_reanalysis_2024() -> Dataset: ...
+
+
+def glorys_reanalysis_2024_1_4() -> Dataset: ...
