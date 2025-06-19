@@ -14,28 +14,8 @@ format:
 
 Welcome to OceanBench.
 
+![Reanalysis track](assets/reanalysis-track.png)
 
-```{python}
-# | classes: plain
+![Analysis track](assets/analysis-track.png)
 
-from IPython.display import display, HTML
-from helpers.table import get_html_tables
-from helpers.notebook_score_parser import get_model_score_from_notebook, get_model_score_from_file
-
-REFERENCE_SCORE = get_model_score_from_notebook(
-    "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/0.0.1a0/glonet.report.ipynb", "GLONET"
-)
-
-glonet_sample = get_model_score_from_notebook(
-    "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/0.0.1a0/glonet_sample.report.ipynb",
-    "GLONET_sample",
-)
-
-depths = list(REFERENCE_SCORE.depths.keys())
-other_scores = [glonet_sample]
-
-
-for depth in depths:
-    display(HTML(f"<h3>Model scores for {depth} (real value: {REFERENCE_SCORE.depths[depth].real_value})</h3>"))
-    display(HTML(get_html_tables(REFERENCE_SCORE, depth, other_scores)))
-```
+![Observation track](assets/observations-track.png)
