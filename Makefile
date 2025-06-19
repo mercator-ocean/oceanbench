@@ -26,6 +26,7 @@ create-environment: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 create-environment: SELECTED_ENVIRONMENT_FILE_NAME = ${ENVIRONMENT_FILE_NAME}
 create-environment: _create-update-environment
 	micromamba run --name ${ENVIRONMENT_NAME} poetry install
+	./helper_scripts/install-quarto.sh
 
 create-test-environment: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 create-test-environment: SELECTED_ENVIRONMENT_FILE_NAME = ${TEST_ENVIRONMENT_FILE_NAME}
@@ -73,3 +74,6 @@ update-documentation: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 update-documentation:
 	${ACTIVATE_ENVIRONMENT}
 	cd docs; $(MAKE) html
+
+deploy-website-locally:
+	quarto preview website

@@ -15,3 +15,8 @@ dependencies:
       - toml==0.10.2
       - sphinx-copybutton==0.5.2
       - furo==2024.8.6
+      - jupyter==1.1.1
+      - pandas==2.2.3
+      - beautifulsoup4==4.13.3
+      - matplotlib==3.10.1
+      - pydantic==2.11.3
