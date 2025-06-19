@@ -11,10 +11,14 @@ website:
       - href: index.qmd
         text: Home
       - about.qmd
+      - partners.qmd
   repo-url: https://github.com/mercator-ocean/oceanbench
   repo-actions: [edit, source, issue]
   repo-subdir: website
   repo-link-target: _blank
+  page-footer: |
+    Powered by:
+    [![](https://datalab.dive.edito.eu/custom-resources/logos/Full_EU_DTO_Banner.jpeg){height=65px}](https://dive.edito.eu)
 format:
   html:
     theme:
