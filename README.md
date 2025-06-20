@@ -18,7 +18,7 @@ SPDX-License-Identifier: EUPL-1.2
 [![REUSE status](https://api.reuse.software/badge/github.com/mercator-ocean/oceanbench/)](https://api.reuse.software/info/github.com/mercator-ocean/oceanbench/)
 [![Documentation](https://img.shields.io/readthedocs/oceanbench/latest?logo=readthedocs)](https://oceanbench.readthedocs.io)
 
-OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis datasets (such as 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030) and [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024) as well as observations.
+OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis datasets (such as 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030) and [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024)) as well as observations.
 
 ## Score table and system comparison
 

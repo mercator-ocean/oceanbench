@@ -5,17 +5,36 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 
 ---
-title: "OceanBench"
+description: "OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean datasets and observations."
+hide-description: true
+author: "Mercator Ocean"
 format:
   html:
     echo: false
     page-layout: full
 ---
 
-Welcome to OceanBench.
+![](https://minio.dive.edito.eu/project-oceanbench/public/oceanbench-logo-with-name.svg)
 
-![Reanalysis track](assets/reanalysis-track.png)
+# Evaluating ocean forecasting systems
 
-![Analysis track](assets/analysis-track.png)
+OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis datasets (such as 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030) and [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024)) as well as observations.
 
-![Observation track](assets/observations-track.png)
+Evaluating ocean forecast performance is a complex task, as different users have varying priorities.
+Some may focus on accurate predictions of currents, while others prioritize sea level or salinity forecasts.
+To accommodate these diverse needs, OceanBench provides a comprehensive set of metrics.
+Please keep in mind that these metrics capture key aspects of forecast quality rather than the complete picture.
+
+Want to evaluate your system or get involved in OceanBench? Check out the [GitHub project](https://github.com/mercator-ocean/oceanbench/)!
+
+## Comparison to reanalysis
+
+![Absolute RMSE scores against 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030). These are the deterministic scores for the forecasted variables and physically-consistent diagnostic variables. The colors denote % difference to the GLO12 baseline.](assets/reanalysis-track.png)
+
+## Comparison to analysis
+
+![Absolute RMSE scores against 2024 [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024). These are the deterministic scores for the forecasted variables and physically-consistent diagnostic variables. The colors denote % difference to the GLO12 baseline.](assets/analysis-track.png)
+
+## Comparison to observations
+
+![Absolute RMSE scores against 2024 observations. These are the deterministic scores for the forecasted variables and physically-consistent diagnostic variables. The colors denote % difference to the GLO12 baseline.](assets/observations-track.png)
