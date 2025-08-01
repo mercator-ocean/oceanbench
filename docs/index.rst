@@ -16,5 +16,6 @@ This documentation contains the definitions of the evaluation methods as well as
    :maxdepth: 2
    :caption: Contents:
 
+   shape-of-the-challenger-dataset
    evaluation-methods
    source/oceanbench
