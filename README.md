@@ -24,16 +24,34 @@ OceanBench is a benchmarking tool to evaluate ocean forecasting systems against 
 
 The official score table is available on the [OceanBench website](https://oceanbench.lab.dive.edito.eu).
 
-## Definitions of evaluation methods
-
-The definitions of the methods used to evaluate systems are available on the [OceanBench website](https://oceanbench.lab.dive.edito.eu) and in the [documentation](https://oceanbench.readthedocs.io).
-
 ## Evaluate your system with OceanBench
 
-### Interactively
+The evaluation of a system consists in the sequential execution of a Python notebook run several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).
+
+The OceanBench documentation describes [the shape a challenger dataset](https://oceanbench.readthedocs.io/en/latest/shape-of-the-challenger-dataset.html) must have, as well of [the definitions of the methods used to evaluate systems](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
+
+### Official evaluation
+
+All official challenger notebooks are maintained and re-executable in order to update the scores with new OceanBench versions (all official challengers are re-evaluated at each new version).
+
+To officially submit your system to OceanBench, please open an issue on this repository attaching one of the following:
+
+1. The executed notebook resulting from an [interactive](#interactive-evalution) or [programmatic](#programmatic-evaluation) evaluation.
+2. A way to access the system output data in a standard format (e.g. Zarr or NetCDF).
+3. A way to execute the system code or container along with clear instructions for how to run it (e.g., input/output format, required dependencies, etc.).
+
+In addition, please provide the following metadata:
+- The organization that leads the construction or operation of the system.
+- A link to the reference paper of the system.
+- The system method. For example, "Physics-based", "ML-based" or "Hybrid".
+- The system type. For example, "Forecast (deterministic)" or "Forecast (ensemble)".
+- The system initial conditions. For example, "GLO12/IFS".
+- The approximate horizontal resolution of the system. For example, "1/12°" or "1/4°".
+
+### Interactive evaluation
 
 Checkout [this notebook](https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.report.ipynb) that evaluates a sample (two forecasts) of the GLONET system on OceanBench.
-The resulting executed notebook is used as the evaluation report of the system, and its content is used to fulfil the OceanBench score table.
+The resulting executed notebook is used as the evaluation report of the system, and its content is used to fulfill the OceanBench score table.
 
 You can replace the cell that open the challenger datasets with your code and execute the notebook.
 
@@ -60,7 +78,7 @@ git clone git@github.com:mercator-ocean/oceanbench.git && cd oceanbench/ && pip 
 You can open and manually execute the example notebook in EDITO datalab by clicking here:
 [![Link to open resource in EDITO](https://dive.edito.eu/badges/Open-in-EDITO.svg)](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-python-ocean-science?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.report.ipynb»)
 
-### Programmatically
+### Programmatic evaluation
 
 #### Python
 
@@ -79,19 +97,6 @@ More details in the [documentation](https://oceanbench.readthedocs.io/en/latest/
 Running OceanBench to evaluate systems with 1/12° resolution uses the [Copernicus Marine Toolbox](https://github.com/mercator-ocean/copernicus-marine-toolbox/) and hence requires authentication to the [Copernicus Marine Service](https://marine.copernicus.eu/).
 
 > If you're running OceanBench in a non-interactive way, please follow the [Copernicus Marine Toolbox documentation](https://toolbox-docs.marine.copernicus.eu) to login to the Copernicus Marine Service before running the bench.
-
-## Official evaluation
-
-To officially submit your system to OceanBench, please open an issue attaching:
-
-- The executed notebook resulting from an [interactive](#interactively) or [programmatic](#programmatically) evaluation. The notebook should be re-executable in order to update the scores with new OceanBench versions (all official challengers are re-evaluated at each new version).
-- The organization that leads the construction or operation of the system.
-- A link to the reference paper of the system.
-- The system method. For example, "Physics-based", "ML-based" or "Hybrid".
-- The system type. For example, "Forecast (deterministic)" or "Forecast (ensemble)".
-- The system initial conditions. For example, "GLO12/IFS".
-- The approximate horizontal resolution of the system. For example, "1/12°" or "1/4°".
-
 
 ## Contribution
 
