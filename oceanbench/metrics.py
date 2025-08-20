@@ -171,3 +171,22 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     return metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
         challenger_dataset=challenger_dataset
     )
+
+
+def rmsd_of_variables_compared_to_class4_observations(
+    challenger_dataset: xarray.Dataset,
+) -> DataFrame:
+    """
+    Compute the Root Mean Square Deviation (RMSD) of variables compared to Class4 observations.
+
+    Parameters
+    ----------
+    challenger_dataset : xarray.Dataset
+        The challenger dataset.
+
+    Returns
+    -------
+    DataFrame
+        The DataFrame containing the scores.
+    """
+    return metrics.rmsd_of_variables_compared_to_class4_observations(challenger_dataset=challenger_dataset)
