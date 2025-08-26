@@ -7,7 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 ---
 description: "OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean datasets and observations."
 hide-description: true
-author: "Mercator Ocean International"
+author: "Mercator Ocean"
 format:
   html:
     echo: false
