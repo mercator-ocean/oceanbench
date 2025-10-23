@@ -7,7 +7,7 @@ import xarray
 import pandas
 
 from oceanbench.core.climate_forecast_standard_names import (
-    remane_dataset_with_standard_names,
+    rename_dataset_with_standard_names,
 )
 from oceanbench.core.dataset_utils import (
     Variable,
@@ -83,7 +83,7 @@ def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> 
 
 
 def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
-    standard_dataset = remane_dataset_with_standard_names(dataset)
+    standard_dataset = rename_dataset_with_standard_names(dataset)
     dataset_with_lead_day_labels = standard_dataset.assign(
         {Dimension.LEAD_DAY_INDEX.key(): list(range(LEAD_DAYS_COUNT))}
     )

@@ -48,14 +48,14 @@ def evaluate_challenger(
 ):
     """
     Compute all the benchmark scores for the given challenger dataset, by calling all functions of the `metrics` module.
-    It generates and executes a notebook based on the python code that open the challenger dataset as `challenger_dataset: xarray.Dataset`.
+    It generates and executes a notebook based on the python code that opens the challenger dataset as `challenger_dataset: xarray.Dataset`.
 
     This function is used for official evaluation.
 
     Parameters
     ----------
     challenger_python_code_uri_or_local_path : str, optional
-        The python content that open the challenger dataset. Required. Can be a remote file (URL), a DataURI or the path to a local file. Can also be configured with environment variable `OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH`.
+        The python content that opens the challenger dataset. Required. Can be a remote file (URL), a DataURI or the path to a local file. Can also be configured with environment variable `OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH`.
     output_notebook_file_name : str, optional
         The name of the executed notebook. Required. Can also be configured with environment variable `OCEANBENCH_OUTPUT_NOTEBOOK_FILE_NAME`.
     output_bucket : str, optional

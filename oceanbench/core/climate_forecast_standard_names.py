@@ -24,7 +24,7 @@ class StandardVariable(Enum):
     GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY = "geostrophic_eastward_sea_water_velocity"
 
 
-def remane_dataset_with_standard_names(
+def rename_dataset_with_standard_names(
     dataset: xarray.Dataset,
 ) -> xarray.Dataset:
     mapping = {

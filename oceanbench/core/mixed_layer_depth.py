@@ -8,7 +8,7 @@ import dask
 
 from oceanbench.core.climate_forecast_standard_names import (
     StandardVariable,
-    remane_dataset_with_standard_names,
+    rename_dataset_with_standard_names,
 )
 from oceanbench.core.dataset_utils import (
     Dimension,
@@ -21,7 +21,7 @@ def compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
 
 
 def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
-    return remane_dataset_with_standard_names(dataset)
+    return rename_dataset_with_standard_names(dataset)
 
 
 def _compute_absolute_salinity(

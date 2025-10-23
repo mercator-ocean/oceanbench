@@ -6,7 +6,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 # Report an issue or propose an evolution
 
-Feel free to open an issue to discuss a particular change or evolution; however, please be advised that we may not respond to your request or may provide a negative response.
+Feel free to open an issue to discuss a particular change or evolution; however, please be advised that we may not be able to respond to your request or may decline it.
 
 # Contribute
 
@@ -15,7 +15,7 @@ All submissions, including submissions by project members, require review.
 ## REUSE and licensing
 
 This repository follows the [REUSE software](https://reuse.software) recommendations.
-By contributing, you accept that Mercator Ocean International is the copyright holder of all files, and that files are published under the [EUPL-1.2](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12) license.
+By contributing, you acknowledge that Mercator Ocean International is the copyright holder of all files, and that files are published under the [EUPL-1.2](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12) license.
 
 ## Developer Certificate of Origin and sign off agreement
 
@@ -37,9 +37,9 @@ More info:
 
 ## Reproducibility and automation
 
-We use Micromamba virtual environment manager.
-We aim at automating as much as possible everything.
-Checkout the [Makefile](Makefile) and CI/Actions to discover what is done automatically and what you can do manually in that project.
+We use the Micromamba virtual environment manager.
+We aim to automate as much as possible.
+Check out the [Makefile](Makefile) and CI/Actions to discover what is done automatically and what you can do manually in this project.
 
 ## Library life cycle
 
@@ -58,9 +58,9 @@ The library source code is under the `oceanbench` directory:
     └── plot.py # python lib interface
 ```
 
-The main objective of the library is to be use as part of a notebook that execution is used as an evaluation reports.
-On new version release, the participating models are re-evaluated.
-The OceanBench maintainers stored the versioned evaluation reports of all participating models on [EDITO](https://datalab.dive.edito.eu/my-files/project-oceanbench/public/evaluation-reports/).
+The main objective of the library is to be used as part of a notebook whose execution serves as an evaluation report.
+On each new version release, the participating models are re-evaluated.
+The OceanBench maintainers store the versioned evaluation reports of all participating models on [EDITO](https://datalab.dive.edito.eu/my-files/project-oceanbench/public/evaluation-reports/).
 
 ### Version management
 
@@ -84,8 +84,8 @@ make release-patch
 ## Website life cycle
 
 The website source code is under the `website` directory.
-The `main` branch is automatically deployed on OceanBench website.
-The website parse and display a given version of the evaluation reports stored on [EDITO](https://datalab.dive.edito.eu/my-files/project-oceanbench/public/evaluation-reports/).
+The `main` branch is automatically deployed to the OceanBench website.
+The website parses and displays a given version of the evaluation reports stored on [EDITO](https://datalab.dive.edito.eu/my-files/project-oceanbench/public/evaluation-reports/).
 
 ## Development environment
 
@@ -97,9 +97,9 @@ make create-environment
 
 After any implementation:
 
-- add test/ documentation on new functionality if relevant
+- add tests/documentation for new functionality if relevant
 
-- add necessary module to "pyproject.toml" in [tool.poetry.dependencies] section
+- add necessary modules to "pyproject.toml" in the [tool.poetry.dependencies] section
 
 - run pre-commit before committing:
 

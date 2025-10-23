@@ -54,7 +54,6 @@
   "license": "https://creativecommons.org/licenses/by/4.0/",
   "description": "Initial states (GLO2 nowcasts) and forcing (IFS) datasets for OceanBench challengers to produce forecast datasets to evaluate in the benchmark",
   "conformsTo": "http://mlcommons.org/croissant/1.0",
-  "url": "https://example.com/dataset/recipes/minimal-recommended",
   "keywords": [
     "Datasets",
     "Nowcasts",
@@ -486,7 +485,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240306.zarr",
       "name": "GLO12_NOWCAST_20240306.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240306.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240306.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -494,7 +493,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241225.zarr",
       "name": "GLO12_NOWCAST_20241225.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241225.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241225.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -502,7 +501,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240403.zarr",
       "name": "GLO12_NOWCAST_20240403.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240403.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240403.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -510,7 +509,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240221.zarr",
       "name": "GLO12_NOWCAST_20240221.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240221.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240221.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -518,7 +517,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240821.zarr",
       "name": "GLO12_NOWCAST_20240821.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240821.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240821.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -526,7 +525,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240410.zarr",
       "name": "GLO12_NOWCAST_20240410.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240410.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240410.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -534,7 +533,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240724.zarr",
       "name": "GLO12_NOWCAST_20240724.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240724.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240724.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -542,7 +541,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241120.zarr",
       "name": "GLO12_NOWCAST_20241120.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241120.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241120.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -550,7 +549,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241204.zarr",
       "name": "GLO12_NOWCAST_20241204.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241204.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241204.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -558,7 +557,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240117.zarr",
       "name": "GLO12_NOWCAST_20240117.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240117.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240117.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -566,7 +565,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240710.zarr",
       "name": "GLO12_NOWCAST_20240710.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240710.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240710.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -574,7 +573,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240228.zarr",
       "name": "GLO12_NOWCAST_20240228.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240228.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240228.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -582,7 +581,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240918.zarr",
       "name": "GLO12_NOWCAST_20240918.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240918.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240918.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -590,7 +589,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240207.zarr",
       "name": "GLO12_NOWCAST_20240207.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240207.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240207.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -598,7 +597,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240807.zarr",
       "name": "GLO12_NOWCAST_20240807.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240807.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240807.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -606,7 +605,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240814.zarr",
       "name": "GLO12_NOWCAST_20240814.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240814.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240814.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -614,7 +613,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240103.zarr",
       "name": "GLO12_NOWCAST_20240103.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240103.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240103.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -622,7 +621,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240515.zarr",
       "name": "GLO12_NOWCAST_20240515.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240515.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240515.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -630,7 +629,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240911.zarr",
       "name": "GLO12_NOWCAST_20240911.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240911.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240911.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -638,7 +637,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240320.zarr",
       "name": "GLO12_NOWCAST_20240320.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240320.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240320.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -646,7 +645,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240828.zarr",
       "name": "GLO12_NOWCAST_20240828.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240828.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240828.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -654,7 +653,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240703.zarr",
       "name": "GLO12_NOWCAST_20240703.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240703.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240703.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -662,7 +661,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240619.zarr",
       "name": "GLO12_NOWCAST_20240619.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240619.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240619.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -670,7 +669,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240424.zarr",
       "name": "GLO12_NOWCAST_20240424.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240424.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240424.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -678,7 +677,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240110.zarr",
       "name": "GLO12_NOWCAST_20240110.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240110.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240110.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -686,7 +685,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241127.zarr",
       "name": "GLO12_NOWCAST_20241127.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241127.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241127.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -694,7 +693,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240131.zarr",
       "name": "GLO12_NOWCAST_20240131.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240131.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240131.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -702,7 +701,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241023.zarr",
       "name": "GLO12_NOWCAST_20241023.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241023.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241023.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -710,7 +709,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240612.zarr",
       "name": "GLO12_NOWCAST_20240612.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240612.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240612.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -718,7 +717,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240529.zarr",
       "name": "GLO12_NOWCAST_20240529.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240529.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240529.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -726,7 +725,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240124.zarr",
       "name": "GLO12_NOWCAST_20240124.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240124.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240124.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -734,7 +733,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240925.zarr",
       "name": "GLO12_NOWCAST_20240925.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240925.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240925.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -742,7 +741,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241218.zarr",
       "name": "GLO12_NOWCAST_20241218.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241218.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241218.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -750,7 +749,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240501.zarr",
       "name": "GLO12_NOWCAST_20240501.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240501.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240501.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -758,7 +757,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240417.zarr",
       "name": "GLO12_NOWCAST_20240417.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240417.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240417.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -766,7 +765,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240522.zarr",
       "name": "GLO12_NOWCAST_20240522.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240522.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240522.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -774,7 +773,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241030.zarr",
       "name": "GLO12_NOWCAST_20241030.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241030.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241030.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -782,7 +781,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240717.zarr",
       "name": "GLO12_NOWCAST_20240717.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240717.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240717.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -790,7 +789,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240508.zarr",
       "name": "GLO12_NOWCAST_20240508.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240508.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240508.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -798,7 +797,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241113.zarr",
       "name": "GLO12_NOWCAST_20241113.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241113.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241113.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -806,7 +805,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240605.zarr",
       "name": "GLO12_NOWCAST_20240605.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240605.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240605.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -814,7 +813,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241002.zarr",
       "name": "GLO12_NOWCAST_20241002.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241002.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241002.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -822,7 +821,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241106.zarr",
       "name": "GLO12_NOWCAST_20241106.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241106.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241106.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -830,7 +829,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240904.zarr",
       "name": "GLO12_NOWCAST_20240904.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240904.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240904.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -838,7 +837,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241016.zarr",
       "name": "GLO12_NOWCAST_20241016.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241016.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241016.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -846,7 +845,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240313.zarr",
       "name": "GLO12_NOWCAST_20240313.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240313.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240313.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -854,7 +853,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240214.zarr",
       "name": "GLO12_NOWCAST_20240214.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240214.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240214.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -862,7 +861,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241211.zarr",
       "name": "GLO12_NOWCAST_20241211.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241211.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241211.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -870,7 +869,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240327.zarr",
       "name": "GLO12_NOWCAST_20240327.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240327.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240327.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -878,7 +877,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20241009.zarr",
       "name": "GLO12_NOWCAST_20241009.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20241009.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20241009.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -886,7 +885,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240731.zarr",
       "name": "GLO12_NOWCAST_20240731.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240731.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240731.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     },
@@ -894,7 +893,7 @@
       "@type": "cr:FileObject",
       "@id": "GLO12_NOWCAST_20240626.zarr",
       "name": "GLO12_NOWCAST_20240626.zarr",
-      "contentUrl": "https://minio.dive.edito.eu/project-oceanb.zarrh/public/GLO12_NOWCAST/20240626.zarr",
+      "contentUrl": "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_NOWCAST/20240626.zarr",
       "encodingFormat": "application/x-zarr",
       "md5": "n/a"
     }

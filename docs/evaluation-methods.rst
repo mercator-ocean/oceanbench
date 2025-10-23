@@ -8,8 +8,14 @@
 Definitions of evaluation methods
 ===================================================
 
-Several methods are used to evaluate forecasting system in OceanBench.
-Each of them is applied on a dataset grouping 52 forecasts in year 2024.
+Several methods are used to evaluate forecasting systems in OceanBench.
+Each of them is applied to a dataset grouping 52 forecasts in the year 2024.
+
+The following figure provides an overview of the evaluation methodology, illustrating the multifaceted evaluation strategy that captures different aspects of model performance.
+This includes (i) observation-based intercomparison, (ii) reference-model benchmarking, and (iii) process-oriented diagnostics derived from physically meaningful variables.
+Together, these components provide a holistic view of each model’s ability to reproduce observed ocean dynamics, maintain internal physical consistency, and generalize beyond the training regime.
+
+.. image:: oceanbench-evaluation-overview.png
 
 Reference datasets
 **********************************************
@@ -22,7 +28,7 @@ OceanBench evaluates challengers against the following reference datasets:
 Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
 **********************************************************************************************
 
-The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the challenger dataset and the GLORYS reanalysis dataset, i.e over all dataset variables.
+The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the challenger dataset and the GLORYS reanalysis dataset, i.e., over all dataset variables.
 
 Only 4 depths are used:
 
@@ -43,19 +49,19 @@ Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS rea
 
 The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `geostrophic current <https://en.wikipedia.org/wiki/Geostrophic_current>`_ computations over the challenger datasets and the GLORYS reanalysis dataset.
 
-The geostrophic currents are computed using sea surface height above geoid with Coriolis parameters Omega of 7.2921e-5, R of 6371000, and a gravity of 9.81 m/s². Equator (latitude betwenn -0.5° and 0.5°) is excluded.
+The geostrophic currents are computed using sea surface height above geoid with Coriolis parameters Omega of 7.2921e-5, R of 6371000, and a gravity of 9.81 m/s². The Equator (latitude between -0.5° and 0.5°) is excluded.
 
 Deviation of Lagrangian trajectories compared to GLORYS reanalysis
 **********************************************************************************************
 
 The deviation in kilometers between the two sets of drifting particles computed over the challenger datasets and the GLORYS reanalysis dataset.
 
-The particles are simulated in a small squared area in the Atlantic joining Newyork coasts and Nouadhibou coasts.
+The particles are simulated in a small square area in the Atlantic joining New York coasts and Nouadhibou coasts.
 
 Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis
 **********************************************************************************************
 
-The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the challenger dataset and the GLO12 analysis dataset, i.e over all dataset variables.
+The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the challenger dataset and the GLO12 analysis dataset, i.e., over all dataset variables.
 
 Only 4 depths are used:
 
@@ -76,11 +82,11 @@ Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 anal
 
 The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `geostrophic current <https://en.wikipedia.org/wiki/Geostrophic_current>`_ computations over the challenger datasets and the GLO12 analysis dataset.
 
-The geostrophic currents are computed using sea surface height above geoid with Coriolis parameters Omega of 7.2921e-5, R of 6371000, and a gravity of 9.81 m/s². Equator (latitude betwenn -0.5° and 0.5°) is excluded.
+The geostrophic currents are computed using sea surface height above geoid with Coriolis parameters Omega of 7.2921e-5, R of 6371000, and a gravity of 9.81 m/s². The Equator (latitude between -0.5° and 0.5°) is excluded.
 
 Deviation of Lagrangian trajectories compared to GLO12 analysis
 **********************************************************************************************
 
 The deviation in kilometers between the two sets of drifting particles computed over the challenger datasets and the GLO12 analysis dataset.
 
-The particles are simulated in a small squared area in the Atlantic joining Newyork coasts and Nouadhibou coasts.
+The particles are simulated in a small square area in the Atlantic joining New York coasts and Nouadhibou coasts.

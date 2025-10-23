@@ -19,7 +19,7 @@ from parcels.kernel import shutil
 import xarray
 
 from oceanbench.core.climate_forecast_standard_names import (
-    remane_dataset_with_standard_names,
+    rename_dataset_with_standard_names,
 )
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.lead_day_utils import lead_day_labels
@@ -64,7 +64,7 @@ def deviation_of_lagrangian_trajectories(
 
 
 def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
-    return remane_dataset_with_standard_names(dataset)
+    return rename_dataset_with_standard_names(dataset)
 
 
 def _deviation_of_lagrangian_trajectories(

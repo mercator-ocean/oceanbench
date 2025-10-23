@@ -26,17 +26,17 @@ The official score table is available on the [OceanBench website](https://oceanb
 
 ## Evaluate your system with OceanBench
 
-The evaluation of a system consists in the sequential execution of a Python notebook run several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).
+The evaluation of a system consists of the sequential execution of a Python notebook that runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).
 
-The OceanBench documentation describes [the shape a challenger dataset](https://oceanbench.readthedocs.io/en/latest/shape-of-the-challenger-dataset.html) must have, as well of [the definitions of the methods used to evaluate systems](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
+The OceanBench documentation describes [the shape a challenger dataset](https://oceanbench.readthedocs.io/en/latest/shape-of-the-challenger-dataset.html) must have, as well as [the definitions of the methods used to evaluate systems](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
 
 ### Official evaluation
 
-All official challenger notebooks are maintained and re-executable in order to update the scores with new OceanBench versions (all official challengers are re-evaluated at each new version).
+All official challenger notebooks are maintained and remain executable in order to update the scores with new OceanBench versions (all official challengers are re-evaluated with each new version).
 
 To officially submit your system to OceanBench, please open an issue on this repository attaching one of the following:
 
-1. The executed notebook resulting from an [interactive](#interactive-evalution) or [programmatic](#programmatic-evaluation) evaluation.
+1. The executed notebook resulting from an [interactive](#interactive-evaluation) or [programmatic](#programmatic-evaluation) evaluation.
 2. A way to access the system output data in a standard format (e.g. Zarr or NetCDF).
 3. A way to execute the system code or container along with clear instructions for how to run it (e.g., input/output format, required dependencies, etc.).
 
@@ -53,7 +53,7 @@ In addition, please provide the following metadata:
 Checkout [this notebook](https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.report.ipynb) that evaluates a sample (two forecasts) of the GLONET system on OceanBench.
 The resulting executed notebook is used as the evaluation report of the system, and its content is used to fulfill the OceanBench score table.
 
-You can replace the cell that open the challenger datasets with your code and execute the notebook.
+You can replace the cell that opens the challenger datasets with your code and execute the notebook.
 
 #### Execute on your own resources
 
@@ -94,7 +94,7 @@ More details in the [documentation](https://oceanbench.readthedocs.io/en/latest/
 
 ### Dependency on the Copernicus Marine Service
 
-Running OceanBench to evaluate systems with 1/12° resolution uses the [Copernicus Marine Toolbox](https://github.com/mercator-ocean/copernicus-marine-toolbox/) and hence requires authentication to the [Copernicus Marine Service](https://marine.copernicus.eu/).
+Running OceanBench to evaluate systems with 1/12° resolution uses the [Copernicus Marine Toolbox](https://github.com/mercator-ocean/copernicus-marine-toolbox/) and therefore requires authentication with the [Copernicus Marine Service](https://marine.copernicus.eu/).
 
 > If you're running OceanBench in a non-interactive way, please follow the [Copernicus Marine Toolbox documentation](https://toolbox-docs.marine.copernicus.eu) to login to the Copernicus Marine Service before running the bench.
 
