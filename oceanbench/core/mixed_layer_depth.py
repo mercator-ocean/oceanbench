@@ -38,6 +38,8 @@ def _compute_potential_density(
     temperature: xarray.DataArray,
     depth: xarray.DataArray,
 ) -> xarray.DataArray:
+    absolute_salinity = absolute_salinity.clip(min=0)  # filter out negative salinities
+
     return gsw.pot_rho_t_exact(absolute_salinity, temperature, depth, 0)
 
 
