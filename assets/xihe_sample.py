@@ -4,7 +4,7 @@ import xarray
 
 challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
     [
-        "https://minio.dive.edito.eu/project-oceanbench/public/xihe_full_2024/20240103.zarr",
+        "https://minio.dive.edito.eu/project-oceanbench/public/XIHE/20240103.zarr",
     ],
     engine="zarr",
     preprocess=lambda dataset: dataset.rename({"time": "lead_day_index"}).assign({"lead_day_index": range(10)}),
