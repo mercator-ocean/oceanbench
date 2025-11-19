@@ -53,8 +53,10 @@ evaluate-challenger:
 run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
-	$(MAKE) evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/glonet_sample.py CHALLENGER_REPORT_NAME=glonet_sample.report.ipynb
-	python tests/compare_notebook.py assets/glonet_sample.report.ipynb glonet_sample.report.ipynb
+	# $(MAKE) evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/glonet_sample.py CHALLENGER_REPORT_NAME=glonet_sample.report.ipynb
+	# python tests/compare_notebook.py assets/glonet_sample.report.ipynb glonet_sample.report.ipynb
+	$(MAKE) evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/xihe_sample.py CHALLENGER_REPORT_NAME=xihe_sample.report.ipynb
+	python tests/compare_notebook.py assets/xihe_sample.report.ipynb xihe_sample.report.ipynb
 
 _release: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 _release:
