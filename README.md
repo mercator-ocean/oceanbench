@@ -20,6 +20,20 @@ SPDX-License-Identifier: EUPL-1.2
 
 OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis datasets (such as 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030) and [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024)) as well as observations.
 
+## Citation
+
+OceanBench's scientific paper is published in NeurIPS and is accessible at [https://openreview.net/forum?id=wZGe1Kqs8G](https://openreview.net/forum?id=wZGe1Kqs8G).
+```
+@inproceedings{
+  aouni2025oceanbench,
+  title={OceanBench: A Benchmark for Data-Driven Global Ocean Forecasting systems},
+  author={Anass El Aouni and Quentin Gaudel and Juan Emmanuel Johnson and REGNIER Charly and Julien Le Sommer and van Gennip and Ronan Fablet and Marie Drevillon and Yann DRILLET and Pierre Yves Le Traon},
+  booktitle={The Thirty-ninth Annual Conference on Neural Information Processing Systems Datasets and Benchmarks Track},
+  year={2025},
+  url={https://openreview.net/forum?id=wZGe1Kqs8G}
+}
+```
+
 ## Score table and system comparison
 
 The official score table is available on the [OceanBench website](https://oceanbench.lab.dive.edito.eu).
