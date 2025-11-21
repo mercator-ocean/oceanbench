@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from enum import Enum
-
+from xarray import Dataset
 from oceanbench.core.climate_forecast_standard_names import (
     StandardDimension,
     StandardVariable,
@@ -35,9 +35,30 @@ class Dimension(Enum):
     def key(self) -> str:
         return self.value.value if isinstance(self.value, StandardDimension) else self.value
 
+    def dimension_name_from_dataset(self, dataset):
+        """
+        Get the actual dimension name in the dataset corresponding to this Dimension enum member.
+        """
+        mapping = {
+            Dimension.DEPTH: "depth",
+            Dimension.LATITUDE: "latitude",
+            Dimension.LONGITUDE: "longitude",
+            Dimension.TIME: "time",
+            Dimension.LEAD_DAY_INDEX: "lead_day_index",
+            Dimension.FIRST_DAY_DATETIME: "first_day_datetime",
+        }
+        return mapping[self]
+
 
 class DepthLevel(Enum):
     SURFACE = 4.940250e-01
     MINUS_50_METERS = 4.737369e01
     MINUS_200_METERS = 2.224752e02
     MINUS_550_METERS = 5.410889e02
+
+
+def get_dimension(dataset: Dataset, dimension: Dimension):
+    """
+    Get the dimension name in the dataset corresponding to the given Dimension enum member.
+    """
+    return dataset[dimension.dimension_name_from_dataset(dataset)]
