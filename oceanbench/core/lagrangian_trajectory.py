@@ -23,9 +23,9 @@ from oceanbench.core.climate_forecast_standard_names import (
 )
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.lead_day_utils import lead_day_labels
-
+import numpy
 import logging
-
+VARIABLE=Variable
 logger = logging.getLogger("parcels.tools.loggers")
 logger.setLevel(level=logging.WARNING)
 
@@ -54,12 +54,14 @@ LEAD_DAY_STOP = 9
 def deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    zone: Zone,
+    latitudes: xarray.Dataset,
+    longitudes: xarray.Dataset,
 ) -> pandas.DataFrame:
     return _deviation_of_lagrangian_trajectories(
         _harmonise_dataset(challenger_dataset),
         _harmonise_dataset(reference_dataset),
-        zone,
+        latitudes,
+        longitudes
     )
 
 
@@ -70,10 +72,11 @@ def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
 def _deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    zone: Zone,
+    latitudes: xarray.Dataset,
+    longitudes: xarray.Dataset,
 ) -> pandas.DataFrame:
     deviations = numpy.array(
-        _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, zone)
+        _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes)
     ).mean(axis=0)
     # print(deviations)
     score_dataframe = pandas.DataFrame(
@@ -113,13 +116,15 @@ def _split_dataset(dataset: xarray.Dataset) -> list[xarray.Dataset]:
 def _all_deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    zone: Zone,
+    latitudes: xarray.Dataset,
+    longitudes: xarray.Dataset,
 ):
     return list(
         map(
             partial(
                 _one_deviation_of_lagrangian_trajectories,
-                zone=zone,
+                latitudes=latitudes,
+                longitudes=longitudes
             ),
             _split_dataset(challenger_dataset),
             _split_dataset(reference_dataset),
@@ -130,30 +135,26 @@ def _all_deviation_of_lagrangian_trajectories(
 def _one_deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    zone: Zone,
+    latitudes: xarray.Dataset,
+    longitudes: xarray.Dataset,
+    
 ):
     challenger_trajectories = _get_particle_dataset(
         dataset=challenger_dataset.isel({Dimension.DEPTH.key(): 0}),
-        zone=zone,
+        latitudes=latitudes,
+        longitudes=longitudes
     )
 
     reference_trajectories = _get_particle_dataset(
         dataset=reference_dataset.isel({Dimension.DEPTH.key(): 0}),
-        zone=zone,
+        latitudes=latitudes,
+        longitudes=longitudes
     )
-
-    euclidean_distance = numpy.sqrt(
-        ((challenger_trajectories.x.data - reference_trajectories.x.data) * 111.32) ** 2
-        + (
-            111.32
-            * numpy.cos(
-                numpy.radians(challenger_trajectories.lat.data).reshape(1, challenger_trajectories.lat.shape[0], 1)
-            )
-            * (challenger_trajectories.y.data - reference_trajectories.y.data)
-        )
-        ** 2
-    )
-    return numpy.nanmean(euclidean_distance, axis=(1, 2))
+    print(challenger_trajectories)
+    
+    euclidean_distance = Euclidean_distance([challenger_trajectories], [reference_trajectories])
+    print(f"-->{euclidean_distance}")
+    return euclidean_distance
 
 
 def _zone_dimensions(dataset: xarray.Dataset, zone: Zone) -> tuple[Any, Any]:
@@ -191,7 +192,108 @@ def _build_field_set(dataset) -> FieldSet:
     )
 
 
-def _get_all_particles_positions(
+
+def _get_all_particles_positions(dataset: xarray.Dataset, lats: numpy.ndarray, lons: numpy.ndarray) -> xarray.Dataset:
+    from parcels import FieldSet, ParticleSet, JITParticle, AdvectionRK4, Variable
+    from parcels.particle import ScipyParticle
+    from datetime import timedelta
+    import numpy as numpy
+    import xarray
+
+    assert lats.shape == lons.shape, "lats and lons must be the same shape"
+    variables = {
+        "U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(),
+         "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key()
+                }
+    dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
+
+
+    fieldset = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
+
+    # Define a custom particle class with a `frozen` flag
+    class FreezeParticle(JITParticle):
+        frozen = Variable("frozen", dtype=numpy.int32, initial=0)
+        lat0 = Variable("lat0", dtype=numpy.float32, to_write=False)
+        lon0 = Variable("lon0", dtype=numpy.float32, to_write=False)
+        pid = Variable("pid", dtype=numpy.int32)  # <-- added only this to track order
+
+    # Set domain bounds
+    fieldset.add_constant("lon_min", float(dataset.longitude.values.min()))
+    fieldset.add_constant("lon_max", float(dataset.longitude.values.max()))
+    fieldset.add_constant("lat_min", float(dataset.latitude.values.min()))
+    fieldset.add_constant("lat_max", float(dataset.latitude.values.max()))
+
+    #Custom kernel: freeze particles that exit the domain
+    def FreezeIfOutOfBounds(particle, fieldset, time):
+        if particle.frozen == 0:
+            if (particle.lon < fieldset.lon_min or particle.lon > fieldset.lon_max or
+                particle.lat < fieldset.lat_min or particle.lat > fieldset.lat_max):
+                particle.frozen = 1
+                particle.lat0 = particle.lat  # store frozen position
+                particle.lon0 = particle.lon
+        else:
+            particle.lat = particle.lat0
+            particle.lon = particle.lon0
+
+    def DeleteErrorParticle(particle, fieldset, time):
+        if particle.state == StatusCode.ErrorOutOfBounds:
+            particle.delete()
+
+    # Initialize particle set with `pid`
+    pset = ParticleSet.from_list(
+        fieldset=fieldset,
+        pclass=FreezeParticle,
+        lon=lons,
+        lat=lats,
+        time=dataset.time[0],
+        pid=numpy.arange(len(lats)),
+    )
+
+    # Keep your original kernel setup
+    kernels = [AdvectionRK4, DeleteErrorParticle]
+
+    # Run simulation
+    output_file = pset.ParticleFile(name="tmp_particles.zarr", outputdt=timedelta(hours=24))
+    pset.execute(
+        kernels,
+        runtime=timedelta(days=9),
+        dt=timedelta(minutes=60),
+        output_file=output_file,
+    )
+
+    # Read output
+    ds = xarray.open_zarr("tmp_particles.zarr")
+    plats = ds.lat.values  # shape: (time, n_particles)
+    plons = ds.lon.values
+    pids = ds.pid.values   # shape: (time, n_particles)
+    print(pids.shape)
+
+    # Reorder based on pid at time 0
+    sort_idx = numpy.argsort(pids[:,0])
+    print(sort_idx)
+    plats = plats[sort_idx,:]
+    plons = plons[sort_idx,:]
+
+    n_particles = lats.shape[0]
+    n_times = plats.shape[1]
+
+    ds_out = xarray.Dataset(
+        {
+            "lat": (["particle", "time"], plats),
+            "lon": (["particle", "time"], plons),
+        },
+        coords={
+            "time": dataset.time[:n_times],
+            "particle": numpy.arange(n_particles),
+            "lat0": ("particle", lats),
+            "lon0": ("particle", lons),
+        },
+    )
+
+    return ds_out
+
+
+def __get_all_particles_positions(
     dataset: xarray.Dataset,
     field_set: FieldSet,
     particle_initial_latitudes,
@@ -222,28 +324,62 @@ def _get_all_particles_positions(
     return all_particle_latitudes, all_particle_longitudes
 
 
-def _get_particle_dataset(dataset: xarray.Dataset, zone: Zone) -> xarray.Dataset:
+def _get_particle_dataset(dataset: xarray.Dataset, latitudes: xarray.Dataset, longitudes: xarray.Dataset) -> xarray.Dataset:
     field_set = _build_field_set(dataset)
-    latitudes, longitudes = _zone_dimensions(dataset, zone)
-    particle_initial_latitudes, particle_initial_longitudes = _particle_initial_positions(latitudes, longitudes)
+    particle_initial_latitudes = latitudes 
+    particle_initial_longitudes = longitudes 
 
-    all_particle_latitudes, all_particle_longitudes = _get_all_particles_positions(
+    ds_out = _get_all_particles_positions(
         dataset,
-        field_set,
         particle_initial_latitudes,
         particle_initial_longitudes,
     )
-    x = all_particle_latitudes.reshape(latitudes.shape[0], longitudes.shape[0], LEAD_DAY_STOP).transpose(2, 0, 1)
-    y = all_particle_longitudes.reshape(latitudes.shape[0], longitudes.shape[0], LEAD_DAY_STOP).transpose(2, 0, 1)
+    return ds_out
 
-    return xarray.Dataset(
-        {
-            "x": (["time", "lat", "lon"], x),
-            "y": (["time", "lat", "lon"], y),
-        },
-        coords={
-            "time": dataset[Dimension.TIME.key()][0:LEAD_DAY_STOP],
-            "lat": latitudes,
-            "lon": longitudes,
-        },
-    )
+
+def get_random_ocean_points_from_file(ds: xarray.Dataset, varname: str = "zos", n: int = 100, seed: int = 42):
+
+    var = ds[varname].isel(lead_day_index=0)  
+    mask = ~numpy.isnan(var).squeeze()
+    print(mask.shape)
+
+    lat = ds.lat
+    lon = ds.lon
+
+    lat_grid, lon_grid = numpy.meshgrid(lat, lon, indexing="ij")
+    lat_vals = lat_grid[mask.values]
+    lon_vals = lon_grid[mask.values]
+
+    if len(lat_vals) < n:
+        raise ValueError(f"Requested {n} points, but only {len(lat_vals)} ocean points available.")
+
+    numpy.random.seed(seed)
+    idx = numpy.random.choice(len(lat_vals), n, replace=False)
+
+    return lat_vals[idx], lon_vals[idx]
+
+def Euclidean_distance( modelset: list[xarray.Dataset], refset: list[xarray.Dataset], pad: int = 10) -> list[numpy.ndarray]:
+    all_distances = []
+
+    for model, ref in zip(modelset, refset):
+        model['time'] = model['time'].dt.floor('D')
+        ref['time'] = ref['time'].dt.floor('D')
+        lat_ref_rad = numpy.deg2rad(ref["lat"])
+
+        dlat = (model["lat"] - ref["lat"]) * 111  # meters
+        dlon = (model["lon"] - ref["lon"]) * 111 * numpy.cos(lat_ref_rad)
+
+        distance = numpy.sqrt(dlat**2 + dlon**2)  # shape: (particle, time)
+        distance = distance.mean(axis=0)       # shape: (time,)
+        distance_arr = distance.values         # convert to NumPy array
+
+        # # Pad to fixed length with NaNs if needed
+        # if len(distance_arr) < pad:
+        #     padded = numpy.full(pad, numpy.nan)
+        #     padded[:len(distance_arr)] = distance_arr
+        # else:
+        #     padded = distance_arr[:pad]  # truncate if too long
+
+        # all_distances.append(padded)
+
+    return distance_arr
