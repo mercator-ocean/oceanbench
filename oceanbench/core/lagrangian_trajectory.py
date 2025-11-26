@@ -340,9 +340,7 @@ def _get_particle_dataset(dataset: xarray.Dataset, latitudes: xarray.Dataset, lo
 def get_random_ocean_points_from_file(ds: xarray.Dataset, varname: str = "zos", n: int = 100, seed: int = 42):
 
     var = ds[varname].isel(lead_day_index=0)  
-    mask = ~numpy.isnan(var).squeeze()
-    print(mask.shape)
-
+    mask = ~numpy.isnan(var)[0].squeeze()
     lat = ds.lat
     lon = ds.lon
 
@@ -372,14 +370,5 @@ def Euclidean_distance( modelset: list[xarray.Dataset], refset: list[xarray.Data
         distance = numpy.sqrt(dlat**2 + dlon**2)  # shape: (particle, time)
         distance = distance.mean(axis=0)       # shape: (time,)
         distance_arr = distance.values         # convert to NumPy array
-
-        # # Pad to fixed length with NaNs if needed
-        # if len(distance_arr) < pad:
-        #     padded = numpy.full(pad, numpy.nan)
-        #     padded[:len(distance_arr)] = distance_arr
-        # else:
-        #     padded = distance_arr[:pad]  # truncate if too long
-
-        # all_distances.append(padded)
 
     return distance_arr
