@@ -117,8 +117,10 @@ def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
 def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
+    latitudes, longitudes = get_random_ocean_points_from_file(challenger_dataset, varname="zos", n=10000, seed=123)
     return deviation_of_lagrangian_trajectories(
         challenger_dataset=challenger_dataset,
-        reference_dataset=glo12_analysis_dataset(challenger_dataset),
-        zone=Zone.SMALL_ATLANTIC_NEWYORK_TO_NOUADHIBOU,
+        reference_dataset=glorys_reanalysis_dataset(challenger_dataset),
+        latitudes=latitudes,
+        longitudes=longitudes,
     )
