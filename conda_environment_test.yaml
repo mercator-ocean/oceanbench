@@ -5,6 +5,7 @@
 dependencies:
   - python==3.13.2
   - pip=25.0.*
+  - poetry=2.0.*
   - gcc
   - pip:
       - deepdiff==8.4.2
