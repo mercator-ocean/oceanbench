@@ -72,8 +72,39 @@ def ifs_forcings() -> xarray.Dataset:
     Dataset
         The Dataset containing IFS forcings.
 
-    >>> ifs_forcings()
-    True
+    >>> ifs_forcings() # doctest: +SKIP
+    <xarray.Dataset> Size: 147GB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 10,
+                             latitude: 2041, longitude: 4320)
+    Coordinates:
+      * longitude           (longitude) float32 17kB -180.0 -179.9 ... 179.8 179.9
+      * latitude            (latitude) float32 8kB -80.0 -79.92 ... 89.92 90.0
+      * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
+      * first_day_datetime  (first_day_datetime) datetime64[ns] 416B 2024-01-03 ....
+    Data variables:
+        leadtime            (first_day_datetime, lead_day_index) float64 4kB dask.array<chunksize=(1, 10), meta=np.ndarray>
+        sotemair            (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1021, 2160), meta=np.ndarray>
+        sowinu10            (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1021, 2160), meta=np.ndarray>
+        sowinv10            (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1021, 2160), meta=np.ndarray>
+        sosudosw            (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1021, 2160), meta=np.ndarray>
+        sosudolw            (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1021, 2160), meta=np.ndarray>
+        sowaprec            (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1021, 2160), meta=np.ndarray>
+        sod2m               (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1021, 2160), meta=np.ndarray>
+        somslpre            (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1021, 2160), meta=np.ndarray>
+    Attributes: (12/30)
+        CDI:                                      Climate Data Interface version ...
+        Conventions:                              CF-1.6
+        GRIB_dataType:                            fc
+        GRIB_typeOfLevel:                         surface
+        GRIB_stepType:                            instant
+        GRIB_gridType:                            regular_gg
+        ...                                       ...
+        GRIB_units:                               Pa
+        GRIB_shortName:                           msl
+        GRIB_name:                                Mean sea level pressure
+        units:                                    Pa
+        long_name:                                Mean sea level pressure
+        history_of_appended_files:                Wed Apr  9 07:48:50 2025: Appen...
     """
 
     return input_datasets.ifs_forcings()
