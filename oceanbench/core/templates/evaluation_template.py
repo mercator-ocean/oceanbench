@@ -8,7 +8,7 @@ oceanbench.__version__
 
 import xarray
 
-challenger_dataset: xarray.Dataset = ...
+challenger_dataset: xarray.Dataset = xarray.Dataset()
 
 # ### Evaluation of challenger dataset using OceanBench
 

@@ -6,14 +6,12 @@
 This module exposes the package python API to evaluate a challenger.
 """
 
-from . import metrics
-from . import datasets
-from .core.evaluate import evaluate_challenger
-from .core.version import __version__
+from . import reference
+from . import input
+from . import challenger
 
 __all__ = [
-    "metrics",
-    "datasets",
-    "evaluate_challenger",
-    "__version__",
+    "reference",
+    "input",
+    "challenger",
 ]
