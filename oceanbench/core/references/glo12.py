@@ -4,8 +4,10 @@
 
 from datetime import datetime
 import numpy
-from xarray import Dataset, open_mfdataset
+from xarray import Dataset, open_mfdataset, merge
 import logging
+import copernicusmarine
+from oceanbench.core.climate_forecast_standard_names import StandardVariable
 
 
 logger = logging.getLogger("copernicusmarine")
@@ -32,3 +34,45 @@ def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
         concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
         parallel=True,
     ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+
+
+def glo12_analysis() -> Dataset:
+    start_datetime = "2024-01-01"
+    end_datetime = "2024-12-31"
+
+    thetao_dataset = copernicusmarine.open_dataset(
+        dataset_id="cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m",
+        dataset_version="202406",
+        variables=[StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value],
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
+    )
+
+    so_dataset = copernicusmarine.open_dataset(
+        dataset_id="cmems_mod_glo_phy-so_anfc_0.083deg_P1D-m",
+        dataset_version="202406",
+        variables=[StandardVariable.SEA_WATER_SALINITY.value],
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
+    )
+
+    current_dataset = copernicusmarine.open_dataset(
+        dataset_id="cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m",
+        dataset_version="202406",
+        variables=[
+            StandardVariable.EASTWARD_SEA_WATER_VELOCITY.value,
+            StandardVariable.NORTHWARD_SEA_WATER_VELOCITY.value,
+        ],
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
+    )
+
+    zos_dataset = copernicusmarine.open_dataset(
+        dataset_id="cmems_mod_glo_phy_anfc_0.083deg_P1D-m",
+        dataset_version="202406",
+        variables=[StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.value],
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
+    )
+
+    return merge([thetao_dataset, so_dataset, current_dataset, zos_dataset])

@@ -25,7 +25,7 @@ OceanBench evaluates challengers against the following reference datasets:
 - `2024 GLORYS reanalysis <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_
 - `2024 GLO12 analysis <https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024>`_
 
-You can open and explore these datasets by using the ``oceanbench.reference_datasets`` module, the documentation is `here <https://oceanbench.readthedocs.io/en/latest/source/oceanbench.html#oceanbench.reference_datasets>`_.
+You can open and explore these datasets by using the ``oceanbench.datasets.reference`` module, the documentation is `here <https://oceanbench.readthedocs.io/en/latest/source/oceanbench.datasets.html#module-oceanbench.datasets.reference>`_.
 
 Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
 **********************************************************************************************

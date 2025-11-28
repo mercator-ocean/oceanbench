@@ -9,3 +9,4 @@ dependencies:
   - gcc
   - pip:
       - deepdiff==8.4.2
+      - pytest-xdist==3.8.0

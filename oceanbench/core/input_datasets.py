@@ -31,23 +31,15 @@ def ifs_forcings() -> xarray.Dataset:
         "2024-01-03",
         "2024-12-25",
         7,
-        # "2024-01-03",
-        # "2024-01-10",
-        # 7,
     )
     dataset: xarray.Dataset = xarray.open_mfdataset(
         list(map(_ifs_forcing_dataset_path, first_day_datetimes)),
-        # [
-        #     "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240103.nc#mode=bytes",
-        #     "https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_20240110.nc#mode=bytes",
-        # ],
         engine="netcdf4",
         preprocess=lambda dataset: dataset.rename({"time_counter": "lead_day_index"}).assign(
             {"lead_day_index": range(10)}
         ),
         combine="nested",
         concat_dim="first_day_datetime",
-        # parallel=True,
         decode_timedelta=False,
     ).assign({"first_day_datetime": first_day_datetimes})
     return dataset
