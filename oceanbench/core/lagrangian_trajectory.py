@@ -78,7 +78,6 @@ def _deviation_of_lagrangian_trajectories(
     deviations = numpy.array(
         _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes)
     ).mean(axis=0)
-    # print(deviations)
     score_dataframe = pandas.DataFrame(
         {"Surface Lagrangian trajectory deviation (km)": deviations[LEAD_DAY_START - 1 : LEAD_DAY_STOP]}
     )
@@ -150,10 +149,8 @@ def _one_deviation_of_lagrangian_trajectories(
         latitudes=latitudes,
         longitudes=longitudes
     )
-    print(challenger_trajectories)
     
     euclidean_distance = Euclidean_distance([challenger_trajectories], [reference_trajectories])
-    print(f"-->{euclidean_distance}")
     return euclidean_distance
 
 
@@ -259,6 +256,7 @@ def _get_all_particles_positions(dataset: xarray.Dataset, lats: numpy.ndarray, l
         runtime=timedelta(days=9),
         dt=timedelta(minutes=60),
         output_file=output_file,
+        verbose_progress=False,
     )
 
     # Read output
@@ -266,11 +264,9 @@ def _get_all_particles_positions(dataset: xarray.Dataset, lats: numpy.ndarray, l
     plats = ds.lat.values  # shape: (time, n_particles)
     plons = ds.lon.values
     pids = ds.pid.values   # shape: (time, n_particles)
-    print(pids.shape)
 
     # Reorder based on pid at time 0
     sort_idx = numpy.argsort(pids[:,0])
-    print(sort_idx)
     plats = plats[sort_idx,:]
     plons = plons[sort_idx,:]
 
