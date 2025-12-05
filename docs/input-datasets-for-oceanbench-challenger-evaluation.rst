@@ -11,6 +11,9 @@
 
 This page lists the initial states (GLO2 nowcasts) and forcing (IFS) datasets for OceanBench challengers to produce forecast datasets to evaluate in the benchmark.
 
+
+You can open and explore these datasets by using the ``oceanbench.datasets.input`` module, the documentation is `here <https://oceanbench.readthedocs.io/en/latest/source/oceanbench.datasets.html#module-oceanbench.datasets.input>`_.
+
 Dataset files
 **********************************************
 
