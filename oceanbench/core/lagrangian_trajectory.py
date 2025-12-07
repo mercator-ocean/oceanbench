@@ -14,7 +14,9 @@ from parcels import (
     FieldSet,
     JITParticle,
     ParticleSet,
+    StatusCode,
 )
+
 from parcels.kernel import shutil
 import xarray
 
@@ -23,9 +25,9 @@ from oceanbench.core.climate_forecast_standard_names import (
 )
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.lead_day_utils import lead_day_labels
-import numpy
 import logging
-VARIABLE=Variable
+
+VARIABLE = Variable
 logger = logging.getLogger("parcels.tools.loggers")
 logger.setLevel(level=logging.WARNING)
 
@@ -58,10 +60,7 @@ def deviation_of_lagrangian_trajectories(
     longitudes: xarray.Dataset,
 ) -> pandas.DataFrame:
     return _deviation_of_lagrangian_trajectories(
-        _harmonise_dataset(challenger_dataset),
-        _harmonise_dataset(reference_dataset),
-        latitudes,
-        longitudes
+        _harmonise_dataset(challenger_dataset), _harmonise_dataset(reference_dataset), latitudes, longitudes
     )
 
 
@@ -120,11 +119,7 @@ def _all_deviation_of_lagrangian_trajectories(
 ):
     return list(
         map(
-            partial(
-                _one_deviation_of_lagrangian_trajectories,
-                latitudes=latitudes,
-                longitudes=longitudes
-            ),
+            partial(_one_deviation_of_lagrangian_trajectories, latitudes=latitudes, longitudes=longitudes),
             _split_dataset(challenger_dataset),
             _split_dataset(reference_dataset),
         )
@@ -136,20 +131,15 @@ def _one_deviation_of_lagrangian_trajectories(
     reference_dataset: xarray.Dataset,
     latitudes: xarray.Dataset,
     longitudes: xarray.Dataset,
-    
 ):
     challenger_trajectories = _get_particle_dataset(
-        dataset=challenger_dataset.isel({Dimension.DEPTH.key(): 0}),
-        latitudes=latitudes,
-        longitudes=longitudes
+        dataset=challenger_dataset.isel({Dimension.DEPTH.key(): 0}), latitudes=latitudes, longitudes=longitudes
     )
 
     reference_trajectories = _get_particle_dataset(
-        dataset=reference_dataset.isel({Dimension.DEPTH.key(): 0}),
-        latitudes=latitudes,
-        longitudes=longitudes
+        dataset=reference_dataset.isel({Dimension.DEPTH.key(): 0}), latitudes=latitudes, longitudes=longitudes
     )
-    
+
     euclidean_distance = Euclidean_distance([challenger_trajectories], [reference_trajectories])
     return euclidean_distance
 
@@ -189,21 +179,15 @@ def _build_field_set(dataset) -> FieldSet:
     )
 
 
-
 def _get_all_particles_positions(dataset: xarray.Dataset, lats: numpy.ndarray, lons: numpy.ndarray) -> xarray.Dataset:
     from parcels import FieldSet, ParticleSet, JITParticle, AdvectionRK4, Variable
-    from parcels.particle import ScipyParticle
     from datetime import timedelta
     import numpy as numpy
     import xarray
 
     assert lats.shape == lons.shape, "lats and lons must be the same shape"
-    variables = {
-        "U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(),
-         "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key()
-                }
+    variables = {"U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(), "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key()}
     dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
-
 
     fieldset = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
 
@@ -220,11 +204,15 @@ def _get_all_particles_positions(dataset: xarray.Dataset, lats: numpy.ndarray, l
     fieldset.add_constant("lat_min", float(dataset.latitude.values.min()))
     fieldset.add_constant("lat_max", float(dataset.latitude.values.max()))
 
-    #Custom kernel: freeze particles that exit the domain
+    # Custom kernel: freeze particles that exit the domain
     def FreezeIfOutOfBounds(particle, fieldset, time):
         if particle.frozen == 0:
-            if (particle.lon < fieldset.lon_min or particle.lon > fieldset.lon_max or
-                particle.lat < fieldset.lat_min or particle.lat > fieldset.lat_max):
+            if (
+                particle.lon < fieldset.lon_min
+                or particle.lon > fieldset.lon_max
+                or particle.lat < fieldset.lat_min
+                or particle.lat > fieldset.lat_max
+            ):
                 particle.frozen = 1
                 particle.lat0 = particle.lat  # store frozen position
                 particle.lon0 = particle.lon
@@ -263,12 +251,12 @@ def _get_all_particles_positions(dataset: xarray.Dataset, lats: numpy.ndarray, l
     ds = xarray.open_zarr("tmp_particles.zarr")
     plats = ds.lat.values  # shape: (time, n_particles)
     plons = ds.lon.values
-    pids = ds.pid.values   # shape: (time, n_particles)
+    pids = ds.pid.values  # shape: (time, n_particles)
 
     # Reorder based on pid at time 0
-    sort_idx = numpy.argsort(pids[:,0])
-    plats = plats[sort_idx,:]
-    plons = plons[sort_idx,:]
+    sort_idx = numpy.argsort(pids[:, 0])
+    plats = plats[sort_idx, :]
+    plons = plons[sort_idx, :]
 
     n_particles = lats.shape[0]
     n_times = plats.shape[1]
@@ -320,10 +308,11 @@ def __get_all_particles_positions(
     return all_particle_latitudes, all_particle_longitudes
 
 
-def _get_particle_dataset(dataset: xarray.Dataset, latitudes: xarray.Dataset, longitudes: xarray.Dataset) -> xarray.Dataset:
-    field_set = _build_field_set(dataset)
-    particle_initial_latitudes = latitudes 
-    particle_initial_longitudes = longitudes 
+def _get_particle_dataset(
+    dataset: xarray.Dataset, latitudes: xarray.Dataset, longitudes: xarray.Dataset
+) -> xarray.Dataset:
+    particle_initial_latitudes = latitudes
+    particle_initial_longitudes = longitudes
 
     ds_out = _get_all_particles_positions(
         dataset,
@@ -335,7 +324,7 @@ def _get_particle_dataset(dataset: xarray.Dataset, latitudes: xarray.Dataset, lo
 
 def get_random_ocean_points_from_file(ds: xarray.Dataset, varname: str = "zos", n: int = 100, seed: int = 42):
 
-    var = ds[varname].isel(lead_day_index=0)  
+    var = ds[varname].isel(lead_day_index=0)
     mask = ~numpy.isnan(var)[0].squeeze()
     lat = ds.lat
     lon = ds.lon
@@ -352,19 +341,21 @@ def get_random_ocean_points_from_file(ds: xarray.Dataset, varname: str = "zos", 
 
     return lat_vals[idx], lon_vals[idx]
 
-def Euclidean_distance( modelset: list[xarray.Dataset], refset: list[xarray.Dataset], pad: int = 10) -> list[numpy.ndarray]:
-    all_distances = []
+
+def Euclidean_distance(
+    modelset: list[xarray.Dataset], refset: list[xarray.Dataset], pad: int = 10
+) -> list[numpy.ndarray]:
 
     for model, ref in zip(modelset, refset):
-        model['time'] = model['time'].dt.floor('D')
-        ref['time'] = ref['time'].dt.floor('D')
+        model["time"] = model["time"].dt.floor("D")
+        ref["time"] = ref["time"].dt.floor("D")
         lat_ref_rad = numpy.deg2rad(ref["lat"])
 
         dlat = (model["lat"] - ref["lat"]) * 111  # meters
         dlon = (model["lon"] - ref["lon"]) * 111 * numpy.cos(lat_ref_rad)
 
         distance = numpy.sqrt(dlat**2 + dlon**2)  # shape: (particle, time)
-        distance = distance.mean(axis=0)       # shape: (time,)
-        distance_arr = distance.values         # convert to NumPy array
+        distance = distance.mean(axis=0)  # shape: (time,)
+        distance_arr = distance.values  # convert to NumPy array
 
     return distance_arr
