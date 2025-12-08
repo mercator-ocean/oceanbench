@@ -38,6 +38,43 @@ OceanBench's scientific paper is published in NeurIPS and is accessible at [http
 
 The official score table is available on the [OceanBench website](https://oceanbench.lab.dive.edito.eu).
 
+## Open GLORYS dataset to train your ocean forecasting system
+
+You can train your model with [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030).
+From an environment with OceanBench installed, run:
+
+```
+import oceanbench
+oceanbench.datasets.reference.glorys_reanalysis()
+```
+
+to open GLORYS dataset as a [`xarray.Dataset`](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html):
+```
+<xarray.Dataset> Size: 5TB
+Dimensions:    (depth: 50, latitude: 2041, longitude: 4320, time: 366)
+Coordinates:
+  * depth      (depth) float32 200B 0.494 1.541 2.646 ... 5.275e+03 5.728e+03
+  * latitude   (latitude) float32 8kB -80.0 -79.92 -79.83 ... 89.83 89.92 90.0
+  * longitude  (longitude) float32 17kB -180.0 -179.9 -179.8 ... 179.8 179.9
+  * time       (time) datetime64[ns] 3kB 2024-01-01 2024-01-02 ... 2024-12-31
+Data variables:
+    thetao     (time, depth, latitude, longitude) float64 1TB dask.array<chunksize=(28, 1, 512, 2048), meta=np.ndarray>
+    so         (time, depth, latitude, longitude) float64 1TB dask.array<chunksize=(28, 1, 512, 2048), meta=np.ndarray>
+    uo         (time, depth, latitude, longitude) float64 1TB dask.array<chunksize=(28, 1, 512, 2048), meta=np.ndarray>
+    vo         (time, depth, latitude, longitude) float64 1TB dask.array<chunksize=(28, 1, 512, 2048), meta=np.ndarray>
+    zos        (time, latitude, longitude) float64 26GB dask.array<chunksize=(28, 512, 2048), meta=np.ndarray>
+Attributes:
+    source:       MERCATOR GLORYS12V1
+    institution:  MERCATOR OCEAN
+    comment:      CMEMS product
+    title:        daily mean fields from Global Ocean Physics Analysis and Fo...
+    references:   http://www.mercator-ocean.fr
+    history:      2023/06/01 16:20:05 MERCATOR OCEAN Netcdf creation
+    Conventions:  CF-1.4
+```
+
+([Xarray](https://xarray.dev/) is a popular Python library to open and manipulate 
+
 ## Evaluate your system with OceanBench
 
 The evaluation of a system consists of the sequential execution of a Python notebook that runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).
