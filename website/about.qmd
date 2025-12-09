@@ -8,6 +8,22 @@ SPDX-License-Identifier: EUPL-1.2
 title: "About"
 ---
 
+## Citation
+
+OceanBench's scientific paper is published in NeurIPS and is accessible at [https://openreview.net/forum?id=wZGe1Kqs8G](https://openreview.net/forum?id=wZGe1Kqs8G).
+```
+@inproceedings{
+  aouni2025oceanbench,
+  title={OceanBench: A Benchmark for Data-Driven Global Ocean Forecasting systems},
+  author={Anass El Aouni and Quentin Gaudel and Juan Emmanuel Johnson and REGNIER Charly and Julien Le Sommer and van Gennip and Ronan Fablet and Marie Drevillon and Yann DRILLET and Pierre Yves Le Traon},
+  booktitle={The Thirty-ninth Annual Conference on Neural Information Processing Systems Datasets and Benchmarks Track},
+  year={2025},
+  url={https://openreview.net/forum?id=wZGe1Kqs8G}
+}
+```
+
+## Project
+
 OceanBench is a project implemented by [Mercator Ocean International](https://mercator-ocean.eu) as part of a fruitful collaboration with:
 
 <a href="https://mercator-ocean.eu"><img src="https://www.nemo-ocean.eu/wp-content/uploads/MOI.png" alt="Mercator Ocean logo" height="100"/></a>
