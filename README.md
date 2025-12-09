@@ -73,8 +73,6 @@ Attributes:
     Conventions:  CF-1.4
 ```
 
-([Xarray](https://xarray.dev/) is a popular Python library to open and manipulate 
-
 ## Evaluate your system with OceanBench
 
 The evaluation of a system consists of the sequential execution of a Python notebook that runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).
