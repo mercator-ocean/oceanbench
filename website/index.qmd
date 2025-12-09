@@ -41,4 +41,4 @@ Want to evaluate your system or get involved in OceanBench? Check out the [GitHu
 
 Implemented by [Mercator Ocean](https://mercator-ocean.eu).
 
-![](https://www.nemo-ocean.eu/wp-content/uploads/MOI.png)
+<a href="https://mercator-ocean.eu"><img src="https://www.nemo-ocean.eu/wp-content/uploads/MOI.png" alt="Mercator Ocean logo" height="100"/></a>
