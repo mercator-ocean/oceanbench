@@ -22,7 +22,7 @@ OceanBench is a benchmarking tool to evaluate ocean forecasting systems against 
 
 ## Citation
 
-OceanBench's scientific paper is published in NeurIPS and is accessible at [https://openreview.net/forum?id=wZGe1Kqs8G](https://openreview.net/forum?id=wZGe1Kqs8G).
+OceanBench's scientific paper is published in [NeurIPS 2025](https://neurips.cc/virtual/2025/loc/san-diego/poster/121394) and is accessible at [https://openreview.net/forum?id=wZGe1Kqs8G](https://openreview.net/forum?id=wZGe1Kqs8G).
 ```
 @inproceedings{
   aouni2025oceanbench,
