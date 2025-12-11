@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from enum import Enum
-
 from oceanbench.core.climate_forecast_standard_names import (
     StandardDimension,
     StandardVariable,
