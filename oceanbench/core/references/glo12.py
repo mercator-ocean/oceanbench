@@ -4,17 +4,17 @@
 
 from datetime import datetime
 import numpy
+import pandas
 from xarray import Dataset, open_mfdataset, merge, concat
 import logging
-from dataset_utils import is_quarter_degree_dataset
+from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.resolution import is_quarter_degree_dataset
 import copernicusmarine
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
 
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
-
-from oceanbench.core.dataset_utils import Dimension
 
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
@@ -39,11 +39,11 @@ def _glo12_analysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
 
 def _glo12_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
     # Convert numpy.datetime64 to Python datetime
-    first_day = pd.Timestamp(first_day_datetime).to_pydatetime()
+    first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
 
     # Dates for the request
     start_datetime = first_day.strftime("%Y-%m-%dT00:00:00")
-    end_datetime = (first_day + pd.Timedelta(days=9)).strftime("%Y-%m-%dT00:00:00")
+    end_datetime = (first_day + pandas.Timedelta(days=9)).strftime("%Y-%m-%dT00:00:00")
 
     # Load each variable separately as the dataset_ids are different
 
