@@ -12,7 +12,6 @@ from oceanbench.core.resolution import is_quarter_degree_dataset
 import copernicusmarine
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
 
-
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
