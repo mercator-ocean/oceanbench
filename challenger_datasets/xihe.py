@@ -2,10 +2,10 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Open GLONET forecasts with xarray
+# Open XiHe forecasts with xarray
 import xarray
 import oceanbench
 
-challenger_dataset: xarray.Dataset = oceanbench.datasets.challenger.glonet()
+challenger_dataset: xarray.Dataset = oceanbench.datasets.challenger.xihe()
 
 challenger_dataset

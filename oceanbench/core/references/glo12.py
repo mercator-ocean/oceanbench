@@ -4,16 +4,16 @@
 
 from datetime import datetime
 import numpy
-from xarray import Dataset, open_mfdataset, merge
+import pandas
+from xarray import Dataset, open_mfdataset, merge, concat
 import logging
+from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.resolution import is_quarter_degree_dataset
 import copernicusmarine
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
 
-
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
-
-from oceanbench.core.dataset_utils import Dimension
 
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
@@ -21,7 +21,7 @@ def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
     return f"https://minio.dive.edito.eu/project-oceanbench/public/glo14/{first_day}.zarr"
 
 
-def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
+def _glo12_analysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
 
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     return open_mfdataset(
@@ -36,29 +36,35 @@ def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
     ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 
-def glo12_analysis() -> Dataset:
-    start_datetime = "2024-01-01"
-    end_datetime = "2024-12-31"
+def _glo12_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
+    # Convert numpy.datetime64 to Python datetime
+    first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
 
-    thetao_dataset = copernicusmarine.open_dataset(
+    # Dates for the request
+    start_datetime = first_day.strftime("%Y-%m-%dT00:00:00")
+    end_datetime = (first_day + pandas.Timedelta(days=9)).strftime("%Y-%m-%dT00:00:00")
+
+    # Load each variable separately as the dataset_ids are different
+
+    # 1. Temperature (thetao)
+    dataset_thetao = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m",
-        dataset_version="202406",
         variables=[StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
     )
 
-    so_dataset = copernicusmarine.open_dataset(
+    # 2. Salinity (so)
+    dataset_so = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy-so_anfc_0.083deg_P1D-m",
-        dataset_version="202406",
         variables=[StandardVariable.SEA_WATER_SALINITY.value],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
     )
 
-    current_dataset = copernicusmarine.open_dataset(
+    # 3. Currents (uo, vo)
+    dataset_current = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m",
-        dataset_version="202406",
         variables=[
             StandardVariable.EASTWARD_SEA_WATER_VELOCITY.value,
             StandardVariable.NORTHWARD_SEA_WATER_VELOCITY.value,
@@ -67,12 +73,54 @@ def glo12_analysis() -> Dataset:
         end_datetime=end_datetime,
     )
 
-    zos_dataset = copernicusmarine.open_dataset(
+    # 4. Sea surface height (zos)
+    dataset_zos = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy_anfc_0.083deg_P1D-m",
-        dataset_version="202406",
         variables=[StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.value],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
     )
 
-    return merge([thetao_dataset, so_dataset, current_dataset, zos_dataset])
+    # Select closest depths if specified
+    if target_depths is not None:
+        dataset_thetao = dataset_thetao.sel(depth=target_depths, method="nearest")
+        dataset_so = dataset_so.sel(depth=target_depths, method="nearest")
+        dataset_current = dataset_current.sel(depth=target_depths, method="nearest")
+        # Note: zos has no depth dimension, so we don't apply it
+
+    # Merge all datasets - order determines variable order
+    dataset = merge([dataset_thetao, dataset_so, dataset_current, dataset_zos])
+
+    return dataset
+
+
+def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
+    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+
+    # Extract depths from the challenger_dataset
+    target_depths = challenger_dataset["depth"].values
+
+    # Load each dataset one by one
+    datasets = []
+    for first_day_datetime in first_day_datetimes:
+        dataset = _glo12_1_12_path(first_day_datetime, target_depths=target_depths)
+        # Rename 'time' to 'lead_day_index' and assign indices 0-9
+        dataset = dataset.rename({"time": Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
+            {Dimension.LEAD_DAY_INDEX.key(): range(10)}
+        )
+        datasets.append(dataset)
+
+    # Concatenate all datasets on the first_day_datetime dimension
+    combined_dataset = concat(datasets, dim=Dimension.FIRST_DAY_DATETIME.key()).assign_coords(
+        {Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes}
+    )
+
+    return combined_dataset
+
+
+def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
+    return (
+        _glo12_analysis_dataset_1_4(challenger_dataset)
+        if is_quarter_degree_dataset(challenger_dataset)
+        else _glo12_analysis_dataset_1_12(challenger_dataset)
+    )
