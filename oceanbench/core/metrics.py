@@ -118,3 +118,19 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
         reference_dataset=glo12_analysis_dataset(challenger_dataset),
         zone=Zone.SMALL_ATLANTIC_NEWYORK_TO_NOUADHIBOU,
     )
+
+
+def rmsd_of_variables_compared_to_class4_observations(
+    challenger_dataset: xarray.Dataset,
+) -> pandas.DataFrame:
+    return rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=glo12_analysis_dataset(challenger_dataset),
+        variables=[
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+            Variable.SEA_WATER_SALINITY,
+            Variable.NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.EASTWARD_SEA_WATER_VELOCITY,
+        ],
+    )
