@@ -179,7 +179,9 @@ def _build_field_set(dataset) -> FieldSet:
     )
 
 
-def _get_all_particles_positions(dataset: xarray.Dataset, latitudes: numpy.ndarray, longitudes: numpy.ndarray) -> xarray.Dataset:
+def _get_all_particles_positions(
+    dataset: xarray.Dataset, latitudes: numpy.ndarray, longitudes: numpy.ndarray
+) -> xarray.Dataset:
     from parcels import FieldSet, ParticleSet, JITParticle, AdvectionRK4, Variable
     from datetime import timedelta
     import numpy as numpy
@@ -275,7 +277,6 @@ def _get_all_particles_positions(dataset: xarray.Dataset, latitudes: numpy.ndarr
     )
 
 
-
 def __get_all_particles_positions(
     dataset: xarray.Dataset,
     field_set: FieldSet,
@@ -318,13 +319,14 @@ def _get_particle_dataset(
         particle_initial_latitudes,
         particle_initial_longitudes,
     )
-    
 
 
-def get_random_ocean_points_from_file(dataset: xarray.Dataset, variable_name: str = "zos", n: int = 100, seed: int = 42):
+def get_random_ocean_points_from_file(
+    dataset: xarray.Dataset, variable_name: str = "zos", n: int = 100, seed: int = 42
+):
 
     var = dataset[variable_name].isel(lead_day_index=0)
-    mask = ~numpy.isnan(variable_name)[0].squeeze()
+    mask = ~numpy.isnan(var)[0].squeeze()
     lat = dataset.lat
     lon = dataset.lon
 
@@ -341,17 +343,15 @@ def get_random_ocean_points_from_file(dataset: xarray.Dataset, variable_name: st
     return lat_vals[idx], lon_vals[idx]
 
 
-def Euclidean_distance(
-    model_set: xarray.Dataset, reference_set: xarray.Dataset, pad: int = 10
-) -> numpy.ndarray:
+def Euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset, pad: int = 10) -> numpy.ndarray:
 
     model_set["time"] = model_set["time"].dt.floor("D")
     reference_set["time"] = reference_set["time"].dt.floor("D")
     lat_reference_set_rad = numpy.deg2rad(reference_set["lat"])
-    
+
     dlat = (model_set["lat"] - reference_set["lat"]) * 111  # meters
     dlon = (model_set["lon"] - reference_set["lon"]) * 111 * numpy.cos(lat_reference_set_rad)
-    
+
     distance = numpy.sqrt(dlat**2 + dlon**2)  # shape: (particle, time)
     distance = distance.mean(axis=0)  # shape: (time,)
     return distance.values
