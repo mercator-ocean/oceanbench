@@ -140,7 +140,7 @@ def _one_deviation_of_lagrangian_trajectories(
         dataset=reference_dataset.isel({Dimension.DEPTH.key(): 0}), latitudes=latitudes, longitudes=longitudes
     )
 
-    euclidean_distance = Euclidean_distance([challenger_trajectories], [reference_trajectories])
+    euclidean_distance = Euclidean_distance(challenger_trajectories, reference_trajectories)
     return euclidean_distance
 
 
@@ -179,13 +179,13 @@ def _build_field_set(dataset) -> FieldSet:
     )
 
 
-def _get_all_particles_positions(dataset: xarray.Dataset, lats: numpy.ndarray, lons: numpy.ndarray) -> xarray.Dataset:
+def _get_all_particles_positions(dataset: xarray.Dataset, latitudes: numpy.ndarray, longitudes: numpy.ndarray) -> xarray.Dataset:
     from parcels import FieldSet, ParticleSet, JITParticle, AdvectionRK4, Variable
     from datetime import timedelta
     import numpy as numpy
     import xarray
 
-    assert lats.shape == lons.shape, "lats and lons must be the same shape"
+    assert latitudes.shape == longitudes.shape, "latitudes and longitudes must be the same shape"
     variables = {"U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(), "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key()}
     dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
 
@@ -228,10 +228,10 @@ def _get_all_particles_positions(dataset: xarray.Dataset, lats: numpy.ndarray, l
     pset = ParticleSet.from_list(
         fieldset=fieldset,
         pclass=FreezeParticle,
-        lon=lons,
-        lat=lats,
+        lon=longitudes,
+        lat=latitudes,
         time=dataset.time[0],
-        pid=numpy.arange(len(lats)),
+        pid=numpy.arange(len(latitudes)),
     )
 
     # Keep your original kernel setup
@@ -258,10 +258,10 @@ def _get_all_particles_positions(dataset: xarray.Dataset, lats: numpy.ndarray, l
     plats = plats[sort_idx, :]
     plons = plons[sort_idx, :]
 
-    n_particles = lats.shape[0]
+    n_particles = latitudes.shape[0]
     n_times = plats.shape[1]
 
-    ds_out = xarray.Dataset(
+    return xarray.Dataset(
         {
             "lat": (["particle", "time"], plats),
             "lon": (["particle", "time"], plons),
@@ -269,12 +269,11 @@ def _get_all_particles_positions(dataset: xarray.Dataset, lats: numpy.ndarray, l
         coords={
             "time": dataset.time[:n_times],
             "particle": numpy.arange(n_particles),
-            "lat0": ("particle", lats),
-            "lon0": ("particle", lons),
+            "lat0": ("particle", latitudes),
+            "lon0": ("particle", longitudes),
         },
     )
 
-    return ds_out
 
 
 def __get_all_particles_positions(
@@ -314,20 +313,20 @@ def _get_particle_dataset(
     particle_initial_latitudes = latitudes
     particle_initial_longitudes = longitudes
 
-    ds_out = _get_all_particles_positions(
+    return _get_all_particles_positions(
         dataset,
         particle_initial_latitudes,
         particle_initial_longitudes,
     )
-    return ds_out
+    
 
 
-def get_random_ocean_points_from_file(ds: xarray.Dataset, varname: str = "zos", n: int = 100, seed: int = 42):
+def get_random_ocean_points_from_file(dataset: xarray.Dataset, variable_name: str = "zos", n: int = 100, seed: int = 42):
 
-    var = ds[varname].isel(lead_day_index=0)
-    mask = ~numpy.isnan(var)[0].squeeze()
-    lat = ds.lat
-    lon = ds.lon
+    var = dataset[variable_name].isel(lead_day_index=0)
+    mask = ~numpy.isnan(variable_name)[0].squeeze()
+    lat = dataset.lat
+    lon = dataset.lon
 
     lat_grid, lon_grid = numpy.meshgrid(lat, lon, indexing="ij")
     lat_vals = lat_grid[mask.values]
@@ -343,19 +342,16 @@ def get_random_ocean_points_from_file(ds: xarray.Dataset, varname: str = "zos", 
 
 
 def Euclidean_distance(
-    modelset: list[xarray.Dataset], refset: list[xarray.Dataset], pad: int = 10
-) -> list[numpy.ndarray]:
+    model_set: xarray.Dataset, reference_set: xarray.Dataset, pad: int = 10
+) -> numpy.ndarray:
 
-    for model, ref in zip(modelset, refset):
-        model["time"] = model["time"].dt.floor("D")
-        ref["time"] = ref["time"].dt.floor("D")
-        lat_ref_rad = numpy.deg2rad(ref["lat"])
-
-        dlat = (model["lat"] - ref["lat"]) * 111  # meters
-        dlon = (model["lon"] - ref["lon"]) * 111 * numpy.cos(lat_ref_rad)
-
-        distance = numpy.sqrt(dlat**2 + dlon**2)  # shape: (particle, time)
-        distance = distance.mean(axis=0)  # shape: (time,)
-        distance_arr = distance.values  # convert to NumPy array
-
-    return distance_arr
+    model_set["time"] = model_set["time"].dt.floor("D")
+    reference_set["time"] = reference_set["time"].dt.floor("D")
+    lat_reference_set_rad = numpy.deg2rad(reference_set["lat"])
+    
+    dlat = (model_set["lat"] - reference_set["lat"]) * 111  # meters
+    dlon = (model_set["lon"] - reference_set["lon"]) * 111 * numpy.cos(lat_reference_set_rad)
+    
+    distance = numpy.sqrt(dlat**2 + dlon**2)  # shape: (particle, time)
+    distance = distance.mean(axis=0)  # shape: (time,)
+    return distance.values
