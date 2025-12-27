@@ -250,7 +250,7 @@ def _get_all_particles_positions(
     )
 
     # Read output
-    ds = xarray.open_zarr("tmp_particles.zarr")
+    ds = xarray.open_zarr("tmp_particles.zarr").load()
     plats = ds.lat.values  # shape: (time, n_particles)
     plons = ds.lon.values
     pids = ds.pid.values  # shape: (time, n_particles)
@@ -345,8 +345,8 @@ def get_random_ocean_points_from_file(
 
 def Euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset, pad: int = 10) -> numpy.ndarray:
 
-    model_set["time"] = model_set["time"].dt.floor("D").values
-    reference_set["time"] = reference_set["time"].dt.floor("D").values
+    model_set["time"] = model_set["time"].dt.floor("D")
+    reference_set["time"] = reference_set["time"].dt.floor("D")
     lat_reference_set_rad = numpy.deg2rad(reference_set["lat"])
 
     dlat = (model_set["lat"] - reference_set["lat"]) * 111  # meters
