@@ -30,6 +30,12 @@ import logging
 VARIABLE = Variable
 logger = logging.getLogger("parcels.tools.loggers")
 logger.setLevel(level=logging.WARNING)
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message=".*'where' used without 'out'.*",
+)
 
 
 @dataclass
@@ -250,7 +256,7 @@ def _get_all_particles_positions(
     )
 
     # Read output
-    ds = xarray.open_zarr("tmp_particles.zarr").load()
+    ds = xarray.open_zarr("tmp_particles.zarr")
     plats = ds.lat.values  # shape: (time, n_particles)
     plons = ds.lon.values
     pids = ds.pid.values  # shape: (time, n_particles)
