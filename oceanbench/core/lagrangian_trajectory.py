@@ -345,8 +345,8 @@ def get_random_ocean_points_from_file(
 
 def Euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset, pad: int = 10) -> numpy.ndarray:
 
-    model_set["time"] = model_set["time"].dt.floor("D")
-    reference_set["time"] = reference_set["time"].dt.floor("D")
+    model_set["time"] = model_set["time"].dt.floor("D").values
+    reference_set["time"] = reference_set["time"].dt.floor("D").values
     lat_reference_set_rad = numpy.deg2rad(reference_set["lat"])
 
     dlat = (model_set["lat"] - reference_set["lat"]) * 111  # meters
