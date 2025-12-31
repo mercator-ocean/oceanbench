@@ -11,6 +11,7 @@ This module exposes the reference datasets used in OceanBench for OceanBench cha
 import xarray
 from oceanbench.core.references import glorys
 from oceanbench.core.references import glo12
+from oceanbench.core.references import observations 
 
 
 def glorys_reanalysis() -> xarray.Dataset:
@@ -83,3 +84,22 @@ def glo12_analysis() -> xarray.Dataset:
         institution:  Mercator Ocean International
     """
     return glo12.glo12_analysis()
+
+
+def observations(challenger_dataset: xarray.Dataset) -> dict:
+    """
+    Expose Class IV observation datasets (Argo, Drifters, SLA) 
+    matched to the challenger's timeframe.
+
+    Parameters
+    ----------
+    challenger_dataset : xarray.Dataset
+        The dataset of the model being evaluated (e.g., XiHe).
+
+    Returns
+    -------
+    dict
+        A dictionary containing pandas DataFrames for each observation type:
+        {'argo': df, 'drifters': df, 'sla': df}
+    """
+    return observations.class4_observations_dataset(challenger_dataset)

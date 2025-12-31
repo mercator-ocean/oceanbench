@@ -12,6 +12,8 @@ from pandas import DataFrame
 
 from oceanbench.core import metrics
 
+from oceanbench.core import classIV as _classIV
+
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
@@ -170,4 +172,45 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     """
     return metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
         challenger_dataset=challenger_dataset
+    )
+    
+    
+def evaluate_class4(
+    challenger_dataset: xarray.Dataset,
+    observations_df,
+    variable_name: str,
+    climatology_df=None
+) -> DataFrame:
+    """
+    Evaluate challenger against CLASS-IV observations.
+    
+    Performs point-to-point matchup via bilinear interpolation.
+    Computes RMSE, Bias, ACC per lead day.
+
+    Parameters
+    ----------
+    challenger_dataset : xarray.Dataset
+        The challenger dataset.
+    observations_df : pd.DataFrame
+        Observations DataFrame (from observations()).
+    variable_name : str
+        Variable to evaluate (e.g., 'thetao', 'so', 'uo', 'vo').
+    climatology_df : pd.DataFrame, optional
+        Climatology for anomaly correlation.
+
+    Returns
+    -------
+    DataFrame
+        Metrics per lead day.
+    """
+    matchup = _classIV.perform_matchup(
+        challenger=challenger_dataset,
+        obs_df=observations_df,
+        var_name=variable_name
+    )
+    
+    return _classIV.compute_metrics(
+        matchup_df=matchup,
+        var_name=variable_name,
+        clim_df=climatology_df
     )
