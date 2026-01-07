@@ -7,15 +7,10 @@ from datetime import datetime, timedelta
 from functools import partial
 import numpy
 import pandas
-from parcels import (
-    AdvectionRK4,
-    FieldSet,
-    JITParticle,
-    ParticleSet,
-    StatusCode,
-)
+from parcels import StatusCode
 
 import xarray
+
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
@@ -140,6 +135,11 @@ def _one_deviation_of_lagrangian_trajectories(
 def _get_all_particles_positions(
     dataset: xarray.Dataset, latitudes: numpy.ndarray, longitudes: numpy.ndarray
 ) -> xarray.Dataset:
+    from parcels import FieldSet, ParticleSet, JITParticle, AdvectionRK4, Variable
+    from datetime import timedelta
+    import numpy as numpy
+    import xarray
+
     assert latitudes.shape == longitudes.shape, "latitudes and longitudes must be the same shape"
     variables = {"U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(), "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key()}
     dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
@@ -159,7 +159,7 @@ def _get_all_particles_positions(
     fieldset.add_constant("lat_min", float(dataset.latitude.values.min()))
     fieldset.add_constant("lat_max", float(dataset.latitude.values.max()))
 
-    def DeleteErrorParticle(particle):
+    def DeleteErrorParticle(particle, fieldset, time):
         if particle.state == StatusCode.ErrorOutOfBounds:
             particle.delete()
 
