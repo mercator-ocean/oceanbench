@@ -4,9 +4,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
 from functools import partial
-from typing import Any
 import numpy
 import pandas
 from parcels import (
@@ -17,9 +15,7 @@ from parcels import (
     StatusCode,
 )
 
-from parcels.kernel import shutil
 import xarray
-
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
@@ -44,15 +40,6 @@ class ZoneCoordinates:
     maximum_latitude: float
     minimum_longitude: float
     maximum_longitude: float
-
-
-class Zone(Enum):
-    SMALL_ATLANTIC_NEWYORK_TO_NOUADHIBOU = ZoneCoordinates(
-        minimum_latitude=20.303418,
-        maximum_latitude=40.580585,
-        minimum_longitude=-71.542969,
-        maximum_longitude=-17.753906,
-    )
 
 
 LEAD_DAY_START = 2
@@ -150,49 +137,9 @@ def _one_deviation_of_lagrangian_trajectories(
     return euclidean_distance
 
 
-def _zone_dimensions(dataset: xarray.Dataset, zone: Zone) -> tuple[Any, Any]:
-    latitudes = dataset.sel(
-        {Dimension.LATITUDE.key(): slice(zone.value.minimum_latitude, zone.value.maximum_latitude)}
-    )[Dimension.LATITUDE.key()].data
-    longitudes = dataset.sel(
-        {Dimension.LONGITUDE.key(): slice(zone.value.minimum_longitude, zone.value.maximum_longitude)}
-    )[Dimension.LONGITUDE.key()].data
-    return latitudes, longitudes
-
-
-def _particle_initial_positions(latitudes, longitudes):
-    longitude_mesh, latitude_mesh = numpy.meshgrid(longitudes, latitudes)
-    particle_latitudes = latitude_mesh.flatten()
-
-    particle_longitudes = longitude_mesh.flatten()
-    return particle_latitudes, particle_longitudes
-
-
-def _build_field_set(dataset) -> FieldSet:
-    variable_mapping = {
-        "U": Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
-        "V": Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
-    }
-    dimension_mapping = {
-        "lat": Dimension.LATITUDE.key(),
-        "lon": Dimension.LONGITUDE.key(),
-        "time": Dimension.TIME.key(),
-    }
-    return FieldSet.from_xarray_dataset(
-        dataset,
-        variables=variable_mapping,
-        dimensions=dimension_mapping,
-    )
-
-
 def _get_all_particles_positions(
     dataset: xarray.Dataset, latitudes: numpy.ndarray, longitudes: numpy.ndarray
 ) -> xarray.Dataset:
-    from parcels import FieldSet, ParticleSet, JITParticle, AdvectionRK4, Variable
-    from datetime import timedelta
-    import numpy as numpy
-    import xarray
-
     assert latitudes.shape == longitudes.shape, "latitudes and longitudes must be the same shape"
     variables = {"U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(), "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key()}
     dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
@@ -212,28 +159,12 @@ def _get_all_particles_positions(
     fieldset.add_constant("lat_min", float(dataset.latitude.values.min()))
     fieldset.add_constant("lat_max", float(dataset.latitude.values.max()))
 
-    # Custom kernel: freeze particles that exit the domain
-    def FreezeIfOutOfBounds(particle, fieldset, time):
-        if particle.frozen == 0:
-            if (
-                particle.lon < fieldset.lon_min
-                or particle.lon > fieldset.lon_max
-                or particle.lat < fieldset.lat_min
-                or particle.lat > fieldset.lat_max
-            ):
-                particle.frozen = 1
-                particle.lat0 = particle.lat  # store frozen position
-                particle.lon0 = particle.lon
-        else:
-            particle.lat = particle.lat0
-            particle.lon = particle.lon0
-
-    def DeleteErrorParticle(particle, fieldset, time):
+    def DeleteErrorParticle(particle):
         if particle.state == StatusCode.ErrorOutOfBounds:
             particle.delete()
 
     # Initialize particle set with `pid`
-    pset = ParticleSet.from_list(
+    particle_set = ParticleSet.from_list(
         fieldset=fieldset,
         pclass=FreezeParticle,
         lon=longitudes,
@@ -246,8 +177,8 @@ def _get_all_particles_positions(
     kernels = [AdvectionRK4, DeleteErrorParticle]
 
     # Run simulation
-    output_file = pset.ParticleFile(name="tmp_particles.zarr", outputdt=timedelta(hours=24))
-    pset.execute(
+    output_file = particle_set.ParticleFile(name="tmp_particles.zarr", outputdt=timedelta(hours=24))
+    particle_set.execute(
         kernels,
         runtime=timedelta(days=9),
         dt=timedelta(minutes=60),
@@ -256,23 +187,23 @@ def _get_all_particles_positions(
     )
 
     # Read output
-    ds = xarray.open_zarr("tmp_particles.zarr")
-    plats = ds.lat.values  # shape: (time, n_particles)
-    plons = ds.lon.values
-    pids = ds.pid.values  # shape: (time, n_particles)
+    dataset = xarray.open_zarr("tmp_particles.zarr")
+    particle_lats = dataset.lat.values  # shape: (time, n_particles)
+    particle_lons = dataset.lon.values
+    particle_ids = dataset.pid.values  # shape: (time, n_particles)
 
     # Reorder based on pid at time 0
-    sort_idx = numpy.argsort(pids[:, 0])
-    plats = plats[sort_idx, :]
-    plons = plons[sort_idx, :]
+    sort_idx = numpy.argsort(particle_ids[:, 0])
+    particle_lats = particle_lats[sort_idx, :]
+    particle_lons = particle_lons[sort_idx, :]
 
     n_particles = latitudes.shape[0]
-    n_times = plats.shape[1]
+    n_times = particle_lats.shape[1]
 
     return xarray.Dataset(
         {
-            "lat": (["particle", "time"], plats),
-            "lon": (["particle", "time"], plons),
+            "lat": (["particle", "time"], particle_lats),
+            "lon": (["particle", "time"], particle_lons),
         },
         coords={
             "time": dataset.time[:n_times],
@@ -281,37 +212,6 @@ def _get_all_particles_positions(
             "lon0": ("particle", longitudes),
         },
     )
-
-
-def __get_all_particles_positions(
-    dataset: xarray.Dataset,
-    field_set: FieldSet,
-    particle_initial_latitudes,
-    particle_initial_longitudes,
-) -> tuple[Any, Any]:
-    first_day = dataset[Dimension.TIME.key()][0]
-    particle_set = ParticleSet.from_list(
-        fieldset=field_set,  # the fields on which the particles are advected
-        pclass=JITParticle,  # the type of particles (JITParticle or ScipyParticle)
-        lon=particle_initial_longitudes,  # a vector of release longitudes
-        lat=particle_initial_latitudes,
-        time=first_day,
-    )
-    particle_zarr_folder = "tmp_particles.zarr"
-
-    output_file = particle_set.ParticleFile(name=particle_zarr_folder, outputdt=timedelta(hours=24))
-    particle_set.execute(
-        AdvectionRK4,
-        runtime=timedelta(days=LEAD_DAY_STOP),
-        dt=timedelta(minutes=60),
-        output_file=output_file,
-        verbose_progress=False,
-    )
-    particle_dataset = xarray.open_zarr(particle_zarr_folder)
-    all_particle_latitudes = particle_dataset.lat.values
-    all_particle_longitudes = particle_dataset.lon.values
-    shutil.rmtree(particle_zarr_folder)
-    return all_particle_latitudes, all_particle_longitudes
 
 
 def _get_particle_dataset(
