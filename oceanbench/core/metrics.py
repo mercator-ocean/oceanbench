@@ -8,9 +8,11 @@ import xarray
 from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_mixed_layer_depth
 from oceanbench.core.derived_quantities import compute_geostrophic_currents
+from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
-from oceanbench.core.rmsd import rmsd
+from oceanbench.core.rmsd import LEAD_DAYS_COUNT, rmsd
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
+from oceanbench.core.references.observations import observations_dataset
 
 from oceanbench.core.lagrangian_trajectory import (
     Zone,
@@ -83,6 +85,59 @@ def rmsd_of_variables_compared_to_glo12_analysis(
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
     )
+
+
+from oceanbench.core.climate_forecast_standard_names import (
+    VARIABLE_TO_OBSERVATION_MAPPING,
+)
+
+from oceanbench.core.metrics import rmsd_class4, perform_matchup
+from oceanbench.core.metrics import VARIABLE_LABELS
+
+
+def rmsd_of_variables_compared_to_observations(
+    challenger_dataset: xarray.Dataset,
+) -> pandas.DataFrame:
+    """
+    Compute RMSD of challenger dataset against observations using Class 4 methodology.
+    """
+    obs_dict = observations_dataset(challenger_dataset)
+    rmsd_results = {}
+
+    for standard_var, (obs_source, obs_column) in VARIABLE_TO_OBSERVATION_MAPPING.items():
+        var_key = standard_var.value
+
+        if var_key not in challenger_dataset:
+            continue
+
+        obs_source_key = obs_source.value
+
+        if obs_source_key not in obs_dict:
+            continue
+
+        obs_df = obs_dict[obs_source_key]
+
+        if obs_column not in obs_df.columns:
+            continue
+
+        try:
+            matchup_df = perform_matchup(challenger=challenger_dataset, obs_df=obs_df, var_name=var_key)
+
+            if matchup_df.empty:
+                continue
+
+            rmsd_df = rmsd_class4(matchup_df=matchup_df, var_name=obs_column)
+
+            variable_label = VARIABLE_LABELS.get(var_key, var_key)
+            rmsd_results[variable_label] = rmsd_df["rmsd"].values
+
+        except Exception:
+            continue
+
+    if not rmsd_results:
+        return pandas.DataFrame()
+
+    return pandas.DataFrame(rmsd_results, index=lead_day_labels(1, LEAD_DAYS_COUNT)).T
 
 
 def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(

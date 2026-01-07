@@ -173,17 +173,35 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     return metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
         challenger_dataset=challenger_dataset
     )
-    
-    
-def evaluate_class4(
+
+
+def rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
-    observations_df,
-    variable_name: str,
-    climatology_df=None
+) -> DataFrame:
+    """
+    Compute the Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis.
+
+    Parameters
+    ----------
+    challenger_dataset : xarray.Dataset
+        The challenger dataset.
+
+    Returns
+    -------
+    DataFrame
+        The DataFrame containing the scores.
+    """
+
+    return metrics.rmsd_of_variables_compared_to_observations(challenger_dataset=challenger_dataset)
+
+
+# de côté
+def evaluate_class4(
+    challenger_dataset: xarray.Dataset, observations_df, variable_name: str, climatology_df=None
 ) -> DataFrame:
     """
     Evaluate challenger against CLASS-IV observations.
-    
+
     Performs point-to-point matchup via bilinear interpolation.
     Computes RMSE, Bias, ACC per lead day.
 
@@ -203,14 +221,6 @@ def evaluate_class4(
     DataFrame
         Metrics per lead day.
     """
-    matchup = _classIV.perform_matchup(
-        challenger=challenger_dataset,
-        obs_df=observations_df,
-        var_name=variable_name
-    )
-    
-    return _classIV.compute_metrics(
-        matchup_df=matchup,
-        var_name=variable_name,
-        clim_df=climatology_df
-    )
+    matchup = _classIV.perform_matchup(challenger=challenger_dataset, obs_df=observations_df, var_name=variable_name)
+
+    return _classIV.compute_metrics(matchup_df=matchup, var_name=variable_name, clim_df=climatology_df)
