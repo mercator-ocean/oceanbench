@@ -5,11 +5,13 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
+import shutil
 import numpy
 import pandas
 from parcels import StatusCode
-
+from parcels import FieldSet, ParticleSet, JITParticle, AdvectionRK4, Variable as ParcelsVariable
 import xarray
+
 
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
@@ -35,6 +37,13 @@ class ZoneCoordinates:
     maximum_latitude: float
     minimum_longitude: float
     maximum_longitude: float
+
+
+class FreezeParticle(JITParticle):
+    frozen = ParcelsVariable("frozen", dtype=numpy.int32, initial=0)
+    lat0 = ParcelsVariable("lat0", dtype=numpy.float32, to_write=False)
+    lon0 = ParcelsVariable("lon0", dtype=numpy.float32, to_write=False)
+    pid = ParcelsVariable("pid", dtype=numpy.int32)
 
 
 LEAD_DAY_START = 2
@@ -132,51 +141,15 @@ def _one_deviation_of_lagrangian_trajectories(
     return euclidean_distance
 
 
-def _get_all_particles_positions(
-    dataset: xarray.Dataset, latitudes: numpy.ndarray, longitudes: numpy.ndarray
-) -> xarray.Dataset:
-    from parcels import FieldSet, ParticleSet, JITParticle, AdvectionRK4, Variable
-    from datetime import timedelta
-    import numpy as numpy
-    import xarray
+def set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
+    field_set.add_constant("lon_min", float(dataset.longitude.values.min()))
+    field_set.add_constant("lon_max", float(dataset.longitude.values.max()))
+    field_set.add_constant("lat_min", float(dataset.latitude.values.min()))
+    field_set.add_constant("lat_max", float(dataset.latitude.values.max()))
+    return field_set
 
-    assert latitudes.shape == longitudes.shape, "latitudes and longitudes must be the same shape"
-    variables = {"U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(), "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key()}
-    dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
 
-    fieldset = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
-
-    # Define a custom particle class with a `frozen` flag
-    class FreezeParticle(JITParticle):
-        frozen = Variable("frozen", dtype=numpy.int32, initial=0)
-        lat0 = Variable("lat0", dtype=numpy.float32, to_write=False)
-        lon0 = Variable("lon0", dtype=numpy.float32, to_write=False)
-        pid = Variable("pid", dtype=numpy.int32)  # <-- added only this to track order
-
-    # Set domain bounds
-    fieldset.add_constant("lon_min", float(dataset.longitude.values.min()))
-    fieldset.add_constant("lon_max", float(dataset.longitude.values.max()))
-    fieldset.add_constant("lat_min", float(dataset.latitude.values.min()))
-    fieldset.add_constant("lat_max", float(dataset.latitude.values.max()))
-
-    def DeleteErrorParticle(particle, fieldset, time):
-        if particle.state == StatusCode.ErrorOutOfBounds:
-            particle.delete()
-
-    # Initialize particle set with `pid`
-    particle_set = ParticleSet.from_list(
-        fieldset=fieldset,
-        pclass=FreezeParticle,
-        lon=longitudes,
-        lat=latitudes,
-        time=dataset.time[0],
-        pid=numpy.arange(len(latitudes)),
-    )
-
-    # Keep your original kernel setup
-    kernels = [AdvectionRK4, DeleteErrorParticle]
-
-    # Run simulation
+def run_simulation(particle_set: ParticleSet, kernels):
     output_file = particle_set.ParticleFile(name="tmp_particles.zarr", outputdt=timedelta(hours=24))
     particle_set.execute(
         kernels,
@@ -186,16 +159,52 @@ def _get_all_particles_positions(
         verbose_progress=False,
     )
 
-    # Read output
-    dataset = xarray.open_zarr("tmp_particles.zarr")
-    particle_lats = dataset.lat.values  # shape: (time, n_particles)
-    particle_lons = dataset.lon.values
-    particle_ids = dataset.pid.values  # shape: (time, n_particles)
 
-    # Reorder based on pid at time 0
+def reorder_particles_by_pid(particle_lats: numpy.ndarray, particle_lons: numpy.ndarray, particle_ids: numpy.ndarray):
     sort_idx = numpy.argsort(particle_ids[:, 0])
     particle_lats = particle_lats[sort_idx, :]
     particle_lons = particle_lons[sort_idx, :]
+    return particle_lats, particle_lons
+
+
+def read_output_file(file_path: str) -> xarray.Dataset:
+    ds = xarray.open_zarr(file_path)
+    particle_lats = ds.lat.values  # shape: (time, n_particles)
+    particle_lons = ds.lon.values
+    particle_ids = ds.pid.values  # shape: (time, n_particles)
+    shutil.rmtree(file_path)
+    return particle_lats, particle_lons, particle_ids
+
+
+def _get_all_particles_positions(
+    dataset: xarray.Dataset, latitudes: numpy.ndarray, longitudes: numpy.ndarray
+) -> xarray.Dataset:
+    assert latitudes.shape == longitudes.shape, "latitudes and longitudes must be the same shape"
+    variables = {"U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(), "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key()}
+    dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
+    field_set = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
+    field_set = set_domain_bounds(field_set, dataset)
+
+    def DeleteErrorParticle(particle, fieldset, time):
+        if particle.state == StatusCode.ErrorOutOfBounds:
+            particle.delete()
+
+    particle_set = ParticleSet.from_list(
+        fieldset=field_set,
+        pclass=FreezeParticle,
+        lon=longitudes,
+        lat=latitudes,
+        time=dataset.time[0],
+        pid=numpy.arange(len(latitudes)),
+    )
+
+    kernels = [AdvectionRK4, DeleteErrorParticle]  # Keep your original kernel setup
+
+    run_simulation(particle_set, kernels)
+
+    particle_lats, particle_lons, particle_ids = read_output_file("tmp_particles.zarr")
+
+    particle_lats, particle_lons = reorder_particles_by_pid(particle_lats, particle_lons, particle_ids)
 
     n_particles = latitudes.shape[0]
     n_times = particle_lats.shape[1]
@@ -230,11 +239,17 @@ def _get_particle_dataset(
 def get_random_ocean_points_from_file(
     dataset: xarray.Dataset, variable_name: str = "zos", n: int = 100, seed: int = 42
 ):
-
     var = dataset[variable_name].isel(lead_day_index=0)
     mask = ~numpy.isnan(var)[0].squeeze()
-    lat = dataset.lat
-    lon = dataset.lon
+
+    lat = dataset.get("lat") if "lat" in dataset.coords else dataset.get("latitude")
+    lon = dataset.get("lon") if "lon" in dataset.coords else dataset.get("longitude")
+
+    if lat is None or lon is None:
+        raise ValueError(
+            f"Dataset must have 'lat'/'latitude' and 'lon'/'longitude' coordinates. "
+            f"Available coords: {list(dataset.coords.keys())}"
+        )
 
     lat_grid, lon_grid = numpy.meshgrid(lat, lon, indexing="ij")
     lat_vals = lat_grid[mask.values]

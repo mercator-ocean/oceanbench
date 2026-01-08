@@ -15,6 +15,9 @@ from oceanbench.core.climate_forecast_standard_names import StandardVariable
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
+COPERNICUSMARINE_USERNAME = "zaissa@mercator-ocean.fr"
+COPERNICUSMARINE_PASSWORD = "Banana-!31100"
+
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
     first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
@@ -49,6 +52,8 @@ def _glo12_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
     # 1. Temperature (thetao)
     dataset_thetao = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m",
+        username=COPERNICUSMARINE_USERNAME,
+        password=COPERNICUSMARINE_PASSWORD,
         variables=[StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
@@ -57,6 +62,8 @@ def _glo12_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
     # 2. Salinity (so)
     dataset_so = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy-so_anfc_0.083deg_P1D-m",
+        username=COPERNICUSMARINE_USERNAME,
+        password=COPERNICUSMARINE_PASSWORD,
         variables=[StandardVariable.SEA_WATER_SALINITY.value],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
@@ -65,6 +72,8 @@ def _glo12_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
     # 3. Currents (uo, vo)
     dataset_current = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m",
+        username=COPERNICUSMARINE_USERNAME,
+        password=COPERNICUSMARINE_PASSWORD,
         variables=[
             StandardVariable.EASTWARD_SEA_WATER_VELOCITY.value,
             StandardVariable.NORTHWARD_SEA_WATER_VELOCITY.value,
@@ -76,6 +85,8 @@ def _glo12_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
     # 4. Sea surface height (zos)
     dataset_zos = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy_anfc_0.083deg_P1D-m",
+        username=COPERNICUSMARINE_USERNAME,
+        password=COPERNICUSMARINE_PASSWORD,
         variables=[StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.value],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
