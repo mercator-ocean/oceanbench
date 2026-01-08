@@ -137,8 +137,8 @@ def _one_deviation_of_lagrangian_trajectories(
         dataset=reference_dataset.isel({Dimension.DEPTH.key(): 0}), latitudes=latitudes, longitudes=longitudes
     )
 
-    euclidean_distance = Euclidean_distance(challenger_trajectories, reference_trajectories)
-    return euclidean_distance
+    euclideandistance = euclidean_distance(challenger_trajectories, reference_trajectories)
+    return euclideandistance
 
 
 def set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
@@ -160,20 +160,22 @@ def run_simulation(particle_set: ParticleSet, kernels):
     )
 
 
-def reorder_particles_by_pid(particle_lats: numpy.ndarray, particle_lons: numpy.ndarray, particle_ids: numpy.ndarray):
+def reorder_particles_by_pid(
+    particle_latitudes: numpy.ndarray, particle_longitudes: numpy.ndarray, particle_ids: numpy.ndarray
+):
     sort_idx = numpy.argsort(particle_ids[:, 0])
-    particle_lats = particle_lats[sort_idx, :]
-    particle_lons = particle_lons[sort_idx, :]
-    return particle_lats, particle_lons
+    particle_latitudes = particle_latitudes[sort_idx, :]
+    particle_longitudes = particle_longitudes[sort_idx, :]
+    return particle_latitudes, particle_longitudes
 
 
 def read_output_file(file_path: str) -> xarray.Dataset:
     ds = xarray.open_zarr(file_path)
-    particle_lats = ds.lat.values  # shape: (time, n_particles)
-    particle_lons = ds.lon.values
+    particle_latitudes = ds.lat.values  # shape: (time, n_particles)
+    particle_longitudes = ds.lon.values
     particle_ids = ds.pid.values  # shape: (time, n_particles)
     shutil.rmtree(file_path)
-    return particle_lats, particle_lons, particle_ids
+    return particle_latitudes, particle_longitudes, particle_ids
 
 
 def _get_all_particles_positions(
@@ -185,7 +187,7 @@ def _get_all_particles_positions(
     field_set = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
     field_set = set_domain_bounds(field_set, dataset)
 
-    def DeleteErrorParticle(particle, fieldset, time):
+    def delete_error_particle(particle, fieldset, time):
         if particle.state == StatusCode.ErrorOutOfBounds:
             particle.delete()
 
@@ -198,21 +200,23 @@ def _get_all_particles_positions(
         pid=numpy.arange(len(latitudes)),
     )
 
-    kernels = [AdvectionRK4, DeleteErrorParticle]  # Keep your original kernel setup
+    kernels = [AdvectionRK4, delete_error_particle]  # Keep your original kernel setup
 
     run_simulation(particle_set, kernels)
 
-    particle_lats, particle_lons, particle_ids = read_output_file("tmp_particles.zarr")
+    particle_latitudes, particle_longitudes, particle_ids = read_output_file("tmp_particles.zarr")
 
-    particle_lats, particle_lons = reorder_particles_by_pid(particle_lats, particle_lons, particle_ids)
+    particle_latitudes, particle_longitudes = reorder_particles_by_pid(
+        particle_latitudes, particle_longitudes, particle_ids
+    )
 
     n_particles = latitudes.shape[0]
-    n_times = particle_lats.shape[1]
+    n_times = particle_latitudes.shape[1]
 
     return xarray.Dataset(
         {
-            "lat": (["particle", "time"], particle_lats),
-            "lon": (["particle", "time"], particle_lons),
+            "lat": (["particle", "time"], particle_latitudes),
+            "lon": (["particle", "time"], particle_longitudes),
         },
         coords={
             "time": dataset.time[:n_times],
@@ -242,37 +246,37 @@ def get_random_ocean_points_from_file(
     var = dataset[variable_name].isel(lead_day_index=0)
     mask = ~numpy.isnan(var)[0].squeeze()
 
-    lat = dataset.get("lat") if "lat" in dataset.coords else dataset.get("latitude")
-    lon = dataset.get("lon") if "lon" in dataset.coords else dataset.get("longitude")
+    latitude = dataset.get("lat") if "lat" in dataset.coords else dataset.get("latitude")
+    longitude = dataset.get("lon") if "lon" in dataset.coords else dataset.get("longitude")
 
-    if lat is None or lon is None:
+    if latitude is None or longitude is None:
         raise ValueError(
             f"Dataset must have 'lat'/'latitude' and 'lon'/'longitude' coordinates. "
             f"Available coords: {list(dataset.coords.keys())}"
         )
 
-    lat_grid, lon_grid = numpy.meshgrid(lat, lon, indexing="ij")
-    lat_vals = lat_grid[mask.values]
-    lon_vals = lon_grid[mask.values]
+    latitude_grid, longitude_grid = numpy.meshgrid(latitude, longitude, indexing="ij")
+    latitude_vals = latitude_grid[mask.values]
+    longitude_vals = longitude_grid[mask.values]
 
-    if len(lat_vals) < n:
-        raise ValueError(f"Requested {n} points, but only {len(lat_vals)} ocean points available.")
+    if len(latitude_vals) < n:
+        raise ValueError(f"Requested {n} points, but only {len(latitude_vals)} ocean points available.")
 
     numpy.random.seed(seed)
-    idx = numpy.random.choice(len(lat_vals), n, replace=False)
+    idx = numpy.random.choice(len(latitude_vals), n, replace=False)
 
-    return lat_vals[idx], lon_vals[idx]
+    return latitude_vals[idx], longitude_vals[idx]
 
 
-def Euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset, pad: int = 10) -> numpy.ndarray:
+def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset, pad: int = 10) -> numpy.ndarray:
 
     model_set["time"] = model_set["time"].dt.floor("D")
     reference_set["time"] = reference_set["time"].dt.floor("D")
-    lat_reference_set_rad = numpy.deg2rad(reference_set["lat"])
+    latitude_reference_set_rad = numpy.deg2rad(reference_set["lat"])
 
-    dlat = (model_set["lat"] - reference_set["lat"]) * 111  # meters
-    dlon = (model_set["lon"] - reference_set["lon"]) * 111 * numpy.cos(lat_reference_set_rad)
+    dlatitude = (model_set["lat"] - reference_set["lat"]) * 111  # meters
+    dlongitude = (model_set["lon"] - reference_set["lon"]) * 111 * numpy.cos(latitude_reference_set_rad)
 
-    distance = numpy.sqrt(dlat**2 + dlon**2)  # shape: (particle, time)
+    distance = numpy.sqrt(dlatitude**2 + dlongitude**2)  # shape: (particle, time)
     distance = distance.mean(axis=0)  # shape: (time,)
     return distance.values
