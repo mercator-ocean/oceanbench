@@ -15,9 +15,6 @@ from oceanbench.core.climate_forecast_standard_names import StandardVariable
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
-COPERNICUSMARINE_USERNAME = "zaissa@mercator-ocean.fr"
-COPERNICUSMARINE_PASSWORD = "Banana-!31100"
-
 
 def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
     first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
@@ -48,8 +45,6 @@ def _glorys_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
 
     dataset = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",
-        username=COPERNICUSMARINE_USERNAME,
-        password=COPERNICUSMARINE_PASSWORD,
         variables=[
             StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value,
             StandardVariable.SEA_WATER_SALINITY.value,
