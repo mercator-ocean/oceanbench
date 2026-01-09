@@ -170,10 +170,10 @@ def reorder_particles_by_pid(
 
 
 def read_output_file(file_path: str) -> xarray.Dataset:
-    ds = xarray.open_zarr(file_path)
-    particle_latitudes = ds.lat.values  # shape: (time, n_particles)
-    particle_longitudes = ds.lon.values
-    particle_ids = ds.pid.values  # shape: (time, n_particles)
+    dataset = xarray.open_zarr(file_path)
+    particle_latitudes = dataset.lat.values  # shape: (time, n_particles)
+    particle_longitudes = dataset.lon.values
+    particle_ids = dataset.pid.values  # shape: (time, n_particles)
     shutil.rmtree(file_path)
     return particle_latitudes, particle_longitudes, particle_ids
 
@@ -241,10 +241,11 @@ def _get_particle_dataset(
 
 
 def get_random_ocean_points_from_file(
-    dataset: xarray.Dataset, variable_name: str = "zos", n: int = 100, seed: int = 42
-):
-    var = dataset[variable_name].isel(lead_day_index=0)
-    mask = ~numpy.isnan(var)[0].squeeze()
+    dataset: xarray.Dataset, variable_name: str, n: int, seed: int
+) -> tuple[numpy.ndarray, numpy.ndarray]:
+
+    variable_values = dataset[variable_name].isel(lead_day_index=0)
+    mask = ~numpy.isnan(variable_values)[0].squeeze()
 
     latitude = dataset.get("lat") if "lat" in dataset.coords else dataset.get("latitude")
     longitude = dataset.get("lon") if "lon" in dataset.coords else dataset.get("longitude")
