@@ -11,10 +11,11 @@ from oceanbench.core.derived_quantities import compute_geostrophic_currents
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.rmsd import rmsd
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
+from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 
 from oceanbench.core.lagrangian_trajectory import (
-    Zone,
     deviation_of_lagrangian_trajectories,
+    get_random_ocean_points_from_file,
 )
 
 
@@ -62,10 +63,16 @@ def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
 def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
+    harmonized_challenger_dataset = rename_dataset_with_standard_names(challenger_dataset)
+    latitudes, longitudes = get_random_ocean_points_from_file(
+        harmonized_challenger_dataset, variable_name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(), n=10000, seed=123
+    )
+
     return deviation_of_lagrangian_trajectories(
         challenger_dataset=challenger_dataset,
         reference_dataset=glorys_reanalysis_dataset(challenger_dataset),
-        zone=Zone.SMALL_ATLANTIC_NEWYORK_TO_NOUADHIBOU,
+        latitudes=latitudes,
+        longitudes=longitudes,
     )
 
 
@@ -113,8 +120,13 @@ def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
 def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
+    harmonized_challenger_dataset = rename_dataset_with_standard_names(challenger_dataset)
+    latitudes, longitudes = get_random_ocean_points_from_file(
+        harmonized_challenger_dataset, variable_name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(), n=10000, seed=123
+    )
     return deviation_of_lagrangian_trajectories(
         challenger_dataset=challenger_dataset,
         reference_dataset=glo12_analysis_dataset(challenger_dataset),
-        zone=Zone.SMALL_ATLANTIC_NEWYORK_TO_NOUADHIBOU,
+        latitudes=latitudes,
+        longitudes=longitudes,
     )
