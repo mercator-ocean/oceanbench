@@ -164,7 +164,7 @@ Implemented by:
 
 As part of a fruitful collaboration with:
 
-<a href="https://www.ocean-climat.fr"><img src="https://www.cnrs.fr/sites/default/files/image/VISU-PPRsmol.jpg" alt="PPR logo" height="100"/></a>
+<a href="https://www.ocean-climat.fr"><img src="https://oceansconnectes.org/wp-content/uploads/2023/02/VISU-PPRsmol.jpg" alt="PPR logo" height="100"/></a>
 <a href="https://www.imt-atlantique.fr"><img src="https://www.imt-atlantique.fr/sites/default/files/ecole/IMT_Atlantique_logo.png" alt="IMTA logo" height="100"/></a>
 <a href="https://www.univ-grenoble-alpes.fr"><img src="https://www.grenoble-inp.fr/medias/photo/logo-uga-carrousel_1575017090994-png" alt="UGA logo" height="100"/></a>
 <a href="https://igeo.ucm-csic.es/"><img src="https://igeo.ufrj.br/wp-content/uploads/2022/10/image-1.png" alt="IGEO logo" height="100"/></a>
