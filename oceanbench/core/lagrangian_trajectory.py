@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
 import shutil
+import uuid
 import numpy
 import pandas
 from parcels import StatusCode
@@ -150,7 +151,9 @@ def set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
 
 
 def run_simulation(particle_set: ParticleSet, kernels):
-    output_file = particle_set.ParticleFile(name="tmp_particles.zarr", outputdt=timedelta(hours=24))
+    unique_id = uuid.uuid4()
+    output_path = f"tmp/tmp_particles_{unique_id}.zarr"
+    output_file = particle_set.ParticleFile(name=output_path, outputdt=timedelta(hours=24))
     particle_set.execute(
         kernels,
         runtime=timedelta(days=9),
@@ -158,6 +161,7 @@ def run_simulation(particle_set: ParticleSet, kernels):
         output_file=output_file,
         verbose_progress=False,
     )
+    return output_path
 
 
 def reorder_particles_by_pid(
@@ -202,9 +206,11 @@ def _get_all_particles_positions(
 
     kernels = [AdvectionRK4, delete_error_particle]  # Keep your original kernel setup
 
-    run_simulation(particle_set, kernels)
+    output_path = run_simulation(particle_set, kernels)
 
-    particle_latitudes, particle_longitudes, particle_ids = read_output_file("tmp_particles.zarr")
+    particle_latitudes, particle_longitudes, particle_ids = read_output_file(output_path)
+
+    shutil.rmtree("tmp")
 
     particle_latitudes, particle_longitudes = reorder_particles_by_pid(
         particle_latitudes, particle_longitudes, particle_ids
