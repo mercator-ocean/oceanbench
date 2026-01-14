@@ -5,14 +5,14 @@
 import pandas
 import xarray
 
+from oceanbench.core.classIV import rmsd_class4
 from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_mixed_layer_depth
 from oceanbench.core.derived_quantities import compute_geostrophic_currents
-from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
-from oceanbench.core.rmsd import LEAD_DAYS_COUNT, rmsd
+from oceanbench.core.rmsd import rmsd
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
-from oceanbench.core.references.observations import observations_dataset
+from oceanbench.core.references.observations import obs_insitu_dataset
 
 from oceanbench.core.lagrangian_trajectory import (
     Zone,
@@ -26,6 +26,22 @@ def rmsd_of_variables_compared_to_glorys_reanalysis(
     return rmsd(
         challenger_dataset=challenger_dataset,
         reference_dataset=glorys_reanalysis_dataset(challenger_dataset),
+        variables=[
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+            Variable.SEA_WATER_SALINITY,
+            Variable.NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.EASTWARD_SEA_WATER_VELOCITY,
+        ],
+    )
+
+
+def rmsd_of_variables_compared_to_observations(
+    challenger_dataset: xarray.Dataset,
+) -> pandas.DataFrame:
+    return rmsd_class4(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=obs_insitu_dataset(challenger_dataset),
         variables=[
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
@@ -87,21 +103,18 @@ def rmsd_of_variables_compared_to_glo12_analysis(
     )
 
 
-from oceanbench.core.climate_forecast_standard_names import (
+"""from oceanbench.core.climate_forecast_standard_names import (
     VARIABLE_TO_OBSERVATION_MAPPING,
-)
+)"""
 
-from oceanbench.core.metrics import rmsd_class4, perform_matchup
-from oceanbench.core.metrics import VARIABLE_LABELS
-
-
+# from oceanbench.core.metrics import rmsd_class4, perform_matchup
+# from oceanbench.core.metrics import VARIABLE_LABELS
+"""
 def rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    """
-    Compute RMSD of challenger dataset against observations using Class 4 methodology.
-    """
-    obs_dict = observations_dataset(challenger_dataset)
+    #Compute RMSD of challenger dataset against observations using Class 4 methodology.
+    obs_dict = obs_insitu_dataset(challenger_dataset)
     rmsd_results = {}
 
     for standard_var, (obs_source, obs_column) in VARIABLE_TO_OBSERVATION_MAPPING.items():
@@ -138,6 +151,7 @@ def rmsd_of_variables_compared_to_observations(
         return pandas.DataFrame()
 
     return pandas.DataFrame(rmsd_results, index=lead_day_labels(1, LEAD_DAYS_COUNT)).T
+"""
 
 
 def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(

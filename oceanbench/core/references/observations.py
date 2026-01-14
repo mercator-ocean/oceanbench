@@ -2,155 +2,81 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+
+import pandas
+from xarray import Dataset, concat
 import logging
-import os
-import pandas as pd
-from xarray import Dataset
-import copernicusmarine as cm
-from oceanbench.core.dataset_utils import Dimension
-from oceanbench.core.climate_forecast_standard_names import StandardVariable
+import copernicusmarine
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
 
-def _get_credentials():
-    username = os.getenv("COPERNICUS_USERNAME")
-    password = os.getenv("COPERNICUS_PASSWORD")
+def _obs_insitu_path(first_day_datetime, target_depths=None) -> Dataset:
+    """
+    Load in-situ observations for a given first day and 10 days ahead.
 
-    if not username or not password:
-        logger.error("COPERNICUS_USERNAME and COPERNICUS_PASSWORD not set")
-        return None, None
+    Args:
+        first_day_datetime: Starting date for observations
+        target_depths: Optional depths to select (will use nearest)
 
-    return username, password
+    Returns:
+        Dataset with observations for the 10-day period
+    """
+    # Convert numpy.datetime64 to Python datetime
+    first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
 
+    # Dates for the request - 10 days of observations
+    start_datetime = first_day.strftime("%Y-%m-%dT00:00:00")
+    end_datetime = (first_day + pandas.Timedelta(days=9, hours=23, minutes=59)).strftime("%Y-%m-%dT23:59:59")
 
-def _login_copernicus():
-    username, password = _get_credentials()
-    if username and password:
-        cm.login(username=username, password=password)
+    # Load the in-situ observation dataset
+    dataset = copernicusmarine.open_dataset(
+        dataset_id="cmems_obs-ins_glo_phybgcwav_mynrt_na_irr",
+        dataset_part="monthly",
+        variables=["TEMP", "PSAL", "EWCT", "NSCT", "SLEV"],
+        minimum_longitude=-180,
+        maximum_longitude=179.99989318847656,
+        minimum_latitude=-78.25827026367188,
+        maximum_latitude=90,
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
+        minimum_depth=-20,
+        maximum_depth=600,
+    )
 
+    # Select closest depths if specified
+    if target_depths is not None and "depth" in dataset.dims:
+        dataset = dataset.sel(depth=target_depths, method="nearest")
 
-def _argo_profiles(start_date: str, end_date: str) -> pd.DataFrame:
-    try:
-        _login_copernicus()
-
-        df = cm.read_dataframe(
-            dataset_id="cmems_obs-ins_glo_phybgcwav_mynrt_na_irr",
-            start_datetime=start_date,
-            end_datetime=end_date,
-        )
-
-        df = df[df["value_qc"] == 1].copy()
-
-        df = df.pivot_table(
-            index=["time", "latitude", "longitude", "depth"], columns="variable", values="value", aggfunc="first"
-        ).reset_index()
-
-        df = df.rename(
-            columns={
-                "time": "time",
-                "latitude": "lat",
-                "longitude": "lon",
-                "depth": "depth",
-                "TEMP": StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value,
-                "PSAL": StandardVariable.SEA_WATER_SALINITY.value,
-            }
-        )
-
-        thetao_col = StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value
-        so_col = StandardVariable.SEA_WATER_SALINITY.value
-
-        df = df[(df[thetao_col] > -5) & (df[thetao_col] < 50) & (df[so_col] > 30) & (df[so_col] < 40)]
-
-        df["time"] = pd.to_datetime(df["time"])
-
-        logger.info(f"Argo: {len(df)} profiles")
-        return df
-
-    except Exception as e:
-        logger.error(f"Argo fetch failed: {e}")
-        return pd.DataFrame()
+    return dataset
 
 
-def _surface_currents(start_date: str, end_date: str) -> pd.DataFrame:
-    try:
-        _login_copernicus()
+def obs_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
+    """
+    Load in-situ observations matching the challenger dataset's time range.
 
-        df = cm.read_dataframe(
-            dataset_id="cmems_obs-ins_glo_phy-cur_nrt_drifter_irr",
-            start_datetime=start_date,
-            end_datetime=end_date,
-        )
+    Args:
+        challenger_dataset: Dataset with first_day_datetime dimension
 
-        df = df[df["value_qc"] == 1].copy()
+    Returns:
+        Combined dataset with observations for all time periods
+    """
+    from oceanbench.core.dataset_utils import Dimension
 
-        df = df.pivot_table(
-            index=["time", "latitude", "longitude", "depth"], columns="variable", values="value", aggfunc="first"
-        ).reset_index()
+    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
 
-        df = df.rename(
-            columns={
-                "time": "time",
-                "latitude": "lat",
-                "longitude": "lon",
-                "depth": "depth",
-                "EWCT": StandardVariable.EASTWARD_SEA_WATER_VELOCITY.value,
-                "NSCT": StandardVariable.NORTHWARD_SEA_WATER_VELOCITY.value,
-            }
-        )
+    # Extract depths from the challenger_dataset if available
+    target_depths = challenger_dataset["depth"].values if "depth" in challenger_dataset.dims else None
 
-        df["time"] = pd.to_datetime(df["time"])
+    # Load each dataset one by one
+    datasets = []
+    for first_day_datetime in first_day_datetimes:
+        print(f"Loading observations for {first_day_datetime}...")
+        dataset = _obs_insitu_path(first_day_datetime, target_depths=target_depths)
+        datasets.append(dataset)
 
-        logger.info(f"Drifters: {len(df)} measurements")
-        return df
+    # Concatenate all datasets on the time dimension
+    combined_dataset = concat(datasets, dim="time")
 
-    except Exception as e:
-        logger.error(f"Drifters fetch failed: {e}")
-        return pd.DataFrame()
-
-
-def _sea_level_anomaly(start_date: str, end_date: str) -> pd.DataFrame:
-    try:
-        _login_copernicus()
-
-        df = cm.read_dataframe(
-            dataset_id="cmems_obs-slv_glo_phy_nrt_008_044",
-            variables=["sla"],
-            start_datetime=start_date,
-            end_datetime=end_date,
-        )
-
-        df = df.rename(
-            columns={
-                "TIME": "time",
-                "LATITUDE": "lat",
-                "LONGITUDE": "lon",
-                "sla": StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.value,
-            }
-        )
-
-        df["time"] = pd.to_datetime(df["time"])
-
-        logger.info(f"SLA: {len(df)} observations")
-        return df
-
-    except Exception as e:
-        logger.error(f"SLA fetch failed: {e}")
-        return pd.DataFrame()
-
-
-def observations_dataset(challenger_dataset: Dataset) -> dict:
-    run_dates = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
-    start_dt = pd.to_datetime(run_dates.min()).strftime("%Y-%m-%d")
-    end_dt = (pd.to_datetime(run_dates.max()) + pd.Timedelta(days=10)).strftime("%Y-%m-%d")
-
-    logger.info(f"Fetching observations from {start_dt} to {end_dt}")
-
-    obs = {
-        "argo": _argo_profiles(start_dt, end_dt),
-        "drifters": _surface_currents(start_dt, end_dt),
-        "sla": _sea_level_anomaly(start_dt, end_dt),
-    }
-
-    return {k: v for k, v in obs.items() if not v.empty}
+    return combined_dataset
