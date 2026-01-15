@@ -135,3 +135,5 @@ def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
         return _glo12_analysis_dataset_1_12(challenger_dataset)
     elif resolution == "degree":
         return _glo12_analysis_dataset_1_deg(challenger_dataset)
+    else:
+        raise ValueError(f"Unsupported resolution: {resolution}")

@@ -27,6 +27,7 @@ def get_dataset_resolution(dataset: Dataset) -> str:
     # Define known resolutions (lat, lon)
     resolutions = {
         (168, 360): "degree",  # 1 degree
+        (170, 360): "degree",  # 1 degree (from 1/12 degree interpolated datasets)
         (672, 1440): "quarter_degree",  # 0.25 degree
         (2041, 4320): "twelfth_degree",  # 1/12 degree (~0.083 degree)
     }
@@ -39,8 +40,3 @@ def get_dataset_resolution(dataset: Dataset) -> str:
             f"Unknown resolution: dimensions {lat_dim_name}={lat_size}, {lon_dim_name}={lon_size}. "
             f"Expected values: {dict((k, v) for k, v in resolutions.items())}"
         )
-
-
-def is_quarter_degree_dataset(dataset: Dataset) -> bool:
-    """Check if dataset is at quarter degree resolution."""
-    return get_dataset_resolution(dataset) == "quarter_degree"
