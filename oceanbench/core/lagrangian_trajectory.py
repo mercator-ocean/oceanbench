@@ -152,7 +152,7 @@ def set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
 
 def run_simulation(particle_set: ParticleSet, kernels):
     unique_id = uuid.uuid4()
-    output_path = f"tmp/tmp_particles_{unique_id}.zarr"
+    output_path = f"/tmp/tmp_particles_{unique_id}.zarr"
     output_file = particle_set.ParticleFile(name=output_path, outputdt=timedelta(hours=24))
     particle_set.execute(
         kernels,
@@ -210,7 +210,7 @@ def _get_all_particles_positions(
 
     particle_latitudes, particle_longitudes, particle_ids = read_output_file(output_path)
 
-    shutil.rmtree("tmp")
+    shutil.rmtree("/tmp")
 
     particle_latitudes, particle_longitudes = reorder_particles_by_pid(
         particle_latitudes, particle_longitudes, particle_ids
