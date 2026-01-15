@@ -8,7 +8,7 @@ import pandas
 from xarray import Dataset, open_mfdataset, concat
 import logging
 import copernicusmarine
-from oceanbench.core.resolution import is_quarter_degree_dataset
+from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
 
@@ -21,8 +21,12 @@ def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
     return f"https://minio.dive.edito.eu/project-glonet/public/glorys14_refull_2024/{first_day}.zarr"
 
 
-def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
+def _glorys_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
+    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
+    return f"https://minio.dive.edito.eu/project-oceanbench/public/glorys_1degree_2024/{first_day}.zarr"
 
+
+def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     return open_mfdataset(
         list(map(_glorys_1_4_path, first_day_datetimes)),
@@ -40,9 +44,9 @@ def _glorys_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
     """
     Args:
        first_day_datetime: Start date
-       target_depths: Optional list of target depths to select"""
+       target_depths: Optional list of target depths to select
+    """
     first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
-
     dataset = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",
         variables=[
@@ -87,9 +91,29 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     return combined_dataset
 
 
+def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
+    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    return open_mfdataset(
+        list(map(_glorys_1_degree_path, first_day_datetimes)),
+        engine="zarr",
+        preprocess=lambda dataset: dataset.rename({"time": Dimension.LEAD_DAY_INDEX.key()}).assign(
+            {Dimension.LEAD_DAY_INDEX.key(): range(10)}
+        ),
+        combine="nested",
+        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
+        parallel=True,
+    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+
+
 def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
-    return (
-        _glorys_reanalysis_dataset_1_4(challenger_dataset)
-        if is_quarter_degree_dataset(challenger_dataset)
-        else _glorys_reanalysis_dataset_1_12(challenger_dataset)
-    )
+
+    resolution = get_dataset_resolution(challenger_dataset)
+
+    if resolution == "quarter_degree":
+        return _glorys_reanalysis_dataset_1_4(challenger_dataset)
+    elif resolution == "twelfth_degree":
+        return _glorys_reanalysis_dataset_1_12(challenger_dataset)
+    elif resolution == "one_degree":
+        return _glorys_reanalysis_dataset_1_degree(challenger_dataset)
+    else:
+        raise ValueError(f"Unsupported resolution: {resolution}")

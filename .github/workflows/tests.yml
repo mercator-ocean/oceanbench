@@ -33,9 +33,13 @@ jobs:
           TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
         run: make run-tests
         shell: micromamba-shell {0}
-      - name: Archive glonet_sample test report
-        if: ${{ failure()  }}
+      - name: Archive generated notebooks
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: glonet_sample.report.ipynb
-          path: glonet_sample.report.ipynb
+          name: generated-notebooks
+          path: |
+            glonet_sample.report.ipynb
+            glonet_1_degree_sample.report.ipynb
+            xihe_sample.report.ipynb
+            wenhai_sample.report.ipynb

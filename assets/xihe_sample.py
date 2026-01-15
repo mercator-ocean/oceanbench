@@ -19,5 +19,3 @@ challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
     }
 )
 challenger_dataset
-
-print(challenger_dataset)

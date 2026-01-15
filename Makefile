@@ -58,6 +58,9 @@ _evaluate-challenger:
 evaluate-glonet-sample:
 	$(MAKE) _evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/glonet_sample.py CHALLENGER_REPORT_NAME=glonet_sample.report.ipynb
 
+evaluate-glonet-1-degree-sample:
+	$(MAKE) _evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/glonet_1_degree_sample.py CHALLENGER_REPORT_NAME=glonet_1_degree_sample.report.ipynb
+
 evaluate-xihe-sample:
 	$(MAKE) _evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/xihe_sample.py CHALLENGER_REPORT_NAME=xihe_sample.report.ipynb
 
@@ -68,6 +71,7 @@ compare-notebooks: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-notebooks:
 	${ACTIVATE_ENVIRONMENT}
 	python tests/compare_notebook.py assets/glonet_sample.report.ipynb glonet_sample.report.ipynb
+	python tests/compare_notebook.py assets/glonet_1_degree_sample.report.ipynb glonet_1_degree_sample.report.ipynb
 	python tests/compare_notebook.py assets/xihe_sample.report.ipynb xihe_sample.report.ipynb
 	python tests/compare_notebook.py assets/wenhai_sample.report.ipynb wenhai_sample.report.ipynb
 
@@ -75,7 +79,7 @@ run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
-	$(MAKE) -j3 evaluate-glonet-sample evaluate-xihe-sample evaluate-wenhai-sample
+	$(MAKE) -j4 evaluate-glonet-sample evaluate-glonet-1-degree-sample evaluate-xihe-sample evaluate-wenhai-sample
 	$(MAKE) compare-notebooks
 	poetry run pytest --doctest-modules oceanbench/datasets/* -n 8
 
