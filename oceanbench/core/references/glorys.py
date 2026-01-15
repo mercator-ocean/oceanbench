@@ -8,9 +8,10 @@ import pandas
 from xarray import Dataset, open_mfdataset, concat
 import logging
 import copernicusmarine
-from oceanbench.core.resolution import is_quarter_degree_dataset
+from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
+from oceanbench.core.interpolate import interpolate_1deg
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
@@ -22,7 +23,6 @@ def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
 
 
 def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
-
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     return open_mfdataset(
         list(map(_glorys_1_4_path, first_day_datetimes)),
@@ -40,9 +40,9 @@ def _glorys_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
     """
     Args:
        first_day_datetime: Start date
-       target_depths: Optional list of target depths to select"""
+       target_depths: Optional list of target depths to select
+    """
     first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
-
     dataset = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",
         variables=[
@@ -87,9 +87,32 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     return combined_dataset
 
 
+def _glorys_reanalysis_dataset_1_deg(challenger_dataset: Dataset) -> Dataset:
+    """
+    For 1 degree resolution: load quarter degree data and interpolate to 1 degree.
+    """
+    quarter_deg_dataset = _glorys_reanalysis_dataset_1_4(challenger_dataset)
+
+    return interpolate_1deg(quarter_deg_dataset)
+
+
 def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
-    return (
-        _glorys_reanalysis_dataset_1_4(challenger_dataset)
-        if is_quarter_degree_dataset(challenger_dataset)
-        else _glorys_reanalysis_dataset_1_12(challenger_dataset)
-    )
+    """
+    Load GLORYS reanalysis dataset at the appropriate resolution.
+
+    Args:
+        challenger_dataset: The challenger dataset
+
+    Returns:
+        Reanalysis dataset at the same resolution as challenger_dataset
+    """
+    resolution = get_dataset_resolution(challenger_dataset)
+
+    if resolution == "quarter_degree":
+        return _glorys_reanalysis_dataset_1_4(challenger_dataset)
+    elif resolution == "twelfth_degree":
+        return _glorys_reanalysis_dataset_1_12(challenger_dataset)
+    elif resolution == "degree":
+        return _glorys_reanalysis_dataset_1_deg(challenger_dataset)
+    else:
+        raise ValueError(f"Unsupported resolution: {resolution}")
