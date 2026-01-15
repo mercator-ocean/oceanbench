@@ -286,7 +286,6 @@ def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset,
     distance = numpy.sqrt(dlatitude**2 + dlongitude**2)  # shape: (particle, time)
     distance = distance.mean(axis=0)  # shape: (time,)
 
-    # Ensure fixed length output (10 days)
     result = numpy.full(10, numpy.nan)
     actual_length = min(len(distance.values), 10)
     result[:actual_length] = distance.values[:actual_length]

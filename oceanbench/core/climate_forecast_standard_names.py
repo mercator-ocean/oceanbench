@@ -13,6 +13,17 @@ class StandardDimension(Enum):
     LONGITUDE = "longitude"
 
 
+def rename_dimensions_with_standard_names(
+    dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    mapping = {
+        dim_name: dataset[dim_name].standard_name
+        for dim_name in dataset.dims
+        if dim_name in dataset.coords and hasattr(dataset[dim_name], "standard_name")
+    }
+    return dataset.rename(mapping)
+
+
 class StandardVariable(Enum):
     SEA_SURFACE_HEIGHT_ABOVE_GEOID = "sea_surface_height_above_geoid"
     SEA_WATER_POTENTIAL_TEMPERATURE = "sea_water_potential_temperature"
