@@ -1,6 +1,7 @@
 # Open XIHE forecast sample with xarray
 from datetime import datetime
 import xarray
+from oceanbench.core.interpolate import interpolate_1deg
 
 challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
     [
@@ -18,6 +19,6 @@ challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
         ]
     }
 )
-challenger_dataset
+challenger_dataset = interpolate_1deg(challenger_dataset)
 
 print(challenger_dataset)

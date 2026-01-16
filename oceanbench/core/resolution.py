@@ -4,8 +4,6 @@
 
 from xarray import Dataset
 
-QUARTER_DEGREE = 0.25
-
 
 def get_dataset_resolution(dataset: Dataset) -> str:
     """
@@ -26,8 +24,8 @@ def get_dataset_resolution(dataset: Dataset) -> str:
 
     # Define known resolutions (lat, lon)
     resolutions = {
-        (168, 360): "degree",  # 1 degree
-        (170, 360): "degree",  # 1 degree (from 1/12 degree interpolated datasets)
+        # (168, 360): "degree",  # 1 degree
+        (180, 360): "degree",  # 1 degree (from 1/12 degree interpolated datasets)
         (672, 1440): "quarter_degree",  # 0.25 degree
         (2041, 4320): "twelfth_degree",  # 1/12 degree (~0.083 degree)
     }
