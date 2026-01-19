@@ -30,6 +30,8 @@ warnings.filterwarnings(
     message=".*'where' used without 'out'.*",
 )
 
+warnings.filterwarnings("ignore", message="Mean of empty slice", category=RuntimeWarning)
+
 
 @dataclass
 class ZoneCoordinates:

@@ -88,24 +88,14 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
 
 
 def _glorys_reanalysis_dataset_1_deg(challenger_dataset: Dataset) -> Dataset:
-    """
-    For 1 degree resolution: load quarter degree data and interpolate to 1 degree.
-    """
-    quarter_deg_dataset = _glorys_reanalysis_dataset_1_4(challenger_dataset)
 
-    return interpolate_1deg(quarter_deg_dataset)
+    twelfth_deg_dataset = _glorys_reanalysis_dataset_1_12(challenger_dataset)
+
+    return interpolate_1deg(twelfth_deg_dataset)
 
 
 def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
-    """
-    Load GLORYS reanalysis dataset at the appropriate resolution.
 
-    Args:
-        challenger_dataset: The challenger dataset
-
-    Returns:
-        Reanalysis dataset at the same resolution as challenger_dataset
-    """
     resolution = get_dataset_resolution(challenger_dataset)
 
     if resolution == "quarter_degree":

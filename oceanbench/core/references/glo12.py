@@ -121,12 +121,13 @@ def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
 
 def _glo12_analysis_dataset_1_deg(challenger_dataset: Dataset) -> Dataset:
 
-    quarter_deg_dataset = _glo12_analysis_dataset_1_4(challenger_dataset)
+    twelfth_deg_dataset = _glo12_analysis_dataset_1_12(challenger_dataset)
 
-    return interpolate_1deg(quarter_deg_dataset)
+    return interpolate_1deg(twelfth_deg_dataset)
 
 
 def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
+
     resolution = get_dataset_resolution(challenger_dataset)
 
     if resolution == "quarter_degree":
