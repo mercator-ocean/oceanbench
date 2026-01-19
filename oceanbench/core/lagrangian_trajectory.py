@@ -210,8 +210,6 @@ def _get_all_particles_positions(
 
     particle_latitudes, particle_longitudes, particle_ids = read_output_file(output_path)
 
-    shutil.rmtree("/tmp")
-
     particle_latitudes, particle_longitudes = reorder_particles_by_pid(
         particle_latitudes, particle_longitudes, particle_ids
     )
