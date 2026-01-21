@@ -54,7 +54,7 @@ class FreezeParticle(JITParticle):
 
 
 LEAD_DAY_START = 2
-LEAD_DAY_STOP = 9
+LEAD_DAY_STOP = 7
 
 
 def deviation_of_lagrangian_trajectories(
@@ -173,7 +173,7 @@ def _run_simulation(particle_set: ParticleSet, kernels):
     output_file = particle_set.ParticleFile(name=output_path, outputdt=timedelta(hours=24))
     particle_set.execute(
         kernels,
-        runtime=timedelta(days=9),
+        runtime=timedelta(days=6),
         dt=timedelta(minutes=60),
         output_file=output_file,
         verbose_progress=False,

@@ -19,13 +19,14 @@ def _glo12_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"https://minio.dive.edito.eu/project-oceanbench/public/GLO12/{start_datetime_string}.zarr"
 
+
 def glo36v1() -> xarray.Dataset:
     return _open_multizarr_forecasts_as_challenger_dataset(_glo36v1_dataset_path)
 
 
 def _glo36v1_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public//{start_datetime_string}.zarr"
+    return f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/{start_datetime_string}.zarr"
 
 
 def glonet() -> xarray.Dataset:
