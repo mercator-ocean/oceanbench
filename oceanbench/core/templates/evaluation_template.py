@@ -36,7 +36,7 @@ oceanbench.metrics.rmsd_of_variables_compared_to_glo12_analysis(challenger_datas
 
 oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(challenger_dataset)
 
-# #### Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLOR12 analysis
+# #### Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis
 
 oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glo12_analysis(challenger_dataset)
 
