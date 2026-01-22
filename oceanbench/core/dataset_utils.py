@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from enum import Enum
+
 from oceanbench.core.climate_forecast_standard_names import (
     StandardDimension,
     StandardVariable,
@@ -38,5 +39,7 @@ class Dimension(Enum):
 class DepthLevel(Enum):
     SURFACE = 4.940250e-01
     MINUS_50_METERS = 4.737369e01
+    MINUS_100_METERS = 9.232607e01
     MINUS_200_METERS = 2.224752e02
-    MINUS_550_METERS = 5.410889e02
+    MINUS_300_METERS = 3.181274e02
+    MINUS_500_METERS = 5.410889e02

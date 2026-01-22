@@ -17,7 +17,7 @@ def get_raw_html_report_score_table(raw_notebook) -> str:
 
 
 def _get_depth_and_variable(variable: str) -> tuple[str, str]:
-    for depth in ["Surface", "50m", "200m", "550m"]:
+    for depth in ["Surface", "50m", "100m", "200m", "300m", "500m"]:
         if variable.startswith(depth):
             return (depth, variable.removeprefix(depth + " "))
 
