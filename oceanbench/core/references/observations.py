@@ -2,59 +2,61 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-
 import pandas
-from xarray import Dataset, concat
+from xarray import Dataset, open_zarr, concat
 import logging
-import copernicusmarine
+from oceanbench.core.dataset_utils import Dimension
 
-logger = logging.getLogger("copernicusmarine")
+logger = logging.getLogger("obs_insitu")
 logger.setLevel(level=logging.WARNING)
 
 
-def _obs_insitu_path(first_day_datetime, target_depths=None) -> Dataset:
-    """
-    Load in-situ observations for a given first day and 10 days ahead.
+import os
+from pathlib import Path
 
-    Args:
-        first_day_datetime: Starting date for observations
-        target_depths: Optional depths to select (will use nearest)
+# URL du fichier Zarr - essaie distant puis local
+OBSERVATIONS_ZARR_URL_REMOTE = (
+    "https://minio.dive.edito.eu/project-oceanbench/public/observations/observations_ALL_2days.zarr"
+)
 
-    Returns:
-        Dataset with observations for the 10-day period
-    """
-    # Convert numpy.datetime64 to Python datetime
-    first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
+# Chemin local - peut être configuré via variable d'environnement
+OBSERVATIONS_ZARR_URL_LOCAL = os.environ.get(
+    "OBSERVATIONS_ZARR_PATH", str(Path.home() / "Downloads" / "observations_ALL_2days.zarr")
+)
 
-    # Dates for the request - 10 days of observations
-    start_datetime = first_day.strftime("%Y-%m-%dT00:00:00")
-    end_datetime = (first_day + pandas.Timedelta(days=9, hours=23, minutes=59)).strftime("%Y-%m-%dT23:59:59")
+# Cache global
+_OBSERVATIONS_CACHE = None
 
-    # Load the in-situ observation dataset
-    dataset = copernicusmarine.open_dataset(
-        dataset_id="cmems_obs-ins_glo_phybgcwav_mynrt_na_irr",
-        dataset_part="monthly",
-        variables=["TEMP", "PSAL", "EWCT", "NSCT", "SLEV"],
-        minimum_longitude=-180,
-        maximum_longitude=179.99989318847656,
-        minimum_latitude=-78.25827026367188,
-        maximum_latitude=90,
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
-        minimum_depth=-20,
-        maximum_depth=600,
-    )
 
-    # Select closest depths if specified
-    if target_depths is not None and "depth" in dataset.dims:
-        dataset = dataset.sel(depth=target_depths, method="nearest")
+def _load_observations():
+    """Load and cache the observations Zarr."""
+    global _OBSERVATIONS_CACHE
 
-    return dataset
+    if _OBSERVATIONS_CACHE is None:
+        # Essayer d'abord l'URL distante
+        try:
+            logger.info(f"Loading observations from remote: {OBSERVATIONS_ZARR_URL_REMOTE}")
+            _OBSERVATIONS_CACHE = open_zarr(OBSERVATIONS_ZARR_URL_REMOTE).compute()
+            logger.info(f"Observations loaded from remote: {len(_OBSERVATIONS_CACHE.obs)} points")
+        except Exception as e:
+            logger.warning(f"Failed to load from remote: {e}")
+            logger.info(f"Trying local path: {OBSERVATIONS_ZARR_URL_LOCAL}")
+            try:
+                _OBSERVATIONS_CACHE = open_zarr(OBSERVATIONS_ZARR_URL_LOCAL).compute()
+                logger.info(f"Observations loaded from local: {len(_OBSERVATIONS_CACHE.obs)} points")
+            except Exception as e2:
+                raise RuntimeError(
+                    f"Cannot load observations from remote or local. " f"Remote error: {e}, Local error: {e2}"
+                )
+
+    return _OBSERVATIONS_CACHE
 
 
 def obs_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
     """
     Load in-situ observations matching the challenger dataset's time range.
+
+    Reads from a single pre-computed Zarr file on EDITO.
 
     Args:
         challenger_dataset: Dataset with first_day_datetime dimension
@@ -62,21 +64,34 @@ def obs_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
     Returns:
         Combined dataset with observations for all time periods
     """
-    from oceanbench.core.dataset_utils import Dimension
-
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
 
-    # Extract depths from the challenger_dataset if available
-    target_depths = challenger_dataset["depth"].values if "depth" in challenger_dataset.dims else None
+    # Load the full observations dataset (cached)
+    obs_full = _load_observations()
 
-    # Load each dataset one by one
+    # Filter and concatenate for each first_day_datetime
     datasets = []
     for first_day_datetime in first_day_datetimes:
-        print(f"Loading observations for {first_day_datetime}...")
-        dataset = _obs_insitu_path(first_day_datetime, target_depths=target_depths)
-        datasets.append(dataset)
+        # Convert to datetime
+        first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
+        end_day = first_day + pandas.Timedelta(days=9, hours=23, minutes=59)
 
-    # Concatenate all datasets on the time dimension
-    combined_dataset = concat(datasets, dim="time")
+        # Filter by time
+        time_mask = (obs_full.time >= first_day) & (obs_full.time <= end_day)
+        ds_filtered = obs_full.isel(obs=time_mask.values)
+
+        if len(ds_filtered.obs) > 0:
+            datasets.append(ds_filtered)
+            logger.info(f"Found {len(ds_filtered.obs)} observations for {first_day.date()}")
+        else:
+            logger.warning(f"No observations found for {first_day.date()}")
+
+    if not datasets:
+        raise ValueError("No observations found for any of the requested periods")
+
+    # Concatenate along first_day_datetime dimension
+    combined_dataset = concat(datasets, dim=Dimension.FIRST_DAY_DATETIME.key()).assign_coords(
+        {Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes}
+    )
 
     return combined_dataset
