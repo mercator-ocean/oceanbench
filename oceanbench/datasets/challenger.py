@@ -30,7 +30,7 @@ def glo12() -> xarray.Dataset:
       * latitude            (latitude) float32 8kB -80.0 -79.92 ... 89.92 90.0
       * longitude           (longitude) float32 17kB -180.0 -179.9 ... 179.8 179.9
       * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
-      * first_day_datetime  (first_day_datetime) datetime64[ns] 416B 2024-01-03 ....
+      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ....
     Data variables:
         so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 385GB dask.array<chunksize=(1, 1, 1, 75, 4320), meta=np.ndarray>
         thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 385GB dask.array<chunksize=(1, 1, 1, 75, 4320), meta=np.ndarray>
@@ -71,7 +71,7 @@ def glonet() -> xarray.Dataset:
       * lat                 (lat) float64 5kB -78.0 -77.75 -77.5 ... 89.5 89.75
       * lon                 (lon) float64 12kB -180.0 -179.8 -179.5 ... 179.5 179.8
       * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
-      * first_day_datetime  (first_day_datetime) datetime64[ns] 416B 2024-01-03 ....
+      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ....
     Data variables:
         so                  (first_day_datetime, lead_day_index, depth, lat, lon) float64 85GB dask.array<chunksize=(1, 10, 1, 672, 1440), meta=np.ndarray>
         thetao              (first_day_datetime, lead_day_index, depth, lat, lon) float64 85GB dask.array<chunksize=(1, 10, 1, 672, 1440), meta=np.ndarray>
@@ -103,7 +103,7 @@ def xihe() -> xarray.Dataset:
       * latitude            (latitude) float32 8kB -80.0 -79.92 ... 89.92 90.0
       * longitude           (longitude) float32 17kB -180.0 -179.9 ... 179.8 179.9
       * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
-      * first_day_datetime  (first_day_datetime) datetime64[ns] 416B 2024-01-03 ....
+      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ....
     Data variables:
         so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 422GB dask.array<chunksize=(1, 1, 1, 75, 4320), meta=np.ndarray>
         thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 422GB dask.array<chunksize=(1, 1, 1, 75, 4320), meta=np.ndarray>
@@ -133,7 +133,7 @@ def wenhai() -> xarray.Dataset:
       * latitude            (latitude) float32 8kB -80.0 -79.92 ... 89.92 90.0
       * longitude           (longitude) float32 17kB -180.0 -179.9 ... 179.8 179.9
       * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
-      * first_day_datetime  (first_day_datetime) datetime64[ns] 416B 2024-01-03 ....
+      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ....
     Data variables:
         so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 422GB dask.array<chunksize=(1, 1, 1, 75, 4320), meta=np.ndarray>
         thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 422GB dask.array<chunksize=(1, 1, 1, 75, 4320), meta=np.ndarray>

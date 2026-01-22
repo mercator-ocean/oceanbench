@@ -3,8 +3,15 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import json
+import re
 from deepdiff import DeepDiff
 import sys
+
+
+def normalize_datetime_precision(value):
+    if isinstance(value, str):
+        return re.sub(r"datetime64\[(ns|us|ms|s)\]", "datetime64", value)
+    return value
 
 
 def ignore_ids_and_execution(json_data):
@@ -22,7 +29,7 @@ def ignore_ids_and_execution(json_data):
     elif isinstance(json_data, list):
         return [ignore_ids_and_execution(item) for item in json_data]
     else:
-        return json_data
+        return normalize_datetime_precision(json_data)
 
 
 def compare_notebook_files(file1_path, file2_path):
