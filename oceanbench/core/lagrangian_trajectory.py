@@ -248,17 +248,21 @@ def get_random_ocean_points_from_file(
     dataset: xarray.Dataset, variable_name: str, n: int, seed: int
 ) -> tuple[numpy.ndarray, numpy.ndarray]:
 
-    variable_values = dataset[variable_name].isel(lead_day_index=0)
+    standard_dataset = rename_dataset_with_standard_names(dataset)
+    variable_values = standard_dataset[variable_name].isel(lead_day_index=0)
     mask = ~numpy.isnan(variable_values)[0].squeeze()
 
-    latitude = dataset.get("lat") if "lat" in dataset.coords else dataset.get("latitude")
-    longitude = dataset.get("lon") if "lon" in dataset.coords else dataset.get("longitude")
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
 
-    if latitude is None or longitude is None:
+    if latitude_key not in standard_dataset.coords or longitude_key not in standard_dataset.coords:
         raise ValueError(
-            f"Dataset must have 'lat'/'latitude' and 'lon'/'longitude' coordinates. "
-            f"Available coords: {list(dataset.coords.keys())}"
+            f"Dataset must have '{latitude_key}' and '{longitude_key}' coordinates. "
+            f"Available coords: {list(standard_dataset.coords.keys())}"
         )
+
+    latitude = standard_dataset[latitude_key]
+    longitude = standard_dataset[longitude_key]
 
     latitude_grid, longitude_grid = numpy.meshgrid(latitude, longitude, indexing="ij")
     latitude_vals = latitude_grid[mask.values]
