@@ -8,9 +8,10 @@ import pandas
 from xarray import Dataset, open_mfdataset, merge, concat
 import logging
 from oceanbench.core.dataset_utils import Dimension
-from oceanbench.core.resolution import is_quarter_degree_dataset
+from oceanbench.core.resolution import get_dataset_resolution
 import copernicusmarine
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
+from oceanbench.core.interpolate import interpolate_1deg
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
@@ -118,9 +119,22 @@ def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     return combined_dataset
 
 
+def _glo12_analysis_dataset_1_deg(challenger_dataset: Dataset) -> Dataset:
+
+    twelfth_deg_dataset = _glo12_analysis_dataset_1_12(challenger_dataset)
+
+    return interpolate_1deg(twelfth_deg_dataset)
+
+
 def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
-    return (
-        _glo12_analysis_dataset_1_4(challenger_dataset)
-        if is_quarter_degree_dataset(challenger_dataset)
-        else _glo12_analysis_dataset_1_12(challenger_dataset)
-    )
+
+    resolution = get_dataset_resolution(challenger_dataset)
+
+    if resolution == "quarter_degree":
+        return _glo12_analysis_dataset_1_4(challenger_dataset)
+    elif resolution == "twelfth_degree":
+        return _glo12_analysis_dataset_1_12(challenger_dataset)
+    elif resolution == "degree":
+        return _glo12_analysis_dataset_1_deg(challenger_dataset)
+    else:
+        raise ValueError(f"Unsupported resolution: {resolution}")

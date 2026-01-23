@@ -4,10 +4,17 @@
 
 from xarray import Dataset
 
-QUARTER_DEGREE = 0.25
 
+def get_dataset_resolution(dataset: Dataset) -> str:
+    """
+    Determine the resolution of a dataset based on its dimensions.
 
-def is_quarter_degree_dataset(dataset: Dataset) -> bool:
+    Returns:
+        str: 'degree', 'quarter_degree', or 'twelfth_degree'
+
+    Raises:
+        ValueError: If the resolution is unknown
+    """
     # Handle both possible names
     lat_dim_name = "latitude" if "latitude" in dataset.sizes else "lat"
     lon_dim_name = "longitude" if "longitude" in dataset.sizes else "lon"
@@ -15,14 +22,19 @@ def is_quarter_degree_dataset(dataset: Dataset) -> bool:
     lat_size = dataset.sizes[lat_dim_name]
     lon_size = dataset.sizes[lon_dim_name]
 
-    # Quarter degree: lat=672, lon=1440
-    if lat_size == 672 and lon_size == 1440:
-        return True
-    # Twelfth degree: lat=2041, lon=4320
-    elif lat_size == 2041 and lon_size == 4320:
-        return False
+    # Define known resolutions (lat, lon)
+    resolutions = {
+        # (168, 360): "degree",  # 1 degree
+        (180, 360): "degree",  # 1 degree (from 1/12 degree interpolated datasets)
+        (672, 1440): "quarter_degree",  # 0.25 degree
+        (2041, 4320): "twelfth_degree",  # 1/12 degree (~0.083 degree)
+    }
+
+    key = (lat_size, lon_size)
+    if key in resolutions:
+        return resolutions[key]
     else:
         raise ValueError(
             f"Unknown resolution: dimensions {lat_dim_name}={lat_size}, {lon_dim_name}={lon_size}. "
-            f"Expected values: (672, 1440) for quarter degree or (2041, 4320) for twelfth degree."
+            f"Expected values: {dict((k, v) for k, v in resolutions.items())}"
         )

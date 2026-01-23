@@ -31,6 +31,8 @@ warnings.filterwarnings(
     message=".*'where' used without 'out'.*",
 )
 
+warnings.filterwarnings("ignore", message="Mean of empty slice", category=RuntimeWarning)
+
 
 @dataclass
 class ZoneCoordinates:
@@ -72,9 +74,14 @@ def _deviation_of_lagrangian_trajectories(
     latitudes: xarray.Dataset,
     longitudes: xarray.Dataset,
 ) -> pandas.DataFrame:
-    deviations = numpy.array(
-        _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes)
-    ).mean(axis=0)
+    results = _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes)
+
+    # Convert to array (now all have same shape)
+    deviations_array = numpy.array(results)
+
+    # Mean ignoring NaN values
+    deviations = numpy.nanmean(deviations_array, axis=0)
+
     score_dataframe = pandas.DataFrame(
         {"Surface Lagrangian trajectory deviation (km)": deviations[LEAD_DAY_START - 1 : LEAD_DAY_STOP]}
     )
@@ -284,4 +291,9 @@ def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset,
 
     distance = numpy.sqrt(dlatitude**2 + dlongitude**2)  # shape: (particle, time)
     distance = distance.mean(axis=0)  # shape: (time,)
-    return distance.values
+
+    result = numpy.full(10, numpy.nan)
+    actual_length = min(len(distance.values), 10)
+    result[:actual_length] = distance.values[:actual_length]
+
+    return result
