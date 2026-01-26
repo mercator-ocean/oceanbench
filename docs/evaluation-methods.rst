@@ -32,12 +32,14 @@ Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
 
 The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the challenger dataset and the GLORYS reanalysis dataset, i.e., over all dataset variables.
 
-Only 4 depths are used:
+Only 6 depths are used:
 
 - Surface (~4.9 meters)
-- 50 m (~4.7 meters)
+- 50 m (~47 meters)
+- 100 m (~92 meters)
 - 200 m (~223 meters)
-- 550 m (~541 meters)
+- 300 m (~318 meters)
+- 500 m (~541 meters)
 
 Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLORYS reanalysis
 **********************************************************************************************
@@ -65,12 +67,14 @@ Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis
 
 The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the challenger dataset and the GLO12 analysis dataset, i.e., over all dataset variables.
 
-Only 4 depths are used:
+Only 6 depths are used:
 
 - Surface (~4.9 meters)
 - 50 m (~47 meters)
+- 100 m (~92 meters)
 - 200 m (~223 meters)
-- 550 m (~541 meters)
+- 300 m (~318 meters)
+- 500 m (~541 meters)
 
 Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLO12 analysis
 **********************************************************************************************

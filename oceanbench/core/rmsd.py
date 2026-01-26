@@ -30,8 +30,10 @@ VARIABLE_LABELS: dict[str, str] = {
 DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.SURFACE: "surface",
     DepthLevel.MINUS_50_METERS: "50m",
+    DepthLevel.MINUS_100_METERS: "100m",
     DepthLevel.MINUS_200_METERS: "200m",
-    DepthLevel.MINUS_550_METERS: "550m",
+    DepthLevel.MINUS_300_METERS: "300m",
+    DepthLevel.MINUS_500_METERS: "500m",
 }
 
 
