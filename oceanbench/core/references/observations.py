@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import pandas
-from xarray import Dataset, open_zarr, concat
+from xarray import Dataset, open_dataset, concat
 import logging
 from oceanbench.core.dataset_utils import Dimension
 
@@ -11,52 +11,15 @@ logger = logging.getLogger("obs_insitu")
 logger.setLevel(level=logging.WARNING)
 
 
-import os
-from pathlib import Path
-
-# URL du fichier Zarr - essaie distant puis local
-OBSERVATIONS_ZARR_URL_REMOTE = (
-    "https://minio.dive.edito.eu/project-oceanbench/public/observations/observations_ALL_2days.zarr"
-)
-
-# Chemin local - peut être configuré via variable d'environnement
-OBSERVATIONS_ZARR_URL_LOCAL = os.environ.get(
-    "OBSERVATIONS_ZARR_PATH", str(Path.home() / "Downloads" / "observations_ALL_2days.zarr")
-)
-
-# Cache global
-_OBSERVATIONS_CACHE = None
-
-
-def _load_observations():
-    """Load and cache the observations Zarr."""
-    global _OBSERVATIONS_CACHE
-
-    if _OBSERVATIONS_CACHE is None:
-        # Essayer d'abord l'URL distante
-        try:
-            logger.info(f"Loading observations from remote: {OBSERVATIONS_ZARR_URL_REMOTE}")
-            _OBSERVATIONS_CACHE = open_zarr(OBSERVATIONS_ZARR_URL_REMOTE).compute()
-            logger.info(f"Observations loaded from remote: {len(_OBSERVATIONS_CACHE.obs)} points")
-        except Exception as e:
-            logger.warning(f"Failed to load from remote: {e}")
-            logger.info(f"Trying local path: {OBSERVATIONS_ZARR_URL_LOCAL}")
-            try:
-                _OBSERVATIONS_CACHE = open_zarr(OBSERVATIONS_ZARR_URL_LOCAL).compute()
-                logger.info(f"Observations loaded from local: {len(_OBSERVATIONS_CACHE.obs)} points")
-            except Exception as e2:
-                raise RuntimeError(
-                    f"Cannot load observations from remote or local. " f"Remote error: {e}, Local error: {e2}"
-                )
-
-    return _OBSERVATIONS_CACHE
+# URL du Zarr sur EDITO
+OBSERVATIONS_ZARR_URL = "https://minio.dive.edito.eu/project-ml-compression/public/observations_ALL_2daysV2.zarr"
 
 
 def obs_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
     """
     Load in-situ observations matching the challenger dataset's time range.
 
-    Reads from a single pre-computed Zarr file on EDITO.
+    Reads from pre-computed Zarr file on EDITO.
 
     Args:
         challenger_dataset: Dataset with first_day_datetime dimension
@@ -66,8 +29,9 @@ def obs_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
     """
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
 
-    # Load the full observations dataset (cached)
-    obs_full = _load_observations()
+    # Load the full observations dataset
+    logger.info(f"Loading observations from EDITO: {OBSERVATIONS_ZARR_URL}")
+    obs_full = open_dataset(OBSERVATIONS_ZARR_URL, engine="zarr")
 
     # Filter and concatenate for each first_day_datetime
     datasets = []
