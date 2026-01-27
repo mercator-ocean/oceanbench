@@ -11,18 +11,16 @@ from oceanbench.core.dataset_utils import Dimension
 logger = logging.getLogger("obs_insitu")
 logger.setLevel(level=logging.WARNING)
 
-OBSERVATIONS_ZARR_URL = "https://minio.dive.edito.eu/project-ml-compression/public/observations_valid_only.zarr"
+OBSERVATIONS_ZARR_URL = "https://minio.dive.edito.eu/project-ml-compression/public/observations_standard.zarr"
 
 
 def obs_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
 
-    # Load observations and convert time
     obs_full = open_dataset(OBSERVATIONS_ZARR_URL, engine="zarr", decode_cf=False)
     time_dt = pandas.to_datetime(obs_full.time.values)
     obs_full = obs_full.assign_coords(time=("obs", time_dt))
 
-    # Filter and stack for each period
     all_datasets = []
     for first_day_datetime in first_day_datetimes:
         first_day = np.datetime64(pandas.Timestamp(first_day_datetime))
@@ -45,8 +43,7 @@ def obs_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
     if not all_datasets:
         raise ValueError("No observations found for any of the requested periods")
 
-    # Stack manually
-    variables = ["TEMP", "PSAL", "EWCT", "NSCT", "SLEV"]
+    variables = ["thetao", "so", "uo", "vo", "zos"]
     coords = ["time", "latitude", "longitude", "depth", "first_day_datetime"]
 
     stacked_data = {var: np.concatenate([ds[var].values for ds in all_datasets]) for var in variables + coords}

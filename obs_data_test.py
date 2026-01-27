@@ -9,6 +9,6 @@ importlib.reload(xarray)
 
 import xarray as xr
 
-ZARR_URL = "https://minio.dive.edito.eu/project-ml-compression/public/observations_valid_only.zarr"
+ZARR_URL = "https://minio.dive.edito.eu/project-ml-compression/public/observations_standard.zarr"
 dataset = xr.open_zarr(ZARR_URL, consolidated=True)
 print(dataset)
