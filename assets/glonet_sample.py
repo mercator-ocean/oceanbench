@@ -15,8 +15,8 @@ challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
 ).assign(
     {
         "first_day_datetime": [
-            datetime.fromisoformat("2024-01-03"),
-            datetime.fromisoformat("2024-01-10"),
+            datetime.fromisoformat("2024-01-01"),
+            datetime.fromisoformat("2024-01-02"),
         ]
     }
 )

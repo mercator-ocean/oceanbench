@@ -13,7 +13,7 @@ def perform_matchup(challenger: xr.Dataset, obs_df: pd.DataFrame, var_name: str)
     Match model values to observation points.
     Interpolation according to the Class-4 method :
     - Horizontal bilinear (lat/lon)
-    - Cubic spline vertical (depth)
+    - Cubic spline vertical (depth) - only for 3D variables
     """
     results = []
     run_dates = challenger[Dimension.FIRST_DAY_DATETIME.key()].values
@@ -30,19 +30,26 @@ def perform_matchup(challenger: xr.Dataset, obs_df: pd.DataFrame, var_name: str)
 
             try:
                 model_slice = forecast.sel({Dimension.LEAD_DAY_INDEX.key(): lead}).load()
+
                 coords_horizontal = {
                     "lat": xr.DataArray(daily_obs["lat"].values, dims="pts"),
                     "lon": xr.DataArray(daily_obs["lon"].values, dims="pts"),
                 }
+
                 horizontal_interp = model_slice[var_name].interp(coords_horizontal, method="linear")
 
-                if "depth" in model_slice.dims and "depth" in daily_obs.columns:
+                # Vérifier si la VARIABLE a une dimension depth
+                if "depth" in model_slice[var_name].dims and "depth" in daily_obs.columns:
+                    # Variable 3D - interpoler verticalement
                     model_values = [
                         _interpolate_depth(horizontal_interp, idx, obs_depth)
                         for idx, obs_depth in enumerate(daily_obs["depth"].values)
                     ]
                     daily_obs["model_val"] = model_values
+                    # Convertir en float pour éviter dtype object
+                    daily_obs["model_val"] = pd.to_numeric(daily_obs["model_val"], errors="coerce")
                 else:
+                    # Variable 2D (comme zos) - juste interpolation horizontale
                     daily_obs["model_val"] = horizontal_interp.values
 
                 daily_obs["lead_day"] = lead
@@ -61,51 +68,71 @@ def perform_matchup(challenger: xr.Dataset, obs_df: pd.DataFrame, var_name: str)
 
 def _interpolate_depth(horizontal_interp: xr.DataArray, idx: int, obs_depth: float) -> float:
     """
-    Interpolate depth with fallback from cubic to linear.
-    Returns np.nan if both methods fail.
+    Interpolate depth with LINEAR method (more robust than cubic).
     """
     point_data = horizontal_interp.isel(pts=idx)
 
-    # Try cubic interpolation first
     try:
-        return point_data.interp(depth=obs_depth, method="cubic").values
+        result = point_data.interp(depth=obs_depth, method="linear").values
+        return float(result)  # Forcer en float
     except (ValueError, KeyError):
-        # Fallback to linear interpolation
-        try:
-            return point_data.interp(depth=obs_depth, method="linear").values
-        except (ValueError, KeyError):
-            return np.nan
+        return np.nan
 
 
 def rmsd_class4(matchup_df: pd.DataFrame, var_name: str) -> pd.DataFrame:
     """
-    Compute Root Mean Square Difference for Class 4 validation.
-    parameters:
+    Compute RMSD by lead_day AND depth bins.
+
+    Parameters:
     -----------
     matchup_df : pd.DataFrame
         DataFrame with model-observation pairs from perform_matchup()
-        Must contain columns: 'model_val', var_name, 'lead_day'
     var_name : str
-        Name of the observed variable column
+        Name of the variable
 
-    returns:
+    Returns:
     --------
     pd.DataFrame
-        RMSD and count per lead_day
+        RMSD and count per lead_day and depth_bin
     """
-    rmsd_values = []
-    counts = []
-    lead_days = []
+    # Définir les bins de profondeur selon la variable
+    if var_name in ["uo", "vo"]:
+        # Pour les courants: seulement 15m (±5m autour de 15m)
+        depth_bins = {"15m": (10, 20)}
+    elif var_name == "zos":
+        # Pour SSH: surface
+        depth_bins = {"surface": (-1, 1)}
+    else:
+        # Pour température et salinité: bins standards
+        depth_bins = {
+            "0-5m": (0, 5),
+            "5-100m": (5, 100),
+            "100-300m": (100, 300),
+            "300-600m": (300, 600),
+        }
+
+    results = []
 
     for lead in sorted(matchup_df["lead_day"].unique()):
-        group = matchup_df[matchup_df["lead_day"] == lead]
-        model_vals = group["model_val"].values
-        obs_vals = group[var_name].values
+        lead_data = matchup_df[matchup_df["lead_day"] == lead]
 
-        rmsd = np.sqrt(np.mean((model_vals - obs_vals) ** 2))
+        # RMSD par bin de profondeur
+        for depth_label, (min_depth, max_depth) in depth_bins.items():
+            depth_data = lead_data[(lead_data["depth"] >= min_depth) & (lead_data["depth"] < max_depth)]
 
-        rmsd_values.append(rmsd)
-        counts.append(len(group))
-        lead_days.append(lead)
+            if len(depth_data) > 0:
+                model_vals = depth_data["model_val"].values
+                obs_vals = depth_data[var_name].values
+                rmsd = np.sqrt(np.mean((model_vals - obs_vals) ** 2))
 
-    return pd.DataFrame({"lead_day": lead_days, "rmsd": rmsd_values, "count": counts}).set_index("lead_day")
+                results.append(
+                    {
+                        "variable": var_name,
+                        "depth_bin": depth_label,
+                        "lead_day": lead,
+                        "rmsd": rmsd,
+                        "count": len(depth_data),
+                    }
+                )
+
+    return pd.DataFrame(results)
