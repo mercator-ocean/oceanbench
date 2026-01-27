@@ -32,14 +32,4 @@ def rename_dataset_with_standard_names(
         for variable_name in dataset.variables
         if hasattr(dataset[variable_name], "standard_name")
     }
-
-    for coord_name, coord in dataset.coords.items():
-        if not hasattr(coord, "standard_name"):
-            continue
-
-        for standard_dim in StandardDimension:
-            if coord.standard_name == standard_dim.value:
-                if coord_name != standard_dim.value and coord_name not in mapping:
-                    mapping[coord_name] = standard_dim.value
-
-    return dataset.rename(mapping) if mapping else dataset
+    return dataset.rename(mapping)

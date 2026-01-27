@@ -54,11 +54,9 @@ LEAD_DAY_STOP = 9
 def deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    latitudes: xarray.Dataset,
-    longitudes: xarray.Dataset,
 ) -> pandas.DataFrame:
     return _deviation_of_lagrangian_trajectories(
-        _harmonise_dataset(challenger_dataset), _harmonise_dataset(reference_dataset), latitudes, longitudes
+        _harmonise_dataset(challenger_dataset), _harmonise_dataset(reference_dataset)
     )
 
 
@@ -69,9 +67,10 @@ def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
 def _deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    latitudes: xarray.Dataset,
-    longitudes: xarray.Dataset,
 ) -> pandas.DataFrame:
+    latitudes, longitudes = _get_random_ocean_points_from_file(
+        challenger_dataset, variable_name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(), n=10000, seed=123
+    )
     deviations = numpy.array(
         _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes)
     ).mean(axis=0)
@@ -244,25 +243,24 @@ def _get_particle_dataset(
     )
 
 
-def get_random_ocean_points_from_file(
+def _get_random_ocean_points_from_file(
     dataset: xarray.Dataset, variable_name: str, n: int, seed: int
 ) -> tuple[numpy.ndarray, numpy.ndarray]:
 
-    standard_dataset = rename_dataset_with_standard_names(dataset)
-    variable_values = standard_dataset[variable_name].isel(lead_day_index=0)
+    variable_values = dataset[variable_name].isel(lead_day_index=0)
     mask = ~numpy.isnan(variable_values)[0].squeeze()
 
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
 
-    if latitude_key not in standard_dataset.coords or longitude_key not in standard_dataset.coords:
+    if latitude_key not in dataset.coords or longitude_key not in dataset.coords:
         raise ValueError(
             f"Dataset must have '{latitude_key}' and '{longitude_key}' coordinates. "
-            f"Available coords: {list(standard_dataset.coords.keys())}"
+            f"Available coords: {list(dataset.coords.keys())}"
         )
 
-    latitude = standard_dataset[latitude_key]
-    longitude = standard_dataset[longitude_key]
+    latitude = dataset[latitude_key]
+    longitude = dataset[longitude_key]
 
     latitude_grid, longitude_grid = numpy.meshgrid(latitude, longitude, indexing="ij")
     latitude_vals = latitude_grid[mask.values]
