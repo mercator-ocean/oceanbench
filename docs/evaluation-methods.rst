@@ -34,7 +34,7 @@ The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_
 
 Only 6 depths are used:
 
-- Surface (~4.9 meters)
+- Surface (~0.49 meters)
 - 50 m (~47 meters)
 - 100 m (~92 meters)
 - 200 m (~223 meters)
@@ -69,7 +69,7 @@ The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_
 
 Only 6 depths are used:
 
-- Surface (~4.9 meters)
+- Surface (~0.49 meters)
 - 50 m (~47 meters)
 - 100 m (~92 meters)
 - 200 m (~223 meters)
