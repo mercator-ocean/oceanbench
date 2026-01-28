@@ -10,7 +10,13 @@ import uuid
 import numpy
 import pandas
 from parcels import StatusCode
-from parcels import FieldSet, ParticleSet, JITParticle, AdvectionRK4, Variable as ParcelsVariable
+from parcels import (
+    FieldSet,
+    ParticleSet,
+    JITParticle,
+    AdvectionRK4,
+    Variable as ParcelsVariable,
+)
 import xarray
 
 
@@ -56,7 +62,8 @@ def deviation_of_lagrangian_trajectories(
     reference_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
     return _deviation_of_lagrangian_trajectories(
-        _harmonise_dataset(challenger_dataset), _harmonise_dataset(reference_dataset)
+        _harmonise_dataset(challenger_dataset),
+        _harmonise_dataset(reference_dataset),
     )
 
 
@@ -69,7 +76,10 @@ def _deviation_of_lagrangian_trajectories(
     reference_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
     latitudes, longitudes = _get_random_ocean_points_from_file(
-        challenger_dataset, variable_name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(), n=10000, seed=123
+        challenger_dataset,
+        variable_name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+        n=10000,
+        seed=123,
     )
     deviations = numpy.array(
         _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes)
@@ -111,12 +121,16 @@ def _split_dataset(dataset: xarray.Dataset) -> list[xarray.Dataset]:
 def _all_deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    latitudes: xarray.Dataset,
-    longitudes: xarray.Dataset,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
 ):
     return list(
         map(
-            partial(_one_deviation_of_lagrangian_trajectories, latitudes=latitudes, longitudes=longitudes),
+            partial(
+                _one_deviation_of_lagrangian_trajectories,
+                latitudes=latitudes,
+                longitudes=longitudes,
+            ),
             _split_dataset(challenger_dataset),
             _split_dataset(reference_dataset),
         )
@@ -126,22 +140,26 @@ def _all_deviation_of_lagrangian_trajectories(
 def _one_deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    latitudes: xarray.Dataset,
-    longitudes: xarray.Dataset,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
 ):
     challenger_trajectories = _get_particle_dataset(
-        dataset=challenger_dataset.isel({Dimension.DEPTH.key(): 0}), latitudes=latitudes, longitudes=longitudes
+        dataset=challenger_dataset.isel({Dimension.DEPTH.key(): 0}),
+        latitudes=latitudes,
+        longitudes=longitudes,
     )
 
     reference_trajectories = _get_particle_dataset(
-        dataset=reference_dataset.isel({Dimension.DEPTH.key(): 0}), latitudes=latitudes, longitudes=longitudes
+        dataset=reference_dataset.isel({Dimension.DEPTH.key(): 0}),
+        latitudes=latitudes,
+        longitudes=longitudes,
     )
 
     euclideandistance = euclidean_distance(challenger_trajectories, reference_trajectories)
     return euclideandistance
 
 
-def set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
+def _set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
     field_set.add_constant("lon_min", float(dataset.longitude.values.min()))
     field_set.add_constant("lon_max", float(dataset.longitude.values.max()))
     field_set.add_constant("lat_min", float(dataset.latitude.values.min()))
@@ -149,7 +167,7 @@ def set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
     return field_set
 
 
-def run_simulation(particle_set: ParticleSet, kernels):
+def _run_simulation(particle_set: ParticleSet, kernels):
     unique_id = uuid.uuid4()
     output_path = f"/tmp/tmp_particles_{unique_id}.zarr"
     output_file = particle_set.ParticleFile(name=output_path, outputdt=timedelta(hours=24))
@@ -163,8 +181,10 @@ def run_simulation(particle_set: ParticleSet, kernels):
     return output_path
 
 
-def reorder_particles_by_pid(
-    particle_latitudes: numpy.ndarray, particle_longitudes: numpy.ndarray, particle_ids: numpy.ndarray
+def _reorder_particles_by_pid(
+    particle_latitudes: numpy.ndarray,
+    particle_longitudes: numpy.ndarray,
+    particle_ids: numpy.ndarray,
 ):
     sort_idx = numpy.argsort(particle_ids[:, 0])
     particle_latitudes = particle_latitudes[sort_idx, :]
@@ -172,7 +192,7 @@ def reorder_particles_by_pid(
     return particle_latitudes, particle_longitudes
 
 
-def read_output_file(file_path: str) -> xarray.Dataset:
+def _read_output_file(file_path: str):
     dataset = xarray.open_zarr(file_path)
     particle_latitudes = dataset.lat.values  # shape: (time, n_particles)
     particle_longitudes = dataset.lon.values
@@ -182,15 +202,20 @@ def read_output_file(file_path: str) -> xarray.Dataset:
 
 
 def _get_all_particles_positions(
-    dataset: xarray.Dataset, latitudes: numpy.ndarray, longitudes: numpy.ndarray
+    dataset: xarray.Dataset,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
 ) -> xarray.Dataset:
     assert latitudes.shape == longitudes.shape, "latitudes and longitudes must be the same shape"
-    variables = {"U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(), "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key()}
+    variables = {
+        "U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(),
+        "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key(),
+    }
     dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
     field_set = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
-    field_set = set_domain_bounds(field_set, dataset)
+    field_set = _set_domain_bounds(field_set, dataset)
 
-    def delete_error_particle(particle, fieldset, time):
+    def delete_error_particle(particle, _fieldset, _time):
         if particle.state == StatusCode.ErrorOutOfBounds:
             particle.delete()
 
@@ -203,13 +228,16 @@ def _get_all_particles_positions(
         pid=numpy.arange(len(latitudes)),
     )
 
-    kernels = [AdvectionRK4, delete_error_particle]  # Keep your original kernel setup
+    kernels = [
+        AdvectionRK4,
+        delete_error_particle,
+    ]  # Keep your original kernel setup
 
-    output_path = run_simulation(particle_set, kernels)
+    output_path = _run_simulation(particle_set, kernels)
 
-    particle_latitudes, particle_longitudes, particle_ids = read_output_file(output_path)
+    particle_latitudes, particle_longitudes, particle_ids = _read_output_file(output_path)
 
-    particle_latitudes, particle_longitudes = reorder_particles_by_pid(
+    particle_latitudes, particle_longitudes = _reorder_particles_by_pid(
         particle_latitudes, particle_longitudes, particle_ids
     )
 
@@ -231,7 +259,9 @@ def _get_all_particles_positions(
 
 
 def _get_particle_dataset(
-    dataset: xarray.Dataset, latitudes: xarray.Dataset, longitudes: xarray.Dataset
+    dataset: xarray.Dataset,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
 ) -> xarray.Dataset:
     particle_initial_latitudes = latitudes
     particle_initial_longitudes = longitudes
@@ -250,32 +280,24 @@ def _get_random_ocean_points_from_file(
     variable_values = dataset[variable_name].isel(lead_day_index=0)
     mask = ~numpy.isnan(variable_values)[0].squeeze()
 
-    latitude_key = Dimension.LATITUDE.key()
-    longitude_key = Dimension.LONGITUDE.key()
+    latitude_grid, longitude_grid = numpy.meshgrid(
+        dataset[Dimension.LATITUDE.key()],
+        Dimension.LONGITUDE.key(),
+        indexing="ij",
+    )
+    latitude_values = latitude_grid[mask.values]
+    longitude_values = longitude_grid[mask.values]
 
-    if latitude_key not in dataset.coords or longitude_key not in dataset.coords:
-        raise ValueError(
-            f"Dataset must have '{latitude_key}' and '{longitude_key}' coordinates. "
-            f"Available coords: {list(dataset.coords.keys())}"
-        )
-
-    latitude = dataset[latitude_key]
-    longitude = dataset[longitude_key]
-
-    latitude_grid, longitude_grid = numpy.meshgrid(latitude, longitude, indexing="ij")
-    latitude_vals = latitude_grid[mask.values]
-    longitude_vals = longitude_grid[mask.values]
-
-    if len(latitude_vals) < n:
-        raise ValueError(f"Requested {n} points, but only {len(latitude_vals)} ocean points available.")
+    if len(latitude_values) < n:
+        raise ValueError(f"Requested {n} points, but only {len(latitude_values)} ocean points available.")
 
     numpy.random.seed(seed)
-    idx = numpy.random.choice(len(latitude_vals), n, replace=False)
+    idx = numpy.random.choice(len(latitude_values), n, replace=False)
 
-    return latitude_vals[idx], longitude_vals[idx]
+    return latitude_values[idx], longitude_values[idx]
 
 
-def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset, pad: int = 10) -> numpy.ndarray:
+def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset) -> numpy.ndarray:
 
     model_set["time"] = model_set["time"].dt.floor("D")
     reference_set["time"] = reference_set["time"].dt.floor("D")
