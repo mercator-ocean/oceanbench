@@ -7,10 +7,14 @@ import pandas as pd
 import xarray as xr
 import xarray
 import pandas
+import time
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 
 def perform_matchup(challenger: xr.Dataset, obs_df: pd.DataFrame, var_name: str) -> pd.DataFrame:
+    start_time = time.time()
+    print(f"Starting matchup for {var_name} with {len(obs_df)} observations...")
+
     results = []
     run_dates = challenger[Dimension.FIRST_DAY_DATETIME.key()].values
 
@@ -21,6 +25,10 @@ def perform_matchup(challenger: xr.Dataset, obs_df: pd.DataFrame, var_name: str)
             daily_matchup = _match_single_lead_day(forecast, obs_df, var_name, lead, run_date)
             if daily_matchup is not None:
                 results.append(daily_matchup)
+
+    elapsed = time.time() - start_time
+    total_matchups = sum(len(r) for r in results) if results else 0
+    print(f"  Matchup completed in {elapsed:.1f}s ({total_matchups} matchups)")
 
     return pd.concat(results, ignore_index=True) if results else pd.DataFrame()
 
@@ -41,7 +49,8 @@ def _match_single_lead_day(
         daily_obs["run_date"] = run_date
 
         return daily_obs.dropna(subset=["model_val", var_name])
-    except Exception:
+    except Exception as e:
+        print(f"   Error at lead={lead}: {e}")
         return None
 
 
@@ -82,26 +91,53 @@ def rmsd_class4_validation(
     depth_bins_config: dict = None,
 ) -> pandas.DataFrame:
 
+    print("\n" + "=" * 70)
+    print("CLASS-4 VALIDATION - TIMING REPORT")
+    print("=" * 70)
+    total_start = time.time()
+
     all_results = []
 
     for var in variables:
         var_name = _get_standard_variable_name(var)
+        print(f"\n Processing {var_name}...")
 
         if var_name not in reference_dataset:
+            print("   Variable not in reference dataset, skipping")
             continue
 
+        df_start = time.time()
         obs_df = _create_observation_dataframe(reference_dataset, var_name)
+        print(f"  ✓ DataFrame created in {time.time() - df_start:.1f}s ({len(obs_df)} obs)")
+
         if obs_df.empty:
+            print("   No valid observations, skipping")
             continue
 
         matchup_df = perform_matchup(challenger_dataset, obs_df, var_name)
+
         if not matchup_df.empty:
-            all_results.append(rmsd_class4(matchup_df, var_name))
+            rmsd_start = time.time()
+            rmsd_result = rmsd_class4(matchup_df, var_name)
+            print(f"  ✓ RMSD computed in {time.time() - rmsd_start:.1f}s")
+            all_results.append(rmsd_result)
+        else:
+            print("   No matchups found")
 
     if not all_results:
+        print("\n No results generated")
         return pd.DataFrame()
 
-    return _format_rmsd_table(pd.concat(all_results, ignore_index=True))
+    format_start = time.time()
+    result = _format_rmsd_table(pd.concat(all_results, ignore_index=True))
+    print(f"\n Table formatted in {time.time() - format_start:.1f}s")
+
+    total_time = time.time() - total_start
+    print("=" * 70)
+    print(f"TOTAL TIME: {total_time:.1f}s ({total_time / 60:.1f} min)")
+    print("=" * 70 + "\n")
+
+    return result
 
 
 def _get_standard_variable_name(var: Variable) -> str:
@@ -186,18 +222,43 @@ def _calculate_rmsd(model_values: np.ndarray, obs_values: np.ndarray) -> float:
     return np.sqrt(np.mean((model_values - obs_values) ** 2))
 
 
-def _format_rmsd_table(combined: pd.DataFrame, lead_day: int = 1) -> pd.DataFrame:
-    table = combined[combined["lead_day"] == lead_day]
-    pivot = _create_pivot_table(table)
+def _format_rmsd_table(combined: pd.DataFrame, lead_days: list = None) -> pd.DataFrame:
+    """Format RMSD results with multiple lead days."""
+    if lead_days is None:
+        lead_days = [1, 3, 5, 7, 10]
+
+    table = combined[combined["lead_day"].isin(lead_days)]
+
+    if table.empty:
+        return pd.DataFrame()
+
+    pivot = _create_pivot_table_multi_lead(table)
+    pivot = _add_observation_counts(pivot, table, lead_days[0])
     pivot = _rename_and_sort_variables(pivot)
-    return _create_final_output_table(pivot, lead_day)
+
+    return _create_final_output_table_multi_lead(pivot, lead_days)
 
 
-def _create_pivot_table(table: pd.DataFrame) -> pd.DataFrame:
-    return table.pivot_table(values=["rmsd", "count"], index=["variable", "depth_bin"], aggfunc="first").reset_index()
+def _create_pivot_table_multi_lead(table: pd.DataFrame) -> pd.DataFrame:
+    """Create pivot table with lead days as columns."""
+    return table.pivot_table(
+        values="rmsd", index=["variable", "depth_bin"], columns="lead_day", aggfunc="first"
+    ).reset_index()
+
+
+def _add_observation_counts(pivot: pd.DataFrame, table: pd.DataFrame, reference_lead: int) -> pd.DataFrame:
+    """Add observation counts from reference lead day."""
+    counts = (
+        table[table["lead_day"] == reference_lead]
+        .pivot_table(values="count", index=["variable", "depth_bin"], aggfunc="first")
+        .reset_index()
+    )
+
+    return pivot.merge(counts, on=["variable", "depth_bin"], how="left")
 
 
 def _rename_and_sort_variables(pivot: pd.DataFrame) -> pd.DataFrame:
+    """Rename variables to display names and sort."""
     var_names = {
         "zos": "SSH",
         "thetao": "Temperature",
@@ -215,12 +276,18 @@ def _rename_and_sort_variables(pivot: pd.DataFrame) -> pd.DataFrame:
     return pivot.sort_values(["var_sort", "depth_sort"]).reset_index(drop=True)
 
 
-def _create_final_output_table(pivot: pd.DataFrame, lead_day: int) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "Variable": pivot["variable"],
-            "Depth Range": pivot["depth_bin"],
-            f"RMSE (lead={lead_day} day)": pivot["rmsd"].apply(lambda x: f"{x:.3f}"),
-            "N observations": pivot["count"].astype(int),
-        }
-    )
+def _create_final_output_table_multi_lead(pivot: pd.DataFrame, lead_days: list) -> pd.DataFrame:
+    """Create final output table with multiple lead day columns."""
+    output_cols = {
+        "Variable": pivot["variable"],
+        "Depth Range": pivot["depth_bin"],
+    }
+
+    for lead in lead_days:
+        if lead in pivot.columns:
+            output_cols[f"Lead {lead}d"] = pivot[lead].apply(lambda x: f"{x:.3f}" if pd.notna(x) else "-")
+
+    if "count" in pivot.columns:
+        output_cols["N obs"] = pivot["count"].astype(int)
+
+    return pd.DataFrame(output_cols)

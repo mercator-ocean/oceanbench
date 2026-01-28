@@ -4,23 +4,63 @@
 
 import pandas
 import numpy as np
-from xarray import Dataset, open_dataset
+from datetime import datetime
+from xarray import Dataset, open_mfdataset
 import logging
 from oceanbench.core.dataset_utils import Dimension
 
 logger = logging.getLogger("obs_insitu")
 logger.setLevel(level=logging.WARNING)
 
-OBSERVATIONS_ZARR_URL = "https://minio.dive.edito.eu/project-ml-compression/public/observations_standard.zarr"
+
+def _obs_insitu_path(day_datetime: np.datetime64) -> str:
+    """Generate path to daily observation Zarr file."""
+    day = datetime.fromisoformat(str(day_datetime)).strftime("%Y%m%d")
+    return f"https://minio.dive.edito.eu/project-ml-compression/public/observations_by_day/{day}.zarr"
 
 
 def obs_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
+    """
+    Load in-situ observations for 10-day windows matching challenger dataset.
+
+    For each first_day_datetime in the challenger, loads observations from
+    first_day to first_day+9 days (inclusive) using individual daily Zarr files.
+
+    Args:
+        challenger_dataset: Dataset with first_day_datetime dimension
+
+    Returns:
+        Dataset with observations for all periods, with first_day_datetime coordinate
+    """
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
 
-    obs_full = open_dataset(OBSERVATIONS_ZARR_URL, engine="zarr", decode_cf=False)
+    # Generate list of all days needed (10 days per period)
+    all_days = set()
+    for first_day in first_day_datetimes:
+        for day_offset in range(10):
+            day = pandas.Timestamp(first_day) + pandas.Timedelta(days=day_offset)
+            all_days.add(np.datetime64(day.date()))
+
+    # Generate paths for all unique days
+    paths = [_obs_insitu_path(day) for day in sorted(all_days)]
+
+    logger.info(f"Loading {len(paths)} days of observations...")
+
+    # Load all daily Zarr files with open_mfdataset (parallel)
+    obs_full = open_mfdataset(
+        paths,
+        engine="zarr",
+        decode_cf=False,
+        parallel=True,
+        concat_dim="obs",
+        combine="nested",
+    )
+
+    # Convert time from string to datetime
     time_dt = pandas.to_datetime(obs_full.time.values)
     obs_full = obs_full.assign_coords(time=("obs", time_dt))
 
+    # Filter and assign first_day_datetime for each period
     all_datasets = []
     for first_day_datetime in first_day_datetimes:
         first_day = np.datetime64(pandas.Timestamp(first_day_datetime))
@@ -43,6 +83,7 @@ def obs_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
     if not all_datasets:
         raise ValueError("No observations found for any of the requested periods")
 
+    # Stack manually to preserve data
     variables = ["thetao", "so", "uo", "vo", "zos"]
     coords = ["time", "latitude", "longitude", "depth", "first_day_datetime"]
 
