@@ -32,5 +32,4 @@ def rename_dataset_with_standard_names(
         for variable_name in dataset.variables
         if hasattr(dataset[variable_name], "standard_name")
     }
-
     return dataset.rename(mapping)
