@@ -36,7 +36,7 @@ def perform_matchup(challenger: xr.Dataset, obs_df: pd.DataFrame, var_name: str)
 def _match_single_lead_day(
     forecast: xr.Dataset, obs_df: pd.DataFrame, var_name: str, lead: int, run_date
 ) -> pd.DataFrame:
-    valid_time = pd.to_datetime(run_date) + pd.Timedelta(days=lead)
+    valid_time = pd.to_datetime(run_date) + pd.Timedelta(days=lead + 1)  # ← +1 ici
     daily_obs = obs_df[obs_df["time"].dt.date == valid_time.date()].copy()
 
     if daily_obs.empty:
@@ -45,7 +45,7 @@ def _match_single_lead_day(
     try:
         model_slice = forecast.sel({Dimension.LEAD_DAY_INDEX.key(): lead}).load()
         daily_obs["model_val"] = _interpolate_model_to_observations(model_slice, daily_obs, var_name)
-        daily_obs["lead_day"] = lead
+        daily_obs["lead_day"] = lead + 1  # ← Stocker comme lead day 1-10
         daily_obs["run_date"] = run_date
 
         return daily_obs.dropna(subset=["model_val", var_name])

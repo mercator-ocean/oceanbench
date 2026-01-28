@@ -60,9 +60,6 @@ run-tests:
 	#$(MAKE) evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/wenhai_sample.py CHALLENGER_REPORT_NAME=wenhai_sample.report.ipynb
 	#python tests/compare_notebook.py assets/wenhai_sample.report.ipynb wenhai_sample.report.ipynb
 	#poetry run pytest --doctest-modules oceanbench/datasets/* -n 8
-	#$(MAKE) evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/observations_sample.py CHALLENGER_REPORT_NAME=observations_sample.report.ipynb
-	#python tests/compare_notebook.py assets/observations_sample.report.ipynb observations_sample.report.ipynb
-
 
 
 _release: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
