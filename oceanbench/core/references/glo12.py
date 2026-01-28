@@ -10,10 +10,7 @@ import logging
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.resolution import is_quarter_degree_dataset
 import copernicusmarine
-from oceanbench.core.climate_forecast_standard_names import (
-    StandardVariable,
-    rename_dataset_with_standard_names,
-)
+from oceanbench.core.climate_forecast_standard_names import StandardVariable
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
@@ -122,9 +119,8 @@ def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
 
 
 def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
-    harmonized_dataset = rename_dataset_with_standard_names(challenger_dataset)
     return (
-        _glo12_analysis_dataset_1_4(harmonized_dataset)
-        if is_quarter_degree_dataset(harmonized_dataset)
-        else _glo12_analysis_dataset_1_12(harmonized_dataset)
+        _glo12_analysis_dataset_1_4(challenger_dataset)
+        if is_quarter_degree_dataset(challenger_dataset)
+        else _glo12_analysis_dataset_1_12(challenger_dataset)
     )
