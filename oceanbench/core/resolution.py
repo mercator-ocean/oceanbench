@@ -6,6 +6,9 @@ from xarray import Dataset
 
 
 from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.climate_forecast_standard_names import (
+    rename_dataset_with_standard_names,
+)
 
 QUARTER_DEGREE = 0.25
 
@@ -16,23 +19,23 @@ TWELFTH_DEGREE_LON_SIZE = 4320
 
 
 def is_quarter_degree_dataset(dataset: Dataset) -> bool:
+    standard_dataset = rename_dataset_with_standard_names(dataset)
 
-    lat_key = Dimension.LATITUDE.key()
-    lon_key = Dimension.LONGITUDE.key()
+    latitude_size = standard_dataset.sizes[Dimension.LATITUDE.key()]
+    longitude_size = standard_dataset.sizes[Dimension.LONGITUDE.key()]
 
-    if lat_key not in dataset.sizes or lon_key not in dataset.sizes:
-        raise ValueError(f"Dataset missing required dimensions: {lat_key}, {lon_key}")
-
-    lat_size = dataset.sizes[lat_key]
-    lon_size = dataset.sizes[lon_key]
-
-    if lat_size == QUARTER_DEGREE_LAT_SIZE and lon_size == QUARTER_DEGREE_LON_SIZE:
+    if (
+        latitude_size == QUARTER_DEGREE_LAT_SIZE
+        and longitude_size == QUARTER_DEGREE_LON_SIZE
+    ):
         return True
-    elif lat_size == TWELFTH_DEGREE_LAT_SIZE and lon_size == TWELFTH_DEGREE_LON_SIZE:
+    if (
+        latitude_size == TWELFTH_DEGREE_LAT_SIZE
+        and longitude_size == TWELFTH_DEGREE_LON_SIZE
+    ):
         return False
-    else:
-        raise ValueError(
-            f"Unknown resolution: dimensions {lat_key}={lat_size}, {lon_key}={lon_size}. "
-            f"Expected values: ({QUARTER_DEGREE_LAT_SIZE}, {QUARTER_DEGREE_LON_SIZE}) for quarter degree "
-            f"or ({TWELFTH_DEGREE_LAT_SIZE}, {TWELFTH_DEGREE_LON_SIZE}) for twelfth degree."
-        )
+    raise ValueError(
+        f"Unknown resolution: dimensions {Dimension.LATITUDE.key()}={latitude_size}, {Dimension.LONGITUDE.key()}={longitude_size}. "
+        f"Expected values: ({QUARTER_DEGREE_LAT_SIZE}, {QUARTER_DEGREE_LON_SIZE}) for quarter degree "
+        f"or ({TWELFTH_DEGREE_LAT_SIZE}, {TWELFTH_DEGREE_LON_SIZE}) for twelfth degree."
+    )

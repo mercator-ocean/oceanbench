@@ -10,29 +10,30 @@ import logging
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.resolution import is_quarter_degree_dataset
 import copernicusmarine
-from oceanbench.core.climate_forecast_standard_names import (
-    StandardVariable,
-    rename_dataset_with_standard_names,
-)
+from oceanbench.core.climate_forecast_standard_names import StandardVariable
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
-    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
+    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime(
+        "%Y%m%d"
+    )
     return f"https://minio.dive.edito.eu/project-oceanbench/public/glo14/{first_day}.zarr"
 
 
 def _glo12_analysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
 
-    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    first_day_datetimes = challenger_dataset[
+        Dimension.FIRST_DAY_DATETIME.key()
+    ].values
     return open_mfdataset(
         list(map(_glo12_1_4_path, first_day_datetimes)),
         engine="zarr",
-        preprocess=lambda dataset: dataset.rename({"time": Dimension.LEAD_DAY_INDEX.key()}).assign(
-            {Dimension.LEAD_DAY_INDEX.key(): range(10)}
-        ),
+        preprocess=lambda dataset: dataset.rename(
+            {Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}
+        ).assign({Dimension.LEAD_DAY_INDEX.key(): range(10)}),
         combine="nested",
         concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
         parallel=True,
@@ -45,7 +46,9 @@ def _glo12_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
 
     # Dates for the request
     start_datetime = first_day.strftime("%Y-%m-%dT00:00:00")
-    end_datetime = (first_day + pandas.Timedelta(days=9)).strftime("%Y-%m-%dT00:00:00")
+    end_datetime = (first_day + pandas.Timedelta(days=9)).strftime(
+        "%Y-%m-%dT00:00:00"
+    )
 
     # Load each variable separately as the dataset_ids are different
 
@@ -86,9 +89,13 @@ def _glo12_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
 
     # Select closest depths if specified
     if target_depths is not None:
-        dataset_thetao = dataset_thetao.sel(depth=target_depths, method="nearest")
+        dataset_thetao = dataset_thetao.sel(
+            depth=target_depths, method="nearest"
+        )
         dataset_so = dataset_so.sel(depth=target_depths, method="nearest")
-        dataset_current = dataset_current.sel(depth=target_depths, method="nearest")
+        dataset_current = dataset_current.sel(
+            depth=target_depths, method="nearest"
+        )
         # Note: zos has no depth dimension, so we don't apply it
 
     # Merge all datasets - order determines variable order
@@ -98,33 +105,36 @@ def _glo12_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
 
 
 def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
-    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    first_day_datetimes = challenger_dataset[
+        Dimension.FIRST_DAY_DATETIME.key()
+    ].values
 
     # Extract depths from the challenger_dataset
-    target_depths = challenger_dataset["depth"].values
+    target_depths = challenger_dataset[Dimension.DEPTH.key()].values
 
     # Load each dataset one by one
     datasets = []
     for first_day_datetime in first_day_datetimes:
-        dataset = _glo12_1_12_path(first_day_datetime, target_depths=target_depths)
-        # Rename 'time' to 'lead_day_index' and assign indices 0-9
-        dataset = dataset.rename({"time": Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
-            {Dimension.LEAD_DAY_INDEX.key(): range(10)}
+        dataset = _glo12_1_12_path(
+            first_day_datetime, target_depths=target_depths
         )
+        # Rename 'time' to 'lead_day_index' and assign indices 0-9
+        dataset = dataset.rename(
+            {Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}
+        ).assign_coords({Dimension.LEAD_DAY_INDEX.key(): range(10)})
         datasets.append(dataset)
 
     # Concatenate all datasets on the first_day_datetime dimension
-    combined_dataset = concat(datasets, dim=Dimension.FIRST_DAY_DATETIME.key()).assign_coords(
-        {Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes}
-    )
+    combined_dataset = concat(
+        datasets, dim=Dimension.FIRST_DAY_DATETIME.key()
+    ).assign_coords({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
     return combined_dataset
 
 
 def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
-    harmonized_dataset = rename_dataset_with_standard_names(challenger_dataset)
     return (
-        _glo12_analysis_dataset_1_4(harmonized_dataset)
-        if is_quarter_degree_dataset(harmonized_dataset)
-        else _glo12_analysis_dataset_1_12(harmonized_dataset)
+        _glo12_analysis_dataset_1_4(challenger_dataset)
+        if is_quarter_degree_dataset(challenger_dataset)
+        else _glo12_analysis_dataset_1_12(challenger_dataset)
     )
