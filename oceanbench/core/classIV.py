@@ -2,19 +2,14 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import numpy as np
-import pandas as pd
-import xarray as xr
+import numpy
 import xarray
 import pandas
 import time
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 
-def perform_matchup(challenger: xr.Dataset, obs_df: pd.DataFrame, var_name: str) -> pd.DataFrame:
-    start_time = time.time()
-    print(f"Starting matchup for {var_name} with {len(obs_df)} observations...")
-
+def perform_matchup(challenger: xarray.Dataset, obs_df: pandas.DataFrame, var_name: str) -> pandas.DataFrame:
     results = []
     run_dates = challenger[Dimension.FIRST_DAY_DATETIME.key()].values
 
@@ -26,17 +21,13 @@ def perform_matchup(challenger: xr.Dataset, obs_df: pd.DataFrame, var_name: str)
             if daily_matchup is not None:
                 results.append(daily_matchup)
 
-    elapsed = time.time() - start_time
-    total_matchups = sum(len(r) for r in results) if results else 0
-    print(f"  Matchup completed in {elapsed:.1f}s ({total_matchups} matchups)")
-
-    return pd.concat(results, ignore_index=True) if results else pd.DataFrame()
+    return pandas.concat(results, ignore_index=True) if results else pandas.DataFrame()
 
 
 def _match_single_lead_day(
-    forecast: xr.Dataset, obs_df: pd.DataFrame, var_name: str, lead: int, run_date
-) -> pd.DataFrame:
-    valid_time = pd.to_datetime(run_date) + pd.Timedelta(days=lead + 1)  # ← +1 ici
+    forecast: xarray.Dataset, obs_df: pandas.DataFrame, var_name: str, lead: int, run_date
+) -> pandas.DataFrame:
+    valid_time = pandas.to_datetime(run_date) + pandas.Timedelta(days=lead + 1)
     daily_obs = obs_df[obs_df["time"].dt.date == valid_time.date()].copy()
 
     if daily_obs.empty:
@@ -45,19 +36,20 @@ def _match_single_lead_day(
     try:
         model_slice = forecast.sel({Dimension.LEAD_DAY_INDEX.key(): lead}).load()
         daily_obs["model_val"] = _interpolate_model_to_observations(model_slice, daily_obs, var_name)
-        daily_obs["lead_day"] = lead + 1  # ← Stocker comme lead day 1-10
+        daily_obs["lead_day"] = lead
         daily_obs["run_date"] = run_date
 
         return daily_obs.dropna(subset=["model_val", var_name])
-    except Exception as e:
-        print(f"   Error at lead={lead}: {e}")
+    except Exception:
         return None
 
 
-def _interpolate_model_to_observations(model_slice: xr.Dataset, obs_df: pd.DataFrame, var_name: str) -> np.ndarray:
+def _interpolate_model_to_observations(
+    model_slice: xarray.Dataset, obs_df: pandas.DataFrame, var_name: str
+) -> numpy.ndarray:
     horizontal_coords = {
-        "lat": xr.DataArray(obs_df["lat"].values, dims="pts"),
-        "lon": xr.DataArray(obs_df["lon"].values, dims="pts"),
+        "lat": xarray.DataArray(obs_df["lat"].values, dims="pts"),
+        "lon": xarray.DataArray(obs_df["lon"].values, dims="pts"),
     }
     horizontal_interp = model_slice[var_name].interp(horizontal_coords, method="linear")
 
@@ -67,21 +59,21 @@ def _interpolate_model_to_observations(model_slice: xr.Dataset, obs_df: pd.DataF
     return horizontal_interp.values
 
 
-def _has_vertical_dimension(data_array: xr.DataArray) -> bool:
+def _has_vertical_dimension(data_array: xarray.DataArray) -> bool:
     return "depth" in data_array.dims
 
 
-def _interpolate_vertical(horizontal_interp: xr.DataArray, depths: np.ndarray) -> np.ndarray:
+def _interpolate_vertical(horizontal_interp: xarray.DataArray, depths: numpy.ndarray) -> numpy.ndarray:
     model_values = [_interpolate_single_depth(horizontal_interp, idx, depth) for idx, depth in enumerate(depths)]
-    return pd.to_numeric(model_values, errors="coerce")
+    return pandas.to_numeric(model_values, errors="coerce")
 
 
-def _interpolate_single_depth(horizontal_interp: xr.DataArray, idx: int, obs_depth: float) -> float:
+def _interpolate_single_depth(horizontal_interp: xarray.DataArray, idx: int, obs_depth: float) -> float:
     try:
         result = horizontal_interp.isel(pts=idx).interp(depth=obs_depth, method="cubic").values
         return float(result)
     except (ValueError, KeyError):
-        return np.nan
+        return numpy.nan
 
 
 def rmsd_class4_validation(
@@ -126,10 +118,10 @@ def rmsd_class4_validation(
 
     if not all_results:
         print("\n No results generated")
-        return pd.DataFrame()
+        return pandas.DataFrame()
 
     format_start = time.time()
-    result = _format_rmsd_table(pd.concat(all_results, ignore_index=True))
+    result = _format_rmsd_table(pandas.concat(all_results, ignore_index=True))
     print(f"\n Table formatted in {time.time() - format_start:.1f}s")
 
     total_time = time.time() - total_start
@@ -151,8 +143,8 @@ def _get_standard_variable_name(var: Variable) -> str:
     return short_names[var]
 
 
-def _create_observation_dataframe(reference_dataset: xr.Dataset, var_name: str) -> pd.DataFrame:
-    obs_df = pd.DataFrame(
+def _create_observation_dataframe(reference_dataset: xarray.Dataset, var_name: str) -> pandas.DataFrame:
+    obs_df = pandas.DataFrame(
         {
             var_name: reference_dataset[var_name].values,
             "time": reference_dataset["time"].values,
@@ -165,7 +157,7 @@ def _create_observation_dataframe(reference_dataset: xr.Dataset, var_name: str) 
     return obs_df.dropna(subset=[var_name])
 
 
-def rmsd_class4(matchup_df: pd.DataFrame, var_name: str) -> pd.DataFrame:
+def rmsd_class4(matchup_df: pandas.DataFrame, var_name: str) -> pandas.DataFrame:
     depth_bins = _get_depth_bins_for_variable(var_name)
     results = []
 
@@ -173,7 +165,7 @@ def rmsd_class4(matchup_df: pd.DataFrame, var_name: str) -> pd.DataFrame:
         lead_data = matchup_df[matchup_df["lead_day"] == lead]
         results.extend(_compute_rmsd_for_depth_bins(lead_data, var_name, lead, depth_bins))
 
-    return pd.DataFrame(results)
+    return pandas.DataFrame(results)
 
 
 def _get_depth_bins_for_variable(var_name: str) -> dict:
@@ -193,7 +185,7 @@ def _get_depth_bins_for_variable(var_name: str) -> dict:
     return depth_bins_by_var.get(var_name, default_bins)
 
 
-def _compute_rmsd_for_depth_bins(lead_data: pd.DataFrame, var_name: str, lead: int, depth_bins: dict) -> list:
+def _compute_rmsd_for_depth_bins(lead_data: pandas.DataFrame, var_name: str, lead: int, depth_bins: dict) -> list:
     results = []
 
     for depth_label, (min_depth, max_depth) in depth_bins.items():
@@ -214,23 +206,30 @@ def _compute_rmsd_for_depth_bins(lead_data: pd.DataFrame, var_name: str, lead: i
     return results
 
 
-def _filter_by_depth_range(data: pd.DataFrame, min_depth: float, max_depth: float) -> pd.DataFrame:
+def _filter_by_depth_range(data: pandas.DataFrame, min_depth: float, max_depth: float) -> pandas.DataFrame:
     return data[(data["depth"] >= min_depth) & (data["depth"] < max_depth)]
 
 
-def _calculate_rmsd(model_values: np.ndarray, obs_values: np.ndarray) -> float:
-    return np.sqrt(np.mean((model_values - obs_values) ** 2))
+def _calculate_rmsd(model_values: numpy.ndarray, obs_values: numpy.ndarray) -> float:
+    return numpy.sqrt(numpy.mean((model_values - obs_values) ** 2))
 
 
-def _format_rmsd_table(combined: pd.DataFrame, lead_days: list = None) -> pd.DataFrame:
+def _create_pivot_table_multi_lead(table: pandas.DataFrame) -> pandas.DataFrame:
+    """Create pivot table with lead days as columns."""
+    return table.pivot_table(
+        values="rmsd", index=["variable", "depth_bin"], columns="lead_day", aggfunc="first"
+    ).reset_index()
+
+
+def _format_rmsd_table(combined: pandas.DataFrame, lead_days: list = None) -> pandas.DataFrame:
     """Format RMSD results with multiple lead days."""
     if lead_days is None:
-        lead_days = [1, 3, 5, 7, 10]
+        lead_days = [0, 2, 4, 6, 9]
 
     table = combined[combined["lead_day"].isin(lead_days)]
 
     if table.empty:
-        return pd.DataFrame()
+        return pandas.DataFrame()
 
     pivot = _create_pivot_table_multi_lead(table)
     pivot = _add_observation_counts(pivot, table, lead_days[0])
@@ -239,14 +238,28 @@ def _format_rmsd_table(combined: pd.DataFrame, lead_days: list = None) -> pd.Dat
     return _create_final_output_table_multi_lead(pivot, lead_days)
 
 
-def _create_pivot_table_multi_lead(table: pd.DataFrame) -> pd.DataFrame:
-    """Create pivot table with lead days as columns."""
-    return table.pivot_table(
-        values="rmsd", index=["variable", "depth_bin"], columns="lead_day", aggfunc="first"
-    ).reset_index()
+def _create_final_output_table_multi_lead(pivot: pandas.DataFrame, lead_days: list) -> pandas.DataFrame:
+    """Create final output table with multiple lead day columns."""
+    output_cols = {
+        "Variable": pivot["variable"],
+        "Depth Range": pivot["depth_bin"],
+    }
+
+    # Mapping: index interne → label affiché
+    lead_day_labels_map = {0: 1, 2: 3, 4: 5, 6: 7, 9: 10}
+
+    for lead in lead_days:
+        if lead in pivot.columns:
+            display_lead = lead_day_labels_map.get(lead, lead + 1)
+            output_cols[f"Lead {display_lead}d"] = pivot[lead].apply(lambda x: f"{x:.3f}" if pandas.notna(x) else "-")
+
+    if "count" in pivot.columns:
+        output_cols["N obs"] = pivot["count"].apply(lambda x: int(x) if pandas.notna(x) else "-")
+
+    return pandas.DataFrame(output_cols)
 
 
-def _add_observation_counts(pivot: pd.DataFrame, table: pd.DataFrame, reference_lead: int) -> pd.DataFrame:
+def _add_observation_counts(pivot: pandas.DataFrame, table: pandas.DataFrame, reference_lead: int) -> pandas.DataFrame:
     """Add observation counts from reference lead day."""
     counts = (
         table[table["lead_day"] == reference_lead]
@@ -257,7 +270,7 @@ def _add_observation_counts(pivot: pd.DataFrame, table: pd.DataFrame, reference_
     return pivot.merge(counts, on=["variable", "depth_bin"], how="left")
 
 
-def _rename_and_sort_variables(pivot: pd.DataFrame) -> pd.DataFrame:
+def _rename_and_sort_variables(pivot: pandas.DataFrame) -> pandas.DataFrame:
     """Rename variables to display names and sort."""
     var_names = {
         "zos": "SSH",
@@ -274,20 +287,3 @@ def _rename_and_sort_variables(pivot: pd.DataFrame) -> pd.DataFrame:
     pivot["depth_sort"] = pivot["depth_bin"].map({d: i for i, d in enumerate(depth_order)})
 
     return pivot.sort_values(["var_sort", "depth_sort"]).reset_index(drop=True)
-
-
-def _create_final_output_table_multi_lead(pivot: pd.DataFrame, lead_days: list) -> pd.DataFrame:
-    """Create final output table with multiple lead day columns."""
-    output_cols = {
-        "Variable": pivot["variable"],
-        "Depth Range": pivot["depth_bin"],
-    }
-
-    for lead in lead_days:
-        if lead in pivot.columns:
-            output_cols[f"Lead {lead}d"] = pivot[lead].apply(lambda x: f"{x:.3f}" if pd.notna(x) else "-")
-
-    if "count" in pivot.columns:
-        output_cols["N obs"] = pivot["count"].astype(int)
-
-    return pd.DataFrame(output_cols)
