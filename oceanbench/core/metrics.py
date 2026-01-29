@@ -5,7 +5,7 @@
 import pandas
 import xarray
 
-from oceanbench.core.dataset_utils import Variable
+from oceanbench.core.dataset_utils import Variable, Dimension
 from oceanbench.core.derived_quantities import compute_mixed_layer_depth
 from oceanbench.core.derived_quantities import compute_geostrophic_currents
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
@@ -37,9 +37,10 @@ def rmsd_of_variables_compared_to_glorys_reanalysis(
 def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
+    challenger_dataset_unchunked_depth = challenger_dataset.chunk({Dimension.DEPTH.key(): -1})
     return rmsd(
-        challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
-        reference_dataset=compute_mixed_layer_depth(glorys_reanalysis_dataset(challenger_dataset)),
+        challenger_dataset=compute_mixed_layer_depth(challenger_dataset_unchunked_depth),
+        reference_dataset=compute_mixed_layer_depth(glorys_reanalysis_dataset(challenger_dataset_unchunked_depth)),
         variables=[
             Variable.MIXED_LAYER_DEPTH,
         ],
@@ -88,9 +89,10 @@ def rmsd_of_variables_compared_to_glo12_analysis(
 def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
+    challenger_dataset_unchunked_depth = challenger_dataset.chunk({Dimension.DEPTH.key(): -1})
     return rmsd(
-        challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
-        reference_dataset=compute_mixed_layer_depth(glo12_analysis_dataset(challenger_dataset)),
+        challenger_dataset=compute_mixed_layer_depth(challenger_dataset_unchunked_depth),
+        reference_dataset=compute_mixed_layer_depth(glo12_analysis_dataset(challenger_dataset_unchunked_depth)),
         variables=[
             Variable.MIXED_LAYER_DEPTH,
         ],
