@@ -282,7 +282,7 @@ def _get_random_ocean_points_from_file(
 
     latitude_grid, longitude_grid = numpy.meshgrid(
         dataset[Dimension.LATITUDE.key()],
-        Dimension.LONGITUDE.key(),
+        dataset[Dimension.LONGITUDE.key()],
         indexing="ij",
     )
     latitude_values = latitude_grid[mask.values]
