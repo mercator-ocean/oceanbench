@@ -21,7 +21,7 @@ challenger_dataset: xarray.Dataset = (
     .chunk(
         {
             "lead_day_index": 1,
-            "depth": -1,
+            "depth": 1,
             "lat": 100,
             "lon": -1,
         }
