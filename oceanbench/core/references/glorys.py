@@ -27,7 +27,7 @@ def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
     return open_mfdataset(
         list(map(_glorys_1_4_path, first_day_datetimes)),
         engine="zarr",
-        preprocess=lambda dataset: dataset.rename({"time": Dimension.LEAD_DAY_INDEX.key()}).assign(
+        preprocess=lambda dataset: dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign(
             {Dimension.LEAD_DAY_INDEX.key(): range(10)}
         ),
         combine="nested",
@@ -67,14 +67,14 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
 
     # Extract depths from challenger_dataset
-    target_depths = challenger_dataset["depth"].values
+    target_depths = challenger_dataset[Dimension.DEPTH.key()].values
 
     # Load each dataset one by one
     datasets = []
     for first_day_datetime in first_day_datetimes:
         dataset = _glorys_1_12_path(first_day_datetime, target_depths=target_depths)
         # Rename 'time' to 'lead_day_index' and assign indices 0-9
-        dataset = dataset.rename({"time": Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
+        dataset = dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
             {Dimension.LEAD_DAY_INDEX.key(): range(10)}
         )
         datasets.append(dataset)
