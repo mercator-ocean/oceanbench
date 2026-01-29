@@ -18,6 +18,14 @@ challenger_dataset: xarray.Dataset = (
         parallel=True,
     )
     .unify_chunks()
+    .chunk(
+        {
+            "lead_day_index": 1,
+            "depth": -1,
+            "lat": 100,
+            "lon": -1,
+        }
+    )
     .assign({"first_day_datetime": [datetime.fromisoformat("2024-01-04"), datetime.fromisoformat("2024-01-11")]})
 )
 
