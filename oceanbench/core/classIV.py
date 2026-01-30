@@ -6,6 +6,10 @@ import numpy
 import xarray
 import pandas
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.lead_day_utils import lead_day_labels
+
+LEAD_DAYS_COUNT = 10
+SELECTED_LEAD_DAYS_FOR_DISPLAY = [0, 2, 4, 6, 9]
 
 
 def perform_matchup(
@@ -17,7 +21,7 @@ def perform_matchup(
     for run_date in run_dates:
         forecast = challenger.sel({Dimension.FIRST_DAY_DATETIME.key(): run_date})
 
-        for lead_index in range(10):
+        for lead_index in range(LEAD_DAYS_COUNT):
             daily_matchup = _match_single_lead_day(
                 forecast, observations_dataframe, variable_name, lead_index, run_date
             )
@@ -41,19 +45,21 @@ def _match_single_lead_day(
         return None
 
     model_slice = forecast.sel({Dimension.LEAD_DAY_INDEX.key(): lead_index}).load()
-    daily_observations["model_val"] = _interpolate_model_to_observations(model_slice, daily_observations, variable_name)
+    daily_observations["model_value"] = _interpolate_model_to_observations(
+        model_slice, daily_observations, variable_name
+    )
     daily_observations["lead_day"] = lead_index
     daily_observations["run_date"] = run_date
 
-    return daily_observations.dropna(subset=["model_val", variable_name])
+    return daily_observations.dropna(subset=["model_value", variable_name])
 
 
 def _interpolate_model_to_observations(
     model_slice: xarray.Dataset, observations_dataframe: pandas.DataFrame, variable_name: str
 ) -> numpy.ndarray:
     horizontal_coordinates = {
-        "lat": xarray.DataArray(observations_dataframe["lat"].values, dims="pts"),
-        "lon": xarray.DataArray(observations_dataframe["lon"].values, dims="pts"),
+        "lat": xarray.DataArray(observations_dataframe["latitude"].values, dims="points"),
+        "lon": xarray.DataArray(observations_dataframe["longitude"].values, dims="points"),
     }
     horizontal_interpolation = model_slice[variable_name].interp(horizontal_coordinates, method="linear")
 
@@ -78,7 +84,7 @@ def _interpolate_single_depth(
     horizontal_interpolation: xarray.DataArray, index: int, observation_depth: float
 ) -> float:
     try:
-        result = horizontal_interpolation.isel(pts=index).interp(depth=observation_depth, method="cubic").values
+        result = horizontal_interpolation.isel(points=index).interp(depth=observation_depth, method="linear").values
         return float(result) if not numpy.isnan(result) else numpy.nan
     except (ValueError, KeyError):
         return numpy.nan
@@ -131,8 +137,8 @@ def _create_observation_dataframe(reference_dataset: xarray.Dataset, variable_na
         {
             variable_name: reference_dataset[variable_name].values,
             "time": reference_dataset["time"].values,
-            "lat": reference_dataset["latitude"].values,
-            "lon": reference_dataset["longitude"].values,
+            "latitude": reference_dataset["latitude"].values,
+            "longitude": reference_dataset["longitude"].values,
             "depth": reference_dataset["depth"].values,
             "first_day_datetime": reference_dataset["first_day_datetime"].values,
         }
@@ -158,14 +164,14 @@ def _get_depth_bins_for_variable(variable_name: str) -> dict:
         "zos": {"surface": (-1, 1)},
     }
 
-    default_bins = {
+    default_depth_bins = {
         "0-5m": (0, 5),
         "5-100m": (5, 100),
         "100-300m": (100, 300),
         "300-600m": (300, 600),
     }
 
-    return depth_bins_by_variable.get(variable_name, default_bins)
+    return depth_bins_by_variable.get(variable_name, default_depth_bins)
 
 
 def _compute_rmsd_for_depth_bins(
@@ -177,7 +183,7 @@ def _compute_rmsd_for_depth_bins(
         depth_data = _filter_by_depth_range(lead_data, minimum_depth, maximum_depth)
 
         if len(depth_data) > 0:
-            rmsd = _calculate_rmsd(depth_data["model_val"], depth_data[variable_name])
+            rmsd = _calculate_rmsd(depth_data["model_value"], depth_data[variable_name])
             results.append(
                 {
                     "variable": variable_name,
@@ -205,39 +211,41 @@ def _create_pivot_table_multi_lead(table: pandas.DataFrame) -> pandas.DataFrame:
     ).reset_index()
 
 
-def _format_rmsd_table(combined: pandas.DataFrame, lead_days: list = None) -> pandas.DataFrame:
-    if lead_days is None:
-        lead_days = [0, 2, 4, 6, 9]
+def _format_rmsd_table(combined: pandas.DataFrame, selected_lead_days: list = None) -> pandas.DataFrame:
+    if selected_lead_days is None:
+        selected_lead_days = SELECTED_LEAD_DAYS_FOR_DISPLAY
 
-    table = combined[combined["lead_day"].isin(lead_days)]
+    table = combined[combined["lead_day"].isin(selected_lead_days)]
 
     if table.empty:
         return pandas.DataFrame()
 
     pivot = _create_pivot_table_multi_lead(table)
-    pivot = _add_observation_counts(pivot, table, lead_days[0])
+    pivot = _add_observation_counts(pivot, table, selected_lead_days[0])
     pivot = _rename_and_sort_variables(pivot)
 
-    return _create_final_output_table_multi_lead(pivot, lead_days)
+    return _create_final_output_table_multi_lead(pivot, selected_lead_days)
 
 
-def _create_final_output_table_multi_lead(pivot: pandas.DataFrame, lead_days: list) -> pandas.DataFrame:
+def _create_final_output_table_multi_lead(pivot: pandas.DataFrame, selected_lead_days: list) -> pandas.DataFrame:
     output_columns = {
         "Variable": pivot["variable"],
         "Depth Range": pivot["depth_bin"],
     }
 
-    lead_day_labels_mapping = {0: 1, 2: 3, 4: 5, 6: 7, 9: 10}
+    all_lead_labels = lead_day_labels(1, LEAD_DAYS_COUNT)
 
-    for lead_index in lead_days:
+    for lead_index in selected_lead_days:
         if lead_index in pivot.columns:
-            display_lead = lead_day_labels_mapping.get(lead_index, lead_index + 1)
-            output_columns[f"Lead {display_lead}d"] = pivot[lead_index].apply(
-                lambda x: f"{x:.3f}" if pandas.notna(x) else "-"
+            label = all_lead_labels[lead_index]
+            output_columns[label] = pivot[lead_index].apply(
+                lambda value: f"{value:.3f}" if pandas.notna(value) else "-"
             )
 
     if "count" in pivot.columns:
-        output_columns["N obs"] = pivot["count"].apply(lambda x: int(x) if pandas.notna(x) else "-")
+        output_columns["Number of observations"] = pivot["count"].apply(
+            lambda count: int(count) if pandas.notna(count) else "-"
+        )
 
     return pandas.DataFrame(output_columns)
 
@@ -260,11 +268,13 @@ def _rename_and_sort_variables(pivot: pandas.DataFrame) -> pandas.DataFrame:
         "uo": "Zonal current",
         "vo": "Meridional current",
     }
-    variable_order = ["Temperature", "Salinity", "SSH", "Zonal current", "Meridional current"]
-    depth_order = ["surface", "0-5m", "5-100m", "100-300m", "300-600m", "15m"]
+    variable_display_order = ["Temperature", "Salinity", "SSH", "Zonal current", "Meridional current"]
+    depth_bin_display_order = ["surface", "0-5m", "5-100m", "100-300m", "300-600m", "15m"]
 
     pivot["variable"] = pivot["variable"].map(variable_display_names)
-    pivot["var_sort"] = pivot["variable"].map({variable: index for index, variable in enumerate(variable_order)})
-    pivot["depth_sort"] = pivot["depth_bin"].map({depth: index for index, depth in enumerate(depth_order)})
+    pivot["var_sort"] = pivot["variable"].map(
+        {variable: index for index, variable in enumerate(variable_display_order)}
+    )
+    pivot["depth_sort"] = pivot["depth_bin"].map({depth: index for index, depth in enumerate(depth_bin_display_order)})
 
     return pivot.sort_values(["var_sort", "depth_sort"]).reset_index(drop=True)
