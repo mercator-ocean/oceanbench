@@ -28,7 +28,6 @@ def obs_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
             all_days.add(numpy.datetime64(day_timestamp.date()))
 
     observation_paths = [_observation_insitu_path(day) for day in sorted(all_days)]
-    logger.info(f"Loading {len(observation_paths)} days of observations...")
 
     observations_full = open_mfdataset(
         observation_paths,
