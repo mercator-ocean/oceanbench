@@ -84,7 +84,7 @@ def _interpolate_single_depth(
     horizontal_interpolation: xarray.DataArray, index: int, observation_depth: float
 ) -> float:
     try:
-        result = horizontal_interpolation.isel(points=index).interp(depth=observation_depth, method="linear").values
+        result = horizontal_interpolation.isel(points=index).interp(depth=observation_depth, method="cubic").values
         return float(result) if not numpy.isnan(result) else numpy.nan
     except (ValueError, KeyError):
         return numpy.nan
