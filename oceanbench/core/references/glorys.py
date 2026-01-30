@@ -11,7 +11,6 @@ import copernicusmarine
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
-from oceanbench.core.interpolate import interpolate_1deg
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
@@ -20,6 +19,11 @@ logger.setLevel(level=logging.WARNING)
 def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
     first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
     return f"https://minio.dive.edito.eu/project-glonet/public/glorys14_refull_2024/{first_day}.zarr"
+
+
+def _glorys_1_deg_path(first_day_datetime: numpy.datetime64) -> str:
+    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
+    return f"https://minio.dive.edito.eu/project-glonet/public/glorys_1degree_2024/{first_day}.zarr"
 
 
 def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
@@ -88,10 +92,17 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
 
 
 def _glorys_reanalysis_dataset_1_deg(challenger_dataset: Dataset) -> Dataset:
-
-    twelfth_deg_dataset = _glorys_reanalysis_dataset_1_12(challenger_dataset)
-
-    return interpolate_1deg(twelfth_deg_dataset)
+    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    return open_mfdataset(
+        list(map(_glorys_1_deg_path, first_day_datetimes)),
+        engine="zarr",
+        preprocess=lambda dataset: dataset.rename({"time": Dimension.LEAD_DAY_INDEX.key()}).assign(
+            {Dimension.LEAD_DAY_INDEX.key(): range(10)}
+        ),
+        combine="nested",
+        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
+        parallel=True,
+    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 
 def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
