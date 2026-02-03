@@ -22,9 +22,15 @@ from oceanbench.core.lagrangian_trajectory import (
 def rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    return rmsd_class4_validation(
+    print("=" * 80, flush=True)
+    print("STARTING OBSERVATIONS VALIDATION", flush=True)
+    print("=" * 80, flush=True)
+
+    print(" Loading observations dataset...", flush=True)
+    obs_dataset = observation_insitu_dataset(challenger_dataset)
+    result = rmsd_class4_validation(
         challenger_dataset=challenger_dataset,
-        reference_dataset=observation_insitu_dataset(challenger_dataset),
+        reference_dataset=obs_dataset,
         variables=[
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
@@ -33,6 +39,9 @@ def rmsd_of_variables_compared_to_observations(
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
     )
+
+    print("✓ Validation complete!", flush=True)
+    return result
 
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(

@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# test_mssh_loading.py
+import xarray
+import os
+import requests
+ZARR_URL = "https://minio.dive.edito.eu/project-ml-compression/public/observations_by_day/20240104.zarr"
+try:
+    ds = xarray.open_dataset(
+        "https://minio.dive.edito.eu/project-ml-compression/public/observations_by_day/20240113.zarr", engine="zarr"
+    )
+    print(f"✅ 20240113.zarr exists with {len(ds.obs)} observations")
+except Exception:
+    print("❌ 20240113.zarr not found or empty")
+
+print(ds)

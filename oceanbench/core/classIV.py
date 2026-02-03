@@ -11,17 +11,69 @@ from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_
 
 LEAD_DAYS_COUNT = 10
 SELECTED_LEAD_DAYS_FOR_DISPLAY = [0, 2, 4, 6, 9]
+REANALYSIS_MSSH_SHIFT = -0.1148
+MSSH_URL = "https://minio.dive.edito.eu/project-ml-compression/public/glorys12_mssh_2024.zarr"
 
 VARIABLE_DISPLAY_NAMES: dict[str, str] = {
-    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "Sea surface height",
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "SSH",
     Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): "Temperature",
     Variable.SEA_WATER_SALINITY.key(): "Salinity",
     Variable.EASTWARD_SEA_WATER_VELOCITY.key(): "Zonal current",
     Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): "Meridional current",
 }
 
+_MSSH_CACHE = None  # Cache global
+
+
+def _load_mean_ssh() -> xarray.DataArray:
+    """Load pre-computed MSSH from GLORYS12 2024 (cached)."""
+    global _MSSH_CACHE
+
+    if _MSSH_CACHE is not None:
+        print("✓ Using cached MSSH from memory", flush=True)
+        return _MSSH_CACHE
+
+    print(f"📥 Loading MSSH from {MSSH_URL}...", flush=True)
+    mssh_dataset = xarray.open_dataset(MSSH_URL, engine="zarr", chunks=None)
+
+    print("   Computing MSSH in memory...", flush=True)
+    _MSSH_CACHE = mssh_dataset["mssh"].load()  # Force en mémoire
+
+    print(f"✓ MSSH loaded in memory ({_MSSH_CACHE.nbytes / 1e6:.1f} MB)", flush=True)
+
+    return _MSSH_CACHE
+
+
+def _convert_sla_to_ssh(reference_dataset: xarray.Dataset, mean_ssh: xarray.DataArray) -> xarray.Dataset:
+    """Convert SLA observations to absolute SSH by adding MSSH and correction shift."""
+    ssh_variable = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
+
+    if ssh_variable not in reference_dataset:
+        return reference_dataset
+
+    print(" Converting SLA to absolute SSH...", flush=True)
+    print(f"   Number of observations: {len(reference_dataset.obs)}", flush=True)
+
+    # Interpolate MSSH to observation locations
+    print("   Interpolating MSSH to observation locations...", flush=True)
+    mssh_at_obs = mean_ssh.interp(
+        {
+            Dimension.LATITUDE.key(): reference_dataset[Dimension.LATITUDE.key()],
+            Dimension.LONGITUDE.key(): reference_dataset[Dimension.LONGITUDE.key()],
+        },
+        method="linear",
+    ).compute()  # Force le calcul
+
+    print("   Computing SSH = SLA + MSSH + shift...", flush=True)
+    # Convert: ssh_absolute = sla + mssh + shift
+    reference_dataset[ssh_variable] = reference_dataset[ssh_variable] + mssh_at_obs + REANALYSIS_MSSH_SHIFT
+
+    print(" SLA converted to SSH", flush=True)
+    return reference_dataset
+
 
 def _standardize_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
+    """Normalize dimension and variable names while preserving non-standard coordinates."""
     preserved_coords = {}
     if "first_day_datetime" in dataset.coords:
         preserved_coords["first_day_datetime"] = dataset["first_day_datetime"]
@@ -50,19 +102,30 @@ def _standardize_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
 def perform_matchup(
     challenger: xarray.Dataset, observations_dataframe: pandas.DataFrame, variable_name: str
 ) -> pandas.DataFrame:
+    print(f"         Starting matchup for {len(observations_dataframe)} obs...", flush=True)
     matchup_results = []
     run_dates = challenger[Dimension.FIRST_DAY_DATETIME.key()].values
 
-    for run_date in run_dates:
+    print(f"         Number of run_dates: {len(run_dates)}", flush=True)
+    print(f"         LEAD_DAYS_COUNT: {LEAD_DAYS_COUNT}", flush=True)
+
+    for i, run_date in enumerate(run_dates):
+        print(f"Run date {i + 1}/{len(run_dates)}: {run_date}", flush=True)
         forecast = challenger.sel({Dimension.FIRST_DAY_DATETIME.key(): run_date})
 
         for lead_index in range(LEAD_DAYS_COUNT):
+            print(f"            Lead day {lead_index}...", flush=True)
             daily_matchup = _match_single_lead_day(
                 forecast, observations_dataframe, variable_name, lead_index, run_date
             )
             if daily_matchup is not None:
+                print(f"            → {len(daily_matchup)} matchups found", flush=True)
                 matchup_results.append(daily_matchup)
+            else:
+                print("No matchups", flush=True)
 
+    total_matchups = sum(len(r) for r in matchup_results)
+    print(f"         Matchup complete: {total_matchups} total", flush=True)
     return pandas.concat(matchup_results, ignore_index=True) if matchup_results else pandas.DataFrame()
 
 
@@ -79,7 +142,7 @@ def _match_single_lead_day(
     if daily_observations.empty:
         return None
 
-    model_slice = forecast.sel({Dimension.LEAD_DAY_INDEX.key(): lead_index}).load()
+    model_slice = forecast.sel({Dimension.LEAD_DAY_INDEX.key(): lead_index})
     daily_observations["model_value"] = _interpolate_model_to_observations(
         model_slice, daily_observations, variable_name
     )
@@ -92,20 +155,30 @@ def _match_single_lead_day(
 def _interpolate_model_to_observations(
     model_slice: xarray.Dataset, observations_dataframe: pandas.DataFrame, variable_name: str
 ) -> numpy.ndarray:
-    horizontal_coordinates = {
-        Dimension.LATITUDE.key(): xarray.DataArray(
-            observations_dataframe[Dimension.LATITUDE.key()].values, dims="points"
-        ),
-        Dimension.LONGITUDE.key(): xarray.DataArray(
-            observations_dataframe[Dimension.LONGITUDE.key()].values, dims="points"
-        ),
-    }
-    horizontal_interpolation = model_slice[variable_name].interp(horizontal_coordinates, method="linear")
 
-    if _has_vertical_dimension(model_slice[variable_name]) and Dimension.DEPTH.key() in observations_dataframe.columns:
-        return _interpolate_vertical(horizontal_interpolation, observations_dataframe[Dimension.DEPTH.key()].values)
+    data_array = model_slice[variable_name]
 
-    return horizontal_interpolation.values
+    # Créer les coordonnées pour interpolation
+    lats = xarray.DataArray(observations_dataframe[Dimension.LATITUDE.key()].values, dims="points")
+    lons = xarray.DataArray(observations_dataframe[Dimension.LONGITUDE.key()].values, dims="points")
+
+    # Interpolation horizontale
+    horizontal_interp = data_array.interp(
+        {Dimension.LATITUDE.key(): lats, Dimension.LONGITUDE.key(): lons}, method="linear"
+    )
+
+    # Si pas de dimension verticale, on retourne directement
+    if Dimension.DEPTH.key() not in data_array.dims:
+        return horizontal_interp.values
+
+    # Interpolation verticale VECTORISÉE
+    if Dimension.DEPTH.key() in observations_dataframe.columns:
+        depths = xarray.DataArray(observations_dataframe[Dimension.DEPTH.key()].values, dims="points")
+        # Interpolation 3D en une seule opération
+        result = horizontal_interp.interp({Dimension.DEPTH.key(): depths}, method="linear")
+        return result.values
+
+    return horizontal_interp.values
 
 
 def _has_vertical_dimension(data_array: xarray.DataArray) -> bool:
@@ -125,7 +198,7 @@ def _interpolate_single_depth(
     try:
         result = (
             horizontal_interpolation.isel(points=index)
-            .interp({Dimension.DEPTH.key(): observation_depth}, method="cubic")
+            .interp({Dimension.DEPTH.key(): observation_depth}, method="linear")
             .values
         )
         return float(result) if not numpy.isnan(result) else numpy.nan
@@ -137,34 +210,69 @@ def rmsd_class4_validation(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
-    depth_bins_config: dict = None,
+    use_ssh_correction: bool = True,
 ) -> pandas.DataFrame:
-    challenger_standardized = _standardize_dataset(challenger_dataset)
-    reference_standardized = _standardize_dataset(reference_dataset)
+    """
+    Compute Class-4 validation metrics.
 
+    Args:
+        challenger_dataset: Forecast dataset to validate
+        reference_dataset: In-situ observations dataset
+        variables: List of variables to validate
+        use_ssh_correction: Apply SLA to SSH conversion using GLORYS MSSH (default: True)
+    """
+    print(" Starting Class-4 validation...", flush=True)
+
+    print("   Standardizing challenger...", flush=True)
+    challenger_standardized = _standardize_dataset(challenger_dataset)
+    print("    Challenger standardized", flush=True)
+
+    print("   Standardizing reference...", flush=True)
+    reference_standardized = _standardize_dataset(reference_dataset)
+    print("    Reference standardized", flush=True)
+
+    # Convert SLA to absolute SSH if requested
+    ssh_variable = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
+    if use_ssh_correction and ssh_variable in reference_standardized:
+        print("   Loading MSSH...", flush=True)
+        mean_ssh = _load_mean_ssh()
+        reference_standardized = _convert_sla_to_ssh(reference_standardized, mean_ssh)
+
+    print("   Starting variable processing...", flush=True)
     all_results = []
 
     for variable in variables:
         variable_name = variable.key()
+        print(f"\n   Processing {variable_name}...", flush=True)
 
         if variable_name not in reference_standardized:
+            print("  Not in reference, skipping", flush=True)
             continue
 
         observations_dataframe = _create_observation_dataframe(reference_standardized, variable_name)
+        print(f"      ✓ {len(observations_dataframe)} observations", flush=True)
 
         if observations_dataframe.empty:
             continue
 
         matchup_dataframe = perform_matchup(challenger_standardized, observations_dataframe, variable_name)
+        print(f"      ✓ {len(matchup_dataframe)} matchups", flush=True)
 
         if not matchup_dataframe.empty:
+            print("Computing RMSD...", flush=True)
             rmsd_result = rmsd_class4(matchup_dataframe, variable_name)
+            print("RMSD computed", flush=True)
             all_results.append(rmsd_result)
 
     if not all_results:
+        print("\n No results generated", flush=True)
         return pandas.DataFrame()
 
-    return _format_rmsd_table(pandas.concat(all_results, ignore_index=True))
+    print("\n   Formatting results...", flush=True)
+    result = _format_rmsd_table(pandas.concat(all_results, ignore_index=True))
+    print("✓ Class-4 validation complete!", flush=True)
+
+    return result
 
 
 def _create_observation_dataframe(reference_dataset: xarray.Dataset, variable_name: str) -> pandas.DataFrame:
@@ -182,6 +290,7 @@ def _create_observation_dataframe(reference_dataset: xarray.Dataset, variable_na
 
 
 def rmsd_class4(matchup_dataframe: pandas.DataFrame, variable_name: str) -> pandas.DataFrame:
+    print("RMSD calculation starting...", flush=True)
     depth_bins = _get_depth_bins_for_variable(variable_name)
     results = []
 
@@ -189,6 +298,7 @@ def rmsd_class4(matchup_dataframe: pandas.DataFrame, variable_name: str) -> pand
         lead_data = matchup_dataframe[matchup_dataframe["lead_day"] == lead_index]
         results.extend(_compute_rmsd_for_depth_bins(lead_data, variable_name, lead_index, depth_bins))
 
+    print("RMSD calculation done", flush=True)
     return pandas.DataFrame(results)
 
 
