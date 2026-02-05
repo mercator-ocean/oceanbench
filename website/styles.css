@@ -28,3 +28,36 @@ table.model-names {
 tfoot tr td {
   font-size: small;
 }
+
+.navbar-logo {
+  height: 50px !important;
+  max-height: none !important;
+  width: auto !important;
+}
+
+.navbar {
+  padding-top: 0.25rem !important;
+  padding-bottom: 0.25rem !important;
+}
+
+body.quarto-dark img[src*="analysis-track"],
+body.quarto-dark img[src*="observations-track"],
+body.quarto-dark img[src*="reanalysis-track"] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+body.quarto-light .navbar-logo {
+  content: url('./assets/favicon-light.png');
+}
+
+body.quarto-dark .navbar-logo {
+  content: url('./assets/favicon-dark.png');
+}
+
+body.quarto-light .only-dark {
+  display: none !important;
+}
+
+body.quarto-dark .only-light {
+  display: none !important;
+}

@@ -10,9 +10,14 @@ import json
 
 def get_raw_html_report_score_table(raw_notebook) -> str:
     for cell in raw_notebook["cells"]:
-        if "oceanbench.metrics.rmsd_of_variables_compared_to_glorys(challenger_datasets)" in cell["source"]:
+        if (
+            "oceanbench.metrics.rmsd_of_variables_compared_to_glorys(challenger_datasets)"
+            in cell["source"]
+        ):
             html_output = cell["outputs"][0]["data"]["text/html"]
-            cleaned_html_output = "".join([line.removesuffix("\n") for line in html_output])
+            cleaned_html_output = "".join(
+                [line.removesuffix("\n") for line in html_output]
+            )
             return cleaned_html_output
 
 
@@ -22,7 +27,9 @@ def _get_depth_and_variable(variable: str) -> tuple[str, str]:
             return (depth, variable.removeprefix(depth + " "))
 
 
-def _convert_raw_html_report_score_table_to_model_score(raw_table: str, name: str) -> ModelScore:
+def _convert_raw_html_report_score_table_to_model_score(
+    raw_table: str, name: str
+) -> ModelScore:
     scores = {"name": name, "depths": {}}
     soup = BeautifulSoup(raw_table, features="html.parser")
     tbody = soup.find("tbody")
@@ -34,7 +41,10 @@ def _convert_raw_html_report_score_table_to_model_score(raw_table: str, name: st
         scores["depths"][depth]["variables"][variable] = {
             "cf_name": "TODO",
             "unit": "TODO",
-            "data": {str(k + 1): float(v.string) for k, v in enumerate(row.find_all("td"))},
+            "data": {
+                str(k + 1): float(v.string)
+                for k, v in enumerate(row.find_all("td"))
+            },
         }
     return ModelScore.model_validate(scores)
 
@@ -52,7 +62,9 @@ def _get_notebook(path: str):
 def get_model_score_from_notebook(notebook_path: str, name: str) -> ModelScore:
     raw_report = _get_notebook(notebook_path)
     score_table = get_raw_html_report_score_table(raw_report)
-    model_score = _convert_raw_html_report_score_table_to_model_score(score_table, name)
+    model_score = _convert_raw_html_report_score_table_to_model_score(
+        score_table, name
+    )
     return model_score
 
 

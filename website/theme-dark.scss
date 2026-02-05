@@ -5,12 +5,22 @@
  */
 
 $primary: #3aa6d3;
+$body-bg: #1a1a2e;
 
-/*-- scss:defaults --*/
 table.model-names {
   background-color: #181818 !important;
 }
 
 table {
   border: 1px solid #375a7f !important;
+}
+
+/*-- scss:rules --*/
+
+.navbar {
+  background-color: #16213e !important;
+}
+
+body {
+  background-color: #1a1a2e !important;
 }
