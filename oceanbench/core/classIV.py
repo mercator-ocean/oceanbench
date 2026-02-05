@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import time
 import numpy
 import xarray
 import pandas
@@ -22,75 +23,103 @@ VARIABLE_DISPLAY_NAMES: dict[str, str] = {
     Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): "Meridional current",
 }
 
-_MSSH_CACHE = None  # Cache global
+DEPTH_BINS_DEFAULT = {
+    "0-5m": (0, 5),
+    "5-100m": (5, 100),
+    "100-300m": (100, 300),
+    "300-600m": (300, 600),
+}
+
+DEPTH_BINS_BY_VARIABLE = {
+    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): {"15m": (10, 20)},
+    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): {"15m": (10, 20)},
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): {"surface": (-1, 1)},
+}
+
+DEPTH_BIN_DISPLAY_ORDER = ["surface", "0-5m", "5-100m", "100-300m", "300-600m", "15m"]
+
+VARIABLE_DISPLAY_ORDER = [
+    VARIABLE_DISPLAY_NAMES[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()],
+    VARIABLE_DISPLAY_NAMES[Variable.SEA_WATER_SALINITY.key()],
+    VARIABLE_DISPLAY_NAMES[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()],
+    VARIABLE_DISPLAY_NAMES[Variable.EASTWARD_SEA_WATER_VELOCITY.key()],
+    VARIABLE_DISPLAY_NAMES[Variable.NORTHWARD_SEA_WATER_VELOCITY.key()],
+]
+
+_MSSH_CACHE = None
+
+
+def rmsd_class4_validation(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    variables: list[Variable],
+    use_ssh_correction: bool = True,
+) -> pandas.DataFrame:
+    start_time = time.time()
+
+    print("Standardizing datasets...", flush=True)
+    challenger_standardized = _standardize_dataset(challenger_dataset)
+    reference_standardized = _standardize_dataset(reference_dataset)
+
+    ssh_variable = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
+    if use_ssh_correction and ssh_variable in reference_standardized:
+        print("Applying SLA to SSH correction...", flush=True)
+        mean_ssh = _load_mean_ssh()
+        reference_standardized = _convert_sla_to_ssh(reference_standardized, mean_ssh)
+
+    print("Processing variables...", flush=True)
+    all_results = _process_all_variables(challenger_standardized, reference_standardized, variables)
+
+    if not all_results:
+        return pandas.DataFrame()
+
+    print("Formatting results...", flush=True)
+    result = _format_rmsd_table(pandas.concat(all_results, ignore_index=True))
+
+    elapsed_time = time.time() - start_time
+    print(f"Class-4 validation completed in {elapsed_time:.1f} seconds", flush=True)
+
+    return result
 
 
 def _load_mean_ssh() -> xarray.DataArray:
-    """Load pre-computed MSSH from GLORYS12 2024 (cached)."""
     global _MSSH_CACHE
 
     if _MSSH_CACHE is not None:
-        print("✓ Using cached MSSH from memory", flush=True)
         return _MSSH_CACHE
 
-    print(f"📥 Loading MSSH from {MSSH_URL}...", flush=True)
     mssh_dataset = xarray.open_dataset(MSSH_URL, engine="zarr", chunks=None)
-
-    print("   Computing MSSH in memory...", flush=True)
-    _MSSH_CACHE = mssh_dataset["mssh"].load()  # Force en mémoire
-
-    print(f"✓ MSSH loaded in memory ({_MSSH_CACHE.nbytes / 1e6:.1f} MB)", flush=True)
+    _MSSH_CACHE = mssh_dataset["mssh"].load()
 
     return _MSSH_CACHE
 
 
-def _convert_sla_to_ssh(reference_dataset: xarray.Dataset, mean_ssh: xarray.DataArray) -> xarray.Dataset:
-    """Convert SLA observations to absolute SSH by adding MSSH and correction shift."""
+def _convert_sla_to_ssh(
+    reference_dataset: xarray.Dataset,
+    mean_ssh: xarray.DataArray,
+) -> xarray.Dataset:
     ssh_variable = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
 
-    if ssh_variable not in reference_dataset:
-        return reference_dataset
-
-    print(" Converting SLA to absolute SSH...", flush=True)
-    print(f"   Number of observations: {len(reference_dataset.obs)}", flush=True)
-
-    # Interpolate MSSH to observation locations
-    print("   Interpolating MSSH to observation locations...", flush=True)
-    mssh_at_obs = mean_ssh.interp(
+    mssh_at_observations = mean_ssh.interp(
         {
             Dimension.LATITUDE.key(): reference_dataset[Dimension.LATITUDE.key()],
             Dimension.LONGITUDE.key(): reference_dataset[Dimension.LONGITUDE.key()],
         },
         method="linear",
-    ).compute()  # Force le calcul
+    ).compute()
 
-    print("   Computing SSH = SLA + MSSH + shift...", flush=True)
-    # Convert: ssh_absolute = sla + mssh + shift
-    reference_dataset[ssh_variable] = reference_dataset[ssh_variable] + mssh_at_obs + REANALYSIS_MSSH_SHIFT
+    reference_dataset[ssh_variable] = reference_dataset[ssh_variable] + mssh_at_observations + REANALYSIS_MSSH_SHIFT
 
-    print(" SLA converted to SSH", flush=True)
     return reference_dataset
 
 
 def _standardize_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
-    """Normalize dimension and variable names while preserving non-standard coordinates."""
     preserved_coords = {}
     if "first_day_datetime" in dataset.coords:
         preserved_coords["first_day_datetime"] = dataset["first_day_datetime"]
 
     standardized = rename_dataset_with_standard_names(dataset)
-
-    variable_rename_mapping = {
-        "zos": Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
-        "thetao": Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
-        "so": Variable.SEA_WATER_SALINITY.key(),
-        "uo": Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
-        "vo": Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
-    }
-
-    variables_to_rename = {old: new for old, new in variable_rename_mapping.items() if old in standardized}
-    if variables_to_rename:
-        standardized = standardized.rename(variables_to_rename)
+    standardized = _rename_variables_to_standard_names(standardized)
 
     for coord_name, coord_values in preserved_coords.items():
         if coord_name not in standardized.coords:
@@ -99,34 +128,111 @@ def _standardize_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
     return standardized
 
 
-def perform_matchup(
-    challenger: xarray.Dataset, observations_dataframe: pandas.DataFrame, variable_name: str
+def _rename_variables_to_standard_names(dataset: xarray.Dataset) -> xarray.Dataset:
+    variable_rename_mapping = {
+        "zos": Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+        "thetao": Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+        "so": Variable.SEA_WATER_SALINITY.key(),
+        "uo": Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        "vo": Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+    }
+
+    variables_to_rename = {old: new for old, new in variable_rename_mapping.items() if old in dataset}
+
+    if variables_to_rename:
+        return dataset.rename(variables_to_rename)
+
+    return dataset
+
+
+def _process_all_variables(
+    challenger_standardized: xarray.Dataset,
+    reference_standardized: xarray.Dataset,
+    variables: list[Variable],
+) -> list[pandas.DataFrame]:
+    all_results = []
+
+    for variable in variables:
+        variable_result = _process_single_variable(challenger_standardized, reference_standardized, variable)
+        if variable_result is not None:
+            all_results.append(variable_result)
+
+    return all_results
+
+
+def _process_single_variable(
+    challenger_standardized: xarray.Dataset,
+    reference_standardized: xarray.Dataset,
+    variable: Variable,
+) -> pandas.DataFrame | None:
+    variable_name = variable.key()
+
+    if variable_name not in reference_standardized:
+        return None
+
+    observations_dataframe = _create_observation_dataframe(reference_standardized, variable_name)
+
+    if observations_dataframe.empty:
+        return None
+
+    matchup_dataframe = _perform_matchup(challenger_standardized, observations_dataframe, variable_name)
+
+    if matchup_dataframe.empty:
+        return None
+
+    return _compute_rmsd_class4(matchup_dataframe, variable_name)
+
+
+def _create_observation_dataframe(
+    reference_dataset: xarray.Dataset,
+    variable_name: str,
 ) -> pandas.DataFrame:
-    print(f"         Starting matchup for {len(observations_dataframe)} obs...", flush=True)
+    observations_dataframe = pandas.DataFrame(
+        {
+            variable_name: reference_dataset[variable_name].values,
+            "time": reference_dataset[Dimension.TIME.key()].values,
+            Dimension.LATITUDE.key(): reference_dataset[Dimension.LATITUDE.key()].values,
+            Dimension.LONGITUDE.key(): reference_dataset[Dimension.LONGITUDE.key()].values,
+            Dimension.DEPTH.key(): reference_dataset[Dimension.DEPTH.key()].values,
+            "first_day_datetime": reference_dataset["first_day_datetime"].values,
+        }
+    )
+    return observations_dataframe.dropna(subset=[variable_name])
+
+
+def _perform_matchup(
+    challenger: xarray.Dataset,
+    observations_dataframe: pandas.DataFrame,
+    variable_name: str,
+) -> pandas.DataFrame:
     matchup_results = []
     run_dates = challenger[Dimension.FIRST_DAY_DATETIME.key()].values
 
-    print(f"         Number of run_dates: {len(run_dates)}", flush=True)
-    print(f"         LEAD_DAYS_COUNT: {LEAD_DAYS_COUNT}", flush=True)
-
-    for i, run_date in enumerate(run_dates):
-        print(f"Run date {i + 1}/{len(run_dates)}: {run_date}", flush=True)
+    for run_date in run_dates:
         forecast = challenger.sel({Dimension.FIRST_DAY_DATETIME.key(): run_date})
+        run_matchups = _perform_matchup_for_single_run(forecast, observations_dataframe, variable_name, run_date)
+        matchup_results.extend(run_matchups)
 
-        for lead_index in range(LEAD_DAYS_COUNT):
-            print(f"            Lead day {lead_index}...", flush=True)
-            daily_matchup = _match_single_lead_day(
-                forecast, observations_dataframe, variable_name, lead_index, run_date
-            )
-            if daily_matchup is not None:
-                print(f"            → {len(daily_matchup)} matchups found", flush=True)
-                matchup_results.append(daily_matchup)
-            else:
-                print("No matchups", flush=True)
+    if not matchup_results:
+        return pandas.DataFrame()
 
-    total_matchups = sum(len(r) for r in matchup_results)
-    print(f"         Matchup complete: {total_matchups} total", flush=True)
-    return pandas.concat(matchup_results, ignore_index=True) if matchup_results else pandas.DataFrame()
+    return pandas.concat(matchup_results, ignore_index=True)
+
+
+def _perform_matchup_for_single_run(
+    forecast: xarray.Dataset,
+    observations_dataframe: pandas.DataFrame,
+    variable_name: str,
+    run_date: numpy.datetime64,
+) -> list[pandas.DataFrame]:
+    run_matchups = []
+
+    for lead_index in range(LEAD_DAYS_COUNT):
+        daily_matchup = _match_single_lead_day(forecast, observations_dataframe, variable_name, lead_index, run_date)
+        if daily_matchup is not None:
+            run_matchups.append(daily_matchup)
+
+    return run_matchups
 
 
 def _match_single_lead_day(
@@ -134,8 +240,8 @@ def _match_single_lead_day(
     observations_dataframe: pandas.DataFrame,
     variable_name: str,
     lead_index: int,
-    run_date,
-) -> pandas.DataFrame:
+    run_date: numpy.datetime64,
+) -> pandas.DataFrame | None:
     valid_time = pandas.to_datetime(run_date) + pandas.Timedelta(days=lead_index + 1)
     daily_observations = observations_dataframe[observations_dataframe["time"].dt.date == valid_time.date()].copy()
 
@@ -153,182 +259,58 @@ def _match_single_lead_day(
 
 
 def _interpolate_model_to_observations(
-    model_slice: xarray.Dataset, observations_dataframe: pandas.DataFrame, variable_name: str
+    model_slice: xarray.Dataset,
+    observations_dataframe: pandas.DataFrame,
+    variable_name: str,
 ) -> numpy.ndarray:
-
     data_array = model_slice[variable_name]
 
-    # Créer les coordonnées pour interpolation
     lats = xarray.DataArray(observations_dataframe[Dimension.LATITUDE.key()].values, dims="points")
     lons = xarray.DataArray(observations_dataframe[Dimension.LONGITUDE.key()].values, dims="points")
 
-    # Interpolation horizontale
-    horizontal_interp = data_array.interp(
-        {Dimension.LATITUDE.key(): lats, Dimension.LONGITUDE.key(): lons}, method="linear"
+    horizontal_interpolation = data_array.interp(
+        {Dimension.LATITUDE.key(): lats, Dimension.LONGITUDE.key(): lons},
+        method="linear",
     )
 
-    # Si pas de dimension verticale, on retourne directement
     if Dimension.DEPTH.key() not in data_array.dims:
-        return horizontal_interp.values
+        return horizontal_interpolation.values
 
-    # Interpolation verticale VECTORISÉE
     if Dimension.DEPTH.key() in observations_dataframe.columns:
         depths = xarray.DataArray(observations_dataframe[Dimension.DEPTH.key()].values, dims="points")
-        # Interpolation 3D en une seule opération
-        result = horizontal_interp.interp({Dimension.DEPTH.key(): depths}, method="linear")
+        result = horizontal_interpolation.interp({Dimension.DEPTH.key(): depths}, method="cubic")
         return result.values
 
-    return horizontal_interp.values
+    return horizontal_interpolation.values
 
 
-def _has_vertical_dimension(data_array: xarray.DataArray) -> bool:
-    return Dimension.DEPTH.key() in data_array.dims
-
-
-def _interpolate_vertical(horizontal_interpolation: xarray.DataArray, depths: numpy.ndarray) -> numpy.ndarray:
-    model_values = [
-        _interpolate_single_depth(horizontal_interpolation, index, depth) for index, depth in enumerate(depths)
-    ]
-    return pandas.to_numeric(model_values, errors="coerce")
-
-
-def _interpolate_single_depth(
-    horizontal_interpolation: xarray.DataArray, index: int, observation_depth: float
-) -> float:
-    try:
-        result = (
-            horizontal_interpolation.isel(points=index)
-            .interp({Dimension.DEPTH.key(): observation_depth}, method="linear")
-            .values
-        )
-        return float(result) if not numpy.isnan(result) else numpy.nan
-    except (ValueError, KeyError):
-        return numpy.nan
-
-
-def rmsd_class4_validation(
-    challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
-    variables: list[Variable],
-    use_ssh_correction: bool = True,
+def _compute_rmsd_class4(
+    matchup_dataframe: pandas.DataFrame,
+    variable_name: str,
 ) -> pandas.DataFrame:
-    """
-    Compute Class-4 validation metrics.
-
-    Args:
-        challenger_dataset: Forecast dataset to validate
-        reference_dataset: In-situ observations dataset
-        variables: List of variables to validate
-        use_ssh_correction: Apply SLA to SSH conversion using GLORYS MSSH (default: True)
-    """
-    print(" Starting Class-4 validation...", flush=True)
-
-    print("   Standardizing challenger...", flush=True)
-    challenger_standardized = _standardize_dataset(challenger_dataset)
-    print("    Challenger standardized", flush=True)
-
-    print("   Standardizing reference...", flush=True)
-    reference_standardized = _standardize_dataset(reference_dataset)
-    print("    Reference standardized", flush=True)
-
-    # Convert SLA to absolute SSH if requested
-    ssh_variable = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
-    if use_ssh_correction and ssh_variable in reference_standardized:
-        print("   Loading MSSH...", flush=True)
-        mean_ssh = _load_mean_ssh()
-        reference_standardized = _convert_sla_to_ssh(reference_standardized, mean_ssh)
-
-    print("   Starting variable processing...", flush=True)
-    all_results = []
-
-    for variable in variables:
-        variable_name = variable.key()
-        print(f"\n   Processing {variable_name}...", flush=True)
-
-        if variable_name not in reference_standardized:
-            print("  Not in reference, skipping", flush=True)
-            continue
-
-        observations_dataframe = _create_observation_dataframe(reference_standardized, variable_name)
-        print(f"      ✓ {len(observations_dataframe)} observations", flush=True)
-
-        if observations_dataframe.empty:
-            continue
-
-        matchup_dataframe = perform_matchup(challenger_standardized, observations_dataframe, variable_name)
-        print(f"      ✓ {len(matchup_dataframe)} matchups", flush=True)
-
-        if not matchup_dataframe.empty:
-            print("Computing RMSD...", flush=True)
-            rmsd_result = rmsd_class4(matchup_dataframe, variable_name)
-            print("RMSD computed", flush=True)
-            all_results.append(rmsd_result)
-
-    if not all_results:
-        print("\n No results generated", flush=True)
-        return pandas.DataFrame()
-
-    print("\n   Formatting results...", flush=True)
-    result = _format_rmsd_table(pandas.concat(all_results, ignore_index=True))
-    print("✓ Class-4 validation complete!", flush=True)
-
-    return result
-
-
-def _create_observation_dataframe(reference_dataset: xarray.Dataset, variable_name: str) -> pandas.DataFrame:
-    observations_dataframe = pandas.DataFrame(
-        {
-            variable_name: reference_dataset[variable_name].values,
-            "time": reference_dataset[Dimension.TIME.key()].values,
-            Dimension.LATITUDE.key(): reference_dataset[Dimension.LATITUDE.key()].values,
-            Dimension.LONGITUDE.key(): reference_dataset[Dimension.LONGITUDE.key()].values,
-            Dimension.DEPTH.key(): reference_dataset[Dimension.DEPTH.key()].values,
-            "first_day_datetime": reference_dataset["first_day_datetime"].values,
-        }
-    )
-    return observations_dataframe.dropna(subset=[variable_name])
-
-
-def rmsd_class4(matchup_dataframe: pandas.DataFrame, variable_name: str) -> pandas.DataFrame:
-    print("RMSD calculation starting...", flush=True)
-    depth_bins = _get_depth_bins_for_variable(variable_name)
+    depth_bins = DEPTH_BINS_BY_VARIABLE.get(variable_name, DEPTH_BINS_DEFAULT)
     results = []
 
     for lead_index in sorted(matchup_dataframe["lead_day"].unique()):
         lead_data = matchup_dataframe[matchup_dataframe["lead_day"] == lead_index]
-        results.extend(_compute_rmsd_for_depth_bins(lead_data, variable_name, lead_index, depth_bins))
+        results.extend(_compute_rmsd_for_all_depth_bins(lead_data, variable_name, lead_index, depth_bins))
 
-    print("RMSD calculation done", flush=True)
     return pandas.DataFrame(results)
 
 
-def _get_depth_bins_for_variable(variable_name: str) -> dict:
-    depth_bins_by_variable = {
-        Variable.EASTWARD_SEA_WATER_VELOCITY.key(): {"15m": (10, 20)},
-        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): {"15m": (10, 20)},
-        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): {"surface": (-1, 1)},
-    }
-
-    default_depth_bins = {
-        "0-5m": (0, 5),
-        "5-100m": (5, 100),
-        "100-300m": (100, 300),
-        "300-600m": (300, 600),
-    }
-
-    return depth_bins_by_variable.get(variable_name, default_depth_bins)
-
-
-def _compute_rmsd_for_depth_bins(
-    lead_data: pandas.DataFrame, variable_name: str, lead_index: int, depth_bins: dict
-) -> list:
+def _compute_rmsd_for_all_depth_bins(
+    lead_data: pandas.DataFrame,
+    variable_name: str,
+    lead_index: int,
+    depth_bins: dict,
+) -> list[dict]:
     results = []
 
     for depth_label, (minimum_depth, maximum_depth) in depth_bins.items():
-        depth_data = _filter_by_depth_range(lead_data, minimum_depth, maximum_depth)
+        depth_data = lead_data[(lead_data["depth"] >= minimum_depth) & (lead_data["depth"] < maximum_depth)]
 
         if len(depth_data) > 0:
-            rmsd = _calculate_rmsd(depth_data["model_value"], depth_data[variable_name])
+            rmsd = numpy.sqrt(numpy.mean((depth_data["model_value"] - depth_data[variable_name]) ** 2))
             results.append(
                 {
                     "variable": variable_name,
@@ -342,37 +324,62 @@ def _compute_rmsd_for_depth_bins(
     return results
 
 
-def _filter_by_depth_range(data: pandas.DataFrame, minimum_depth: float, maximum_depth: float) -> pandas.DataFrame:
-    return data[(data["depth"] >= minimum_depth) & (data["depth"] < maximum_depth)]
-
-
-def _calculate_rmsd(model_values: numpy.ndarray, observation_values: numpy.ndarray) -> float:
-    return numpy.sqrt(numpy.mean((model_values - observation_values) ** 2))
-
-
-def _create_pivot_table_multi_lead(table: pandas.DataFrame) -> pandas.DataFrame:
-    return table.pivot_table(
-        values="rmsd", index=["variable", "depth_bin"], columns="lead_day", aggfunc="first"
-    ).reset_index()
-
-
-def _format_rmsd_table(combined: pandas.DataFrame, selected_lead_days: list = None) -> pandas.DataFrame:
+def _format_rmsd_table(
+    combined: pandas.DataFrame,
+    selected_lead_days: list = None,
+) -> pandas.DataFrame:
     if selected_lead_days is None:
         selected_lead_days = SELECTED_LEAD_DAYS_FOR_DISPLAY
 
-    table = combined[combined["lead_day"].isin(selected_lead_days)]
+    filtered_table = combined[combined["lead_day"].isin(selected_lead_days)]
 
-    if table.empty:
+    if filtered_table.empty:
         return pandas.DataFrame()
 
-    pivot = _create_pivot_table_multi_lead(table)
-    pivot = _add_observation_counts(pivot, table, selected_lead_days[0])
-    pivot = _rename_and_sort_variables(pivot)
+    pivot = _create_pivot_table(filtered_table)
+    pivot = _add_observation_counts(pivot, filtered_table, selected_lead_days[0])
+    pivot = _apply_display_names_and_sorting(pivot)
 
-    return _create_final_output_table_multi_lead(pivot, selected_lead_days)
+    return _create_final_output_table(pivot, selected_lead_days)
 
 
-def _create_final_output_table_multi_lead(pivot: pandas.DataFrame, selected_lead_days: list) -> pandas.DataFrame:
+def _create_pivot_table(table: pandas.DataFrame) -> pandas.DataFrame:
+    return table.pivot_table(
+        values="rmsd",
+        index=["variable", "depth_bin"],
+        columns="lead_day",
+        aggfunc="first",
+    ).reset_index()
+
+
+def _add_observation_counts(
+    pivot: pandas.DataFrame,
+    table: pandas.DataFrame,
+    reference_lead: int,
+) -> pandas.DataFrame:
+    counts = (
+        table[table["lead_day"] == reference_lead]
+        .pivot_table(values="count", index=["variable", "depth_bin"], aggfunc="first")
+        .reset_index()
+    )
+    return pivot.merge(counts, on=["variable", "depth_bin"], how="left")
+
+
+def _apply_display_names_and_sorting(pivot: pandas.DataFrame) -> pandas.DataFrame:
+    pivot["variable"] = pivot["variable"].map(VARIABLE_DISPLAY_NAMES)
+    pivot["variable_sort_order"] = pivot["variable"].map(
+        {name: index for index, name in enumerate(VARIABLE_DISPLAY_ORDER)}
+    )
+    pivot["depth_sort_order"] = pivot["depth_bin"].map(
+        {name: index for index, name in enumerate(DEPTH_BIN_DISPLAY_ORDER)}
+    )
+    return pivot.sort_values(["variable_sort_order", "depth_sort_order"]).reset_index(drop=True)
+
+
+def _create_final_output_table(
+    pivot: pandas.DataFrame,
+    selected_lead_days: list,
+) -> pandas.DataFrame:
     output_columns = {
         "Variable": pivot["variable"],
         "Depth Range": pivot["depth_bin"],
@@ -393,32 +400,3 @@ def _create_final_output_table_multi_lead(pivot: pandas.DataFrame, selected_lead
         )
 
     return pandas.DataFrame(output_columns)
-
-
-def _add_observation_counts(pivot: pandas.DataFrame, table: pandas.DataFrame, reference_lead: int) -> pandas.DataFrame:
-    counts = (
-        table[table["lead_day"] == reference_lead]
-        .pivot_table(values="count", index=["variable", "depth_bin"], aggfunc="first")
-        .reset_index()
-    )
-
-    return pivot.merge(counts, on=["variable", "depth_bin"], how="left")
-
-
-def _rename_and_sort_variables(pivot: pandas.DataFrame) -> pandas.DataFrame:
-    variable_display_order = [
-        VARIABLE_DISPLAY_NAMES[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()],
-        VARIABLE_DISPLAY_NAMES[Variable.SEA_WATER_SALINITY.key()],
-        VARIABLE_DISPLAY_NAMES[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()],
-        VARIABLE_DISPLAY_NAMES[Variable.EASTWARD_SEA_WATER_VELOCITY.key()],
-        VARIABLE_DISPLAY_NAMES[Variable.NORTHWARD_SEA_WATER_VELOCITY.key()],
-    ]
-    depth_bin_display_order = ["surface", "0-5m", "5-100m", "100-300m", "300-600m", "15m"]
-
-    pivot["variable"] = pivot["variable"].map(VARIABLE_DISPLAY_NAMES)
-    pivot["var_sort"] = pivot["variable"].map(
-        {variable: index for index, variable in enumerate(variable_display_order)}
-    )
-    pivot["depth_sort"] = pivot["depth_bin"].map({depth: index for index, depth in enumerate(depth_bin_display_order)})
-
-    return pivot.sort_values(["var_sort", "depth_sort"]).reset_index(drop=True)
