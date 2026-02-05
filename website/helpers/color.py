@@ -15,7 +15,5 @@ def get_color(reference_value: float, compared_value: float):
         min(MAX_DIFF_DISTANCE, compared_value - reference_value),
     )
     # normalize the difference between 0 and 1
-    normalized_diff = (constraint_diff + MAX_DIFF_DISTANCE) / (
-        MAX_DIFF_DISTANCE * 2
-    )
+    normalized_diff = (constraint_diff + MAX_DIFF_DISTANCE) / (MAX_DIFF_DISTANCE * 2)
     return mpl.colors.rgb2hex(CMAP(normalized_diff))

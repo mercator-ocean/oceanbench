@@ -19,9 +19,7 @@ def _get_score_value(
     variable_label: str,
     index: str,
 ) -> float:
-    return float(
-        score.depths[depth_label].variables[variable_label].data[index]
-    )
+    return float(score.depths[depth_label].variables[variable_label].data[index])
 
 
 def _get_model_names_table(
@@ -54,12 +52,8 @@ def _get_variable_table_body_row_cells(
             reference_score, depth_label, variable_label, lead_day_index
         )
         color = get_color(reference_value, value)
-        style = (
-            "" if is_reference else f"background-color:{color}; color: black"
-        )
-        table_cells.append(
-            f"<td style='{style}'>{'{:.2f}'.format(value)}</td>"
-        )
+        style = "" if is_reference else f"background-color:{color}; color: black"
+        table_cells.append(f"<td style='{style}'>{'{:.2f}'.format(value)}</td>")
     return "".join(table_cells)
 
 
@@ -154,6 +148,8 @@ def get_html_tables(
             variable, reference_score, depth_label, other_scores
         )
 
-    html_tables = f"<div class='row'>{models}<div class='variables'>{variable_tables}</div></div>"
+    html_tables = (
+        f"<div class='row'>{models}<div class='variables'>{variable_tables}</div></div>"
+    )
 
     return html_tables

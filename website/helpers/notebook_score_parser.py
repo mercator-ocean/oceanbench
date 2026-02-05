@@ -42,8 +42,7 @@ def _convert_raw_html_report_score_table_to_model_score(
             "cf_name": "TODO",
             "unit": "TODO",
             "data": {
-                str(k + 1): float(v.string)
-                for k, v in enumerate(row.find_all("td"))
+                str(k + 1): float(v.string) for k, v in enumerate(row.find_all("td"))
             },
         }
     return ModelScore.model_validate(scores)
@@ -62,9 +61,7 @@ def _get_notebook(path: str):
 def get_model_score_from_notebook(notebook_path: str, name: str) -> ModelScore:
     raw_report = _get_notebook(notebook_path)
     score_table = get_raw_html_report_score_table(raw_report)
-    model_score = _convert_raw_html_report_score_table_to_model_score(
-        score_table, name
-    )
+    model_score = _convert_raw_html_report_score_table_to_model_score(score_table, name)
     return model_score
 
 
