@@ -18,7 +18,7 @@ challenger_dataset: xarray.Dataset = (
         parallel=True,
     )
     .unify_chunks()
-    .assign({"first_day_datetime": [datetime.fromisoformat("2024-01-04"), datetime.fromisoformat("2024-01-11")]})
+    .assign({"first_day_datetime": [datetime.fromisoformat("2023-01-04"), datetime.fromisoformat("2023-01-11")]})
 )
 
 

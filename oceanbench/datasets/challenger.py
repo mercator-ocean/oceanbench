@@ -71,7 +71,7 @@ def glo36v1() -> xarray.Dataset:
       * lat                 (lat) float32 8kB -80.0 -79.92 -79.83 ... 89.92 90.0
       * lead_day_index      (lead_day_index) int64 56B 0 1 2 3 4 5 6
       * lon                 (lon) float32 17kB -180.0 -179.9 -179.8 ... 179.8 179.9
-      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ...
+      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2023-01-04 ...
     Data variables:
         so                  (first_day_datetime, lead_day_index, depth, lat, lon) float32 642GB dask.array<chunksize=(1, 1, 7, 256, 540), meta=np.ndarray>
         thetao              (first_day_datetime, lead_day_index, depth, lat, lon) float32 642GB dask.array<chunksize=(1, 1, 7, 256, 540), meta=np.ndarray>

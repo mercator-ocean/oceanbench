@@ -7,7 +7,7 @@ This module exposes the challenger datasets evaluated in the benchmark.
 """
 
 import xarray
-from datetime import datetime, timedelta
+from datetime import datetime
 from oceanbench.core.datetime_utils import generate_dates
 
 
@@ -21,15 +21,19 @@ def _glo12_dataset_path(start_datetime: datetime) -> str:
 
 
 def glo36v1() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_glo36v1_dataset_path, preprocess=None)
+    first_day_datetimes = generate_dates("2023-01-04", "2023-12-27", 7)
 
-
-def _glo36v1_dataset_path(start_datetime: datetime) -> str:
-    # GLO36 data is from 2023, but we artificially use 2024 dates.
-    # So we map the 2024 request back to 2023 files.
-    actual_datetime = start_datetime - timedelta(weeks=52)
-    start_datetime_string = actual_datetime.strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/{start_datetime_string}.zarr"
+    challenger_dataset = xarray.open_mfdataset(
+        [
+            f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/{dt.strftime('%Y%m%d')}.zarr"
+            for dt in first_day_datetimes
+        ],
+        engine="zarr",
+        combine="nested",
+        concat_dim="first_day_datetime",
+        parallel=True,
+    ).assign({"first_day_datetime": first_day_datetimes})
+    return challenger_dataset
 
 
 def glonet() -> xarray.Dataset:
