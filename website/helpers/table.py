@@ -28,9 +28,7 @@ def _get_model_names_table(
     other_scores: list[ModelScore],
 ) -> str:
     thead = "<thead><tr><th>Models</th></tr></thead>"
-    model_names = [reference_score.name] + [
-        score.name for score in other_scores if depth_label in score.depths
-    ]
+    model_names = [reference_score.name] + [score.name for score in other_scores if depth_label in score.depths]
     model_name_as_tr = [f"<tr><th>{name}</th></tr>" for name in model_names]
     tbody = "<tbody>" + "".join(model_name_as_tr) + "</tbody>"
     tfoot = "<tfoot><tr><th>Lead day</th></tr></tfoot>"
@@ -48,9 +46,7 @@ def _get_variable_table_body_row_cells(
     table_cells = []
     for lead_day_index in LEAD_DAY_INDEXES:
         value = data[lead_day_index]
-        reference_value = _get_score_value(
-            reference_score, depth_label, variable_label, lead_day_index
-        )
+        reference_value = _get_score_value(reference_score, depth_label, variable_label, lead_day_index)
         color = get_color(reference_value, value)
         style = "" if is_reference else f"background-color:{color}; color: black"
         table_cells.append(f"<td style='{style}'>{'{:.2f}'.format(value)}</td>")
@@ -123,11 +119,7 @@ def _get_variable_table(
         depth_label=depth_label,
         other_scores=other_scores,
     )
-    tfoot = (
-        "<tfoot><tr>"
-        + "".join([f"<td>{index}</td>" for index in LEAD_DAY_INDEXES])
-        + "</tr></tfoot>"
-    )
+    tfoot = "<tfoot><tr>" + "".join([f"<td>{index}</td>" for index in LEAD_DAY_INDEXES]) + "</tr></tfoot>"
 
     html_table = f"<table>{thead}{tbody}{tfoot}</table>"
 
@@ -144,12 +136,8 @@ def get_html_tables(
     variables = _get_variables(reference_score, depth_label)
     variable_tables = ""
     for variable in variables:
-        variable_tables += _get_variable_table(
-            variable, reference_score, depth_label, other_scores
-        )
+        variable_tables += _get_variable_table(variable, reference_score, depth_label, other_scores)
 
-    html_tables = (
-        f"<div class='row'>{models}<div class='variables'>{variable_tables}</div></div>"
-    )
+    html_tables = f"<div class='row'>{models}<div class='variables'>{variable_tables}</div></div>"
 
     return html_tables
