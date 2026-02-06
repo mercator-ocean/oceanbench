@@ -14,10 +14,6 @@ format:
     page-layout: full
 ---
 
-<div style="text-align: left; margin-top: -10px; margin-bottom: 20px;">
-  <p style="text-transform: uppercase; font-size: 0.7em; color: gray; margin-bottom: 0;">Author</p>
-  <p style="font-size: 1em; margin-top: 0;">Mercator Ocean</p>
-</div>
 
 <div style="text-align: left; margin: 30px 0;">
   <img id="main-logo" class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-light.png" alt="OceanBench logo" style="width: 950px; height: 350px;">
