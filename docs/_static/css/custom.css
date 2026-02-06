@@ -8,10 +8,6 @@
     font-size: 1.2rem;
 }
 
-.sidebar-logo {
-    max-width: 70%;
-}
-
 .github-link {
     margin-bottom: 1em;
 }
@@ -21,4 +17,55 @@ a:active,
 a:hover,
 a:visited:hover {
     color: var(--color-brand-primary);
+}
+
+:root {
+    --logo-dark-url: url("https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-dark.png");
+    --logo-height: 100px;
+}
+
+body[data-theme="dark"] .sidebar-logo,
+body[data-theme="dark"] .sidebar-logo-container {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+body[data-theme="dark"] .sidebar-brand::before {
+    content: "";
+    display: block;
+    width: 100%;
+    height: var(--logo-height);
+    background-image: var(--logo-dark-url);
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    margin-bottom: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+    body[data-theme="auto"] .sidebar-logo,
+    body[data-theme="auto"] .sidebar-logo-container {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    body[data-theme="auto"] .sidebar-brand::before {
+        content: "";
+        display: block;
+        width: 100%;
+        height: var(--logo-height);
+        background-image: var(--logo-dark-url);
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        margin-bottom: 10px;
+    }
 }

@@ -37,13 +37,13 @@ pygments_dark_style = "monokai"
 
 html_theme = "furo"
 html_static_path = ["_static"]
-html_favicon = "https://minio.dive.edito.eu/project-oceanbench/public/oceanbench-logo.png"
+html_favicon = "https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-light.png"
 html_css_files = ["css/custom.css"]
 
 apidoc_modules = [
     {"path": "../oceanbench", "destination": "source/"},
 ]
-html_logo = "https://minio.dive.edito.eu/project-oceanbench/public/oceanbench-logo.png"
+html_logo = "https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-light.png"
 
 html_theme_options = {
     "light_css_variables": {"color-brand-primary": "#002a49"},
