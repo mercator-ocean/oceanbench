@@ -2,11 +2,12 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import pandas
-import numpy
 from datetime import datetime
+import numpy
+import pandas
 from xarray import Dataset, open_mfdataset
 import logging
+
 from oceanbench.core.dataset_utils import Dimension
 
 logger = logging.getLogger("obs_insitu")
@@ -21,16 +22,16 @@ def _observation_insitu_path(day_datetime: numpy.datetime64) -> str:
 def observation_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
 
-    all_days = set()
-    for first_day_datetime in first_day_datetimes:
-        for day_offset in range(11):
-            day_timestamp = pandas.Timestamp(first_day_datetime) + pandas.Timedelta(days=day_offset)
-            all_days.add(numpy.datetime64(day_timestamp.date()))
+    all_days = numpy.unique(
+        [
+            numpy.datetime64((pandas.Timestamp(first_day) + pandas.Timedelta(days=day_offset)).date())
+            for first_day in first_day_datetimes
+            for day_offset in range(11)
+        ]
+    )
 
-    observation_paths = [_observation_insitu_path(day) for day in sorted(all_days)]
-
-    observations_full = open_mfdataset(
-        observation_paths,
+    observations = open_mfdataset(
+        list(map(_observation_insitu_path, all_days)),
         engine="zarr",
         decode_cf=False,
         parallel=True,
@@ -38,39 +39,22 @@ def observation_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
         combine="nested",
     )
 
-    time_datetime = pandas.to_datetime(observations_full.time.values)
-    observations_full = observations_full.assign_coords(time=("obs", time_datetime))
+    time_datetime = pandas.to_datetime(observations.time.values)
+    observations = observations.assign_coords(time=("obs", time_datetime))
 
-    filtered_datasets = []
-    for first_day_datetime in first_day_datetimes:
-        first_day = numpy.datetime64(pandas.Timestamp(first_day_datetime))
-        end_day = numpy.datetime64(
-            pandas.Timestamp(first_day_datetime) + pandas.Timedelta(days=10, hours=23, minutes=59)
-        )
+    time_values = observations.time.values
+    first_days = first_day_datetimes[:, numpy.newaxis]  # Shape: (n_runs, 1)
+    end_days = (pandas.to_datetime(first_day_datetimes) + pandas.Timedelta(days=10, hours=23, minutes=59)).values[
+        :, numpy.newaxis
+    ]
 
-        time_mask = (observations_full.time.values >= first_day) & (observations_full.time.values <= end_day)
-        dataset_filtered = observations_full.isel(obs=time_mask)
+    masks = (time_values >= first_days) & (time_values <= end_days)  # Shape: (n_runs, n_obs)
 
-        if len(dataset_filtered.obs) > 0:
-            dataset_filtered = dataset_filtered.assign_coords(
-                {
-                    Dimension.FIRST_DAY_DATETIME.key(): (
-                        ("obs",),
-                        numpy.full(len(dataset_filtered.obs), first_day_datetime, dtype="datetime64[ns]"),
-                    )
-                }
-            )
-            filtered_datasets.append(dataset_filtered)
+    run_indices = numpy.argmax(masks, axis=0)
+    combined_mask = numpy.any(masks, axis=0)
 
-    variables = ["thetao", "so", "uo", "vo", "zos"]
-    coordinates = ["time", "latitude", "longitude", "depth", "first_day_datetime"]
+    first_day_coord = first_day_datetimes[run_indices]
 
-    stacked_data = {
-        variable: numpy.concatenate([dataset[variable].values for dataset in filtered_datasets])
-        for variable in variables + coordinates
-    }
-
-    return Dataset(
-        {variable: (["obs"], stacked_data[variable]) for variable in variables},
-        coords={coordinate: (["obs"], stacked_data[coordinate]) for coordinate in coordinates},
+    return observations.isel(obs=combined_mask).assign_coords(
+        {Dimension.FIRST_DAY_DATETIME.key(): (("obs",), first_day_coord[combined_mask])}
     )

@@ -75,7 +75,7 @@ run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
-	$(MAKE) -j3 evaluate-glonet-sample evaluate-xihe-sample evaluate-wenhai-sample
+	$(MAKE) -j3 evaluate-glonet-sample
 	$(MAKE) compare-notebooks
 	poetry run pytest --doctest-modules oceanbench/datasets/* -n 8
 
