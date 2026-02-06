@@ -20,8 +20,8 @@ format:
 </div>
 
 <div style="text-align: left; margin: 30px 0;">
-  <img id="main-logo" class="only-light" src="assets/oceanbench-logo-light.png" alt="OceanBench logo" style="width: 950px; height: 350px;">
-  <img id="main-logo-dark" class="only-dark" src="assets/oceanbench-logo-dark.png" alt="OceanBench logo" style="width: 950px; height: 350px;">
+  <img id="main-logo" class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-light.png" alt="OceanBench logo" style="width: 950px; height: 350px;">
+  <img id="main-logo-dark" class="only-dark" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-dark.png" alt="OceanBench logo" style="width: 950px; height: 350px;">
 </div>
 
 

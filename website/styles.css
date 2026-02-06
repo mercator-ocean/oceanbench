@@ -47,11 +47,11 @@ body.quarto-dark img[src*="reanalysis-track"] {
 }
 
 body.quarto-dark .navbar-logo {
-  content: url('./assets/favicon-dark.png');
+  content: url('https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-dark.png');
 }
 
 body.quarto-light .navbar-logo {
-  content: url('./assets/favicon-light.png');
+  content: url('https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-light.png');
 }
 
 body.quarto-light .only-dark {

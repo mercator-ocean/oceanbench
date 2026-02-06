@@ -9,7 +9,7 @@ website:
   favicon: favicon.png
   open-graph: true
   navbar:
-    logo: assets/favicon-light.png
+    logo: https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-light.png
     logo-alt: "OceanBench logo."
     left:
       - href: index.qmd
