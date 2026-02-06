@@ -41,7 +41,7 @@ html_favicon = "https://minio.dive.edito.eu/project-oceanbench/public/logo/favic
 html_css_files = ["css/custom.css"]
 
 apidoc_modules = [
-    {"path": "../oceanbench", "destination": "source/"},
+    {"path": "../oceanbench", "destination": "source/", "exclude": ["../oceanbench/cli.py"]},
 ]
 html_logo = "https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-light.png"
 
