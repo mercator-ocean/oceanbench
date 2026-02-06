@@ -24,7 +24,7 @@ jobs:
           micromamba-version: '1.5.6-0'
           micromamba-binary-path: ${{ runner.temp }}/bin/micromamba
           environment-file: conda_environment_test.yaml
-          environment-name: oceanbench_test
+          environment-name: oceanbench_evaluate_challenger_${{ github.ref_name }}_${{ github.sha }}
           condarc-file: .condarc
           cache-environment: true
           post-cleanup: 'all'
@@ -40,5 +40,6 @@ jobs:
           CHALLENGER_REPORT_NAME: ${{ inputs.challengerPythonFileName }}.report.ipynb
           OUTPUT_BUCKET: project-oceanbench
           OUTPUT_PREFIX: dev/evaluation-reports/${{ github.head_ref || github.ref_name }}
+          TEST_ENVIRONMENT_NAME: oceanbench_evaluate_challenger_${{ github.ref_name }}_${{ github.sha }}
         run: make evaluate-challenger
         shell: micromamba-shell {0}
