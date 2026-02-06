@@ -6,14 +6,24 @@ import argparse
 import json
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass
 from urllib.request import urlopen, Request
-from urllib.error import URLError
 
 from oceanbench.core.version import __version__
 
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/mercator-ocean/oceanbench"
 GITHUB_API_BASE = "https://api.github.com/repos/mercator-ocean/oceanbench/contents"
 CHALLENGER_DIRECTORY = "challenger_datasets"
+
+
+@dataclass(frozen=True)
+class EvaluationResult:
+    challenger: str
+    error: str | None = None
+
+    @property
+    def success(self) -> bool:
+        return self.error is None
 
 
 def _get_version_ref() -> str:
@@ -33,68 +43,71 @@ def _resolve_all_challenger_urls() -> list[str]:
     ]
 
 
-def _evaluate_one(challenger: str, output_bucket: str | None, output_prefix: str | None) -> None:
-    from oceanbench.core.evaluate import evaluate_challenger
+def _evaluate_one(
+    challenger: str,
+    output_bucket: str | None,
+    output_prefix: str | None,
+) -> EvaluationResult:
+    try:
+        from oceanbench.core.evaluate import evaluate_challenger
 
-    evaluate_challenger(
-        challenger_python_code_uri_or_local_path=challenger,
-        output_bucket=output_bucket,
-        output_prefix=output_prefix,
-    )
+        evaluate_challenger(
+            challenger_python_code_uri_or_local_path=challenger,
+            output_bucket=output_bucket,
+            output_prefix=output_prefix,
+        )
+        return EvaluationResult(challenger=challenger)
+    except Exception as exception:
+        return EvaluationResult(challenger=challenger, error=str(exception))
+
+
+def _resolve_challengers(args: argparse.Namespace) -> list[str]:
+    if args.all_challengers:
+        return _resolve_all_challenger_urls()
+    return args.challengers
+
+
+def _evaluate_all(
+    challengers: list[str],
+    output_bucket: str | None,
+    output_prefix: str | None,
+) -> list[EvaluationResult]:
+    with ProcessPoolExecutor() as executor:
+        futures = {
+            executor.submit(_evaluate_one, challenger, output_bucket, output_prefix): challenger
+            for challenger in challengers
+        }
+        return [future.result() for future in as_completed(futures)]
+
+
+def _print_results(results: list[EvaluationResult]) -> None:
+    for result in results:
+        if result.success:
+            print(f"OK: {result.challenger}")
+        else:
+            print(f"FAIL: {result.challenger}: {result.error}", file=sys.stderr)
+
+    successes = sum(1 for result in results if result.success)
+    failures = sum(1 for result in results if not result.success)
+    print(f"\n{successes} succeeded, {failures} failed")
 
 
 def _run_evaluate(args: argparse.Namespace) -> int:
-    if args.all_challengers:
-        try:
-            challengers = _resolve_all_challenger_urls()
-        except URLError as e:
-            print(f"Error: failed to fetch challengers from GitHub: {e}", file=sys.stderr)
-            return 1
-        if not challengers:
-            print("No challengers found on GitHub for version", _get_version_ref(), file=sys.stderr)
-            return 1
-    else:
-        challengers = args.challengers
+    challengers = _resolve_challengers(args)
 
     if not challengers:
-        print("Error: provide challenger files or use --all-challengers", file=sys.stderr)
+        print(
+            "Error: provide challenger files or use --all-challengers",
+            file=sys.stderr,
+        )
         return 1
 
-    output_bucket = args.output_bucket
-    output_prefix = args.output_prefix
-
-    if len(challengers) == 1:
-        try:
-            _evaluate_one(challengers[0], output_bucket, output_prefix)
-            return 0
-        except Exception as e:
-            print(f"Error evaluating {challengers[0]}: {e}", file=sys.stderr)
-            return 1
-
-    successes: list[str] = []
-    failures: list[tuple[str, str]] = []
-
-    with ProcessPoolExecutor() as executor:
-        future_to_challenger = {executor.submit(_evaluate_one, c, output_bucket, output_prefix): c for c in challengers}
-        for future in as_completed(future_to_challenger):
-            challenger = future_to_challenger[future]
-            try:
-                future.result()
-                successes.append(challenger)
-                print(f"OK: {challenger}")
-            except Exception as e:
-                failures.append((challenger, str(e)))
-                print(f"FAIL: {challenger}: {e}", file=sys.stderr)
-
-    print(f"\n{len(successes)} succeeded, {len(failures)} failed")
-    if failures:
-        for name, error in failures:
-            print(f"  - {name}: {error}", file=sys.stderr)
-        return 1
-    return 0
+    results = _evaluate_all(challengers, args.output_bucket, args.output_prefix)
+    _print_results(results)
+    return 0 if all(result.success for result in results) else 1
 
 
-def main():
+def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     parser = argparse.ArgumentParser(
         prog="oceanbench",
         description="OceanBench CLI",
@@ -127,7 +140,11 @@ def main():
         default=None,
         help="S3 prefix for output notebooks (env: OCEANBENCH_OUTPUT_PREFIX)",
     )
+    return parser, evaluate_parser
 
+
+def main():
+    parser, evaluate_parser = _build_parser()
     args = parser.parse_args()
 
     if args.command is None:
