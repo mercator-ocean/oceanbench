@@ -28,6 +28,9 @@ dependencies = [
     "papermill[s3] (>=2.6.0)"
 ]
 
+[project.scripts]
+oceanbench = "oceanbench.cli:main"
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
