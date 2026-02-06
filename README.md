@@ -129,14 +129,36 @@ You can open and manually execute the example notebook in EDITO datalab by click
 
 ### Programmatic evaluation
 
+Once [installed](#installation), you can evaluate your system from the command line or using python.
+
+#### CLI
+
+
+```bash
+oceanbench evaluate path/to/challenger.py
+```
+
+To evaluate multiple challengers in parallel:
+
+```bash
+oceanbench evaluate challenger_a.py challenger_b.py
+```
+
+To upload the resulting notebooks to an S3 bucket:
+
+```bash
+oceanbench evaluate path/to/challenger.py --output-bucket my-bucket --output-prefix results/
+```
+
+The output notebook name is automatically derived from the challenger file name (e.g. `challenger.py` produces `challenger.report.ipynb`).
+
 #### Python
 
-Once [installed](#installation), you can evaluate your system using python with the following code:
 
 ```python
 import oceanbench
 
-oceanbench.evaluate_challenger("path/to/file/opening/the/challenger/datasets.py", "notebook_report_name.ipynb")
+oceanbench.evaluate_challenger("path/to/file/opening/the/challenger/datasets.py")
 ```
 
 More details in the [documentation](https://oceanbench.readthedocs.io/en/latest/source/oceanbench.html#oceanbench.evaluate_challenger).

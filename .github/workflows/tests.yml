@@ -39,7 +39,4 @@ jobs:
         with:
           name: generated-notebooks
           path: |
-            glonet_sample.report.ipynb
-            glonet_1_degree_sample.report.ipynb
-            xihe_sample.report.ipynb
-            wenhai_sample.report.ipynb
+            *_sample.report.ipynb

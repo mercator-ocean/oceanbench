@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from os import environ
+from pathlib import PurePosixPath
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 
@@ -40,9 +41,13 @@ def _parse_input_mandatory(
     return parsed_variable
 
 
+def _derive_output_notebook_file_name(challenger_path: str) -> str:
+    stem = PurePosixPath(challenger_path).stem
+    return f"{stem}.report.ipynb"
+
+
 def evaluate_challenger(
     challenger_python_code_uri_or_local_path: str | None = None,
-    output_notebook_file_name: str | None = None,
     output_bucket: str | None = None,
     output_prefix: str | None = None,
 ):
@@ -52,25 +57,25 @@ def evaluate_challenger(
 
     This function is used for official evaluation.
 
+    The output notebook file name is automatically derived from the challenger file name:
+    ``glonet.py`` becomes ``glonet.report.ipynb``.
+
     Parameters
     ----------
     challenger_python_code_uri_or_local_path : str, optional
-        The python content that opens the challenger dataset. Required. Can be a remote file (URL), a DataURI or the path to a local file. Can also be configured with environment variable `OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH`.
-    output_notebook_file_name : str, optional
-        The name of the executed notebook. Required. Can also be configured with environment variable `OCEANBENCH_OUTPUT_NOTEBOOK_FILE_NAME`.
+        The python content that opens the challenger dataset. Required. Can be a remote file (URL), a DataURI or the path to a local file. Can also be configured with environment variable ``OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH``.
     output_bucket : str, optional
-        The destination S3 bucket of the executed notebook. If not provided, the notebook is written on the local filesystem. If provided, uses AWS S3 environment variables. Can also be configured with environment variable `OCEANBENCH_OUTPUT_BUCKET`.
+        The destination S3 bucket of the executed notebook. If not provided, the notebook is written on the local filesystem. If provided, uses AWS S3 environment variables. Can also be configured with environment variable ``OCEANBENCH_OUTPUT_BUCKET``.
     output_prefix : str, optional
-        The destination S3 prefix of the executed notebook. If `output_bucket` is not provided, this option is ignored. If provided, uses AWS S3 environment variables. Can also be configured with environment variable `OCEANBENCH_OUTPUT_PREFIX`.
+        The destination S3 prefix of the executed notebook. If ``output_bucket`` is not provided, this option is ignored. If provided, uses AWS S3 environment variables. Can also be configured with environment variable ``OCEANBENCH_OUTPUT_PREFIX``.
     """  # noqa
 
     oceanbench_challenger_python_code_uri_or_local_path = _parse_input_mandatory(
         challenger_python_code_uri_or_local_path,
         OceanbenchEnvironmentVariable.OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH,
     )
-    oceanbench_output_notebook_file_name = _parse_input_mandatory(
-        output_notebook_file_name,
-        OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_NOTEBOOK_FILE_NAME,
+    oceanbench_output_notebook_file_name = _derive_output_notebook_file_name(
+        oceanbench_challenger_python_code_uri_or_local_path
     )
     oceanbench_output_bucket = _parse_input_non_manadatory(
         output_bucket,
@@ -93,10 +98,12 @@ def _execute_evaluation_notebook_file(
     output_bucket: str | None,
     output_prefix: str | None,
 ):
-    environ.setdefault("BOTO3_ENDPOINT_URL", f"https://{environ['AWS_S3_ENDPOINT']}")
-
     output_name = f"{output_prefix}/{output_notebook_file_name}" if output_prefix else output_notebook_file_name
-    output_path = f"s3://{output_bucket}/{output_name}" if output_bucket else output_notebook_file_name
+    if output_bucket:
+        environ.setdefault("BOTO3_ENDPOINT_URL", f"https://{environ['AWS_S3_ENDPOINT']}")
+        output_path = f"s3://{output_bucket}/{output_name}"
+    else:
+        output_path = output_notebook_file_name
     execute_notebook(
         output_notebook_file_name,
         output_path,
