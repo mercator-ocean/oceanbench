@@ -43,3 +43,42 @@ class DepthLevel(Enum):
     MINUS_200_METERS = 2.224752e02
     MINUS_300_METERS = 3.181274e02
     MINUS_500_METERS = 5.410889e02
+
+
+# Shared display names for variables
+VARIABLE_LABELS: dict[str, str] = {
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "surface height",
+    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): "temperature",
+    Variable.SEA_WATER_SALINITY.key(): "salinity",
+    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): "northward velocity",
+    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): "eastward velocity",
+    Variable.MIXED_LAYER_DEPTH.key(): "mixed layer depth",
+    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): "northward geostrophic velocity",
+    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): "eastward geostrophic velocity",
+}
+
+# Depth labels for DepthLevel enum
+DEPTH_LABELS: dict[DepthLevel, str] = {
+    DepthLevel.SURFACE: "surface",
+    DepthLevel.MINUS_50_METERS: "50m",
+    DepthLevel.MINUS_100_METERS: "100m",
+    DepthLevel.MINUS_200_METERS: "200m",
+    DepthLevel.MINUS_300_METERS: "300m",
+    DepthLevel.MINUS_500_METERS: "500m",
+}
+
+# Depth bins for class IV validation (range-based binning)
+DEPTH_BINS_DEFAULT: dict[str, tuple[float, float]] = {
+    "surface": (-1, 1),
+    "0-5m": (0, 5),
+    "5-100m": (5, 100),
+    "100-300m": (100, 300),
+    "300-600m": (300, 600),
+}
+
+# Variable-specific depth bins override
+DEPTH_BINS_BY_VARIABLE: dict[str, dict[str, tuple[float, float]]] = {
+    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): {"15m": (10, 20)},
+    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): {"15m": (10, 20)},
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): {"surface": (-5, 5)},
+}

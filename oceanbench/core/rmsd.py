@@ -13,29 +13,10 @@ from oceanbench.core.dataset_utils import (
     Variable,
     Dimension,
     DepthLevel,
+    VARIABLE_LABELS,
+    DEPTH_LABELS,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
-
-VARIABLE_LABELS: dict[str, str] = {
-    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "surface height",
-    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): "temperature",
-    Variable.SEA_WATER_SALINITY.key(): "salinity",
-    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): "northward velocity",
-    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): "eastward velocity",
-    Variable.MIXED_LAYER_DEPTH.key(): "mixed layer depth",
-    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): "northward geostrophic velocity",
-    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): "eastward geostrophic velocity",
-}
-
-DEPTH_LABELS: dict[DepthLevel, str] = {
-    DepthLevel.SURFACE: "surface",
-    DepthLevel.MINUS_50_METERS: "50m",
-    DepthLevel.MINUS_100_METERS: "100m",
-    DepthLevel.MINUS_200_METERS: "200m",
-    DepthLevel.MINUS_300_METERS: "300m",
-    DepthLevel.MINUS_500_METERS: "500m",
-}
-
 
 LEAD_DAYS_COUNT = 10
 
