@@ -16,7 +16,6 @@ format:
 
 <div style="text-align: left; margin: 0;">
   <img id="main-logo" class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-light.png" alt="OceanBench logo" style="width: 950px; height: auto; margin-bottom: -20px;">
-  
   <img id="main-logo-dark" class="only-dark" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-dark.png" alt="OceanBench logo" style="width: 950px; height: auto; margin-bottom: -20px;">
 </div>
 
