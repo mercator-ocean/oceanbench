@@ -98,10 +98,12 @@ def _execute_evaluation_notebook_file(
     output_bucket: str | None,
     output_prefix: str | None,
 ):
-    environ.setdefault("BOTO3_ENDPOINT_URL", f"https://{environ['AWS_S3_ENDPOINT']}")
-
     output_name = f"{output_prefix}/{output_notebook_file_name}" if output_prefix else output_notebook_file_name
-    output_path = f"s3://{output_bucket}/{output_name}" if output_bucket else output_notebook_file_name
+    if output_bucket:
+        environ.setdefault("BOTO3_ENDPOINT_URL", f"https://{environ['AWS_S3_ENDPOINT']}")
+        output_path = f"s3://{output_bucket}/{output_name}"
+    else:
+        output_path = output_notebook_file_name
     execute_notebook(
         output_notebook_file_name,
         output_path,
