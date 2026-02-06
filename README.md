@@ -8,8 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
   <img src="https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-light.png" alt="OceanBench logo" height="200"/>
 </div>
 
-# OceanBench: Evaluating ocean forecasting systems
-
+# OceanBench
 [![The latest version of OceanBench can be found on PyPI.](https://img.shields.io/pypi/v/oceanbench.svg)](https://pypi.org/project/oceanbench)
 [![Link to discover EDITO](https://dive.edito.eu/badges/Powered-by-EDITO.svg)](https://dive.edito.eu)
 [![Information on what versions of Python OceanBench supports can be found on PyPI.](https://img.shields.io/pypi/pyversions/oceanbench.svg)](https://pypi.org/project/oceanbench)
