@@ -9,7 +9,7 @@ website:
   favicon: favicon.png
   open-graph: true
   navbar:
-    logo: https://minio.dive.edito.eu/project-oceanbench/public/oceanbench-logo.png
+    logo: https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-light.png
     logo-alt: "OceanBench logo."
     left:
       - href: index.qmd
@@ -19,7 +19,6 @@ website:
   repo-url: https://github.com/mercator-ocean/oceanbench
   repo-actions: [edit, source, issue]
   repo-subdir: website
-  repo-link-target: _blank
   page-footer: |
     Powered by:
     [![](https://datalab.dive.edito.eu/custom-resources/logos/Full_EU_DTO_Banner.jpeg){height=65px}](https://edito.eu)

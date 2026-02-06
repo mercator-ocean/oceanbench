@@ -5,7 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 
 <div align="center">
-  <img src="https://minio.dive.edito.eu/project-oceanbench/public/oceanbench-logo-with-name.svg" alt="OceanBench logo" height="100"/>
+  <img src="https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-light.png" alt="OceanBench logo" height="200"/>
 </div>
 
 # OceanBench: Evaluating ocean forecasting systems
