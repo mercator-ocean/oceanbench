@@ -7,7 +7,7 @@ import numpy
 import pandas
 from xarray import Dataset, open_mfdataset
 import logging
-
+from oceanbench.core.classIV import LEAD_DAYS_COUNT
 from oceanbench.core.dataset_utils import Dimension
 
 logger = logging.getLogger("obs_insitu")
@@ -26,7 +26,7 @@ def observation_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
         [
             numpy.datetime64((pandas.Timestamp(first_day) + pandas.Timedelta(days=day_offset)).date())
             for first_day in first_day_datetimes
-            for day_offset in range(11)
+            for day_offset in range(1, LEAD_DAYS_COUNT + 1)
         ]
     )
 
@@ -44,9 +44,9 @@ def observation_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
 
     time_values = observations.time.values
     first_days = first_day_datetimes[:, numpy.newaxis]  # Shape: (n_runs, 1)
-    end_days = (pandas.to_datetime(first_day_datetimes) + pandas.Timedelta(days=10, hours=23, minutes=59)).values[
-        :, numpy.newaxis
-    ]
+    end_days = (
+        pandas.to_datetime(first_day_datetimes) + pandas.Timedelta(days=LEAD_DAYS_COUNT, hours=23, minutes=59)
+    ).values[:, numpy.newaxis]
 
     masks = (time_values >= first_days) & (time_values <= end_days)  # Shape: (n_runs, n_obs)
 
