@@ -6,7 +6,7 @@ PROJECT_NAME = oceanbench
 
 ENVIRONMENT_NAME = ${PROJECT_NAME}
 ENVIRONMENT_FILE_NAME = conda_environment.yaml
-TEST_ENVIRONMENT_NAME = ${PROJECT_NAME}_test
+TEST_ENVIRONMENT_NAME ?= ${PROJECT_NAME}_test
 TEST_ENVIRONMENT_FILE_NAME = conda_environment_test.yaml
 .ONESHELL:
 .SHELLFLAGS = -ec
@@ -44,38 +44,32 @@ reuse-annotate:
 	reuse annotate --year 2025 --copyright "Mercator Ocean International <https://www.mercator-ocean.eu/>" --license EUPL-1.2 --recursive . --skip-unrecognised
 	reuse download --all
 
+SAMPLE_FILES := $(wildcard assets/*_sample.py)
+
 evaluate-challenger: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-challenger:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
-	$(MAKE) _evaluate-challenger
+	oceanbench evaluate $(CHALLENGER_PYTHON_FILE_PATH)
 
-_evaluate-challenger: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
-_evaluate-challenger:
+evaluate-samples: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+evaluate-samples:
 	${ACTIVATE_ENVIRONMENT}
-	python -c 'import oceanbench; oceanbench.evaluate_challenger("$(CHALLENGER_PYTHON_FILE_PATH)", "$(CHALLENGER_REPORT_NAME)", "$(OUTPUT_BUCKET)", "$(OUTPUT_PREFIX)")'
-
-evaluate-glonet-sample:
-	$(MAKE) _evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/glonet_sample.py CHALLENGER_REPORT_NAME=glonet_sample.report.ipynb
-
-evaluate-xihe-sample:
-	$(MAKE) _evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/xihe_sample.py CHALLENGER_REPORT_NAME=xihe_sample.report.ipynb
-
-evaluate-wenhai-sample:
-	$(MAKE) _evaluate-challenger CHALLENGER_PYTHON_FILE_PATH=assets/wenhai_sample.py CHALLENGER_REPORT_NAME=wenhai_sample.report.ipynb
+	oceanbench evaluate $(SAMPLE_FILES)
 
 compare-notebooks: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-notebooks:
 	${ACTIVATE_ENVIRONMENT}
-	python tests/compare_notebook.py assets/glonet_sample.report.ipynb glonet_sample.report.ipynb
-	python tests/compare_notebook.py assets/xihe_sample.report.ipynb xihe_sample.report.ipynb
-	python tests/compare_notebook.py assets/wenhai_sample.report.ipynb wenhai_sample.report.ipynb
+	@for f in $(SAMPLE_FILES); do \
+		name=$$(basename $$f .py); \
+		python tests/compare_notebook.py assets/$$name.report.ipynb $$name.report.ipynb; \
+	done
 
 run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
-	$(MAKE) -j3 evaluate-glonet-sample
+	$(MAKE) evaluate-samples
 	$(MAKE) compare-notebooks
 	poetry run pytest --doctest-modules oceanbench/datasets/* -n 8
 
