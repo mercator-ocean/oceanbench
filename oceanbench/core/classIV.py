@@ -9,6 +9,7 @@ Computes RMSD between model forecasts and in-situ observations using
 scipy interpolation for efficient batch processing.
 """
 
+import time
 import numpy
 import xarray
 import pandas
@@ -28,19 +29,19 @@ from oceanbench.core.climate_forecast_standard_names import (
 
 LEAD_DAYS_COUNT = 10
 SELECTED_LEAD_DAYS_FOR_DISPLAY = [0, 2, 4, 6, 9]
-REANALYSIS_MSSH_SHIFT = -0.1148
-MSSH_URL = "https://minio.dive.edito.eu/project-ml-compression/public/glorys12_mssh_2024.zarr"
+REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
+MEAN_SEA_SURFACE_HEIGHT_URL = "https://minio.dive.edito.eu/project-ml-compression/public/glorys12_mssh_2024.zarr"
 
-_MSSH_CACHE = None
+_MEAN_SEA_SURFACE_HEIGHT_CACHE = None
 
 
-def _load_mean_ssh() -> xarray.DataArray:
+def _load_mean_sea_surface_height() -> xarray.DataArray:
     """Load mean sea surface height with caching."""
-    global _MSSH_CACHE
-    if _MSSH_CACHE is None:
-        dataset = xarray.open_dataset(MSSH_URL, engine="zarr", chunks=None)
-        _MSSH_CACHE = dataset["mssh"].load()
-    return _MSSH_CACHE
+    global _MEAN_SEA_SURFACE_HEIGHT_CACHE
+    if _MEAN_SEA_SURFACE_HEIGHT_CACHE is None:
+        dataset = xarray.open_dataset(MEAN_SEA_SURFACE_HEIGHT_URL, engine="zarr", chunks=None)
+        _MEAN_SEA_SURFACE_HEIGHT_CACHE = dataset["mssh"].load()
+    return _MEAN_SEA_SURFACE_HEIGHT_CACHE
 
 
 COORDINATE_NAME_MAPPING = {
@@ -48,12 +49,31 @@ COORDINATE_NAME_MAPPING = {
     "lon": Dimension.LONGITUDE.key(),
 }
 
+# Mapping from short variable names to CF standard names
+VARIABLE_NAME_MAPPING = {
+    "zos": Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+    "thetao": Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+    "so": Variable.SEA_WATER_SALINITY.key(),
+    "uo": Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+    "vo": Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+}
+
 
 def _standardize_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
     """Standardize variable and coordinate names."""
     dataset = rename_dataset_with_standard_names(dataset)
-    rename_dict = {k: v for k, v in COORDINATE_NAME_MAPPING.items() if k in dataset.dims}
-    return dataset.rename(rename_dict) if rename_dict else dataset
+
+    # Rename coordinates (lat -> latitude, lon -> longitude)
+    coord_rename = {k: v for k, v in COORDINATE_NAME_MAPPING.items() if k in dataset.dims}
+    if coord_rename:
+        dataset = dataset.rename(coord_rename)
+
+    # Rename variables that don't have standard_name attribute (e.g., observations)
+    var_rename = {k: v for k, v in VARIABLE_NAME_MAPPING.items() if k in dataset}
+    if var_rename:
+        dataset = dataset.rename(var_rename)
+
+    return dataset
 
 
 def _get_depth_bins(variable_key: str) -> dict[str, tuple[float, float]]:
@@ -96,7 +116,7 @@ def _create_observations_dataframe(
     return dataframe[dataframe["depth_bin"] != ""]
 
 
-def _apply_ssh_correction(
+def _apply_sea_surface_height_correction(
     dataframe: pandas.DataFrame,
     variable_key: str,
 ) -> pandas.DataFrame:
@@ -104,16 +124,20 @@ def _apply_ssh_correction(
     if variable_key != Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
         return dataframe
 
-    mean_ssh = _load_mean_ssh()
+    mean_sea_surface_height = _load_mean_sea_surface_height()
 
     latitudes = xarray.DataArray(dataframe["latitude"].values, dims="observation")
     longitudes = xarray.DataArray(dataframe["longitude"].values, dims="observation")
 
-    mssh_at_observations = mean_ssh.interp(latitude=latitudes, longitude=longitudes, method="linear").values
+    mean_sea_surface_height_at_observations = mean_sea_surface_height.interp(
+        latitude=latitudes, longitude=longitudes, method="linear"
+    ).values
 
     corrected_dataframe = dataframe.copy()
     corrected_dataframe["observation_value"] = (
-        dataframe["observation_value"] + mssh_at_observations + REANALYSIS_MSSH_SHIFT
+        dataframe["observation_value"]
+        + mean_sea_surface_height_at_observations
+        + REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
     )
     return corrected_dataframe
 
@@ -305,6 +329,8 @@ def rmsd_class4_validation(
 
     Uses linear interpolation for latitude/longitude and cubic spline for depth.
     """
+    start_time = time.time()
+
     print("Standardizing datasets...", flush=True)
     challenger = _standardize_dataset(challenger_dataset)
     observations = _standardize_dataset(reference_dataset)
@@ -327,7 +353,7 @@ def rmsd_class4_validation(
 
         print(f"    > {len(observations_dataframe)} observations", flush=True)
 
-        observations_dataframe = _apply_ssh_correction(observations_dataframe, variable_key)
+        observations_dataframe = _apply_sea_surface_height_correction(observations_dataframe, variable_key)
 
         model_variable = challenger[variable_key]
         observations_dataframe["model_value"] = _interpolate_model_to_observations(
@@ -343,6 +369,8 @@ def rmsd_class4_validation(
         return pandas.DataFrame()
 
     result = _format_results(pandas.concat(all_results, ignore_index=True))
-    print("✓ Validation complete!", flush=True)
+
+    elapsed_time = time.time() - start_time
+    print(f"✓ Validation complete! (took {elapsed_time:.2f}s)", flush=True)
 
     return result
