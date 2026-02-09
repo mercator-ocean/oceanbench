@@ -54,7 +54,6 @@ class FreezeParticle(JITParticle):
 
 
 LEAD_DAY_START = 2
-LEAD_DAY_STOP = 7
 
 
 def deviation_of_lagrangian_trajectories(
@@ -75,6 +74,7 @@ def _deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
+    lead_day_stop = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()] - 1
     latitudes, longitudes = _get_random_ocean_points_from_file(
         challenger_dataset,
         variable_name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
@@ -85,9 +85,9 @@ def _deviation_of_lagrangian_trajectories(
         _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes)
     ).mean(axis=0)
     score_dataframe = pandas.DataFrame(
-        {"Surface Lagrangian trajectory deviation (km)": deviations[LEAD_DAY_START - 1 : LEAD_DAY_STOP]}
+        {"Surface Lagrangian trajectory deviation (km)": deviations[LEAD_DAY_START - 1 : lead_day_stop]}
     )
-    score_dataframe.index = lead_day_labels(LEAD_DAY_START, LEAD_DAY_STOP)
+    score_dataframe.index = lead_day_labels(LEAD_DAY_START, lead_day_stop)
     return score_dataframe.T
 
 
@@ -167,13 +167,13 @@ def _set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
     return field_set
 
 
-def _run_simulation(particle_set: ParticleSet, kernels):
+def _run_simulation(particle_set: ParticleSet, kernels, runtime_days: int):
     unique_id = uuid.uuid4()
     output_path = f"/tmp/tmp_particles_{unique_id}.zarr"
     output_file = particle_set.ParticleFile(name=output_path, outputdt=timedelta(hours=24))
     particle_set.execute(
         kernels,
-        runtime=timedelta(days=6),
+        runtime=timedelta(days=runtime_days),
         dt=timedelta(minutes=60),
         output_file=output_file,
         verbose_progress=False,
@@ -233,7 +233,8 @@ def _get_all_particles_positions(
         delete_error_particle,
     ]  # Keep your original kernel setup
 
-    output_path = _run_simulation(particle_set, kernels)
+    runtime_days = len(dataset.time) - 1
+    output_path = _run_simulation(particle_set, kernels, runtime_days)
 
     particle_latitudes, particle_longitudes, particle_ids = _read_output_file(output_path)
 
