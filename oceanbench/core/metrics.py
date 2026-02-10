@@ -11,11 +11,37 @@ from oceanbench.core.derived_quantities import compute_geostrophic_currents
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.rmsd import rmsd
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
-
+from oceanbench.core.classIV import rmsd_class4_validation
+from oceanbench.core.references.observations import observation_insitu_dataset
 
 from oceanbench.core.lagrangian_trajectory import (
     deviation_of_lagrangian_trajectories,
 )
+
+
+def rmsd_of_variables_compared_to_observations(
+    challenger_dataset: xarray.Dataset,
+) -> pandas.DataFrame:
+    print("=" * 80, flush=True)
+    print("STARTING OBSERVATIONS VALIDATION", flush=True)
+    print("=" * 80, flush=True)
+
+    print(" Loading observations dataset...", flush=True)
+    obs_dataset = observation_insitu_dataset(challenger_dataset)
+    result = rmsd_class4_validation(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=obs_dataset,
+        variables=[
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+            Variable.SEA_WATER_SALINITY,
+            Variable.NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.EASTWARD_SEA_WATER_VELOCITY,
+        ],
+    )
+
+    print("✓ Validation complete!", flush=True)
+    return result
 
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(
