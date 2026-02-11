@@ -7,6 +7,7 @@ import numpy
 import xarray
 import pandas
 from scipy.interpolate import CubicSpline
+import matplotlib.pyplot as plt
 
 from oceanbench.core.dataset_utils import (
     Dimension,
@@ -28,6 +29,45 @@ MEAN_SEA_SURFACE_HEIGHT_URL = "https://minio.dive.edito.eu/project-ml-compressio
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 
 _MEAN_SEA_SURFACE_HEIGHT_CACHE = None
+
+
+class TaskTimer:
+    def __init__(self):
+        self.results = []
+
+    def __call__(self, name):
+        return self._MeasureContext(self, name)
+
+    class _MeasureContext:
+        def __init__(self, parent, name):
+            self.parent = parent
+            self.name = name
+            self.start = None
+
+        def __enter__(self):
+            self.start = time.perf_counter()
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            end = time.perf_counter()
+            self.parent.results.append((self.name, end - self.start))
+
+    def plot(self):
+        names, times = zip(*self.results)
+        plt.figure(figsize=(10, 6))
+        bars = plt.barh(names, times, color="skyblue")
+        plt.xlabel("Time (seconds)")
+        plt.title("Execution Time Distribution per Step")
+        plt.gca().invert_yaxis()
+
+        for bar in bars:
+            plt.text(bar.get_width(), bar.get_y() + bar.get_height() / 2, f" {bar.get_width():.2f}s", va="center")
+
+        plt.tight_layout()
+        plt.show()
+
+
+timer = TaskTimer()
 
 
 def _load_mean_sea_surface_height() -> xarray.DataArray:
@@ -138,20 +178,42 @@ def _interpolate_vertically(
         return profiles[0, :]
     observation_count = profiles.shape[1]
     result = numpy.full(observation_count, numpy.nan)
-    for observation_index in range(observation_count):
-        profile = profiles[:, observation_index]
-        valid_mask = ~numpy.isnan(profile)
-        if numpy.sum(valid_mask) < MINIMUM_POINTS_FOR_CUBIC_SPLINE:
+    sort_order = numpy.argsort(model_depths)
+    sorted_depths = model_depths[sort_order]
+    sorted_profiles = profiles[sort_order, :]
+    valid_masks = ~numpy.isnan(sorted_profiles)
+    valid_counts = valid_masks.sum(axis=0)
+    enough_points = valid_counts >= MINIMUM_POINTS_FOR_CUBIC_SPLINE
+    if not numpy.any(enough_points):
+        return result
+    eligible_indices = numpy.where(enough_points)[0]
+    powers = 2 ** numpy.arange(len(sorted_depths), dtype=numpy.int64)
+    mask_ids = valid_masks[:, eligible_indices].astype(numpy.int64).T @ powers
+    unique_mask_ids, inverse = numpy.unique(mask_ids, return_inverse=True)
+    batch_size = 1000
+    for group_idx in range(len(unique_mask_ids)):
+        group_local = numpy.where(inverse == group_idx)[0]
+        indices = eligible_indices[group_local]
+        valid_mask = valid_masks[:, indices[0]]
+        group_depths = sorted_depths[valid_mask]
+        group_targets = target_depths[indices]
+        in_range = (group_targets >= group_depths[0]) & (group_targets <= group_depths[-1])
+        if not numpy.any(in_range):
             continue
-        valid_depths = model_depths[valid_mask]
-        valid_values = profile[valid_mask]
-        sort_indices = numpy.argsort(valid_depths)
-        sorted_depths = valid_depths[sort_indices]
-        sorted_values = valid_values[sort_indices]
-        target = target_depths[observation_index]
-        if sorted_depths[0] <= target <= sorted_depths[-1]:
-            spline = CubicSpline(sorted_depths, sorted_values, bc_type="natural")
-            result[observation_index] = spline(target)
+        active_indices = indices[in_range]
+        active_targets = group_targets[in_range]
+        active_profiles = sorted_profiles[valid_mask][:, active_indices]
+        for start in range(0, len(active_indices), batch_size):
+            end = min(start + batch_size, len(active_indices))
+            batch_idx = active_indices[start:end]
+            batch_targets = active_targets[start:end]
+            batch_profiles = active_profiles[:, start:end]
+            spline = CubicSpline(group_depths, batch_profiles, axis=0, bc_type="natural")
+            interpolated = spline(batch_targets)
+            if interpolated.ndim == 2:
+                result[batch_idx] = interpolated[numpy.arange(len(batch_idx)), numpy.arange(len(batch_idx))]
+            else:
+                result[batch_idx] = interpolated
     return result
 
 
@@ -251,32 +313,50 @@ def rmsd_class4_validation(
     variables: list[Variable],
 ) -> pandas.DataFrame:
     start_time = time.time()
-    print("Standardizing datasets...", flush=True)
-    challenger = _standardize_dataset(challenger_dataset)
-    observations = _standardize_dataset(reference_dataset)
-    if challenger.chunks:
-        challenger = challenger.compute()
+    print("Starting validation...", flush=True)
+
+    with timer("Standardization & Loading"):
+        challenger = _standardize_dataset(challenger_dataset)
+        observations = _standardize_dataset(reference_dataset)
+        if challenger.chunks:
+            challenger = challenger.compute()
+
     all_results = []
     variable_keys = [variable.key() for variable in variables if variable.key() in observations]
+
     print(f"Processing {len(variable_keys)} variables...", flush=True)
+
     for variable_key in variable_keys:
-        print(f"  Processing {variable_key}...", flush=True)
-        observations_dataframe = _create_observations_dataframe(observations, variable_key)
-        if observations_dataframe.empty:
-            continue
-        print(f"    > {len(observations_dataframe)} observations", flush=True)
-        observations_dataframe = _apply_sea_surface_height_correction(observations_dataframe, variable_key)
-        observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
-        model_variable = challenger[variable_key]
-        observations_dataframe["model_value"] = _interpolate_model_to_observations(
-            model_variable, observations_dataframe
-        )
-        variable_results = _compute_rmsd_table(observations_dataframe, variable_key)
-        if not variable_results.empty:
-            all_results.append(variable_results)
-    if not all_results:
-        return pandas.DataFrame()
-    result = _format_results(pandas.concat(all_results, ignore_index=True))
+        with timer(f"Obs Preparation: {variable_key}"):
+            observations_dataframe = _create_observations_dataframe(observations, variable_key)
+            if observations_dataframe.empty:
+                continue
+
+            observations_dataframe = _apply_sea_surface_height_correction(observations_dataframe, variable_key)
+            observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
+
+        with timer(f"Model Interpolation: {variable_key}"):
+            model_variable = challenger[variable_key]
+            observations_dataframe["model_value"] = _interpolate_model_to_observations(
+                model_variable, observations_dataframe
+            )
+
+        with timer(f"Stats Computation: {variable_key}"):
+            variable_results = _compute_rmsd_table(observations_dataframe, variable_key)
+            if not variable_results.empty:
+                all_results.append(variable_results)
+
+    with timer("Results Formatting"):
+        if not all_results:
+            return pandas.DataFrame()
+
+        final_df = pandas.concat(all_results, ignore_index=True)
+        result = _format_results(final_df)
+
+    print("Validation finished!", flush=True)
+
+    timer.plot()
     elapsed_time = time.time() - start_time
-    print(f"Validation complete! (took {elapsed_time:.2f}s)", flush=True)
+    print(f"Validation complete! (took {elapsed_time:.2f}s) in total", flush=True)
+
     return result
