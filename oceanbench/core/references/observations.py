@@ -16,7 +16,7 @@ logger.setLevel(level=logging.WARNING)
 
 def _observation_insitu_path(day_datetime: numpy.datetime64) -> str:
     day_string = datetime.fromisoformat(str(day_datetime)).strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-ml-compression/public/observations_by_day/{day_string}.zarr"
+    return f"https://minio.dive.edito.eu/project-oceanbench/public/observations_for_class4_2024/{day_string}.zarr"
 
 
 def observation_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
