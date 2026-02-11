@@ -33,8 +33,12 @@ _MEAN_SEA_SURFACE_HEIGHT_CACHE = None
 def _load_mean_sea_surface_height() -> xarray.DataArray:
     global _MEAN_SEA_SURFACE_HEIGHT_CACHE
     if _MEAN_SEA_SURFACE_HEIGHT_CACHE is None:
-        dataset = xarray.open_dataset(MEAN_SEA_SURFACE_HEIGHT_URL, engine="zarr", chunks=None)
-        _MEAN_SEA_SURFACE_HEIGHT_CACHE = dataset["mssh"].load()
+        ds = xarray.open_dataset(
+            MEAN_SEA_SURFACE_HEIGHT_URL,
+            engine="zarr",
+            chunks="auto",
+        )
+        _MEAN_SEA_SURFACE_HEIGHT_CACHE = ds["mssh"]
     return _MEAN_SEA_SURFACE_HEIGHT_CACHE
 
 
