@@ -96,7 +96,7 @@ def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
     return open_mfdataset(
         list(map(_glorys_1_degree_path, first_day_datetimes)),
         engine="zarr",
-        preprocess=lambda dataset: dataset.rename({"time": Dimension.LEAD_DAY_INDEX.key()}).assign(
+        preprocess=lambda dataset: dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign(
             {Dimension.LEAD_DAY_INDEX.key(): range(10)}
         ),
         combine="nested",
