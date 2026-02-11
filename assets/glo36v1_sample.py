@@ -10,7 +10,6 @@ challenger_dataset: xarray.Dataset = (
     xarray.open_mfdataset(
         [
             "https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/20230104.zarr",
-            "https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/20230111.zarr",
         ],
         engine="zarr",
         combine="nested",
@@ -19,7 +18,7 @@ challenger_dataset: xarray.Dataset = (
     )
     .rename({"lat": "latitude", "lon": "longitude"})
     .unify_chunks()
-    .assign({"first_day_datetime": [datetime.fromisoformat("2023-01-04"), datetime.fromisoformat("2023-01-11")]})
+    .assign({"first_day_datetime": [datetime.fromisoformat("2023-01-04")]})
 )
 
 
