@@ -1,10 +1,4 @@
 import oceanbench
-import os
-
-
-def _mem():
-    print(f"[MEMORY] RSS: {int(os.popen(f'ps -o rss= -p {os.getpid()}').read().strip()) // 1024} MB")
-
 
 oceanbench.__version__
 
@@ -15,46 +9,37 @@ oceanbench.__version__
 import xarray
 
 challenger_dataset: xarray.Dataset = xarray.Dataset()
-_mem()
 
 # ### Evaluation of challenger dataset using OceanBench
 
 # #### Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
 
 oceanbench.metrics.rmsd_of_variables_compared_to_glorys_reanalysis(challenger_dataset)
-_mem()
 
 # #### Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLORYS reanalysis
 
 oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(challenger_dataset)
-_mem()
 
 # #### Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS reanalysis
 
 oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(challenger_dataset)
-_mem()
 
 # #### Deviation of Lagrangian trajectories compared to GLORYS reanalysis
 
 oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(challenger_dataset)
-_mem()
 
 # #### Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis
 
 oceanbench.metrics.rmsd_of_variables_compared_to_glo12_analysis(challenger_dataset)
-_mem()
 
 # #### Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLO12 analysis
 
 oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(challenger_dataset)
-_mem()
 
 # #### Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis
 
 oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glo12_analysis(challenger_dataset)
-_mem()
 
 # #### Deviation of Lagrangian trajectories compared to GLO12 analysis
 
 oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(challenger_dataset)
-_mem()
