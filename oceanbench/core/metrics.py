@@ -27,10 +27,10 @@ def rmsd_of_variables_compared_to_observations(
     print("=" * 80, flush=True)
 
     print(" Loading observations dataset...", flush=True)
-    obs_dataset = observation_insitu_dataset(challenger_dataset)
+    observation_datasetset = observation_insitu_dataset(challenger_dataset)
     result = rmsd_class4_validation(
         challenger_dataset=challenger_dataset,
-        reference_dataset=obs_dataset,
+        reference_dataset=observation_datasetset,
         variables=[
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
