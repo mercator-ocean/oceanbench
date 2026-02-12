@@ -40,12 +40,7 @@ def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
     ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 
-def _glorys_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
-    """
-    Args:
-       first_day_datetime: Start date
-       target_depths: Optional list of target depths to select
-    """
+def _glorys_1_12_dataset(first_day_datetime, target_depths) -> Dataset:
     first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
     dataset = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",
@@ -60,7 +55,6 @@ def _glorys_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
         end_datetime=(first_day + pandas.Timedelta(days=9)).strftime("%Y-%m-%dT00:00:00"),
     )
 
-    # Select closest depths if specified
     if target_depths is not None:
         dataset = dataset.sel(depth=target_depths, method="nearest")
 
@@ -76,7 +70,7 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     # Load each dataset one by one
     datasets = []
     for first_day_datetime in first_day_datetimes:
-        dataset = _glorys_1_12_path(first_day_datetime, target_depths=target_depths)
+        dataset = _glorys_1_12_dataset(first_day_datetime, target_depths=target_depths)
         # Rename 'time' to 'lead_day_index' and assign indices 0-9
         dataset = dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
             {Dimension.LEAD_DAY_INDEX.key(): range(10)}
@@ -91,7 +85,9 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     return combined_dataset
 
 
-def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
+def _glorys_reanalysis_dataset_1_degree(
+    challenger_dataset: Dataset,
+) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     return open_mfdataset(
         list(map(_glorys_1_degree_path, first_day_datetimes)),

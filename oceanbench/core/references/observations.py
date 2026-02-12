@@ -6,20 +6,16 @@ from datetime import datetime
 import numpy
 import pandas
 from xarray import Dataset, open_mfdataset
-import logging
 from oceanbench.core.classIV import LEAD_DAYS_COUNT
 from oceanbench.core.dataset_utils import Dimension
 
-logger = logging.getLogger("obs_insitu")
-logger.setLevel(level=logging.WARNING)
 
-
-def _observation_insitu_path(day_datetime: numpy.datetime64) -> str:
+def _observation_path(day_datetime: numpy.datetime64) -> str:
     day_string = datetime.fromisoformat(str(day_datetime)).strftime("%Y%m%d")
     return f"https://minio.dive.edito.eu/project-oceanbench/public/observations_for_class4_2024/{day_string}.zarr"
 
 
-def observation_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
+def observations(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
 
     all_days = numpy.unique(
@@ -31,7 +27,7 @@ def observation_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
     )
 
     observations = open_mfdataset(
-        list(map(_observation_insitu_path, all_days)),
+        list(map(_observation_path, all_days)),
         engine="zarr",
         decode_cf=False,
         parallel=True,
@@ -56,5 +52,10 @@ def observation_insitu_dataset(challenger_dataset: Dataset) -> Dataset:
     first_day_coord = first_day_datetimes[run_indices]
 
     return observations.isel(obs=combined_mask).assign_coords(
-        {Dimension.FIRST_DAY_DATETIME.key(): (("obs",), first_day_coord[combined_mask])}
+        {
+            Dimension.FIRST_DAY_DATETIME.key(): (
+                ("obs",),
+                first_day_coord[combined_mask],
+            )
+        }
     )
