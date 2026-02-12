@@ -31,7 +31,9 @@ jobs:
           AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
-        run: make run-tests
+        run: |
+          pip install --editable .
+          make evaluate-samples SAMPLE_FILES=assets/glonet_1_degree_sample.py
         shell: micromamba-shell {0}
       - name: Archive generated notebooks
         if: always()
