@@ -28,22 +28,24 @@ def _glorys_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
 
 def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
     return open_mfdataset(
         list(map(_glorys_1_4_path, first_day_datetimes)),
         engine="zarr",
-        preprocess=lambda dataset: dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign(
-            {Dimension.LEAD_DAY_INDEX.key(): range(10)}
-        ),
+        preprocess=lambda dataset: dataset.isel(time=slice(0, lead_days_count))
+        .rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()})
+        .assign({Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}),
         combine="nested",
         concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
         parallel=True,
     ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 
-def _glorys_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
+def _glorys_1_12_path(first_day_datetime, days_count, target_depths=None) -> Dataset:
     """
     Args:
        first_day_datetime: Start date
+       days_count: Number of days to fetch
        target_depths: Optional list of target depths to select
     """
     first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
@@ -57,7 +59,7 @@ def _glorys_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
             StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.value,
         ],
         start_datetime=first_day.strftime("%Y-%m-%dT00:00:00"),
-        end_datetime=(first_day + pandas.Timedelta(days=9)).strftime("%Y-%m-%dT00:00:00"),
+        end_datetime=(first_day + pandas.Timedelta(days=days_count - 1)).strftime("%Y-%m-%dT00:00:00"),
     )
 
     # Select closest depths if specified
@@ -69,6 +71,7 @@ def _glorys_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
 
 def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
 
     # Extract depths from challenger_dataset
     target_depths = challenger_dataset[Dimension.DEPTH.key()].values
@@ -76,10 +79,10 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     # Load each dataset one by one
     datasets = []
     for first_day_datetime in first_day_datetimes:
-        dataset = _glorys_1_12_path(first_day_datetime, target_depths=target_depths)
-        # Rename 'time' to 'lead_day_index' and assign indices 0-9
+        dataset = _glorys_1_12_path(first_day_datetime, days_count=lead_days_count, target_depths=target_depths)
+        # Rename 'time' to 'lead_day_index' and assign indices
         dataset = dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
-            {Dimension.LEAD_DAY_INDEX.key(): range(10)}
+            {Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}
         )
         datasets.append(dataset)
 

@@ -37,9 +37,6 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
 }
 
 
-LEAD_DAYS_COUNT = 10
-
-
 def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
     return dataset.assign({Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]})
 
@@ -81,14 +78,17 @@ def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> 
         for variable in variables
         if depth_level == DEPTH_LABELS[DepthLevel.SURFACE] or _has_depths(dataset_with_depth, variable.key())
     }
-    return pandas.DataFrame(values_2d).set_index([lead_day_labels(1, LEAD_DAYS_COUNT)]).T
+    lead_days_count = dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
+    return pandas.DataFrame(values_2d).set_index([lead_day_labels(1, lead_days_count)]).T
 
 
 def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
     standard_dataset = rename_dataset_with_standard_names(dataset)
+    lead_days_count = standard_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
     dataset_with_lead_day_labels = standard_dataset.assign(
-        {Dimension.LEAD_DAY_INDEX.key(): list(range(LEAD_DAYS_COUNT))}
+        {Dimension.LEAD_DAY_INDEX.key(): list(range(lead_days_count))}
     )
+
     dataset_with_depth_selected = dataset_with_lead_day_labels.sel(
         {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}, method="nearest"
     )

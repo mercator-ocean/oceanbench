@@ -20,6 +20,26 @@ def _glo12_dataset_path(start_datetime: datetime) -> str:
     return f"https://minio.dive.edito.eu/project-oceanbench/public/GLO12/{start_datetime_string}.zarr"
 
 
+def glo36v1() -> xarray.Dataset:
+    first_day_datetimes = generate_dates("2023-01-04", "2023-12-27", 7)
+
+    challenger_dataset = (
+        xarray.open_mfdataset(
+            [
+                f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/{dt.strftime('%Y%m%d')}.zarr"
+                for dt in first_day_datetimes
+            ],
+            engine="zarr",
+            combine="nested",
+            concat_dim="first_day_datetime",
+            parallel=True,
+        )
+        .rename({"lat": "latitude", "lon": "longitude"})
+        .assign({"first_day_datetime": first_day_datetimes})
+    )
+    return challenger_dataset
+
+
 def glonet() -> xarray.Dataset:
     return _open_multizarr_forecasts_as_challenger_dataset(_glonet_dataset_path)
 
