@@ -41,7 +41,7 @@ def _glo12_analysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
     ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 
-def _glo12_1_12_path(first_day_datetime, target_depths=None) -> Dataset:
+def _glo12_1_12_dataset(first_day_datetime, target_depths) -> Dataset:
     # Convert numpy.datetime64 to Python datetime
     first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
 
@@ -108,7 +108,7 @@ def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     # Load each dataset one by one
     datasets = []
     for first_day_datetime in first_day_datetimes:
-        dataset = _glo12_1_12_path(first_day_datetime, target_depths=target_depths)
+        dataset = _glo12_1_12_dataset(first_day_datetime, target_depths=target_depths)
         # Rename 'time' to 'lead_day_index' and assign indices 0-9
         dataset = dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
             {Dimension.LEAD_DAY_INDEX.key(): range(10)}
