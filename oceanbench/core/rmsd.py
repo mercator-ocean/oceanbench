@@ -84,13 +84,10 @@ def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> 
 
 def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
     standard_dataset = rename_dataset_with_standard_names(dataset)
-    if Dimension.LEAD_DAY_INDEX.key() not in standard_dataset.coords:
-        lead_days_count = standard_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
-        dataset_with_lead_day_labels = standard_dataset.assign_coords(
-            {Dimension.LEAD_DAY_INDEX.key(): list(range(lead_days_count))}
-        )
-    else:
-        dataset_with_lead_day_labels = standard_dataset
+    lead_days_count = standard_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
+    dataset_with_lead_day_labels = standard_dataset.assign(
+        {Dimension.LEAD_DAY_INDEX.key(): list(range(lead_days_count))}
+    )
 
     dataset_with_depth_selected = dataset_with_lead_day_labels.sel(
         {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}, method="nearest"

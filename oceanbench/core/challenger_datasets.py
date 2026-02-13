@@ -67,20 +67,15 @@ def _wenhai_dataset_path(start_datetime: datetime) -> str:
     return f"https://minio.dive.edito.eu/project-oceanbench/public/WENHAI/{start_datetime_string}.zarr"
 
 
-def _rename_time_to_lead_day_index(dataset: xarray.Dataset) -> xarray.Dataset:
-    return dataset.rename({"time": "lead_day_index"}).assign({"lead_day_index": range(10)})
-
-
 def _open_multizarr_forecasts_as_challenger_dataset(
     zarr_path_callback,
-    preprocess=_rename_time_to_lead_day_index,
 ) -> xarray.Dataset:
     first_day_datetimes: list[datetime] = generate_dates("2024-01-03", "2024-12-25", 7)
 
     challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
         list(map(zarr_path_callback, first_day_datetimes)),
         engine="zarr",
-        preprocess=preprocess,
+        preprocess=lambda dataset: dataset.rename({"time": "lead_day_index"}).assign({"lead_day_index": range(10)}),
         combine="nested",
         concat_dim="first_day_datetime",
         parallel=True,
