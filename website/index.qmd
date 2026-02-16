@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 description: "OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean datasets and observations."
 hide-description: true
 author: "Mercator Ocean"
+jupyter: python3
 format:
   html:
     echo: false
@@ -31,18 +32,71 @@ Please keep in mind that these metrics capture key aspects of forecast quality r
 
 Want to evaluate your system or get involved in OceanBench? Check out the [GitHub project](https://github.com/mercator-ocean/oceanbench/)!
 
+```{python}
+#| output: false
+
+import json
+import os
+from helpers.s3_discovery import discover_challengers, get_notebook_url
+from helpers.notebook_score_parser import get_all_model_scores_from_notebook
+
+challengers = discover_challengers()
+print(f"Challengers: {challengers}")
+
+all_scores = {}
+for name in challengers:
+    local_path = os.path.join("reports", f"{name}.report.ipynb")
+    if os.path.exists(local_path):
+        source = local_path
+    else:
+        source = get_notebook_url(name)
+    print(f"Fetching {name} from {source}...")
+    scores = get_all_model_scores_from_notebook(source, name)
+    if scores:
+        all_scores[name] = {
+            metric_key: score.model_dump() for metric_key, score in scores.items()
+        }
+        print(f"  -> {len(scores)} metrics parsed")
+    else:
+        print(f"  -> FAILED")
+
+scores_json = json.dumps({"challengers": all_scores, "challenger_names": list(all_scores.keys())})
+```
+
+```{python}
+#| output: asis
+
+print(f'<script type="application/json" id="scores-data">{scores_json}</script>')
+```
+
+<div class="controls">
+  <label>
+    Baseline:
+    <select id="baseline-select"></select>
+  </label>
+  <span class="palette-group">
+    Palette:
+    <span id="palette-buttons"></span>
+  </span>
+  <div id="color-legend" class="color-legend"></div>
+</div>
+
 ## Comparison to reanalysis
 
-![Absolute RMSE scores against 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030). These are the deterministic scores for the forecasted variables and physically-consistent diagnostic variables. The colors denote % difference to the GLO12 baseline.](assets/reanalysis-track.png)
+Absolute RMSE scores against 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030). These are the deterministic scores for the forecasted variables and physically-consistent diagnostic variables. The colors denote % difference to the selected baseline.
+
+<div id="reanalysis-scores"></div>
 
 ## Comparison to analysis
 
-![Absolute RMSE scores against 2024 [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024). These are the deterministic scores for the forecasted variables and physically-consistent diagnostic variables. The colors denote % difference to the GLO12 baseline.](assets/analysis-track.png)
+Absolute RMSE scores against 2024 [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024). These are the deterministic scores for the forecasted variables and physically-consistent diagnostic variables. The colors denote % difference to the selected baseline.
 
-## Comparison to observations
-
-![Absolute RMSE scores against 2024 observations. These are the deterministic scores for the forecasted variables and physically-consistent diagnostic variables. The colors denote % difference to the GLO12 baseline.](assets/observations-track.png)
+<div id="analysis-scores"></div>
 
 Implemented by [Mercator Ocean](https://mercator-ocean.eu).
 
 <a href="https://mercator-ocean.eu"><img src="https://www.nemo-ocean.eu/wp-content/uploads/MOI.png" alt="Mercator Ocean logo" height="100"/></a>
+
+```{=html}
+<script src="interactive-scores.js"></script>
+```

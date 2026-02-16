@@ -15,6 +15,7 @@ if [ $returnValue -ne 0 ]; then
 fi
 
 pip install -r requirements.txt
+python download_reports.py
 quarto render --to html
 
 cp -r _site/* /app/repository

@@ -4,30 +4,281 @@
  * SPDX-License-Identifier: EUPL-1.2
  */
 
-table.model-names {
-  width: auto;
+/* --- Score tables --- */
+
+.score-table-wrapper {
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
 }
 
-.row {
-  display: flex;
-  flex-direction: row;
+.score-table {
+  border-collapse: collapse;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  width: max-content;
 }
 
-.row .variables {
-  display: flex;
-  flex-direction: row;
-  overflow-x: scroll;
-}
-
-.row .variables table {
-  margin-left: 10px;
-  margin-right: 10px;
+.score-table th,
+.score-table td {
+  padding: 0.15rem 0.3rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
   text-align: center;
 }
 
-tfoot tr td {
-  font-size: small;
+.score-table td {
+  transition: background-color 0.3s ease;
 }
+
+/* Sticky first column (model names) */
+.score-table .model-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bs-body-bg, #fafaf7);
+  text-align: left;
+  font-weight: 600;
+  min-width: 5rem;
+}
+
+.score-table .model-col a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Header cells on top of sticky column */
+.score-table thead .model-col {
+  z-index: 2;
+}
+
+/* Variable group headers */
+.score-table .var-header {
+  border-bottom: none;
+  font-weight: 600;
+}
+
+.score-table .cf-name {
+  font-weight: 400;
+  font-size: 0.6rem;
+  color: var(--bs-secondary, #6c757d);
+}
+
+/* Lead day sub-headers */
+.score-table .lead-day {
+  font-weight: 400;
+  font-size: 0.65rem;
+  color: var(--bs-secondary, #6c757d);
+}
+
+/* "Lead days" label in the sticky column */
+.score-table .lead-day-label {
+  font-weight: 400;
+  font-size: 0.65rem;
+  color: var(--bs-secondary, #6c757d);
+  font-style: italic;
+}
+
+/* Sticky header row background */
+.score-table thead th {
+  background: var(--bs-body-bg, #fafaf7);
+}
+
+/* Dark mode overrides */
+body.quarto-dark .score-table .model-col,
+body.quarto-dark .score-table thead th {
+  background: var(--bs-body-bg, #1a1a2e);
+}
+
+body.quarto-dark .score-table .lead-day,
+body.quarto-dark .score-table .lead-day-label,
+body.quarto-dark .score-table .cf-name {
+  color: #adb5bd;
+}
+
+/* --- Controls --- */
+
+.controls {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bs-light, #f8f9fa);
+  border-radius: 0.5rem;
+  margin-bottom: 1.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.controls select {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+body.quarto-dark .controls {
+  background: var(--bs-dark, #343a40);
+}
+
+body.quarto-dark .controls select {
+  background: var(--bs-dark, #343a40);
+  color: var(--bs-body-color, #d4d4d8);
+  border-color: var(--bs-border-color, #495057);
+}
+
+/* --- Palette buttons --- */
+
+.palette-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+#palette-buttons {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.palette-btn {
+  width: 60px;
+  height: 20px;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.6rem;
+  color: white;
+  text-align: center;
+  line-height: 20px;
+  text-shadow: 0 0 2px rgba(0,0,0,0.5);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 0.2s ease;
+}
+
+.palette-btn:hover {
+  outline-color: var(--bs-secondary, #6c757d);
+}
+
+.palette-btn.active {
+  outline-color: var(--bs-body-color, #333940);
+}
+
+/* --- Color legend --- */
+
+.color-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  font-size: 0.75rem;
+}
+
+.legend-bar {
+  width: 100px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+.legend-label {
+  color: var(--bs-body-color, #333940);
+  white-space: nowrap;
+}
+
+/* --- Row hover highlight --- */
+
+.score-table tbody tr:hover td {
+  filter: brightness(0.9);
+}
+
+.score-table tbody tr:hover th.model-col {
+  text-decoration: underline;
+}
+
+/* --- Baseline row --- */
+
+.score-table tr.baseline-row th {
+  font-style: italic;
+}
+
+.score-table tr.baseline-row td {
+  background: var(--bs-tertiary-bg, #f0f0f0);
+}
+
+body.quarto-dark .score-table tr.baseline-row td {
+  background: #2a2a2a;
+}
+
+/* --- Depth tabs --- */
+
+.depth-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+}
+
+.depth-tab {
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-bottom: none;
+  background: var(--bs-tertiary-bg, #e9ecef);
+  color: var(--bs-body-color, #333940);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 0.35rem 0.35rem 0 0;
+  margin-right: -1px;
+  position: relative;
+}
+
+.depth-tab:hover {
+  background: var(--bs-body-bg, #fafaf7);
+}
+
+.depth-tab.active {
+  background: var(--bs-body-bg, #fafaf7);
+  border-bottom: 1px solid var(--bs-body-bg, #fafaf7);
+  z-index: 1;
+}
+
+body.quarto-dark .depth-tab {
+  background: #2a2a2a;
+  color: #adb5bd;
+}
+
+body.quarto-dark .depth-tab:hover {
+  background: var(--bs-body-bg, #1a1a2e);
+}
+
+body.quarto-dark .depth-tab.active {
+  background: var(--bs-body-bg, #1a1a2e);
+  border-bottom-color: var(--bs-body-bg, #1a1a2e);
+  color: var(--bs-body-color, #d4d4d8);
+}
+
+.depth-panel .score-table-wrapper {
+  margin-bottom: 0;
+}
+
+/* --- Section headings --- */
+
+#reanalysis-scores h3,
+#analysis-scores h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* --- Navbar --- */
 
 .navbar-logo {
   height: 50px !important;
@@ -44,11 +295,7 @@ tfoot tr td {
   min-height: 55px !important;
 }
 
-body.quarto-dark img[src*="analysis-track"],
-body.quarto-dark img[src*="observations-track"],
-body.quarto-dark img[src*="reanalysis-track"] {
-  filter: invert(1) hue-rotate(180deg);
-}
+/* --- Theme switching --- */
 
 body.quarto-dark .navbar-logo {
   content: url('https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-dark.png');

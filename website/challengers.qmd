@@ -8,9 +8,9 @@ SPDX-License-Identifier: EUPL-1.2
 title: "Challengers"
 ---
 
-| System | Organisation   | Method        | Forecast type | Initial conditions | Output resolution |
-|--------|----------------|---------------|---------------|--------------------|-------------------|
-| [GLO12](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024)  | [Mercator Ocean](https://mercator-ocean.eu) | Physics-based | Deterministic | IFS HRES           | 1/12°             |
-| [GLONET](https://glonet.lab.dive.edito.eu) | [Mercator Ocean](https://mercator-ocean.eu) | ML-based      | Deterministic | GLO12      | 1/4°              |
-| [WenHai](https://www.nature.com/articles/s41467-025-57389-2) | [DOMES](http://iaos.ouc.edu.cn/DeepOceanMultispheresandEarthSystem/list.htm)                | ML-based      | Deterministic | GLO12/IFS          | 1/12°             |
-| [XiHe](https://arxiv.org/abs/2402.02995)   | [NUDT](https://english.nudt.edu.cn/)           | ML-based      | Deterministic | GLO12/IFS          | 1/12°             |
+| System | Organisation   | Method        | Forecast type | Initial conditions | Output resolution | Report |
+|--------|----------------|---------------|---------------|--------------------|-------------------|--------|
+| [GLO12](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024)  | [Mercator Ocean](https://mercator-ocean.eu) | Physics-based | Deterministic | IFS HRES           | 1/12°             | [Report](reports/glo12.report.html) |
+| [GLONET](https://glonet.lab.dive.edito.eu) | [Mercator Ocean](https://mercator-ocean.eu) | ML-based      | Deterministic | GLO12      | 1/4°              | [Report](reports/glonet.report.html) |
+| [WenHai](https://www.nature.com/articles/s41467-025-57389-2) | [DOMES](http://iaos.ouc.edu.cn/DeepOceanMultispheresandEarthSystem/list.htm)                | ML-based      | Deterministic | GLO12/IFS          | 1/12°             | [Report](reports/wenhai.report.html) |
+| [XiHe](https://arxiv.org/abs/2402.02995)   | [NUDT](https://english.nudt.edu.cn/)           | ML-based      | Deterministic | GLO12/IFS          | 1/12°             | [Report](reports/xihe.report.html) |
