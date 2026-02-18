@@ -15,7 +15,8 @@ if [ $returnValue -ne 0 ]; then
 fi
 
 pip install -r requirements.txt
-python download_reports.py
+# TODO: revert to `python download_reports.py` before merging to main
+python download_reports.py --use-samples
 quarto render --to html
 
 cp -r _site/* /app/repository
