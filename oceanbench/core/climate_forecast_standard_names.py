@@ -24,12 +24,34 @@ class StandardVariable(Enum):
     GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY = "geostrophic_eastward_sea_water_velocity"
 
 
-def rename_dataset_with_standard_names(
-    dataset: xarray.Dataset,
-) -> xarray.Dataset:
-    mapping = {
+def _rename_mapping_from_standard_name_attributes(dataset: xarray.Dataset) -> dict[str, str]:
+    return {
         variable_name: dataset[variable_name].standard_name
         for variable_name in dataset.variables
         if hasattr(dataset[variable_name], "standard_name")
     }
+
+
+def _rename_mapping_from_common_aliases(dataset: xarray.Dataset) -> dict[str, str]:
+    common_aliases_to_standard_names = {
+        "lat": StandardDimension.LATITUDE.value,
+        "lon": StandardDimension.LONGITUDE.value,
+        "zos": StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.value,
+        "thetao": StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value,
+        "so": StandardVariable.SEA_WATER_SALINITY.value,
+        "uo": StandardVariable.EASTWARD_SEA_WATER_VELOCITY.value,
+        "vo": StandardVariable.NORTHWARD_SEA_WATER_VELOCITY.value,
+    }
+    return {
+        alias_name: standard_name
+        for alias_name, standard_name in common_aliases_to_standard_names.items()
+        if alias_name in dataset.variables and standard_name not in dataset.variables
+    }
+
+
+def rename_dataset_with_standard_names(
+    dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    mapping = _rename_mapping_from_standard_name_attributes(dataset)
+    mapping.update(_rename_mapping_from_common_aliases(dataset))
     return dataset.rename(mapping)

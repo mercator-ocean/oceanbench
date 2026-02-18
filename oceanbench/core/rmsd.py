@@ -13,6 +13,7 @@ from oceanbench.core.dataset_utils import (
     Variable,
     Dimension,
     DepthLevel,
+    LEAD_DAYS_COUNT,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
 

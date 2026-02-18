@@ -7,11 +7,11 @@ import numpy
 import xarray
 import pandas
 from scipy.interpolate import CubicSpline
-import matplotlib.pyplot as plt
 
 from oceanbench.core.dataset_utils import (
     Dimension,
     Variable,
+    LEAD_DAYS_COUNT,
     VARIABLE_LABELS,
     DEPTH_BINS_DEFAULT,
     DEPTH_BINS_BY_VARIABLE,
@@ -23,88 +23,19 @@ from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
 
-LEAD_DAYS_COUNT = 10
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MEAN_SEA_SURFACE_HEIGHT_URL = "https://minio.dive.edito.eu/project-ml-compression/public/glorys12_mssh_2024.zarr"
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
-
-_MEAN_SEA_SURFACE_HEIGHT_CACHE = None
-
-
-class TaskTimer:
-    def __init__(self):
-        self.results = []
-
-    def __call__(self, name):
-        return self._MeasureContext(self, name)
-
-    class _MeasureContext:
-        def __init__(self, parent, name):
-            self.parent = parent
-            self.name = name
-            self.start = None
-
-        def __enter__(self):
-            self.start = time.perf_counter()
-            return self
-
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            end = time.perf_counter()
-            self.parent.results.append((self.name, end - self.start))
-
-    def plot(self):
-        names, times = zip(*self.results)
-        plt.figure(figsize=(10, 6))
-        bars = plt.barh(names, times, color="skyblue")
-        plt.xlabel("Time (seconds)")
-        plt.title("Execution Time Distribution per Step")
-        plt.gca().invert_yaxis()
-
-        for bar in bars:
-            plt.text(bar.get_width(), bar.get_y() + bar.get_height() / 2, f" {bar.get_width():.2f}s", va="center")
-
-        plt.tight_layout()
-        plt.show()
-
-
-timer = TaskTimer()
+VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 
 
 def _load_mean_sea_surface_height() -> xarray.DataArray:
-    global _MEAN_SEA_SURFACE_HEIGHT_CACHE
-    if _MEAN_SEA_SURFACE_HEIGHT_CACHE is None:
-        ds = xarray.open_dataset(
-            MEAN_SEA_SURFACE_HEIGHT_URL,
-            engine="zarr",
-            chunks="auto",
-        )
-        _MEAN_SEA_SURFACE_HEIGHT_CACHE = ds["mssh"]
-    return _MEAN_SEA_SURFACE_HEIGHT_CACHE
-
-
-COORDINATE_NAME_MAPPING = {
-    "lat": Dimension.LATITUDE.key(),
-    "lon": Dimension.LONGITUDE.key(),
-}
-
-VARIABLE_NAME_MAPPING = {
-    "zos": Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
-    "thetao": Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
-    "so": Variable.SEA_WATER_SALINITY.key(),
-    "uo": Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
-    "vo": Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
-}
-
-
-def _standardize_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
-    dataset = rename_dataset_with_standard_names(dataset)
-    coord_rename = {k: v for k, v in COORDINATE_NAME_MAPPING.items() if k in dataset.dims}
-    if coord_rename:
-        dataset = dataset.rename(coord_rename)
-    var_rename = {k: v for k, v in VARIABLE_NAME_MAPPING.items() if k in dataset}
-    if var_rename:
-        dataset = dataset.rename(var_rename)
-    return dataset
+    mean_sea_surface_height_dataset = xarray.open_dataset(
+        MEAN_SEA_SURFACE_HEIGHT_URL,
+        engine="zarr",
+        chunks="auto",
+    )
+    return mean_sea_surface_height_dataset["mssh"]
 
 
 def _get_depth_bins(variable_key: str) -> dict[str, tuple[float, float]]:
@@ -124,28 +55,52 @@ def _assign_depth_bins(
 
 def _create_observations_dataframe(
     observations_dataset: xarray.Dataset,
-    variable_key: str,
+    observation_variable_key: str,
+    standard_variable_key: str,
 ) -> pandas.DataFrame:
-    dataframe = pandas.DataFrame(
+    time_key = Dimension.TIME.key()
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
+    first_day_key = Dimension.FIRST_DAY_DATETIME.key()
+    depth_key = Dimension.DEPTH.key()
+    observation_dimension_key = observations_dataset[observation_variable_key].dims[0]
+
+    selected_variable_keys = [
+        observation_variable_key,
+        time_key,
+        latitude_key,
+        longitude_key,
+        first_day_key,
+        depth_key,
+    ]
+
+    observation_subset = observations_dataset[selected_variable_keys].rename(
         {
-            "observation_value": observations_dataset[variable_key].values,
-            "time": observations_dataset.time.values,
-            "latitude": observations_dataset[Dimension.LATITUDE.key()].values,
-            "longitude": observations_dataset[Dimension.LONGITUDE.key()].values,
-            "first_day": observations_dataset[Dimension.FIRST_DAY_DATETIME.key()].values,
+            observation_variable_key: "observation_value",
+            first_day_key: "first_day",
         }
     )
-    if Dimension.DEPTH.key() in observations_dataset:
-        dataframe["depth"] = observations_dataset[Dimension.DEPTH.key()].values
-    else:
-        dataframe["depth"] = 0.0
-    dataframe = dataframe.dropna(subset=["observation_value"])
-    dataframe["lead_day"] = (
-        pandas.to_datetime(dataframe["time"]) - pandas.to_datetime(dataframe["first_day"])
-    ).dt.days - 1
-    depth_bins = _get_depth_bins(variable_key)
-    dataframe["depth_bin"] = _assign_depth_bins(dataframe["depth"].values, depth_bins)
-    return dataframe[dataframe["depth_bin"] != ""]
+
+    lead_day = ((observation_subset[time_key] - observation_subset["first_day"]) / numpy.timedelta64(1, "D")).astype(
+        "int64"
+    ) - 1
+    observation_subset = observation_subset.assign(lead_day=lead_day)
+    valid_observation_mask = (
+        observation_subset["observation_value"].notnull()
+        & (observation_subset["lead_day"] >= 0)
+        & (observation_subset["lead_day"] < LEAD_DAYS_COUNT)
+    ).compute()
+    observation_subset = observation_subset.isel({observation_dimension_key: valid_observation_mask})
+
+    observations_dataframe = observation_subset.compute().to_dataframe().reset_index()
+    observations_dataframe = observations_dataframe.drop(columns=[observation_dimension_key], errors="ignore")
+    observations_dataframe = observations_dataframe[
+        ["observation_value", time_key, latitude_key, longitude_key, "first_day", depth_key, "lead_day"]
+    ]
+
+    depth_bins = _get_depth_bins(standard_variable_key)
+    observations_dataframe["depth_bin"] = _assign_depth_bins(observations_dataframe[depth_key].values, depth_bins)
+    return observations_dataframe.loc[observations_dataframe["depth_bin"] != ""]
 
 
 def _apply_sea_surface_height_correction(
@@ -190,7 +145,6 @@ def _interpolate_vertically(
     powers = 2 ** numpy.arange(len(sorted_depths), dtype=numpy.int64)
     mask_ids = valid_masks[:, eligible_indices].astype(numpy.int64).T @ powers
     unique_mask_ids, inverse = numpy.unique(mask_ids, return_inverse=True)
-    batch_size = 1000
     for group_idx in range(len(unique_mask_ids)):
         group_local = numpy.where(inverse == group_idx)[0]
         indices = eligible_indices[group_local]
@@ -203,8 +157,8 @@ def _interpolate_vertically(
         active_indices = indices[in_range]
         active_targets = group_targets[in_range]
         active_profiles = sorted_profiles[valid_mask][:, active_indices]
-        for start in range(0, len(active_indices), batch_size):
-            end = min(start + batch_size, len(active_indices))
+        for start in range(0, len(active_indices), VERTICAL_INTERPOLATION_BATCH_SIZE):
+            end = min(start + VERTICAL_INTERPOLATION_BATCH_SIZE, len(active_indices))
             batch_idx = active_indices[start:end]
             batch_targets = active_targets[start:end]
             batch_profiles = active_profiles[:, start:end]
@@ -221,6 +175,7 @@ def _interpolate_model_to_observations(
     model_data: xarray.DataArray,
     observations_dataframe: pandas.DataFrame,
 ) -> numpy.ndarray:
+    observations_dataframe = observations_dataframe.reset_index(drop=True)
     depth_key = Dimension.DEPTH.key()
     if depth_key not in model_data.dims:
         model_data = model_data.expand_dims({depth_key: [0.0]})
@@ -230,31 +185,36 @@ def _interpolate_model_to_observations(
     first_day_to_index = {first_day: index for index, first_day in enumerate(first_days)}
     lead_day_to_index = {lead_day: index for index, lead_day in enumerate(lead_days)}
     model_values = numpy.full(len(observations_dataframe), numpy.nan)
-    grouped_observations = observations_dataframe.groupby(["first_day", "lead_day"])
-    for (first_day, lead_day), observation_group in grouped_observations:
-        if first_day not in first_day_to_index or lead_day not in lead_day_to_index:
-            continue
+    grouped_by_first_day = observations_dataframe.groupby("first_day", sort=False)
+    for first_day, first_day_group in grouped_by_first_day:
+        grouped_by_lead_day = first_day_group.groupby("lead_day", sort=False)
+        available_lead_days = list(grouped_by_lead_day.groups.keys())
+        lead_day_indices = [lead_day_to_index[lead_day] for lead_day in available_lead_days]
         first_day_index = first_day_to_index[first_day]
-        lead_day_index = lead_day_to_index[lead_day]
-        time_slice = model_data.isel(
+        first_day_model_subset = model_data.isel(
             {
                 Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
-                Dimension.LEAD_DAY_INDEX.key(): lead_day_index,
+                Dimension.LEAD_DAY_INDEX.key(): lead_day_indices,
             }
         ).compute()
-        observation_latitudes = observation_group["latitude"].values
-        observation_longitudes = observation_group["longitude"].values
-        observation_depths = observation_group["depth"].values
-        observation_indices = observation_group.index.values
-        horizontally_interpolated = time_slice.interp(
-            {
-                Dimension.LATITUDE.key(): xarray.DataArray(observation_latitudes, dims="observation"),
-                Dimension.LONGITUDE.key(): xarray.DataArray(observation_longitudes, dims="observation"),
-            },
-            method="linear",
-        ).values
-        interpolated = _interpolate_vertically(horizontally_interpolated, model_depths, observation_depths)
-        model_values[observations_dataframe.index.get_indexer(observation_indices)] = interpolated
+        lead_day_to_local_index = {lead_day: local_index for local_index, lead_day in enumerate(available_lead_days)}
+        for lead_day, observation_group in grouped_by_lead_day:
+            time_slice = first_day_model_subset.isel(
+                {Dimension.LEAD_DAY_INDEX.key(): lead_day_to_local_index[lead_day]}
+            )
+            observation_latitudes = observation_group["latitude"].values
+            observation_longitudes = observation_group["longitude"].values
+            observation_depths = observation_group["depth"].values
+            observation_indices = observation_group.index.values
+            horizontally_interpolated = time_slice.interp(
+                {
+                    Dimension.LATITUDE.key(): xarray.DataArray(observation_latitudes, dims="observation"),
+                    Dimension.LONGITUDE.key(): xarray.DataArray(observation_longitudes, dims="observation"),
+                },
+                method="linear",
+            ).values
+            interpolated = _interpolate_vertically(horizontally_interpolated, model_depths, observation_depths)
+            model_values[observation_indices] = interpolated
     return model_values
 
 
@@ -282,8 +242,6 @@ def _compute_rmsd_table(
 
 
 def _format_results(results_dataframe: pandas.DataFrame) -> pandas.DataFrame:
-    if results_dataframe.empty:
-        return pandas.DataFrame()
     pivot_table = results_dataframe.pivot_table(
         values="rmsd",
         index=["variable", "depth_bin"],
@@ -313,49 +271,39 @@ def rmsd_class4_validation(
     variables: list[Variable],
 ) -> pandas.DataFrame:
     start_time = time.time()
-    print("Starting validation...", flush=True)
-
-    with timer("Standardization & Loading"):
-        challenger = _standardize_dataset(challenger_dataset)
-        observations = _standardize_dataset(reference_dataset)
-        if challenger.chunks:
-            challenger = challenger.compute()
+    challenger = rename_dataset_with_standard_names(challenger_dataset)
+    observations = reference_dataset
 
     all_results = []
-    variable_keys = [variable.key() for variable in variables if variable.key() in observations]
+    resolved_variables = [(variable.key(), variable.key(), variable.key()) for variable in variables]
 
-    print(f"Processing {len(variable_keys)} variables...", flush=True)
+    for standard_variable_key, observation_variable_key, challenger_variable_key in resolved_variables:
+        observations_dataframe = _create_observations_dataframe(
+            observations,
+            observation_variable_key,
+            standard_variable_key,
+        )
+        if observations_dataframe.empty:
+            continue
 
-    for variable_key in variable_keys:
-        with timer(f"Obs Preparation: {variable_key}"):
-            observations_dataframe = _create_observations_dataframe(observations, variable_key)
-            if observations_dataframe.empty:
-                continue
+        observations_dataframe = _apply_sea_surface_height_correction(observations_dataframe, standard_variable_key)
+        observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
 
-            observations_dataframe = _apply_sea_surface_height_correction(observations_dataframe, variable_key)
-            observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
+        model_variable = challenger[challenger_variable_key]
+        observations_dataframe["model_value"] = _interpolate_model_to_observations(
+            model_variable, observations_dataframe
+        )
 
-        with timer(f"Model Interpolation: {variable_key}"):
-            model_variable = challenger[variable_key]
-            observations_dataframe["model_value"] = _interpolate_model_to_observations(
-                model_variable, observations_dataframe
-            )
+        variable_results = _compute_rmsd_table(observations_dataframe, standard_variable_key)
+        if not variable_results.empty:
+            all_results.append(variable_results)
 
-        with timer(f"Stats Computation: {variable_key}"):
-            variable_results = _compute_rmsd_table(observations_dataframe, variable_key)
-            if not variable_results.empty:
-                all_results.append(variable_results)
-
-    with timer("Results Formatting"):
-        if not all_results:
-            return pandas.DataFrame()
-
+    if not all_results:
+        result = pandas.DataFrame()
+    else:
         final_df = pandas.concat(all_results, ignore_index=True)
         result = _format_results(final_df)
 
-    print("Validation finished!", flush=True)
-
-    timer.plot()
     elapsed_time = time.time() - start_time
     print(f"Validation complete! (took {elapsed_time:.2f}s) in total", flush=True)
 

@@ -65,6 +65,8 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.MINUS_500_METERS: "500m",
 }
 
+LEAD_DAYS_COUNT = 10
+
 # For class IV validation :
 
 DEPTH_BINS_DEFAULT: dict[str, tuple[float, float]] = {

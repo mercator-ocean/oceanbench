@@ -9,6 +9,7 @@ This module exposes the challenger datasets evaluated in the benchmark.
 import xarray
 from datetime import datetime
 from oceanbench.core.datetime_utils import generate_dates
+from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
 
 
 def glo12() -> xarray.Dataset:
@@ -75,7 +76,9 @@ def _open_multizarr_forecasts_as_challenger_dataset(
     challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
         list(map(zarr_path_callback, first_day_datetimes)),
         engine="zarr",
-        preprocess=lambda dataset: dataset.rename({"time": "lead_day_index"}).assign({"lead_day_index": range(10)}),
+        preprocess=lambda dataset: dataset.rename({"time": "lead_day_index"}).assign(
+            {"lead_day_index": range(LEAD_DAYS_COUNT)}
+        ),
         combine="nested",
         concat_dim="first_day_datetime",
         parallel=True,
