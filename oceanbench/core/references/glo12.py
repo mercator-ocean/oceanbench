@@ -7,7 +7,7 @@ import numpy
 import pandas
 from xarray import Dataset, open_mfdataset, merge, concat
 import logging
-from oceanbench.core.dataset_utils import Dimension, LEAD_DAYS_COUNT
+from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.resolution import get_dataset_resolution
 import copernicusmarine
 from oceanbench.core.climate_forecast_standard_names import StandardVariable

@@ -9,7 +9,7 @@ from xarray import Dataset, open_mfdataset, concat
 import logging
 import copernicusmarine
 from oceanbench.core.resolution import get_dataset_resolution
-from oceanbench.core.dataset_utils import Dimension, LEAD_DAYS_COUNT
+from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
 
 logger = logging.getLogger("copernicusmarine")
