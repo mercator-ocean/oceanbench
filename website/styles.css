@@ -312,3 +312,16 @@ body.quarto-light .only-dark {
 body.quarto-dark .only-light {
   display: none !important;
 }
+
+/* --- xarray output dark mode (notebooks use different selectors) --- */
+
+body.quarto-dark {
+  --xr-font-color0: rgba(255, 255, 255, 1);
+  --xr-font-color2: rgba(255, 255, 255, 0.54);
+  --xr-font-color3: rgba(255, 255, 255, 0.38);
+  --xr-border-color: #1f1f1f;
+  --xr-disabled-color: #515151;
+  --xr-background-color: #111111;
+  --xr-background-color-row-even: #111111;
+  --xr-background-color-row-odd: #313131;
+}
