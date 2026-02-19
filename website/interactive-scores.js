@@ -12,8 +12,8 @@ const DISPLAY_LEAD_DAYS = [
 ];
 
 const PALETTES = {
-  "Teal-Orange":  { ends: [[0, 128, 128],  [230, 97, 1]],   light: [240, 240, 240], dark: [45, 45, 45] },
   "Blue-Red":     { ends: [[0, 0, 255],    [255, 0, 0]],     light: [255, 255, 255], dark: [40, 40, 40] },
+  "Teal-Orange":  { ends: [[0, 128, 128],  [230, 97, 1]],   light: [240, 240, 240], dark: [45, 45, 45] },
   "Green-Red":    { ends: [[26, 152, 80],  [215, 48, 39]],   light: [254, 224, 79],  dark: [80, 70, 20] },
   "Purple-Orange":{ ends: [[94, 60, 153],  [230, 97, 1]],    light: [247, 247, 247], dark: [45, 45, 45] },
   "Green-Purple": { ends: [[27, 120, 55],  [118, 42, 131]],  light: [247, 247, 247], dark: [45, 45, 45] },
@@ -427,7 +427,7 @@ function renderMetricSection(
   });
 }
 
-let currentPalette = "Teal-Orange";
+let currentPalette = "Blue-Red";
 let paletteReversed = false;
 
 function formatRgb(color) {
@@ -435,7 +435,7 @@ function formatRgb(color) {
 }
 
 function activeGradientCSS() {
-  const colors = getActivePaletteColors();
+  const colors = [...getActivePaletteColors()].reverse();
   const stops = colors.map(
     (color, index) => `${formatRgb(color)} ${(index / (colors.length - 1)) * 100}%`,
   );
@@ -444,7 +444,8 @@ function activeGradientCSS() {
 
 function paletteGradientCSS(paletteName, reversed) {
   const paletteColors = getPaletteColors(paletteName);
-  const colors = reversed ? [...paletteColors].reverse() : paletteColors;
+  const ordered = reversed ? [...paletteColors].reverse() : paletteColors;
+  const colors = [...ordered].reverse();
   const stops = colors.map(
     (color, index) => `${formatRgb(color)} ${(index / (colors.length - 1)) * 100}%`,
   );
