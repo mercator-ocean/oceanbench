@@ -44,7 +44,7 @@
 
 .score-table .model-col a {
   color: var(--bs-primary, #046293);
-  text-decoration: none;
+  text-decoration: underline;
 }
 
 /* Header cells on top of sticky column */
@@ -264,9 +264,6 @@ body.quarto-dark .depth-separator-cell {
   filter: brightness(0.9);
 }
 
-.score-table tbody tr:hover th.model-col {
-  text-decoration: underline;
-}
 
 /* Don't highlight separator rows on hover */
 .score-table tbody tr.depth-separator:hover td {
