@@ -27,7 +27,8 @@ For commits made via the Git command line interface, you must sign off on the co
 ## Git workflow
 
 This repository relies on a git workflow using rebase on the `main` branch.
-Please rebase your pull requests on `main` and squash your commit into a single one.
+Please rebase your branches on `main` and squash your commit into a single one.
+Always review the code yourself before opening pull requests, and check they are compliant with the [development guidelines](#development-guidelines-and-conventions).
 
 More info:
 
@@ -43,24 +44,33 @@ Check out the [Makefile](Makefile) and CI/Actions to discover what is done autom
 
 ## Library life cycle
 
-The library source code is under the `oceanbench` directory:
-
-```sh
-└── oceanbench
-    ├── core
-    │   ├── ...
-    │   ├── derived_quantities.py # internal entrypoint
-    │   ├── metrics.py # internal entrypoint
-    │   └── plot.py # internal entrypoint
-    ├── derived_quantities.py # python lib interface
-    ├── evaluate.py # python lib interface
-    ├── metrics.py # python lib interface
-    └── plot.py # python lib interface
-```
-
 The main objective of the library is to be used as part of a notebook whose execution serves as an evaluation report.
 On each new version release, the participating models are re-evaluated.
 The OceanBench maintainers store the versioned evaluation reports of all participating models on [EDITO](https://datalab.dive.edito.eu/my-files/project-oceanbench/public/evaluation-reports/).
+
+The library source code is under the `oceanbench` directory:
+
+```sh
+└── oceanbench/
+    ├── core
+    │   ├── ...
+    │   ├── metrics.py
+    │   ├── mixed_layer_depth.py
+    │   ├── references
+    │   │   └── ...
+    │   ├── rmsd.py
+    │   └── version.py
+    ├── cli.py # CLI API
+    ├── datasets
+    │   ├── ...
+    │   ├── challenger.py # Python API to open challenger datasets
+    │   ├── input.py # Python API to open input datasets
+    │   └── reference.py # Python API to open reference datasets
+    ├── __init__.py # Python main API
+    └── metrics.py # Python metrics API
+```
+
+All core/domain related code is in the `core` subdirectory, while all API/interface related code is outside it, starting at the root for the main CLI and Python APIs.
 
 ### Version management
 
@@ -86,6 +96,21 @@ make release-patch
 The website source code is under the `website` directory.
 The `main` branch is automatically deployed to the OceanBench website.
 The website parses and displays a given version of the evaluation reports stored on [EDITO](https://datalab.dive.edito.eu/my-files/project-oceanbench/public/evaluation-reports/).
+
+## Development guidelines and conventions
+
+The development has no hard-defined code style, but we aims at following some principles, whoever/whatever produces the code:
+
+1. Name files, variables, constants, modules, functions, etc. with complete human-readable words.
+Do not use acronyms, abbreviations, or abstract names if it can be avoided.
+2. Keep the code functional (like in functional programming) as much as Python allows you. It starts by never mutating variables, writing functions, and splitting big functions into well named smaller functions.
+3. Only use docstrings to document API functions.
+Other inline comments that restate the code should be useless if you name everything well, and will be outdated soon anyway.
+4. No need to abuse of architecture paradigms such as generic classes and heritage.
+Just write functions that make sense to the maintainers and for the future developers.
+5. For Python code, prefix with `_` the name of the functions only used in the file.
+6. For Python code related to metrics computation, delegate everything (as much as possible) to `xarray` (that will distribute computation over `dask` automatically under the hood).
+That starts by favoring dataset/matrix computations over using conditions, loops and mappings. If you use `if` and `for` statements for example, that is symptomatic and can have huge performance consequences.
 
 ## Development environment
 
