@@ -27,6 +27,8 @@
 
 .score-table td {
   transition: background-color 0.3s ease;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Sticky first column (model names) */
