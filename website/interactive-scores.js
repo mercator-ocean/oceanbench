@@ -244,11 +244,17 @@ function ensureControlsElement() {
   let el = document.getElementById("score-controls");
   if (el) return el;
 
+  // Remove any stale controls div from server-rendered HTML (freeze cache)
+  const wrapper = document.getElementById("all-scores");
+  if (wrapper) {
+    const stale = wrapper.querySelector(".controls:not(#score-controls)");
+    if (stale) stale.remove();
+  }
+
   el = document.createElement("div");
   el.id = "score-controls";
   el.className = "controls";
 
-  const wrapper = document.getElementById("all-scores");
   if (wrapper) {
     wrapper.insertBefore(el, wrapper.firstElementChild);
   } else {
