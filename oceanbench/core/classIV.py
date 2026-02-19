@@ -10,7 +10,6 @@ from scipy.interpolate import CubicSpline
 from oceanbench.core.dataset_utils import (
     Dimension,
     Variable,
-    LEAD_DAYS_COUNT,
     VARIABLE_LABELS,
     DEPTH_BINS_DEFAULT,
     DEPTH_BINS_BY_VARIABLE,
@@ -56,6 +55,7 @@ def _create_observations_dataframe(
     observations_dataset: xarray.Dataset,
     observation_variable_key: str,
     standard_variable_key: str,
+    lead_days_count: int,
 ) -> pandas.DataFrame:
     time_key = Dimension.TIME.key()
     latitude_key = Dimension.LATITUDE.key()
@@ -87,7 +87,7 @@ def _create_observations_dataframe(
     valid_observation_mask = (
         observation_subset["observation_value"].notnull()
         & (observation_subset["lead_day"] >= 0)
-        & (observation_subset["lead_day"] < LEAD_DAYS_COUNT)
+        & (observation_subset["lead_day"] < lead_days_count)
     ).compute()
     observation_subset = observation_subset.isel({observation_dimension_key: valid_observation_mask})
 
@@ -108,11 +108,13 @@ def _apply_sea_surface_height_correction(
 ) -> pandas.DataFrame:
     if variable_key != Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
         return dataframe
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
     mean_sea_surface_height = _load_mean_sea_surface_height()
-    latitudes = xarray.DataArray(dataframe["latitude"].values, dims="observation")
-    longitudes = xarray.DataArray(dataframe["longitude"].values, dims="observation")
+    latitudes = xarray.DataArray(dataframe[latitude_key].values, dims="observation")
+    longitudes = xarray.DataArray(dataframe[longitude_key].values, dims="observation")
     mean_sea_surface_height_at_observations = mean_sea_surface_height.interp(
-        latitude=latitudes, longitude=longitudes, method="linear"
+        **{latitude_key: latitudes, longitude_key: longitudes}, method="linear"
     ).values
     corrected_dataframe = dataframe.copy()
     corrected_dataframe["observation_value"] = (
@@ -175,6 +177,8 @@ def _interpolate_model_to_observations(
     observations_dataframe: pandas.DataFrame,
 ) -> numpy.ndarray:
     observations_dataframe = observations_dataframe.reset_index(drop=True)
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
     depth_key = Dimension.DEPTH.key()
     if depth_key not in model_data.dims:
         model_data = model_data.expand_dims({depth_key: [0.0]})
@@ -201,14 +205,14 @@ def _interpolate_model_to_observations(
             time_slice = first_day_model_subset.isel(
                 {Dimension.LEAD_DAY_INDEX.key(): lead_day_to_local_index[lead_day]}
             )
-            observation_latitudes = observation_group["latitude"].values
-            observation_longitudes = observation_group["longitude"].values
-            observation_depths = observation_group["depth"].values
+            observation_latitudes = observation_group[latitude_key].values
+            observation_longitudes = observation_group[longitude_key].values
+            observation_depths = observation_group[depth_key].values
             observation_indices = observation_group.index.values
             horizontally_interpolated = time_slice.interp(
                 {
-                    Dimension.LATITUDE.key(): xarray.DataArray(observation_latitudes, dims="observation"),
-                    Dimension.LONGITUDE.key(): xarray.DataArray(observation_longitudes, dims="observation"),
+                    latitude_key: xarray.DataArray(observation_latitudes, dims="observation"),
+                    longitude_key: xarray.DataArray(observation_longitudes, dims="observation"),
                 },
                 method="linear",
             ).values
@@ -240,7 +244,7 @@ def _compute_rmsd_table(
     return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
 
 
-def _format_results(results_dataframe: pandas.DataFrame) -> pandas.DataFrame:
+def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -> pandas.DataFrame:
     pivot_table = results_dataframe.pivot_table(
         values="rmsd",
         index=["variable", "depth_bin"],
@@ -256,13 +260,13 @@ def _format_results(results_dataframe: pandas.DataFrame) -> pandas.DataFrame:
     pivot_table["depth_sort"] = pivot_table["depth_bin"].map(DEPTH_BIN_DISPLAY_ORDER)
     pivot_table = pivot_table.sort_values(["variable_sort", "depth_sort"]).drop(columns=["variable_sort", "depth_sort"])
     pivot_table["variable"] = pivot_table["variable"].map(VARIABLE_LABELS)
-    lead_labels = lead_day_labels(1, LEAD_DAYS_COUNT)
+    lead_labels = lead_day_labels(1, lead_days_count)
     rename_columns = {
         column: lead_labels[column] for column in pivot_table.columns if isinstance(column, (int, numpy.integer))
     }
     rename_columns["variable"] = "Variable"
     rename_columns["depth_bin"] = "Depth Range"
-    rename_columns["count"] = "Number of observations for the first lead day"
+    rename_columns["count"] = "Number of observations at lead day 1"
     return pivot_table.rename(columns=rename_columns).reset_index(drop=True)
 
 
@@ -272,6 +276,7 @@ def rmsd_class4_validation(
     variables: list[Variable],
 ) -> pandas.DataFrame:
     challenger = rename_dataset_with_standard_names(challenger_dataset)
+    lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
     observations = reference_dataset
 
     all_results = []
@@ -282,6 +287,7 @@ def rmsd_class4_validation(
             observations,
             observation_variable_key,
             standard_variable_key,
+            lead_days_count,
         )
         if observations_dataframe.empty:
             continue
@@ -302,6 +308,6 @@ def rmsd_class4_validation(
         result = pandas.DataFrame()
     else:
         final_df = pandas.concat(all_results, ignore_index=True)
-        result = _format_results(final_df)
+        result = _format_results(final_df, lead_days_count)
 
     return result
