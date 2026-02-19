@@ -482,9 +482,9 @@ function updateColorLegend(baseline) {
   const legend = document.getElementById("color-legend");
   if (!legend) return;
   legend.innerHTML =
-    `<span class="legend-label">Better</span>` +
-    `<span class="legend-bar" style="background: ${activeGradientCSS()}"></span>` +
     `<span class="legend-label">Worse</span>` +
+    `<span class="legend-bar" style="background: ${activeGradientCSS()}"></span>` +
+    `<span class="legend-label">Better</span>` +
     `<span class="legend-label">(vs. ${baseline})</span>`;
 }
 

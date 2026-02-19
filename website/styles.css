@@ -41,8 +41,15 @@
 }
 
 .score-table .model-col a {
-  color: inherit;
+  color: var(--bs-primary, #046293);
+  text-decoration: underline;
+}
+
+.score-table .model-col a::after {
+  content: " \01F517";
+  font-size: 0.6em;
   text-decoration: none;
+  display: inline-block;
 }
 
 /* Header cells on top of sticky column */
