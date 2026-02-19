@@ -124,10 +124,15 @@ function getCfName(scoreData, depth, variable) {
   }
 }
 
+function titleCase(str) {
+  return str.replace(/(^|\s)\w/g, (c) => c.toUpperCase());
+}
+
 function formatVariableHeader(variable, unit, cfName) {
-  let header = variable;
+  const displayName = titleCase(variable);
+  let header = displayName;
   if (unit && !variable.includes(`(${unit})`)) {
-    header = `${variable} (${unit})`;
+    header = `${displayName} (${unit})`;
   }
   if (cfName && cfName !== "unknown") {
     header += `<br><span class="cf-name">${cfName}</span>`;
@@ -137,7 +142,7 @@ function formatVariableHeader(variable, unit, cfName) {
 
 function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName) {
   const unitSuffix = unit ? ` ${unit}` : "";
-  let tooltip = `${variable}, lead day ${day}\nValue: ${value.toFixed(2)}${unitSuffix}`;
+  let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${value.toFixed(2)}${unitSuffix}`;
   if (!isBaseline && referenceValue !== null) {
     tooltip += `\nvs ${baselineName}: ${formatPercentDiff(referenceValue, value)}`;
   }
