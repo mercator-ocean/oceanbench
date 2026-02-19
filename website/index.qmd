@@ -69,17 +69,7 @@ scores_json = json.dumps({"challengers": all_scores, "challenger_names": list(al
 print(f'<script type="application/json" id="scores-data">{scores_json}</script>')
 ```
 
-<div class="controls">
-  <label>
-    Baseline:
-    <select id="baseline-select"></select>
-  </label>
-  <span class="palette-group">
-    Palette:
-    <span id="palette-buttons"></span>
-  </span>
-  <div id="color-legend" class="color-legend"></div>
-</div>
+::: {#all-scores}
 
 ## Comparison to reanalysis
 
@@ -92,6 +82,8 @@ Absolute RMSE scores against 2024 [GLORYS reanalysis](https://data.marine.copern
 Absolute RMSE scores against 2024 [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024). These are the deterministic scores for the forecasted variables and physically-consistent diagnostic variables. The colors denote % difference to the selected baseline.
 
 <div id="analysis-scores"></div>
+
+:::
 
 Implemented by [Mercator Ocean](https://mercator-ocean.eu).
 
