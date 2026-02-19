@@ -11,22 +11,19 @@ const DISPLAY_LEAD_DAYS = [
   { preferred: "10", fallback: "9" },
 ];
 
-const PALETTES = {
-  "Blue-Red":     { ends: [[0, 0, 255],    [255, 0, 0]],     light: [255, 255, 255], dark: [40, 40, 40] },
-  "Teal-Orange":  { ends: [[0, 128, 128],  [230, 97, 1]],   light: [240, 240, 240], dark: [45, 45, 45] },
-  "Green-Red":    { ends: [[26, 152, 80],  [215, 48, 39]],   light: [254, 224, 79],  dark: [80, 70, 20] },
-  "Purple-Orange":{ ends: [[94, 60, 153],  [230, 97, 1]],    light: [247, 247, 247], dark: [45, 45, 45] },
-  "Green-Purple": { ends: [[27, 120, 55],  [118, 42, 131]],  light: [247, 247, 247], dark: [45, 45, 45] },
+const PALETTE = {
+  ends: [[0, 0, 255], [255, 0, 0]],
+  light: [255, 255, 255],
+  dark: [40, 40, 40],
 };
 
 function isDarkMode() {
   return document.body.classList.contains("quarto-dark");
 }
 
-function getPaletteColors(paletteName) {
-  const palette = PALETTES[paletteName];
-  const neutralColor = isDarkMode() ? palette.dark : palette.light;
-  return [palette.ends[0], neutralColor, palette.ends[1]];
+function getPaletteColors() {
+  const neutralColor = isDarkMode() ? PALETTE.dark : PALETTE.light;
+  return [PALETTE.ends[0], neutralColor, PALETTE.ends[1]];
 }
 
 const METRIC_TITLES = {
@@ -55,7 +52,7 @@ const ANALYSIS_FLAT_METRICS = [
   "lagrangian_glo12",
 ];
 
-const activeDepthTab = {};
+let showAllDepths = false;
 
 function interpolateColor(startColor, endColor, ratio) {
   return [
@@ -65,18 +62,13 @@ function interpolateColor(startColor, endColor, ratio) {
   ];
 }
 
-function getActivePaletteColors() {
-  const colors = getPaletteColors(currentPalette);
-  return paletteReversed ? [...colors].reverse() : colors;
-}
-
 function textColorForBackground(rgb) {
   const luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
   return luminance > 140 ? "black" : "white";
 }
 
 function getCellStyle(referenceValue, comparedValue) {
-  const palette = getActivePaletteColors();
+  const palette = getPaletteColors();
   const percentDiff = referenceValue === 0 ? 0 : ((comparedValue - referenceValue) / Math.abs(referenceValue)) * 100;
   const clamped = Math.max(-MAX_PERCENT_DIFF, Math.min(MAX_PERCENT_DIFF, percentDiff));
   const normalized = (clamped + MAX_PERCENT_DIFF) / (MAX_PERCENT_DIFF * 2);
@@ -178,7 +170,7 @@ function buildDataRows(
         if (!isBaseline && value !== null && referenceValue !== null) {
           style = getCellStyle(referenceValue, value);
         }
-        const display = value !== null ? value.toFixed(2) : "NaN";
+        const display = value !== null ? value.toFixed(2) : "";
         const title = value !== null
           ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
           : "";
@@ -215,7 +207,7 @@ function buildCombinedDataRows(
           if (!isBaseline && value !== null && referenceValue !== null) {
             style = getCellStyle(referenceValue, value);
           }
-          const display = value !== null ? value.toFixed(2) : "NaN";
+          const display = value !== null ? value.toFixed(2) : "";
           const title = value !== null
             ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
             : "";
@@ -228,17 +220,58 @@ function buildCombinedDataRows(
   return rows;
 }
 
-function renderTabbedDepthMetric(
+function buildControlsInnerHtml(challengerNames, baseline) {
+  let html = "";
+
+  html += '<label>Baseline: <select id="baseline-select">';
+  for (const name of challengerNames) {
+    const selected = name === baseline ? " selected" : "";
+    html += `<option value="${name}"${selected}>${name}</option>`;
+  }
+  html += "</select></label>";
+
+  html += '<span class="depth-toggle">';
+  html += `<button class="depth-toggle-btn${showAllDepths ? "" : " active"}" data-mode="surface">Surface</button>`;
+  html += `<button class="depth-toggle-btn${showAllDepths ? " active" : ""}" data-mode="all">All depths</button>`;
+  html += "</span>";
+
+  html += '<div id="color-legend" class="color-legend"></div>';
+
+  return html;
+}
+
+function ensureControlsElement() {
+  let el = document.getElementById("score-controls");
+  if (el) return el;
+
+  el = document.createElement("div");
+  el.id = "score-controls";
+  el.className = "controls";
+
+  const wrapper = document.getElementById("all-scores");
+  if (wrapper) {
+    wrapper.insertBefore(el, wrapper.firstElementChild);
+  } else {
+    const reanalysis = document.getElementById("reanalysis-scores");
+    if (reanalysis) {
+      reanalysis.parentNode.insertBefore(el, reanalysis);
+    }
+  }
+
+  return el;
+}
+
+function renderDepthMetric(
   challengers,
   challengerNames,
   metricKey,
   baseline,
-  idPrefix,
 ) {
   const baselineScore = challengers[baseline][metricKey];
   if (!baselineScore) return "";
 
   const depths = Object.keys(baselineScore.depths);
+  const visibleDepths = showAllDepths ? depths : [depths[0]];
   const orderedNames = [
     baseline,
     ...challengerNames.filter(
@@ -246,75 +279,55 @@ function renderTabbedDepthMetric(
     ),
   ];
 
-  const savedDepth = activeDepthTab[idPrefix];
-  const activeIndex = savedDepth ? Math.max(depths.indexOf(savedDepth), 0) : 0;
+  // Split variables: common (all depths) vs surface-only
+  const headerDepth = depths[0];
+  const allHeaderVars = Object.keys(baselineScore.depths[headerDepth].variables);
+  const deeperVarSets = depths.slice(1).map(
+    (d) => new Set(Object.keys(baselineScore.depths[d]?.variables || {})),
+  );
+  const surfaceOnlyVars = allHeaderVars.filter(
+    (v) => deeperVarSets.length > 0 && deeperVarSets.some((s) => !s.has(v)),
+  );
+  const commonVars = allHeaderVars.filter((v) => !surfaceOnlyVars.includes(v));
+  // Surface mode: all vars (common + surface-only on right). All depths: common only.
+  const variables = showAllDepths ? commonVars : [...commonVars, ...surfaceOnlyVars];
+  const leadDays = getLeadDays(baselineScore, headerDepth);
+  const totalCols = 1 + variables.length * leadDays.length;
 
-  let tabsHtml = `<div class="depth-tabs" role="tablist">`;
-  for (let i = 0; i < depths.length; i++) {
-    const depth = depths[i];
-    const active = i === activeIndex ? " active" : "";
-    const selected = i === activeIndex ? "true" : "false";
-    tabsHtml += `<button class="depth-tab${active}" role="tab" aria-selected="${selected}" data-depth="${depth}" data-prefix="${idPrefix}">${depth}</button>`;
+  let thead = "<thead>";
+  thead += `<tr><th class="model-col">Models</th>`;
+  for (const variable of variables) {
+    const unit = getUnit(baselineScore, headerDepth, variable);
+    const cfName = getCfName(baselineScore, headerDepth, variable);
+    thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, cfName)}</th>`;
   }
-  tabsHtml += `</div>`;
-
-  const variableSets = depths.map((depth) => new Set(Object.keys(baselineScore.depths[depth].variables)));
-  const commonVariables = [];
-  const allSeenVariables = new Set();
-  for (const depth of depths) {
-    for (const variable of Object.keys(baselineScore.depths[depth].variables)) {
-      if (!allSeenVariables.has(variable) && variableSets.every((variableSet) => variableSet.has(variable))) {
-        commonVariables.push(variable);
-      }
-      allSeenVariables.add(variable);
+  thead += `</tr><tr><th class="model-col lead-day-label">Lead days</th>`;
+  for (const variable of variables) {
+    for (const day of leadDays) {
+      thead += `<th class="lead-day">${day}</th>`;
     }
   }
-  const commonVariableSet = new Set(commonVariables);
+  thead += "</tr></thead>";
 
-  let panelsHtml = "";
-  for (let i = 0; i < depths.length; i++) {
-    const depth = depths[i];
-    const depthVariables = Object.keys(baselineScore.depths[depth].variables);
-    const depthSpecificVariables = depthVariables.filter((variable) => !commonVariableSet.has(variable));
-    const orderedVariables = [...commonVariables.filter((variable) => depthVariables.includes(variable)), ...depthSpecificVariables];
-    if (orderedVariables.length === 0) continue;
-    const leadDays = getLeadDays(baselineScore, depth);
-    const hiddenAttribute = i === activeIndex ? "" : " hidden";
-
-    let thead = "<thead>";
-    thead += `<tr><th class="model-col">Models</th>`;
-    for (const variable of orderedVariables) {
-      const unit = getUnit(baselineScore, depth, variable);
-      const cfName = getCfName(baselineScore, depth, variable);
-      thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, cfName)}</th>`;
+  let tbody = "<tbody>";
+  for (const depth of visibleDepths) {
+    if (showAllDepths) {
+      tbody += `<tr class="depth-separator"><td class="depth-separator-cell" colspan="${totalCols}">${depth}</td></tr>`;
     }
-    thead += `</tr><tr><th class="model-col lead-day-label">Lead days</th>`;
-    for (const variable of orderedVariables) {
-      for (const day of leadDays) {
-        thead += `<th class="lead-day">${day}</th>`;
-      }
-    }
-    thead += "</tr></thead>";
-
-    const tbody =
-      "<tbody>" +
-      buildDataRows(
-        orderedNames,
-        challengers,
-        metricKey,
-        depth,
-        orderedVariables,
-        leadDays,
-        baseline,
-      ) +
-      "</tbody>";
-
-    panelsHtml += `<div class="depth-panel"${hiddenAttribute} role="tabpanel" data-depth="${depth}" data-prefix="${idPrefix}">`;
-    panelsHtml += `<div class="score-table-wrapper"><table class="score-table">${thead}${tbody}</table></div>`;
-    panelsHtml += `</div>`;
+    tbody += buildDataRows(
+      orderedNames,
+      challengers,
+      metricKey,
+      depth,
+      variables,
+      leadDays,
+      baseline,
+    );
   }
+  tbody += "</tbody>";
 
-  return tabsHtml + panelsHtml;
+  const tableClass = showAllDepths ? "score-table depth-table" : "score-table";
+  return `<table class="${tableClass}">${thead}${tbody}</table>`;
 }
 
 function renderCombinedFlatMetrics(
@@ -384,17 +397,17 @@ function renderMetricSection(
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  const idPrefix = containerId;
   let html = "";
 
+  html += '<div class="depth-section">';
   html += `<h3>${METRIC_TITLES[depthMetric]}</h3>`;
-  html += renderTabbedDepthMetric(
+  html += renderDepthMetric(
     challengers,
     challengerNames,
     depthMetric,
     baseline,
-    idPrefix,
   );
+  html += "</div>";
 
   html += `<h3>Diagnostic Metrics</h3>`;
   html += renderCombinedFlatMetrics(
@@ -405,78 +418,18 @@ function renderMetricSection(
   );
 
   container.innerHTML = html;
-
-  container.querySelectorAll(".depth-tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const prefix = tab.dataset.prefix;
-      const depth = tab.dataset.depth;
-
-      activeDepthTab[prefix] = depth;
-
-      container.querySelectorAll(`.depth-tab[data-prefix="${prefix}"]`).forEach((tabButton) => {
-        tabButton.classList.remove("active");
-        tabButton.setAttribute("aria-selected", "false");
-      });
-      tab.classList.add("active");
-      tab.setAttribute("aria-selected", "true");
-
-      container.querySelectorAll(`.depth-panel[data-prefix="${prefix}"]`).forEach((panel) => {
-        panel.hidden = panel.dataset.depth !== depth;
-      });
-    });
-  });
 }
-
-let currentPalette = "Blue-Red";
-let paletteReversed = false;
 
 function formatRgb(color) {
   return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
 
-function activeGradientCSS() {
-  const colors = [...getActivePaletteColors()].reverse();
+function legendGradientCSS() {
+  const colors = [...getPaletteColors()].reverse();
   const stops = colors.map(
     (color, index) => `${formatRgb(color)} ${(index / (colors.length - 1)) * 100}%`,
   );
   return `linear-gradient(to right, ${stops.join(", ")})`;
-}
-
-function paletteGradientCSS(paletteName, reversed) {
-  const paletteColors = getPaletteColors(paletteName);
-  const ordered = reversed ? [...paletteColors].reverse() : paletteColors;
-  const colors = [...ordered].reverse();
-  const stops = colors.map(
-    (color, index) => `${formatRgb(color)} ${(index / (colors.length - 1)) * 100}%`,
-  );
-  return `linear-gradient(to right, ${stops.join(", ")})`;
-}
-
-function buildPaletteButtons() {
-  const container = document.getElementById("palette-buttons");
-  if (!container) return;
-  container.innerHTML = "";
-  for (const name of Object.keys(PALETTES)) {
-    const button = document.createElement("button");
-    const isActive = name === currentPalette;
-    const showReversed = isActive && paletteReversed;
-    button.className = "palette-btn" + (isActive ? " active" : "");
-    button.style.background = paletteGradientCSS(name, showReversed);
-    button.title = name + (showReversed ? " (reversed)" : "");
-    if (showReversed) {
-      button.textContent = "\u21C4";
-    }
-    button.addEventListener("click", () => {
-      if (currentPalette === name) {
-        paletteReversed = !paletteReversed;
-      } else {
-        currentPalette = name;
-        paletteReversed = false;
-      }
-      renderAllTables();
-    });
-    container.appendChild(button);
-  }
 }
 
 function updateColorLegend(baseline) {
@@ -484,21 +437,31 @@ function updateColorLegend(baseline) {
   if (!legend) return;
   legend.innerHTML =
     `<span class="legend-label">Worse</span>` +
-    `<span class="legend-bar" style="background: ${activeGradientCSS()}"></span>` +
+    `<span class="legend-bar" style="background: ${legendGradientCSS()}"></span>` +
     `<span class="legend-label">Better</span>` +
     `<span class="legend-label">(vs. ${baseline})</span>`;
 }
 
-function populateBaselineSelect(challengerNames) {
-  const select = document.getElementById("baseline-select");
-  if (!select || select.options.length > 0) return;
-  for (const name of challengerNames) {
-    const option = document.createElement("option");
-    option.value = name;
-    option.textContent = name;
-    if (name === "glo12") option.selected = true;
-    select.appendChild(option);
+function updateStickyOffsets() {
+  const controls = document.getElementById("score-controls");
+  if (controls) {
+    const h = controls.getBoundingClientRect().height;
+    document.documentElement.style.setProperty("--controls-height", h + "px");
   }
+}
+
+function attachControlListeners() {
+  const baselineSelect = document.getElementById("baseline-select");
+  if (baselineSelect) {
+    baselineSelect.addEventListener("change", renderAllTables);
+  }
+
+  document.querySelectorAll(".depth-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      showAllDepths = btn.dataset.mode === "all";
+      renderAllTables();
+    });
+  });
 }
 
 function renderAllTables() {
@@ -507,13 +470,10 @@ function renderAllTables() {
   const data = JSON.parse(dataElement.textContent);
   const { challengers, challenger_names: challengerNames } = data;
 
-  populateBaselineSelect(challengerNames);
-  buildPaletteButtons();
-
-  const baseline =
-    document.getElementById("baseline-select").value || challengerNames[0];
-
-  updateColorLegend(baseline);
+  // Preserve baseline across re-renders
+  const existingSelect = document.getElementById("baseline-select");
+  const baseline = existingSelect?.value
+    || (challengerNames.includes("glo12") ? "glo12" : challengerNames[0]);
 
   renderMetricSection(
     "reanalysis-scores",
@@ -531,18 +491,41 @@ function renderAllTables() {
     challengerNames,
     baseline,
   );
+
+  const controlsEl = ensureControlsElement();
+  controlsEl.innerHTML = buildControlsInnerHtml(challengerNames, baseline);
+
+  updateColorLegend(baseline);
+  updateStickyOffsets();
+  attachControlListeners();
 }
 
 function init() {
   if (!document.getElementById("scores-data")) return;
   renderAllTables();
-  const baselineSelect = document.getElementById("baseline-select");
-  if (baselineSelect)
-    baselineSelect.addEventListener("change", renderAllTables);
-  new MutationObserver(() => renderAllTables()).observe(document.body, {
+  let wasDark = document.body.classList.contains("quarto-dark");
+  new MutationObserver(() => {
+    const isDark = document.body.classList.contains("quarto-dark");
+    if (isDark !== wasDark) {
+      wasDark = isDark;
+      renderAllTables();
+    }
+  }).observe(document.body, {
     attributes: true,
     attributeFilter: ["class"],
   });
+
+  const header = document.getElementById("quarto-header")
+    || document.querySelector(".headroom");
+  if (header) {
+    const navbar = header.querySelector(".navbar") || header;
+    const h = navbar.offsetHeight;
+    document.documentElement.style.setProperty("--navbar-full-height", h + "px");
+    new MutationObserver(() => {
+      const hidden = header.classList.contains("headroom--unpinned");
+      document.body.classList.toggle("nav-hidden", hidden);
+    }).observe(header, { attributes: true, attributeFilter: ["class"] });
+  }
 }
 
 if (document.readyState === "loading") {
