@@ -263,16 +263,22 @@ body.quarto-dark .score-table .depth-separator-cell {
   color: #adb5bd;
 }
 
-/* --- Row hover highlight --- */
+/* --- Cell hover highlight --- */
 
-.score-table tbody tr:hover td {
-  filter: brightness(0.9);
+.score-table td.highlight-cell {
+  outline: 2px solid var(--bs-body-color, #333940);
+  outline-offset: -2px;
+  z-index: 2;
+  position: relative;
 }
 
+.score-table th.highlight-label {
+  background: var(--bs-primary, #046293) !important;
+  color: white !important;
+}
 
-/* Don't highlight separator rows on hover */
-.score-table tbody tr.depth-separator:hover td {
-  filter: none;
+.score-table th.highlight-label a {
+  color: white !important;
 }
 
 /* --- Baseline row --- */

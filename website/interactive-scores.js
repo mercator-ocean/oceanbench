@@ -453,6 +453,32 @@ function updateColorLegend(baseline) {
     `<span class="legend-label">(vs. ${baseline})</span>`;
 }
 
+function setupCellHighlight() {
+  document.querySelectorAll(".score-table").forEach((table) => {
+    table.addEventListener("mouseover", (e) => {
+      const td = e.target.closest("td");
+      if (!td || td.classList.contains("depth-separator-cell")) return;
+      td.classList.add("highlight-cell");
+      // Highlight model name
+      const modelCell = td.parentElement.querySelector("th.model-col");
+      if (modelCell) modelCell.classList.add("highlight-label");
+      // Highlight lead day header
+      const colIdx = td.cellIndex;
+      const lastHeadRow = table.querySelector("thead tr:last-child");
+      if (lastHeadRow && lastHeadRow.cells[colIdx]) {
+        lastHeadRow.cells[colIdx].classList.add("highlight-label");
+      }
+    });
+    table.addEventListener("mouseout", (e) => {
+      const td = e.target.closest("td");
+      if (!td) return;
+      table.querySelectorAll(".highlight-cell, .highlight-label").forEach((c) => {
+        c.classList.remove("highlight-cell", "highlight-label");
+      });
+    });
+  });
+}
+
 function updateStickyOffsets() {
   const controls = document.getElementById("score-controls");
   if (controls) {
@@ -509,6 +535,7 @@ function renderAllTables() {
   updateColorLegend(baseline);
   updateStickyOffsets();
   attachControlListeners();
+  setupCellHighlight();
 }
 
 function init() {
