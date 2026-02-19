@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import logging
 import pandas
 import xarray
 
@@ -18,8 +17,6 @@ from oceanbench.core.references.observations import observations
 from oceanbench.core.lagrangian_trajectory import (
     deviation_of_lagrangian_trajectories,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def rmsd_of_variables_compared_to_observations(

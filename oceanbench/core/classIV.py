@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import time
 import numpy
 import xarray
 import pandas
@@ -258,10 +257,12 @@ def _format_results(results_dataframe: pandas.DataFrame) -> pandas.DataFrame:
     pivot_table = pivot_table.sort_values(["variable_sort", "depth_sort"]).drop(columns=["variable_sort", "depth_sort"])
     pivot_table["variable"] = pivot_table["variable"].map(VARIABLE_LABELS)
     lead_labels = lead_day_labels(1, LEAD_DAYS_COUNT)
-    rename_columns = {col: lead_labels[col] for col in pivot_table.columns if isinstance(col, (int, numpy.integer))}
+    rename_columns = {
+        column: lead_labels[column] for column in pivot_table.columns if isinstance(column, (int, numpy.integer))
+    }
     rename_columns["variable"] = "Variable"
     rename_columns["depth_bin"] = "Depth Range"
-    rename_columns["count"] = "Number of observations"
+    rename_columns["count"] = "Number of observations for the first lead day"
     return pivot_table.rename(columns=rename_columns).reset_index(drop=True)
 
 
@@ -270,7 +271,6 @@ def rmsd_class4_validation(
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
 ) -> pandas.DataFrame:
-    start_time = time.time()
     challenger = rename_dataset_with_standard_names(challenger_dataset)
     observations = reference_dataset
 
@@ -303,8 +303,5 @@ def rmsd_class4_validation(
     else:
         final_df = pandas.concat(all_results, ignore_index=True)
         result = _format_results(final_df)
-
-    elapsed_time = time.time() - start_time
-    print(f"Validation complete! (took {elapsed_time:.2f}s) in total", flush=True)
 
     return result
