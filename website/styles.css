@@ -215,7 +215,7 @@ body.quarto-dark .controls select {
 /* --- Baseline row --- */
 
 .score-table tr.baseline-row th {
-  font-style: italic;
+  border-left: 3px solid var(--bs-primary, #046293);
 }
 
 .score-table tr.baseline-row td {
