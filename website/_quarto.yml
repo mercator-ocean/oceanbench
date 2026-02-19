@@ -22,6 +22,8 @@ website:
   page-footer: |
     Powered by:
     [![](https://datalab.dive.edito.eu/custom-resources/logos/Full_EU_DTO_Banner.jpeg){height=65px}](https://edito.eu)
+execute:
+  cache: false
 format:
   html:
     theme:
