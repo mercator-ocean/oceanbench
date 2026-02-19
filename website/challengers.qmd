@@ -6,11 +6,44 @@ SPDX-License-Identifier: EUPL-1.2
 
 ---
 title: "Challengers"
+jupyter: python3
+format:
+  html:
+    echo: false
 ---
 
-| System | Organisation   | Method        | Forecast type | Initial conditions | Output resolution | Report |
-|--------|----------------|---------------|---------------|--------------------|-------------------|--------|
-| [GLO12](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024)  | [Mercator Ocean](https://mercator-ocean.eu) | Physics-based | Deterministic | IFS HRES           | 1/12°             | [Report](reports/glo12.report.html) |
-| [GLONET](https://glonet.lab.dive.edito.eu) | [Mercator Ocean](https://mercator-ocean.eu) | ML-based      | Deterministic | GLO12      | 1/4°              | [Report](reports/glonet.report.html) |
-| [WenHai](https://www.nature.com/articles/s41467-025-57389-2) | [DOMES](http://iaos.ouc.edu.cn/DeepOceanMultispheresandEarthSystem/list.htm)                | ML-based      | Deterministic | GLO12/IFS          | 1/12°             | [Report](reports/wenhai.report.html) |
-| [XiHe](https://arxiv.org/abs/2402.02995)   | [NUDT](https://english.nudt.edu.cn/)           | ML-based      | Deterministic | GLO12/IFS          | 1/12°             | [Report](reports/xihe.report.html) |
+```{python}
+#| output: asis
+
+from helpers.challenger_metadata import CHALLENGERS
+from helpers.s3_discovery import discover_challengers
+
+challengers = discover_challengers()
+
+header = "| System | Organisation | Method | Forecast type | Initial conditions | Output resolution | Report |\n"
+header += "|--------|--------------|--------|---------------|--------------------|-------------------|--------|\n"
+
+rows = ""
+for name in challengers:
+    meta = CHALLENGERS.get(name)
+    if meta:
+        system = f"[{meta['label']}]({meta['url']})"
+        org = f"[{meta['organisation']}]({meta['org_url']})"
+        method = meta["method"]
+        forecast = meta["forecast_type"]
+        ic = meta["initial_conditions"]
+        res = meta["resolution"]
+    else:
+        system = name
+        org = ""
+        method = ""
+        forecast = ""
+        ic = ""
+        res = ""
+
+    report = f"[Report](reports/{name}.report.html)"
+
+    rows += f"| {system} | {org} | {method} | {forecast} | {ic} | {res} | {report} |\n"
+
+print(header + rows)
+```
