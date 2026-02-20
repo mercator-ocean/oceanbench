@@ -28,32 +28,6 @@ function getPaletteColors() {
   return [PALETTE.blue.end, PALETTE.blue.mid, neutral, PALETTE.red.mid, PALETTE.red.end];
 }
 
-const METRIC_TITLES = {
-  rmsd_variables_glorys: "RMSD of Variables",
-  rmsd_mld_glorys: "RMSD of Mixed Layer Depth",
-  rmsd_geostrophic_glorys: "RMSD of Geostrophic Currents",
-  lagrangian_glorys: "Lagrangian Trajectory Deviation",
-  rmsd_variables_glo12: "RMSD of Variables",
-  rmsd_mld_glo12: "RMSD of Mixed Layer Depth",
-  rmsd_geostrophic_glo12: "RMSD of Geostrophic Currents",
-  lagrangian_glo12: "Lagrangian Trajectory Deviation",
-};
-
-const REANALYSIS_DEPTH_METRIC = "rmsd_variables_glorys";
-const ANALYSIS_DEPTH_METRIC = "rmsd_variables_glo12";
-
-const REANALYSIS_FLAT_METRICS = [
-  "rmsd_mld_glorys",
-  "rmsd_geostrophic_glorys",
-  "lagrangian_glorys",
-];
-
-const ANALYSIS_FLAT_METRICS = [
-  "rmsd_mld_glo12",
-  "rmsd_geostrophic_glo12",
-  "lagrangian_glo12",
-];
-
 let selectedDepths = new Set();
 let availableDepths = [];
 let showAllMode = true;
@@ -438,6 +412,7 @@ function renderMetricSection(
   challengers,
   challengerNames,
   baseline,
+  metricTitles,
 ) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -445,7 +420,7 @@ function renderMetricSection(
   let html = "";
 
   html += '<div class="depth-section">';
-  html += `<h3>${METRIC_TITLES[depthMetric]}</h3>`;
+  html += `<h3>${metricTitles[depthMetric]}</h3>`;
   html += renderDepthMetric(
     challengers,
     challengerNames,
@@ -598,35 +573,32 @@ function renderAllTables() {
     if (!dataElement) return;
     parsedData = JSON.parse(dataElement.textContent);
   }
-  const data = parsedData;
-  const { challengers, challenger_names: challengerNames } = data;
+  const {
+    challengers,
+    challenger_names: challengerNames,
+    metric_titles: metricTitles,
+    sections,
+  } = parsedData;
 
   const existingSelect = document.getElementById("baseline-select");
   const baseline = existingSelect?.value
     || (challengerNames.includes("glo12") ? "glo12" : challengerNames[0]);
 
-  const referenceScore = challengers[baseline]?.[REANALYSIS_DEPTH_METRIC]
-    || challengers[baseline]?.[ANALYSIS_DEPTH_METRIC];
-  if (referenceScore) {
-    availableDepths = Object.keys(referenceScore.depths);
+  for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
+    const depthScore = challengers[baseline]?.[sectionConfig.depth_metric];
+    if (depthScore && availableDepths.length === 0) {
+      availableDepths = Object.keys(depthScore.depths);
+    }
+    renderMetricSection(
+      `${sectionKey}-scores`,
+      sectionConfig.depth_metric,
+      sectionConfig.flat_metrics,
+      challengers,
+      challengerNames,
+      baseline,
+      metricTitles,
+    );
   }
-
-  renderMetricSection(
-    "reanalysis-scores",
-    REANALYSIS_DEPTH_METRIC,
-    REANALYSIS_FLAT_METRICS,
-    challengers,
-    challengerNames,
-    baseline,
-  );
-  renderMetricSection(
-    "analysis-scores",
-    ANALYSIS_DEPTH_METRIC,
-    ANALYSIS_FLAT_METRICS,
-    challengers,
-    challengerNames,
-    baseline,
-  );
 
   const controlsElement = ensureControlsElement();
   controlsElement.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);

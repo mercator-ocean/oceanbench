@@ -7,43 +7,74 @@ import json
 from bs4 import BeautifulSoup
 import requests
 
-from oceanbench.core.rmsd import DEPTH_LABELS
+from oceanbench.core.rmsd import DEPTH_LABELS, VARIABLE_METADATA
+from oceanbench.core.lagrangian_trajectory import LAGRANGIAN_LABEL, LAGRANGIAN_UNIT, LAGRANGIAN_CF_NAME
 
 from helpers.type import ModelScore
 
 
-_GLORYS = "compared_to_glorys_reanalysis(challenger_dataset)"
-_GLO12 = "compared_to_glo12_analysis(challenger_dataset)"
+METRICS = [
+    {"key": "rmsd_variables", "title": "RMSD of Variables", "function": "rmsd_of_variables", "has_depths": True},
+    {
+        "key": "rmsd_mld",
+        "title": "RMSD of Mixed Layer Depth",
+        "function": "rmsd_of_mixed_layer_depth",
+        "has_depths": False,
+    },
+    {
+        "key": "rmsd_geostrophic",
+        "title": "RMSD of Geostrophic Currents",
+        "function": "rmsd_of_geostrophic_currents",
+        "has_depths": False,
+    },
+    {
+        "key": "lagrangian",
+        "title": "Lagrangian Trajectory Deviation",
+        "function": "deviation_of_lagrangian_trajectories",
+        "has_depths": False,
+    },
+]
+
+REFERENCES = [
+    {"key": "reanalysis", "suffix": "glorys", "function_suffix": "compared_to_glorys_reanalysis(challenger_dataset)"},
+    {"key": "analysis", "suffix": "glo12", "function_suffix": "compared_to_glo12_analysis(challenger_dataset)"},
+]
 
 METRIC_PATTERNS = {
-    "rmsd_variables_glorys": f"oceanbench.metrics.rmsd_of_variables_{_GLORYS}",
-    "rmsd_mld_glorys": f"oceanbench.metrics.rmsd_of_mixed_layer_depth_{_GLORYS}",
-    "rmsd_geostrophic_glorys": f"oceanbench.metrics.rmsd_of_geostrophic_currents_{_GLORYS}",
-    "lagrangian_glorys": f"oceanbench.metrics.deviation_of_lagrangian_trajectories_{_GLORYS}",
-    "rmsd_variables_glo12": f"oceanbench.metrics.rmsd_of_variables_{_GLO12}",
-    "rmsd_mld_glo12": f"oceanbench.metrics.rmsd_of_mixed_layer_depth_{_GLO12}",
-    "rmsd_geostrophic_glo12": f"oceanbench.metrics.rmsd_of_geostrophic_currents_{_GLO12}",
-    "lagrangian_glo12": f"oceanbench.metrics.deviation_of_lagrangian_trajectories_{_GLO12}",
+    f"{metric['key']}_{reference['suffix']}": f"oceanbench.metrics.{metric['function']}_{reference['function_suffix']}"
+    for metric in METRICS
+    for reference in REFERENCES
 }
 
-DEPTH_VARIABLE_METRICS = {"rmsd_variables_glorys", "rmsd_variables_glo12"}
-
-VARIABLE_UNITS = {
-    "height": ("sea_surface_height_above_geoid", "m"),
-    "temperature": ("sea_water_potential_temperature", "°C"),
-    "salinity": ("sea_water_salinity", "PSU"),
-    "northward velocity": ("northward_sea_water_velocity", "m/s"),
-    "eastward velocity": ("eastward_sea_water_velocity", "m/s"),
-    "Mixed layer depth": ("ocean_mixed_layer_thickness", "m"),
-    "Northward geostrophic velocity": ("northward_geostrophic_velocity", "m/s"),
-    "Eastward geostrophic velocity": ("eastward_geostrophic_velocity", "m/s"),
-    "Surface Lagrangian trajectory deviation (km)": ("lagrangian_trajectory_deviation", "km"),
+DEPTH_VARIABLE_METRICS = {
+    f"{metric['key']}_{reference['suffix']}" for metric in METRICS for reference in REFERENCES if metric["has_depths"]
 }
+
+METRIC_TITLES = {
+    f"{metric['key']}_{reference['suffix']}": metric["title"] for metric in METRICS for reference in REFERENCES
+}
+
+SECTIONS = {
+    reference["key"]: {
+        "depth_metric": next(f"{metric['key']}_{reference['suffix']}" for metric in METRICS if metric["has_depths"]),
+        "flat_metrics": [f"{metric['key']}_{reference['suffix']}" for metric in METRICS if not metric["has_depths"]],
+    }
+    for reference in REFERENCES
+}
+
+_LABEL_LOOKUP: dict[str, tuple[str, str]] = {}
+for _cf_name, (_label, _unit) in VARIABLE_METADATA.items():
+    _LABEL_LOOKUP[_label] = (_cf_name, _unit)
+    for _depth in DEPTH_LABELS.values():
+        if _label.startswith(f"{_depth} "):
+            _LABEL_LOOKUP[_label.removeprefix(f"{_depth} ")] = (_cf_name, _unit)
+_LABEL_LOOKUP[f"{LAGRANGIAN_LABEL} ({LAGRANGIAN_UNIT})"] = (LAGRANGIAN_CF_NAME, LAGRANGIAN_UNIT)
 
 
 def _get_variable_metadata(variable_name: str) -> tuple[str, str]:
-    if variable_name in VARIABLE_UNITS:
-        return VARIABLE_UNITS[variable_name]
+    result = _LABEL_LOOKUP.get(variable_name) or _LABEL_LOOKUP.get(variable_name.lower())
+    if result:
+        return result
     return ("unknown", "")
 
 
