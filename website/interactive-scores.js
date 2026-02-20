@@ -58,6 +58,7 @@ let selectedDepths = new Set();
 let availableDepths = [];
 let showAllMode = true;
 let showPercentDiff = false;
+let parsedData = null;
 
 function interpolateColor(startColor, endColor, ratio) {
   return [
@@ -592,9 +593,12 @@ function attachControlListeners() {
 }
 
 function renderAllTables() {
-  const dataElement = document.getElementById("scores-data");
-  if (!dataElement) return;
-  const data = JSON.parse(dataElement.textContent);
+  if (!parsedData) {
+    const dataElement = document.getElementById("scores-data");
+    if (!dataElement) return;
+    parsedData = JSON.parse(dataElement.textContent);
+  }
+  const data = parsedData;
   const { challengers, challenger_names: challengerNames } = data;
 
   // Preserve baseline across re-renders
