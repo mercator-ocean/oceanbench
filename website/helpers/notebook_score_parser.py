@@ -69,7 +69,7 @@ for _cf_name, (_label, _unit) in VARIABLE_METADATA.items():
     for _depth in DEPTH_LABELS.values():
         if _label.startswith(f"{_depth} "):
             _LABEL_LOOKUP[_label.removeprefix(f"{_depth} ")] = (_cf_name, _unit)
-_LABEL_LOOKUP[f"{LAGRANGIAN_LABEL} ({LAGRANGIAN_UNIT})"] = (LAGRANGIAN_CF_NAME, LAGRANGIAN_UNIT)
+_LABEL_LOOKUP[LAGRANGIAN_LABEL] = (LAGRANGIAN_CF_NAME, LAGRANGIAN_UNIT)
 
 
 def _get_variable_metadata(variable_name: str) -> tuple[str, str]:

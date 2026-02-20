@@ -8,7 +8,7 @@ from pydantic import BaseModel
 class ModelVariable(BaseModel):
     cf_name: str
     unit: str
-    data: dict[str, float]
+    data: dict[str, float | None]
 
 
 class ModelDepth(BaseModel):
