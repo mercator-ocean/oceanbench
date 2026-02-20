@@ -12,7 +12,9 @@ const DISPLAY_LEAD_DAYS = [
 ];
 
 const PALETTE = {
-  ends: [[0, 0, 255], [255, 0, 0]],
+  // ColorBrewer RdBu diverging — perceptually uniform, colorblind-safe
+  blue: { end: [33, 102, 172], mid: [146, 197, 222] },
+  red:  { mid: [244, 165, 130], end: [178, 24, 43] },
   light: [255, 255, 255],
   dark: [40, 40, 40],
 };
@@ -22,8 +24,8 @@ function isDarkMode() {
 }
 
 function getPaletteColors() {
-  const neutralColor = isDarkMode() ? PALETTE.dark : PALETTE.light;
-  return [PALETTE.ends[0], neutralColor, PALETTE.ends[1]];
+  const neutral = isDarkMode() ? PALETTE.dark : PALETTE.light;
+  return [PALETTE.blue.end, PALETTE.blue.mid, neutral, PALETTE.red.mid, PALETTE.red.end];
 }
 
 const METRIC_TITLES = {
