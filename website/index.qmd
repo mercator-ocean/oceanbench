@@ -41,24 +41,18 @@ from helpers.s3_discovery import discover_challengers, get_notebook_url
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook
 
 challengers = discover_challengers()
-print(f"Challengers: {challengers}")
 
 all_scores = {}
 for name in challengers:
     local_path = os.path.join("reports", f"{name}.report.ipynb")
-    if os.path.exists(local_path):
-        source = local_path
-    else:
-        source = get_notebook_url(name)
-    print(f"Fetching {name} from {source}...")
+    source = local_path if os.path.exists(local_path) else get_notebook_url(name)
     scores = get_all_model_scores_from_notebook(source, name)
     if scores:
         all_scores[name] = {
             metric_key: score.model_dump() for metric_key, score in scores.items()
         }
-        print(f"  -> {len(scores)} metrics parsed")
     else:
-        print(f"  -> FAILED")
+        print(f"WARNING: failed to parse scores for {name} from {source}")
 
 scores_json = json.dumps({"challengers": all_scores, "challenger_names": list(all_scores.keys())})
 ```

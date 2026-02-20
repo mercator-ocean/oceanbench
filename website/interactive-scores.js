@@ -174,9 +174,13 @@ function buildDataRows(
     rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.report.html">${name}</a></th>`;
     for (const variable of variables) {
       const unit = getUnit(baselineScore, depth, variable);
+      const referenceValues = {};
+      for (const day of leadDays) {
+        referenceValues[day] = getValue(baselineScore, depth, variable, day);
+      }
       for (const day of leadDays) {
         const value = getValue(score, depth, variable, day);
-        const referenceValue = getValue(baselineScore, depth, variable, day);
+        const referenceValue = referenceValues[day];
         let style = "";
         if (!isBaseline && value !== null && referenceValue !== null) {
           style = getCellStyle(referenceValue, value);
@@ -467,6 +471,7 @@ function formatRgb(color) {
 }
 
 function legendGradientCSS() {
+  // Reverse: palette is ordered better→worse, legend displays worse→better (left→right)
   const colors = [...getPaletteColors()].reverse();
   const stops = colors.map(
     (color, index) => `${formatRgb(color)} ${(index / (colors.length - 1)) * 100}%`,

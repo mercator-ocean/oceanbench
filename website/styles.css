@@ -177,21 +177,17 @@ body.quarto-dark .controls select {
   border-left: none;
 }
 
-.depth-toggle-btn.active {
+.depth-toggle-btn.active,
+.display-toggle-btn.active {
   background: var(--bs-primary, #046293);
   color: white;
   border-color: var(--bs-primary, #046293);
 }
 
-body.quarto-dark .depth-toggle-btn {
+body.quarto-dark .depth-toggle-btn,
+body.quarto-dark .display-toggle-btn {
   background: #2a2a2a;
   color: #adb5bd;
-}
-
-body.quarto-dark .depth-toggle-btn.active {
-  background: var(--bs-primary, #046293);
-  color: white;
-  border-color: var(--bs-primary, #046293);
 }
 
 /* --- Display toggle (values / % diff) --- */
@@ -219,23 +215,6 @@ body.quarto-dark .depth-toggle-btn.active {
 .display-toggle-btn:last-child {
   border-radius: 0 0.2rem 0.2rem 0;
   border-left: none;
-}
-
-.display-toggle-btn.active {
-  background: var(--bs-primary, #046293);
-  color: white;
-  border-color: var(--bs-primary, #046293);
-}
-
-body.quarto-dark .display-toggle-btn {
-  background: #2a2a2a;
-  color: #adb5bd;
-}
-
-body.quarto-dark .display-toggle-btn.active {
-  background: var(--bs-primary, #046293);
-  color: white;
-  border-color: var(--bs-primary, #046293);
 }
 
 /* --- Color legend --- */
@@ -376,10 +355,8 @@ body.quarto-dark .score-table tr.baseline-row td {
   margin-bottom: 0.5rem;
 }
 
-/* First h3 in section needs no top margin */
-#reanalysis-scores h3:first-child,
-#analysis-scores h3:first-child,
-.depth-section h3:first-child {
+/* First h3 in each score section needs no top margin */
+.depth-section h3 {
   margin-top: 0;
 }
 
