@@ -9,6 +9,7 @@ import requests
 
 from oceanbench.core.rmsd import DEPTH_LABELS, VARIABLE_METADATA
 from oceanbench.core.lagrangian_trajectory import LAGRANGIAN_LABEL, LAGRANGIAN_UNIT, LAGRANGIAN_CF_NAME
+from oceanbench.core.lead_day_utils import LEAD_DAY_LABEL_PREFIX
 
 from helpers.type import ModelScore
 
@@ -118,7 +119,7 @@ def _parse_html_table_rows(raw_table: str) -> list[dict]:
     soup = BeautifulSoup(raw_table, features="html.parser")
     thead = soup.find("thead")
     headers = [th.get_text(strip=True) for th in thead.find_all("th")]
-    lead_days = [header.replace("Lead day ", "") for header in headers[1:]]
+    lead_days = [header.removeprefix(LEAD_DAY_LABEL_PREFIX) for header in headers[1:]]
 
     tbody = soup.find("tbody")
     rows = []
