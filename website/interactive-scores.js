@@ -130,8 +130,8 @@ function getCfName(scoreData, depth, variable) {
   }
 }
 
-function titleCase(str) {
-  return str.replace(/(^|\s)\w/g, (c) => c.toUpperCase());
+function titleCase(text) {
+  return text.replace(/(^|\s)\w/g, (character) => character.toUpperCase());
 }
 
 function formatVariableHeader(variable, unit, cfName) {
@@ -270,7 +270,7 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
 
   html += '<span class="display-toggle">';
   html += `<button class="display-toggle-btn${!showPercentDiff ? " active" : ""}" data-display="values">Values</button>`;
-  html += `<button class="display-toggle-btn${showPercentDiff ? " active" : ""}" data-display="pctdiff">% diff</button>`;
+  html += `<button class="display-toggle-btn${showPercentDiff ? " active" : ""}" data-display="percent-diff">% diff</button>`;
   html += '</span>';
 
   html += '<div id="color-legend" class="color-legend"></div>';
@@ -279,30 +279,30 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
 }
 
 function ensureControlsElement() {
-  let el = document.getElementById("score-controls");
-  if (el) return el;
+  let element = document.getElementById("score-controls");
+  if (element) return element;
 
-  // Remove any stale controls div from server-rendered HTML (freeze cache)
+  // Quarto freeze cache can leave a stale controls div in the rendered HTML
   const wrapper = document.getElementById("all-scores");
   if (wrapper) {
     const stale = wrapper.querySelector(".controls:not(#score-controls)");
     if (stale) stale.remove();
   }
 
-  el = document.createElement("div");
-  el.id = "score-controls";
-  el.className = "controls";
+  element = document.createElement("div");
+  element.id = "score-controls";
+  element.className = "controls";
 
   if (wrapper) {
-    wrapper.insertBefore(el, wrapper.firstElementChild);
+    wrapper.insertBefore(element, wrapper.firstElementChild);
   } else {
     const reanalysis = document.getElementById("reanalysis-scores");
     if (reanalysis) {
-      reanalysis.parentNode.insertBefore(el, reanalysis);
+      reanalysis.parentNode.insertBefore(element, reanalysis);
     }
   }
 
-  return el;
+  return element;
 }
 
 function renderDepthMetric(
@@ -315,7 +315,7 @@ function renderDepthMetric(
   if (!baselineScore) return "";
 
   const depths = Object.keys(baselineScore.depths);
-  const visibleDepths = showAllMode ? depths : depths.filter((d) => selectedDepths.has(d));
+  const visibleDepths = showAllMode ? depths : depths.filter((depth) => selectedDepths.has(depth));
   if (visibleDepths.length === 0) return "";
   const orderedNames = [
     baseline,
@@ -324,21 +324,20 @@ function renderDepthMetric(
     ),
   ];
 
-  // Split variables: common (all depths) vs surface-only
+  // Variables present at all depths vs only at the surface (e.g. SSH has no deeper levels)
   const headerDepth = depths[0];
-  const allHeaderVars = Object.keys(baselineScore.depths[headerDepth].variables);
-  const deeperVarSets = depths.slice(1).map(
-    (d) => new Set(Object.keys(baselineScore.depths[d]?.variables || {})),
+  const allHeaderVariables = Object.keys(baselineScore.depths[headerDepth].variables);
+  const deeperVariableSets = depths.slice(1).map(
+    (depth) => new Set(Object.keys(baselineScore.depths[depth]?.variables || {})),
   );
-  const surfaceOnlyVars = allHeaderVars.filter(
-    (v) => deeperVarSets.length > 0 && deeperVarSets.some((s) => !s.has(v)),
+  const surfaceOnlyVariables = allHeaderVariables.filter(
+    (variable) => deeperVariableSets.length > 0 && deeperVariableSets.some((set) => !set.has(variable)),
   );
-  const commonVars = allHeaderVars.filter((v) => !surfaceOnlyVars.includes(v));
-  // If only surface-level depths selected, show surface-only vars too
-  const hasDeepDepth = visibleDepths.some((d) => d !== depths[0]);
-  const variables = hasDeepDepth ? commonVars : [...commonVars, ...surfaceOnlyVars];
+  const commonVariables = allHeaderVariables.filter((variable) => !surfaceOnlyVariables.includes(variable));
+  const hasDeepDepth = visibleDepths.some((depth) => depth !== depths[0]);
+  const variables = hasDeepDepth ? commonVariables : [...commonVariables, ...surfaceOnlyVariables];
   const leadDays = getLeadDays(baselineScore, headerDepth);
-  const totalCols = 1 + variables.length * leadDays.length;
+  const totalColumns = 1 + variables.length * leadDays.length;
 
   let thead = "<thead>";
   thead += `<tr><th class="model-col">Models</th>`;
@@ -358,7 +357,7 @@ function renderDepthMetric(
   let tbody = "<tbody>";
   for (const depth of visibleDepths) {
     if (visibleDepths.length > 1) {
-      tbody += `<tr class="depth-separator"><td class="depth-separator-cell" colspan="${totalCols}">${depth}</td></tr>`;
+      tbody += `<tr class="depth-separator"><td class="depth-separator-cell" colspan="${totalColumns}">${depth}</td></tr>`;
     }
     tbody += buildDataRows(
       orderedNames,
@@ -491,25 +490,23 @@ function updateColorLegend(baseline) {
 
 function setupCellHighlight() {
   document.querySelectorAll(".score-table").forEach((table) => {
-    table.addEventListener("mouseover", (e) => {
-      const td = e.target.closest("td");
-      if (!td || td.classList.contains("depth-separator-cell")) return;
-      td.classList.add("highlight-cell");
-      // Highlight model name
-      const modelCell = td.parentElement.querySelector("th.model-col");
+    table.addEventListener("mouseover", (event) => {
+      const cell = event.target.closest("td");
+      if (!cell || cell.classList.contains("depth-separator-cell")) return;
+      cell.classList.add("highlight-cell");
+      const modelCell = cell.parentElement.querySelector("th.model-col");
       if (modelCell) modelCell.classList.add("highlight-label");
-      // Highlight lead day header
-      const colIdx = td.cellIndex;
+      const columnIndex = cell.cellIndex;
       const lastHeadRow = table.querySelector("thead tr:last-child");
-      if (lastHeadRow && lastHeadRow.cells[colIdx]) {
-        lastHeadRow.cells[colIdx].classList.add("highlight-label");
+      if (lastHeadRow && lastHeadRow.cells[columnIndex]) {
+        lastHeadRow.cells[columnIndex].classList.add("highlight-label");
       }
     });
-    table.addEventListener("mouseout", (e) => {
-      const td = e.target.closest("td");
-      if (!td) return;
-      table.querySelectorAll(".highlight-cell, .highlight-label").forEach((c) => {
-        c.classList.remove("highlight-cell", "highlight-label");
+    table.addEventListener("mouseout", (event) => {
+      const cell = event.target.closest("td");
+      if (!cell) return;
+      table.querySelectorAll(".highlight-cell, .highlight-label").forEach((highlighted) => {
+        highlighted.classList.remove("highlight-cell", "highlight-label");
       });
     });
   });
@@ -518,8 +515,8 @@ function setupCellHighlight() {
 function updateStickyOffsets() {
   const controls = document.getElementById("score-controls");
   if (controls) {
-    const h = controls.getBoundingClientRect().height;
-    document.documentElement.style.setProperty("--controls-height", h + "px");
+    const controlsHeight = controls.getBoundingClientRect().height;
+    document.documentElement.style.setProperty("--controls-height", controlsHeight + "px");
   }
 }
 
@@ -529,18 +526,16 @@ function attachControlListeners() {
     baselineSelect.addEventListener("change", renderAllTables);
   }
 
-  // Display toggle (values vs % diff)
-  document.querySelectorAll(".display-toggle-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      showPercentDiff = btn.dataset.display === "pctdiff";
+  document.querySelectorAll(".display-toggle-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      showPercentDiff = button.dataset.display === "percent-diff";
       renderAllTables();
     });
   });
 
-  // "All" button — simple click
-  const allBtn = document.querySelector('.depth-toggle-btn[data-depth="all"]');
-  if (allBtn) {
-    allBtn.addEventListener("click", () => {
+  const allButton = document.querySelector('.depth-toggle-btn[data-depth="all"]');
+  if (allButton) {
+    allButton.addEventListener("click", () => {
       if (showAllMode) {
         showAllMode = false;
         selectedDepths = new Set();
@@ -551,11 +546,11 @@ function attachControlListeners() {
     });
   }
 
-  // Depth pills — drag-select (click-hold-drag to select/deselect range)
+  // Click-hold-drag to select/deselect a range of depth pills
   let dragAction = null;
 
-  function applyToBtn(btn) {
-    const depth = btn.dataset.depth;
+  function applyDragToButton(button) {
+    const depth = button.dataset.depth;
     if (!depth || depth === "all") return;
     if (dragAction === "select") {
       if (showAllMode) {
@@ -564,35 +559,35 @@ function attachControlListeners() {
       } else {
         selectedDepths.add(depth);
       }
-      btn.classList.add("active");
+      button.classList.add("active");
     } else {
       if (!showAllMode) {
         selectedDepths.delete(depth);
-        btn.classList.remove("active");
+        button.classList.remove("active");
       }
     }
-    if (allBtn) allBtn.classList.toggle("active", showAllMode);
+    if (allButton) allButton.classList.toggle("active", showAllMode);
   }
 
   document.querySelectorAll(".depth-pills").forEach((container) => {
-    container.addEventListener("mousedown", (e) => {
-      const btn = e.target.closest(".depth-toggle-btn");
-      if (!btn) return;
-      e.preventDefault();
-      const depth = btn.dataset.depth;
+    container.addEventListener("mousedown", (event) => {
+      const button = event.target.closest(".depth-toggle-btn");
+      if (!button) return;
+      event.preventDefault();
+      const depth = button.dataset.depth;
       const isActive = !showAllMode && selectedDepths.has(depth);
       dragAction = isActive ? "deselect" : "select";
-      applyToBtn(btn);
+      applyDragToButton(button);
       document.addEventListener("mouseup", () => {
         dragAction = null;
         renderAllTables();
       }, { once: true });
     });
-    container.addEventListener("mouseover", (e) => {
+    container.addEventListener("mouseover", (event) => {
       if (!dragAction) return;
-      const btn = e.target.closest(".depth-toggle-btn");
-      if (!btn) return;
-      applyToBtn(btn);
+      const button = event.target.closest(".depth-toggle-btn");
+      if (!button) return;
+      applyDragToButton(button);
     });
   });
 }
@@ -606,16 +601,14 @@ function renderAllTables() {
   const data = parsedData;
   const { challengers, challenger_names: challengerNames } = data;
 
-  // Preserve baseline across re-renders
   const existingSelect = document.getElementById("baseline-select");
   const baseline = existingSelect?.value
     || (challengerNames.includes("glo12") ? "glo12" : challengerNames[0]);
 
-  // Discover available depths
-  const refScore = challengers[baseline]?.[REANALYSIS_DEPTH_METRIC]
+  const referenceScore = challengers[baseline]?.[REANALYSIS_DEPTH_METRIC]
     || challengers[baseline]?.[ANALYSIS_DEPTH_METRIC];
-  if (refScore) {
-    availableDepths = Object.keys(refScore.depths);
+  if (referenceScore) {
+    availableDepths = Object.keys(referenceScore.depths);
   }
 
   renderMetricSection(
@@ -635,8 +628,8 @@ function renderAllTables() {
     baseline,
   );
 
-  const controlsEl = ensureControlsElement();
-  controlsEl.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);
+  const controlsElement = ensureControlsElement();
+  controlsElement.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);
 
   updateColorLegend(baseline);
   updateStickyOffsets();
@@ -663,8 +656,8 @@ function init() {
     || document.querySelector(".headroom");
   if (header) {
     const navbar = header.querySelector(".navbar") || header;
-    const h = navbar.offsetHeight;
-    document.documentElement.style.setProperty("--navbar-full-height", h + "px");
+    const navbarHeight = navbar.offsetHeight;
+    document.documentElement.style.setProperty("--navbar-full-height", navbarHeight + "px");
     new MutationObserver(() => {
       const hidden = header.classList.contains("headroom--unpinned");
       document.body.classList.toggle("nav-hidden", hidden);

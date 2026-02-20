@@ -62,7 +62,7 @@ def _get_cell_html_output(cell: dict) -> str | None:
     return None
 
 
-def get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
+def _get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
     metrics = {}
     for cell in raw_notebook["cells"]:
         source = _get_cell_source(cell)
@@ -74,7 +74,7 @@ def get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
     return metrics
 
 
-def _get_depth_and_variable(variable: str) -> tuple[str, str]:
+def _get_depth_and_variable(variable: str) -> tuple[str, str] | None:
     for depth in ["Surface", "50m", "100m", "200m", "300m", "500m"]:
         if variable.startswith(depth):
             return (depth, variable.removeprefix(depth + " "))
@@ -148,7 +148,7 @@ def get_all_model_scores_from_notebook(notebook_path: str, name: str) -> dict[st
     raw_notebook = _get_notebook(notebook_path)
     if raw_notebook is None:
         return {}
-    metrics_html = get_all_metrics_from_notebook(raw_notebook)
+    metrics_html = _get_all_metrics_from_notebook(raw_notebook)
     scores = {}
     for metric_key, raw_table in metrics_html.items():
         if metric_key in DEPTH_VARIABLE_METRICS:
