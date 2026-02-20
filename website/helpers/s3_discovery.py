@@ -19,13 +19,12 @@ def discover_challengers() -> list[str]:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             keys = re.findall(r"<Key>(.*?)</Key>", response.text)
-            names = []
-            for key in keys:
-                if key.endswith(".report.ipynb"):
-                    filename = key.split("/")[-1]
-                    name = filename.removesuffix(".report.ipynb")
-                    if name:
-                        names.append(name)
+            names = [
+                name
+                for key in keys
+                if key.endswith(".report.ipynb")
+                if (name := key.split("/")[-1].removesuffix(".report.ipynb"))
+            ]
             if names:
                 return sorted(set(names))
     except Exception:

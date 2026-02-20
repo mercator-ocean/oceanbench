@@ -20,30 +20,20 @@ from helpers.s3_discovery import discover_challengers
 
 challengers = discover_challengers()
 
-header = "| System | Organisation | Method | Forecast type | Initial conditions | Output resolution | Report |\n"
-header += "|--------|--------------|--------|---------------|--------------------|-------------------|--------|\n"
+header = (
+    "| System | Organisation | Method | Forecast type | Initial conditions | Output resolution | Report |\n"
+    "|--------|--------------|--------|---------------|--------------------|-------------------|--------|\n"
+)
 
-rows = ""
-for name in challengers:
+def format_row(name):
     meta = CHALLENGERS.get(name)
     if meta:
         system = f"[{meta['label']}]({meta['url']})"
         org = f"[{meta['organisation']}]({meta['org_url']})"
-        method = meta["method"]
-        forecast = meta["forecast_type"]
-        ic = meta["initial_conditions"]
-        res = meta["resolution"]
-    else:
-        system = name
-        org = ""
-        method = ""
-        forecast = ""
-        ic = ""
-        res = ""
+        return f"| {system} | {org} | {meta['method']} | {meta['forecast_type']} | {meta['initial_conditions']} | {meta['resolution']} | [Report](reports/{name}.report.html) |"
+    return f"| {name} |  |  |  |  |  | [Report](reports/{name}.report.html) |"
 
-    report = f"[Report](reports/{name}.report.html)"
-
-    rows += f"| {system} | {org} | {method} | {forecast} | {ic} | {res} | {report} |\n"
+rows = "\n".join(map(format_row, challengers))
 
 print(header + rows)
 ```
