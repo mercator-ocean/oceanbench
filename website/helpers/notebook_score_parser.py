@@ -104,7 +104,10 @@ def _parse_html_table_rows(raw_table: str) -> list[dict]:
 def _convert_depth_variable_table_to_model_score(raw_table: str, name: str) -> ModelScore:
     scores = {"name": name, "depths": {}}
     for row in _parse_html_table_rows(raw_table):
-        depth, variable = _get_depth_and_variable(row["label"])
+        result = _get_depth_and_variable(row["label"])
+        if result is None:
+            continue
+        depth, variable = result
         if depth not in scores["depths"]:
             scores["depths"][depth] = {"variables": {}}
         cf_name, unit = _get_variable_metadata(variable)
