@@ -13,7 +13,7 @@ OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 
 def observation_path(day_datetime: numpy.datetime64) -> str:
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/obs_finales_v2/{day_string}.zarr"
+    return f"https://minio.dive.edito.eu/project-oceanbench/public/observations2024/{day_string}.zarr"
 
 
 def _assign_standard_names(observations_dataset: Dataset) -> Dataset:

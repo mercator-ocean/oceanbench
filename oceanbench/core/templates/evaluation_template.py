@@ -44,6 +44,6 @@ oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glo12_analysis(chall
 
 oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(challenger_dataset)
 
-# ### Root Mean Square Deviation (RMSD) of variables compared to observations
+# #### Root Mean Square Deviation (RMSD) of variables compared to observations
 
 oceanbench.metrics.rmsd_of_variables_compared_to_observations(challenger_dataset)
