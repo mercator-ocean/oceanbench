@@ -23,7 +23,7 @@ from oceanbench.core.climate_forecast_standard_names import (
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MEAN_SEA_SURFACE_HEIGHT_URL = (
-    "https://minio.dive.edito.eu/project-ml-compression/public/glorys12_mean_sea_surface_height_2024.zarr"
+    "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mean_sea_surface_height_2024.zarr"
 )
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
