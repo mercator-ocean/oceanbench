@@ -99,6 +99,7 @@ body.quarto-dark .score-table .cf-name {
 
 .controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 1.5rem;
   padding: 0.4rem 0.6rem;
   background: var(--bs-body-bg, #fafaf7);
@@ -136,15 +137,18 @@ body.quarto-dark .controls select {
   border-color: var(--bs-border-color, #495057);
 }
 
-/* --- Depth toggle (segmented control) --- */
+/* --- Depth pills (multi-select) --- */
 
 .depth-toggle {
   display: flex;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .depth-toggle-btn {
-  padding: 0.2rem 0.6rem;
+  padding: 0.2rem 0.5rem;
   border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.2rem;
   background: var(--bs-tertiary-bg, #e9ecef);
   color: var(--bs-body-color, #333940);
   cursor: pointer;
@@ -153,12 +157,23 @@ body.quarto-dark .controls select {
   line-height: 1.4;
 }
 
-.depth-toggle-btn:first-child {
+.depth-pills {
+  display: flex;
+}
+
+.depth-pills .depth-toggle-btn {
+  border-radius: 0;
+}
+
+.depth-pills .depth-toggle-btn:first-child {
   border-radius: 0.2rem 0 0 0.2rem;
 }
 
-.depth-toggle-btn:last-child {
+.depth-pills .depth-toggle-btn:last-child {
   border-radius: 0 0.2rem 0.2rem 0;
+}
+
+.depth-pills .depth-toggle-btn + .depth-toggle-btn {
   border-left: none;
 }
 

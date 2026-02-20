@@ -52,7 +52,9 @@ const ANALYSIS_FLAT_METRICS = [
   "lagrangian_glo12",
 ];
 
-let showAllDepths = false;
+let selectedDepths = new Set();
+let availableDepths = [];
+let showAllMode = true;
 
 function interpolateColor(startColor, endColor, ratio) {
   return [
@@ -225,7 +227,7 @@ function buildCombinedDataRows(
   return rows;
 }
 
-function buildControlsInnerHtml(challengerNames, baseline) {
+function buildControlsInnerHtml(challengerNames, baseline, depths) {
   let html = "";
 
   html += '<label>Baseline: <select id="baseline-select">';
@@ -236,9 +238,13 @@ function buildControlsInnerHtml(challengerNames, baseline) {
   html += "</select></label>";
 
   html += '<span class="depth-toggle">';
-  html += `<button class="depth-toggle-btn${showAllDepths ? "" : " active"}" data-mode="surface">Surface</button>`;
-  html += `<button class="depth-toggle-btn${showAllDepths ? " active" : ""}" data-mode="all">All depths</button>`;
-  html += "</span>";
+  html += `<button class="depth-toggle-btn${showAllMode ? " active" : ""}" data-depth="all">All</button>`;
+  html += '<span class="depth-pills">';
+  for (const depth of depths) {
+    const active = !showAllMode && selectedDepths.has(depth) ? " active" : "";
+    html += `<button class="depth-toggle-btn${active}" data-depth="${depth}">${depth}</button>`;
+  }
+  html += "</span></span>";
 
   html += '<div id="color-legend" class="color-legend"></div>';
 
@@ -282,7 +288,8 @@ function renderDepthMetric(
   if (!baselineScore) return "";
 
   const depths = Object.keys(baselineScore.depths);
-  const visibleDepths = showAllDepths ? depths : [depths[0]];
+  const visibleDepths = showAllMode ? depths : depths.filter((d) => selectedDepths.has(d));
+  if (visibleDepths.length === 0) return "";
   const orderedNames = [
     baseline,
     ...challengerNames.filter(
@@ -300,8 +307,9 @@ function renderDepthMetric(
     (v) => deeperVarSets.length > 0 && deeperVarSets.some((s) => !s.has(v)),
   );
   const commonVars = allHeaderVars.filter((v) => !surfaceOnlyVars.includes(v));
-  // Surface mode: all vars (common + surface-only on right). All depths: common only.
-  const variables = showAllDepths ? commonVars : [...commonVars, ...surfaceOnlyVars];
+  // If only surface-level depths selected, show surface-only vars too
+  const hasDeepDepth = visibleDepths.some((d) => d !== depths[0]);
+  const variables = hasDeepDepth ? commonVars : [...commonVars, ...surfaceOnlyVars];
   const leadDays = getLeadDays(baselineScore, headerDepth);
   const totalCols = 1 + variables.length * leadDays.length;
 
@@ -322,7 +330,7 @@ function renderDepthMetric(
 
   let tbody = "<tbody>";
   for (const depth of visibleDepths) {
-    if (showAllDepths) {
+    if (visibleDepths.length > 1) {
       tbody += `<tr class="depth-separator"><td class="depth-separator-cell" colspan="${totalCols}">${depth}</td></tr>`;
     }
     tbody += buildDataRows(
@@ -337,7 +345,7 @@ function renderDepthMetric(
   }
   tbody += "</tbody>";
 
-  const tableClass = showAllDepths ? "score-table depth-table" : "score-table";
+  const tableClass = visibleDepths.length > 1 ? "score-table depth-table" : "score-table";
   return `<table class="${tableClass}">${thead}${tbody}</table>`;
 }
 
@@ -493,10 +501,62 @@ function attachControlListeners() {
     baselineSelect.addEventListener("change", renderAllTables);
   }
 
-  document.querySelectorAll(".depth-toggle-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      showAllDepths = btn.dataset.mode === "all";
+  // "All" button — simple click
+  const allBtn = document.querySelector('.depth-toggle-btn[data-depth="all"]');
+  if (allBtn) {
+    allBtn.addEventListener("click", () => {
+      if (showAllMode) {
+        showAllMode = false;
+        selectedDepths = new Set();
+      } else {
+        showAllMode = true;
+      }
       renderAllTables();
+    });
+  }
+
+  // Depth pills — drag-select (click-hold-drag to select/deselect range)
+  let dragAction = null;
+
+  function applyToBtn(btn) {
+    const depth = btn.dataset.depth;
+    if (!depth || depth === "all") return;
+    if (dragAction === "select") {
+      if (showAllMode) {
+        showAllMode = false;
+        selectedDepths = new Set([depth]);
+      } else {
+        selectedDepths.add(depth);
+      }
+      btn.classList.add("active");
+    } else {
+      if (!showAllMode) {
+        selectedDepths.delete(depth);
+        btn.classList.remove("active");
+      }
+    }
+    if (allBtn) allBtn.classList.toggle("active", showAllMode);
+  }
+
+  document.querySelectorAll(".depth-pills").forEach((container) => {
+    container.addEventListener("mousedown", (e) => {
+      const btn = e.target.closest(".depth-toggle-btn");
+      if (!btn) return;
+      e.preventDefault();
+      const depth = btn.dataset.depth;
+      const isActive = !showAllMode && selectedDepths.has(depth);
+      dragAction = isActive ? "deselect" : "select";
+      applyToBtn(btn);
+      document.addEventListener("mouseup", () => {
+        dragAction = null;
+        renderAllTables();
+      }, { once: true });
+    });
+    container.addEventListener("mouseover", (e) => {
+      if (!dragAction) return;
+      const btn = e.target.closest(".depth-toggle-btn");
+      if (!btn) return;
+      applyToBtn(btn);
     });
   });
 }
@@ -511,6 +571,13 @@ function renderAllTables() {
   const existingSelect = document.getElementById("baseline-select");
   const baseline = existingSelect?.value
     || (challengerNames.includes("glo12") ? "glo12" : challengerNames[0]);
+
+  // Discover available depths
+  const refScore = challengers[baseline]?.[REANALYSIS_DEPTH_METRIC]
+    || challengers[baseline]?.[ANALYSIS_DEPTH_METRIC];
+  if (refScore) {
+    availableDepths = Object.keys(refScore.depths);
+  }
 
   renderMetricSection(
     "reanalysis-scores",
@@ -530,7 +597,7 @@ function renderAllTables() {
   );
 
   const controlsEl = ensureControlsElement();
-  controlsEl.innerHTML = buildControlsInnerHtml(challengerNames, baseline);
+  controlsEl.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);
 
   updateColorLegend(baseline);
   updateStickyOffsets();
