@@ -261,21 +261,36 @@ body.nav-hidden .depth-table thead {
 /* --- Depth separator rows --- */
 
 .score-table .depth-separator-cell {
+  position: relative;
   background: var(--bs-body-bg, #fafaf7);
   font-weight: 600;
   font-size: 0.8rem;
   text-align: left;
-  padding: 0.25rem 0.5rem;
-  border-color: var(--bs-body-bg, #fafaf7) !important;
-  border-top-width: 12px !important;
+  padding: 12px 0.5rem 0.25rem 0.5rem;
+  border: hidden !important;
   border-bottom: 1px solid var(--bs-border-color, #dee2e6) !important;
+}
+
+/* Pseudo-element restores the bottom border of the previous depth section,
+   which border: hidden suppresses in the collapsed border model. */
+.score-table .depth-separator-cell::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--bs-border-color, #dee2e6);
 }
 
 body.quarto-dark .score-table .depth-separator-cell {
   background: var(--bs-body-bg, #1a1a2e);
-  border-color: var(--bs-body-bg, #1a1a2e) !important;
   border-bottom-color: var(--bs-border-color, #495057) !important;
   color: #adb5bd;
+}
+
+body.quarto-dark .score-table .depth-separator-cell::before {
+  background: var(--bs-border-color, #495057);
 }
 
 /* --- Cell hover highlight --- */
