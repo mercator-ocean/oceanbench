@@ -12,7 +12,6 @@ class ModelVariable(BaseModel):
 
 
 class ModelDepth(BaseModel):
-    real_value: float
     variables: dict[str, ModelVariable]
 
 

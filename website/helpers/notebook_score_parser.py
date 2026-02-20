@@ -62,12 +62,6 @@ def _get_cell_html_output(cell: dict) -> str | None:
     return None
 
 
-def get_raw_html_report_score_table(raw_notebook: dict) -> str | None:
-    for cell in raw_notebook["cells"]:
-        if METRIC_PATTERNS["rmsd_variables_glorys"] in _get_cell_source(cell):
-            return _get_cell_html_output(cell)
-
-
 def get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
     metrics = {}
     for cell in raw_notebook["cells"]:
@@ -112,7 +106,7 @@ def _convert_depth_variable_table_to_model_score(raw_table: str, name: str) -> M
     for row in _parse_html_table_rows(raw_table):
         depth, variable = _get_depth_and_variable(row["label"])
         if depth not in scores["depths"]:
-            scores["depths"][depth] = {"real_value": 0, "variables": {}}
+            scores["depths"][depth] = {"variables": {}}
         cf_name, unit = _get_variable_metadata(variable)
         scores["depths"][depth]["variables"][variable] = {
             "cf_name": cf_name,
@@ -127,30 +121,12 @@ def _convert_flat_table_to_model_score(raw_table: str, name: str) -> ModelScore:
     for row in _parse_html_table_rows(raw_table):
         label = row["label"]
         if "flat" not in scores["depths"]:
-            scores["depths"]["flat"] = {"real_value": 0, "variables": {}}
+            scores["depths"]["flat"] = {"variables": {}}
         cf_name, unit = _get_variable_metadata(label)
         scores["depths"]["flat"]["variables"][label] = {
             "cf_name": cf_name,
             "unit": unit,
             "data": row["data"],
-        }
-    return ModelScore.model_validate(scores)
-
-
-def _convert_raw_html_report_score_table_to_model_score(raw_table: str, name: str) -> ModelScore:
-    scores = {"name": name, "depths": {}}
-    soup = BeautifulSoup(raw_table, features="html.parser")
-    tbody = soup.find("tbody")
-    rows = tbody.find_all("tr")
-    for row in rows:
-        depth, variable = _get_depth_and_variable(row.find("th").string)
-        if depth not in scores["depths"]:
-            scores["depths"][depth] = {"real_value": 0, "variables": {}}
-        cf_name, unit = _get_variable_metadata(variable)
-        scores["depths"][depth]["variables"][variable] = {
-            "cf_name": cf_name,
-            "unit": unit,
-            "data": {str(index + 1): float(cell.string) for index, cell in enumerate(row.find_all("td"))},
         }
     return ModelScore.model_validate(scores)
 
@@ -165,13 +141,6 @@ def _get_notebook(path: str) -> dict | None:
             return json.load(file)
 
 
-def get_model_score_from_notebook(notebook_path: str, name: str) -> ModelScore:
-    raw_report = _get_notebook(notebook_path)
-    score_table = get_raw_html_report_score_table(raw_report)
-    model_score = _convert_raw_html_report_score_table_to_model_score(score_table, name)
-    return model_score
-
-
 def get_all_model_scores_from_notebook(notebook_path: str, name: str) -> dict[str, ModelScore]:
     raw_notebook = _get_notebook(notebook_path)
     if raw_notebook is None:
@@ -184,8 +153,3 @@ def get_all_model_scores_from_notebook(notebook_path: str, name: str) -> dict[st
         else:
             scores[metric_key] = _convert_flat_table_to_model_score(raw_table, name)
     return scores
-
-
-def get_model_score_from_file(file_path: str) -> ModelScore:
-    with open(file_path) as file:
-        return ModelScore.model_validate(json.load(file))
