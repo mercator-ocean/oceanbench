@@ -7,6 +7,8 @@ import json
 from bs4 import BeautifulSoup
 import requests
 
+from oceanbench.core.rmsd import DEPTH_LABELS
+
 from helpers.type import ModelScore
 
 
@@ -75,9 +77,10 @@ def _get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
 
 
 def _get_depth_and_variable(variable: str) -> tuple[str, str] | None:
-    for depth in ["Surface", "50m", "100m", "200m", "300m", "500m"]:
-        if variable.startswith(depth):
-            return (depth, variable.removeprefix(depth + " "))
+    for depth_label in DEPTH_LABELS.values():
+        capitalized = depth_label.capitalize()
+        if variable.startswith(capitalized):
+            return (capitalized, variable.removeprefix(capitalized + " "))
 
 
 def _parse_html_table_rows(raw_table: str) -> list[dict]:
