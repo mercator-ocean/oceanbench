@@ -37,8 +37,8 @@ METRICS = [
 ]
 
 REFERENCES = [
-    {"key": "reanalysis", "suffix": "glorys", "function_suffix": "compared_to_glorys_reanalysis(challenger_dataset)"},
-    {"key": "analysis", "suffix": "glo12", "function_suffix": "compared_to_glo12_analysis(challenger_dataset)"},
+    {"key": "reanalysis", "suffix": "glorys", "function_suffix": "compared_to_glorys_reanalysis"},
+    {"key": "analysis", "suffix": "glo12", "function_suffix": "compared_to_glo12_analysis"},
 ]
 
 METRIC_PATTERNS = {
