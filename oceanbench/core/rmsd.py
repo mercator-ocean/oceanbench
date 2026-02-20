@@ -16,15 +16,15 @@ from oceanbench.core.dataset_utils import (
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
 
-VARIABLE_LABELS: dict[str, str] = {
-    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "surface height",
-    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): "temperature",
-    Variable.SEA_WATER_SALINITY.key(): "salinity",
-    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): "northward velocity",
-    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): "eastward velocity",
-    Variable.MIXED_LAYER_DEPTH.key(): "mixed layer depth",
-    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): "northward geostrophic velocity",
-    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): "eastward geostrophic velocity",
+VARIABLE_METADATA: dict[str, tuple[str, str]] = {
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): ("surface height", "m"),
+    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): ("temperature", "°C"),
+    Variable.SEA_WATER_SALINITY.key(): ("salinity", "PSU"),
+    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): ("northward velocity", "m/s"),
+    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): ("eastward velocity", "m/s"),
+    Variable.MIXED_LAYER_DEPTH.key(): ("mixed layer depth", "m"),
+    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): ("northward geostrophic velocity", "m/s"),
+    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): ("eastward geostrophic velocity", "m/s"),
 }
 
 DEPTH_LABELS: dict[DepthLevel, str] = {
@@ -59,7 +59,9 @@ def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
 
 def _variable_depth_label(dataset: xarray.Dataset, variable: str, depth_label: str) -> str:
     return (
-        f"{depth_label} {VARIABLE_LABELS[variable]}" if _has_depths(dataset, variable) else VARIABLE_LABELS[variable]
+        f"{depth_label} {VARIABLE_METADATA[variable][0]}"
+        if _has_depths(dataset, variable)
+        else VARIABLE_METADATA[variable][0]
     ).capitalize()
 
 

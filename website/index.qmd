@@ -38,7 +38,7 @@ Want to evaluate your system or get involved in OceanBench? Check out the [GitHu
 import json
 import os
 from helpers.s3_discovery import discover_challengers, get_notebook_url
-from helpers.notebook_score_parser import get_all_model_scores_from_notebook
+from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
 
 challengers = discover_challengers()
 
@@ -54,7 +54,12 @@ for name in challengers:
     else:
         print(f"WARNING: failed to parse scores for {name} from {source}")
 
-scores_json = json.dumps({"challengers": all_scores, "challenger_names": list(all_scores.keys())})
+scores_json = json.dumps({
+    "challengers": all_scores,
+    "challenger_names": list(all_scores.keys()),
+    "metric_titles": METRIC_TITLES,
+    "sections": SECTIONS,
+})
 ```
 
 ```{python}
