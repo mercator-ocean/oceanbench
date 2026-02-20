@@ -14,7 +14,7 @@ from oceanbench.core.lead_day_utils import LEAD_DAY_LABEL_PREFIX
 from helpers.type import ModelScore
 
 
-METRICS = [
+_METRICS = [
     {"key": "rmsd_variables", "title": "RMSD of Variables", "function": "rmsd_of_variables", "has_depths": True},
     {
         "key": "rmsd_mld",
@@ -36,40 +36,44 @@ METRICS = [
     },
 ]
 
-REFERENCES = [
+_REFERENCES = [
     {"key": "reanalysis", "suffix": "glorys", "function_suffix": "compared_to_glorys_reanalysis"},
     {"key": "analysis", "suffix": "glo12", "function_suffix": "compared_to_glo12_analysis"},
 ]
 
-METRIC_PATTERNS = {
+_METRIC_PATTERNS = {
     f"{metric['key']}_{reference['suffix']}": f"oceanbench.metrics.{metric['function']}_{reference['function_suffix']}"
-    for metric in METRICS
-    for reference in REFERENCES
+    for metric in _METRICS
+    for reference in _REFERENCES
 }
 
-DEPTH_VARIABLE_METRICS = {
-    f"{metric['key']}_{reference['suffix']}" for metric in METRICS for reference in REFERENCES if metric["has_depths"]
+_DEPTH_VARIABLE_METRICS = {
+    f"{metric['key']}_{reference['suffix']}" for metric in _METRICS for reference in _REFERENCES if metric["has_depths"]
 }
 
 METRIC_TITLES = {
-    f"{metric['key']}_{reference['suffix']}": metric["title"] for metric in METRICS for reference in REFERENCES
+    f"{metric['key']}_{reference['suffix']}": metric["title"] for metric in _METRICS for reference in _REFERENCES
 }
 
 SECTIONS = {
     reference["key"]: {
-        "depth_metric": next(f"{metric['key']}_{reference['suffix']}" for metric in METRICS if metric["has_depths"]),
-        "flat_metrics": [f"{metric['key']}_{reference['suffix']}" for metric in METRICS if not metric["has_depths"]],
+        "depth_metric": next(f"{metric['key']}_{reference['suffix']}" for metric in _METRICS if metric["has_depths"]),
+        "flat_metrics": [f"{metric['key']}_{reference['suffix']}" for metric in _METRICS if not metric["has_depths"]],
     }
-    for reference in REFERENCES
+    for reference in _REFERENCES
 }
 
-_LABEL_LOOKUP: dict[str, tuple[str, str]] = {}
-for _cf_name, (_label, _unit) in VARIABLE_METADATA.items():
-    _LABEL_LOOKUP[_label] = (_cf_name, _unit)
-    for _depth in DEPTH_LABELS.values():
-        if _label.startswith(f"{_depth} "):
-            _LABEL_LOOKUP[_label.removeprefix(f"{_depth} ")] = (_cf_name, _unit)
-_LABEL_LOOKUP[LAGRANGIAN_LABEL] = (LAGRANGIAN_CF_NAME, LAGRANGIAN_UNIT)
+_LABEL_LOOKUP: dict[str, tuple[str, str]] = {
+    **{label: (cf_name, unit) for cf_name, (label, unit) in VARIABLE_METADATA.items()},
+    **{
+        label.removeprefix(f"{depth} "): (cf_name, unit)
+        for cf_name, (label, unit) in VARIABLE_METADATA.items()
+        for depth in DEPTH_LABELS.values()
+        if label.startswith(f"{depth} ")
+    },
+    LAGRANGIAN_LABEL: (LAGRANGIAN_CF_NAME, LAGRANGIAN_UNIT),
+    f"{LAGRANGIAN_LABEL} ({LAGRANGIAN_UNIT})": (LAGRANGIAN_CF_NAME, LAGRANGIAN_UNIT),
+}
 
 
 def _get_variable_metadata(variable_name: str) -> tuple[str, str]:
@@ -97,15 +101,13 @@ def _get_cell_html_output(cell: dict) -> str | None:
 
 
 def _get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
-    metrics = {}
-    for cell in raw_notebook["cells"]:
-        source = _get_cell_source(cell)
-        for metric_key, pattern in METRIC_PATTERNS.items():
-            if pattern in source:
-                html = _get_cell_html_output(cell)
-                if html:
-                    metrics[metric_key] = html
-    return metrics
+    return {
+        metric_key: html
+        for cell in raw_notebook["cells"]
+        for metric_key, pattern in _METRIC_PATTERNS.items()
+        if pattern in _get_cell_source(cell)
+        if (html := _get_cell_html_output(cell))
+    }
 
 
 def _get_depth_and_variable(variable: str) -> tuple[str, str] | None:
@@ -115,58 +117,55 @@ def _get_depth_and_variable(variable: str) -> tuple[str, str] | None:
             return (capitalized, variable.removeprefix(capitalized + " "))
 
 
+def _parse_cell_value(text: str) -> float | None:
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _parse_html_table_row(row, lead_days: list[str]) -> dict:
+    label = row.find("th").get_text(strip=True)
+    values = {day: _parse_cell_value(cell.get_text(strip=True)) for day, cell in zip(lead_days, row.find_all("td"))}
+    return {"label": label, "data": values}
+
+
 def _parse_html_table_rows(raw_table: str) -> list[dict]:
     soup = BeautifulSoup(raw_table, features="html.parser")
-    thead = soup.find("thead")
-    headers = [th.get_text(strip=True) for th in thead.find_all("th")]
+    headers = [th.get_text(strip=True) for th in soup.find("thead").find_all("th")]
     lead_days = [header.removeprefix(LEAD_DAY_LABEL_PREFIX) for header in headers[1:]]
-
-    tbody = soup.find("tbody")
-    rows = []
-    for row in tbody.find_all("tr"):
-        label = row.find("th").get_text(strip=True)
-        values = {}
-        for index, table_cell in enumerate(row.find_all("td")):
-            text = table_cell.get_text(strip=True)
-            try:
-                values[lead_days[index]] = float(text)
-            except (ValueError, IndexError):
-                values[lead_days[index]] = None
-        rows.append({"label": label, "data": values})
-    return rows
+    return [_parse_html_table_row(row, lead_days) for row in soup.find("tbody").find_all("tr")]
 
 
 def _convert_depth_variable_table_to_model_score(raw_table: str, name: str) -> ModelScore:
-    scores = {"name": name, "depths": {}}
-    for row in _parse_html_table_rows(raw_table):
-        result = _get_depth_and_variable(row["label"])
-        if result is None:
-            continue
-        depth, variable = result
-        if depth not in scores["depths"]:
-            scores["depths"][depth] = {"variables": {}}
-        cf_name, unit = _get_variable_metadata(variable)
-        scores["depths"][depth]["variables"][variable] = {
-            "cf_name": cf_name,
-            "unit": unit,
-            "data": row["data"],
+    parsed_rows = [
+        (depth, variable, _get_variable_metadata(variable), row["data"])
+        for row in _parse_html_table_rows(raw_table)
+        if (result := _get_depth_and_variable(row["label"])) is not None
+        for depth, variable in [result]
+    ]
+    unique_depths = dict.fromkeys(depth for depth, _, _, _ in parsed_rows)
+    depths = {
+        depth: {
+            "variables": {
+                variable: {"cf_name": metadata[0], "unit": metadata[1], "data": data}
+                for row_depth, variable, metadata, data in parsed_rows
+                if row_depth == depth
+            }
         }
-    return ModelScore.model_validate(scores)
+        for depth in unique_depths
+    }
+    return ModelScore.model_validate({"name": name, "depths": depths})
 
 
 def _convert_flat_table_to_model_score(raw_table: str, name: str) -> ModelScore:
-    scores = {"name": name, "depths": {}}
-    for row in _parse_html_table_rows(raw_table):
-        label = row["label"]
-        if "flat" not in scores["depths"]:
-            scores["depths"]["flat"] = {"variables": {}}
-        cf_name, unit = _get_variable_metadata(label)
-        scores["depths"]["flat"]["variables"][label] = {
-            "cf_name": cf_name,
-            "unit": unit,
-            "data": row["data"],
-        }
-    return ModelScore.model_validate(scores)
+    rows = _parse_html_table_rows(raw_table)
+    variables = {
+        row["label"]: {"cf_name": cf_name, "unit": unit, "data": row["data"]}
+        for row in rows
+        for cf_name, unit in [_get_variable_metadata(row["label"])]
+    }
+    return ModelScore.model_validate({"name": name, "depths": {"flat": {"variables": variables}}})
 
 
 def _get_notebook(path: str) -> dict | None:
@@ -184,10 +183,12 @@ def get_all_model_scores_from_notebook(notebook_path: str, name: str) -> dict[st
     if raw_notebook is None:
         return {}
     metrics_html = _get_all_metrics_from_notebook(raw_notebook)
-    scores = {}
-    for metric_key, raw_table in metrics_html.items():
-        if metric_key in DEPTH_VARIABLE_METRICS:
-            scores[metric_key] = _convert_depth_variable_table_to_model_score(raw_table, name)
-        else:
-            scores[metric_key] = _convert_flat_table_to_model_score(raw_table, name)
-    return scores
+
+    def _converter(key):
+        return (
+            _convert_depth_variable_table_to_model_score
+            if key in _DEPTH_VARIABLE_METRICS
+            else _convert_flat_table_to_model_score
+        )
+
+    return {metric_key: _converter(metric_key)(raw_table, name) for metric_key, raw_table in metrics_html.items()}
