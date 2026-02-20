@@ -55,6 +55,7 @@ const ANALYSIS_FLAT_METRICS = [
 let selectedDepths = new Set();
 let availableDepths = [];
 let showAllMode = true;
+let showPercentDiff = false;
 
 function interpolateColor(startColor, endColor, ratio) {
   return [
@@ -85,7 +86,7 @@ function formatPercentDiff(referenceValue, comparedValue) {
   if (referenceValue === 0) return comparedValue === 0 ? "0%" : "N/A";
   const percent = ((comparedValue - referenceValue) / Math.abs(referenceValue)) * 100;
   const sign = percent > 0 ? "+" : "";
-  return `${sign}${percent.toFixed(1)}%`;
+  return `${sign}${Math.round(percent)}%`;
 }
 
 function getValue(scoreData, depth, variable, leadDay) {
@@ -177,7 +178,14 @@ function buildDataRows(
         if (!isBaseline && value !== null && referenceValue !== null) {
           style = getCellStyle(referenceValue, value);
         }
-        const display = value !== null ? value.toFixed(2) : "";
+        let display = "";
+        if (value !== null) {
+          if (showPercentDiff && !isBaseline && referenceValue !== null) {
+            display = formatPercentDiff(referenceValue, value);
+          } else {
+            display = value.toFixed(2);
+          }
+        }
         const title = value !== null
           ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
           : "";
@@ -214,7 +222,14 @@ function buildCombinedDataRows(
           if (!isBaseline && value !== null && referenceValue !== null) {
             style = getCellStyle(referenceValue, value);
           }
-          const display = value !== null ? value.toFixed(2) : "";
+          let display = "";
+          if (value !== null) {
+            if (showPercentDiff && !isBaseline && referenceValue !== null) {
+              display = formatPercentDiff(referenceValue, value);
+            } else {
+              display = value.toFixed(2);
+            }
+          }
           const title = value !== null
             ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
             : "";
@@ -245,6 +260,11 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
     html += `<button class="depth-toggle-btn${active}" data-depth="${depth}">${depth}</button>`;
   }
   html += "</span></span>";
+
+  html += '<span class="display-toggle">';
+  html += `<button class="display-toggle-btn${!showPercentDiff ? " active" : ""}" data-display="values">Values</button>`;
+  html += `<button class="display-toggle-btn${showPercentDiff ? " active" : ""}" data-display="pctdiff">% diff</button>`;
+  html += '</span>';
 
   html += '<div id="color-legend" class="color-legend"></div>';
 
@@ -500,6 +520,14 @@ function attachControlListeners() {
   if (baselineSelect) {
     baselineSelect.addEventListener("change", renderAllTables);
   }
+
+  // Display toggle (values vs % diff)
+  document.querySelectorAll(".display-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      showPercentDiff = btn.dataset.display === "pctdiff";
+      renderAllTables();
+    });
+  });
 
   // "All" button — simple click
   const allBtn = document.querySelector('.depth-toggle-btn[data-depth="all"]');
