@@ -4,7 +4,7 @@
 
 [project]
 name = "oceanbench"
-version = "0.0.2"
+version = "0.0.3"
 description = ""
 authors = [
     {name = "Mercator Ocean International",email = "digital-ocean-dev@mercator-ocean.eu"},
