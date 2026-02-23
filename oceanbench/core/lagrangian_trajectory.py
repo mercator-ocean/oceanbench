@@ -88,9 +88,7 @@ def _deviation_of_lagrangian_trajectories(
     deviations = numpy.array(
         _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes)
     ).mean(axis=0)
-    score_dataframe = pandas.DataFrame(
-        {f"{LAGRANGIAN_LABEL} ({LAGRANGIAN_UNIT})": deviations[LEAD_DAY_START - 1 : LEAD_DAY_STOP]}
-    )
+    score_dataframe = pandas.DataFrame({LAGRANGIAN_LABEL: deviations[LEAD_DAY_START - 1 : LEAD_DAY_STOP]})
     score_dataframe.index = lead_day_labels(LEAD_DAY_START, LEAD_DAY_STOP)
     return score_dataframe.T
 
