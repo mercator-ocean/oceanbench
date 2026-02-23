@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-name: Publish OceanBench to PyPI and TestPyPI
+name: Publish OceanBench to PyPI
 on: push
 jobs:
   build:
