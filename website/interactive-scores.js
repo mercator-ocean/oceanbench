@@ -108,12 +108,10 @@ function titleCase(text) {
   return text.replace(/(^|\s)\w/g, (character) => character.toUpperCase());
 }
 
-function formatVariableHeader(variable, unit, cfName) {
+function formatVariableHeader(variable, cfName) {
   const displayName = titleCase(variable);
-  let header = displayName;
-  if (unit && !variable.includes(`(${unit})`)) {
-    header = `${displayName} (${unit})`;
-  }
+  const hasUnit = variable.includes("(");
+  let header = hasUnit ? displayName : `${displayName} (RMSD)`;
   if (cfName && cfName !== "unknown") {
     header += `<br><span class="cf-name">${cfName}</span>`;
   }
@@ -316,9 +314,8 @@ function renderDepthMetric(
   let thead = "<thead>";
   thead += `<tr><th class="model-col">Models</th>`;
   for (const variable of variables) {
-    const unit = getUnit(baselineScore, headerDepth, variable);
     const cfName = getCfName(baselineScore, headerDepth, variable);
-    thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, cfName)}</th>`;
+    thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, cfName)}</th>`;
   }
   thead += `</tr><tr><th class="model-col lead-day-label">Lead days</th>`;
   for (const variable of variables) {
@@ -380,9 +377,8 @@ function renderCombinedFlatMetrics(
   for (const { metricKey, variables, leadDays } of metricSpecs) {
     const baselineScore = challengers[baseline][metricKey];
     for (const variable of variables) {
-      const unit = getUnit(baselineScore, "flat", variable);
       const cfName = getCfName(baselineScore, "flat", variable);
-      thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, cfName)}</th>`;
+      thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, cfName)}</th>`;
     }
   }
   thead += "</tr>";
