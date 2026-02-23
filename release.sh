@@ -19,7 +19,7 @@ if [ -z `git status --porcelain` ] && [ ! -z "${BUMP_TYPE}" ] ; then
   poetry version ${BUMP_TYPE}
   VERSION=$(poetry version --short)
   RELEASE_TITLE="OceanBench Release ${VERSION}"
-  git commit -am "$RELEASE_TITLE"
+  git commit -am "$RELEASE_TITLE" --signoff
   git push --set-upstream origin $RELEASE_BRANCH_NAME
   PR_LINK=$(gh pr create --title "$RELEASE_TITLE" --body "")
   gh pr view $PR_LINK --web
