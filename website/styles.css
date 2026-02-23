@@ -30,12 +30,9 @@ tfoot tr td {
 }
 
 .navbar-logo {
-  height: 50px !important;
+  height: 30px !important;
   max-height: none !important;
   width: auto !important;
-  margin-top: -5px;
-  margin-bottom: -5px;
-  margin-right: -10px !important;
 }
 
 .navbar {
