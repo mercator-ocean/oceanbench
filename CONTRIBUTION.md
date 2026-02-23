@@ -26,7 +26,7 @@ For commits made via the Git command line interface, you must sign off on the co
 
 ## Git workflow
 
-This repository relies on a git workflow using rebase on the `main` branch.
+This repository relies on a git workflow using rebase on the `main` branch, to keep a linear commit history.
 Please rebase your branches on `main` and squash your commit into a single one.
 Always review the code yourself before opening pull requests, and check they are compliant with the [development guidelines](#development-guidelines-and-conventions).
 
