@@ -55,11 +55,19 @@
 /* Variable group headers */
 .score-table .var-header {
   font-weight: 600;
+  line-height: 1.2;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.score-table .metric-label {
+  font-weight: 400;
+  font-size: 0.65rem;
 }
 
 .score-table .cf-name {
   font-weight: 400;
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   color: var(--bs-secondary, #6c757d);
 }
 
@@ -255,22 +263,23 @@ body.nav-hidden .depth-table thead {
   top: calc(var(--controls-height, 2rem) - 1px);
 }
 
-/* Pseudo-elements fill gaps that border-collapse drops on sticky thead */
-.depth-table thead tr:last-child th {
+/* Pseudo-elements restore borders on sticky thead so scrolling content
+   (especially depth-separator rows with border:hidden) cannot erase them. */
+.depth-table thead th {
   position: relative;
 }
 
-.depth-table thead tr:last-child th::before {
+.depth-table thead th::before {
   content: '';
   position: absolute;
-  top: -1px;
-  left: 0;
-  right: 0;
-  height: 1px;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 1px;
   background: var(--bs-border-color, #dee2e6);
 }
 
-.depth-table thead tr:last-child th::after {
+.depth-table thead th::after {
   content: '';
   position: absolute;
   bottom: -1px;
