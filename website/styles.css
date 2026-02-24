@@ -4,6 +4,14 @@
  * SPDX-License-Identifier: EUPL-1.2
  */
 
+/* --- Quarto markdown tables (e.g. Challengers page) --- */
+
+.content table:not(.score-table) th,
+.content table:not(.score-table) td {
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  white-space: nowrap;
+}
+
 /* --- Score tables --- */
 
 .score-table-wrapper {
