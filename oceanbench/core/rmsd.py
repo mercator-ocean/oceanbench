@@ -58,11 +58,9 @@ def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
 
 
 def _variable_depth_label(dataset: xarray.Dataset, variable: str, depth_label: str) -> str:
-    return (
-        f"{depth_label} {VARIABLE_METADATA[variable][0]}"
-        if _has_depths(dataset, variable)
-        else VARIABLE_METADATA[variable][0]
-    ).capitalize()
+    display_name, unit = VARIABLE_METADATA[variable]
+    base = (f"{depth_label} {display_name}" if _has_depths(dataset, variable) else display_name).capitalize()
+    return f"{base} ({unit}) [{variable}]{{{depth_label}}}"
 
 
 def _select_dataset_variable_and_depth(dataset: xarray.Dataset, variable_name: str, depth_level: str) -> numpy.ndarray:

@@ -3,36 +3,22 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import json
+import re
 
 from bs4 import BeautifulSoup
 import requests
 
-_LEAD_DAY_LABEL_PREFIX = "Lead day "
-
-_DEPTH_LABELS = ["surface", "50m", "100m", "200m", "300m", "500m"]
-
-_UNIT_BY_KEYWORD = {
-    "height": "m",
-    "temperature": "°C",
-    "salinity": "PSU",
-    "velocity": "m/s",
-    "layer depth": "m",
-    "lagrangian": "km",
-}
-
-_CF_NAME_BY_KEYWORD = {
-    "height": "sea_surface_height_above_geoid",
-    "northward geostrophic velocity": "geostrophic_northward_sea_water_velocity",
-    "eastward geostrophic velocity": "geostrophic_eastward_sea_water_velocity",
-    "northward velocity": "northward_sea_water_velocity",
-    "eastward velocity": "eastward_sea_water_velocity",
-    "mixed layer depth": "mixed_layer_depth",
-    "temperature": "sea_water_potential_temperature",
-    "salinity": "sea_water_salinity",
-    "lagrangian": "lagrangian_trajectory_deviation",
-}
-
 from helpers.type import ModelScore
+
+_VARIABLE_LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]+)\) \[([^\]]+)\](?:\{([^}]+)\})?$")
+_LEAD_DAY_NUMBER_PATTERN = re.compile(r"(\d+)$")
+
+
+def _parse_variable_label(label: str) -> tuple[str, str, str, str]:
+    match = _VARIABLE_LABEL_PATTERN.match(label)
+    if match:
+        return match.group(1), match.group(2), match.group(3), match.group(4) or ""
+    return label, "", "unknown", ""
 
 
 _METRICS = [
@@ -85,21 +71,6 @@ SECTIONS = {
 }
 
 
-def _get_variable_metadata(variable_name: str) -> tuple[str, str]:
-    label_lower = variable_name.lower()
-    unit = ""
-    for keyword, matched_unit in _UNIT_BY_KEYWORD.items():
-        if keyword in label_lower:
-            unit = matched_unit
-            break
-    cf_name = "unknown"
-    for keyword, name in _CF_NAME_BY_KEYWORD.items():
-        if keyword in label_lower:
-            cf_name = name
-            break
-    return (cf_name, unit)
-
-
 def _get_cell_source(cell: dict) -> str:
     source = cell.get("source", [])
     if isinstance(source, list):
@@ -127,13 +98,6 @@ def _get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
     }
 
 
-def _get_depth_and_variable(variable: str) -> tuple[str, str] | None:
-    for depth_label in _DEPTH_LABELS:
-        capitalized = depth_label.capitalize()
-        if variable.startswith(capitalized):
-            return (capitalized, variable.removeprefix(capitalized + " "))
-
-
 def _parse_cell_value(text: str) -> float | None:
     try:
         return float(text)
@@ -147,26 +111,33 @@ def _parse_html_table_row(row, lead_days: list[str]) -> dict:
     return {"label": label, "data": values}
 
 
+def _extract_lead_day_number(header: str) -> str:
+    match = _LEAD_DAY_NUMBER_PATTERN.search(header)
+    return match.group(1) if match else header
+
+
 def _parse_html_table_rows(raw_table: str) -> list[dict]:
     soup = BeautifulSoup(raw_table, features="html.parser")
     headers = [th.get_text(strip=True) for th in soup.find("thead").find_all("th")]
-    lead_days = [header.removeprefix(_LEAD_DAY_LABEL_PREFIX) for header in headers[1:]]
+    lead_days = [_extract_lead_day_number(header) for header in headers[1:]]
     return [_parse_html_table_row(row, lead_days) for row in soup.find("tbody").find_all("tr")]
 
 
 def _convert_depth_variable_table_to_model_score(raw_table: str, name: str) -> ModelScore:
     parsed_rows = [
-        (depth, variable, _get_variable_metadata(variable), row["data"])
+        (depth, variable_name, cf_name, unit, row["data"])
         for row in _parse_html_table_rows(raw_table)
-        if (result := _get_depth_and_variable(row["label"])) is not None
-        for depth, variable in [result]
+        for display_name, unit, cf_name, depth_label in [_parse_variable_label(row["label"])]
+        if depth_label
+        for depth in [depth_label.capitalize()]
+        for variable_name in [display_name.removeprefix(depth + " ")]
     ]
-    unique_depths = dict.fromkeys(depth for depth, _, _, _ in parsed_rows)
+    unique_depths = dict.fromkeys(depth for depth, _, _, _, _ in parsed_rows)
     depths = {
         depth: {
             "variables": {
-                variable: {"cf_name": metadata[0], "unit": metadata[1], "data": data}
-                for row_depth, variable, metadata, data in parsed_rows
+                variable_name: {"cf_name": cf_name, "unit": unit, "data": data}
+                for row_depth, variable_name, cf_name, unit, data in parsed_rows
                 if row_depth == depth
             }
         }
@@ -178,9 +149,9 @@ def _convert_depth_variable_table_to_model_score(raw_table: str, name: str) -> M
 def _convert_flat_table_to_model_score(raw_table: str, name: str) -> ModelScore:
     rows = _parse_html_table_rows(raw_table)
     variables = {
-        row["label"]: {"cf_name": cf_name, "unit": unit, "data": row["data"]}
+        display_name: {"cf_name": cf_name, "unit": unit, "data": row["data"]}
         for row in rows
-        for cf_name, unit in [_get_variable_metadata(row["label"])]
+        for display_name, unit, cf_name, _depth_label in [_parse_variable_label(row["label"])]
     }
     return ModelScore.model_validate({"name": name, "depths": {"flat": {"variables": variables}}})
 
