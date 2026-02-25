@@ -73,12 +73,32 @@ def _evaluate_all(
     output_prefix: str | None,
     max_workers: int | None = None,
 ) -> list[EvaluationResult]:
+    if max_workers == 1:
+        # Run each challenger in an isolated worker process to avoid memory accumulation
+        # across consecutive notebook executions in long CI runs.
+        results: list[EvaluationResult] = []
+        for challenger in challengers:
+            with ProcessPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_evaluate_one, challenger, output_bucket, output_prefix)
+                try:
+                    results.append(future.result())
+                except Exception as exception:
+                    results.append(EvaluationResult(challenger=challenger, error=str(exception)))
+        return results
+
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(_evaluate_one, challenger, output_bucket, output_prefix): challenger
             for challenger in challengers
         }
-        return [future.result() for future in as_completed(futures)]
+        results = []
+        for future in as_completed(futures):
+            challenger = futures[future]
+            try:
+                results.append(future.result())
+            except Exception as exception:
+                results.append(EvaluationResult(challenger=challenger, error=str(exception)))
+        return results
 
 
 def _print_results(results: list[EvaluationResult]) -> None:

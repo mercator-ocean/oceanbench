@@ -258,10 +258,20 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
         ["variable", "depth_bin", "count"]
     ]
     pivot_table = pivot_table.merge(observation_counts, on=["variable", "depth_bin"], how="left")
-    pivot_table["variable_sort"] = pivot_table["variable"].map(VARIABLE_DISPLAY_ORDER)
+    pivot_table["variable_sort"] = pivot_table["variable"].map(VARIABLE_DISPLAY_ORDER).astype(float)
+    sst_sort_mask = (pivot_table["variable"] == Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()) & (
+        pivot_table["depth_bin"] == "SST"
+    )
+    pivot_table.loc[sst_sort_mask, "variable_sort"] = VARIABLE_DISPLAY_ORDER[Variable.SEA_WATER_SALINITY.key()] + 0.5
     pivot_table["depth_sort"] = pivot_table["depth_bin"].map(DEPTH_BIN_DISPLAY_ORDER)
     pivot_table = pivot_table.sort_values(["variable_sort", "depth_sort"]).drop(columns=["variable_sort", "depth_sort"])
     pivot_table["variable"] = pivot_table["variable"].map(VARIABLE_LABELS)
+
+    # Display SST as a dedicated "surface temperature" row, separated from the other temperature depth bins.
+    sst_display_mask = (pivot_table["variable"] == "temperature") & (pivot_table["depth_bin"] == "SST")
+    pivot_table.loc[sst_display_mask, "variable"] = "surface temperature"
+    pivot_table.loc[sst_display_mask, "depth_bin"] = "surface"
+
     lead_labels = lead_day_labels(1, lead_days_count)
     rename_columns = {
         column: lead_labels[column] for column in pivot_table.columns if isinstance(column, (int, numpy.integer))
