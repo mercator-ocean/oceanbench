@@ -81,9 +81,17 @@ def _deviation_of_lagrangian_trajectories(
         n=10000,
         seed=123,
     )
-    deviations = numpy.array(
-        _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes)
-    ).mean(axis=0)
+    deviations = (
+        pandas.concat(
+            map(
+                pandas.Series,
+                _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes),
+            ),
+            axis=1,
+        )
+        .mean(axis=1)
+        .values
+    )
     score_dataframe = pandas.DataFrame(
         {"Surface Lagrangian trajectory deviation (km)": deviations[LEAD_DAY_START - 1 : lead_day_stop]}
     )
