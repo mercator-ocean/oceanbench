@@ -7,9 +7,30 @@ import json
 from bs4 import BeautifulSoup
 import requests
 
-from oceanbench.core.rmsd import DEPTH_LABELS, VARIABLE_METADATA
-from oceanbench.core.lagrangian_trajectory import LAGRANGIAN_LABEL, LAGRANGIAN_UNIT, LAGRANGIAN_CF_NAME
-from oceanbench.core.lead_day_utils import LEAD_DAY_LABEL_PREFIX
+_LEAD_DAY_LABEL_PREFIX = "Lead day "
+
+_DEPTH_LABELS = ["surface", "50m", "100m", "200m", "300m", "500m"]
+
+_UNIT_BY_KEYWORD = {
+    "height": "m",
+    "temperature": "°C",
+    "salinity": "PSU",
+    "velocity": "m/s",
+    "layer depth": "m",
+    "lagrangian": "km",
+}
+
+_CF_NAME_BY_KEYWORD = {
+    "height": "sea_surface_height_above_geoid",
+    "northward geostrophic velocity": "geostrophic_northward_sea_water_velocity",
+    "eastward geostrophic velocity": "geostrophic_eastward_sea_water_velocity",
+    "northward velocity": "northward_sea_water_velocity",
+    "eastward velocity": "eastward_sea_water_velocity",
+    "mixed layer depth": "mixed_layer_depth",
+    "temperature": "sea_water_potential_temperature",
+    "salinity": "sea_water_salinity",
+    "lagrangian": "lagrangian_trajectory_deviation",
+}
 
 from helpers.type import ModelScore
 
@@ -63,24 +84,20 @@ SECTIONS = {
     for reference in _REFERENCES
 }
 
-_LABEL_LOOKUP: dict[str, tuple[str, str]] = {
-    **{label: (cf_name, unit) for cf_name, (label, unit) in VARIABLE_METADATA.items()},
-    **{
-        label.removeprefix(f"{depth} "): (cf_name, unit)
-        for cf_name, (label, unit) in VARIABLE_METADATA.items()
-        for depth in DEPTH_LABELS.values()
-        if label.startswith(f"{depth} ")
-    },
-    LAGRANGIAN_LABEL: (LAGRANGIAN_CF_NAME, LAGRANGIAN_UNIT),
-    f"{LAGRANGIAN_LABEL} ({LAGRANGIAN_UNIT})": (LAGRANGIAN_CF_NAME, LAGRANGIAN_UNIT),
-}
-
 
 def _get_variable_metadata(variable_name: str) -> tuple[str, str]:
-    result = _LABEL_LOOKUP.get(variable_name) or _LABEL_LOOKUP.get(variable_name.lower())
-    if result:
-        return result
-    return ("unknown", "")
+    label_lower = variable_name.lower()
+    unit = ""
+    for keyword, matched_unit in _UNIT_BY_KEYWORD.items():
+        if keyword in label_lower:
+            unit = matched_unit
+            break
+    cf_name = "unknown"
+    for keyword, name in _CF_NAME_BY_KEYWORD.items():
+        if keyword in label_lower:
+            cf_name = name
+            break
+    return (cf_name, unit)
 
 
 def _get_cell_source(cell: dict) -> str:
@@ -111,7 +128,7 @@ def _get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
 
 
 def _get_depth_and_variable(variable: str) -> tuple[str, str] | None:
-    for depth_label in DEPTH_LABELS.values():
+    for depth_label in _DEPTH_LABELS:
         capitalized = depth_label.capitalize()
         if variable.startswith(capitalized):
             return (capitalized, variable.removeprefix(capitalized + " "))
@@ -133,7 +150,7 @@ def _parse_html_table_row(row, lead_days: list[str]) -> dict:
 def _parse_html_table_rows(raw_table: str) -> list[dict]:
     soup = BeautifulSoup(raw_table, features="html.parser")
     headers = [th.get_text(strip=True) for th in soup.find("thead").find_all("th")]
-    lead_days = [header.removeprefix(LEAD_DAY_LABEL_PREFIX) for header in headers[1:]]
+    lead_days = [header.removeprefix(_LEAD_DAY_LABEL_PREFIX) for header in headers[1:]]
     return [_parse_html_table_row(row, lead_days) for row in soup.find("tbody").find_all("tr")]
 
 
