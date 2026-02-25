@@ -76,14 +76,31 @@ def _evaluate_all(
     if max_workers == 1:
         # Run each challenger in an isolated worker process to avoid memory accumulation
         # across consecutive notebook executions in long CI runs.
+        transient_error_markers = (
+            "Kernel died while waiting for execute reply",
+            "The operation was canceled.",
+        )
         results: list[EvaluationResult] = []
         for challenger in challengers:
-            with ProcessPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_evaluate_one, challenger, output_bucket, output_prefix)
-                try:
-                    results.append(future.result())
-                except Exception as exception:
-                    results.append(EvaluationResult(challenger=challenger, error=str(exception)))
+            print(f"START: {challenger}")
+            last_result: EvaluationResult | None = None
+            for attempt in range(2):
+                with ProcessPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_evaluate_one, challenger, output_bucket, output_prefix)
+                    try:
+                        last_result = future.result()
+                    except Exception as exception:
+                        last_result = EvaluationResult(challenger=challenger, error=str(exception))
+
+                if last_result.success:
+                    break
+
+                if attempt == 0 and any(marker in (last_result.error or "") for marker in transient_error_markers):
+                    print(f"RETRY: {challenger} after transient kernel failure")
+                    continue
+                break
+
+            results.append(last_result if last_result is not None else EvaluationResult(challenger=challenger))
         return results
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:

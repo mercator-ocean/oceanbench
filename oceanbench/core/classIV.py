@@ -193,20 +193,14 @@ def _interpolate_model_to_observations(
     grouped_by_first_day = observations_dataframe.groupby("first_day", sort=False)
     for first_day, first_day_group in grouped_by_first_day:
         grouped_by_lead_day = first_day_group.groupby("lead_day", sort=False)
-        available_lead_days = list(grouped_by_lead_day.groups.keys())
-        lead_day_indices = [lead_day_to_index[lead_day] for lead_day in available_lead_days]
         first_day_index = first_day_to_index[first_day]
-        first_day_model_subset = model_data.isel(
-            {
-                Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
-                Dimension.LEAD_DAY_INDEX.key(): lead_day_indices,
-            }
-        ).compute()
-        lead_day_to_local_index = {lead_day: local_index for local_index, lead_day in enumerate(available_lead_days)}
         for lead_day, observation_group in grouped_by_lead_day:
-            time_slice = first_day_model_subset.isel(
-                {Dimension.LEAD_DAY_INDEX.key(): lead_day_to_local_index[lead_day]}
-            )
+            time_slice = model_data.isel(
+                {
+                    Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
+                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+                }
+            ).compute()
             observation_latitudes = observation_group[latitude_key].values
             observation_longitudes = observation_group[longitude_key].values
             observation_depths = observation_group[depth_key].values
