@@ -10,7 +10,8 @@ import requests
 from helpers.challenger_metadata import KNOWN_CHALLENGERS
 
 S3_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench"
-REPORTS_PREFIX = "public/evaluation-reports/"
+# TODO: revert to "public/evaluation-reports/" when real scores are computed
+REPORTS_PREFIX = "public/evaluation-reports/paper-scores/"
 
 
 def discover_challengers() -> list[str]:
