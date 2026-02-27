@@ -48,11 +48,14 @@ _REFERENCES = [
     {"key": "analysis", "suffix": "glo12", "function_suffix": "compared_to_glo12_analysis"},
 ]
 
+_OBSERVATIONS_METRIC_KEY = "rmsd_variables_observations"
+_OBSERVATIONS_METRICS = {_OBSERVATIONS_METRIC_KEY}
+
 _METRIC_PATTERNS = {
     f"{metric['key']}_{reference['suffix']}": f"oceanbench.metrics.{metric['function']}_{reference['function_suffix']}"
     for metric in _METRICS
     for reference in _REFERENCES
-}
+} | {_OBSERVATIONS_METRIC_KEY: "oceanbench.metrics.rmsd_of_variables_compared_to_observations"}
 
 _DEPTH_VARIABLE_METRICS = {
     f"{metric['key']}_{reference['suffix']}" for metric in _METRICS for reference in _REFERENCES if metric["has_depths"]
@@ -60,7 +63,7 @@ _DEPTH_VARIABLE_METRICS = {
 
 METRIC_TITLES = {
     f"{metric['key']}_{reference['suffix']}": metric["title"] for metric in _METRICS for reference in _REFERENCES
-}
+} | {_OBSERVATIONS_METRIC_KEY: "RMSD vs. Observations"}
 
 SECTIONS = {
     reference["key"]: {
@@ -68,6 +71,15 @@ SECTIONS = {
         "flat_metrics": [f"{metric['key']}_{reference['suffix']}" for metric in _METRICS if not metric["has_depths"]],
     }
     for reference in _REFERENCES
+} | {"observations": {"depth_metric": _OBSERVATIONS_METRIC_KEY, "flat_metrics": []}}
+
+_OBSERVATIONS_VARIABLE_METADATA = {
+    "temperature": ("°C", "sea_water_potential_temperature"),
+    "surface temperature": ("°C", "sea_surface_temperature"),
+    "salinity": ("PSU", "sea_water_salinity"),
+    "surface height": ("m", "sea_surface_height_above_geoid"),
+    "eastward velocity": ("m/s", "eastward_sea_water_velocity"),
+    "northward velocity": ("m/s", "northward_sea_water_velocity"),
 }
 
 
@@ -156,6 +168,49 @@ def _convert_flat_table_to_model_score(raw_table: str, name: str) -> ModelScore:
     return ModelScore.model_validate({"name": name, "depths": {"flat": {"variables": variables}}})
 
 
+def _convert_observations_table_to_model_score(raw_table: str, name: str) -> ModelScore | None:
+    soup = BeautifulSoup(raw_table, features="html.parser")
+    headers = [th.get_text(strip=True) for th in soup.find("thead").find_all("th")]
+
+    if len(headers) < 4 or headers[1] == "Message":
+        return None
+
+    lead_day_headers = [h for h in headers if h.startswith("Lead day")]
+    lead_days = [_extract_lead_day_number(h) for h in lead_day_headers]
+
+    parsed_rows = [
+        (
+            cells[0].get_text(strip=True),
+            cells[1].get_text(strip=True),
+            {day: _parse_cell_value(cells[2 + i].get_text(strip=True)) for i, day in enumerate(lead_days)},
+        )
+        for row in soup.find("tbody").find_all("tr")
+        for cells in [row.find_all("td")]
+        if len(cells) >= 2 + len(lead_days)
+    ]
+
+    if not parsed_rows:
+        return None
+
+    unique_depths = dict.fromkeys(depth for _, depth, _ in parsed_rows)
+    depths = {
+        depth: {
+            "variables": {
+                variable_name: {
+                    "unit": _OBSERVATIONS_VARIABLE_METADATA.get(variable_name, ("", "unknown"))[0],
+                    "cf_name": _OBSERVATIONS_VARIABLE_METADATA.get(variable_name, ("", "unknown"))[1],
+                    "data": data,
+                }
+                for row_variable, row_depth, data in parsed_rows
+                for variable_name in [row_variable]
+                if row_depth == depth
+            }
+        }
+        for depth in unique_depths
+    }
+    return ModelScore.model_validate({"name": name, "depths": depths})
+
+
 def _get_notebook(path: str) -> dict | None:
     if path.startswith("http"):
         response = requests.get(path)
@@ -173,10 +228,14 @@ def get_all_model_scores_from_notebook(notebook_path: str, name: str) -> dict[st
     metrics_html = _get_all_metrics_from_notebook(raw_notebook)
 
     def _converter(key):
-        return (
-            _convert_depth_variable_table_to_model_score
-            if key in _DEPTH_VARIABLE_METRICS
-            else _convert_flat_table_to_model_score
-        )
+        if key in _OBSERVATIONS_METRICS:
+            return _convert_observations_table_to_model_score
+        if key in _DEPTH_VARIABLE_METRICS:
+            return _convert_depth_variable_table_to_model_score
+        return _convert_flat_table_to_model_score
 
-    return {metric_key: _converter(metric_key)(raw_table, name) for metric_key, raw_table in metrics_html.items()}
+    return {
+        metric_key: result
+        for metric_key, raw_table in metrics_html.items()
+        if (result := _converter(metric_key)(raw_table, name)) is not None
+    }

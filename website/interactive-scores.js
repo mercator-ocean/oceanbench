@@ -277,6 +277,21 @@ function ensureControlsElement() {
   return element;
 }
 
+function groupDepthsByVariables(baselineScore, depths) {
+  const groups = [];
+  for (const depth of depths) {
+    const variables = Object.keys(baselineScore.depths[depth]?.variables || {});
+    const signature = variables.join(",");
+    const last = groups[groups.length - 1];
+    if (last && last.signature === signature) {
+      last.depths.push(depth);
+    } else {
+      groups.push({ signature, depths: [depth], variables });
+    }
+  }
+  return groups;
+}
+
 function renderDepthMetric(
   challengers,
   challengerNames,
@@ -287,8 +302,8 @@ function renderDepthMetric(
   if (!baselineScore) return "";
 
   const depths = Object.keys(baselineScore.depths);
-  const visibleDepths = showAllMode ? depths : depths.filter((depth) => selectedDepths.has(depth));
-  if (visibleDepths.length === 0) return "";
+  const filteredDepths = showAllMode ? depths : depths.filter((depth) => selectedDepths.has(depth));
+  const visibleDepths = filteredDepths.length > 0 ? filteredDepths : depths;
   const orderedNames = [
     baseline,
     ...challengerNames.filter(
@@ -296,7 +311,13 @@ function renderDepthMetric(
     ),
   ];
 
-  // Variables present at all depths vs only at the surface (e.g. SSH has no deeper levels)
+  const depthGroups = groupDepthsByVariables(baselineScore, visibleDepths);
+  if (depthGroups.length > 1) {
+    return depthGroups.map((group) => renderDepthGroup(
+      baselineScore, orderedNames, challengers, metricKey, group.depths, group.variables, baseline,
+    )).join("");
+  }
+
   const headerDepth = depths[0];
   const allHeaderVariables = Object.keys(baselineScore.depths[headerDepth].variables);
   const deeperVariableSets = depths.slice(1).map(
@@ -308,14 +329,26 @@ function renderDepthMetric(
   const commonVariables = allHeaderVariables.filter((variable) => !surfaceOnlyVariables.includes(variable));
   const hasDeepDepth = visibleDepths.some((depth) => depth !== depths[0]);
   const variables = hasDeepDepth ? commonVariables : [...commonVariables, ...surfaceOnlyVariables];
-  const leadDays = getLeadDays(baselineScore, headerDepth);
+
+  return renderDepthGroup(
+    baselineScore, orderedNames, challengers, metricKey, visibleDepths, variables, baseline,
+  );
+}
+
+function renderDepthGroup(
+  baselineScore, orderedNames, challengers, metricKey, depths, variables, baseline,
+) {
+  if (variables.length === 0 || depths.length === 0) return "";
+
+  const refDepth = depths[0];
+  const leadDays = getLeadDays(baselineScore, refDepth);
   const totalColumns = 1 + variables.length * leadDays.length;
 
   let thead = "<thead>";
   thead += `<tr><th class="model-col">Models</th>`;
   for (const variable of variables) {
-    const unit = getUnit(baselineScore, headerDepth, variable);
-    const cfName = getCfName(baselineScore, headerDepth, variable);
+    const unit = getUnit(baselineScore, refDepth, variable);
+    const cfName = getCfName(baselineScore, refDepth, variable);
     thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, cfName, metricKey)}</th>`;
   }
   thead += `</tr><tr><th class="model-col lead-day-label">Lead days</th>`;
@@ -327,8 +360,8 @@ function renderDepthMetric(
   thead += "</tr></thead>";
 
   let tbody = "<tbody>";
-  for (const depth of visibleDepths) {
-    if (visibleDepths.length > 1) {
+  for (const depth of depths) {
+    if (depths.length > 1) {
       tbody += `<tr class="depth-separator"><td class="depth-separator-cell" colspan="${totalColumns}">${depth}</td></tr>`;
     }
     tbody += buildDataRows(
@@ -343,7 +376,7 @@ function renderDepthMetric(
   }
   tbody += "</tbody>";
 
-  const tableClass = visibleDepths.length > 1 ? "score-table depth-table" : "score-table";
+  const tableClass = depths.length > 1 ? "score-table depth-table" : "score-table";
   return `<table class="${tableClass}">${thead}${tbody}</table>`;
 }
 
@@ -427,13 +460,16 @@ function renderMetricSection(
   );
   html += "</div>";
 
-  html += `<h3>Diagnostic Metrics</h3>`;
-  html += renderCombinedFlatMetrics(
+  const flatHtml = renderCombinedFlatMetrics(
     challengers,
     challengerNames,
     flatMetrics,
     baseline,
   );
+  if (flatHtml) {
+    html += `<h3>Diagnostic Metrics</h3>`;
+    html += flatHtml;
+  }
 
   container.innerHTML = html;
 }
