@@ -71,51 +71,14 @@ def _evaluate_all(
     challengers: list[str],
     output_bucket: str | None,
     output_prefix: str | None,
-    max_workers: int | None = None,
+    max_workers: int | None,
 ) -> list[EvaluationResult]:
-    if max_workers == 1:
-        # Run each challenger in an isolated worker process to avoid memory accumulation
-        # across consecutive notebook executions in long CI runs.
-        transient_error_markers = (
-            "Kernel died while waiting for execute reply",
-            "The operation was canceled.",
-        )
-        results: list[EvaluationResult] = []
-        for challenger in challengers:
-            print(f"START: {challenger}")
-            last_result: EvaluationResult | None = None
-            for attempt in range(2):
-                with ProcessPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(_evaluate_one, challenger, output_bucket, output_prefix)
-                    try:
-                        last_result = future.result()
-                    except Exception as exception:
-                        last_result = EvaluationResult(challenger=challenger, error=str(exception))
-
-                if last_result.success:
-                    break
-
-                if attempt == 0 and any(marker in (last_result.error or "") for marker in transient_error_markers):
-                    print(f"RETRY: {challenger} after transient kernel failure")
-                    continue
-                break
-
-            results.append(last_result if last_result is not None else EvaluationResult(challenger=challenger))
-        return results
-
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(_evaluate_one, challenger, output_bucket, output_prefix): challenger
             for challenger in challengers
         }
-        results = []
-        for future in as_completed(futures):
-            challenger = futures[future]
-            try:
-                results.append(future.result())
-            except Exception as exception:
-                results.append(EvaluationResult(challenger=challenger, error=str(exception)))
-        return results
+        return [future.result() for future in as_completed(futures)]
 
 
 def _print_results(results: list[EvaluationResult]) -> None:
@@ -144,12 +107,7 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         print("Error: --max-workers must be >= 1", file=sys.stderr)
         return 1
 
-    results = _evaluate_all(
-        challengers,
-        args.output_bucket,
-        args.output_prefix,
-        args.max_workers,
-    )
+    results = _evaluate_all(challengers, args.output_bucket, args.output_prefix, args.max_workers)
     _print_results(results)
     return 0 if all(result.success for result in results) else 1
 
