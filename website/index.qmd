@@ -80,6 +80,12 @@ Absolute RMSE scores against 2024 [GLO12 analysis](https://data.marine.copernicu
 
 <div id="analysis-scores"></div>
 
+## Comparison to observations
+
+Absolute RMSE scores against in-situ observations (Class IV validation). The colors denote % difference to the selected baseline.
+
+<div id="observations-scores"></div>
+
 :::
 
 Implemented by [Mercator Ocean](https://mercator-ocean.eu).

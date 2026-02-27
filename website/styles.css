@@ -297,6 +297,12 @@ body.nav-hidden .depth-table thead {
   background: var(--bs-border-color, #dee2e6);
 }
 
+/* --- Spacing between sub-tables (e.g. observations depth groups) --- */
+
+.score-table + .score-table {
+  margin-top: 3rem;
+}
+
 /* --- Depth separator rows --- */
 
 .score-table .depth-separator-cell {
