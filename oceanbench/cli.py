@@ -71,8 +71,9 @@ def _evaluate_all(
     challengers: list[str],
     output_bucket: str | None,
     output_prefix: str | None,
+    max_workers: int | None,
 ) -> list[EvaluationResult]:
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(_evaluate_one, challenger, output_bucket, output_prefix): challenger
             for challenger in challengers
@@ -102,7 +103,11 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         )
         return 1
 
-    results = _evaluate_all(challengers, args.output_bucket, args.output_prefix)
+    if args.max_workers is not None and args.max_workers < 1:
+        print("Error: --max-workers must be >= 1", file=sys.stderr)
+        return 1
+
+    results = _evaluate_all(challengers, args.output_bucket, args.output_prefix, args.max_workers)
     _print_results(results)
     return 0 if all(result.success for result in results) else 1
 
@@ -139,6 +144,12 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--output-prefix",
         default=None,
         help="S3 prefix for output notebooks (env: OCEANBENCH_OUTPUT_PREFIX)",
+    )
+    evaluate_parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=None,
+        help="Maximum number of worker processes to use for evaluation",
     )
     return parser, evaluate_parser
 
