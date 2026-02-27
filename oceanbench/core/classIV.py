@@ -138,6 +138,8 @@ def _interpolate_vertically(
     result = numpy.full(observation_count, numpy.nan)
     sort_order = numpy.argsort(model_depths)
     sorted_depths = model_depths[sort_order]
+    if len(sorted_depths) > 64:
+        raise ValueError("Too many depth levels for Class IV bitmask encoding: maximum supported is 64.")
     sorted_profiles = profiles[sort_order, :]
     valid_masks = ~numpy.isnan(sorted_profiles)
     valid_counts = valid_masks.sum(axis=0)
