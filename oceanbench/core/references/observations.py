@@ -13,6 +13,7 @@ OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 OBSERVATION_FIRST_DAY_INDEX_KEY = "first_day_index"
 OBSERVATION_FIRST_DAY_LOOKUP_KEY = "first_day_datetime_lookup"
 OBSERVATION_FIRST_DAY_LOOKUP_DIMENSION_KEY = "first_day_lookup_index"
+OBSERVATION_SELECTION_BLOCK_SIZE = 1_000_000
 _memory_tracker = default_memory_tracker("reference_observations")
 
 
@@ -96,35 +97,27 @@ def _observations(challenger_dataset: Dataset) -> Dataset:
         )
 
         time_variable = observations_dataset[time_key]
-        time_data = time_variable.data
-        if getattr(time_data, "chunks", None):
-            time_chunk_sizes = time_data.chunks[0]
-        else:
-            time_chunk_sizes = (observation_count,)
+        total_blocks = (observation_count + OBSERVATION_SELECTION_BLOCK_SIZE - 1) // OBSERVATION_SELECTION_BLOCK_SIZE
 
-        start_index = 0
-        for chunk_index, chunk_size in enumerate(time_chunk_sizes, start=1):
-            stop_index = start_index + chunk_size
-            with _memory_tracker.step(
-                f"selection_chunk {chunk_index}/{len(time_chunk_sizes)} [{start_index}:{stop_index}]"
-            ):
+        for block_index, start_index in enumerate(
+            range(0, observation_count, OBSERVATION_SELECTION_BLOCK_SIZE), start=1
+        ):
+            stop_index = min(start_index + OBSERVATION_SELECTION_BLOCK_SIZE, observation_count)
+            with _memory_tracker.step(f"selection_block {block_index}/{total_blocks} [{start_index}:{stop_index}]"):
                 time_chunk = pandas.to_datetime(
                     time_variable.isel({observation_dimension_key: slice(start_index, stop_index)}).values
                 ).to_numpy(dtype="datetime64[ns]")
-                chunk_selected_mask = numpy.zeros(chunk_size, dtype=bool)
-                chunk_run_indices = numpy.full(chunk_size, -1, dtype=numpy.int16)
 
-                for run_index, (window_start, window_end) in enumerate(
-                    zip(first_valid_datetimes, end_datetimes_exclusive)
-                ):
-                    in_window_mask = (time_chunk >= window_start) & (time_chunk < window_end)
-                    newly_selected_mask = in_window_mask & (chunk_run_indices < 0)
-                    chunk_run_indices[newly_selected_mask] = run_index
-                    chunk_selected_mask |= in_window_mask
+                # Vectorized mapping to the earliest forecast run that contains each observation datetime.
+                candidate_indices = numpy.searchsorted(end_datetimes_exclusive, time_chunk, side="right")
+                valid_indices_mask = candidate_indices < len(first_valid_datetimes)
+                bounded_indices = numpy.clip(candidate_indices, 0, len(first_valid_datetimes) - 1)
+                starts_before_time = time_chunk >= first_valid_datetimes[bounded_indices]
+                chunk_selected_mask = valid_indices_mask & starts_before_time
+                chunk_run_indices = numpy.where(chunk_selected_mask, bounded_indices, -1).astype(numpy.int16)
 
                 selected_observations_mask[start_index:stop_index] = chunk_selected_mask
                 selected_run_indices[start_index:stop_index] = chunk_run_indices
-            start_index = stop_index
 
         selected_run_indices = selected_run_indices[selected_observations_mask]
         _memory_tracker.emit(f"selected_observations_count={int(selected_observations_mask.sum())}")
