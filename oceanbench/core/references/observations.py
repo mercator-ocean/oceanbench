@@ -87,18 +87,23 @@ def _observations(challenger_dataset: Dataset) -> Dataset:
         {time_key: (observation_dimension_key, observation_datetimes)}
     )
 
-    first_valid_datetimes = (first_day_timestamps + pandas.Timedelta(days=1)).values[:, numpy.newaxis]
-    end_datetimes_exclusive = (first_day_timestamps + pandas.Timedelta(days=lead_days_count + 1)).values[
-        :, numpy.newaxis
-    ]
+    with _memory_tracker.step("build_observation_selection_mask"):
+        # Memory-safe implementation: avoid creating a huge 2D mask with shape
+        # (runs, observations), which can trigger kernel OOM.
+        observation_values = observation_datetimes.values
+        selected_observations_mask = numpy.zeros(observation_values.shape, dtype=bool)
+        selected_run_indices = numpy.full(observation_values.shape, -1, dtype=numpy.int64)
 
-    observation_window_masks = (observation_datetimes.values >= first_valid_datetimes) & (
-        observation_datetimes.values < end_datetimes_exclusive
-    )
+        for run_index, first_day in enumerate(first_day_timestamps):
+            window_start = (first_day + pandas.Timedelta(days=1)).to_datetime64()
+            window_end = (first_day + pandas.Timedelta(days=lead_days_count + 1)).to_datetime64()
+            in_window_mask = (observation_values >= window_start) & (observation_values < window_end)
+            newly_selected_mask = in_window_mask & (selected_run_indices < 0)
+            selected_run_indices[newly_selected_mask] = run_index
+            selected_observations_mask |= in_window_mask
 
-    selected_observations_mask = numpy.any(observation_window_masks, axis=0)
-    selected_run_indices = numpy.argmax(observation_window_masks[:, selected_observations_mask], axis=0)
-    selected_first_day_coord = first_day_datetimes[selected_run_indices]
+        selected_run_indices = selected_run_indices[selected_observations_mask]
+        selected_first_day_coord = first_day_datetimes[selected_run_indices]
 
     with _memory_tracker.step("select_observations_for_challenger_windows"):
         selected_observations = observations_dataset.isel(
