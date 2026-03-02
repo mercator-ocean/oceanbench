@@ -23,6 +23,7 @@ from oceanbench.core.climate_forecast_standard_names import (
 from oceanbench.core.references.observations import (
     OBSERVATION_FIRST_DAY_INDEX_KEY,
     OBSERVATION_FIRST_DAY_LOOKUP_KEY,
+    OBSERVATION_LEAD_DAY_KEY,
 )
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
@@ -69,16 +70,23 @@ def _create_observations_dataframe(
     first_day_key = Dimension.FIRST_DAY_DATETIME.key()
     first_day_index_key = OBSERVATION_FIRST_DAY_INDEX_KEY
     first_day_lookup_key = OBSERVATION_FIRST_DAY_LOOKUP_KEY
+    precomputed_lead_day_key = OBSERVATION_LEAD_DAY_KEY
     depth_key = Dimension.DEPTH.key()
     observation_dimension_key = observations_dataset[observation_variable_key].dims[0]
 
     selected_variable_keys = [
         observation_variable_key,
-        time_key,
         latitude_key,
         longitude_key,
         depth_key,
     ]
+    has_precomputed_lead_day = (
+        precomputed_lead_day_key in observations_dataset.coords or precomputed_lead_day_key in observations_dataset
+    )
+    if has_precomputed_lead_day:
+        selected_variable_keys.append(precomputed_lead_day_key)
+    else:
+        selected_variable_keys.append(time_key)
     has_first_day_datetime = first_day_key in observations_dataset.coords or first_day_key in observations_dataset
     has_first_day_index = (
         first_day_index_key in observations_dataset.coords or first_day_index_key in observations_dataset
@@ -105,21 +113,25 @@ def _create_observations_dataframe(
     non_null_observation_mask = observation_subset["observation_value"].notnull().compute()
     observation_subset = observation_subset.isel({observation_dimension_key: non_null_observation_mask})
 
-    if not has_first_day_datetime:
-        first_day_lookup_dimension_key = observations_dataset[first_day_lookup_key].dims[0]
-        first_day_indices = observation_subset[first_day_index_key].astype("int32")
-        observation_subset = observation_subset.assign(
-            first_day=observations_dataset[first_day_lookup_key].isel(
-                {first_day_lookup_dimension_key: first_day_indices}
-            )
-        ).drop_vars(first_day_index_key)
-    else:
+    if has_first_day_datetime:
         observation_subset = observation_subset.rename({first_day_key: "first_day"})
 
-    lead_day = ((observation_subset[time_key] - observation_subset["first_day"]) / numpy.timedelta64(1, "D")).astype(
-        "int64"
-    ) - 1
-    observation_subset = observation_subset.assign(lead_day=lead_day)
+    if has_precomputed_lead_day:
+        observation_subset = observation_subset.rename({precomputed_lead_day_key: "lead_day"})
+    else:
+        if not has_first_day_datetime:
+            first_day_lookup_dimension_key = observations_dataset[first_day_lookup_key].dims[0]
+            first_day_indices = observation_subset[first_day_index_key].astype("int32")
+            observation_subset = observation_subset.assign(
+                first_day=observations_dataset[first_day_lookup_key].isel(
+                    {first_day_lookup_dimension_key: first_day_indices}
+                )
+            )
+        lead_day = (
+            (observation_subset[time_key] - observation_subset["first_day"]) / numpy.timedelta64(1, "D")
+        ).astype("int64") - 1
+        observation_subset = observation_subset.assign(lead_day=lead_day)
+
     valid_observation_mask = (
         (observation_subset["lead_day"] >= 0) & (observation_subset["lead_day"] < lead_days_count)
     ).compute()
@@ -127,9 +139,14 @@ def _create_observations_dataframe(
 
     observations_dataframe = observation_subset.compute().to_dataframe().reset_index()
     observations_dataframe = observations_dataframe.drop(columns=[observation_dimension_key], errors="ignore")
-    observations_dataframe = observations_dataframe[
-        ["observation_value", time_key, latitude_key, longitude_key, "first_day", depth_key, "lead_day"]
-    ]
+    if has_first_day_datetime:
+        observations_dataframe = observations_dataframe[
+            ["observation_value", latitude_key, longitude_key, "first_day", depth_key, "lead_day"]
+        ]
+    else:
+        observations_dataframe = observations_dataframe[
+            ["observation_value", latitude_key, longitude_key, first_day_index_key, depth_key, "lead_day"]
+        ]
 
     depth_bins = _get_depth_bins(standard_variable_key)
     observations_dataframe["depth_bin"] = _assign_depth_bins(observations_dataframe[depth_key].values, depth_bins)
@@ -224,10 +241,12 @@ def _interpolate_model_to_observations(
     first_day_to_index = {first_day: index for index, first_day in enumerate(first_days)}
     lead_day_to_index = {lead_day: index for index, lead_day in enumerate(lead_days)}
     model_values = numpy.full(len(observations_dataframe), numpy.nan)
-    grouped_by_first_day = observations_dataframe.groupby("first_day", sort=False)
-    for first_day, first_day_group in grouped_by_first_day:
+    has_first_day_index = OBSERVATION_FIRST_DAY_INDEX_KEY in observations_dataframe.columns
+    first_day_group_key = OBSERVATION_FIRST_DAY_INDEX_KEY if has_first_day_index else "first_day"
+    grouped_by_first_day = observations_dataframe.groupby(first_day_group_key, sort=False)
+    for first_day_value, first_day_group in grouped_by_first_day:
         grouped_by_lead_day = first_day_group.groupby("lead_day", sort=False)
-        first_day_index = first_day_to_index[first_day]
+        first_day_index = int(first_day_value) if has_first_day_index else first_day_to_index[first_day_value]
         for lead_day, observation_group in grouped_by_lead_day:
             time_slice = model_data.isel(
                 {

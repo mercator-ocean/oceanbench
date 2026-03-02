@@ -13,6 +13,7 @@ OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 OBSERVATION_FIRST_DAY_INDEX_KEY = "first_day_index"
 OBSERVATION_FIRST_DAY_LOOKUP_KEY = "first_day_datetime_lookup"
 OBSERVATION_FIRST_DAY_LOOKUP_DIMENSION_KEY = "first_day_lookup_index"
+OBSERVATION_LEAD_DAY_KEY = "lead_day"
 OBSERVATION_SELECTION_BLOCK_SIZE = 1_000_000
 _memory_tracker = default_memory_tracker("reference_observations")
 
@@ -90,6 +91,7 @@ def _observations(challenger_dataset: Dataset) -> Dataset:
         observation_count = observations_dataset.sizes[observation_dimension_key]
         selected_observations_mask = numpy.zeros(observation_count, dtype=bool)
         selected_run_indices = numpy.full(observation_count, -1, dtype=numpy.int16)
+        selected_lead_days = numpy.full(observation_count, -1, dtype=numpy.int16)
 
         first_valid_datetimes = (first_day_timestamps + pandas.Timedelta(days=1)).to_numpy(dtype="datetime64[ns]")
         end_datetimes_exclusive = (first_day_timestamps + pandas.Timedelta(days=lead_days_count + 1)).to_numpy(
@@ -115,11 +117,19 @@ def _observations(challenger_dataset: Dataset) -> Dataset:
                 starts_before_time = time_chunk >= first_valid_datetimes[bounded_indices]
                 chunk_selected_mask = valid_indices_mask & starts_before_time
                 chunk_run_indices = numpy.where(chunk_selected_mask, bounded_indices, -1).astype(numpy.int16)
+                chunk_lead_days = numpy.full(time_chunk.shape, -1, dtype=numpy.int16)
+                if numpy.any(chunk_selected_mask):
+                    selected_times = time_chunk[chunk_selected_mask]
+                    selected_starts = first_valid_datetimes[bounded_indices[chunk_selected_mask]]
+                    lead_days = ((selected_times - selected_starts) // numpy.timedelta64(1, "D")).astype(numpy.int16)
+                    chunk_lead_days[chunk_selected_mask] = lead_days
 
                 selected_observations_mask[start_index:stop_index] = chunk_selected_mask
                 selected_run_indices[start_index:stop_index] = chunk_run_indices
+                selected_lead_days[start_index:stop_index] = chunk_lead_days
 
         selected_run_indices = selected_run_indices[selected_observations_mask]
+        selected_lead_days = selected_lead_days[selected_observations_mask]
         _memory_tracker.emit(f"selected_observations_count={int(selected_observations_mask.sum())}")
 
     with _memory_tracker.step("select_observations_for_challenger_windows"):
@@ -130,6 +140,10 @@ def _observations(challenger_dataset: Dataset) -> Dataset:
                 OBSERVATION_FIRST_DAY_INDEX_KEY: (
                     (observation_dimension_key,),
                     selected_run_indices,
+                ),
+                OBSERVATION_LEAD_DAY_KEY: (
+                    (observation_dimension_key,),
+                    selected_lead_days,
                 ),
                 OBSERVATION_FIRST_DAY_LOOKUP_KEY: (
                     (OBSERVATION_FIRST_DAY_LOOKUP_DIMENSION_KEY,),
