@@ -26,6 +26,7 @@ from oceanbench.core.references.observations import (
     OBSERVATION_LEAD_DAY_KEY,
     OBSERVATION_SELECTED_MASK_KEY,
 )
+from oceanbench.core.memory_diagnostics import default_memory_tracker
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MEAN_SEA_SURFACE_HEIGHT_URL = (
@@ -33,6 +34,7 @@ MEAN_SEA_SURFACE_HEIGHT_URL = (
 )
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
+_memory_tracker = default_memory_tracker("classIV")
 
 
 def _load_mean_sea_surface_height() -> xarray.DataArray:
@@ -65,6 +67,7 @@ def _create_observations_dataframe(
     standard_variable_key: str,
     lead_days_count: int,
 ) -> pandas.DataFrame:
+    _memory_tracker.checkpoint(f"create_observations_dataframe_start variable={standard_variable_key}")
     time_key = Dimension.TIME.key()
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
@@ -118,9 +121,11 @@ def _create_observations_dataframe(
     if has_selected_mask:
         selected_mask = observation_subset[selected_mask_key]
         observation_subset = observation_subset.isel({observation_dimension_key: selected_mask})
+    _memory_tracker.checkpoint(f"after_selected_mask variable={standard_variable_key}")
 
     non_null_observation_mask = observation_subset["observation_value"].notnull().compute()
     observation_subset = observation_subset.isel({observation_dimension_key: non_null_observation_mask})
+    _memory_tracker.checkpoint(f"after_non_null_mask variable={standard_variable_key}")
 
     if has_first_day_datetime:
         observation_subset = observation_subset.rename({first_day_key: "first_day"})
@@ -140,13 +145,28 @@ def _create_observations_dataframe(
             (observation_subset[time_key] - observation_subset["first_day"]) / numpy.timedelta64(1, "D")
         ).astype("int64") - 1
         observation_subset = observation_subset.assign(lead_day=lead_day)
+        valid_observation_mask = (
+            (observation_subset["lead_day"] >= 0) & (observation_subset["lead_day"] < lead_days_count)
+        ).compute()
+        observation_subset = observation_subset.isel({observation_dimension_key: valid_observation_mask})
+    _memory_tracker.checkpoint(f"after_lead_day_assignment variable={standard_variable_key}")
 
-    valid_observation_mask = (
-        (observation_subset["lead_day"] >= 0) & (observation_subset["lead_day"] < lead_days_count)
+    depth_bins = _get_depth_bins(standard_variable_key)
+    minimum_depth = min(depth_minimum for depth_minimum, _ in depth_bins.values())
+    maximum_depth = max(depth_maximum for _, depth_maximum in depth_bins.values())
+    depth_range_mask = (
+        (observation_subset[depth_key] >= minimum_depth) & (observation_subset[depth_key] < maximum_depth)
     ).compute()
-    observation_subset = observation_subset.isel({observation_dimension_key: valid_observation_mask})
+    observation_subset = observation_subset.isel({observation_dimension_key: depth_range_mask})
+    _memory_tracker.checkpoint(
+        f"after_depth_range_filter variable={standard_variable_key} depth=[{minimum_depth},{maximum_depth})"
+    )
 
+    _memory_tracker.checkpoint(f"before_to_dataframe variable={standard_variable_key}")
     observations_dataframe = observation_subset.compute().to_dataframe().reset_index()
+    _memory_tracker.checkpoint(
+        f"after_to_dataframe variable={standard_variable_key} rows={len(observations_dataframe)}"
+    )
     observations_dataframe = observations_dataframe.drop(columns=[observation_dimension_key], errors="ignore")
     if has_first_day_datetime:
         observations_dataframe = observations_dataframe[
@@ -157,7 +177,6 @@ def _create_observations_dataframe(
             ["observation_value", latitude_key, longitude_key, first_day_index_key, depth_key, "lead_day"]
         ]
 
-    depth_bins = _get_depth_bins(standard_variable_key)
     observations_dataframe["depth_bin"] = _assign_depth_bins(observations_dataframe[depth_key].values, depth_bins)
     return observations_dataframe.loc[observations_dataframe["depth_bin"] != ""]
 
