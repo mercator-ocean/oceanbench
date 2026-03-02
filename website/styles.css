@@ -237,21 +237,62 @@ body.quarto-dark .display-toggle-btn {
 
 .color-legend {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.4rem;
   font-size: 0.75rem;
-}
-
-.legend-bar {
-  width: 100px;
-  height: 12px;
-  border-radius: 3px;
-  border: 1px solid var(--bs-border-color, #dee2e6);
 }
 
 .legend-label {
   color: var(--bs-body-color, #333940);
   white-space: nowrap;
+  margin-top: 1px;
+  line-height: 12px;
+}
+
+.legend-bar-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.legend-bar {
+  display: flex;
+  width: 350px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  overflow: hidden;
+}
+
+.legend-bin {
+  flex: 1;
+  border-right: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+.legend-bin:last-child {
+  border-right: none;
+}
+
+.legend-ticks {
+  position: relative;
+  height: 1rem;
+  margin-top: 2px;
+}
+
+.legend-tick-label {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 0.5rem;
+  color: var(--bs-secondary, #6c757d);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.legend-baseline-label {
+  text-align: center;
+  font-size: 0.6rem;
+  color: var(--bs-secondary, #6c757d);
+  font-style: italic;
 }
 
 /* --- Sticky depth table thead (below controls bar) --- */

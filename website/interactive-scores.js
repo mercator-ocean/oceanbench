@@ -2,7 +2,9 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-const MAX_PERCENT_DIFF = 50;
+// Symmetric log-spaced bins: finer near 0%, coarser at extremes
+// ±Infinity edges give dedicated bins for values beyond ±80%
+const BIN_EDGES = [-Infinity, -80, -40, -20, -10, -5, 0, 5, 10, 20, 40, 80, Infinity];
 const DISPLAY_LEAD_DAYS = [
   { preferred: "1", fallback: "2" },
   { preferred: "3" },
@@ -47,15 +49,28 @@ function textColorForBackground(rgb) {
   return luminance > 140 ? "black" : "white";
 }
 
-function getCellStyle(referenceValue, comparedValue) {
+function getBinIndex(percentDiff) {
+  const binCount = BIN_EDGES.length - 1;
+  for (let i = 0; i < binCount; i++) {
+    if (percentDiff <= BIN_EDGES[i + 1]) return i;
+  }
+  return binCount - 1;
+}
+
+function getBinColor(binIndex) {
   const palette = getPaletteColors();
-  const percentDiff = referenceValue === 0 ? 0 : ((comparedValue - referenceValue) / Math.abs(referenceValue)) * 100;
-  const clamped = Math.max(-MAX_PERCENT_DIFF, Math.min(MAX_PERCENT_DIFF, percentDiff));
-  const normalized = (clamped + MAX_PERCENT_DIFF) / (MAX_PERCENT_DIFF * 2);
+  const binCount = BIN_EDGES.length - 1;
+  const normalized = (binIndex + 0.5) / binCount;
   const segmentCount = palette.length - 1;
   const segment = Math.min(Math.floor(normalized * segmentCount), segmentCount - 1);
   const localRatio = normalized * segmentCount - segment;
-  const color = interpolateColor(palette[segment], palette[segment + 1], localRatio);
+  return interpolateColor(palette[segment], palette[segment + 1], localRatio);
+}
+
+function getCellStyle(referenceValue, comparedValue) {
+  const percentDiff = referenceValue === 0 ? 0 : ((comparedValue - referenceValue) / Math.abs(referenceValue)) * 100;
+  const binIndex = getBinIndex(percentDiff);
+  const color = getBinColor(binIndex);
   return `background-color:rgb(${color[0]}, ${color[1]}, ${color[2]}); color: ${textColorForBackground(color)}`;
 }
 
@@ -478,23 +493,36 @@ function formatRgb(color) {
   return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
 
-function legendGradientCSS() {
-  // Reverse: palette is ordered better→worse, legend displays worse→better (left→right)
-  const colors = [...getPaletteColors()].reverse();
-  const stops = colors.map(
-    (color, index) => `${formatRgb(color)} ${(index / (colors.length - 1)) * 100}%`,
-  );
-  return `linear-gradient(to right, ${stops.join(", ")})`;
-}
-
 function updateColorLegend(baseline) {
   const legend = document.getElementById("color-legend");
   if (!legend) return;
+
+  const binCount = BIN_EDGES.length - 1;
+
+  // Reverse: bin 0 = best (blue), last bin = worst (red)
+  // Legend shows Worse (red) on the left, Better (blue) on the right
+  let binsHtml = "";
+  for (let i = binCount - 1; i >= 0; i--) {
+    binsHtml += `<span class="legend-bin" style="background:${formatRgb(getBinColor(i))}"></span>`;
+  }
+
+  let ticksHtml = "";
+  for (let i = 0; i < BIN_EDGES.length; i++) {
+    if (!isFinite(BIN_EDGES[i])) continue;
+    const percent = ((binCount - i) / binCount) * 100;
+    const value = BIN_EDGES[i];
+    const label = value > 0 ? `+${value}%` : `${value}%`;
+    ticksHtml += `<span class="legend-tick-label" style="left:${percent}%">${label}</span>`;
+  }
+
   legend.innerHTML =
     `<span class="legend-label">Worse</span>` +
-    `<span class="legend-bar" style="background: ${legendGradientCSS()}"></span>` +
-    `<span class="legend-label">Better</span>` +
-    `<span class="legend-label">(vs. ${baseline})</span>`;
+    `<span class="legend-bar-wrapper">` +
+      `<span class="legend-bar">${binsHtml}</span>` +
+      `<span class="legend-ticks">${ticksHtml}</span>` +
+      `<span class="legend-baseline-label">(vs. ${baseline})</span>` +
+    `</span>` +
+    `<span class="legend-label">Better</span>`;
 }
 
 function setupCellHighlight() {
