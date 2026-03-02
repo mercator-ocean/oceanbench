@@ -10,7 +10,10 @@ from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.python2jupyter import (
     generate_evaluation_notebook_file,
 )
+from oceanbench.core.memory_diagnostics import default_memory_tracker
 from papermill import execute_notebook
+
+_memory_tracker = default_memory_tracker("evaluate")
 
 
 def _parse_variable_environment(
@@ -70,27 +73,28 @@ def evaluate_challenger(
         The destination S3 prefix of the executed notebook. If ``output_bucket`` is not provided, this option is ignored. If provided, uses AWS S3 environment variables. Can also be configured with environment variable ``OCEANBENCH_OUTPUT_PREFIX``.
     """  # noqa
 
-    oceanbench_challenger_python_code_uri_or_local_path = _parse_input_mandatory(
-        challenger_python_code_uri_or_local_path,
-        OceanbenchEnvironmentVariable.OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH,
-    )
-    oceanbench_output_notebook_file_name = _derive_output_notebook_file_name(
-        oceanbench_challenger_python_code_uri_or_local_path
-    )
-    oceanbench_output_bucket = _parse_input_non_manadatory(
-        output_bucket,
-        OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_BUCKET,
-    )
-    oceanbench_output_prefix = _parse_input_non_manadatory(
-        output_prefix,
-        OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_PREFIX,
-    )
-    _evaluate_challenger(
-        oceanbench_challenger_python_code_uri_or_local_path,
-        oceanbench_output_notebook_file_name,
-        oceanbench_output_bucket,
-        oceanbench_output_prefix,
-    )
+    with _memory_tracker.step("evaluate_challenger"):
+        oceanbench_challenger_python_code_uri_or_local_path = _parse_input_mandatory(
+            challenger_python_code_uri_or_local_path,
+            OceanbenchEnvironmentVariable.OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH,
+        )
+        oceanbench_output_notebook_file_name = _derive_output_notebook_file_name(
+            oceanbench_challenger_python_code_uri_or_local_path
+        )
+        oceanbench_output_bucket = _parse_input_non_manadatory(
+            output_bucket,
+            OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_BUCKET,
+        )
+        oceanbench_output_prefix = _parse_input_non_manadatory(
+            output_prefix,
+            OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_PREFIX,
+        )
+        _evaluate_challenger(
+            oceanbench_challenger_python_code_uri_or_local_path,
+            oceanbench_output_notebook_file_name,
+            oceanbench_output_bucket,
+            oceanbench_output_prefix,
+        )
 
 
 def _execute_evaluation_notebook_file(
@@ -116,12 +120,14 @@ def _evaluate_challenger(
     output_bucket: str | None,
     output_prefix: str | None,
 ):
-    generate_evaluation_notebook_file(
-        challenger_python_code_uri_or_local_path,
-        output_notebook_file_path=output_notebook_file_name,
-    )
-    _execute_evaluation_notebook_file(
-        output_notebook_file_name,
-        output_bucket,
-        output_prefix,
-    )
+    with _memory_tracker.step("generate_notebook"):
+        generate_evaluation_notebook_file(
+            challenger_python_code_uri_or_local_path,
+            output_notebook_file_path=output_notebook_file_name,
+        )
+    with _memory_tracker.step("execute_notebook"):
+        _execute_evaluation_notebook_file(
+            output_notebook_file_name,
+            output_bucket,
+            output_prefix,
+        )

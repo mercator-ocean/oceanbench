@@ -15,6 +15,7 @@ from oceanbench.core.dataset_utils import (
     DepthLevel,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
+from oceanbench.core.memory_diagnostics import default_memory_tracker, describe_dataset
 
 VARIABLE_LABELS: dict[str, str] = {
     Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "surface height",
@@ -35,6 +36,8 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.MINUS_300_METERS: "300m",
     DepthLevel.MINUS_500_METERS: "500m",
 }
+
+_memory_tracker = default_memory_tracker("rmsd")
 
 
 def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
@@ -105,10 +108,19 @@ def rmsd(
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
 ) -> pandas.DataFrame:
-    return _to_pretty_dataframe(
-        _rmsd(
-            _select_variables(_harmonise_dataset(challenger_dataset), variables),
-            _select_variables(_harmonise_dataset(reference_dataset), variables),
-        ),
-        variables,
-    )
+    with _memory_tracker.step("rmsd_pipeline"):
+        describe_dataset(challenger_dataset, "challenger_input", _memory_tracker)
+        describe_dataset(reference_dataset, "reference_input", _memory_tracker)
+        with _memory_tracker.step("harmonise_challenger"):
+            harmonised_challenger = _harmonise_dataset(challenger_dataset)
+        with _memory_tracker.step("harmonise_reference"):
+            harmonised_reference = _harmonise_dataset(reference_dataset)
+        with _memory_tracker.step("select_variables"):
+            selected_challenger = _select_variables(harmonised_challenger, variables)
+            selected_reference = _select_variables(harmonised_reference, variables)
+        describe_dataset(selected_challenger, "challenger_selected", _memory_tracker)
+        describe_dataset(selected_reference, "reference_selected", _memory_tracker)
+        with _memory_tracker.step("compute_rmsd_array"):
+            rmsd_dataset = _rmsd(selected_challenger, selected_reference)
+        with _memory_tracker.step("to_pretty_dataframe"):
+            return _to_pretty_dataframe(rmsd_dataset, variables)

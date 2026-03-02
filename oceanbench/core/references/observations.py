@@ -7,8 +7,10 @@ import pandas
 from xarray import Dataset, open_mfdataset
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.memory_diagnostics import default_memory_tracker, describe_dataset
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
+_memory_tracker = default_memory_tracker("reference_observations")
 
 
 def observation_path(day_datetime: numpy.datetime64) -> str:
@@ -34,6 +36,12 @@ def _assign_standard_names(observations_dataset: Dataset) -> Dataset:
 
 
 def observations(challenger_dataset: Dataset) -> Dataset:
+    with _memory_tracker.step("observations_pipeline"):
+        return _observations(challenger_dataset)
+
+
+def _observations(challenger_dataset: Dataset) -> Dataset:
+    describe_dataset(challenger_dataset, "challenger_dataset_for_observations", _memory_tracker)
     time_key = Dimension.TIME.key()
     lead_day_index_key = Dimension.LEAD_DAY_INDEX.key()
     first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
@@ -57,16 +65,22 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
 
-    observations_dataset = open_mfdataset(
-        list(map(observation_path, observation_days)),
-        engine="zarr",
-        decode_cf=False,
-        parallel=True,
-        concat_dim=source_observation_dimension_key,
-        combine="nested",
-    )
-    observations_dataset = observations_dataset.rename({source_observation_dimension_key: observation_dimension_key})
-    observations_dataset = _assign_standard_names(observations_dataset)
+    _memory_tracker.checkpoint(f"observation_days_count={len(observation_days)}")
+    with _memory_tracker.step("open_observations_mfdataset"):
+        observations_dataset = open_mfdataset(
+            list(map(observation_path, observation_days)),
+            engine="zarr",
+            decode_cf=False,
+            parallel=True,
+            concat_dim=source_observation_dimension_key,
+            combine="nested",
+        )
+    with _memory_tracker.step("normalize_observations_dataset"):
+        observations_dataset = observations_dataset.rename(
+            {source_observation_dimension_key: observation_dimension_key}
+        )
+        observations_dataset = _assign_standard_names(observations_dataset)
+    describe_dataset(observations_dataset, "observations_loaded", _memory_tracker)
 
     observation_datetimes = pandas.to_datetime(observations_dataset[time_key].values)
     observations_dataset = observations_dataset.assign_coords(
@@ -86,11 +100,16 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     selected_run_indices = numpy.argmax(observation_window_masks[:, selected_observations_mask], axis=0)
     selected_first_day_coord = first_day_datetimes[selected_run_indices]
 
-    return observations_dataset.isel({observation_dimension_key: selected_observations_mask}).assign_coords(
-        {
-            first_day_datetime_key: (
-                (observation_dimension_key,),
-                selected_first_day_coord,
-            )
-        }
-    )
+    with _memory_tracker.step("select_observations_for_challenger_windows"):
+        selected_observations = observations_dataset.isel(
+            {observation_dimension_key: selected_observations_mask}
+        ).assign_coords(
+            {
+                first_day_datetime_key: (
+                    (observation_dimension_key,),
+                    selected_first_day_coord,
+                )
+            }
+        )
+    describe_dataset(selected_observations, "observations_selected", _memory_tracker)
+    return selected_observations
