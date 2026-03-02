@@ -14,6 +14,7 @@ OBSERVATION_FIRST_DAY_INDEX_KEY = "first_day_index"
 OBSERVATION_FIRST_DAY_LOOKUP_KEY = "first_day_datetime_lookup"
 OBSERVATION_FIRST_DAY_LOOKUP_DIMENSION_KEY = "first_day_lookup_index"
 OBSERVATION_LEAD_DAY_KEY = "lead_day"
+OBSERVATION_SELECTED_MASK_KEY = "selected_observation_mask"
 OBSERVATION_SELECTION_BLOCK_SIZE = 1_000_000
 _memory_tracker = default_memory_tracker("reference_observations")
 
@@ -128,15 +129,15 @@ def _observations(challenger_dataset: Dataset) -> Dataset:
                 selected_run_indices[start_index:stop_index] = chunk_run_indices
                 selected_lead_days[start_index:stop_index] = chunk_lead_days
 
-        selected_run_indices = selected_run_indices[selected_observations_mask]
-        selected_lead_days = selected_lead_days[selected_observations_mask]
         _memory_tracker.emit(f"selected_observations_count={int(selected_observations_mask.sum())}")
 
-    with _memory_tracker.step("select_observations_for_challenger_windows"):
-        selected_observations = observations_dataset.isel(
-            {observation_dimension_key: selected_observations_mask}
-        ).assign_coords(
+    with _memory_tracker.step("attach_observation_window_metadata"):
+        observations_with_metadata = observations_dataset.assign_coords(
             {
+                OBSERVATION_SELECTED_MASK_KEY: (
+                    (observation_dimension_key,),
+                    selected_observations_mask,
+                ),
                 OBSERVATION_FIRST_DAY_INDEX_KEY: (
                     (observation_dimension_key,),
                     selected_run_indices,
@@ -151,5 +152,5 @@ def _observations(challenger_dataset: Dataset) -> Dataset:
                 ),
             }
         )
-    describe_dataset(selected_observations, "observations_selected", _memory_tracker)
-    return selected_observations
+    describe_dataset(observations_with_metadata, "observations_with_metadata", _memory_tracker)
+    return observations_with_metadata

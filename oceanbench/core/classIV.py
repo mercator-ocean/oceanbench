@@ -24,6 +24,7 @@ from oceanbench.core.references.observations import (
     OBSERVATION_FIRST_DAY_INDEX_KEY,
     OBSERVATION_FIRST_DAY_LOOKUP_KEY,
     OBSERVATION_LEAD_DAY_KEY,
+    OBSERVATION_SELECTED_MASK_KEY,
 )
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
@@ -71,6 +72,7 @@ def _create_observations_dataframe(
     first_day_index_key = OBSERVATION_FIRST_DAY_INDEX_KEY
     first_day_lookup_key = OBSERVATION_FIRST_DAY_LOOKUP_KEY
     precomputed_lead_day_key = OBSERVATION_LEAD_DAY_KEY
+    selected_mask_key = OBSERVATION_SELECTED_MASK_KEY
     depth_key = Dimension.DEPTH.key()
     observation_dimension_key = observations_dataset[observation_variable_key].dims[0]
 
@@ -80,6 +82,9 @@ def _create_observations_dataframe(
         longitude_key,
         depth_key,
     ]
+    has_selected_mask = selected_mask_key in observations_dataset.coords or selected_mask_key in observations_dataset
+    if has_selected_mask:
+        selected_variable_keys.append(selected_mask_key)
     has_precomputed_lead_day = (
         precomputed_lead_day_key in observations_dataset.coords or precomputed_lead_day_key in observations_dataset
     )
@@ -109,6 +114,10 @@ def _create_observations_dataframe(
             observation_variable_key: "observation_value",
         }
     )
+
+    if has_selected_mask:
+        selected_mask = observation_subset[selected_mask_key]
+        observation_subset = observation_subset.isel({observation_dimension_key: selected_mask})
 
     non_null_observation_mask = observation_subset["observation_value"].notnull().compute()
     observation_subset = observation_subset.isel({observation_dimension_key: non_null_observation_mask})
