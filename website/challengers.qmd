@@ -35,5 +35,5 @@ def format_row(name):
 
 rows = "\n".join(map(format_row, challengers))
 
-print(header + rows)
+print('<div style="overflow-x: auto;">\n\n' + header + rows + "\n\n</div>")
 ```

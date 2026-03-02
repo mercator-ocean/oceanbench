@@ -163,6 +163,8 @@ function buildDataRows(
   variables,
   leadDays,
   baseline,
+  depthLabel,
+  depthVars,
 ) {
   const baselineScore = challengers[baseline][metricKey];
   let rows = "";
@@ -173,6 +175,12 @@ function buildDataRows(
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
     rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.report.html">${name}</a></th>`;
     for (const variable of variables) {
+      if (depthVars && !depthVars.has(variable)) {
+        for (const day of leadDays) {
+          rows += `<td class="no-var-cell"></td>`;
+        }
+        continue;
+      }
       const unit = getUnit(baselineScore, depth, variable);
       const referenceValues = {};
       for (const day of leadDays) {
@@ -327,6 +335,7 @@ function renderDepthMetric(
   challengerNames,
   metricKey,
   baseline,
+  unifyVariables,
 ) {
   const baselineScore = challengers[baseline][metricKey];
   if (!baselineScore) return "";
@@ -341,28 +350,32 @@ function renderDepthMetric(
     ),
   ];
 
-  const depthGroups = groupDepthsByVariables(baselineScore, visibleDepths);
-  if (depthGroups.length > 1) {
-    return depthGroups.map((group) => renderDepthGroup(
-      baselineScore, orderedNames, challengers, metricKey, group.depths, group.variables, baseline,
-    )).join("");
+  if (unifyVariables) {
+    const seen = new Set();
+    const allVariables = [];
+    for (const depth of visibleDepths) {
+      for (const variable of Object.keys(baselineScore.depths[depth]?.variables || {})) {
+        if (!seen.has(variable)) {
+          seen.add(variable);
+          allVariables.push(variable);
+        }
+      }
+    }
+    const depthSets = visibleDepths.map(
+      (d) => new Set(Object.keys(baselineScore.depths[d]?.variables || {})),
+    );
+    const commonVars = allVariables.filter((v) => depthSets.every((s) => s.has(v)));
+    const partialVars = allVariables.filter((v) => !depthSets.every((s) => s.has(v)));
+    const unionVariables = [...commonVars, ...partialVars];
+    return renderDepthGroup(
+      baselineScore, orderedNames, challengers, metricKey, visibleDepths, unionVariables, baseline,
+    );
   }
 
-  const headerDepth = depths[0];
-  const allHeaderVariables = Object.keys(baselineScore.depths[headerDepth].variables);
-  const deeperVariableSets = depths.slice(1).map(
-    (depth) => new Set(Object.keys(baselineScore.depths[depth]?.variables || {})),
-  );
-  const surfaceOnlyVariables = allHeaderVariables.filter(
-    (variable) => deeperVariableSets.length > 0 && deeperVariableSets.some((set) => !set.has(variable)),
-  );
-  const commonVariables = allHeaderVariables.filter((variable) => !surfaceOnlyVariables.includes(variable));
-  const hasDeepDepth = visibleDepths.some((depth) => depth !== depths[0]);
-  const variables = hasDeepDepth ? commonVariables : [...commonVariables, ...surfaceOnlyVariables];
-
-  return renderDepthGroup(
-    baselineScore, orderedNames, challengers, metricKey, visibleDepths, variables, baseline,
-  );
+  const depthGroups = groupDepthsByVariables(baselineScore, visibleDepths);
+  return depthGroups.map((group) => renderDepthGroup(
+    baselineScore, orderedNames, challengers, metricKey, group.depths, group.variables, baseline,
+  )).join("");
 }
 
 function renderDepthGroup(
@@ -377,8 +390,11 @@ function renderDepthGroup(
   let thead = "<thead>";
   thead += `<tr><th class="model-col">Models</th>`;
   for (const variable of variables) {
-    const unit = getUnit(baselineScore, refDepth, variable);
-    const cfName = getCfName(baselineScore, refDepth, variable);
+    const sourceDepth = depths.find(
+      (d) => baselineScore.depths[d]?.variables?.[variable],
+    ) || refDepth;
+    const unit = getUnit(baselineScore, sourceDepth, variable);
+    const cfName = getCfName(baselineScore, sourceDepth, variable);
     thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, cfName, metricKey)}</th>`;
   }
   thead += `</tr><tr><th class="model-col lead-day-label">Lead days</th>`;
@@ -392,8 +408,9 @@ function renderDepthGroup(
   let tbody = "<tbody>";
   for (const depth of depths) {
     if (depths.length > 1) {
-      tbody += `<tr class="depth-separator"><td class="depth-separator-cell" colspan="${totalColumns}">${depth}</td></tr>`;
+      tbody += `<tr class="depth-separator"><th class="depth-separator-cell">${depth}</th><td colspan="${totalColumns - 1}" style="border: hidden;"></td></tr>`;
     }
+    const depthVars = new Set(Object.keys(baselineScore.depths[depth]?.variables || {}));
     tbody += buildDataRows(
       orderedNames,
       challengers,
@@ -402,6 +419,8 @@ function renderDepthGroup(
       variables,
       leadDays,
       baseline,
+      null,
+      depthVars,
     );
   }
   tbody += "</tbody>";
@@ -474,6 +493,7 @@ function renderMetricSection(
   challengerNames,
   baseline,
   metricTitles,
+  unifyVariables,
 ) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -487,6 +507,7 @@ function renderMetricSection(
     challengerNames,
     depthMetric,
     baseline,
+    unifyVariables,
   );
   html += "</div>";
 
@@ -548,7 +569,7 @@ function setupCellHighlight() {
   document.querySelectorAll(".score-table").forEach((table) => {
     table.addEventListener("mouseover", (event) => {
       const cell = event.target.closest("td");
-      if (!cell || cell.classList.contains("depth-separator-cell")) return;
+      if (!cell || cell.classList.contains("no-var-cell") || cell.closest("tr").classList.contains("depth-separator")) return;
       cell.classList.add("highlight-cell");
       const modelCell = cell.parentElement.querySelector("th.model-col");
       if (modelCell) modelCell.classList.add("highlight-label");
@@ -719,6 +740,7 @@ function renderTablesOnly() {
       challengerNames,
       baseline,
       metricTitles,
+      sectionKey !== "observations",
     );
   }
 
@@ -748,6 +770,7 @@ function renderAllTables() {
       challengerNames,
       baseline,
       metricTitles,
+      sectionKey !== "observations",
     );
   }
 
