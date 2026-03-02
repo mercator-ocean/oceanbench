@@ -2,9 +2,22 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Symmetric log-spaced bins: finer near 0%, coarser at extremes
-// ±Infinity edges give dedicated bins for values beyond ±80%
-const BIN_EDGES = [-Infinity, -80, -40, -20, -10, -5, 0, 5, 10, 20, 40, 80, Infinity];
+function buildBinEdges(max) {
+  // 5 positive edges via halving: max, max/2, max/4, max/8, max/16
+  const positive = [];
+  let value = max;
+  for (let i = 0; i < 5; i++) {
+    positive.push(value);
+    value = value / 2;
+  }
+  positive.reverse();
+  const negative = positive.map((v) => -v).reverse();
+  return [-Infinity, ...negative, 0, ...positive, Infinity];
+}
+
+const SCALE_SNAPS = [5, 10, 20, 40, 80, 100, 200, 500, 1000];
+let maxScale = 80;
+let BIN_EDGES = buildBinEdges(maxScale);
 const DISPLAY_LEAD_DAYS = [
   { preferred: "1", fallback: "2" },
   { preferred: "3" },
@@ -262,6 +275,8 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
 
   html += '<div id="color-legend" class="color-legend"></div>';
 
+  html += `<label>\u00b1 <input id="scale-input" type="number" min="1" step="1" value="${maxScale}"> %</label>`;
+
   return html;
 }
 
@@ -493,7 +508,13 @@ function formatRgb(color) {
   return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
 
-function updateColorLegend(baseline) {
+function formatTickLabel(value) {
+  if (value === 0) return "0%";
+  const formatted = Number.isInteger(value) ? `${value}` : value.toFixed(1).replace(/\.0$/, "");
+  return value > 0 ? `+${formatted}%` : `${formatted}%`;
+}
+
+function updateColorLegend() {
   const legend = document.getElementById("color-legend");
   if (!legend) return;
 
@@ -510,8 +531,7 @@ function updateColorLegend(baseline) {
   for (let i = 0; i < BIN_EDGES.length; i++) {
     if (!isFinite(BIN_EDGES[i])) continue;
     const percent = ((binCount - i) / binCount) * 100;
-    const value = BIN_EDGES[i];
-    const label = value > 0 ? `+${value}%` : `${value}%`;
+    const label = formatTickLabel(BIN_EDGES[i]);
     ticksHtml += `<span class="legend-tick-label" style="left:${percent}%">${label}</span>`;
   }
 
@@ -520,7 +540,6 @@ function updateColorLegend(baseline) {
     `<span class="legend-bar-wrapper">` +
       `<span class="legend-bar">${binsHtml}</span>` +
       `<span class="legend-ticks">${ticksHtml}</span>` +
-      `<span class="legend-baseline-label">(vs. ${baseline})</span>` +
     `</span>` +
     `<span class="legend-label">Better</span>`;
 }
@@ -569,6 +588,50 @@ function attachControlListeners() {
       renderAllTables();
     });
   });
+
+  const scaleInput = document.getElementById("scale-input");
+  if (scaleInput) {
+    function applyScale(value) {
+      if (value > 0 && isFinite(value)) {
+        maxScale = value;
+        scaleInput.value = maxScale;
+        BIN_EDGES = buildBinEdges(maxScale);
+        renderTablesOnly();
+      }
+    }
+
+    function snapScale(direction) {
+      const current = maxScale;
+      if (direction > 0) {
+        const next = SCALE_SNAPS.find((v) => v > current);
+        return next || current;
+      }
+      for (let i = SCALE_SNAPS.length - 1; i >= 0; i--) {
+        if (SCALE_SNAPS[i] < current) return SCALE_SNAPS[i];
+      }
+      return current;
+    }
+
+    scaleInput.addEventListener("change", () => applyScale(Number(scaleInput.value)));
+
+    scaleInput.addEventListener("input", () => {
+      const raw = Number(scaleInput.value);
+      const direction = raw > maxScale ? 1 : -1;
+      applyScale(snapScale(direction));
+    });
+
+    scaleInput.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      applyScale(snapScale(event.deltaY < 0 ? 1 : -1));
+    }, { passive: false });
+
+    scaleInput.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        applyScale(snapScale(event.key === "ArrowUp" ? 1 : -1));
+      }
+    });
+  }
 
   const allButton = document.querySelector('.depth-toggle-btn[data-depth="all"]');
   if (allButton) {
@@ -629,18 +692,44 @@ function attachControlListeners() {
   });
 }
 
-function renderAllTables() {
+function ensureParsedData() {
   if (!parsedData) {
     const dataElement = document.getElementById("scores-data");
-    if (!dataElement) return;
+    if (!dataElement) return null;
     parsedData = JSON.parse(dataElement.textContent);
   }
-  const {
-    challengers,
-    challenger_names: challengerNames,
-    metric_titles: metricTitles,
-    sections,
-  } = parsedData;
+  return parsedData;
+}
+
+function renderTablesOnly() {
+  const data = ensureParsedData();
+  if (!data) return;
+  const { challengers, challenger_names: challengerNames, metric_titles: metricTitles, sections } = data;
+
+  const existingSelect = document.getElementById("baseline-select");
+  const baseline = existingSelect?.value
+    || (challengerNames.includes("glo12") ? "glo12" : challengerNames[0]);
+
+  for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
+    renderMetricSection(
+      `${sectionKey}-scores`,
+      sectionConfig.depth_metric,
+      sectionConfig.flat_metrics,
+      challengers,
+      challengerNames,
+      baseline,
+      metricTitles,
+    );
+  }
+
+  updateColorLegend();
+  setupCellHighlight();
+}
+
+function renderAllTables() {
+  const data = ensureParsedData();
+  if (!data) return;
+  const { challengers, challenger_names: challengerNames, metric_titles: metricTitles, sections } = data;
 
   const existingSelect = document.getElementById("baseline-select");
   const baseline = existingSelect?.value
@@ -665,7 +754,7 @@ function renderAllTables() {
   const controlsElement = ensureControlsElement();
   controlsElement.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);
 
-  updateColorLegend(baseline);
+  updateColorLegend();
   updateStickyOffsets();
   attachControlListeners();
   setupCellHighlight();

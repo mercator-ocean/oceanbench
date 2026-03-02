@@ -99,6 +99,11 @@
   background: var(--bs-body-bg, #fafaf7);
 }
 
+/* Tiny gap below thead so model names peek through when scrolling */
+.score-table thead tr:last-child th {
+  border-bottom-width: 3px;
+}
+
 /* Dark mode overrides */
 body.quarto-dark .score-table .model-col,
 body.quarto-dark .score-table thead th {
@@ -116,7 +121,7 @@ body.quarto-dark .score-table .cf-name {
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
+  gap: 0.4rem 0.75rem;
   padding: 0.4rem 0.6rem;
   background: var(--bs-body-bg, #fafaf7);
   border: 1px solid var(--bs-border-color, #dee2e6);
@@ -233,11 +238,28 @@ body.quarto-dark .display-toggle-btn {
   border-left: none;
 }
 
+/* --- Scale input --- */
+
+#scale-input {
+  width: 2.5rem;
+  padding: 0.05rem 0.15rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.2rem;
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+body.quarto-dark #scale-input {
+  background: var(--bs-body-bg, #1a1a2e);
+  color: var(--bs-body-color, #d4d4d8);
+  border-color: var(--bs-border-color, #495057);
+}
+
 /* --- Color legend --- */
 
 .color-legend {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.4rem;
   font-size: 0.75rem;
 }
@@ -245,18 +267,18 @@ body.quarto-dark .display-toggle-btn {
 .legend-label {
   color: var(--bs-body-color, #333940);
   white-space: nowrap;
-  margin-top: 1px;
   line-height: 12px;
 }
 
 .legend-bar-wrapper {
   display: flex;
   flex-direction: column;
+  margin-top: -4px;
 }
 
 .legend-bar {
   display: flex;
-  width: 350px;
+  width: 300px;
   height: 12px;
   border-radius: 3px;
   border: 1px solid var(--bs-border-color, #dee2e6);
@@ -274,7 +296,8 @@ body.quarto-dark .display-toggle-btn {
 
 .legend-ticks {
   position: relative;
-  height: 1rem;
+  height: 0;
+  overflow: visible;
   margin-top: 2px;
 }
 
@@ -286,13 +309,6 @@ body.quarto-dark .display-toggle-btn {
   color: var(--bs-secondary, #6c757d);
   white-space: nowrap;
   line-height: 1;
-}
-
-.legend-baseline-label {
-  text-align: center;
-  font-size: 0.6rem;
-  color: var(--bs-secondary, #6c757d);
-  font-style: italic;
 }
 
 /* --- Sticky depth table thead (below controls bar) --- */
@@ -422,6 +438,12 @@ body.quarto-dark .score-table tr.baseline-row td {
 /* First h3 in each score section needs no top margin */
 .depth-section h3 {
   margin-top: 0;
+}
+
+/* Tighten gap between controls bar and first section */
+#all-scores > h2:first-of-type,
+#all-scores > section:first-of-type > h2 {
+  margin-top: 0.25rem;
 }
 
 /* --- Navbar --- */
