@@ -71,6 +71,27 @@ def _available_memory_bytes() -> int | None:
     return None
 
 
+def _read_int_file(path: str) -> int | None:
+    try:
+        with open(path, "r", encoding="utf8") as file:
+            raw_value = file.read().strip()
+            if raw_value == "max":
+                return None
+            return int(raw_value)
+    except Exception:
+        return None
+
+
+def _cgroup_memory_current_bytes() -> int | None:
+    return _read_int_file("/sys/fs/cgroup/memory.current") or _read_int_file(
+        "/sys/fs/cgroup/memory/memory.usage_in_bytes"
+    )
+
+
+def _cgroup_memory_limit_bytes() -> int | None:
+    return _read_int_file("/sys/fs/cgroup/memory.max") or _read_int_file("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+
+
 @dataclass
 class MemoryDiagnostics:
     component: str
@@ -108,12 +129,16 @@ class MemoryDiagnostics:
         delta_last = None if current_rss is None or previous_rss is None else current_rss - previous_rss
         delta_start = None if current_rss is None or start_rss is None else current_rss - start_rss
         available_memory = _available_memory_bytes()
+        cgroup_current_memory = _cgroup_memory_current_bytes()
+        cgroup_limit_memory = _cgroup_memory_limit_bytes()
 
         self.emit(
             f"{label} | rss={_format_bytes(current_rss)}"
             f" | delta={_format_bytes(delta_last)}"
             f" | total_delta={_format_bytes(delta_start)}"
             f" | mem_available={_format_bytes(available_memory)}"
+            f" | cgroup_mem={_format_bytes(cgroup_current_memory)}"
+            f" | cgroup_limit={_format_bytes(cgroup_limit_memory)}"
             f" | elapsed={elapsed_seconds:.1f}s"
         )
         self._last_rss_bytes = current_rss

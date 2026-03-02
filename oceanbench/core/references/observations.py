@@ -10,6 +10,9 @@ from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.memory_diagnostics import default_memory_tracker, describe_dataset
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
+OBSERVATION_FIRST_DAY_INDEX_KEY = "first_day_index"
+OBSERVATION_FIRST_DAY_LOOKUP_KEY = "first_day_datetime_lookup"
+OBSERVATION_FIRST_DAY_LOOKUP_DIMENSION_KEY = "first_day_lookup_index"
 _memory_tracker = default_memory_tracker("reference_observations")
 
 
@@ -82,38 +85,63 @@ def _observations(challenger_dataset: Dataset) -> Dataset:
         observations_dataset = _assign_standard_names(observations_dataset)
     describe_dataset(observations_dataset, "observations_loaded", _memory_tracker)
 
-    observation_datetimes = pandas.to_datetime(observations_dataset[time_key].values)
-    observations_dataset = observations_dataset.assign_coords(
-        {time_key: (observation_dimension_key, observation_datetimes)}
-    )
-
     with _memory_tracker.step("build_observation_selection_mask"):
-        # Memory-safe implementation: avoid creating a huge 2D mask with shape
-        # (runs, observations), which can trigger kernel OOM.
-        observation_values = observation_datetimes.values
-        selected_observations_mask = numpy.zeros(observation_values.shape, dtype=bool)
-        selected_run_indices = numpy.full(observation_values.shape, -1, dtype=numpy.int64)
+        observation_count = observations_dataset.sizes[observation_dimension_key]
+        selected_observations_mask = numpy.zeros(observation_count, dtype=bool)
+        selected_run_indices = numpy.full(observation_count, -1, dtype=numpy.int16)
 
-        for run_index, first_day in enumerate(first_day_timestamps):
-            window_start = (first_day + pandas.Timedelta(days=1)).to_datetime64()
-            window_end = (first_day + pandas.Timedelta(days=lead_days_count + 1)).to_datetime64()
-            in_window_mask = (observation_values >= window_start) & (observation_values < window_end)
-            newly_selected_mask = in_window_mask & (selected_run_indices < 0)
-            selected_run_indices[newly_selected_mask] = run_index
-            selected_observations_mask |= in_window_mask
+        first_valid_datetimes = (first_day_timestamps + pandas.Timedelta(days=1)).to_numpy(dtype="datetime64[ns]")
+        end_datetimes_exclusive = (first_day_timestamps + pandas.Timedelta(days=lead_days_count + 1)).to_numpy(
+            dtype="datetime64[ns]"
+        )
+
+        time_variable = observations_dataset[time_key]
+        time_data = time_variable.data
+        if getattr(time_data, "chunks", None):
+            time_chunk_sizes = time_data.chunks[0]
+        else:
+            time_chunk_sizes = (observation_count,)
+
+        start_index = 0
+        for chunk_index, chunk_size in enumerate(time_chunk_sizes, start=1):
+            stop_index = start_index + chunk_size
+            with _memory_tracker.step(
+                f"selection_chunk {chunk_index}/{len(time_chunk_sizes)} [{start_index}:{stop_index}]"
+            ):
+                time_chunk = pandas.to_datetime(
+                    time_variable.isel({observation_dimension_key: slice(start_index, stop_index)}).values
+                ).to_numpy(dtype="datetime64[ns]")
+                chunk_selected_mask = numpy.zeros(chunk_size, dtype=bool)
+                chunk_run_indices = numpy.full(chunk_size, -1, dtype=numpy.int16)
+
+                for run_index, (window_start, window_end) in enumerate(
+                    zip(first_valid_datetimes, end_datetimes_exclusive)
+                ):
+                    in_window_mask = (time_chunk >= window_start) & (time_chunk < window_end)
+                    newly_selected_mask = in_window_mask & (chunk_run_indices < 0)
+                    chunk_run_indices[newly_selected_mask] = run_index
+                    chunk_selected_mask |= in_window_mask
+
+                selected_observations_mask[start_index:stop_index] = chunk_selected_mask
+                selected_run_indices[start_index:stop_index] = chunk_run_indices
+            start_index = stop_index
 
         selected_run_indices = selected_run_indices[selected_observations_mask]
-        selected_first_day_coord = first_day_datetimes[selected_run_indices]
+        _memory_tracker.emit(f"selected_observations_count={int(selected_observations_mask.sum())}")
 
     with _memory_tracker.step("select_observations_for_challenger_windows"):
         selected_observations = observations_dataset.isel(
             {observation_dimension_key: selected_observations_mask}
         ).assign_coords(
             {
-                first_day_datetime_key: (
+                OBSERVATION_FIRST_DAY_INDEX_KEY: (
                     (observation_dimension_key,),
-                    selected_first_day_coord,
-                )
+                    selected_run_indices,
+                ),
+                OBSERVATION_FIRST_DAY_LOOKUP_KEY: (
+                    (OBSERVATION_FIRST_DAY_LOOKUP_DIMENSION_KEY,),
+                    first_day_datetimes,
+                ),
             }
         )
     describe_dataset(selected_observations, "observations_selected", _memory_tracker)

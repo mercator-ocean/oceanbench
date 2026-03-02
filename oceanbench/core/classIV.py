@@ -20,6 +20,10 @@ from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
+from oceanbench.core.references.observations import (
+    OBSERVATION_FIRST_DAY_INDEX_KEY,
+    OBSERVATION_FIRST_DAY_LOOKUP_KEY,
+)
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MEAN_SEA_SURFACE_HEIGHT_URL = (
@@ -63,6 +67,8 @@ def _create_observations_dataframe(
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
     first_day_key = Dimension.FIRST_DAY_DATETIME.key()
+    first_day_index_key = OBSERVATION_FIRST_DAY_INDEX_KEY
+    first_day_lookup_key = OBSERVATION_FIRST_DAY_LOOKUP_KEY
     depth_key = Dimension.DEPTH.key()
     observation_dimension_key = observations_dataset[observation_variable_key].dims[0]
 
@@ -71,25 +77,51 @@ def _create_observations_dataframe(
         time_key,
         latitude_key,
         longitude_key,
-        first_day_key,
         depth_key,
     ]
+    has_first_day_datetime = first_day_key in observations_dataset.coords or first_day_key in observations_dataset
+    has_first_day_index = (
+        first_day_index_key in observations_dataset.coords or first_day_index_key in observations_dataset
+    )
+    has_first_day_lookup = (
+        first_day_lookup_key in observations_dataset.coords or first_day_lookup_key in observations_dataset
+    )
+    if has_first_day_datetime:
+        selected_variable_keys.append(first_day_key)
+    elif has_first_day_index and has_first_day_lookup:
+        selected_variable_keys.append(first_day_index_key)
+    else:
+        raise ValueError(
+            "Observations dataset is missing first day mapping. "
+            f"Expected either '{first_day_key}' or ('{first_day_index_key}', '{first_day_lookup_key}')."
+        )
 
     observation_subset = observations_dataset[selected_variable_keys].rename(
         {
             observation_variable_key: "observation_value",
-            first_day_key: "first_day",
         }
     )
+
+    non_null_observation_mask = observation_subset["observation_value"].notnull().compute()
+    observation_subset = observation_subset.isel({observation_dimension_key: non_null_observation_mask})
+
+    if not has_first_day_datetime:
+        first_day_lookup_dimension_key = observations_dataset[first_day_lookup_key].dims[0]
+        first_day_indices = observation_subset[first_day_index_key].astype("int32")
+        observation_subset = observation_subset.assign(
+            first_day=observations_dataset[first_day_lookup_key].isel(
+                {first_day_lookup_dimension_key: first_day_indices}
+            )
+        ).drop_vars(first_day_index_key)
+    else:
+        observation_subset = observation_subset.rename({first_day_key: "first_day"})
 
     lead_day = ((observation_subset[time_key] - observation_subset["first_day"]) / numpy.timedelta64(1, "D")).astype(
         "int64"
     ) - 1
     observation_subset = observation_subset.assign(lead_day=lead_day)
     valid_observation_mask = (
-        observation_subset["observation_value"].notnull()
-        & (observation_subset["lead_day"] >= 0)
-        & (observation_subset["lead_day"] < lead_days_count)
+        (observation_subset["lead_day"] >= 0) & (observation_subset["lead_day"] < lead_days_count)
     ).compute()
     observation_subset = observation_subset.isel({observation_dimension_key: valid_observation_mask})
 
