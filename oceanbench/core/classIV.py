@@ -10,7 +10,7 @@ from scipy.interpolate import CubicSpline
 from oceanbench.core.dataset_utils import (
     Dimension,
     Variable,
-    VARIABLE_LABELS,
+    VARIABLE_METADATA,
     DEPTH_BINS_DEFAULT,
     DEPTH_BINS_BY_VARIABLE,
     VARIABLE_DISPLAY_ORDER,
@@ -242,6 +242,13 @@ def _compute_rmsd_table(
     return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
 
 
+def _observation_variable_depth_label(cf_name: str, depth_bin: str) -> str:
+    display_name, unit = VARIABLE_METADATA[cf_name]
+    already_prefixed = display_name.lower().startswith(depth_bin.lower())
+    base = (display_name if already_prefixed else f"{depth_bin} {display_name}").capitalize()
+    return f"{base} ({unit}) [{cf_name}]{{{depth_bin}}}"
+
+
 def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -> pandas.DataFrame:
     pivot_table = results_dataframe.pivot_table(
         values="rmsd",
@@ -249,11 +256,6 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
         columns="lead_day",
         aggfunc="first",
     ).reset_index()
-    first_available_day = results_dataframe["lead_day"].min()
-    observation_counts = results_dataframe[results_dataframe["lead_day"] == first_available_day][
-        ["variable", "depth_bin", "count"]
-    ]
-    pivot_table = pivot_table.merge(observation_counts, on=["variable", "depth_bin"], how="left")
     pivot_table["variable_sort"] = pivot_table["variable"].map(VARIABLE_DISPLAY_ORDER).astype(float)
     sst_sort_mask = (pivot_table["variable"] == Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()) & (
         pivot_table["depth_bin"] == "SST"
@@ -261,21 +263,23 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
     pivot_table.loc[sst_sort_mask, "variable_sort"] = VARIABLE_DISPLAY_ORDER[Variable.SEA_WATER_SALINITY.key()] + 0.5
     pivot_table["depth_sort"] = pivot_table["depth_bin"].map(DEPTH_BIN_DISPLAY_ORDER)
     pivot_table = pivot_table.sort_values(["variable_sort", "depth_sort"]).drop(columns=["variable_sort", "depth_sort"])
-    pivot_table["variable"] = pivot_table["variable"].map(VARIABLE_LABELS)
 
-    # Display SST as a dedicated "surface temperature" row, separated from the other temperature depth bins.
-    sst_display_mask = (pivot_table["variable"] == "temperature") & (pivot_table["depth_bin"] == "SST")
-    pivot_table.loc[sst_display_mask, "variable"] = "surface temperature"
-    pivot_table.loc[sst_display_mask, "depth_bin"] = "surface"
+    # SST is a special case: remap to its own CF standard name.
+    pivot_table.loc[sst_sort_mask, "variable"] = Variable.SEA_SURFACE_TEMPERATURE.key()
+    pivot_table.loc[sst_sort_mask, "depth_bin"] = "surface"
 
+    pivot_table["label"] = pivot_table.apply(
+        lambda row: _observation_variable_depth_label(row["variable"], row["depth_bin"]),
+        axis=1,
+    )
+
+    lead_columns = [col for col in pivot_table.columns if isinstance(col, (int, numpy.integer))]
     lead_labels = lead_day_labels(1, lead_days_count)
-    rename_columns = {
-        column: lead_labels[column] for column in pivot_table.columns if isinstance(column, (int, numpy.integer))
-    }
-    rename_columns["variable"] = "Variable"
-    rename_columns["depth_bin"] = "Depth Range"
-    rename_columns["count"] = "Number of observations at lead day 1"
-    return pivot_table.rename(columns=rename_columns).reset_index(drop=True)
+    column_rename = {col: lead_labels[col] for col in lead_columns}
+    result = pivot_table.set_index("label")[lead_columns].rename(columns=column_rename)
+    result.index.name = None
+    result.columns.name = None
+    return result
 
 
 def rmsd_class4_validation(
