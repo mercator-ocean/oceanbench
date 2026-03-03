@@ -22,7 +22,7 @@ def _parse_variable_label(label: str) -> tuple[str, str, str, str]:
 
 
 _METRICS = [
-    {"key": "rmsd_variables", "title": "RMSD of Variables", "function": "rmsd_of_variables", "has_depths": True},
+    {"key": "rmsd_variables", "title": "Forecasted variables", "function": "rmsd_of_variables", "has_depths": True},
     {
         "key": "rmsd_mld",
         "title": "RMSD of Mixed Layer Depth",
@@ -62,7 +62,7 @@ _DEPTH_VARIABLE_METRICS = {
 
 METRIC_TITLES = {
     f"{metric['key']}_{reference['suffix']}": metric["title"] for metric in _METRICS for reference in _REFERENCES
-} | {_OBSERVATIONS_METRIC_KEY: "RMSD vs. Observations"}
+} | {_OBSERVATIONS_METRIC_KEY: "Forecasted variables"}
 
 SECTIONS = {
     reference["key"]: {
