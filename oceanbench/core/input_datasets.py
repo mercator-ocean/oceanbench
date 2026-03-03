@@ -9,6 +9,7 @@ This module exposes the challenger datasets evaluated in the benchmark.
 import xarray
 from datetime import datetime
 from oceanbench.core.datetime_utils import generate_dates
+from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
 
 
 def glo12_nowcasts() -> xarray.Dataset:
@@ -36,7 +37,7 @@ def ifs_forcings() -> xarray.Dataset:
         list(map(_ifs_forcing_dataset_path, first_day_datetimes)),
         engine="netcdf4",
         preprocess=lambda dataset: dataset.rename({"time_counter": "lead_day_index"}).assign(
-            {"lead_day_index": range(10)}
+            {"lead_day_index": range(LEAD_DAYS_COUNT)}
         ),
         combine="nested",
         concat_dim="first_day_datetime",
