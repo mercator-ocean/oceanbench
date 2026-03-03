@@ -35,7 +35,7 @@ OceanBench's scientific paper is published in [NeurIPS 2025](https://neurips.cc/
 
 ## Score table and system comparison
 
-The official score table is available on the [OceanBench website](https://oceanbench.lab.dive.edito.eu).
+The official score table is available on the [OceanBench website](https://oceanbench.edito.eu).
 
 ## Open GLORYS dataset to train your ocean forecasting system
 
