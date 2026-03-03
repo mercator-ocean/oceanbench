@@ -48,6 +48,7 @@ let availableDepths = [];
 let showAllMode = true;
 let showPercentDiff = false;
 let parsedData = null;
+let challengerLabels = {};
 
 function interpolateColor(startColor, endColor, ratio) {
   return [
@@ -132,6 +133,10 @@ function getCfName(scoreData, depth, variable) {
   }
 }
 
+function displayName(name) {
+  return challengerLabels[name] || name;
+}
+
 function titleCase(text) {
   return text.replace(/(^|\s)\w/g, (character) => character.toUpperCase());
 }
@@ -150,7 +155,7 @@ function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, bas
   const unitSuffix = unit ? ` ${unit}` : "";
   let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${value.toFixed(2)}${unitSuffix}`;
   if (!isBaseline && referenceValue !== null) {
-    tooltip += `\nvs ${baselineName}: ${formatPercentDiff(referenceValue, value)}`;
+    tooltip += `\nvs ${displayName(baselineName)}: ${formatPercentDiff(referenceValue, value)}`;
   }
   return tooltip;
 }
@@ -173,7 +178,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.report.html">${name}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.report.html">${displayName(name)}</a></th>`;
     for (const variable of variables) {
       if (depthVars && !depthVars.has(variable)) {
         for (const day of leadDays) {
@@ -222,7 +227,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.report.html">${name}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.report.html">${displayName(name)}</a></th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -263,7 +268,7 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   html += '<label>Baseline: <select id="baseline-select">';
   for (const name of challengerNames) {
     const selected = name === baseline ? " selected" : "";
-    html += `<option value="${name}"${selected}>${name}</option>`;
+    html += `<option value="${name}"${selected}>${displayName(name)}</option>`;
   }
   html += "</select></label>";
 
@@ -718,6 +723,7 @@ function ensureParsedData() {
     const dataElement = document.getElementById("scores-data");
     if (!dataElement) return null;
     parsedData = JSON.parse(dataElement.textContent);
+    challengerLabels = parsedData.challenger_labels || {};
   }
   return parsedData;
 }

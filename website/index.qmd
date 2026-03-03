@@ -39,6 +39,7 @@ import json
 import os
 from helpers.s3_discovery import discover_challengers, get_notebook_url
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
+from helpers.challenger_metadata import CHALLENGERS
 
 challengers = discover_challengers()
 
@@ -55,6 +56,7 @@ all_scores = {name: dumped for name in challengers if (dumped := _load_scores(na
 scores_json = json.dumps({
     "challengers": all_scores,
     "challenger_names": list(all_scores.keys()),
+    "challenger_labels": {name: CHALLENGERS[name]["label"] for name in all_scores if name in CHALLENGERS},
     "metric_titles": METRIC_TITLES,
     "sections": SECTIONS,
 })
