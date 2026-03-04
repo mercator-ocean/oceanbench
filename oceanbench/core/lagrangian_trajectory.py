@@ -56,6 +56,11 @@ class FreezeParticle(JITParticle):
 LEAD_DAY_START = 2
 
 
+def _delete_error_particle(particle, _fieldset, _time):
+    if particle.state == StatusCode.ErrorOutOfBounds:
+        particle.delete()
+
+
 def deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
@@ -224,10 +229,6 @@ def _get_all_particles_positions(
     field_set = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
     field_set = _set_domain_bounds(field_set, dataset)
 
-    def delete_error_particle(particle, _fieldset, _time):
-        if particle.state == StatusCode.ErrorOutOfBounds:
-            particle.delete()
-
     particle_set = ParticleSet.from_list(
         fieldset=field_set,
         pclass=FreezeParticle,
@@ -239,8 +240,8 @@ def _get_all_particles_positions(
 
     kernels = [
         AdvectionRK4,
-        delete_error_particle,
-    ]  # Keep your original kernel setup
+        _delete_error_particle,
+    ]
 
     runtime_days = len(dataset.time) - 1
     output_path = _run_simulation(particle_set, kernels, runtime_days)
