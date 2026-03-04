@@ -205,6 +205,7 @@ def _read_output_file(file_path: str):
     particle_latitudes = dataset.lat.values  # shape: (time, n_particles)
     particle_longitudes = dataset.lon.values
     particle_ids = dataset.pid.values  # shape: (time, n_particles)
+    dataset.close()
     shutil.rmtree(file_path)
     return particle_latitudes, particle_longitudes, particle_ids
 
