@@ -33,7 +33,7 @@ def glo36v1() -> xarray.Dataset:
             engine="zarr",
             combine="nested",
             concat_dim="first_day_datetime",
-            parallel=True,
+            parallel=False,
         )
         .rename({"lat": "latitude", "lon": "longitude"})
         .assign({"first_day_datetime": first_day_datetimes})
@@ -81,6 +81,6 @@ def _open_multizarr_forecasts_as_challenger_dataset(
         ),
         combine="nested",
         concat_dim="first_day_datetime",
-        parallel=True,
+        parallel=False,
     ).assign({"first_day_datetime": first_day_datetimes})
     return challenger_dataset
