@@ -49,6 +49,14 @@ let showAllMode = true;
 let showPercentDiff = false;
 let parsedData = null;
 let challengerLabels = {};
+let activeSection = "reanalysis";
+let scrollSpyObserver = null;
+
+const SECTION_ID_MAP = {
+  reanalysis: "comparison-to-reanalysis",
+  analysis: "comparison-to-analysis",
+  observations: "comparison-to-observations",
+};
 
 function interpolateColor(startColor, endColor, ratio) {
   return [
@@ -262,6 +270,127 @@ function buildCombinedDataRows(
   return rows;
 }
 
+function readSectionFromHash() {
+  const hash = window.location.hash.slice(1);
+  if (SECTION_ID_MAP[hash]) return hash;
+  for (const [sectionKey, sectionId] of Object.entries(SECTION_ID_MAP)) {
+    if (sectionId === hash) return sectionKey;
+  }
+  return null;
+}
+
+function getSectionElement(sectionKey) {
+  const sectionId = SECTION_ID_MAP[sectionKey];
+  if (!sectionId) return null;
+  return document.getElementById(sectionId);
+}
+
+function updateSectionHash(sectionKey, replaceHistory) {
+  const sectionId = SECTION_ID_MAP[sectionKey];
+  if (!sectionId) return;
+  const hash = `#${sectionId}`;
+  if (window.location.hash === hash) return;
+  if (replaceHistory) {
+    window.history.replaceState(null, "", hash);
+  } else {
+    window.history.pushState(null, "", hash);
+  }
+}
+
+function setActiveSection(sectionKey, options = {}) {
+  if (!SECTION_ID_MAP[sectionKey]) return;
+  const { updateHash = false, replaceHistory = true } = options;
+  activeSection = sectionKey;
+  document.querySelectorAll(".score-track-link").forEach((link) => {
+    const isActive = link.dataset.section === activeSection;
+    link.classList.toggle("active", isActive);
+    if (isActive) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
+  if (updateHash) {
+    updateSectionHash(sectionKey, replaceHistory);
+  }
+}
+
+function getStickyBottomOffset() {
+  const scoreHeader = document.getElementById("score-header");
+  if (!scoreHeader) return 0;
+  return Math.max(scoreHeader.getBoundingClientRect().bottom, 0);
+}
+
+function ensureSectionVisible(sectionKey, behavior = "auto") {
+  const target = getSectionElement(sectionKey);
+  if (!target) return;
+  target.scrollIntoView({ behavior, block: "start" });
+}
+
+function sectionInView() {
+  const offset = getStickyBottomOffset() + 20;
+  const marker = offset + Math.min(window.innerHeight * 0.25, 240);
+
+  let lastPassed = null;
+  let nextAhead = null;
+  for (const sectionKey of Object.keys(SECTION_ID_MAP)) {
+    const section = getSectionElement(sectionKey);
+    if (!section) continue;
+    const top = section.getBoundingClientRect().top;
+    if (top <= marker) {
+      lastPassed = sectionKey;
+    } else if (!nextAhead) {
+      nextAhead = sectionKey;
+    }
+  }
+  return lastPassed || nextAhead;
+}
+
+function refreshScrollSpy() {
+  if (scrollSpyObserver) {
+    scrollSpyObserver.disconnect();
+  }
+  const rootMarginTop = getStickyBottomOffset() + 20;
+  scrollSpyObserver = new IntersectionObserver(() => {
+    const visibleSection = sectionInView();
+    if (visibleSection) {
+      setActiveSection(visibleSection, { updateHash: true, replaceHistory: true });
+    }
+  }, {
+    root: null,
+    rootMargin: `-${rootMarginTop}px 0px -60% 0px`,
+    threshold: [0, 0.1, 0.25, 0.5, 1],
+  });
+  for (const sectionKey of Object.keys(SECTION_ID_MAP)) {
+    const section = getSectionElement(sectionKey);
+    if (section) {
+      scrollSpyObserver.observe(section);
+    }
+  }
+  const currentSection = sectionInView();
+  if (currentSection) {
+    setActiveSection(currentSection, { updateHash: true, replaceHistory: true });
+  }
+}
+
+function buildTabsInnerHtml(sections) {
+  let html = "";
+  for (const sectionKey of Object.keys(sections)) {
+    const isActive = sectionKey === activeSection;
+    html += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${titleCase(sectionKey)}</a>`;
+  }
+  return html;
+}
+
+function attachTabListeners() {
+  document.querySelectorAll(".score-track-link").forEach((link) => {
+    link.addEventListener("click", () => {
+      const sectionKey = link.dataset.section;
+      setActiveSection(sectionKey);
+    });
+  });
+}
+
 function buildControlsInnerHtml(challengerNames, baseline, depths) {
   let html = "";
 
@@ -293,31 +422,35 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   return html;
 }
 
-function ensureControlsElement() {
-  let element = document.getElementById("score-controls");
-  if (element) return element;
+function ensureHeaderElement() {
+  const existing = document.getElementById("score-header");
+  if (existing) return document.getElementById("score-controls");
 
-  // Quarto freeze cache can leave a stale controls div in the rendered HTML
   const wrapper = document.getElementById("all-scores");
   if (wrapper) {
     const stale = wrapper.querySelector(".controls:not(#score-controls)");
     if (stale) stale.remove();
   }
 
-  element = document.createElement("div");
-  element.id = "score-controls";
-  element.className = "controls";
+  const header = document.createElement("div");
+  header.id = "score-header";
+
+  const tabNav = document.createElement("nav");
+  tabNav.id = "score-tabs";
+  tabNav.setAttribute("aria-label", "Score sections");
+
+  const controlsDiv = document.createElement("div");
+  controlsDiv.id = "score-controls";
+  controlsDiv.className = "controls";
+
+  header.appendChild(tabNav);
+  header.appendChild(controlsDiv);
 
   if (wrapper) {
-    wrapper.insertBefore(element, wrapper.firstElementChild);
-  } else {
-    const reanalysis = document.getElementById("reanalysis-scores");
-    if (reanalysis) {
-      reanalysis.parentNode.insertBefore(element, reanalysis);
-    }
+    wrapper.insertBefore(header, wrapper.firstElementChild);
   }
 
-  return element;
+  return controlsDiv;
 }
 
 function groupDepthsByVariables(baselineScore, depths) {
@@ -595,10 +728,17 @@ function setupCellHighlight() {
 }
 
 function updateStickyOffsets() {
-  const controls = document.getElementById("score-controls");
-  if (controls) {
-    const controlsHeight = controls.getBoundingClientRect().height;
-    document.documentElement.style.setProperty("--controls-height", controlsHeight + "px");
+  const header = document.getElementById("score-header");
+  if (header) {
+    const headerHeight = header.getBoundingClientRect().height;
+    document.documentElement.style.setProperty("--controls-height", headerHeight + "px");
+    const navbarHeight = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--navbar-full-height"),
+    ) || 0;
+    document.documentElement.style.setProperty(
+      "--section-anchor-offset",
+      `${navbarHeight + headerHeight + 12}px`,
+    );
   }
 }
 
@@ -780,18 +920,48 @@ function renderAllTables() {
     );
   }
 
-  const controlsElement = ensureControlsElement();
+  const controlsElement = ensureHeaderElement();
   controlsElement.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);
+
+  const tabNav = document.getElementById("score-tabs");
+  if (tabNav) {
+    tabNav.innerHTML = buildTabsInnerHtml(sections);
+  }
 
   updateColorLegend();
   updateStickyOffsets();
   attachControlListeners();
+  attachTabListeners();
+  setActiveSection(activeSection);
+  refreshScrollSpy();
   setupCellHighlight();
 }
 
 function init() {
   if (!document.getElementById("scores-data")) return;
+  const initialSection = readSectionFromHash();
+  if (initialSection) {
+    activeSection = initialSection;
+  }
   renderAllTables();
+
+  if (initialSection) {
+    ensureSectionVisible(initialSection, "auto");
+  }
+
+  window.addEventListener("hashchange", () => {
+    const newSection = readSectionFromHash();
+    if (newSection) {
+      setActiveSection(newSection);
+      ensureSectionVisible(newSection, "auto");
+    }
+  });
+
+  window.addEventListener("resize", () => {
+    updateStickyOffsets();
+    refreshScrollSpy();
+  });
+
   let wasDark = document.body.classList.contains("quarto-dark");
   new MutationObserver(() => {
     const isDark = document.body.classList.contains("quarto-dark");
@@ -813,6 +983,8 @@ function init() {
     new MutationObserver(() => {
       const hidden = header.classList.contains("headroom--unpinned");
       document.body.classList.toggle("nav-hidden", hidden);
+      updateStickyOffsets();
+      refreshScrollSpy();
     }).observe(header, { attributes: true, attributeFilter: ["class"] });
   }
 }
