@@ -37,7 +37,7 @@ def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
         .assign({Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}),
         combine="nested",
         concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-        parallel=True,
+        parallel=False,
     ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 
@@ -93,7 +93,7 @@ def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
         ),
         combine="nested",
         concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-        parallel=True,
+        parallel=False,
     ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 

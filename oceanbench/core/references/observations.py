@@ -65,7 +65,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
         list(map(observation_path, observation_days)),
         engine="zarr",
         decode_cf=False,
-        parallel=True,
+        parallel=False,
         concat_dim=source_observation_dimension_key,
         combine="nested",
     )
