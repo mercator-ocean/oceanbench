@@ -523,7 +523,7 @@ function renderMetricSection(
     baseline,
   );
   if (flatHtml) {
-    html += `<h3>Physically-consistent diagnostic variables</h3>`;
+    html += `<h3>Physically consistent diagnostic variables</h3>`;
     html += flatHtml;
   }
 
