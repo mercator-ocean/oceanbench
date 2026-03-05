@@ -38,6 +38,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Keep table width stable when toggling Values / % diff mode */
+.score-table td.score-value-cell {
+  width: 5.5ch;
+  min-width: 5.5ch;
+  max-width: 5.5ch;
+  overflow: hidden;
+  text-overflow: clip;
+  padding-left: 0.2rem;
+  padding-right: 0.2rem;
+}
+
 /* Sticky first column (model names) */
 .score-table .model-col {
   position: sticky;
@@ -69,26 +80,32 @@
 
 .score-table .metric-label {
   font-weight: 400;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
 }
 
 .score-table .cf-name {
+  display: inline-block;
   font-weight: 400;
-  font-size: 0.55rem;
+  font-size: 0.65rem;
   color: var(--bs-secondary, #6c757d);
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 /* Lead day sub-headers */
 .score-table .lead-day {
   font-weight: 400;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   color: var(--bs-secondary, #6c757d);
 }
 
 /* "Lead days" label in the sticky column */
 .score-table .lead-day-label {
   font-weight: 400;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   color: var(--bs-secondary, #6c757d);
   font-style: italic;
 }

@@ -105,6 +105,14 @@ function formatPercentDiff(referenceValue, comparedValue) {
   return `${sign}${Math.round(percent)}%`;
 }
 
+function formatPercentDiffForCell(referenceValue, comparedValue) {
+  if (referenceValue === 0) return comparedValue === 0 ? "0%" : "N/A";
+  const percent = ((comparedValue - referenceValue) / Math.abs(referenceValue)) * 100;
+  if (percent > 999) return ">999%";
+  if (percent < -999) return "<-999%";
+  return `${Math.round(percent)}%`;
+}
+
 function getValue(scoreData, depth, variable, leadDay) {
   try {
     return scoreData.depths[depth].variables[variable].data[leadDay];
@@ -210,7 +218,7 @@ function buildDataRows(
         let display = "";
         if (value !== null) {
           if (showPercentDiff && !isBaseline && referenceValue !== null) {
-            display = formatPercentDiff(referenceValue, value);
+            display = formatPercentDiffForCell(referenceValue, value);
           } else {
             display = value.toFixed(2);
           }
@@ -218,7 +226,7 @@ function buildDataRows(
         const title = value !== null
           ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
           : "";
-        rows += `<td style="${style}" title="${title}">${display}</td>`;
+        rows += `<td class="score-value-cell" style="${style}" title="${title}">${display}</td>`;
       }
     }
     rows += "</tr>";
@@ -254,7 +262,7 @@ function buildCombinedDataRows(
           let display = "";
           if (value !== null) {
             if (showPercentDiff && !isBaseline && referenceValue !== null) {
-              display = formatPercentDiff(referenceValue, value);
+              display = formatPercentDiffForCell(referenceValue, value);
             } else {
               display = value.toFixed(2);
             }
@@ -262,7 +270,7 @@ function buildCombinedDataRows(
           const title = value !== null
             ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
             : "";
-          rows += `<td style="${style}" title="${title}">${display}</td>`;
+          rows += `<td class="score-value-cell" style="${style}" title="${title}">${display}</td>`;
         }
       }
     }
