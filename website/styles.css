@@ -190,12 +190,6 @@ body.quarto-dark .score-tab.active {
   outline-offset: -2px;
 }
 
-#comparison-to-reanalysis,
-#comparison-to-analysis,
-#comparison-to-observations {
-  scroll-margin-top: var(--section-anchor-offset, calc(var(--navbar-full-height, 0px) + var(--controls-height, 0px) + 0.75rem));
-}
-
 /* --- Controls bar --- */
 
 .controls {
@@ -396,8 +390,6 @@ body.quarto-dark #scale-input {
   z-index: 3;
   transition: top 0.2s linear;
 }
-
-/* nav-hidden offset handled by #score-header rule above */
 
 body.nav-hidden .depth-table thead {
   top: calc(var(--controls-height, 2rem) - 1px);

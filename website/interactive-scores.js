@@ -50,7 +50,7 @@ let showPercentDiff = false;
 let parsedData = null;
 let challengerLabels = {};
 let activeSection = "reanalysis";
-let scrollSpyObserver = null;
+let isScrollRefreshScheduled = false;
 
 const SECTION_ID_MAP = {
   reanalysis: "comparison-to-reanalysis",
@@ -176,7 +176,6 @@ function buildDataRows(
   variables,
   leadDays,
   baseline,
-  depthLabel,
   depthVars,
 ) {
   const baselineScore = challengers[baseline][metricKey];
@@ -321,56 +320,56 @@ function getStickyBottomOffset() {
   return Math.max(scoreHeader.getBoundingClientRect().bottom, 0);
 }
 
-function ensureSectionVisible(sectionKey, behavior = "auto") {
+function scrollToSection(sectionKey) {
   const target = getSectionElement(sectionKey);
-  if (!target) return;
-  target.scrollIntoView({ behavior, block: "start" });
+  if (!target) return false;
+  const desiredTop = getStickyBottomOffset() + 4;
+  const delta = target.getBoundingClientRect().top - desiredTop;
+  if (Math.abs(delta) < 2) return false;
+  const top = Math.max(0, window.scrollY + delta);
+  window.scrollTo({ top, behavior: "auto" });
+  return true;
+}
+
+function navigateToSection(
+  sectionKey,
+  { replaceHistory = false, updateHash = true } = {},
+) {
+  if (!SECTION_ID_MAP[sectionKey]) return;
+  scrollToSection(sectionKey);
+  setActiveSection(sectionKey, { updateHash, replaceHistory });
 }
 
 function sectionInView() {
-  const offset = getStickyBottomOffset() + 20;
-  const marker = offset + Math.min(window.innerHeight * 0.25, 240);
-
+  const marker = getStickyBottomOffset() + 12;
+  let firstSection = null;
   let lastPassed = null;
-  let nextAhead = null;
   for (const sectionKey of Object.keys(SECTION_ID_MAP)) {
     const section = getSectionElement(sectionKey);
     if (!section) continue;
+    if (!firstSection) firstSection = sectionKey;
     const top = section.getBoundingClientRect().top;
     if (top <= marker) {
       lastPassed = sectionKey;
-    } else if (!nextAhead) {
-      nextAhead = sectionKey;
     }
   }
-  return lastPassed || nextAhead;
+  return lastPassed || firstSection;
 }
 
 function refreshScrollSpy() {
-  if (scrollSpyObserver) {
-    scrollSpyObserver.disconnect();
-  }
-  const rootMarginTop = getStickyBottomOffset() + 20;
-  scrollSpyObserver = new IntersectionObserver(() => {
-    const visibleSection = sectionInView();
-    if (visibleSection) {
-      setActiveSection(visibleSection, { updateHash: true, replaceHistory: true });
-    }
-  }, {
-    root: null,
-    rootMargin: `-${rootMarginTop}px 0px -60% 0px`,
-    threshold: [0, 0.1, 0.25, 0.5, 1],
-  });
-  for (const sectionKey of Object.keys(SECTION_ID_MAP)) {
-    const section = getSectionElement(sectionKey);
-    if (section) {
-      scrollSpyObserver.observe(section);
-    }
-  }
   const currentSection = sectionInView();
   if (currentSection) {
-    setActiveSection(currentSection, { updateHash: true, replaceHistory: true });
+    setActiveSection(currentSection, { updateHash: false });
   }
+}
+
+function scheduleScrollSpyRefresh() {
+  if (isScrollRefreshScheduled) return;
+  isScrollRefreshScheduled = true;
+  window.requestAnimationFrame(() => {
+    isScrollRefreshScheduled = false;
+    refreshScrollSpy();
+  });
 }
 
 function buildTabsInnerHtml(sections) {
@@ -384,9 +383,11 @@ function buildTabsInnerHtml(sections) {
 
 function attachTabListeners() {
   document.querySelectorAll(".score-track-link").forEach((link) => {
-    link.addEventListener("click", () => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
       const sectionKey = link.dataset.section;
-      setActiveSection(sectionKey);
+      if (sectionKey === activeSection) return;
+      navigateToSection(sectionKey, { replaceHistory: false, updateHash: true });
     });
   });
 }
@@ -557,7 +558,6 @@ function renderDepthGroup(
       variables,
       leadDays,
       baseline,
-      null,
       depthVars,
     );
   }
@@ -732,13 +732,6 @@ function updateStickyOffsets() {
   if (header) {
     const headerHeight = header.getBoundingClientRect().height;
     document.documentElement.style.setProperty("--controls-height", headerHeight + "px");
-    const navbarHeight = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--navbar-full-height"),
-    ) || 0;
-    document.documentElement.style.setProperty(
-      "--section-anchor-offset",
-      `${navbarHeight + headerHeight + 12}px`,
-    );
   }
 }
 
@@ -946,21 +939,17 @@ function init() {
   renderAllTables();
 
   if (initialSection) {
-    ensureSectionVisible(initialSection, "auto");
+    navigateToSection(initialSection, { replaceHistory: true, updateHash: true });
   }
 
   window.addEventListener("hashchange", () => {
     const newSection = readSectionFromHash();
     if (newSection) {
-      setActiveSection(newSection);
-      ensureSectionVisible(newSection, "auto");
+      navigateToSection(newSection, { updateHash: false });
     }
   });
 
-  window.addEventListener("resize", () => {
-    updateStickyOffsets();
-    refreshScrollSpy();
-  });
+  window.addEventListener("scroll", scheduleScrollSpyRefresh, { passive: true });
 
   let wasDark = document.body.classList.contains("quarto-dark");
   new MutationObserver(() => {
@@ -978,14 +967,28 @@ function init() {
     || document.querySelector(".headroom");
   if (header) {
     const navbar = header.querySelector(".navbar") || header;
-    const navbarHeight = navbar.offsetHeight;
-    document.documentElement.style.setProperty("--navbar-full-height", navbarHeight + "px");
-    new MutationObserver(() => {
+    const syncHeaderState = () => {
       const hidden = header.classList.contains("headroom--unpinned");
       document.body.classList.toggle("nav-hidden", hidden);
       updateStickyOffsets();
       refreshScrollSpy();
+    };
+    document.documentElement.style.setProperty("--navbar-full-height", `${navbar.offsetHeight}px`);
+    syncHeaderState();
+
+    new MutationObserver(() => {
+      syncHeaderState();
     }).observe(header, { attributes: true, attributeFilter: ["class"] });
+
+    window.addEventListener("resize", () => {
+      document.documentElement.style.setProperty("--navbar-full-height", `${navbar.offsetHeight}px`);
+      syncHeaderState();
+    });
+  } else {
+    window.addEventListener("resize", () => {
+      updateStickyOffsets();
+      refreshScrollSpy();
+    });
   }
 }
 
