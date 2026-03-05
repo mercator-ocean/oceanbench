@@ -302,6 +302,16 @@ function setActiveSection(sectionKey, options = {}) {
   if (!SECTION_ID_MAP[sectionKey]) return;
   const { updateHash = false, replaceHistory = true } = options;
   activeSection = sectionKey;
+  const depthToggle = document.getElementById("depth-toggle");
+  if (depthToggle) {
+    if (activeSection === "observations") {
+      depthToggle.setAttribute("hidden", "");
+      depthToggle.setAttribute("aria-hidden", "true");
+    } else {
+      depthToggle.removeAttribute("hidden");
+      depthToggle.removeAttribute("aria-hidden");
+    }
+  }
   document.querySelectorAll(".score-track-link").forEach((link) => {
     const isActive = link.dataset.section === activeSection;
     link.classList.toggle("active", isActive);
@@ -411,7 +421,7 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   }
   html += "</select></label>";
 
-  html += '<span class="depth-toggle">';
+  html += '<span id="depth-toggle" class="depth-toggle">';
   html += `<button class="depth-toggle-btn${showAllMode ? " active" : ""}" data-depth="all">All</button>`;
   html += '<span class="depth-pills">';
   for (const depth of depths) {
