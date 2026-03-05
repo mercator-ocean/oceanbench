@@ -502,6 +502,18 @@ body.quarto-dark .score-table tr.baseline-row td {
 
 /* --- Section headings --- */
 
+#comparison-to-reanalysis > h2,
+#comparison-to-analysis > h2,
+#comparison-to-observations > h2 {
+  border-bottom: 1px solid #046293 !important;
+}
+
+body.quarto-dark #comparison-to-reanalysis > h2,
+body.quarto-dark #comparison-to-analysis > h2,
+body.quarto-dark #comparison-to-observations > h2 {
+  border-bottom-color: #3aa6d3 !important;
+}
+
 #reanalysis-scores h3,
 #analysis-scores h3 {
   margin-top: 1.5rem;
