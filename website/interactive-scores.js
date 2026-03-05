@@ -49,13 +49,15 @@ let showAllMode = true;
 let showPercentDiff = false;
 let parsedData = null;
 let challengerLabels = {};
-let activeSection = "reanalysis";
+let activeSection = "observations";
 let isScrollRefreshScheduled = false;
 
+const SECTION_ORDER = ["observations", "reanalysis", "analysis"];
+
 const SECTION_ID_MAP = {
+  observations: "comparison-to-observations",
   reanalysis: "comparison-to-reanalysis",
   analysis: "comparison-to-analysis",
-  observations: "comparison-to-observations",
 };
 
 function interpolateColor(startColor, endColor, ratio) {
@@ -331,6 +333,13 @@ function scrollToSection(sectionKey) {
   return true;
 }
 
+function orderedSectionKeys(sections) {
+  const availableSections = sections ? new Set(Object.keys(sections)) : null;
+  return SECTION_ORDER.filter(
+    (sectionKey) => SECTION_ID_MAP[sectionKey] && (!availableSections || availableSections.has(sectionKey)),
+  );
+}
+
 function navigateToSection(
   sectionKey,
   { replaceHistory = false, updateHash = true } = {},
@@ -344,7 +353,7 @@ function sectionInView() {
   const marker = getStickyBottomOffset() + 12;
   let firstSection = null;
   let lastPassed = null;
-  for (const sectionKey of Object.keys(SECTION_ID_MAP)) {
+  for (const sectionKey of orderedSectionKeys()) {
     const section = getSectionElement(sectionKey);
     if (!section) continue;
     if (!firstSection) firstSection = sectionKey;
@@ -374,7 +383,7 @@ function scheduleScrollSpyRefresh() {
 
 function buildTabsInnerHtml(sections) {
   let html = "";
-  for (const sectionKey of Object.keys(sections)) {
+  for (const sectionKey of orderedSectionKeys(sections)) {
     const isActive = sectionKey === activeSection;
     html += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${titleCase(sectionKey)}</a>`;
   }
