@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from os import environ
 from time import sleep
 from typing import TypeVar
@@ -23,6 +23,11 @@ RETRIABLE_HTTP_ERROR_TOKENS = (
 REMOTE_ZARR_LOGGER = logging.getLogger(__name__)
 
 CALLBACK_RESULT = TypeVar("CALLBACK_RESULT")
+DATASET = TypeVar("DATASET")
+
+
+class RetriableRemoteHttpError(RuntimeError):
+    pass
 
 
 def _exception_chain(error: Exception):
@@ -36,9 +41,24 @@ def _exception_chain(error: Exception):
 
 def _is_retriable_remote_http_error(error: Exception) -> bool:
     return any(
-        isinstance(exception, ClientError) or any(token in str(exception) for token in RETRIABLE_HTTP_ERROR_TOKENS)
+        isinstance(exception, (ClientError, RetriableRemoteHttpError))
+        or any(token in str(exception) for token in RETRIABLE_HTTP_ERROR_TOKENS)
         for exception in _exception_chain(error)
     )
+
+
+def require_remote_dataset_dimensions(
+    dataset: DATASET,
+    expected_dimensions: Iterable[str],
+    operation_name: str,
+) -> DATASET:
+    missing_dimensions = sorted(set(expected_dimensions) - set(dataset.dims))
+    if missing_dimensions:
+        raise RetriableRemoteHttpError(
+            f"Remote dataset opened without expected dimensions {missing_dimensions} during {operation_name}. "
+            f"Available dimensions: {sorted(dataset.dims)}"
+        )
+    return dataset
 
 
 def with_remote_http_retries(
