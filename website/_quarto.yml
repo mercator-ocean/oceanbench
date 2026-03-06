@@ -21,7 +21,10 @@ website:
   repo-subdir: website
   page-footer: |
     Powered by:
-    [![](https://datalab.dive.edito.eu/custom-resources/logos/Full_EU_DTO_Banner.jpeg){height=65px}](https://edito.eu)
+    <a href="https://edito.eu">
+      <img class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_A1%20Version.png" alt="EDITO logo" height="65" />
+      <img class="only-dark" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_A1%20Version%20Negative.png" alt="EDITO logo" height="65" />
+    </a>
 execute:
   cache: false
 format:
