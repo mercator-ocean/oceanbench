@@ -8,7 +8,8 @@ from time import sleep
 from typing import TypeVar
 import logging
 
-from aiohttp.client_exceptions import ClientError
+from aiohttp.client_exceptions import ClientError, ClientPayloadError
+from aiohttp.http_exceptions import ContentLengthError
 
 REMOTE_HTTP_RETRIES_ENVIRONMENT_VARIABLE = "OCEANBENCH_REMOTE_HTTP_RETRIES"
 DEFAULT_REMOTE_HTTP_RETRIES = 3
@@ -41,7 +42,15 @@ def _exception_chain(error: Exception):
 
 def _is_retriable_remote_http_error(error: Exception) -> bool:
     return any(
-        isinstance(exception, (ClientError, RetriableRemoteHttpError))
+        isinstance(
+            exception,
+            (
+                ClientError,
+                ClientPayloadError,
+                ContentLengthError,
+                RetriableRemoteHttpError,
+            ),
+        )
         or any(token in str(exception) for token in RETRIABLE_HTTP_ERROR_TOKENS)
         for exception in _exception_chain(error)
     )
