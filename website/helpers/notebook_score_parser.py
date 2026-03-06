@@ -12,6 +12,14 @@ from helpers.type import ModelScore
 
 _VARIABLE_LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]+)\) \[([^\]]*)\](?:\{([^}]+)\})?$")
 _LEAD_DAY_NUMBER_PATTERN = re.compile(r"(\d+)$")
+_DISPLAY_NAME_RENAMES = {
+    "height": "sea surface height",
+    "surface height": "sea surface height",
+    "northward velocity": "meridional current",
+    "eastward velocity": "zonal current",
+    "northward geostrophic velocity": "meridional geostrophic current",
+    "eastward geostrophic velocity": "zonal geostrophic current",
+}
 
 
 def _parse_variable_label(label: str) -> tuple[str, str, str, str]:
@@ -19,6 +27,10 @@ def _parse_variable_label(label: str) -> tuple[str, str, str, str]:
     if match:
         return match.group(1), match.group(2), match.group(3), match.group(4) or ""
     return label, "", "unknown", ""
+
+
+def _normalise_display_name(display_name: str) -> str:
+    return _DISPLAY_NAME_RENAMES.get(display_name.lower(), display_name)
 
 
 _METRICS = [
@@ -132,7 +144,7 @@ def _convert_depth_variable_table_to_model_score(raw_table: str, name: str) -> M
         for display_name, unit, cf_name, depth_label in [_parse_variable_label(row["label"])]
         if depth_label
         for depth in [depth_label.capitalize()]
-        for variable_name in [display_name.removeprefix(depth + " ")]
+        for variable_name in [_normalise_display_name(display_name.removeprefix(depth + " "))]
     ]
     unique_depths = dict.fromkeys(depth for depth, _, _, _, _ in parsed_rows)
     depths = {
@@ -151,7 +163,7 @@ def _convert_depth_variable_table_to_model_score(raw_table: str, name: str) -> M
 def _convert_flat_table_to_model_score(raw_table: str, name: str) -> ModelScore:
     rows = _parse_html_table_rows(raw_table)
     variables = {
-        display_name: {"cf_name": cf_name, "unit": unit, "data": row["data"]}
+        _normalise_display_name(display_name): {"cf_name": cf_name, "unit": unit, "data": row["data"]}
         for row in rows
         for display_name, unit, cf_name, _depth_label in [_parse_variable_label(row["label"])]
     }

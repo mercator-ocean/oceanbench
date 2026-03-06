@@ -84,14 +84,18 @@
 }
 
 .score-table .cf-name {
-  display: inline-block;
+  display: block;
   font-weight: 400;
-  font-size: 0.67rem;
+  font-size: 0.58rem;
+  line-height: 1.1;
   color: var(--bs-secondary, #6c757d);
-  max-width: 16ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  width: 100%;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
   vertical-align: bottom;
 }
 
