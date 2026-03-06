@@ -11,6 +11,7 @@ import copernicusmarine
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
+from oceanbench.core.remote_http import require_remote_dataset_dimensions
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
@@ -32,7 +33,12 @@ def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
     return open_mfdataset(
         list(map(_glorys_1_4_path, first_day_datetimes)),
         engine="zarr",
-        preprocess=lambda dataset: dataset.isel(time=slice(0, lead_days_count))
+        preprocess=lambda dataset: require_remote_dataset_dimensions(
+            dataset,
+            [Dimension.TIME.key()],
+            "GLORYS quarter-degree dataset open",
+        )
+        .isel(time=slice(0, lead_days_count))
         .rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()})
         .assign({Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}),
         combine="nested",
@@ -88,9 +94,13 @@ def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
     return open_mfdataset(
         list(map(_glorys_1_degree_path, first_day_datetimes)),
         engine="zarr",
-        preprocess=lambda dataset: dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign(
-            {Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}
-        ),
+        preprocess=lambda dataset: require_remote_dataset_dimensions(
+            dataset,
+            [Dimension.TIME.key()],
+            "GLORYS one-degree dataset open",
+        )
+        .rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()})
+        .assign({Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}),
         combine="nested",
         concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
         parallel=False,
