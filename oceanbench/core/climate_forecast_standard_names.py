@@ -21,6 +21,7 @@ class StandardVariable(Enum):
     EASTWARD_SEA_WATER_VELOCITY = "eastward_sea_water_velocity"
     MIXED_LAYER_THICKNESS = "ocean_mixed_layer_thickness"
     GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY = "geostrophic_northward_sea_water_velocity"
+    SEA_SURFACE_TEMPERATURE = "sea_surface_temperature"
     GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY = "geostrophic_eastward_sea_water_velocity"
 
 
