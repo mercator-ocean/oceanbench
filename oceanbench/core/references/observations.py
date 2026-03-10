@@ -7,7 +7,7 @@ import pandas
 from xarray import Dataset, open_mfdataset
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.remote_http import require_remote_dataset_dimensions
+from oceanbench.core.remote_http import RetriableRemoteDataError, require_remote_dataset_dimensions
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 
@@ -68,9 +68,14 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     )
     observations_dataset = require_remote_dataset_dimensions(
         observations_dataset,
-        [time_key, source_observation_dimension_key],
+        [source_observation_dimension_key],
         "observation dataset open",
     )
+    if time_key not in observations_dataset.variables:
+        raise RetriableRemoteDataError(
+            f"Remote dataset opened without expected variable {time_key!r} during observation dataset open. "
+            f"Available variables: {sorted(observations_dataset.variables)}"
+        )
     observations_dataset = observations_dataset.rename({source_observation_dimension_key: observation_dimension_key})
     observations_dataset = _assign_standard_names(observations_dataset)
 
