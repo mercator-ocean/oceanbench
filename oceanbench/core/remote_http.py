@@ -8,17 +8,16 @@ from time import sleep
 from typing import TypeVar
 import logging
 
-from aiohttp.client_exceptions import ClientError, ClientPayloadError
-from aiohttp.http_exceptions import ContentLengthError
-
 REMOTE_HTTP_RETRIES_ENVIRONMENT_VARIABLE = "OCEANBENCH_REMOTE_HTTP_RETRIES"
 DEFAULT_REMOTE_HTTP_RETRIES = 3
 DEFAULT_RETRY_BACKOFF_SECONDS = 2
 RETRIABLE_HTTP_ERROR_TOKENS = (
-    "ClientPayloadError",
-    "ContentLengthError",
     "Server disconnected",
     "Connection reset by peer",
+)
+RETRIABLE_REMOTE_BACKEND_MODULE_PREFIXES = (
+    "aiohttp",
+    "botocore",
 )
 
 REMOTE_ZARR_LOGGER = logging.getLogger(__name__)
@@ -27,7 +26,7 @@ CALLBACK_RESULT = TypeVar("CALLBACK_RESULT")
 DATASET = TypeVar("DATASET")
 
 
-class RetriableRemoteHttpError(RuntimeError):
+class RetriableRemoteDataError(RuntimeError):
     pass
 
 
@@ -40,17 +39,14 @@ def _exception_chain(error: Exception):
         current_exception = current_exception.__cause__ or current_exception.__context__
 
 
-def _is_retriable_remote_http_error(error: Exception) -> bool:
+def _originates_from_retriable_remote_backend(exception: Exception) -> bool:
+    return exception.__class__.__module__.startswith(RETRIABLE_REMOTE_BACKEND_MODULE_PREFIXES)
+
+
+def _is_retriable_remote_data_error(error: Exception) -> bool:
     return any(
-        isinstance(
-            exception,
-            (
-                ClientError,
-                ClientPayloadError,
-                ContentLengthError,
-                RetriableRemoteHttpError,
-            ),
-        )
+        isinstance(exception, RetriableRemoteDataError)
+        or _originates_from_retriable_remote_backend(exception)
         or any(token in str(exception) for token in RETRIABLE_HTTP_ERROR_TOKENS)
         for exception in _exception_chain(error)
     )
@@ -63,7 +59,7 @@ def require_remote_dataset_dimensions(
 ) -> DATASET:
     missing_dimensions = sorted(set(expected_dimensions) - set(dataset.dims))
     if missing_dimensions:
-        raise RetriableRemoteHttpError(
+        raise RetriableRemoteDataError(
             f"Remote dataset opened without expected dimensions {missing_dimensions} during {operation_name}. "
             f"Available dimensions: {sorted(dataset.dims)}"
         )
@@ -79,11 +75,11 @@ def with_remote_http_retries(
         try:
             return callback()
         except Exception as error:
-            if not _is_retriable_remote_http_error(error) or attempt == retry_count:
+            if not _is_retriable_remote_data_error(error) or attempt == retry_count:
                 raise
             backoff_seconds = DEFAULT_RETRY_BACKOFF_SECONDS * attempt
             REMOTE_ZARR_LOGGER.warning(
-                "Remote HTTP read failed during %s (%s/%s): %s. Retrying in %ss.",
+                "Remote data read failed during %s (%s/%s): %s. Retrying in %ss.",
                 operation_name,
                 attempt,
                 retry_count,
@@ -92,4 +88,4 @@ def with_remote_http_retries(
             )
             sleep(backoff_seconds)
 
-    raise RuntimeError(f"Remote HTTP retries exhausted for {operation_name}")
+    raise RuntimeError(f"Remote data retries exhausted for {operation_name}")
