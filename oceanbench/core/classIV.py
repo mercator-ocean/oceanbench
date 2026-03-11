@@ -20,6 +20,7 @@ from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
+from oceanbench.core.resolution import get_dataset_resolution
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MEAN_SEA_SURFACE_HEIGHT_URL = (
@@ -104,27 +105,27 @@ def _create_observations_dataframe(
     return observations_dataframe.loc[observations_dataframe["depth_bin"] != ""]
 
 
-def _apply_sea_surface_height_correction(
-    dataframe: pandas.DataFrame,
+def _convert_forecast_ssh_to_sla(
+    model_variable: xarray.DataArray,
     variable_key: str,
-) -> pandas.DataFrame:
+) -> xarray.DataArray:
     if variable_key != Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
-        return dataframe
+        return model_variable
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
     mean_sea_surface_height = _load_mean_sea_surface_height()
-    latitudes = xarray.DataArray(dataframe[latitude_key].values, dims="observation")
-    longitudes = xarray.DataArray(dataframe[longitude_key].values, dims="observation")
-    mean_sea_surface_height_at_observations = mean_sea_surface_height.interp(
-        **{latitude_key: latitudes, longitude_key: longitudes}, method="linear"
-    ).values
-    corrected_dataframe = dataframe.copy()
-    corrected_dataframe["observation_value"] = (
-        dataframe["observation_value"]
-        + mean_sea_surface_height_at_observations
-        + REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
-    )
-    return corrected_dataframe
+    resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
+    if resolution == "twelfth_degree":
+        mean_on_model_grid = mean_sea_surface_height
+    else:
+        mean_on_model_grid = mean_sea_surface_height.interp(
+            {
+                latitude_key: model_variable[latitude_key],
+                longitude_key: model_variable[longitude_key],
+            },
+            method="linear",
+        )
+    return model_variable - mean_on_model_grid - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
 
 
 def _interpolate_vertically(
@@ -300,10 +301,12 @@ def rmsd_class4_validation(
         if observations_dataframe.empty:
             continue
 
-        observations_dataframe = _apply_sea_surface_height_correction(observations_dataframe, standard_variable_key)
         observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
 
-        model_variable = challenger[challenger_variable_key]
+        model_variable = _convert_forecast_ssh_to_sla(
+            challenger[challenger_variable_key],
+            standard_variable_key,
+        )
         observations_dataframe["model_value"] = _interpolate_model_to_observations(
             model_variable, observations_dataframe
         )
