@@ -2,14 +2,22 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from os import environ
+from pathlib import Path
+import shutil
+
 import numpy
 import pandas
-from xarray import Dataset, open_mfdataset
+from xarray import Dataset, open_dataset, open_mfdataset
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.remote_http import RetriableRemoteDataError, require_remote_dataset_dimensions
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
+LOCAL_STAGE_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE"
+LOCAL_STAGE_DIRECTORY_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE_DIRECTORY"
+LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
+LOCAL_STAGE_ALL_KEY = "all"
 
 
 class ObservationDataUnavailableError(ValueError):
@@ -38,6 +46,36 @@ def _assign_standard_names(observations_dataset: Dataset) -> Dataset:
     return observations_dataset
 
 
+def _should_stage_observations_locally() -> bool:
+    local_stage_value = environ.get(LOCAL_STAGE_ENVIRONMENT_VARIABLE, "")
+    local_stage_keys = {key.strip().lower() for key in local_stage_value.split(",") if key.strip()}
+    return LOCAL_STAGE_OBSERVATIONS_KEY in local_stage_keys or LOCAL_STAGE_ALL_KEY in local_stage_keys
+
+
+def _observations_stage_path(first_day_start: str, last_day_end: str, lead_days_count: int) -> Path:
+    default_stage_directory = Path(environ.get("TMPDIR", "/tmp")) / "oceanbench-stage"
+    base_stage_directory = Path(environ.get(LOCAL_STAGE_DIRECTORY_ENVIRONMENT_VARIABLE, str(default_stage_directory)))
+    return base_stage_directory / (
+        f"observations-{first_day_start.replace('-', '')}-{last_day_end.replace('-', '')}-{lead_days_count}d.zarr"
+    )
+
+
+def _write_staged_observations_dataset(observations_dataset: Dataset, stage_path: Path) -> None:
+    staged_dataset = observations_dataset.load()
+    for variable_name in staged_dataset.variables:
+        staged_dataset[variable_name].encoding.pop("chunks", None)
+    temporary_stage_path = stage_path.with_name(f"{stage_path.name}.tmp")
+    stage_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(temporary_stage_path, ignore_errors=True)
+    staged_dataset.to_zarr(temporary_stage_path, mode="w")
+    shutil.rmtree(stage_path, ignore_errors=True)
+    temporary_stage_path.rename(stage_path)
+
+
+def _open_staged_observations_dataset(stage_path: Path) -> Dataset:
+    return open_dataset(stage_path, engine="zarr")
+
+
 def observations(challenger_dataset: Dataset) -> Dataset:
     time_key = Dimension.TIME.key()
     lead_day_index_key = Dimension.LEAD_DAY_INDEX.key()
@@ -61,6 +99,9 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
     last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
+    local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)
+    if _should_stage_observations_locally() and local_stage_path.exists():
+        return _open_staged_observations_dataset(local_stage_path)
 
     observations_dataset = open_mfdataset(
         list(map(observation_path, observation_days)),
@@ -101,7 +142,9 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     selected_run_indices = numpy.argmax(observation_window_masks[:, selected_observations_mask], axis=0)
     selected_first_day_coord = first_day_datetimes[selected_run_indices]
 
-    return observations_dataset.isel({observation_dimension_key: selected_observations_mask}).assign_coords(
+    observations_dataset = observations_dataset.isel(
+        {observation_dimension_key: selected_observations_mask}
+    ).assign_coords(
         {
             first_day_datetime_key: (
                 (observation_dimension_key,),
@@ -109,3 +152,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
             )
         }
     )
+    if not _should_stage_observations_locally():
+        return observations_dataset
+    _write_staged_observations_dataset(observations_dataset, local_stage_path)
+    return _open_staged_observations_dataset(local_stage_path)
