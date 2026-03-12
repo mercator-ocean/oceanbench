@@ -2,10 +2,13 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
+import os
 import shutil
+import time
 import uuid
 import numpy
 import pandas
@@ -55,6 +58,8 @@ class FreezeParticle(JITParticle):
 
 
 LEAD_DAY_START = 2
+LAGRANGIAN_MAX_WORKERS_ENVIRONMENT_VARIABLE = "OCEANBENCH_LAGRANGIAN_MAX_WORKERS"
+DEFAULT_LAGRANGIAN_MAX_WORKERS = 1
 
 
 def _delete_error_particle(particle, _fieldset, _time):
@@ -141,28 +146,117 @@ def _all_deviation_of_lagrangian_trajectories(
     challenger_datasets = _split_dataset(challenger_dataset)
     reference_datasets = _split_dataset(reference_dataset)
     weeks_count = len(challenger_datasets)
+    max_workers = _lagrangian_max_workers(weeks_count)
     deviations = []
-    log_event("lagrangian_weeks_started", weeks_count=weeks_count)
-    for week_index, (challenger_week_dataset, reference_week_dataset) in enumerate(
-        zip(challenger_datasets, reference_datasets, strict=True), start=1
-    ):
-        first_day_datetime = str(challenger_week_dataset[Dimension.TIME.key()].values[0])
-        with instrumented_operation(
-            "lagrangian_week",
-            week_index=week_index,
-            weeks_count=weeks_count,
-            first_day_datetime=first_day_datetime,
+    log_event("lagrangian_parallel_configuration", weeks_count=weeks_count, max_workers=max_workers)
+    log_event("lagrangian_weeks_started", weeks_count=weeks_count, max_workers=max_workers)
+    if max_workers == 1:
+        for week_index, (challenger_week_dataset, reference_week_dataset) in enumerate(
+            zip(challenger_datasets, reference_datasets, strict=True), start=1
         ):
-            deviations.append(
-                _one_deviation_of_lagrangian_trajectories(
-                    challenger_week_dataset,
-                    reference_week_dataset,
-                    latitudes,
-                    longitudes,
+            first_day_datetime = str(challenger_week_dataset[Dimension.TIME.key()].values[0])
+            with instrumented_operation(
+                "lagrangian_week",
+                week_index=week_index,
+                weeks_count=weeks_count,
+                first_day_datetime=first_day_datetime,
+            ):
+                deviations.append(
+                    _one_deviation_of_lagrangian_trajectories(
+                        challenger_week_dataset,
+                        reference_week_dataset,
+                        latitudes,
+                        longitudes,
+                    )
                 )
-            )
-    log_event("lagrangian_weeks_completed", weeks_count=weeks_count)
+    else:
+        deviations = _parallel_deviation_of_lagrangian_trajectories(
+            challenger_datasets,
+            reference_datasets,
+            latitudes,
+            longitudes,
+            max_workers,
+        )
+    log_event("lagrangian_weeks_completed", weeks_count=weeks_count, max_workers=max_workers)
     return deviations
+
+
+def _lagrangian_max_workers(weeks_count: int) -> int:
+    raw_max_workers = os.environ.get(
+        LAGRANGIAN_MAX_WORKERS_ENVIRONMENT_VARIABLE,
+        str(DEFAULT_LAGRANGIAN_MAX_WORKERS),
+    )
+    requested_max_workers = int(raw_max_workers)
+    if requested_max_workers < 1:
+        raise ValueError(
+            f"{LAGRANGIAN_MAX_WORKERS_ENVIRONMENT_VARIABLE} must be a positive integer, "
+            f"got {requested_max_workers!r}."
+        )
+    return min(requested_max_workers, weeks_count)
+
+
+def _parallel_deviation_of_lagrangian_trajectories(
+    challenger_datasets: list[xarray.Dataset],
+    reference_datasets: list[xarray.Dataset],
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+    max_workers: int,
+) -> list[numpy.ndarray]:
+    weeks_count = len(challenger_datasets)
+    start_times: dict[int, float] = {}
+    first_day_datetimes: dict[int, str] = {}
+    deviations_by_week_index: dict[int, numpy.ndarray] = {}
+
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_to_week_index = {}
+        for week_index, (challenger_week_dataset, reference_week_dataset) in enumerate(
+            zip(challenger_datasets, reference_datasets, strict=True), start=1
+        ):
+            first_day_datetime = str(challenger_week_dataset[Dimension.TIME.key()].values[0])
+            first_day_datetimes[week_index] = first_day_datetime
+            start_times[week_index] = time.monotonic()
+            log_event(
+                "lagrangian_week_started",
+                week_index=week_index,
+                weeks_count=weeks_count,
+                first_day_datetime=first_day_datetime,
+            )
+            future = executor.submit(
+                _one_deviation_of_lagrangian_trajectories,
+                challenger_week_dataset,
+                reference_week_dataset,
+                latitudes,
+                longitudes,
+            )
+            future_to_week_index[future] = week_index
+
+        for future in as_completed(future_to_week_index):
+            week_index = future_to_week_index[future]
+            first_day_datetime = first_day_datetimes[week_index]
+            duration_seconds = time.monotonic() - start_times[week_index]
+            try:
+                deviations_by_week_index[week_index] = future.result()
+            except Exception as error:
+                log_event(
+                    "lagrangian_week_failed",
+                    week_index=week_index,
+                    weeks_count=weeks_count,
+                    first_day_datetime=first_day_datetime,
+                    duration_seconds=duration_seconds,
+                    error_type=error.__class__.__name__,
+                    error_module=error.__class__.__module__,
+                    error_message=str(error),
+                )
+                raise
+            log_event(
+                "lagrangian_week_completed",
+                week_index=week_index,
+                weeks_count=weeks_count,
+                first_day_datetime=first_day_datetime,
+                duration_seconds=duration_seconds,
+            )
+
+    return [deviations_by_week_index[week_index] for week_index in range(1, weeks_count + 1)]
 
 
 def _one_deviation_of_lagrangian_trajectories(
