@@ -24,6 +24,7 @@ from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.instrumentation import instrumented_operation, log_event
 from oceanbench.core.lead_day_utils import lead_day_labels
 import logging
 
@@ -137,17 +138,31 @@ def _all_deviation_of_lagrangian_trajectories(
     latitudes: numpy.ndarray,
     longitudes: numpy.ndarray,
 ):
-    return list(
-        map(
-            partial(
-                _one_deviation_of_lagrangian_trajectories,
-                latitudes=latitudes,
-                longitudes=longitudes,
-            ),
-            _split_dataset(challenger_dataset),
-            _split_dataset(reference_dataset),
-        )
-    )
+    challenger_datasets = _split_dataset(challenger_dataset)
+    reference_datasets = _split_dataset(reference_dataset)
+    weeks_count = len(challenger_datasets)
+    deviations = []
+    log_event("lagrangian_weeks_started", weeks_count=weeks_count)
+    for week_index, (challenger_week_dataset, reference_week_dataset) in enumerate(
+        zip(challenger_datasets, reference_datasets, strict=True), start=1
+    ):
+        first_day_datetime = str(challenger_week_dataset[Dimension.TIME.key()].values[0])
+        with instrumented_operation(
+            "lagrangian_week",
+            week_index=week_index,
+            weeks_count=weeks_count,
+            first_day_datetime=first_day_datetime,
+        ):
+            deviations.append(
+                _one_deviation_of_lagrangian_trajectories(
+                    challenger_week_dataset,
+                    reference_week_dataset,
+                    latitudes,
+                    longitudes,
+                )
+            )
+    log_event("lagrangian_weeks_completed", weeks_count=weeks_count)
+    return deviations
 
 
 def _one_deviation_of_lagrangian_trajectories(

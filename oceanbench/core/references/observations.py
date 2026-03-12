@@ -11,6 +11,7 @@ import pandas
 from xarray import Dataset, open_dataset, open_mfdataset
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.instrumentation import instrumented_operation, log_event
 from oceanbench.core.remote_http import RetriableRemoteDataError, require_remote_dataset_dimensions
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
@@ -97,8 +98,19 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
     local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)
     if _should_stage_observations_locally() and local_stage_path.exists():
+        log_event(
+            "observations_stage_reused",
+            stage_path=str(local_stage_path),
+            observation_days_count=len(observation_days),
+        )
         return _open_staged_observations_dataset(local_stage_path)
 
+    if _should_stage_observations_locally():
+        log_event(
+            "observations_stage_build_started",
+            stage_path=str(local_stage_path),
+            observation_days_count=len(observation_days),
+        )
     observations_dataset = open_mfdataset(
         list(map(observation_path, observation_days)),
         engine="zarr",
@@ -150,5 +162,15 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     )
     if not _should_stage_observations_locally():
         return observations_dataset
-    _write_staged_observations_dataset(observations_dataset, local_stage_path)
+    with instrumented_operation(
+        "observations_stage_write",
+        stage_path=str(local_stage_path),
+        selected_observations_count=int(selected_observations_mask.sum()),
+    ):
+        _write_staged_observations_dataset(observations_dataset, local_stage_path)
+    log_event(
+        "observations_stage_ready",
+        stage_path=str(local_stage_path),
+        selected_observations_count=int(selected_observations_mask.sum()),
+    )
     return _open_staged_observations_dataset(local_stage_path)

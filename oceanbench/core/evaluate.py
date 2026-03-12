@@ -6,6 +6,7 @@ from os import environ
 from pathlib import PurePosixPath
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
+from oceanbench.core.instrumentation import instrumented_operation, log_event
 
 from oceanbench.core.python2jupyter import (
     generate_evaluation_notebook_file,
@@ -116,12 +117,23 @@ def _evaluate_challenger(
     output_bucket: str | None,
     output_prefix: str | None,
 ):
-    generate_evaluation_notebook_file(
-        challenger_python_code_uri_or_local_path,
-        output_notebook_file_path=output_notebook_file_name,
-    )
-    _execute_evaluation_notebook_file(
-        output_notebook_file_name,
-        output_bucket,
-        output_prefix,
-    )
+    with instrumented_operation(
+        "evaluation",
+        challenger=challenger_python_code_uri_or_local_path,
+        output_notebook=output_notebook_file_name,
+    ):
+        log_event(
+            "evaluation_configuration",
+            challenger=challenger_python_code_uri_or_local_path,
+            output_bucket=output_bucket,
+            output_prefix=output_prefix,
+        )
+        generate_evaluation_notebook_file(
+            challenger_python_code_uri_or_local_path,
+            output_notebook_file_path=output_notebook_file_name,
+        )
+        _execute_evaluation_notebook_file(
+            output_notebook_file_name,
+            output_bucket,
+            output_prefix,
+        )

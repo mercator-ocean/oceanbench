@@ -8,6 +8,8 @@ from time import sleep
 from typing import TypeVar
 import logging
 
+from oceanbench.core.instrumentation import log_event
+
 REMOTE_HTTP_RETRIES_ENVIRONMENT_VARIABLE = "OCEANBENCH_REMOTE_HTTP_RETRIES"
 DEFAULT_REMOTE_HTTP_RETRIES = 3
 DEFAULT_RETRY_BACKOFF_SECONDS = 2
@@ -75,9 +77,30 @@ def with_remote_http_retries(
         try:
             return callback()
         except Exception as error:
-            if not _is_retriable_remote_data_error(error) or attempt == retry_count:
+            is_retriable_error = _is_retriable_remote_data_error(error)
+            if not is_retriable_error or attempt == retry_count:
+                log_event(
+                    "remote_operation_failed",
+                    operation=operation_name,
+                    attempt=attempt,
+                    retry_count=retry_count,
+                    retriable=is_retriable_error,
+                    error_type=error.__class__.__name__,
+                    error_module=error.__class__.__module__,
+                    error_message=str(error),
+                )
                 raise
             backoff_seconds = DEFAULT_RETRY_BACKOFF_SECONDS * attempt
+            log_event(
+                "remote_retry_scheduled",
+                operation=operation_name,
+                attempt=attempt,
+                retry_count=retry_count,
+                backoff_seconds=backoff_seconds,
+                error_type=error.__class__.__name__,
+                error_module=error.__class__.__module__,
+                error_message=str(error),
+            )
             REMOTE_ZARR_LOGGER.warning(
                 "Remote data read failed during %s (%s/%s): %s. Retrying in %ss.",
                 operation_name,

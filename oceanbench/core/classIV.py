@@ -20,6 +20,7 @@ from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
+from oceanbench.core.instrumentation import instrumented_operation, log_event
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MEAN_SEA_SURFACE_HEIGHT_URL = (
@@ -179,6 +180,7 @@ def _interpolate_vertically(
 def _interpolate_model_to_observations(
     model_data: xarray.DataArray,
     observations_dataframe: pandas.DataFrame,
+    variable_key: str,
 ) -> numpy.ndarray:
     observations_dataframe = observations_dataframe.reset_index(drop=True)
     latitude_key = Dimension.LATITUDE.key()
@@ -193,29 +195,39 @@ def _interpolate_model_to_observations(
     lead_day_to_index = {lead_day: index for index, lead_day in enumerate(lead_days)}
     model_values = numpy.full(len(observations_dataframe), numpy.nan)
     grouped_by_first_day = observations_dataframe.groupby("first_day", sort=False)
-    for first_day, first_day_group in grouped_by_first_day:
+    first_day_groups_count = observations_dataframe["first_day"].nunique()
+    for first_day_group_index, (first_day, first_day_group) in enumerate(grouped_by_first_day, start=1):
         grouped_by_lead_day = first_day_group.groupby("lead_day", sort=False)
         first_day_index = first_day_to_index[first_day]
-        for lead_day, observation_group in grouped_by_lead_day:
-            time_slice = model_data.isel(
-                {
-                    Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
-                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
-                }
-            ).compute()
-            observation_latitudes = observation_group[latitude_key].values
-            observation_longitudes = observation_group[longitude_key].values
-            observation_depths = observation_group[depth_key].values
-            observation_indices = observation_group.index.values
-            horizontally_interpolated = time_slice.interp(
-                {
-                    latitude_key: xarray.DataArray(observation_latitudes, dims="observation"),
-                    longitude_key: xarray.DataArray(observation_longitudes, dims="observation"),
-                },
-                method="linear",
-            ).values
-            interpolated = _interpolate_vertically(horizontally_interpolated, model_depths, observation_depths)
-            model_values[observation_indices] = interpolated
+        with instrumented_operation(
+            "class4_first_day",
+            variable=variable_key,
+            first_day_group_index=first_day_group_index,
+            first_day_groups_count=first_day_groups_count,
+            first_day=str(first_day),
+            lead_day_groups_count=first_day_group["lead_day"].nunique(),
+            observations_count=len(first_day_group),
+        ):
+            for lead_day, observation_group in grouped_by_lead_day:
+                time_slice = model_data.isel(
+                    {
+                        Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
+                        Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+                    }
+                ).compute()
+                observation_latitudes = observation_group[latitude_key].values
+                observation_longitudes = observation_group[longitude_key].values
+                observation_depths = observation_group[depth_key].values
+                observation_indices = observation_group.index.values
+                horizontally_interpolated = time_slice.interp(
+                    {
+                        latitude_key: xarray.DataArray(observation_latitudes, dims="observation"),
+                        longitude_key: xarray.DataArray(observation_longitudes, dims="observation"),
+                    },
+                    method="linear",
+                ).values
+                interpolated = _interpolate_vertically(horizontally_interpolated, model_depths, observation_depths)
+                model_values[observation_indices] = interpolated
     return model_values
 
 
@@ -291,26 +303,39 @@ def rmsd_class4_validation(
     resolved_variables = [(variable.key(), variable.key(), variable.key()) for variable in variables]
 
     for standard_variable_key, observation_variable_key, challenger_variable_key in resolved_variables:
-        observations_dataframe = _create_observations_dataframe(
-            observations,
-            observation_variable_key,
-            standard_variable_key,
-            lead_days_count,
-        )
-        if observations_dataframe.empty:
-            continue
+        with instrumented_operation("class4_variable", variable=standard_variable_key):
+            observations_dataframe = _create_observations_dataframe(
+                observations,
+                observation_variable_key,
+                standard_variable_key,
+                lead_days_count,
+            )
+            log_event(
+                "class4_variable_observations_loaded",
+                variable=standard_variable_key,
+                observations_count=len(observations_dataframe),
+            )
+            if observations_dataframe.empty:
+                continue
 
-        observations_dataframe = _apply_sea_surface_height_correction(observations_dataframe, standard_variable_key)
-        observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
+            observations_dataframe = _apply_sea_surface_height_correction(observations_dataframe, standard_variable_key)
+            observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
 
-        model_variable = challenger[challenger_variable_key]
-        observations_dataframe["model_value"] = _interpolate_model_to_observations(
-            model_variable, observations_dataframe
-        )
+            model_variable = challenger[challenger_variable_key]
+            observations_dataframe["model_value"] = _interpolate_model_to_observations(
+                model_variable,
+                observations_dataframe,
+                standard_variable_key,
+            )
 
-        variable_results = _compute_rmsd_table(observations_dataframe, standard_variable_key)
-        if not variable_results.empty:
-            all_results.append(variable_results)
+            variable_results = _compute_rmsd_table(observations_dataframe, standard_variable_key)
+            log_event(
+                "class4_variable_results_ready",
+                variable=standard_variable_key,
+                result_rows=len(variable_results),
+            )
+            if not variable_results.empty:
+                all_results.append(variable_results)
 
     if not all_results:
         result = pandas.DataFrame()
