@@ -113,5 +113,7 @@ def rmsd(
         prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
     with instrumented_operation("rmsd_build_expression", variables=variable_keys):
         rmsd_dataset = _rmsd(prepared_challenger_dataset, prepared_reference_dataset)
+    with instrumented_operation("rmsd_compute_dataset", variables=variable_keys):
+        computed_rmsd_dataset = rmsd_dataset.compute()
     with instrumented_operation("rmsd_materialize_dataframe", variables=variable_keys):
-        return _to_pretty_dataframe(rmsd_dataset, variables)
+        return _to_pretty_dataframe(computed_rmsd_dataset, variables)
