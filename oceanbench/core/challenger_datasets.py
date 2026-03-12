@@ -10,6 +10,7 @@ import xarray
 from datetime import datetime
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
+from oceanbench.core.instrumentation import instrumented_operation
 from oceanbench.core.remote_http import require_remote_dataset_dimensions, with_remote_http_retries
 
 
@@ -73,22 +74,28 @@ def _open_multizarr_forecasts_as_challenger_dataset(
     zarr_path_callback,
 ) -> xarray.Dataset:
     first_day_datetimes: list[datetime] = generate_dates("2024-01-03", "2024-12-25", 7)
+    dataset_name = zarr_path_callback.__name__.replace("_dataset_path", "")
 
     def open_dataset() -> xarray.Dataset:
-        challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
-            list(map(zarr_path_callback, first_day_datetimes)),
-            engine="zarr",
-            preprocess=lambda dataset: require_remote_dataset_dimensions(
-                dataset,
-                ["time"],
-                "challenger dataset open",
-            )
-            .rename({"time": "lead_day_index"})
-            .assign({"lead_day_index": range(LEAD_DAYS_COUNT)}),
-            combine="nested",
-            concat_dim="first_day_datetime",
-            parallel=False,
-        ).assign({"first_day_datetime": first_day_datetimes})
-        return challenger_dataset
+        with instrumented_operation(
+            "challenger_dataset_load",
+            dataset=dataset_name,
+            weeks_count=len(first_day_datetimes),
+        ):
+            challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
+                list(map(zarr_path_callback, first_day_datetimes)),
+                engine="zarr",
+                preprocess=lambda dataset: require_remote_dataset_dimensions(
+                    dataset,
+                    ["time"],
+                    "challenger dataset open",
+                )
+                .rename({"time": "lead_day_index"})
+                .assign({"lead_day_index": range(LEAD_DAYS_COUNT)}),
+                combine="nested",
+                concat_dim="first_day_datetime",
+                parallel=False,
+            ).assign({"first_day_datetime": first_day_datetimes})
+            return challenger_dataset
 
     return with_remote_http_retries("challenger dataset open", open_dataset)

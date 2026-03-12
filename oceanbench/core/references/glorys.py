@@ -11,6 +11,7 @@ import copernicusmarine
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
+from oceanbench.core.instrumentation import instrumented_operation
 from oceanbench.core.remote_http import require_remote_dataset_dimensions
 
 logger = logging.getLogger("copernicusmarine")
@@ -30,21 +31,22 @@ def _glorys_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
 def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
-    return open_mfdataset(
-        list(map(_glorys_1_4_path, first_day_datetimes)),
-        engine="zarr",
-        preprocess=lambda dataset: require_remote_dataset_dimensions(
-            dataset,
-            [Dimension.TIME.key()],
-            "GLORYS quarter-degree dataset open",
-        )
-        .isel(time=slice(0, lead_days_count))
-        .rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()})
-        .assign({Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}),
-        combine="nested",
-        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-        parallel=False,
-    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+    with instrumented_operation("reference_dataset_load", dataset="glorys", resolution="quarter_degree"):
+        return open_mfdataset(
+            list(map(_glorys_1_4_path, first_day_datetimes)),
+            engine="zarr",
+            preprocess=lambda dataset: require_remote_dataset_dimensions(
+                dataset,
+                [Dimension.TIME.key()],
+                "GLORYS quarter-degree dataset open",
+            )
+            .isel(time=slice(0, lead_days_count))
+            .rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()})
+            .assign({Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}),
+            combine="nested",
+            concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
+            parallel=False,
+        ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 
 def _glorys_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.ndarray) -> Dataset:
@@ -74,37 +76,47 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     target_depths = challenger_dataset[Dimension.DEPTH.key()].values
 
     datasets = []
-    for first_day_datetime in first_day_datetimes:
-        dataset = _glorys_1_12_path(first_day_datetime, days_count=lead_days_count, target_depths=target_depths)
-        dataset = dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
-            {Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}
+    with instrumented_operation("reference_dataset_load", dataset="glorys", resolution="twelfth_degree"):
+        for week_index, first_day_datetime in enumerate(first_day_datetimes, start=1):
+            with instrumented_operation(
+                "reference_dataset_week_load",
+                dataset="glorys",
+                resolution="twelfth_degree",
+                week_index=week_index,
+                weeks_count=len(first_day_datetimes),
+                first_day_datetime=str(first_day_datetime),
+            ):
+                dataset = _glorys_1_12_path(first_day_datetime, days_count=lead_days_count, target_depths=target_depths)
+                dataset = dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
+                    {Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}
+                )
+                datasets.append(dataset)
+
+        combined_dataset = concat(datasets, dim=Dimension.FIRST_DAY_DATETIME.key()).assign_coords(
+            {Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes}
         )
-        datasets.append(dataset)
 
-    combined_dataset = concat(datasets, dim=Dimension.FIRST_DAY_DATETIME.key()).assign_coords(
-        {Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes}
-    )
-
-    return combined_dataset
+        return combined_dataset
 
 
 def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
-    return open_mfdataset(
-        list(map(_glorys_1_degree_path, first_day_datetimes)),
-        engine="zarr",
-        preprocess=lambda dataset: require_remote_dataset_dimensions(
-            dataset,
-            [Dimension.TIME.key()],
-            "GLORYS one-degree dataset open",
-        )
-        .rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()})
-        .assign({Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}),
-        combine="nested",
-        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-        parallel=False,
-    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+    with instrumented_operation("reference_dataset_load", dataset="glorys", resolution="one_degree"):
+        return open_mfdataset(
+            list(map(_glorys_1_degree_path, first_day_datetimes)),
+            engine="zarr",
+            preprocess=lambda dataset: require_remote_dataset_dimensions(
+                dataset,
+                [Dimension.TIME.key()],
+                "GLORYS one-degree dataset open",
+            )
+            .rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()})
+            .assign({Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count)}),
+            combine="nested",
+            concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
+            parallel=False,
+        ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 
 def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
