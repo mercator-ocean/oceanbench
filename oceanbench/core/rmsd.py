@@ -9,6 +9,7 @@ import pandas
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
+from oceanbench.core.instrumentation import instrumented_operation
 from oceanbench.core.dataset_utils import (
     Variable,
     Dimension,
@@ -105,10 +106,12 @@ def rmsd(
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
 ) -> pandas.DataFrame:
-    return _to_pretty_dataframe(
-        _rmsd(
-            _select_variables(_harmonise_dataset(challenger_dataset), variables),
-            _select_variables(_harmonise_dataset(reference_dataset), variables),
-        ),
-        variables,
-    )
+    variable_keys = [variable.key() for variable in variables]
+    with instrumented_operation("rmsd_prepare_dataset", role="challenger", variables=variable_keys):
+        prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
+    with instrumented_operation("rmsd_prepare_dataset", role="reference", variables=variable_keys):
+        prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
+    with instrumented_operation("rmsd_build_expression", variables=variable_keys):
+        rmsd_dataset = _rmsd(prepared_challenger_dataset, prepared_reference_dataset)
+    with instrumented_operation("rmsd_materialize_dataframe", variables=variable_keys):
+        return _to_pretty_dataframe(rmsd_dataset, variables)
