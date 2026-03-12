@@ -6,9 +6,9 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
+from multiprocessing import get_context
 import os
 import shutil
-import time
 import uuid
 import numpy
 import pandas
@@ -60,6 +60,10 @@ class FreezeParticle(JITParticle):
 LEAD_DAY_START = 2
 LAGRANGIAN_MAX_WORKERS_ENVIRONMENT_VARIABLE = "OCEANBENCH_LAGRANGIAN_MAX_WORKERS"
 DEFAULT_LAGRANGIAN_MAX_WORKERS = 1
+_PARALLEL_CHALLENGER_DATASETS: list[xarray.Dataset] | None = None
+_PARALLEL_REFERENCE_DATASETS: list[xarray.Dataset] | None = None
+_PARALLEL_LATITUDES: numpy.ndarray | None = None
+_PARALLEL_LONGITUDES: numpy.ndarray | None = None
 
 
 def _delete_error_particle(particle, _fieldset, _time):
@@ -192,6 +196,13 @@ def _lagrangian_max_workers(weeks_count: int) -> int:
             f"{LAGRANGIAN_MAX_WORKERS_ENVIRONMENT_VARIABLE} must be a positive integer, "
             f"got {requested_max_workers!r}."
         )
+    if requested_max_workers > 1 and not _supports_parallel_lagrangian_workers():
+        log_event(
+            "lagrangian_parallel_unavailable",
+            requested_max_workers=requested_max_workers,
+            reason="fork_start_method_unavailable",
+        )
+        return 1
     return min(requested_max_workers, weeks_count)
 
 
@@ -203,60 +214,126 @@ def _parallel_deviation_of_lagrangian_trajectories(
     max_workers: int,
 ) -> list[numpy.ndarray]:
     weeks_count = len(challenger_datasets)
-    start_times: dict[int, float] = {}
-    first_day_datetimes: dict[int, str] = {}
     deviations_by_week_index: dict[int, numpy.ndarray] = {}
-
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        future_to_week_index = {}
-        for week_index, (challenger_week_dataset, reference_week_dataset) in enumerate(
-            zip(challenger_datasets, reference_datasets, strict=True), start=1
-        ):
-            first_day_datetime = str(challenger_week_dataset[Dimension.TIME.key()].values[0])
-            first_day_datetimes[week_index] = first_day_datetime
-            start_times[week_index] = time.monotonic()
-            log_event(
-                "lagrangian_week_started",
-                week_index=week_index,
-                weeks_count=weeks_count,
-                first_day_datetime=first_day_datetime,
-            )
-            future = executor.submit(
-                _one_deviation_of_lagrangian_trajectories,
-                challenger_week_dataset,
-                reference_week_dataset,
-                latitudes,
-                longitudes,
-            )
-            future_to_week_index[future] = week_index
-
-        for future in as_completed(future_to_week_index):
-            week_index = future_to_week_index[future]
-            first_day_datetime = first_day_datetimes[week_index]
-            duration_seconds = time.monotonic() - start_times[week_index]
-            try:
-                deviations_by_week_index[week_index] = future.result()
-            except Exception as error:
-                log_event(
-                    "lagrangian_week_failed",
-                    week_index=week_index,
-                    weeks_count=weeks_count,
-                    first_day_datetime=first_day_datetime,
-                    duration_seconds=duration_seconds,
-                    error_type=error.__class__.__name__,
-                    error_module=error.__class__.__module__,
-                    error_message=str(error),
+    _set_parallel_lagrangian_state(
+        challenger_datasets,
+        reference_datasets,
+        latitudes,
+        longitudes,
+    )
+    try:
+        mp_context = get_context("fork")
+        with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp_context) as executor:
+            future_to_week_index = {}
+            next_week_index = 1
+            for _ in range(min(max_workers, weeks_count)):
+                next_week_index = _submit_parallel_lagrangian_week(
+                    executor,
+                    future_to_week_index,
+                    challenger_datasets,
+                    next_week_index,
+                    weeks_count,
                 )
-                raise
-            log_event(
-                "lagrangian_week_completed",
-                week_index=week_index,
-                weeks_count=weeks_count,
-                first_day_datetime=first_day_datetime,
-                duration_seconds=duration_seconds,
-            )
+
+            while future_to_week_index:
+                for future in as_completed(tuple(future_to_week_index)):
+                    week_index = future_to_week_index.pop(future)
+                    deviations_by_week_index[week_index] = future.result()
+                    if next_week_index <= weeks_count:
+                        next_week_index = _submit_parallel_lagrangian_week(
+                            executor,
+                            future_to_week_index,
+                            challenger_datasets,
+                            next_week_index,
+                            weeks_count,
+                        )
+                    break
+    finally:
+        _clear_parallel_lagrangian_state()
 
     return [deviations_by_week_index[week_index] for week_index in range(1, weeks_count + 1)]
+
+
+def _supports_parallel_lagrangian_workers() -> bool:
+    try:
+        get_context("fork")
+    except ValueError:
+        return False
+    return True
+
+
+def _set_parallel_lagrangian_state(
+    challenger_datasets: list[xarray.Dataset],
+    reference_datasets: list[xarray.Dataset],
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+) -> None:
+    global _PARALLEL_CHALLENGER_DATASETS
+    global _PARALLEL_REFERENCE_DATASETS
+    global _PARALLEL_LATITUDES
+    global _PARALLEL_LONGITUDES
+    _PARALLEL_CHALLENGER_DATASETS = challenger_datasets
+    _PARALLEL_REFERENCE_DATASETS = reference_datasets
+    _PARALLEL_LATITUDES = latitudes
+    _PARALLEL_LONGITUDES = longitudes
+
+
+def _clear_parallel_lagrangian_state() -> None:
+    global _PARALLEL_CHALLENGER_DATASETS
+    global _PARALLEL_REFERENCE_DATASETS
+    global _PARALLEL_LATITUDES
+    global _PARALLEL_LONGITUDES
+    _PARALLEL_CHALLENGER_DATASETS = None
+    _PARALLEL_REFERENCE_DATASETS = None
+    _PARALLEL_LATITUDES = None
+    _PARALLEL_LONGITUDES = None
+
+
+def _submit_parallel_lagrangian_week(
+    executor: ProcessPoolExecutor,
+    future_to_week_index: dict,
+    challenger_datasets: list[xarray.Dataset],
+    week_index: int,
+    weeks_count: int,
+) -> int:
+    first_day_datetime = str(
+        challenger_datasets[week_index - 1][Dimension.TIME.key()].values[0]
+    )
+    log_event(
+        "lagrangian_week_submitted",
+        week_index=week_index,
+        weeks_count=weeks_count,
+        first_day_datetime=first_day_datetime,
+    )
+    future = executor.submit(_compute_parallel_lagrangian_week, week_index, weeks_count)
+    future_to_week_index[future] = week_index
+    return week_index + 1
+
+
+def _compute_parallel_lagrangian_week(week_index: int, weeks_count: int) -> numpy.ndarray:
+    if (
+        _PARALLEL_CHALLENGER_DATASETS is None
+        or _PARALLEL_REFERENCE_DATASETS is None
+        or _PARALLEL_LATITUDES is None
+        or _PARALLEL_LONGITUDES is None
+    ):
+        raise RuntimeError("Parallel lagrangian worker state is not initialised.")
+
+    challenger_week_dataset = _PARALLEL_CHALLENGER_DATASETS[week_index - 1]
+    reference_week_dataset = _PARALLEL_REFERENCE_DATASETS[week_index - 1]
+    first_day_datetime = str(challenger_week_dataset[Dimension.TIME.key()].values[0])
+    with instrumented_operation(
+        "lagrangian_week",
+        week_index=week_index,
+        weeks_count=weeks_count,
+        first_day_datetime=first_day_datetime,
+    ):
+        return _one_deviation_of_lagrangian_trajectories(
+            challenger_week_dataset,
+            reference_week_dataset,
+            _PARALLEL_LATITUDES,
+            _PARALLEL_LONGITUDES,
+        )
 
 
 def _one_deviation_of_lagrangian_trajectories(
