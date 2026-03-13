@@ -24,6 +24,17 @@ _resource_sampler_thread: Thread | None = None
 _write_lock = Lock()
 
 
+def _reset_after_fork() -> None:
+    global _resource_sampler_lock
+    global _resource_sampler_stop_event
+    global _resource_sampler_thread
+    global _write_lock
+    _resource_sampler_lock = Lock()
+    _resource_sampler_stop_event = Event()
+    _resource_sampler_thread = None
+    _write_lock = Lock()
+
+
 def is_instrumentation_enabled() -> bool:
     return _log_path() is not None
 
@@ -147,3 +158,6 @@ def _stop_resource_sampler() -> None:
 
 
 atexit.register(_stop_resource_sampler)
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_after_fork)
