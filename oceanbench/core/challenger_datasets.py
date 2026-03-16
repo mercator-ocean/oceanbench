@@ -8,6 +8,7 @@ This module exposes the challenger datasets evaluated in the benchmark.
 
 import xarray
 from datetime import datetime
+from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
 from oceanbench.core.instrumentation import instrumented_operation
@@ -40,7 +41,7 @@ def glo36v1() -> xarray.Dataset:
         .rename({"lat": "latitude", "lon": "longitude"})
         .assign({"first_day_datetime": first_day_datetimes})
     )
-    return challenger_dataset
+    return with_dataset_source(challenger_dataset, kind="challenger", name="glo36v1")
 
 
 def glonet() -> xarray.Dataset:
@@ -74,7 +75,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
     zarr_path_callback,
 ) -> xarray.Dataset:
     first_day_datetimes: list[datetime] = generate_dates("2024-01-03", "2024-12-25", 7)
-    dataset_name = zarr_path_callback.__name__.replace("_dataset_path", "")
+    dataset_name = zarr_path_callback.__name__.removeprefix("_").replace("_dataset_path", "")
 
     def open_dataset() -> xarray.Dataset:
         with instrumented_operation(
@@ -96,6 +97,6 @@ def _open_multizarr_forecasts_as_challenger_dataset(
                 concat_dim="first_day_datetime",
                 parallel=False,
             ).assign({"first_day_datetime": first_day_datetimes})
-            return challenger_dataset
+            return with_dataset_source(challenger_dataset, kind="challenger", name=dataset_name)
 
     return with_remote_http_retries("challenger dataset open", open_dataset)
