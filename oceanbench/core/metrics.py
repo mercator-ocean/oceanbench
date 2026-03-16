@@ -2,21 +2,28 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import os
+from multiprocessing import get_context
+
 import pandas
 import xarray
 
+from oceanbench.core.dataset_source import get_dataset_source, with_dataset_source
 from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_mixed_layer_depth
 from oceanbench.core.derived_quantities import compute_geostrophic_currents
 from oceanbench.core.instrumentation import instrumented_operation, log_event
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.rmsd import rmsd
+from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.references.observations import observations
 from oceanbench.core.remote_http import with_remote_http_retries
 
 from oceanbench.core.lagrangian_trajectory import (
+    DEFAULT_LAGRANGIAN_MAX_WORKERS,
+    LAGRANGIAN_MAX_WORKERS_ENVIRONMENT_VARIABLE,
     deviation_of_lagrangian_trajectories,
 )
 
@@ -52,6 +59,45 @@ def _glorys_reference_dataset(challenger_dataset: xarray.Dataset) -> xarray.Data
 
 def _glo12_reference_dataset(challenger_dataset: xarray.Dataset) -> xarray.Dataset:
     return _cached_reference_dataset("glo12", challenger_dataset, glo12_analysis_dataset)
+
+
+def _requested_lagrangian_max_workers() -> int:
+    return int(
+        os.environ.get(
+            LAGRANGIAN_MAX_WORKERS_ENVIRONMENT_VARIABLE,
+            str(DEFAULT_LAGRANGIAN_MAX_WORKERS),
+        )
+    )
+
+
+def _can_skip_lagrangian_reference_preload(challenger_dataset: xarray.Dataset) -> bool:
+    if _requested_lagrangian_max_workers() <= 1:
+        return False
+    if get_dataset_source(challenger_dataset) is None:
+        return False
+    try:
+        get_context("fork")
+        get_dataset_resolution(challenger_dataset)
+    except ValueError:
+        return False
+    return True
+
+
+def _lagrangian_reference_dataset(
+    dataset_name: str,
+    challenger_dataset: xarray.Dataset,
+    load_reference_dataset,
+) -> xarray.Dataset:
+    if not _can_skip_lagrangian_reference_preload(challenger_dataset):
+        return _cached_reference_dataset(dataset_name, challenger_dataset, load_reference_dataset)
+
+    log_event("lagrangian_reference_preload_skipped", dataset=dataset_name)
+    return with_dataset_source(
+        xarray.Dataset(),
+        kind="reference",
+        name=dataset_name,
+        resolution=get_dataset_resolution(challenger_dataset),
+    )
 
 
 def rmsd_of_variables_compared_to_observations(
@@ -153,7 +199,11 @@ def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
             "GLORYS lagrangian trajectories",
             lambda: deviation_of_lagrangian_trajectories(
                 challenger_dataset=challenger_dataset,
-                reference_dataset=_glorys_reference_dataset(challenger_dataset),
+                reference_dataset=_lagrangian_reference_dataset(
+                    "glorys",
+                    challenger_dataset,
+                    glorys_reanalysis_dataset,
+                ),
             ),
         ),
     )
@@ -227,7 +277,11 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
             "GLO12 lagrangian trajectories",
             lambda: deviation_of_lagrangian_trajectories(
                 challenger_dataset=challenger_dataset,
-                reference_dataset=_glo12_reference_dataset(challenger_dataset),
+                reference_dataset=_lagrangian_reference_dataset(
+                    "glo12",
+                    challenger_dataset,
+                    glo12_analysis_dataset,
+                ),
             ),
         ),
     )
