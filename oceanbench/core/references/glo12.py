@@ -8,6 +8,7 @@ import pandas
 from xarray import Dataset, open_mfdataset, merge, concat
 import logging
 from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.resolution import get_dataset_resolution
 import copernicusmarine
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
@@ -33,7 +34,7 @@ def _glo12_analysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
     with instrumented_operation("reference_dataset_load", dataset="glo12", resolution="quarter_degree"):
-        return open_mfdataset(
+        reference_dataset = open_mfdataset(
             list(map(_glo12_1_4_path, first_day_datetimes)),
             engine="zarr",
             preprocess=lambda dataset: require_remote_dataset_dimensions(
@@ -48,6 +49,12 @@ def _glo12_analysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
             concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
             parallel=False,
         ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+        return with_dataset_source(
+            reference_dataset,
+            kind="reference",
+            name="glo12",
+            resolution="quarter_degree",
+        )
 
 
 def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.ndarray) -> Dataset:
@@ -124,15 +131,19 @@ def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
         combined_dataset = concat(datasets, dim=Dimension.FIRST_DAY_DATETIME.key()).assign_coords(
             {Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes}
         )
-
-        return combined_dataset
+        return with_dataset_source(
+            combined_dataset,
+            kind="reference",
+            name="glo12",
+            resolution="twelfth_degree",
+        )
 
 
 def _glo12_analysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
     with instrumented_operation("reference_dataset_load", dataset="glo12", resolution="one_degree"):
-        return open_mfdataset(
+        reference_dataset = open_mfdataset(
             list(map(_glo12_1_degree_path, first_day_datetimes)),
             engine="zarr",
             preprocess=lambda dataset: require_remote_dataset_dimensions(
@@ -146,6 +157,12 @@ def _glo12_analysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
             concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
             parallel=False,
         ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+        return with_dataset_source(
+            reference_dataset,
+            kind="reference",
+            name="glo12",
+            resolution="one_degree",
+        )
 
 
 def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
