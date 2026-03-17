@@ -58,8 +58,6 @@ VARIABLE_METADATA: dict[str, tuple[str, str]] = {
     Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): ("zonal geostrophic current", "m/s"),
 }
 
-VARIABLE_LABELS: dict[str, str] = {k: v[0] for k, v in VARIABLE_METADATA.items()}
-
 DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.SURFACE: "surface",
     DepthLevel.MINUS_50_METERS: "50m",
@@ -70,8 +68,6 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
 }
 
 LEAD_DAYS_COUNT = 10
-
-# For class IV validation :
 
 DEPTH_BINS_DEFAULT: dict[str, tuple[float, float]] = {
     "surface": (-1, 1),

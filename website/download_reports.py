@@ -9,14 +9,14 @@ import shutil
 
 from helpers.s3_discovery import discover_challengers, download_notebook
 
-SCRIPT_DIR = os.path.dirname(__file__)
-REPORTS_DIR = os.path.join(SCRIPT_DIR, "reports")
-ASSETS_DIR = os.path.join(SCRIPT_DIR, "..", "assets")
-METADATA_YML = os.path.join(REPORTS_DIR, "_metadata.yml")
+SCRIPT_DIRECTORY = os.path.dirname(__file__)
+REPORTS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "reports")
+ASSETS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "..", "assets")
+QUARTO_METADATA_FILE_PATH = os.path.join(REPORTS_DIRECTORY, "_metadata.yml")
 
 
-def _find_sample_notebook(name: str) -> str | None:
-    pattern = os.path.join(ASSETS_DIR, f"{name}*.report.ipynb")
+def _find_sample_notebook(challenger_name: str) -> str | None:
+    pattern = os.path.join(ASSETS_DIRECTORY, f"{challenger_name}*.report.ipynb")
     matches = glob.glob(pattern)
     if matches:
         return matches[0]
@@ -35,29 +35,29 @@ def main() -> None:
     challengers = discover_challengers()
     print(f"Discovered challengers: {challengers}")
 
-    os.makedirs(REPORTS_DIR, exist_ok=True)
+    os.makedirs(REPORTS_DIRECTORY, exist_ok=True)
 
-    for name in challengers:
-        destination = os.path.join(REPORTS_DIR, f"{name}.report.ipynb")
+    for challenger_name in challengers:
+        destination = os.path.join(REPORTS_DIRECTORY, f"{challenger_name}.report.ipynb")
 
         if args.use_samples:
-            sample = _find_sample_notebook(name)
+            sample = _find_sample_notebook(challenger_name)
             if sample:
                 shutil.copy2(sample, destination)
-                print(f"{name}: OK (sample) -> {destination}")
+                print(f"{challenger_name}: OK (sample) -> {destination}")
             else:
-                print(f"{name}: no sample found in assets/")
+                print(f"{challenger_name}: no sample found in assets/")
         else:
-            print(f"Downloading {name}...", end=" ")
-            result = download_notebook(name, REPORTS_DIR)
+            print(f"Downloading {challenger_name}...", end=" ")
+            result = download_notebook(challenger_name, REPORTS_DIRECTORY)
             if result:
                 print(f"OK -> {result}")
             else:
                 print("FAILED")
 
-    with open(METADATA_YML, "w") as file:
+    with open(QUARTO_METADATA_FILE_PATH, "w") as file:
         file.write("execute:\n  enabled: false\nformat:\n  html:\n    page-layout: full\n")
-    print(f"Created {METADATA_YML}")
+    print(f"Created {QUARTO_METADATA_FILE_PATH}")
 
 
 if __name__ == "__main__":

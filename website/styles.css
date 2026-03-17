@@ -83,7 +83,7 @@
   font-size: 0.72rem;
 }
 
-.score-table .cf-name {
+.score-table .standard-name {
   display: block;
   font-weight: 400;
   font-size: 0.58rem;
@@ -132,7 +132,7 @@ body.quarto-dark .score-table thead th {
 
 body.quarto-dark .score-table .lead-day,
 body.quarto-dark .score-table .lead-day-label,
-body.quarto-dark .score-table .cf-name {
+body.quarto-dark .score-table .standard-name {
   color: #adb5bd;
 }
 

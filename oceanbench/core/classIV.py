@@ -242,11 +242,11 @@ def _compute_rmsd_table(
     return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
 
 
-def _observation_variable_depth_label(cf_name: str, depth_bin: str) -> str:
-    display_name, unit = VARIABLE_METADATA[cf_name]
+def _observation_variable_depth_label(standard_name: str, depth_bin: str) -> str:
+    display_name, unit = VARIABLE_METADATA[standard_name]
     already_prefixed = display_name.lower().startswith(depth_bin.lower())
     base = (display_name if already_prefixed else f"{depth_bin} {display_name}").capitalize()
-    return f"{base} ({unit}) [{cf_name}]{{{depth_bin}}}"
+    return f"{base} ({unit}) [{standard_name}]{{{depth_bin}}}"
 
 
 def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -> pandas.DataFrame:
@@ -264,7 +264,6 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
     pivot_table["depth_sort"] = pivot_table["depth_bin"].map(DEPTH_BIN_DISPLAY_ORDER)
     pivot_table = pivot_table.sort_values(["variable_sort", "depth_sort"]).drop(columns=["variable_sort", "depth_sort"])
 
-    # SST is a special case: remap to its own CF standard name.
     pivot_table.loc[sst_sort_mask, "variable"] = Variable.SEA_SURFACE_TEMPERATURE.key()
     pivot_table.loc[sst_sort_mask, "depth_bin"] = "surface"
 

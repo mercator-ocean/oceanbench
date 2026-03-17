@@ -25,13 +25,20 @@ header = (
     "|--------|--------------|--------|---------------|--------------------|-------------------|--------|\n"
 )
 
-def format_row(name):
-    meta = CHALLENGERS.get(name)
-    if meta:
-        system = f"[{meta['label']}]({meta['url']})"
-        org = f"[{meta['organisation']}]({meta['org_url']})"
-        return f"| {system} | {org} | {meta['method']} | {meta['forecast_type']} | {meta['initial_conditions']} | {meta['resolution']} | [Report](reports/{name}.report.html) |"
-    return f"| {name} |  |  |  |  |  | [Report](reports/{name}.report.html) |"
+def format_row(challenger_name):
+    challenger_metadata = CHALLENGERS.get(challenger_name)
+    if challenger_metadata:
+        system = f"[{challenger_metadata['label']}]({challenger_metadata['url']})"
+        organisation = (
+            f"[{challenger_metadata['organisation']}]"
+            f"({challenger_metadata['organisation_url']})"
+        )
+        return (
+            f"| {system} | {organisation} | {challenger_metadata['method']} | "
+            f"{challenger_metadata['forecast_type']} | {challenger_metadata['initial_conditions']} | "
+            f"{challenger_metadata['resolution']} | [Report](reports/{challenger_name}.report.html) |"
+        )
+    return f"| {challenger_name} |  |  |  |  |  | [Report](reports/{challenger_name}.report.html) |"
 
 rows = "\n".join(map(format_row, challengers))
 

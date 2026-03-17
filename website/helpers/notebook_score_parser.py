@@ -137,11 +137,11 @@ def _parse_html_table_rows(raw_table: str) -> list[dict]:
     return [_parse_html_table_row(row, lead_days) for row in soup.find("tbody").find_all("tr")]
 
 
-def _convert_depth_variable_table_to_model_score(raw_table: str, name: str) -> ModelScore:
+def _convert_depth_variable_table_to_model_score(raw_table: str, challenger_name: str) -> ModelScore:
     parsed_rows = [
-        (depth, variable_name, cf_name, unit, row["data"])
+        (depth, variable_name, standard_name, unit, row["data"])
         for row in _parse_html_table_rows(raw_table)
-        for display_name, unit, cf_name, depth_label in [_parse_variable_label(row["label"])]
+        for display_name, unit, standard_name, depth_label in [_parse_variable_label(row["label"])]
         if depth_label
         for depth in [depth_label.capitalize()]
         for variable_name in [_normalise_display_name(display_name.removeprefix(depth + " "))]
@@ -150,24 +150,24 @@ def _convert_depth_variable_table_to_model_score(raw_table: str, name: str) -> M
     depths = {
         depth: {
             "variables": {
-                variable_name: {"cf_name": cf_name, "unit": unit, "data": data}
-                for row_depth, variable_name, cf_name, unit, data in parsed_rows
+                variable_name: {"standard_name": standard_name, "unit": unit, "data": data}
+                for row_depth, variable_name, standard_name, unit, data in parsed_rows
                 if row_depth == depth
             }
         }
         for depth in unique_depths
     }
-    return ModelScore.model_validate({"name": name, "depths": depths})
+    return ModelScore.model_validate({"name": challenger_name, "depths": depths})
 
 
-def _convert_flat_table_to_model_score(raw_table: str, name: str) -> ModelScore:
+def _convert_flat_table_to_model_score(raw_table: str, challenger_name: str) -> ModelScore:
     rows = _parse_html_table_rows(raw_table)
     variables = {
-        _normalise_display_name(display_name): {"cf_name": cf_name, "unit": unit, "data": row["data"]}
+        _normalise_display_name(display_name): {"standard_name": standard_name, "unit": unit, "data": row["data"]}
         for row in rows
-        for display_name, unit, cf_name, _depth_label in [_parse_variable_label(row["label"])]
+        for display_name, unit, standard_name, _depth_label in [_parse_variable_label(row["label"])]
     }
-    return ModelScore.model_validate({"name": name, "depths": {"flat": {"variables": variables}}})
+    return ModelScore.model_validate({"name": challenger_name, "depths": {"flat": {"variables": variables}}})
 
 
 def _get_notebook(path: str) -> dict | None:
@@ -180,19 +180,19 @@ def _get_notebook(path: str) -> dict | None:
             return json.load(file)
 
 
-def get_all_model_scores_from_notebook(notebook_path: str, name: str) -> dict[str, ModelScore]:
+def get_all_model_scores_from_notebook(notebook_path: str, challenger_name: str) -> dict[str, ModelScore]:
     raw_notebook = _get_notebook(notebook_path)
     if raw_notebook is None:
         return {}
     metrics_html = _get_all_metrics_from_notebook(raw_notebook)
 
-    def _converter(key):
-        if key in _DEPTH_VARIABLE_METRICS:
+    def _converter(metric_key: str):
+        if metric_key in _DEPTH_VARIABLE_METRICS:
             return _convert_depth_variable_table_to_model_score
         return _convert_flat_table_to_model_score
 
     return {
         metric_key: result
         for metric_key, raw_table in metrics_html.items()
-        if (result := _converter(metric_key)(raw_table, name)) is not None
+        if (result := _converter(metric_key)(raw_table, challenger_name)) is not None
     }

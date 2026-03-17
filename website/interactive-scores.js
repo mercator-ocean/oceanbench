@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-function buildBinEdges(max) {
-  // 5 positive edges via halving: max, max/2, max/4, max/8, max/16
+function buildBinEdges(maximumPercent) {
   const positive = [];
-  let value = max;
+  let value = maximumPercent;
   for (let i = 0; i < 5; i++) {
     positive.push(value);
     value = value / 2;
@@ -17,7 +16,7 @@ function buildBinEdges(max) {
 
 const SCALE_SNAPS = [5, 10, 20, 40, 80, 100, 200, 500, 1000];
 let maxScale = 80;
-let BIN_EDGES = buildBinEdges(maxScale);
+let colorScaleEdges = buildBinEdges(maxScale);
 const DISPLAY_LEAD_DAYS = [
   { preferred: "1", fallback: "2" },
   { preferred: "3" },
@@ -27,7 +26,6 @@ const DISPLAY_LEAD_DAYS = [
 ];
 
 const PALETTE = {
-  // ColorBrewer RdBu diverging — perceptually uniform, colorblind-safe
   blue: { end: [33, 102, 172], mid: [146, 197, 222] },
   red:  { mid: [244, 165, 130], end: [178, 24, 43] },
   light: [255, 255, 255],
@@ -44,7 +42,6 @@ function getPaletteColors() {
 }
 
 let selectedDepths = new Set();
-let availableDepths = [];
 let showAllMode = true;
 let showPercentDiff = false;
 let parsedData = null;
@@ -74,16 +71,16 @@ function textColorForBackground(rgb) {
 }
 
 function getBinIndex(percentDiff) {
-  const binCount = BIN_EDGES.length - 1;
+  const binCount = colorScaleEdges.length - 1;
   for (let i = 0; i < binCount; i++) {
-    if (percentDiff <= BIN_EDGES[i + 1]) return i;
+    if (percentDiff <= colorScaleEdges[i + 1]) return i;
   }
   return binCount - 1;
 }
 
 function getBinColor(binIndex) {
   const palette = getPaletteColors();
-  const binCount = BIN_EDGES.length - 1;
+  const binCount = colorScaleEdges.length - 1;
   const normalized = (binIndex + 0.5) / binCount;
   const segmentCount = palette.length - 1;
   const segment = Math.min(Math.floor(normalized * segmentCount), segmentCount - 1);
@@ -143,9 +140,9 @@ function getUnit(scoreData, depth, variable) {
   }
 }
 
-function getCfName(scoreData, depth, variable) {
+function getStandardName(scoreData, depth, variable) {
   try {
-    return scoreData.depths[depth].variables[variable].cf_name || "";
+    return scoreData.depths[depth].variables[variable].standard_name || "";
   } catch {
     return "";
   }
@@ -159,12 +156,12 @@ function titleCase(text) {
   return text.replace(/(^|\s)\w/g, (character) => character.toUpperCase());
 }
 
-function formatVariableHeader(variable, unit, cfName, metricKey) {
+function formatVariableHeader(variable, unit, standardName, metricKey) {
   const displayName = titleCase(variable);
   const metricLabel = metricKey.startsWith("rmsd") ? `RMSE (${unit})` : `(${unit})`;
   let header = `${displayName}<br><span class="metric-label">${metricLabel}</span>`;
-  if (cfName && cfName !== "unknown") {
-    header += `<br><span class="cf-name">${cfName}</span>`;
+  if (standardName && standardName !== "unknown") {
+    header += `<br><span class="standard-name">${standardName}</span>`;
   }
   return header;
 }
@@ -186,7 +183,7 @@ function buildDataRows(
   variables,
   leadDays,
   baseline,
-  depthVars,
+  depthVariables,
 ) {
   const baselineScore = challengers[baseline][metricKey];
   let rows = "";
@@ -197,7 +194,7 @@ function buildDataRows(
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
     rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.report.html">${displayName(name)}</a></th>`;
     for (const variable of variables) {
-      if (depthVars && !depthVars.has(variable)) {
+      if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
           rows += `<td class="no-var-cell"></td>`;
         }
@@ -400,12 +397,12 @@ function scheduleScrollSpyRefresh() {
 }
 
 function buildTabsInnerHtml(sections) {
-  let html = "";
+  let markup = "";
   for (const sectionKey of orderedSectionKeys(sections)) {
     const isActive = sectionKey === activeSection;
-    html += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${titleCase(sectionKey)}</a>`;
+    markup += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${titleCase(sectionKey)}</a>`;
   }
-  return html;
+  return markup;
 }
 
 function attachTabListeners() {
@@ -420,34 +417,34 @@ function attachTabListeners() {
 }
 
 function buildControlsInnerHtml(challengerNames, baseline, depths) {
-  let html = "";
+  let markup = "";
 
-  html += '<label>Baseline: <select id="baseline-select">';
+  markup += '<label>Baseline: <select id="baseline-select">';
   for (const name of challengerNames) {
     const selected = name === baseline ? " selected" : "";
-    html += `<option value="${name}"${selected}>${displayName(name)}</option>`;
+    markup += `<option value="${name}"${selected}>${displayName(name)}</option>`;
   }
-  html += "</select></label>";
+  markup += "</select></label>";
 
-  html += '<span id="depth-toggle" class="depth-toggle">';
-  html += `<button class="depth-toggle-btn${showAllMode ? " active" : ""}" data-depth="all">All</button>`;
-  html += '<span class="depth-pills">';
+  markup += '<span id="depth-toggle" class="depth-toggle">';
+  markup += `<button class="depth-toggle-btn${showAllMode ? " active" : ""}" data-depth="all">All</button>`;
+  markup += '<span class="depth-pills">';
   for (const depth of depths) {
     const active = !showAllMode && selectedDepths.has(depth) ? " active" : "";
-    html += `<button class="depth-toggle-btn${active}" data-depth="${depth}">${depth}</button>`;
+    markup += `<button class="depth-toggle-btn${active}" data-depth="${depth}">${depth}</button>`;
   }
-  html += "</span></span>";
+  markup += "</span></span>";
 
-  html += '<span class="display-toggle">';
-  html += `<button class="display-toggle-btn${!showPercentDiff ? " active" : ""}" data-display="values">Values</button>`;
-  html += `<button class="display-toggle-btn${showPercentDiff ? " active" : ""}" data-display="percent-diff">% diff</button>`;
-  html += '</span>';
+  markup += '<span class="display-toggle">';
+  markup += `<button class="display-toggle-btn${!showPercentDiff ? " active" : ""}" data-display="values">Values</button>`;
+  markup += `<button class="display-toggle-btn${showPercentDiff ? " active" : ""}" data-display="percent-diff">% diff</button>`;
+  markup += '</span>';
 
-  html += '<div id="color-legend" class="color-legend"></div>';
+  markup += '<div id="color-legend" class="color-legend"></div>';
 
-  html += `<label>\u00b1 <input id="scale-input" type="number" min="1" step="1" value="${maxScale}"> %</label>`;
+  markup += `<label>\u00b1 <input id="scale-input" type="number" min="1" step="1" value="${maxScale}"> %</label>`;
 
-  return html;
+  return markup;
 }
 
 function ensureHeaderElement() {
@@ -463,22 +460,32 @@ function ensureHeaderElement() {
   const header = document.createElement("div");
   header.id = "score-header";
 
-  const tabNav = document.createElement("nav");
-  tabNav.id = "score-tabs";
-  tabNav.setAttribute("aria-label", "Score sections");
+  const tabNavigation = document.createElement("nav");
+  tabNavigation.id = "score-tabs";
+  tabNavigation.setAttribute("aria-label", "Score sections");
 
-  const controlsDiv = document.createElement("div");
-  controlsDiv.id = "score-controls";
-  controlsDiv.className = "controls";
+  const controlsElement = document.createElement("div");
+  controlsElement.id = "score-controls";
+  controlsElement.className = "controls";
 
-  header.appendChild(tabNav);
-  header.appendChild(controlsDiv);
+  header.appendChild(tabNavigation);
+  header.appendChild(controlsElement);
 
   if (wrapper) {
     wrapper.insertBefore(header, wrapper.firstElementChild);
   }
 
-  return controlsDiv;
+  return controlsElement;
+}
+
+function getAvailableDepths(challengers, baseline, sections) {
+  for (const sectionConfig of Object.values(sections)) {
+    const depthScore = challengers[baseline]?.[sectionConfig.depth_metric];
+    if (depthScore) {
+      return Object.keys(depthScore.depths);
+    }
+  }
+  return [];
 }
 
 function groupDepthsByVariables(baselineScore, depths) {
@@ -549,8 +556,8 @@ function renderDepthGroup(
 ) {
   if (variables.length === 0 || depths.length === 0) return "";
 
-  const refDepth = depths[0];
-  const leadDays = getLeadDays(baselineScore, refDepth);
+  const referenceDepth = depths[0];
+  const leadDays = getLeadDays(baselineScore, referenceDepth);
   const totalColumns = 1 + variables.length * leadDays.length;
 
   let thead = "<thead>";
@@ -558,10 +565,10 @@ function renderDepthGroup(
   for (const variable of variables) {
     const sourceDepth = depths.find(
       (d) => baselineScore.depths[d]?.variables?.[variable],
-    ) || refDepth;
+    ) || referenceDepth;
     const unit = getUnit(baselineScore, sourceDepth, variable);
-    const cfName = getCfName(baselineScore, sourceDepth, variable);
-    thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, cfName, metricKey)}</th>`;
+    const standardName = getStandardName(baselineScore, sourceDepth, variable);
+    thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, standardName, metricKey)}</th>`;
   }
   thead += `</tr><tr><th class="model-col lead-day-label">Lead days</th>`;
   for (const variable of variables) {
@@ -576,7 +583,7 @@ function renderDepthGroup(
     if (depths.length > 1) {
       tbody += `<tr class="depth-separator"><th class="depth-separator-cell">${depth}</th><td colspan="${totalColumns - 1}" style="border: hidden;"></td></tr>`;
     }
-    const depthVars = new Set(Object.keys(baselineScore.depths[depth]?.variables || {}));
+    const depthVariables = new Set(Object.keys(baselineScore.depths[depth]?.variables || {}));
     tbody += buildDataRows(
       orderedNames,
       challengers,
@@ -585,7 +592,7 @@ function renderDepthGroup(
       variables,
       leadDays,
       baseline,
-      depthVars,
+      depthVariables,
     );
   }
   tbody += "</tbody>";
@@ -626,8 +633,8 @@ function renderCombinedFlatMetrics(
     const baselineScore = challengers[baseline][metricKey];
     for (const variable of variables) {
       const unit = getUnit(baselineScore, "flat", variable);
-      const cfName = getCfName(baselineScore, "flat", variable);
-      thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, cfName, metricKey)}</th>`;
+      const standardName = getStandardName(baselineScore, "flat", variable);
+      thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, standardName, metricKey)}</th>`;
     }
   }
   thead += "</tr>";
@@ -663,31 +670,31 @@ function renderMetricSection(
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  let html = "";
+  let markup = "";
 
-  html += '<div class="depth-section">';
-  html += `<h3>${metricTitles[depthMetric]}</h3>`;
-  html += renderDepthMetric(
+  markup += '<div class="depth-section">';
+  markup += `<h3>${metricTitles[depthMetric]}</h3>`;
+  markup += renderDepthMetric(
     challengers,
     challengerNames,
     depthMetric,
     baseline,
     unifyVariables,
   );
-  html += "</div>";
+  markup += "</div>";
 
-  const flatHtml = renderCombinedFlatMetrics(
+  const flatMarkup = renderCombinedFlatMetrics(
     challengers,
     challengerNames,
     flatMetrics,
     baseline,
   );
-  if (flatHtml) {
-    html += `<h3>Physically consistent diagnostic variables</h3>`;
-    html += flatHtml;
+  if (flatMarkup) {
+    markup += `<h3>Physically consistent diagnostic variables</h3>`;
+    markup += flatMarkup;
   }
 
-  container.innerHTML = html;
+  container.innerHTML = markup;
 }
 
 function formatRgb(color) {
@@ -704,20 +711,18 @@ function updateColorLegend() {
   const legend = document.getElementById("color-legend");
   if (!legend) return;
 
-  const binCount = BIN_EDGES.length - 1;
+  const binCount = colorScaleEdges.length - 1;
 
-  // Reverse: bin 0 = best (blue), last bin = worst (red)
-  // Legend shows Worse (red) on the left, Better (blue) on the right
   let binsHtml = "";
   for (let i = binCount - 1; i >= 0; i--) {
     binsHtml += `<span class="legend-bin" style="background:${formatRgb(getBinColor(i))}"></span>`;
   }
 
   let ticksHtml = "";
-  for (let i = 0; i < BIN_EDGES.length; i++) {
-    if (!isFinite(BIN_EDGES[i])) continue;
+  for (let i = 0; i < colorScaleEdges.length; i++) {
+    if (!isFinite(colorScaleEdges[i])) continue;
     const percent = ((binCount - i) / binCount) * 100;
-    const label = formatTickLabel(BIN_EDGES[i]);
+    const label = formatTickLabel(colorScaleEdges[i]);
     ticksHtml += `<span class="legend-tick-label" style="left:${percent}%">${label}</span>`;
   }
 
@@ -781,7 +786,7 @@ function attachControlListeners() {
       if (value > 0 && isFinite(value)) {
         maxScale = value;
         scaleInput.value = maxScale;
-        BIN_EDGES = buildBinEdges(maxScale);
+        colorScaleEdges = buildBinEdges(maxScale);
         renderTablesOnly();
       }
     }
@@ -801,8 +806,8 @@ function attachControlListeners() {
     scaleInput.addEventListener("change", () => applyScale(Number(scaleInput.value)));
 
     scaleInput.addEventListener("input", () => {
-      const raw = Number(scaleInput.value);
-      const direction = raw > maxScale ? 1 : -1;
+      const enteredValue = Number(scaleInput.value);
+      const direction = enteredValue > maxScale ? 1 : -1;
       applyScale(snapScale(direction));
     });
 
@@ -832,7 +837,6 @@ function attachControlListeners() {
     });
   }
 
-  // Click-hold-drag to select/deselect a range of depth pills
   let dragAction = null;
 
   function applyDragToButton(button) {
@@ -922,12 +926,9 @@ function renderAllTables() {
   const existingSelect = document.getElementById("baseline-select");
   const baseline = existingSelect?.value
     || (challengerNames.includes("glo12") ? "glo12" : challengerNames[0]);
+  const availableDepths = getAvailableDepths(challengers, baseline, sections);
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
-    const depthScore = challengers[baseline]?.[sectionConfig.depth_metric];
-    if (depthScore && availableDepths.length === 0) {
-      availableDepths = Object.keys(depthScore.depths);
-    }
     renderMetricSection(
       `${sectionKey}-scores`,
       sectionConfig.depth_metric,
@@ -943,9 +944,9 @@ function renderAllTables() {
   const controlsElement = ensureHeaderElement();
   controlsElement.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);
 
-  const tabNav = document.getElementById("score-tabs");
-  if (tabNav) {
-    tabNav.innerHTML = buildTabsInnerHtml(sections);
+  const tabNavigation = document.getElementById("score-tabs");
+  if (tabNavigation) {
+    tabNavigation.innerHTML = buildTabsInnerHtml(sections);
   }
 
   updateColorLegend();

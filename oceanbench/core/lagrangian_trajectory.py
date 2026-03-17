@@ -55,9 +55,7 @@ class FreezeParticle(JITParticle):
 
 LEAD_DAY_START = 2
 
-_LAGRANGIAN_LABEL = "Surface Lagrangian trajectory deviation"
-_LAGRANGIAN_UNIT = "km"
-_LAGRANGIAN_ROW_LABEL = f"{_LAGRANGIAN_LABEL} ({_LAGRANGIAN_UNIT}) []"
+_LAGRANGIAN_ROW_LABEL = "Surface Lagrangian trajectory deviation (km) []"
 
 
 def deviation_of_lagrangian_trajectories(
@@ -157,8 +155,8 @@ def _one_deviation_of_lagrangian_trajectories(
         longitudes=longitudes,
     )
 
-    euclideandistance = euclidean_distance(challenger_trajectories, reference_trajectories)
-    return euclideandistance
+    euclidean_distance_values = euclidean_distance(challenger_trajectories, reference_trajectories)
+    return euclidean_distance_values
 
 
 def _set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
@@ -196,9 +194,9 @@ def _reorder_particles_by_pid(
 
 def _read_output_file(file_path: str):
     dataset = xarray.open_zarr(file_path)
-    particle_latitudes = dataset.lat.values  # shape: (time, n_particles)
+    particle_latitudes = dataset.lat.values
     particle_longitudes = dataset.lon.values
-    particle_ids = dataset.pid.values  # shape: (time, n_particles)
+    particle_ids = dataset.pid.values
     shutil.rmtree(file_path)
     return particle_latitudes, particle_longitudes, particle_ids
 
@@ -233,7 +231,7 @@ def _get_all_particles_positions(
     kernels = [
         AdvectionRK4,
         delete_error_particle,
-    ]  # Keep your original kernel setup
+    ]
 
     runtime_days = len(dataset.time) - 1
     output_path = _run_simulation(particle_set, kernels, runtime_days)
@@ -295,13 +293,12 @@ def _get_random_ocean_points_from_file(
         raise ValueError(f"Requested {n} points, but only {len(latitude_values)} ocean points available.")
 
     numpy.random.seed(seed)
-    idx = numpy.random.choice(len(latitude_values), n, replace=False)
+    selected_indices = numpy.random.choice(len(latitude_values), n, replace=False)
 
-    return latitude_values[idx], longitude_values[idx]
+    return latitude_values[selected_indices], longitude_values[selected_indices]
 
 
 def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset) -> numpy.ndarray:
-
     model_set["time"] = model_set["time"].dt.floor("D")
     reference_set["time"] = reference_set["time"].dt.floor("D")
     latitude_reference_set_rad = numpy.deg2rad(reference_set["lat"])
@@ -309,6 +306,6 @@ def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset)
     dlatitude = (model_set["lat"] - reference_set["lat"]) * 111  # meters
     dlongitude = (model_set["lon"] - reference_set["lon"]) * 111 * numpy.cos(latitude_reference_set_rad)
 
-    distance = numpy.sqrt(dlatitude**2 + dlongitude**2)  # shape: (particle, time)
-    distance = distance.mean(axis=0)  # shape: (time,)
+    distance = numpy.sqrt(dlatitude**2 + dlongitude**2)
+    distance = distance.mean(axis=0)
     return distance.values
