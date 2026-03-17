@@ -192,4 +192,7 @@ As part of a fruitful collaboration with:
 
 Powered by:
 
-<a href="https://dive.edito.eu"><img src="https://datalab.dive.edito.eu/custom-resources/logos/Full_EU_DTO_Banner.jpeg" alt="EU DTO banner" height="100"/></a>
+<a href="https://edito.eu">
+  <img class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_A1%20Version.png" alt="EDITO logo" height="65" />
+
+</a>
