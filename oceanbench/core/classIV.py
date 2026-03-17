@@ -208,13 +208,9 @@ def _interpolate_model_to_observations(
             lead_day_groups_count=first_day_group["lead_day"].nunique(),
             observations_count=len(first_day_group),
         ):
+            first_day_block = model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index}).compute()
             for lead_day, observation_group in grouped_by_lead_day:
-                time_slice = model_data.isel(
-                    {
-                        Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
-                        Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
-                    }
-                ).compute()
+                time_slice = first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
                 observation_latitudes = observation_group[latitude_key].values
                 observation_longitudes = observation_group[longitude_key].values
                 observation_depths = observation_group[depth_key].values
