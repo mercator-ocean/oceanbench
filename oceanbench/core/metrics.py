@@ -2,9 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import os
-from multiprocessing import get_context
-
 import pandas
 import xarray
 
@@ -13,6 +10,7 @@ from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_mixed_layer_depth
 from oceanbench.core.derived_quantities import compute_geostrophic_currents
 from oceanbench.core.instrumentation import instrumented_operation, log_event
+from oceanbench.core.local_stage import should_stage_locally
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.rmsd import rmsd
 from oceanbench.core.resolution import get_dataset_resolution
@@ -22,8 +20,7 @@ from oceanbench.core.references.observations import observations
 from oceanbench.core.remote_http import with_remote_http_retries
 
 from oceanbench.core.lagrangian_trajectory import (
-    DEFAULT_LAGRANGIAN_MAX_WORKERS,
-    LAGRANGIAN_MAX_WORKERS_ENVIRONMENT_VARIABLE,
+    LOCAL_STAGE_LAGRANGIAN_KEY,
     deviation_of_lagrangian_trajectories,
 )
 
@@ -61,22 +58,12 @@ def _glo12_reference_dataset(challenger_dataset: xarray.Dataset) -> xarray.Datas
     return _cached_reference_dataset("glo12", challenger_dataset, glo12_analysis_dataset)
 
 
-def _requested_lagrangian_max_workers() -> int:
-    return int(
-        os.environ.get(
-            LAGRANGIAN_MAX_WORKERS_ENVIRONMENT_VARIABLE,
-            str(DEFAULT_LAGRANGIAN_MAX_WORKERS),
-        )
-    )
-
-
 def _can_skip_lagrangian_reference_preload(challenger_dataset: xarray.Dataset) -> bool:
-    if _requested_lagrangian_max_workers() <= 1:
+    if not should_stage_locally(LOCAL_STAGE_LAGRANGIAN_KEY):
         return False
     if get_dataset_source(challenger_dataset) is None:
         return False
     try:
-        get_context("fork")
         get_dataset_resolution(challenger_dataset)
     except ValueError:
         return False
