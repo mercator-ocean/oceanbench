@@ -2,22 +2,20 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from os import environ
 from pathlib import Path
 import shutil
 
 import numpy
 import pandas
 from xarray import Dataset, open_dataset, open_mfdataset
+
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.local_stage import local_stage_build_guard, local_stage_directory, should_stage_locally
 from oceanbench.core.remote_http import RetriableRemoteDataError, require_remote_dataset_dimensions
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
-LOCAL_STAGE_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE"
-LOCAL_STAGE_DIRECTORY_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE_DIRECTORY"
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
-LOCAL_STAGE_ALL_KEY = "all"
 
 
 class ObservationDataUnavailableError(ValueError):
@@ -47,15 +45,11 @@ def _assign_standard_names(observations_dataset: Dataset) -> Dataset:
 
 
 def _should_stage_observations_locally() -> bool:
-    local_stage_value = environ.get(LOCAL_STAGE_ENVIRONMENT_VARIABLE, "")
-    local_stage_keys = {key.strip().lower() for key in local_stage_value.split(",") if key.strip()}
-    return LOCAL_STAGE_OBSERVATIONS_KEY in local_stage_keys or LOCAL_STAGE_ALL_KEY in local_stage_keys
+    return should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY)
 
 
 def _observations_stage_path(first_day_start: str, last_day_end: str, lead_days_count: int) -> Path:
-    default_stage_directory = Path(environ.get("TMPDIR", "/tmp")) / "oceanbench-stage"
-    base_stage_directory = Path(environ.get(LOCAL_STAGE_DIRECTORY_ENVIRONMENT_VARIABLE, str(default_stage_directory)))
-    return base_stage_directory / (
+    return local_stage_directory() / (
         f"observations-{first_day_start.replace('-', '')}-{last_day_end.replace('-', '')}-{lead_days_count}d.zarr"
     )
 
@@ -76,32 +70,16 @@ def _open_staged_observations_dataset(stage_path: Path) -> Dataset:
     return open_dataset(stage_path, engine="zarr")
 
 
-def observations(challenger_dataset: Dataset) -> Dataset:
+def _selected_observations_dataset(
+    observation_days: numpy.ndarray,
+    first_day_timestamps: pandas.DatetimeIndex,
+    first_day_datetimes: numpy.ndarray,
+    lead_days_count: int,
+) -> Dataset:
     time_key = Dimension.TIME.key()
-    lead_day_index_key = Dimension.LEAD_DAY_INDEX.key()
-    first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
     source_observation_dimension_key = "obs"
     observation_dimension_key = "observations"
-    first_day_datetimes = challenger_dataset[first_day_datetime_key].values
-    lead_days_count = challenger_dataset.sizes[lead_day_index_key]
-    first_day_dates = first_day_datetimes.astype("datetime64[D]")
-    first_challenger_day = first_day_dates.min()
-    if first_challenger_day < OBSERVATIONS_FIRST_AVAILABLE_DATE:
-        first_challenger_day_string = pandas.Timestamp(first_challenger_day).strftime("%Y-%m-%d")
-        first_available_day_string = pandas.Timestamp(OBSERVATIONS_FIRST_AVAILABLE_DATE).strftime("%Y-%m-%d")
-        raise ObservationDataUnavailableError(
-            "Observation-based Class IV scores were not computed for this challenger. "
-            f"Observation data is available from {first_available_day_string}, "
-            f"while challenger first_day_datetime starts on {first_challenger_day_string}."
-        )
-
-    first_day_timestamps = pandas.to_datetime(first_day_datetimes)
-    first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
-    last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).strftime("%Y-%m-%d")
-    observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
-    local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)
-    if _should_stage_observations_locally() and local_stage_path.exists():
-        return _open_staged_observations_dataset(local_stage_path)
+    first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
 
     observations_dataset = open_mfdataset(
         list(map(observation_path, observation_days)),
@@ -142,9 +120,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     selected_run_indices = numpy.argmax(observation_window_masks[:, selected_observations_mask], axis=0)
     selected_first_day_coord = first_day_datetimes[selected_run_indices]
 
-    observations_dataset = observations_dataset.isel(
-        {observation_dimension_key: selected_observations_mask}
-    ).assign_coords(
+    return observations_dataset.isel({observation_dimension_key: selected_observations_mask}).assign_coords(
         {
             first_day_datetime_key: (
                 (observation_dimension_key,),
@@ -152,7 +128,47 @@ def observations(challenger_dataset: Dataset) -> Dataset:
             )
         }
     )
+
+
+def observations(challenger_dataset: Dataset) -> Dataset:
+    lead_day_index_key = Dimension.LEAD_DAY_INDEX.key()
+    first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
+    first_day_datetimes = challenger_dataset[first_day_datetime_key].values
+    lead_days_count = challenger_dataset.sizes[lead_day_index_key]
+    first_day_dates = first_day_datetimes.astype("datetime64[D]")
+    first_challenger_day = first_day_dates.min()
+    if first_challenger_day < OBSERVATIONS_FIRST_AVAILABLE_DATE:
+        first_challenger_day_string = pandas.Timestamp(first_challenger_day).strftime("%Y-%m-%d")
+        first_available_day_string = pandas.Timestamp(OBSERVATIONS_FIRST_AVAILABLE_DATE).strftime("%Y-%m-%d")
+        raise ObservationDataUnavailableError(
+            "Observation-based Class IV scores were not computed for this challenger. "
+            f"Observation data is available from {first_available_day_string}, "
+            f"while challenger first_day_datetime starts on {first_challenger_day_string}."
+        )
+
+    first_day_timestamps = pandas.to_datetime(first_day_datetimes)
+    first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
+    last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).strftime("%Y-%m-%d")
+    observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
+    local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)
+    if _should_stage_observations_locally() and local_stage_path.exists():
+        return _open_staged_observations_dataset(local_stage_path)
+
     if not _should_stage_observations_locally():
-        return observations_dataset
-    _write_staged_observations_dataset(observations_dataset, local_stage_path)
-    return _open_staged_observations_dataset(local_stage_path)
+        return _selected_observations_dataset(
+            observation_days=observation_days,
+            first_day_timestamps=first_day_timestamps,
+            first_day_datetimes=first_day_datetimes,
+            lead_days_count=lead_days_count,
+        )
+    with local_stage_build_guard(local_stage_path) as should_build_stage:
+        if not should_build_stage:
+            return _open_staged_observations_dataset(local_stage_path)
+        observations_dataset = _selected_observations_dataset(
+            observation_days=observation_days,
+            first_day_timestamps=first_day_timestamps,
+            first_day_datetimes=first_day_datetimes,
+            lead_days_count=lead_days_count,
+        )
+        _write_staged_observations_dataset(observations_dataset, local_stage_path)
+        return _open_staged_observations_dataset(local_stage_path)
