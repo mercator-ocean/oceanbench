@@ -8,8 +8,12 @@ from datetime import datetime, timedelta
 from functools import partial
 from multiprocessing import get_context
 import os
+import pickle
 from pathlib import Path
 import shutil
+import subprocess
+import sys
+import tempfile
 import time
 import uuid
 import numpy
@@ -223,7 +227,7 @@ def _all_deviation_of_lagrangian_trajectories(
                     )
                 )
     else:
-        deviations = _parallel_deviation_of_lagrangian_trajectories(week_tasks, max_workers)
+        deviations = _run_parallel_lagrangian_driver(week_tasks, max_workers)
     log_event("lagrangian_weeks_completed", weeks_count=weeks_count, max_workers=max_workers)
     return deviations
 
@@ -243,7 +247,7 @@ def _lagrangian_max_workers(weeks_count: int) -> int:
         log_event(
             "lagrangian_parallel_unavailable",
             requested_max_workers=requested_max_workers,
-            reason="fork_start_method_unavailable",
+            reason="spawn_start_method_unavailable",
         )
         return 1
     return min(requested_max_workers, weeks_count)
@@ -407,7 +411,7 @@ def _parallel_deviation_of_lagrangian_trajectories(
     deviations_by_week_index: dict[int, numpy.ndarray] = {}
     start_times: dict[int, float] = {}
 
-    mp_context = get_context("fork")
+    mp_context = get_context("spawn")
     with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp_context) as executor:
         future_to_task: dict = {}
         next_task_index = 0
@@ -486,10 +490,46 @@ def _submit_parallel_lagrangian_week(
 
 def _supports_parallel_lagrangian_workers() -> bool:
     try:
-        get_context("fork")
+        get_context("spawn")
     except ValueError:
         return False
     return True
+
+
+def _run_parallel_lagrangian_driver(
+    week_tasks: list[LagrangianWeekTask],
+    max_workers: int,
+) -> list[numpy.ndarray]:
+    with tempfile.TemporaryDirectory(prefix="oceanbench-lagrangian-") as temporary_directory:
+        temporary_directory_path = Path(temporary_directory)
+        input_path = temporary_directory_path / "input.pkl"
+        output_path = temporary_directory_path / "output.pkl"
+        with input_path.open("wb") as input_handle:
+            pickle.dump(
+                {
+                    "max_workers": max_workers,
+                    "week_tasks": week_tasks,
+                },
+                input_handle,
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
+        with instrumented_operation(
+            "lagrangian_parallel_driver",
+            max_workers=max_workers,
+            weeks_count=len(week_tasks),
+        ):
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "oceanbench.core.lagrangian_parallel_driver",
+                    str(input_path),
+                    str(output_path),
+                ],
+                check=True,
+            )
+        with output_path.open("rb") as output_handle:
+            return pickle.load(output_handle)
 
 
 def _compute_parallel_lagrangian_week(week_task: LagrangianWeekTask) -> tuple[int, numpy.ndarray]:
