@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from os import environ
 from pathlib import Path
 import shutil
 
@@ -12,13 +11,11 @@ from xarray import Dataset, open_dataset, open_mfdataset
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.instrumentation import instrumented_operation, log_event
+from oceanbench.core.local_stage import local_stage_directory, should_stage_locally
 from oceanbench.core.remote_http import RetriableRemoteDataError, require_remote_dataset_dimensions
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
-LOCAL_STAGE_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE"
-LOCAL_STAGE_DIRECTORY_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE_DIRECTORY"
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
-LOCAL_STAGE_ALL_KEY = "all"
 
 
 def observation_path(day_datetime: numpy.datetime64) -> str:
@@ -44,15 +41,11 @@ def _assign_standard_names(observations_dataset: Dataset) -> Dataset:
 
 
 def _should_stage_observations_locally() -> bool:
-    local_stage_value = environ.get(LOCAL_STAGE_ENVIRONMENT_VARIABLE, "")
-    local_stage_keys = {key.strip().lower() for key in local_stage_value.split(",") if key.strip()}
-    return LOCAL_STAGE_OBSERVATIONS_KEY in local_stage_keys or LOCAL_STAGE_ALL_KEY in local_stage_keys
+    return should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY)
 
 
 def _observations_stage_path(first_day_start: str, last_day_end: str, lead_days_count: int) -> Path:
-    default_stage_directory = Path(environ.get("TMPDIR", "/tmp")) / "oceanbench-stage"
-    base_stage_directory = Path(environ.get(LOCAL_STAGE_DIRECTORY_ENVIRONMENT_VARIABLE, str(default_stage_directory)))
-    return base_stage_directory / (
+    return local_stage_directory() / (
         f"observations-{first_day_start.replace('-', '')}-{last_day_end.replace('-', '')}-{lead_days_count}d.zarr"
     )
 

@@ -3,11 +3,12 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from functools import partial
 from multiprocessing import get_context
 import os
+from pathlib import Path
 import shutil
 import time
 import uuid
@@ -32,6 +33,7 @@ from oceanbench.core.dataset_source import DatasetSource, get_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.instrumentation import instrumented_operation, log_event
 from oceanbench.core.lead_day_utils import lead_day_labels
+from oceanbench.core.local_stage import local_stage_directory, should_stage_locally
 from oceanbench.core.references import glo12 as glo12_reference_datasets
 from oceanbench.core.references import glorys as glorys_reference_datasets
 from oceanbench.core.remote_http import require_remote_dataset_dimensions
@@ -66,6 +68,7 @@ class FreezeParticle(JITParticle):
 LEAD_DAY_START = 2
 LAGRANGIAN_MAX_WORKERS_ENVIRONMENT_VARIABLE = "OCEANBENCH_LAGRANGIAN_MAX_WORKERS"
 DEFAULT_LAGRANGIAN_MAX_WORKERS = 1
+LOCAL_STAGE_LAGRANGIAN_KEY = "lagrangian"
 SUPPORTED_CHALLENGER_SOURCES = frozenset({"glo12", "glo36v1", "glonet", "xihe", "wenhai"})
 SUPPORTED_REFERENCE_SOURCES = frozenset(
     {
@@ -90,6 +93,8 @@ class LagrangianWeekTask:
     longitudes: numpy.ndarray
     challenger_source: DatasetSource
     reference_source: DatasetSource
+    challenger_stage_path: str | None = None
+    reference_stage_path: str | None = None
 
 
 def _delete_error_particle(particle, _fieldset, _time):
@@ -191,6 +196,8 @@ def _all_deviation_of_lagrangian_trajectories(
                 reason="dataset_source_unknown_or_unsupported",
             )
             max_workers = 1
+        elif _should_stage_lagrangian_locally():
+            week_tasks = _stage_parallel_lagrangian_week_tasks(challenger_dataset, week_tasks)
     deviations = []
     log_event("lagrangian_parallel_configuration", weeks_count=weeks_count, max_workers=max_workers)
     log_event("lagrangian_weeks_started", weeks_count=weeks_count, max_workers=max_workers)
@@ -286,6 +293,111 @@ def _surface_depth(dataset: xarray.Dataset) -> float | None:
     if Dimension.DEPTH.key() not in dataset.coords:
         return None
     return float(dataset[Dimension.DEPTH.key()].values[0])
+
+
+def _should_stage_lagrangian_locally() -> bool:
+    return should_stage_locally(LOCAL_STAGE_LAGRANGIAN_KEY)
+
+
+def _lagrangian_stage_directory(dataset_source: DatasetSource, lead_days_count: int) -> Path:
+    resolution_suffix = "" if dataset_source.resolution is None else f"-{dataset_source.resolution}"
+    return local_stage_directory() / (
+        f"lagrangian-{dataset_source.kind}-{dataset_source.name}{resolution_suffix}-{lead_days_count}d"
+    )
+
+
+def _lagrangian_stage_path(week_task: LagrangianWeekTask, dataset_source: DatasetSource) -> Path:
+    first_day = datetime.fromisoformat(week_task.first_day_datetime).strftime("%Y%m%d")
+    return _lagrangian_stage_directory(dataset_source, week_task.lead_days_count) / f"{first_day}.zarr"
+
+
+def _write_staged_lagrangian_dataset(dataset: xarray.Dataset, stage_path: Path) -> None:
+    staged_dataset = _surface_current_dataset(dataset).load()
+    for variable_name in staged_dataset.variables:
+        staged_dataset[variable_name].encoding.pop("chunks", None)
+    temporary_stage_path = stage_path.with_name(f"{stage_path.name}.tmp")
+    stage_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(temporary_stage_path, ignore_errors=True)
+    staged_dataset.to_zarr(temporary_stage_path, mode="w")
+    shutil.rmtree(stage_path, ignore_errors=True)
+    temporary_stage_path.rename(stage_path)
+
+
+def _open_staged_lagrangian_dataset(stage_path: str) -> xarray.Dataset:
+    return xarray.open_dataset(stage_path, engine="zarr")
+
+
+def _stage_parallel_lagrangian_week_tasks(
+    challenger_dataset: xarray.Dataset,
+    week_tasks: list[LagrangianWeekTask],
+) -> list[LagrangianWeekTask]:
+    challenger_week_datasets = _split_dataset(challenger_dataset)
+    staged_tasks = []
+    for week_task, challenger_week_dataset in zip(week_tasks, challenger_week_datasets, strict=True):
+        challenger_stage_path = _lagrangian_stage_path(week_task, week_task.challenger_source)
+        reference_stage_path = _lagrangian_stage_path(week_task, week_task.reference_source)
+
+        if challenger_stage_path.exists():
+            log_event(
+                "lagrangian_stage_reused",
+                source_kind=week_task.challenger_source.kind,
+                source_name=week_task.challenger_source.name,
+                source_resolution=week_task.challenger_source.resolution,
+                stage_path=str(challenger_stage_path),
+                week_index=week_task.week_index,
+                weeks_count=week_task.weeks_count,
+                first_day_datetime=week_task.first_day_datetime,
+            )
+        else:
+            with instrumented_operation(
+                "lagrangian_stage_build",
+                source_kind=week_task.challenger_source.kind,
+                source_name=week_task.challenger_source.name,
+                source_resolution=week_task.challenger_source.resolution,
+                stage_path=str(challenger_stage_path),
+                week_index=week_task.week_index,
+                weeks_count=week_task.weeks_count,
+                first_day_datetime=week_task.first_day_datetime,
+            ):
+                _write_staged_lagrangian_dataset(challenger_week_dataset, challenger_stage_path)
+
+        if reference_stage_path.exists():
+            log_event(
+                "lagrangian_stage_reused",
+                source_kind=week_task.reference_source.kind,
+                source_name=week_task.reference_source.name,
+                source_resolution=week_task.reference_source.resolution,
+                stage_path=str(reference_stage_path),
+                week_index=week_task.week_index,
+                weeks_count=week_task.weeks_count,
+                first_day_datetime=week_task.first_day_datetime,
+            )
+        else:
+            with instrumented_operation(
+                "lagrangian_stage_build",
+                source_kind=week_task.reference_source.kind,
+                source_name=week_task.reference_source.name,
+                source_resolution=week_task.reference_source.resolution,
+                stage_path=str(reference_stage_path),
+                week_index=week_task.week_index,
+                weeks_count=week_task.weeks_count,
+                first_day_datetime=week_task.first_day_datetime,
+            ):
+                reference_week_dataset = _open_parallel_reference_week(week_task)
+                try:
+                    _write_staged_lagrangian_dataset(reference_week_dataset, reference_stage_path)
+                finally:
+                    reference_week_dataset.close()
+
+        staged_tasks.append(
+            replace(
+                week_task,
+                challenger_stage_path=str(challenger_stage_path),
+                reference_stage_path=str(reference_stage_path),
+            )
+        )
+
+    return staged_tasks
 
 
 def _parallel_deviation_of_lagrangian_trajectories(
@@ -397,6 +509,9 @@ def _compute_parallel_lagrangian_week(week_task: LagrangianWeekTask) -> tuple[in
 
 
 def _open_parallel_challenger_week(week_task: LagrangianWeekTask) -> xarray.Dataset:
+    if week_task.challenger_stage_path is not None:
+        return _open_staged_lagrangian_dataset(week_task.challenger_stage_path)
+
     first_day_datetime = datetime.fromisoformat(week_task.first_day_datetime)
     if week_task.challenger_source.name == "glo36v1":
         dataset_path = (
@@ -428,6 +543,9 @@ def _open_parallel_challenger_week(week_task: LagrangianWeekTask) -> xarray.Data
 
 
 def _open_parallel_reference_week(week_task: LagrangianWeekTask) -> xarray.Dataset:
+    if week_task.reference_stage_path is not None:
+        return _open_staged_lagrangian_dataset(week_task.reference_stage_path)
+
     first_day_datetime = datetime.fromisoformat(week_task.first_day_datetime)
     if week_task.reference_source.name == "glorys":
         return _open_parallel_glorys_reference_week(first_day_datetime, week_task)
@@ -450,7 +568,7 @@ def _open_parallel_glorys_reference_week(
         )
     else:
         surface_depth = 0.0 if week_task.surface_depth is None else week_task.surface_depth
-        dataset = glorys_reference_datasets._glorys_1_12_path(
+        dataset = glorys_reference_datasets._glorys_surface_currents_1_12(
             first_day_datetime,
             days_count=week_task.lead_days_count,
             target_depths=numpy.array([surface_depth]),
@@ -479,7 +597,7 @@ def _open_parallel_glo12_reference_week(
         )
     else:
         surface_depth = 0.0 if week_task.surface_depth is None else week_task.surface_depth
-        dataset = glo12_reference_datasets._glo12_1_12_path(
+        dataset = glo12_reference_datasets._glo12_surface_currents_1_12(
             first_day_datetime,
             days_count=week_task.lead_days_count,
             target_depths=numpy.array([surface_depth]),
