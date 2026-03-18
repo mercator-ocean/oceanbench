@@ -28,7 +28,7 @@ from oceanbench.core.dataset_source import DatasetSource, get_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.instrumentation import instrumented_operation, log_event
 from oceanbench.core.lead_day_utils import lead_day_labels
-from oceanbench.core.local_stage import local_stage_directory, should_stage_locally
+from oceanbench.core.local_stage import local_stage_build_guard, local_stage_directory, should_stage_locally
 from oceanbench.core.references import glo12 as glo12_reference_datasets
 from oceanbench.core.references import glorys as glorys_reference_datasets
 from oceanbench.core.remote_http import require_remote_dataset_dimensions
@@ -311,57 +311,59 @@ def _stage_lagrangian_week_sources(
         challenger_stage_path = _lagrangian_stage_path(week_source, week_source.challenger_source)
         reference_stage_path = _lagrangian_stage_path(week_source, week_source.reference_source)
 
-        if challenger_stage_path.exists():
-            log_event(
-                "lagrangian_stage_reused",
-                source_kind=week_source.challenger_source.kind,
-                source_name=week_source.challenger_source.name,
-                source_resolution=week_source.challenger_source.resolution,
-                stage_path=str(challenger_stage_path),
-                week_index=week_source.week_index,
-                weeks_count=week_source.weeks_count,
-                first_day_datetime=week_source.first_day_datetime,
-            )
-        else:
-            with instrumented_operation(
-                "lagrangian_stage_build",
-                source_kind=week_source.challenger_source.kind,
-                source_name=week_source.challenger_source.name,
-                source_resolution=week_source.challenger_source.resolution,
-                stage_path=str(challenger_stage_path),
-                week_index=week_source.week_index,
-                weeks_count=week_source.weeks_count,
-                first_day_datetime=week_source.first_day_datetime,
-            ):
-                _write_staged_lagrangian_dataset(challenger_week_dataset, challenger_stage_path)
+        with local_stage_build_guard(challenger_stage_path) as should_build_stage:
+            if not should_build_stage:
+                log_event(
+                    "lagrangian_stage_reused",
+                    source_kind=week_source.challenger_source.kind,
+                    source_name=week_source.challenger_source.name,
+                    source_resolution=week_source.challenger_source.resolution,
+                    stage_path=str(challenger_stage_path),
+                    week_index=week_source.week_index,
+                    weeks_count=week_source.weeks_count,
+                    first_day_datetime=week_source.first_day_datetime,
+                )
+            else:
+                with instrumented_operation(
+                    "lagrangian_stage_build",
+                    source_kind=week_source.challenger_source.kind,
+                    source_name=week_source.challenger_source.name,
+                    source_resolution=week_source.challenger_source.resolution,
+                    stage_path=str(challenger_stage_path),
+                    week_index=week_source.week_index,
+                    weeks_count=week_source.weeks_count,
+                    first_day_datetime=week_source.first_day_datetime,
+                ):
+                    _write_staged_lagrangian_dataset(challenger_week_dataset, challenger_stage_path)
 
-        if reference_stage_path.exists():
-            log_event(
-                "lagrangian_stage_reused",
-                source_kind=week_source.reference_source.kind,
-                source_name=week_source.reference_source.name,
-                source_resolution=week_source.reference_source.resolution,
-                stage_path=str(reference_stage_path),
-                week_index=week_source.week_index,
-                weeks_count=week_source.weeks_count,
-                first_day_datetime=week_source.first_day_datetime,
-            )
-        else:
-            with instrumented_operation(
-                "lagrangian_stage_build",
-                source_kind=week_source.reference_source.kind,
-                source_name=week_source.reference_source.name,
-                source_resolution=week_source.reference_source.resolution,
-                stage_path=str(reference_stage_path),
-                week_index=week_source.week_index,
-                weeks_count=week_source.weeks_count,
-                first_day_datetime=week_source.first_day_datetime,
-            ):
-                reference_week_dataset = _open_reference_week_from_source(week_source)
-                try:
-                    _write_staged_lagrangian_dataset(reference_week_dataset, reference_stage_path)
-                finally:
-                    reference_week_dataset.close()
+        with local_stage_build_guard(reference_stage_path) as should_build_stage:
+            if not should_build_stage:
+                log_event(
+                    "lagrangian_stage_reused",
+                    source_kind=week_source.reference_source.kind,
+                    source_name=week_source.reference_source.name,
+                    source_resolution=week_source.reference_source.resolution,
+                    stage_path=str(reference_stage_path),
+                    week_index=week_source.week_index,
+                    weeks_count=week_source.weeks_count,
+                    first_day_datetime=week_source.first_day_datetime,
+                )
+            else:
+                with instrumented_operation(
+                    "lagrangian_stage_build",
+                    source_kind=week_source.reference_source.kind,
+                    source_name=week_source.reference_source.name,
+                    source_resolution=week_source.reference_source.resolution,
+                    stage_path=str(reference_stage_path),
+                    week_index=week_source.week_index,
+                    weeks_count=week_source.weeks_count,
+                    first_day_datetime=week_source.first_day_datetime,
+                ):
+                    reference_week_dataset = _open_reference_week_from_source(week_source)
+                    try:
+                        _write_staged_lagrangian_dataset(reference_week_dataset, reference_stage_path)
+                    finally:
+                        reference_week_dataset.close()
 
         staged_week_sources.append(
             LagrangianWeekSource(

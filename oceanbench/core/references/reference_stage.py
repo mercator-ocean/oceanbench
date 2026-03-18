@@ -13,7 +13,7 @@ import xarray
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.instrumentation import instrumented_operation, log_event
-from oceanbench.core.local_stage import local_stage_directory, should_stage_locally
+from oceanbench.core.local_stage import local_stage_build_guard, local_stage_directory, should_stage_locally
 
 LOCAL_STAGE_REFERENCES_KEY = "references"
 
@@ -77,30 +77,31 @@ def staged_reference_dataset(
     weeks_count = len(first_day_datetimes)
     for week_index, first_day_datetime in enumerate(first_day_datetimes, start=1):
         stage_path = _reference_stage_path(dataset_name, resolution, lead_days_count, first_day_datetime)
-        if stage_path.exists():
-            log_event(
-                "reference_stage_reused",
-                dataset=dataset_name,
-                resolution=resolution,
-                stage_path=str(stage_path),
-                week_index=week_index,
-                weeks_count=weeks_count,
-                first_day_datetime=str(first_day_datetime),
-            )
-        else:
-            with instrumented_operation(
-                "reference_stage_build",
-                dataset=dataset_name,
-                resolution=resolution,
-                stage_path=str(stage_path),
-                week_index=week_index,
-                weeks_count=weeks_count,
-                first_day_datetime=str(first_day_datetime),
-            ):
-                week_dataset = open_week_dataset(first_day_datetime)
-                try:
-                    _write_staged_reference_dataset(week_dataset, stage_path)
-                finally:
-                    week_dataset.close()
+        with local_stage_build_guard(stage_path) as should_build_stage:
+            if not should_build_stage:
+                log_event(
+                    "reference_stage_reused",
+                    dataset=dataset_name,
+                    resolution=resolution,
+                    stage_path=str(stage_path),
+                    week_index=week_index,
+                    weeks_count=weeks_count,
+                    first_day_datetime=str(first_day_datetime),
+                )
+            else:
+                with instrumented_operation(
+                    "reference_stage_build",
+                    dataset=dataset_name,
+                    resolution=resolution,
+                    stage_path=str(stage_path),
+                    week_index=week_index,
+                    weeks_count=weeks_count,
+                    first_day_datetime=str(first_day_datetime),
+                ):
+                    week_dataset = open_week_dataset(first_day_datetime)
+                    try:
+                        _write_staged_reference_dataset(week_dataset, stage_path)
+                    finally:
+                        week_dataset.close()
         stage_paths.append(stage_path)
     return _open_staged_reference_dataset(dataset_name, resolution, first_day_datetimes, stage_paths)
