@@ -5,7 +5,7 @@
 from datetime import datetime
 import numpy
 import pandas
-from xarray import Dataset, open_mfdataset, merge, concat
+from xarray import Dataset, open_dataset, open_mfdataset, merge, concat
 import logging
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.dataset_source import with_dataset_source
@@ -14,9 +14,23 @@ import copernicusmarine
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
 from oceanbench.core.instrumentation import instrumented_operation
 from oceanbench.core.remote_http import require_remote_dataset_dimensions
+from oceanbench.core.references.reference_stage import staged_reference_dataset, should_stage_reference_locally
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
+
+
+def _prepare_reference_week_dataset(
+    dataset: Dataset,
+    lead_days_count: int,
+    operation_name: str,
+) -> Dataset:
+    week_dataset = require_remote_dataset_dimensions(dataset, [Dimension.TIME.key()], operation_name)
+    week_dataset = week_dataset.isel({Dimension.TIME.key(): slice(0, lead_days_count)})
+    week_lead_days_count = week_dataset.sizes[Dimension.TIME.key()]
+    return week_dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
+        {Dimension.LEAD_DAY_INDEX.key(): range(week_lead_days_count)}
+    )
 
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
@@ -34,6 +48,18 @@ def _glo12_analysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
     with instrumented_operation("reference_dataset_load", dataset="glo12", resolution="quarter_degree"):
+        if should_stage_reference_locally():
+            return staged_reference_dataset(
+                dataset_name="glo12",
+                resolution="quarter_degree",
+                first_day_datetimes=first_day_datetimes,
+                lead_days_count=lead_days_count,
+                open_week_dataset=lambda first_day_datetime: _prepare_reference_week_dataset(
+                    open_dataset(_glo12_1_4_path(first_day_datetime), engine="zarr"),
+                    lead_days_count=lead_days_count,
+                    operation_name="GLO12 quarter-degree dataset open",
+                ),
+            )
         reference_dataset = open_mfdataset(
             list(map(_glo12_1_4_path, first_day_datetimes)),
             engine="zarr",
@@ -130,8 +156,20 @@ def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
 
     target_depths = challenger_dataset[Dimension.DEPTH.key()].values
 
-    datasets = []
     with instrumented_operation("reference_dataset_load", dataset="glo12", resolution="twelfth_degree"):
+        if should_stage_reference_locally():
+            return staged_reference_dataset(
+                dataset_name="glo12",
+                resolution="twelfth_degree",
+                first_day_datetimes=first_day_datetimes,
+                lead_days_count=lead_days_count,
+                open_week_dataset=lambda first_day_datetime: _prepare_reference_week_dataset(
+                    _glo12_1_12_path(first_day_datetime, days_count=lead_days_count, target_depths=target_depths),
+                    lead_days_count=lead_days_count,
+                    operation_name="GLO12 twelfth-degree dataset open",
+                ),
+            )
+        datasets = []
         for week_index, first_day_datetime in enumerate(first_day_datetimes, start=1):
             with instrumented_operation(
                 "reference_dataset_week_load",
@@ -162,6 +200,18 @@ def _glo12_analysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
     with instrumented_operation("reference_dataset_load", dataset="glo12", resolution="one_degree"):
+        if should_stage_reference_locally():
+            return staged_reference_dataset(
+                dataset_name="glo12",
+                resolution="one_degree",
+                first_day_datetimes=first_day_datetimes,
+                lead_days_count=lead_days_count,
+                open_week_dataset=lambda first_day_datetime: _prepare_reference_week_dataset(
+                    open_dataset(_glo12_1_degree_path(first_day_datetime), engine="zarr"),
+                    lead_days_count=lead_days_count,
+                    operation_name="GLO12 one-degree dataset open",
+                ),
+            )
         reference_dataset = open_mfdataset(
             list(map(_glo12_1_degree_path, first_day_datetimes)),
             engine="zarr",
