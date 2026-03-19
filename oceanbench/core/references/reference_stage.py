@@ -13,7 +13,12 @@ import xarray
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.instrumentation import instrumented_operation, log_event
-from oceanbench.core.local_stage import local_stage_build_guard, local_stage_directory, should_stage_locally
+from oceanbench.core.local_stage import (
+    local_stage_build_guard,
+    local_stage_directory,
+    run_in_local_stage_workers,
+    should_stage_locally,
+)
 
 LOCAL_STAGE_REFERENCES_KEY = "references"
 
@@ -73,9 +78,10 @@ def staged_reference_dataset(
     lead_days_count: int,
     open_week_dataset: Callable[[numpy.datetime64], xarray.Dataset],
 ) -> xarray.Dataset:
-    stage_paths = []
     weeks_count = len(first_day_datetimes)
-    for week_index, first_day_datetime in enumerate(first_day_datetimes, start=1):
+
+    def stage_week(week: tuple[int, numpy.datetime64]) -> Path:
+        week_index, first_day_datetime = week
         stage_path = _reference_stage_path(dataset_name, resolution, lead_days_count, first_day_datetime)
         with local_stage_build_guard(stage_path) as should_build_stage:
             if not should_build_stage:
@@ -103,5 +109,10 @@ def staged_reference_dataset(
                         _write_staged_reference_dataset(week_dataset, stage_path)
                     finally:
                         week_dataset.close()
-        stage_paths.append(stage_path)
+        return stage_path
+
+    stage_paths = run_in_local_stage_workers(
+        list(enumerate(first_day_datetimes, start=1)),
+        stage_week,
+    )
     return _open_staged_reference_dataset(dataset_name, resolution, first_day_datetimes, stage_paths)

@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
@@ -11,21 +13,25 @@ import socket
 from os import environ
 from pathlib import Path
 from time import sleep
-from typing import Iterator
+from typing import Iterator, TypeVar
 
 from oceanbench.core.instrumentation import log_event
 
 LOCAL_STAGE_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE"
 LOCAL_STAGE_DIRECTORY_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE_DIRECTORY"
 LOCAL_STAGE_CLEANUP_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE_CLEANUP"
+LOCAL_STAGE_MAX_WORKERS_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE_MAX_WORKERS"
 LOCAL_STAGE_LOCK_TIMEOUT_SECONDS_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE_LOCK_TIMEOUT_SECONDS"
 LOCAL_STAGE_LOCK_POLL_SECONDS_ENVIRONMENT_VARIABLE = "OCEANBENCH_LOCAL_STAGE_LOCK_POLL_SECONDS"
 LOCAL_STAGE_ALL_KEY = "all"
 LOCAL_STAGE_CLEANUP_NEVER = "never"
 LOCAL_STAGE_CLEANUP_SUCCESS = "success"
 LOCAL_STAGE_CLEANUP_ALWAYS = "always"
+DEFAULT_LOCAL_STAGE_MAX_WORKERS = min(4, os.cpu_count() or 1)
 DEFAULT_LOCAL_STAGE_LOCK_TIMEOUT_SECONDS = 24 * 60 * 60
 DEFAULT_LOCAL_STAGE_LOCK_POLL_SECONDS = 5.0
+ITEM = TypeVar("ITEM")
+RESULT = TypeVar("RESULT")
 
 
 def local_stage_keys() -> set[str]:
@@ -45,6 +51,16 @@ def should_stage_locally(stage_key: str) -> bool:
 def local_stage_directory() -> Path:
     default_stage_directory = Path(environ.get("TMPDIR", "/tmp")) / "oceanbench-stage"
     return Path(environ.get(LOCAL_STAGE_DIRECTORY_ENVIRONMENT_VARIABLE, str(default_stage_directory)))
+
+
+def local_stage_max_workers() -> int:
+    max_workers = int(environ.get(LOCAL_STAGE_MAX_WORKERS_ENVIRONMENT_VARIABLE, DEFAULT_LOCAL_STAGE_MAX_WORKERS))
+    if max_workers < 1:
+        raise ValueError(
+            f"Unsupported {LOCAL_STAGE_MAX_WORKERS_ENVIRONMENT_VARIABLE} value: {max_workers!r}. "
+            "Expected an integer greater than or equal to 1."
+        )
+    return max_workers
 
 
 def _local_stage_lock_timeout_seconds() -> float:
@@ -90,6 +106,19 @@ def should_cleanup_local_stage_directory(operation_succeeded: bool) -> bool:
 
 def cleanup_local_stage_directory() -> None:
     shutil.rmtree(local_stage_directory(), ignore_errors=True)
+
+
+def run_in_local_stage_workers(items: list[ITEM], callback: Callable[[ITEM], RESULT]) -> list[RESULT]:
+    max_workers = min(local_stage_max_workers(), len(items))
+    if max_workers <= 1:
+        return [callback(item) for item in items]
+    log_event(
+        "local_stage_parallel_execution",
+        items_count=len(items),
+        max_workers=max_workers,
+    )
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        return list(executor.map(callback, items))
 
 
 def _local_stage_lock_path(stage_path: Path) -> Path:
