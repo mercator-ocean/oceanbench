@@ -12,7 +12,6 @@ from oceanbench.core.dataset_utils import (
     Variable,
     VARIABLE_LABELS,
     DEPTH_BINS_DEFAULT,
-    DEPTH_BINS_BY_VARIABLE,
     VARIABLE_DISPLAY_ORDER,
     DEPTH_BIN_DISPLAY_ORDER,
 )
@@ -20,26 +19,52 @@ from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
+from oceanbench.core.resolution import get_dataset_resolution
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
-MEAN_SEA_SURFACE_HEIGHT_URL = (
-    "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mean_sea_surface_height_2024.zarr"
-)
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
+VELOCITY_TARGET_DEPTH_METERS = 15.0
 
 
-def _load_mean_sea_surface_height() -> xarray.DataArray:
-    mean_sea_surface_height_dataset = xarray.open_dataset(
-        MEAN_SEA_SURFACE_HEIGHT_URL,
+def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
+    if resolution == "twelfth_degree":
+        return (
+            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mean_sea_surface_height_2024/"
+            "GLO-MFC_001_030_mdt.zarr"
+        )
+    if resolution == "quarter_degree":
+        return (
+            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mean_sea_surface_height_2024/"
+            "GLO-MFC_001_030_mdt_025deg.zarr"
+        )
+    if resolution == "one_degree":
+        return (
+            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mean_sea_surface_height_2024/"
+            "GLO-MFC_001_030_mdt_1deg.zarr"
+        )
+    raise ValueError(f"Unsupported resolution : {resolution}.")
+
+
+def _load_mean_dynamic_topography(resolution: str) -> xarray.DataArray:
+    dataset = xarray.open_dataset(
+        _mean_dynamic_topography_zarr_url(resolution),
         engine="zarr",
         chunks="auto",
+        consolidated=True,
     )
-    return mean_sea_surface_height_dataset["mssh"]
-
-
-def _get_depth_bins(variable_key: str) -> dict[str, tuple[float, float]]:
-    return DEPTH_BINS_BY_VARIABLE.get(variable_key, DEPTH_BINS_DEFAULT)
+    dataset = rename_dataset_with_standard_names(dataset)
+    dataset = dataset.rename(
+        {
+            dimension_name: standard_name
+            for dimension_name, standard_name in {
+                "lat": Dimension.LATITUDE.key(),
+                "lon": Dimension.LONGITUDE.key(),
+            }.items()
+            if dimension_name in dataset.dims
+        }
+    )
+    return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 
 
 def _assign_depth_bins(
@@ -51,6 +76,71 @@ def _assign_depth_bins(
         mask = (depth_values >= depth_minimum) & (depth_values < depth_maximum)
         bin_assignments[mask] = bin_name
     return bin_assignments
+
+
+def _assign_temperature_depth_bins(depth_values: numpy.ndarray) -> numpy.ndarray:
+    bin_assignments = _assign_depth_bins(depth_values, DEPTH_BINS_DEFAULT)
+    surface_mask = (depth_values >= -1) & (depth_values < 1)
+    bin_assignments[surface_mask] = "SST"
+    return bin_assignments
+
+
+def _interpolate_observations_to_target_depth(
+    observations_dataframe: pandas.DataFrame,
+    target_depth: float,
+) -> pandas.DataFrame:
+    if observations_dataframe.empty:
+        return observations_dataframe
+    observations_dataframe = observations_dataframe.dropna(subset=["observation_value", Dimension.DEPTH.key()])
+    if observations_dataframe.empty:
+        return observations_dataframe
+    time_key = Dimension.TIME.key()
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
+    depth_key = Dimension.DEPTH.key()
+    group_keys = [time_key, latitude_key, longitude_key, "first_day", "lead_day"]
+    target_columns = [
+        "observation_value",
+        time_key,
+        latitude_key,
+        longitude_key,
+        "first_day",
+        depth_key,
+        "lead_day",
+    ]
+
+    records = []
+    for group_key, group in observations_dataframe.groupby(group_keys, sort=False):
+        depths = group[depth_key].to_numpy()
+        values = group["observation_value"].to_numpy()
+        below_depths = depths[depths <= target_depth]
+        above_depths = depths[depths >= target_depth]
+        if below_depths.size == 0 or above_depths.size == 0:
+            continue
+        below_depth = below_depths.max()
+        above_depth = above_depths.min()
+        below_value = values[depths == below_depth].mean()
+        above_value = values[depths == above_depth].mean()
+        if numpy.isclose(below_depth, above_depth):
+            interpolated_value = below_value
+        else:
+            weight = (target_depth - below_depth) / (above_depth - below_depth)
+            interpolated_value = below_value + weight * (above_value - below_value)
+        if not isinstance(group_key, tuple):
+            group_key = (group_key,)
+        record = dict(zip(group_keys, group_key))
+        record.update(
+            {
+                "observation_value": interpolated_value,
+                depth_key: target_depth,
+            }
+        )
+        records.append(record)
+
+    if not records:
+        return pandas.DataFrame(columns=target_columns)
+    result = pandas.DataFrame.from_records(records)
+    return result[target_columns]
 
 
 def _create_observations_dataframe(
@@ -99,32 +189,53 @@ def _create_observations_dataframe(
         ["observation_value", time_key, latitude_key, longitude_key, "first_day", depth_key, "lead_day"]
     ]
 
-    depth_bins = _get_depth_bins(standard_variable_key)
-    observations_dataframe["depth_bin"] = _assign_depth_bins(observations_dataframe[depth_key].values, depth_bins)
+    if standard_variable_key in (
+        Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+    ):
+        observations_dataframe = _interpolate_observations_to_target_depth(
+            observations_dataframe,
+            VELOCITY_TARGET_DEPTH_METERS,
+        )
+        if observations_dataframe.empty:
+            return observations_dataframe
+        observations_dataframe["depth_bin"] = "15m"
+        return observations_dataframe
+
+    if standard_variable_key == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
+        observations_dataframe["depth_bin"] = "surface"
+        return observations_dataframe
+    if standard_variable_key == Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key():
+        observations_dataframe["depth_bin"] = _assign_temperature_depth_bins(observations_dataframe[depth_key].values)
+    else:
+        observations_dataframe["depth_bin"] = _assign_depth_bins(
+            observations_dataframe[depth_key].values,
+            DEPTH_BINS_DEFAULT,
+        )
     return observations_dataframe.loc[observations_dataframe["depth_bin"] != ""]
 
 
-def _apply_sea_surface_height_correction(
-    dataframe: pandas.DataFrame,
+def _convert_forecast_ssh_to_sla(
+    model_variable: xarray.DataArray,
     variable_key: str,
-) -> pandas.DataFrame:
+) -> xarray.DataArray:
     if variable_key != Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
-        return dataframe
-    latitude_key = Dimension.LATITUDE.key()
-    longitude_key = Dimension.LONGITUDE.key()
-    mean_sea_surface_height = _load_mean_sea_surface_height()
-    latitudes = xarray.DataArray(dataframe[latitude_key].values, dims="observation")
-    longitudes = xarray.DataArray(dataframe[longitude_key].values, dims="observation")
-    mean_sea_surface_height_at_observations = mean_sea_surface_height.interp(
-        **{latitude_key: latitudes, longitude_key: longitudes}, method="linear"
-    ).values
-    corrected_dataframe = dataframe.copy()
-    corrected_dataframe["observation_value"] = (
-        dataframe["observation_value"]
-        + mean_sea_surface_height_at_observations
-        + REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+        return model_variable
+    model_dataset = rename_dataset_with_standard_names(model_variable.to_dataset(name=variable_key))
+    model_dataset = model_dataset.rename(
+        {
+            dimension_name: standard_name
+            for dimension_name, standard_name in {
+                "lat": Dimension.LATITUDE.key(),
+                "lon": Dimension.LONGITUDE.key(),
+            }.items()
+            if dimension_name in model_dataset.dims
+        }
     )
-    return corrected_dataframe
+    model_variable = model_dataset[variable_key]
+    resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
+    mean_dynamic_topography = _load_mean_dynamic_topography(resolution)
+    return model_variable - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
 
 
 def _interpolate_vertically(
@@ -176,9 +287,53 @@ def _interpolate_vertically(
     return result
 
 
+def _interpolate_vertically_bracket(
+    profiles: numpy.ndarray,
+    model_depths: numpy.ndarray,
+    target_depths: numpy.ndarray,
+) -> numpy.ndarray:
+    if len(model_depths) == 1:
+        return profiles[0, :]
+    observation_count = profiles.shape[1]
+    result = numpy.full(observation_count, numpy.nan)
+    sort_order = numpy.argsort(model_depths)
+    sorted_depths = model_depths[sort_order]
+    sorted_profiles = profiles[sort_order, :]
+
+    insert_idx = numpy.searchsorted(sorted_depths, target_depths)
+    idx_upper = numpy.clip(insert_idx, 0, len(sorted_depths) - 1)
+    idx_lower = numpy.clip(insert_idx - 1, 0, len(sorted_depths) - 1)
+
+    exact_mask = sorted_depths[idx_upper] == target_depths
+    idx_lower = numpy.where(exact_mask, idx_upper, idx_lower)
+
+    obs_indices = numpy.arange(observation_count)
+    lower_values = sorted_profiles[idx_lower, obs_indices]
+    upper_values = sorted_profiles[idx_upper, obs_indices]
+    lower_depths = sorted_depths[idx_lower]
+    upper_depths = sorted_depths[idx_upper]
+
+    same_depth = numpy.isclose(lower_depths, upper_depths)
+    interpolated = numpy.empty(observation_count, dtype=float)
+    interpolated[same_depth] = lower_values[same_depth]
+    different = ~same_depth
+    if numpy.any(different):
+        weights = (target_depths[different] - lower_depths[different]) / (
+            upper_depths[different] - lower_depths[different]
+        )
+        interpolated[different] = lower_values[different] + weights * (
+            upper_values[different] - lower_values[different]
+        )
+
+    invalid = numpy.isnan(lower_values) | numpy.isnan(upper_values)
+    result[~invalid] = interpolated[~invalid]
+    return result
+
+
 def _interpolate_model_to_observations(
     model_data: xarray.DataArray,
     observations_dataframe: pandas.DataFrame,
+    variable_key: str,
 ) -> numpy.ndarray:
     observations_dataframe = observations_dataframe.reset_index(drop=True)
     latitude_key = Dimension.LATITUDE.key()
@@ -214,7 +369,19 @@ def _interpolate_model_to_observations(
                 },
                 method="linear",
             ).values
-            interpolated = _interpolate_vertically(horizontally_interpolated, model_depths, observation_depths)
+            if variable_key in (
+                Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+                Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+                Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+                Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+            ):
+                interpolated = _interpolate_vertically_bracket(
+                    horizontally_interpolated,
+                    model_depths,
+                    observation_depths,
+                )
+            else:
+                interpolated = _interpolate_vertically(horizontally_interpolated, model_depths, observation_depths)
             model_values[observation_indices] = interpolated
     return model_values
 
@@ -263,10 +430,11 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
     pivot_table = pivot_table.sort_values(["variable_sort", "depth_sort"]).drop(columns=["variable_sort", "depth_sort"])
     pivot_table["variable"] = pivot_table["variable"].map(VARIABLE_LABELS)
 
-    # Display SST as a dedicated "surface temperature" row, separated from the other temperature depth bins.
     sst_display_mask = (pivot_table["variable"] == "temperature") & (pivot_table["depth_bin"] == "SST")
     pivot_table.loc[sst_display_mask, "variable"] = "surface temperature"
     pivot_table.loc[sst_display_mask, "depth_bin"] = "surface"
+    sla_display_mask = pivot_table["variable"] == "surface height"
+    pivot_table.loc[sla_display_mask, "variable"] = "sea level anomaly"
 
     lead_labels = lead_day_labels(1, lead_days_count)
     rename_columns = {
@@ -275,7 +443,16 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
     rename_columns["variable"] = "Variable"
     rename_columns["depth_bin"] = "Depth Range"
     rename_columns["count"] = "Number of observations at lead day 1"
-    return pivot_table.rename(columns=rename_columns).reset_index(drop=True)
+    pivot_table = pivot_table.rename(columns=rename_columns).reset_index(drop=True)
+    lead_day_columns = lead_labels
+    ordered_columns = [
+        "Variable",
+        "Depth Range",
+        "Number of observations at lead day 1",
+        *lead_day_columns,
+    ]
+    ordered_columns = [column for column in ordered_columns if column in pivot_table.columns]
+    return pivot_table[ordered_columns]
 
 
 def rmsd_class4_validation(
@@ -300,12 +477,14 @@ def rmsd_class4_validation(
         if observations_dataframe.empty:
             continue
 
-        observations_dataframe = _apply_sea_surface_height_correction(observations_dataframe, standard_variable_key)
         observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
 
-        model_variable = challenger[challenger_variable_key]
+        model_variable = _convert_forecast_ssh_to_sla(
+            challenger[challenger_variable_key],
+            standard_variable_key,
+        )
         observations_dataframe["model_value"] = _interpolate_model_to_observations(
-            model_variable, observations_dataframe
+            model_variable, observations_dataframe, standard_variable_key
         )
 
         variable_results = _compute_rmsd_table(observations_dataframe, standard_variable_key)

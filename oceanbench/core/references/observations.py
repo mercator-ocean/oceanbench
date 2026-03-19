@@ -11,6 +11,10 @@ from oceanbench.core.dataset_utils import Dimension, Variable
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 
 
+class ObservationDataUnavailableError(ValueError):
+    pass
+
+
 def observation_path(day_datetime: numpy.datetime64) -> str:
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
     return f"https://minio.dive.edito.eu/project-oceanbench/public/observations2024/{day_string}.zarr"
@@ -46,8 +50,8 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     if first_challenger_day < OBSERVATIONS_FIRST_AVAILABLE_DATE:
         first_challenger_day_string = pandas.Timestamp(first_challenger_day).strftime("%Y-%m-%d")
         first_available_day_string = pandas.Timestamp(OBSERVATIONS_FIRST_AVAILABLE_DATE).strftime("%Y-%m-%d")
-        raise ValueError(
-            "OBSERVATIONS_NOT_AVAILABLE: Observation-based Class IV scores were not computed for this challenger. "
+        raise ObservationDataUnavailableError(
+            "Observation-based Class IV scores were not computed for this challenger. "
             f"Observation data is available from {first_available_day_string}, "
             f"while challenger first_day_datetime starts on {first_challenger_day_string}."
         )
