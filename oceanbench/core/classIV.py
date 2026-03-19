@@ -6,6 +6,8 @@ import numpy
 import xarray
 import pandas
 from scipy.interpolate import CubicSpline
+from pathlib import Path
+import shutil
 
 from oceanbench.core.dataset_utils import (
     Dimension,
@@ -16,10 +18,13 @@ from oceanbench.core.dataset_utils import (
     DEPTH_BIN_DISPLAY_ORDER,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
+from oceanbench.core.local_stage import local_stage_build_guard, local_stage_directory, should_stage_locally
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
 from oceanbench.core.resolution import get_dataset_resolution
+from oceanbench.core.instrumentation import instrumented_operation, log_event
+from oceanbench.core.references.observations import LOCAL_STAGE_OBSERVATIONS_KEY
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
@@ -41,13 +46,70 @@ def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
     raise ValueError(f"Unsupported resolution : {resolution}.")
 
 
+def _mean_dynamic_topography_stage_path(resolution: str) -> Path:
+    return local_stage_directory() / f"class4-mean-dynamic-topography-2024-{resolution}.zarr"
+
+
+def _write_staged_mean_dynamic_topography_dataset(
+    mean_dynamic_topography_dataset: xarray.Dataset,
+    stage_path: Path,
+) -> None:
+    temporary_stage_path = stage_path.with_name(f"{stage_path.name}.tmp")
+    stage_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(temporary_stage_path, ignore_errors=True)
+    mean_dynamic_topography_dataset.to_zarr(temporary_stage_path, mode="w")
+    shutil.rmtree(stage_path, ignore_errors=True)
+    temporary_stage_path.rename(stage_path)
+
+
+def _open_mean_dynamic_topography_dataset(resolution: str) -> xarray.Dataset:
+    mean_dynamic_topography_url = _mean_dynamic_topography_zarr_url(resolution)
+    if not should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY):
+        return xarray.open_dataset(
+            mean_dynamic_topography_url,
+            engine="zarr",
+            chunks="auto",
+            consolidated=True,
+        )
+    local_stage_path = _mean_dynamic_topography_stage_path(resolution)
+    with local_stage_build_guard(local_stage_path) as should_build_stage:
+        if not should_build_stage:
+            log_event(
+                "mean_dynamic_topography_stage_reused",
+                stage_path=str(local_stage_path),
+                resolution=resolution,
+            )
+        else:
+            log_event(
+                "mean_dynamic_topography_stage_build_started",
+                stage_path=str(local_stage_path),
+                resolution=resolution,
+            )
+            mean_dynamic_topography_dataset = xarray.open_dataset(
+                mean_dynamic_topography_url,
+                engine="zarr",
+                chunks="auto",
+                consolidated=True,
+            )
+            try:
+                with instrumented_operation(
+                    "mean_dynamic_topography_stage_write",
+                    stage_path=str(local_stage_path),
+                    resolution=resolution,
+                ):
+                    _write_staged_mean_dynamic_topography_dataset(mean_dynamic_topography_dataset, local_stage_path)
+            finally:
+                mean_dynamic_topography_dataset.close()
+            log_event(
+                "mean_dynamic_topography_stage_ready",
+                stage_path=str(local_stage_path),
+                resolution=resolution,
+            )
+    return xarray.open_dataset(local_stage_path, engine="zarr")
+
+
 def _load_mean_dynamic_topography(resolution: str) -> xarray.DataArray:
-    dataset = xarray.open_dataset(
-        _mean_dynamic_topography_zarr_url(resolution),
-        engine="zarr",
-        chunks="auto",
-        consolidated=True,
-    )
+    dataset = _open_mean_dynamic_topography_dataset(resolution)
     dataset = rename_dataset_with_standard_names(dataset)
     return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 

@@ -131,25 +131,6 @@ def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.n
     return dataset
 
 
-def _glo12_surface_currents_1_12(first_day_datetime, days_count: int, target_depths: numpy.ndarray) -> Dataset:
-    first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
-
-    start_datetime = first_day.strftime("%Y-%m-%dT00:00:00")
-    end_datetime = (first_day + pandas.Timedelta(days=days_count - 1)).strftime("%Y-%m-%dT00:00:00")
-
-    dataset_current = copernicusmarine.open_dataset(
-        dataset_id="cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m",
-        variables=[
-            StandardVariable.EASTWARD_SEA_WATER_VELOCITY.value,
-            StandardVariable.NORTHWARD_SEA_WATER_VELOCITY.value,
-        ],
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
-    )
-
-    return dataset_current.sel(depth=target_depths, method="nearest")
-
-
 def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
