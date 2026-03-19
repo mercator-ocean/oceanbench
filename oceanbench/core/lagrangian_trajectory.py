@@ -5,7 +5,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
-from pathlib import Path
 import shutil
 import uuid
 import numpy
@@ -24,14 +23,9 @@ import xarray
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
-from oceanbench.core.dataset_source import DatasetSource, get_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.instrumentation import instrumented_operation, log_event
 from oceanbench.core.lead_day_utils import lead_day_labels
-from oceanbench.core.local_stage import local_stage_build_guard, local_stage_directory, should_stage_locally
-from oceanbench.core.references import glo12 as glo12_reference_datasets
-from oceanbench.core.references import glorys as glorys_reference_datasets
-from oceanbench.core.remote_http import require_remote_dataset_dimensions
 import logging
 
 VARIABLE = Variable
@@ -61,31 +55,6 @@ class FreezeParticle(JITParticle):
 
 
 LEAD_DAY_START = 2
-LOCAL_STAGE_LAGRANGIAN_KEY = "lagrangian"
-SUPPORTED_CHALLENGER_SOURCES = frozenset({"glo12", "glo36v1", "glonet", "xihe", "wenhai"})
-SUPPORTED_REFERENCE_SOURCES = frozenset(
-    {
-        ("glorys", "quarter_degree"),
-        ("glorys", "twelfth_degree"),
-        ("glorys", "one_degree"),
-        ("glo12", "quarter_degree"),
-        ("glo12", "twelfth_degree"),
-        ("glo12", "one_degree"),
-    }
-)
-
-
-@dataclass(frozen=True)
-class LagrangianWeekSource:
-    week_index: int
-    weeks_count: int
-    first_day_datetime: str
-    lead_days_count: int
-    surface_depth: float | None
-    challenger_source: DatasetSource
-    reference_source: DatasetSource
-    challenger_stage_path: str | None = None
-    reference_stage_path: str | None = None
 
 
 def _delete_error_particle(particle, _fieldset, _time):
@@ -171,313 +140,29 @@ def _all_deviation_of_lagrangian_trajectories(
 ):
     weeks_count = challenger_dataset.sizes[Dimension.FIRST_DAY_DATETIME.key()]
     deviations = []
-    staged_week_sources = None
-    if _should_stage_lagrangian_locally():
-        staged_week_sources = _stage_lagrangian_week_sources(challenger_dataset, reference_dataset)
-
     log_event("lagrangian_weeks_started", weeks_count=weeks_count)
-    if staged_week_sources is None:
-        challenger_datasets = _split_dataset(challenger_dataset)
-        reference_datasets = _split_dataset(reference_dataset)
-        for week_index, (challenger_week_dataset, reference_week_dataset) in enumerate(
-            zip(challenger_datasets, reference_datasets, strict=True), start=1
-        ):
-            first_day_datetime = str(challenger_week_dataset[Dimension.TIME.key()].values[0])
-            with instrumented_operation(
-                "lagrangian_week",
-                week_index=week_index,
-                weeks_count=weeks_count,
-                first_day_datetime=first_day_datetime,
-            ):
-                deviations.append(
-                    _one_deviation_of_lagrangian_trajectories(
-                        challenger_week_dataset,
-                        reference_week_dataset,
-                        latitudes,
-                        longitudes,
-                    )
-                )
-    else:
-        for staged_week_source in staged_week_sources:
-            with instrumented_operation(
-                "lagrangian_week",
-                week_index=staged_week_source.week_index,
-                weeks_count=staged_week_source.weeks_count,
-                first_day_datetime=staged_week_source.first_day_datetime,
-            ):
-                challenger_week_dataset = _open_staged_lagrangian_dataset(staged_week_source.challenger_stage_path)
-                reference_week_dataset = _open_staged_lagrangian_dataset(staged_week_source.reference_stage_path)
-                try:
-                    deviations.append(
-                        _one_deviation_of_lagrangian_trajectories(
-                            challenger_week_dataset,
-                            reference_week_dataset,
-                            latitudes,
-                            longitudes,
-                        )
-                    )
-                finally:
-                    challenger_week_dataset.close()
-                    reference_week_dataset.close()
-    log_event("lagrangian_weeks_completed", weeks_count=weeks_count)
-    return deviations
-
-
-def _build_lagrangian_week_sources(
-    challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
-) -> list[LagrangianWeekSource] | None:
-    challenger_source = get_dataset_source(challenger_dataset)
-    reference_source = get_dataset_source(reference_dataset)
-    if (
-        challenger_source is None
-        or reference_source is None
-        or challenger_source.kind != "challenger"
-        or reference_source.kind != "reference"
-        or challenger_source.name not in SUPPORTED_CHALLENGER_SOURCES
-        or (reference_source.name, reference_source.resolution) not in SUPPORTED_REFERENCE_SOURCES
+    challenger_datasets = _split_dataset(challenger_dataset)
+    reference_datasets = _split_dataset(reference_dataset)
+    for week_index, (challenger_week_dataset, reference_week_dataset) in enumerate(
+        zip(challenger_datasets, reference_datasets, strict=True), start=1
     ):
-        return None
-
-    weeks_count = challenger_dataset.sizes[Dimension.FIRST_DAY_DATETIME.key()]
-    lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
-    surface_depth = _surface_depth(challenger_dataset)
-    return [
-        LagrangianWeekSource(
+        first_day_datetime = str(challenger_week_dataset[Dimension.TIME.key()].values[0])
+        with instrumented_operation(
+            "lagrangian_week",
             week_index=week_index,
             weeks_count=weeks_count,
-            first_day_datetime=str(first_day_datetime),
-            lead_days_count=lead_days_count,
-            surface_depth=surface_depth,
-            challenger_source=challenger_source,
-            reference_source=reference_source,
-        )
-        for week_index, first_day_datetime in enumerate(
-            challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values,
-            start=1,
-        )
-    ]
-
-
-def _surface_depth(dataset: xarray.Dataset) -> float | None:
-    if Dimension.DEPTH.key() not in dataset.coords:
-        return None
-    return float(dataset[Dimension.DEPTH.key()].values[0])
-
-
-def _should_stage_lagrangian_locally() -> bool:
-    return should_stage_locally(LOCAL_STAGE_LAGRANGIAN_KEY)
-
-
-def _lagrangian_stage_directory(dataset_source: DatasetSource, lead_days_count: int) -> Path:
-    resolution_suffix = "" if dataset_source.resolution is None else f"-{dataset_source.resolution}"
-    return local_stage_directory() / (
-        f"lagrangian-{dataset_source.kind}-{dataset_source.name}{resolution_suffix}-{lead_days_count}d"
-    )
-
-
-def _lagrangian_stage_path(week_source: LagrangianWeekSource, dataset_source: DatasetSource) -> Path:
-    first_day = datetime.fromisoformat(week_source.first_day_datetime).strftime("%Y%m%d")
-    return _lagrangian_stage_directory(dataset_source, week_source.lead_days_count) / f"{first_day}.zarr"
-
-
-def _write_staged_lagrangian_dataset(dataset: xarray.Dataset, stage_path: Path) -> None:
-    staged_dataset = _surface_current_dataset(dataset).load()
-    for variable_name in staged_dataset.variables:
-        staged_dataset[variable_name].encoding.pop("chunks", None)
-    temporary_stage_path = stage_path.with_name(f"{stage_path.name}.tmp")
-    stage_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.rmtree(temporary_stage_path, ignore_errors=True)
-    staged_dataset.to_zarr(temporary_stage_path, mode="w")
-    shutil.rmtree(stage_path, ignore_errors=True)
-    temporary_stage_path.rename(stage_path)
-
-
-def _open_staged_lagrangian_dataset(stage_path: str) -> xarray.Dataset:
-    return xarray.open_dataset(stage_path, engine="zarr")
-
-
-def _stage_lagrangian_week_sources(
-    challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
-) -> list[LagrangianWeekSource] | None:
-    week_sources = _build_lagrangian_week_sources(challenger_dataset, reference_dataset)
-    if week_sources is None:
-        return None
-
-    challenger_week_datasets = _split_dataset(challenger_dataset)
-    staged_week_sources = []
-    for week_source, challenger_week_dataset in zip(week_sources, challenger_week_datasets, strict=True):
-        challenger_stage_path = _lagrangian_stage_path(week_source, week_source.challenger_source)
-        reference_stage_path = _lagrangian_stage_path(week_source, week_source.reference_source)
-
-        with local_stage_build_guard(challenger_stage_path) as should_build_stage:
-            if not should_build_stage:
-                log_event(
-                    "lagrangian_stage_reused",
-                    source_kind=week_source.challenger_source.kind,
-                    source_name=week_source.challenger_source.name,
-                    source_resolution=week_source.challenger_source.resolution,
-                    stage_path=str(challenger_stage_path),
-                    week_index=week_source.week_index,
-                    weeks_count=week_source.weeks_count,
-                    first_day_datetime=week_source.first_day_datetime,
+            first_day_datetime=first_day_datetime,
+        ):
+            deviations.append(
+                _one_deviation_of_lagrangian_trajectories(
+                    challenger_week_dataset,
+                    reference_week_dataset,
+                    latitudes,
+                    longitudes,
                 )
-            else:
-                with instrumented_operation(
-                    "lagrangian_stage_build",
-                    source_kind=week_source.challenger_source.kind,
-                    source_name=week_source.challenger_source.name,
-                    source_resolution=week_source.challenger_source.resolution,
-                    stage_path=str(challenger_stage_path),
-                    week_index=week_source.week_index,
-                    weeks_count=week_source.weeks_count,
-                    first_day_datetime=week_source.first_day_datetime,
-                ):
-                    _write_staged_lagrangian_dataset(challenger_week_dataset, challenger_stage_path)
-
-        with local_stage_build_guard(reference_stage_path) as should_build_stage:
-            if not should_build_stage:
-                log_event(
-                    "lagrangian_stage_reused",
-                    source_kind=week_source.reference_source.kind,
-                    source_name=week_source.reference_source.name,
-                    source_resolution=week_source.reference_source.resolution,
-                    stage_path=str(reference_stage_path),
-                    week_index=week_source.week_index,
-                    weeks_count=week_source.weeks_count,
-                    first_day_datetime=week_source.first_day_datetime,
-                )
-            else:
-                with instrumented_operation(
-                    "lagrangian_stage_build",
-                    source_kind=week_source.reference_source.kind,
-                    source_name=week_source.reference_source.name,
-                    source_resolution=week_source.reference_source.resolution,
-                    stage_path=str(reference_stage_path),
-                    week_index=week_source.week_index,
-                    weeks_count=week_source.weeks_count,
-                    first_day_datetime=week_source.first_day_datetime,
-                ):
-                    reference_week_dataset = _open_reference_week_from_source(week_source)
-                    try:
-                        _write_staged_lagrangian_dataset(reference_week_dataset, reference_stage_path)
-                    finally:
-                        reference_week_dataset.close()
-
-        staged_week_sources.append(
-            LagrangianWeekSource(
-                week_index=week_source.week_index,
-                weeks_count=week_source.weeks_count,
-                first_day_datetime=week_source.first_day_datetime,
-                lead_days_count=week_source.lead_days_count,
-                surface_depth=week_source.surface_depth,
-                challenger_source=week_source.challenger_source,
-                reference_source=week_source.reference_source,
-                challenger_stage_path=str(challenger_stage_path),
-                reference_stage_path=str(reference_stage_path),
             )
-        )
-
-    return staged_week_sources
-
-
-def _open_reference_week_from_source(
-    week_source: LagrangianWeekSource,
-) -> xarray.Dataset:
-    first_day_datetime = datetime.fromisoformat(week_source.first_day_datetime)
-    if week_source.reference_source.name == "glorys":
-        return _open_glorys_reference_week_from_source(first_day_datetime, week_source)
-    return _open_glo12_reference_week_from_source(first_day_datetime, week_source)
-
-
-def _open_glorys_reference_week_from_source(
-    first_day_datetime: datetime,
-    week_source: LagrangianWeekSource,
-) -> xarray.Dataset:
-    if week_source.reference_source.resolution == "quarter_degree":
-        dataset = xarray.open_dataset(
-            glorys_reference_datasets._glorys_1_4_path(first_day_datetime),
-            engine="zarr",
-        )
-    elif week_source.reference_source.resolution == "one_degree":
-        dataset = xarray.open_dataset(
-            glorys_reference_datasets._glorys_1_degree_path(first_day_datetime),
-            engine="zarr",
-        )
-    else:
-        surface_depth = 0.0 if week_source.surface_depth is None else week_source.surface_depth
-        dataset = glorys_reference_datasets._glorys_surface_currents_1_12(
-            first_day_datetime,
-            days_count=week_source.lead_days_count,
-            target_depths=numpy.array([surface_depth]),
-        )
-    return _prepare_week_dataset(
-        dataset,
-        first_day_datetime,
-        week_source.lead_days_count,
-        "glorys lagrangian week open",
-    )
-
-
-def _open_glo12_reference_week_from_source(
-    first_day_datetime: datetime,
-    week_source: LagrangianWeekSource,
-) -> xarray.Dataset:
-    if week_source.reference_source.resolution == "quarter_degree":
-        dataset = xarray.open_dataset(
-            glo12_reference_datasets._glo12_1_4_path(first_day_datetime),
-            engine="zarr",
-        )
-    elif week_source.reference_source.resolution == "one_degree":
-        dataset = xarray.open_dataset(
-            glo12_reference_datasets._glo12_1_degree_path(first_day_datetime),
-            engine="zarr",
-        )
-    else:
-        surface_depth = 0.0 if week_source.surface_depth is None else week_source.surface_depth
-        dataset = glo12_reference_datasets._glo12_surface_currents_1_12(
-            first_day_datetime,
-            days_count=week_source.lead_days_count,
-            target_depths=numpy.array([surface_depth]),
-        )
-    return _prepare_week_dataset(
-        dataset,
-        first_day_datetime,
-        week_source.lead_days_count,
-        "glo12 lagrangian week open",
-    )
-
-
-def _prepare_week_dataset(
-    dataset: xarray.Dataset,
-    first_day_datetime: datetime,
-    lead_days_count: int,
-    operation_name: str,
-) -> xarray.Dataset:
-    week_dataset = require_remote_dataset_dimensions(dataset, [Dimension.TIME.key()], operation_name)
-    week_dataset = week_dataset.isel({Dimension.TIME.key(): slice(0, lead_days_count)})
-    week_lead_days_count = week_dataset.sizes[Dimension.TIME.key()]
-    return _assign_week_time(
-        first_day_datetime,
-        week_dataset.rename({Dimension.TIME.key(): Dimension.LEAD_DAY_INDEX.key()}).assign_coords(
-            {Dimension.LEAD_DAY_INDEX.key(): range(week_lead_days_count)}
-        ),
-    )
-
-
-def _assign_week_time(
-    first_day_datetime: datetime,
-    dataset: xarray.Dataset,
-) -> xarray.Dataset:
-    lead_day_values = dataset[Dimension.LEAD_DAY_INDEX.key()].values
-    return dataset.rename({Dimension.LEAD_DAY_INDEX.key(): Dimension.TIME.key()}).assign(
-        {
-            Dimension.TIME.key(): [
-                first_day_datetime + timedelta(days=int(lead_day_index)) for lead_day_index in lead_day_values
-            ]
-        }
-    )
+    log_event("lagrangian_weeks_completed", weeks_count=weeks_count)
+    return deviations
 
 
 def _one_deviation_of_lagrangian_trajectories(

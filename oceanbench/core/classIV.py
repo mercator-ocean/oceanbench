@@ -6,6 +6,8 @@ import numpy
 import xarray
 import pandas
 from scipy.interpolate import CubicSpline
+from pathlib import Path
+import shutil
 
 from oceanbench.core.dataset_utils import (
     Dimension,
@@ -17,10 +19,12 @@ from oceanbench.core.dataset_utils import (
     DEPTH_BIN_DISPLAY_ORDER,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
+from oceanbench.core.local_stage import local_stage_build_guard, local_stage_directory, should_stage_locally
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
 from oceanbench.core.instrumentation import instrumented_operation, log_event
+from oceanbench.core.references.observations import LOCAL_STAGE_OBSERVATIONS_KEY
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MEAN_SEA_SURFACE_HEIGHT_URL = (
@@ -30,12 +34,63 @@ MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 
 
+def _mean_sea_surface_height_stage_path() -> Path:
+    return local_stage_directory() / "class4-mean-sea-surface-height-2024.zarr"
+
+
+def _write_staged_mean_sea_surface_height_dataset(
+    mean_sea_surface_height_dataset: xarray.Dataset,
+    stage_path: Path,
+) -> None:
+    temporary_stage_path = stage_path.with_name(f"{stage_path.name}.tmp")
+    stage_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(temporary_stage_path, ignore_errors=True)
+    mean_sea_surface_height_dataset.to_zarr(temporary_stage_path, mode="w")
+    shutil.rmtree(stage_path, ignore_errors=True)
+    temporary_stage_path.rename(stage_path)
+
+
+def _open_mean_sea_surface_height_dataset() -> xarray.Dataset:
+    if not should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY):
+        return xarray.open_dataset(
+            MEAN_SEA_SURFACE_HEIGHT_URL,
+            engine="zarr",
+            chunks="auto",
+        )
+    local_stage_path = _mean_sea_surface_height_stage_path()
+    with local_stage_build_guard(local_stage_path) as should_build_stage:
+        if not should_build_stage:
+            log_event(
+                "mean_sea_surface_height_stage_reused",
+                stage_path=str(local_stage_path),
+            )
+        else:
+            log_event(
+                "mean_sea_surface_height_stage_build_started",
+                stage_path=str(local_stage_path),
+            )
+            mean_sea_surface_height_dataset = xarray.open_dataset(
+                MEAN_SEA_SURFACE_HEIGHT_URL,
+                engine="zarr",
+                chunks="auto",
+            )
+            try:
+                with instrumented_operation(
+                    "mean_sea_surface_height_stage_write",
+                    stage_path=str(local_stage_path),
+                ):
+                    _write_staged_mean_sea_surface_height_dataset(mean_sea_surface_height_dataset, local_stage_path)
+            finally:
+                mean_sea_surface_height_dataset.close()
+            log_event(
+                "mean_sea_surface_height_stage_ready",
+                stage_path=str(local_stage_path),
+            )
+    return xarray.open_dataset(local_stage_path, engine="zarr")
+
+
 def _load_mean_sea_surface_height() -> xarray.DataArray:
-    mean_sea_surface_height_dataset = xarray.open_dataset(
-        MEAN_SEA_SURFACE_HEIGHT_URL,
-        engine="zarr",
-        chunks="auto",
-    )
+    mean_sea_surface_height_dataset = _open_mean_sea_surface_height_dataset()
     return mean_sea_surface_height_dataset["mssh"]
 
 
