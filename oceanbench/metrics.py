@@ -23,7 +23,6 @@ def rmsd_of_variables_compared_to_observations(
     ----------
     challenger_dataset : xarray.Dataset
         The challenger dataset.
-
     Returns
     -------
     DataFrame
