@@ -6,20 +6,24 @@ import numpy
 import xarray
 import pandas
 from scipy.interpolate import CubicSpline
+from pathlib import Path
+import shutil
 
 from oceanbench.core.dataset_utils import (
     Dimension,
     Variable,
-    VARIABLE_LABELS,
+    VARIABLE_METADATA,
     DEPTH_BINS_DEFAULT,
     VARIABLE_DISPLAY_ORDER,
     DEPTH_BIN_DISPLAY_ORDER,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
+from oceanbench.core.local_stage import local_stage_build_guard, local_stage_directory, should_stage_locally
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
 from oceanbench.core.resolution import get_dataset_resolution
+from oceanbench.core.references.observations import LOCAL_STAGE_OBSERVATIONS_KEY
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
@@ -41,13 +45,49 @@ def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
     raise ValueError(f"Unsupported resolution : {resolution}.")
 
 
+def _mean_dynamic_topography_stage_path(resolution: str) -> Path:
+    return local_stage_directory() / f"class4-mean-dynamic-topography-2024-{resolution}.zarr"
+
+
+def _write_staged_mean_dynamic_topography_dataset(
+    mean_dynamic_topography_dataset: xarray.Dataset,
+    stage_path: Path,
+) -> None:
+    temporary_stage_path = stage_path.with_name(f"{stage_path.name}.tmp")
+    stage_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(temporary_stage_path, ignore_errors=True)
+    mean_dynamic_topography_dataset.to_zarr(temporary_stage_path, mode="w")
+    shutil.rmtree(stage_path, ignore_errors=True)
+    temporary_stage_path.rename(stage_path)
+
+
+def _open_mean_dynamic_topography_dataset(resolution: str) -> xarray.Dataset:
+    mean_dynamic_topography_url = _mean_dynamic_topography_zarr_url(resolution)
+    if not should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY):
+        return xarray.open_dataset(
+            mean_dynamic_topography_url,
+            engine="zarr",
+            chunks="auto",
+            consolidated=True,
+        )
+    local_stage_path = _mean_dynamic_topography_stage_path(resolution)
+    with local_stage_build_guard(local_stage_path) as should_build_stage:
+        if should_build_stage:
+            mean_dynamic_topography_dataset = xarray.open_dataset(
+                mean_dynamic_topography_url,
+                engine="zarr",
+                chunks="auto",
+                consolidated=True,
+            )
+            try:
+                _write_staged_mean_dynamic_topography_dataset(mean_dynamic_topography_dataset, local_stage_path)
+            finally:
+                mean_dynamic_topography_dataset.close()
+    return xarray.open_dataset(local_stage_path, engine="zarr")
+
+
 def _load_mean_dynamic_topography(resolution: str) -> xarray.DataArray:
-    dataset = xarray.open_dataset(
-        _mean_dynamic_topography_zarr_url(resolution),
-        engine="zarr",
-        chunks="auto",
-        consolidated=True,
-    )
+    dataset = _open_mean_dynamic_topography_dataset(resolution)
     dataset = rename_dataset_with_standard_names(dataset)
     return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 
@@ -320,61 +360,103 @@ def _interpolate_vertically_bracket(
     return result
 
 
+def _model_data_with_depth_dimension(model_data: xarray.DataArray) -> xarray.DataArray:
+    depth_key = Dimension.DEPTH.key()
+    if depth_key in model_data.dims:
+        return model_data
+    return model_data.expand_dims({depth_key: [0.0]})
+
+
+def _should_use_bracket_vertical_interpolation(variable_key: str) -> bool:
+    return variable_key in (
+        Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+        Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+    )
+
+
+def _horizontally_interpolated_profiles(
+    time_slice: xarray.DataArray,
+    observation_group: pandas.DataFrame,
+) -> numpy.ndarray:
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
+    observation_latitudes = observation_group[latitude_key].values
+    observation_longitudes = observation_group[longitude_key].values
+    return time_slice.interp(
+        {
+            latitude_key: xarray.DataArray(observation_latitudes, dims="observation"),
+            longitude_key: xarray.DataArray(observation_longitudes, dims="observation"),
+        },
+        method="linear",
+    ).values
+
+
+def _interpolated_model_values_for_observation_group(
+    time_slice: xarray.DataArray,
+    observation_group: pandas.DataFrame,
+    model_depths: numpy.ndarray,
+    variable_key: str,
+) -> numpy.ndarray:
+    observation_depths = observation_group[Dimension.DEPTH.key()].values
+    horizontally_interpolated = _horizontally_interpolated_profiles(time_slice, observation_group)
+    if _should_use_bracket_vertical_interpolation(variable_key):
+        return _interpolate_vertically_bracket(
+            horizontally_interpolated,
+            model_depths,
+            observation_depths,
+        )
+    return _interpolate_vertically(horizontally_interpolated, model_depths, observation_depths)
+
+
+def _assign_model_values_for_first_day(
+    model_values: numpy.ndarray,
+    model_data: xarray.DataArray,
+    first_day_group: pandas.DataFrame,
+    first_day_index: int,
+    lead_day_to_index: dict[object, int],
+    model_depths: numpy.ndarray,
+    variable_key: str,
+) -> None:
+    for lead_day, observation_group in first_day_group.groupby("lead_day", sort=False):
+        time_slice = model_data.isel(
+            {
+                Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
+                Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+            }
+        ).compute()
+        model_values[observation_group.index.values] = _interpolated_model_values_for_observation_group(
+            time_slice,
+            observation_group,
+            model_depths,
+            variable_key,
+        )
+
+
 def _interpolate_model_to_observations(
     model_data: xarray.DataArray,
     observations_dataframe: pandas.DataFrame,
     variable_key: str,
 ) -> numpy.ndarray:
     observations_dataframe = observations_dataframe.reset_index(drop=True)
-    latitude_key = Dimension.LATITUDE.key()
-    longitude_key = Dimension.LONGITUDE.key()
-    depth_key = Dimension.DEPTH.key()
-    if depth_key not in model_data.dims:
-        model_data = model_data.expand_dims({depth_key: [0.0]})
-    model_depths = model_data[depth_key].values
+    model_data = _model_data_with_depth_dimension(model_data)
+    model_depths = model_data[Dimension.DEPTH.key()].values
     first_days = model_data[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days = model_data[Dimension.LEAD_DAY_INDEX.key()].values
     first_day_to_index = {first_day: index for index, first_day in enumerate(first_days)}
     lead_day_to_index = {lead_day: index for index, lead_day in enumerate(lead_days)}
     model_values = numpy.full(len(observations_dataframe), numpy.nan)
-    grouped_by_first_day = observations_dataframe.groupby("first_day", sort=False)
-    for first_day, first_day_group in grouped_by_first_day:
-        grouped_by_lead_day = first_day_group.groupby("lead_day", sort=False)
-        first_day_index = first_day_to_index[first_day]
-        for lead_day, observation_group in grouped_by_lead_day:
-            # Load one forecast slice at a time to avoid materializing the whole
-            # first_day block in memory during Class IV validation.
-            time_slice = model_data.isel(
-                {
-                    Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
-                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
-                }
-            ).compute()
-            observation_latitudes = observation_group[latitude_key].values
-            observation_longitudes = observation_group[longitude_key].values
-            observation_depths = observation_group[depth_key].values
-            observation_indices = observation_group.index.values
-            horizontally_interpolated = time_slice.interp(
-                {
-                    latitude_key: xarray.DataArray(observation_latitudes, dims="observation"),
-                    longitude_key: xarray.DataArray(observation_longitudes, dims="observation"),
-                },
-                method="linear",
-            ).values
-            if variable_key in (
-                Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
-                Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
-                Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
-                Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
-            ):
-                interpolated = _interpolate_vertically_bracket(
-                    horizontally_interpolated,
-                    model_depths,
-                    observation_depths,
-                )
-            else:
-                interpolated = _interpolate_vertically(horizontally_interpolated, model_depths, observation_depths)
-            model_values[observation_indices] = interpolated
+    for first_day, first_day_group in observations_dataframe.groupby("first_day", sort=False):
+        _assign_model_values_for_first_day(
+            model_values,
+            model_data,
+            first_day_group,
+            first_day_to_index[first_day],
+            lead_day_to_index,
+            model_depths,
+            variable_key,
+        )
     return model_values
 
 
@@ -397,6 +479,14 @@ def _compute_rmsd_table(
     return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
 
 
+def _observation_variable_depth_label(standard_name: str, depth_bin: str) -> str:
+    display_name, unit = VARIABLE_METADATA[standard_name]
+    if standard_name == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
+        # TODO: replace the reused SSH standard name with an agreed SLA-specific one for Class IV observations.
+        display_name = "sea level anomaly"
+    return f"{display_name.capitalize()} ({unit}) [{standard_name}]{{{depth_bin}}}"
+
+
 def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -> pandas.DataFrame:
     pivot_table = results_dataframe.pivot_table(
         values="rmsd",
@@ -412,28 +502,63 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
     pivot_table["variable_sort"] = pivot_table["variable"].map(VARIABLE_DISPLAY_ORDER).astype(float)
     pivot_table["depth_sort"] = pivot_table["depth_bin"].map(DEPTH_BIN_DISPLAY_ORDER)
     pivot_table = pivot_table.sort_values(["variable_sort", "depth_sort"]).drop(columns=["variable_sort", "depth_sort"])
-    pivot_table["variable"] = pivot_table["variable"].map(VARIABLE_LABELS)
+    pivot_table["label"] = pivot_table.apply(
+        lambda row: _observation_variable_depth_label(row["variable"], row["depth_bin"]),
+        axis=1,
+    )
 
-    sla_display_mask = pivot_table["variable"] == "surface height"
-    pivot_table.loc[sla_display_mask, "variable"] = "sea level anomaly"
-
+    lead_columns = [column for column in pivot_table.columns if isinstance(column, (int, numpy.integer))]
     lead_labels = lead_day_labels(1, lead_days_count)
-    rename_columns = {
-        column: lead_labels[column] for column in pivot_table.columns if isinstance(column, (int, numpy.integer))
-    }
-    rename_columns["variable"] = "Variable"
-    rename_columns["depth_bin"] = "Depth Range"
-    rename_columns["count"] = "Number of observations at lead day 1"
-    pivot_table = pivot_table.rename(columns=rename_columns).reset_index(drop=True)
-    lead_day_columns = lead_labels
-    ordered_columns = [
-        "Variable",
-        "Depth Range",
-        "Number of observations at lead day 1",
-        *lead_day_columns,
-    ]
-    ordered_columns = [column for column in ordered_columns if column in pivot_table.columns]
-    return pivot_table[ordered_columns]
+    column_rename = {column: lead_labels[column] for column in lead_columns}
+    result = pivot_table.set_index("label")[lead_columns].rename(columns=column_rename)
+    result.index.name = None
+    result.columns.name = None
+    return result
+
+
+def _class4_variable_results(
+    challenger: xarray.Dataset,
+    observations: xarray.Dataset,
+    base_observations_dataframe: pandas.DataFrame,
+    selected_observation_indices: numpy.ndarray,
+    observation_dimension_key: str,
+    observation_variable_key: str,
+    challenger_variable_key: str,
+    standard_variable_key: str,
+) -> pandas.DataFrame:
+    observations_dataframe = _create_observations_dataframe(
+        base_observations_dataframe,
+        selected_observation_indices,
+        observation_dimension_key,
+        observations,
+        observation_variable_key,
+        standard_variable_key,
+    )
+    if observations_dataframe.empty:
+        return pandas.DataFrame()
+
+    observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
+    model_variable = _convert_forecast_ssh_to_sla(
+        challenger[challenger_variable_key],
+        standard_variable_key,
+    )
+    observations_dataframe = observations_dataframe.assign(
+        model_value=_interpolate_model_to_observations(
+            model_variable,
+            observations_dataframe,
+            standard_variable_key,
+        )
+    )
+    return _compute_rmsd_table(observations_dataframe, standard_variable_key)
+
+
+def _formatted_class4_results(
+    all_results: list[pandas.DataFrame],
+    lead_days_count: int,
+) -> pandas.DataFrame:
+    if not all_results:
+        return pandas.DataFrame()
+    return _format_results(pandas.concat(all_results, ignore_index=True), lead_days_count)
 
 
 def rmsd_class4_validation(
@@ -449,38 +574,20 @@ def rmsd_class4_validation(
     )
 
     all_results = []
-    resolved_variables = [(variable.key(), variable.key(), variable.key()) for variable in variables]
+    resolved_variable_keys = [(variable.key(), variable.key(), variable.key()) for variable in variables]
 
-    for standard_variable_key, observation_variable_key, challenger_variable_key in resolved_variables:
-        observations_dataframe = _create_observations_dataframe(
+    for standard_variable_key, observation_variable_key, challenger_variable_key in resolved_variable_keys:
+        variable_results = _class4_variable_results(
+            challenger,
+            observations,
             base_observations_dataframe,
             selected_observation_indices,
             observation_dimension_key,
-            observations,
             observation_variable_key,
+            challenger_variable_key,
             standard_variable_key,
         )
-        if observations_dataframe.empty:
-            continue
-
-        observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
-
-        model_variable = _convert_forecast_ssh_to_sla(
-            challenger[challenger_variable_key],
-            standard_variable_key,
-        )
-        observations_dataframe["model_value"] = _interpolate_model_to_observations(
-            model_variable, observations_dataframe, standard_variable_key
-        )
-
-        variable_results = _compute_rmsd_table(observations_dataframe, standard_variable_key)
         if not variable_results.empty:
             all_results.append(variable_results)
 
-    if not all_results:
-        result = pandas.DataFrame()
-    else:
-        final_df = pandas.concat(all_results, ignore_index=True)
-        result = _format_results(final_df, lead_days_count)
-
-    return result
+    return _formatted_class4_results(all_results, lead_days_count)
