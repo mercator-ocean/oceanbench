@@ -193,5 +193,5 @@ As part of a fruitful collaboration with:
 Powered by:
 
 <a href="https://edito.eu">
-  <img class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_Full_Logo.png" alt="EDITO logo"  style="max-width: 55%; height: auto;"  />
+  <img class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_Full_Logo.png" alt="EDITO logo"  height=100  />
 </a>
