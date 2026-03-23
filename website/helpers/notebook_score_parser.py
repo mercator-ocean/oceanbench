@@ -95,6 +95,24 @@ SECTIONS = {
     }
 }
 
+TRACK_METRIC_CALLS = {
+    "glorys_reanalysis": [
+        "rmsd_variables_glorys",
+        "rmsd_mld_glorys",
+        "rmsd_geostrophic_glorys",
+        "lagrangian_glorys",
+    ],
+    "glo12_analysis": [
+        "rmsd_variables_glo12",
+        "rmsd_mld_glo12",
+        "rmsd_geostrophic_glo12",
+        "lagrangian_glo12",
+    ],
+    "observations": [
+        _OBSERVATIONS_METRIC_KEY,
+    ],
+}
+
 
 def _get_cell_source(cell: dict) -> str:
     source = cell.get("source", [])
@@ -186,9 +204,34 @@ def _get_notebook(path: str) -> dict | None:
         response = requests.get(path)
         if response.status_code == 200:
             return response.json()
-    else:
-        with open(path) as file:
-            return json.load(file)
+        raise ValueError(f"Failed to read notebook at {path}: HTTP {response.status_code}")
+    with open(path) as file:
+        return json.load(file)
+
+
+def _metric_converter(metric_key: str):
+    if metric_key in _DEPTH_VARIABLE_METRICS:
+        return _convert_depth_variable_table_to_model_score
+    return _convert_flat_table_to_model_score
+
+
+def _merge_model_scores(challenger_name: str, model_scores: list[ModelScore]) -> ModelScore:
+    merged_depths: dict[str, dict[str, dict]] = {}
+    for model_score in model_scores:
+        for depth_name, depth_score in model_score.depths.items():
+            if depth_name not in merged_depths:
+                merged_depths[depth_name] = {"variables": {}}
+            merged_depths[depth_name]["variables"].update(
+                {
+                    variable_name: {
+                        "standard_name": variable_score.standard_name,
+                        "unit": variable_score.unit,
+                        "data": variable_score.data,
+                    }
+                    for variable_name, variable_score in depth_score.variables.items()
+                }
+            )
+    return ModelScore.model_validate({"name": challenger_name, "depths": merged_depths})
 
 
 def get_all_model_scores_from_notebook(notebook_path: str, challenger_name: str) -> dict[str, ModelScore]:
@@ -196,14 +239,27 @@ def get_all_model_scores_from_notebook(notebook_path: str, challenger_name: str)
     if raw_notebook is None:
         return {}
     metrics_html = _get_all_metrics_from_notebook(raw_notebook)
-
-    def _converter(metric_key: str):
-        if metric_key in _DEPTH_VARIABLE_METRICS:
-            return _convert_depth_variable_table_to_model_score
-        return _convert_flat_table_to_model_score
-
     return {
         metric_key: result
         for metric_key, raw_table in metrics_html.items()
-        if (result := _converter(metric_key)(raw_table, challenger_name)) is not None
+        if (result := _metric_converter(metric_key)(raw_table, challenger_name)) is not None
     }
+
+
+def get_model_score_from_notebook(notebook_path: str, challenger_name: str, track: str) -> ModelScore:
+    if track not in TRACK_METRIC_CALLS:
+        supported_tracks = ", ".join(TRACK_METRIC_CALLS.keys())
+        raise ValueError(f"Unsupported score track: {track}. Supported values are: {supported_tracks}.")
+
+    all_scores = get_all_model_scores_from_notebook(notebook_path, challenger_name)
+    missing_metric_keys = [metric_key for metric_key in TRACK_METRIC_CALLS[track] if metric_key not in all_scores]
+    if missing_metric_keys:
+        missing_metrics = ", ".join(missing_metric_keys)
+        raise ValueError(f"Notebook is missing scores for track {track}: {missing_metrics}.")
+
+    return _merge_model_scores(challenger_name, [all_scores[metric_key] for metric_key in TRACK_METRIC_CALLS[track]])
+
+
+def get_model_score_from_file(file_path: str) -> ModelScore:
+    with open(file_path) as file:
+        return ModelScore.model_validate(json.load(file))

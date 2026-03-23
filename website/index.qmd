@@ -31,6 +31,7 @@ To accommodate these diverse needs, OceanBench provides a comprehensive set of m
 Please keep in mind that these metrics capture key aspects of forecast quality rather than the complete picture.
 
 Want to evaluate your system or get involved in OceanBench? Check out the [GitHub project](https://github.com/mercator-ocean/oceanbench/)!
+Regional scores for the Atlantic Iberia-Biscay-Ireland domain are available on the [IBI](ibi.qmd) page.
 
 ```{python}
 #| output: false

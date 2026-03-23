@@ -10,6 +10,8 @@ WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook  # noqa: E402
+from helpers.notebook_score_parser import get_model_score_from_file  # noqa: E402
+from helpers.notebook_score_parser import get_model_score_from_notebook  # noqa: E402
 
 
 def _score_table(rows: list[tuple[str, float, float]]) -> str:
@@ -32,8 +34,7 @@ def _metric_cell(metric_call: str, html_table: str) -> dict:
     }
 
 
-def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
-    notebook_path = tmp_path / "glo12.report.ipynb"
+def _write_notebook(notebook_path: Path) -> None:
     notebook = {
         "cells": [
             _metric_cell(
@@ -57,10 +58,18 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
                 ),
             ),
             _metric_cell(
+                "oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis",
+                _score_table(
+                    [
+                        ("Mixed Layer Depth (m) [mixed_layer_depth]", 1.3, 1.4),
+                    ]
+                ),
+            ),
+            _metric_cell(
                 "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis",
                 _score_table(
                     [
-                        ("Lagrangian trajectory deviation (km) []{surface}", 2.1, 2.2),
+                        ("Lagrangian trajectory deviation (km) []", 2.1, 2.2),
                     ]
                 ),
             ),
@@ -68,11 +77,17 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
     }
     notebook_path.write_text(json.dumps(notebook), encoding="utf-8")
 
+
+def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
+    notebook_path = tmp_path / "glo12.report.ipynb"
+    _write_notebook(notebook_path)
+
     scores = get_all_model_scores_from_notebook(str(notebook_path), "glo12")
 
     assert set(scores) == {
         "rmsd_variables_observations",
         "rmsd_variables_glorys",
+        "rmsd_mld_glorys",
         "lagrangian_glorys",
     }
 
@@ -91,3 +106,43 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
     lagrangian_variable = lagrangian_score.depths["flat"].variables["lagrangian trajectory deviation"]
     assert lagrangian_variable.standard_name == ""
     assert lagrangian_variable.data == {"1": 2.1, "2": 2.2}
+
+
+def test_track_parser_merges_metric_fragments(tmp_path):
+    notebook_path = tmp_path / "glo12.report.ipynb"
+    _write_notebook(notebook_path)
+
+    score = get_model_score_from_notebook(str(notebook_path), "GLO12", "glorys_reanalysis")
+
+    assert score.name == "GLO12"
+    assert score.depths["100m"].variables["temperature"].data == {"1": 1.1, "2": 1.2}
+    assert score.depths["flat"].variables["mixed layer depth"].data == {"1": 1.3, "2": 1.4}
+    assert score.depths["flat"].variables["lagrangian trajectory deviation"].data == {"1": 2.1, "2": 2.2}
+
+
+def test_model_score_roundtrip_from_file(tmp_path):
+    score_path = tmp_path / "glo12.json"
+    score_path.write_text(
+        json.dumps(
+            {
+                "name": "GLO12",
+                "depths": {
+                    "Surface": {
+                        "variables": {
+                            "temperature": {
+                                "standard_name": "sea_water_potential_temperature",
+                                "unit": "C",
+                                "data": {"1": 0.1},
+                            }
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    score = get_model_score_from_file(str(score_path))
+
+    assert score.name == "GLO12"
+    assert score.depths["Surface"].variables["temperature"].data == {"1": 0.1}

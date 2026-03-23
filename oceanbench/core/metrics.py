@@ -5,25 +5,24 @@
 import pandas
 import xarray
 
-from oceanbench.core.dataset_utils import Variable
-from oceanbench.core.derived_quantities import compute_mixed_layer_depth
-from oceanbench.core.derived_quantities import compute_geostrophic_currents
-from oceanbench.core.references.glo12 import glo12_analysis_dataset
-from oceanbench.core.rmsd import rmsd
-from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.classIV import rmsd_class4_validation
+from oceanbench.core.dataset_utils import Variable
+from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
+from oceanbench.core.lagrangian_trajectory import deviation_of_lagrangian_trajectories
+from oceanbench.core.references.glo12 import glo12_analysis_dataset
+from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
-
-from oceanbench.core.lagrangian_trajectory import (
-    deviation_of_lagrangian_trajectories,
-)
+from oceanbench.core.rmsd import rmsd
+from oceanbench.core.subregions import subset_dataset_to_sub_region
 
 
 def rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_sub_region(challenger_dataset, sub_region_name)
     try:
-        observation_dataset = observations(challenger_dataset)
+        observation_dataset = subset_dataset_to_sub_region(observations(challenger_dataset), sub_region_name)
     except ObservationDataUnavailableError as error:
         return pandas.DataFrame({"Message": [str(error)]})
     return rmsd_class4_validation(
@@ -41,10 +40,12 @@ def rmsd_of_variables_compared_to_observations(
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_sub_region(challenger_dataset, sub_region_name)
     return rmsd(
         challenger_dataset=challenger_dataset,
-        reference_dataset=glorys_reanalysis_dataset(challenger_dataset),
+        reference_dataset=subset_dataset_to_sub_region(glorys_reanalysis_dataset(challenger_dataset), sub_region_name),
         variables=[
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
@@ -57,10 +58,14 @@ def rmsd_of_variables_compared_to_glorys_reanalysis(
 
 def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_sub_region(challenger_dataset, sub_region_name)
     return rmsd(
         challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
-        reference_dataset=compute_mixed_layer_depth(glorys_reanalysis_dataset(challenger_dataset)),
+        reference_dataset=compute_mixed_layer_depth(
+            subset_dataset_to_sub_region(glorys_reanalysis_dataset(challenger_dataset), sub_region_name)
+        ),
         variables=[
             Variable.MIXED_LAYER_DEPTH,
         ],
@@ -69,10 +74,14 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
 
 def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_sub_region(challenger_dataset, sub_region_name)
     return rmsd(
         challenger_dataset=compute_geostrophic_currents(challenger_dataset),
-        reference_dataset=compute_geostrophic_currents(glorys_reanalysis_dataset(challenger_dataset)),
+        reference_dataset=compute_geostrophic_currents(
+            subset_dataset_to_sub_region(glorys_reanalysis_dataset(challenger_dataset), sub_region_name)
+        ),
         variables=[
             Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
             Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
@@ -82,19 +91,23 @@ def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
 
 def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_sub_region(challenger_dataset, sub_region_name)
     return deviation_of_lagrangian_trajectories(
         challenger_dataset=challenger_dataset,
-        reference_dataset=glorys_reanalysis_dataset(challenger_dataset),
+        reference_dataset=subset_dataset_to_sub_region(glorys_reanalysis_dataset(challenger_dataset), sub_region_name),
     )
 
 
 def rmsd_of_variables_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_sub_region(challenger_dataset, sub_region_name)
     return rmsd(
         challenger_dataset=challenger_dataset,
-        reference_dataset=glo12_analysis_dataset(challenger_dataset),
+        reference_dataset=subset_dataset_to_sub_region(glo12_analysis_dataset(challenger_dataset), sub_region_name),
         variables=[
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
@@ -107,10 +120,14 @@ def rmsd_of_variables_compared_to_glo12_analysis(
 
 def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_sub_region(challenger_dataset, sub_region_name)
     return rmsd(
         challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
-        reference_dataset=compute_mixed_layer_depth(glo12_analysis_dataset(challenger_dataset)),
+        reference_dataset=compute_mixed_layer_depth(
+            subset_dataset_to_sub_region(glo12_analysis_dataset(challenger_dataset), sub_region_name)
+        ),
         variables=[
             Variable.MIXED_LAYER_DEPTH,
         ],
@@ -119,10 +136,14 @@ def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
 
 def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_sub_region(challenger_dataset, sub_region_name)
     return rmsd(
         challenger_dataset=compute_geostrophic_currents(challenger_dataset),
-        reference_dataset=compute_geostrophic_currents(glo12_analysis_dataset(challenger_dataset)),
+        reference_dataset=compute_geostrophic_currents(
+            subset_dataset_to_sub_region(glo12_analysis_dataset(challenger_dataset), sub_region_name)
+        ),
         variables=[
             Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
             Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
@@ -132,8 +153,10 @@ def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
 
 def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_sub_region(challenger_dataset, sub_region_name)
     return deviation_of_lagrangian_trajectories(
         challenger_dataset=challenger_dataset,
-        reference_dataset=glo12_analysis_dataset(challenger_dataset),
+        reference_dataset=subset_dataset_to_sub_region(glo12_analysis_dataset(challenger_dataset), sub_region_name),
     )

@@ -15,6 +15,7 @@ from oceanbench.core import metrics
 
 def rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> DataFrame:
     """
     Compute the Root Mean Square Deviation (RMSD) of variables compared to observations.
@@ -23,17 +24,24 @@ def rmsd_of_variables_compared_to_observations(
     ----------
     challenger_dataset : xarray.Dataset
         The challenger dataset.
+    sub_region_name : str, optional
+        The pre-defined OceanBench sub-region to evaluate on.
+
     Returns
     -------
     DataFrame
         The DataFrame containing the scores.
     """
 
-    return metrics.rmsd_of_variables_compared_to_observations(challenger_dataset=challenger_dataset)
+    return metrics.rmsd_of_variables_compared_to_observations(
+        challenger_dataset=challenger_dataset,
+        sub_region_name=sub_region_name,
+    )
 
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> DataFrame:
     """
     Compute the Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis.
@@ -42,6 +50,8 @@ def rmsd_of_variables_compared_to_glorys_reanalysis(
     ----------
     challenger_dataset : xarray.Dataset
         The challenger dataset.
+    sub_region_name : str, optional
+        The pre-defined OceanBench sub-region to evaluate on.
 
     Returns
     -------
@@ -49,11 +59,15 @@ def rmsd_of_variables_compared_to_glorys_reanalysis(
         The DataFrame containing the scores.
     """
 
-    return metrics.rmsd_of_variables_compared_to_glorys_reanalysis(challenger_dataset=challenger_dataset)
+    return metrics.rmsd_of_variables_compared_to_glorys_reanalysis(
+        challenger_dataset=challenger_dataset,
+        sub_region_name=sub_region_name,
+    )
 
 
 def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> DataFrame:
     """
     Compute the Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLORYS reanalysis.
@@ -62,6 +76,8 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     ----------
     challenger_dataset : xarray.Dataset
         The challenger dataset.
+    sub_region_name : str, optional
+        The pre-defined OceanBench sub-region to evaluate on.
 
     Returns
     -------
@@ -69,11 +85,15 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
         The DataFrame containing the scores.
     """
 
-    return metrics.rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(challenger_dataset=challenger_dataset)
+    return metrics.rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
+        challenger_dataset=challenger_dataset,
+        sub_region_name=sub_region_name,
+    )
 
 
 def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> DataFrame:
     """
     Compute the Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS reanalysis.
@@ -82,17 +102,23 @@ def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
     ----------
     challenger_dataset : xarray.Dataset
         The challenger dataset.
+    sub_region_name : str, optional
+        The pre-defined OceanBench sub-region to evaluate on.
 
     Returns
     -------
     DataFrame
         The DataFrame containing the scores.
     """
-    return metrics.rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(challenger_dataset=challenger_dataset)
+    return metrics.rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
+        challenger_dataset=challenger_dataset,
+        sub_region_name=sub_region_name,
+    )
 
 
 def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> DataFrame:
     """
     Compute the deviation of Lagrangian trajectories compared to GLORYS reanalysis.
@@ -101,6 +127,8 @@ def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
     ----------
     challenger_dataset : xarray.Dataset
         The challenger dataset.
+    sub_region_name : str, optional
+        The pre-defined OceanBench sub-region to evaluate on.
 
     Returns
     -------
@@ -108,12 +136,14 @@ def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
         The DataFrame containing the scores.
     """
     return metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
-        challenger_dataset=challenger_dataset
+        challenger_dataset=challenger_dataset,
+        sub_region_name=sub_region_name,
     )
 
 
 def rmsd_of_variables_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> DataFrame:
     """
     Compute the Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis.
@@ -122,6 +152,8 @@ def rmsd_of_variables_compared_to_glo12_analysis(
     ----------
     challenger_dataset : xarray.Dataset
         The challenger dataset.
+    sub_region_name : str, optional
+        The pre-defined OceanBench sub-region to evaluate on.
 
     Returns
     -------
@@ -129,11 +161,15 @@ def rmsd_of_variables_compared_to_glo12_analysis(
         The DataFrame containing the scores.
     """
 
-    return metrics.rmsd_of_variables_compared_to_glo12_analysis(challenger_dataset=challenger_dataset)
+    return metrics.rmsd_of_variables_compared_to_glo12_analysis(
+        challenger_dataset=challenger_dataset,
+        sub_region_name=sub_region_name,
+    )
 
 
 def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> DataFrame:
     """
     Compute the Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLO12 analysis.
@@ -142,6 +178,8 @@ def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     ----------
     challenger_dataset : xarray.Dataset
         The challenger dataset.
+    sub_region_name : str, optional
+        The pre-defined OceanBench sub-region to evaluate on.
 
     Returns
     -------
@@ -149,11 +187,15 @@ def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
         The DataFrame containing the scores.
     """
 
-    return metrics.rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(challenger_dataset=challenger_dataset)
+    return metrics.rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
+        challenger_dataset=challenger_dataset,
+        sub_region_name=sub_region_name,
+    )
 
 
 def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> DataFrame:
     """
     Compute the Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis.
@@ -162,17 +204,23 @@ def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
     ----------
     challenger_dataset : xarray.Dataset
         The challenger dataset.
+    sub_region_name : str, optional
+        The pre-defined OceanBench sub-region to evaluate on.
 
     Returns
     -------
     DataFrame
         The DataFrame containing the scores.
     """
-    return metrics.rmsd_of_geostrophic_currents_compared_to_glo12_analysis(challenger_dataset=challenger_dataset)
+    return metrics.rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
+        challenger_dataset=challenger_dataset,
+        sub_region_name=sub_region_name,
+    )
 
 
 def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
+    sub_region_name: str | None = None,
 ) -> DataFrame:
     """
     Compute the deviation of Lagrangian trajectories compared to GLO12 analysis.
@@ -181,6 +229,8 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     ----------
     challenger_dataset : xarray.Dataset
         The challenger dataset.
+    sub_region_name : str, optional
+        The pre-defined OceanBench sub-region to evaluate on.
 
     Returns
     -------
@@ -188,5 +238,6 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
         The DataFrame containing the scores.
     """
     return metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
-        challenger_dataset=challenger_dataset
+        challenger_dataset=challenger_dataset,
+        sub_region_name=sub_region_name,
     )
