@@ -41,7 +41,7 @@ def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
     if resolution == "one_degree":
         return (
             "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mean_sea_surface_height_2024/"
-            "GLO-MFC_001_030_mdt_1deg.zarr"
+            "GLO-MFC_001_030_mdt_1_deg.zarr"
         )
     raise ValueError(f"Unsupported resolution : {resolution}.")
 
