@@ -81,7 +81,7 @@ def _assign_depth_bins(
 def _assign_temperature_depth_bins(depth_values: numpy.ndarray) -> numpy.ndarray:
     bin_assignments = _assign_depth_bins(depth_values, DEPTH_BINS_DEFAULT)
     surface_mask = (depth_values >= -1) & (depth_values < 1)
-    bin_assignments[surface_mask] = "SST"
+    bin_assignments[surface_mask] = "Sea Surface Temperature"
     return bin_assignments
 
 
