@@ -41,15 +41,19 @@ def _parse_input_mandatory(
     return parsed_variable
 
 
-def _derive_output_notebook_file_name(challenger_path: str) -> str:
+def _derive_output_notebook_file_name(
+    challenger_path: str,
+    sub_region_name: str | None,
+) -> str:
     stem = PurePosixPath(challenger_path).stem
-    return f"{stem}.report.ipynb"
+    return f"{stem}.{sub_region_name}.report.ipynb" if sub_region_name else f"{stem}.report.ipynb"
 
 
 def evaluate_challenger(
     challenger_python_code_uri_or_local_path: str | None = None,
     output_bucket: str | None = None,
     output_prefix: str | None = None,
+    sub_region_name: str | None = None,
 ):
     """
     Compute all the benchmark scores for the given challenger dataset, by calling all functions of the `metrics` module.
@@ -68,14 +72,21 @@ def evaluate_challenger(
         The destination S3 bucket of the executed notebook. If not provided, the notebook is written on the local filesystem. If provided, uses AWS S3 environment variables. Can also be configured with environment variable ``OCEANBENCH_OUTPUT_BUCKET``.
     output_prefix : str, optional
         The destination S3 prefix of the executed notebook. If ``output_bucket`` is not provided, this option is ignored. If provided, uses AWS S3 environment variables. Can also be configured with environment variable ``OCEANBENCH_OUTPUT_PREFIX``.
+    sub_region_name : str, optional
+        The pre-defined OceanBench sub-region to evaluate on. Can also be configured with environment variable ``OCEANBENCH_SUB_REGION``.
     """  # noqa
 
     oceanbench_challenger_python_code_uri_or_local_path = _parse_input_mandatory(
         challenger_python_code_uri_or_local_path,
         OceanbenchEnvironmentVariable.OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH,
     )
+    oceanbench_sub_region_name = _parse_input_non_manadatory(
+        sub_region_name,
+        OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION,
+    )
     oceanbench_output_notebook_file_name = _derive_output_notebook_file_name(
-        oceanbench_challenger_python_code_uri_or_local_path
+        oceanbench_challenger_python_code_uri_or_local_path,
+        oceanbench_sub_region_name,
     )
     oceanbench_output_bucket = _parse_input_non_manadatory(
         output_bucket,
@@ -90,6 +101,7 @@ def evaluate_challenger(
         oceanbench_output_notebook_file_name,
         oceanbench_output_bucket,
         oceanbench_output_prefix,
+        oceanbench_sub_region_name,
     )
 
 
@@ -97,6 +109,7 @@ def _execute_evaluation_notebook_file(
     output_notebook_file_name: str,
     output_bucket: str | None,
     output_prefix: str | None,
+    sub_region_name: str | None,
 ):
     output_name = f"{output_prefix}/{output_notebook_file_name}" if output_prefix else output_notebook_file_name
     if output_bucket:
@@ -104,10 +117,21 @@ def _execute_evaluation_notebook_file(
         output_path = f"s3://{output_bucket}/{output_name}"
     else:
         output_path = output_notebook_file_name
-    execute_notebook(
-        output_notebook_file_name,
-        output_path,
-    )
+    previous_sub_region_name = environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION.value)
+    if sub_region_name in (None, ""):
+        environ.pop(OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION.value, None)
+    else:
+        environ[OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION.value] = sub_region_name
+    try:
+        execute_notebook(
+            output_notebook_file_name,
+            output_path,
+        )
+    finally:
+        if previous_sub_region_name is None:
+            environ.pop(OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION.value, None)
+        else:
+            environ[OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION.value] = previous_sub_region_name
 
 
 def _evaluate_challenger(
@@ -115,6 +139,7 @@ def _evaluate_challenger(
     output_notebook_file_name: str,
     output_bucket: str | None,
     output_prefix: str | None,
+    sub_region_name: str | None,
 ):
     generate_evaluation_notebook_file(
         challenger_python_code_uri_or_local_path,
@@ -124,4 +149,5 @@ def _evaluate_challenger(
         output_notebook_file_name,
         output_bucket,
         output_prefix,
+        sub_region_name,
     )
