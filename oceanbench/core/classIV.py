@@ -339,10 +339,17 @@ def _interpolate_model_to_observations(
     model_values = numpy.full(len(observations_dataframe), numpy.nan)
     grouped_by_first_day = observations_dataframe.groupby("first_day", sort=False)
     for first_day, first_day_group in grouped_by_first_day:
-        first_day_block = model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_to_index[first_day]}).compute()
         grouped_by_lead_day = first_day_group.groupby("lead_day", sort=False)
+        first_day_index = first_day_to_index[first_day]
         for lead_day, observation_group in grouped_by_lead_day:
-            time_slice = first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
+            # Load one forecast slice at a time to avoid materializing the whole
+            # first_day block in memory during Class IV validation.
+            time_slice = model_data.isel(
+                {
+                    Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
+                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+                }
+            ).compute()
             observation_latitudes = observation_group[latitude_key].values
             observation_longitudes = observation_group[longitude_key].values
             observation_depths = observation_group[depth_key].values
