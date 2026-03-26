@@ -29,19 +29,14 @@ VELOCITY_TARGET_DEPTH_METERS = 15.0
 
 def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
     if resolution == "twelfth_degree":
-        return (
-            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mean_sea_surface_height_2024/"
-            "GLO-MFC_001_030_mdt.zarr"
-        )
+        return "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt.zarr"
     if resolution == "quarter_degree":
         return (
-            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mean_sea_surface_height_2024/"
-            "GLO-MFC_001_030_mdt_025deg.zarr"
+            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt_025deg.zarr"
         )
     if resolution == "one_degree":
         return (
-            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mean_sea_surface_height_2024/"
-            "GLO-MFC_001_030_mdt_1_deg.zarr"
+            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt_1_deg.zarr"
         )
     raise ValueError(f"Unsupported resolution : {resolution}.")
 
@@ -54,16 +49,6 @@ def _load_mean_dynamic_topography(resolution: str) -> xarray.DataArray:
         consolidated=True,
     )
     dataset = rename_dataset_with_standard_names(dataset)
-    dataset = dataset.rename(
-        {
-            dimension_name: standard_name
-            for dimension_name, standard_name in {
-                "lat": Dimension.LATITUDE.key(),
-                "lon": Dimension.LONGITUDE.key(),
-            }.items()
-            if dimension_name in dataset.dims
-        }
-    )
     return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 
 
@@ -85,15 +70,45 @@ def _assign_temperature_depth_bins(depth_values: numpy.ndarray) -> numpy.ndarray
     return bin_assignments
 
 
+def _interpolated_observation_record_at_target_depth(
+    group_key,
+    group: pandas.DataFrame,
+    group_keys: list[str],
+    depth_key: str,
+    target_depth: float,
+) -> dict[str, object] | None:
+    depths = group[depth_key].to_numpy()
+    values = group["observation_value"].to_numpy()
+    below_depths = depths[depths <= target_depth]
+    above_depths = depths[depths >= target_depth]
+    if below_depths.size == 0 or above_depths.size == 0:
+        return None
+    below_depth = below_depths.max()
+    above_depth = above_depths.min()
+    below_value = values[depths == below_depth].mean()
+    above_value = values[depths == above_depth].mean()
+    interpolated_value = (
+        below_value
+        if numpy.isclose(below_depth, above_depth)
+        else below_value + ((target_depth - below_depth) / (above_depth - below_depth)) * (above_value - below_value)
+    )
+    normalized_group_key = group_key if isinstance(group_key, tuple) else (group_key,)
+    return {
+        **dict(zip(group_keys, normalized_group_key)),
+        "observation_value": interpolated_value,
+        depth_key: target_depth,
+    }
+
+
 def _interpolate_observations_to_target_depth(
     observations_dataframe: pandas.DataFrame,
     target_depth: float,
 ) -> pandas.DataFrame:
     if observations_dataframe.empty:
         return observations_dataframe
-    observations_dataframe = observations_dataframe.dropna(subset=["observation_value", Dimension.DEPTH.key()])
-    if observations_dataframe.empty:
-        return observations_dataframe
+    filtered_observations_dataframe = observations_dataframe.dropna(subset=["observation_value", Dimension.DEPTH.key()])
+    if filtered_observations_dataframe.empty:
+        return filtered_observations_dataframe
     time_key = Dimension.TIME.key()
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
@@ -109,33 +124,14 @@ def _interpolate_observations_to_target_depth(
         "lead_day",
     ]
 
-    records = []
-    for group_key, group in observations_dataframe.groupby(group_keys, sort=False):
-        depths = group[depth_key].to_numpy()
-        values = group["observation_value"].to_numpy()
-        below_depths = depths[depths <= target_depth]
-        above_depths = depths[depths >= target_depth]
-        if below_depths.size == 0 or above_depths.size == 0:
-            continue
-        below_depth = below_depths.max()
-        above_depth = above_depths.min()
-        below_value = values[depths == below_depth].mean()
-        above_value = values[depths == above_depth].mean()
-        if numpy.isclose(below_depth, above_depth):
-            interpolated_value = below_value
-        else:
-            weight = (target_depth - below_depth) / (above_depth - below_depth)
-            interpolated_value = below_value + weight * (above_value - below_value)
-        if not isinstance(group_key, tuple):
-            group_key = (group_key,)
-        record = dict(zip(group_keys, group_key))
-        record.update(
-            {
-                "observation_value": interpolated_value,
-                depth_key: target_depth,
-            }
+    records = [
+        record
+        for record in (
+            _interpolated_observation_record_at_target_depth(group_key, group, group_keys, depth_key, target_depth)
+            for group_key, group in filtered_observations_dataframe.groupby(group_keys, sort=False)
         )
-        records.append(record)
+        if record is not None
+    ]
 
     if not records:
         return pandas.DataFrame(columns=target_columns)
@@ -144,47 +140,26 @@ def _interpolate_observations_to_target_depth(
 
 
 def _create_observations_dataframe(
+    base_observations_dataframe: pandas.DataFrame,
+    selected_observation_indices: numpy.ndarray,
+    observation_dimension_key: str,
     observations_dataset: xarray.Dataset,
     observation_variable_key: str,
     standard_variable_key: str,
-    lead_days_count: int,
 ) -> pandas.DataFrame:
     time_key = Dimension.TIME.key()
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
-    first_day_key = Dimension.FIRST_DAY_DATETIME.key()
     depth_key = Dimension.DEPTH.key()
-    observation_dimension_key = observations_dataset[observation_variable_key].dims[0]
-
-    selected_variable_keys = [
-        observation_variable_key,
-        time_key,
-        latitude_key,
-        longitude_key,
-        first_day_key,
-        depth_key,
-    ]
-
-    observation_subset = observations_dataset[selected_variable_keys].rename(
-        {
-            observation_variable_key: "observation_value",
-            first_day_key: "first_day",
-        }
+    observation_values = (
+        observations_dataset[observation_variable_key]
+        .isel({observation_dimension_key: selected_observation_indices})
+        .compute()
+        .values
     )
-
-    lead_day = ((observation_subset[time_key] - observation_subset["first_day"]) / numpy.timedelta64(1, "D")).astype(
-        "int64"
-    ) - 1
-    observation_subset = observation_subset.assign(lead_day=lead_day)
-    valid_observation_mask = (
-        observation_subset["observation_value"].notnull()
-        & (observation_subset["lead_day"] >= 0)
-        & (observation_subset["lead_day"] < lead_days_count)
-    ).compute()
-    observation_subset = observation_subset.isel({observation_dimension_key: valid_observation_mask})
-
-    observations_dataframe = observation_subset.compute().to_dataframe().reset_index()
-    observations_dataframe = observations_dataframe.drop(columns=[observation_dimension_key], errors="ignore")
+    valid_observation_mask = ~numpy.isnan(observation_values)
+    observations_dataframe = base_observations_dataframe.loc[valid_observation_mask].copy()
+    observations_dataframe["observation_value"] = observation_values[valid_observation_mask]
     observations_dataframe = observations_dataframe[
         ["observation_value", time_key, latitude_key, longitude_key, "first_day", depth_key, "lead_day"]
     ]
@@ -215,6 +190,31 @@ def _create_observations_dataframe(
     return observations_dataframe.loc[observations_dataframe["depth_bin"] != ""]
 
 
+def _create_observations_base_dataframe(
+    observations_dataset: xarray.Dataset,
+    lead_days_count: int,
+) -> tuple[pandas.DataFrame, numpy.ndarray, str]:
+    time_key = Dimension.TIME.key()
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
+    first_day_key = Dimension.FIRST_DAY_DATETIME.key()
+    depth_key = Dimension.DEPTH.key()
+    observation_dimension_key = observations_dataset[time_key].dims[0]
+
+    base_subset = observations_dataset[[time_key, latitude_key, longitude_key, first_day_key, depth_key]].rename(
+        {first_day_key: "first_day"}
+    )
+    lead_day = ((base_subset[time_key] - base_subset["first_day"]) / numpy.timedelta64(1, "D")).astype("int64") - 1
+    base_subset = base_subset.assign(lead_day=lead_day)
+    valid_observation_mask = ((base_subset["lead_day"] >= 0) & (base_subset["lead_day"] < lead_days_count)).compute()
+    selected_observation_indices = numpy.flatnonzero(valid_observation_mask.values)
+    base_subset = base_subset.isel({observation_dimension_key: selected_observation_indices})
+    base_dataframe = base_subset.compute().to_dataframe().reset_index()
+    base_dataframe = base_dataframe.drop(columns=[observation_dimension_key], errors="ignore")
+    base_dataframe = base_dataframe[[time_key, latitude_key, longitude_key, "first_day", depth_key, "lead_day"]]
+    return base_dataframe, selected_observation_indices, observation_dimension_key
+
+
 def _convert_forecast_ssh_to_sla(
     model_variable: xarray.DataArray,
     variable_key: str,
@@ -222,16 +222,6 @@ def _convert_forecast_ssh_to_sla(
     if variable_key != Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
         return model_variable
     model_dataset = rename_dataset_with_standard_names(model_variable.to_dataset(name=variable_key))
-    model_dataset = model_dataset.rename(
-        {
-            dimension_name: standard_name
-            for dimension_name, standard_name in {
-                "lat": Dimension.LATITUDE.key(),
-                "lon": Dimension.LONGITUDE.key(),
-            }.items()
-            if dimension_name in model_dataset.dims
-        }
-    )
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
     mean_dynamic_topography = _load_mean_dynamic_topography(resolution)
@@ -349,15 +339,10 @@ def _interpolate_model_to_observations(
     model_values = numpy.full(len(observations_dataframe), numpy.nan)
     grouped_by_first_day = observations_dataframe.groupby("first_day", sort=False)
     for first_day, first_day_group in grouped_by_first_day:
+        first_day_block = model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_to_index[first_day]}).compute()
         grouped_by_lead_day = first_day_group.groupby("lead_day", sort=False)
-        first_day_index = first_day_to_index[first_day]
         for lead_day, observation_group in grouped_by_lead_day:
-            time_slice = model_data.isel(
-                {
-                    Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
-                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
-                }
-            ).compute()
+            time_slice = first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
             observation_latitudes = observation_group[latitude_key].values
             observation_longitudes = observation_group[longitude_key].values
             observation_depths = observation_group[depth_key].values
@@ -391,18 +376,14 @@ def _compute_rmsd_table(
     variable_key: str,
 ) -> pandas.DataFrame:
     valid_dataframe = dataframe.dropna(subset=["model_value", "observation_value"])
-
-    def compute_group_rmsd(group):
-        differences = group["model_value"].values - group["observation_value"].values
-        return pandas.Series(
-            {
-                "rmsd": numpy.sqrt(numpy.mean(differences**2)),
-                "count": len(group),
-            }
-        )
-
     grouped = (
-        valid_dataframe.groupby(["depth_bin", "lead_day"]).apply(compute_group_rmsd, include_groups=False).reset_index()
+        valid_dataframe.assign(
+            squared_difference=(valid_dataframe["model_value"] - valid_dataframe["observation_value"]) ** 2
+        )
+        .groupby(["depth_bin", "lead_day"], as_index=False)
+        .agg(
+            rmsd=("squared_difference", lambda values: numpy.sqrt(values.mean())), count=("squared_difference", "size")
+        )
     )
     grouped["count"] = grouped["count"].astype(int)
     grouped["variable"] = variable_key
@@ -463,16 +444,21 @@ def rmsd_class4_validation(
     challenger = rename_dataset_with_standard_names(challenger_dataset)
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
     observations = reference_dataset
+    base_observations_dataframe, selected_observation_indices, observation_dimension_key = (
+        _create_observations_base_dataframe(observations, lead_days_count)
+    )
 
     all_results = []
     resolved_variables = [(variable.key(), variable.key(), variable.key()) for variable in variables]
 
     for standard_variable_key, observation_variable_key, challenger_variable_key in resolved_variables:
         observations_dataframe = _create_observations_dataframe(
+            base_observations_dataframe,
+            selected_observation_indices,
+            observation_dimension_key,
             observations,
             observation_variable_key,
             standard_variable_key,
-            lead_days_count,
         )
         if observations_dataframe.empty:
             continue
