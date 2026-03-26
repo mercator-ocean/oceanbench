@@ -16,6 +16,7 @@ from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
 from oceanbench.core.remote_http import require_remote_dataset_dimensions, with_remote_http_retries
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
+from oceanbench.core.interpolate import interpolate_1_degree
 
 
 def _default_first_day_datetimes() -> list[datetime]:
@@ -24,6 +25,10 @@ def _default_first_day_datetimes() -> list[datetime]:
 
 def glo12() -> xarray.Dataset:
     return _open_multizarr_forecasts_as_challenger_dataset(_glo12_dataset_path)
+
+
+def glo12_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(glo12())
 
 
 def _glo12_dataset_path(start_datetime: datetime) -> str:
@@ -60,6 +65,10 @@ def glonet() -> xarray.Dataset:
     return _open_multizarr_forecasts_as_challenger_dataset(_glonet_dataset_path)
 
 
+def glonet_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(glonet())
+
+
 def _glonet_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"https://minio.dive.edito.eu/project-oceanbench/public/glonet_full_2024/{start_datetime_string}.zarr"
@@ -69,6 +78,10 @@ def xihe() -> xarray.Dataset:
     return _open_multizarr_forecasts_as_challenger_dataset(_xihe_dataset_path)
 
 
+def xihe_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(xihe())
+
+
 def _xihe_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"https://minio.dive.edito.eu/project-oceanbench/public/XIHE/{start_datetime_string}.zarr"
@@ -76,6 +89,10 @@ def _xihe_dataset_path(start_datetime: datetime) -> str:
 
 def wenhai() -> xarray.Dataset:
     return _open_multizarr_forecasts_as_challenger_dataset(_wenhai_dataset_path)
+
+
+def wenhai_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(wenhai())
 
 
 def _wenhai_dataset_path(start_datetime: datetime) -> str:

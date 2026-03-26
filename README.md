@@ -72,6 +72,17 @@ Attributes:
     Conventions:  CF-1.4
 ```
 
+## Open official challenger datasets
+
+OceanBench exposes the official challengers through `oceanbench.datasets.challenger`.
+This includes the maintained 2024 challengers `glo12`, `glonet`, `wenhai` and `xihe`, as well as their 1 degree base challengers `glo12_1_degree`, `glonet_1_degree`, `wenhai_1_degree` and `xihe_1_degree` for the 1 degree track.
+
+```python
+import oceanbench
+
+oceanbench.datasets.challenger.glonet_1_degree()
+```
+
 ## Evaluate your system with OceanBench
 
 The evaluation of a system consists of the sequential execution of a Python notebook that runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).
