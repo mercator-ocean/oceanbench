@@ -53,6 +53,10 @@ def glo12_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.
     return interpolate_1_degree(glo12(first_day_datetimes))
 
 
+def glo12_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(glo12())
+
+
 def _glo12_dataset_path(start_datetime: datetime) -> str:
     run_date_string = (start_datetime + timedelta(days=1)).strftime("%Y%m%d")
     return f"{_GLO12_FORECASTS_URL}/glo12_rg_1d-m_fcst_R{run_date_string}.zarr"
