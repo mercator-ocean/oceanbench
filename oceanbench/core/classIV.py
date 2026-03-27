@@ -419,7 +419,6 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
     pivot_table["variable"] = pivot_table["variable"].map(VARIABLE_LABELS)
 
     sst_display_mask = (pivot_table["variable"] == "temperature") & (pivot_table["depth_bin"] == "SST")
-    pivot_table.loc[sst_display_mask, "variable"] = "surface temperature"
     pivot_table.loc[sst_display_mask, "depth_bin"] = "surface"
     sla_display_mask = pivot_table["variable"] == "surface height"
     pivot_table.loc[sla_display_mask, "variable"] = "sea level anomaly"
