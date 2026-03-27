@@ -55,9 +55,7 @@ evaluate-challenger:
 evaluate-samples: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-samples:
 	${ACTIVATE_ENVIRONMENT}
-	for sample_file in $(SAMPLE_FILES); do \
-		oceanbench evaluate --max-workers 1 $$sample_file; \
-	done
+	oceanbench evaluate --max-workers 1 $(SAMPLE_FILES)
 
 compare-notebooks: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-notebooks:
