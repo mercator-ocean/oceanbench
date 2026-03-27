@@ -263,9 +263,8 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
     pivot_table = pivot_table.sort_values(["variable_sort", "depth_sort"]).drop(columns=["variable_sort", "depth_sort"])
     pivot_table["variable"] = pivot_table["variable"].map(VARIABLE_LABELS)
 
-    # Display SST as a dedicated "surface temperature" row, separated from the other temperature depth bins.
+    # Display SST in the "surface" depth bin while keeping the variable label consistent.
     sst_display_mask = (pivot_table["variable"] == "temperature") & (pivot_table["depth_bin"] == "SST")
-    pivot_table.loc[sst_display_mask, "variable"] = "surface temperature"
     pivot_table.loc[sst_display_mask, "depth_bin"] = "surface"
 
     lead_labels = lead_day_labels(1, lead_days_count)
