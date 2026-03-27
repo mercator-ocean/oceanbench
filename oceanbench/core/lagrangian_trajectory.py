@@ -274,64 +274,6 @@ def _open_or_stage_lagrangian_dataset(
     return _open_staged_lagrangian_dataset(stage_path)
 
 
-def _lagrangian_stage_sources(
-    challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
-) -> tuple[DatasetSource, DatasetSource] | None:
-    if not should_stage_challenger_locally() and not should_stage_reference_locally():
-        return None
-    challenger_source = get_dataset_source(challenger_dataset)
-    reference_source = get_dataset_source(reference_dataset)
-    if challenger_source is None or reference_source is None:
-        return None
-    return challenger_source, reference_source
-
-
-def _lagrangian_stage_directory(dataset_source: DatasetSource, lead_days_count: int) -> Path:
-    resolution_suffix = "" if dataset_source.resolution is None else f"-{dataset_source.resolution}"
-    return local_stage_directory() / (
-        f"lagrangian-{dataset_source.kind}-{dataset_source.name}{resolution_suffix}-{lead_days_count}d"
-    )
-
-
-def _lagrangian_stage_path(
-    dataset_source: DatasetSource,
-    lead_days_count: int,
-    first_day_datetime: str,
-) -> Path:
-    first_day = datetime.fromisoformat(first_day_datetime).strftime("%Y%m%d")
-    return _lagrangian_stage_directory(dataset_source, lead_days_count) / f"{first_day}.zarr"
-
-
-def _write_staged_lagrangian_dataset(dataset: xarray.Dataset, stage_path: Path) -> None:
-    staged_dataset = _surface_current_dataset(dataset).load()
-    for variable_name in staged_dataset.variables:
-        staged_dataset[variable_name].encoding.pop("chunks", None)
-    temporary_stage_path = stage_path.with_name(f"{stage_path.name}.tmp")
-    stage_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.rmtree(temporary_stage_path, ignore_errors=True)
-    staged_dataset.to_zarr(temporary_stage_path, mode="w")
-    shutil.rmtree(stage_path, ignore_errors=True)
-    temporary_stage_path.rename(stage_path)
-
-
-def _open_staged_lagrangian_dataset(stage_path: Path) -> xarray.Dataset:
-    return xarray.open_dataset(stage_path, engine="zarr")
-
-
-def _open_or_stage_lagrangian_dataset(
-    dataset: xarray.Dataset,
-    dataset_source: DatasetSource,
-    first_day_datetime: str,
-) -> xarray.Dataset:
-    lead_days_count = dataset.sizes[Dimension.TIME.key()]
-    stage_path = _lagrangian_stage_path(dataset_source, lead_days_count, first_day_datetime)
-    with local_stage_build_guard(stage_path) as should_build_stage:
-        if should_build_stage:
-            _write_staged_lagrangian_dataset(dataset, stage_path)
-    return _open_staged_lagrangian_dataset(stage_path)
-
-
 def _one_deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,

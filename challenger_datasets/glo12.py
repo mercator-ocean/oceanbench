@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Open GLO12 forecasts with xarray
 import xarray
 import oceanbench
 

@@ -3,13 +3,11 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from collections.abc import Callable, Iterable
-from os import environ
 from time import sleep
 from typing import TypeVar
 import logging
 
-REMOTE_HTTP_RETRIES_ENVIRONMENT_VARIABLE = "OCEANBENCH_REMOTE_HTTP_RETRIES"
-DEFAULT_REMOTE_HTTP_RETRIES = 3
+from oceanbench.core.runtime_configuration import current_runtime_configuration
 DEFAULT_RETRY_BACKOFF_SECONDS = 2
 RETRIABLE_HTTP_ERROR_TOKENS = (
     "Server disconnected",
@@ -70,12 +68,13 @@ def with_remote_http_retries(
     operation_name: str,
     callback: Callable[[], CALLBACK_RESULT],
 ) -> CALLBACK_RESULT:
-    retry_count = int(environ.get(REMOTE_HTTP_RETRIES_ENVIRONMENT_VARIABLE, DEFAULT_REMOTE_HTTP_RETRIES))
+    retry_count = current_runtime_configuration().remote_retries
     for attempt in range(1, retry_count + 1):
         try:
             return callback()
         except Exception as error:
-            if not _is_retriable_remote_data_error(error) or attempt == retry_count:
+            is_retriable_error = _is_retriable_remote_data_error(error)
+            if not is_retriable_error or attempt == retry_count:
                 raise
             backoff_seconds = DEFAULT_RETRY_BACKOFF_SECONDS * attempt
             REMOTE_ZARR_LOGGER.warning(
