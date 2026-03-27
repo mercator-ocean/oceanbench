@@ -9,6 +9,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.request import urlopen, Request
 
+from oceanbench.core.local_stage import cleanup_local_stage_directory
+from oceanbench.core.runtime_configuration import RuntimeConfiguration
 from oceanbench.core.version import __version__
 
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/mercator-ocean/oceanbench"
@@ -47,6 +49,7 @@ def _evaluate_one(
     challenger: str,
     output_bucket: str | None,
     output_prefix: str | None,
+    runtime_configuration: RuntimeConfiguration,
 ) -> EvaluationResult:
     try:
         from oceanbench.core.evaluate import evaluate_challenger
@@ -55,6 +58,7 @@ def _evaluate_one(
             challenger_python_code_uri_or_local_path=challenger,
             output_bucket=output_bucket,
             output_prefix=output_prefix,
+            runtime_configuration=runtime_configuration,
         )
         return EvaluationResult(challenger=challenger)
     except Exception as exception:
@@ -72,10 +76,11 @@ def _evaluate_all(
     output_bucket: str | None,
     output_prefix: str | None,
     max_workers: int | None,
+    runtime_configuration: RuntimeConfiguration,
 ) -> list[EvaluationResult]:
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(_evaluate_one, challenger, output_bucket, output_prefix): challenger
+            executor.submit(_evaluate_one, challenger, output_bucket, output_prefix, runtime_configuration): challenger
             for challenger in challengers
         }
         return [future.result() for future in as_completed(futures)]
@@ -107,7 +112,26 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         print("Error: --max-workers must be >= 1", file=sys.stderr)
         return 1
 
-    results = _evaluate_all(challengers, args.output_bucket, args.output_prefix, args.max_workers)
+    try:
+        runtime_configuration = RuntimeConfiguration(
+            staged_components=tuple(args.stage or ()),
+            stage_directory=args.stage_dir,
+            stage_max_workers=args.stage_max_workers,
+            remote_retries=args.remote_retries,
+        )
+    except ValueError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+    results = _evaluate_all(
+        challengers,
+        args.output_bucket,
+        args.output_prefix,
+        args.max_workers,
+        runtime_configuration,
+    )
+    if runtime_configuration.has_local_stage() and not args.keep_stage and all(result.success for result in results):
+        cleanup_local_stage_directory(runtime_configuration.resolved_stage_directory())
     _print_results(results)
     return 0 if all(result.success for result in results) else 1
 
@@ -138,18 +162,46 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     evaluate_parser.add_argument(
         "--output-bucket",
         default=None,
-        help="S3 bucket for output notebooks (env: OCEANBENCH_OUTPUT_BUCKET)",
+        help="S3 bucket for output notebooks",
     )
     evaluate_parser.add_argument(
         "--output-prefix",
         default=None,
-        help="S3 prefix for output notebooks (env: OCEANBENCH_OUTPUT_PREFIX)",
+        help="S3 prefix for output notebooks",
     )
     evaluate_parser.add_argument(
         "--max-workers",
         type=int,
         default=None,
         help="Maximum number of worker processes to use for evaluation",
+    )
+    evaluate_parser.add_argument(
+        "--stage",
+        action="append",
+        choices=["challenger", "references", "observations", "all"],
+        help="Stage selected datasets locally before evaluation. Repeat the flag to enable multiple staging targets.",
+    )
+    evaluate_parser.add_argument(
+        "--stage-dir",
+        default=None,
+        help="Directory used for local staging when --stage is enabled",
+    )
+    evaluate_parser.add_argument(
+        "--stage-max-workers",
+        type=int,
+        default=RuntimeConfiguration().stage_max_workers,
+        help="Maximum number of worker threads used to build local stage data",
+    )
+    evaluate_parser.add_argument(
+        "--remote-retries",
+        type=int,
+        default=RuntimeConfiguration().remote_retries,
+        help="Number of retries for transient remote data read failures",
+    )
+    evaluate_parser.add_argument(
+        "--keep-stage",
+        action="store_true",
+        help="Keep staged data after a successful evaluate command",
     )
     return parser, evaluate_parser
 
