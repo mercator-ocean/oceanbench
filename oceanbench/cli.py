@@ -73,10 +73,7 @@ def _evaluate_all(
     output_prefix: str | None,
     max_workers: int | None,
 ) -> list[EvaluationResult]:
-    # Notebook evaluations are heavy and can leave substantial state behind in a
-    # worker process. Recycle the worker after each challenger to avoid
-    # cross-challenger memory growth during `oceanbench evaluate a.py b.py ...`.
-    with ProcessPoolExecutor(max_workers=max_workers, max_tasks_per_child=1) as executor:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(_evaluate_one, challenger, output_bucket, output_prefix): challenger
             for challenger in challengers
