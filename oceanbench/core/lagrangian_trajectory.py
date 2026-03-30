@@ -59,6 +59,7 @@ class FreezeParticle(JITParticle):
 
 
 LEAD_DAY_START = 2
+_LAGRANGIAN_ROW_LABEL = "Surface Lagrangian trajectory deviation (km) []"
 
 
 def _delete_error_particle(particle, _fieldset, _time):
@@ -98,9 +99,7 @@ def _deviation_of_lagrangian_trajectories(
         longitudes,
     )
     deviations = _mean_weekly_lagrangian_deviations(weekly_deviations)
-    score_dataframe = pandas.DataFrame(
-        {"Surface Lagrangian trajectory deviation (km)": deviations[LEAD_DAY_START - 1 : lead_day_stop]}
-    )
+    score_dataframe = pandas.DataFrame({_LAGRANGIAN_ROW_LABEL: deviations[LEAD_DAY_START - 1 : lead_day_stop]})
     score_dataframe.index = lead_day_labels(LEAD_DAY_START, lead_day_stop)
     return score_dataframe.T
 

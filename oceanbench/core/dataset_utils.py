@@ -45,15 +45,19 @@ class DepthLevel(Enum):
     MINUS_500_METERS = 5.410889e02
 
 
+VARIABLE_METADATA: dict[str, tuple[str, str]] = {
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): ("sea surface height", "m"),
+    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): ("temperature", "°C"),
+    Variable.SEA_WATER_SALINITY.key(): ("salinity", "PSU"),
+    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): ("meridional current", "m/s"),
+    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): ("zonal current", "m/s"),
+    Variable.MIXED_LAYER_DEPTH.key(): ("mixed layer depth", "m"),
+    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): ("meridional geostrophic current", "m/s"),
+    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): ("zonal geostrophic current", "m/s"),
+}
+
 VARIABLE_LABELS: dict[str, str] = {
-    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "surface height",
-    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): "temperature",
-    Variable.SEA_WATER_SALINITY.key(): "salinity",
-    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): "northward velocity",
-    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): "eastward velocity",
-    Variable.MIXED_LAYER_DEPTH.key(): "mixed layer depth",
-    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): "northward geostrophic velocity",
-    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): "eastward geostrophic velocity",
+    variable_key: display_name for variable_key, (display_name, _unit) in VARIABLE_METADATA.items()
 }
 
 DEPTH_LABELS: dict[DepthLevel, str] = {

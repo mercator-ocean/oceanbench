@@ -13,19 +13,9 @@ from oceanbench.core.dataset_utils import (
     Variable,
     Dimension,
     DepthLevel,
+    VARIABLE_METADATA,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
-
-VARIABLE_LABELS: dict[str, str] = {
-    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "surface height",
-    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): "temperature",
-    Variable.SEA_WATER_SALINITY.key(): "salinity",
-    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): "northward velocity",
-    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): "eastward velocity",
-    Variable.MIXED_LAYER_DEPTH.key(): "mixed layer depth",
-    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): "northward geostrophic velocity",
-    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): "eastward geostrophic velocity",
-}
 
 DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.SURFACE: "surface",
@@ -55,9 +45,9 @@ def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
 
 
 def _variable_depth_label(dataset: xarray.Dataset, variable: str, depth_label: str) -> str:
-    return (
-        f"{depth_label} {VARIABLE_LABELS[variable]}" if _has_depths(dataset, variable) else VARIABLE_LABELS[variable]
-    ).capitalize()
+    display_name, unit = VARIABLE_METADATA[variable]
+    base = (f"{depth_label} {display_name}" if _has_depths(dataset, variable) else display_name).capitalize()
+    return f"{base} ({unit}) [{variable}]{{{depth_label}}}"
 
 
 def _select_dataset_variable_and_depth(dataset: xarray.Dataset, variable_name: str, depth_level: str) -> numpy.ndarray:

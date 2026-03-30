@@ -12,7 +12,7 @@ import shutil
 from oceanbench.core.dataset_utils import (
     Dimension,
     Variable,
-    VARIABLE_LABELS,
+    VARIABLE_METADATA,
     DEPTH_BINS_DEFAULT,
     VARIABLE_DISPLAY_ORDER,
     DEPTH_BIN_DISPLAY_ORDER,
@@ -479,6 +479,17 @@ def _compute_rmsd_table(
     return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
 
 
+def _observation_variable_depth_label(standard_name: str, depth_bin: str) -> str:
+    display_name, unit = VARIABLE_METADATA[standard_name]
+    no_prefix = standard_name == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
+    if no_prefix:
+        display_name = "sea level anomaly"
+    already_prefixed = display_name.lower().startswith(depth_bin.lower())
+    surface_name = depth_bin == "surface" and "surface" in display_name.lower()
+    base = display_name if no_prefix or already_prefixed or surface_name else f"{depth_bin} {display_name}"
+    return f"{base.capitalize()} ({unit}) [{standard_name}]{{{depth_bin}}}"
+
+
 def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -> pandas.DataFrame:
     pivot_table = results_dataframe.pivot_table(
         values="rmsd",
@@ -494,28 +505,18 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
     pivot_table["variable_sort"] = pivot_table["variable"].map(VARIABLE_DISPLAY_ORDER).astype(float)
     pivot_table["depth_sort"] = pivot_table["depth_bin"].map(DEPTH_BIN_DISPLAY_ORDER)
     pivot_table = pivot_table.sort_values(["variable_sort", "depth_sort"]).drop(columns=["variable_sort", "depth_sort"])
-    pivot_table["variable"] = pivot_table["variable"].map(VARIABLE_LABELS)
+    pivot_table["label"] = pivot_table.apply(
+        lambda row: _observation_variable_depth_label(row["variable"], row["depth_bin"]),
+        axis=1,
+    )
 
-    sla_display_mask = pivot_table["variable"] == "surface height"
-    pivot_table.loc[sla_display_mask, "variable"] = "sea level anomaly"
-
+    lead_columns = [column for column in pivot_table.columns if isinstance(column, (int, numpy.integer))]
     lead_labels = lead_day_labels(1, lead_days_count)
-    rename_columns = {
-        column: lead_labels[column] for column in pivot_table.columns if isinstance(column, (int, numpy.integer))
-    }
-    rename_columns["variable"] = "Variable"
-    rename_columns["depth_bin"] = "Depth Range"
-    rename_columns["count"] = "Number of observations at lead day 1"
-    pivot_table = pivot_table.rename(columns=rename_columns).reset_index(drop=True)
-    lead_day_columns = lead_labels
-    ordered_columns = [
-        "Variable",
-        "Depth Range",
-        "Number of observations at lead day 1",
-        *lead_day_columns,
-    ]
-    ordered_columns = [column for column in ordered_columns if column in pivot_table.columns]
-    return pivot_table[ordered_columns]
+    column_rename = {column: lead_labels[column] for column in lead_columns}
+    result = pivot_table.set_index("label")[lead_columns].rename(columns=column_rename)
+    result.index.name = None
+    result.columns.name = None
+    return result
 
 
 def _class4_variable_results(
