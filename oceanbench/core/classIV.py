@@ -561,51 +561,6 @@ def _formatted_class4_results(
     return _format_results(pandas.concat(all_results, ignore_index=True), lead_days_count)
 
 
-def _class4_variable_results(
-    challenger: xarray.Dataset,
-    observations: xarray.Dataset,
-    base_observations_dataframe: pandas.DataFrame,
-    selected_observation_indices: numpy.ndarray,
-    observation_dimension_key: str,
-    observation_variable_key: str,
-    challenger_variable_key: str,
-    standard_variable_key: str,
-) -> pandas.DataFrame:
-    observations_dataframe = _create_observations_dataframe(
-        base_observations_dataframe,
-        selected_observation_indices,
-        observation_dimension_key,
-        observations,
-        observation_variable_key,
-        standard_variable_key,
-    )
-    if observations_dataframe.empty:
-        return pandas.DataFrame()
-
-    observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
-    model_variable = _convert_forecast_ssh_to_sla(
-        challenger[challenger_variable_key],
-        standard_variable_key,
-    )
-    observations_dataframe = observations_dataframe.assign(
-        model_value=_interpolate_model_to_observations(
-            model_variable,
-            observations_dataframe,
-            standard_variable_key,
-        )
-    )
-    return _compute_rmsd_table(observations_dataframe, standard_variable_key)
-
-
-def _formatted_class4_results(
-    all_results: list[pandas.DataFrame],
-    lead_days_count: int,
-) -> pandas.DataFrame:
-    if not all_results:
-        return pandas.DataFrame()
-    return _format_results(pandas.concat(all_results, ignore_index=True), lead_days_count)
-
-
 def rmsd_class4_validation(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,

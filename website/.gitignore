@@ -6,3 +6,6 @@
 /_site/
 # /_result_tables/
 /index_files/
+/reports/
+
+**/*.quarto_ipynb
