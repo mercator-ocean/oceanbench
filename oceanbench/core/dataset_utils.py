@@ -85,5 +85,5 @@ VARIABLE_DISPLAY_ORDER: dict[str, int] = {
 }
 
 DEPTH_BIN_DISPLAY_ORDER: dict[str, int] = {
-    name: index for index, name in enumerate(["SST", "surface", "0-5m", "5-100m", "100-300m", "300-600m", "15m"])
+    name: index for index, name in enumerate(["surface", "0-5m", "5-100m", "100-300m", "300-600m", "15m"])
 }

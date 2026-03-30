@@ -66,7 +66,7 @@ def _assign_depth_bins(
 def _assign_temperature_depth_bins(depth_values: numpy.ndarray) -> numpy.ndarray:
     bin_assignments = _assign_depth_bins(depth_values, DEPTH_BINS_DEFAULT)
     surface_mask = (depth_values >= -1) & (depth_values < 1)
-    bin_assignments[surface_mask] = "Sea Surface Temperature"
+    bin_assignments[surface_mask] = "surface"
     return bin_assignments
 
 
@@ -410,18 +410,10 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
     ]
     pivot_table = pivot_table.merge(observation_counts, on=["variable", "depth_bin"], how="left")
     pivot_table["variable_sort"] = pivot_table["variable"].map(VARIABLE_DISPLAY_ORDER).astype(float)
-    sst_sort_mask = (pivot_table["variable"] == Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()) & (
-        pivot_table["depth_bin"] == "SST"
-    )
-    pivot_table.loc[sst_sort_mask, "variable_sort"] = VARIABLE_DISPLAY_ORDER[Variable.SEA_WATER_SALINITY.key()] + 0.5
     pivot_table["depth_sort"] = pivot_table["depth_bin"].map(DEPTH_BIN_DISPLAY_ORDER)
     pivot_table = pivot_table.sort_values(["variable_sort", "depth_sort"]).drop(columns=["variable_sort", "depth_sort"])
     pivot_table["variable"] = pivot_table["variable"].map(VARIABLE_LABELS)
 
-    sst_display_mask = (pivot_table["variable"] == "temperature") & (
-        pivot_table["depth_bin"] == "Sea Surface Temperature"
-    )
-    pivot_table.loc[sst_display_mask, "depth_bin"] = "surface"
     sla_display_mask = pivot_table["variable"] == "surface height"
     pivot_table.loc[sla_display_mask, "variable"] = "sea level anomaly"
 
