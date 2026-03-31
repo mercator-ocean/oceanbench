@@ -581,7 +581,7 @@ function renderDepthGroup(
   let tbody = "<tbody>";
   for (const depth of depths) {
     if (depths.length > 1) {
-      tbody += `<tr class="depth-separator"><th class="depth-separator-cell">${depth}</th><td colspan="${totalColumns - 1}" style="border: hidden;"></td></tr>`;
+      tbody += `<tr class="depth-separator"><th class="depth-separator-cell">${depth}</th><td colspan="${totalColumns - 1}" style="border: none;"></td></tr>`;
     }
     const depthVariables = new Set(Object.keys(baselineScore.depths[depth]?.variables || {}));
     tbody += buildDataRows(
