@@ -483,6 +483,7 @@ def _observation_variable_depth_label(standard_name: str, depth_bin: str) -> str
     display_name, unit = VARIABLE_METADATA[standard_name]
     no_prefix = standard_name == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
     if no_prefix:
+        # TODO: replace the reused SSH standard name with an agreed SLA-specific one for Class IV observations.
         display_name = "sea level anomaly"
     already_prefixed = display_name.lower().startswith(depth_bin.lower())
     surface_name = depth_bin == "surface" and "surface" in display_name.lower()

@@ -82,7 +82,17 @@ SECTIONS = {
         "flat_metrics": [f"{metric['key']}_{reference['suffix']}" for metric in _METRICS if not metric["has_depths"]],
     }
     for reference in _REFERENCES
-} | {"observations": {"depth_metric": _OBSERVATIONS_METRIC_KEY, "flat_metrics": []}}
+} | {
+    "observations": {
+        "depth_metric": _OBSERVATIONS_METRIC_KEY,
+        "flat_metrics": [],
+        "depth_groups": [
+            {"depths": ["0-5m", "5-100m", "100-300m", "300-600m"], "variables": ["temperature", "salinity"]},
+            {"depths": ["Surface"], "variables": ["temperature", "Sea level anomaly"], "show_depth_label": True},
+            {"depths": ["15m"], "variables": ["zonal current", "meridional current"], "show_depth_label": True},
+        ],
+    }
+}
 
 
 def _get_cell_source(cell: dict) -> str:
