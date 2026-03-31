@@ -509,6 +509,7 @@ function renderDepthMetric(
   metricKey,
   baseline,
   unifyVariables,
+  depthGroupsConfig = null,
 ) {
   const baselineScore = challengers[baseline][metricKey];
   if (!baselineScore) return "";
@@ -545,6 +546,27 @@ function renderDepthMetric(
     );
   }
 
+  if (depthGroupsConfig) {
+    const visibleDepthSet = new Set(visibleDepths);
+    return depthGroupsConfig.map((group) => {
+      const groupDepths = group.depths.filter((depth) => visibleDepthSet.has(depth));
+      if (groupDepths.length === 0) return "";
+      const groupVariables = group.variables.filter((variable) => groupDepths.some(
+        (depth) => baselineScore.depths[depth]?.variables?.[variable],
+      ));
+      return renderDepthGroup(
+        baselineScore,
+        orderedNames,
+        challengers,
+        metricKey,
+        groupDepths,
+        groupVariables,
+        baseline,
+        group.show_depth_label || false,
+      );
+    }).join("");
+  }
+
   const depthGroups = groupDepthsByVariables(baselineScore, visibleDepths);
   return depthGroups.map((group) => renderDepthGroup(
     baselineScore, orderedNames, challengers, metricKey, group.depths, group.variables, baseline,
@@ -552,7 +574,7 @@ function renderDepthMetric(
 }
 
 function renderDepthGroup(
-  baselineScore, orderedNames, challengers, metricKey, depths, variables, baseline,
+  baselineScore, orderedNames, challengers, metricKey, depths, variables, baseline, showDepthLabelForSingleDepth = false,
 ) {
   if (variables.length === 0 || depths.length === 0) return "";
 
@@ -580,7 +602,7 @@ function renderDepthGroup(
 
   let tbody = "<tbody>";
   for (const depth of depths) {
-    if (depths.length > 1) {
+    if (depths.length > 1 || showDepthLabelForSingleDepth) {
       tbody += `<tr class="depth-separator"><th class="depth-separator-cell">${depth}</th><td colspan="${totalColumns - 1}" style="border: none;"></td></tr>`;
     }
     const depthVariables = new Set(Object.keys(baselineScore.depths[depth]?.variables || {}));
@@ -666,6 +688,7 @@ function renderMetricSection(
   baseline,
   metricTitles,
   unifyVariables,
+  depthGroups,
 ) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -680,6 +703,7 @@ function renderMetricSection(
     depthMetric,
     baseline,
     unifyVariables,
+    depthGroups,
   );
   markup += "</div>";
 
@@ -911,6 +935,7 @@ function renderTablesOnly() {
       baseline,
       metricTitles,
       sectionKey !== "observations",
+      sectionConfig.depth_groups || null,
     );
   }
 
@@ -938,6 +963,7 @@ function renderAllTables() {
       baseline,
       metricTitles,
       sectionKey !== "observations",
+      sectionConfig.depth_groups || null,
     );
   }
 
