@@ -8,6 +8,7 @@ from pathlib import PurePosixPath
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
+from oceanbench.core.regions import normalize_region_name
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from papermill import execute_notebook
 
@@ -42,10 +43,10 @@ def _parse_input_mandatory(
 
 def _derive_output_notebook_file_name(
     challenger_path: str,
-    sub_region_name: str | None,
+    region: str,
 ) -> str:
     stem = PurePosixPath(challenger_path).stem
-    return f"{stem}.{sub_region_name}.report.ipynb" if sub_region_name else f"{stem}.report.ipynb"
+    return f"{stem}.{region}.report.ipynb"
 
 
 @contextmanager
@@ -76,19 +77,16 @@ def _runtime_configuration_environment(runtime_configuration: RuntimeConfigurati
 
 
 @contextmanager
-def _sub_region_environment(sub_region_name: str | None):
-    previous_sub_region_name = environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION.value)
-    if sub_region_name in (None, ""):
-        environ.pop(OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION.value, None)
-    else:
-        environ[OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION.value] = sub_region_name
+def _region_environment(region: str):
+    previous_region = environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_REGION.value)
+    environ[OceanbenchEnvironmentVariable.OCEANBENCH_REGION.value] = region
     try:
         yield
     finally:
-        if previous_sub_region_name is None:
-            environ.pop(OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION.value, None)
+        if previous_region is None:
+            environ.pop(OceanbenchEnvironmentVariable.OCEANBENCH_REGION.value, None)
         else:
-            environ[OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION.value] = previous_sub_region_name
+            environ[OceanbenchEnvironmentVariable.OCEANBENCH_REGION.value] = previous_region
 
 
 def evaluate_challenger(
@@ -96,7 +94,7 @@ def evaluate_challenger(
     output_bucket: str | None = None,
     output_prefix: str | None = None,
     runtime_configuration: RuntimeConfiguration | None = None,
-    sub_region_name: str | None = None,
+    region: str | None = None,
 ):
     """
     Compute all the benchmark scores for the given challenger dataset, by calling all functions of the `metrics` module.
@@ -105,7 +103,7 @@ def evaluate_challenger(
     This function is used for official evaluation.
 
     The output notebook file name is automatically derived from the challenger file name:
-    ``glonet.py`` becomes ``glonet.report.ipynb``.
+    ``glonet.py`` becomes ``glonet.global.report.ipynb``.
 
     Parameters
     ----------
@@ -117,16 +115,18 @@ def evaluate_challenger(
         The destination S3 prefix of the executed notebook. If ``output_bucket`` is not provided, this option is ignored. If provided, uses AWS S3 environment variables. Can also be configured with environment variable ``OCEANBENCH_OUTPUT_PREFIX``.
     runtime_configuration : RuntimeConfiguration, optional
         Runtime settings applied inside the generated notebook execution, including staging and remote retry behavior.
-    sub_region_name : str, optional
-        The pre-defined OceanBench sub-region to evaluate on. Can also be configured with environment variable ``OCEANBENCH_SUB_REGION``.
+    region : str, optional
+        The OceanBench region to evaluate on. Supported values include ``global`` and ``ibi``. Can also be configured with environment variable ``OCEANBENCH_REGION``.
     """  # noqa
     resolved_challenger_python_code_uri_or_local_path = _parse_input_mandatory(
         challenger_python_code_uri_or_local_path,
         OceanbenchEnvironmentVariable.OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH,
     )
-    resolved_sub_region_name = _parse_input_non_manadatory(
-        sub_region_name,
-        OceanbenchEnvironmentVariable.OCEANBENCH_SUB_REGION,
+    resolved_region = normalize_region_name(
+        _parse_input_non_manadatory(
+            region,
+            OceanbenchEnvironmentVariable.OCEANBENCH_REGION,
+        )
     )
     resolved_output_bucket = _parse_input_non_manadatory(
         output_bucket,
@@ -139,7 +139,7 @@ def evaluate_challenger(
     resolved_runtime_configuration = runtime_configuration or runtime_configuration_from_environment()
     output_notebook_file_name = _derive_output_notebook_file_name(
         resolved_challenger_python_code_uri_or_local_path,
-        resolved_sub_region_name,
+        resolved_region,
     )
     _evaluate_challenger(
         resolved_challenger_python_code_uri_or_local_path,
@@ -147,7 +147,7 @@ def evaluate_challenger(
         resolved_output_bucket,
         resolved_output_prefix,
         resolved_runtime_configuration,
-        resolved_sub_region_name,
+        resolved_region,
     )
 
 
@@ -156,7 +156,7 @@ def _execute_evaluation_notebook_file(
     output_bucket: str | None,
     output_prefix: str | None,
     runtime_configuration: RuntimeConfiguration,
-    sub_region_name: str | None,
+    region: str,
 ):
     output_name = f"{output_prefix}/{output_notebook_file_name}" if output_prefix else output_notebook_file_name
     if output_bucket:
@@ -165,7 +165,7 @@ def _execute_evaluation_notebook_file(
     else:
         output_path = output_notebook_file_name
     with _runtime_configuration_environment(runtime_configuration):
-        with _sub_region_environment(sub_region_name):
+        with _region_environment(region):
             execute_notebook(
                 output_notebook_file_name,
                 output_path,
@@ -178,16 +178,17 @@ def _evaluate_challenger(
     output_bucket: str | None,
     output_prefix: str | None,
     runtime_configuration: RuntimeConfiguration,
-    sub_region_name: str | None,
+    region: str,
 ):
     generate_evaluation_notebook_file(
         challenger_python_code_uri_or_local_path,
         output_notebook_file_path=output_notebook_file_name,
+        region=region,
     )
     _execute_evaluation_notebook_file(
         output_notebook_file_name,
         output_bucket,
         output_prefix,
         runtime_configuration,
-        sub_region_name,
+        region,
     )

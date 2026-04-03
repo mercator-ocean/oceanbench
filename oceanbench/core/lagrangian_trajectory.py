@@ -70,10 +70,12 @@ def _delete_error_particle(particle, _fieldset, _time):
 def deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
+    particle_count: int = 10000,
 ) -> pandas.DataFrame:
     return _deviation_of_lagrangian_trajectories(
         _harmonise_dataset(challenger_dataset),
         _harmonise_dataset(reference_dataset),
+        particle_count,
     )
 
 
@@ -84,12 +86,13 @@ def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
 def _deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
+    particle_count: int,
 ) -> pandas.DataFrame:
     lead_day_stop = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()] - 1
     latitudes, longitudes = _get_random_ocean_points_from_file(
         challenger_dataset,
         variable_name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
-        n=10000,
+        n=particle_count,
         seed=123,
     )
     deviations = mean_weekly_lagrangian_deviations(
@@ -298,8 +301,11 @@ def _get_random_ocean_points_from_file(
     latitude_values = latitude_grid[mask.values]
     longitude_values = longitude_grid[mask.values]
 
-    if len(latitude_values) < n:
-        raise ValueError(f"Requested {n} points, but only {len(latitude_values)} ocean points available.")
+    n_available_ocean_points = len(latitude_values)
+    if n_available_ocean_points == 0:
+        raise ValueError("No ocean points available to initialize lagrangian trajectories.")
+
+    n = min(n, n_available_ocean_points)
 
     numpy.random.seed(seed)
     idx = numpy.random.choice(len(latitude_values), n, replace=False)

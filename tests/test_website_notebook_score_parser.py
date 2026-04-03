@@ -79,7 +79,7 @@ def _write_notebook(notebook_path: Path) -> None:
 
 
 def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
-    notebook_path = tmp_path / "glo12.report.ipynb"
+    notebook_path = tmp_path / "glo12.global.report.ipynb"
     _write_notebook(notebook_path)
 
     scores = get_all_model_scores_from_notebook(str(notebook_path), "glo12")
@@ -109,7 +109,7 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
 
 
 def test_track_parser_merges_metric_fragments(tmp_path):
-    notebook_path = tmp_path / "glo12.report.ipynb"
+    notebook_path = tmp_path / "glo12.global.report.ipynb"
     _write_notebook(notebook_path)
 
     score = get_model_score_from_notebook(str(notebook_path), "GLO12", "glorys_reanalysis")

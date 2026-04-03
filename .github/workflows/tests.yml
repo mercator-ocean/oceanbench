@@ -39,4 +39,4 @@ jobs:
         with:
           name: generated-notebooks
           path: |
-            *_sample.report.ipynb
+            *_sample.*.report.ipynb

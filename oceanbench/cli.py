@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from urllib.request import Request, urlopen
 
 from oceanbench.core.local_stage import cleanup_local_stage_directory
+from oceanbench.core.regions import get_pre_defined_region_names
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
-from oceanbench.core.subregions import get_pre_defined_sub_region_names
 from oceanbench.core.version import __version__
 
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/mercator-ocean/oceanbench"
@@ -51,7 +51,7 @@ def _evaluate_one(
     output_bucket: str | None,
     output_prefix: str | None,
     runtime_configuration: RuntimeConfiguration,
-    sub_region_name: str | None,
+    region: str | None,
 ) -> EvaluationResult:
     try:
         from oceanbench.core.evaluate import evaluate_challenger
@@ -61,7 +61,7 @@ def _evaluate_one(
             output_bucket=output_bucket,
             output_prefix=output_prefix,
             runtime_configuration=runtime_configuration,
-            sub_region_name=sub_region_name,
+            region=region,
         )
         return EvaluationResult(challenger=challenger)
     except Exception as exception:
@@ -80,7 +80,7 @@ def _evaluate_all(
     output_prefix: str | None,
     max_workers: int | None,
     runtime_configuration: RuntimeConfiguration,
-    sub_region_name: str | None,
+    region: str | None,
 ) -> list[EvaluationResult]:
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
@@ -90,7 +90,7 @@ def _evaluate_all(
                 output_bucket,
                 output_prefix,
                 runtime_configuration,
-                sub_region_name,
+                region,
             ): challenger
             for challenger in challengers
         }
@@ -153,7 +153,7 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         args.output_prefix,
         args.max_workers,
         runtime_configuration,
-        args.sub_region,
+        args.region,
     )
     if runtime_configuration.has_local_stage() and not args.keep_stage and all(result.success for result in results):
         cleanup_local_stage_directory(runtime_configuration.resolved_stage_directory())
@@ -229,10 +229,10 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         help="Keep staged data after a successful evaluate command",
     )
     evaluate_parser.add_argument(
-        "--sub-region",
-        choices=get_pre_defined_sub_region_names(),
+        "--region",
+        choices=get_pre_defined_region_names(),
         default=None,
-        help="Pre-defined OceanBench sub-region to evaluate on",
+        help="OceanBench region to evaluate on",
     )
     return parser, evaluate_parser
 
