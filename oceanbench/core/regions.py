@@ -9,8 +9,11 @@ import xarray
 from oceanbench.core.dataset_utils import Dimension
 
 
+GLOBAL_REGION_NAME = "global"
+
+
 @dataclass(frozen=True)
-class GeographicSubRegion:
+class GeographicRegion:
     identifier: str
     display_name: str
     minimum_latitude: float
@@ -19,7 +22,7 @@ class GeographicSubRegion:
     maximum_longitude: float
 
 
-IBI = GeographicSubRegion(
+IBI = GeographicRegion(
     identifier="ibi",
     display_name="IBI",
     minimum_latitude=26.17,
@@ -28,35 +31,42 @@ IBI = GeographicSubRegion(
     maximum_longitude=5.08,
 )
 
-PRE_DEFINED_SUB_REGIONS = {
-    sub_region.identifier: sub_region
-    for sub_region in [
+PRE_DEFINED_REGIONS = {
+    region.identifier: region
+    for region in [
         IBI,
     ]
 }
 
 
-def get_pre_defined_sub_region_names() -> list[str]:
-    return list(PRE_DEFINED_SUB_REGIONS.keys())
+def get_pre_defined_region_names() -> list[str]:
+    return [GLOBAL_REGION_NAME, *list(PRE_DEFINED_REGIONS.keys())]
 
 
-def resolve_sub_region(sub_region_name: str | None) -> GeographicSubRegion | None:
-    if sub_region_name in (None, ""):
+def normalize_region_name(region_name: str | None) -> str:
+    if region_name in (None, ""):
+        return GLOBAL_REGION_NAME
+
+    normalized_region_name = region_name.strip().lower()
+    if normalized_region_name not in get_pre_defined_region_names():
+        supported_regions = ", ".join(get_pre_defined_region_names())
+        raise ValueError(f"Unsupported region: {region_name}. Supported values are: {supported_regions}.")
+    return normalized_region_name
+
+
+def resolve_region(region_name: str | None) -> GeographicRegion | None:
+    normalized_region_name = normalize_region_name(region_name)
+    if normalized_region_name == GLOBAL_REGION_NAME:
         return None
-
-    normalized_sub_region_name = sub_region_name.strip().lower()
-    if normalized_sub_region_name not in PRE_DEFINED_SUB_REGIONS:
-        supported_sub_regions = ", ".join(get_pre_defined_sub_region_names())
-        raise ValueError(f"Unsupported sub-region: {sub_region_name}. Supported values are: {supported_sub_regions}.")
-    return PRE_DEFINED_SUB_REGIONS[normalized_sub_region_name]
+    return PRE_DEFINED_REGIONS[normalized_region_name]
 
 
-def subset_dataset_to_sub_region(
+def subset_dataset_to_region(
     dataset: xarray.Dataset,
-    sub_region_name: str | None,
+    region_name: str | None,
 ) -> xarray.Dataset:
-    resolved_sub_region = resolve_sub_region(sub_region_name)
-    if resolved_sub_region is None:
+    resolved_region = resolve_region(region_name)
+    if resolved_region is None:
         return dataset
 
     latitude_key = _resolve_coordinate_key(dataset, Dimension.LATITUDE.key())
@@ -65,10 +75,10 @@ def subset_dataset_to_sub_region(
     longitude_values = dataset[longitude_key]
 
     if latitude_key in dataset.dims and longitude_key in dataset.dims:
-        latitude_mask = _get_latitude_mask(latitude_values, resolved_sub_region)
-        longitude_mask = _get_longitude_mask(longitude_values, resolved_sub_region)
-        _validate_mask(latitude_mask, latitude_key, resolved_sub_region)
-        _validate_mask(longitude_mask, longitude_key, resolved_sub_region)
+        latitude_mask = _get_latitude_mask(latitude_values, resolved_region)
+        longitude_mask = _get_longitude_mask(longitude_values, resolved_region)
+        _validate_mask(latitude_mask, latitude_key, resolved_region)
+        _validate_mask(longitude_mask, longitude_key, resolved_region)
         return dataset.isel(
             {
                 latitude_key: latitude_mask,
@@ -79,15 +89,15 @@ def subset_dataset_to_sub_region(
     shared_dimensions = [dimension for dimension in latitude_values.dims if dimension in longitude_values.dims]
     if len(shared_dimensions) != 1:
         raise ValueError(
-            "Sub-region selection requires latitude and longitude to either be dimensions, "
+            "Region selection requires latitude and longitude to either be dimensions, "
             + "or point-like variables sharing a single dimension."
         )
 
     shared_dimension = shared_dimensions[0]
-    point_mask = _get_latitude_mask(latitude_values, resolved_sub_region) & _get_longitude_mask(
-        longitude_values, resolved_sub_region
+    point_mask = _get_latitude_mask(latitude_values, resolved_region) & _get_longitude_mask(
+        longitude_values, resolved_region
     )
-    _validate_mask(point_mask, shared_dimension, resolved_sub_region)
+    _validate_mask(point_mask, shared_dimension, resolved_region)
     return dataset.isel({shared_dimension: point_mask})
 
 
@@ -106,26 +116,26 @@ def _resolve_coordinate_key(
     if len(matching_variable_names) == 1:
         return matching_variable_names[0]
     raise ValueError(
-        f"Dataset does not expose a unique variable with standard_name={standard_name!r} required for sub-region."
+        f"Dataset does not expose a unique variable with standard_name={standard_name!r} required for region."
     )
 
 
 def _get_latitude_mask(
     latitude_values: xarray.DataArray,
-    sub_region: GeographicSubRegion,
+    region: GeographicRegion,
 ) -> xarray.DataArray:
-    return (latitude_values >= sub_region.minimum_latitude) & (latitude_values <= sub_region.maximum_latitude)
+    return (latitude_values >= region.minimum_latitude) & (latitude_values <= region.maximum_latitude)
 
 
 def _get_longitude_mask(
     longitude_values: xarray.DataArray,
-    sub_region: GeographicSubRegion,
+    region: GeographicRegion,
 ) -> xarray.DataArray:
     dataset_uses_positive_longitudes = (
         float(longitude_values.min().values) >= 0 and float(longitude_values.max().values) > 180
     )
-    minimum_longitude = sub_region.minimum_longitude
-    maximum_longitude = sub_region.maximum_longitude
+    minimum_longitude = region.minimum_longitude
+    maximum_longitude = region.maximum_longitude
 
     if dataset_uses_positive_longitudes:
         minimum_longitude = minimum_longitude % 360
@@ -139,8 +149,8 @@ def _get_longitude_mask(
 def _validate_mask(
     mask: xarray.DataArray,
     dimension_name: str,
-    sub_region: GeographicSubRegion,
+    region: GeographicRegion,
 ) -> None:
     if bool(mask.any().item()):
         return
-    raise ValueError(f"Sub-region {sub_region.display_name} does not overlap dataset {dimension_name} coordinates.")
+    raise ValueError(f"Region {region.display_name} does not overlap dataset {dimension_name} coordinates.")

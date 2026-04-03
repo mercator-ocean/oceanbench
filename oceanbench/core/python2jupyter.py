@@ -5,6 +5,7 @@
 import nbformat
 from importlib import resources
 from oceanbench.core import templates
+from oceanbench.core.regions import normalize_region_name
 from urllib.request import urlopen
 
 
@@ -22,10 +23,12 @@ def _parse_challenger_python_code(
 def generate_evaluation_notebook_file(
     challenger_python_code_uri_or_local_path: str,
     output_notebook_file_path: str,
+    region: str | None = None,
 ):
     challenger_python_code = _parse_challenger_python_code(challenger_python_code_uri_or_local_path)
     notebook = _generate_template_notebook()
     new_notebook = _replace_code_to_open_challenger_datasets(challenger_python_code, notebook)
+    new_notebook = _replace_evaluation_configuration_code(normalize_region_name(region), new_notebook)
     nbformat.write(new_notebook, output_notebook_file_path)
 
 
@@ -83,3 +86,15 @@ def _replace_code_to_open_challenger_datasets(
 ) -> nbformat.NotebookNode:
     notebook["cells"][2]["source"] = python_code
     return notebook
+
+
+def _replace_evaluation_configuration_code(
+    region: str,
+    notebook: nbformat.NotebookNode,
+) -> nbformat.NotebookNode:
+    notebook["cells"][4]["source"] = _generate_evaluation_configuration_code(region)
+    return notebook
+
+
+def _generate_evaluation_configuration_code(region: str) -> str:
+    return f"region = {region!r}"

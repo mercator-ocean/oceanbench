@@ -45,6 +45,8 @@ reuse-annotate:
 	reuse download --all
 
 SAMPLE_FILES := $(wildcard assets/*_sample.py)
+IBI_SAMPLE_FILE := assets/glonet_sample.py
+IBI_NOTEBOOK := glonet_sample.ibi.report.ipynb
 
 evaluate-challenger: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-challenger:
@@ -56,14 +58,16 @@ evaluate-samples: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-samples:
 	${ACTIVATE_ENVIRONMENT}
 	oceanbench evaluate --max-workers 1 $(SAMPLE_FILES)
+	oceanbench evaluate ${IBI_SAMPLE_FILE} --region ibi
 
 compare-notebooks: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-notebooks:
 	${ACTIVATE_ENVIRONMENT}
 	@for f in $(SAMPLE_FILES); do \
 		name=$$(basename $$f .py); \
-		python tests/compare_notebook.py assets/$$name.report.ipynb $$name.report.ipynb; \
+		python tests/compare_notebook.py assets/$$name.global.report.ipynb $$name.global.report.ipynb; \
 	done
+	python tests/compare_notebook.py assets/$(IBI_NOTEBOOK) $(IBI_NOTEBOOK)
 
 run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:

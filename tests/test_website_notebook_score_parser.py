@@ -14,7 +14,7 @@ if str(WEBSITE_DIRECTORY) not in sys.path:
 from helpers.notebook_score_parser import get_model_score_from_notebook  # noqa: E402
 
 
-NOTEBOOK_PATH = str(PROJECT_ROOT / "assets" / "glonet_sample.report.ipynb")
+NOTEBOOK_PATH = str(PROJECT_ROOT / "assets" / "glonet_sample.global.report.ipynb")
 
 
 def test_parse_glorys_reanalysis_score_from_notebook():
