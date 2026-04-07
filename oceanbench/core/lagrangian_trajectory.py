@@ -59,7 +59,7 @@ class FreezeParticle(JITParticle):
 
 
 LEAD_DAY_START = 2
-_LAGRANGIAN_ROW_LABEL = "Surface Lagrangian trajectory deviation (km) []"
+_LAGRANGIAN_ROW_LABEL = "Lagrangian trajectory deviation (km) []{surface}"
 
 
 def _delete_error_particle(particle, _fieldset, _time):
