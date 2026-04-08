@@ -70,24 +70,10 @@ LEAD_DAYS_COUNT = 10
 # For class IV validation :
 
 DEPTH_BINS_DEFAULT: dict[str, tuple[float, float]] = {
-    "surface": (-1, 1),
     "0-5m": (0, 5),
     "5-100m": (5, 100),
     "100-300m": (100, 300),
     "300-600m": (300, 600),
-}
-
-DEPTH_BINS_BY_VARIABLE: dict[str, dict[str, tuple[float, float]]] = {
-    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): {
-        "SST": (-1, 1),
-        "0-5m": (1, 5),
-        "5-100m": (5, 100),
-        "100-300m": (100, 300),
-        "300-600m": (300, 600),
-    },
-    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): {"15m": (10, 20)},
-    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): {"15m": (10, 20)},
-    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): {"surface": (-5, 5)},
 }
 
 VARIABLE_DISPLAY_ORDER: dict[str, int] = {
@@ -99,5 +85,5 @@ VARIABLE_DISPLAY_ORDER: dict[str, int] = {
 }
 
 DEPTH_BIN_DISPLAY_ORDER: dict[str, int] = {
-    name: index for index, name in enumerate(["SST", "surface", "0-5m", "5-100m", "100-300m", "300-600m", "15m"])
+    name: index for index, name in enumerate(["surface", "0-5m", "5-100m", "100-300m", "300-600m", "15m"])
 }
