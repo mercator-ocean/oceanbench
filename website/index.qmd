@@ -37,7 +37,7 @@ Want to evaluate your system or get involved in OceanBench? Check out the [GitHu
 
 import json
 import os
-from helpers.s3_discovery import discover_challengers, get_notebook_url
+from helpers.s3_discovery import discover_challengers
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
 from helpers.challenger_metadata import CHALLENGERS
 
@@ -45,13 +45,14 @@ challengers = discover_challengers()
 
 def _load_scores(challenger_name):
     local_path = os.path.join("reports", f"{challenger_name}.report.ipynb")
-    source = local_path if os.path.exists(local_path) else get_notebook_url(challenger_name)
-    scores = get_all_model_scores_from_notebook(source, challenger_name)
+    if not os.path.exists(local_path):
+        raise FileNotFoundError(f"Missing downloaded report notebook for {challenger_name}: {local_path}")
+    scores = get_all_model_scores_from_notebook(local_path, challenger_name)
     if not scores:
-        print(f"WARNING: failed to parse scores for {challenger_name} from {source}")
-    return {metric_key: score.model_dump() for metric_key, score in scores.items()} if scores else None
+        raise RuntimeError(f"Failed to parse scores for {challenger_name} from {local_path}")
+    return {metric_key: score.model_dump() for metric_key, score in scores.items()}
 
-all_scores = {name: dumped for name in challengers if (dumped := _load_scores(name))}
+all_scores = {name: _load_scores(name) for name in challengers}
 
 scores_json = json.dumps({
     "challengers": all_scores,
