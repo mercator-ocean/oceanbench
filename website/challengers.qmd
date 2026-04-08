@@ -42,5 +42,5 @@ def format_row(challenger_name):
 
 rows = "\n".join(map(format_row, challengers))
 
-print('<div style="overflow-x: auto;">\n\n' + header + rows + "\n\n</div>")
+print('<div class="challengers-table-wrap">\n\n' + header + rows + "\n\n</div>")
 ```

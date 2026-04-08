@@ -11,6 +11,29 @@
   border: 1px solid var(--bs-border-color, #dee2e6);
 }
 
+.challengers-table-wrap table {
+  width: 100%;
+  font-size: 0.9rem;
+}
+
+.challengers-table-wrap th,
+.challengers-table-wrap td {
+  padding: 0.35rem 0.5rem;
+  line-height: 1.2;
+}
+
+.challengers-table-wrap th,
+.challengers-table-wrap th:first-child,
+.challengers-table-wrap td:first-child,
+.challengers-table-wrap th:nth-child(4),
+.challengers-table-wrap td:nth-child(4),
+.challengers-table-wrap th:nth-child(6),
+.challengers-table-wrap td:nth-child(6),
+.challengers-table-wrap th:last-child,
+.challengers-table-wrap td:last-child {
+  white-space: nowrap;
+}
+
 /* --- Score tables --- */
 
 .score-table-wrapper {
