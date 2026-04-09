@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import tempfile
 
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
+
 STAGE_ALL_KEY = "all"
 DEFAULT_STAGE_MAX_WORKERS = min(4, os.cpu_count() or 1)
 DEFAULT_REMOTE_HTTP_RETRIES = 5
@@ -40,11 +42,38 @@ class RuntimeConfiguration:
         return Path(tempfile.gettempdir()) / "oceanbench-stage"
 
 
-_runtime_configuration = RuntimeConfiguration()
+def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
+    staged_components = tuple(
+        component.strip()
+        for component in os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value, "").split(",")
+        if component.strip()
+    )
+    stage_directory = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value) or None
+    stage_max_workers = int(
+        os.environ.get(
+            OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value,
+            DEFAULT_STAGE_MAX_WORKERS,
+        )
+    )
+    remote_retries = int(
+        os.environ.get(
+            OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value,
+            DEFAULT_REMOTE_HTTP_RETRIES,
+        )
+    )
+    return RuntimeConfiguration(
+        staged_components=staged_components,
+        stage_directory=stage_directory,
+        stage_max_workers=stage_max_workers,
+        remote_retries=remote_retries,
+    )
+
+
+_runtime_configuration: RuntimeConfiguration | None = None
 
 
 def current_runtime_configuration() -> RuntimeConfiguration:
-    return _runtime_configuration
+    return _runtime_configuration or _parse_runtime_configuration_from_environment()
 
 
 def set_runtime_configuration(runtime_configuration: RuntimeConfiguration) -> None:

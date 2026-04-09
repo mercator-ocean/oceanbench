@@ -7,10 +7,6 @@ import re
 from deepdiff import DeepDiff
 import sys
 
-RUNTIME_CONFIGURATION_CELL_PREFIX = (
-    "from oceanbench.core.runtime_configuration import RuntimeConfiguration, set_runtime_configuration"
-)
-
 
 def normalize_value(value):
     if isinstance(value, str):
@@ -19,23 +15,11 @@ def normalize_value(value):
     return value
 
 
-def _cell_source(cell):
-    source = cell.get("source", [])
-    return "".join(source) if isinstance(source, list) else source
-
-
-def _should_ignore_cell(cell):
-    return cell.get("cell_type") == "code" and _cell_source(cell).startswith(RUNTIME_CONFIGURATION_CELL_PREFIX)
-
-
 def ignore_ids_and_execution(json_data):
     if isinstance(json_data, dict):
         new_dict = {}
         for key, value in json_data.items():
-            if key == "cells":
-                # Special handling for cells
-                new_dict[key] = [ignore_ids_and_execution(cell) for cell in value if not _should_ignore_cell(cell)]
-            elif key in ["id", "metadata", "text/html", "execution_count"]:
+            if key in ["id", "metadata", "text/html", "execution_count"]:
                 continue
             else:
                 new_dict[key] = ignore_ids_and_execution(value)

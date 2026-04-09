@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from contextlib import contextmanager
 from os import environ
 from pathlib import PurePosixPath
 
@@ -42,6 +43,33 @@ def _parse_input_mandatory(
 def _derive_output_notebook_file_name(challenger_path: str) -> str:
     stem = PurePosixPath(challenger_path).stem
     return f"{stem}.report.ipynb"
+
+
+@contextmanager
+def _runtime_configuration_environment(runtime_configuration: RuntimeConfiguration):
+    environment_updates = {
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value: ",".join(runtime_configuration.staged_components),
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value: runtime_configuration.stage_directory,
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value: str(runtime_configuration.stage_max_workers),
+        OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value: str(runtime_configuration.remote_retries),
+    }
+    previous_environment = {
+        environment_variable_name: environ.get(environment_variable_name)
+        for environment_variable_name in environment_updates
+    }
+    for environment_variable_name, value in environment_updates.items():
+        if value in (None, ""):
+            environ.pop(environment_variable_name, None)
+        else:
+            environ[environment_variable_name] = value
+    try:
+        yield
+    finally:
+        for environment_variable_name, previous_value in previous_environment.items():
+            if previous_value is None:
+                environ.pop(environment_variable_name, None)
+            else:
+                environ[environment_variable_name] = previous_value
 
 
 def evaluate_challenger(
@@ -97,6 +125,7 @@ def _execute_evaluation_notebook_file(
     output_notebook_file_name: str,
     output_bucket: str | None,
     output_prefix: str | None,
+    runtime_configuration: RuntimeConfiguration,
 ):
     output_name = f"{output_prefix}/{output_notebook_file_name}" if output_prefix else output_notebook_file_name
     if output_bucket:
@@ -104,10 +133,11 @@ def _execute_evaluation_notebook_file(
         output_path = f"s3://{output_bucket}/{output_name}"
     else:
         output_path = output_notebook_file_name
-    execute_notebook(
-        output_notebook_file_name,
-        output_path,
-    )
+    with _runtime_configuration_environment(runtime_configuration):
+        execute_notebook(
+            output_notebook_file_name,
+            output_path,
+        )
 
 
 def _evaluate_challenger(
@@ -120,10 +150,10 @@ def _evaluate_challenger(
     generate_evaluation_notebook_file(
         challenger_python_code_uri_or_local_path,
         output_notebook_file_path=output_notebook_file_name,
-        runtime_configuration=runtime_configuration,
     )
     _execute_evaluation_notebook_file(
         output_notebook_file_name,
         output_bucket,
         output_prefix,
+        runtime_configuration,
     )
