@@ -10,16 +10,12 @@ import xarray
 from datetime import datetime
 from collections.abc import Callable
 
-from oceanbench.core.challenger_stage import staged_challenger_dataset, should_stage_challenger_locally
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
 from oceanbench.core.remote_http import require_remote_dataset_dimensions, with_remote_http_retries
 from oceanbench.core.runtime_configuration import current_runtime_configuration
-
-
-def _identity_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
-    return dataset
+from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
 
 
 def _default_first_day_datetimes() -> list[datetime]:
@@ -51,7 +47,9 @@ def glo36v1() -> xarray.Dataset:
         .rename({"lat": "latitude", "lon": "longitude"})
         .assign({"first_day_datetime": first_day_datetimes})
     )
-    return _with_optional_challenger_source(challenger_dataset, "glo36v1")
+    if not current_runtime_configuration().has_local_stage():
+        return challenger_dataset
+    return with_dataset_source(challenger_dataset, kind="challenger", name="glo36v1")
 
 
 def _glo36v1_dataset_path(start_datetime: datetime) -> str:
@@ -106,86 +104,67 @@ def _prepared_challenger_week_dataset(
 
 def _opened_challenger_week_dataset(
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
-    preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset],
+    preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None,
     first_day_datetime: datetime,
 ) -> xarray.Dataset:
-    return preprocess_dataset(
-        xarray.open_dataset(
-            forecast_zarr_path_from_start_datetime(first_day_datetime),
-            engine="zarr",
-        )
+    opened_dataset = xarray.open_dataset(
+        forecast_zarr_path_from_start_datetime(first_day_datetime),
+        engine="zarr",
     )
-
-
-def _staged_multizarr_forecasts_as_challenger_dataset(
-    dataset_name: str,
-    forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
-    first_day_datetimes: list[datetime],
-    preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset],
-) -> xarray.Dataset:
-    return staged_challenger_dataset(
-        dataset_name=dataset_name,
-        first_day_datetimes=first_day_datetimes,
-        lead_days_count=LEAD_DAYS_COUNT,
-        open_week_dataset=lambda first_day_datetime: _prepared_challenger_week_dataset(
-            _opened_challenger_week_dataset(
-                forecast_zarr_path_from_start_datetime,
-                preprocess_dataset,
-                first_day_datetime,
-            ),
-            f"{dataset_name} challenger dataset open",
-        ),
-    )
+    return preprocess_dataset(opened_dataset) if preprocess_dataset is not None else opened_dataset
 
 
 def _remote_multizarr_forecasts_as_challenger_dataset(
     dataset_name: str,
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
     first_day_datetimes: list[datetime],
-    preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset],
+    preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None,
 ) -> xarray.Dataset:
     challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
         list(map(forecast_zarr_path_from_start_datetime, first_day_datetimes)),
         engine="zarr",
         preprocess=lambda dataset: _prepared_challenger_week_dataset(
-            preprocess_dataset(dataset),
+            preprocess_dataset(dataset) if preprocess_dataset is not None else dataset,
             f"{dataset_name} challenger dataset open",
         ),
         combine="nested",
         concat_dim="first_day_datetime",
         parallel=False,
     ).assign({"first_day_datetime": first_day_datetimes})
-    return _with_optional_challenger_source(challenger_dataset, dataset_name)
-
-
-def _with_optional_challenger_source(dataset: xarray.Dataset, dataset_name: str) -> xarray.Dataset:
-    if not current_runtime_configuration().has_local_stage():
-        return dataset
-    return with_dataset_source(dataset, kind="challenger", name=dataset_name)
+    return challenger_dataset
 
 
 def _open_multizarr_forecasts_as_challenger_dataset(
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
     *,
     first_day_datetimes: list[datetime] | None = None,
-    preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] = _identity_dataset,
+    preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None = None,
 ) -> xarray.Dataset:
     resolved_first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes)
     dataset_name = _challenger_dataset_name(forecast_zarr_path_from_start_datetime)
 
     def open_dataset() -> xarray.Dataset:
-        if should_stage_challenger_locally():
-            return _staged_multizarr_forecasts_as_challenger_dataset(
+        return maybe_stage_weekly_dataset(
+            stage_key="challenger",
+            dataset_kind="challenger",
+            dataset_name=dataset_name,
+            first_day_datetimes=resolved_first_day_datetimes,
+            lead_days_count=LEAD_DAYS_COUNT,
+            open_week_dataset=lambda first_day_datetime: _prepared_challenger_week_dataset(
+                _opened_challenger_week_dataset(
+                    forecast_zarr_path_from_start_datetime,
+                    preprocess_dataset,
+                    first_day_datetime,
+                ),
+                f"{dataset_name} challenger dataset open",
+            ),
+            open_remote_dataset=lambda: _remote_multizarr_forecasts_as_challenger_dataset(
                 dataset_name,
                 forecast_zarr_path_from_start_datetime,
                 resolved_first_day_datetimes,
                 preprocess_dataset,
-            )
-        return _remote_multizarr_forecasts_as_challenger_dataset(
-            dataset_name,
-            forecast_zarr_path_from_start_datetime,
-            resolved_first_day_datetimes,
-            preprocess_dataset,
+            ),
+            attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
         )
 
     return with_remote_http_retries("challenger dataset open", open_dataset)

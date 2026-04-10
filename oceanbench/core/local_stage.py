@@ -14,12 +14,15 @@ from pathlib import Path
 from time import sleep
 from typing import Iterator, TypeVar
 
+import xarray
+
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
 DEFAULT_LOCAL_STAGE_LOCK_TIMEOUT_SECONDS = 24 * 60 * 60
 DEFAULT_LOCAL_STAGE_LOCK_POLL_SECONDS = 5.0
 ITEM = TypeVar("ITEM")
 RESULT = TypeVar("RESULT")
+DATASET = TypeVar("DATASET")
 
 
 def should_stage_locally(stage_key: str) -> bool:
@@ -53,6 +56,49 @@ def run_in_local_stage_workers(items: list[ITEM], callback: Callable[[ITEM], RES
         return [callback(item) for item in items]
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         return list(executor.map(callback, items))
+
+
+def write_dataset_to_local_stage(
+    dataset: xarray.Dataset,
+    stage_path: Path,
+    *,
+    prepare_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None = None,
+    load_before_write: bool = False,
+    clear_chunk_encoding: bool = False,
+) -> None:
+    staged_dataset = prepare_dataset(dataset) if prepare_dataset is not None else dataset
+    if load_before_write:
+        staged_dataset = staged_dataset.load()
+    if clear_chunk_encoding:
+        for variable_name in staged_dataset.variables:
+            staged_dataset[variable_name].encoding.pop("chunks", None)
+    temporary_stage_path = stage_path.with_name(f"{stage_path.name}.tmp")
+    stage_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(temporary_stage_path, ignore_errors=True)
+    staged_dataset.to_zarr(temporary_stage_path, mode="w")
+    shutil.rmtree(stage_path, ignore_errors=True)
+    temporary_stage_path.rename(stage_path)
+
+
+def open_or_create_local_stage_dataset(
+    stage_path: Path,
+    open_staged_dataset: Callable[[Path], DATASET],
+    build_stage: Callable[[Path], None],
+) -> DATASET:
+    ensure_local_stage(stage_path, build_stage)
+    return open_staged_dataset(stage_path)
+
+
+def ensure_local_stage(
+    stage_path: Path,
+    build_stage: Callable[[Path], None],
+) -> Path:
+    if stage_path.exists():
+        return stage_path
+    with local_stage_build_guard(stage_path) as should_build_stage:
+        if should_build_stage:
+            build_stage(stage_path)
+    return stage_path
 
 
 def _local_stage_lock_path(stage_path: Path) -> Path:

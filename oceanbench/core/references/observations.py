@@ -3,16 +3,25 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from pathlib import Path
-import shutil
 
 import numpy
 import pandas
 from xarray import Dataset, open_dataset, open_mfdataset
 
+from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.local_stage import local_stage_build_guard, local_stage_directory, should_stage_locally
-from oceanbench.core.remote_http import RetriableRemoteDataError, require_remote_dataset_dimensions
+from oceanbench.core.local_stage import (
+    local_stage_directory,
+    open_or_create_local_stage_dataset,
+    should_stage_locally,
+    write_dataset_to_local_stage,
+)
+from oceanbench.core.remote_http import (
+    RetriableRemoteDataError,
+    require_remote_dataset_dimensions,
+    with_remote_http_retries,
+)
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
@@ -20,6 +29,69 @@ LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
 
 class ObservationDataUnavailableError(ValueError):
     pass
+
+
+def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
+    if resolution == "twelfth_degree":
+        return "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt.zarr"
+    if resolution == "quarter_degree":
+        return (
+            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt_025deg.zarr"
+        )
+    if resolution == "one_degree":
+        return (
+            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt_1_deg.zarr"
+        )
+    raise ValueError(f"Unsupported resolution : {resolution}.")
+
+
+def _mean_dynamic_topography_stage_path(resolution: str) -> Path:
+    return local_stage_directory() / f"class4-mean-dynamic-topography-2024-{resolution}.zarr"
+
+
+def _open_staged_mean_dynamic_topography_dataset(stage_path: Path) -> Dataset:
+    return open_dataset(stage_path, engine="zarr")
+
+
+def _build_staged_mean_dynamic_topography_dataset(
+    mean_dynamic_topography_url: str,
+    stage_path: Path,
+) -> None:
+    mean_dynamic_topography_dataset = open_dataset(
+        mean_dynamic_topography_url,
+        engine="zarr",
+        chunks="auto",
+        consolidated=True,
+    )
+    try:
+        write_dataset_to_local_stage(mean_dynamic_topography_dataset, stage_path)
+    finally:
+        mean_dynamic_topography_dataset.close()
+
+
+def load_mean_dynamic_topography(resolution: str) -> Dataset:
+    def open_mean_dynamic_topography_dataset() -> Dataset:
+        mean_dynamic_topography_url = _mean_dynamic_topography_zarr_url(resolution)
+        if not should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY):
+            return open_dataset(
+                mean_dynamic_topography_url,
+                engine="zarr",
+                chunks="auto",
+                consolidated=True,
+            )
+        local_stage_path = _mean_dynamic_topography_stage_path(resolution)
+        return open_or_create_local_stage_dataset(
+            local_stage_path,
+            open_staged_dataset=_open_staged_mean_dynamic_topography_dataset,
+            build_stage=lambda stage_path: _build_staged_mean_dynamic_topography_dataset(
+                mean_dynamic_topography_url,
+                stage_path,
+            ),
+        )
+
+    dataset = with_remote_http_retries("mean dynamic topography open", open_mean_dynamic_topography_dataset)
+    dataset = rename_dataset_with_standard_names(dataset)
+    return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 
 
 def observation_path(day_datetime: numpy.datetime64) -> str:
@@ -54,20 +126,32 @@ def _observations_stage_path(first_day_start: str, last_day_end: str, lead_days_
     )
 
 
-def _write_staged_observations_dataset(observations_dataset: Dataset, stage_path: Path) -> None:
-    staged_dataset = observations_dataset.load()
-    for variable_name in staged_dataset.variables:
-        staged_dataset[variable_name].encoding.pop("chunks", None)
-    temporary_stage_path = stage_path.with_name(f"{stage_path.name}.tmp")
-    stage_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.rmtree(temporary_stage_path, ignore_errors=True)
-    staged_dataset.to_zarr(temporary_stage_path, mode="w")
-    shutil.rmtree(stage_path, ignore_errors=True)
-    temporary_stage_path.rename(stage_path)
-
-
 def _open_staged_observations_dataset(stage_path: Path) -> Dataset:
     return open_dataset(stage_path, engine="zarr")
+
+
+def _build_staged_observations_dataset(
+    stage_path: Path,
+    observation_days: numpy.ndarray,
+    first_day_timestamps: pandas.DatetimeIndex,
+    first_day_datetimes: numpy.ndarray,
+    lead_days_count: int,
+) -> None:
+    observations_dataset = _selected_observations_dataset(
+        observation_days=observation_days,
+        first_day_timestamps=first_day_timestamps,
+        first_day_datetimes=first_day_datetimes,
+        lead_days_count=lead_days_count,
+    )
+    try:
+        write_dataset_to_local_stage(
+            observations_dataset,
+            stage_path,
+            load_before_write=True,
+            clear_chunk_encoding=True,
+        )
+    finally:
+        observations_dataset.close()
 
 
 def _selected_observations_dataset(
@@ -151,24 +235,25 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
     local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)
-    if _should_stage_observations_locally() and local_stage_path.exists():
-        return _open_staged_observations_dataset(local_stage_path)
 
-    if not _should_stage_observations_locally():
-        return _selected_observations_dataset(
-            observation_days=observation_days,
-            first_day_timestamps=first_day_timestamps,
-            first_day_datetimes=first_day_datetimes,
-            lead_days_count=lead_days_count,
+    def open_selected_observations() -> Dataset:
+        if not _should_stage_observations_locally():
+            return _selected_observations_dataset(
+                observation_days=observation_days,
+                first_day_timestamps=first_day_timestamps,
+                first_day_datetimes=first_day_datetimes,
+                lead_days_count=lead_days_count,
+            )
+        return open_or_create_local_stage_dataset(
+            local_stage_path,
+            open_staged_dataset=_open_staged_observations_dataset,
+            build_stage=lambda stage_path: _build_staged_observations_dataset(
+                stage_path,
+                observation_days=observation_days,
+                first_day_timestamps=first_day_timestamps,
+                first_day_datetimes=first_day_datetimes,
+                lead_days_count=lead_days_count,
+            ),
         )
-    with local_stage_build_guard(local_stage_path) as should_build_stage:
-        if not should_build_stage:
-            return _open_staged_observations_dataset(local_stage_path)
-        observations_dataset = _selected_observations_dataset(
-            observation_days=observation_days,
-            first_day_timestamps=first_day_timestamps,
-            first_day_datetimes=first_day_datetimes,
-            lead_days_count=lead_days_count,
-        )
-        _write_staged_observations_dataset(observations_dataset, local_stage_path)
-        return _open_staged_observations_dataset(local_stage_path)
+
+    return with_remote_http_retries("observation dataset open", open_selected_observations)

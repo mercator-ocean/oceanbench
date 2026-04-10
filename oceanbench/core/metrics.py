@@ -13,177 +13,127 @@ from oceanbench.core.rmsd import rmsd
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
-from oceanbench.core.remote_http import with_remote_http_retries
-from oceanbench.core.lagrangian_trajectory import deviation_of_lagrangian_trajectories
 
-_REFERENCE_DATASET_CACHE: dict[tuple[str, int], xarray.Dataset] = {}
-
-
-def _cached_reference_dataset(
-    dataset_name: str,
-    challenger_dataset: xarray.Dataset,
-    load_reference_dataset,
-) -> xarray.Dataset:
-    cache_key = (dataset_name, id(challenger_dataset))
-    cached_dataset = _REFERENCE_DATASET_CACHE.get(cache_key)
-    if cached_dataset is not None:
-        return cached_dataset
-
-    reference_dataset = load_reference_dataset(challenger_dataset)
-    _REFERENCE_DATASET_CACHE[cache_key] = reference_dataset
-    return reference_dataset
-
-
-def _glorys_reference_dataset(challenger_dataset: xarray.Dataset) -> xarray.Dataset:
-    return _cached_reference_dataset("glorys", challenger_dataset, glorys_reanalysis_dataset)
-
-
-def _glo12_reference_dataset(challenger_dataset: xarray.Dataset) -> xarray.Dataset:
-    return _cached_reference_dataset("glo12", challenger_dataset, glo12_analysis_dataset)
+from oceanbench.core.lagrangian_trajectory import (
+    deviation_of_lagrangian_trajectories,
+)
 
 
 def rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    def compute():
-        try:
-            observation_dataset = observations(challenger_dataset)
-        except ObservationDataUnavailableError as error:
-            return pandas.DataFrame({"Message": [str(error)]})
-        return rmsd_class4_validation(
-            challenger_dataset=challenger_dataset,
-            reference_dataset=observation_dataset,
-            variables=[
-                Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
-                Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
-                Variable.SEA_WATER_SALINITY,
-                Variable.NORTHWARD_SEA_WATER_VELOCITY,
-                Variable.EASTWARD_SEA_WATER_VELOCITY,
-            ],
-        )
-
-    return with_remote_http_retries("observation-based RMSD", compute)
+    try:
+        observation_dataset = observations(challenger_dataset)
+    except ObservationDataUnavailableError as error:
+        return pandas.DataFrame({"Message": [str(error)]})
+    return rmsd_class4_validation(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=observation_dataset,
+        variables=[
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+            Variable.SEA_WATER_SALINITY,
+            Variable.NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.EASTWARD_SEA_WATER_VELOCITY,
+        ],
+    )
 
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    return with_remote_http_retries(
-        "GLORYS variable RMSD",
-        lambda: rmsd(
-            challenger_dataset=challenger_dataset,
-            reference_dataset=_glorys_reference_dataset(challenger_dataset),
-            variables=[
-                Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
-                Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
-                Variable.SEA_WATER_SALINITY,
-                Variable.NORTHWARD_SEA_WATER_VELOCITY,
-                Variable.EASTWARD_SEA_WATER_VELOCITY,
-            ],
-        ),
+    return rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=glorys_reanalysis_dataset(challenger_dataset),
+        variables=[
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+            Variable.SEA_WATER_SALINITY,
+            Variable.NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.EASTWARD_SEA_WATER_VELOCITY,
+        ],
     )
 
 
 def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    return with_remote_http_retries(
-        "GLORYS mixed layer depth RMSD",
-        lambda: rmsd(
-            challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
-            reference_dataset=compute_mixed_layer_depth(_glorys_reference_dataset(challenger_dataset)),
-            variables=[
-                Variable.MIXED_LAYER_DEPTH,
-            ],
-        ),
+    return rmsd(
+        challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
+        reference_dataset=compute_mixed_layer_depth(glorys_reanalysis_dataset(challenger_dataset)),
+        variables=[
+            Variable.MIXED_LAYER_DEPTH,
+        ],
     )
 
 
 def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    return with_remote_http_retries(
-        "GLORYS geostrophic current RMSD",
-        lambda: rmsd(
-            challenger_dataset=compute_geostrophic_currents(challenger_dataset),
-            reference_dataset=compute_geostrophic_currents(_glorys_reference_dataset(challenger_dataset)),
-            variables=[
-                Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
-                Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
-            ],
-        ),
+    return rmsd(
+        challenger_dataset=compute_geostrophic_currents(challenger_dataset),
+        reference_dataset=compute_geostrophic_currents(glorys_reanalysis_dataset(challenger_dataset)),
+        variables=[
+            Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
+        ],
     )
 
 
 def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    return with_remote_http_retries(
-        "GLORYS lagrangian trajectories",
-        lambda: deviation_of_lagrangian_trajectories(
-            challenger_dataset=challenger_dataset,
-            reference_dataset=_glorys_reference_dataset(challenger_dataset),
-        ),
+    return deviation_of_lagrangian_trajectories(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=glorys_reanalysis_dataset(challenger_dataset),
     )
 
 
 def rmsd_of_variables_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    return with_remote_http_retries(
-        "GLO12 variable RMSD",
-        lambda: rmsd(
-            challenger_dataset=challenger_dataset,
-            reference_dataset=_glo12_reference_dataset(challenger_dataset),
-            variables=[
-                Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
-                Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
-                Variable.SEA_WATER_SALINITY,
-                Variable.NORTHWARD_SEA_WATER_VELOCITY,
-                Variable.EASTWARD_SEA_WATER_VELOCITY,
-            ],
-        ),
+    return rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=glo12_analysis_dataset(challenger_dataset),
+        variables=[
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+            Variable.SEA_WATER_SALINITY,
+            Variable.NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.EASTWARD_SEA_WATER_VELOCITY,
+        ],
     )
 
 
 def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    return with_remote_http_retries(
-        "GLO12 mixed layer depth RMSD",
-        lambda: rmsd(
-            challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
-            reference_dataset=compute_mixed_layer_depth(_glo12_reference_dataset(challenger_dataset)),
-            variables=[
-                Variable.MIXED_LAYER_DEPTH,
-            ],
-        ),
+    return rmsd(
+        challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
+        reference_dataset=compute_mixed_layer_depth(glo12_analysis_dataset(challenger_dataset)),
+        variables=[
+            Variable.MIXED_LAYER_DEPTH,
+        ],
     )
 
 
 def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    return with_remote_http_retries(
-        "GLO12 geostrophic current RMSD",
-        lambda: rmsd(
-            challenger_dataset=compute_geostrophic_currents(challenger_dataset),
-            reference_dataset=compute_geostrophic_currents(_glo12_reference_dataset(challenger_dataset)),
-            variables=[
-                Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
-                Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
-            ],
-        ),
+    return rmsd(
+        challenger_dataset=compute_geostrophic_currents(challenger_dataset),
+        reference_dataset=compute_geostrophic_currents(glo12_analysis_dataset(challenger_dataset)),
+        variables=[
+            Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
+        ],
     )
 
 
 def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-    return with_remote_http_retries(
-        "GLO12 lagrangian trajectories",
-        lambda: deviation_of_lagrangian_trajectories(
-            challenger_dataset=challenger_dataset,
-            reference_dataset=_glo12_reference_dataset(challenger_dataset),
-        ),
+    return deviation_of_lagrangian_trajectories(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=glo12_analysis_dataset(challenger_dataset),
     )
