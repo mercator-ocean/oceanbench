@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import argparse
+import glob
 import os
 from concurrent.futures import ThreadPoolExecutor
 
@@ -16,6 +18,7 @@ from helpers.s3_discovery import (
 
 SCRIPT_DIRECTORY = os.path.dirname(__file__)
 REPORTS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "reports")
+ASSETS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "..", "assets")
 QUARTO_METADATA_FILE_PATH = os.path.join(REPORTS_DIRECTORY, "_metadata.yml")
 
 
@@ -56,6 +59,14 @@ def _download_version_reports(version: str) -> bool:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Download evaluation report notebooks.")
+    parser.add_argument(
+        "--use-samples",
+        action="store_true",
+        help="Use local sample notebooks from assets/ instead of downloading from S3.",
+    )
+    args = parser.parse_args()
+
     os.makedirs(REPORTS_DIRECTORY, exist_ok=True)
     active_version = default_version()
 
