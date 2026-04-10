@@ -5,10 +5,10 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
-import shutil
 import uuid
 import numpy
 import pandas
+import shutil
 from parcels import StatusCode
 from parcels import (
     FieldSet,
