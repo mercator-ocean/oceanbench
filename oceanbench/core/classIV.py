@@ -20,6 +20,7 @@ from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
+from oceanbench.core import regions
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MEAN_SEA_SURFACE_HEIGHT_URL = (
@@ -189,7 +190,7 @@ def _interpolate_model_to_observations(
     model_depths = model_data[depth_key].values
     first_days = model_data[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days = model_data[Dimension.LEAD_DAY_INDEX.key()].values
-    first_day_to_index = {first_day: index for index, first_day in enumerate(first_days)}
+    first_day_to_index = {pandas.Timestamp(first_day): index for index, first_day in enumerate(first_days)}
     lead_day_to_index = {lead_day: index for index, lead_day in enumerate(lead_days)}
     model_values = numpy.full(len(observations_dataframe), numpy.nan)
     grouped_by_first_day = observations_dataframe.groupby("first_day", sort=False)
@@ -278,7 +279,7 @@ def _format_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -
     return pivot_table.rename(columns=rename_columns).reset_index(drop=True)
 
 
-def rmsd_class4_validation(
+def class4_validation_dataframe(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
@@ -287,7 +288,7 @@ def rmsd_class4_validation(
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
     observations = reference_dataset
 
-    all_results = []
+    all_dataframes = []
     resolved_variables = [(variable.key(), variable.key(), variable.key()) for variable in variables]
 
     for standard_variable_key, observation_variable_key, challenger_variable_key in resolved_variables:
@@ -297,6 +298,10 @@ def rmsd_class4_validation(
             standard_variable_key,
             lead_days_count,
         )
+        observations_dataframe = regions.filter_dataframe_from_challenger_region(
+            observations_dataframe,
+            challenger_dataset=challenger,
+        )
         if observations_dataframe.empty:
             continue
 
@@ -304,10 +309,50 @@ def rmsd_class4_validation(
         observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
 
         model_variable = challenger[challenger_variable_key]
+        observations_dataframe = observations_dataframe.copy()
         observations_dataframe["model_value"] = _interpolate_model_to_observations(
             model_variable, observations_dataframe
         )
+        observations_dataframe["error"] = observations_dataframe["model_value"] - observations_dataframe["observation_value"]
+        observations_dataframe["absolute_error"] = observations_dataframe["error"].abs()
+        observations_dataframe["variable"] = standard_variable_key
+        all_dataframes.append(observations_dataframe)
 
+    if not all_dataframes:
+        return pandas.DataFrame(
+            columns=[
+                "observation_value",
+                Dimension.TIME.key(),
+                Dimension.LATITUDE.key(),
+                Dimension.LONGITUDE.key(),
+                "first_day",
+                Dimension.DEPTH.key(),
+                "lead_day",
+                "depth_bin",
+                "model_value",
+                "error",
+                "absolute_error",
+                "variable",
+            ]
+        )
+
+    return pandas.concat(all_dataframes, ignore_index=True)
+
+
+def rmsd_class4_validation(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    variables: list[Variable],
+) -> pandas.DataFrame:
+    lead_days_count = rename_dataset_with_standard_names(challenger_dataset).sizes[Dimension.LEAD_DAY_INDEX.key()]
+    comparison_dataframe = class4_validation_dataframe(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=variables,
+    )
+
+    all_results = []
+    for standard_variable_key, observations_dataframe in comparison_dataframe.groupby("variable", sort=False):
         variable_results = _compute_rmsd_table(observations_dataframe, standard_variable_key)
         if not variable_results.empty:
             all_results.append(variable_results)

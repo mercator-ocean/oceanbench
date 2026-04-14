@@ -54,6 +54,7 @@ class FreezeParticle(JITParticle):
 
 
 LEAD_DAY_START = 2
+INITIAL_PARTICLE_COUNT = 10000
 
 
 def deviation_of_lagrangian_trajectories(
@@ -78,7 +79,7 @@ def _deviation_of_lagrangian_trajectories(
     latitudes, longitudes = _get_random_ocean_points_from_file(
         challenger_dataset,
         variable_name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
-        n=10000,
+        n=INITIAL_PARTICLE_COUNT,
         seed=123,
     )
     deviations = (
@@ -297,11 +298,12 @@ def _get_random_ocean_points_from_file(
     latitude_values = latitude_grid[mask.values]
     longitude_values = longitude_grid[mask.values]
 
-    if len(latitude_values) < n:
-        raise ValueError(f"Requested {n} points, but only {len(latitude_values)} ocean points available.")
+    sampled_particle_count = min(n, len(latitude_values))
+    if sampled_particle_count == 0:
+        raise ValueError("No valid ocean points are available in the selected challenger domain.")
 
     numpy.random.seed(seed)
-    idx = numpy.random.choice(len(latitude_values), n, replace=False)
+    idx = numpy.random.choice(len(latitude_values), sampled_particle_count, replace=False)
 
     return latitude_values[idx], longitude_values[idx]
 
