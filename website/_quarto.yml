@@ -4,6 +4,7 @@
 
 project:
   type: website
+  pre-render: python download_reports.py
 website:
   title: "OceanBench"
   favicon: favicon-light.png

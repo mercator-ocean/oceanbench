@@ -17,7 +17,6 @@ fi
 rm -rf reports _site
 
 pip install -r requirements.txt
-python download_reports.py
 quarto render --to html
 
 mkdir -p /app/repository
