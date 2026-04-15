@@ -30,7 +30,8 @@ def _parse_variable_label(label: str) -> tuple[str, str, str, str]:
 
 
 def _normalise_display_name(display_name: str) -> str:
-    return _DISPLAY_NAME_RENAMES.get(display_name.lower(), display_name)
+    normalised_display_name = display_name.lower()
+    return _DISPLAY_NAME_RENAMES.get(normalised_display_name, normalised_display_name)
 
 
 _METRICS = [
@@ -88,7 +89,7 @@ SECTIONS = {
         "flat_metrics": [],
         "depth_groups": [
             {"depths": ["0-5m", "5-100m", "100-300m", "300-600m"], "variables": ["temperature", "salinity"]},
-            {"depths": ["Surface"], "variables": ["temperature", "Sea level anomaly"], "show_depth_label": True},
+            {"depths": ["Surface"], "variables": ["temperature", "sea level anomaly"], "show_depth_label": True},
             {"depths": ["15m"], "variables": ["zonal current", "meridional current"], "show_depth_label": True},
         ],
     }
