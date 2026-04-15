@@ -21,11 +21,6 @@ python download_reports.py
 quarto render --to html
 
 mkdir -p /app/repository
-if command -v rsync > /dev/null; then
-    rsync -a --delete _site/ /app/repository/
-else
-    find /app/repository -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-    cp -R _site/. /app/repository/
-fi
+cp -r _site/* /app/repository
 
 popd > /dev/null
