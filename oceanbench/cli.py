@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from urllib.request import urlopen, Request
 
 from oceanbench.core.local_stage import cleanup_local_stage_directory
-from oceanbench.core.runtime_configuration import RuntimeConfiguration
+from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from oceanbench.core.version import __version__
 
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/mercator-ocean/oceanbench"
@@ -98,6 +98,24 @@ def _print_results(results: list[EvaluationResult]) -> None:
     print(f"\n{successes} succeeded, {failures} failed")
 
 
+def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfiguration:
+    environment_configuration = runtime_configuration_from_environment()
+    return RuntimeConfiguration(
+        staged_components=(
+            tuple(args.stage) if args.stage is not None else environment_configuration.staged_components
+        ),
+        stage_directory=args.stage_dir if args.stage_dir is not None else environment_configuration.stage_directory,
+        stage_max_workers=(
+            args.stage_max_workers
+            if args.stage_max_workers is not None
+            else environment_configuration.stage_max_workers
+        ),
+        remote_retries=(
+            args.remote_retries if args.remote_retries is not None else environment_configuration.remote_retries
+        ),
+    )
+
+
 def _run_evaluate(args: argparse.Namespace) -> int:
     challengers = _resolve_challengers(args)
 
@@ -113,12 +131,7 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        runtime_configuration = RuntimeConfiguration(
-            staged_components=tuple(args.stage or ()),
-            stage_directory=args.stage_dir,
-            stage_max_workers=args.stage_max_workers,
-            remote_retries=args.remote_retries,
-        )
+        runtime_configuration = _runtime_configuration_from_args(args)
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
@@ -189,13 +202,13 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     evaluate_parser.add_argument(
         "--stage-max-workers",
         type=int,
-        default=RuntimeConfiguration().stage_max_workers,
+        default=None,
         help="Maximum number of worker threads used to build local stage data",
     )
     evaluate_parser.add_argument(
         "--remote-retries",
         type=int,
-        default=RuntimeConfiguration().remote_retries,
+        default=None,
         help="Number of retries for transient remote data read failures",
     )
     evaluate_parser.add_argument(

@@ -7,7 +7,7 @@ from os import environ
 from pathlib import PurePosixPath
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.runtime_configuration import RuntimeConfiguration
+from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
 from papermill import execute_notebook
 
@@ -110,7 +110,7 @@ def evaluate_challenger(
         output_prefix,
         OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_PREFIX,
     )
-    resolved_runtime_configuration = runtime_configuration or RuntimeConfiguration()
+    resolved_runtime_configuration = runtime_configuration or runtime_configuration_from_environment()
     output_notebook_file_name = _derive_output_notebook_file_name(resolved_challenger_python_code_uri_or_local_path)
     _evaluate_challenger(
         resolved_challenger_python_code_uri_or_local_path,

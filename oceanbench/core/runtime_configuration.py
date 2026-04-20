@@ -69,11 +69,15 @@ def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
     )
 
 
+def runtime_configuration_from_environment() -> RuntimeConfiguration:
+    return _parse_runtime_configuration_from_environment()
+
+
 _runtime_configuration: RuntimeConfiguration | None = None
 
 
 def current_runtime_configuration() -> RuntimeConfiguration:
-    return _runtime_configuration or _parse_runtime_configuration_from_environment()
+    return _runtime_configuration or runtime_configuration_from_environment()
 
 
 def set_runtime_configuration(runtime_configuration: RuntimeConfiguration) -> None:
