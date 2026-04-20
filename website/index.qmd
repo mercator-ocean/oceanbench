@@ -37,14 +37,16 @@ Want to evaluate your system or get involved in OceanBench? Check out the [GitHu
 
 import json
 import os
-from helpers.s3_discovery import discover_challengers
+from helpers.s3_discovery import discover_official_reports
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
 from helpers.challenger_metadata import CHALLENGERS
+from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
 
-challengers = discover_challengers()
+published_reports = discover_official_reports()
+website_region_ids = published_region_ids_with_reports(published_reports)
 
-def _load_scores(challenger_name):
-    local_path = os.path.join("reports", f"{challenger_name}.report.ipynb")
+def _load_scores(challenger_name, region_id):
+    local_path = os.path.join("reports", f"{challenger_name}.{region_id}.report.ipynb")
     if not os.path.exists(local_path):
         raise FileNotFoundError(f"Missing downloaded report notebook for {challenger_name}: {local_path}")
     scores = get_all_model_scores_from_notebook(local_path, challenger_name)
@@ -52,14 +54,33 @@ def _load_scores(challenger_name):
         raise RuntimeError(f"Failed to parse scores for {challenger_name} from {local_path}")
     return {metric_key: score.model_dump() for metric_key, score in scores.items()}
 
-all_scores = {name: _load_scores(name) for name in challengers}
+all_scores = {
+    region_id: {
+        "display_name": published_region_label(region_id),
+        "challengers": {
+            challenger_name: _load_scores(challenger_name, region_id)
+            for challenger_name in published_reports[region_id]
+        },
+        "challenger_names": list(published_reports[region_id]),
+    }
+    for region_id in website_region_ids
+}
 
 scores_json = json.dumps({
-    "challengers": all_scores,
-    "challenger_names": list(all_scores.keys()),
+    "regions": all_scores,
+    "region_order": website_region_ids,
+    "region_labels": {
+        region_id: published_region_label(region_id)
+        for region_id in website_region_ids
+    },
+    "region_metadata": {
+        region_id: published_region_metadata(region_id)
+        for region_id in website_region_ids
+    },
     "challenger_labels": {
         name: CHALLENGERS[name]["label"]
-        for name in all_scores
+        for region in all_scores.values()
+        for name in region["challenger_names"]
         if name in CHALLENGERS
     },
     "metric_titles": METRIC_TITLES,

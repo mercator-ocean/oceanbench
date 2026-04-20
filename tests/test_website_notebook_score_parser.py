@@ -66,6 +66,15 @@ def _write_notebook(notebook_path: Path) -> None:
                 ),
             ),
             _metric_cell(
+                "oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis",
+                _score_table(
+                    [
+                        ("Zonal geostrophic current (m/s) [geostrophic_eastward_sea_water_velocity]", 1.5, 1.6),
+                        ("Meridional geostrophic current (m/s) [geostrophic_northward_sea_water_velocity]", 1.7, 1.8),
+                    ]
+                ),
+            ),
+            _metric_cell(
                 "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis",
                 _score_table(
                     [
@@ -88,6 +97,7 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
         "rmsd_variables_observations",
         "rmsd_variables_glorys",
         "rmsd_mld_glorys",
+        "rmsd_geostrophic_glorys",
         "lagrangian_glorys",
     }
 
@@ -117,6 +127,7 @@ def test_track_parser_merges_metric_fragments(tmp_path):
     assert score.name == "GLO12"
     assert score.depths["100m"].variables["temperature"].data == {"1": 1.1, "2": 1.2}
     assert score.depths["flat"].variables["mixed layer depth"].data == {"1": 1.3, "2": 1.4}
+    assert score.depths["flat"].variables["zonal geostrophic current"].data == {"1": 1.5, "2": 1.6}
     assert score.depths["flat"].variables["lagrangian trajectory deviation"].data == {"1": 2.1, "2": 2.2}
 
 

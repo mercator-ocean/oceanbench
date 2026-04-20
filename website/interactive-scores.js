@@ -46,7 +46,10 @@ let showAllMode = true;
 let showPercentDiff = false;
 let parsedData = null;
 let challengerLabels = {};
+let regionLabels = {};
+let regionMetadata = {};
 let activeSection = "observations";
+let activeRegion = null;
 let isScrollRefreshScheduled = false;
 
 const SECTION_ORDER = ["observations", "reanalysis", "analysis"];
@@ -178,6 +181,7 @@ function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, bas
 function buildDataRows(
   orderedNames,
   challengers,
+  regionId,
   metricKey,
   depth,
   variables,
@@ -192,7 +196,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -234,6 +238,7 @@ function buildDataRows(
 function buildCombinedDataRows(
   orderedNames,
   challengers,
+  regionId,
   metricSpecs,
   baseline,
 ) {
@@ -241,7 +246,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -447,6 +452,47 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   return markup;
 }
 
+function buildRegionSelectorInnerHtml(regionIds) {
+  if (regionIds.length <= 1) return "";
+
+  let markup = '<div class="region-selector-row">';
+  markup += '<span class="region-selector-label">Region</span>';
+  markup += '<div class="region-chip-group" role="group" aria-label="Evaluation region">';
+  for (const regionId of regionIds) {
+    const active = regionId === activeRegion ? " active" : "";
+    const label = regionLabels[regionId] || titleCase(regionId);
+    const description = regionMetadata[regionId]?.description || "";
+    markup += `<button type="button" class="region-chip${active}" data-region="${regionId}" aria-pressed="${regionId === activeRegion}" title="${description}">${label}</button>`;
+  }
+  markup += "</div></div>";
+
+  const activeDescription = regionMetadata[activeRegion]?.description;
+  if (activeDescription) {
+    markup += `<div class="region-selector-description">${activeDescription}</div>`;
+  }
+
+  return markup;
+}
+
+function renderRegionSelector(regionIds) {
+  const existing = document.getElementById("region-selector");
+  if (regionIds.length <= 1) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  const wrapper = document.getElementById("all-scores");
+  if (!wrapper) return;
+
+  const regionSelector = existing || document.createElement("div");
+  regionSelector.id = "region-selector";
+  regionSelector.innerHTML = buildRegionSelectorInnerHtml(regionIds);
+
+  if (!existing) {
+    wrapper.parentNode.insertBefore(regionSelector, wrapper);
+  }
+}
+
 function ensureHeaderElement() {
   const existing = document.getElementById("score-header");
   if (existing) return document.getElementById("score-controls");
@@ -506,6 +552,7 @@ function groupDepthsByVariables(baselineScore, depths) {
 function renderDepthMetric(
   challengers,
   challengerNames,
+  regionId,
   metricKey,
   baseline,
   unifyVariables,
@@ -542,7 +589,7 @@ function renderDepthMetric(
     const partialVars = allVariables.filter((v) => !depthSets.every((s) => s.has(v)));
     const unionVariables = [...commonVars, ...partialVars];
     return renderDepthGroup(
-      baselineScore, orderedNames, challengers, metricKey, visibleDepths, unionVariables, baseline,
+      baselineScore, orderedNames, challengers, regionId, metricKey, visibleDepths, unionVariables, baseline,
     );
   }
 
@@ -558,6 +605,7 @@ function renderDepthMetric(
         baselineScore,
         orderedNames,
         challengers,
+        regionId,
         metricKey,
         groupDepths,
         groupVariables,
@@ -569,12 +617,12 @@ function renderDepthMetric(
 
   const depthGroups = groupDepthsByVariables(baselineScore, visibleDepths);
   return depthGroups.map((group) => renderDepthGroup(
-    baselineScore, orderedNames, challengers, metricKey, group.depths, group.variables, baseline,
+    baselineScore, orderedNames, challengers, regionId, metricKey, group.depths, group.variables, baseline,
   )).join("");
 }
 
 function renderDepthGroup(
-  baselineScore, orderedNames, challengers, metricKey, depths, variables, baseline, showDepthLabelForSingleDepth = false,
+  baselineScore, orderedNames, challengers, regionId, metricKey, depths, variables, baseline, showDepthLabelForSingleDepth = false,
 ) {
   if (variables.length === 0 || depths.length === 0) return "";
 
@@ -609,6 +657,7 @@ function renderDepthGroup(
     tbody += buildDataRows(
       orderedNames,
       challengers,
+      regionId,
       metricKey,
       depth,
       variables,
@@ -626,6 +675,7 @@ function renderDepthGroup(
 function renderCombinedFlatMetrics(
   challengers,
   challengerNames,
+  regionId,
   metricKeys,
   baseline,
 ) {
@@ -673,7 +723,7 @@ function renderCombinedFlatMetrics(
 
   const tbody =
     "<tbody>" +
-    buildCombinedDataRows(orderedNames, challengers, metricSpecs, baseline) +
+    buildCombinedDataRows(orderedNames, challengers, regionId, metricSpecs, baseline) +
     "</tbody>";
 
   return `<div class="score-table-wrapper"><table class="score-table">${thead}${tbody}</table></div>`;
@@ -685,6 +735,7 @@ function renderMetricSection(
   flatMetrics,
   challengers,
   challengerNames,
+  regionId,
   baseline,
   metricTitles,
   unifyVariables,
@@ -700,6 +751,7 @@ function renderMetricSection(
   markup += renderDepthMetric(
     challengers,
     challengerNames,
+    regionId,
     depthMetric,
     baseline,
     unifyVariables,
@@ -710,6 +762,7 @@ function renderMetricSection(
   const flatMarkup = renderCombinedFlatMetrics(
     challengers,
     challengerNames,
+    regionId,
     flatMetrics,
     baseline,
   );
@@ -792,6 +845,14 @@ function updateStickyOffsets() {
 }
 
 function attachControlListeners() {
+  document.querySelectorAll(".region-chip").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.region === activeRegion) return;
+      activeRegion = button.dataset.region;
+      renderAllTables();
+    });
+  });
+
   const baselineSelect = document.getElementById("baseline-select");
   if (baselineSelect) {
     baselineSelect.addEventListener("change", renderAllTables);
@@ -912,18 +973,46 @@ function ensureParsedData() {
     if (!dataElement) return null;
     parsedData = JSON.parse(dataElement.textContent);
     challengerLabels = parsedData.challenger_labels || {};
+    regionLabels = parsedData.region_labels || {};
+    regionMetadata = parsedData.region_metadata || {};
+    const regionIds = parsedData.region_order || Object.keys(parsedData.regions || {});
+    if (!activeRegion || !regionIds.includes(activeRegion)) {
+      activeRegion = regionIds[0] || null;
+    }
   }
   return parsedData;
+}
+
+function getRegionIds(data) {
+  return data.region_order || Object.keys(data.regions || {});
+}
+
+function getCurrentRegionData(data) {
+  if (!activeRegion) return null;
+  return data.regions?.[activeRegion] || null;
+}
+
+function resolveBaselineSelection(challengerNames, selectedBaseline) {
+  if (selectedBaseline && challengerNames.includes(selectedBaseline)) {
+    return selectedBaseline;
+  }
+  if (challengerNames.includes("glo12")) {
+    return "glo12";
+  }
+  return challengerNames[0];
 }
 
 function renderTablesOnly() {
   const data = ensureParsedData();
   if (!data) return;
-  const { challengers, challenger_names: challengerNames, metric_titles: metricTitles, sections } = data;
+  const regionData = getCurrentRegionData(data);
+  if (!regionData) return;
+  const { challengers, challenger_names: challengerNames } = regionData;
+  if (!challengerNames || challengerNames.length === 0) return;
+  const { metric_titles: metricTitles, sections } = data;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = existingSelect?.value
-    || (challengerNames.includes("glo12") ? "glo12" : challengerNames[0]);
+  const baseline = resolveBaselineSelection(challengerNames, existingSelect?.value);
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
     renderMetricSection(
@@ -932,6 +1021,7 @@ function renderTablesOnly() {
       sectionConfig.flat_metrics,
       challengers,
       challengerNames,
+      activeRegion,
       baseline,
       metricTitles,
       sectionKey !== "observations",
@@ -946,11 +1036,15 @@ function renderTablesOnly() {
 function renderAllTables() {
   const data = ensureParsedData();
   if (!data) return;
-  const { challengers, challenger_names: challengerNames, metric_titles: metricTitles, sections } = data;
+  const regionData = getCurrentRegionData(data);
+  if (!regionData) return;
+  const { challengers, challenger_names: challengerNames } = regionData;
+  const { metric_titles: metricTitles, sections } = data;
+  const regionIds = getRegionIds(data);
+  if (!challengerNames || challengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = existingSelect?.value
-    || (challengerNames.includes("glo12") ? "glo12" : challengerNames[0]);
+  const baseline = resolveBaselineSelection(challengerNames, existingSelect?.value);
   const availableDepths = getAvailableDepths(challengers, baseline, sections);
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
@@ -960,6 +1054,7 @@ function renderAllTables() {
       sectionConfig.flat_metrics,
       challengers,
       challengerNames,
+      activeRegion,
       baseline,
       metricTitles,
       sectionKey !== "observations",
@@ -969,6 +1064,7 @@ function renderAllTables() {
 
   const controlsElement = ensureHeaderElement();
   controlsElement.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);
+  renderRegionSelector(regionIds);
 
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {
