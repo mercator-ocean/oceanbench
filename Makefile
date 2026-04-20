@@ -71,7 +71,7 @@ run-tests:
 	pip install --editable .
 	$(MAKE) evaluate-samples
 	$(MAKE) compare-notebooks
-	poetry run pytest --doctest-modules oceanbench/datasets/* -n 8
+	poetry run pytest tests --doctest-modules oceanbench/datasets/* -n 8
 
 _release: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 _release:

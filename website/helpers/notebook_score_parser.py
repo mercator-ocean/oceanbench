@@ -2,44 +2,186 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import json
+import re
+
 from bs4 import BeautifulSoup
 import requests
+
 from helpers.type import ModelScore
-import json
+
+_VARIABLE_LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]+)\) \[([^\]]*)\](?:\{([^}]+)\})?$")
+_LEAD_DAY_NUMBER_PATTERN = re.compile(r"(\d+)$")
+_DISPLAY_NAME_RENAMES = {
+    "height": "sea surface height",
+    "surface height": "sea surface height",
+    "northward velocity": "meridional current",
+    "eastward velocity": "zonal current",
+    "northward geostrophic velocity": "meridional geostrophic current",
+    "eastward geostrophic velocity": "zonal geostrophic current",
+}
 
 
-def get_raw_html_report_score_table(raw_notebook) -> str:
-    for cell in raw_notebook["cells"]:
-        if "oceanbench.metrics.rmsd_of_variables_compared_to_glorys(challenger_datasets)" in cell["source"]:
-            html_output = cell["outputs"][0]["data"]["text/html"]
-            cleaned_html_output = "".join([line.removesuffix("\n") for line in html_output])
-            return cleaned_html_output
+def _parse_variable_label(label: str) -> tuple[str, str, str, str]:
+    match = _VARIABLE_LABEL_PATTERN.match(label)
+    if match:
+        return match.group(1), match.group(2), match.group(3), match.group(4) or ""
+    return label, "", "unknown", ""
 
 
-def _get_depth_and_variable(variable: str) -> tuple[str, str]:
-    for depth in ["Surface", "50m", "100m", "200m", "300m", "500m"]:
-        if variable.startswith(depth):
-            return (depth, variable.removeprefix(depth + " "))
+def _normalise_display_name(display_name: str) -> str:
+    normalised_display_name = display_name.lower()
+    return _DISPLAY_NAME_RENAMES.get(normalised_display_name, normalised_display_name)
 
 
-def _convert_raw_html_report_score_table_to_model_score(raw_table: str, name: str) -> ModelScore:
-    scores = {"name": name, "depths": {}}
+_METRICS = [
+    {"key": "rmsd_variables", "title": "Forecasted variables", "function": "rmsd_of_variables", "has_depths": True},
+    {
+        "key": "rmsd_mld",
+        "title": "RMSD of Mixed Layer Depth",
+        "function": "rmsd_of_mixed_layer_depth",
+        "has_depths": False,
+    },
+    {
+        "key": "rmsd_geostrophic",
+        "title": "RMSD of Geostrophic Currents",
+        "function": "rmsd_of_geostrophic_currents",
+        "has_depths": False,
+    },
+    {
+        "key": "lagrangian",
+        "title": "Lagrangian Trajectory Deviation",
+        "function": "deviation_of_lagrangian_trajectories",
+        "has_depths": False,
+    },
+]
+
+_REFERENCES = [
+    {"key": "reanalysis", "suffix": "glorys", "function_suffix": "compared_to_glorys_reanalysis"},
+    {"key": "analysis", "suffix": "glo12", "function_suffix": "compared_to_glo12_analysis"},
+]
+
+_OBSERVATIONS_METRIC_KEY = "rmsd_variables_observations"
+
+_METRIC_PATTERNS = {
+    f"{metric['key']}_{reference['suffix']}": f"oceanbench.metrics.{metric['function']}_{reference['function_suffix']}"
+    for metric in _METRICS
+    for reference in _REFERENCES
+} | {_OBSERVATIONS_METRIC_KEY: "oceanbench.metrics.rmsd_of_variables_compared_to_observations"}
+
+_DEPTH_VARIABLE_METRICS = {
+    f"{metric['key']}_{reference['suffix']}" for metric in _METRICS for reference in _REFERENCES if metric["has_depths"]
+} | {_OBSERVATIONS_METRIC_KEY}
+
+METRIC_TITLES = {
+    f"{metric['key']}_{reference['suffix']}": metric["title"] for metric in _METRICS for reference in _REFERENCES
+} | {_OBSERVATIONS_METRIC_KEY: "Forecasted variables"}
+
+SECTIONS = {
+    reference["key"]: {
+        "depth_metric": next(f"{metric['key']}_{reference['suffix']}" for metric in _METRICS if metric["has_depths"]),
+        "flat_metrics": [f"{metric['key']}_{reference['suffix']}" for metric in _METRICS if not metric["has_depths"]],
+    }
+    for reference in _REFERENCES
+} | {
+    "observations": {
+        "depth_metric": _OBSERVATIONS_METRIC_KEY,
+        "flat_metrics": [],
+        "depth_groups": [
+            {"depths": ["0-5m", "5-100m", "100-300m", "300-600m"], "variables": ["temperature", "salinity"]},
+            {"depths": ["Surface"], "variables": ["temperature", "sea level anomaly"], "show_depth_label": True},
+            {"depths": ["15m"], "variables": ["zonal current", "meridional current"], "show_depth_label": True},
+        ],
+    }
+}
+
+
+def _get_cell_source(cell: dict) -> str:
+    source = cell.get("source", [])
+    if isinstance(source, list):
+        return "".join(source)
+    return source
+
+
+def _get_cell_html_output(cell: dict) -> str | None:
+    for output in cell.get("outputs", []):
+        if "data" in output and "text/html" in output["data"]:
+            html_parts = output["data"]["text/html"]
+            if isinstance(html_parts, list):
+                return "".join(line.removesuffix("\n") for line in html_parts)
+            return html_parts
+    return None
+
+
+def _get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
+    return {
+        metric_key: html
+        for cell in raw_notebook["cells"]
+        for metric_key, pattern in _METRIC_PATTERNS.items()
+        if pattern in _get_cell_source(cell)
+        if (html := _get_cell_html_output(cell))
+    }
+
+
+def _parse_cell_value(text: str) -> float | None:
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _parse_html_table_row(row, lead_days: list[str]) -> dict:
+    label = row.find("th").get_text(strip=True)
+    values = {day: _parse_cell_value(cell.get_text(strip=True)) for day, cell in zip(lead_days, row.find_all("td"))}
+    return {"label": label, "data": values}
+
+
+def _extract_lead_day_number(header: str) -> str:
+    match = _LEAD_DAY_NUMBER_PATTERN.search(header)
+    return match.group(1) if match else header
+
+
+def _parse_html_table_rows(raw_table: str) -> list[dict]:
     soup = BeautifulSoup(raw_table, features="html.parser")
-    tbody = soup.find("tbody")
-    rows = tbody.find_all("tr")
-    for row in rows:
-        depth, variable = _get_depth_and_variable(row.find("th").string)
-        if depth not in scores["depths"]:
-            scores["depths"][depth] = {"real_value": 0, "variables": {}}
-        scores["depths"][depth]["variables"][variable] = {
-            "cf_name": "TODO",
-            "unit": "TODO",
-            "data": {str(k + 1): float(v.string) for k, v in enumerate(row.find_all("td"))},
+    headers = [th.get_text(strip=True) for th in soup.find("thead").find_all("th")]
+    lead_days = [_extract_lead_day_number(header) for header in headers[1:]]
+    return [_parse_html_table_row(row, lead_days) for row in soup.find("tbody").find_all("tr")]
+
+
+def _convert_depth_variable_table_to_model_score(raw_table: str, challenger_name: str) -> ModelScore:
+    parsed_rows = [
+        (depth, variable_name, standard_name, unit, row["data"])
+        for row in _parse_html_table_rows(raw_table)
+        for display_name, unit, standard_name, depth_label in [_parse_variable_label(row["label"])]
+        if depth_label
+        for depth in [depth_label.capitalize()]
+        for variable_name in [_normalise_display_name(display_name.removeprefix(depth + " "))]
+    ]
+    unique_depths = dict.fromkeys(depth for depth, _, _, _, _ in parsed_rows)
+    depths = {
+        depth: {
+            "variables": {
+                variable_name: {"standard_name": standard_name, "unit": unit, "data": data}
+                for row_depth, variable_name, standard_name, unit, data in parsed_rows
+                if row_depth == depth
+            }
         }
-    return ModelScore.model_validate(scores)
+        for depth in unique_depths
+    }
+    return ModelScore.model_validate({"name": challenger_name, "depths": depths})
 
 
-def _get_notebook(path: str):
+def _convert_flat_table_to_model_score(raw_table: str, challenger_name: str) -> ModelScore:
+    rows = _parse_html_table_rows(raw_table)
+    variables = {
+        _normalise_display_name(display_name): {"standard_name": standard_name, "unit": unit, "data": row["data"]}
+        for row in rows
+        for display_name, unit, standard_name, _depth_label in [_parse_variable_label(row["label"])]
+    }
+    return ModelScore.model_validate({"name": challenger_name, "depths": {"flat": {"variables": variables}}})
+
+
+def _get_notebook(path: str) -> dict | None:
     if path.startswith("http"):
         response = requests.get(path)
         if response.status_code == 200:
@@ -49,13 +191,19 @@ def _get_notebook(path: str):
             return json.load(file)
 
 
-def get_model_score_from_notebook(notebook_path: str, name: str) -> ModelScore:
-    raw_report = _get_notebook(notebook_path)
-    score_table = get_raw_html_report_score_table(raw_report)
-    model_score = _convert_raw_html_report_score_table_to_model_score(score_table, name)
-    return model_score
+def get_all_model_scores_from_notebook(notebook_path: str, challenger_name: str) -> dict[str, ModelScore]:
+    raw_notebook = _get_notebook(notebook_path)
+    if raw_notebook is None:
+        return {}
+    metrics_html = _get_all_metrics_from_notebook(raw_notebook)
 
+    def _converter(metric_key: str):
+        if metric_key in _DEPTH_VARIABLE_METRICS:
+            return _convert_depth_variable_table_to_model_score
+        return _convert_flat_table_to_model_score
 
-def get_model_score_from_file(file_path: str) -> ModelScore:
-    with open(file_path) as file:
-        return ModelScore.model_validate(json.load(file))
+    return {
+        metric_key: result
+        for metric_key, raw_table in metrics_html.items()
+        if (result := _converter(metric_key)(raw_table, challenger_name)) is not None
+    }

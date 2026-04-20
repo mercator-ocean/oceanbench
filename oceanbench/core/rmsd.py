@@ -13,19 +13,9 @@ from oceanbench.core.dataset_utils import (
     Variable,
     Dimension,
     DepthLevel,
+    VARIABLE_METADATA,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
-
-VARIABLE_LABELS: dict[str, str] = {
-    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "surface height",
-    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): "temperature",
-    Variable.SEA_WATER_SALINITY.key(): "salinity",
-    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): "northward velocity",
-    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): "eastward velocity",
-    Variable.MIXED_LAYER_DEPTH.key(): "mixed layer depth",
-    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): "northward geostrophic velocity",
-    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): "eastward geostrophic velocity",
-}
 
 DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.SURFACE: "surface",
@@ -55,9 +45,8 @@ def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
 
 
 def _variable_depth_label(dataset: xarray.Dataset, variable: str, depth_label: str) -> str:
-    return (
-        f"{depth_label} {VARIABLE_LABELS[variable]}" if _has_depths(dataset, variable) else VARIABLE_LABELS[variable]
-    ).capitalize()
+    display_name, unit = VARIABLE_METADATA[variable]
+    return f"{display_name.capitalize()} ({unit}) [{variable}]{{{depth_label}}}"
 
 
 def _select_dataset_variable_and_depth(dataset: xarray.Dataset, variable_name: str, depth_level: str) -> numpy.ndarray:
@@ -105,10 +94,8 @@ def rmsd(
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
 ) -> pandas.DataFrame:
-    return _to_pretty_dataframe(
-        _rmsd(
-            _select_variables(_harmonise_dataset(challenger_dataset), variables),
-            _select_variables(_harmonise_dataset(reference_dataset), variables),
-        ),
-        variables,
-    )
+    prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
+    prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
+    rmsd_dataset = _rmsd(prepared_challenger_dataset, prepared_reference_dataset)
+    computed_rmsd_dataset = rmsd_dataset.compute()
+    return _to_pretty_dataframe(computed_rmsd_dataset, variables)

@@ -2,14 +2,13 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from contextlib import contextmanager
 from os import environ
 from pathlib import PurePosixPath
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-
-from oceanbench.core.python2jupyter import (
-    generate_evaluation_notebook_file,
-)
+from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
+from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
 from papermill import execute_notebook
 
 
@@ -46,10 +45,38 @@ def _derive_output_notebook_file_name(challenger_path: str) -> str:
     return f"{stem}.report.ipynb"
 
 
+@contextmanager
+def _runtime_configuration_environment(runtime_configuration: RuntimeConfiguration):
+    environment_updates = {
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value: ",".join(runtime_configuration.staged_components),
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value: runtime_configuration.stage_directory,
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value: str(runtime_configuration.stage_max_workers),
+        OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value: str(runtime_configuration.remote_retries),
+    }
+    previous_environment = {
+        environment_variable_name: environ.get(environment_variable_name)
+        for environment_variable_name in environment_updates
+    }
+    for environment_variable_name, value in environment_updates.items():
+        if value in (None, ""):
+            environ.pop(environment_variable_name, None)
+        else:
+            environ[environment_variable_name] = value
+    try:
+        yield
+    finally:
+        for environment_variable_name, previous_value in previous_environment.items():
+            if previous_value is None:
+                environ.pop(environment_variable_name, None)
+            else:
+                environ[environment_variable_name] = previous_value
+
+
 def evaluate_challenger(
     challenger_python_code_uri_or_local_path: str | None = None,
     output_bucket: str | None = None,
     output_prefix: str | None = None,
+    runtime_configuration: RuntimeConfiguration | None = None,
 ):
     """
     Compute all the benchmark scores for the given challenger dataset, by calling all functions of the `metrics` module.
@@ -68,28 +95,29 @@ def evaluate_challenger(
         The destination S3 bucket of the executed notebook. If not provided, the notebook is written on the local filesystem. If provided, uses AWS S3 environment variables. Can also be configured with environment variable ``OCEANBENCH_OUTPUT_BUCKET``.
     output_prefix : str, optional
         The destination S3 prefix of the executed notebook. If ``output_bucket`` is not provided, this option is ignored. If provided, uses AWS S3 environment variables. Can also be configured with environment variable ``OCEANBENCH_OUTPUT_PREFIX``.
+    runtime_configuration : RuntimeConfiguration, optional
+        Runtime settings applied inside the generated notebook execution, including staging and remote retry behavior.
     """  # noqa
-
-    oceanbench_challenger_python_code_uri_or_local_path = _parse_input_mandatory(
+    resolved_challenger_python_code_uri_or_local_path = _parse_input_mandatory(
         challenger_python_code_uri_or_local_path,
         OceanbenchEnvironmentVariable.OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH,
     )
-    oceanbench_output_notebook_file_name = _derive_output_notebook_file_name(
-        oceanbench_challenger_python_code_uri_or_local_path
-    )
-    oceanbench_output_bucket = _parse_input_non_manadatory(
+    resolved_output_bucket = _parse_input_non_manadatory(
         output_bucket,
         OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_BUCKET,
     )
-    oceanbench_output_prefix = _parse_input_non_manadatory(
+    resolved_output_prefix = _parse_input_non_manadatory(
         output_prefix,
         OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_PREFIX,
     )
+    resolved_runtime_configuration = runtime_configuration or runtime_configuration_from_environment()
+    output_notebook_file_name = _derive_output_notebook_file_name(resolved_challenger_python_code_uri_or_local_path)
     _evaluate_challenger(
-        oceanbench_challenger_python_code_uri_or_local_path,
-        oceanbench_output_notebook_file_name,
-        oceanbench_output_bucket,
-        oceanbench_output_prefix,
+        resolved_challenger_python_code_uri_or_local_path,
+        output_notebook_file_name,
+        resolved_output_bucket,
+        resolved_output_prefix,
+        resolved_runtime_configuration,
     )
 
 
@@ -97,6 +125,7 @@ def _execute_evaluation_notebook_file(
     output_notebook_file_name: str,
     output_bucket: str | None,
     output_prefix: str | None,
+    runtime_configuration: RuntimeConfiguration,
 ):
     output_name = f"{output_prefix}/{output_notebook_file_name}" if output_prefix else output_notebook_file_name
     if output_bucket:
@@ -104,10 +133,11 @@ def _execute_evaluation_notebook_file(
         output_path = f"s3://{output_bucket}/{output_name}"
     else:
         output_path = output_notebook_file_name
-    execute_notebook(
-        output_notebook_file_name,
-        output_path,
-    )
+    with _runtime_configuration_environment(runtime_configuration):
+        execute_notebook(
+            output_notebook_file_name,
+            output_path,
+        )
 
 
 def _evaluate_challenger(
@@ -115,6 +145,7 @@ def _evaluate_challenger(
     output_notebook_file_name: str,
     output_bucket: str | None,
     output_prefix: str | None,
+    runtime_configuration: RuntimeConfiguration,
 ):
     generate_evaluation_notebook_file(
         challenger_python_code_uri_or_local_path,
@@ -124,4 +155,5 @@ def _evaluate_challenger(
         output_notebook_file_name,
         output_bucket,
         output_prefix,
+        runtime_configuration,
     )

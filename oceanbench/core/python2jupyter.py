@@ -16,7 +16,7 @@ def _parse_challenger_python_code(
             return file.read()
     except Exception:
         with urlopen(challenger_python_code_uri_or_local_path) as response:
-            return response.read()
+            return response.read().decode("utf-8")
 
 
 def generate_evaluation_notebook_file(

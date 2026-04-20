@@ -17,7 +17,7 @@ def glo12_nowcasts() -> xarray.Dataset:
     dataset: xarray.Dataset = xarray.open_mfdataset(
         list(map(_glo12_nowcast_dataset_path, first_day_datetimes)),
         engine="zarr",
-        parallel=True,
+        parallel=False,
     )
     return dataset
 

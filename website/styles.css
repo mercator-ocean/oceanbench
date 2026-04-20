@@ -4,30 +4,585 @@
  * SPDX-License-Identifier: EUPL-1.2
  */
 
-table.model-names {
-  width: auto;
+/* --- Quarto markdown tables (e.g. Challengers page) --- */
+
+.content table:not(.score-table) th,
+.content table:not(.score-table) td {
+  border: 1px solid var(--bs-border-color, #dee2e6);
 }
 
-.row {
-  display: flex;
-  flex-direction: row;
+.challengers-table-wrap table {
+  width: 100%;
+  font-size: 0.9rem;
 }
 
-.row .variables {
-  display: flex;
-  flex-direction: row;
-  overflow-x: scroll;
+.challengers-table-wrap th,
+.challengers-table-wrap td {
+  padding: 0.35rem 0.5rem;
+  line-height: 1.2;
 }
 
-.row .variables table {
-  margin-left: 10px;
-  margin-right: 10px;
+.challengers-table-wrap th,
+.challengers-table-wrap th:first-child,
+.challengers-table-wrap td:first-child,
+.challengers-table-wrap th:nth-child(4),
+.challengers-table-wrap td:nth-child(4),
+.challengers-table-wrap th:nth-child(6),
+.challengers-table-wrap td:nth-child(6),
+.challengers-table-wrap th:last-child,
+.challengers-table-wrap td:last-child {
+  white-space: nowrap;
+}
+
+/* --- Score tables --- */
+
+.score-table-wrapper {
+  margin-bottom: 1.5rem;
+}
+
+
+.score-table {
+  border-collapse: collapse;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  width: max-content;
+}
+
+.score-table th,
+.score-table td {
+  padding: 0.15rem 0.3rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
   text-align: center;
 }
 
-tfoot tr td {
-  font-size: small;
+.score-table td {
+  transition: background-color 0.3s ease;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
+
+/* Keep table width stable when toggling Values / % diff mode */
+.score-table td.score-value-cell {
+  width: 5ch;
+  min-width: 5ch;
+  max-width: 5ch;
+  overflow: hidden;
+  text-overflow: clip;
+  padding-left: 0.2rem;
+  padding-right: 0.2rem;
+}
+
+/* Sticky first column (model names) */
+.score-table .model-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bs-body-bg, #fafaf7);
+  text-align: left;
+  font-weight: 600;
+  min-width: 5rem;
+}
+
+.score-table .model-col a {
+  color: var(--bs-primary, #046293);
+  text-decoration: underline;
+}
+
+/* Header cells on top of sticky column */
+.score-table thead .model-col {
+  z-index: 4;
+}
+
+/* Variable group headers */
+.score-table .var-header {
+  font-weight: 600;
+  line-height: 1.2;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.score-table .metric-label {
+  font-weight: 400;
+  font-size: 0.72rem;
+}
+
+.score-table .standard-name {
+  display: block;
+  font-weight: 400;
+  font-size: 0.58rem;
+  line-height: 1.1;
+  color: var(--bs-secondary, #6c757d);
+  width: 100%;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  vertical-align: bottom;
+}
+
+/* Lead day sub-headers */
+.score-table .lead-day {
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: var(--bs-secondary, #6c757d);
+}
+
+/* "Lead days" label in the sticky column */
+.score-table .lead-day-label {
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: var(--bs-secondary, #6c757d);
+  font-style: italic;
+}
+
+/* Sticky header row background */
+.score-table thead th {
+  background: var(--bs-body-bg, #fafaf7);
+}
+
+/* Tiny gap below thead so model names peek through when scrolling */
+.score-table thead tr:last-child th {
+  border-bottom-width: 3px;
+}
+
+/* Dark mode overrides */
+body.quarto-dark .score-table .model-col,
+body.quarto-dark .score-table thead th {
+  background: var(--bs-body-bg, #1a1a2e);
+}
+
+body.quarto-dark .score-table .lead-day,
+body.quarto-dark .score-table .lead-day-label,
+body.quarto-dark .score-table .standard-name {
+  color: #adb5bd;
+}
+
+/* --- Two-row sticky header (tabs + controls) --- */
+
+#score-header {
+  position: sticky;
+  top: var(--navbar-full-height, 0px);
+  z-index: 10;
+  transition: top 0.2s linear;
+  background: var(--bs-body-bg, #fafaf7);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  min-width: max-content;
+}
+
+body.quarto-dark #score-header {
+  background: var(--bs-body-bg, #1a1a2e);
+}
+
+body.nav-hidden #score-header {
+  top: 0px;
+}
+
+/* --- Section tracker row --- */
+
+#score-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 0.4rem;
+  align-items: flex-end;
+}
+
+.score-tab {
+  padding: 0.45rem 1.1rem;
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--bs-secondary, #6c757d);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  transition: color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.score-tab:hover:not(.active) {
+  color: var(--bs-body-color, #333940);
+}
+
+.score-tab.active {
+  color: var(--bs-primary, #046293);
+  border-bottom-color: var(--bs-primary, #046293);
+}
+
+body.quarto-dark .score-tab {
+  color: #6c757d;
+}
+
+body.quarto-dark .score-tab:hover:not(.active) {
+  color: var(--bs-body-color, #d4d4d8);
+}
+
+body.quarto-dark .score-tab.active {
+  color: var(--bs-primary, #3aa6d3);
+  border-bottom-color: var(--bs-primary, #3aa6d3);
+}
+
+.score-tab:focus-visible {
+  outline: 2px solid var(--bs-primary, #046293);
+  outline-offset: -2px;
+}
+
+/* --- Controls bar --- */
+
+.controls {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.4rem 0.75rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bs-body-bg, #fafaf7);
+  border-top: 1px solid var(--bs-border-color, #dee2e6);
+  margin-bottom: 0;
+  align-items: center;
+  font-size: 0.75rem;
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 500;
+}
+
+.controls select {
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.2rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  font-size: 0.75rem;
+}
+
+body.quarto-dark .controls {
+  background: var(--bs-body-bg, #1a1a2e);
+}
+
+body.quarto-dark .controls select {
+  background: var(--bs-body-bg, #1a1a2e);
+  color: var(--bs-body-color, #d4d4d8);
+  border-color: var(--bs-border-color, #495057);
+}
+
+/* --- Depth pills (multi-select) --- */
+
+.depth-toggle {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.depth-toggle-btn {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.2rem;
+  background: var(--bs-tertiary-bg, #e9ecef);
+  color: var(--bs-body-color, #333940);
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.depth-pills {
+  display: flex;
+}
+
+.depth-pills .depth-toggle-btn {
+  border-radius: 0;
+}
+
+.depth-pills .depth-toggle-btn:first-child {
+  border-radius: 0.2rem 0 0 0.2rem;
+}
+
+.depth-pills .depth-toggle-btn:last-child {
+  border-radius: 0 0.2rem 0.2rem 0;
+}
+
+.depth-pills .depth-toggle-btn + .depth-toggle-btn {
+  border-left: none;
+}
+
+.depth-toggle-btn.active,
+.display-toggle-btn.active {
+  background: var(--bs-primary, #046293);
+  color: white;
+  border-color: var(--bs-primary, #046293);
+}
+
+body.quarto-dark .depth-toggle-btn,
+body.quarto-dark .display-toggle-btn {
+  background: #2a2a2a;
+  color: #adb5bd;
+}
+
+/* --- Display toggle (values / % diff) --- */
+
+.display-toggle {
+  display: flex;
+  margin-left: auto;
+}
+
+.display-toggle-btn {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  background: var(--bs-tertiary-bg, #e9ecef);
+  color: var(--bs-body-color, #333940);
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.display-toggle-btn:first-child {
+  border-radius: 0.2rem 0 0 0.2rem;
+}
+
+.display-toggle-btn:last-child {
+  border-radius: 0 0.2rem 0.2rem 0;
+  border-left: none;
+}
+
+/* --- Scale input --- */
+
+#scale-input {
+  width: 2.5rem;
+  padding: 0.05rem 0.15rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.2rem;
+  font-size: inherit;
+  text-align: center;
+}
+
+body.quarto-dark #scale-input {
+  background: var(--bs-body-bg, #1a1a2e);
+  color: var(--bs-body-color, #d4d4d8);
+  border-color: var(--bs-border-color, #495057);
+}
+
+/* --- Color legend --- */
+
+.color-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: inherit;
+}
+
+.legend-label {
+  color: var(--bs-body-color, #333940);
+  white-space: nowrap;
+  line-height: 12px;
+}
+
+.legend-bar-wrapper {
+  display: flex;
+  flex-direction: column;
+  margin-top: -4px;
+}
+
+.legend-bar {
+  display: flex;
+  width: 300px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  overflow: hidden;
+}
+
+.legend-bin {
+  flex: 1;
+  border-right: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+.legend-bin:last-child {
+  border-right: none;
+}
+
+.legend-ticks {
+  position: relative;
+  height: 0;
+  overflow: visible;
+  margin-top: 2px;
+}
+
+.legend-tick-label {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 0.5rem;
+  color: var(--bs-secondary, #6c757d);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+/* --- Sticky depth table thead (below controls bar) --- */
+
+/* Sticky thead only on desktop where overflow-x is visible */
+.depth-table thead {
+  position: sticky;
+  top: calc(var(--navbar-full-height, 0px) + var(--controls-height, 2rem) - 1px);
+  z-index: 3;
+  transition: top 0.2s linear;
+}
+
+body.nav-hidden .depth-table thead {
+  top: calc(var(--controls-height, 2rem) - 1px);
+}
+
+/* Pseudo-elements restore borders on sticky thead so scrolling content
+   (especially depth-separator rows with border:hidden) cannot erase them. */
+.depth-table thead th {
+  position: relative;
+}
+
+.depth-table thead th::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 1px;
+  background: var(--bs-border-color, #dee2e6);
+}
+
+.depth-table thead th::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--bs-border-color, #dee2e6);
+}
+
+.depth-table thead th:last-child {
+  box-shadow: inset -1px 0 0 var(--bs-border-color, #dee2e6);
+}
+
+/* --- Spacing between sub-tables (e.g. observations depth groups) --- */
+
+.score-table + .score-table {
+  margin-top: 3rem;
+}
+
+/* --- Depth separator rows --- */
+
+.score-table .depth-separator-cell {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bs-body-bg, #fafaf7);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-align: left;
+  padding: 12px 0.5rem 0.25rem 0.5rem;
+  border: none !important;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6) !important;
+}
+
+.score-table .depth-separator-cell::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--bs-border-color, #dee2e6);
+}
+
+body.quarto-dark .score-table .depth-separator-cell {
+  background: var(--bs-body-bg, #1a1a2e);
+  border-bottom-color: var(--bs-border-color, #495057) !important;
+  color: #adb5bd;
+}
+
+body.quarto-dark .score-table .depth-separator-cell::before {
+  background: var(--bs-border-color, #495057);
+}
+
+body.quarto-dark .depth-table thead th:last-child {
+  box-shadow: inset -1px 0 0 var(--bs-border-color, #495057);
+}
+
+/* Blank cells for variables not available at this depth */
+.score-table .no-var-cell {
+  border: none !important;
+  background: none !important;
+}
+
+/* --- Cell hover highlight --- */
+
+.score-table td.highlight-cell {
+  outline: 2px solid var(--bs-body-color, #333940);
+  outline-offset: -2px;
+  z-index: 2;
+  position: relative;
+}
+
+.score-table th.highlight-label {
+  background: var(--bs-primary, #046293) !important;
+  color: white !important;
+}
+
+.score-table th.highlight-label a {
+  color: white !important;
+}
+
+/* --- Baseline row --- */
+
+.score-table tr.baseline-row th {
+  box-shadow: inset 3px 0 0 var(--bs-primary, #046293);
+}
+
+.score-table tr.baseline-row td {
+  background: var(--bs-tertiary-bg, #f0f0f0);
+}
+
+body.quarto-dark .score-table tr.baseline-row td {
+  background: #2a2a2a;
+}
+
+/* --- Section headings --- */
+
+#comparison-to-reanalysis > h2,
+#comparison-to-analysis > h2,
+#comparison-to-observations > h2 {
+  border-bottom: 1px solid #046293 !important;
+}
+
+body.quarto-dark #comparison-to-reanalysis > h2,
+body.quarto-dark #comparison-to-analysis > h2,
+body.quarto-dark #comparison-to-observations > h2 {
+  border-bottom-color: #3aa6d3 !important;
+}
+
+#reanalysis-scores h3,
+#analysis-scores h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* First h3 in each score section needs no top margin */
+.depth-section h3 {
+  margin-top: 0;
+}
+
+/* Tighten gap between header and first visible section */
+#all-scores > .level2 {
+  margin-top: 0.25rem;
+}
+
+/* --- Navbar --- */
 
 .navbar-logo {
   height: 30px !important;
@@ -41,11 +596,7 @@ tfoot tr td {
   min-height: 55px !important;
 }
 
-body.quarto-dark img[src*="analysis-track"],
-body.quarto-dark img[src*="observations-track"],
-body.quarto-dark img[src*="reanalysis-track"] {
-  filter: invert(1) hue-rotate(180deg);
-}
+/* --- Theme switching --- */
 
 body.quarto-dark .navbar-logo {
   content: url('https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-dark.png');
@@ -61,4 +612,32 @@ body.quarto-light .only-dark {
 
 body.quarto-dark .only-light {
   display: none !important;
+}
+
+/* --- xarray output dark mode (notebooks use different selectors) --- */
+
+body.quarto-dark {
+  --xr-font-color0: rgba(255, 255, 255, 1);
+  --xr-font-color2: rgba(255, 255, 255, 0.54);
+  --xr-font-color3: rgba(255, 255, 255, 0.38);
+  --xr-border-color: #1f1f1f;
+  --xr-disabled-color: #515151;
+  --xr-background-color: #111111;
+  --xr-background-color-row-even: #111111;
+  --xr-background-color-row-odd: #313131;
+}
+
+/* --- Mobile tab responsiveness --- */
+
+@media (max-width: 600px) {
+  #score-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 0.2rem;
+  }
+
+  .score-tab {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.8rem;
+  }
 }

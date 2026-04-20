@@ -4,6 +4,7 @@
 
 project:
   type: website
+  pre-render: python download_reports.py
 website:
   title: "OceanBench"
   favicon: favicon-light.png
@@ -25,6 +26,8 @@ website:
       <img class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_A1%20Version.png" alt="EDITO logo" height="65" />
       <img class="only-dark" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_A1%20Version%20Negative.png" alt="EDITO logo" height="65" />
     </a>
+execute:
+  cache: false
 format:
   html:
     theme:

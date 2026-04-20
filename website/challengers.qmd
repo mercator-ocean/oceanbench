@@ -6,11 +6,41 @@ SPDX-License-Identifier: EUPL-1.2
 
 ---
 title: "Challengers"
+jupyter: python3
+format:
+  html:
+    echo: false
 ---
 
-| System | Organisation   | Method        | Forecast type | Initial conditions | Output resolution |
-|--------|----------------|---------------|---------------|--------------------|-------------------|
-| [GLO12](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024)  | [Mercator Ocean](https://mercator-ocean.eu) | Physics-based | Deterministic | IFS HRES           | 1/12°             |
-| [GLONET](https://glonet.lab.dive.edito.eu) | [Mercator Ocean](https://mercator-ocean.eu) | ML-based      | Deterministic | GLO12      | 1/4°              |
-| [WenHai](https://www.nature.com/articles/s41467-025-57389-2) | [DOMES](http://iaos.ouc.edu.cn/DeepOceanMultispheresandEarthSystem/list.htm)                | ML-based      | Deterministic | GLO12/IFS          | 1/12°             |
-| [XiHe](https://arxiv.org/abs/2402.02995)   | [NUDT](https://english.nudt.edu.cn/)           | ML-based      | Deterministic | GLO12/IFS          | 1/12°             |
+```{python}
+#| output: asis
+
+from helpers.challenger_metadata import CHALLENGERS
+from helpers.s3_discovery import discover_challengers
+
+challengers = discover_challengers()
+
+header = (
+    "| System | Organisation | Method | Forecast type | Initial conditions | Output resolution | Report |\n"
+    "|--------|--------------|--------|---------------|--------------------|-------------------|--------|\n"
+)
+
+def format_row(challenger_name):
+    challenger_metadata = CHALLENGERS.get(challenger_name)
+    if challenger_metadata:
+        system = f"[{challenger_metadata['label']}]({challenger_metadata['url']})"
+        organisation = (
+            f"[{challenger_metadata['organisation']}]"
+            f"({challenger_metadata['organisation_url']})"
+        )
+        return (
+            f"| {system} | {organisation} | {challenger_metadata['method']} | "
+            f"{challenger_metadata['forecast_type']} | {challenger_metadata['initial_conditions']} | "
+            f"{challenger_metadata['resolution']} | [Report](reports/{challenger_name}.report.html) |"
+        )
+    return f"| {challenger_name} |  |  |  |  |  | [Report](reports/{challenger_name}.report.html) |"
+
+rows = "\n".join(map(format_row, challengers))
+
+print('<div class="challengers-table-wrap">\n\n' + header + rows + "\n\n</div>")
+```

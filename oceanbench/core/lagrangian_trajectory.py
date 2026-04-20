@@ -24,6 +24,12 @@ from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.lagrangian_support import (
+    LAGRANGIAN_ROW_LABEL,
+    all_weekly_lagrangian_deviations,
+    mean_weekly_lagrangian_deviations,
+    surface_current_dataset,
+)
 from oceanbench.core.lead_day_utils import lead_day_labels
 import logging
 
@@ -56,6 +62,11 @@ class FreezeParticle(JITParticle):
 LEAD_DAY_START = 2
 
 
+def _delete_error_particle(particle, _fieldset, _time):
+    if particle.state == StatusCode.ErrorOutOfBounds:
+        particle.delete()
+
+
 def deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
@@ -81,20 +92,15 @@ def _deviation_of_lagrangian_trajectories(
         n=10000,
         seed=123,
     )
-    deviations = (
-        pandas.concat(
-            map(
-                pandas.Series,
-                _all_deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, latitudes, longitudes),
-            ),
-            axis=1,
+    deviations = mean_weekly_lagrangian_deviations(
+        _all_deviation_of_lagrangian_trajectories(
+            challenger_dataset,
+            reference_dataset,
+            latitudes,
+            longitudes,
         )
-        .mean(axis=1)
-        .values
     )
-    score_dataframe = pandas.DataFrame(
-        {"Surface Lagrangian trajectory deviation (km)": deviations[LEAD_DAY_START - 1 : lead_day_stop]}
-    )
+    score_dataframe = pandas.DataFrame({LAGRANGIAN_ROW_LABEL: deviations[LEAD_DAY_START - 1 : lead_day_stop]})
     score_dataframe.index = lead_day_labels(LEAD_DAY_START, lead_day_stop)
     return score_dataframe.T
 
@@ -132,16 +138,12 @@ def _all_deviation_of_lagrangian_trajectories(
     latitudes: numpy.ndarray,
     longitudes: numpy.ndarray,
 ):
-    return list(
-        map(
-            partial(
-                _one_deviation_of_lagrangian_trajectories,
-                latitudes=latitudes,
-                longitudes=longitudes,
-            ),
-            _split_dataset(challenger_dataset),
-            _split_dataset(reference_dataset),
-        )
+    return all_weekly_lagrangian_deviations(
+        _split_dataset(challenger_dataset),
+        _split_dataset(reference_dataset),
+        latitudes,
+        longitudes,
+        _one_deviation_of_lagrangian_trajectories,
     )
 
 
@@ -152,13 +154,13 @@ def _one_deviation_of_lagrangian_trajectories(
     longitudes: numpy.ndarray,
 ):
     challenger_trajectories = _get_particle_dataset(
-        dataset=challenger_dataset.isel({Dimension.DEPTH.key(): 0}),
+        dataset=surface_current_dataset(challenger_dataset),
         latitudes=latitudes,
         longitudes=longitudes,
     )
 
     reference_trajectories = _get_particle_dataset(
-        dataset=reference_dataset.isel({Dimension.DEPTH.key(): 0}),
+        dataset=surface_current_dataset(reference_dataset),
         latitudes=latitudes,
         longitudes=longitudes,
     )
@@ -205,6 +207,7 @@ def _read_output_file(file_path: str):
     particle_latitudes = dataset.lat.values  # shape: (time, n_particles)
     particle_longitudes = dataset.lon.values
     particle_ids = dataset.pid.values  # shape: (time, n_particles)
+    dataset.close()
     shutil.rmtree(file_path)
     return particle_latitudes, particle_longitudes, particle_ids
 
@@ -223,10 +226,6 @@ def _get_all_particles_positions(
     field_set = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
     field_set = _set_domain_bounds(field_set, dataset)
 
-    def delete_error_particle(particle, _fieldset, _time):
-        if particle.state == StatusCode.ErrorOutOfBounds:
-            particle.delete()
-
     particle_set = ParticleSet.from_list(
         fieldset=field_set,
         pclass=FreezeParticle,
@@ -238,7 +237,7 @@ def _get_all_particles_positions(
 
     kernels = [
         AdvectionRK4,
-        delete_error_particle,
+        _delete_error_particle,
     ]  # Keep your original kernel setup
 
     runtime_days = len(dataset.time) - 1
@@ -283,9 +282,11 @@ def _get_particle_dataset(
 
 
 def _get_random_ocean_points_from_file(
-    dataset: xarray.Dataset, variable_name: str, n: int, seed: int
+    dataset: xarray.Dataset,
+    variable_name: str,
+    n: int,
+    seed: int,
 ) -> tuple[numpy.ndarray, numpy.ndarray]:
-
     variable_values = dataset[variable_name].isel(lead_day_index=0)
     mask = ~numpy.isnan(variable_values)[0].squeeze()
 
@@ -307,7 +308,6 @@ def _get_random_ocean_points_from_file(
 
 
 def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset) -> numpy.ndarray:
-
     model_set["time"] = model_set["time"].dt.floor("D")
     reference_set["time"] = reference_set["time"].dt.floor("D")
     latitude_reference_set_rad = numpy.deg2rad(reference_set["lat"])

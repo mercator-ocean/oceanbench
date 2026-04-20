@@ -19,10 +19,7 @@ def ignore_ids_and_execution(json_data):
     if isinstance(json_data, dict):
         new_dict = {}
         for key, value in json_data.items():
-            if key == "cells":
-                # Special handling for cells
-                new_dict[key] = [ignore_ids_and_execution(cell) for cell in value]
-            elif key in ["id", "metadata", "text/html", "execution_count"]:
+            if key in ["id", "metadata", "text/html", "execution_count"]:
                 continue
             else:
                 new_dict[key] = ignore_ids_and_execution(value)

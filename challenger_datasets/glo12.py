@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-jupyter == 1.1.1
-pandas == 2.2.3
-beautifulsoup4 == 4.13.3
-matplotlib == 3.10.1
-pydantic == 2.11.3
-requests == 2.32.3
+import xarray
+import oceanbench
+
+challenger_dataset: xarray.Dataset = oceanbench.datasets.challenger.glo12()
+
+challenger_dataset

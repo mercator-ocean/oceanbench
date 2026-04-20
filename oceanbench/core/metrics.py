@@ -26,7 +26,7 @@ def rmsd_of_variables_compared_to_observations(
         observation_dataset = observations(challenger_dataset)
     except ObservationDataUnavailableError as error:
         return pandas.DataFrame({"Message": [str(error)]})
-    result = rmsd_class4_validation(
+    return rmsd_class4_validation(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
         variables=[
@@ -37,8 +37,6 @@ def rmsd_of_variables_compared_to_observations(
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
     )
-
-    return result
 
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(
@@ -85,7 +83,6 @@ def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
 def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-
     return deviation_of_lagrangian_trajectories(
         challenger_dataset=challenger_dataset,
         reference_dataset=glorys_reanalysis_dataset(challenger_dataset),
@@ -136,7 +133,6 @@ def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
 def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
-
     return deviation_of_lagrangian_trajectories(
         challenger_dataset=challenger_dataset,
         reference_dataset=glo12_analysis_dataset(challenger_dataset),
