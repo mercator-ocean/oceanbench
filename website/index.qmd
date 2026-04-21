@@ -37,12 +37,12 @@ Want to evaluate your system or get involved in OceanBench? Check out the [GitHu
 
 import json
 import os
-from helpers.s3_discovery import discover_official_reports
+from helpers.s3_discovery import discover_downloaded_reports
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
 from helpers.challenger_metadata import CHALLENGERS
 from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
 
-published_reports = discover_official_reports()
+published_reports = discover_downloaded_reports("reports")
 website_region_ids = published_region_ids_with_reports(published_reports)
 
 def _load_scores(challenger_name, region_id):

@@ -9,6 +9,7 @@ WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
 from helpers.s3_discovery import download_notebook  # noqa: E402
+from helpers.s3_discovery import discover_downloaded_reports  # noqa: E402
 from helpers.s3_discovery import discover_official_reports  # noqa: E402
 from helpers.published_regions import published_region_ids  # noqa: E402
 from helpers.published_regions import published_region_ids_with_reports  # noqa: E402
@@ -71,6 +72,19 @@ def test_published_regions_have_stable_order_and_metadata() -> None:
 def test_published_region_ids_with_reports_filters_empty_regions() -> None:
     assert published_region_ids_with_reports({"global": ["glo12"], "ibi": []}) == ["global"]
     assert published_region_ids_with_reports({"global": [], "ibi": ["glo12"]}) == ["ibi"]
+
+
+def test_discover_downloaded_reports_reads_local_report_files(tmp_path) -> None:
+    (tmp_path / "glonet.global.report.ipynb").write_text("{}", encoding="utf-8")
+    (tmp_path / "glonet.ibi.report.ipynb").write_text("{}", encoding="utf-8")
+    (tmp_path / "glonet.custom_box.report.ipynb").write_text("{}", encoding="utf-8")
+    (tmp_path / "glonet.report.ipynb").write_text("{}", encoding="utf-8")
+    (tmp_path / "unknown.ibi.report.ipynb").write_text("{}", encoding="utf-8")
+
+    reports = discover_downloaded_reports(str(tmp_path))
+
+    assert reports["global"] == ["glonet"]
+    assert reports["ibi"] == ["glonet"]
 
 
 def test_download_notebook_uses_only_explicit_region_name(monkeypatch, tmp_path) -> None:

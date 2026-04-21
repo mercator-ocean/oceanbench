@@ -16,10 +16,10 @@ format:
 #| output: asis
 
 from helpers.challenger_metadata import CHALLENGERS
-from helpers.s3_discovery import discover_official_reports
+from helpers.s3_discovery import discover_downloaded_reports
 from helpers.published_regions import published_region_ids, published_region_label
 
-published_reports = discover_official_reports()
+published_reports = discover_downloaded_reports("reports")
 region_labels = {
     region_id: published_region_label(region_id)
     for region_id in published_region_ids()

@@ -24,6 +24,8 @@ def main() -> None:
 
     published_reports = discover_official_reports()
     print(f"Discovered reports: {published_reports}")
+    if not any(published_reports.values()):
+        raise RuntimeError("No evaluation reports were discovered in the official bucket.")
 
     _clear_report_notebooks()
 
