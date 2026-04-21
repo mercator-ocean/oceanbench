@@ -8,21 +8,30 @@ import xarray
 from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
-from oceanbench.core.lagrangian_trajectory import deviation_of_lagrangian_trajectories
+from oceanbench.core.lagrangian_trajectory import (
+    deviation_of_lagrangian_trajectories,
+    lagrangian_particle_count_for_region,
+)
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
-from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, resolve_region, subset_dataset_to_region
+from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, subset_dataset_to_region
 from oceanbench.core.rmsd import rmsd
 
 GLOBAL_LAGRANGIAN_PARTICLE_COUNT = 10000
-REGIONAL_LAGRANGIAN_PARTICLE_COUNT = 5000
+MINIMUM_LAGRANGIAN_PARTICLE_COUNT = 2000
 
 
-def _lagrangian_particle_count(region: RegionLike) -> int:
-    if resolve_region(region).id == GLOBAL_REGION_NAME:
-        return GLOBAL_LAGRANGIAN_PARTICLE_COUNT
-    return REGIONAL_LAGRANGIAN_PARTICLE_COUNT
+def _lagrangian_particle_count(
+    global_challenger_dataset: xarray.Dataset,
+    regional_challenger_dataset: xarray.Dataset,
+) -> int:
+    return lagrangian_particle_count_for_region(
+        global_challenger_dataset,
+        regional_challenger_dataset,
+        global_particle_count=GLOBAL_LAGRANGIAN_PARTICLE_COUNT,
+        minimum_particle_count=MINIMUM_LAGRANGIAN_PARTICLE_COUNT,
+    )
 
 
 def rmsd_of_variables_compared_to_observations(
@@ -102,11 +111,11 @@ def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
-    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
+    regional_challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return deviation_of_lagrangian_trajectories(
-        challenger_dataset=challenger_dataset,
-        reference_dataset=subset_dataset_to_region(glorys_reanalysis_dataset(challenger_dataset), region),
-        particle_count=_lagrangian_particle_count(region),
+        challenger_dataset=regional_challenger_dataset,
+        reference_dataset=subset_dataset_to_region(glorys_reanalysis_dataset(regional_challenger_dataset), region),
+        particle_count=_lagrangian_particle_count(challenger_dataset, regional_challenger_dataset),
     )
 
 
@@ -165,9 +174,9 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
-    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
+    regional_challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return deviation_of_lagrangian_trajectories(
-        challenger_dataset=challenger_dataset,
-        reference_dataset=subset_dataset_to_region(glo12_analysis_dataset(challenger_dataset), region),
-        particle_count=_lagrangian_particle_count(region),
+        challenger_dataset=regional_challenger_dataset,
+        reference_dataset=subset_dataset_to_region(glo12_analysis_dataset(regional_challenger_dataset), region),
+        particle_count=_lagrangian_particle_count(challenger_dataset, regional_challenger_dataset),
     )
