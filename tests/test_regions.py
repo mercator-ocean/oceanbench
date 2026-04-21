@@ -12,6 +12,7 @@ import xarray
 
 import oceanbench
 from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
+from oceanbench.core.regions import region_from_dict, region_to_dict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WESTERN_MED_REGION_FILE = PROJECT_ROOT / "assets" / "western_med_region.json"
@@ -27,8 +28,8 @@ def test_custom_region_roundtrip_and_subset() -> None:
         maximum_longitude=15.0,
     )
 
-    region_dict = oceanbench.regions.region_to_dict(region)
-    loaded_region = oceanbench.regions.region_from_dict(region_dict)
+    region_dict = region_to_dict(region)
+    loaded_region = region_from_dict(region_dict)
 
     assert loaded_region == region
     assert loaded_region.official is False
@@ -139,7 +140,9 @@ def test_example_custom_region_file_generates_custom_region_notebook(tmp_path) -
 
     notebook = nbformat.read(output_path, as_version=4)
 
-    assert "region = oceanbench.regions.region_from_dict(" in notebook.cells[4].source
+    assert "region = oceanbench.regions.custom(" in notebook.cells[4].source
+    assert "identifier='western_med'" in notebook.cells[4].source
+    assert "display_name='Western Mediterranean'" in notebook.cells[4].source
     assert notebook.metadata["oceanbench"]["region"]["id"] == "western_med"
     assert notebook.metadata["oceanbench"]["region"]["display_name"] == "Western Mediterranean"
     assert notebook.metadata["oceanbench"]["region"]["official"] is False

@@ -103,4 +103,15 @@ def _replace_evaluation_configuration_code(
 def _generate_evaluation_configuration_code(region) -> str:
     if region.official:
         return f"region = {region.id!r}"
-    return f"region = oceanbench.regions.region_from_dict({region_to_dict(region)!r})"
+    region_data = region_to_dict(region)
+    bounds = region_data["bounds"]
+    return (
+        "region = oceanbench.regions.custom(\n"
+        f"    identifier={region_data['id']!r},\n"
+        f"    display_name={region_data['display_name']!r},\n"
+        f"    minimum_latitude={bounds['minimum_latitude']!r},\n"
+        f"    maximum_latitude={bounds['maximum_latitude']!r},\n"
+        f"    minimum_longitude={bounds['minimum_longitude']!r},\n"
+        f"    maximum_longitude={bounds['maximum_longitude']!r},\n"
+        ")"
+    )

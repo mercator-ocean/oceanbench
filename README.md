@@ -143,6 +143,33 @@ To evaluate multiple challengers in parallel:
 oceanbench evaluate challenger_a.py challenger_b.py
 ```
 
+By default, OceanBench evaluates the global domain. To evaluate an official region, pass its identifier:
+
+```bash
+oceanbench evaluate path/to/challenger.py --region ibi
+```
+
+To evaluate a custom region, write its bounding box in a JSON file:
+
+```json
+{
+  "id": "western_med",
+  "display_name": "Western Mediterranean",
+  "bounds": {
+    "minimum_latitude": 34.0,
+    "maximum_latitude": 44.5,
+    "minimum_longitude": -1.0,
+    "maximum_longitude": 18.0
+  }
+}
+```
+
+Then pass it to the CLI:
+
+```bash
+oceanbench evaluate path/to/challenger.py --region-file path/to/region.json
+```
+
 To upload the resulting notebooks to an S3 bucket:
 
 ```bash
