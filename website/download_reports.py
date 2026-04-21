@@ -4,7 +4,6 @@
 
 import os
 
-from helpers.s3_discovery import LOCAL_REPORTS_ENVIRONMENT_VARIABLE
 from helpers.s3_discovery import discover_official_reports, download_notebook
 
 SCRIPT_DIRECTORY = os.path.dirname(__file__)
@@ -22,13 +21,6 @@ def _clear_report_notebooks() -> None:
 
 def main() -> None:
     os.makedirs(REPORTS_DIRECTORY, exist_ok=True)
-
-    if os.environ.get(LOCAL_REPORTS_ENVIRONMENT_VARIABLE) == "1":
-        with open(QUARTO_METADATA_FILE_PATH, "w") as file:
-            file.write("execute:\n  enabled: false\nformat:\n  html:\n    page-layout: full\n")
-        print(f"Using local report notebooks from {REPORTS_DIRECTORY}")
-        print(f"Created {QUARTO_METADATA_FILE_PATH}")
-        return
 
     published_reports = discover_official_reports()
     print(f"Discovered reports: {published_reports}")
