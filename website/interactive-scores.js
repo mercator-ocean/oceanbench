@@ -453,7 +453,7 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
 }
 
 function buildRegionSelectorInnerHtml(regionIds) {
-  if (regionIds.length <= 1) return "";
+  if (regionIds.length === 0) return "";
 
   let markup = '<div class="region-selector-layout">';
   markup += '<div class="region-selector-copy">';
@@ -491,7 +491,7 @@ function renderRegionGlobe(regionIds) {
 
 function renderRegionSelector(regionIds) {
   const existing = document.getElementById("region-selector");
-  if (regionIds.length <= 1) {
+  if (regionIds.length === 0) {
     if (existing) existing.remove();
     return;
   }
