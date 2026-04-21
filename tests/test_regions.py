@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import json
+from pathlib import Path
 
 import dask.array
 import nbformat
@@ -11,6 +12,9 @@ import xarray
 
 import oceanbench
 from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+WESTERN_MED_REGION_FILE = PROJECT_ROOT / "assets" / "western_med_region.json"
 
 
 def test_custom_region_roundtrip_and_subset() -> None:
@@ -118,21 +122,14 @@ def test_load_region_file_reports_missing_path_cleanly(tmp_path) -> None:
         oceanbench.regions.load_region_file(missing_region_path)
 
 
-def test_generate_evaluation_notebook_embeds_custom_region_configuration(tmp_path) -> None:
+def test_example_custom_region_file_generates_custom_region_notebook(tmp_path) -> None:
     challenger_path = tmp_path / "challenger.py"
     challenger_path.write_text(
         "import xarray\n\nchallenger_dataset = xarray.Dataset()\n",
         encoding="utf-8",
     )
-    output_path = tmp_path / "custom.report.ipynb"
-    custom_region = oceanbench.regions.custom(
-        identifier="western_med",
-        display_name="Western Mediterranean",
-        minimum_latitude=5.0,
-        maximum_latitude=15.0,
-        minimum_longitude=5.0,
-        maximum_longitude=15.0,
-    )
+    output_path = tmp_path / "western_med.report.ipynb"
+    custom_region = oceanbench.regions.load_region_file(WESTERN_MED_REGION_FILE)
 
     generate_evaluation_notebook_file(
         str(challenger_path),
@@ -144,6 +141,7 @@ def test_generate_evaluation_notebook_embeds_custom_region_configuration(tmp_pat
 
     assert "region = oceanbench.regions.region_from_dict(" in notebook.cells[4].source
     assert notebook.metadata["oceanbench"]["region"]["id"] == "western_med"
+    assert notebook.metadata["oceanbench"]["region"]["display_name"] == "Western Mediterranean"
     assert notebook.metadata["oceanbench"]["region"]["official"] is False
 
 
