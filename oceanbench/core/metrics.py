@@ -12,22 +12,22 @@ from oceanbench.core.lagrangian_trajectory import deviation_of_lagrangian_trajec
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
-from oceanbench.core.regions import GLOBAL_REGION_NAME, subset_dataset_to_region
+from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, resolve_region, subset_dataset_to_region
 from oceanbench.core.rmsd import rmsd
 
 GLOBAL_LAGRANGIAN_PARTICLE_COUNT = 10000
-REGIONAL_LAGRANGIAN_PARTICLE_COUNT = 1000
+REGIONAL_LAGRANGIAN_PARTICLE_COUNT = 5000
 
 
-def _lagrangian_particle_count(region: str) -> int:
-    if region == GLOBAL_REGION_NAME:
+def _lagrangian_particle_count(region: RegionLike) -> int:
+    if resolve_region(region).id == GLOBAL_REGION_NAME:
         return GLOBAL_LAGRANGIAN_PARTICLE_COUNT
     return REGIONAL_LAGRANGIAN_PARTICLE_COUNT
 
 
 def rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
-    region: str = GLOBAL_REGION_NAME,
+    region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     try:
@@ -49,7 +49,7 @@ def rmsd_of_variables_compared_to_observations(
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
-    region: str = GLOBAL_REGION_NAME,
+    region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
@@ -67,7 +67,7 @@ def rmsd_of_variables_compared_to_glorys_reanalysis(
 
 def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
-    region: str = GLOBAL_REGION_NAME,
+    region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
@@ -83,7 +83,7 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
 
 def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
-    region: str = GLOBAL_REGION_NAME,
+    region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
@@ -100,7 +100,7 @@ def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
 
 def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
-    region: str = GLOBAL_REGION_NAME,
+    region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return deviation_of_lagrangian_trajectories(
@@ -112,7 +112,7 @@ def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
 
 def rmsd_of_variables_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
-    region: str = GLOBAL_REGION_NAME,
+    region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
@@ -130,7 +130,7 @@ def rmsd_of_variables_compared_to_glo12_analysis(
 
 def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
-    region: str = GLOBAL_REGION_NAME,
+    region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
@@ -146,7 +146,7 @@ def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
 
 def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
-    region: str = GLOBAL_REGION_NAME,
+    region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
@@ -163,7 +163,7 @@ def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
 
 def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
-    region: str = GLOBAL_REGION_NAME,
+    region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return deviation_of_lagrangian_trajectories(

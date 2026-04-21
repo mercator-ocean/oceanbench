@@ -121,5 +121,9 @@ Implemented by [Mercator Ocean](https://mercator-ocean.eu).
 <a href="https://mercator-ocean.eu"><img src="https://www.nemo-ocean.eu/wp-content/uploads/MOI.png" alt="Mercator Ocean logo" height="100"/></a>
 
 ```{=html}
+<script src="vendor/d3-array.v3.min.js"></script>
+<script src="vendor/d3-geo.v3.min.js"></script>
+<script src="vendor/topojson-client.v3.min.js"></script>
+<script src="region-globe.js"></script>
 <script src="interactive-scores.js"></script>
 ```

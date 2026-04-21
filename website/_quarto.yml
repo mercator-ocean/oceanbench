@@ -5,6 +5,8 @@
 project:
   type: website
   pre-render: python download_reports.py
+  resources:
+    - assets/land-110m.json
 website:
   title: "OceanBench"
   favicon: favicon-light.png

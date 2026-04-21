@@ -2,11 +2,13 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import nbformat
 from importlib import resources
-from oceanbench.core import templates
-from oceanbench.core.regions import normalize_region_name
 from urllib.request import urlopen
+
+import nbformat
+
+from oceanbench.core import templates
+from oceanbench.core.regions import RegionLike, resolve_region, region_to_dict
 
 
 def _parse_challenger_python_code(
@@ -23,13 +25,15 @@ def _parse_challenger_python_code(
 def generate_evaluation_notebook_file(
     challenger_python_code_uri_or_local_path: str,
     output_notebook_file_path: str,
-    region: str | None = None,
+    region: RegionLike = None,
 ):
+    resolved_region = resolve_region(region)
     challenger_python_code = _parse_challenger_python_code(challenger_python_code_uri_or_local_path)
     notebook = _generate_template_notebook()
-    new_notebook = _replace_code_to_open_challenger_datasets(challenger_python_code, notebook)
-    new_notebook = _replace_evaluation_configuration_code(normalize_region_name(region), new_notebook)
-    nbformat.write(new_notebook, output_notebook_file_path)
+    notebook = _replace_code_to_open_challenger_datasets(challenger_python_code, notebook)
+    notebook = _replace_evaluation_configuration_code(resolved_region, notebook)
+    notebook.metadata.setdefault("oceanbench", {})["region"] = region_to_dict(resolved_region)
+    nbformat.write(notebook, output_notebook_file_path)
 
 
 def _generate_template_notebook() -> nbformat.NotebookNode:
@@ -89,12 +93,14 @@ def _replace_code_to_open_challenger_datasets(
 
 
 def _replace_evaluation_configuration_code(
-    region: str,
+    region,
     notebook: nbformat.NotebookNode,
 ) -> nbformat.NotebookNode:
     notebook["cells"][4]["source"] = _generate_evaluation_configuration_code(region)
     return notebook
 
 
-def _generate_evaluation_configuration_code(region: str) -> str:
-    return f"region = {region!r}"
+def _generate_evaluation_configuration_code(region) -> str:
+    if region.official:
+        return f"region = {region.id!r}"
+    return f"region = oceanbench.regions.region_from_dict({region_to_dict(region)!r})"

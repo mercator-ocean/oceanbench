@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 """
-This module exposes the pre-defined geographic regions supported by OceanBench.
+This module exposes the OceanBench region API.
 """
 
 from os import environ
@@ -11,95 +11,46 @@ from os import environ
 import xarray
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.regions import GeographicRegion
+from oceanbench.core.regions import BoundingBox
+from oceanbench.core.regions import RegionLike
+from oceanbench.core.regions import RegionSpec
 from oceanbench.core.regions import get_pre_defined_region_names
-from oceanbench.core.regions import normalize_region_name as _normalize_region_name
-from oceanbench.core.regions import resolve_region as _resolve_region
+from oceanbench.core.regions import load_region_file
+from oceanbench.core.regions import normalize_region_name
+from oceanbench.core.regions import official_region_ids
+from oceanbench.core.regions import official_regions
+from oceanbench.core.regions import region_from_dict
+from oceanbench.core.regions import region_to_dict
+from oceanbench.core.regions import resolve_region
 from oceanbench.core.regions import subset_dataset_to_region
+from oceanbench.core.regions import custom_region as custom
 
 
-def available_regions() -> list[str]:
-    """
-    List the pre-defined geographic regions supported by OceanBench.
-
-    Returns
-    -------
-    list[str]
-        The available region identifiers.
-    """
-
-    return get_pre_defined_region_names()
-
-
-def normalize_region_name(region_name: str | None) -> str:
-    """
-    Normalize a region identifier for OceanBench usage.
-
-    Parameters
-    ----------
-    region_name : str, optional
-        The region identifier. If ``None``, the global region is selected.
-
-    Returns
-    -------
-    str
-        The normalized region identifier.
-    """
-
-    return _normalize_region_name(region_name)
+__all__ = [
+    "BoundingBox",
+    "RegionLike",
+    "RegionSpec",
+    "available_regions",
+    "custom",
+    "get_pre_defined_region_names",
+    "load_region_file",
+    "normalize_region_name",
+    "official_region_ids",
+    "official_regions",
+    "region_from_dict",
+    "region_to_dict",
+    "resolve_region",
+    "selected_region_name_from_environment",
+    "subset",
+]
 
 
-def resolve_region(
-    region_name: str | None,
-) -> GeographicRegion | None:
-    """
-    Resolve a region identifier to a pre-defined OceanBench geographic region.
-
-    Parameters
-    ----------
-    region_name : str, optional
-        The region identifier. If ``None`` or ``global``, the full global domain is selected.
-
-    Returns
-    -------
-    GeographicRegion or None
-        The matching pre-defined geographic region, or ``None`` for the full global domain.
-    """
-
-    return _resolve_region(region_name)
+available_regions = get_pre_defined_region_names
 
 
 def selected_region_name_from_environment() -> str:
-    """
-    Read the configured OceanBench region from the process environment.
-
-    Returns
-    -------
-    str
-        The configured region identifier, normalized for OceanBench usage.
-    """
-
-    return _normalize_region_name(environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_REGION.value))
+    return normalize_region_name(environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_REGION.value))
 
 
-def subset(
-    dataset: xarray.Dataset,
-    region_name: str | None,
-) -> xarray.Dataset:
-    """
-    Restrict a dataset to a pre-defined OceanBench region.
-
-    Parameters
-    ----------
-    dataset : xarray.Dataset
-        The dataset to subset.
-    region_name : str, optional
-        The region identifier. If ``None`` or ``global``, the dataset is returned unchanged.
-
-    Returns
-    -------
-    xarray.Dataset
-        The region subset of the dataset.
-    """
-
-    return subset_dataset_to_region(dataset, region_name)
+def subset(dataset: xarray.Dataset, region: RegionLike) -> xarray.Dataset:
+    return subset_dataset_to_region(dataset, region)

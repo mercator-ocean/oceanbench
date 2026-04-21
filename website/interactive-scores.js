@@ -455,7 +455,9 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
 function buildRegionSelectorInnerHtml(regionIds) {
   if (regionIds.length <= 1) return "";
 
-  let markup = '<div class="region-selector-row">';
+  let markup = '<div class="region-selector-layout">';
+  markup += '<div class="region-selector-copy">';
+  markup += '<div class="region-selector-row">';
   markup += '<span class="region-selector-label">Region</span>';
   markup += '<div class="region-chip-group" role="group" aria-label="Evaluation region">';
   for (const regionId of regionIds) {
@@ -470,8 +472,21 @@ function buildRegionSelectorInnerHtml(regionIds) {
   if (activeDescription) {
     markup += `<div class="region-selector-description">${activeDescription}</div>`;
   }
+  markup += "</div>";
+  markup += '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
+  markup += "</div>";
 
   return markup;
+}
+
+function renderRegionGlobe(regionIds) {
+  if (!window.OceanBenchRegionGlobe) return;
+  window.OceanBenchRegionGlobe.render({
+    activeRegion,
+    regionIds,
+    regionLabels,
+    regionMetadata,
+  });
 }
 
 function renderRegionSelector(regionIds) {
@@ -491,6 +506,8 @@ function renderRegionSelector(regionIds) {
   if (!existing) {
     wrapper.parentNode.insertBefore(regionSelector, wrapper);
   }
+
+  renderRegionGlobe(regionIds);
 }
 
 function ensureHeaderElement() {
