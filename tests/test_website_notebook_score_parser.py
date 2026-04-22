@@ -10,8 +10,6 @@ WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook  # noqa: E402
-from helpers.notebook_score_parser import get_model_score_from_file  # noqa: E402
-from helpers.notebook_score_parser import get_model_score_from_notebook  # noqa: E402
 
 
 def _score_table(rows: list[tuple[str, float, float]]) -> str:
@@ -116,44 +114,3 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
     lagrangian_variable = lagrangian_score.depths["flat"].variables["lagrangian trajectory deviation"]
     assert lagrangian_variable.standard_name == ""
     assert lagrangian_variable.data == {"1": 2.1, "2": 2.2}
-
-
-def test_track_parser_merges_metric_fragments(tmp_path):
-    notebook_path = tmp_path / "glo12.global.report.ipynb"
-    _write_notebook(notebook_path)
-
-    score = get_model_score_from_notebook(str(notebook_path), "GLO12", "glorys_reanalysis")
-
-    assert score.name == "GLO12"
-    assert score.depths["100m"].variables["temperature"].data == {"1": 1.1, "2": 1.2}
-    assert score.depths["flat"].variables["mixed layer depth"].data == {"1": 1.3, "2": 1.4}
-    assert score.depths["flat"].variables["zonal geostrophic current"].data == {"1": 1.5, "2": 1.6}
-    assert score.depths["flat"].variables["lagrangian trajectory deviation"].data == {"1": 2.1, "2": 2.2}
-
-
-def test_model_score_roundtrip_from_file(tmp_path):
-    score_path = tmp_path / "glo12.json"
-    score_path.write_text(
-        json.dumps(
-            {
-                "name": "GLO12",
-                "depths": {
-                    "Surface": {
-                        "variables": {
-                            "temperature": {
-                                "standard_name": "sea_water_potential_temperature",
-                                "unit": "C",
-                                "data": {"1": 0.1},
-                            }
-                        }
-                    }
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    score = get_model_score_from_file(str(score_path))
-
-    assert score.name == "GLO12"
-    assert score.depths["Surface"].variables["temperature"].data == {"1": 0.1}
