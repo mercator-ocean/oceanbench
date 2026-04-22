@@ -2,10 +2,13 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import nbformat
 from importlib import resources
-from oceanbench.core import templates
 from urllib.request import urlopen
+
+import nbformat
+
+from oceanbench.core import templates
+from oceanbench.core.regions import RegionLike, resolve_region, region_to_dict
 
 
 def _parse_challenger_python_code(
@@ -22,11 +25,15 @@ def _parse_challenger_python_code(
 def generate_evaluation_notebook_file(
     challenger_python_code_uri_or_local_path: str,
     output_notebook_file_path: str,
+    region: RegionLike = None,
 ):
+    resolved_region = resolve_region(region)
     challenger_python_code = _parse_challenger_python_code(challenger_python_code_uri_or_local_path)
     notebook = _generate_template_notebook()
-    new_notebook = _replace_code_to_open_challenger_datasets(challenger_python_code, notebook)
-    nbformat.write(new_notebook, output_notebook_file_path)
+    notebook = _replace_code_to_open_challenger_datasets(challenger_python_code, notebook)
+    notebook = _replace_evaluation_configuration_code(resolved_region, notebook)
+    notebook.metadata.setdefault("oceanbench", {})["region"] = region_to_dict(resolved_region)
+    nbformat.write(notebook, output_notebook_file_path)
 
 
 def _generate_template_notebook() -> nbformat.NotebookNode:
@@ -83,3 +90,28 @@ def _replace_code_to_open_challenger_datasets(
 ) -> nbformat.NotebookNode:
     notebook["cells"][2]["source"] = python_code
     return notebook
+
+
+def _replace_evaluation_configuration_code(
+    region,
+    notebook: nbformat.NotebookNode,
+) -> nbformat.NotebookNode:
+    notebook["cells"][4]["source"] = _generate_evaluation_configuration_code(region)
+    return notebook
+
+
+def _generate_evaluation_configuration_code(region) -> str:
+    if region.official:
+        return f"region = {region.id!r}"
+    region_data = region_to_dict(region)
+    bounds = region_data["bounds"]
+    return (
+        "region = oceanbench.regions.custom(\n"
+        f"    identifier={region_data['id']!r},\n"
+        f"    display_name={region_data['display_name']!r},\n"
+        f"    minimum_latitude={bounds['minimum_latitude']!r},\n"
+        f"    maximum_latitude={bounds['maximum_latitude']!r},\n"
+        f"    minimum_longitude={bounds['minimum_longitude']!r},\n"
+        f"    maximum_longitude={bounds['maximum_longitude']!r},\n"
+        ")"
+    )

@@ -7,8 +7,9 @@ from os import environ
 from pathlib import PurePosixPath
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
+from oceanbench.core.regions import RegionLike, resolve_region
+from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from papermill import execute_notebook
 
 
@@ -40,9 +41,22 @@ def _parse_input_mandatory(
     return parsed_variable
 
 
-def _derive_output_notebook_file_name(challenger_path: str) -> str:
+def _resolve_region_input(region: RegionLike) -> RegionLike:
+    if region is not None:
+        return region
+    return _parse_input_non_manadatory(
+        None,
+        OceanbenchEnvironmentVariable.OCEANBENCH_REGION,
+    )
+
+
+def _derive_output_notebook_file_name(
+    challenger_path: str,
+    region: RegionLike,
+) -> str:
+    resolved_region = resolve_region(region)
     stem = PurePosixPath(challenger_path).stem
-    return f"{stem}.report.ipynb"
+    return f"{stem}.{resolved_region.id}.report.ipynb"
 
 
 @contextmanager
@@ -77,6 +91,7 @@ def evaluate_challenger(
     output_bucket: str | None = None,
     output_prefix: str | None = None,
     runtime_configuration: RuntimeConfiguration | None = None,
+    region: RegionLike = None,
 ):
     """
     Compute all the benchmark scores for the given challenger dataset, by calling all functions of the `metrics` module.
@@ -85,7 +100,7 @@ def evaluate_challenger(
     This function is used for official evaluation.
 
     The output notebook file name is automatically derived from the challenger file name:
-    ``glonet.py`` becomes ``glonet.report.ipynb``.
+    ``glonet.py`` becomes ``glonet.global.report.ipynb``.
 
     Parameters
     ----------
@@ -97,11 +112,14 @@ def evaluate_challenger(
         The destination S3 prefix of the executed notebook. If ``output_bucket`` is not provided, this option is ignored. If provided, uses AWS S3 environment variables. Can also be configured with environment variable ``OCEANBENCH_OUTPUT_PREFIX``.
     runtime_configuration : RuntimeConfiguration, optional
         Runtime settings applied inside the generated notebook execution, including staging and remote retry behavior.
+    region : str, RegionSpec, or None, optional
+        The OceanBench region to evaluate on. This can be an official region id such as ``global`` or ``ibi``, or a custom ``oceanbench.regions.RegionSpec`` value.
     """  # noqa
     resolved_challenger_python_code_uri_or_local_path = _parse_input_mandatory(
         challenger_python_code_uri_or_local_path,
         OceanbenchEnvironmentVariable.OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH,
     )
+    resolved_region = resolve_region(_resolve_region_input(region))
     resolved_output_bucket = _parse_input_non_manadatory(
         output_bucket,
         OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_BUCKET,
@@ -111,13 +129,17 @@ def evaluate_challenger(
         OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_PREFIX,
     )
     resolved_runtime_configuration = runtime_configuration or runtime_configuration_from_environment()
-    output_notebook_file_name = _derive_output_notebook_file_name(resolved_challenger_python_code_uri_or_local_path)
+    output_notebook_file_name = _derive_output_notebook_file_name(
+        resolved_challenger_python_code_uri_or_local_path,
+        resolved_region,
+    )
     _evaluate_challenger(
         resolved_challenger_python_code_uri_or_local_path,
         output_notebook_file_name,
         resolved_output_bucket,
         resolved_output_prefix,
         resolved_runtime_configuration,
+        resolved_region,
     )
 
 
@@ -146,10 +168,12 @@ def _evaluate_challenger(
     output_bucket: str | None,
     output_prefix: str | None,
     runtime_configuration: RuntimeConfiguration,
+    region: RegionLike,
 ):
     generate_evaluation_notebook_file(
         challenger_python_code_uri_or_local_path,
         output_notebook_file_path=output_notebook_file_name,
+        region=region,
     )
     _execute_evaluation_notebook_file(
         output_notebook_file_name,

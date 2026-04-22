@@ -32,8 +32,7 @@ def _metric_cell(metric_call: str, html_table: str) -> dict:
     }
 
 
-def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
-    notebook_path = tmp_path / "glo12.report.ipynb"
+def _write_notebook(notebook_path: Path) -> None:
     notebook = {
         "cells": [
             _metric_cell(
@@ -57,10 +56,27 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
                 ),
             ),
             _metric_cell(
+                "oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis",
+                _score_table(
+                    [
+                        ("Mixed Layer Depth (m) [mixed_layer_depth]", 1.3, 1.4),
+                    ]
+                ),
+            ),
+            _metric_cell(
+                "oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis",
+                _score_table(
+                    [
+                        ("Zonal geostrophic current (m/s) [geostrophic_eastward_sea_water_velocity]", 1.5, 1.6),
+                        ("Meridional geostrophic current (m/s) [geostrophic_northward_sea_water_velocity]", 1.7, 1.8),
+                    ]
+                ),
+            ),
+            _metric_cell(
                 "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis",
                 _score_table(
                     [
-                        ("Lagrangian trajectory deviation (km) []{surface}", 2.1, 2.2),
+                        ("Lagrangian trajectory deviation (km) []", 2.1, 2.2),
                     ]
                 ),
             ),
@@ -68,11 +84,18 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
     }
     notebook_path.write_text(json.dumps(notebook), encoding="utf-8")
 
+
+def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
+    notebook_path = tmp_path / "glo12.global.report.ipynb"
+    _write_notebook(notebook_path)
+
     scores = get_all_model_scores_from_notebook(str(notebook_path), "glo12")
 
     assert set(scores) == {
         "rmsd_variables_observations",
         "rmsd_variables_glorys",
+        "rmsd_mld_glorys",
+        "rmsd_geostrophic_glorys",
         "lagrangian_glorys",
     }
 

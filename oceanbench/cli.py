@@ -7,9 +7,10 @@ import json
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
-from urllib.request import urlopen, Request
+from urllib.request import Request, urlopen
 
 from oceanbench.core.local_stage import cleanup_local_stage_directory
+from oceanbench.core.regions import RegionLike, get_pre_defined_region_names, load_region_file
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from oceanbench.core.version import __version__
 
@@ -45,11 +46,18 @@ def _resolve_all_challenger_urls() -> list[str]:
     ]
 
 
+def _resolve_region_argument(args: argparse.Namespace) -> RegionLike:
+    if args.region_file is not None:
+        return load_region_file(args.region_file)
+    return args.region
+
+
 def _evaluate_one(
     challenger: str,
     output_bucket: str | None,
     output_prefix: str | None,
     runtime_configuration: RuntimeConfiguration,
+    region: RegionLike,
 ) -> EvaluationResult:
     try:
         from oceanbench.core.evaluate import evaluate_challenger
@@ -59,6 +67,7 @@ def _evaluate_one(
             output_bucket=output_bucket,
             output_prefix=output_prefix,
             runtime_configuration=runtime_configuration,
+            region=region,
         )
         return EvaluationResult(challenger=challenger)
     except Exception as exception:
@@ -77,10 +86,18 @@ def _evaluate_all(
     output_prefix: str | None,
     max_workers: int | None,
     runtime_configuration: RuntimeConfiguration,
+    region: RegionLike,
 ) -> list[EvaluationResult]:
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(_evaluate_one, challenger, output_bucket, output_prefix, runtime_configuration): challenger
+            executor.submit(
+                _evaluate_one,
+                challenger,
+                output_bucket,
+                output_prefix,
+                runtime_configuration,
+                region,
+            ): challenger
             for challenger in challengers
         }
         return [future.result() for future in as_completed(futures)]
@@ -132,6 +149,7 @@ def _run_evaluate(args: argparse.Namespace) -> int:
 
     try:
         runtime_configuration = _runtime_configuration_from_args(args)
+        region = _resolve_region_argument(args)
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
@@ -142,6 +160,7 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         args.output_prefix,
         args.max_workers,
         runtime_configuration,
+        region,
     )
     if runtime_configuration.has_local_stage() and not args.keep_stage and all(result.success for result in results):
         cleanup_local_stage_directory(runtime_configuration.resolved_stage_directory())
@@ -215,6 +234,18 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--keep-stage",
         action="store_true",
         help="Keep staged data after a successful evaluate command",
+    )
+    region_group = evaluate_parser.add_mutually_exclusive_group()
+    region_group.add_argument(
+        "--region",
+        choices=get_pre_defined_region_names(),
+        default=None,
+        help="Official OceanBench region to evaluate on",
+    )
+    region_group.add_argument(
+        "--region-file",
+        default=None,
+        help="Path to a JSON file describing a custom evaluation region",
     )
     return parser, evaluate_parser
 

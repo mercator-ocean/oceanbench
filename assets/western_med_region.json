@@ -1,0 +1,10 @@
+{
+  "id": "western_med",
+  "display_name": "Western Mediterranean",
+  "bounds": {
+    "minimum_latitude": 34.0,
+    "maximum_latitude": 44.5,
+    "minimum_longitude": -1.0,
+    "maximum_longitude": 18.0
+  }
+}

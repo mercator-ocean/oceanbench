@@ -16,9 +16,19 @@ format:
 #| output: asis
 
 from helpers.challenger_metadata import CHALLENGERS
-from helpers.s3_discovery import discover_challengers
+from helpers.s3_discovery import discover_downloaded_reports
+from helpers.published_regions import published_region_ids, published_region_label
 
-challengers = discover_challengers()
+published_reports = discover_downloaded_reports("reports")
+region_labels = {
+    region_id: published_region_label(region_id)
+    for region_id in published_region_ids()
+}
+challengers = sorted({
+    challenger_name
+    for region_challengers in published_reports.values()
+    for challenger_name in region_challengers
+})
 
 header = (
     "| System | Organisation | Method | Forecast type | Initial conditions | Output resolution | Report |\n"
@@ -27,6 +37,13 @@ header = (
 
 def format_row(challenger_name):
     challenger_metadata = CHALLENGERS.get(challenger_name)
+    report_links = "".join(
+        f'<a class="region-report-badge" href="reports/{challenger_name}.{region_id}.report.html">'
+        f"{region_labels[region_id]}</a>"
+        for region_id, region_challengers in published_reports.items()
+        if challenger_name in region_challengers
+    )
+    report_links = f'<span class="region-report-badges">{report_links}</span>' if report_links else ""
     if challenger_metadata:
         system = f"[{challenger_metadata['label']}]({challenger_metadata['url']})"
         organisation = (
@@ -36,9 +53,9 @@ def format_row(challenger_name):
         return (
             f"| {system} | {organisation} | {challenger_metadata['method']} | "
             f"{challenger_metadata['forecast_type']} | {challenger_metadata['initial_conditions']} | "
-            f"{challenger_metadata['resolution']} | [Report](reports/{challenger_name}.report.html) |"
+            f"{challenger_metadata['resolution']} | {report_links} |"
         )
-    return f"| {challenger_name} |  |  |  |  |  | [Report](reports/{challenger_name}.report.html) |"
+    return f"| {challenger_name} |  |  |  |  |  | {report_links} |"
 
 rows = "\n".join(map(format_row, challengers))
 

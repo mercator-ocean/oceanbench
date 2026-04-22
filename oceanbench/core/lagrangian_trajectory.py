@@ -70,10 +70,12 @@ def _delete_error_particle(particle, _fieldset, _time):
 def deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
+    particle_count: int = 10000,
 ) -> pandas.DataFrame:
     return _deviation_of_lagrangian_trajectories(
         _harmonise_dataset(challenger_dataset),
         _harmonise_dataset(reference_dataset),
+        particle_count,
     )
 
 
@@ -81,15 +83,40 @@ def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
     return rename_dataset_with_standard_names(dataset)
 
 
+def lagrangian_particle_count_for_region(
+    global_challenger_dataset: xarray.Dataset,
+    regional_challenger_dataset: xarray.Dataset,
+    *,
+    global_particle_count: int = 10000,
+    minimum_particle_count: int = 2000,
+) -> int:
+    harmonised_global_dataset = _harmonise_dataset(global_challenger_dataset)
+    harmonised_regional_dataset = _harmonise_dataset(regional_challenger_dataset)
+    global_ocean_point_count = _available_ocean_point_count(
+        harmonised_global_dataset,
+        VARIABLE.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+    )
+    regional_ocean_point_count = _available_ocean_point_count(
+        harmonised_regional_dataset,
+        VARIABLE.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+    )
+    scaled_particle_count = int(round(global_particle_count * regional_ocean_point_count / global_ocean_point_count))
+    return min(
+        regional_ocean_point_count,
+        max(minimum_particle_count, scaled_particle_count),
+    )
+
+
 def _deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
+    particle_count: int,
 ) -> pandas.DataFrame:
     lead_day_stop = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()] - 1
     latitudes, longitudes = _get_random_ocean_points_from_file(
         challenger_dataset,
         variable_name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
-        n=10000,
+        n=particle_count,
         seed=123,
     )
     deviations = mean_weekly_lagrangian_deviations(
@@ -287,8 +314,7 @@ def _get_random_ocean_points_from_file(
     n: int,
     seed: int,
 ) -> tuple[numpy.ndarray, numpy.ndarray]:
-    variable_values = dataset[variable_name].isel(lead_day_index=0)
-    mask = ~numpy.isnan(variable_values)[0].squeeze()
+    mask = _surface_ocean_point_mask(dataset, variable_name)
 
     latitude_grid, longitude_grid = numpy.meshgrid(
         dataset[Dimension.LATITUDE.key()],
@@ -298,13 +324,36 @@ def _get_random_ocean_points_from_file(
     latitude_values = latitude_grid[mask.values]
     longitude_values = longitude_grid[mask.values]
 
-    if len(latitude_values) < n:
-        raise ValueError(f"Requested {n} points, but only {len(latitude_values)} ocean points available.")
+    n_available_ocean_points = int(numpy.count_nonzero(mask.values))
+    if n_available_ocean_points == 0:
+        raise ValueError("No ocean points available to initialize lagrangian trajectories.")
+
+    n = min(n, n_available_ocean_points)
 
     numpy.random.seed(seed)
     idx = numpy.random.choice(len(latitude_values), n, replace=False)
 
     return latitude_values[idx], longitude_values[idx]
+
+
+def _surface_ocean_point_mask(
+    dataset: xarray.Dataset,
+    variable_name: str,
+) -> xarray.DataArray:
+    variable_values = dataset[variable_name].isel({Dimension.LEAD_DAY_INDEX.key(): 0})
+    if Dimension.FIRST_DAY_DATETIME.key() in variable_values.dims:
+        variable_values = variable_values.isel({Dimension.FIRST_DAY_DATETIME.key(): 0})
+    return ~numpy.isnan(variable_values).squeeze()
+
+
+def _available_ocean_point_count(
+    dataset: xarray.Dataset,
+    variable_name: str,
+) -> int:
+    ocean_point_count = int(numpy.count_nonzero(_surface_ocean_point_mask(dataset, variable_name).values))
+    if ocean_point_count == 0:
+        raise ValueError("No ocean points available to initialize lagrangian trajectories.")
+    return ocean_point_count
 
 
 def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset) -> numpy.ndarray:

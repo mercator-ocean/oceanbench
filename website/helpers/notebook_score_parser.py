@@ -181,29 +181,27 @@ def _convert_flat_table_to_model_score(raw_table: str, challenger_name: str) -> 
     return ModelScore.model_validate({"name": challenger_name, "depths": {"flat": {"variables": variables}}})
 
 
-def _get_notebook(path: str) -> dict | None:
+def _get_notebook(path: str) -> dict:
     if path.startswith("http"):
         response = requests.get(path)
         if response.status_code == 200:
             return response.json()
-    else:
-        with open(path) as file:
-            return json.load(file)
+        raise ValueError(f"Failed to read notebook at {path}: HTTP {response.status_code}")
+    with open(path) as file:
+        return json.load(file)
+
+
+def _metric_converter(metric_key: str):
+    if metric_key in _DEPTH_VARIABLE_METRICS:
+        return _convert_depth_variable_table_to_model_score
+    return _convert_flat_table_to_model_score
 
 
 def get_all_model_scores_from_notebook(notebook_path: str, challenger_name: str) -> dict[str, ModelScore]:
     raw_notebook = _get_notebook(notebook_path)
-    if raw_notebook is None:
-        return {}
     metrics_html = _get_all_metrics_from_notebook(raw_notebook)
-
-    def _converter(metric_key: str):
-        if metric_key in _DEPTH_VARIABLE_METRICS:
-            return _convert_depth_variable_table_to_model_score
-        return _convert_flat_table_to_model_score
-
     return {
         metric_key: result
         for metric_key, raw_table in metrics_html.items()
-        if (result := _converter(metric_key)(raw_table, challenger_name)) is not None
+        if (result := _metric_converter(metric_key)(raw_table, challenger_name)) is not None
     }
