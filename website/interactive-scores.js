@@ -514,11 +514,25 @@ function buildRegionSelectorInnerHtml(regionIds) {
     const description = regionMetadata[regionId]?.description || "";
     markup += `<button type="button" class="region-chip${active}" data-region="${regionId}" aria-pressed="${regionId === activeRegion}" title="${description}">${label}</button>`;
   }
-  markup += "</div></div>";
+  markup += "</div>";
 
   const activeDescription = regionMetadata[activeRegion]?.description;
   if (activeDescription) {
     markup += `<div class="region-selector-description">${activeDescription}</div>`;
+  }
+  markup += "</div>";
+
+  const trackKeys = getAvailableTracks(
+    regionIds.includes(activeRegion) && parsedData?.regions?.[activeRegion]?.challenger_names
+      ? parsedData.regions[activeRegion].challenger_names
+      : [],
+  );
+  const trackTabs = buildTrackTabsInnerHtml(trackKeys);
+  if (trackTabs) {
+    markup += '<div class="track-selector-row">';
+    markup += '<span class="region-selector-label">Track</span>';
+    markup += `<div id="score-track-tabs" role="group" aria-label="Model resolution track">${trackTabs}</div>`;
+    markup += "</div>";
   }
   markup += "</div>";
   markup += '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
@@ -571,9 +585,6 @@ function ensureHeaderElement() {
   const header = document.createElement("div");
   header.id = "score-header";
 
-  const modeNavigation = document.createElement("div");
-  modeNavigation.id = "score-track-tabs";
-
   const tabNavigation = document.createElement("nav");
   tabNavigation.id = "score-tabs";
   tabNavigation.setAttribute("aria-label", "Score sections");
@@ -582,7 +593,6 @@ function ensureHeaderElement() {
   controlsElement.id = "score-controls";
   controlsElement.className = "controls";
 
-  header.appendChild(modeNavigation);
   header.appendChild(tabNavigation);
   header.appendChild(controlsElement);
 
@@ -1180,11 +1190,6 @@ function renderAllTables() {
   const controlsElement = ensureHeaderElement();
   controlsElement.innerHTML = buildControlsInnerHtml(visibleChallengerNames, baseline, availableDepths);
   renderRegionSelector(regionIds);
-
-  const modeNavigation = document.getElementById("score-track-tabs");
-  if (modeNavigation) {
-    modeNavigation.innerHTML = buildTrackTabsInnerHtml(availableTracks);
-  }
 
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {

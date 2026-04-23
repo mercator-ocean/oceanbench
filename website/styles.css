@@ -345,6 +345,14 @@ body.quarto-dark #region-selector {
   align-items: center;
 }
 
+.track-selector-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  margin-top: 0.6rem;
+}
+
 .region-selector-label {
   color: var(--ob-muted);
   font-size: 0.8rem;
@@ -383,9 +391,35 @@ body.quarto-dark #region-selector {
 }
 
 .region-selector-description {
-  margin-top: 0.45rem;
   color: var(--ob-muted);
   font-size: 0.85rem;
+}
+
+.track-selector-row #score-track-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.track-selector-row .score-tab {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--ob-border);
+  border-bottom-width: 1px;
+  border-radius: var(--ob-radius-pill);
+  background: var(--ob-surface);
+  color: var(--bs-body-color, #333940);
+  font-size: 0.85rem;
+  min-height: auto;
+}
+
+.track-selector-row .score-tab:hover:not(.active) {
+  background: var(--ob-surface);
+}
+
+.track-selector-row .score-tab.active {
+  background: var(--ob-accent);
+  border-color: var(--ob-accent);
+  color: var(--ob-accent-contrast);
 }
 
 body.quarto-dark .region-chip {
@@ -526,20 +560,11 @@ body.quarto-dark .region-globe-outline {
 
 /* --- Section tracker row --- */
 
-#score-track-tabs,
 #score-tabs {
   display: flex;
   gap: 0;
   padding: 0 0.4rem;
   align-items: flex-end;
-}
-
-#score-track-tabs {
-  border-bottom: 1px solid var(--ob-border);
-}
-
-#score-track-tabs:empty {
-  display: none;
 }
 
 .score-tab {
@@ -1002,7 +1027,6 @@ body.quarto-dark {
 /* --- Mobile tab responsiveness --- */
 
 @media (max-width: 600px) {
-  #score-track-tabs,
   #score-tabs {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
