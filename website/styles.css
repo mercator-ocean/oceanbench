@@ -526,11 +526,20 @@ body.quarto-dark .region-globe-outline {
 
 /* --- Section tracker row --- */
 
+#score-track-tabs,
 #score-tabs {
   display: flex;
   gap: 0;
   padding: 0 0.4rem;
   align-items: flex-end;
+}
+
+#score-track-tabs {
+  border-bottom: 1px solid var(--ob-border);
+}
+
+#score-track-tabs:empty {
+  display: none;
 }
 
 .score-tab {
@@ -993,6 +1002,7 @@ body.quarto-dark {
 /* --- Mobile tab responsiveness --- */
 
 @media (max-width: 600px) {
+  #score-track-tabs,
   #score-tabs {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
