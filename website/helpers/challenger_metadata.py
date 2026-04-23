@@ -14,7 +14,7 @@ CHALLENGERS = {
         "resolution": "1/12 deg",
     },
     "glo12_1_degree": {
-        "label": "GLO12 (1 deg)",
+        "label": "GLO12",
         "url": "https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024",
         "organisation": "Mercator Ocean",
         "organisation_url": "https://mercator-ocean.eu",
@@ -34,7 +34,7 @@ CHALLENGERS = {
         "resolution": "1/4 deg",
     },
     "glonet_1_degree": {
-        "label": "GLONET (1 deg)",
+        "label": "GLONET",
         "url": "https://glonet.lab.dive.edito.eu",
         "organisation": "Mercator Ocean",
         "organisation_url": "https://mercator-ocean.eu",
@@ -54,7 +54,7 @@ CHALLENGERS = {
         "resolution": "1/12 deg",
     },
     "wenhai_1_degree": {
-        "label": "WenHai (1 deg)",
+        "label": "WenHai",
         "url": "https://www.nature.com/articles/s41467-025-57389-2",
         "organisation": "DOMES",
         "organisation_url": "http://iaos.ouc.edu.cn/DeepOceanMultispheresandEarthSystem/list.htm",
@@ -74,7 +74,7 @@ CHALLENGERS = {
         "resolution": "1/12 deg",
     },
     "xihe_1_degree": {
-        "label": "XiHe (1 deg)",
+        "label": "XiHe",
         "url": "https://arxiv.org/abs/2402.02995",
         "organisation": "NUDT",
         "organisation_url": "https://english.nudt.edu.cn/",
