@@ -765,9 +765,6 @@ function ensureHeaderElement() {
   const header = document.createElement("div");
   header.id = "score-header";
 
-  const modeNavigation = document.createElement("div");
-  modeNavigation.id = "score-track-tabs";
-
   const tabNavigation = document.createElement("nav");
   tabNavigation.id = "score-tabs";
   tabNavigation.setAttribute("aria-label", "Score sections");
@@ -776,7 +773,6 @@ function ensureHeaderElement() {
   controlsElement.id = "score-controls";
   controlsElement.className = "controls";
 
-  header.appendChild(modeNavigation);
   header.appendChild(tabNavigation);
   header.appendChild(controlsElement);
 
@@ -1576,11 +1572,6 @@ function renderAllTables() {
   controlsElement.innerHTML = buildControlsInnerHtml(trackChallengerNames, baseline, availableDepths);
   renderRegionSelector(regionIds, versionTracks, availableTracks);
   renderVersionSelector(getVersions(data));
-
-  const modeNavigation = document.getElementById("score-track-tabs");
-  if (modeNavigation) {
-    modeNavigation.innerHTML = buildTrackTabsInnerHtml(availableTracks);
-  }
 
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {
