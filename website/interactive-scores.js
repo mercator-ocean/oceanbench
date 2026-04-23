@@ -48,6 +48,7 @@ let parsedData = null;
 let challengerLabels = {};
 let regionLabels = {};
 let regionMetadata = {};
+let activeTrack = "high_resolution";
 let activeSection = "observations";
 let activeRegion = null;
 let isScrollRefreshScheduled = false;
@@ -58,6 +59,11 @@ const SECTION_ID_MAP = {
   observations: "comparison-to-observations",
   reanalysis: "comparison-to-reanalysis",
   analysis: "comparison-to-analysis",
+};
+
+const TRACK_LABELS = {
+  high_resolution: "High resolution",
+  one_degree: "1 degree",
 };
 
 function interpolateColor(startColor, endColor, ratio) {
@@ -153,6 +159,25 @@ function getStandardName(scoreData, depth, variable) {
 
 function displayName(name) {
   return challengerLabels[name] || name;
+}
+
+function trackKeyForChallenger(name) {
+  return name.endsWith("_1_degree") ? "one_degree" : "high_resolution";
+}
+
+function getTrackChallengerNames(challengerNames, trackKey) {
+  return challengerNames.filter((name) => trackKeyForChallenger(name) === trackKey);
+}
+
+function getAvailableTracks(challengerNames) {
+  const tracks = [];
+  if (getTrackChallengerNames(challengerNames, "high_resolution").length > 0) {
+    tracks.push("high_resolution");
+  }
+  if (getTrackChallengerNames(challengerNames, "one_degree").length > 0) {
+    tracks.push("one_degree");
+  }
+  return tracks;
 }
 
 function titleCase(text) {
@@ -410,6 +435,16 @@ function buildTabsInnerHtml(sections) {
   return markup;
 }
 
+function buildTrackTabsInnerHtml(trackKeys) {
+  if (trackKeys.length <= 1) return "";
+  let markup = "";
+  for (const trackKey of trackKeys) {
+    const isActive = trackKey === activeTrack;
+    markup += `<button type="button" class="score-tab score-mode-link${isActive ? " active" : ""}" data-track="${trackKey}"${isActive ? ' aria-current="page"' : ""}>${TRACK_LABELS[trackKey]}</button>`;
+  }
+  return markup;
+}
+
 function attachTabListeners() {
   document.querySelectorAll(".score-track-link").forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -417,6 +452,19 @@ function attachTabListeners() {
       const sectionKey = link.dataset.section;
       if (sectionKey === activeSection) return;
       navigateToSection(sectionKey, { replaceHistory: false, updateHash: true });
+    });
+  });
+}
+
+function attachTrackListeners() {
+  document.querySelectorAll(".score-mode-link").forEach((button) => {
+    button.addEventListener("click", () => {
+      const trackKey = button.dataset.track;
+      if (!trackKey || trackKey === activeTrack) return;
+      activeTrack = trackKey;
+      selectedDepths = new Set();
+      showAllMode = true;
+      renderAllTables();
     });
   });
 }
@@ -523,6 +571,9 @@ function ensureHeaderElement() {
   const header = document.createElement("div");
   header.id = "score-header";
 
+  const modeNavigation = document.createElement("div");
+  modeNavigation.id = "score-track-tabs";
+
   const tabNavigation = document.createElement("nav");
   tabNavigation.id = "score-tabs";
   tabNavigation.setAttribute("aria-label", "Score sections");
@@ -531,6 +582,7 @@ function ensureHeaderElement() {
   controlsElement.id = "score-controls";
   controlsElement.className = "controls";
 
+  header.appendChild(modeNavigation);
   header.appendChild(tabNavigation);
   header.appendChild(controlsElement);
 
@@ -1009,14 +1061,54 @@ function getCurrentRegionData(data) {
   return data.regions?.[activeRegion] || null;
 }
 
-function resolveBaselineSelection(challengerNames, selectedBaseline) {
+function resolveBaselineSelection(challengerNames, selectedBaseline, trackKey) {
+  const trackChallengerNames = getTrackChallengerNames(challengerNames, trackKey);
+  if (trackChallengerNames.length === 0) {
+    return null;
+  }
+  if (selectedBaseline && trackChallengerNames.includes(selectedBaseline)) {
+    return selectedBaseline;
+  }
+  const preferredBaseline = trackKey === "one_degree" ? "glo12_1_degree" : "glo12";
+  if (trackChallengerNames.includes(preferredBaseline)) {
+    return preferredBaseline;
+  }
+  return trackChallengerNames[0];
+}
+
+function resolveTrackSelection(challengerNames) {
+  const availableTracks = getAvailableTracks(challengerNames);
+  if (!availableTracks.includes(activeTrack)) {
+    activeTrack = availableTracks[0] || "high_resolution";
+  }
+  return availableTracks;
+}
+
+function setActiveTrackUi() {
+  document.querySelectorAll(".score-mode-link").forEach((button) => {
+    const isActive = button.dataset.track === activeTrack;
+    button.classList.toggle("active", isActive);
+    if (isActive) {
+      button.setAttribute("aria-current", "page");
+    } else {
+      button.removeAttribute("aria-current");
+    }
+  });
+}
+
+function resolveVisibleChallengerNames(challengerNames) {
+  const availableTracks = resolveTrackSelection(challengerNames);
+  return {
+    availableTracks,
+    visibleChallengerNames: getTrackChallengerNames(challengerNames, activeTrack),
+  };
+}
+
+function resolveBaselineSelectionForTrack(challengerNames, selectedBaseline) {
   if (selectedBaseline && challengerNames.includes(selectedBaseline)) {
     return selectedBaseline;
   }
-  if (challengerNames.includes("glo12")) {
-    return "glo12";
-  }
-  return challengerNames[0];
+  return resolveBaselineSelection(challengerNames, selectedBaseline, activeTrack);
 }
 
 function renderTablesOnly() {
@@ -1027,9 +1119,12 @@ function renderTablesOnly() {
   const { challengers, challenger_names: challengerNames } = regionData;
   if (!challengerNames || challengerNames.length === 0) return;
   const { metric_titles: metricTitles, sections } = data;
+  const { visibleChallengerNames } = resolveVisibleChallengerNames(challengerNames);
+  if (visibleChallengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelection(challengerNames, existingSelect?.value);
+  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value);
+  if (!baseline) return;
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
     renderMetricSection(
@@ -1037,7 +1132,7 @@ function renderTablesOnly() {
       sectionConfig.depth_metric,
       sectionConfig.flat_metrics,
       challengers,
-      challengerNames,
+      visibleChallengerNames,
       activeRegion,
       baseline,
       metricTitles,
@@ -1059,9 +1154,12 @@ function renderAllTables() {
   const { metric_titles: metricTitles, sections } = data;
   const regionIds = getRegionIds(data);
   if (!challengerNames || challengerNames.length === 0) return;
+  const { availableTracks, visibleChallengerNames } = resolveVisibleChallengerNames(challengerNames);
+  if (visibleChallengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelection(challengerNames, existingSelect?.value);
+  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value);
+  if (!baseline) return;
   const availableDepths = getAvailableDepths(challengers, baseline, sections);
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
@@ -1070,7 +1168,7 @@ function renderAllTables() {
       sectionConfig.depth_metric,
       sectionConfig.flat_metrics,
       challengers,
-      challengerNames,
+      visibleChallengerNames,
       activeRegion,
       baseline,
       metricTitles,
@@ -1080,8 +1178,13 @@ function renderAllTables() {
   }
 
   const controlsElement = ensureHeaderElement();
-  controlsElement.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);
+  controlsElement.innerHTML = buildControlsInnerHtml(visibleChallengerNames, baseline, availableDepths);
   renderRegionSelector(regionIds);
+
+  const modeNavigation = document.getElementById("score-track-tabs");
+  if (modeNavigation) {
+    modeNavigation.innerHTML = buildTrackTabsInnerHtml(availableTracks);
+  }
 
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {
@@ -1090,8 +1193,10 @@ function renderAllTables() {
 
   updateColorLegend();
   updateStickyOffsets();
+  attachTrackListeners();
   attachControlListeners();
   attachTabListeners();
+  setActiveTrackUi();
   setActiveSection(activeSection);
   refreshScrollSpy();
   setupCellHighlight();
