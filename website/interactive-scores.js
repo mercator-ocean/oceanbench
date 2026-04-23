@@ -565,6 +565,16 @@ function buildTabsInnerHtml(sections) {
   return markup;
 }
 
+function buildTrackTabsInnerHtml(trackKeys) {
+  if (trackKeys.length <= 1) return "";
+  let markup = "";
+  for (const trackKey of trackKeys) {
+    const isActive = trackKey === activeTrack;
+    markup += `<button type="button" class="score-tab score-mode-link${isActive ? " active" : ""}" data-track="${trackKey}"${isActive ? ' aria-current="page"' : ""}>${TRACK_LABELS[trackKey]}</button>`;
+  }
+  return markup;
+}
+
 function attachTabListeners() {
   document.querySelectorAll(".score-track-link").forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -572,6 +582,19 @@ function attachTabListeners() {
       const sectionKey = link.dataset.section;
       if (sectionKey === activeSection) return;
       navigateToSection(sectionKey, { replaceHistory: false, updateHash: true });
+    });
+  });
+}
+
+function attachTrackListeners() {
+  document.querySelectorAll(".score-mode-link").forEach((button) => {
+    button.addEventListener("click", () => {
+      const trackKey = button.dataset.track;
+      if (!trackKey || trackKey === activeTrack) return;
+      activeTrack = trackKey;
+      selectedDepths = new Set();
+      showAllMode = true;
+      renderAllTables();
     });
   });
 }
@@ -742,6 +765,9 @@ function ensureHeaderElement() {
   const header = document.createElement("div");
   header.id = "score-header";
 
+  const modeNavigation = document.createElement("div");
+  modeNavigation.id = "score-track-tabs";
+
   const tabNavigation = document.createElement("nav");
   tabNavigation.id = "score-tabs";
   tabNavigation.setAttribute("aria-label", "Score sections");
@@ -750,6 +776,7 @@ function ensureHeaderElement() {
   controlsElement.id = "score-controls";
   controlsElement.className = "controls";
 
+  header.appendChild(modeNavigation);
   header.appendChild(tabNavigation);
   header.appendChild(controlsElement);
 
@@ -1550,6 +1577,11 @@ function renderAllTables() {
   renderRegionSelector(regionIds, versionTracks, availableTracks);
   renderVersionSelector(getVersions(data));
 
+  const modeNavigation = document.getElementById("score-track-tabs");
+  if (modeNavigation) {
+    modeNavigation.innerHTML = buildTrackTabsInnerHtml(availableTracks);
+  }
+
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {
     tabNavigation.innerHTML = buildTabsInnerHtml(sections);
@@ -1560,6 +1592,7 @@ function renderAllTables() {
   attachSelectorListeners();
   attachControlListeners();
   attachTabListeners();
+  setActiveTrackUi();
   setActiveSection(activeSection);
   refreshScrollSpy();
   setupCellHighlight();
