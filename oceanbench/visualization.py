@@ -68,6 +68,38 @@ def plot_surface_comparison_explorer(
     )
 
 
+def plot_multi_reference_surface_comparison_explorer(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    variables: Sequence[Variable | str] = visualization.DEFAULT_SURFACE_COMPARISON_VARIABLES,
+    first_day_index: int = 0,
+    lead_day_indices: Sequence[int] | None = None,
+    depth_selectors: Mapping[str, int | float | None] | None = None,
+    challenger_name: str = "Challenger",
+    maximum_map_cells: int = visualization.DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS,
+    height_pixels: int = visualization.DEFAULT_EXPLORER_HEIGHT_PIXELS,
+):
+    """
+    Display one browser-side explorer comparing a challenger to several references.
+
+    The challenger layer is embedded once, while the reference, error, absolute
+    error, and RMSE layers remain available for each reference.
+    """
+
+    return visualization.plot_multi_reference_surface_comparison_explorer(
+        challenger_dataset=challenger_dataset,
+        reference_datasets=reference_datasets,
+        variables=variables,
+        first_day_index=first_day_index,
+        lead_day_indices=lead_day_indices,
+        depth_selectors=depth_selectors,
+        challenger_name=challenger_name,
+        maximum_map_cells=maximum_map_cells,
+        height_pixels=height_pixels,
+    )
+
+
 __all__ = [
+    "plot_multi_reference_surface_comparison_explorer",
     "plot_surface_comparison_explorer",
 ]
