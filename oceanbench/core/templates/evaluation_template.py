@@ -14,6 +14,41 @@ challenger_dataset: xarray.Dataset = xarray.Dataset()
 
 region = "global"
 
+# ### Surface comparison maps
+
+import oceanbench.visualization
+
+from oceanbench.core.dataset_utils import Variable
+from oceanbench.core.references.glo12 import glo12_analysis_dataset
+from oceanbench.core.references.glorys import glorys_reanalysis_dataset
+
+regional_challenger_dataset = oceanbench.regions.subset(challenger_dataset, region)
+glorys_dataset = oceanbench.regions.subset(glorys_reanalysis_dataset(challenger_dataset), region)
+glo12_dataset = oceanbench.regions.subset(glo12_analysis_dataset(challenger_dataset), region)
+surface_comparison_variables = [
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+    Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+    Variable.SEA_WATER_SALINITY,
+    Variable.EASTWARD_SEA_WATER_VELOCITY,
+    Variable.NORTHWARD_SEA_WATER_VELOCITY,
+]
+
+glorys_surface_comparison_explorer = oceanbench.visualization.plot_surface_comparison_explorer(
+    regional_challenger_dataset,
+    glorys_dataset,
+    "GLORYS reanalysis",
+    variables=surface_comparison_variables,
+)
+glorys_surface_comparison_explorer
+
+glo12_surface_comparison_explorer = oceanbench.visualization.plot_surface_comparison_explorer(
+    regional_challenger_dataset,
+    glo12_dataset,
+    "GLO12 analysis",
+    variables=surface_comparison_variables,
+)
+glo12_surface_comparison_explorer
+
 # ### Evaluation of challenger dataset using OceanBench
 
 # #### Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
