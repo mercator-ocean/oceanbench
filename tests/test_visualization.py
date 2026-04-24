@@ -98,12 +98,13 @@ def test_plot_surface_comparison_explorer_returns_self_contained_html() -> None:
     assert "RMSE over dates" in html_output.data
     assert "rmse_over_dates" in html_output.data
     assert "Lead day" in html_output.data
-    assert "ob-map-variable-button" in html_output.data
-    assert "ob-map-depth-button" in html_output.data
+    assert "ob-map-variable-buttons" in html_output.data
+    assert "ob-map-depth-buttons" in html_output.data
+    assert "ob-map-layer-buttons" in html_output.data
     assert "0.5 m" in html_output.data
     assert "10 m" in html_output.data
     assert "depths" in html_output.data
-    assert "grid-template-columns: 12ch minmax(150px, 240px)" in html_output.data
+    assert "ob-map-secondary-row" in html_output.data
     assert "font-variant-numeric: tabular-nums" in html_output.data
     assert "white-space: nowrap" in html_output.data
     assert "allow-scripts" in html_output.data
@@ -128,6 +129,28 @@ def test_plot_surface_comparison_explorer_skips_missing_default_variables() -> N
     assert "Meridional current" not in html_output.data
 
 
+def test_plot_multi_reference_surface_comparison_explorer_uses_one_viewer() -> None:
+    sea_surface_height = numpy.arange(18, dtype=float).reshape(1, 3, 2, 3)
+    challenger_dataset = _map_dataset({Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): sea_surface_height})
+    first_reference_dataset = _map_dataset({Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): sea_surface_height + 1.0})
+    second_reference_dataset = _map_dataset({Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): sea_surface_height + 2.0})
+
+    html_output = oceanbench.visualization.plot_multi_reference_surface_comparison_explorer(
+        challenger_dataset,
+        {
+            "First reference": first_reference_dataset,
+            "Second reference": second_reference_dataset,
+        },
+    )
+
+    assert "First reference" in html_output.data
+    assert "Second reference" in html_output.data
+    assert "ob-map-reference-buttons" in html_output.data
+    assert "challengerLayer" in html_output.data
+    assert "references" in html_output.data
+    assert "Signed error" in html_output.data
+
+
 def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_path: Path) -> None:
     challenger_path = tmp_path / "challenger.py"
     challenger_path.write_text("import xarray\n\nchallenger_dataset = xarray.Dataset()\n", encoding="utf-8")
@@ -142,20 +165,21 @@ def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_
     notebook = nbformat.read(output_path, as_version=4)
     all_sources = "\n".join(cell.source for cell in notebook.cells)
 
-    assert "oceanbench.visualization.plot_surface_comparison_explorer" in all_sources
+    assert "oceanbench.visualization.plot_multi_reference_surface_comparison_explorer" in all_sources
     assert "glorys_reanalysis_dataset" in all_sources
-    assert "glorys_surface_comparison_explorer" in all_sources
     assert '"GLORYS reanalysis"' in all_sources
-    assert "glo12_surface_comparison_explorer" in all_sources
+    assert "glo12_analysis_dataset" in all_sources
     assert '"GLO12 analysis"' in all_sources
+    assert "surface_comparison_explorer" in all_sources
     assert "surface_comparison_variables" in all_sources
     assert "Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID" in all_sources
     assert "Variable.SEA_WATER_POTENTIAL_TEMPERATURE" in all_sources
     assert "Variable.SEA_WATER_SALINITY" in all_sources
     assert "Variable.EASTWARD_SEA_WATER_VELOCITY" in all_sources
     assert "Variable.NORTHWARD_SEA_WATER_VELOCITY" in all_sources
-    assert "glorys_surface_comparison_explorer\n" in all_sources
-    assert "glo12_surface_comparison_explorer\n" in all_sources
+    assert "surface_comparison_explorer\n" in all_sources
+    assert "glorys_surface_comparison_explorer" not in all_sources
+    assert "glo12_surface_comparison_explorer" not in all_sources
     assert "plot_surface_comparison_maps" not in all_sources
     assert "plot_spatial_rmse_gallery" not in all_sources
     assert "plot_lagrangian_trajectory_comparison" not in all_sources

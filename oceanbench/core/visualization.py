@@ -4,10 +4,12 @@
 
 from collections.abc import Mapping, Sequence
 from base64 import b64encode
+from dataclasses import dataclass
 import html
 import json
 from uuid import uuid4
 
+from dask import compute as dask_compute
 from IPython.display import HTML
 from matplotlib import colormaps
 from matplotlib.colors import Normalize, TwoSlopeNorm
@@ -51,6 +53,22 @@ QUANTIZED_MINIMUM_VALUE = -32767
 QUANTIZED_MAXIMUM_VALUE = 32767
 DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS = 160_000
 DEFAULT_EXPLORER_HEIGHT_PIXELS = 760
+
+
+@dataclass(frozen=True)
+class _ComputedReferenceComparisonFields:
+    key: str
+    label: str
+    reference_fields: tuple[xarray.DataArray, ...]
+    rmse_fields: tuple[xarray.DataArray, ...]
+
+
+@dataclass(frozen=True)
+class _ComputedMultiReferenceComparisonFields:
+    lead_day_indices: tuple[int, ...]
+    challenger_fields: tuple[xarray.DataArray, ...]
+    references: tuple[_ComputedReferenceComparisonFields, ...]
+    spatial_stride: int
 
 
 def _as_variable_key(variable: Variable | str) -> str:
@@ -100,38 +118,42 @@ def _select_depth(
     return data_array.sel({Dimension.DEPTH.key(): depth_selector}, method="nearest")
 
 
-def _select_surface_field(
+def _select_variable_field(
     dataset: xarray.Dataset,
     variable_key: str,
+    depth_selector: int | float | None,
+) -> xarray.DataArray:
+    standard_dataset = _standard_dataset(dataset)
+    if variable_key not in standard_dataset:
+        raise ValueError(f"Dataset does not contain variable {variable_key!r}.")
+
+    field = standard_dataset[variable_key]
+    return _select_depth(field, depth_selector)
+
+
+def _select_lead_day_indices(
+    data_array: xarray.DataArray,
+    lead_day_indices: Sequence[int],
+) -> xarray.DataArray:
+    if Dimension.LEAD_DAY_INDEX.key() not in data_array.dims:
+        if tuple(lead_day_indices) == (0,):
+            return data_array
+        raise ValueError(
+            f"Cannot select lead day indices {tuple(lead_day_indices)!r} "
+            + f"because dimension {Dimension.LEAD_DAY_INDEX.key()!r} is missing."
+        )
+    return data_array.isel({Dimension.LEAD_DAY_INDEX.key(): list(lead_day_indices)})
+
+
+def _select_first_day_index(
+    data_array: xarray.DataArray,
     first_day_index: int,
-    lead_day_index: int,
-    depth_selector: int | float | None,
 ) -> xarray.DataArray:
-    standard_dataset = _standard_dataset(dataset)
-    if variable_key not in standard_dataset:
-        raise ValueError(f"Dataset does not contain variable {variable_key!r}.")
-
-    field = standard_dataset[variable_key]
-    field = _select_dimension_index(field, Dimension.FIRST_DAY_DATETIME.key(), first_day_index)
-    field = _select_dimension_index(field, Dimension.LEAD_DAY_INDEX.key(), lead_day_index)
-    field = _select_depth(field, depth_selector)
-    return field
-
-
-def _select_surface_lead_field(
-    dataset: xarray.Dataset,
-    variable_key: str,
-    lead_day_index: int,
-    depth_selector: int | float | None,
-) -> xarray.DataArray:
-    standard_dataset = _standard_dataset(dataset)
-    if variable_key not in standard_dataset:
-        raise ValueError(f"Dataset does not contain variable {variable_key!r}.")
-
-    field = standard_dataset[variable_key]
-    field = _select_dimension_index(field, Dimension.LEAD_DAY_INDEX.key(), lead_day_index)
-    field = _select_depth(field, depth_selector)
-    return field
+    return _select_dimension_index(
+        data_array,
+        Dimension.FIRST_DAY_DATETIME.key(),
+        first_day_index,
+    )
 
 
 def _depth_label(field: xarray.DataArray) -> str:
@@ -196,79 +218,106 @@ def _all_lead_day_indices(dataset: xarray.Dataset) -> tuple[int, ...]:
     return tuple(range(lead_day_count))
 
 
-def _comparison_fields(
+def _reference_items(
+    reference_datasets: Mapping[str, xarray.Dataset],
+) -> tuple[tuple[str, str, xarray.Dataset], ...]:
+    if not reference_datasets:
+        raise ValueError("reference_datasets must contain at least one reference dataset.")
+    return tuple(
+        (f"reference_{index}", reference_name, reference_dataset)
+        for index, (reference_name, reference_dataset) in enumerate(reference_datasets.items())
+    )
+
+
+def _multi_reference_comparison_fields(
     challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
     variable_key: str,
     first_day_index: int,
     lead_day_indices: Sequence[int],
     depth_selector: int | float | None,
     maximum_map_cells: int,
-) -> tuple[
-    list[tuple[int, xarray.DataArray, xarray.DataArray, xarray.DataArray, xarray.DataArray]],
-    int,
-]:
-    fields = []
-    spatial_stride = 1
-    for lead_day_index in lead_day_indices:
-        challenger_field = _select_surface_field(
-            challenger_dataset,
-            variable_key,
-            first_day_index,
-            lead_day_index,
-            depth_selector,
+) -> _ComputedMultiReferenceComparisonFields:
+    reference_items = _reference_items(reference_datasets)
+    challenger_field = _select_variable_field(
+        challenger_dataset,
+        variable_key,
+        depth_selector,
+    )
+    reference_fields = tuple(
+        _select_variable_field(reference_dataset, variable_key, depth_selector)
+        for _, _, reference_dataset in reference_items
+    )
+    aligned_fields = xarray.align(challenger_field, *reference_fields, join="inner")
+    challenger_field = aligned_fields[0]
+    reference_fields = aligned_fields[1:]
+    display_challenger_field = _select_lead_day_indices(
+        _select_first_day_index(challenger_field, first_day_index),
+        lead_day_indices,
+    )
+    spatial_stride = _spatial_stride(display_challenger_field, maximum_map_cells)
+    thinned_display_challenger_field = _thin_field(display_challenger_field, spatial_stride)
+    thinned_display_reference_fields = tuple(
+        _thin_field(
+            _select_lead_day_indices(_select_first_day_index(reference_field, first_day_index), lead_day_indices),
+            spatial_stride,
         )
-        reference_field = _select_surface_field(
-            reference_dataset,
-            variable_key,
-            first_day_index,
-            lead_day_index,
-            depth_selector,
+        for reference_field in reference_fields
+    )
+    thinned_rmse_fields = tuple(
+        _rmse_over_forecast_dates_field(
+            challenger_field,
+            reference_field,
+            lead_day_indices,
+            spatial_stride,
         )
-        challenger_field, reference_field = xarray.align(challenger_field, reference_field, join="inner")
-        if not fields:
-            spatial_stride = _spatial_stride(challenger_field, maximum_map_cells)
-        error_field = challenger_field - reference_field
-        rmse_field = _rmse_over_forecast_dates_field(
-            challenger_dataset,
-            reference_dataset,
-            variable_key,
-            lead_day_index,
-            depth_selector,
-        )
-        fields.append(
-            (
-                lead_day_index,
-                _thin_field(challenger_field, spatial_stride).compute(),
-                _thin_field(reference_field, spatial_stride).compute(),
-                _thin_field(error_field, spatial_stride).compute(),
-                _thin_field(rmse_field, spatial_stride).compute(),
+        for reference_field in reference_fields
+    )
+    computed_fields = dask_compute(
+        thinned_display_challenger_field,
+        *thinned_display_reference_fields,
+        *thinned_rmse_fields,
+    )
+    computed_challenger_field = computed_fields[0]
+    reference_count = len(reference_items)
+    computed_reference_fields = computed_fields[1 : 1 + reference_count]
+    computed_rmse_fields = computed_fields[1 + reference_count :]
+    return _ComputedMultiReferenceComparisonFields(
+        lead_day_indices=tuple(lead_day_indices),
+        challenger_fields=_split_lead_day_fields(computed_challenger_field),
+        references=tuple(
+            _ComputedReferenceComparisonFields(
+                key=reference_key,
+                label=reference_name,
+                reference_fields=_split_lead_day_fields(reference_field),
+                rmse_fields=_split_lead_day_fields(rmse_field),
             )
-        )
-    return fields, spatial_stride
+            for (reference_key, reference_name, _), reference_field, rmse_field in zip(
+                reference_items,
+                computed_reference_fields,
+                computed_rmse_fields,
+                strict=True,
+            )
+        ),
+        spatial_stride=spatial_stride,
+    )
 
 
 def _rmse_over_forecast_dates_field(
-    challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
-    variable_key: str,
-    lead_day_index: int,
-    depth_selector: int | float | None,
+    challenger_field: xarray.DataArray,
+    reference_field: xarray.DataArray,
+    lead_day_indices: Sequence[int],
+    spatial_stride: int,
 ) -> xarray.DataArray:
-    challenger_field = _select_surface_lead_field(
-        challenger_dataset,
-        variable_key,
-        lead_day_index,
-        depth_selector,
+    thinned_challenger_field = _thin_field(
+        _select_lead_day_indices(challenger_field, lead_day_indices),
+        spatial_stride,
     )
-    reference_field = _select_surface_lead_field(
-        reference_dataset,
-        variable_key,
-        lead_day_index,
-        depth_selector,
+    thinned_reference_field = _thin_field(
+        _select_lead_day_indices(reference_field, lead_day_indices),
+        spatial_stride,
     )
-    challenger_field, reference_field = xarray.align(challenger_field, reference_field, join="inner")
-    error_field = challenger_field - reference_field
+    error_field = thinned_challenger_field - thinned_reference_field
     reduction_dimensions = [
         Dimension.FIRST_DAY_DATETIME.key(),
     ]
@@ -276,6 +325,21 @@ def _rmse_over_forecast_dates_field(
     if not reduction_dimensions:
         return abs(error_field)
     return numpy.sqrt((error_field**2).mean(dim=reduction_dimensions))
+
+
+def _split_lead_day_fields(data_array: xarray.DataArray) -> tuple[xarray.DataArray, ...]:
+    if Dimension.LEAD_DAY_INDEX.key() not in data_array.dims:
+        return (_visualization_field(data_array),)
+    return tuple(
+        _visualization_field(data_array.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_index}))
+        for lead_day_index in range(data_array.sizes[Dimension.LEAD_DAY_INDEX.key()])
+    )
+
+
+def _visualization_field(data_array: xarray.DataArray) -> xarray.DataArray:
+    if numpy.issubdtype(data_array.dtype, numpy.floating):
+        return data_array.astype("float32", copy=False)
+    return data_array
 
 
 def _spatial_stride(field: xarray.DataArray, maximum_map_cells: int) -> int:
@@ -349,23 +413,27 @@ def _rounded_coordinate_values(values: numpy.ndarray) -> list[float]:
     return [round(float(value), 6) for value in values]
 
 
-def _surface_comparison_depth_payload(
-    fields: Sequence[tuple[int, xarray.DataArray, xarray.DataArray, xarray.DataArray, xarray.DataArray]],
+def _surface_comparison_multi_reference_depth_payload(
+    fields: _ComputedMultiReferenceComparisonFields,
     variable_key: str,
-    reference_name: str,
     challenger_name: str,
     depth_key: str,
-    spatial_stride: int,
 ) -> dict[str, object]:
-    challenger_fields = [challenger_field for _, challenger_field, _, _, _ in fields]
-    reference_fields = [reference_field for _, _, reference_field, _, _ in fields]
-    error_fields = [error_field for _, _, _, error_field, _ in fields]
-    absolute_error_fields = [abs(error_field) for error_field in error_fields]
-    rmse_fields = [rmse_field for _, _, _, _, rmse_field in fields]
-    field_norm = _field_norm(variable_key, [*challenger_fields, *reference_fields])
-    error_norm = _symmetric_norm(error_fields)
-    absolute_error_norm = _positive_norm(absolute_error_fields)
-    rmse_norm = _positive_norm(rmse_fields)
+    challenger_fields = list(fields.challenger_fields)
+    all_reference_fields = [
+        reference_field for reference in fields.references for reference_field in reference.reference_fields
+    ]
+    all_error_fields = [
+        challenger_field - reference_field
+        for reference in fields.references
+        for challenger_field, reference_field in zip(challenger_fields, reference.reference_fields, strict=True)
+    ]
+    all_absolute_error_fields = [abs(error_field) for error_field in all_error_fields]
+    all_rmse_fields = [rmse_field for reference in fields.references for rmse_field in reference.rmse_fields]
+    field_norm = _field_norm(variable_key, [*challenger_fields, *all_reference_fields])
+    error_norm = _symmetric_norm(all_error_fields)
+    absolute_error_norm = _positive_norm(all_absolute_error_fields)
+    rmse_norm = _positive_norm(all_rmse_fields)
     latitude_values = challenger_fields[0][Dimension.LATITUDE.key()].values
     longitude_values = challenger_fields[0][Dimension.LONGITUDE.key()].values
 
@@ -373,24 +441,63 @@ def _surface_comparison_depth_payload(
         "key": depth_key,
         "label": _depth_label(challenger_fields[0]),
         "leadDays": [
-            _lead_day_label(challenger_field, lead_day_index) for lead_day_index, challenger_field, _, _, _ in fields
+            _lead_day_label(challenger_field, lead_day_index)
+            for lead_day_index, challenger_field in zip(
+                fields.lead_day_indices,
+                challenger_fields,
+                strict=True,
+            )
         ],
         "latitude": _rounded_coordinate_values(latitude_values),
         "longitude": _rounded_coordinate_values(longitude_values),
-        "shape": [len(fields), len(latitude_values), len(longitude_values)],
-        "spatialStride": spatial_stride,
+        "shape": [len(fields.lead_day_indices), len(latitude_values), len(longitude_values)],
+        "spatialStride": fields.spatial_stride,
+        "challengerLayer": _encoded_layer(
+            "challenger",
+            challenger_name,
+            challenger_fields,
+            field_norm,
+            _field_colormap(variable_key),
+            _variable_label_with_unit(variable_key),
+        ),
+        "references": [
+            _surface_comparison_reference_payload(
+                reference,
+                challenger_fields=challenger_fields,
+                variable_key=variable_key,
+                field_norm=field_norm,
+                error_norm=error_norm,
+                absolute_error_norm=absolute_error_norm,
+                rmse_norm=rmse_norm,
+            )
+            for reference in fields.references
+        ],
+    }
+
+
+def _surface_comparison_reference_payload(
+    reference: _ComputedReferenceComparisonFields,
+    challenger_fields: Sequence[xarray.DataArray],
+    variable_key: str,
+    field_norm: Normalize,
+    error_norm: Normalize,
+    absolute_error_norm: Normalize,
+    rmse_norm: Normalize,
+) -> dict[str, object]:
+    reference_fields = list(reference.reference_fields)
+    error_fields = [
+        challenger_field - reference_field
+        for challenger_field, reference_field in zip(challenger_fields, reference_fields, strict=True)
+    ]
+    absolute_error_fields = [abs(error_field) for error_field in error_fields]
+    rmse_fields = list(reference.rmse_fields)
+    return {
+        "key": reference.key,
+        "label": reference.label,
         "layers": [
             _encoded_layer(
-                "challenger",
-                challenger_name,
-                challenger_fields,
-                field_norm,
-                _field_colormap(variable_key),
-                _variable_label_with_unit(variable_key),
-            ),
-            _encoded_layer(
                 "reference",
-                reference_name,
+                reference.label,
                 reference_fields,
                 field_norm,
                 _field_colormap(variable_key),
@@ -437,10 +544,10 @@ def _surface_comparison_variable_payload(
 
 def _surface_comparison_payload(
     variable_payloads: Sequence[dict[str, object]],
-    reference_name: str,
+    reference_name: str | None,
 ) -> dict[str, object]:
     return {
-        "title": f"Surface comparison against {reference_name}",
+        "title": f"Surface comparison against {reference_name}" if reference_name is not None else "Surface comparison",
         "landColor": LAND_BACKGROUND_COLOR,
         "axisColor": "#334155",
         "gridColor": "rgba(71, 85, 105, 0.22)",
@@ -484,15 +591,17 @@ html, body {{
   line-height: 1.2;
 }}
 .ob-map-controls {{
+  display: grid;
+  gap: 9px;
+  width: min(100%, 980px);
+}}
+.ob-map-control-row {{
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
   justify-content: flex-end;
-  gap: 10px 14px;
+  gap: 8px 10px;
 }}
-.ob-map-variable-buttons,
-.ob-map-depth-buttons,
-.ob-map-layer-buttons {{
+.ob-map-chip-group {{
   display: inline-flex;
   max-width: 100%;
   overflow-x: auto;
@@ -500,9 +609,7 @@ html, body {{
   border-radius: 7px;
   background: #ffffff;
 }}
-.ob-map-variable-button,
-.ob-map-depth-button,
-.ob-map-layer-button {{
+.ob-map-chip-button {{
   appearance: none;
   border: 0;
   border-right: 1px solid #cbd5e1;
@@ -514,23 +621,24 @@ html, body {{
   cursor: pointer;
   white-space: nowrap;
 }}
-.ob-map-variable-button:last-child,
-.ob-map-depth-button:last-child,
-.ob-map-layer-button:last-child {{
+.ob-map-chip-button:last-child {{
   border-right: 0;
 }}
-.ob-map-variable-button.active,
-.ob-map-depth-button.active,
-.ob-map-layer-button.active {{
+.ob-map-chip-button.active {{
   background: #0f5f8f;
   color: #ffffff;
 }}
+.ob-map-chip-button:disabled {{
+  color: #64748b;
+  cursor: default;
+}}
 .ob-map-depth-buttons.hidden {{
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
 }}
 .ob-map-lead-control {{
   display: grid;
-  grid-template-columns: 12ch minmax(150px, 240px);
+  grid-template-columns: 11ch minmax(140px, 1fr);
   align-items: center;
   gap: 8px;
   color: #334155;
@@ -538,13 +646,15 @@ html, body {{
 }}
 .ob-map-lead-label {{
   display: block;
-  min-width: 12ch;
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  color: #334155;
+  font-size: 13px;
 }}
 .ob-map-lead-control input {{
   accent-color: #0f5f8f;
+  margin: 0;
 }}
 .ob-map-canvas-wrap {{
   position: relative;
@@ -578,8 +688,13 @@ html, body {{
     display: block;
   }}
   .ob-map-controls {{
-    justify-content: flex-start;
     margin-top: 10px;
+    width: 100%;
+  }}
+  .ob-map-control-row,
+  .ob-map-secondary-row {{
+    justify-content: flex-start;
+    width: 100%;
   }}
   .ob-map-canvas-wrap {{
     height: 420px;
@@ -592,13 +707,20 @@ html, body {{
   <div class="ob-map-header">
     <div class="ob-map-title"></div>
     <div class="ob-map-controls">
-      <div class="ob-map-variable-buttons"></div>
-      <div class="ob-map-depth-buttons"></div>
-      <div class="ob-map-layer-buttons"></div>
-      <label class="ob-map-lead-control">
-        <span class="ob-map-lead-label"></span>
-        <input class="ob-map-lead-input" type="range">
-      </label>
+      <div class="ob-map-control-row">
+        <div class="ob-map-variable-buttons ob-map-chip-group"></div>
+      </div>
+      <div class="ob-map-control-row">
+        <div class="ob-map-reference-buttons ob-map-chip-group"></div>
+        <div class="ob-map-layer-buttons ob-map-chip-group"></div>
+      </div>
+      <div class="ob-map-control-row ob-map-secondary-row">
+        <div class="ob-map-depth-buttons ob-map-chip-group"></div>
+        <label class="ob-map-lead-control">
+          <span class="ob-map-lead-label"></span>
+          <input class="ob-map-lead-input" type="range">
+        </label>
+      </div>
     </div>
   </div>
   <div class="ob-map-canvas-wrap">
@@ -614,6 +736,7 @@ html, body {{
   const title = root.querySelector(".ob-map-title");
   const variableButtons = root.querySelector(".ob-map-variable-buttons");
   const depthButtons = root.querySelector(".ob-map-depth-buttons");
+  const referenceButtons = root.querySelector(".ob-map-reference-buttons");
   const layerButtons = root.querySelector(".ob-map-layer-buttons");
   const leadLabel = root.querySelector(".ob-map-lead-label");
   const leadInput = root.querySelector(".ob-map-lead-input");
@@ -629,51 +752,27 @@ html, body {{
       Object.fromEntries(
         variable.depths.map((depth) => [
           depth.key,
-          Object.fromEntries(depth.layers.map((layer) => [layer.key, decodeInt16(layer.data)])),
+          {{
+            challenger: decodeInt16(depth.challengerLayer.data),
+            references: Object.fromEntries(
+              depth.references.map((reference) => [
+                reference.key,
+                Object.fromEntries(reference.layers.map((layer) => [layer.key, decodeInt16(layer.data)])),
+              ]),
+            ),
+          }},
         ]),
       ),
     ]),
   );
   let activeVariableKey = payload.variables[0].key;
   let activeDepthKey = payload.variables[0].depths[0].key;
+  let activeReferenceKey = payload.variables[0].depths[0].references[0].key;
   let activeLayerKey = "error";
   let activeLeadIndex = 0;
   let plotArea = {{ left: 0, top: 0, width: 0, height: 0 }};
 
   title.textContent = payload.title;
-
-  for (const variable of payload.variables) {{
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "ob-map-variable-button";
-    button.textContent = variable.label;
-    button.dataset.variableKey = variable.key;
-    button.addEventListener("click", () => {{
-      activeVariableKey = variable.key;
-      activeDepthKey = currentVariable().depths[0].key;
-      activeLeadIndex = Math.min(activeLeadIndex, currentDepth().shape[0] - 1);
-      buildDepthButtons();
-      updateControls();
-      render();
-    }});
-    variableButtons.appendChild(button);
-  }}
-
-  buildDepthButtons();
-
-  for (const layer of payload.variables[0].depths[0].layers) {{
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "ob-map-layer-button";
-    button.textContent = layer.label;
-    button.dataset.layerKey = layer.key;
-    button.addEventListener("click", () => {{
-      activeLayerKey = layer.key;
-      updateControls();
-      render();
-    }});
-    layerButtons.appendChild(button);
-  }}
 
   leadInput.addEventListener("input", () => {{
     activeLeadIndex = Number(leadInput.value);
@@ -717,31 +816,43 @@ html, body {{
     return Object.fromEntries(currentVariable().depths.map((depth) => [depth.key, depth]))[activeDepthKey];
   }}
 
+  function currentReference() {{
+    return Object.fromEntries(currentDepth().references.map((reference) => [reference.key, reference]))[
+      activeReferenceKey
+    ];
+  }}
+
+  function currentLayers() {{
+    return [currentDepth().challengerLayer, ...currentReference().layers];
+  }}
+
   function currentLayer() {{
-    return Object.fromEntries(currentDepth().layers.map((layer) => [layer.key, layer]))[activeLayerKey];
+    return Object.fromEntries(currentLayers().map((layer) => [layer.key, layer]))[activeLayerKey];
   }}
 
   function currentLayerData() {{
-    return variableData[activeVariableKey][activeDepthKey][activeLayerKey];
+    const depthData = variableData[activeVariableKey][activeDepthKey];
+    if (activeLayerKey === "challenger") {{
+      return depthData.challenger;
+    }}
+    return depthData.references[activeReferenceKey][activeLayerKey];
   }}
 
-  function buildDepthButtons() {{
-    depthButtons.replaceChildren();
-    const variable = currentVariable();
-    depthButtons.classList.toggle("hidden", variable.depths.length <= 1);
-    for (const depth of variable.depths) {{
+  function buildChipButtons(container, items, selectedKey, onSelect, disabled = false) {{
+    container.replaceChildren();
+    for (const item of items) {{
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "ob-map-depth-button";
-      button.textContent = depth.label;
-      button.dataset.depthKey = depth.key;
+      button.className = "ob-map-chip-button";
+      button.textContent = item.label;
+      button.disabled = disabled;
+      button.classList.toggle("active", item.key === selectedKey);
       button.addEventListener("click", () => {{
-        activeDepthKey = depth.key;
-        activeLeadIndex = Math.min(activeLeadIndex, currentDepth().shape[0] - 1);
-        updateControls();
-        render();
+        if (!disabled) {{
+          onSelect(item.key);
+        }}
       }});
-      depthButtons.appendChild(button);
+      container.appendChild(button);
     }}
   }}
 
@@ -751,19 +862,55 @@ html, body {{
       activeDepthKey = variable.depths[0].key;
     }}
     const depth = currentDepth();
+    if (!depth.references.some((reference) => reference.key === activeReferenceKey)) {{
+      activeReferenceKey = depth.references[0].key;
+    }}
+    if (!currentLayers().some((layer) => layer.key === activeLayerKey)) {{
+      activeLayerKey = currentLayers()[0].key;
+    }}
     leadInput.min = 0;
     leadInput.max = depth.shape[0] - 1;
     leadInput.step = 1;
     leadInput.value = activeLeadIndex;
-    for (const button of variableButtons.querySelectorAll("button")) {{
-      button.classList.toggle("active", button.dataset.variableKey === activeVariableKey);
+    buildChipButtons(variableButtons, payload.variables, activeVariableKey, (variableKey) => {{
+      activeVariableKey = variableKey;
+      activeDepthKey = currentVariable().depths[0].key;
+      activeReferenceKey = currentDepth().references[0].key;
+      activeLeadIndex = Math.min(activeLeadIndex, currentDepth().shape[0] - 1);
+      updateControls();
+      render();
+    }});
+    buildChipButtons(
+      depthButtons,
+      depthChipItems(variable.depths),
+      activeDepthKey,
+      (depthKey) => {{
+        activeDepthKey = depthKey;
+        activeReferenceKey = currentDepth().references[0].key;
+        activeLeadIndex = Math.min(activeLeadIndex, currentDepth().shape[0] - 1);
+        updateControls();
+        render();
+      }},
+      variable.depths.length <= 1,
+    );
+    depthButtons.classList.toggle("hidden", variable.depths.length <= 1);
+    buildChipButtons(referenceButtons, depth.references, activeReferenceKey, (referenceKey) => {{
+      activeReferenceKey = referenceKey;
+      updateControls();
+      render();
+    }});
+    buildChipButtons(layerButtons, currentLayers(), activeLayerKey, (layerKey) => {{
+      activeLayerKey = layerKey;
+      updateControls();
+      render();
+    }});
+  }}
+
+  function depthChipItems(depths) {{
+    if (depths.length <= 1) {{
+      return [{{ key: depths[0].key, label: "Surface" }}];
     }}
-    for (const button of depthButtons.querySelectorAll("button")) {{
-      button.classList.toggle("active", button.dataset.depthKey === activeDepthKey);
-    }}
-    for (const button of layerButtons.querySelectorAll("button")) {{
-      button.classList.toggle("active", button.dataset.layerKey === activeLayerKey);
-    }}
+    return depths;
   }}
 
   function setupCanvas(targetCanvas, targetContext, cssHeight) {{
@@ -1022,23 +1169,25 @@ def _dataset_contains_variable(dataset: xarray.Dataset, variable_key: str) -> bo
     return variable_key in _standard_dataset(dataset)
 
 
-def _shared_variable_keys(
+def _shared_multi_reference_variable_keys(
     challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
     variable_keys: Sequence[str],
 ) -> tuple[str, ...]:
     return tuple(
         variable_key
         for variable_key in variable_keys
         if _dataset_contains_variable(challenger_dataset, variable_key)
-        and _dataset_contains_variable(reference_dataset, variable_key)
+        and all(
+            _dataset_contains_variable(reference_dataset, variable_key)
+            for reference_dataset in reference_datasets.values()
+        )
     )
 
 
-def _surface_comparison_variable_payloads(
+def _surface_comparison_multi_reference_variable_payloads(
     challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
-    reference_name: str,
+    reference_datasets: Mapping[str, xarray.Dataset],
     challenger_name: str,
     variable_keys: Sequence[str],
     first_day_index: int,
@@ -1047,14 +1196,14 @@ def _surface_comparison_variable_payloads(
     maximum_map_cells: int,
 ) -> list[dict[str, object]]:
     variable_payloads = []
-    for variable_key in _shared_variable_keys(challenger_dataset, reference_dataset, variable_keys):
+    for variable_key in _shared_multi_reference_variable_keys(challenger_dataset, reference_datasets, variable_keys):
         depth_payloads = []
         for depth_index, depth_selector in enumerate(
             _depth_selectors_for_variable(challenger_dataset, variable_key, depth_selectors)
         ):
-            fields, spatial_stride = _comparison_fields(
+            fields = _multi_reference_comparison_fields(
                 challenger_dataset=challenger_dataset,
-                reference_dataset=reference_dataset,
+                reference_datasets=reference_datasets,
                 variable_key=variable_key,
                 first_day_index=first_day_index,
                 lead_day_indices=lead_day_indices,
@@ -1062,13 +1211,11 @@ def _surface_comparison_variable_payloads(
                 maximum_map_cells=maximum_map_cells,
             )
             depth_payloads.append(
-                _surface_comparison_depth_payload(
+                _surface_comparison_multi_reference_depth_payload(
                     fields,
                     variable_key=variable_key,
-                    reference_name=reference_name,
                     challenger_name=challenger_name,
                     depth_key=f"depth_{depth_index}",
-                    spatial_stride=spatial_stride,
                 )
             )
         variable_payloads.append(
@@ -1078,7 +1225,7 @@ def _surface_comparison_variable_payloads(
             )
         )
     if not variable_payloads:
-        raise ValueError("None of the requested variables are available in both datasets.")
+        raise ValueError("None of the requested variables are available in the challenger and reference datasets.")
     return variable_payloads
 
 
@@ -1086,6 +1233,30 @@ def plot_surface_comparison_explorer(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     reference_name: str,
+    variables: Sequence[Variable | str] = DEFAULT_SURFACE_COMPARISON_VARIABLES,
+    first_day_index: int = 0,
+    lead_day_indices: Sequence[int] | None = None,
+    depth_selectors: Mapping[str, int | float | None] | None = None,
+    challenger_name: str = "Challenger",
+    maximum_map_cells: int = DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS,
+    height_pixels: int = DEFAULT_EXPLORER_HEIGHT_PIXELS,
+) -> HTML:
+    return plot_multi_reference_surface_comparison_explorer(
+        challenger_dataset=challenger_dataset,
+        reference_datasets={reference_name: reference_dataset},
+        variables=variables,
+        first_day_index=first_day_index,
+        lead_day_indices=lead_day_indices,
+        depth_selectors=depth_selectors,
+        challenger_name=challenger_name,
+        maximum_map_cells=maximum_map_cells,
+        height_pixels=height_pixels,
+    )
+
+
+def plot_multi_reference_surface_comparison_explorer(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
     variables: Sequence[Variable | str] = DEFAULT_SURFACE_COMPARISON_VARIABLES,
     first_day_index: int = 0,
     lead_day_indices: Sequence[int] | None = None,
@@ -1102,10 +1273,9 @@ def plot_surface_comparison_explorer(
     if not resolved_lead_day_indices:
         raise ValueError("lead_day_indices must contain at least one lead day index.")
 
-    variable_payloads = _surface_comparison_variable_payloads(
+    variable_payloads = _surface_comparison_multi_reference_variable_payloads(
         challenger_dataset=challenger_dataset,
-        reference_dataset=reference_dataset,
-        reference_name=reference_name,
+        reference_datasets=reference_datasets,
         challenger_name=challenger_name,
         variable_keys=variable_keys,
         first_day_index=first_day_index,
@@ -1115,7 +1285,7 @@ def plot_surface_comparison_explorer(
     )
     element_id = f"ob-surface-comparison-{uuid4().hex}"
     payload = _surface_comparison_payload(
-        reference_name=reference_name,
+        reference_name=None,
         variable_payloads=variable_payloads,
     )
     document = _surface_comparison_explorer_document(element_id, payload)

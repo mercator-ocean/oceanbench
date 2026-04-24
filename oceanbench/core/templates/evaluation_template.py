@@ -33,21 +33,15 @@ surface_comparison_variables = [
     Variable.NORTHWARD_SEA_WATER_VELOCITY,
 ]
 
-glorys_surface_comparison_explorer = oceanbench.visualization.plot_surface_comparison_explorer(
+surface_comparison_explorer = oceanbench.visualization.plot_multi_reference_surface_comparison_explorer(
     regional_challenger_dataset,
-    glorys_dataset,
-    "GLORYS reanalysis",
+    {
+        "GLORYS reanalysis": glorys_dataset,
+        "GLO12 analysis": glo12_dataset,
+    },
     variables=surface_comparison_variables,
 )
-glorys_surface_comparison_explorer
-
-glo12_surface_comparison_explorer = oceanbench.visualization.plot_surface_comparison_explorer(
-    regional_challenger_dataset,
-    glo12_dataset,
-    "GLO12 analysis",
-    variables=surface_comparison_variables,
-)
-glo12_surface_comparison_explorer
+surface_comparison_explorer
 
 # ### Evaluation of challenger dataset using OceanBench
 
