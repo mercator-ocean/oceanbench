@@ -18,7 +18,7 @@ import numpy
 import xarray
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
-from oceanbench.core.dataset_utils import Dimension, Variable, VARIABLE_LABELS, VARIABLE_METADATA
+from oceanbench.core.dataset_utils import DepthLevel, Dimension, Variable, VARIABLE_LABELS, VARIABLE_METADATA
 
 DEFAULT_SURFACE_COMPARISON_VARIABLES: tuple[Variable, ...] = (
     Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
@@ -53,6 +53,7 @@ QUANTIZED_MINIMUM_VALUE = -32767
 QUANTIZED_MAXIMUM_VALUE = 32767
 DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS = 160_000
 DEFAULT_EXPLORER_HEIGHT_PIXELS = 760
+DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS: tuple[float, ...] = tuple(depth_level.value for depth_level in DepthLevel)
 
 
 @dataclass(frozen=True)
@@ -1161,8 +1162,23 @@ def _depth_selectors_for_variable(
     if Dimension.DEPTH.key() not in variable.dims:
         return (None,)
     if Dimension.DEPTH.key() not in variable.coords:
-        return tuple(range(variable.sizes[Dimension.DEPTH.key()]))
-    return tuple(float(depth) for depth in variable[Dimension.DEPTH.key()].values)
+        return tuple(range(min(variable.sizes[Dimension.DEPTH.key()], len(DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS))))
+    return _nearest_unique_depth_selectors(
+        variable[Dimension.DEPTH.key()].values,
+        DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS,
+    )
+
+
+def _nearest_unique_depth_selectors(
+    available_depths: numpy.ndarray,
+    requested_depths: Sequence[float],
+) -> tuple[float, ...]:
+    available_depths = numpy.asarray(available_depths, dtype=float)
+    nearest_indices = (
+        int(numpy.nanargmin(numpy.abs(available_depths - requested_depth))) for requested_depth in requested_depths
+    )
+    unique_nearest_indices = tuple(dict.fromkeys(nearest_indices))
+    return tuple(float(available_depths[index]) for index in unique_nearest_indices)
 
 
 def _dataset_contains_variable(dataset: xarray.Dataset, variable_key: str) -> bool:
