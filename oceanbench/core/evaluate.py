@@ -12,6 +12,8 @@ from oceanbench.core.regions import RegionLike, resolve_region
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from papermill import execute_notebook
 
+DEFAULT_NOTEBOOK_IOPUB_TIMEOUT_SECONDS = 3600
+
 
 def _parse_variable_environment(
     variable: str | None,
@@ -57,6 +59,21 @@ def _derive_output_notebook_file_name(
     resolved_region = resolve_region(region)
     stem = PurePosixPath(challenger_path).stem
     return f"{stem}.{resolved_region.id}.report.ipynb"
+
+
+def _notebook_iopub_timeout_seconds() -> int:
+    configured_timeout = environ.get(
+        OceanbenchEnvironmentVariable.OCEANBENCH_NOTEBOOK_IOPUB_TIMEOUT_SECONDS.value,
+    )
+    if configured_timeout in (None, ""):
+        return DEFAULT_NOTEBOOK_IOPUB_TIMEOUT_SECONDS
+    timeout_seconds = int(configured_timeout)
+    if timeout_seconds < 1:
+        raise ValueError(
+            f"{OceanbenchEnvironmentVariable.OCEANBENCH_NOTEBOOK_IOPUB_TIMEOUT_SECONDS.value} "
+            + "must be greater than or equal to 1."
+        )
+    return timeout_seconds
 
 
 @contextmanager
@@ -159,6 +176,7 @@ def _execute_evaluation_notebook_file(
         execute_notebook(
             output_notebook_file_name,
             output_path,
+            iopub_timeout=_notebook_iopub_timeout_seconds(),
         )
 
 
