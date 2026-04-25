@@ -44,8 +44,9 @@ def plot_surface_comparison_explorer(
     lead_day_indices : sequence of int, optional
         The lead day indices to include. Defaults to all available lead days.
     depth_selectors : mapping, optional
-        Optional single depth selector per variable. If omitted, all available
-        depths are exposed for depth-resolved variables.
+        Optional single depth selector per variable. If omitted, depth-resolved
+        variables expose the OceanBench demo depth set: surface, 50 m, 100 m,
+        200 m, 300 m, and 500 m, selected on the nearest available model depth.
     challenger_name : str, optional
         The display name of the challenger dataset.
     maximum_map_cells : int, optional

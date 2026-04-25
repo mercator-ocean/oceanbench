@@ -41,7 +41,12 @@ def _map_dataset(values_by_variable: dict[str, numpy.ndarray]) -> xarray.Dataset
         },
         coords={
             **(
-                {Dimension.DEPTH.key(): numpy.array([0.5, 10.0, 25.0][:depth_count], dtype=float)}
+                {
+                    Dimension.DEPTH.key(): numpy.array(
+                        [0.5, 10.0, 47.4, 92.3, 155.9, 222.5, 318.1, 541.1][:depth_count],
+                        dtype=float,
+                    )
+                }
                 if depth_count
                 else {}
             ),
@@ -127,6 +132,27 @@ def test_plot_surface_comparison_explorer_skips_missing_default_variables() -> N
     assert "Salinity" not in html_output.data
     assert "Zonal current" not in html_output.data
     assert "Meridional current" not in html_output.data
+
+
+def test_plot_surface_comparison_explorer_uses_demo_depths_by_default() -> None:
+    values = numpy.arange(48, dtype=float).reshape(1, 1, 8, 2, 3)
+    challenger_dataset = _map_dataset({Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): values})
+    reference_dataset = _map_dataset({Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): values + 1.0})
+
+    html_output = oceanbench.visualization.plot_surface_comparison_explorer(
+        challenger_dataset,
+        reference_dataset,
+        "Reference",
+    )
+
+    assert "0.5 m" in html_output.data
+    assert "47 m" in html_output.data
+    assert "92 m" in html_output.data
+    assert "222 m" in html_output.data
+    assert "318 m" in html_output.data
+    assert "541 m" in html_output.data
+    assert "10 m" not in html_output.data
+    assert "156 m" not in html_output.data
 
 
 def test_plot_multi_reference_surface_comparison_explorer_uses_one_viewer() -> None:
