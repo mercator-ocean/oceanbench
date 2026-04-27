@@ -6,14 +6,15 @@ from collections.abc import Mapping, Sequence
 from base64 import b64encode
 from dataclasses import dataclass
 import html
+from io import BytesIO
 import json
 from uuid import uuid4
 
 from dask import compute as dask_compute
 from IPython.display import HTML
 from matplotlib import colormaps
+import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, TwoSlopeNorm
-from matplotlib.colors import to_hex
 import numpy
 import xarray
 
@@ -48,11 +49,9 @@ ERROR_COLORMAP = "RdBu_r"
 ABSOLUTE_ERROR_COLORMAP = "magma"
 RMSE_COLORMAP = "magma"
 LAND_BACKGROUND_COLOR = "#d9d5cc"
-QUANTIZED_MISSING_VALUE = -32768
-QUANTIZED_MINIMUM_VALUE = -32767
-QUANTIZED_MAXIMUM_VALUE = 32767
 DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS = 160_000
 DEFAULT_EXPLORER_HEIGHT_PIXELS = 760
+DEFAULT_EXPLORER_IMAGE_QUALITY = 85
 DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS: tuple[float, ...] = tuple(depth_level.value for depth_level in DepthLevel)
 
 
@@ -363,29 +362,65 @@ def _thin_field(field: xarray.DataArray, stride: int) -> xarray.DataArray:
     )
 
 
-def _sample_colormap(colormap_name: str, color_count: int = 256) -> list[str]:
-    colormap = colormaps[colormap_name]
-    return [to_hex(colormap(index / (color_count - 1)), keep_alpha=False) for index in range(color_count)]
+def _image_extent(field: xarray.DataArray) -> tuple[float, float, float, float]:
+    longitude = field[Dimension.LONGITUDE.key()].values
+    latitude = field[Dimension.LATITUDE.key()].values
+    return (
+        float(numpy.nanmin(longitude)),
+        float(numpy.nanmax(longitude)),
+        float(numpy.nanmin(latitude)),
+        float(numpy.nanmax(latitude)),
+    )
 
 
-def _norm_limits(norm: Normalize) -> tuple[float, float]:
-    return float(norm.vmin), float(norm.vmax)
+def _image_values(field: xarray.DataArray) -> numpy.ndarray:
+    values = numpy.asarray(field.values, dtype=float)
+    latitude = field[Dimension.LATITUDE.key()].values
+    if len(latitude) > 1 and latitude[0] > latitude[-1]:
+        return numpy.flipud(values)
+    return values
 
 
-def _quantize_array(array: numpy.ndarray, minimum: float, maximum: float) -> tuple[numpy.ndarray, float, float]:
-    if maximum <= minimum:
-        maximum = minimum + 1.0
-    scale = (maximum - minimum) / (QUANTIZED_MAXIMUM_VALUE - QUANTIZED_MINIMUM_VALUE)
-    offset = minimum - QUANTIZED_MINIMUM_VALUE * scale
-    values = numpy.asarray(array, dtype=float)
-    finite_mask = numpy.isfinite(values)
-    quantized = numpy.full(values.shape, QUANTIZED_MISSING_VALUE, dtype="<i2")
-    clipped_values = numpy.clip(values[finite_mask], minimum, maximum)
-    quantized[finite_mask] = numpy.rint((clipped_values - offset) / scale).astype("<i2")
-    return quantized, float(scale), float(offset)
+def _encoded_webp_image(
+    field: xarray.DataArray,
+    norm: Normalize,
+    colormap_name: str,
+    value_label: str,
+    title: str,
+) -> str:
+    colormap = colormaps[colormap_name].copy()
+    colormap.set_bad(LAND_BACKGROUND_COLOR)
+    figure, axis = plt.subplots(figsize=(11.0, 6.2), dpi=100)
+    figure.patch.set_facecolor("#ffffff")
+    axis.set_facecolor(LAND_BACKGROUND_COLOR)
+    image = axis.imshow(
+        _image_values(field),
+        cmap=colormap,
+        extent=_image_extent(field),
+        interpolation="nearest",
+        norm=norm,
+        origin="lower",
+        aspect="auto",
+    )
+    axis.set_title(title, fontsize=12)
+    axis.set_xlabel("Longitude")
+    axis.set_ylabel("Latitude")
+    axis.grid(color="#334155", alpha=0.18, linewidth=0.6)
+    colorbar = figure.colorbar(image, ax=axis, orientation="horizontal", pad=0.1, shrink=0.86)
+    colorbar.set_label(value_label)
+    buffer = BytesIO()
+    figure.savefig(
+        buffer,
+        format="webp",
+        bbox_inches="tight",
+        facecolor=figure.get_facecolor(),
+        pil_kwargs={"quality": DEFAULT_EXPLORER_IMAGE_QUALITY},
+    )
+    plt.close(figure)
+    return "data:image/webp;base64," + b64encode(buffer.getvalue()).decode("ascii")
 
 
-def _encoded_layer(
+def _encoded_images(
     key: str,
     label: str,
     arrays: Sequence[xarray.DataArray],
@@ -393,25 +428,21 @@ def _encoded_layer(
     colormap_name: str,
     value_label: str,
 ) -> dict[str, object]:
-    stacked_values = numpy.stack([numpy.asarray(array.values, dtype=float) for array in arrays])
-    minimum, maximum = _norm_limits(norm)
-    quantized_values, scale, offset = _quantize_array(stacked_values, minimum, maximum)
     return {
         "key": key,
         "label": label,
-        "data": b64encode(quantized_values.tobytes()).decode("ascii"),
-        "scale": scale,
-        "offset": offset,
-        "missing": QUANTIZED_MISSING_VALUE,
-        "minimum": minimum,
-        "maximum": maximum,
-        "colormap": _sample_colormap(colormap_name),
         "valueLabel": value_label,
+        "images": [
+            _encoded_webp_image(
+                array,
+                norm,
+                colormap_name,
+                value_label,
+                f"{label} - lead day {lead_day_index + 1}",
+            )
+            for lead_day_index, array in enumerate(arrays)
+        ],
     }
-
-
-def _rounded_coordinate_values(values: numpy.ndarray) -> list[float]:
-    return [round(float(value), 6) for value in values]
 
 
 def _surface_comparison_multi_reference_depth_payload(
@@ -435,8 +466,6 @@ def _surface_comparison_multi_reference_depth_payload(
     error_norm = _symmetric_norm(all_error_fields)
     absolute_error_norm = _positive_norm(all_absolute_error_fields)
     rmse_norm = _positive_norm(all_rmse_fields)
-    latitude_values = challenger_fields[0][Dimension.LATITUDE.key()].values
-    longitude_values = challenger_fields[0][Dimension.LONGITUDE.key()].values
 
     return {
         "key": depth_key,
@@ -449,11 +478,8 @@ def _surface_comparison_multi_reference_depth_payload(
                 strict=True,
             )
         ],
-        "latitude": _rounded_coordinate_values(latitude_values),
-        "longitude": _rounded_coordinate_values(longitude_values),
-        "shape": [len(fields.lead_day_indices), len(latitude_values), len(longitude_values)],
         "spatialStride": fields.spatial_stride,
-        "challengerLayer": _encoded_layer(
+        "challengerLayer": _encoded_images(
             "challenger",
             challenger_name,
             challenger_fields,
@@ -496,7 +522,7 @@ def _surface_comparison_reference_payload(
         "key": reference.key,
         "label": reference.label,
         "layers": [
-            _encoded_layer(
+            _encoded_images(
                 "reference",
                 reference.label,
                 reference_fields,
@@ -504,7 +530,7 @@ def _surface_comparison_reference_payload(
                 _field_colormap(variable_key),
                 _variable_label_with_unit(variable_key),
             ),
-            _encoded_layer(
+            _encoded_images(
                 "error",
                 "Signed error",
                 error_fields,
@@ -512,7 +538,7 @@ def _surface_comparison_reference_payload(
                 ERROR_COLORMAP,
                 f"{_variable_label_with_unit(variable_key)} error",
             ),
-            _encoded_layer(
+            _encoded_images(
                 "absolute_error",
                 "Absolute error",
                 absolute_error_fields,
@@ -520,7 +546,7 @@ def _surface_comparison_reference_payload(
                 ABSOLUTE_ERROR_COLORMAP,
                 f"{_variable_label_with_unit(variable_key)} absolute error",
             ),
-            _encoded_layer(
+            _encoded_images(
                 "rmse_over_dates",
                 "RMSE over dates",
                 rmse_fields,
@@ -549,9 +575,6 @@ def _surface_comparison_payload(
 ) -> dict[str, object]:
     return {
         "title": f"Surface comparison against {reference_name}" if reference_name is not None else "Surface comparison",
-        "landColor": LAND_BACKGROUND_COLOR,
-        "axisColor": "#334155",
-        "gridColor": "rgba(71, 85, 105, 0.22)",
         "variables": list(variable_payloads),
     }
 
@@ -666,21 +689,16 @@ html, body {{
   background: #ffffff;
   overflow: hidden;
 }}
-.ob-map-canvas,
-.ob-map-colorbar {{
+.ob-map-image {{
   display: block;
   width: 100%;
-}}
-.ob-map-canvas {{
   height: 100%;
-}}
-.ob-map-colorbar {{
-  height: 58px;
-  margin-top: 8px;
+  object-fit: contain;
+  background: #ffffff;
 }}
 .ob-map-status {{
   min-height: 18px;
-  margin-top: 2px;
+  margin-top: 8px;
   color: #475569;
   font-size: 12px;
 }}
@@ -725,9 +743,8 @@ html, body {{
     </div>
   </div>
   <div class="ob-map-canvas-wrap">
-    <canvas class="ob-map-canvas"></canvas>
+    <img class="ob-map-image" alt="Surface comparison map">
   </div>
-  <canvas class="ob-map-colorbar"></canvas>
   <div class="ob-map-status"></div>
 </div>
 <script>
@@ -741,37 +758,14 @@ html, body {{
   const layerButtons = root.querySelector(".ob-map-layer-buttons");
   const leadLabel = root.querySelector(".ob-map-lead-label");
   const leadInput = root.querySelector(".ob-map-lead-input");
-  const canvas = root.querySelector(".ob-map-canvas");
-  const colorbar = root.querySelector(".ob-map-colorbar");
+  const image = root.querySelector(".ob-map-image");
   const status = root.querySelector(".ob-map-status");
-  const context = canvas.getContext("2d");
-  const colorbarContext = colorbar.getContext("2d");
   const variables = Object.fromEntries(payload.variables.map((variable) => [variable.key, variable]));
-  const variableData = Object.fromEntries(
-    payload.variables.map((variable) => [
-      variable.key,
-      Object.fromEntries(
-        variable.depths.map((depth) => [
-          depth.key,
-          {{
-            challenger: decodeInt16(depth.challengerLayer.data),
-            references: Object.fromEntries(
-              depth.references.map((reference) => [
-                reference.key,
-                Object.fromEntries(reference.layers.map((layer) => [layer.key, decodeInt16(layer.data)])),
-              ]),
-            ),
-          }},
-        ]),
-      ),
-    ]),
-  );
   let activeVariableKey = payload.variables[0].key;
   let activeDepthKey = payload.variables[0].depths[0].key;
   let activeReferenceKey = payload.variables[0].depths[0].references[0].key;
   let activeLayerKey = "error";
   let activeLeadIndex = 0;
-  let plotArea = {{ left: 0, top: 0, width: 0, height: 0 }};
 
   title.textContent = payload.title;
 
@@ -779,35 +773,9 @@ html, body {{
     activeLeadIndex = Number(leadInput.value);
     render();
   }});
-  canvas.addEventListener("mousemove", updateStatus);
-  canvas.addEventListener("mouseleave", () => {{
-    status.textContent = "";
-  }});
-  window.addEventListener("resize", render);
 
   updateControls();
   render();
-
-  function decodeInt16(base64) {{
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {{
-      bytes[index] = binary.charCodeAt(index);
-    }}
-    return new Int16Array(bytes.buffer);
-  }}
-
-  function layerValue(layer, storedValue) {{
-    if (storedValue === layer.missing) {{
-      return Number.NaN;
-    }}
-    return storedValue * layer.scale + layer.offset;
-  }}
-
-  function dataIndex(variable, leadIndex, latitudeIndex, longitudeIndex) {{
-    const [, latitudeCount, longitudeCount] = variable.shape;
-    return leadIndex * latitudeCount * longitudeCount + latitudeIndex * longitudeCount + longitudeIndex;
-  }}
 
   function currentVariable() {{
     return variables[activeVariableKey];
@@ -829,14 +797,6 @@ html, body {{
 
   function currentLayer() {{
     return Object.fromEntries(currentLayers().map((layer) => [layer.key, layer]))[activeLayerKey];
-  }}
-
-  function currentLayerData() {{
-    const depthData = variableData[activeVariableKey][activeDepthKey];
-    if (activeLayerKey === "challenger") {{
-      return depthData.challenger;
-    }}
-    return depthData.references[activeReferenceKey][activeLayerKey];
   }}
 
   function buildChipButtons(container, items, selectedKey, onSelect, disabled = false) {{
@@ -870,14 +830,14 @@ html, body {{
       activeLayerKey = currentLayers()[0].key;
     }}
     leadInput.min = 0;
-    leadInput.max = depth.shape[0] - 1;
+    leadInput.max = depth.leadDays.length - 1;
     leadInput.step = 1;
     leadInput.value = activeLeadIndex;
     buildChipButtons(variableButtons, payload.variables, activeVariableKey, (variableKey) => {{
       activeVariableKey = variableKey;
       activeDepthKey = currentVariable().depths[0].key;
       activeReferenceKey = currentDepth().references[0].key;
-      activeLeadIndex = Math.min(activeLeadIndex, currentDepth().shape[0] - 1);
+      activeLeadIndex = Math.min(activeLeadIndex, currentDepth().leadDays.length - 1);
       updateControls();
       render();
     }});
@@ -888,7 +848,7 @@ html, body {{
       (depthKey) => {{
         activeDepthKey = depthKey;
         activeReferenceKey = currentDepth().references[0].key;
-        activeLeadIndex = Math.min(activeLeadIndex, currentDepth().shape[0] - 1);
+        activeLeadIndex = Math.min(activeLeadIndex, currentDepth().leadDays.length - 1);
         updateControls();
         render();
       }},
@@ -914,208 +874,24 @@ html, body {{
     return depths;
   }}
 
-  function setupCanvas(targetCanvas, targetContext, cssHeight) {{
-    const deviceRatio = window.devicePixelRatio || 1;
-    const width = Math.max(320, Math.floor(targetCanvas.clientWidth));
-    const height = Math.max(cssHeight, Math.floor(targetCanvas.clientHeight));
-    targetCanvas.width = Math.floor(width * deviceRatio);
-    targetCanvas.height = Math.floor(height * deviceRatio);
-    targetContext.setTransform(deviceRatio, 0, 0, deviceRatio, 0, 0);
-    return {{ width, height }};
-  }}
-
   function render() {{
-    const size = setupCanvas(canvas, context, 420);
-    const depth = currentDepth();
-    const layer = currentLayer();
-    const values = currentLayerData();
-    leadLabel.textContent = `Lead day ${{depth.leadDays[activeLeadIndex]}}`;
-    context.clearRect(0, 0, size.width, size.height);
-    drawMap(context, size, depth, layer, values);
-    drawColorbar(layer);
-  }}
-
-  function drawMap(targetContext, size, depth, layer, values) {{
-    const margin = {{ left: 56, top: 18, right: 16, bottom: 40 }};
-    plotArea = {{
-      left: margin.left,
-      top: margin.top,
-      width: size.width - margin.left - margin.right,
-      height: size.height - margin.top - margin.bottom,
-    }};
-    const [, latitudeCount, longitudeCount] = depth.shape;
-    const latitude = depth.latitude;
-    const longitude = depth.longitude;
-    const cellWidth = plotArea.width / longitudeCount;
-    const cellHeight = plotArea.height / latitudeCount;
-    targetContext.fillStyle = "#ffffff";
-    targetContext.fillRect(0, 0, size.width, size.height);
-    targetContext.fillStyle = payload.landColor;
-    targetContext.fillRect(plotArea.left, plotArea.top, plotArea.width, plotArea.height);
-
-    const latitudeAscending = latitude[0] < latitude[latitude.length - 1];
-    for (let latitudeIndex = 0; latitudeIndex < latitudeCount; latitudeIndex += 1) {{
-      const yIndex = latitudeAscending ? latitudeCount - 1 - latitudeIndex : latitudeIndex;
-      const y = plotArea.top + yIndex * cellHeight;
-      for (let longitudeIndex = 0; longitudeIndex < longitudeCount; longitudeIndex += 1) {{
-        const value = layerValue(
-          layer,
-          values[dataIndex(depth, activeLeadIndex, latitudeIndex, longitudeIndex)],
-        );
-        targetContext.fillStyle = Number.isFinite(value) ? colorForValue(layer, value) : payload.landColor;
-        targetContext.fillRect(
-          plotArea.left + longitudeIndex * cellWidth,
-          y,
-          Math.ceil(cellWidth) + 0.5,
-          Math.ceil(cellHeight) + 0.5,
-        );
-      }}
-    }}
-    drawAxes(targetContext, depth);
-  }}
-
-  function colorForValue(layer, value) {{
-    const fraction = Math.max(0, Math.min(1, (value - layer.minimum) / (layer.maximum - layer.minimum)));
-    const colorIndex = Math.round(fraction * (layer.colormap.length - 1));
-    return layer.colormap[colorIndex];
-  }}
-
-  function niceStep(span, targetCount) {{
-    const roughStep = span / targetCount;
-    const power = Math.pow(10, Math.floor(Math.log10(roughStep)));
-    const normalized = roughStep / power;
-    if (normalized <= 1) return power;
-    if (normalized <= 2) return 2 * power;
-    if (normalized <= 5) return 5 * power;
-    return 10 * power;
-  }}
-
-  function ticks(minimum, maximum, targetCount) {{
-    const step = niceStep(maximum - minimum, targetCount);
-    const first = Math.ceil(minimum / step) * step;
-    const values = [];
-    for (let value = first; value <= maximum + step * 0.5; value += step) {{
-      values.push(Math.abs(value) < 1e-9 ? 0 : value);
-    }}
-    return values;
-  }}
-
-  function drawAxes(targetContext, depth) {{
-    const latitude = depth.latitude;
-    const longitude = depth.longitude;
-    const longitudeMinimum = Math.min(...longitude);
-    const longitudeMaximum = Math.max(...longitude);
-    const latitudeMinimum = Math.min(...latitude);
-    const latitudeMaximum = Math.max(...latitude);
-    const longitudeTicks = ticks(longitudeMinimum, longitudeMaximum, 7);
-    const latitudeTicks = ticks(latitudeMinimum, latitudeMaximum, 5);
-    const latitudeAscending = latitude[0] < latitude[latitude.length - 1];
-
-    targetContext.save();
-    targetContext.strokeStyle = payload.gridColor;
-    targetContext.fillStyle = payload.axisColor;
-    targetContext.lineWidth = 1;
-    targetContext.font = "12px ui-sans-serif, system-ui, sans-serif";
-    targetContext.textAlign = "center";
-    targetContext.textBaseline = "top";
-    for (const tick of longitudeTicks) {{
-      const x = plotArea.left + ((tick - longitudeMinimum) / (longitudeMaximum - longitudeMinimum)) * plotArea.width;
-      targetContext.beginPath();
-      targetContext.moveTo(x, plotArea.top);
-      targetContext.lineTo(x, plotArea.top + plotArea.height);
-      targetContext.stroke();
-      targetContext.fillText(formatTick(tick), x, plotArea.top + plotArea.height + 8);
-    }}
-
-    targetContext.textAlign = "right";
-    targetContext.textBaseline = "middle";
-    for (const tick of latitudeTicks) {{
-      const fraction = (tick - latitudeMinimum) / (latitudeMaximum - latitudeMinimum);
-      const y = latitudeAscending
-        ? plotArea.top + (1 - fraction) * plotArea.height
-        : plotArea.top + fraction * plotArea.height;
-      targetContext.beginPath();
-      targetContext.moveTo(plotArea.left, y);
-      targetContext.lineTo(plotArea.left + plotArea.width, y);
-      targetContext.stroke();
-      targetContext.fillText(formatTick(tick), plotArea.left - 8, y);
-    }}
-
-    targetContext.strokeStyle = "#1f2937";
-    targetContext.strokeRect(plotArea.left, plotArea.top, plotArea.width, plotArea.height);
-    targetContext.restore();
-  }}
-
-  function formatTick(value) {{
-    return Number.isInteger(value) ? String(value) : value.toFixed(1);
-  }}
-
-  function drawColorbar(layer) {{
-    const size = setupCanvas(colorbar, colorbarContext, 58);
-    const margin = {{ left: 56, top: 8, right: 16, bottom: 28 }};
-    const barWidth = size.width - margin.left - margin.right;
-    const barHeight = 14;
-    colorbarContext.clearRect(0, 0, size.width, size.height);
-    for (let index = 0; index < barWidth; index += 1) {{
-      const fraction = index / Math.max(1, barWidth - 1);
-      const colorIndex = Math.round(fraction * (layer.colormap.length - 1));
-      colorbarContext.fillStyle = layer.colormap[colorIndex];
-      colorbarContext.fillRect(margin.left + index, margin.top, 1, barHeight);
-    }}
-    colorbarContext.strokeStyle = "#1f2937";
-    colorbarContext.strokeRect(margin.left, margin.top, barWidth, barHeight);
-    colorbarContext.fillStyle = payload.axisColor;
-    colorbarContext.font = "12px ui-sans-serif, system-ui, sans-serif";
-    colorbarContext.textAlign = "left";
-    colorbarContext.textBaseline = "top";
-    colorbarContext.fillText(layer.minimum.toPrecision(3), margin.left, margin.top + barHeight + 6);
-    colorbarContext.textAlign = "center";
-    colorbarContext.fillText(layer.valueLabel, margin.left + barWidth / 2, margin.top + barHeight + 6);
-    colorbarContext.textAlign = "right";
-    colorbarContext.fillText(layer.maximum.toPrecision(3), margin.left + barWidth, margin.top + barHeight + 6);
-  }}
-
-  function updateStatus(event) {{
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    if (
-      x < plotArea.left ||
-      x > plotArea.left + plotArea.width ||
-      y < plotArea.top ||
-      y > plotArea.top + plotArea.height
-    ) {{
-      status.textContent = "";
-      return;
-    }}
     const variable = currentVariable();
     const depth = currentDepth();
     const layer = currentLayer();
-    const values = currentLayerData();
-    const [, latitudeCount, longitudeCount] = depth.shape;
-    const latitude = depth.latitude;
-    const longitude = depth.longitude;
-    const longitudeIndex = Math.max(
-      0,
-      Math.min(longitudeCount - 1, Math.floor(((x - plotArea.left) / plotArea.width) * longitudeCount)),
-    );
-    const latitudeAscending = latitude[0] < latitude[latitude.length - 1];
-    const yIndex = Math.max(
-      0,
-      Math.min(latitudeCount - 1, Math.floor(((y - plotArea.top) / plotArea.height) * latitudeCount)),
-    );
-    const latitudeIndex = latitudeAscending ? latitudeCount - 1 - yIndex : yIndex;
-    const value = layerValue(
-      layer,
-      values[dataIndex(depth, activeLeadIndex, latitudeIndex, longitudeIndex)],
-    );
-    const valueText = Number.isFinite(value) ? value.toPrecision(4) : "land / no data";
-    const depthText = currentVariable().depths.length > 1 ? ` · ${{depth.label}}` : "";
+    leadLabel.textContent = `Lead day ${{depth.leadDays[activeLeadIndex]}}`;
+    image.src = layer.images[activeLeadIndex];
+    image.alt = [
+      payload.title,
+      variable.label,
+      layer.label,
+      `lead day ${{depth.leadDays[activeLeadIndex]}}`,
+    ].join(" - ");
+    const depthText = variable.depths.length > 1 ? ` · ${{depth.label}}` : "";
     status.textContent = [
-      `lon ${{longitude[longitudeIndex].toFixed(2)}}`,
-      `lat ${{latitude[latitudeIndex].toFixed(2)}}`,
       `${{variable.label}}${{depthText}}`,
-      `${{layer.label}}: ${{valueText}}`,
+      currentReference().label,
+      layer.label,
+      `lead day ${{depth.leadDays[activeLeadIndex]}}`,
     ].join(" · ");
   }}
 }})();

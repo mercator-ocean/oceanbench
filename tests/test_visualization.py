@@ -102,6 +102,7 @@ def test_plot_surface_comparison_explorer_returns_self_contained_html() -> None:
     assert "Absolute error" in html_output.data
     assert "RMSE over dates" in html_output.data
     assert "rmse_over_dates" in html_output.data
+    assert "data:image/webp;base64," in html_output.data
     assert "Lead day" in html_output.data
     assert "ob-map-variable-buttons" in html_output.data
     assert "ob-map-depth-buttons" in html_output.data
@@ -112,6 +113,7 @@ def test_plot_surface_comparison_explorer_returns_self_contained_html() -> None:
     assert "ob-map-secondary-row" in html_output.data
     assert "font-variant-numeric: tabular-nums" in html_output.data
     assert "white-space: nowrap" in html_output.data
+    assert "decodeInt16" not in html_output.data
     assert "allow-scripts" in html_output.data
     assert "height:500px" in html_output.data
 
@@ -175,6 +177,7 @@ def test_plot_multi_reference_surface_comparison_explorer_uses_one_viewer() -> N
     assert "challengerLayer" in html_output.data
     assert "references" in html_output.data
     assert "Signed error" in html_output.data
+    assert "data:image/webp;base64," in html_output.data
 
 
 def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_path: Path) -> None:
