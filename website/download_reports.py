@@ -57,11 +57,12 @@ def main() -> None:
             if result:
                 print(f"OK -> {result}")
                 continue
-            sample = _find_sample_notebook(challenger_name)
-            if sample:
-                shutil.copy2(sample, destination)
-                print(f"OK (sample fallback) -> {destination}")
-                continue
+            if args.use_samples:
+                sample = _find_sample_notebook(challenger_name)
+                if sample:
+                    shutil.copy2(sample, destination)
+                    print(f"OK (sample fallback) -> {destination}")
+                    continue
             if os.path.exists(destination):
                 os.remove(destination)
             print("FAILED")
