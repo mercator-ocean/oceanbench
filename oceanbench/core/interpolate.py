@@ -5,6 +5,7 @@
 import xarray
 import numpy
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names, StandardDimension
+from oceanbench.core.dataset_source import get_dataset_source, with_dataset_source
 
 
 def interpolate_1_degree(data: xarray.Dataset) -> xarray.Dataset:
@@ -35,5 +36,15 @@ def interpolate_1_degree(data: xarray.Dataset) -> xarray.Dataset:
         chunk_dimensions[depth_dimension] = 1
 
     data = data.chunk(chunk_dimensions)
+    interpolated = data.interp(**{latitude_dimension: new_latitude, longitude_dimension: new_longitude})
 
-    return data.interp(**{latitude_dimension: new_latitude, longitude_dimension: new_longitude})
+    dataset_source = get_dataset_source(data)
+    if dataset_source is None:
+        return interpolated
+
+    return with_dataset_source(
+        interpolated,
+        kind=dataset_source.kind,
+        name=dataset_source.name,
+        resolution="one_degree",
+    )
