@@ -11,7 +11,7 @@ CHALLENGERS = {
         "method": "Physics-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "IFS HRES",
-        "resolution": "1/12 deg",
+        "resolution": "1/12°",
     },
     "glo12_1_degree": {
         "label": "GLO12",
@@ -21,7 +21,7 @@ CHALLENGERS = {
         "method": "Physics-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "IFS HRES",
-        "resolution": "1 deg",
+        "resolution": "1°",
     },
     "glonet": {
         "label": "GLONET",
@@ -31,7 +31,7 @@ CHALLENGERS = {
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12",
-        "resolution": "1/4 deg",
+        "resolution": "1/4°",
     },
     "glonet_1_degree": {
         "label": "GLONET",
@@ -41,7 +41,7 @@ CHALLENGERS = {
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12",
-        "resolution": "1 deg",
+        "resolution": "1°",
     },
     "wenhai": {
         "label": "WenHai",
@@ -51,7 +51,7 @@ CHALLENGERS = {
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12/IFS",
-        "resolution": "1/12 deg",
+        "resolution": "1/12°",
     },
     "wenhai_1_degree": {
         "label": "WenHai",
@@ -61,7 +61,7 @@ CHALLENGERS = {
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12/IFS",
-        "resolution": "1 deg",
+        "resolution": "1°",
     },
     "xihe": {
         "label": "XiHe",
@@ -71,7 +71,7 @@ CHALLENGERS = {
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12/IFS",
-        "resolution": "1/12 deg",
+        "resolution": "1/12°",
     },
     "xihe_1_degree": {
         "label": "XiHe",
@@ -81,7 +81,7 @@ CHALLENGERS = {
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12/IFS",
-        "resolution": "1 deg",
+        "resolution": "1°",
     },
 }
 

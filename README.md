@@ -75,7 +75,7 @@ Attributes:
 ## Open official challenger datasets
 
 OceanBench exposes the official challengers through `oceanbench.datasets.challenger`.
-This includes the maintained 2024 challengers `glo12`, `glonet`, `wenhai` and `xihe`, as well as their 1 degree base challengers `glo12_1_degree`, `glonet_1_degree`, `wenhai_1_degree` and `xihe_1_degree` for the 1 degree track.
+This includes the maintained 2024 challengers `glo12`, `glonet`, `wenhai` and `xihe`, as well as their 1 degree interpolated variants `glo12_1_degree`, `glonet_1_degree`, `wenhai_1_degree` and `xihe_1_degree` for the 1 degree track.
 
 ```python
 import oceanbench
