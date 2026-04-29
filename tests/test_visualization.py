@@ -107,6 +107,8 @@ def test_plot_surface_comparison_explorer_returns_self_contained_html() -> None:
     assert "ob-map-variable-buttons" in html_output.data
     assert "ob-map-depth-buttons" in html_output.data
     assert "ob-map-layer-buttons" in html_output.data
+    assert "Loading interactive maps..." in html_output.data
+    assert "ob-map-loading" in html_output.data
     assert "0.5 m" in html_output.data
     assert "10 m" in html_output.data
     assert "depths" in html_output.data

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import html
 from io import BytesIO
 import json
+import warnings
 from uuid import uuid4
 
 from dask import compute as dask_compute
@@ -695,6 +696,24 @@ html, body {{
   height: 100%;
   object-fit: contain;
   background: #ffffff;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}}
+.ob-map-image.loaded {{
+  opacity: 1;
+}}
+.ob-map-loading {{
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(238, 242, 247, 0.92));
+  color: #334155;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}}
+.ob-map-loading.hidden {{
+  display: none;
 }}
 .ob-map-status {{
   min-height: 18px;
@@ -744,6 +763,7 @@ html, body {{
   </div>
   <div class="ob-map-canvas-wrap">
     <img class="ob-map-image" alt="Surface comparison map">
+    <div class="ob-map-loading">Loading interactive maps...</div>
   </div>
   <div class="ob-map-status"></div>
 </div>
@@ -759,6 +779,7 @@ html, body {{
   const leadLabel = root.querySelector(".ob-map-lead-label");
   const leadInput = root.querySelector(".ob-map-lead-input");
   const image = root.querySelector(".ob-map-image");
+  const loading = root.querySelector(".ob-map-loading");
   const status = root.querySelector(".ob-map-status");
   const variables = Object.fromEntries(payload.variables.map((variable) => [variable.key, variable]));
   let activeVariableKey = payload.variables[0].key;
@@ -769,6 +790,10 @@ html, body {{
 
   title.textContent = payload.title;
 
+  image.addEventListener("load", () => {{
+    image.classList.add("loaded");
+    loading.classList.add("hidden");
+  }});
   leadInput.addEventListener("input", () => {{
     activeLeadIndex = Number(leadInput.value);
     render();
@@ -879,6 +904,8 @@ html, body {{
     const depth = currentDepth();
     const layer = currentLayer();
     leadLabel.textContent = `Lead day ${{depth.leadDays[activeLeadIndex]}}`;
+    image.classList.remove("loaded");
+    loading.classList.remove("hidden");
     image.src = layer.images[activeLeadIndex];
     image.alt = [
       payload.title,
@@ -908,6 +935,16 @@ def _surface_comparison_iframe_html(document: str, height_pixels: int) -> str:
         + f'height:{height_pixels}px; border:0;" '
         + 'loading="lazy" sandbox="allow-scripts"></iframe>'
     )
+
+
+def _html_without_iframe_warning(data: str) -> HTML:
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Consider using IPython.display.IFrame instead",
+            category=UserWarning,
+        )
+        return HTML(data)
 
 
 def _resolved_variable_keys(variables: Sequence[Variable | str]) -> tuple[str, ...]:
@@ -1081,4 +1118,4 @@ def plot_multi_reference_surface_comparison_explorer(
         variable_payloads=variable_payloads,
     )
     document = _surface_comparison_explorer_document(element_id, payload)
-    return HTML(_surface_comparison_iframe_html(document, height_pixels=height_pixels))
+    return _html_without_iframe_warning(_surface_comparison_iframe_html(document, height_pixels=height_pixels))
