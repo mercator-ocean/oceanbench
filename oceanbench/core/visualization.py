@@ -808,24 +808,6 @@ html, body {{
   height: 100%;
   object-fit: contain;
   background: #ffffff;
-  opacity: 0;
-  transition: opacity 160ms ease;
-}}
-.ob-map-image.loaded {{
-  opacity: 1;
-}}
-.ob-map-loading {{
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(238, 242, 247, 0.92));
-  color: #334155;
-  font-size: 14px;
-  letter-spacing: 0.01em;
-}}
-.ob-map-loading.hidden {{
-  display: none;
 }}
 .ob-map-status {{
   min-height: 18px;
@@ -875,7 +857,6 @@ html, body {{
   </div>
   <div class="ob-map-canvas-wrap">
     <img class="ob-map-image" alt="Surface comparison map">
-    <div class="ob-map-loading">Loading interactive maps...</div>
   </div>
   <div class="ob-map-status"></div>
 </div>
@@ -891,7 +872,6 @@ html, body {{
   const leadLabel = root.querySelector(".ob-map-lead-label");
   const leadInput = root.querySelector(".ob-map-lead-input");
   const image = root.querySelector(".ob-map-image");
-  const loading = root.querySelector(".ob-map-loading");
   const status = root.querySelector(".ob-map-status");
   const variables = Object.fromEntries(payload.variables.map((variable) => [variable.key, variable]));
   let activeVariableKey = payload.variables[0].key;
@@ -902,10 +882,6 @@ html, body {{
 
   title.textContent = payload.title;
 
-  image.addEventListener("load", () => {{
-    image.classList.add("loaded");
-    loading.classList.add("hidden");
-  }});
   leadInput.addEventListener("input", () => {{
     activeLeadIndex = Number(leadInput.value);
     render();
@@ -1016,8 +992,6 @@ html, body {{
     const depth = currentDepth();
     const layer = currentLayer();
     leadLabel.textContent = `Lead day ${{depth.leadDays[activeLeadIndex]}}`;
-    image.classList.remove("loaded");
-    loading.classList.remove("hidden");
     image.src = layer.images[activeLeadIndex];
     image.alt = [
       payload.title,
