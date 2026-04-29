@@ -29,6 +29,11 @@ DEFAULT_SURFACE_COMPARISON_VARIABLES: tuple[Variable, ...] = (
     Variable.EASTWARD_SEA_WATER_VELOCITY,
     Variable.NORTHWARD_SEA_WATER_VELOCITY,
 )
+DEFAULT_ZONAL_PSD_VARIABLES: tuple[Variable, ...] = (
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+    Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+)
+DEFAULT_ZONAL_PSD_LEAD_DAY_INDICES: tuple[int, ...] = (0, -1)
 FIELD_COLORMAPS: dict[str, str] = {
     Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "RdBu_r",
     Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): "viridis",
@@ -220,6 +225,16 @@ def _all_lead_day_indices(dataset: xarray.Dataset) -> tuple[int, ...]:
     return tuple(range(lead_day_count))
 
 
+def _resolved_lead_day_indices(dataset: xarray.Dataset, lead_day_indices: Sequence[int]) -> tuple[int, ...]:
+    all_lead_day_indices = _all_lead_day_indices(dataset)
+    resolved_indices = []
+    for lead_day_index in lead_day_indices:
+        resolved_index = all_lead_day_indices[lead_day_index] if lead_day_index < 0 else lead_day_index
+        if resolved_index in all_lead_day_indices:
+            resolved_indices.append(resolved_index)
+    return tuple(dict.fromkeys(resolved_indices))
+
+
 def _reference_items(
     reference_datasets: Mapping[str, xarray.Dataset],
 ) -> tuple[tuple[str, str, xarray.Dataset], ...]:
@@ -228,6 +243,69 @@ def _reference_items(
     return tuple(
         (f"reference_{index}", reference_name, reference_dataset)
         for index, (reference_name, reference_dataset) in enumerate(reference_datasets.items())
+    )
+
+
+def _zonal_wavelength_kilometers(field: xarray.DataArray) -> numpy.ndarray:
+    longitude = numpy.asarray(field[Dimension.LONGITUDE.key()].values, dtype=float)
+    latitude = numpy.asarray(field[Dimension.LATITUDE.key()].values, dtype=float)
+    longitude_spacing_degree = float(numpy.nanmedian(numpy.abs(numpy.diff(longitude))))
+    mean_latitude_radians = numpy.deg2rad(float(numpy.nanmean(latitude)))
+    longitude_spacing_meters = (
+        longitude_spacing_degree * numpy.pi / 180.0 * 6_371_000.0 * numpy.cos(mean_latitude_radians)
+    )
+    frequencies = numpy.fft.rfftfreq(len(longitude), d=abs(longitude_spacing_meters))
+    with numpy.errstate(divide="ignore"):
+        wavelength_kilometers = 1.0 / frequencies / 1000.0
+    return wavelength_kilometers
+
+
+def _zonal_power_spectrum(field: xarray.DataArray) -> tuple[numpy.ndarray, numpy.ndarray]:
+    values = numpy.asarray(field.values, dtype=float)
+    values = values - numpy.nanmean(values, axis=-1, keepdims=True)
+    values = numpy.nan_to_num(values, nan=0.0)
+    spectrum = numpy.fft.rfft(values, axis=-1)
+    power = numpy.nanmean(numpy.abs(spectrum) ** 2, axis=-2)
+    wavelength_kilometers = _zonal_wavelength_kilometers(field)
+    valid_mask = numpy.isfinite(wavelength_kilometers) & numpy.isfinite(power) & (wavelength_kilometers > 0)
+    sorted_indices = numpy.argsort(wavelength_kilometers[valid_mask])
+    return wavelength_kilometers[valid_mask][sorted_indices], power[valid_mask][sorted_indices]
+
+
+def _zonal_psd_fields(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    variable_key: str,
+    first_day_index: int,
+    lead_day_indices: Sequence[int],
+    depth_selector: int | float | None,
+) -> tuple[xarray.DataArray, tuple[tuple[str, str, xarray.DataArray], ...]]:
+    reference_items = _reference_items(reference_datasets)
+    challenger_field = _select_lead_day_indices(
+        _select_first_day_index(
+            _select_variable_field(challenger_dataset, variable_key, depth_selector),
+            first_day_index,
+        ),
+        lead_day_indices,
+    )
+    reference_fields = tuple(
+        _select_lead_day_indices(
+            _select_first_day_index(
+                _select_variable_field(reference_dataset, variable_key, depth_selector),
+                first_day_index,
+            ),
+            lead_day_indices,
+        )
+        for _, _, reference_dataset in reference_items
+    )
+    aligned_fields = dask_compute(*xarray.align(challenger_field, *reference_fields, join="inner"))
+    return aligned_fields[0], tuple(
+        (reference_key, reference_label, reference_field)
+        for (reference_key, reference_label, _), reference_field in zip(
+            reference_items,
+            aligned_fields[1:],
+            strict=True,
+        )
     )
 
 
@@ -979,6 +1057,79 @@ def _html_without_iframe_warning(data: str) -> HTML:
             category=UserWarning,
         )
         return HTML(data)
+
+
+def plot_multi_reference_zonal_psd_comparison(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    variables: Sequence[Variable | str] = DEFAULT_ZONAL_PSD_VARIABLES,
+    first_day_index: int = 0,
+    lead_day_indices: Sequence[int] = DEFAULT_ZONAL_PSD_LEAD_DAY_INDICES,
+    depth_selectors: Mapping[str, int | float | None] | None = None,
+    challenger_name: str = "Challenger",
+):
+    variable_keys = _resolved_variable_keys(variables)
+    resolved_lead_day_indices = _resolved_lead_day_indices(challenger_dataset, lead_day_indices)
+    if not resolved_lead_day_indices:
+        raise ValueError("lead_day_indices must contain at least one available lead day index.")
+
+    figure, axes = plt.subplots(
+        len(variable_keys),
+        1,
+        figsize=(9.2, 4.2 * len(variable_keys)),
+        squeeze=False,
+        constrained_layout=True,
+    )
+    reference_colors = ["tab:orange", "tab:green", "tab:red", "tab:purple"]
+    lead_day_styles = ["-", "--", ":", "-."]
+
+    for variable_index, variable_key in enumerate(variable_keys):
+        axis = axes[variable_index, 0]
+        challenger_field, reference_fields = _zonal_psd_fields(
+            challenger_dataset=challenger_dataset,
+            reference_datasets=reference_datasets,
+            variable_key=variable_key,
+            first_day_index=first_day_index,
+            lead_day_indices=resolved_lead_day_indices,
+            depth_selector=_depth_selector_for_variable(variable_key, depth_selectors),
+        )
+        for lead_day_position, lead_day_index in enumerate(resolved_lead_day_indices):
+            line_style = lead_day_styles[lead_day_position % len(lead_day_styles)]
+            challenger_wavelength, challenger_power = _zonal_power_spectrum(
+                challenger_field.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_position})
+            )
+            axis.plot(
+                challenger_wavelength,
+                challenger_power,
+                color="tab:blue",
+                linestyle=line_style,
+                linewidth=2.0,
+                label=f"{challenger_name} day {lead_day_index + 1}",
+            )
+            for reference_index, (_, reference_label, reference_field) in enumerate(reference_fields):
+                reference_wavelength, reference_power = _zonal_power_spectrum(
+                    reference_field.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_position})
+                )
+                axis.plot(
+                    reference_wavelength,
+                    reference_power,
+                    color=reference_colors[reference_index % len(reference_colors)],
+                    linestyle=line_style,
+                    linewidth=2.0,
+                    label=f"{reference_label} day {lead_day_index + 1}",
+                )
+
+        axis.set_xscale("log")
+        axis.set_yscale("log")
+        axis.invert_xaxis()
+        axis.grid(True, alpha=0.25, which="both")
+        axis.set_xlabel("Zonal wavelength (km)")
+        axis.set_ylabel("Power spectral density")
+        axis.set_title(_variable_label_with_unit(variable_key))
+        axis.legend(fontsize=8)
+
+    figure.suptitle("Zonal power spectral density comparison", fontsize=14)
+    return figure
 
 
 def _resolved_variable_keys(variables: Sequence[Variable | str]) -> tuple[str, ...]:
