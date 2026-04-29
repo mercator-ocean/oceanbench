@@ -19,6 +19,7 @@ region = "global"
 import oceanbench.visualization
 
 from oceanbench.core.dataset_utils import Variable
+from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 
@@ -42,6 +43,42 @@ surface_comparison_explorer = oceanbench.visualization.plot_multi_reference_surf
     variables=surface_comparison_variables,
 )
 surface_comparison_explorer
+
+# ### Dynamic diagnostic maps
+
+challenger_dynamic_dataset = xarray.merge(
+    [
+        compute_mixed_layer_depth(regional_challenger_dataset),
+        compute_geostrophic_currents(regional_challenger_dataset),
+    ]
+)
+glorys_dynamic_dataset = xarray.merge(
+    [
+        compute_mixed_layer_depth(glorys_dataset),
+        compute_geostrophic_currents(glorys_dataset),
+    ]
+)
+glo12_dynamic_dataset = xarray.merge(
+    [
+        compute_mixed_layer_depth(glo12_dataset),
+        compute_geostrophic_currents(glo12_dataset),
+    ]
+)
+dynamic_diagnostic_variables = [
+    Variable.MIXED_LAYER_DEPTH,
+    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
+    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
+]
+
+dynamic_diagnostic_explorer = oceanbench.visualization.plot_multi_reference_surface_comparison_explorer(
+    challenger_dynamic_dataset,
+    {
+        "GLORYS reanalysis": glorys_dynamic_dataset,
+        "GLO12 analysis": glo12_dynamic_dataset,
+    },
+    variables=dynamic_diagnostic_variables,
+)
+dynamic_diagnostic_explorer
 
 # ### Evaluation of challenger dataset using OceanBench
 

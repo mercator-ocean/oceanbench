@@ -203,12 +203,20 @@ def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_
     assert '"GLO12 analysis"' in all_sources
     assert "surface_comparison_explorer" in all_sources
     assert "surface_comparison_variables" in all_sources
+    assert "dynamic_diagnostic_explorer" in all_sources
+    assert "dynamic_diagnostic_variables" in all_sources
+    assert "compute_mixed_layer_depth" in all_sources
+    assert "compute_geostrophic_currents" in all_sources
     assert "Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID" in all_sources
     assert "Variable.SEA_WATER_POTENTIAL_TEMPERATURE" in all_sources
     assert "Variable.SEA_WATER_SALINITY" in all_sources
     assert "Variable.EASTWARD_SEA_WATER_VELOCITY" in all_sources
     assert "Variable.NORTHWARD_SEA_WATER_VELOCITY" in all_sources
+    assert "Variable.MIXED_LAYER_DEPTH" in all_sources
+    assert "Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY" in all_sources
+    assert "Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY" in all_sources
     assert "surface_comparison_explorer\n" in all_sources
+    assert "dynamic_diagnostic_explorer\n" in all_sources
     assert "glorys_surface_comparison_explorer" not in all_sources
     assert "glo12_surface_comparison_explorer" not in all_sources
     assert "plot_surface_comparison_maps" not in all_sources
