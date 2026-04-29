@@ -55,7 +55,7 @@ def glo12() -> xarray.Dataset:
 
 def glo12_1_degree() -> xarray.Dataset:
     """
-    Open the GLO12 1 degree base challenger dataset.
+    Open the GLO12 challenger dataset interpolated to the 1 degree resolution.
 
     Returns
     -------
@@ -130,7 +130,7 @@ def glonet() -> xarray.Dataset:
 
 def glonet_1_degree() -> xarray.Dataset:
     """
-    Open the GLONET 1 degree base challenger dataset.
+    Open the GLONET challenger dataset interpolated to the 1 degree resolution.
 
     Returns
     -------
@@ -173,7 +173,7 @@ def xihe() -> xarray.Dataset:
 
 def xihe_1_degree() -> xarray.Dataset:
     """
-    Open the XiHe 1 degree base challenger dataset.
+    Open the XiHe challenger dataset interpolated to the 1 degree resolution.
 
     Returns
     -------
@@ -216,7 +216,7 @@ def wenhai() -> xarray.Dataset:
 
 def wenhai_1_degree() -> xarray.Dataset:
     """
-    Open the WenHai 1 degree base challenger dataset.
+    Open the WenHai challenger dataset interpolated to the 1 degree resolution.
 
     Returns
     -------
