@@ -9,20 +9,41 @@
 =============================================================
 
 
-This page lists the initial states (GLO2 nowcasts) and forcing (IFS) datasets for OceanBench challengers to produce forecast datasets to evaluate in the benchmark.
-
+This page lists the input datasets available to OceanBench challengers to produce forecast datasets to evaluate in the benchmark.
 
 You can open and explore these datasets by using the ``oceanbench.datasets.input`` module, the documentation is `here <https://oceanbench.readthedocs.io/en/latest/source/oceanbench.datasets.html#module-oceanbench.datasets.input>`_.
+
+Current 2024 evaluation inputs
+******************************
+
+These are the current inputs already exposed in the public API:
+
+* ``oceanbench.datasets.input.glo12_nowcasts()`` for weekly GLO12 nowcasts.
+* ``oceanbench.datasets.input.ifs_forcings()`` for weekly IFS forcings stored as NetCDF.
+
+Additional 2023 forcing datasets
+********************************
+
+OceanBench also exposes additional weekly input datasets stored in the bucket
+``oceanbench-bucket/dev/additionnal-data/``.
+
+These datasets are available through:
+
+* ``oceanbench.datasets.input.glo12_forcings()`` for GLO12 Zarr datasets such as
+  ``glo12_rg_1d-m_nwct_R20230104.zarr`` and weekly successors.
+* ``oceanbench.datasets.input.ifs_forcings_zarr()`` for IFS Zarr datasets such as
+  ``ifs_forcing_rg_forecasts_R20230103.zarr`` and weekly successors.
 
 Dataset files
 **********************************************
 
-The dataset consists of two families of files:
+The input data currently consists of three families of files:
 
 * **NetCDF files** (``.nc``) – raw model output.
-* **Zarr collections** (``.zarr``) – chunked, cloud‑optimised arrays.
+* **Zarr collections** (``.zarr``) – chunked, cloud-optimised arrays used for the 2024 nowcasts.
+* **Additional Zarr collections** under ``dev/additionnal-data`` – weekly GLO12 and IFS inputs for 2023.
 
-Both families are listed below with their download URLs and MD5 checksums
+These families are listed below with their download URLs and MD5 checksums
 (where available).
 
 .. csv-table::
