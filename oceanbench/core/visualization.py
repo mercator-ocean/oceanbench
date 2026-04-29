@@ -54,6 +54,7 @@ DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS = 160_000
 DEFAULT_EXPLORER_HEIGHT_PIXELS = 760
 DEFAULT_EXPLORER_IMAGE_QUALITY = 85
 DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS: tuple[float, ...] = tuple(depth_level.value for depth_level in DepthLevel)
+GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES = 300.0
 
 
 @dataclass(frozen=True)
@@ -363,6 +364,14 @@ def _thin_field(field: xarray.DataArray, stride: int) -> xarray.DataArray:
     )
 
 
+def _longitude_values_for_image(field: xarray.DataArray) -> numpy.ndarray:
+    longitude = numpy.asarray(field[Dimension.LONGITUDE.key()].values, dtype=float)
+    longitude_span = float(numpy.nanmax(longitude) - numpy.nanmin(longitude))
+    if longitude_span >= GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES:
+        return numpy.mod(longitude, 360.0)
+    return longitude
+
+
 def _image_extent(field: xarray.DataArray) -> tuple[float, float, float, float]:
     longitude = field[Dimension.LONGITUDE.key()].values
     latitude = field[Dimension.LATITUDE.key()].values
@@ -372,6 +381,13 @@ def _image_extent(field: xarray.DataArray) -> tuple[float, float, float, float]:
         float(numpy.nanmin(latitude)),
         float(numpy.nanmax(latitude)),
     )
+
+
+def _prepared_image_field(field: xarray.DataArray) -> xarray.DataArray:
+    image_longitude = _longitude_values_for_image(field)
+    if numpy.array_equal(image_longitude, field[Dimension.LONGITUDE.key()].values):
+        return field
+    return field.assign_coords({Dimension.LONGITUDE.key(): image_longitude}).sortby(Dimension.LONGITUDE.key())
 
 
 def _image_values(field: xarray.DataArray) -> numpy.ndarray:
@@ -389,6 +405,7 @@ def _encoded_webp_image(
     value_label: str,
     title: str,
 ) -> str:
+    field = _prepared_image_field(field)
     colormap = colormaps[colormap_name].copy()
     colormap.set_bad(LAND_BACKGROUND_COLOR)
     figure, axis = plt.subplots(figsize=(11.0, 6.2), dpi=100)
@@ -401,7 +418,7 @@ def _encoded_webp_image(
         interpolation="nearest",
         norm=norm,
         origin="lower",
-        aspect="auto",
+        aspect="equal",
     )
     axis.set_title(title, fontsize=12)
     axis.set_xlabel("Longitude")
@@ -428,6 +445,7 @@ def _encoded_images(
     norm: Normalize,
     colormap_name: str,
     value_label: str,
+    title_prefix: str,
 ) -> dict[str, object]:
     return {
         "key": key,
@@ -439,7 +457,7 @@ def _encoded_images(
                 norm,
                 colormap_name,
                 value_label,
-                f"{label} - lead day {lead_day_index + 1}",
+                f"{title_prefix} | {label} | Lead day {_lead_day_label(array, lead_day_index)}",
             )
             for lead_day_index, array in enumerate(arrays)
         ],
@@ -467,10 +485,13 @@ def _surface_comparison_multi_reference_depth_payload(
     error_norm = _symmetric_norm(all_error_fields)
     absolute_error_norm = _positive_norm(all_absolute_error_fields)
     rmse_norm = _positive_norm(all_rmse_fields)
+    variable_label = _variable_label_with_unit(variable_key)
+    depth_label = _depth_label(challenger_fields[0])
+    title_prefix = f"{variable_label} | {depth_label}"
 
     return {
         "key": depth_key,
-        "label": _depth_label(challenger_fields[0]),
+        "label": depth_label,
         "leadDays": [
             _lead_day_label(challenger_field, lead_day_index)
             for lead_day_index, challenger_field in zip(
@@ -486,12 +507,14 @@ def _surface_comparison_multi_reference_depth_payload(
             challenger_fields,
             field_norm,
             _field_colormap(variable_key),
-            _variable_label_with_unit(variable_key),
+            variable_label,
+            title_prefix,
         ),
         "references": [
             _surface_comparison_reference_payload(
                 reference,
                 challenger_fields=challenger_fields,
+                challenger_name=challenger_name,
                 variable_key=variable_key,
                 field_norm=field_norm,
                 error_norm=error_norm,
@@ -506,6 +529,7 @@ def _surface_comparison_multi_reference_depth_payload(
 def _surface_comparison_reference_payload(
     reference: _ComputedReferenceComparisonFields,
     challenger_fields: Sequence[xarray.DataArray],
+    challenger_name: str,
     variable_key: str,
     field_norm: Normalize,
     error_norm: Normalize,
@@ -519,6 +543,8 @@ def _surface_comparison_reference_payload(
     ]
     absolute_error_fields = [abs(error_field) for error_field in error_fields]
     rmse_fields = list(reference.rmse_fields)
+    variable_label = _variable_label_with_unit(variable_key)
+    title_prefix = f"{variable_label} | {_depth_label(reference_fields[0])}"
     return {
         "key": reference.key,
         "label": reference.label,
@@ -529,7 +555,8 @@ def _surface_comparison_reference_payload(
                 reference_fields,
                 field_norm,
                 _field_colormap(variable_key),
-                _variable_label_with_unit(variable_key),
+                variable_label,
+                f"{reference.label} | {title_prefix}",
             ),
             _encoded_images(
                 "error",
@@ -537,7 +564,8 @@ def _surface_comparison_reference_payload(
                 error_fields,
                 error_norm,
                 ERROR_COLORMAP,
-                f"{_variable_label_with_unit(variable_key)} error",
+                f"{variable_label} error",
+                f"{challenger_name} vs {reference.label} | {title_prefix}",
             ),
             _encoded_images(
                 "absolute_error",
@@ -545,7 +573,8 @@ def _surface_comparison_reference_payload(
                 absolute_error_fields,
                 absolute_error_norm,
                 ABSOLUTE_ERROR_COLORMAP,
-                f"{_variable_label_with_unit(variable_key)} absolute error",
+                f"{variable_label} absolute error",
+                f"{challenger_name} vs {reference.label} | {title_prefix}",
             ),
             _encoded_images(
                 "rmse_over_dates",
@@ -553,7 +582,8 @@ def _surface_comparison_reference_payload(
                 rmse_fields,
                 rmse_norm,
                 RMSE_COLORMAP,
-                f"{_variable_label_with_unit(variable_key)} RMSE",
+                f"{variable_label} RMSE",
+                f"{challenger_name} vs {reference.label} | {title_prefix}",
             ),
         ],
     }
@@ -575,7 +605,11 @@ def _surface_comparison_payload(
     reference_name: str | None,
 ) -> dict[str, object]:
     return {
-        "title": f"Surface comparison against {reference_name}" if reference_name is not None else "Surface comparison",
+        "title": (
+            f"Surface diagnostic maps against {reference_name}"
+            if reference_name is not None
+            else "Surface diagnostic maps"
+        ),
         "variables": list(variable_payloads),
     }
 
