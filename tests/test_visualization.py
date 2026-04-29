@@ -182,6 +182,32 @@ def test_plot_multi_reference_surface_comparison_explorer_uses_one_viewer() -> N
     assert "data:image/webp;base64," in html_output.data
 
 
+def test_plot_multi_reference_zonal_psd_comparison_returns_compact_figure() -> None:
+    sea_surface_height = numpy.arange(18, dtype=float).reshape(1, 3, 2, 3)
+    temperature = numpy.arange(18, dtype=float).reshape(1, 3, 1, 2, 3) + 10.0
+    challenger_dataset = _map_dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): sea_surface_height,
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): temperature,
+        }
+    )
+    reference_dataset = _map_dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): sea_surface_height + 1.0,
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): temperature + 0.5,
+        }
+    )
+
+    figure = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison(
+        challenger_dataset,
+        {"Reference": reference_dataset},
+    )
+
+    assert len(figure.axes) == 2
+    assert figure.axes[0].get_xscale() == "log"
+    assert figure.axes[0].get_yscale() == "log"
+
+
 def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_path: Path) -> None:
     challenger_path = tmp_path / "challenger.py"
     challenger_path.write_text("import xarray\n\nchallenger_dataset = xarray.Dataset()\n", encoding="utf-8")
@@ -205,6 +231,8 @@ def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_
     assert "surface_comparison_variables" in all_sources
     assert "dynamic_diagnostic_explorer" in all_sources
     assert "dynamic_diagnostic_variables" in all_sources
+    assert "plot_multi_reference_zonal_psd_comparison" in all_sources
+    assert "zonal_psd_figure" in all_sources
     assert "compute_mixed_layer_depth" in all_sources
     assert "compute_geostrophic_currents" in all_sources
     assert "Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID" in all_sources

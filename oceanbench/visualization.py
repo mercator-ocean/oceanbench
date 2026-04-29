@@ -100,7 +100,32 @@ def plot_multi_reference_surface_comparison_explorer(
     )
 
 
+def plot_multi_reference_zonal_psd_comparison(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    variables: Sequence[Variable | str] = visualization.DEFAULT_ZONAL_PSD_VARIABLES,
+    first_day_index: int = 0,
+    lead_day_indices: Sequence[int] = visualization.DEFAULT_ZONAL_PSD_LEAD_DAY_INDICES,
+    depth_selectors: Mapping[str, int | float | None] | None = None,
+    challenger_name: str = "Challenger",
+):
+    """
+    Plot compact zonal power spectral density comparisons against several references.
+    """
+
+    return visualization.plot_multi_reference_zonal_psd_comparison(
+        challenger_dataset=challenger_dataset,
+        reference_datasets=reference_datasets,
+        variables=variables,
+        first_day_index=first_day_index,
+        lead_day_indices=lead_day_indices,
+        depth_selectors=depth_selectors,
+        challenger_name=challenger_name,
+    )
+
+
 __all__ = [
     "plot_multi_reference_surface_comparison_explorer",
+    "plot_multi_reference_zonal_psd_comparison",
     "plot_surface_comparison_explorer",
 ]
