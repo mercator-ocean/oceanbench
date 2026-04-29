@@ -1074,9 +1074,9 @@ def plot_multi_reference_zonal_psd_comparison(
         raise ValueError("lead_day_indices must contain at least one available lead day index.")
 
     figure, axes = plt.subplots(
-        len(variable_keys),
         1,
-        figsize=(9.2, 4.2 * len(variable_keys)),
+        len(variable_keys),
+        figsize=(6.2 * len(variable_keys), 4.6),
         squeeze=False,
         constrained_layout=True,
     )
@@ -1084,7 +1084,7 @@ def plot_multi_reference_zonal_psd_comparison(
     lead_day_styles = ["-", "--", ":", "-."]
 
     for variable_index, variable_key in enumerate(variable_keys):
-        axis = axes[variable_index, 0]
+        axis = axes[0, variable_index]
         challenger_field, reference_fields = _zonal_psd_fields(
             challenger_dataset=challenger_dataset,
             reference_datasets=reference_datasets,
