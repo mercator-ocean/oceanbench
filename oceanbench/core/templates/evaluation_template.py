@@ -42,6 +42,9 @@ surface_comparison_explorer = oceanbench.visualization.plot_multi_reference_surf
     },
     variables=surface_comparison_variables,
 )
+
+# > Interactive map loading... The report can pause here while the browser parses the embedded map images.
+
 surface_comparison_explorer
 
 # ### Dynamic diagnostic maps
@@ -78,6 +81,9 @@ dynamic_diagnostic_explorer = oceanbench.visualization.plot_multi_reference_surf
     },
     variables=dynamic_diagnostic_variables,
 )
+
+# > Interactive map loading... The report can pause here while the browser parses the embedded map images.
+
 dynamic_diagnostic_explorer
 
 # ### Spectral diagnostic
