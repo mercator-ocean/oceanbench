@@ -80,6 +80,21 @@ dynamic_diagnostic_explorer = oceanbench.visualization.plot_multi_reference_surf
 )
 dynamic_diagnostic_explorer
 
+# ### Spectral diagnostic
+
+zonal_psd_figure = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison(
+    regional_challenger_dataset,
+    {
+        "GLORYS reanalysis": glorys_dataset,
+        "GLO12 analysis": glo12_dataset,
+    },
+    variables=[
+        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+        Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+    ],
+)
+zonal_psd_figure
+
 # ### Evaluation of challenger dataset using OceanBench
 
 # #### Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
