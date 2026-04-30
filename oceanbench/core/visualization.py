@@ -19,6 +19,7 @@ from matplotlib.colors import Normalize, TwoSlopeNorm
 import numpy
 import xarray
 
+from oceanbench.core import lagrangian_trajectory
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import DepthLevel, Dimension, Variable, VARIABLE_LABELS, VARIABLE_METADATA
 
@@ -59,6 +60,7 @@ NO_DATA_COLOR = "#eef2f7"
 DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS = 160_000
 DEFAULT_EXPLORER_HEIGHT_PIXELS = 760
 DEFAULT_EXPLORER_IMAGE_QUALITY = 85
+DEFAULT_LAGRANGIAN_PARTICLE_COUNT = 300
 DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS: tuple[float, ...] = tuple(depth_level.value for depth_level in DepthLevel)
 GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES = 300.0
 
@@ -480,16 +482,37 @@ def _image_values(field: xarray.DataArray) -> numpy.ndarray:
     return values
 
 
+def _add_geostrophic_equatorial_mask_band(axis, field: xarray.DataArray, variable_key: str) -> None:
+    if variable_key not in {
+        Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(),
+        Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(),
+    }:
+        return
+    latitude = numpy.asarray(field[Dimension.LATITUDE.key()].values, dtype=float)
+    if numpy.nanmin(latitude) > 0.5 or numpy.nanmax(latitude) < -0.5:
+        return
+    axis.axhspan(
+        -0.5,
+        0.5,
+        facecolor=NO_DATA_COLOR,
+        edgecolor="#94a3b8",
+        linewidth=0.5,
+        alpha=0.96,
+        zorder=3,
+    )
+
+
 def _encoded_webp_image(
     field: xarray.DataArray,
     norm: Normalize,
     colormap_name: str,
     value_label: str,
     title: str,
+    variable_key: str,
 ) -> str:
     field = _prepared_image_field(field)
     colormap = colormaps[colormap_name].copy()
-    colormap.set_bad(NO_DATA_COLOR)
+    colormap.set_bad(LAND_BACKGROUND_COLOR)
     figure, axis = plt.subplots(figsize=(11.0, 6.2), dpi=100)
     figure.patch.set_facecolor("#ffffff")
     axis.set_facecolor(LAND_BACKGROUND_COLOR)
@@ -502,6 +525,7 @@ def _encoded_webp_image(
         origin="lower",
         aspect="equal",
     )
+    _add_geostrophic_equatorial_mask_band(axis, field, variable_key)
     axis.set_title(title, fontsize=12)
     axis.set_xlabel("Longitude")
     axis.set_ylabel("Latitude")
@@ -528,6 +552,7 @@ def _encoded_images(
     colormap_name: str,
     value_label: str,
     title_prefix: str,
+    variable_key: str,
 ) -> dict[str, object]:
     return {
         "key": key,
@@ -540,6 +565,7 @@ def _encoded_images(
                 colormap_name,
                 value_label,
                 f"{title_prefix} | {label} | Lead day {_lead_day_label(array, lead_day_index)}",
+                variable_key,
             )
             for lead_day_index, array in enumerate(arrays)
         ],
@@ -591,6 +617,7 @@ def _surface_comparison_multi_reference_depth_payload(
             _field_colormap(variable_key),
             variable_label,
             title_prefix,
+            variable_key,
         ),
         "references": [
             _surface_comparison_reference_payload(
@@ -639,6 +666,7 @@ def _surface_comparison_reference_payload(
                 _field_colormap(variable_key),
                 variable_label,
                 f"{reference.label} | {title_prefix}",
+                variable_key,
             ),
             _encoded_images(
                 "error",
@@ -648,6 +676,7 @@ def _surface_comparison_reference_payload(
                 ERROR_COLORMAP,
                 f"{variable_label} error",
                 f"{challenger_name} vs {reference.label} | {title_prefix}",
+                variable_key,
             ),
             _encoded_images(
                 "absolute_error",
@@ -657,6 +686,7 @@ def _surface_comparison_reference_payload(
                 ABSOLUTE_ERROR_COLORMAP,
                 f"{variable_label} absolute error",
                 f"{challenger_name} vs {reference.label} | {title_prefix}",
+                variable_key,
             ),
             _encoded_images(
                 "rmse_over_dates",
@@ -666,6 +696,7 @@ def _surface_comparison_reference_payload(
                 RMSE_COLORMAP,
                 f"{variable_label} RMSE",
                 f"{challenger_name} vs {reference.label} | {title_prefix}",
+                variable_key,
             ),
         ],
     }
@@ -1034,6 +1065,642 @@ def _html_without_iframe_warning(data: str) -> HTML:
         return HTML(data)
 
 
+def _json_ready_array(values: numpy.ndarray, decimals: int = 4) -> list:
+    values = numpy.asarray(values, dtype=float)
+    rounded_values = numpy.round(values, decimals=decimals).astype(object)
+    rounded_values[~numpy.isfinite(values)] = None
+    return rounded_values.tolist()
+
+
+def _lagrangian_bounds(dataset: xarray.Dataset) -> dict[str, float]:
+    standard_dataset = _standard_dataset(dataset)
+    longitude = numpy.asarray(standard_dataset[Dimension.LONGITUDE.key()].values, dtype=float)
+    latitude = numpy.asarray(standard_dataset[Dimension.LATITUDE.key()].values, dtype=float)
+    longitude_minimum = float(numpy.nanmin(longitude))
+    longitude_maximum = float(numpy.nanmax(longitude))
+    latitude_minimum = float(numpy.nanmin(latitude))
+    latitude_maximum = float(numpy.nanmax(latitude))
+    longitude_padding = max(0.5, 0.02 * (longitude_maximum - longitude_minimum))
+    latitude_padding = max(0.5, 0.02 * (latitude_maximum - latitude_minimum))
+    return {
+        "longitudeMinimum": longitude_minimum - longitude_padding,
+        "longitudeMaximum": longitude_maximum + longitude_padding,
+        "latitudeMinimum": latitude_minimum - latitude_padding,
+        "latitudeMaximum": latitude_maximum + latitude_padding,
+    }
+
+
+def _particle_track_payload(particles: xarray.Dataset) -> dict[str, object]:
+    return {
+        "longitude": _json_ready_array(particles["lon"].values),
+        "latitude": _json_ready_array(particles["lat"].values),
+        "initialLongitude": _json_ready_array(particles["lon0"].values),
+        "initialLatitude": _json_ready_array(particles["lat0"].values),
+    }
+
+
+def _trajectory_distances_kilometers(
+    challenger_particles: xarray.Dataset,
+    reference_particles: xarray.Dataset,
+) -> numpy.ndarray:
+    challenger_particles, reference_particles = xarray.align(challenger_particles, reference_particles, join="inner")
+    latitude_reference_radians = numpy.deg2rad(reference_particles["lat"].values)
+    latitude_distance = (challenger_particles["lat"].values - reference_particles["lat"].values) * 111.0
+    longitude_delta = challenger_particles["lon"].values - reference_particles["lon"].values
+    longitude_distance = longitude_delta * 111.0 * numpy.cos(latitude_reference_radians)
+    return numpy.sqrt(latitude_distance**2 + longitude_distance**2)
+
+
+def _lagrangian_separation_scale_kilometers(
+    challenger_particles: xarray.Dataset,
+    reference_particles_by_key: Mapping[str, xarray.Dataset],
+) -> float:
+    distances = numpy.concatenate(
+        [
+            _trajectory_distances_kilometers(challenger_particles, reference_particles).ravel()
+            for reference_particles in reference_particles_by_key.values()
+        ]
+    )
+    finite_distances = distances[numpy.isfinite(distances)]
+    if finite_distances.size == 0:
+        return 1.0
+    return max(1.0, float(numpy.nanpercentile(finite_distances, 95)))
+
+
+def _reference_key(reference_name: str) -> str:
+    reference_key = "".join(character.lower() if character.isalnum() else "_" for character in reference_name).strip(
+        "_"
+    )
+    return reference_key or "reference"
+
+
+def _lagrangian_payload(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    first_day_index: int,
+    particle_count: int,
+    seed: int,
+    challenger_name: str,
+    title: str,
+) -> dict[str, object]:
+    if not reference_datasets:
+        raise ValueError("reference_datasets must contain at least one reference dataset.")
+    if particle_count <= 0:
+        raise ValueError("particle_count must be a positive integer.")
+    challenger_standard_dataset = lagrangian_trajectory._harmonise_dataset(challenger_dataset)
+    challenger_runs = lagrangian_trajectory._split_dataset(challenger_standard_dataset)
+    if first_day_index < 0 or first_day_index >= len(challenger_runs):
+        raise ValueError(f"first_day_index must be between 0 and {len(challenger_runs) - 1}.")
+    initial_latitudes, initial_longitudes = lagrangian_trajectory._get_random_ocean_points_from_file(
+        challenger_standard_dataset,
+        variable_name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+        n=particle_count,
+        seed=seed,
+    )
+    challenger_run_dataset = challenger_runs[first_day_index]
+    challenger_particles = lagrangian_trajectory._get_particle_dataset(
+        dataset=lagrangian_trajectory.surface_current_dataset(challenger_run_dataset),
+        latitudes=initial_latitudes,
+        longitudes=initial_longitudes,
+    )
+    reference_particles_by_key: dict[str, xarray.Dataset] = {}
+    reference_payloads: list[dict[str, object]] = []
+    for reference_name, reference_dataset in reference_datasets.items():
+        reference_standard_dataset = lagrangian_trajectory._harmonise_dataset(reference_dataset)
+        reference_run_dataset = lagrangian_trajectory._split_dataset(reference_standard_dataset)[first_day_index]
+        reference_particles = lagrangian_trajectory._get_particle_dataset(
+            dataset=lagrangian_trajectory.surface_current_dataset(reference_run_dataset),
+            latitudes=initial_latitudes,
+            longitudes=initial_longitudes,
+        )
+        key = _reference_key(reference_name)
+        reference_particles_by_key[key] = reference_particles
+        reference_payloads.append(
+            {
+                "key": key,
+                "label": reference_name,
+                "track": _particle_track_payload(reference_particles),
+            }
+        )
+
+    time_count = challenger_particles.sizes["time"]
+    return {
+        "title": title,
+        "challengerName": challenger_name,
+        "particleCount": int(challenger_particles.sizes["particle"]),
+        "timeLabels": [f"{index + 1:.1f}" for index in range(time_count)],
+        "bounds": _lagrangian_bounds(challenger_dataset),
+        "separationScaleKilometers": _lagrangian_separation_scale_kilometers(
+            challenger_particles,
+            reference_particles_by_key,
+        ),
+        "challenger": _particle_track_payload(challenger_particles),
+        "references": reference_payloads,
+    }
+
+
+def _lagrangian_explorer_document(element_id: str, payload: dict[str, object]) -> str:
+    payload_json = json.dumps(payload, separators=(",", ":"))
+    return f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html, body {{
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: #172033;
+  font-family: Arial, sans-serif;
+}}
+.ob-lagrangian {{
+  border: 1px solid #cfd8e3;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}}
+.ob-lagrangian-header {{
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #cfd8e3;
+  background: #f8fafc;
+}}
+.ob-lagrangian-title {{
+  font-size: 18px;
+  font-weight: 650;
+}}
+.ob-lagrangian-subtitle {{
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}}
+.ob-lagrangian-controls {{
+  display: grid;
+  gap: 8px;
+  min-width: 430px;
+}}
+.ob-lagrangian-control-row {{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}}
+.ob-lagrangian-chip-group {{
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #cfd8e3;
+  border-radius: 999px;
+  background: #ffffff;
+}}
+.ob-lagrangian-chip {{
+  border: 0;
+  border-right: 1px solid #cfd8e3;
+  padding: 7px 12px;
+  background: transparent;
+  color: #0f5f8f;
+  font-size: 13px;
+  cursor: pointer;
+}}
+.ob-lagrangian-chip:last-child {{
+  border-right: 0;
+}}
+.ob-lagrangian-chip.active {{
+  background: #0f5f8f;
+  color: #ffffff;
+}}
+.ob-lagrangian-play {{
+  width: 34px;
+  height: 34px;
+  border: 1px solid #cfd8e3;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f5f8f;
+  cursor: pointer;
+}}
+.ob-lagrangian-slider {{
+  display: grid;
+  grid-template-columns: 13ch minmax(180px, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 330px;
+  color: #334155;
+  font-size: 13px;
+}}
+.ob-lagrangian-slider span {{
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}}
+.ob-lagrangian-slider input {{
+  accent-color: #0f5f8f;
+}}
+.ob-lagrangian-map {{
+  height: 620px;
+  background: linear-gradient(180deg, #eef7fb, #ffffff);
+}}
+.ob-lagrangian-map canvas {{
+  display: block;
+  width: 100%;
+  height: 100%;
+}}
+.ob-lagrangian-status {{
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid #cfd8e3;
+  color: #64748b;
+  font-size: 12px;
+}}
+.ob-lagrangian-legend {{
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}}
+.ob-lagrangian-key {{
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}}
+.ob-lagrangian-swatch {{
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+  background: #000;
+}}
+.ob-lagrangian-swatch.ref {{ background: #64748b; }}
+.ob-lagrangian-swatch.chal {{ background: #0f5f8f; }}
+.ob-lagrangian-swatch.sep {{ background: linear-gradient(90deg, #0f9f8f, #f59e0b, #d1495b); }}
+.ob-lagrangian-swatch.truth {{
+  height: 8px;
+  width: 8px;
+  border: 1px solid #64748b;
+  background: #ffffff;
+}}
+@media (max-width: 760px) {{
+  .ob-lagrangian-header {{
+    display: block;
+  }}
+  .ob-lagrangian-controls {{
+    min-width: 0;
+    margin-top: 12px;
+  }}
+  .ob-lagrangian-control-row {{
+    justify-content: flex-start;
+  }}
+  .ob-lagrangian-map {{
+    height: 440px;
+  }}
+}}
+</style>
+</head>
+<body>
+<div id="{element_id}" class="ob-lagrangian">
+  <div class="ob-lagrangian-header">
+    <div>
+      <div class="ob-lagrangian-title"></div>
+      <div class="ob-lagrangian-subtitle">Smooth visual interpolation between true daily particle positions.</div>
+    </div>
+    <div class="ob-lagrangian-controls">
+      <div class="ob-lagrangian-control-row">
+        <div class="ob-lagrangian-reference-buttons ob-lagrangian-chip-group"></div>
+      </div>
+      <div class="ob-lagrangian-control-row">
+        <button class="ob-lagrangian-play" type="button">▶</button>
+        <label class="ob-lagrangian-slider">
+          <span class="ob-lagrangian-time-label"></span>
+          <input class="ob-lagrangian-time-input" type="range" min="0" step="0.02" value="0">
+        </label>
+      </div>
+    </div>
+  </div>
+  <div class="ob-lagrangian-map">
+    <canvas width="1180" height="620"></canvas>
+  </div>
+  <div class="ob-lagrangian-status">
+    <div class="ob-lagrangian-status-text"></div>
+    <div class="ob-lagrangian-legend">
+      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch ref"></span>Reference trail</span>
+      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch chal"></span>Challenger trail</span>
+      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch sep"></span>Current separation distance</span>
+      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch truth"></span>Reached daily positions</span>
+    </div>
+  </div>
+</div>
+<script>
+(() => {{
+  const payload = {payload_json};
+  const root = document.getElementById("{element_id}");
+  const canvas = root.querySelector("canvas");
+  const context = canvas.getContext("2d");
+  const title = root.querySelector(".ob-lagrangian-title");
+  const referenceButtons = root.querySelector(".ob-lagrangian-reference-buttons");
+  const playButton = root.querySelector(".ob-lagrangian-play");
+  const timeLabel = root.querySelector(".ob-lagrangian-time-label");
+  const timeInput = root.querySelector(".ob-lagrangian-time-input");
+  const statusText = root.querySelector(".ob-lagrangian-status-text");
+  const references = Object.fromEntries(payload.references.map((reference) => [reference.key, reference]));
+  let activeReferenceKey = payload.references[0].key;
+  let activeTime = 0;
+  let animationFrame = null;
+  let lastFrameTime = null;
+
+  title.textContent = payload.title;
+  timeInput.max = payload.timeLabels.length - 1;
+  timeInput.addEventListener("input", () => {{
+    activeTime = Number(timeInput.value);
+    renderControls();
+    draw();
+  }});
+  playButton.addEventListener("click", () => {{
+    if (animationFrame !== null) {{
+      stop();
+      return;
+    }}
+    playButton.textContent = "Ⅱ";
+    lastFrameTime = null;
+    animationFrame = window.requestAnimationFrame(tick);
+  }});
+
+  renderControls();
+  draw();
+
+  function stop() {{
+    window.cancelAnimationFrame(animationFrame);
+    animationFrame = null;
+    playButton.textContent = "▶";
+  }}
+
+  function tick(timestamp) {{
+    if (lastFrameTime === null) {{
+      lastFrameTime = timestamp;
+    }}
+    const elapsedSeconds = (timestamp - lastFrameTime) / 1000;
+    lastFrameTime = timestamp;
+    activeTime += elapsedSeconds * 0.85;
+    if (activeTime > payload.timeLabels.length - 1) {{
+      activeTime = 0;
+    }}
+    timeInput.value = activeTime;
+    renderControls();
+    draw();
+    animationFrame = window.requestAnimationFrame(tick);
+  }}
+
+  function renderControls() {{
+    referenceButtons.replaceChildren();
+    for (const reference of payload.references) {{
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ob-lagrangian-chip";
+      button.textContent = reference.label;
+      button.classList.toggle("active", reference.key === activeReferenceKey);
+      button.addEventListener("click", () => {{
+        activeReferenceKey = reference.key;
+        renderControls();
+        draw();
+      }});
+      referenceButtons.appendChild(button);
+    }}
+    timeLabel.textContent = `Lead day ${{(activeTime + 1).toFixed(1)}}`;
+    statusText.textContent = [
+      references[activeReferenceKey].label,
+      `${{payload.particleCount}} sampled particles`,
+      "interpolated display",
+    ].join(" · ");
+  }}
+
+  function point(track, particleIndex, timeIndex) {{
+    const longitude = track.longitude[particleIndex][timeIndex];
+    const latitude = track.latitude[particleIndex][timeIndex];
+    if (longitude === null || latitude === null) {{
+      return null;
+    }}
+    return {{ longitude, latitude }};
+  }}
+
+  function interpolate(track, particleIndex, time) {{
+    const lower = Math.max(0, Math.min(payload.timeLabels.length - 1, Math.floor(time)));
+    const upper = Math.max(0, Math.min(payload.timeLabels.length - 1, lower + 1));
+    const lowerPoint = point(track, particleIndex, lower);
+    const upperPoint = point(track, particleIndex, upper);
+    if (lowerPoint === null) {{
+      return upperPoint;
+    }}
+    if (upperPoint === null || upper === lower) {{
+      return lowerPoint;
+    }}
+    const fraction = time - lower;
+    return {{
+      longitude: lowerPoint.longitude * (1 - fraction) + upperPoint.longitude * fraction,
+      latitude: lowerPoint.latitude * (1 - fraction) + upperPoint.latitude * fraction,
+    }};
+  }}
+
+  function project(point) {{
+    const bounds = payload.bounds;
+    const x = (
+      (point.longitude - bounds.longitudeMinimum) / (bounds.longitudeMaximum - bounds.longitudeMinimum)
+    ) * canvas.width;
+    const y = canvas.height - (
+      (point.latitude - bounds.latitudeMinimum) / (bounds.latitudeMaximum - bounds.latitudeMinimum)
+    ) * canvas.height;
+    return {{ x, y }};
+  }}
+
+  function draw() {{
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    drawBackground();
+    const reference = references[activeReferenceKey];
+    drawDailyMarkers(payload.challenger, reference.track, activeTime);
+    for (let particleIndex = 0; particleIndex < payload.particleCount; particleIndex += 1) {{
+      const referencePoint = interpolate(reference.track, particleIndex, activeTime);
+      const challengerPoint = interpolate(payload.challenger, particleIndex, activeTime);
+      if (referencePoint === null || challengerPoint === null) {{
+        continue;
+      }}
+      const separationColorValue = separationColor(referencePoint, challengerPoint);
+      drawTrail(reference.track, particleIndex, referencePoint, activeTime, "rgba(71, 85, 105, 0.24)", 1.1);
+      drawTrail(payload.challenger, particleIndex, challengerPoint, activeTime, "rgba(15, 95, 143, 0.42)", 1.5);
+      drawSeparation(referencePoint, challengerPoint, separationColorValue);
+      drawPosition(referencePoint, "#64748b", 2.0, "#ffffff");
+      drawPosition(challengerPoint, "#0f5f8f", 3.0, "#ffffff");
+    }}
+    drawFrame();
+  }}
+
+  function drawBackground() {{
+    context.fillStyle = "#eef7fb";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = "rgba(51, 65, 85, 0.18)";
+    context.lineWidth = 1;
+    const bounds = payload.bounds;
+    const longitudeStep = niceStep(bounds.longitudeMaximum - bounds.longitudeMinimum);
+    const latitudeStep = niceStep(bounds.latitudeMaximum - bounds.latitudeMinimum);
+    for (
+      let longitude = Math.ceil(bounds.longitudeMinimum / longitudeStep) * longitudeStep;
+      longitude <= bounds.longitudeMaximum;
+      longitude += longitudeStep
+    ) {{
+      line(
+        project({{ longitude, latitude: bounds.latitudeMinimum }}),
+        project({{ longitude, latitude: bounds.latitudeMaximum }}),
+      );
+    }}
+    for (
+      let latitude = Math.ceil(bounds.latitudeMinimum / latitudeStep) * latitudeStep;
+      latitude <= bounds.latitudeMaximum;
+      latitude += latitudeStep
+    ) {{
+      line(
+        project({{ longitude: bounds.longitudeMinimum, latitude }}),
+        project({{ longitude: bounds.longitudeMaximum, latitude }}),
+      );
+    }}
+  }}
+
+  function niceStep(span) {{
+    if (span > 180) return 60;
+    if (span > 90) return 30;
+    if (span > 35) return 10;
+    if (span > 12) return 5;
+    return 2;
+  }}
+
+  function drawDailyMarkers(challengerTrack, referenceTrack, time) {{
+    context.lineWidth = 0.8;
+    const lastReachedIndex = Math.floor(time);
+    for (let particleIndex = 0; particleIndex < payload.particleCount; particleIndex += 1) {{
+      for (let timeIndex = 0; timeIndex <= lastReachedIndex; timeIndex += 1) {{
+        const referencePoint = point(referenceTrack, particleIndex, timeIndex);
+        const challengerPoint = point(challengerTrack, particleIndex, timeIndex);
+        context.fillStyle = "rgba(255, 255, 255, 0.62)";
+        if (referencePoint !== null) {{
+          context.strokeStyle = "rgba(100, 116, 139, 0.42)";
+          circle(project(referencePoint), 1.7, true);
+        }}
+        if (challengerPoint !== null) {{
+          context.strokeStyle = "rgba(15, 95, 143, 0.42)";
+          circle(project(challengerPoint), 1.7, true);
+        }}
+      }}
+    }}
+  }}
+
+  function drawTrail(track, particleIndex, currentPoint, time, color, width) {{
+    const lower = Math.floor(time);
+    context.strokeStyle = color;
+    context.lineWidth = width;
+    let previousProjectedPoint = null;
+    context.beginPath();
+    for (let timeIndex = 0; timeIndex <= lower; timeIndex += 1) {{
+      const trackPoint = point(track, particleIndex, timeIndex);
+      if (trackPoint === null) {{
+        previousProjectedPoint = null;
+        continue;
+      }}
+      const projectedPoint = project(trackPoint);
+      if (previousProjectedPoint === null || tooFarApart(previousProjectedPoint, projectedPoint)) {{
+        context.moveTo(projectedPoint.x, projectedPoint.y);
+      }} else {{
+        context.lineTo(projectedPoint.x, projectedPoint.y);
+      }}
+      previousProjectedPoint = projectedPoint;
+    }}
+    const currentProjectedPoint = project(currentPoint);
+    if (previousProjectedPoint === null || tooFarApart(previousProjectedPoint, currentProjectedPoint)) {{
+      context.moveTo(currentProjectedPoint.x, currentProjectedPoint.y);
+    }} else {{
+      context.lineTo(currentProjectedPoint.x, currentProjectedPoint.y);
+    }}
+    context.stroke();
+  }}
+
+  function drawSeparation(referencePoint, challengerPoint, color) {{
+    const referenceProjectedPoint = project(referencePoint);
+    const challengerProjectedPoint = project(challengerPoint);
+    if (tooFarApart(referenceProjectedPoint, challengerProjectedPoint)) {{
+      return;
+    }}
+    context.strokeStyle = color.replace("1)", "0.34)");
+    context.lineWidth = 1.0;
+    line(referenceProjectedPoint, challengerProjectedPoint);
+  }}
+
+  function drawPosition(pointToDraw, fill, radius, stroke) {{
+    const projectedPoint = project(pointToDraw);
+    context.fillStyle = fill;
+    context.strokeStyle = stroke;
+    context.lineWidth = 1.2;
+    circle(projectedPoint, radius, true);
+  }}
+
+  function circle(projectedPoint, radius, withStroke) {{
+    context.beginPath();
+    context.arc(projectedPoint.x, projectedPoint.y, radius, 0, Math.PI * 2);
+    context.fill();
+    if (withStroke) {{
+      context.stroke();
+    }}
+  }}
+
+  function drawFrame() {{
+    context.strokeStyle = "#cfd8e3";
+    context.lineWidth = 2;
+    context.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+  }}
+
+  function line(a, b) {{
+    context.beginPath();
+    context.moveTo(a.x, a.y);
+    context.lineTo(b.x, b.y);
+    context.stroke();
+  }}
+
+  function tooFarApart(a, b) {{
+    return Math.abs(a.x - b.x) > canvas.width * 0.5;
+  }}
+
+  function separationColor(referencePoint, challengerPoint) {{
+    const distance = separationDistanceKilometers(referencePoint, challengerPoint);
+    const ratio = Math.max(0, Math.min(1, distance / payload.separationScaleKilometers));
+    if (ratio < 0.5) {{
+      const fraction = ratio / 0.5;
+      return colorMix([15, 159, 143], [245, 158, 11], fraction);
+    }}
+    return colorMix([245, 158, 11], [209, 73, 91], (ratio - 0.5) / 0.5);
+  }}
+
+  function separationDistanceKilometers(referencePoint, challengerPoint) {{
+    const latitudeRadians = referencePoint.latitude * Math.PI / 180;
+    const latitudeDistance = (challengerPoint.latitude - referencePoint.latitude) * 111;
+    const longitudeDistance = (challengerPoint.longitude - referencePoint.longitude) * 111 * Math.cos(latitudeRadians);
+    return Math.sqrt(latitudeDistance * latitudeDistance + longitudeDistance * longitudeDistance);
+  }}
+
+  function colorMix(start, end, fraction) {{
+    const values = start.map((value, index) => Math.round(value * (1 - fraction) + end[index] * fraction));
+    return `rgba(${{values[0]}}, ${{values[1]}}, ${{values[2]}}, 1)`;
+  }}
+}})();
+</script>
+</body>
+</html>"""
+
+
+def _lagrangian_explorer_iframe_html(document: str, height_pixels: int) -> str:
+    escaped_document = html.escape(document, quote=True)
+    return (
+        f'<iframe srcdoc="{escaped_document}" '
+        + 'style="width:100%; '
+        + f'height:{height_pixels}px; border:0;" '
+        + 'loading="lazy" sandbox="allow-scripts"></iframe>'
+    )
+
+
 def plot_multi_reference_zonal_psd_comparison(
     challenger_dataset: xarray.Dataset,
     reference_datasets: Mapping[str, xarray.Dataset],
@@ -1283,3 +1950,27 @@ def plot_multi_reference_surface_comparison_explorer(
     )
     document = _surface_comparison_explorer_document(element_id, payload)
     return _html_without_iframe_warning(_surface_comparison_iframe_html(document, height_pixels=height_pixels))
+
+
+def plot_multi_reference_lagrangian_trajectory_explorer(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    first_day_index: int = 0,
+    particle_count: int = DEFAULT_LAGRANGIAN_PARTICLE_COUNT,
+    seed: int = 123,
+    challenger_name: str = "Challenger",
+    height_pixels: int = DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Lagrangian trajectory divergence",
+) -> HTML:
+    payload = _lagrangian_payload(
+        challenger_dataset=challenger_dataset,
+        reference_datasets=reference_datasets,
+        first_day_index=first_day_index,
+        particle_count=particle_count,
+        seed=seed,
+        challenger_name=challenger_name,
+        title=title,
+    )
+    element_id = f"ob-lagrangian-{uuid4().hex}"
+    document = _lagrangian_explorer_document(element_id, payload)
+    return _html_without_iframe_warning(_lagrangian_explorer_iframe_html(document, height_pixels=height_pixels))
