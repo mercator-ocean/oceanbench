@@ -138,6 +138,21 @@ oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analys
     region=region,
 )
 
+# ### Lagrangian trajectory divergence
+
+# > Animated trajectories use a sampled subset of particles.
+# > Motion is smooth visual interpolation between true daily positions.
+
+lagrangian_trajectory_explorer = oceanbench.visualization.plot_multi_reference_lagrangian_trajectory_explorer(
+    regional_challenger_dataset,
+    {
+        "GLORYS reanalysis": glorys_dataset,
+        "GLO12 analysis": glo12_dataset,
+    },
+    particle_count=300,
+)
+lagrangian_trajectory_explorer
+
 # ### Forecast comparison maps
 
 forecast_comparison_explorer = oceanbench.visualization.plot_multi_reference_surface_comparison_explorer(

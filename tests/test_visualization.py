@@ -225,6 +225,60 @@ def test_plot_multi_reference_zonal_psd_comparison_accepts_masked_rows_without_w
     assert len(figure.axes) == 1
 
 
+def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_html(monkeypatch) -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    monkeypatch.setattr(
+        core_visualization,
+        "_lagrangian_payload",
+        lambda **_: {
+            "title": "Lagrangian trajectory divergence",
+            "challengerName": "Challenger",
+            "particleCount": 2,
+            "timeLabels": ["1.0", "2.0"],
+            "bounds": {
+                "longitudeMinimum": 9.0,
+                "longitudeMaximum": 15.0,
+                "latitudeMinimum": -2.0,
+                "latitudeMaximum": 2.0,
+            },
+            "separationScaleKilometers": 10.0,
+            "challenger": {
+                "longitude": [[10.0, 11.0], [12.0, 13.0]],
+                "latitude": [[0.0, 0.5], [1.0, 1.5]],
+                "initialLongitude": [10.0, 12.0],
+                "initialLatitude": [0.0, 1.0],
+            },
+            "references": [
+                {
+                    "key": "reference",
+                    "label": "Reference",
+                    "track": {
+                        "longitude": [[10.0, 10.5], [12.0, 12.5]],
+                        "latitude": [[0.0, 0.2], [1.0, 1.2]],
+                        "initialLongitude": [10.0, 12.0],
+                        "initialLatitude": [0.0, 1.0],
+                    },
+                }
+            ],
+        },
+    )
+
+    html_output = oceanbench.visualization.plot_multi_reference_lagrangian_trajectory_explorer(
+        xarray.Dataset(),
+        {"Reference": xarray.Dataset()},
+        height_pixels=510,
+    )
+
+    assert "<iframe" in html_output.data
+    assert "height:510px" in html_output.data
+    assert "Lagrangian trajectory divergence" in html_output.data
+    assert "requestAnimationFrame" in html_output.data
+    assert "Smooth visual interpolation between true daily particle positions" in html_output.data
+    assert "Current separation distance" in html_output.data
+    assert "Reached daily positions" in html_output.data
+
+
 def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: Path) -> None:
     challenger_path = tmp_path / "challenger.py"
     challenger_path.write_text("import xarray\n\nchallenger_dataset = xarray.Dataset()\n", encoding="utf-8")
@@ -253,6 +307,9 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert "dynamic_diagnostic_explorer" in all_sources
     assert 'title="Dynamic diagnostic maps"' in all_sources
     assert "dynamic_diagnostic_variables" in all_sources
+    assert "lagrangian_trajectory_explorer" in all_sources
+    assert "plot_multi_reference_lagrangian_trajectory_explorer" in all_sources
+    assert "particle_count=300" in all_sources
     assert "plot_multi_reference_zonal_psd_comparison" in all_sources
     assert "zonal_psd_figure" in all_sources
     assert "zonal_psd_figure = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison" in all_sources
@@ -281,6 +338,10 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert all_sources.index("glo12_geostrophic_dataset = compute_geostrophic_currents") < all_sources.index(
         "dynamic_diagnostic_explorer ="
     )
+    assert all_sources.index(
+        "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis"
+    ) < all_sources.index("lagrangian_trajectory_explorer =")
+    assert all_sources.index("lagrangian_trajectory_explorer =") < all_sources.index("forecast_comparison_explorer =")
     assert "reference_dataset=glorys_dataset" in all_sources
     assert "reference_dataset=glo12_dataset" in all_sources
     assert "reference_dataset=glorys_mld_dataset" in all_sources
