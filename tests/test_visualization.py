@@ -242,6 +242,11 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
                 "latitudeMinimum": -2.0,
                 "latitudeMaximum": 2.0,
             },
+            "landMask": {
+                "longitude": [9.0, 10.0],
+                "latitude": [0.0, 1.0],
+                "land": [[0, 1], [1, 0]],
+            },
             "separationScaleKilometers": 10.0,
             "challenger": {
                 "longitude": [[10.0, 11.0], [12.0, 13.0]],
@@ -275,6 +280,7 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "Lagrangian trajectory divergence" in html_output.data
     assert "requestAnimationFrame" in html_output.data
     assert "Smooth visual interpolation between true daily particle positions" in html_output.data
+    assert "drawLandMask" in html_output.data
     assert "Current separation distance" in html_output.data
     assert "Reached daily positions" in html_output.data
 
@@ -300,6 +306,11 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
                 "longitudeMaximum": 15.0,
                 "latitudeMinimum": -2.0,
                 "latitudeMaximum": 2.0,
+            },
+            "landMask": {
+                "longitude": [9.0, 10.0],
+                "latitude": [0.0, 1.0],
+                "land": [[0, 1], [1, 0]],
             },
             "references": [
                 {
