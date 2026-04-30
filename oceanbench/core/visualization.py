@@ -55,6 +55,7 @@ ERROR_COLORMAP = "RdBu_r"
 ABSOLUTE_ERROR_COLORMAP = "magma"
 RMSE_COLORMAP = "magma"
 LAND_BACKGROUND_COLOR = "#d9d5cc"
+NO_DATA_COLOR = "#eef2f7"
 DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS = 160_000
 DEFAULT_EXPLORER_HEIGHT_PIXELS = 760
 DEFAULT_EXPLORER_IMAGE_QUALITY = 85
@@ -488,7 +489,7 @@ def _encoded_webp_image(
 ) -> str:
     field = _prepared_image_field(field)
     colormap = colormaps[colormap_name].copy()
-    colormap.set_bad(LAND_BACKGROUND_COLOR)
+    colormap.set_bad(NO_DATA_COLOR)
     figure, axis = plt.subplots(figsize=(11.0, 6.2), dpi=100)
     figure.patch.set_facecolor("#ffffff")
     axis.set_facecolor(LAND_BACKGROUND_COLOR)
