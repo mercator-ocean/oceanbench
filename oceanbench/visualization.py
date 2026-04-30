@@ -130,7 +130,34 @@ def plot_multi_reference_zonal_psd_comparison(
     )
 
 
+def plot_multi_reference_lagrangian_trajectory_explorer(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    first_day_index: int = 0,
+    particle_count: int = visualization.DEFAULT_LAGRANGIAN_PARTICLE_COUNT,
+    seed: int = 123,
+    challenger_name: str = "Challenger",
+    height_pixels: int = visualization.DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Lagrangian trajectory divergence",
+):
+    """
+    Display an animated browser-side explorer for sampled Lagrangian trajectory divergence.
+    """
+
+    return visualization.plot_multi_reference_lagrangian_trajectory_explorer(
+        challenger_dataset=challenger_dataset,
+        reference_datasets=reference_datasets,
+        first_day_index=first_day_index,
+        particle_count=particle_count,
+        seed=seed,
+        challenger_name=challenger_name,
+        height_pixels=height_pixels,
+        title=title,
+    )
+
+
 __all__ = [
+    "plot_multi_reference_lagrangian_trajectory_explorer",
     "plot_multi_reference_surface_comparison_explorer",
     "plot_multi_reference_zonal_psd_comparison",
     "plot_surface_comparison_explorer",
