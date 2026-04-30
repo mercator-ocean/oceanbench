@@ -156,6 +156,8 @@ forecast_comparison_explorer
 
 # ### Dynamic diagnostic maps
 
+# > Geostrophic currents are masked near the equator where the Coriolis parameter is too small.
+
 challenger_dynamic_dataset = xarray.merge([challenger_mld_dataset, challenger_geostrophic_dataset])
 glorys_dynamic_dataset = xarray.merge([glorys_mld_dataset, glorys_geostrophic_dataset])
 glo12_dynamic_dataset = xarray.merge([glo12_mld_dataset, glo12_geostrophic_dataset])
