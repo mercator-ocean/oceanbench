@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Open WenHai 1 degree base challenger forecasts with xarray
+# Open WenHai 1 degree interpolated challenger forecasts with xarray
 import xarray
 import oceanbench
 

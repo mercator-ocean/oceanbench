@@ -436,7 +436,6 @@ function buildTabsInnerHtml(sections) {
 }
 
 function buildTrackTabsInnerHtml(trackKeys) {
-  if (trackKeys.length <= 1) return "";
   let markup = "";
   for (const trackKey of trackKeys) {
     const isActive = trackKey === activeTrack;
@@ -503,7 +502,7 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
 function buildRegionSelectorInnerHtml(regionIds) {
   if (regionIds.length === 0) return "";
 
-  let markup = '<div class="region-selector-layout">';
+  let markup = `<div class="region-selector-layout region-selector-layout--${activeRegion}">`;
   markup += '<div class="region-selector-copy">';
   markup += '<div class="region-selector-row">';
   markup += '<span class="region-selector-label">Region</span>';
@@ -528,12 +527,10 @@ function buildRegionSelectorInnerHtml(regionIds) {
       : [],
   );
   const trackTabs = buildTrackTabsInnerHtml(trackKeys);
-  if (trackTabs) {
-    markup += '<div class="track-selector-row">';
-    markup += '<span class="region-selector-label">Track</span>';
-    markup += `<div id="score-track-tabs" role="group" aria-label="Model resolution track">${trackTabs}</div>`;
-    markup += "</div>";
-  }
+  markup += '<div class="track-selector-row">';
+  markup += '<span class="region-selector-label">Track</span>';
+  markup += `<div id="score-track-tabs" role="group" aria-label="Model resolution track">${trackTabs}</div>`;
+  markup += "</div>";
   markup += "</div>";
   markup += '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
   markup += "</div>";
