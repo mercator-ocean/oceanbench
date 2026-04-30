@@ -225,7 +225,7 @@ def test_plot_multi_reference_zonal_psd_comparison_accepts_masked_rows_without_w
     assert len(figure.axes) == 1
 
 
-def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_path: Path) -> None:
+def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: Path) -> None:
     challenger_path = tmp_path / "challenger.py"
     challenger_path.write_text("import xarray\n\nchallenger_dataset = xarray.Dataset()\n", encoding="utf-8")
     output_path = tmp_path / "report.ipynb"
@@ -245,9 +245,10 @@ def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_
     assert "glo12_analysis_dataset" in all_sources
     assert '"GLO12 analysis"' in all_sources
     assert "from oceanbench.core.rmsd import rmsd" in all_sources
-    assert "surface_comparison_explorer" in all_sources
+    assert "from dask.array.core import PerformanceWarning" in all_sources
+    assert "forecast_comparison_explorer" in all_sources
     assert 'title="Forecast comparison maps"' in all_sources
-    assert "surface_comparison_variables" in all_sources
+    assert "forecast_comparison_variables" in all_sources
     assert "geostrophic_current_variables" in all_sources
     assert "dynamic_diagnostic_explorer" in all_sources
     assert 'title="Dynamic diagnostic maps"' in all_sources
@@ -266,12 +267,25 @@ def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_
     assert "Variable.MIXED_LAYER_DEPTH" in all_sources
     assert "Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY" in all_sources
     assert "Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY" in all_sources
-    assert "surface_comparison_explorer\n" in all_sources
+    assert "forecast_comparison_explorer\n" in all_sources
     assert "dynamic_diagnostic_explorer\n" in all_sources
+    assert "surface_comparison_explorer =" not in all_sources
+    assert "\nsurface_comparison_explorer\n" not in all_sources
+    assert "surface_comparison_variables" not in all_sources
+    assert "warnings.filterwarnings" in all_sources
+    assert "Increasing number of chunks" in all_sources
+    assert all_sources.index("rmsd(\n    challenger_dataset=regional_challenger_dataset") < all_sources.index(
+        "forecast_comparison_explorer ="
+    )
+    assert all_sources.index("glo12_geostrophic_dataset = compute_geostrophic_currents") < all_sources.index(
+        "dynamic_diagnostic_explorer ="
+    )
     assert "reference_dataset=glorys_dataset" in all_sources
     assert "reference_dataset=glo12_dataset" in all_sources
-    assert "reference_dataset=glorys_dynamic_dataset" in all_sources
-    assert "reference_dataset=glo12_dynamic_dataset" in all_sources
+    assert "reference_dataset=glorys_mld_dataset" in all_sources
+    assert "reference_dataset=glo12_mld_dataset" in all_sources
+    assert "reference_dataset=glorys_geostrophic_dataset" in all_sources
+    assert "reference_dataset=glo12_geostrophic_dataset" in all_sources
     assert "oceanbench.metrics.rmsd_of_variables_compared_to_observations" in all_sources
     assert "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis" in all_sources
     assert "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis" in all_sources
