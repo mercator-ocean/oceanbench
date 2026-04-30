@@ -22,16 +22,26 @@ from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
+from oceanbench.core.rmsd import rmsd
 
 regional_challenger_dataset = oceanbench.regions.subset(challenger_dataset, region)
-glorys_dataset = oceanbench.regions.subset(glorys_reanalysis_dataset(challenger_dataset), region)
-glo12_dataset = oceanbench.regions.subset(glo12_analysis_dataset(challenger_dataset), region)
+glorys_dataset = oceanbench.regions.subset(glorys_reanalysis_dataset(regional_challenger_dataset), region)
+glo12_dataset = oceanbench.regions.subset(glo12_analysis_dataset(regional_challenger_dataset), region)
 surface_comparison_variables = [
     Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
     Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
     Variable.SEA_WATER_SALINITY,
     Variable.EASTWARD_SEA_WATER_VELOCITY,
     Variable.NORTHWARD_SEA_WATER_VELOCITY,
+]
+dynamic_diagnostic_variables = [
+    Variable.MIXED_LAYER_DEPTH,
+    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
+    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
+]
+geostrophic_current_variables = [
+    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
+    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
 ]
 
 surface_comparison_explorer = oceanbench.visualization.plot_multi_reference_surface_comparison_explorer(
@@ -68,11 +78,6 @@ glo12_dynamic_dataset = xarray.merge(
         compute_geostrophic_currents(glo12_dataset),
     ]
 )
-dynamic_diagnostic_variables = [
-    Variable.MIXED_LAYER_DEPTH,
-    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
-    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
-]
 
 dynamic_diagnostic_explorer = oceanbench.visualization.plot_multi_reference_surface_comparison_explorer(
     challenger_dynamic_dataset,
@@ -107,23 +112,26 @@ None
 
 # #### Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
 
-oceanbench.metrics.rmsd_of_variables_compared_to_glorys_reanalysis(
-    challenger_dataset,
-    region=region,
+rmsd(
+    challenger_dataset=regional_challenger_dataset,
+    reference_dataset=glorys_dataset,
+    variables=surface_comparison_variables,
 )
 
 # #### Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLORYS reanalysis
 
-oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
-    challenger_dataset,
-    region=region,
+rmsd(
+    challenger_dataset=challenger_dynamic_dataset,
+    reference_dataset=glorys_dynamic_dataset,
+    variables=[Variable.MIXED_LAYER_DEPTH],
 )
 
 # #### Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS reanalysis
 
-oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
-    challenger_dataset,
-    region=region,
+rmsd(
+    challenger_dataset=challenger_dynamic_dataset,
+    reference_dataset=glorys_dynamic_dataset,
+    variables=geostrophic_current_variables,
 )
 
 # #### Root Mean Square Deviation (RMSD) of variables compared to observations
@@ -142,23 +150,26 @@ oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reana
 
 # #### Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis
 
-oceanbench.metrics.rmsd_of_variables_compared_to_glo12_analysis(
-    challenger_dataset,
-    region=region,
+rmsd(
+    challenger_dataset=regional_challenger_dataset,
+    reference_dataset=glo12_dataset,
+    variables=surface_comparison_variables,
 )
 
 # #### Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLO12 analysis
 
-oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
-    challenger_dataset,
-    region=region,
+rmsd(
+    challenger_dataset=challenger_dynamic_dataset,
+    reference_dataset=glo12_dynamic_dataset,
+    variables=[Variable.MIXED_LAYER_DEPTH],
 )
 
 # #### Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis
 
-oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
-    challenger_dataset,
-    region=region,
+rmsd(
+    challenger_dataset=challenger_dynamic_dataset,
+    reference_dataset=glo12_dynamic_dataset,
+    variables=geostrophic_current_variables,
 )
 
 # #### Deviation of Lagrangian trajectories compared to GLO12 analysis

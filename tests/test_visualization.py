@@ -244,9 +244,11 @@ def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_
     assert '"GLORYS reanalysis"' in all_sources
     assert "glo12_analysis_dataset" in all_sources
     assert '"GLO12 analysis"' in all_sources
+    assert "from oceanbench.core.rmsd import rmsd" in all_sources
     assert "surface_comparison_explorer" in all_sources
     assert 'title="Forecast comparison maps"' in all_sources
     assert "surface_comparison_variables" in all_sources
+    assert "geostrophic_current_variables" in all_sources
     assert "dynamic_diagnostic_explorer" in all_sources
     assert 'title="Dynamic diagnostic maps"' in all_sources
     assert "dynamic_diagnostic_variables" in all_sources
@@ -266,6 +268,19 @@ def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_
     assert "Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY" in all_sources
     assert "surface_comparison_explorer\n" in all_sources
     assert "dynamic_diagnostic_explorer\n" in all_sources
+    assert "reference_dataset=glorys_dataset" in all_sources
+    assert "reference_dataset=glo12_dataset" in all_sources
+    assert "reference_dataset=glorys_dynamic_dataset" in all_sources
+    assert "reference_dataset=glo12_dynamic_dataset" in all_sources
+    assert "oceanbench.metrics.rmsd_of_variables_compared_to_observations" in all_sources
+    assert "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis" in all_sources
+    assert "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis" in all_sources
+    assert "oceanbench.metrics.rmsd_of_variables_compared_to_glorys_reanalysis" not in all_sources
+    assert "oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis" not in all_sources
+    assert "oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis" not in all_sources
+    assert "oceanbench.metrics.rmsd_of_variables_compared_to_glo12_analysis" not in all_sources
+    assert "oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glo12_analysis" not in all_sources
+    assert "oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glo12_analysis" not in all_sources
     assert "glorys_surface_comparison_explorer" not in all_sources
     assert "glo12_surface_comparison_explorer" not in all_sources
     assert "plot_surface_comparison_maps" not in all_sources
