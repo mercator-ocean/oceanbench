@@ -41,6 +41,7 @@ surface_comparison_explorer = oceanbench.visualization.plot_multi_reference_surf
         "GLO12 analysis": glo12_dataset,
     },
     variables=surface_comparison_variables,
+    title="Forecast comparison maps",
 )
 
 # > Interactive map loading... The report can pause here while the browser parses the embedded map images.
@@ -80,6 +81,7 @@ dynamic_diagnostic_explorer = oceanbench.visualization.plot_multi_reference_surf
         "GLO12 analysis": glo12_dynamic_dataset,
     },
     variables=dynamic_diagnostic_variables,
+    title="Dynamic diagnostic maps",
 )
 
 # > Interactive map loading... The report can pause here while the browser parses the embedded map images.
@@ -99,7 +101,7 @@ zonal_psd_figure = oceanbench.visualization.plot_multi_reference_zonal_psd_compa
         Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
     ],
 )
-zonal_psd_figure
+None
 
 # ### Evaluation of challenger dataset using OceanBench
 
