@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import warnings
 from pathlib import Path
 
 import nbformat
@@ -207,6 +208,23 @@ def test_plot_multi_reference_zonal_psd_comparison_returns_compact_figure() -> N
     assert figure.axes[0].get_yscale() == "log"
 
 
+def test_plot_multi_reference_zonal_psd_comparison_accepts_masked_rows_without_warning() -> None:
+    sea_surface_height = numpy.arange(18, dtype=float).reshape(1, 3, 2, 3)
+    sea_surface_height[:, :, 1, :] = numpy.nan
+    challenger_dataset = _map_dataset({Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): sea_surface_height})
+    reference_dataset = _map_dataset({Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): sea_surface_height + 1.0})
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        figure = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison(
+            challenger_dataset,
+            {"Reference": reference_dataset},
+            variables=[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID],
+        )
+
+    assert len(figure.axes) == 1
+
+
 def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_path: Path) -> None:
     challenger_path = tmp_path / "challenger.py"
     challenger_path.write_text("import xarray\n\nchallenger_dataset = xarray.Dataset()\n", encoding="utf-8")
@@ -227,11 +245,15 @@ def test_generated_evaluation_notebook_contains_surface_comparison_explorer(tmp_
     assert "glo12_analysis_dataset" in all_sources
     assert '"GLO12 analysis"' in all_sources
     assert "surface_comparison_explorer" in all_sources
+    assert 'title="Forecast comparison maps"' in all_sources
     assert "surface_comparison_variables" in all_sources
     assert "dynamic_diagnostic_explorer" in all_sources
+    assert 'title="Dynamic diagnostic maps"' in all_sources
     assert "dynamic_diagnostic_variables" in all_sources
     assert "plot_multi_reference_zonal_psd_comparison" in all_sources
     assert "zonal_psd_figure" in all_sources
+    assert "zonal_psd_figure = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison" in all_sources
+    assert ")\nNone" in next(cell.source for cell in notebook.cells if "zonal_psd_figure =" in cell.source)
     assert "compute_mixed_layer_depth" in all_sources
     assert "compute_geostrophic_currents" in all_sources
     assert "Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID" in all_sources

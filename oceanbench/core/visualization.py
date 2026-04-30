@@ -262,7 +262,10 @@ def _zonal_wavelength_kilometers(field: xarray.DataArray) -> numpy.ndarray:
 
 def _zonal_power_spectrum(field: xarray.DataArray) -> tuple[numpy.ndarray, numpy.ndarray]:
     values = numpy.asarray(field.values, dtype=float)
-    values = values - numpy.nanmean(values, axis=-1, keepdims=True)
+    finite_counts = numpy.sum(numpy.isfinite(values), axis=-1, keepdims=True)
+    zonal_sums = numpy.nansum(values, axis=-1, keepdims=True)
+    zonal_means = numpy.divide(zonal_sums, finite_counts, out=numpy.zeros_like(zonal_sums), where=finite_counts > 0)
+    values = values - zonal_means
     values = numpy.nan_to_num(values, nan=0.0)
     spectrum = numpy.fft.rfft(values, axis=-1)
     power = numpy.nanmean(numpy.abs(spectrum) ** 2, axis=-2)
@@ -681,13 +684,10 @@ def _surface_comparison_variable_payload(
 def _surface_comparison_payload(
     variable_payloads: Sequence[dict[str, object]],
     reference_name: str | None,
+    title: str,
 ) -> dict[str, object]:
     return {
-        "title": (
-            f"Surface diagnostic maps against {reference_name}"
-            if reference_name is not None
-            else "Surface diagnostic maps"
-        ),
+        "title": f"{title} against {reference_name}" if reference_name is not None else title,
         "variables": list(variable_payloads),
     }
 
@@ -1228,6 +1228,7 @@ def plot_surface_comparison_explorer(
     challenger_name: str = "Challenger",
     maximum_map_cells: int = DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS,
     height_pixels: int = DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Forecast comparison maps",
 ) -> HTML:
     return plot_multi_reference_surface_comparison_explorer(
         challenger_dataset=challenger_dataset,
@@ -1239,6 +1240,7 @@ def plot_surface_comparison_explorer(
         challenger_name=challenger_name,
         maximum_map_cells=maximum_map_cells,
         height_pixels=height_pixels,
+        title=title,
     )
 
 
@@ -1252,6 +1254,7 @@ def plot_multi_reference_surface_comparison_explorer(
     challenger_name: str = "Challenger",
     maximum_map_cells: int = DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS,
     height_pixels: int = DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Forecast comparison maps",
 ) -> HTML:
     variable_keys = _resolved_variable_keys(variables)
     if lead_day_indices is None:
@@ -1275,6 +1278,7 @@ def plot_multi_reference_surface_comparison_explorer(
     payload = _surface_comparison_payload(
         reference_name=None,
         variable_payloads=variable_payloads,
+        title=title,
     )
     document = _surface_comparison_explorer_document(element_id, payload)
     return _html_without_iframe_warning(_surface_comparison_iframe_html(document, height_pixels=height_pixels))
