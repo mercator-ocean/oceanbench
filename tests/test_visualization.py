@@ -279,6 +279,67 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "Reached daily positions" in html_output.data
 
 
+def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monkeypatch) -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    eddy_record = {
+        "id": 1,
+        "latitude": 0.0,
+        "longitude": 10.0,
+        "polarity": "cyclone",
+        "contourLatitude": [0.0, 0.3, 0.0, -0.3],
+        "contourLongitude": [9.7, 10.0, 10.3, 10.0],
+    }
+    monkeypatch.setattr(
+        core_visualization,
+        "_eddy_payload",
+        lambda **_: {
+            "title": "Mesoscale eddy matching",
+            "bounds": {
+                "longitudeMinimum": 9.0,
+                "longitudeMaximum": 15.0,
+                "latitudeMinimum": -2.0,
+                "latitudeMaximum": 2.0,
+            },
+            "references": [
+                {
+                    "key": "reference",
+                    "label": "Reference",
+                    "frames": [
+                        {
+                            "leadDay": 1,
+                            "matches": [
+                                {
+                                    "challenger": eddy_record,
+                                    "reference": eddy_record,
+                                    "distanceKilometers": 12.0,
+                                }
+                            ],
+                            "spurious": [eddy_record],
+                            "missed": [eddy_record],
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    html_output = oceanbench.visualization.plot_multi_reference_eddy_matching_explorer(
+        xarray.Dataset(),
+        {"Reference": xarray.Dataset()},
+        height_pixels=520,
+    )
+
+    assert "<iframe" in html_output.data
+    assert "height:520px" in html_output.data
+    assert "Mesoscale eddy matching" in html_output.data
+    assert "Discrete SSH eddy detections per lead day" in html_output.data
+    assert "Matched eddy" in html_output.data
+    assert "Spurious challenger" in html_output.data
+    assert "Missed reference" in html_output.data
+    assert "window.setInterval" in html_output.data
+
+
 def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: Path) -> None:
     challenger_path = tmp_path / "challenger.py"
     challenger_path.write_text("import xarray\n\nchallenger_dataset = xarray.Dataset()\n", encoding="utf-8")
@@ -310,6 +371,9 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert "lagrangian_trajectory_explorer" in all_sources
     assert "plot_multi_reference_lagrangian_trajectory_explorer" in all_sources
     assert "particle_count=300" in all_sources
+    assert "eddy_matching_explorer" in all_sources
+    assert "plot_multi_reference_eddy_matching_explorer" in all_sources
+    assert "Eddy centers and contours are detected" in all_sources
     assert "plot_multi_reference_zonal_psd_comparison" in all_sources
     assert "zonal_psd_figure" in all_sources
     assert "zonal_psd_figure = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison" in all_sources
@@ -341,7 +405,8 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert all_sources.index(
         "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis"
     ) < all_sources.index("lagrangian_trajectory_explorer =")
-    assert all_sources.index("lagrangian_trajectory_explorer =") < all_sources.index("forecast_comparison_explorer =")
+    assert all_sources.index("lagrangian_trajectory_explorer =") < all_sources.index("eddy_matching_explorer =")
+    assert all_sources.index("eddy_matching_explorer =") < all_sources.index("forecast_comparison_explorer =")
     assert "reference_dataset=glorys_dataset" in all_sources
     assert "reference_dataset=glo12_dataset" in all_sources
     assert "reference_dataset=glorys_mld_dataset" in all_sources
