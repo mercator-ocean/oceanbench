@@ -25,6 +25,7 @@ def plot_surface_comparison_explorer(
     challenger_name: str = "Challenger",
     maximum_map_cells: int = visualization.DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS,
     height_pixels: int = visualization.DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Forecast comparison maps",
 ):
     """
     Display a browser-side explorer for challenger, reference, and error surface maps.
@@ -53,6 +54,8 @@ def plot_surface_comparison_explorer(
         Maximum number of displayed cells per map before stride-based thinning.
     height_pixels : int, optional
         The iframe height used by notebook and website renderers.
+    title : str, optional
+        The display title shown above the interactive map.
     """
 
     return visualization.plot_surface_comparison_explorer(
@@ -66,6 +69,7 @@ def plot_surface_comparison_explorer(
         challenger_name=challenger_name,
         maximum_map_cells=maximum_map_cells,
         height_pixels=height_pixels,
+        title=title,
     )
 
 
@@ -79,6 +83,7 @@ def plot_multi_reference_surface_comparison_explorer(
     challenger_name: str = "Challenger",
     maximum_map_cells: int = visualization.DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS,
     height_pixels: int = visualization.DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Forecast comparison maps",
 ):
     """
     Display one browser-side explorer comparing a challenger to several references.
@@ -97,6 +102,7 @@ def plot_multi_reference_surface_comparison_explorer(
         challenger_name=challenger_name,
         maximum_map_cells=maximum_map_cells,
         height_pixels=height_pixels,
+        title=title,
     )
 
 
