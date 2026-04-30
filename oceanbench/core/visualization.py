@@ -63,6 +63,7 @@ DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS = 160_000
 DEFAULT_EXPLORER_HEIGHT_PIXELS = 760
 DEFAULT_EXPLORER_IMAGE_QUALITY = 85
 DEFAULT_LAGRANGIAN_PARTICLE_COUNT = 300
+DEFAULT_LAGRANGIAN_MAXIMUM_LAND_MASK_CELLS = 80_000
 DEFAULT_EDDY_MAXIMUM_CONTOUR_POINTS = 80
 DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS: tuple[float, ...] = tuple(depth_level.value for depth_level in DepthLevel)
 GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES = 300.0
@@ -1093,12 +1094,13 @@ def _lagrangian_bounds(dataset: xarray.Dataset) -> dict[str, float]:
     }
 
 
-def _particle_track_payload(particles: xarray.Dataset) -> dict[str, object]:
+def _particle_track_payload(particles: xarray.Dataset, time_count: int | None = None) -> dict[str, object]:
+    selected_particles = particles if time_count is None else particles.isel({"time": slice(0, time_count)})
     return {
-        "longitude": _json_ready_array(particles["lon"].values),
-        "latitude": _json_ready_array(particles["lat"].values),
-        "initialLongitude": _json_ready_array(particles["lon0"].values),
-        "initialLatitude": _json_ready_array(particles["lat0"].values),
+        "longitude": _json_ready_array(selected_particles["lon"].values),
+        "latitude": _json_ready_array(selected_particles["lat"].values),
+        "initialLongitude": _json_ready_array(selected_particles["lon0"].values),
+        "initialLatitude": _json_ready_array(selected_particles["lat0"].values),
     }
 
 
@@ -1112,6 +1114,30 @@ def _trajectory_distances_kilometers(
     longitude_delta = challenger_particles["lon"].values - reference_particles["lon"].values
     longitude_distance = longitude_delta * 111.0 * numpy.cos(latitude_reference_radians)
     return numpy.sqrt(latitude_distance**2 + longitude_distance**2)
+
+
+def _surface_mask_field(dataset: xarray.Dataset, first_day_index: int) -> xarray.DataArray:
+    field = _standard_dataset(dataset)[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
+    if Dimension.FIRST_DAY_DATETIME.key() in field.dims:
+        field = field.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index})
+    if Dimension.LEAD_DAY_INDEX.key() in field.dims:
+        field = field.isel({Dimension.LEAD_DAY_INDEX.key(): 0})
+    elif Dimension.TIME.key() in field.dims:
+        field = field.isel({Dimension.TIME.key(): 0})
+    if Dimension.DEPTH.key() in field.dims:
+        field = field.isel({Dimension.DEPTH.key(): 0})
+    return _prepared_image_field(field.compute()).sortby(Dimension.LATITUDE.key())
+
+
+def _lagrangian_land_mask_payload(dataset: xarray.Dataset, first_day_index: int) -> dict[str, object]:
+    field = _surface_mask_field(dataset, first_day_index)
+    thinned_field = _thin_field(field, _spatial_stride(field, DEFAULT_LAGRANGIAN_MAXIMUM_LAND_MASK_CELLS))
+    land_mask = numpy.where(numpy.isfinite(thinned_field.values), 0, 1).astype(int)
+    return {
+        "longitude": _json_ready_array(thinned_field[Dimension.LONGITUDE.key()].values),
+        "latitude": _json_ready_array(thinned_field[Dimension.LATITUDE.key()].values),
+        "land": land_mask.tolist(),
+    }
 
 
 def _lagrangian_separation_scale_kilometers(
@@ -1167,7 +1193,7 @@ def _lagrangian_payload(
         longitudes=initial_longitudes,
     )
     reference_particles_by_key: dict[str, xarray.Dataset] = {}
-    reference_payloads: list[dict[str, object]] = []
+    reference_labels_by_key: dict[str, str] = {}
     for reference_name, reference_dataset in reference_datasets.items():
         reference_standard_dataset = lagrangian_trajectory._harmonise_dataset(reference_dataset)
         reference_run_dataset = lagrangian_trajectory._split_dataset(reference_standard_dataset)[first_day_index]
@@ -1178,26 +1204,32 @@ def _lagrangian_payload(
         )
         key = _reference_key(reference_name)
         reference_particles_by_key[key] = reference_particles
-        reference_payloads.append(
-            {
-                "key": key,
-                "label": reference_name,
-                "track": _particle_track_payload(reference_particles),
-            }
-        )
+        reference_labels_by_key[key] = reference_name
 
-    time_count = challenger_particles.sizes["time"]
+    time_count = min(
+        challenger_particles.sizes["time"],
+        *(reference_particles.sizes["time"] for reference_particles in reference_particles_by_key.values()),
+    )
+    reference_payloads = [
+        {
+            "key": key,
+            "label": reference_labels_by_key[key],
+            "track": _particle_track_payload(reference_particles, time_count=time_count),
+        }
+        for key, reference_particles in reference_particles_by_key.items()
+    ]
     return {
         "title": title,
         "challengerName": challenger_name,
         "particleCount": int(challenger_particles.sizes["particle"]),
         "timeLabels": [f"{index + 1:.1f}" for index in range(time_count)],
         "bounds": _lagrangian_bounds(challenger_dataset),
+        "landMask": _lagrangian_land_mask_payload(challenger_standard_dataset, first_day_index),
         "separationScaleKilometers": _lagrangian_separation_scale_kilometers(
             challenger_particles,
             reference_particles_by_key,
         ),
-        "challenger": _particle_track_payload(challenger_particles),
+        "challenger": _particle_track_payload(challenger_particles, time_count=time_count),
         "references": reference_payloads,
     }
 
@@ -1282,6 +1314,26 @@ html, body {{
   background: #ffffff;
   color: #0f5f8f;
   cursor: pointer;
+}}
+.ob-lagrangian-zoom {{
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #cfd8e3;
+  border-radius: 999px;
+  background: #ffffff;
+}}
+.ob-lagrangian-zoom button {{
+  min-width: 34px;
+  height: 34px;
+  border: 0;
+  border-right: 1px solid #cfd8e3;
+  background: transparent;
+  color: #0f5f8f;
+  cursor: pointer;
+  font-size: 13px;
+}}
+.ob-lagrangian-zoom button:last-child {{
+  border-right: 0;
 }}
 .ob-lagrangian-slider {{
   display: grid;
@@ -1377,6 +1429,11 @@ html, body {{
           <span class="ob-lagrangian-time-label"></span>
           <input class="ob-lagrangian-time-input" type="range" min="0" step="0.02" value="0">
         </label>
+        <div class="ob-lagrangian-zoom" aria-label="Map zoom controls">
+          <button class="ob-lagrangian-zoom-out" type="button" title="Zoom out">−</button>
+          <button class="ob-lagrangian-zoom-in" type="button" title="Zoom in">+</button>
+          <button class="ob-lagrangian-zoom-reset" type="button" title="Reset zoom">1:1</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1404,10 +1461,14 @@ html, body {{
   const playButton = root.querySelector(".ob-lagrangian-play");
   const timeLabel = root.querySelector(".ob-lagrangian-time-label");
   const timeInput = root.querySelector(".ob-lagrangian-time-input");
+  const zoomOutButton = root.querySelector(".ob-lagrangian-zoom-out");
+  const zoomInButton = root.querySelector(".ob-lagrangian-zoom-in");
+  const zoomResetButton = root.querySelector(".ob-lagrangian-zoom-reset");
   const statusText = root.querySelector(".ob-lagrangian-status-text");
   const references = Object.fromEntries(payload.references.map((reference) => [reference.key, reference]));
   let activeReferenceKey = payload.references[0].key;
   let activeTime = 0;
+  let viewBounds = {{ ...payload.bounds }};
   let animationFrame = null;
   let lastFrameTime = null;
 
@@ -1427,6 +1488,21 @@ html, body {{
     lastFrameTime = null;
     animationFrame = window.requestAnimationFrame(tick);
   }});
+  zoomOutButton.addEventListener("click", () => {{
+    zoom(0.5);
+  }});
+  zoomInButton.addEventListener("click", () => {{
+    zoom(2.0);
+  }});
+  zoomResetButton.addEventListener("click", () => {{
+    viewBounds = {{ ...payload.bounds }};
+    draw();
+  }});
+  canvas.addEventListener("wheel", (event) => {{
+    event.preventDefault();
+    const zoomFactor = event.deltaY < 0 ? 1.18 : 1 / 1.18;
+    zoomAtCanvasPoint(zoomFactor, event.offsetX, event.offsetY);
+  }}, {{ passive: false }});
 
   renderControls();
   draw();
@@ -1504,7 +1580,7 @@ html, body {{
   }}
 
   function project(point) {{
-    const bounds = payload.bounds;
+    const bounds = viewBounds;
     const x = (
       (point.longitude - bounds.longitudeMinimum) / (bounds.longitudeMaximum - bounds.longitudeMinimum)
     ) * canvas.width;
@@ -1512,6 +1588,34 @@ html, body {{
       (point.latitude - bounds.latitudeMinimum) / (bounds.latitudeMaximum - bounds.latitudeMinimum)
     ) * canvas.height;
     return {{ x, y }};
+  }}
+
+  function zoom(factor) {{
+    zoomAt(
+      factor,
+      (viewBounds.longitudeMinimum + viewBounds.longitudeMaximum) / 2,
+      (viewBounds.latitudeMinimum + viewBounds.latitudeMaximum) / 2,
+    );
+  }}
+
+  function zoomAtCanvasPoint(factor, x, y) {{
+    const longitude = viewBounds.longitudeMinimum
+      + (x / canvas.clientWidth) * (viewBounds.longitudeMaximum - viewBounds.longitudeMinimum);
+    const latitude = viewBounds.latitudeMaximum
+      - (y / canvas.clientHeight) * (viewBounds.latitudeMaximum - viewBounds.latitudeMinimum);
+    zoomAt(factor, longitude, latitude);
+  }}
+
+  function zoomAt(factor, longitudeCenter, latitudeCenter) {{
+    const longitudeHalfSpan = (viewBounds.longitudeMaximum - viewBounds.longitudeMinimum) / (2 * factor);
+    const latitudeHalfSpan = (viewBounds.latitudeMaximum - viewBounds.latitudeMinimum) / (2 * factor);
+    viewBounds = {{
+      longitudeMinimum: longitudeCenter - longitudeHalfSpan,
+      longitudeMaximum: longitudeCenter + longitudeHalfSpan,
+      latitudeMinimum: latitudeCenter - latitudeHalfSpan,
+      latitudeMaximum: latitudeCenter + latitudeHalfSpan,
+    }};
+    draw();
   }}
 
   function draw() {{
@@ -1538,6 +1642,7 @@ html, body {{
   function drawBackground() {{
     context.fillStyle = "#eef7fb";
     context.fillRect(0, 0, canvas.width, canvas.height);
+    drawLandMask();
     context.strokeStyle = "rgba(51, 65, 85, 0.18)";
     context.lineWidth = 1;
     const bounds = payload.bounds;
@@ -1571,6 +1676,33 @@ html, body {{
     if (span > 35) return 10;
     if (span > 12) return 5;
     return 2;
+  }}
+
+  function drawLandMask() {{
+    const landMask = payload.landMask;
+    if (!landMask || landMask.land.length === 0) return;
+    const longitudes = landMask.longitude;
+    const latitudes = landMask.latitude;
+    const longitudeStep = coordinateStep(longitudes);
+    const latitudeStep = coordinateStep(latitudes);
+    context.fillStyle = "{LAND_BACKGROUND_COLOR}";
+    for (let latitudeIndex = 0; latitudeIndex < latitudes.length; latitudeIndex += 1) {{
+      for (let longitudeIndex = 0; longitudeIndex < longitudes.length; longitudeIndex += 1) {{
+        if (landMask.land[latitudeIndex][longitudeIndex] !== 1) continue;
+        const west = longitudes[longitudeIndex] - longitudeStep / 2;
+        const east = longitudes[longitudeIndex] + longitudeStep / 2;
+        const south = latitudes[latitudeIndex] - latitudeStep / 2;
+        const north = latitudes[latitudeIndex] + latitudeStep / 2;
+        const northwest = project({{ longitude: west, latitude: north }});
+        const southeast = project({{ longitude: east, latitude: south }});
+        context.fillRect(northwest.x, northwest.y, southeast.x - northwest.x + 1, southeast.y - northwest.y + 1);
+      }}
+    }}
+  }}
+
+  function coordinateStep(values) {{
+    if (values.length < 2) return 1;
+    return Math.abs(values[1] - values[0]);
   }}
 
   function drawDailyMarkers(challengerTrack, referenceTrack, time) {{
@@ -1628,8 +1760,8 @@ html, body {{
     if (tooFarApart(referenceProjectedPoint, challengerProjectedPoint)) {{
       return;
     }}
-    context.strokeStyle = color.replace("1)", "0.34)");
-    context.lineWidth = 1.0;
+    context.strokeStyle = color.replace("1)", "0.68)");
+    context.lineWidth = 1.8;
     line(referenceProjectedPoint, challengerProjectedPoint);
   }}
 
@@ -1896,6 +2028,7 @@ def _eddy_payload(
     return {
         "title": title,
         "bounds": _lagrangian_bounds(challenger_dataset),
+        "landMask": _lagrangian_land_mask_payload(challenger_dataset, first_day_index),
         "references": [
             _eddy_reference_payload(
                 challenger_dataset,
@@ -2177,6 +2310,7 @@ html, body {{
   function drawBackground() {{
     context.fillStyle = "#eef7fb";
     context.fillRect(0, 0, canvas.width, canvas.height);
+    drawLandMask();
     context.strokeStyle = "rgba(51, 65, 85, 0.18)";
     context.lineWidth = 1;
     const bounds = payload.bounds;
@@ -2192,6 +2326,33 @@ html, body {{
       const eastPoint = project({{ longitude: bounds.longitudeMaximum, latitude }});
       line(westPoint, eastPoint);
     }}
+  }}
+
+  function drawLandMask() {{
+    const landMask = payload.landMask;
+    if (!landMask || landMask.land.length === 0) return;
+    const longitudes = landMask.longitude;
+    const latitudes = landMask.latitude;
+    const longitudeStep = coordinateStep(longitudes);
+    const latitudeStep = coordinateStep(latitudes);
+    context.fillStyle = "{LAND_BACKGROUND_COLOR}";
+    for (let latitudeIndex = 0; latitudeIndex < latitudes.length; latitudeIndex += 1) {{
+      for (let longitudeIndex = 0; longitudeIndex < longitudes.length; longitudeIndex += 1) {{
+        if (landMask.land[latitudeIndex][longitudeIndex] !== 1) continue;
+        const west = longitudes[longitudeIndex] - longitudeStep / 2;
+        const east = longitudes[longitudeIndex] + longitudeStep / 2;
+        const south = latitudes[latitudeIndex] - latitudeStep / 2;
+        const north = latitudes[latitudeIndex] + latitudeStep / 2;
+        const northwest = project({{ longitude: west, latitude: north }});
+        const southeast = project({{ longitude: east, latitude: south }});
+        context.fillRect(northwest.x, northwest.y, southeast.x - northwest.x + 1, southeast.y - northwest.y + 1);
+      }}
+    }}
+  }}
+
+  function coordinateStep(values) {{
+    if (values.length < 2) return 1;
+    return Math.abs(values[1] - values[0]);
   }}
 
   function drawMatchLine(reference, challenger) {{
