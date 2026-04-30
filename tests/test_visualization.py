@@ -274,6 +274,7 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert "surface_comparison_variables" not in all_sources
     assert "warnings.filterwarnings" in all_sources
     assert "Increasing number of chunks" in all_sources
+    assert "Geostrophic currents are masked near the equator" in all_sources
     assert all_sources.index("rmsd(\n    challenger_dataset=regional_challenger_dataset") < all_sources.index(
         "forecast_comparison_explorer ="
     )
