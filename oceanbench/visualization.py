@@ -156,7 +156,32 @@ def plot_multi_reference_lagrangian_trajectory_explorer(
     )
 
 
+def plot_multi_reference_eddy_matching_explorer(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    first_day_index: int = 0,
+    lead_day_indices: Sequence[int] | None = None,
+    maximum_contour_points: int = visualization.DEFAULT_EDDY_MAXIMUM_CONTOUR_POINTS,
+    height_pixels: int = visualization.DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Mesoscale eddy matching",
+):
+    """
+    Display a browser-side explorer for SSH mesoscale eddy detections and matches.
+    """
+
+    return visualization.plot_multi_reference_eddy_matching_explorer(
+        challenger_dataset=challenger_dataset,
+        reference_datasets=reference_datasets,
+        first_day_index=first_day_index,
+        lead_day_indices=lead_day_indices,
+        maximum_contour_points=maximum_contour_points,
+        height_pixels=height_pixels,
+        title=title,
+    )
+
+
 __all__ = [
+    "plot_multi_reference_eddy_matching_explorer",
     "plot_multi_reference_lagrangian_trajectory_explorer",
     "plot_multi_reference_surface_comparison_explorer",
     "plot_multi_reference_zonal_psd_comparison",

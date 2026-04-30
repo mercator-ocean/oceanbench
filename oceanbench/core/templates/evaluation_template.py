@@ -153,6 +153,20 @@ lagrangian_trajectory_explorer = oceanbench.visualization.plot_multi_reference_l
 )
 lagrangian_trajectory_explorer
 
+# ### Mesoscale eddy matching
+
+# > Eddy centers and contours are detected from sea surface height anomalies.
+# > Frames are discrete lead days; contours are not interpolated.
+
+eddy_matching_explorer = oceanbench.visualization.plot_multi_reference_eddy_matching_explorer(
+    regional_challenger_dataset,
+    {
+        "GLORYS reanalysis": glorys_dataset,
+        "GLO12 analysis": glo12_dataset,
+    },
+)
+eddy_matching_explorer
+
 # ### Forecast comparison maps
 
 forecast_comparison_explorer = oceanbench.visualization.plot_multi_reference_surface_comparison_explorer(

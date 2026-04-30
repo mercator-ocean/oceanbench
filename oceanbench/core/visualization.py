@@ -17,8 +17,10 @@ from matplotlib import colormaps
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, TwoSlopeNorm
 import numpy
+import pandas
 import xarray
 
+from oceanbench.core import eddies
 from oceanbench.core import lagrangian_trajectory
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import DepthLevel, Dimension, Variable, VARIABLE_LABELS, VARIABLE_METADATA
@@ -61,6 +63,7 @@ DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS = 160_000
 DEFAULT_EXPLORER_HEIGHT_PIXELS = 760
 DEFAULT_EXPLORER_IMAGE_QUALITY = 85
 DEFAULT_LAGRANGIAN_PARTICLE_COUNT = 300
+DEFAULT_EDDY_MAXIMUM_CONTOUR_POINTS = 80
 DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS: tuple[float, ...] = tuple(depth_level.value for depth_level in DepthLevel)
 GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES = 300.0
 
@@ -1701,6 +1704,558 @@ def _lagrangian_explorer_iframe_html(document: str, height_pixels: int) -> str:
     )
 
 
+def _decimated_contour_values(values: object, maximum_points: int) -> list:
+    array = numpy.asarray(values, dtype=float)
+    if array.size == 0:
+        return []
+    stride = max(1, int(numpy.ceil(array.size / maximum_points)))
+    return _json_ready_array(array[::stride], decimals=4)
+
+
+def _eddy_record(row: pandas.Series, contours: pandas.DataFrame, maximum_contour_points: int) -> dict[str, object]:
+    contour = contours.loc[contours["detection_index"] == row.name]
+    contour_latitudes: list = []
+    contour_longitudes: list = []
+    if not contour.empty:
+        contour_row = contour.iloc[0]
+        contour_latitudes = _decimated_contour_values(
+            contour_row[eddies.CONTOUR_LATITUDES_COLUMN],
+            maximum_contour_points,
+        )
+        contour_longitudes = _decimated_contour_values(
+            contour_row[eddies.CONTOUR_LONGITUDES_COLUMN],
+            maximum_contour_points,
+        )
+    return {
+        "id": int(row.name),
+        "latitude": round(float(row[eddies.LATITUDE_COLUMN]), 4),
+        "longitude": round(float(row[eddies.LONGITUDE_COLUMN]), 4),
+        "polarity": str(row[eddies.POLARITY_COLUMN]),
+        "contourLatitude": contour_latitudes,
+        "contourLongitude": contour_longitudes,
+    }
+
+
+def _eddy_frames_payload(
+    challenger_detections: pandas.DataFrame,
+    challenger_contours: pandas.DataFrame,
+    reference_detections: pandas.DataFrame,
+    reference_contours: pandas.DataFrame,
+    matches: pandas.DataFrame,
+    lead_day_indices: Sequence[int],
+    maximum_contour_points: int,
+) -> list[dict[str, object]]:
+    frames = []
+    for lead_day_index in lead_day_indices:
+        challenger_subset = challenger_detections.loc[challenger_detections[eddies.LEAD_DAY_COLUMN] == lead_day_index]
+        reference_subset = reference_detections.loc[reference_detections[eddies.LEAD_DAY_COLUMN] == lead_day_index]
+        match_subset = matches.loc[matches[eddies.LEAD_DAY_COLUMN] == lead_day_index] if not matches.empty else matches
+        matched_challenger_indices = set(match_subset.get("challenger_detection_index", pandas.Series(dtype=int)))
+        matched_reference_indices = set(match_subset.get("reference_detection_index", pandas.Series(dtype=int)))
+        challenger_records = {
+            int(row_index): _eddy_record(row, challenger_contours, maximum_contour_points)
+            for row_index, row in challenger_subset.iterrows()
+        }
+        reference_records = {
+            int(row_index): _eddy_record(row, reference_contours, maximum_contour_points)
+            for row_index, row in reference_subset.iterrows()
+        }
+        frame_matches = []
+        for _, match_row in match_subset.iterrows():
+            challenger_index = int(match_row["challenger_detection_index"])
+            reference_index = int(match_row["reference_detection_index"])
+            if challenger_index not in challenger_records or reference_index not in reference_records:
+                continue
+            frame_matches.append(
+                {
+                    "challenger": challenger_records[challenger_index],
+                    "reference": reference_records[reference_index],
+                    "distanceKilometers": round(float(match_row[eddies.DISTANCE_COLUMN]), 2),
+                }
+            )
+        frames.append(
+            {
+                "leadDay": int(lead_day_index) + 1,
+                "matches": frame_matches,
+                "spurious": [
+                    record
+                    for record_index, record in challenger_records.items()
+                    if record_index not in matched_challenger_indices
+                ],
+                "missed": [
+                    record
+                    for record_index, record in reference_records.items()
+                    if record_index not in matched_reference_indices
+                ],
+            }
+        )
+    return frames
+
+
+def _eddy_reference_payload(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    reference_name: str,
+    first_day_index: int,
+    lead_day_indices: Sequence[int],
+    maximum_contour_points: int,
+    detection_parameters: Mapping[str, float | int],
+) -> dict[str, object]:
+    challenger_detections = eddies.detect_mesoscale_eddies(
+        challenger_dataset,
+        first_day_index=first_day_index,
+        lead_day_indices=list(lead_day_indices),
+        background_sigma_grid=detection_parameters["background_sigma_grid"],
+        detection_sigma_grid=detection_parameters["detection_sigma_grid"],
+        min_distance_grid=detection_parameters["min_distance_grid"],
+        amplitude_threshold_meters=detection_parameters["amplitude_threshold_meters"],
+        max_abs_latitude_degrees=detection_parameters["max_abs_latitude_degrees"],
+    )
+    challenger_contours = eddies.mesoscale_eddy_contours_from_detections(
+        challenger_detections,
+        challenger_dataset,
+        first_day_index=first_day_index,
+        background_sigma_grid=detection_parameters["background_sigma_grid"],
+        detection_sigma_grid=detection_parameters["detection_sigma_grid"],
+        amplitude_threshold_meters=detection_parameters["amplitude_threshold_meters"],
+        max_abs_latitude_degrees=detection_parameters["max_abs_latitude_degrees"],
+        contour_level_step_meters=detection_parameters["contour_level_step_meters"],
+        min_contour_pixel_count=detection_parameters["min_contour_pixel_count"],
+        max_contour_pixel_count=detection_parameters["max_contour_pixel_count"],
+        min_contour_convexity=detection_parameters["min_contour_convexity"],
+    )
+    challenger_detections = eddies.filter_mesoscale_eddy_detections_by_contours(
+        challenger_detections,
+        challenger_contours,
+    )
+    reference_detections = eddies.detect_mesoscale_eddies(
+        reference_dataset,
+        first_day_index=first_day_index,
+        lead_day_indices=list(lead_day_indices),
+        background_sigma_grid=detection_parameters["background_sigma_grid"],
+        detection_sigma_grid=detection_parameters["detection_sigma_grid"],
+        min_distance_grid=detection_parameters["min_distance_grid"],
+        amplitude_threshold_meters=detection_parameters["amplitude_threshold_meters"],
+        max_abs_latitude_degrees=detection_parameters["max_abs_latitude_degrees"],
+    )
+    reference_contours = eddies.mesoscale_eddy_contours_from_detections(
+        reference_detections,
+        reference_dataset,
+        first_day_index=first_day_index,
+        background_sigma_grid=detection_parameters["background_sigma_grid"],
+        detection_sigma_grid=detection_parameters["detection_sigma_grid"],
+        amplitude_threshold_meters=detection_parameters["amplitude_threshold_meters"],
+        max_abs_latitude_degrees=detection_parameters["max_abs_latitude_degrees"],
+        contour_level_step_meters=detection_parameters["contour_level_step_meters"],
+        min_contour_pixel_count=detection_parameters["min_contour_pixel_count"],
+        max_contour_pixel_count=detection_parameters["max_contour_pixel_count"],
+        min_contour_convexity=detection_parameters["min_contour_convexity"],
+    )
+    reference_detections = eddies.filter_mesoscale_eddy_detections_by_contours(
+        reference_detections,
+        reference_contours,
+    )
+    matches = eddies.match_mesoscale_eddies(
+        challenger_detections,
+        reference_detections,
+        max_match_distance_km=detection_parameters["max_match_distance_km"],
+    )
+    return {
+        "key": _reference_key(reference_name),
+        "label": reference_name,
+        "frames": _eddy_frames_payload(
+            challenger_detections,
+            challenger_contours,
+            reference_detections,
+            reference_contours,
+            matches,
+            lead_day_indices,
+            maximum_contour_points,
+        ),
+    }
+
+
+def _eddy_payload(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    first_day_index: int,
+    lead_day_indices: Sequence[int] | None,
+    maximum_contour_points: int,
+    title: str,
+    detection_parameters: Mapping[str, float | int],
+) -> dict[str, object]:
+    if not reference_datasets:
+        raise ValueError("reference_datasets must contain at least one reference dataset.")
+    resolved_lead_day_indices = (
+        tuple(eddies._lead_day_indices(challenger_dataset))
+        if lead_day_indices is None
+        else tuple(index for index in lead_day_indices if index in eddies._lead_day_indices(challenger_dataset))
+    )
+    if not resolved_lead_day_indices:
+        raise ValueError("lead_day_indices must contain at least one available lead day.")
+    return {
+        "title": title,
+        "bounds": _lagrangian_bounds(challenger_dataset),
+        "references": [
+            _eddy_reference_payload(
+                challenger_dataset,
+                reference_dataset,
+                reference_name,
+                first_day_index,
+                resolved_lead_day_indices,
+                maximum_contour_points,
+                detection_parameters,
+            )
+            for reference_name, reference_dataset in reference_datasets.items()
+        ],
+    }
+
+
+def _eddy_explorer_document(element_id: str, payload: dict[str, object]) -> str:
+    payload_json = json.dumps(payload, separators=(",", ":"))
+    return f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html, body {{
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: #172033;
+  font-family: Arial, sans-serif;
+}}
+.ob-eddy {{
+  border: 1px solid #cfd8e3;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}}
+.ob-eddy-header {{
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #cfd8e3;
+  background: #f8fafc;
+}}
+.ob-eddy-title {{
+  font-size: 18px;
+  font-weight: 650;
+}}
+.ob-eddy-subtitle {{
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}}
+.ob-eddy-controls {{
+  display: grid;
+  gap: 8px;
+  min-width: 440px;
+}}
+.ob-eddy-row {{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}}
+.ob-eddy-chip-group {{
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #cfd8e3;
+  border-radius: 999px;
+  background: #ffffff;
+}}
+.ob-eddy-chip {{
+  border: 0;
+  border-right: 1px solid #cfd8e3;
+  padding: 7px 12px;
+  background: transparent;
+  color: #0f5f8f;
+  font-size: 13px;
+  cursor: pointer;
+}}
+.ob-eddy-chip:last-child {{
+  border-right: 0;
+}}
+.ob-eddy-chip.active {{
+  background: #0f5f8f;
+  color: #ffffff;
+}}
+.ob-eddy-play {{
+  width: 34px;
+  height: 34px;
+  border: 1px solid #cfd8e3;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f5f8f;
+  cursor: pointer;
+}}
+.ob-eddy-slider {{
+  display: grid;
+  grid-template-columns: 11ch minmax(180px, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 315px;
+  color: #334155;
+  font-size: 13px;
+}}
+.ob-eddy-slider span {{
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}}
+.ob-eddy-slider input {{
+  accent-color: #0f5f8f;
+}}
+.ob-eddy-map {{
+  height: 620px;
+  background: linear-gradient(180deg, #eef7fb, #ffffff);
+}}
+.ob-eddy-map canvas {{
+  display: block;
+  width: 100%;
+  height: 100%;
+}}
+.ob-eddy-status {{
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid #cfd8e3;
+  color: #64748b;
+  font-size: 12px;
+}}
+.ob-eddy-legend {{
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}}
+.ob-eddy-key {{
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}}
+.ob-eddy-swatch {{
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+}}
+.ob-eddy-swatch.match {{ background: #0f9f8f; }}
+.ob-eddy-swatch.spurious {{ background: #d1495b; }}
+.ob-eddy-swatch.missed {{ background: #f59e0b; }}
+.ob-eddy-swatch.line {{ background: #475569; }}
+</style>
+</head>
+<body>
+<div id="{element_id}" class="ob-eddy">
+  <div class="ob-eddy-header">
+    <div>
+      <div class="ob-eddy-title"></div>
+      <div class="ob-eddy-subtitle">Discrete SSH eddy detections per lead day; contours are not interpolated.</div>
+    </div>
+    <div class="ob-eddy-controls">
+      <div class="ob-eddy-row">
+        <div class="ob-eddy-reference-buttons ob-eddy-chip-group"></div>
+      </div>
+      <div class="ob-eddy-row">
+        <button class="ob-eddy-play" type="button">▶</button>
+        <label class="ob-eddy-slider">
+          <span class="ob-eddy-lead-label"></span>
+          <input class="ob-eddy-lead-input" type="range" min="0" step="1" value="0">
+        </label>
+      </div>
+    </div>
+  </div>
+  <div class="ob-eddy-map"><canvas width="1180" height="620"></canvas></div>
+  <div class="ob-eddy-status">
+    <div class="ob-eddy-status-text"></div>
+    <div class="ob-eddy-legend">
+      <span class="ob-eddy-key"><span class="ob-eddy-swatch match"></span>Matched eddy</span>
+      <span class="ob-eddy-key"><span class="ob-eddy-swatch spurious"></span>Spurious challenger</span>
+      <span class="ob-eddy-key"><span class="ob-eddy-swatch missed"></span>Missed reference</span>
+      <span class="ob-eddy-key"><span class="ob-eddy-swatch line"></span>Match displacement</span>
+    </div>
+  </div>
+</div>
+<script>
+(() => {{
+  const payload = {payload_json};
+  const root = document.getElementById("{element_id}");
+  const canvas = root.querySelector("canvas");
+  const context = canvas.getContext("2d");
+  const title = root.querySelector(".ob-eddy-title");
+  const referenceButtons = root.querySelector(".ob-eddy-reference-buttons");
+  const playButton = root.querySelector(".ob-eddy-play");
+  const leadInput = root.querySelector(".ob-eddy-lead-input");
+  const leadLabel = root.querySelector(".ob-eddy-lead-label");
+  const statusText = root.querySelector(".ob-eddy-status-text");
+  const references = Object.fromEntries(payload.references.map((reference) => [reference.key, reference]));
+  let activeReferenceKey = payload.references[0].key;
+  let activeLeadIndex = 0;
+  let timer = null;
+
+  title.textContent = payload.title;
+  leadInput.addEventListener("input", () => {{
+    activeLeadIndex = Number(leadInput.value);
+    renderControls();
+    draw();
+  }});
+  playButton.addEventListener("click", () => {{
+    if (timer !== null) {{
+      window.clearInterval(timer);
+      timer = null;
+      playButton.textContent = "▶";
+      return;
+    }}
+    playButton.textContent = "Ⅱ";
+    timer = window.setInterval(() => {{
+      activeLeadIndex = (activeLeadIndex + 1) % references[activeReferenceKey].frames.length;
+      leadInput.value = activeLeadIndex;
+      renderControls();
+      draw();
+    }}, 850);
+  }});
+
+  renderControls();
+  draw();
+
+  function renderControls() {{
+    referenceButtons.replaceChildren();
+    for (const reference of payload.references) {{
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ob-eddy-chip";
+      button.textContent = reference.label;
+      button.classList.toggle("active", reference.key === activeReferenceKey);
+      button.addEventListener("click", () => {{
+        activeReferenceKey = reference.key;
+        activeLeadIndex = Math.min(activeLeadIndex, references[activeReferenceKey].frames.length - 1);
+        leadInput.value = activeLeadIndex;
+        renderControls();
+        draw();
+      }});
+      referenceButtons.appendChild(button);
+    }}
+    const frame = references[activeReferenceKey].frames[activeLeadIndex];
+    leadInput.max = references[activeReferenceKey].frames.length - 1;
+    leadLabel.textContent = `Lead day ${{frame.leadDay}}`;
+    statusText.textContent = [
+      references[activeReferenceKey].label,
+      `lead day ${{frame.leadDay}}`,
+      `${{frame.matches.length}} matches`,
+      `${{frame.spurious.length}} spurious`,
+      `${{frame.missed.length}} missed`,
+    ].join(" · ");
+  }}
+
+  function project(point) {{
+    const bounds = payload.bounds;
+    const longitudeSpan = bounds.longitudeMaximum - bounds.longitudeMinimum;
+    const latitudeSpan = bounds.latitudeMaximum - bounds.latitudeMinimum;
+    return {{
+      x: ((point.longitude - bounds.longitudeMinimum) / longitudeSpan) * canvas.width,
+      y: canvas.height - ((point.latitude - bounds.latitudeMinimum) / latitudeSpan) * canvas.height,
+    }};
+  }}
+
+  function draw() {{
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    drawBackground();
+    const frame = references[activeReferenceKey].frames[activeLeadIndex];
+    for (const match of frame.matches) drawMatchLine(match.reference, match.challenger);
+    for (const missed of frame.missed) drawEddy(missed, "rgba(245, 158, 11, 0.15)", "rgba(245, 158, 11, 0.88)", 2.0);
+    for (const spurious of frame.spurious) drawEddy(spurious, "rgba(209, 73, 91, 0.13)", "rgba(209, 73, 91, 0.9)", 2.0);
+    for (const match of frame.matches) {{
+      drawEddy(match.reference, "rgba(100, 116, 139, 0.10)", "rgba(100, 116, 139, 0.65)", 1.3);
+      drawEddy(match.challenger, "rgba(15, 159, 143, 0.16)", "rgba(15, 159, 143, 0.95)", 2.1);
+    }}
+    drawFrame();
+  }}
+
+  function drawBackground() {{
+    context.fillStyle = "#eef7fb";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = "rgba(51, 65, 85, 0.18)";
+    context.lineWidth = 1;
+    const bounds = payload.bounds;
+    const firstLongitude = Math.ceil(bounds.longitudeMinimum / 20) * 20;
+    const firstLatitude = Math.ceil(bounds.latitudeMinimum / 10) * 10;
+    for (let longitude = firstLongitude; longitude <= bounds.longitudeMaximum; longitude += 20) {{
+      const southPoint = project({{ longitude, latitude: bounds.latitudeMinimum }});
+      const northPoint = project({{ longitude, latitude: bounds.latitudeMaximum }});
+      line(southPoint, northPoint);
+    }}
+    for (let latitude = firstLatitude; latitude <= bounds.latitudeMaximum; latitude += 10) {{
+      const westPoint = project({{ longitude: bounds.longitudeMinimum, latitude }});
+      const eastPoint = project({{ longitude: bounds.longitudeMaximum, latitude }});
+      line(westPoint, eastPoint);
+    }}
+  }}
+
+  function drawMatchLine(reference, challenger) {{
+    context.strokeStyle = "rgba(71, 85, 105, 0.44)";
+    context.lineWidth = 1.0;
+    line(project(reference), project(challenger));
+  }}
+
+  function drawEddy(candidate, fill, stroke, width) {{
+    const center = project(candidate);
+    context.fillStyle = fill;
+    context.strokeStyle = stroke;
+    context.lineWidth = width;
+    if (candidate.contourLongitude.length >= 3) {{
+      context.beginPath();
+      for (let index = 0; index < candidate.contourLongitude.length; index += 1) {{
+        const point = project({{
+          longitude: candidate.contourLongitude[index],
+          latitude: candidate.contourLatitude[index],
+        }});
+        if (index === 0) context.moveTo(point.x, point.y);
+        else context.lineTo(point.x, point.y);
+      }}
+      context.closePath();
+      context.fill();
+      context.stroke();
+    }}
+    context.fillStyle = stroke;
+    context.beginPath();
+    context.arc(center.x, center.y, 3.0, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = "#ffffff";
+    context.lineWidth = 1.2;
+    context.stroke();
+  }}
+
+  function drawFrame() {{
+    context.strokeStyle = "#cfd8e3";
+    context.lineWidth = 2;
+    context.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+  }}
+
+  function line(a, b) {{
+    context.beginPath();
+    context.moveTo(a.x, a.y);
+    context.lineTo(b.x, b.y);
+    context.stroke();
+  }}
+}})();
+</script>
+</body>
+</html>"""
+
+
+def _eddy_explorer_iframe_html(document: str, height_pixels: int) -> str:
+    escaped_document = html.escape(document, quote=True)
+    return (
+        f'<iframe srcdoc="{escaped_document}" '
+        + 'style="width:100%; '
+        + f'height:{height_pixels}px; border:0;" '
+        + 'loading="lazy" sandbox="allow-scripts"></iframe>'
+    )
+
+
 def plot_multi_reference_zonal_psd_comparison(
     challenger_dataset: xarray.Dataset,
     reference_datasets: Mapping[str, xarray.Dataset],
@@ -1974,3 +2529,26 @@ def plot_multi_reference_lagrangian_trajectory_explorer(
     element_id = f"ob-lagrangian-{uuid4().hex}"
     document = _lagrangian_explorer_document(element_id, payload)
     return _html_without_iframe_warning(_lagrangian_explorer_iframe_html(document, height_pixels=height_pixels))
+
+
+def plot_multi_reference_eddy_matching_explorer(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    first_day_index: int = 0,
+    lead_day_indices: Sequence[int] | None = None,
+    maximum_contour_points: int = DEFAULT_EDDY_MAXIMUM_CONTOUR_POINTS,
+    height_pixels: int = DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Mesoscale eddy matching",
+) -> HTML:
+    payload = _eddy_payload(
+        challenger_dataset=challenger_dataset,
+        reference_datasets=reference_datasets,
+        first_day_index=first_day_index,
+        lead_day_indices=lead_day_indices,
+        maximum_contour_points=maximum_contour_points,
+        title=title,
+        detection_parameters=eddies.default_eddy_detection_parameters(),
+    )
+    element_id = f"ob-eddy-{uuid4().hex}"
+    document = _eddy_explorer_document(element_id, payload)
+    return _html_without_iframe_warning(_eddy_explorer_iframe_html(document, height_pixels=height_pixels))

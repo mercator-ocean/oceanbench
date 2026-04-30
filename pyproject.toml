@@ -25,7 +25,8 @@ dependencies = [
     "requests (>=2.27.1)",
     "aiohttp (>=3.0.0)",
     "jupyter (>=1.1)",
-    "papermill[s3] (>=2.6.0)"
+    "papermill[s3] (>=2.6.0)",
+    "scikit-image (>=0.25.0,<0.26.0)"
 ]
 
 [project.scripts]
