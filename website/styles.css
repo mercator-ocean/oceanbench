@@ -360,6 +360,7 @@ body.quarto-dark #region-selector {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  min-width: max-content;
 }
 
 .selector-chip {
@@ -431,6 +432,11 @@ body.quarto-dark .selector-chip.active {
   right: 0;
   z-index: 1;
   pointer-events: none;
+}
+
+.region-selector-layout--global .region-globe {
+  right: 5.6rem;
+  width: 43.2rem;
 }
 
 .region-globe svg {

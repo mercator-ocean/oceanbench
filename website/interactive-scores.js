@@ -443,7 +443,6 @@ function buildTabsInnerHtml(sections) {
 }
 
 function buildTrackTabsInnerHtml(trackKeys) {
-  if (trackKeys.length <= 1) return "";
   let markup = "";
   for (const trackKey of trackKeys) {
     const isActive = trackKey === activeTrack;
