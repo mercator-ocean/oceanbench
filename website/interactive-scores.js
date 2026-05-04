@@ -451,6 +451,11 @@ function buildTrackTabsInnerHtml(trackKeys) {
   return markup;
 }
 
+function buildTrackNoteInnerHtml() {
+  const hiddenClass = activeTrack === "one_degree" ? "" : " track-keynote--hidden";
+  return `<div class="track-keynote${hiddenClass}">${ONE_DEGREE_TRACK_NOTE}</div>`;
+}
+
 function attachTabListeners() {
   document.querySelectorAll(".score-track-link").forEach((link) => {
     link.addEventListener("click", (event) => {
