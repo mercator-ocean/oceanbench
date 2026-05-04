@@ -351,6 +351,68 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "window.setInterval" in html_output.data
 
 
+def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeypatch) -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    monkeypatch.setattr(
+        core_visualization,
+        "_class4_payload",
+        lambda **_: {
+            "title": "Class IV observation error maps",
+            "bounds": {
+                "longitudeMinimum": 9.0,
+                "longitudeMaximum": 15.0,
+                "latitudeMinimum": -2.0,
+                "latitudeMaximum": 2.0,
+            },
+            "landMask": {
+                "longitude": [9.0, 10.0],
+                "latitude": [0.0, 1.0],
+                "land": [[0, 1], [1, 0]],
+            },
+            "variables": [
+                {
+                    "key": Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+                    "label": "Sea level anomaly",
+                    "unit": "m",
+                    "depths": [
+                        {
+                            "key": "surface",
+                            "label": "surface",
+                            "signedScale": 0.2,
+                            "absoluteScale": 0.2,
+                            "frames": [
+                                {
+                                    "leadDay": 1,
+                                    "totalCount": 2,
+                                    "shownCount": 2,
+                                    "longitude": [10.0, 11.0],
+                                    "latitude": [0.0, 1.0],
+                                    "error": [-0.1, 0.2],
+                                    "absoluteError": [0.1, 0.2],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    html_output = oceanbench.visualization.plot_class4_observation_error_explorer(
+        xarray.Dataset(),
+        xarray.Dataset(),
+        height_pixels=500,
+    )
+
+    assert "<iframe" in html_output.data
+    assert "height:500px" in html_output.data
+    assert "Class IV observation error maps" in html_output.data
+    assert "Model minus Class IV observation errors" in html_output.data
+    assert "Observation density" not in html_output.data
+    assert "Signed error" in html_output.data
+
+
 def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: Path) -> None:
     challenger_path = tmp_path / "challenger.py"
     challenger_path.write_text("import xarray\n\nchallenger_dataset = xarray.Dataset()\n", encoding="utf-8")
@@ -384,6 +446,12 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert "particle_count=300" in all_sources
     assert "eddy_matching_explorer" in all_sources
     assert "plot_multi_reference_eddy_matching_explorer" in all_sources
+    assert "class4_observation_error_explorer" in all_sources
+    assert "plot_class4_observation_error_explorer" in all_sources
+    assert "class4_validation_dataframe" in all_sources
+    assert "rmsd_class4_validation_dataframe" in all_sources
+    assert "class4_observation_comparison_dataframe" in all_sources
+    assert "ObservationDataUnavailableError" in all_sources
     assert "Eddy centers and contours are detected" in all_sources
     assert "plot_multi_reference_zonal_psd_comparison" in all_sources
     assert "zonal_psd_figure" in all_sources
@@ -416,6 +484,9 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert all_sources.index(
         "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis"
     ) < all_sources.index("lagrangian_trajectory_explorer =")
+    assert all_sources.index("class4_observation_error_explorer =") < all_sources.index(
+        "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis"
+    )
     assert all_sources.index("lagrangian_trajectory_explorer =") < all_sources.index("eddy_matching_explorer =")
     assert all_sources.index("eddy_matching_explorer =") < all_sources.index("forecast_comparison_explorer =")
     assert "reference_dataset=glorys_dataset" in all_sources
@@ -424,7 +495,7 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert "reference_dataset=glo12_mld_dataset" in all_sources
     assert "reference_dataset=glorys_geostrophic_dataset" in all_sources
     assert "reference_dataset=glo12_geostrophic_dataset" in all_sources
-    assert "oceanbench.metrics.rmsd_of_variables_compared_to_observations" in all_sources
+    assert "oceanbench.metrics.rmsd_of_variables_compared_to_observations" not in all_sources
     assert "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis" in all_sources
     assert "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis" in all_sources
     assert "oceanbench.metrics.rmsd_of_variables_compared_to_glorys_reanalysis" not in all_sources
