@@ -604,6 +604,18 @@ def _encoded_images(
     }
 
 
+def _spatial_rmse_value(error_field: xarray.DataArray) -> float | None:
+    values = numpy.asarray(error_field.values, dtype=float)
+    finite_values = values[numpy.isfinite(values)]
+    if finite_values.size == 0:
+        return None
+    return round(float(numpy.sqrt(numpy.mean(finite_values**2))), 4)
+
+
+def _spatial_rmse_curve(error_fields: Sequence[xarray.DataArray]) -> list[float | None]:
+    return [_spatial_rmse_value(error_field) for error_field in error_fields]
+
+
 def _surface_comparison_multi_reference_depth_payload(
     fields: _ComputedMultiReferenceComparisonFields,
     variable_key: str,
@@ -689,6 +701,7 @@ def _surface_comparison_reference_payload(
     return {
         "key": reference.key,
         "label": reference.label,
+        "spatialRmse": _spatial_rmse_curve(error_fields),
         "layers": [
             _encoded_images(
                 "reference",
@@ -879,6 +892,42 @@ html, body {{
   color: #475569;
   font-size: 12px;
 }}
+.ob-map-rmse-panel {{
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(180px, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+  background: #ffffff;
+}}
+.ob-map-rmse-label {{
+  color: #334155;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+}}
+.ob-map-rmse-canvas {{
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: pointer;
+}}
+.ob-map-rmse-tooltip {{
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 8px));
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #172033;
+  color: #ffffff;
+  font-size: 12px;
+  white-space: nowrap;
+}}
 @media (max-width: 760px) {{
   .ob-map-header {{
     display: block;
@@ -894,6 +943,9 @@ html, body {{
   }}
   .ob-map-canvas-wrap {{
     height: 420px;
+  }}
+  .ob-map-rmse-panel {{
+    grid-template-columns: 1fr;
   }}
 }}
 </style>
@@ -922,6 +974,13 @@ html, body {{
   <div class="ob-map-canvas-wrap">
     <img class="ob-map-image" alt="Surface comparison map">
   </div>
+  <div class="ob-map-rmse-panel">
+    <div class="ob-map-rmse-label"></div>
+    <div>
+      <canvas class="ob-map-rmse-canvas" width="720" height="96"></canvas>
+      <div class="ob-map-rmse-tooltip"></div>
+    </div>
+  </div>
   <div class="ob-map-status"></div>
 </div>
 <script>
@@ -936,6 +995,10 @@ html, body {{
   const leadLabel = root.querySelector(".ob-map-lead-label");
   const leadInput = root.querySelector(".ob-map-lead-input");
   const image = root.querySelector(".ob-map-image");
+  const rmseLabel = root.querySelector(".ob-map-rmse-label");
+  const rmseCanvas = root.querySelector(".ob-map-rmse-canvas");
+  const rmseContext = rmseCanvas.getContext("2d");
+  const rmseTooltip = root.querySelector(".ob-map-rmse-tooltip");
   const status = root.querySelector(".ob-map-status");
   const variables = Object.fromEntries(payload.variables.map((variable) => [variable.key, variable]));
   let activeVariableKey = payload.variables[0].key;
@@ -943,11 +1006,29 @@ html, body {{
   let activeReferenceKey = payload.variables[0].depths[0].references[0].key;
   let activeLayerKey = "error";
   let activeLeadIndex = 0;
+  let hoveredRmseIndex = null;
 
   title.textContent = payload.title;
 
   leadInput.addEventListener("input", () => {{
     activeLeadIndex = Number(leadInput.value);
+    render();
+  }});
+  rmseCanvas.addEventListener("pointermove", (event) => {{
+    hoveredRmseIndex = nearestRmseLeadIndex(event);
+    drawRmseCurve();
+    renderRmseTooltip(event);
+  }});
+  rmseCanvas.addEventListener("pointerleave", () => {{
+    hoveredRmseIndex = null;
+    rmseTooltip.style.display = "none";
+    drawRmseCurve();
+  }});
+  rmseCanvas.addEventListener("click", (event) => {{
+    const selectedIndex = nearestRmseLeadIndex(event);
+    if (selectedIndex === null) return;
+    activeLeadIndex = selectedIndex;
+    leadInput.value = selectedIndex;
     render();
   }});
 
@@ -1051,6 +1132,146 @@ html, body {{
     return depths;
   }}
 
+  function rmseLayout() {{
+    const padding = {{left: 34, right: 16, top: 12, bottom: 24}};
+    return {{
+      padding,
+      plotWidth: rmseCanvas.width - padding.left - padding.right,
+      plotHeight: rmseCanvas.height - padding.top - padding.bottom,
+    }};
+  }}
+
+  function rmsePoint(index, value, maximumValue) {{
+    const layout = rmseLayout();
+    const x = layout.padding.left + (
+      currentReference().spatialRmse.length <= 1 ? 0 : (index / (currentReference().spatialRmse.length - 1))
+      * layout.plotWidth
+    );
+    const y = layout.padding.top + layout.plotHeight - (value / maximumValue) * layout.plotHeight;
+    return {{ x, y }};
+  }}
+
+  function rmseCanvasCoordinates(event) {{
+    const rectangle = rmseCanvas.getBoundingClientRect();
+    return {{
+      x: ((event.clientX - rectangle.left) / rectangle.width) * rmseCanvas.width,
+      y: ((event.clientY - rectangle.top) / rectangle.height) * rmseCanvas.height,
+      cssX: event.clientX - rectangle.left,
+      cssY: event.clientY - rectangle.top,
+    }};
+  }}
+
+  function nearestRmseLeadIndex(event) {{
+    const values = currentReference().spatialRmse || [];
+    const validValues = values.filter((value) => value !== null && Number.isFinite(value));
+    if (validValues.length === 0) return null;
+    const maximumValue = Math.max(...validValues, 1e-12);
+    const pointer = rmseCanvasCoordinates(event);
+    let nearestIndex = null;
+    let nearestDistance = Infinity;
+    values.forEach((value, index) => {{
+      if (value === null || !Number.isFinite(value)) return;
+      const point = rmsePoint(index, value, maximumValue);
+      const distance = Math.hypot(pointer.x - point.x, pointer.y - point.y);
+      if (distance < nearestDistance) {{
+        nearestDistance = distance;
+        nearestIndex = index;
+      }}
+    }});
+    return nearestIndex;
+  }}
+
+  function renderRmseTooltip(event) {{
+    if (hoveredRmseIndex === null) {{
+      rmseTooltip.style.display = "none";
+      return;
+    }}
+    const values = currentReference().spatialRmse || [];
+    const value = values[hoveredRmseIndex];
+    if (value === null || !Number.isFinite(value)) {{
+      rmseTooltip.style.display = "none";
+      return;
+    }}
+    const pointer = rmseCanvasCoordinates(event);
+    rmseTooltip.textContent = `day ${{hoveredRmseIndex + 1}} - RMSE ${{value.toPrecision(4)}}`;
+    rmseTooltip.style.left = `${{pointer.cssX}}px`;
+    rmseTooltip.style.top = `${{pointer.cssY}}px`;
+    rmseTooltip.style.display = "block";
+  }}
+
+  function drawRmseCurve() {{
+    const reference = currentReference();
+    const values = reference.spatialRmse || [];
+    const validValues = values.filter((value) => value !== null && Number.isFinite(value));
+    rmseContext.clearRect(0, 0, rmseCanvas.width, rmseCanvas.height);
+    rmseContext.fillStyle = "#ffffff";
+    rmseContext.fillRect(0, 0, rmseCanvas.width, rmseCanvas.height);
+    rmseLabel.textContent = "Spatial RMSE over lead days";
+    if (validValues.length === 0) {{
+      rmseContext.fillStyle = "#64748b";
+      rmseContext.font = "13px sans-serif";
+      rmseContext.fillText("No finite RMSE values", 18, 58);
+      return;
+    }}
+    const padding = {{left: 34, right: 16, top: 12, bottom: 24}};
+    const plotWidth = rmseCanvas.width - padding.left - padding.right;
+    const plotHeight = rmseCanvas.height - padding.top - padding.bottom;
+    const maximumValue = Math.max(...validValues, 1e-12);
+    const x = (index) => padding.left + (values.length <= 1 ? 0 : (index / (values.length - 1)) * plotWidth);
+    const y = (value) => padding.top + plotHeight - (value / maximumValue) * plotHeight;
+
+    rmseContext.strokeStyle = "#d8dee8";
+    rmseContext.lineWidth = 1;
+    rmseContext.beginPath();
+    rmseContext.moveTo(padding.left, padding.top);
+    rmseContext.lineTo(padding.left, padding.top + plotHeight);
+    rmseContext.lineTo(padding.left + plotWidth, padding.top + plotHeight);
+    rmseContext.stroke();
+
+    rmseContext.strokeStyle = "#0f5f8f";
+    rmseContext.lineWidth = 2.2;
+    rmseContext.beginPath();
+    let hasStartedLine = false;
+    values.forEach((value, index) => {{
+      if (value === null || !Number.isFinite(value)) {{
+        hasStartedLine = false;
+        return;
+      }}
+      if (!hasStartedLine) {{
+        rmseContext.moveTo(x(index), y(value));
+        hasStartedLine = true;
+      }} else {{
+        rmseContext.lineTo(x(index), y(value));
+      }}
+    }});
+    rmseContext.stroke();
+
+    values.forEach((value, index) => {{
+      if (value === null || !Number.isFinite(value)) return;
+      const isActive = index === activeLeadIndex;
+      const isHovered = index === hoveredRmseIndex;
+      rmseContext.fillStyle = isActive ? "#d1495b" : "#0f5f8f";
+      rmseContext.beginPath();
+      rmseContext.arc(x(index), y(value), isActive || isHovered ? 4.8 : 3.0, 0, Math.PI * 2);
+      rmseContext.fill();
+      if (isHovered) {{
+        rmseContext.strokeStyle = "#172033";
+        rmseContext.lineWidth = 1.5;
+        rmseContext.stroke();
+      }}
+    }});
+
+    const activeValue = values[activeLeadIndex];
+    rmseContext.fillStyle = "#475569";
+    rmseContext.font = "12px sans-serif";
+    rmseContext.fillText("1", padding.left - 3, rmseCanvas.height - 6);
+    rmseContext.fillText(String(values.length), padding.left + plotWidth - 4, rmseCanvas.height - 6);
+    if (activeValue !== null && Number.isFinite(activeValue)) {{
+      rmseContext.fillStyle = "#172033";
+      rmseContext.fillText(`day ${{activeLeadIndex + 1}}: ${{activeValue.toPrecision(3)}}`, padding.left + 8, 18);
+    }}
+  }}
+
   function render() {{
     const variable = currentVariable();
     const depth = currentDepth();
@@ -1063,13 +1284,14 @@ html, body {{
       layer.label,
       `lead day ${{depth.leadDays[activeLeadIndex]}}`,
     ].join(" - ");
-    const depthText = variable.depths.length > 1 ? ` · ${{depth.label}}` : "";
+    const depthText = variable.depths.length > 1 ? ` - ${{depth.label}}` : "";
     status.textContent = [
       `${{variable.label}}${{depthText}}`,
       currentReference().label,
       layer.label,
       `lead day ${{depth.leadDays[activeLeadIndex]}}`,
-    ].join(" · ");
+    ].join(" - ");
+    drawRmseCurve();
   }}
 }})();
 </script>
@@ -1609,7 +1831,7 @@ html, body {{
       references[activeReferenceKey].label,
       `${{payload.particleCount}} sampled particles`,
       "interpolated display",
-    ].join(" · ");
+    ].join(" - ");
   }}
 
   function point(track, particleIndex, timeIndex) {{
@@ -2363,7 +2585,7 @@ html, body {{
       `${{frame.matches.length}} matches`,
       `${{frame.spurious.length}} spurious`,
       `${{frame.missed.length}} missed`,
-    ].join(" · ");
+    ].join(" - ");
   }}
 
   function project(point) {{
@@ -2912,7 +3134,7 @@ html, body {{
       currentDepth().label,
       modeLabel,
       `${{frame.shownCount}}/${{frame.totalCount}} observations`,
-    ].join(" · ");
+    ].join(" - ");
   }}
 
   function render() {{
