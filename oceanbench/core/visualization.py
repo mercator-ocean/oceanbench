@@ -545,7 +545,7 @@ def _encoded_webp_image(
     field = _prepared_image_field(field)
     colormap = colormaps[colormap_name].copy()
     colormap.set_bad(LAND_BACKGROUND_COLOR)
-    figure, axis = plt.subplots(figsize=(11.0, 6.2), dpi=100)
+    figure, axis = plt.subplots(figsize=(11.0, 5.9), dpi=100)
     figure.patch.set_facecolor("#ffffff")
     axis.set_facecolor(LAND_BACKGROUND_COLOR)
     image = axis.imshow(
@@ -562,7 +562,7 @@ def _encoded_webp_image(
     axis.set_xlabel("Longitude")
     axis.set_ylabel("Latitude")
     axis.grid(color="#334155", alpha=0.18, linewidth=0.6)
-    colorbar = figure.colorbar(image, ax=axis, orientation="horizontal", pad=0.1, shrink=0.86)
+    colorbar = figure.colorbar(image, ax=axis, orientation="vertical", pad=0.025, fraction=0.046)
     colorbar.set_label(value_label)
     buffer = BytesIO()
     figure.savefig(
