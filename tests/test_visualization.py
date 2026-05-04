@@ -120,6 +120,36 @@ def test_plot_surface_comparison_explorer_returns_self_contained_html() -> None:
     assert "height:500px" in html_output.data
 
 
+def test_map_image_uses_vertical_colorbar(monkeypatch) -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    captured_colorbar_arguments = {}
+
+    original_colorbar = core_visualization.plt.Figure.colorbar
+
+    def recording_colorbar(self, *args, **kwargs):
+        captured_colorbar_arguments.update(kwargs)
+        return original_colorbar(self, *args, **kwargs)
+
+    monkeypatch.setattr(core_visualization.plt.Figure, "colorbar", recording_colorbar)
+    field = xarray.DataArray(
+        numpy.arange(6, dtype=float).reshape(2, 3),
+        dims=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={Dimension.LATITUDE.key(): [-1.0, 1.0], Dimension.LONGITUDE.key(): [10.0, 12.0, 14.0]},
+    )
+
+    core_visualization._encoded_webp_image(
+        field,
+        core_visualization._positive_norm([field]),
+        "viridis",
+        "test value",
+        "Test map",
+        Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+    )
+
+    assert captured_colorbar_arguments["orientation"] == "vertical"
+
+
 def test_plot_surface_comparison_explorer_skips_missing_default_variables() -> None:
     sea_surface_height = numpy.arange(18, dtype=float).reshape(1, 3, 2, 3)
     challenger_dataset = _map_dataset({Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): sea_surface_height})
