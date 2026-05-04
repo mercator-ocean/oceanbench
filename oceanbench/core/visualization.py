@@ -786,7 +786,9 @@ html, body {{
 .ob-map-explorer {{
   box-sizing: border-box;
   width: 100%;
+  max-width: 1220px;
   min-width: 320px;
+  margin: 0 auto;
   padding: 14px 16px 12px;
   border: 1px solid #d8dee8;
   border-radius: 8px;
@@ -894,17 +896,15 @@ html, body {{
 }}
 .ob-map-rmse-panel {{
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(120px, 160px) minmax(180px, 1fr);
-  align-items: center;
-  gap: 12px;
+  display: block;
   margin-top: 10px;
-  padding: 10px 12px;
+  padding: 10px 12px 8px;
   border: 1px solid #d8dee8;
   border-radius: 6px;
   background: #ffffff;
 }}
 .ob-map-rmse-label {{
+  margin-bottom: 6px;
   color: #334155;
   font-size: 12px;
   font-weight: 650;
@@ -913,7 +913,7 @@ html, body {{
 .ob-map-rmse-canvas {{
   display: block;
   width: 100%;
-  height: auto;
+  height: 96px;
   cursor: pointer;
 }}
 .ob-map-rmse-tooltip {{
@@ -944,9 +944,6 @@ html, body {{
   .ob-map-canvas-wrap {{
     height: 420px;
   }}
-  .ob-map-rmse-panel {{
-    grid-template-columns: 1fr;
-  }}
 }}
 </style>
 </head>
@@ -976,10 +973,8 @@ html, body {{
   </div>
   <div class="ob-map-rmse-panel">
     <div class="ob-map-rmse-label"></div>
-    <div>
-      <canvas class="ob-map-rmse-canvas" width="720" height="96"></canvas>
-      <div class="ob-map-rmse-tooltip"></div>
-    </div>
+    <canvas class="ob-map-rmse-canvas" width="1180" height="96"></canvas>
+    <div class="ob-map-rmse-tooltip"></div>
   </div>
   <div class="ob-map-status"></div>
 </div>
@@ -1132,17 +1127,38 @@ html, body {{
     return depths;
   }}
 
-  function rmseLayout() {{
-    const padding = {{left: 34, right: 16, top: 12, bottom: 24}};
+  function rmseCanvasDisplaySize() {{
+    const rectangle = rmseCanvas.getBoundingClientRect();
     return {{
-      padding,
-      plotWidth: rmseCanvas.width - padding.left - padding.right,
-      plotHeight: rmseCanvas.height - padding.top - padding.bottom,
+      width: Math.max(1, rectangle.width || 720),
+      height: Math.max(1, rectangle.height || 96),
     }};
   }}
 
-  function rmsePoint(index, value, maximumValue) {{
-    const layout = rmseLayout();
+  function prepareRmseCanvas() {{
+    const size = rmseCanvasDisplaySize();
+    const pixelRatio = window.devicePixelRatio || 1;
+    const width = Math.round(size.width * pixelRatio);
+    const height = Math.round(size.height * pixelRatio);
+    if (rmseCanvas.width !== width || rmseCanvas.height !== height) {{
+      rmseCanvas.width = width;
+      rmseCanvas.height = height;
+    }}
+    rmseContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    return size;
+  }}
+
+  function rmseLayout(size) {{
+    const padding = {{left: 34, right: 16, top: 12, bottom: 24}};
+    return {{
+      padding,
+      plotWidth: size.width - padding.left - padding.right,
+      plotHeight: size.height - padding.top - padding.bottom,
+    }};
+  }}
+
+  function rmsePoint(index, value, maximumValue, size) {{
+    const layout = rmseLayout(size);
     const x = layout.padding.left + (
       currentReference().spatialRmse.length <= 1 ? 0 : (index / (currentReference().spatialRmse.length - 1))
       * layout.plotWidth
@@ -1153,11 +1169,14 @@ html, body {{
 
   function rmseCanvasCoordinates(event) {{
     const rectangle = rmseCanvas.getBoundingClientRect();
+    const panelRectangle = root.querySelector(".ob-map-rmse-panel").getBoundingClientRect();
     return {{
-      x: ((event.clientX - rectangle.left) / rectangle.width) * rmseCanvas.width,
-      y: ((event.clientY - rectangle.top) / rectangle.height) * rmseCanvas.height,
+      x: event.clientX - rectangle.left,
+      y: event.clientY - rectangle.top,
       cssX: event.clientX - rectangle.left,
       cssY: event.clientY - rectangle.top,
+      panelX: event.clientX - panelRectangle.left,
+      panelY: event.clientY - panelRectangle.top,
     }};
   }}
 
@@ -1166,12 +1185,13 @@ html, body {{
     const validValues = values.filter((value) => value !== null && Number.isFinite(value));
     if (validValues.length === 0) return null;
     const maximumValue = Math.max(...validValues, 1e-12);
+    const size = rmseCanvasDisplaySize();
     const pointer = rmseCanvasCoordinates(event);
     let nearestIndex = null;
     let nearestDistance = Infinity;
     values.forEach((value, index) => {{
       if (value === null || !Number.isFinite(value)) return;
-      const point = rmsePoint(index, value, maximumValue);
+      const point = rmsePoint(index, value, maximumValue, size);
       const distance = Math.hypot(pointer.x - point.x, pointer.y - point.y);
       if (distance < nearestDistance) {{
         nearestDistance = distance;
@@ -1194,8 +1214,8 @@ html, body {{
     }}
     const pointer = rmseCanvasCoordinates(event);
     rmseTooltip.textContent = `day ${{hoveredRmseIndex + 1}} - RMSE ${{value.toPrecision(4)}}`;
-    rmseTooltip.style.left = `${{pointer.cssX}}px`;
-    rmseTooltip.style.top = `${{pointer.cssY}}px`;
+    rmseTooltip.style.left = `${{pointer.panelX}}px`;
+    rmseTooltip.style.top = `${{pointer.panelY}}px`;
     rmseTooltip.style.display = "block";
   }}
 
@@ -1203,9 +1223,10 @@ html, body {{
     const reference = currentReference();
     const values = reference.spatialRmse || [];
     const validValues = values.filter((value) => value !== null && Number.isFinite(value));
-    rmseContext.clearRect(0, 0, rmseCanvas.width, rmseCanvas.height);
+    const size = prepareRmseCanvas();
+    rmseContext.clearRect(0, 0, size.width, size.height);
     rmseContext.fillStyle = "#ffffff";
-    rmseContext.fillRect(0, 0, rmseCanvas.width, rmseCanvas.height);
+    rmseContext.fillRect(0, 0, size.width, size.height);
     rmseLabel.textContent = "Spatial RMSE over lead days";
     if (validValues.length === 0) {{
       rmseContext.fillStyle = "#64748b";
@@ -1214,8 +1235,8 @@ html, body {{
       return;
     }}
     const padding = {{left: 34, right: 16, top: 12, bottom: 24}};
-    const plotWidth = rmseCanvas.width - padding.left - padding.right;
-    const plotHeight = rmseCanvas.height - padding.top - padding.bottom;
+    const plotWidth = size.width - padding.left - padding.right;
+    const plotHeight = size.height - padding.top - padding.bottom;
     const maximumValue = Math.max(...validValues, 1e-12);
     const x = (index) => padding.left + (values.length <= 1 ? 0 : (index / (values.length - 1)) * plotWidth);
     const y = (value) => padding.top + plotHeight - (value / maximumValue) * plotHeight;
@@ -1264,8 +1285,8 @@ html, body {{
     const activeValue = values[activeLeadIndex];
     rmseContext.fillStyle = "#475569";
     rmseContext.font = "12px sans-serif";
-    rmseContext.fillText("1", padding.left - 3, rmseCanvas.height - 6);
-    rmseContext.fillText(String(values.length), padding.left + plotWidth - 4, rmseCanvas.height - 6);
+    rmseContext.fillText("1", padding.left - 3, size.height - 6);
+    rmseContext.fillText(String(values.length), padding.left + plotWidth - 4, size.height - 6);
     if (activeValue !== null && Number.isFinite(activeValue)) {{
       rmseContext.fillStyle = "#172033";
       rmseContext.fillText(`day ${{activeLeadIndex + 1}}: ${{activeValue.toPrecision(3)}}`, padding.left + 8, 18);
