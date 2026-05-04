@@ -20,10 +20,18 @@ import numpy
 import pandas
 import xarray
 
+from oceanbench.core import classIV
 from oceanbench.core import eddies
 from oceanbench.core import lagrangian_trajectory
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
-from oceanbench.core.dataset_utils import DepthLevel, Dimension, Variable, VARIABLE_LABELS, VARIABLE_METADATA
+from oceanbench.core.dataset_utils import (
+    DEPTH_BIN_DISPLAY_ORDER,
+    DepthLevel,
+    Dimension,
+    Variable,
+    VARIABLE_LABELS,
+    VARIABLE_METADATA,
+)
 
 DEFAULT_SURFACE_COMPARISON_VARIABLES: tuple[Variable, ...] = (
     Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
@@ -65,7 +73,10 @@ DEFAULT_EXPLORER_IMAGE_QUALITY = 85
 DEFAULT_LAGRANGIAN_PARTICLE_COUNT = 300
 DEFAULT_LAGRANGIAN_MAXIMUM_LAND_MASK_CELLS = 80_000
 DEFAULT_EDDY_MAXIMUM_CONTOUR_POINTS = 80
+DEFAULT_CLASS4_MAXIMUM_POINTS_PER_FRAME = 5_000
 DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS: tuple[float, ...] = tuple(depth_level.value for depth_level in DepthLevel)
+ROBUST_FIELD_PERCENTILE_RANGE = (2.0, 98.0)
+ROBUST_ERROR_PERCENTILE = 98.0
 GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES = 300.0
 
 
@@ -87,6 +98,13 @@ class _ComputedMultiReferenceComparisonFields:
 
 def _as_variable_key(variable: Variable | str) -> str:
     return variable.key() if isinstance(variable, Variable) else variable
+
+
+def _variable_from_key(variable_key: str) -> Variable:
+    for variable in Variable:
+        if variable.key() == variable_key:
+            return variable
+    raise ValueError(f"Unknown OceanBench variable key: {variable_key!r}")
 
 
 def _standard_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
@@ -187,12 +205,15 @@ def _finite_values(arrays: Sequence[xarray.DataArray]) -> numpy.ndarray:
     return flattened_values[numpy.isfinite(flattened_values)]
 
 
-def _positive_norm(arrays: Sequence[xarray.DataArray]) -> Normalize:
+def _positive_norm(arrays: Sequence[xarray.DataArray], lower_percentile: float | None = None) -> Normalize:
     finite_values = _finite_values(arrays)
     if finite_values.size == 0:
         return Normalize(vmin=0.0, vmax=1.0)
-    minimum = float(numpy.nanmin(finite_values))
-    maximum = float(numpy.nanmax(finite_values))
+    if lower_percentile is None:
+        minimum = 0.0
+    else:
+        minimum = float(numpy.nanpercentile(finite_values, lower_percentile))
+    maximum = float(numpy.nanpercentile(finite_values, ROBUST_ERROR_PERCENTILE))
     if maximum <= minimum:
         maximum = minimum + 1.0
     return Normalize(vmin=minimum, vmax=maximum)
@@ -202,7 +223,7 @@ def _symmetric_norm(arrays: Sequence[xarray.DataArray]) -> Normalize:
     finite_values = _finite_values(arrays)
     if finite_values.size == 0:
         return Normalize(vmin=-1.0, vmax=1.0)
-    maximum_absolute_value = float(numpy.nanmax(numpy.abs(finite_values)))
+    maximum_absolute_value = float(numpy.nanpercentile(numpy.abs(finite_values), ROBUST_ERROR_PERCENTILE))
     if maximum_absolute_value == 0.0:
         maximum_absolute_value = 1.0
     return TwoSlopeNorm(vcenter=0.0, vmin=-maximum_absolute_value, vmax=maximum_absolute_value)
@@ -211,7 +232,14 @@ def _symmetric_norm(arrays: Sequence[xarray.DataArray]) -> Normalize:
 def _field_norm(variable_key: str, fields: Sequence[xarray.DataArray]) -> Normalize:
     if variable_key in DIVERGING_VARIABLES:
         return _symmetric_norm(fields)
-    return _positive_norm(fields)
+    finite_values = _finite_values(fields)
+    if finite_values.size == 0:
+        return Normalize(vmin=0.0, vmax=1.0)
+    minimum = float(numpy.nanpercentile(finite_values, ROBUST_FIELD_PERCENTILE_RANGE[0]))
+    maximum = float(numpy.nanpercentile(finite_values, ROBUST_FIELD_PERCENTILE_RANGE[1]))
+    if maximum <= minimum:
+        maximum = minimum + 1.0
+    return Normalize(vmin=minimum, vmax=maximum)
 
 
 def _field_colormap(variable_key: str) -> str:
@@ -2472,6 +2500,448 @@ def _eddy_explorer_iframe_html(document: str, height_pixels: int) -> str:
     )
 
 
+def _class4_variable_label(variable_key: str) -> str:
+    if variable_key == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
+        return "Sea level anomaly"
+    return _variable_label(variable_key)
+
+
+def _class4_depth_sort_key(depth_bin: str) -> int:
+    return DEPTH_BIN_DISPLAY_ORDER.get(depth_bin, len(DEPTH_BIN_DISPLAY_ORDER))
+
+
+def _class4_sampled_frame(group: pandas.DataFrame, maximum_points_per_frame: int) -> dict[str, object]:
+    total_count = len(group)
+    if total_count > maximum_points_per_frame:
+        selected_positions = numpy.linspace(0, total_count - 1, maximum_points_per_frame, dtype=int)
+        group = group.iloc[selected_positions]
+    return {
+        "leadDay": int(group["lead_day"].iloc[0]) + 1,
+        "totalCount": int(total_count),
+        "shownCount": int(len(group)),
+        "longitude": _json_ready_array(group[Dimension.LONGITUDE.key()].to_numpy(), decimals=3),
+        "latitude": _json_ready_array(group[Dimension.LATITUDE.key()].to_numpy(), decimals=3),
+        "error": _json_ready_array(group["error"].to_numpy(), decimals=4),
+        "absoluteError": _json_ready_array(group["absolute_error"].to_numpy(), decimals=4),
+    }
+
+
+def _class4_robust_scale(values: pandas.Series) -> float:
+    finite_values = numpy.abs(values.dropna().to_numpy(dtype=float))
+    if finite_values.size == 0:
+        return 1.0
+    return float(max(numpy.nanquantile(finite_values, 0.95), 1e-6))
+
+
+def _class4_depth_payloads(
+    variable_dataframe: pandas.DataFrame,
+    maximum_points_per_frame: int,
+) -> list[dict[str, object]]:
+    depth_payloads = []
+    for depth_bin in sorted(variable_dataframe["depth_bin"].unique(), key=_class4_depth_sort_key):
+        depth_dataframe = variable_dataframe.loc[variable_dataframe["depth_bin"] == depth_bin]
+        frames = [
+            _class4_sampled_frame(lead_day_group, maximum_points_per_frame)
+            for _, lead_day_group in depth_dataframe.groupby("lead_day", sort=True)
+        ]
+        if frames:
+            depth_payloads.append(
+                {
+                    "key": str(depth_bin),
+                    "label": str(depth_bin),
+                    "signedScale": _class4_robust_scale(depth_dataframe["error"]),
+                    "absoluteScale": _class4_robust_scale(depth_dataframe["absolute_error"]),
+                    "frames": frames,
+                }
+            )
+    return depth_payloads
+
+
+def _class4_payload(
+    challenger_dataset: xarray.Dataset,
+    observation_dataset: xarray.Dataset,
+    variables: Sequence[Variable | str],
+    first_day_index: int,
+    maximum_points_per_frame: int,
+    title: str,
+    comparison_dataframe: pandas.DataFrame | None = None,
+) -> dict[str, object]:
+    variable_keys = _resolved_variable_keys(variables)
+    resolved_comparison_dataframe = (
+        classIV.class4_validation_dataframe(
+            challenger_dataset=challenger_dataset,
+            reference_dataset=observation_dataset,
+            variables=[_variable_from_key(variable_key) for variable_key in variable_keys],
+        )
+        if comparison_dataframe is None
+        else comparison_dataframe
+    )
+    if resolved_comparison_dataframe.empty:
+        raise ValueError("No Class IV observations are available for the requested variables.")
+
+    finite_dataframe = resolved_comparison_dataframe.dropna(
+        subset=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key(), "error", "absolute_error"]
+    )
+    if finite_dataframe.empty:
+        raise ValueError("No finite Class IV model-observation errors are available for display.")
+
+    variable_payloads = []
+    for variable_key in variable_keys:
+        variable_dataframe = finite_dataframe.loc[finite_dataframe["variable"] == variable_key]
+        if variable_dataframe.empty:
+            continue
+        depth_payloads = _class4_depth_payloads(variable_dataframe, maximum_points_per_frame)
+        if depth_payloads:
+            variable_payloads.append(
+                {
+                    "key": variable_key,
+                    "label": _class4_variable_label(variable_key),
+                    "unit": VARIABLE_METADATA[variable_key][1],
+                    "depths": depth_payloads,
+                }
+            )
+    if not variable_payloads:
+        raise ValueError("No Class IV observations are available for the requested variables.")
+
+    return {
+        "title": title,
+        "bounds": _lagrangian_bounds(challenger_dataset),
+        "landMask": _lagrangian_land_mask_payload(challenger_dataset, first_day_index),
+        "variables": variable_payloads,
+    }
+
+
+def _class4_explorer_document(element_id: str, payload: dict[str, object]) -> str:
+    payload_json = json.dumps(payload, separators=(",", ":"))
+    return f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html, body {{
+  margin: 0;
+  background: transparent;
+  color: #172033;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}}
+.ob-class4 {{
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #d5dce8;
+  border-radius: 18px;
+  background: #f8fafc;
+  overflow: hidden;
+}}
+.ob-class4-header {{
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px 12px;
+}}
+.ob-class4-title {{
+  font-size: 18px;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+}}
+.ob-class4-subtitle {{
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}}
+.ob-class4-controls {{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 360px;
+}}
+.ob-class4-row {{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}}
+.ob-class4-chip {{
+  appearance: none;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #334155;
+  padding: 7px 11px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}}
+.ob-class4-chip.active {{
+  background: #0f5f8f;
+  border-color: #0f5f8f;
+  color: #ffffff;
+}}
+.ob-class4-slider {{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}}
+.ob-class4-slider span {{
+  min-width: 76px;
+  text-align: right;
+}}
+.ob-class4-slider input {{
+  width: 180px;
+}}
+.ob-class4-map {{
+  margin: 0 14px 12px;
+  border-radius: 14px;
+  background: #e8eef4;
+  overflow: hidden;
+}}
+.ob-class4-map canvas {{
+  display: block;
+  width: 100%;
+  height: auto;
+}}
+.ob-class4-status {{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px 16px;
+  color: #64748b;
+  font-size: 12px;
+}}
+.ob-class4-legend {{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}}
+.ob-class4-gradient {{
+  width: 120px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2166ac, #f7f7f7, #b2182b);
+  border: 1px solid #cbd5e1;
+}}
+@media (max-width: 840px) {{
+  .ob-class4-header {{
+    flex-direction: column;
+  }}
+  .ob-class4-controls {{
+    min-width: 0;
+  }}
+  .ob-class4-row {{
+    justify-content: flex-start;
+  }}
+}}
+</style>
+</head>
+<body>
+<div id="{element_id}" class="ob-class4">
+  <div class="ob-class4-header">
+    <div>
+      <div class="ob-class4-title"></div>
+      <div class="ob-class4-subtitle">Model minus Class IV observation errors at observation locations.</div>
+    </div>
+    <div class="ob-class4-controls">
+      <div class="ob-class4-row ob-class4-variable-buttons"></div>
+      <div class="ob-class4-row ob-class4-depth-buttons"></div>
+      <div class="ob-class4-row">
+        <div class="ob-class4-mode-buttons"></div>
+        <label class="ob-class4-slider">
+          <span class="ob-class4-lead-label"></span>
+          <input class="ob-class4-lead-input" type="range" min="0" step="1" value="0">
+        </label>
+      </div>
+    </div>
+  </div>
+  <div class="ob-class4-map"><canvas width="1180" height="620"></canvas></div>
+  <div class="ob-class4-status">
+    <div class="ob-class4-status-text"></div>
+    <div class="ob-class4-legend">
+      <span>Signed error</span><span class="ob-class4-gradient"></span><span>negative / positive</span>
+    </div>
+  </div>
+</div>
+<script>
+(() => {{
+  const payload = {payload_json};
+  const root = document.getElementById({json.dumps(element_id)});
+  const title = root.querySelector(".ob-class4-title");
+  const variableButtons = root.querySelector(".ob-class4-variable-buttons");
+  const depthButtons = root.querySelector(".ob-class4-depth-buttons");
+  const modeButtons = root.querySelector(".ob-class4-mode-buttons");
+  const leadInput = root.querySelector(".ob-class4-lead-input");
+  const leadLabel = root.querySelector(".ob-class4-lead-label");
+  const statusText = root.querySelector(".ob-class4-status-text");
+  const canvas = root.querySelector("canvas");
+  const context = canvas.getContext("2d");
+  const modes = [
+    {{key: "signed", label: "Signed error"}},
+    {{key: "absolute", label: "Absolute error"}}
+  ];
+  const state = {{variable: 0, depth: 0, lead: 0, mode: "signed"}};
+
+  title.textContent = payload.title;
+
+  function currentVariable() {{ return payload.variables[state.variable]; }}
+  function currentDepth() {{ return currentVariable().depths[state.depth] || currentVariable().depths[0]; }}
+  function currentFrame() {{ return currentDepth().frames[state.lead] || currentDepth().frames[0]; }}
+
+  function makeButton(label, active, onClick) {{
+    const button = document.createElement("button");
+    button.className = "ob-class4-chip" + (active ? " active" : "");
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", onClick);
+    return button;
+  }}
+
+  function renderButtons() {{
+    variableButtons.replaceChildren(...payload.variables.map((variable, index) =>
+      makeButton(variable.label, index === state.variable, () => {{
+        state.variable = index;
+        state.depth = 0;
+        state.lead = 0;
+        render();
+      }})
+    ));
+    depthButtons.replaceChildren(...currentVariable().depths.map((depth, index) =>
+      makeButton(depth.label, index === state.depth, () => {{
+        state.depth = index;
+        state.lead = Math.min(state.lead, currentDepth().frames.length - 1);
+        render();
+      }})
+    ));
+    modeButtons.replaceChildren(...modes.map((mode) =>
+      makeButton(mode.label, mode.key === state.mode, () => {{
+        state.mode = mode.key;
+        render();
+      }})
+    ));
+    leadInput.max = Math.max(0, currentDepth().frames.length - 1);
+    leadInput.value = String(Math.min(state.lead, Number(leadInput.max)));
+  }}
+
+  function projection() {{
+    const bounds = payload.bounds;
+    const width = canvas.width;
+    const height = canvas.height;
+    const lonSpan = Math.max(1e-6, bounds.longitudeMaximum - bounds.longitudeMinimum);
+    const latSpan = Math.max(1e-6, bounds.latitudeMaximum - bounds.latitudeMinimum);
+    const scale = Math.min(width / lonSpan, height / latSpan) * 0.92;
+    const xOffset = (width - lonSpan * scale) / 2;
+    const yOffset = (height - latSpan * scale) / 2;
+    return {{
+      x: (longitude) => xOffset + (longitude - bounds.longitudeMinimum) * scale,
+      y: (latitude) => height - yOffset - (latitude - bounds.latitudeMinimum) * scale
+    }};
+  }}
+
+  function drawLandMask(project) {{
+    const mask = payload.landMask;
+    if (!mask || !mask.longitude || mask.longitude.length < 2 || mask.latitude.length < 2) return;
+    context.fillStyle = "#d9d5cc";
+    const lonStep = Math.abs(mask.longitude[1] - mask.longitude[0]);
+    const latStep = Math.abs(mask.latitude[1] - mask.latitude[0]);
+    for (let latIndex = 0; latIndex < mask.latitude.length; latIndex += 1) {{
+      for (let lonIndex = 0; lonIndex < mask.longitude.length; lonIndex += 1) {{
+        if (!mask.land[latIndex][lonIndex]) continue;
+        const x0 = project.x(mask.longitude[lonIndex] - lonStep / 2);
+        const x1 = project.x(mask.longitude[lonIndex] + lonStep / 2);
+        const y0 = project.y(mask.latitude[latIndex] - latStep / 2);
+        const y1 = project.y(mask.latitude[latIndex] + latStep / 2);
+        context.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0) + 0.5, Math.abs(y1 - y0) + 0.5);
+      }}
+    }}
+  }}
+
+  function colorForSigned(value, scale) {{
+    if (value === null || !Number.isFinite(value)) return "rgba(100,116,139,0.25)";
+    const clipped = Math.max(-1, Math.min(1, value / scale));
+    if (clipped < 0) {{
+      const t = 1 + clipped;
+      return `rgb(${{Math.round(33 + 214 * t)}}, ${{Math.round(102 + 145 * t)}}, ${{Math.round(172 + 75 * t)}})`;
+    }}
+    const t = clipped;
+    return `rgb(${{Math.round(247 - 69 * t)}}, ${{Math.round(247 - 213 * t)}}, ${{Math.round(247 - 204 * t)}})`;
+  }}
+
+  function colorForAbsolute(value, scale) {{
+    if (value === null || !Number.isFinite(value)) return "rgba(100,116,139,0.25)";
+    const t = Math.max(0, Math.min(1, value / scale));
+    return `rgb(${{Math.round(252 - 175 * t)}}, ${{Math.round(244 - 226 * t)}}, ${{Math.round(164 - 74 * t)}})`;
+  }}
+
+  function drawPoints(project, frame) {{
+    const depth = currentDepth();
+    const signedScale = depth.signedScale || 1;
+    const absoluteScale = depth.absoluteScale || 1;
+    context.globalAlpha = 0.78;
+    for (let index = 0; index < frame.longitude.length; index += 1) {{
+      const longitude = frame.longitude[index];
+      const latitude = frame.latitude[index];
+      if (longitude === null || latitude === null) continue;
+      if (state.mode === "absolute") {{
+        context.fillStyle = colorForAbsolute(frame.absoluteError[index], absoluteScale);
+      }} else {{
+        context.fillStyle = colorForSigned(frame.error[index], signedScale);
+      }}
+      context.beginPath();
+      context.arc(project.x(longitude), project.y(latitude), 2.8, 0, Math.PI * 2);
+      context.fill();
+    }}
+    context.globalAlpha = 1;
+  }}
+
+  function draw() {{
+    const project = projection();
+    const frame = currentFrame();
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#edf3f8";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    drawLandMask(project);
+    drawPoints(project, frame);
+    leadLabel.textContent = `Lead day ${{frame.leadDay}}`;
+    const modeLabel = modes.find((mode) => mode.key === state.mode).label;
+    statusText.textContent = [
+      currentVariable().label,
+      currentDepth().label,
+      modeLabel,
+      `${{frame.shownCount}}/${{frame.totalCount}} observations`,
+    ].join(" · ");
+  }}
+
+  function render() {{
+    renderButtons();
+    draw();
+  }}
+
+  leadInput.addEventListener("input", () => {{
+    state.lead = Number(leadInput.value);
+    draw();
+  }});
+
+  render();
+}})();
+</script>
+</body>
+</html>"""
+
+
+def _class4_explorer_iframe_html(document: str, height_pixels: int) -> str:
+    escaped_document = html.escape(document, quote=True)
+    return (
+        f'<iframe srcdoc="{escaped_document}" '
+        + 'style="width:100%; '
+        + f'height:{height_pixels}px; border:0;" '
+        + 'loading="lazy" sandbox="allow-scripts"></iframe>'
+    )
+
+
 def plot_multi_reference_zonal_psd_comparison(
     challenger_dataset: xarray.Dataset,
     reference_datasets: Mapping[str, xarray.Dataset],
@@ -2768,3 +3238,27 @@ def plot_multi_reference_eddy_matching_explorer(
     element_id = f"ob-eddy-{uuid4().hex}"
     document = _eddy_explorer_document(element_id, payload)
     return _html_without_iframe_warning(_eddy_explorer_iframe_html(document, height_pixels=height_pixels))
+
+
+def plot_class4_observation_error_explorer(
+    challenger_dataset: xarray.Dataset,
+    observation_dataset: xarray.Dataset,
+    variables: Sequence[Variable | str] = DEFAULT_SURFACE_COMPARISON_VARIABLES,
+    first_day_index: int = 0,
+    maximum_points_per_frame: int = DEFAULT_CLASS4_MAXIMUM_POINTS_PER_FRAME,
+    height_pixels: int = DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Class IV observation error maps",
+    comparison_dataframe: pandas.DataFrame | None = None,
+) -> HTML:
+    payload = _class4_payload(
+        challenger_dataset=challenger_dataset,
+        observation_dataset=observation_dataset,
+        variables=variables,
+        first_day_index=first_day_index,
+        maximum_points_per_frame=maximum_points_per_frame,
+        title=title,
+        comparison_dataframe=comparison_dataframe,
+    )
+    element_id = f"ob-class4-{uuid4().hex}"
+    document = _class4_explorer_document(element_id, payload)
+    return _html_without_iframe_warning(_class4_explorer_iframe_html(document, height_pixels=height_pixels))
