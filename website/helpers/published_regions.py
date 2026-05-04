@@ -7,12 +7,12 @@ GLOBAL_REGION_NAME = "global"
 PUBLISHED_REGIONS = {
     GLOBAL_REGION_NAME: {
         "label": "Global",
-        "description": "Global ocean domain.",
+        "description": "Global ocean domain",
         "bounds": None,
     },
     "ibi": {
         "label": "IBI",
-        "description": "Iberia-Biscay-Ireland regional domain.",
+        "description": "Iberia-Biscay-Ireland regional domain",
         "bounds": {
             "minimum_latitude": 26.17,
             "maximum_latitude": 56.08,
