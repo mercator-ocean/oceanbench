@@ -72,6 +72,12 @@ Attributes:
     Conventions:  CF-1.4
 ```
 
+For training on the 1 degree track, the historical 1 degree GLORYS dataset is also available in the EDITO bucket at:
+
+```text
+https://minio.dive.edito.eu/project-oceanbench/public/glorys_1degree_1993_2019
+```
+
 ## Open official challenger datasets
 
 OceanBench exposes the official challengers through `oceanbench.datasets.challenger`.

@@ -327,7 +327,7 @@ body.quarto-dark #region-selector {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  min-height: 8rem;
+  min-height: 9.2rem;
   padding: 0.8rem 8.2rem 0.8rem 0.9rem;
 }
 
@@ -336,7 +336,7 @@ body.quarto-dark #region-selector {
   z-index: 2;
   min-width: 0;
   width: 100%;
-  max-width: 39rem;
+  max-width: 43rem;
   pointer-events: none;
 }
 
@@ -346,17 +346,32 @@ body.quarto-dark #region-selector {
 
 .region-selector-row {
   display: grid;
-  grid-template-columns: auto auto 18rem;
+  grid-template-columns: 3.9rem auto 18rem;
   gap: 0.5rem 0.75rem;
   align-items: center;
 }
 
 .track-selector-row {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 3.9rem 1fr;
   gap: 0.5rem 0.75rem;
   align-items: center;
   margin-top: 0.6rem;
+}
+
+.track-keynote {
+  margin-top: 0.45rem;
+  margin-left: 0;
+  max-width: none;
+  color: var(--ob-muted);
+  font-size: 0.68rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  min-height: 0.9rem;
+}
+
+.track-keynote--hidden {
+  visibility: hidden;
 }
 
 .region-selector-label {
@@ -413,6 +428,9 @@ body.quarto-dark #region-selector {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  justify-self: start;
+  align-self: start;
+  margin-left: -2px;
 }
 
 .track-selector-row .score-tab {
@@ -424,6 +442,8 @@ body.quarto-dark #region-selector {
   color: var(--bs-body-color, #333940);
   font-size: 0.85rem;
   min-height: auto;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .track-selector-row .score-tab:hover:not(.active) {
@@ -588,6 +608,12 @@ body.quarto-dark .region-globe-outline {
   .track-selector-row {
     grid-template-columns: 1fr;
     align-items: flex-start;
+  }
+
+  .track-keynote {
+    margin-left: 0;
+    max-width: 100%;
+    white-space: normal;
   }
 
   .region-chip-group {
