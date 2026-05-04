@@ -54,18 +54,14 @@ def test_glo12_additional_forcing_dataset_path_uses_expected_bucket_layout() -> 
     input_datasets, _datasets_input = _load_input_modules()
     path = input_datasets._glo12_forcing_dataset_path(datetime(2023, 1, 4))
 
-    assert path == (
-        "https://oceanbench-bucket.s3.amazonaws.com/dev/additionnal-data/GLO12/" "glo12_rg_1d-m_nwct_R20230104.zarr"
-    )
+    assert path == "s3://oceanbench-bucket/dev/additionnal-data/GLO12/glo12_rg_1d-m_nwct_R20230104.zarr"
 
 
 def test_ifs_additional_forcing_dataset_path_uses_expected_bucket_layout() -> None:
     input_datasets, _datasets_input = _load_input_modules()
     path = input_datasets._ifs_forcing_zarr_dataset_path(datetime(2023, 1, 3))
 
-    assert path == (
-        "https://oceanbench-bucket.s3.amazonaws.com/dev/additionnal-data/IFS/" "ifs_forcing_rg_forecasts_R20230103.zarr"
-    )
+    assert path == "s3://oceanbench-bucket/dev/additionnal-data/IFS/ifs_forcing_rg_forecasts_R20230103.zarr"
 
 
 def test_public_input_api_forwards_glo12_additional_forcings(monkeypatch) -> None:
