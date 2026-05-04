@@ -8,6 +8,7 @@ This module exposes the functions to generate evaluation visualizations.
 
 from collections.abc import Mapping, Sequence
 
+import pandas
 import xarray
 
 from oceanbench.core.dataset_utils import Variable
@@ -156,6 +157,32 @@ def plot_multi_reference_lagrangian_trajectory_explorer(
     )
 
 
+def plot_class4_observation_error_explorer(
+    challenger_dataset: xarray.Dataset,
+    observation_dataset: xarray.Dataset,
+    variables: Sequence[Variable | str] = visualization.DEFAULT_SURFACE_COMPARISON_VARIABLES,
+    first_day_index: int = 0,
+    maximum_points_per_frame: int = visualization.DEFAULT_CLASS4_MAXIMUM_POINTS_PER_FRAME,
+    height_pixels: int = visualization.DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Class IV observation error maps",
+    comparison_dataframe: pandas.DataFrame | None = None,
+):
+    """
+    Display a browser-side explorer for challenger errors against Class IV observations.
+    """
+
+    return visualization.plot_class4_observation_error_explorer(
+        challenger_dataset=challenger_dataset,
+        observation_dataset=observation_dataset,
+        variables=variables,
+        first_day_index=first_day_index,
+        maximum_points_per_frame=maximum_points_per_frame,
+        height_pixels=height_pixels,
+        title=title,
+        comparison_dataframe=comparison_dataframe,
+    )
+
+
 def plot_multi_reference_eddy_matching_explorer(
     challenger_dataset: xarray.Dataset,
     reference_datasets: Mapping[str, xarray.Dataset],
@@ -181,6 +208,7 @@ def plot_multi_reference_eddy_matching_explorer(
 
 
 __all__ = [
+    "plot_class4_observation_error_explorer",
     "plot_multi_reference_eddy_matching_explorer",
     "plot_multi_reference_lagrangian_trajectory_explorer",
     "plot_multi_reference_surface_comparison_explorer",

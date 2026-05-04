@@ -18,13 +18,16 @@ region = "global"
 
 import oceanbench.visualization
 
+import pandas
 import warnings
 from dask.array.core import PerformanceWarning
 
-from oceanbench.core.dataset_utils import Variable
+from oceanbench.core.classIV import class4_validation_dataframe, rmsd_class4_validation_dataframe
+from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
+from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
 from oceanbench.core.rmsd import rmsd
 
 regional_challenger_dataset = oceanbench.regions.subset(challenger_dataset, region)
@@ -85,10 +88,36 @@ rmsd(
 
 # #### Root Mean Square Deviation (RMSD) of variables compared to observations
 
-oceanbench.metrics.rmsd_of_variables_compared_to_observations(
-    challenger_dataset,
-    region=region,
-)
+try:
+    observation_dataset = oceanbench.regions.subset(observations(regional_challenger_dataset), region)
+except ObservationDataUnavailableError as error:
+    class4_observation_rmsd = pandas.DataFrame({"Message": [str(error)]})
+else:
+    class4_observation_comparison_dataframe = class4_validation_dataframe(
+        challenger_dataset=regional_challenger_dataset,
+        reference_dataset=observation_dataset,
+        variables=forecast_comparison_variables,
+    )
+    class4_observation_rmsd = rmsd_class4_validation_dataframe(
+        class4_observation_comparison_dataframe,
+        lead_days_count=regional_challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()],
+    )
+
+class4_observation_rmsd
+
+# #### Class IV observation error explorer
+
+if "observation_dataset" in locals():
+    class4_observation_error_explorer = oceanbench.visualization.plot_class4_observation_error_explorer(
+        challenger_dataset=regional_challenger_dataset,
+        observation_dataset=observation_dataset,
+        variables=forecast_comparison_variables,
+        title="Class IV observation error maps",
+        comparison_dataframe=class4_observation_comparison_dataframe,
+    )
+    class4_observation_error_explorer
+else:
+    None
 
 # #### Deviation of Lagrangian trajectories compared to GLORYS reanalysis
 
