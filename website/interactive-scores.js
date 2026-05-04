@@ -66,6 +66,9 @@ const TRACK_LABELS = {
   one_degree: "1 degree",
 };
 
+const ONE_DEGREE_TRACK_NOTE =
+  "In this track, the models are base models at a high resolution whose forecasts are interpolated to one degree resolution.";
+
 function interpolateColor(startColor, endColor, ratio) {
   return [
     Math.round(startColor[0] + (endColor[0] - startColor[0]) * ratio),
@@ -444,6 +447,11 @@ function buildTrackTabsInnerHtml(trackKeys) {
   return markup;
 }
 
+function buildTrackNoteInnerHtml() {
+  const hiddenClass = activeTrack === "one_degree" ? "" : " track-keynote--hidden";
+  return `<div class="track-keynote${hiddenClass}">${ONE_DEGREE_TRACK_NOTE}</div>`;
+}
+
 function attachTabListeners() {
   document.querySelectorAll(".score-track-link").forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -531,6 +539,7 @@ function buildRegionSelectorInnerHtml(regionIds) {
   markup += '<span class="region-selector-label">Track</span>';
   markup += `<div id="score-track-tabs" role="group" aria-label="Model resolution track">${trackTabs}</div>`;
   markup += "</div>";
+  markup += buildTrackNoteInnerHtml();
   markup += "</div>";
   markup += '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
   markup += "</div>";
