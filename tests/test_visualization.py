@@ -100,6 +100,8 @@ def test_plot_surface_comparison_explorer_returns_self_contained_html() -> None:
     assert "Zonal current" in html_output.data
     assert "Meridional current" in html_output.data
     assert "Signed error" in html_output.data
+    assert "Color scale:" in html_output.data
+    assert "Maps are downsampled and compressed for display only" in html_output.data
     assert "Absolute error" in html_output.data
     assert "RMSE over dates" in html_output.data
     assert "rmse_over_dates" in html_output.data
@@ -211,6 +213,7 @@ def test_plot_multi_reference_surface_comparison_explorer_uses_one_viewer() -> N
     assert "Signed error" in html_output.data
     assert "Spatial RMSE over lead days" in html_output.data
     assert "spatialRmse" in html_output.data
+    assert "scaleLabel" in html_output.data
     assert "data:image/webp;base64," in html_output.data
 
 
@@ -312,6 +315,7 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "Lagrangian trajectory divergence" in html_output.data
     assert "requestAnimationFrame" in html_output.data
     assert "Smooth visual interpolation between true daily particle positions" in html_output.data
+    assert "particles are sampled for display" in html_output.data
     assert "drawLandMask" in html_output.data
     assert "Current separation distance" in html_output.data
     assert "Reached daily positions" in html_output.data
@@ -377,6 +381,7 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "height:520px" in html_output.data
     assert "Mesoscale eddy matching" in html_output.data
     assert "Discrete SSH eddy detections per lead day" in html_output.data
+    assert "contours are decimated for display" in html_output.data
     assert "Matched eddy" in html_output.data
     assert "Spurious challenger" in html_output.data
     assert "Missed reference" in html_output.data
@@ -441,8 +446,10 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "height:500px" in html_output.data
     assert "Class IV observation error maps" in html_output.data
     assert "Model minus Class IV observation errors" in html_output.data
+    assert "points may be sampled for display" in html_output.data
     assert "Observation density" not in html_output.data
     assert "Signed error" in html_output.data
+    assert "robust 95%" in html_output.data
 
 
 def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: Path) -> None:
@@ -460,6 +467,10 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     all_sources = "\n".join(cell.source for cell in notebook.cells)
 
     assert "oceanbench.visualization.plot_multi_reference_surface_comparison_explorer" in all_sources
+    assert "Report guide" in all_sources
+    assert "Score tables provide the quantitative OceanBench evaluation." in all_sources
+    assert "Interactive figures help diagnose the scores" in all_sources
+    assert "metric scores are computed from the underlying datasets" in all_sources
     assert "glorys_reanalysis_dataset" in all_sources
     assert '"GLORYS reanalysis"' in all_sources
     assert "glo12_analysis_dataset" in all_sources
