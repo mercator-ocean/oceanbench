@@ -72,16 +72,21 @@ Attributes:
     Conventions:  CF-1.4
 ```
 
-For training on the 1 degree track, the historical 1 degree GLORYS dataset is also available in the EDITO bucket at:
+For training on the 1 degree track, OceanBench also exposes the historical 1 degree GLORYS dataset:
 
-```text
-https://minio.dive.edito.eu/project-oceanbench/public/glorys_1degree_1993_2019
+```python
+import oceanbench
+
+oceanbench.datasets.reference.glorys_reanalysis_1_degree_historical()
 ```
 
 ## Open official challenger datasets
 
 OceanBench exposes the official challengers through `oceanbench.datasets.challenger`.
+The generated API documentation for these dataset helpers is also available in the
+[OceanBench documentation](https://oceanbench.readthedocs.io/en/latest/source/oceanbench.datasets.html#module-oceanbench.datasets.challenger).
 This includes the maintained 2024 challengers `glo12`, `glonet`, `wenhai` and `xihe`, as well as their 1 degree interpolated variants `glo12_1_degree`, `glonet_1_degree`, `wenhai_1_degree` and `xihe_1_degree` for the 1 degree track.
+The interpolation method used for the 1 degree track, along with the corresponding 1 degree reference datasets and direct links to the implementation, is documented [here](https://oceanbench.readthedocs.io/en/latest/one-degree-track-interpolation.html).
 
 ```python
 import oceanbench
