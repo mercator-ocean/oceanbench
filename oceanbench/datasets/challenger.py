@@ -61,6 +61,23 @@ def glo12_1_degree() -> xarray.Dataset:
     -------
     Dataset
         The Dataset containing GLO12 forecasts interpolated to 1 degree resolution.
+
+    >>> glo12_1_degree()
+    <xarray.Dataset> Size: 11GB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 21,
+                             latitude: 170, longitude: 360)
+    Coordinates:
+      * depth               (depth) float32 84B 0.494 47.37 ... 4.833e+03 5.275e+03
+      * latitude            (latitude) float64 1kB -79.5 -78.5 -77.5 ... 87.5 88.5 89.5
+      * longitude           (longitude) float64 3kB -179.5 -178.5 -177.5 ... 177.5 178.5 179.5
+      * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
+      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ....
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float64 300MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
     """
 
     return challenger_datasets.glo12_1_degree()
@@ -136,6 +153,23 @@ def glonet_1_degree() -> xarray.Dataset:
     -------
     Dataset
         The Dataset containing GLONET forecasts interpolated to 1 degree resolution.
+
+    >>> glonet_1_degree()
+    <xarray.Dataset> Size: 22GB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 21,
+                             latitude: 168, longitude: 360)
+    Coordinates:
+      * depth               (depth) float32 84B 0.494 47.37 ... 4.833e+03 5.275e+03
+      * latitude            (latitude) float64 1kB -77.5 -76.5 -75.5 ... 87.5 88.5 89.5
+      * longitude           (longitude) float64 3kB -179.5 -178.5 -177.5 ... 177.5 178.5 179.5
+      * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
+      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ....
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float64 255MB dask.array<chunksize=(1, 1, 168, 360), meta=np.ndarray>
     """
 
     return challenger_datasets.glonet_1_degree()
@@ -179,6 +213,23 @@ def xihe_1_degree() -> xarray.Dataset:
     -------
     Dataset
         The Dataset containing XiHe forecasts interpolated to 1 degree resolution.
+
+    >>> xihe_1_degree()
+    <xarray.Dataset> Size: 12GB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 23,
+                             latitude: 170, longitude: 360)
+    Coordinates:
+      * depth               (depth) float64 184B 0.494 2.646 5.078 ... 541.1 643.6
+      * latitude            (latitude) float64 1kB -79.5 -78.5 -77.5 ... 87.5 88.5 89.5
+      * longitude           (longitude) float64 3kB -179.5 -178.5 -177.5 ... 177.5 178.5 179.5
+      * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
+      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ....
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float64 300MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
     """
 
     return challenger_datasets.xihe_1_degree()
@@ -222,6 +273,23 @@ def wenhai_1_degree() -> xarray.Dataset:
     -------
     Dataset
         The Dataset containing WenHai forecasts interpolated to 1 degree resolution.
+
+    >>> wenhai_1_degree()
+    <xarray.Dataset> Size: 12GB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 23,
+                             latitude: 170, longitude: 360)
+    Coordinates:
+      * depth               (depth) float32 92B 0.494 2.646 5.078 ... 541.1 643.6
+      * latitude            (latitude) float64 1kB -79.5 -78.5 -77.5 ... 87.5 88.5 89.5
+      * longitude           (longitude) float64 3kB -179.5 -178.5 -177.5 ... 177.5 178.5 179.5
+      * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
+      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ....
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float64 300MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
     """
 
     return challenger_datasets.wenhai_1_degree()
