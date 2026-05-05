@@ -242,6 +242,28 @@ def _field_norm(variable_key: str, fields: Sequence[xarray.DataArray]) -> Normal
     return Normalize(vmin=minimum, vmax=maximum)
 
 
+def _formatted_scale_value(value: float) -> str:
+    if value == 0.0:
+        return "0"
+    return f"{value:.3g}"
+
+
+def _norm_scale_label(norm: Normalize, method_label: str) -> str:
+    minimum = float(norm.vmin) if norm.vmin is not None else 0.0
+    maximum = float(norm.vmax) if norm.vmax is not None else 1.0
+    if isinstance(norm, TwoSlopeNorm) and numpy.isclose(abs(minimum), abs(maximum)):
+        scale_range = f"+/-{_formatted_scale_value(abs(maximum))}"
+    else:
+        scale_range = f"{_formatted_scale_value(minimum)} to {_formatted_scale_value(maximum)}"
+    return f"Color scale: {scale_range} ({method_label})"
+
+
+def _field_scale_method_label(variable_key: str) -> str:
+    if variable_key in DIVERGING_VARIABLES:
+        return "symmetric robust 98%"
+    return "robust 2-98%"
+
+
 def _field_colormap(variable_key: str) -> str:
     if variable_key not in FIELD_COLORMAPS:
         raise ValueError(f"No surface comparison colormap is configured for variable {variable_key!r}.")
@@ -585,11 +607,13 @@ def _encoded_images(
     value_label: str,
     title_prefix: str,
     variable_key: str,
+    scale_method_label: str,
 ) -> dict[str, object]:
     return {
         "key": key,
         "label": label,
         "valueLabel": value_label,
+        "scaleLabel": _norm_scale_label(norm, scale_method_label),
         "images": [
             _encoded_webp_image(
                 array,
@@ -662,6 +686,7 @@ def _surface_comparison_multi_reference_depth_payload(
             variable_label,
             title_prefix,
             variable_key,
+            _field_scale_method_label(variable_key),
         ),
         "references": [
             _surface_comparison_reference_payload(
@@ -712,6 +737,7 @@ def _surface_comparison_reference_payload(
                 variable_label,
                 f"{reference.label} | {title_prefix}",
                 variable_key,
+                _field_scale_method_label(variable_key),
             ),
             _encoded_images(
                 "error",
@@ -722,6 +748,7 @@ def _surface_comparison_reference_payload(
                 f"{variable_label} error",
                 f"{challenger_name} vs {reference.label} | {title_prefix}",
                 variable_key,
+                "symmetric robust 98%",
             ),
             _encoded_images(
                 "absolute_error",
@@ -732,6 +759,7 @@ def _surface_comparison_reference_payload(
                 f"{variable_label} absolute error",
                 f"{challenger_name} vs {reference.label} | {title_prefix}",
                 variable_key,
+                "0-98% robust",
             ),
             _encoded_images(
                 "rmse_over_dates",
@@ -742,6 +770,7 @@ def _surface_comparison_reference_payload(
                 f"{variable_label} RMSE",
                 f"{challenger_name} vs {reference.label} | {title_prefix}",
                 variable_key,
+                "0-98% robust",
             ),
         ],
     }
@@ -765,6 +794,10 @@ def _surface_comparison_payload(
 ) -> dict[str, object]:
     return {
         "title": f"{title} against {reference_name}" if reference_name is not None else title,
+        "note": (
+            "Maps are downsampled and compressed for display only; "
+            "OceanBench scores are computed from the underlying datasets."
+        ),
         "variables": list(variable_payloads),
     }
 
@@ -894,6 +927,11 @@ html, body {{
   color: #475569;
   font-size: 12px;
 }}
+.ob-map-note {{
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+}}
 .ob-map-rmse-panel {{
   position: relative;
   display: block;
@@ -977,6 +1015,7 @@ html, body {{
     <div class="ob-map-rmse-tooltip"></div>
   </div>
   <div class="ob-map-status"></div>
+  <div class="ob-map-note"></div>
 </div>
 <script>
 (() => {{
@@ -995,6 +1034,7 @@ html, body {{
   const rmseContext = rmseCanvas.getContext("2d");
   const rmseTooltip = root.querySelector(".ob-map-rmse-tooltip");
   const status = root.querySelector(".ob-map-status");
+  const note = root.querySelector(".ob-map-note");
   const variables = Object.fromEntries(payload.variables.map((variable) => [variable.key, variable]));
   let activeVariableKey = payload.variables[0].key;
   let activeDepthKey = payload.variables[0].depths[0].key;
@@ -1004,6 +1044,7 @@ html, body {{
   let hoveredRmseIndex = null;
 
   title.textContent = payload.title;
+  note.textContent = payload.note;
 
   leadInput.addEventListener("input", () => {{
     activeLeadIndex = Number(leadInput.value);
@@ -1311,6 +1352,7 @@ html, body {{
       currentReference().label,
       layer.label,
       `lead day ${{depth.leadDays[activeLeadIndex]}}`,
+      layer.scaleLabel,
     ].join(" - ");
     drawRmseCurve();
   }}
@@ -1693,7 +1735,9 @@ html, body {{
   <div class="ob-lagrangian-header">
     <div>
       <div class="ob-lagrangian-title"></div>
-      <div class="ob-lagrangian-subtitle">Smooth visual interpolation between true daily particle positions.</div>
+      <div class="ob-lagrangian-subtitle">
+        Smooth visual interpolation between true daily particle positions; particles are sampled for display.
+      </div>
     </div>
     <div class="ob-lagrangian-controls">
       <div class="ob-lagrangian-control-row">
@@ -2512,7 +2556,9 @@ html, body {{
   <div class="ob-eddy-header">
     <div>
       <div class="ob-eddy-title"></div>
-      <div class="ob-eddy-subtitle">Discrete SSH eddy detections per lead day; contours are not interpolated.</div>
+      <div class="ob-eddy-subtitle">
+        Discrete SSH eddy detections per lead day; contours are decimated for display and not interpolated.
+      </div>
     </div>
     <div class="ob-eddy-controls">
       <div class="ob-eddy-row">
@@ -2987,7 +3033,9 @@ html, body {{
   <div class="ob-class4-header">
     <div>
       <div class="ob-class4-title"></div>
-      <div class="ob-class4-subtitle">Model minus Class IV observation errors at observation locations.</div>
+      <div class="ob-class4-subtitle">
+        Model minus Class IV observation errors at observation locations; points may be sampled for display.
+      </div>
     </div>
     <div class="ob-class4-controls">
       <div class="ob-class4-row ob-class4-variable-buttons"></div>
@@ -3140,6 +3188,13 @@ html, body {{
     context.globalAlpha = 1;
   }}
 
+  function selectedClass4ScaleLabel() {{
+    const depth = currentDepth();
+    const scale = state.mode === "absolute" ? depth.absoluteScale : depth.signedScale;
+    const prefix = state.mode === "absolute" ? "0 to " : "+/-";
+    return `Color scale: ${{prefix}}${{Number(scale || 1).toPrecision(3)}} (robust 95%)`;
+  }}
+
   function draw() {{
     const project = projection();
     const frame = currentFrame();
@@ -3154,6 +3209,7 @@ html, body {{
       currentVariable().label,
       currentDepth().label,
       modeLabel,
+      selectedClass4ScaleLabel(),
       `${{frame.shownCount}}/${{frame.totalCount}} observations`,
     ].join(" - ");
   }}
