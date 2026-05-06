@@ -29,9 +29,9 @@ OceanBench also exposes additional weekly input datasets stored in the bucket
 
 These datasets are available through:
 
-* ``oceanbench.datasets.input.glo12_forcings()`` for additional GLO12 nowcast Zarr datasets such as
+* ``oceanbench.datasets.input.glo12_additional_nowcasts()`` for additional GLO12 nowcast Zarr datasets such as
   ``glo12_rg_1d-m_nwct_R20230104.zarr`` and weekly successors through 2025.
-* ``oceanbench.datasets.input.ifs_forcings_zarr()`` for additional IFS forcing Zarr datasets such as
+* ``oceanbench.datasets.input.ifs_additional_forcings()`` for additional IFS forcing Zarr datasets such as
   ``ifs_forcing_rg_forecasts_R20230103.zarr`` and weekly successors through 2025.
 
 Dataset files
