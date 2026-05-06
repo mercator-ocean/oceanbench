@@ -59,8 +59,12 @@ def _weekly_first_day_datetimes_2024() -> list[datetime]:
     return generate_dates("2024-01-03", "2024-12-25", 7)
 
 
-def _weekly_first_day_datetimes_2023() -> list[datetime]:
-    return generate_dates("2023-01-04", "2023-12-27", 7)
+def _additional_glo12_datetimes() -> list[datetime]:
+    return generate_dates("2023-01-04", "2025-12-31", 7)
+
+
+def _additional_ifs_datetimes() -> list[datetime]:
+    return generate_dates("2023-01-03", "2025-12-30", 7)
 
 
 def glo12_nowcasts() -> xarray.Dataset:
@@ -100,7 +104,7 @@ def _ifs_forcing_dataset_path(start_datetime: datetime) -> str:
 
 def glo12_forcings() -> xarray.Dataset:
     datasets = _open_available_grouped_zarr_datasets(
-        _weekly_first_day_datetimes_2023(),
+        _additional_glo12_datetimes(),
         _glo12_forcing_dataset_path,
         _GLO12_FORCING_GROUPS,
     )
@@ -114,7 +118,7 @@ def _glo12_forcing_dataset_path(start_datetime: datetime) -> str:
 
 def ifs_forcings_zarr() -> xarray.Dataset:
     datasets = _open_available_grouped_zarr_datasets(
-        _weekly_first_day_datetimes_2023(),
+        _additional_ifs_datetimes(),
         _ifs_forcing_zarr_dataset_path,
         _IFS_FORCING_ZARR_GROUPS,
     )

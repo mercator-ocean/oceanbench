@@ -64,6 +64,13 @@ def test_ifs_additional_forcing_dataset_path_uses_expected_bucket_layout() -> No
     assert path == "s3://oceanbench-bucket/dev/additionnal-data/IFS/ifs_forcing_rg_forecasts_R20230103.zarr"
 
 
+def test_additional_dataset_ranges_cover_documented_2025_end_dates() -> None:
+    input_datasets, _datasets_input = _load_input_modules()
+
+    assert input_datasets._additional_glo12_datetimes()[-1] == datetime(2025, 12, 31)
+    assert input_datasets._additional_ifs_datetimes()[-1] == datetime(2025, 12, 30)
+
+
 def test_public_input_api_forwards_glo12_additional_forcings(monkeypatch) -> None:
     input_datasets, datasets_input = _load_input_modules()
     sentinel = object()

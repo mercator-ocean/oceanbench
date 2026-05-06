@@ -112,12 +112,12 @@ def ifs_forcings() -> xarray.Dataset:
 
 def glo12_forcings() -> xarray.Dataset:
     """
-    Open weekly GLO12 additional input datasets from 2023.
+    Open additional weekly GLO12 nowcasts from 2023 to 2025.
 
     Returns
     -------
     Dataset
-        The Dataset containing GLO12 forcing/initial-state inputs staged as weekly Zarr datasets.
+        The Dataset containing additional GLO12 nowcasts staged as weekly Zarr datasets.
     """
 
     return input_datasets.glo12_forcings()
@@ -125,12 +125,12 @@ def glo12_forcings() -> xarray.Dataset:
 
 def ifs_forcings_zarr() -> xarray.Dataset:
     """
-    Open weekly IFS additional forcing datasets from 2023 stored as Zarr.
+    Open additional weekly IFS forcings from 2023 to 2025 stored as Zarr.
 
     Returns
     -------
     Dataset
-        The Dataset containing IFS forcings stored in the additional-data bucket as weekly Zarr datasets.
+        The Dataset containing additional IFS forcings stored in the additional-data bucket as weekly Zarr datasets.
     """
 
     return input_datasets.ifs_forcings_zarr()
