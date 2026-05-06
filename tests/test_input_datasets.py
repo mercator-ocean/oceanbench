@@ -71,17 +71,17 @@ def test_additional_dataset_ranges_cover_documented_2025_end_dates() -> None:
     assert input_datasets._additional_ifs_datetimes()[-1] == datetime(2025, 12, 30)
 
 
-def test_public_input_api_forwards_glo12_additional_forcings(monkeypatch) -> None:
+def test_public_input_api_forwards_glo12_additional_nowcasts(monkeypatch) -> None:
     input_datasets, datasets_input = _load_input_modules()
     sentinel = object()
     monkeypatch.setattr(input_datasets, "glo12_forcings", lambda: sentinel)
 
-    assert datasets_input.glo12_forcings() is sentinel
+    assert datasets_input.glo12_additional_nowcasts() is sentinel
 
 
-def test_public_input_api_forwards_ifs_additional_forcings_zarr(monkeypatch) -> None:
+def test_public_input_api_forwards_ifs_additional_forcings(monkeypatch) -> None:
     input_datasets, datasets_input = _load_input_modules()
     sentinel = object()
     monkeypatch.setattr(input_datasets, "ifs_forcings_zarr", lambda: sentinel)
 
-    assert datasets_input.ifs_forcings_zarr() is sentinel
+    assert datasets_input.ifs_additional_forcings() is sentinel
