@@ -211,7 +211,8 @@ def test_plot_multi_reference_surface_comparison_explorer_uses_one_viewer() -> N
     assert "challengerLayer" in html_output.data
     assert "references" in html_output.data
     assert "Signed error" in html_output.data
-    assert "Spatial RMSE over lead days" in html_output.data
+    assert "Spatial RMSE trend (auto-scaled)" in html_output.data
+    assert "D1" in html_output.data
     assert "spatialRmse" in html_output.data
     assert "scaleLabel" in html_output.data
     assert "data:image/webp;base64," in html_output.data

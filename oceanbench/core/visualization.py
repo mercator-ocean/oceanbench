@@ -1198,13 +1198,32 @@ html, body {{
     }};
   }}
 
-  function rmsePoint(index, value, maximumValue, size) {{
+  function rmseScale(values) {{
+    const validValues = values.filter((value) => value !== null && Number.isFinite(value));
+    if (validValues.length === 0) return null;
+    const minimumValue = Math.min(...validValues);
+    const maximumValue = Math.max(...validValues);
+    const valueRange = maximumValue - minimumValue;
+    const padding = valueRange > 0 ? valueRange * 0.08 : Math.max(Math.abs(maximumValue) * 0.05, 1e-6);
+    return {{
+      minimum: Math.max(0, minimumValue - padding),
+      maximum: maximumValue + padding,
+    }};
+  }}
+
+  function formatRmseValue(value) {{
+    if (value === null || !Number.isFinite(value)) return "";
+    return value.toPrecision(3);
+  }}
+
+  function rmsePoint(index, value, scale, size) {{
     const layout = rmseLayout(size);
     const x = layout.padding.left + (
       currentReference().spatialRmse.length <= 1 ? 0 : (index / (currentReference().spatialRmse.length - 1))
       * layout.plotWidth
     );
-    const y = layout.padding.top + layout.plotHeight - (value / maximumValue) * layout.plotHeight;
+    const y = layout.padding.top + layout.plotHeight
+      - ((value - scale.minimum) / (scale.maximum - scale.minimum)) * layout.plotHeight;
     return {{ x, y }};
   }}
 
@@ -1223,16 +1242,15 @@ html, body {{
 
   function nearestRmseLeadIndex(event) {{
     const values = currentReference().spatialRmse || [];
-    const validValues = values.filter((value) => value !== null && Number.isFinite(value));
-    if (validValues.length === 0) return null;
-    const maximumValue = Math.max(...validValues, 1e-12);
+    const scale = rmseScale(values);
+    if (scale === null) return null;
     const size = rmseCanvasDisplaySize();
     const pointer = rmseCanvasCoordinates(event);
     let nearestIndex = null;
     let nearestDistance = Infinity;
     values.forEach((value, index) => {{
       if (value === null || !Number.isFinite(value)) return;
-      const point = rmsePoint(index, value, maximumValue, size);
+      const point = rmsePoint(index, value, scale, size);
       const distance = Math.hypot(pointer.x - point.x, pointer.y - point.y);
       if (distance < nearestDistance) {{
         nearestDistance = distance;
@@ -1268,19 +1286,20 @@ html, body {{
     rmseContext.clearRect(0, 0, size.width, size.height);
     rmseContext.fillStyle = "#ffffff";
     rmseContext.fillRect(0, 0, size.width, size.height);
-    rmseLabel.textContent = "Spatial RMSE over lead days";
+    rmseLabel.textContent = "Spatial RMSE trend (auto-scaled)";
     if (validValues.length === 0) {{
       rmseContext.fillStyle = "#64748b";
       rmseContext.font = "13px sans-serif";
       rmseContext.fillText("No finite RMSE values", 18, 58);
       return;
     }}
-    const padding = {{left: 34, right: 16, top: 12, bottom: 24}};
+    const padding = {{left: 42, right: 16, top: 14, bottom: 24}};
     const plotWidth = size.width - padding.left - padding.right;
     const plotHeight = size.height - padding.top - padding.bottom;
-    const maximumValue = Math.max(...validValues, 1e-12);
+    const scale = rmseScale(values);
     const x = (index) => padding.left + (values.length <= 1 ? 0 : (index / (values.length - 1)) * plotWidth);
-    const y = (value) => padding.top + plotHeight - (value / maximumValue) * plotHeight;
+    const y = (value) => padding.top + plotHeight
+      - ((value - scale.minimum) / (scale.maximum - scale.minimum)) * plotHeight;
 
     rmseContext.strokeStyle = "#d8dee8";
     rmseContext.lineWidth = 1;
@@ -1289,6 +1308,13 @@ html, body {{
     rmseContext.lineTo(padding.left, padding.top + plotHeight);
     rmseContext.lineTo(padding.left + plotWidth, padding.top + plotHeight);
     rmseContext.stroke();
+
+    rmseContext.fillStyle = "#64748b";
+    rmseContext.font = "10.5px sans-serif";
+    rmseContext.textAlign = "right";
+    rmseContext.fillText(formatRmseValue(scale.maximum), padding.left - 5, padding.top + 4);
+    rmseContext.fillText(formatRmseValue(scale.minimum), padding.left - 5, padding.top + plotHeight + 3);
+    rmseContext.textAlign = "left";
 
     rmseContext.strokeStyle = "#0f5f8f";
     rmseContext.lineWidth = 2.2;
@@ -1326,11 +1352,11 @@ html, body {{
     const activeValue = values[activeLeadIndex];
     rmseContext.fillStyle = "#475569";
     rmseContext.font = "12px sans-serif";
-    rmseContext.fillText("1", padding.left - 3, size.height - 6);
-    rmseContext.fillText(String(values.length), padding.left + plotWidth - 4, size.height - 6);
+    rmseContext.fillText("D1", padding.left - 5, size.height - 6);
+    rmseContext.fillText(`D${{values.length}}`, padding.left + plotWidth - 8, size.height - 6);
     if (activeValue !== null && Number.isFinite(activeValue)) {{
       rmseContext.fillStyle = "#172033";
-      rmseContext.fillText(`day ${{activeLeadIndex + 1}}: ${{activeValue.toPrecision(3)}}`, padding.left + 8, 18);
+      rmseContext.fillText(`day ${{activeLeadIndex + 1}}: ${{formatRmseValue(activeValue)}}`, padding.left + 8, 18);
     }}
   }}
 
