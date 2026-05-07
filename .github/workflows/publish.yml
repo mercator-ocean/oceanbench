@@ -3,18 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 name: Publish OceanBench to PyPI
-on:
-  push:
-  workflow_dispatch:
-    inputs:
-      git_ref:
-        description: "Git ref to publish, for example v1.0.0"
-        required: true
-        type: string
-      expected_version:
-        description: "Expected package version, for example 1.0.0"
-        required: true
-        type: string
+on: push
 jobs:
   build:
     name: Build distribution
@@ -22,7 +11,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.git_ref || github.ref }}
           persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,11 +18,6 @@ jobs:
           python-version: "3.x"
       - name: Install pypa/build
         run: python3 -m pip install build --user
-      - name: Check package version
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          test "$VERSION" = "${{ inputs.expected_version }}"
       - name: Build a binary wheel and a source tarball
         run: python3 -m build
       - name: Store the distribution packages
@@ -44,7 +27,7 @@ jobs:
           path: dist/
   publish-to-pypi:
     name: Publish to PyPI
-    if: ${{ github.event_name == 'workflow_dispatch' || (startsWith(github.event.head_commit.message, 'OceanBench Release') && github.ref == 'refs/heads/main') }}
+    if: ${{ startsWith(github.event.head_commit.message, 'OceanBench Release') && github.ref == 'refs/heads/main' }}
     needs:
       - build
     runs-on: ubuntu-latest
