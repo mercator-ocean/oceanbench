@@ -17,10 +17,14 @@ from helpers.published_regions import published_region_metadata  # noqa: E402
 
 
 class MockResponse:
-    def __init__(self, status_code: int, text: str = "", content: bytes = b""):
+    def __init__(self, status_code: int, text: str = "", content: bytes = b"", json_data: dict | None = None):
         self.status_code = status_code
         self.text = text
         self.content = content
+        self._json_data = {} if json_data is None else json_data
+
+    def json(self) -> dict:
+        return self._json_data
 
 
 def test_discover_official_reports_probes_only_official_region_report_names(monkeypatch) -> None:
@@ -31,11 +35,17 @@ def test_discover_official_reports_probes_only_official_region_report_names(monk
     }
     requested_urls = []
 
+    def fake_get(url: str, timeout: int):
+        assert url == "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/current.json"
+        assert timeout == 10
+        return MockResponse(status_code=404)
+
     def fake_head(url: str, timeout: int):
         assert timeout == 10
         requested_urls.append(url)
         return MockResponse(status_code=200 if url in existing_report_urls else 404)
 
+    monkeypatch.setattr("helpers.s3_discovery.requests.get", fake_get)
     monkeypatch.setattr("helpers.s3_discovery.requests.head", fake_head)
 
     reports = discover_official_reports()
@@ -48,6 +58,69 @@ def test_discover_official_reports_probes_only_official_region_report_names(monk
         ".report.ipynb" in url and ".global.report.ipynb" not in url and ".ibi.report.ipynb" not in url
         for url in requested_urls
     )
+
+
+def test_discover_official_reports_uses_manifest_current_version(monkeypatch) -> None:
+    existing_report_urls = {
+        "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/0.1.1/glo12.global.report.ipynb",
+    }
+
+    def fake_get(url: str, timeout: int):
+        assert url == "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/current.json"
+        assert timeout == 10
+        return MockResponse(status_code=200, json_data={"current": "0.1.1"})
+
+    def fake_head(url: str, timeout: int):
+        assert timeout == 10
+        return MockResponse(status_code=200 if url in existing_report_urls else 404)
+
+    monkeypatch.setattr("helpers.s3_discovery.requests.get", fake_get)
+    monkeypatch.setattr("helpers.s3_discovery.requests.head", fake_head)
+
+    reports = discover_official_reports()
+
+    assert reports["global"] == ["glo12"]
+    assert reports["ibi"] == []
+
+
+def test_discover_official_reports_falls_back_when_manifest_is_missing(monkeypatch) -> None:
+    existing_report_urls = {
+        "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/1.1.0/glo12.global.report.ipynb",
+    }
+
+    def fake_get(url: str, timeout: int):
+        return MockResponse(status_code=404)
+
+    def fake_head(url: str, timeout: int):
+        return MockResponse(status_code=200 if url in existing_report_urls else 404)
+
+    monkeypatch.setattr("helpers.s3_discovery.requests.get", fake_get)
+    monkeypatch.setattr("helpers.s3_discovery.requests.head", fake_head)
+
+    reports = discover_official_reports()
+
+    assert reports["global"] == ["glo12"]
+    assert reports["ibi"] == []
+
+
+def test_discover_official_reports_falls_back_when_manifest_is_invalid(monkeypatch) -> None:
+    existing_report_urls = {
+        "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/1.1.0/glo12.global.report.ipynb",
+    }
+
+    def fake_get(url: str, timeout: int):
+        return MockResponse(status_code=200, json_data={"current": "../0.1.1"})
+
+    def fake_head(url: str, timeout: int):
+        return MockResponse(status_code=200 if url in existing_report_urls else 404)
+
+    monkeypatch.setattr("helpers.s3_discovery.requests.get", fake_get)
+    monkeypatch.setattr("helpers.s3_discovery.requests.head", fake_head)
+
+    reports = discover_official_reports()
+
+    assert reports["global"] == ["glo12"]
+    assert reports["ibi"] == []
 
 
 def test_published_regions_have_stable_order_and_metadata() -> None:
@@ -104,7 +177,11 @@ def test_download_notebook_uses_only_explicit_region_name(monkeypatch, tmp_path)
     assert (tmp_path / "glonet.global.report.ipynb").read_bytes() == b"{}"
     assert requests_seen == [
         (
+            "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/current.json",
+            10,
+        ),
+        (
             "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/1.1.0/glonet.global.report.ipynb",
             30,
-        )
+        ),
     ]

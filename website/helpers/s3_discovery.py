@@ -11,12 +11,33 @@ from helpers.challenger_metadata import KNOWN_CHALLENGERS
 from helpers.published_regions import published_region_ids
 
 S3_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench"
-REPORTS_PREFIX = "public/evaluation-reports/1.1.0/"
+REPORTS_MANIFEST_PATH = "public/evaluation-reports/current.json"
+DEFAULT_REPORTS_VERSION = "1.1.0"
 REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")
 
 
+def _report_prefix() -> str:
+    return f"public/evaluation-reports/{_current_report_version()}/"
+
+
+def _current_report_version() -> str:
+    try:
+        response = requests.get(f"{S3_BASE_URL}/{REPORTS_MANIFEST_PATH}", timeout=10)
+        if response.status_code != 200:
+            return DEFAULT_REPORTS_VERSION
+        manifest = response.json()
+        current_version = manifest.get("current")
+        return current_version if _valid_report_version(current_version) else DEFAULT_REPORTS_VERSION
+    except Exception:
+        return DEFAULT_REPORTS_VERSION
+
+
+def _valid_report_version(version: object) -> bool:
+    return isinstance(version, str) and re.fullmatch(r"\d+\.\d+\.\d+", version) is not None
+
+
 def _notebook_url(challenger_name: str, region_id: str) -> str:
-    return f"{S3_BASE_URL}/{REPORTS_PREFIX}{challenger_name}.{region_id}.report.ipynb"
+    return f"{S3_BASE_URL}/{_report_prefix()}{challenger_name}.{region_id}.report.ipynb"
 
 
 def _report_exists(challenger_name: str, region_id: str) -> bool:
