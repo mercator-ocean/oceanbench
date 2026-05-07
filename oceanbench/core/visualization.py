@@ -1352,8 +1352,8 @@ html, body {{
     const activeValue = values[activeLeadIndex];
     rmseContext.fillStyle = "#475569";
     rmseContext.font = "12px sans-serif";
-    rmseContext.fillText("D1", padding.left - 5, size.height - 6);
-    rmseContext.fillText(`D${{values.length}}`, padding.left + plotWidth - 8, size.height - 6);
+    rmseContext.fillText("lead 1", padding.left - 5, size.height - 6);
+    rmseContext.fillText(`lead ${{values.length}}`, padding.left + plotWidth - 26, size.height - 6);
     if (activeValue !== null && Number.isFinite(activeValue)) {{
       rmseContext.fillStyle = "#172033";
       rmseContext.fillText(`day ${{activeLeadIndex + 1}}: ${{formatRmseValue(activeValue)}}`, padding.left + 8, 18);
