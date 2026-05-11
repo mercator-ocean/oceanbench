@@ -67,7 +67,7 @@ const TRACK_LABELS = {
 };
 
 const ONE_DEGREE_TRACK_NOTE =
-  "In this track, the models are base models at a high resolution whose forecasts are interpolated to one degree resolution.";
+  "In this track, the models are non-one-degree base models whose forecasts are interpolated to the one degree resolution";
 
 function interpolateColor(startColor, endColor, ratio) {
   return [
