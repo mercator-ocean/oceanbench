@@ -152,7 +152,7 @@ def glo12_additional_nowcasts() -> xarray.Dataset:
         zos        (time, latitude, longitude) float32 ...
     """
 
-    return input_datasets.glo12_forcings()
+    return input_datasets.glo12_additional_nowcasts()
 
 
 def ifs_additional_forcings() -> xarray.Dataset:
@@ -204,4 +204,4 @@ def ifs_additional_forcings() -> xarray.Dataset:
         sp                  (first_day_datetime, lead_day_index, latitude, longitude) float32 ...
     """
 
-    return input_datasets.ifs_forcings_zarr()
+    return input_datasets.ifs_additional_forcings()
