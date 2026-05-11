@@ -8,6 +8,7 @@ This module exposes the challenger datasets evaluated in the benchmark.
 
 import logging
 from datetime import datetime
+from functools import reduce
 
 import xarray
 from zarr.errors import GroupNotFoundError
@@ -25,7 +26,7 @@ _CLOUDFERRO_STORAGE_OPTIONS = {
     },
 }
 
-_GLO12_FORCING_GROUPS = (
+_GLO12_ADDITIONAL_NOWCAST_GROUPS = (
     "siconc",
     "sithick",
     "so",
@@ -37,7 +38,7 @@ _GLO12_FORCING_GROUPS = (
     "zos",
 )
 
-_IFS_FORCING_ZARR_GROUPS = (
+_IFS_ADDITIONAL_FORCING_GROUPS = (
     "cp",
     "ewss",
     "nsss",
@@ -102,25 +103,25 @@ def _ifs_forcing_dataset_path(start_datetime: datetime) -> str:
     return f"https://minio.dive.edito.eu/project-oceanbench/public/IFS/IFS_{start_datetime_string}.nc#mode=bytes"
 
 
-def glo12_forcings() -> xarray.Dataset:
+def glo12_additional_nowcasts() -> xarray.Dataset:
     datasets = _open_available_grouped_zarr_datasets(
         _additional_glo12_datetimes(),
-        _glo12_forcing_dataset_path,
-        _GLO12_FORCING_GROUPS,
+        _glo12_additional_nowcast_dataset_path,
+        _GLO12_ADDITIONAL_NOWCAST_GROUPS,
     )
     return xarray.concat(datasets, dim="time").sortby("time")
 
 
-def _glo12_forcing_dataset_path(start_datetime: datetime) -> str:
+def _glo12_additional_nowcast_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"s3://oceanbench-bucket/dev/additionnal-data/GLO12/glo12_rg_1d-m_nwct_R{start_datetime_string}.zarr"
 
 
-def ifs_forcings_zarr() -> xarray.Dataset:
+def ifs_additional_forcings() -> xarray.Dataset:
     datasets = _open_available_grouped_zarr_datasets(
         _additional_ifs_datetimes(),
-        _ifs_forcing_zarr_dataset_path,
-        _IFS_FORCING_ZARR_GROUPS,
+        _ifs_additional_forcing_dataset_path,
+        _IFS_ADDITIONAL_FORCING_GROUPS,
     )
     return (
         xarray.concat(datasets, dim="first_day_datetime")
@@ -129,7 +130,7 @@ def ifs_forcings_zarr() -> xarray.Dataset:
     )
 
 
-def _ifs_forcing_zarr_dataset_path(start_datetime: datetime) -> str:
+def _ifs_additional_forcing_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"s3://oceanbench-bucket/dev/additionnal-data/IFS/ifs_forcing_rg_forecasts_R{start_datetime_string}.zarr"
 
@@ -154,13 +155,15 @@ def _open_grouped_zarr_dataset(dataset_path: str, groups: tuple[str, ...]) -> xa
 
 
 def _deduplicate_dataset_indexes(dataset: xarray.Dataset) -> xarray.Dataset:
-    for dimension in dataset.dims:
-        if dimension in dataset.indexes:
-            duplicated_mask = dataset.indexes[dimension].duplicated()
-            if duplicated_mask.any():
-                dataset = dataset.isel({dimension: ~duplicated_mask})
-            dataset = dataset.sortby(dimension)
-    return dataset
+    indexed_dimensions = [dimension for dimension in dataset.dims if dimension in dataset.indexes]
+    return reduce(_deduplicate_dimension_index, indexed_dimensions, dataset)
+
+
+def _deduplicate_dimension_index(dataset: xarray.Dataset, dimension: str) -> xarray.Dataset:
+    dimension_index = dataset.indexes[dimension]
+    if dimension_index.has_duplicates:
+        dataset = dataset.isel({dimension: ~dimension_index.duplicated()})
+    return dataset.sortby(dimension)
 
 
 def _open_available_grouped_zarr_datasets(

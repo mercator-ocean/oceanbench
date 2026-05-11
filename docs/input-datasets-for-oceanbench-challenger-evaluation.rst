@@ -21,9 +21,6 @@ These are the current inputs already exposed in the public API:
 * ``oceanbench.datasets.input.glo12_nowcasts()`` for weekly GLO12 nowcasts.
 * ``oceanbench.datasets.input.ifs_forcings()`` for weekly IFS forcings stored as NetCDF.
 
-Additional CloudFerro inputs
-****************************
-
 OceanBench also exposes additional weekly input datasets stored in the bucket
 ``oceanbench-bucket/dev/additionnal-data/``.
 
