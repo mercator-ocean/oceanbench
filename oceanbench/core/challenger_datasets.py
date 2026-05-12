@@ -13,22 +13,36 @@ from collections.abc import Callable
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
+from oceanbench.core.evaluation_year import (
+    evaluation_year_first_day_datetimes,
+    validate_evaluation_year,
+)
 from oceanbench.core.remote_http import require_remote_dataset_dimensions, with_remote_http_retries
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
 from oceanbench.core.interpolate import interpolate_1_degree
 
-
-def _default_first_day_datetimes() -> list[datetime]:
-    return generate_dates("2024-01-03", "2024-12-25", 7)
+FORECAST_SOURCE_YEAR = 2024
 
 
-def glo12() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_glo12_dataset_path)
+def _default_evaluation_year() -> int:
+    return current_runtime_configuration().evaluation_year
 
 
-def glo12_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(glo12())
+def _forecast_source_first_day_datetimes(count: int) -> list[datetime]:
+    source_first_day_datetimes = evaluation_year_first_day_datetimes(FORECAST_SOURCE_YEAR)
+    return [source_first_day_datetimes[index % len(source_first_day_datetimes)] for index in range(count)]
+
+
+def glo12(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _glo12_dataset_path,
+        evaluation_year=evaluation_year,
+    )
+
+
+def glo12_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(glo12(evaluation_year=evaluation_year))
 
 
 def _glo12_dataset_path(start_datetime: datetime) -> str:
@@ -61,12 +75,15 @@ def _glo36v1_dataset_path(start_datetime: datetime) -> str:
     return f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/{start_datetime.strftime('%Y%m%d')}.zarr"
 
 
-def glonet() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_glonet_dataset_path)
+def glonet(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _glonet_dataset_path,
+        evaluation_year=evaluation_year,
+    )
 
 
-def glonet_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(glonet())
+def glonet_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(glonet(evaluation_year=evaluation_year))
 
 
 def _glonet_dataset_path(start_datetime: datetime) -> str:
@@ -74,12 +91,15 @@ def _glonet_dataset_path(start_datetime: datetime) -> str:
     return f"https://minio.dive.edito.eu/project-oceanbench/public/glonet_full_2024/{start_datetime_string}.zarr"
 
 
-def xihe() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_xihe_dataset_path)
+def xihe(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _xihe_dataset_path,
+        evaluation_year=evaluation_year,
+    )
 
 
-def xihe_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(xihe())
+def xihe_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(xihe(evaluation_year=evaluation_year))
 
 
 def _xihe_dataset_path(start_datetime: datetime) -> str:
@@ -87,12 +107,15 @@ def _xihe_dataset_path(start_datetime: datetime) -> str:
     return f"https://minio.dive.edito.eu/project-oceanbench/public/XIHE/{start_datetime_string}.zarr"
 
 
-def wenhai() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_wenhai_dataset_path)
+def wenhai(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _wenhai_dataset_path,
+        evaluation_year=evaluation_year,
+    )
 
 
-def wenhai_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(wenhai())
+def wenhai_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(wenhai(evaluation_year=evaluation_year))
 
 
 def _wenhai_dataset_path(start_datetime: datetime) -> str:
@@ -104,8 +127,44 @@ def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[d
     return forecast_zarr_path_from_start_datetime.__name__.removeprefix("_").replace("_dataset_path", "")
 
 
-def _resolved_first_day_datetimes(first_day_datetimes: list[datetime] | None) -> list[datetime]:
-    return first_day_datetimes if first_day_datetimes is not None else _default_first_day_datetimes()
+def _resolved_evaluation_year(evaluation_year: int | str | None) -> int:
+    return validate_evaluation_year(evaluation_year if evaluation_year is not None else _default_evaluation_year())
+
+
+def _resolved_first_day_datetimes(
+    first_day_datetimes: list[datetime] | None,
+    evaluation_year: int | str | None,
+) -> list[datetime]:
+    if first_day_datetimes is not None:
+        return first_day_datetimes
+    return evaluation_year_first_day_datetimes(_resolved_evaluation_year(evaluation_year))
+
+
+def _resolved_forecast_source_first_day_datetimes(
+    first_day_datetimes: list[datetime] | None,
+    evaluation_first_day_datetimes: list[datetime],
+) -> list[datetime]:
+    if first_day_datetimes is not None:
+        return first_day_datetimes
+    return _forecast_source_first_day_datetimes(len(evaluation_first_day_datetimes))
+
+
+def _datetime_lookup_key(first_day_datetime: datetime) -> str:
+    return datetime.fromisoformat(str(first_day_datetime)).strftime("%Y-%m-%d")
+
+
+def _forecast_source_datetime_by_evaluation_datetime(
+    evaluation_first_day_datetimes: list[datetime],
+    forecast_source_first_day_datetimes: list[datetime],
+) -> dict[str, datetime]:
+    return {
+        _datetime_lookup_key(evaluation_first_day_datetime): forecast_source_first_day_datetime
+        for evaluation_first_day_datetime, forecast_source_first_day_datetime in zip(
+            evaluation_first_day_datetimes,
+            forecast_source_first_day_datetimes,
+            strict=True,
+        )
+    }
 
 
 def _prepared_challenger_week_dataset(
@@ -134,11 +193,12 @@ def _opened_challenger_week_dataset(
 def _remote_multizarr_forecasts_as_challenger_dataset(
     dataset_name: str,
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
-    first_day_datetimes: list[datetime],
+    evaluation_first_day_datetimes: list[datetime],
+    forecast_source_first_day_datetimes: list[datetime],
     preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None,
 ) -> xarray.Dataset:
     challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
-        list(map(forecast_zarr_path_from_start_datetime, first_day_datetimes)),
+        list(map(forecast_zarr_path_from_start_datetime, forecast_source_first_day_datetimes)),
         engine="zarr",
         preprocess=lambda dataset: _prepared_challenger_week_dataset(
             preprocess_dataset(dataset) if preprocess_dataset is not None else dataset,
@@ -147,7 +207,7 @@ def _remote_multizarr_forecasts_as_challenger_dataset(
         combine="nested",
         concat_dim="first_day_datetime",
         parallel=False,
-    ).assign({"first_day_datetime": first_day_datetimes})
+    ).assign({"first_day_datetime": evaluation_first_day_datetimes})
     return challenger_dataset
 
 
@@ -155,9 +215,18 @@ def _open_multizarr_forecasts_as_challenger_dataset(
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
     *,
     first_day_datetimes: list[datetime] | None = None,
+    evaluation_year: int | str | None = None,
     preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None = None,
 ) -> xarray.Dataset:
-    resolved_first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes)
+    resolved_first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes, evaluation_year)
+    forecast_source_first_day_datetimes = _resolved_forecast_source_first_day_datetimes(
+        first_day_datetimes,
+        resolved_first_day_datetimes,
+    )
+    source_datetime_by_evaluation_datetime = _forecast_source_datetime_by_evaluation_datetime(
+        resolved_first_day_datetimes,
+        forecast_source_first_day_datetimes,
+    )
     dataset_name = _challenger_dataset_name(forecast_zarr_path_from_start_datetime)
 
     def open_dataset() -> xarray.Dataset:
@@ -171,7 +240,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
                 _opened_challenger_week_dataset(
                     forecast_zarr_path_from_start_datetime,
                     preprocess_dataset,
-                    first_day_datetime,
+                    source_datetime_by_evaluation_datetime[_datetime_lookup_key(first_day_datetime)],
                 ),
                 f"{dataset_name} challenger dataset open",
             ),
@@ -179,6 +248,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
                 dataset_name,
                 forecast_zarr_path_from_start_datetime,
                 resolved_first_day_datetimes,
+                forecast_source_first_day_datetimes,
                 preprocess_dataset,
             ),
             attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),

@@ -48,6 +48,7 @@ let parsedData = null;
 let challengerLabels = {};
 let regionLabels = {};
 let regionMetadata = {};
+let activeYear = null;
 let activeTrack = "high_resolution";
 let activeSection = "observations";
 let activeRegion = null;
@@ -164,6 +165,11 @@ function displayName(name) {
   return challengerLabels[name] || name;
 }
 
+function reportHref(challengerName, regionId) {
+  const prefix = activeYear && activeYear !== "2024" ? `${activeYear}.` : "";
+  return `reports/${prefix}${challengerName}.${regionId}.report.html`;
+}
+
 function trackKeyForChallenger(name) {
   return name.endsWith("_1_degree") ? "one_degree" : "high_resolution";
 }
@@ -224,7 +230,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="${reportHref(name, regionId)}">${displayName(name)}</a></th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -274,7 +280,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="${reportHref(name, regionId)}">${displayName(name)}</a></th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -452,6 +458,19 @@ function buildTrackNoteInnerHtml() {
   return `<div class="track-keynote${hiddenClass}">${ONE_DEGREE_TRACK_NOTE}</div>`;
 }
 
+function buildYearSelectorInnerHtml(yearIds) {
+  if (yearIds.length === 0) return "";
+  let markup = '<div class="year-selector-row">';
+  markup += '<span class="region-selector-label">Year</span>';
+  markup += '<div class="year-chip-group" role="group" aria-label="Evaluation year">';
+  for (const yearId of yearIds) {
+    const active = yearId === activeYear ? " active" : "";
+    markup += `<button type="button" class="year-chip${active}" data-year="${yearId}" aria-pressed="${yearId === activeYear}">${yearId}</button>`;
+  }
+  markup += "</div></div>";
+  return markup;
+}
+
 function attachTabListeners() {
   document.querySelectorAll(".score-track-link").forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -469,6 +488,18 @@ function attachTrackListeners() {
       const trackKey = button.dataset.track;
       if (!trackKey || trackKey === activeTrack) return;
       activeTrack = trackKey;
+      selectedDepths = new Set();
+      showAllMode = true;
+      renderAllTables();
+    });
+  });
+}
+
+function attachYearListeners() {
+  document.querySelectorAll(".year-chip").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.year === activeYear) return;
+      activeYear = button.dataset.year;
       selectedDepths = new Set();
       showAllMode = true;
       renderAllTables();
@@ -507,11 +538,12 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   return markup;
 }
 
-function buildRegionSelectorInnerHtml(regionIds) {
+function buildRegionSelectorInnerHtml(regionIds, yearIds) {
   if (regionIds.length === 0) return "";
 
   let markup = `<div class="region-selector-layout region-selector-layout--${activeRegion}">`;
   markup += '<div class="region-selector-copy">';
+  markup += buildYearSelectorInnerHtml(yearIds);
   markup += '<div class="region-selector-row">';
   markup += '<span class="region-selector-label">Region</span>';
   markup += '<div class="region-chip-group" role="group" aria-label="Evaluation region">';
@@ -530,8 +562,8 @@ function buildRegionSelectorInnerHtml(regionIds) {
   markup += "</div>";
 
   const trackKeys = getAvailableTracks(
-    regionIds.includes(activeRegion) && parsedData?.regions?.[activeRegion]?.challenger_names
-      ? parsedData.regions[activeRegion].challenger_names
+    regionIds.includes(activeRegion) && getCurrentRegionData(parsedData)?.challenger_names
+      ? getCurrentRegionData(parsedData).challenger_names
       : [],
   );
   const trackTabs = buildTrackTabsInnerHtml(trackKeys);
@@ -557,7 +589,7 @@ function renderRegionGlobe(regionIds) {
   });
 }
 
-function renderRegionSelector(regionIds) {
+function renderRegionSelector(regionIds, yearIds) {
   const existing = document.getElementById("region-selector");
   if (regionIds.length === 0) {
     if (existing) existing.remove();
@@ -569,7 +601,7 @@ function renderRegionSelector(regionIds) {
 
   const regionSelector = existing || document.createElement("div");
   regionSelector.id = "region-selector";
-  regionSelector.innerHTML = buildRegionSelectorInnerHtml(regionIds);
+  regionSelector.innerHTML = buildRegionSelectorInnerHtml(regionIds, yearIds);
 
   if (!existing) {
     wrapper.parentNode.insertBefore(regionSelector, wrapper);
@@ -1060,7 +1092,13 @@ function ensureParsedData() {
     challengerLabels = parsedData.challenger_labels || {};
     regionLabels = parsedData.region_labels || {};
     regionMetadata = parsedData.region_metadata || {};
-    const regionIds = parsedData.region_order || Object.keys(parsedData.regions || {});
+    const yearIds = getYearIds(parsedData);
+    if (!activeYear || !yearIds.includes(activeYear)) {
+      activeYear = parsedData.default_year && yearIds.includes(parsedData.default_year)
+        ? parsedData.default_year
+        : yearIds[0] || "2024";
+    }
+    const regionIds = getRegionIds(parsedData);
     if (!activeRegion || !regionIds.includes(activeRegion)) {
       activeRegion = regionIds[0] || null;
     }
@@ -1068,13 +1106,28 @@ function ensureParsedData() {
   return parsedData;
 }
 
+function getYearIds(data) {
+  if (data.years && data.years.length > 0) {
+    return data.years.map((year) => String(year));
+  }
+  return [String(data.default_year || "2024")];
+}
+
+function getCurrentYearData(data) {
+  if (!data.scores_by_year) return data;
+  return data.scores_by_year[activeYear] || null;
+}
+
 function getRegionIds(data) {
-  return data.region_order || Object.keys(data.regions || {});
+  const yearData = getCurrentYearData(data);
+  if (!yearData) return [];
+  return yearData.region_order || Object.keys(yearData.regions || {});
 }
 
 function getCurrentRegionData(data) {
   if (!activeRegion) return null;
-  return data.regions?.[activeRegion] || null;
+  const yearData = getCurrentYearData(data);
+  return yearData?.regions?.[activeRegion] || null;
 }
 
 function resolveBaselineSelection(challengerNames, selectedBaseline, trackKey) {
@@ -1130,6 +1183,10 @@ function resolveBaselineSelectionForTrack(challengerNames, selectedBaseline) {
 function renderTablesOnly() {
   const data = ensureParsedData();
   if (!data) return;
+  const regionIds = getRegionIds(data);
+  if (!activeRegion || !regionIds.includes(activeRegion)) {
+    activeRegion = regionIds[0] || null;
+  }
   const regionData = getCurrentRegionData(data);
   if (!regionData) return;
   const { challengers, challenger_names: challengerNames } = regionData;
@@ -1164,11 +1221,18 @@ function renderTablesOnly() {
 function renderAllTables() {
   const data = ensureParsedData();
   if (!data) return;
+  const yearIds = getYearIds(data);
+  if (!activeYear || !yearIds.includes(activeYear)) {
+    activeYear = yearIds[0] || "2024";
+  }
+  const regionIds = getRegionIds(data);
+  if (!activeRegion || !regionIds.includes(activeRegion)) {
+    activeRegion = regionIds[0] || null;
+  }
   const regionData = getCurrentRegionData(data);
   if (!regionData) return;
   const { challengers, challenger_names: challengerNames } = regionData;
   const { metric_titles: metricTitles, sections } = data;
-  const regionIds = getRegionIds(data);
   if (!challengerNames || challengerNames.length === 0) return;
   const { availableTracks, visibleChallengerNames } = resolveVisibleChallengerNames(challengerNames);
   if (visibleChallengerNames.length === 0) return;
@@ -1195,7 +1259,7 @@ function renderAllTables() {
 
   const controlsElement = ensureHeaderElement();
   controlsElement.innerHTML = buildControlsInnerHtml(visibleChallengerNames, baseline, availableDepths);
-  renderRegionSelector(regionIds);
+  renderRegionSelector(regionIds, yearIds);
 
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {
@@ -1205,6 +1269,7 @@ function renderAllTables() {
   updateColorLegend();
   updateStickyOffsets();
   attachTrackListeners();
+  attachYearListeners();
   attachControlListeners();
   attachTabListeners();
   setActiveTrackUi();

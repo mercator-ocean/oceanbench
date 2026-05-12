@@ -26,8 +26,12 @@ def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
 
 
 def _glo12_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
-    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/glo12_1degree_2024_V2/{first_day}.zarr"
+    first_day_datetime = datetime.fromisoformat(str(first_day_datetime))
+    first_day = first_day_datetime.strftime("%Y%m%d")
+    return (
+        "https://minio.dive.edito.eu/project-oceanbench/public/"
+        f"glo12_1degree_{first_day_datetime.year}_V2/{first_day}.zarr"
+    )
 
 
 def _glo12_analysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:

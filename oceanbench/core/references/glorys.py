@@ -21,13 +21,21 @@ _GLORYS_REANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
 
 
 def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
-    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-glonet/public/glorys14_refull_2024/{first_day}.zarr"
+    first_day_datetime = datetime.fromisoformat(str(first_day_datetime))
+    first_day = first_day_datetime.strftime("%Y%m%d")
+    return (
+        "https://minio.dive.edito.eu/project-glonet/public/"
+        f"glorys14_refull_{first_day_datetime.year}/{first_day}.zarr"
+    )
 
 
 def _glorys_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
-    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/glorys_1degree_2024_V2/{first_day}.zarr"
+    first_day_datetime = datetime.fromisoformat(str(first_day_datetime))
+    first_day = first_day_datetime.strftime("%Y%m%d")
+    return (
+        "https://minio.dive.edito.eu/project-oceanbench/public/"
+        f"glorys_1degree_{first_day_datetime.year}_V2/{first_day}.zarr"
+    )
 
 
 def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:

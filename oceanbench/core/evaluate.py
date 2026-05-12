@@ -3,10 +3,12 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from contextlib import contextmanager
+from dataclasses import replace
 from os import environ
 from pathlib import PurePosixPath
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
+from oceanbench.core.evaluation_year import DEFAULT_EVALUATION_YEAR, validate_evaluation_year
 from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
 from oceanbench.core.regions import RegionLike, resolve_region
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
@@ -53,9 +55,12 @@ def _resolve_region_input(region: RegionLike) -> RegionLike:
 def _derive_output_notebook_file_name(
     challenger_path: str,
     region: RegionLike,
+    evaluation_year: int,
 ) -> str:
     resolved_region = resolve_region(region)
     stem = PurePosixPath(challenger_path).stem
+    if evaluation_year != DEFAULT_EVALUATION_YEAR:
+        return f"{evaluation_year}.{stem}.{resolved_region.id}.report.ipynb"
     return f"{stem}.{resolved_region.id}.report.ipynb"
 
 
@@ -66,6 +71,7 @@ def _runtime_configuration_environment(runtime_configuration: RuntimeConfigurati
         OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value: runtime_configuration.stage_directory,
         OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value: str(runtime_configuration.stage_max_workers),
         OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value: str(runtime_configuration.remote_retries),
+        OceanbenchEnvironmentVariable.OCEANBENCH_EVALUATION_YEAR.value: str(runtime_configuration.evaluation_year),
     }
     previous_environment = {
         environment_variable_name: environ.get(environment_variable_name)
@@ -92,6 +98,7 @@ def evaluate_challenger(
     output_prefix: str | None = None,
     runtime_configuration: RuntimeConfiguration | None = None,
     region: RegionLike = None,
+    evaluation_year: int | str | None = None,
 ):
     """
     Compute all the benchmark scores for the given challenger dataset, by calling all functions of the `metrics` module.
@@ -114,6 +121,8 @@ def evaluate_challenger(
         Runtime settings applied inside the generated notebook execution, including staging and remote retry behavior.
     region : str, RegionSpec, or None, optional
         The OceanBench region to evaluate on. This can be an official region id such as ``global`` or ``ibi``, or a custom ``oceanbench.regions.RegionSpec`` value.
+    evaluation_year : int or str, optional
+        The OceanBench evaluation year. Supported values are 2023, 2024 and 2025.
     """  # noqa
     resolved_challenger_python_code_uri_or_local_path = _parse_input_mandatory(
         challenger_python_code_uri_or_local_path,
@@ -129,9 +138,15 @@ def evaluate_challenger(
         OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_PREFIX,
     )
     resolved_runtime_configuration = runtime_configuration or runtime_configuration_from_environment()
+    if evaluation_year is not None:
+        resolved_runtime_configuration = replace(
+            resolved_runtime_configuration,
+            evaluation_year=validate_evaluation_year(evaluation_year),
+        )
     output_notebook_file_name = _derive_output_notebook_file_name(
         resolved_challenger_python_code_uri_or_local_path,
         resolved_region,
+        resolved_runtime_configuration.evaluation_year,
     )
     _evaluate_challenger(
         resolved_challenger_python_code_uri_or_local_path,

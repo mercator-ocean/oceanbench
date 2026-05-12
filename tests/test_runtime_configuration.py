@@ -12,6 +12,7 @@ RUNTIME_ENVIRONMENT_VARIABLES = [
     OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR,
     OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS,
     OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES,
+    OceanbenchEnvironmentVariable.OCEANBENCH_EVALUATION_YEAR,
 ]
 
 
@@ -26,6 +27,7 @@ def test_runtime_configuration_reads_environment(monkeypatch):
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value, "/tmp/oceanbench-stage-env")
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value, "2")
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value, "7")
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_EVALUATION_YEAR.value, "2023")
 
     runtime_configuration = runtime_configuration_from_environment()
 
@@ -33,6 +35,7 @@ def test_runtime_configuration_reads_environment(monkeypatch):
     assert runtime_configuration.stage_directory == "/tmp/oceanbench-stage-env"
     assert runtime_configuration.stage_max_workers == 2
     assert runtime_configuration.remote_retries == 7
+    assert runtime_configuration.evaluation_year == 2023
 
 
 def test_evaluate_cli_runtime_arguments_override_environment(monkeypatch):
@@ -56,6 +59,8 @@ def test_evaluate_cli_runtime_arguments_override_environment(monkeypatch):
             "3",
             "--remote-retries",
             "4",
+            "--evaluation-year",
+            "2025",
         ]
     )
 
@@ -65,6 +70,7 @@ def test_evaluate_cli_runtime_arguments_override_environment(monkeypatch):
     assert runtime_configuration.stage_directory == "/tmp/oceanbench-stage-cli"
     assert runtime_configuration.stage_max_workers == 3
     assert runtime_configuration.remote_retries == 4
+    assert runtime_configuration.evaluation_year == 2025
 
 
 def test_evaluate_cli_uses_environment_runtime_configuration_by_default(monkeypatch):
@@ -73,6 +79,7 @@ def test_evaluate_cli_uses_environment_runtime_configuration_by_default(monkeypa
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value, "/tmp/oceanbench-stage-env")
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value, "2")
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value, "7")
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_EVALUATION_YEAR.value, "2025")
     parser, _evaluate_parser = _build_parser()
     args = parser.parse_args(["evaluate", "challenger.py"])
 
@@ -82,3 +89,4 @@ def test_evaluate_cli_uses_environment_runtime_configuration_by_default(monkeypa
     assert runtime_configuration.stage_directory == "/tmp/oceanbench-stage-env"
     assert runtime_configuration.stage_max_workers == 2
     assert runtime_configuration.remote_retries == 7
+    assert runtime_configuration.evaluation_year == 2025

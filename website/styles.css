@@ -327,7 +327,7 @@ body.quarto-dark #region-selector {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  min-height: 9.2rem;
+  min-height: 10.2rem;
   padding: 0.8rem 8.2rem 0.8rem 0.9rem;
 }
 
@@ -349,6 +349,14 @@ body.quarto-dark #region-selector {
   grid-template-columns: 3.9rem auto 18rem;
   gap: 0.5rem 0.75rem;
   align-items: center;
+}
+
+.year-selector-row {
+  display: grid;
+  grid-template-columns: 3.9rem 1fr;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  margin-bottom: 0.6rem;
 }
 
 .track-selector-row {
@@ -382,14 +390,16 @@ body.quarto-dark #region-selector {
   text-transform: uppercase;
 }
 
-.region-chip-group {
+.region-chip-group,
+.year-chip-group {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
   min-width: max-content;
 }
 
-.region-chip {
+.region-chip,
+.year-chip {
   padding: 0.25rem 0.75rem;
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-pill);
@@ -401,12 +411,14 @@ body.quarto-dark #region-selector {
   line-height: 1.4;
 }
 
-.region-chip:hover:not(.active) {
+.region-chip:hover:not(.active),
+.year-chip:hover:not(.active) {
   border-color: var(--ob-accent);
   color: var(--ob-accent);
 }
 
-.region-chip.active {
+.region-chip.active,
+.year-chip.active {
   background: var(--ob-accent);
   border-color: var(--ob-accent);
   color: var(--ob-accent-contrast);
@@ -456,18 +468,21 @@ body.quarto-dark #region-selector {
   color: var(--ob-accent-contrast);
 }
 
-body.quarto-dark .region-chip {
+body.quarto-dark .region-chip,
+body.quarto-dark .year-chip {
   background: var(--ob-surface);
   color: var(--bs-body-color, #d4d4d8);
   border-color: var(--ob-border);
 }
 
-body.quarto-dark .region-chip:hover:not(.active) {
+body.quarto-dark .region-chip:hover:not(.active),
+body.quarto-dark .year-chip:hover:not(.active) {
   border-color: var(--ob-accent);
   color: var(--ob-accent);
 }
 
-body.quarto-dark .region-chip.active {
+body.quarto-dark .region-chip.active,
+body.quarto-dark .year-chip.active {
   background: var(--ob-accent);
   border-color: var(--ob-accent);
   color: var(--ob-accent-contrast);
@@ -592,7 +607,7 @@ body.quarto-dark .region-globe-outline {
 @media (max-width: 720px) {
   .region-selector-layout {
     align-items: flex-start;
-    min-height: 11.5rem;
+    min-height: 12.5rem;
     padding-right: 0.9rem;
   }
 
@@ -601,6 +616,11 @@ body.quarto-dark .region-globe-outline {
   }
 
   .region-selector-row {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .year-selector-row {
     grid-template-columns: 1fr;
     align-items: flex-start;
   }
@@ -616,12 +636,13 @@ body.quarto-dark .region-globe-outline {
     white-space: normal;
   }
 
-  .region-chip-group {
+  .region-chip-group,
+  .year-chip-group {
     min-width: 0;
   }
 
   .region-globe {
-    top: 4.75rem;
+    top: 5.4rem;
     right: 0.2rem;
     width: 10.5rem;
   }

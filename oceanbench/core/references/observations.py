@@ -11,6 +11,7 @@ from xarray import Dataset, open_dataset, open_mfdataset
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.evaluation_year import DEFAULT_EVALUATION_YEAR, validate_evaluation_year
 from oceanbench.core.local_stage import (
     local_stage_directory,
     open_or_create_local_stage_dataset,
@@ -23,7 +24,7 @@ from oceanbench.core.remote_http import (
     with_remote_http_retries,
 )
 
-OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
+OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2023-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
 
 
@@ -94,9 +95,13 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
     return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 
 
-def observation_path(day_datetime: numpy.datetime64) -> str:
+def observation_path(day_datetime: numpy.datetime64, evaluation_year: int = DEFAULT_EVALUATION_YEAR) -> str:
+    resolved_evaluation_year = validate_evaluation_year(evaluation_year)
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/observations2024/{day_string}.zarr"
+    return (
+        "https://minio.dive.edito.eu/project-oceanbench/public/"
+        f"observations{resolved_evaluation_year}/{day_string}.zarr"
+    )
 
 
 def _assign_standard_names(observations_dataset: Dataset) -> Dataset:
@@ -136,12 +141,14 @@ def _build_staged_observations_dataset(
     first_day_timestamps: pandas.DatetimeIndex,
     first_day_datetimes: numpy.ndarray,
     lead_days_count: int,
+    evaluation_year: int,
 ) -> None:
     observations_dataset = _selected_observations_dataset(
         observation_days=observation_days,
         first_day_timestamps=first_day_timestamps,
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
+        evaluation_year=evaluation_year,
     )
     try:
         write_dataset_to_local_stage(
@@ -159,6 +166,7 @@ def _selected_observations_dataset(
     first_day_timestamps: pandas.DatetimeIndex,
     first_day_datetimes: numpy.ndarray,
     lead_days_count: int,
+    evaluation_year: int,
 ) -> Dataset:
     time_key = Dimension.TIME.key()
     source_observation_dimension_key = "obs"
@@ -166,7 +174,7 @@ def _selected_observations_dataset(
     first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
 
     observations_dataset = open_mfdataset(
-        list(map(observation_path, observation_days)),
+        [observation_path(observation_day, evaluation_year) for observation_day in observation_days],
         engine="zarr",
         decode_cf=False,
         parallel=False,
@@ -231,6 +239,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
         )
 
     first_day_timestamps = pandas.to_datetime(first_day_datetimes)
+    evaluation_year = validate_evaluation_year(first_day_timestamps.min().year)
     first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
     last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
@@ -243,6 +252,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
                 first_day_timestamps=first_day_timestamps,
                 first_day_datetimes=first_day_datetimes,
                 lead_days_count=lead_days_count,
+                evaluation_year=evaluation_year,
             )
         return open_or_create_local_stage_dataset(
             local_stage_path,
@@ -253,6 +263,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
                 first_day_timestamps=first_day_timestamps,
                 first_day_datetimes=first_day_datetimes,
                 lead_days_count=lead_days_count,
+                evaluation_year=evaluation_year,
             ),
         )
 

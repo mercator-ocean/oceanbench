@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from urllib.request import Request, urlopen
 
 from oceanbench.core.local_stage import cleanup_local_stage_directory
+from oceanbench.core.evaluation_year import SUPPORTED_EVALUATION_YEARS
 from oceanbench.core.regions import RegionLike, get_pre_defined_region_names, load_region_file
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from oceanbench.core.version import __version__
@@ -133,6 +134,9 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
         remote_retries=(
             args.remote_retries if args.remote_retries is not None else environment_configuration.remote_retries
         ),
+        evaluation_year=(
+            args.evaluation_year if args.evaluation_year is not None else environment_configuration.evaluation_year
+        ),
     )
 
 
@@ -232,6 +236,13 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         type=int,
         default=None,
         help="Number of retries for transient remote data read failures",
+    )
+    evaluate_parser.add_argument(
+        "--evaluation-year",
+        type=int,
+        choices=SUPPORTED_EVALUATION_YEARS,
+        default=None,
+        help="OceanBench evaluation year",
     )
     evaluate_parser.add_argument(
         "--keep-stage",
