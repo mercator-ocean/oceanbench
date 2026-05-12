@@ -9,6 +9,7 @@ import xarray
 DATASET_SOURCE_KIND_ATTRIBUTE = "oceanbench_source_kind"
 DATASET_SOURCE_NAME_ATTRIBUTE = "oceanbench_source_name"
 DATASET_SOURCE_RESOLUTION_ATTRIBUTE = "oceanbench_source_resolution"
+DATASET_SOURCE_VARIANT_ATTRIBUTE = "oceanbench_source_variant"
 
 
 @dataclass(frozen=True)
@@ -16,6 +17,7 @@ class DatasetSource:
     kind: str
     name: str
     resolution: str | None = None
+    variant: str | None = None
 
 
 def with_dataset_source(
@@ -24,6 +26,7 @@ def with_dataset_source(
     kind: str,
     name: str,
     resolution: str | None = None,
+    variant: str | None = None,
 ) -> xarray.Dataset:
     attrs = dict(dataset.attrs)
     attrs[DATASET_SOURCE_KIND_ATTRIBUTE] = kind
@@ -32,6 +35,10 @@ def with_dataset_source(
         attrs.pop(DATASET_SOURCE_RESOLUTION_ATTRIBUTE, None)
     else:
         attrs[DATASET_SOURCE_RESOLUTION_ATTRIBUTE] = resolution
+    if variant is None:
+        attrs.pop(DATASET_SOURCE_VARIANT_ATTRIBUTE, None)
+    else:
+        attrs[DATASET_SOURCE_VARIANT_ATTRIBUTE] = variant
     return dataset.assign_attrs(attrs)
 
 
@@ -41,4 +48,5 @@ def get_dataset_source(dataset: xarray.Dataset) -> DatasetSource | None:
     if kind in (None, "") or name in (None, ""):
         return None
     resolution = dataset.attrs.get(DATASET_SOURCE_RESOLUTION_ATTRIBUTE)
-    return DatasetSource(kind=kind, name=name, resolution=resolution)
+    variant = dataset.attrs.get(DATASET_SOURCE_VARIANT_ATTRIBUTE)
+    return DatasetSource(kind=kind, name=name, resolution=resolution, variant=variant)

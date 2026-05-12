@@ -26,9 +26,14 @@ def _weekly_stage_directory(
     dataset_name: str,
     lead_days_count: int,
     resolution: str | None = None,
+    stage_variant: str | None = None,
 ) -> Path:
     resolution_suffix = "" if resolution is None else f"-{resolution}"
-    return local_stage_directory() / f"{dataset_kind}-{dataset_name}{resolution_suffix}-{lead_days_count}d"
+    stage_variant_suffix = "" if stage_variant is None else f"-{stage_variant}"
+    return (
+        local_stage_directory()
+        / f"{dataset_kind}-{dataset_name}{resolution_suffix}{stage_variant_suffix}-{lead_days_count}d"
+    )
 
 
 def _weekly_stage_path(
@@ -37,9 +42,13 @@ def _weekly_stage_path(
     lead_days_count: int,
     first_day_datetime: numpy.datetime64 | datetime,
     resolution: str | None = None,
+    stage_variant: str | None = None,
 ) -> Path:
     first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
-    return _weekly_stage_directory(dataset_kind, dataset_name, lead_days_count, resolution) / f"{first_day}.zarr"
+    return (
+        _weekly_stage_directory(dataset_kind, dataset_name, lead_days_count, resolution, stage_variant)
+        / f"{first_day}.zarr"
+    )
 
 
 def staged_weekly_dataset(
@@ -50,6 +59,7 @@ def staged_weekly_dataset(
     lead_days_count: int,
     open_week_dataset: Callable[[numpy.datetime64], xarray.Dataset],
     resolution: str | None = None,
+    stage_variant: str | None = None,
 ) -> xarray.Dataset:
     def stage_week(first_day_datetime: numpy.datetime64) -> Path:
         stage_path = _weekly_stage_path(
@@ -58,6 +68,7 @@ def staged_weekly_dataset(
             lead_days_count=lead_days_count,
             first_day_datetime=first_day_datetime,
             resolution=resolution,
+            stage_variant=stage_variant,
         )
 
         def build_stage(path: Path) -> None:
@@ -85,6 +96,7 @@ def staged_weekly_dataset(
         kind=dataset_kind,
         name=dataset_name,
         resolution=resolution,
+        variant=stage_variant,
     )
 
 
@@ -98,6 +110,7 @@ def maybe_stage_weekly_dataset(
     open_week_dataset: Callable[[numpy.datetime64], xarray.Dataset],
     open_remote_dataset: Callable[[], xarray.Dataset],
     resolution: str | None = None,
+    stage_variant: str | None = None,
     attach_source_metadata_when_not_staged: bool = True,
 ) -> xarray.Dataset:
     if should_stage_locally(stage_key):
@@ -108,6 +121,7 @@ def maybe_stage_weekly_dataset(
             lead_days_count=lead_days_count,
             open_week_dataset=open_week_dataset,
             resolution=resolution,
+            stage_variant=stage_variant,
         )
     remote_dataset = open_remote_dataset()
     if not attach_source_metadata_when_not_staged:
@@ -117,6 +131,7 @@ def maybe_stage_weekly_dataset(
         kind=dataset_kind,
         name=dataset_name,
         resolution=resolution,
+        variant=stage_variant,
     )
 
 

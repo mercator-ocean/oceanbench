@@ -58,8 +58,9 @@ def _lagrangian_stage_sources(
 
 def _lagrangian_stage_directory(dataset_source: DatasetSource, lead_days_count: int) -> Path:
     resolution_suffix = "" if dataset_source.resolution is None else f"-{dataset_source.resolution}"
+    variant_suffix = "" if dataset_source.variant is None else f"-{dataset_source.variant}"
     return local_stage_directory() / (
-        f"lagrangian-{dataset_source.kind}-{dataset_source.name}{resolution_suffix}-{lead_days_count}d"
+        f"lagrangian-{dataset_source.kind}-{dataset_source.name}{resolution_suffix}{variant_suffix}-{lead_days_count}d"
     )
 
 
