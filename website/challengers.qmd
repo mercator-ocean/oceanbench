@@ -27,6 +27,7 @@ region_labels = {
 }
 challengers = sorted({
     challenger_name
+    for published_reports in published_reports_by_year.values()
     for region_challengers in published_reports.values()
     for challenger_name in region_challengers
 })

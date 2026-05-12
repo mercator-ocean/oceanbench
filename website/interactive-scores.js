@@ -48,6 +48,7 @@ let parsedData = null;
 let challengerLabels = {};
 let regionLabels = {};
 let regionMetadata = {};
+let activeYear = null;
 let activeTrack = "high_resolution";
 let activeSection = "observations";
 let activeRegion = null;
@@ -166,6 +167,11 @@ function getStandardName(scoreData, depth, variable) {
 
 function displayName(name) {
   return challengerLabels[name] || name;
+}
+
+function reportHref(challengerName, regionId) {
+  const prefix = activeYear && activeYear !== "2024" ? `${activeYear}.` : "";
+  return `reports/${prefix}${challengerName}.${regionId}.report.html`;
 }
 
 function trackKeyForChallenger(name) {
@@ -456,6 +462,19 @@ function buildTrackNoteInnerHtml() {
   return `<div class="track-keynote${hiddenClass}">${ONE_DEGREE_TRACK_NOTE}</div>`;
 }
 
+function buildYearSelectorInnerHtml(yearIds) {
+  if (yearIds.length === 0) return "";
+  let markup = '<div class="year-selector-row">';
+  markup += '<span class="region-selector-label">Year</span>';
+  markup += '<div class="year-chip-group" role="group" aria-label="Evaluation year">';
+  for (const yearId of yearIds) {
+    const active = yearId === activeYear ? " active" : "";
+    markup += `<button type="button" class="year-chip${active}" data-year="${yearId}" aria-pressed="${yearId === activeYear}">${yearId}</button>`;
+  }
+  markup += "</div></div>";
+  return markup;
+}
+
 function attachTabListeners() {
   document.querySelectorAll(".score-track-link").forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -473,6 +492,18 @@ function attachTrackListeners() {
       const trackKey = button.dataset.track;
       if (!trackKey || trackKey === activeTrack) return;
       activeTrack = trackKey;
+      selectedDepths = new Set();
+      showAllMode = true;
+      renderAllTables();
+    });
+  });
+}
+
+function attachYearListeners() {
+  document.querySelectorAll(".year-chip").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.year === activeYear) return;
+      activeYear = button.dataset.year;
       selectedDepths = new Set();
       showAllMode = true;
       renderAllTables();
@@ -1215,6 +1246,10 @@ function resolveBaselineSelectionForTrack(challengerNames, selectedBaseline) {
 function renderTablesOnly() {
   const data = ensureParsedData();
   if (!data) return;
+  const regionIds = getRegionIds(data);
+  if (!activeRegion || !regionIds.includes(activeRegion)) {
+    activeRegion = regionIds[0] || null;
+  }
   const regionData = getCurrentRegionData(data);
   if (!regionData) return;
   const { challengers, challenger_names: challengerNames } = regionData;
@@ -1249,11 +1284,18 @@ function renderTablesOnly() {
 function renderAllTables() {
   const data = ensureParsedData();
   if (!data) return;
+  const yearIds = getYearIds(data);
+  if (!activeYear || !yearIds.includes(activeYear)) {
+    activeYear = yearIds[0] || "2024";
+  }
+  const regionIds = getRegionIds(data);
+  if (!activeRegion || !regionIds.includes(activeRegion)) {
+    activeRegion = regionIds[0] || null;
+  }
   const regionData = getCurrentRegionData(data);
   if (!regionData) return;
   const { challengers, challenger_names: challengerNames } = regionData;
   const { metric_titles: metricTitles, sections } = data;
-  const regionIds = getRegionIds(data);
   if (!challengerNames || challengerNames.length === 0) return;
   const { availableTracks, visibleChallengerNames } = resolveVisibleChallengerNames(challengerNames);
   if (visibleChallengerNames.length === 0) return;
