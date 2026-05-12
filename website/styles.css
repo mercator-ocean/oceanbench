@@ -625,6 +625,11 @@ body.quarto-dark .region-globe-outline {
     right: 0.2rem;
     width: 10.5rem;
   }
+
+  .region-selector-layout--global .region-globe {
+    right: 0.2rem;
+    width: 10.5rem;
+  }
 }
 
 /* --- Section tracker row --- */
