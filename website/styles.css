@@ -622,14 +622,14 @@ body.quarto-dark .region-globe-outline {
 
   .region-globe {
     top: 4.2rem;
-    right: 0.2rem;
+    right: 0;
     bottom: auto;
     width: 10.5rem;
     aspect-ratio: 640 / 220;
   }
 
   .region-selector-layout--global .region-globe {
-    right: 0.2rem;
+    right: 0;
     width: 10.5rem;
   }
 }
