@@ -8,6 +8,17 @@ SPDX-License-Identifier: EUPL-1.2
 
 All notable changes to OceanBench are documented in this file.
 
+## 0.1.2 - 2026-05-12
+
+### Fixed
+
+- Fixed local staging of 1/12-degree GLORYS and GLO12 references so cached reference datasets are keyed by challenger depth grid.
+- Prevented derived lagrangian reference caches from mixing reference cache variants.
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.1.2/`
+
 ## 0.1.1 - 2026-05-06
 
 ### Added
