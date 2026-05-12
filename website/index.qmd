@@ -36,56 +36,117 @@ Want to evaluate your system or get involved in OceanBench? Check out the [GitHu
 #| output: false
 
 import json
-import os
-from helpers.s3_discovery import discover_downloaded_reports
+from helpers.s3_discovery import load_downloaded_report_versions, report_local_path, reports_by_region
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
 from helpers.challenger_metadata import CHALLENGERS
-from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
+from helpers.published_regions import published_region_label, published_region_metadata
 
-published_reports = discover_downloaded_reports("reports")
-website_region_ids = published_region_ids_with_reports(published_reports)
+report_versions = load_downloaded_report_versions("reports")
+if not report_versions:
+    raise RuntimeError("No downloaded evaluation report versions were found.")
 
-def _load_scores(challenger_name, region_id):
-    local_path = os.path.join("reports", f"{challenger_name}.{region_id}.report.ipynb")
-    if not os.path.exists(local_path):
-        raise FileNotFoundError(f"Missing downloaded report notebook for {challenger_name}: {local_path}")
-    scores = get_all_model_scores_from_notebook(local_path, challenger_name)
+def _region_label(version_metadata, region_id):
+    metadata = version_metadata.get("regions", {}).get(region_id, {})
+    if metadata.get("label"):
+        return metadata["label"]
+    try:
+        return published_region_label(region_id)
+    except KeyError:
+        return region_id.replace("_", " ").title()
+
+def _region_metadata(version_metadata, region_id):
+    metadata = version_metadata.get("regions", {}).get(region_id)
+    if metadata is not None:
+        return metadata
+    try:
+        return published_region_metadata(region_id)
+    except KeyError:
+        return {
+            "label": _region_label(version_metadata, region_id),
+            "description": "",
+            "bounds": None,
+        }
+
+def _challenger_label(version_metadata, challenger_name):
+    metadata = version_metadata.get("challengers", {}).get(challenger_name, {})
+    if metadata.get("label"):
+        return metadata["label"]
+    if challenger_name in CHALLENGERS:
+        return CHALLENGERS[challenger_name]["label"]
+    return challenger_name
+
+def _load_scores(version_metadata, report):
+    local_path = report_local_path("reports", version_metadata, report)
+    scores = get_all_model_scores_from_notebook(local_path, report["challenger"])
     if not scores:
-        raise RuntimeError(f"Failed to parse scores for {challenger_name} from {local_path}")
+        raise RuntimeError(f"Failed to parse scores for {report['challenger']} from {local_path}")
     return {metric_key: score.model_dump() for metric_key, score in scores.items()}
 
-all_scores = {
-    region_id: {
-        "display_name": published_region_label(region_id),
-        "challengers": {
-            challenger_name: _load_scores(challenger_name, region_id)
-            for challenger_name in published_reports[region_id]
-        },
-        "challenger_names": list(published_reports[region_id]),
+def _build_version_data(version_metadata):
+    published_reports = reports_by_region(version_metadata)
+    report_lookup = {
+        (report["challenger"], report["region"]): report
+        for report in version_metadata["reports"]
     }
-    for region_id in website_region_ids
-}
+    region_ids = list(published_reports)
+    all_scores = {
+        region_id: {
+            "display_name": _region_label(version_metadata, region_id),
+            "challengers": {
+                challenger_name: _load_scores(version_metadata, report_lookup[(challenger_name, region_id)])
+                for challenger_name in published_reports[region_id]
+            },
+            "challenger_names": list(published_reports[region_id]),
+        }
+        for region_id in region_ids
+    }
+    return {
+        "regions": all_scores,
+        "region_order": region_ids,
+        "report_links": {
+            region_id: {
+                challenger_name: report_lookup[(challenger_name, region_id)]["file"].removesuffix(".ipynb") + ".html"
+                for challenger_name in published_reports[region_id]
+            }
+            for region_id in region_ids
+        },
+        "region_labels": {
+            region_id: _region_label(version_metadata, region_id)
+            for region_id in region_ids
+        },
+        "region_metadata": {
+            region_id: _region_metadata(version_metadata, region_id)
+            for region_id in region_ids
+        },
+        "challenger_labels": {
+            name: _challenger_label(version_metadata, name)
+            for region in all_scores.values()
+            for name in region["challenger_names"]
+        },
+    }
 
-scores_json = json.dumps({
-    "regions": all_scores,
-    "region_order": website_region_ids,
-    "region_labels": {
-        region_id: published_region_label(region_id)
-        for region_id in website_region_ids
-    },
-    "region_metadata": {
-        region_id: published_region_metadata(region_id)
-        for region_id in website_region_ids
-    },
-    "challenger_labels": {
-        name: CHALLENGERS[name]["label"]
-        for region in all_scores.values()
-        for name in region["challenger_names"]
-        if name in CHALLENGERS
-    },
+version_data = {
+    version_metadata["version"]: _build_version_data(version_metadata)
+    for version_metadata in report_versions
+}
+default_version = report_versions[0]["version"]
+scores_payload = {
+    "versions": [
+        {
+            "id": version_metadata["version"],
+            "label": version_metadata.get("label", version_metadata["version"]),
+            "generated_at": version_metadata.get("generated_at"),
+            "oceanbench_version": version_metadata.get("oceanbench_version"),
+        }
+        for version_metadata in report_versions
+    ],
+    "default_version": default_version,
+    "version_data": version_data,
     "metric_titles": METRIC_TITLES,
     "sections": SECTIONS,
-})
+}
+scores_payload.update(version_data[default_version])
+scores_json = json.dumps(scores_payload)
 ```
 
 ```{python}

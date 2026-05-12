@@ -16,14 +16,27 @@ format:
 #| output: asis
 
 from helpers.challenger_metadata import CHALLENGERS
-from helpers.s3_discovery import discover_downloaded_reports
-from helpers.published_regions import published_region_ids, published_region_label
+from helpers.s3_discovery import load_downloaded_report_versions, reports_by_region, report_by_challenger_region
+from helpers.published_regions import published_region_label
 
-published_reports = discover_downloaded_reports("reports")
-region_labels = {
-    region_id: published_region_label(region_id)
-    for region_id in published_region_ids()
-}
+report_versions = load_downloaded_report_versions("reports")
+if not report_versions:
+    raise RuntimeError("No downloaded evaluation report versions were found.")
+
+latest_report_version = report_versions[0]
+latest_version_id = latest_report_version["version"]
+published_reports = reports_by_region(latest_report_version)
+report_lookup = report_by_challenger_region(latest_report_version)
+
+def region_label(region_id):
+    metadata = latest_report_version.get("regions", {}).get(region_id, {})
+    if metadata.get("label"):
+        return metadata["label"]
+    try:
+        return published_region_label(region_id)
+    except KeyError:
+        return region_id.replace("_", " ").title()
+
 challengers = sorted({
     challenger_name
     for region_challengers in published_reports.values()
@@ -38,8 +51,9 @@ header = (
 def format_row(challenger_name):
     challenger_metadata = CHALLENGERS.get(challenger_name)
     report_links = "".join(
-        f'<a class="region-report-badge" href="reports/{challenger_name}.{region_id}.report.html">'
-        f"{region_labels[region_id]}</a>"
+        f'<a class="region-report-badge" href="reports/{latest_version_id}/'
+        f'{report_lookup[(challenger_name, region_id)]["file"].removesuffix(".ipynb")}.html">'
+        f"{region_label(region_id)}</a>"
         for region_id, region_challengers in published_reports.items()
         if challenger_name in region_challengers
     )

@@ -305,7 +305,82 @@ body.nav-hidden #score-header {
   top: 0px;
 }
 
-/* --- Region selector --- */
+/* --- Version and region selectors --- */
+
+#version-selector {
+  margin: 1.25rem 0 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface-raised);
+  box-shadow: var(--ob-soft-shadow);
+}
+
+body.quarto-dark #version-selector {
+  background: var(--ob-surface-raised);
+  border-color: var(--ob-border);
+}
+
+.version-selector-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+}
+
+.version-selector-label {
+  color: var(--ob-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.version-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.version-chip {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-pill);
+  background: var(--ob-surface);
+  color: var(--bs-body-color, #333940);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.version-chip:hover:not(.active) {
+  border-color: var(--ob-accent);
+  color: var(--ob-accent);
+}
+
+.version-chip.active {
+  background: var(--ob-accent);
+  border-color: var(--ob-accent);
+  color: var(--ob-accent-contrast);
+}
+
+body.quarto-dark .version-chip {
+  background: var(--ob-surface);
+  color: var(--bs-body-color, #d4d4d8);
+  border-color: var(--ob-border);
+}
+
+body.quarto-dark .version-chip:hover:not(.active) {
+  border-color: var(--ob-accent);
+  color: var(--ob-accent);
+}
+
+body.quarto-dark .version-chip.active {
+  background: var(--ob-accent);
+  border-color: var(--ob-accent);
+  color: var(--ob-accent-contrast);
+}
 
 #region-selector {
   margin: 1.25rem 0 0.75rem;

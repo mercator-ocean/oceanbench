@@ -45,6 +45,7 @@ let selectedDepths = new Set();
 let showAllMode = true;
 let showPercentDiff = false;
 let parsedData = null;
+let activeVersion = null;
 let challengerLabels = {};
 let regionLabels = {};
 let regionMetadata = {};
@@ -155,6 +156,15 @@ function displayName(name) {
   return challengerLabels[name] || name;
 }
 
+function reportLink(name, regionId) {
+  const activeData = parsedData ? getActiveVersionData(parsedData) : null;
+  const reportPath = activeData?.report_links?.[regionId]?.[name] || `${name}.${regionId}.report.html`;
+  if (activeVersion) {
+    return `reports/${activeVersion}/${reportPath}`;
+  }
+  return `reports/${reportPath}`;
+}
+
 function titleCase(text) {
   return text.replace(/(^|\s)\w/g, (character) => character.toUpperCase());
 }
@@ -196,7 +206,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="${reportLink(name, regionId)}">${displayName(name)}</a></th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -246,7 +256,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="${reportLink(name, regionId)}">${displayName(name)}</a></th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -477,6 +487,49 @@ function buildRegionSelectorInnerHtml(regionIds) {
   markup += "</div>";
 
   return markup;
+}
+
+function getVersionIds(data) {
+  return (data.versions || []).map((version) => version.id);
+}
+
+function getVersionLabel(data, versionId) {
+  const version = (data.versions || []).find((entry) => entry.id === versionId);
+  return version?.label || versionId;
+}
+
+function buildVersionSelectorInnerHtml(data, versionIds) {
+  if (versionIds.length <= 1) return "";
+
+  let markup = '<div class="version-selector-row">';
+  markup += '<span class="version-selector-label">Benchmark version</span>';
+  markup += '<div class="version-chip-group" role="group" aria-label="Benchmark version">';
+  for (const versionId of versionIds) {
+    const active = versionId === activeVersion ? " active" : "";
+    markup += `<button type="button" class="version-chip${active}" data-version="${versionId}" aria-pressed="${versionId === activeVersion}">${getVersionLabel(data, versionId)}</button>`;
+  }
+  markup += "</div></div>";
+  return markup;
+}
+
+function renderVersionSelector(data) {
+  const versionIds = getVersionIds(data);
+  const existing = document.getElementById("version-selector");
+  if (versionIds.length <= 1) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  const wrapper = document.getElementById("all-scores");
+  if (!wrapper) return;
+
+  const versionSelector = existing || document.createElement("div");
+  versionSelector.id = "version-selector";
+  versionSelector.innerHTML = buildVersionSelectorInnerHtml(data, versionIds);
+
+  if (!existing) {
+    wrapper.parentNode.insertBefore(versionSelector, wrapper);
+  }
 }
 
 function renderRegionGlobe(regionIds) {
@@ -862,6 +915,15 @@ function updateStickyOffsets() {
 }
 
 function attachControlListeners() {
+  document.querySelectorAll(".version-chip").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.version === activeVersion) return;
+      activeVersion = button.dataset.version;
+      refreshActiveVersionData();
+      renderAllTables();
+    });
+  });
+
   document.querySelectorAll(".region-chip").forEach((button) => {
     button.addEventListener("click", () => {
       if (button.dataset.region === activeRegion) return;
@@ -984,29 +1046,47 @@ function attachControlListeners() {
   });
 }
 
+function getActiveVersionData(data) {
+  if (!data.version_data || !activeVersion) return data;
+  return data.version_data[activeVersion] || data;
+}
+
+function refreshActiveVersionData() {
+  const data = getActiveVersionData(parsedData);
+  challengerLabels = data.challenger_labels || parsedData.challenger_labels || {};
+  regionLabels = data.region_labels || parsedData.region_labels || {};
+  regionMetadata = data.region_metadata || parsedData.region_metadata || {};
+  const regionIds = getRegionIds(parsedData);
+  if (!activeRegion || !regionIds.includes(activeRegion)) {
+    activeRegion = regionIds[0] || null;
+  }
+}
+
 function ensureParsedData() {
   if (!parsedData) {
     const dataElement = document.getElementById("scores-data");
     if (!dataElement) return null;
     parsedData = JSON.parse(dataElement.textContent);
-    challengerLabels = parsedData.challenger_labels || {};
-    regionLabels = parsedData.region_labels || {};
-    regionMetadata = parsedData.region_metadata || {};
-    const regionIds = parsedData.region_order || Object.keys(parsedData.regions || {});
-    if (!activeRegion || !regionIds.includes(activeRegion)) {
-      activeRegion = regionIds[0] || null;
+    const versionIds = getVersionIds(parsedData);
+    if (versionIds.length > 0) {
+      activeVersion = parsedData.default_version && versionIds.includes(parsedData.default_version)
+        ? parsedData.default_version
+        : versionIds[0];
     }
+    refreshActiveVersionData();
   }
   return parsedData;
 }
 
 function getRegionIds(data) {
-  return data.region_order || Object.keys(data.regions || {});
+  const activeData = getActiveVersionData(data);
+  return activeData.region_order || Object.keys(activeData.regions || {});
 }
 
 function getCurrentRegionData(data) {
   if (!activeRegion) return null;
-  return data.regions?.[activeRegion] || null;
+  const activeData = getActiveVersionData(data);
+  return activeData.regions?.[activeRegion] || null;
 }
 
 function resolveBaselineSelection(challengerNames, selectedBaseline) {
@@ -1081,6 +1161,7 @@ function renderAllTables() {
 
   const controlsElement = ensureHeaderElement();
   controlsElement.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);
+  renderVersionSelector(data);
   renderRegionSelector(regionIds);
 
   const tabNavigation = document.getElementById("score-tabs");
