@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
+from oceanbench.core.evaluation_year import DEFAULT_EVALUATION_YEAR, validate_evaluation_year
 
 STAGE_ALL_KEY = "all"
 DEFAULT_STAGE_MAX_WORKERS = min(4, os.cpu_count() or 1)
@@ -31,6 +32,7 @@ class RuntimeConfiguration:
         if self.remote_retries < 1:
             raise ValueError("remote_retries must be greater than or equal to 1.")
         object.__setattr__(self, "staged_components", normalized_components)
+        object.__setattr__(self, "evaluation_year", validate_evaluation_year(self.evaluation_year))
 
     def has_local_stage(self) -> bool:
         return bool(self.staged_components)
@@ -71,6 +73,12 @@ def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
         os.environ.get(
             OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value,
             DEFAULT_REMOTE_HTTP_RETRIES,
+        )
+    )
+    evaluation_year = int(
+        os.environ.get(
+            OceanbenchEnvironmentVariable.OCEANBENCH_EVALUATION_YEAR.value,
+            DEFAULT_EVALUATION_YEAR,
         )
     )
     return RuntimeConfiguration(

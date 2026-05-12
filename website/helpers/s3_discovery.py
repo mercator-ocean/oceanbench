@@ -104,6 +104,7 @@ def discover_downloaded_reports(reports_directory: str, version: str) -> dict[st
         report_match = REPORT_FILE_PATTERN.match(file_name)
         if report_match is None:
             continue
+        year = _report_file_year(report_match)
         challenger_name = report_match.group("challenger")
         region_id = report_match.group("region")
         if region_id in discovered_reports and challenger_name in known_challengers:
