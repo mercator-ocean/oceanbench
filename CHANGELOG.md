@@ -8,6 +8,17 @@ SPDX-License-Identifier: EUPL-1.2
 
 All notable changes to OceanBench are documented in this file.
 
+## 0.1.3 - 2026-05-13
+
+### Fixed
+
+- Fixed lagrangian local staging so cached surface-current inputs are keyed by the evaluated horizontal domain.
+- Prevented global and regional lagrangian evaluations from reusing each other's staged cache.
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.1.3/`
+
 ## 0.1.2 - 2026-05-12
 
 ### Fixed
