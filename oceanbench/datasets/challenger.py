@@ -53,6 +53,48 @@ def glo12() -> xarray.Dataset:
     return challenger_datasets.glo12()
 
 
+def glo12_1_degree() -> xarray.Dataset:
+    """
+    Open the GLO12 challenger dataset interpolated to the 1 degree resolution.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing GLO12 forecasts interpolated to 1 degree resolution.
+
+    >>> glo12_1_degree() # doctest: +ELLIPSIS
+    <xarray.Dataset> Size: 11GB
+    Dimensions:                          (first_day_datetime: 52,
+                                          lead_day_index: 10, depth: 21,
+                                          latitude: 170, longitude: 360)
+    Coordinates:
+      * depth                            (depth) float32 84B 0.494 ... 5.275e+03
+      * lead_day_index                   (lead_day_index) int64 80B 0 1 2 ... 7 8 9
+      * first_day_datetime               (first_day_datetime) datetime64[us] 416B ...
+      * latitude                         (latitude) float64 1kB -79.5 -78.5 ... 89.5
+      * longitude                        (longitude) float64 3kB -179.5 ... 179.5
+    Data variables:
+        sea_water_salinity               (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        sea_water_potential_temperature  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        eastward_sea_water_velocity      (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        northward_sea_water_velocity     (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float32 127MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
+    Attributes:
+        Conventions:  CF-1.8
+        area:         Global
+        contact:      https://marine.copernicus.eu/contact
+        credit:       E.U. Copernicus Marine Service Information (CMEMS)
+        institution:  Mercator Ocean International
+        licence:      http://marine.copernicus.eu/services-portfolio/service-comm...
+        producer:     CMEMS - Global Monitoring and Forecasting Centre
+        references:   http://marine.copernicus.eu
+        source:       MOI GLO12
+        title:        daily mean fields from Global Ocean Physics Analysis and Fo...
+    """
+
+    return challenger_datasets.glo12_1_degree()
+
+
 def glo36v1() -> xarray.Dataset:
     """
     Open the GLO36V1 challenger dataset.
@@ -115,6 +157,39 @@ def glonet() -> xarray.Dataset:
     return challenger_datasets.glonet()
 
 
+def glonet_1_degree() -> xarray.Dataset:
+    """
+    Open the GLONET challenger dataset interpolated to the 1 degree resolution.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing GLONET forecasts interpolated to 1 degree resolution.
+
+    >>> glonet_1_degree() # doctest: +ELLIPSIS
+    <xarray.Dataset> Size: 21GB
+    Dimensions:                          (first_day_datetime: 52,
+                                          lead_day_index: 10, depth: 21,
+                                          latitude: 168, longitude: 360)
+    Coordinates:
+      * depth                            (depth) float32 84B 0.494 ... 5.275e+03
+      * lead_day_index                   (lead_day_index) int64 80B 0 1 2 ... 7 8 9
+      * first_day_datetime               (first_day_datetime) datetime64[us] 416B ...
+      * latitude                         (latitude) float64 1kB -77.5 -76.5 ... 89.5
+      * longitude                        (longitude) float64 3kB -179.5 ... 179.5
+    Data variables:
+        sea_water_salinity               (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 10, 1, 168, 360), meta=np.ndarray>
+        sea_water_potential_temperature  (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 10, 1, 168, 360), meta=np.ndarray>
+        eastward_sea_water_velocity      (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 10, 1, 168, 360), meta=np.ndarray>
+        northward_sea_water_velocity     (first_day_datetime, lead_day_index, depth, latitude, longitude) float64 5GB dask.array<chunksize=(1, 10, 1, 168, 360), meta=np.ndarray>
+        sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float64 252MB dask.array<chunksize=(1, 10, 168, 360), meta=np.ndarray>
+    Attributes:
+        regrid_method:  bilinear
+    """
+
+    return challenger_datasets.glonet_1_degree()
+
+
 def xihe() -> xarray.Dataset:
     """
     Open the XiHe challenger dataset.
@@ -145,6 +220,37 @@ def xihe() -> xarray.Dataset:
     return challenger_datasets.xihe()
 
 
+def xihe_1_degree() -> xarray.Dataset:
+    """
+    Open the XiHe challenger dataset interpolated to the 1 degree resolution.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing XiHe forecasts interpolated to 1 degree resolution.
+
+    >>> xihe_1_degree() # doctest: +ELLIPSIS
+    <xarray.Dataset> Size: 12GB
+    Dimensions:                          (first_day_datetime: 52,
+                                          lead_day_index: 10, depth: 23,
+                                          latitude: 170, longitude: 360)
+    Coordinates:
+      * depth                            (depth) float64 184B 0.494 2.646 ... 643.6
+      * lead_day_index                   (lead_day_index) int64 80B 0 1 2 ... 7 8 9
+      * first_day_datetime               (first_day_datetime) datetime64[us] 416B ...
+      * latitude                         (latitude) float64 1kB -79.5 -78.5 ... 89.5
+      * longitude                        (longitude) float64 3kB -179.5 ... 179.5
+    Data variables:
+        sea_water_salinity               (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        sea_water_potential_temperature  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        eastward_sea_water_velocity      (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        northward_sea_water_velocity     (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float32 127MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
+    """
+
+    return challenger_datasets.xihe_1_degree()
+
+
 def wenhai() -> xarray.Dataset:
     """
     Open the WenHai challenger dataset.
@@ -173,3 +279,34 @@ def wenhai() -> xarray.Dataset:
     """
 
     return challenger_datasets.wenhai()
+
+
+def wenhai_1_degree() -> xarray.Dataset:
+    """
+    Open the WenHai challenger dataset interpolated to the 1 degree resolution.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing WenHai forecasts interpolated to 1 degree resolution.
+
+    >>> wenhai_1_degree() # doctest: +ELLIPSIS
+    <xarray.Dataset> Size: 12GB
+    Dimensions:                          (first_day_datetime: 52,
+                                          lead_day_index: 10, depth: 23,
+                                          latitude: 170, longitude: 360)
+    Coordinates:
+      * depth                            (depth) float32 92B 0.494 2.646 ... 643.6
+      * lead_day_index                   (lead_day_index) int64 80B 0 1 2 ... 7 8 9
+      * first_day_datetime               (first_day_datetime) datetime64[us] 416B ...
+      * latitude                         (latitude) float64 1kB -79.5 -78.5 ... 89.5
+      * longitude                        (longitude) float64 3kB -179.5 ... 179.5
+    Data variables:
+        sea_water_salinity               (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        sea_water_potential_temperature  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        eastward_sea_water_velocity      (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        northward_sea_water_velocity     (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float32 127MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
+    """
+
+    return challenger_datasets.wenhai_1_degree()

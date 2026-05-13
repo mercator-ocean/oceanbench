@@ -8,6 +8,7 @@
 This module exposes the reference datasets used in OceanBench for OceanBench challenger to explore.
 """
 
+import pandas
 import xarray
 from oceanbench.core.references import glorys
 from oceanbench.core.references import glo12
@@ -47,6 +48,58 @@ def glorys_reanalysis() -> xarray.Dataset:
     """
 
     return glorys.glorys_reanalysis()
+
+
+def glorys_reanalysis_1_degree_historical() -> xarray.Dataset:
+    """
+    Open the historical 1 degree GLORYS reanalysis as an `xarray.Dataset`.
+
+    This dataset is intended to support training on the 1 degree OceanBench track.
+    It exposes the historical GLORYS reanalysis published at 1 degree resolution
+    in the OceanBench public EDITO bucket.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing the historical 1 degree GLORYS reanalysis.
+
+    >>> glorys_reanalysis_1_degree_historical() # doctest: +SKIP
+    <xarray.Dataset> Size: 970GB
+    Dimensions:                          (time: 9861, depth: 50, latitude: 170,
+                                          longitude: 360)
+    Coordinates:
+      * time                             (time) datetime64[ns] 79kB 1993-01-01 .....
+      * depth                            (depth) float32 200B 0.494 ... 5.728e+03
+      * latitude                         (latitude) float64 1kB -79.5 -78.5 ... 89.5
+      * longitude                        (longitude) float64 3kB -179.5 ... 179.5
+    Data variables:
+        eastward_sea_water_velocity      (time, depth, latitude, longitude) float64 241GB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
+        northward_sea_water_velocity     (time, depth, latitude, longitude) float64 241GB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
+        sea_surface_height_above_geoid   (time, latitude, longitude) float64 5GB dask.array<chunksize=(1, 170, 360), meta=np.ndarray>
+        sea_water_potential_temperature  (time, depth, latitude, longitude) float64 241GB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
+        sea_water_salinity               (time, depth, latitude, longitude) float64 241GB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
+    Attributes:
+        Conventions:  CF-1.4
+        comment:      CMEMS product
+        history:      2023/06/01 16:20:05 MERCATOR OCEAN Netcdf creation
+        institution:  MERCATOR OCEAN
+        references:   http://www.mercator-ocean.fr
+        source:       MERCATOR GLORYS12V1
+        title:        daily mean fields from Global Ocean Physics Analysis and Fo...
+    """
+
+    monthly_dates = pandas.date_range("1993-01-01", "2019-12-01", freq="MS")
+    dataset_paths = [
+        "https://minio.dive.edito.eu/project-oceanbench/public/"
+        f"glorys_1degree_1993_2019/{monthly_date.strftime('%Y%m')}.zarr"
+        for monthly_date in monthly_dates
+    ]
+
+    return xarray.open_mfdataset(
+        dataset_paths,
+        engine="zarr",
+        parallel=False,
+    )
 
 
 def glo12_analysis() -> xarray.Dataset:

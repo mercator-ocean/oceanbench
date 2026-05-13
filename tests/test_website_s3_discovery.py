@@ -11,6 +11,7 @@ sys.path.insert(0, str(WEBSITE_DIRECTORY))
 from helpers.s3_discovery import download_notebook  # noqa: E402
 from helpers.s3_discovery import discover_downloaded_reports  # noqa: E402
 from helpers.s3_discovery import discover_official_reports  # noqa: E402
+from helpers.s3_discovery import REPORTS_PREFIX  # noqa: E402
 from helpers.published_regions import published_region_ids  # noqa: E402
 from helpers.published_regions import published_region_ids_with_reports  # noqa: E402
 from helpers.published_regions import published_region_metadata  # noqa: E402
@@ -25,9 +26,9 @@ class MockResponse:
 
 def test_discover_official_reports_probes_only_official_region_report_names(monkeypatch) -> None:
     existing_report_urls = {
-        "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/1.1.0/glo12.global.report.ipynb",
-        "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/1.1.0/glo12.ibi.report.ipynb",
-        "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/1.1.0/wenhai.global.report.ipynb",
+        f"https://minio.dive.edito.eu/project-oceanbench/{REPORTS_PREFIX}glo12.global.report.ipynb",
+        f"https://minio.dive.edito.eu/project-oceanbench/{REPORTS_PREFIX}glo12.ibi.report.ipynb",
+        f"https://minio.dive.edito.eu/project-oceanbench/{REPORTS_PREFIX}wenhai.global.report.ipynb",
     }
     requested_urls = []
 
@@ -104,7 +105,7 @@ def test_download_notebook_uses_only_explicit_region_name(monkeypatch, tmp_path)
     assert (tmp_path / "glonet.global.report.ipynb").read_bytes() == b"{}"
     assert requests_seen == [
         (
-            "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/1.1.0/glonet.global.report.ipynb",
+            f"https://minio.dive.edito.eu/project-oceanbench/{REPORTS_PREFIX}glonet.global.report.ipynb",
             30,
         )
     ]
