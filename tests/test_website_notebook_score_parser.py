@@ -32,6 +32,14 @@ def _metric_cell(metric_call: str, html_table: str) -> dict:
     }
 
 
+def _report_context_metric_cell(metric_property: str, html_table: str) -> dict:
+    return {
+        "cell_type": "code",
+        "source": [metric_property],
+        "outputs": [{"data": {"text/html": [html_table]}}],
+    }
+
+
 def _write_notebook(notebook_path: Path) -> None:
     notebook = {
         "cells": [
@@ -114,3 +122,36 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
     lagrangian_variable = lagrangian_score.depths["flat"].variables["lagrangian trajectory deviation"]
     assert lagrangian_variable.standard_name == ""
     assert lagrangian_variable.data == {"1": 2.1, "2": 2.2}
+
+
+def test_parser_extracts_scores_from_report_context_cells(tmp_path):
+    notebook_path = tmp_path / "glonet.global.report.ipynb"
+    notebook = {
+        "cells": [
+            _report_context_metric_cell(
+                "evaluation_report.glo12_variable_rmsd",
+                _score_table(
+                    [
+                        ("Temperature (C) [sea_water_potential_temperature]{100m}", 1.1, 1.2),
+                    ]
+                ),
+            ),
+            _report_context_metric_cell(
+                "evaluation_report.class4_observation.rmsd",
+                _score_table(
+                    [
+                        ("Sea level anomaly (m) [sea_surface_height_above_geoid]{surface}", 0.5, 0.6),
+                    ]
+                ),
+            ),
+        ]
+    }
+    notebook_path.write_text(json.dumps(notebook), encoding="utf-8")
+
+    scores = get_all_model_scores_from_notebook(str(notebook_path), "glonet")
+
+    assert scores["rmsd_variables_glo12"].depths["100m"].variables["temperature"].data == {"1": 1.1, "2": 1.2}
+    assert scores["rmsd_variables_observations"].depths["Surface"].variables["sea level anomaly"].data == {
+        "1": 0.5,
+        "2": 0.6,
+    }
