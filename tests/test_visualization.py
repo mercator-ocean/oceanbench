@@ -505,85 +505,56 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     notebook = nbformat.read(output_path, as_version=4)
     all_sources = "\n".join(cell.source for cell in notebook.cells)
 
-    assert "oceanbench.visualization.plot_multi_reference_surface_comparison_explorer" in all_sources
     assert "Report guide" in all_sources
     assert "Score tables provide the quantitative OceanBench evaluation." in all_sources
     assert "Interactive figures help diagnose the scores" in all_sources
     assert "metric scores are computed from the underlying datasets" in all_sources
-    assert "glorys_reanalysis_dataset" in all_sources
-    assert '"GLORYS reanalysis"' in all_sources
-    assert "glo12_analysis_dataset" in all_sources
-    assert '"GLO12 analysis"' in all_sources
-    assert "from oceanbench.core.rmsd import rmsd" in all_sources
-    assert "from dask.array.core import PerformanceWarning" in all_sources
-    assert "forecast_comparison_explorer" in all_sources
-    assert 'title="Forecast comparison maps"' in all_sources
-    assert "forecast_comparison_variables" in all_sources
-    assert "geostrophic_current_variables" in all_sources
-    assert "dynamic_diagnostic_explorer" in all_sources
-    assert 'title="Dynamic diagnostic maps"' in all_sources
-    assert "dynamic_diagnostic_variables" in all_sources
-    assert "lagrangian_trajectory_explorer" in all_sources
-    assert "plot_multi_reference_lagrangian_trajectory_explorer" in all_sources
-    assert "particle_count=300" in all_sources
-    assert "eddy_matching_explorer" in all_sources
-    assert "plot_multi_reference_eddy_matching_explorer" in all_sources
-    assert "class4_observation_error_explorer" in all_sources
-    assert "plot_class4_observation_error_explorer" in all_sources
-    assert "class4_validation_dataframe" in all_sources
-    assert "rmsd_class4_validation_dataframe" in all_sources
-    assert "class4_observation_comparison_dataframe" in all_sources
-    assert "ObservationDataUnavailableError" in all_sources
+    assert "from oceanbench.core.evaluation_report import prepare_evaluation_report" in all_sources
+    assert "evaluation_report = prepare_evaluation_report(challenger_dataset, region=region)" in all_sources
+    assert "evaluation_report.glorys_variable_rmsd" in all_sources
+    assert "evaluation_report.glorys_mixed_layer_depth_rmsd" in all_sources
+    assert "evaluation_report.glorys_geostrophic_current_rmsd" in all_sources
+    assert "evaluation_report.glorys_lagrangian_trajectory_deviation" in all_sources
+    assert "evaluation_report.glo12_variable_rmsd" in all_sources
+    assert "evaluation_report.glo12_mixed_layer_depth_rmsd" in all_sources
+    assert "evaluation_report.glo12_geostrophic_current_rmsd" in all_sources
+    assert "evaluation_report.glo12_lagrangian_trajectory_deviation" in all_sources
+    assert "evaluation_report.class4_observation.rmsd" in all_sources
+    assert "evaluation_report.class4_observation_error_explorer" in all_sources
+    assert "evaluation_report.lagrangian_trajectory_explorer" in all_sources
+    assert "evaluation_report.eddy_matching_explorer" in all_sources
+    assert "evaluation_report.forecast_comparison_explorer" in all_sources
+    assert "evaluation_report.dynamic_diagnostic_explorer" in all_sources
+    assert "evaluation_report.zonal_psd_explorer" in all_sources
     assert "Eddy centers and contours are detected" in all_sources
-    assert "plot_multi_reference_zonal_psd_comparison_explorer" in all_sources
-    assert "zonal_psd_explorer" in all_sources
-    assert (
-        "zonal_psd_explorer = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison_explorer"
-        in all_sources
-    )
     assert "wavelength-band scale separation" in all_sources
-    assert "zonal_psd_scores" not in all_sources
-    assert "compute_mixed_layer_depth" in all_sources
-    assert "compute_geostrophic_currents" in all_sources
-    assert "Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID" in all_sources
-    assert "Variable.SEA_WATER_POTENTIAL_TEMPERATURE" in all_sources
-    assert "Variable.SEA_WATER_SALINITY" in all_sources
-    assert "Variable.EASTWARD_SEA_WATER_VELOCITY" in all_sources
-    assert "Variable.NORTHWARD_SEA_WATER_VELOCITY" in all_sources
-    assert "Variable.MIXED_LAYER_DEPTH" in all_sources
-    assert "Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY" in all_sources
-    assert "Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY" in all_sources
-    assert "forecast_comparison_explorer\n" in all_sources
-    assert "dynamic_diagnostic_explorer\n" in all_sources
-    assert "surface_comparison_explorer =" not in all_sources
-    assert "\nsurface_comparison_explorer\n" not in all_sources
-    assert "surface_comparison_variables" not in all_sources
-    assert "warnings.filterwarnings" in all_sources
-    assert "Increasing number of chunks" in all_sources
     assert "Geostrophic currents are masked near the equator" in all_sources
-    assert all_sources.index("rmsd(\n    challenger_dataset=regional_challenger_dataset") < all_sources.index(
-        "forecast_comparison_explorer ="
+    assert all_sources.index("evaluation_report.glorys_variable_rmsd") < all_sources.index(
+        "evaluation_report.forecast_comparison_explorer"
     )
-    assert all_sources.index("glo12_geostrophic_dataset = compute_geostrophic_currents") < all_sources.index(
-        "dynamic_diagnostic_explorer ="
+    assert all_sources.index("evaluation_report.glo12_geostrophic_current_rmsd") < all_sources.index(
+        "evaluation_report.dynamic_diagnostic_explorer"
     )
-    assert all_sources.index(
-        "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis"
-    ) < all_sources.index("lagrangian_trajectory_explorer =")
-    assert all_sources.index("class4_observation_error_explorer =") < all_sources.index(
-        "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis"
+    assert all_sources.index("evaluation_report.class4_observation_error_explorer") < all_sources.index(
+        "evaluation_report.glorys_lagrangian_trajectory_deviation"
     )
-    assert all_sources.index("lagrangian_trajectory_explorer =") < all_sources.index("eddy_matching_explorer =")
-    assert all_sources.index("eddy_matching_explorer =") < all_sources.index("forecast_comparison_explorer =")
-    assert "reference_dataset=glorys_dataset" in all_sources
-    assert "reference_dataset=glo12_dataset" in all_sources
-    assert "reference_dataset=glorys_mld_dataset" in all_sources
-    assert "reference_dataset=glo12_mld_dataset" in all_sources
-    assert "reference_dataset=glorys_geostrophic_dataset" in all_sources
-    assert "reference_dataset=glo12_geostrophic_dataset" in all_sources
+    assert all_sources.index("evaluation_report.lagrangian_trajectory_explorer") < all_sources.index(
+        "evaluation_report.eddy_matching_explorer"
+    )
+    assert all_sources.index("evaluation_report.eddy_matching_explorer") < all_sources.index(
+        "evaluation_report.forecast_comparison_explorer"
+    )
+    assert "regional_challenger_dataset =" not in all_sources
+    assert "glorys_dataset =" not in all_sources
+    assert "glo12_dataset =" not in all_sources
+    assert "challenger_mld_dataset" not in all_sources
+    assert "challenger_geostrophic_dataset" not in all_sources
+    assert "class4_observation_comparison_dataframe" not in all_sources
+    assert "xarray.merge" not in all_sources
+    assert "warnings.filterwarnings" not in all_sources
     assert "oceanbench.metrics.rmsd_of_variables_compared_to_observations" not in all_sources
-    assert "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis" in all_sources
-    assert "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis" in all_sources
+    assert "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis" not in all_sources
+    assert "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis" not in all_sources
     assert "oceanbench.metrics.rmsd_of_variables_compared_to_glorys_reanalysis" not in all_sources
     assert "oceanbench.metrics.rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis" not in all_sources
     assert "oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis" not in all_sources
