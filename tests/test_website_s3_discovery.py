@@ -8,6 +8,8 @@ import sys
 WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
+from helpers.s3_discovery import REPORTS_PREFIX  # noqa: E402
+from helpers.s3_discovery import S3_BASE_URL  # noqa: E402
 from helpers.s3_discovery import download_notebook  # noqa: E402
 from helpers.s3_discovery import discover_downloaded_reports  # noqa: E402
 from helpers.s3_discovery import discover_official_reports  # noqa: E402
