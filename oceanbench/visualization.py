@@ -131,6 +131,34 @@ def plot_multi_reference_zonal_psd_comparison(
     )
 
 
+def plot_multi_reference_zonal_psd_comparison_explorer(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    variables: Sequence[Variable | str] = visualization.DEFAULT_ZONAL_PSD_VARIABLES,
+    first_day_index: int = 0,
+    lead_day_indices: Sequence[int] = visualization.DEFAULT_ZONAL_PSD_LEAD_DAY_INDICES,
+    depth_selectors: Mapping[str, int | float | None] | None = None,
+    challenger_name: str = "Challenger",
+    height_pixels: int = 620,
+    title: str = "Zonal power spectral density comparison",
+):
+    """
+    Display a browser-side explorer for zonal power spectral density comparisons.
+    """
+
+    return visualization.plot_multi_reference_zonal_psd_comparison_explorer(
+        challenger_dataset=challenger_dataset,
+        reference_datasets=reference_datasets,
+        variables=variables,
+        first_day_index=first_day_index,
+        lead_day_indices=lead_day_indices,
+        depth_selectors=depth_selectors,
+        challenger_name=challenger_name,
+        height_pixels=height_pixels,
+        title=title,
+    )
+
+
 def plot_multi_reference_lagrangian_trajectory_explorer(
     challenger_dataset: xarray.Dataset,
     reference_datasets: Mapping[str, xarray.Dataset],
@@ -213,5 +241,6 @@ __all__ = [
     "plot_multi_reference_lagrangian_trajectory_explorer",
     "plot_multi_reference_surface_comparison_explorer",
     "plot_multi_reference_zonal_psd_comparison",
+    "plot_multi_reference_zonal_psd_comparison_explorer",
     "plot_surface_comparison_explorer",
 ]
