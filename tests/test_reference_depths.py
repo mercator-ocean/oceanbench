@@ -9,7 +9,7 @@ import xarray
 
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.dataset_source import DatasetSource, get_dataset_source, with_dataset_source
-from oceanbench.core.lagrangian_support import _lagrangian_stage_directory
+from oceanbench.core.lagrangian_support import _lagrangian_domain_stage_variant, _lagrangian_stage_directory
 from oceanbench.core.reference_depths import (
     REFERENCE_DEPTH_GRID_HASH_ATTRIBUTE,
     REFERENCE_DEPTH_GRID_ROUNDING_ATTRIBUTE,
@@ -28,6 +28,16 @@ def _challenger_dataset(depths: list[float]) -> xarray.Dataset:
             Dimension.FIRST_DAY_DATETIME.key(): [numpy.datetime64("2024-01-03")],
             Dimension.LEAD_DAY_INDEX.key(): [0, 1],
             Dimension.DEPTH.key(): depths,
+        }
+    )
+
+
+def _spatial_dataset(latitudes: list[float], longitudes: list[float]) -> xarray.Dataset:
+    return xarray.Dataset(
+        coords={
+            Dimension.TIME.key(): [numpy.datetime64("2024-01-03")],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
         }
     )
 
@@ -159,6 +169,46 @@ def test_lagrangian_stage_path_uses_source_variant(monkeypatch) -> None:
             variant="depths-23-abc",
         ),
         lead_days_count=10,
+        domain_variant="domain-2041x4320-def",
     )
 
-    assert str(stage_directory) == "/tmp/oceanbench-stage/lagrangian-reference-glo12-twelfth_degree-depths-23-abc-10d"
+    assert (
+        str(stage_directory)
+        == "/tmp/oceanbench-stage/lagrangian-reference-glo12-twelfth_degree-depths-23-abc-domain-2041x4320-def-10d"
+    )
+
+
+def test_lagrangian_domain_stage_variant_depends_on_spatial_grid() -> None:
+    global_domain_variant = _lagrangian_domain_stage_variant(
+        _spatial_dataset(
+            latitudes=[-89.5, 0.5, 89.5],
+            longitudes=[0.5, 1.5, 2.5],
+        )
+    )
+    regional_domain_variant = _lagrangian_domain_stage_variant(
+        _spatial_dataset(
+            latitudes=[40.5, 41.5],
+            longitudes=[-8.5, -7.5, -6.5],
+        )
+    )
+
+    assert global_domain_variant.startswith("domain-3x3-")
+    assert regional_domain_variant.startswith("domain-2x3-")
+    assert global_domain_variant != regional_domain_variant
+
+
+def test_lagrangian_domain_stage_variant_uses_rounded_coordinates() -> None:
+    first_domain_variant = _lagrangian_domain_stage_variant(
+        _spatial_dataset(
+            latitudes=[40.5000001, 41.4999999],
+            longitudes=[-8.4999999, -7.5000001],
+        )
+    )
+    second_domain_variant = _lagrangian_domain_stage_variant(
+        _spatial_dataset(
+            latitudes=[40.5, 41.5],
+            longitudes=[-8.5, -7.5],
+        )
+    )
+
+    assert first_domain_variant == second_domain_variant
