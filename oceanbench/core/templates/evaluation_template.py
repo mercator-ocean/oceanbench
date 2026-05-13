@@ -246,7 +246,10 @@ dynamic_diagnostic_explorer
 
 # ### Spectral diagnostic
 
-zonal_psd_figure = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison(
+# > Zonal spectra use metric longitude coordinates, linear detrending, Tukey windowing,
+# > and wavelength-band scale separation.
+
+zonal_psd_explorer = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison_explorer(
     regional_challenger_dataset,
     {
         "GLORYS reanalysis": glorys_dataset,
@@ -257,4 +260,4 @@ zonal_psd_figure = oceanbench.visualization.plot_multi_reference_zonal_psd_compa
         Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
     ],
 )
-None
+zonal_psd_explorer

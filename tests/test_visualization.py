@@ -261,6 +261,44 @@ def test_plot_multi_reference_zonal_psd_comparison_accepts_masked_rows_without_w
     assert len(figure.axes) == 1
 
 
+def test_plot_multi_reference_zonal_psd_comparison_explorer_returns_hoverable_html() -> None:
+    longitude = numpy.linspace(0.0, 330.0, 12)
+    sea_surface_height = numpy.sin(numpy.deg2rad(longitude))[None, None, None, :] + numpy.arange(3)[None, :, None, None]
+    sea_surface_height = numpy.repeat(sea_surface_height, 2, axis=2)
+    challenger_dataset = xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                [
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ],
+                sea_surface_height,
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): [numpy.datetime64("2024-01-03")],
+            Dimension.LEAD_DAY_INDEX.key(): numpy.arange(3),
+            Dimension.LATITUDE.key(): [-1.0, 1.0],
+            Dimension.LONGITUDE.key(): longitude,
+        },
+    )
+    reference_dataset = challenger_dataset + 0.2
+
+    html_output = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison_explorer(
+        challenger_dataset,
+        {"Reference": reference_dataset},
+        variables=[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID],
+    )
+
+    assert "ob-psd-explorer" in html_output.data
+    assert "ob-psd-tooltip" in html_output.data
+    assert "wavelengthKilometers" in html_output.data
+    assert "Power spectral density" in html_output.data
+    assert "minimumWavelengthKilometers" in html_output.data
+
+
 def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_html(monkeypatch) -> None:
     from oceanbench.core import visualization as core_visualization
 
@@ -497,10 +535,14 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert "class4_observation_comparison_dataframe" in all_sources
     assert "ObservationDataUnavailableError" in all_sources
     assert "Eddy centers and contours are detected" in all_sources
-    assert "plot_multi_reference_zonal_psd_comparison" in all_sources
-    assert "zonal_psd_figure" in all_sources
-    assert "zonal_psd_figure = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison" in all_sources
-    assert ")\nNone" in next(cell.source for cell in notebook.cells if "zonal_psd_figure =" in cell.source)
+    assert "plot_multi_reference_zonal_psd_comparison_explorer" in all_sources
+    assert "zonal_psd_explorer" in all_sources
+    assert (
+        "zonal_psd_explorer = oceanbench.visualization.plot_multi_reference_zonal_psd_comparison_explorer"
+        in all_sources
+    )
+    assert "wavelength-band scale separation" in all_sources
+    assert "zonal_psd_scores" not in all_sources
     assert "compute_mixed_layer_depth" in all_sources
     assert "compute_geostrophic_currents" in all_sources
     assert "Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID" in all_sources

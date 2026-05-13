@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import html
 from io import BytesIO
 import json
+from string import Template
 import warnings
 from uuid import uuid4
 
@@ -23,6 +24,7 @@ import xarray
 from oceanbench.core import classIV
 from oceanbench.core import eddies
 from oceanbench.core import lagrangian_trajectory
+from oceanbench.core import psd
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import (
     DEPTH_BIN_DISPLAY_ORDER,
@@ -303,70 +305,38 @@ def _reference_items(
     )
 
 
-def _zonal_wavelength_kilometers(field: xarray.DataArray) -> numpy.ndarray:
-    longitude = numpy.asarray(field[Dimension.LONGITUDE.key()].values, dtype=float)
-    latitude = numpy.asarray(field[Dimension.LATITUDE.key()].values, dtype=float)
-    longitude_spacing_degree = float(numpy.nanmedian(numpy.abs(numpy.diff(longitude))))
-    mean_latitude_radians = numpy.deg2rad(float(numpy.nanmean(latitude)))
-    longitude_spacing_meters = (
-        longitude_spacing_degree * numpy.pi / 180.0 * 6_371_000.0 * numpy.cos(mean_latitude_radians)
+def _zonal_psd_wavelength_power(
+    power_spectrum: xarray.DataArray,
+    lead_day_index: int,
+) -> tuple[numpy.ndarray, numpy.ndarray]:
+    selected_spectrum = (
+        power_spectrum.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_index})
+        if Dimension.LEAD_DAY_INDEX.key() in power_spectrum.dims
+        else power_spectrum
     )
-    frequencies = numpy.fft.rfftfreq(len(longitude), d=abs(longitude_spacing_meters))
-    with numpy.errstate(divide="ignore"):
+    frequencies = numpy.asarray(selected_spectrum["freq_lon"].values, dtype=float)
+    power = numpy.asarray(selected_spectrum.values, dtype=float)
+    with numpy.errstate(divide="ignore", invalid="ignore"):
         wavelength_kilometers = 1.0 / frequencies / 1000.0
-    return wavelength_kilometers
-
-
-def _zonal_power_spectrum(field: xarray.DataArray) -> tuple[numpy.ndarray, numpy.ndarray]:
-    values = numpy.asarray(field.values, dtype=float)
-    finite_counts = numpy.sum(numpy.isfinite(values), axis=-1, keepdims=True)
-    zonal_sums = numpy.nansum(values, axis=-1, keepdims=True)
-    zonal_means = numpy.divide(zonal_sums, finite_counts, out=numpy.zeros_like(zonal_sums), where=finite_counts > 0)
-    values = values - zonal_means
-    values = numpy.nan_to_num(values, nan=0.0)
-    spectrum = numpy.fft.rfft(values, axis=-1)
-    power = numpy.nanmean(numpy.abs(spectrum) ** 2, axis=-2)
-    wavelength_kilometers = _zonal_wavelength_kilometers(field)
-    valid_mask = numpy.isfinite(wavelength_kilometers) & numpy.isfinite(power) & (wavelength_kilometers > 0)
+    valid_mask = (
+        numpy.isfinite(wavelength_kilometers) & numpy.isfinite(power) & (wavelength_kilometers > 0) & (power > 0)
+    )
     sorted_indices = numpy.argsort(wavelength_kilometers[valid_mask])
     return wavelength_kilometers[valid_mask][sorted_indices], power[valid_mask][sorted_indices]
 
 
-def _zonal_psd_fields(
-    challenger_dataset: xarray.Dataset,
-    reference_datasets: Mapping[str, xarray.Dataset],
-    variable_key: str,
-    first_day_index: int,
-    lead_day_indices: Sequence[int],
-    depth_selector: int | float | None,
-) -> tuple[xarray.DataArray, tuple[tuple[str, str, xarray.DataArray], ...]]:
-    reference_items = _reference_items(reference_datasets)
-    challenger_field = _select_lead_day_indices(
-        _select_first_day_index(
-            _select_variable_field(challenger_dataset, variable_key, depth_selector),
-            first_day_index,
-        ),
-        lead_day_indices,
-    )
-    reference_fields = tuple(
-        _select_lead_day_indices(
-            _select_first_day_index(
-                _select_variable_field(reference_dataset, variable_key, depth_selector),
-                first_day_index,
-            ),
-            lead_day_indices,
-        )
-        for _, _, reference_dataset in reference_items
-    )
-    aligned_fields = dask_compute(*xarray.align(challenger_field, *reference_fields, join="inner"))
-    return aligned_fields[0], tuple(
-        (reference_key, reference_label, reference_field)
-        for (reference_key, reference_label, _), reference_field in zip(
-            reference_items,
-            aligned_fields[1:],
-            strict=True,
-        )
-    )
+def _zonal_psd_spectra_are_equivalent(
+    first_spectrum: xarray.DataArray,
+    second_spectrum: xarray.DataArray,
+) -> bool:
+    if first_spectrum.sizes != second_spectrum.sizes:
+        return False
+    for coordinate_name in (Dimension.LEAD_DAY_INDEX.key(), "freq_lon"):
+        if coordinate_name not in first_spectrum.coords or coordinate_name not in second_spectrum.coords:
+            return False
+        if not numpy.allclose(first_spectrum[coordinate_name].values, second_spectrum[coordinate_name].values):
+            return False
+    return numpy.allclose(first_spectrum.values, second_spectrum.values, equal_nan=True)
 
 
 def _multi_reference_comparison_fields(
@@ -3290,34 +3260,70 @@ def plot_multi_reference_zonal_psd_comparison(
     )
     reference_colors = ["tab:orange", "tab:green", "tab:red", "tab:purple"]
     lead_day_styles = ["-", "--", ":", "-."]
+    reference_items = _reference_items(reference_datasets)
 
     for variable_index, variable_key in enumerate(variable_keys):
         axis = axes[0, variable_index]
-        challenger_field, reference_fields = _zonal_psd_fields(
-            challenger_dataset=challenger_dataset,
-            reference_datasets=reference_datasets,
-            variable_key=variable_key,
-            first_day_index=first_day_index,
-            lead_day_indices=resolved_lead_day_indices,
-            depth_selector=_depth_selector_for_variable(variable_key, depth_selectors),
+        depth_selector = _depth_selector_for_variable(variable_key, depth_selectors)
+        spectral_pairs = tuple(
+            (
+                reference_label,
+                *psd.zonal_longitude_psd_pair(
+                    challenger_dataset=challenger_dataset,
+                    reference_dataset=reference_dataset,
+                    variable=variable_key,
+                    first_day_index=first_day_index,
+                    depth_selector=depth_selector,
+                ),
+            )
+            for _, reference_label, reference_dataset in reference_items
+        )
+        challenger_spectra_are_equivalent = all(
+            _zonal_psd_spectra_are_equivalent(spectral_pairs[0][1], challenger_spectrum)
+            for _, challenger_spectrum, _ in spectral_pairs[1:]
         )
         for lead_day_position, lead_day_index in enumerate(resolved_lead_day_indices):
             line_style = lead_day_styles[lead_day_position % len(lead_day_styles)]
-            challenger_wavelength, challenger_power = _zonal_power_spectrum(
-                challenger_field.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_position})
-            )
-            axis.plot(
-                challenger_wavelength,
-                challenger_power,
-                color="tab:blue",
-                linestyle=line_style,
-                linewidth=2.0,
-                label=f"{challenger_name} day {lead_day_index + 1}",
-            )
-            for reference_index, (_, reference_label, reference_field) in enumerate(reference_fields):
-                reference_wavelength, reference_power = _zonal_power_spectrum(
-                    reference_field.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_position})
+            if challenger_spectra_are_equivalent:
+                challenger_wavelength, challenger_power = _zonal_psd_wavelength_power(
+                    spectral_pairs[0][1],
+                    lead_day_index,
                 )
+                if challenger_wavelength.size:
+                    axis.plot(
+                        challenger_wavelength,
+                        challenger_power,
+                        color="tab:blue",
+                        linestyle=line_style,
+                        linewidth=2.0,
+                        label=f"{challenger_name} day {lead_day_index + 1}",
+                    )
+            for reference_index, (
+                reference_label,
+                challenger_spectrum,
+                reference_spectrum,
+            ) in enumerate(spectral_pairs):
+                if not challenger_spectra_are_equivalent:
+                    challenger_wavelength, challenger_power = _zonal_psd_wavelength_power(
+                        challenger_spectrum,
+                        lead_day_index,
+                    )
+                    if challenger_wavelength.size:
+                        axis.plot(
+                            challenger_wavelength,
+                            challenger_power,
+                            color="tab:blue",
+                            linestyle=line_style,
+                            linewidth=1.6,
+                            alpha=0.72,
+                            label=f"{challenger_name} aligned to {reference_label} day {lead_day_index + 1}",
+                        )
+                reference_wavelength, reference_power = _zonal_psd_wavelength_power(
+                    reference_spectrum,
+                    lead_day_index,
+                )
+                if not reference_wavelength.size:
+                    continue
                 axis.plot(
                     reference_wavelength,
                     reference_power,
@@ -3334,10 +3340,771 @@ def plot_multi_reference_zonal_psd_comparison(
         axis.set_xlabel("Zonal wavelength (km)")
         axis.set_ylabel("Power spectral density")
         axis.set_title(_variable_label_with_unit(variable_key))
-        axis.legend(fontsize=8)
+        if axis.lines:
+            axis.legend(fontsize=8)
 
     figure.suptitle("Zonal power spectral density comparison", fontsize=14)
     return figure
+
+
+def _zonal_psd_series_payload(
+    name: str,
+    lead_day_index: int,
+    wavelength_kilometers: numpy.ndarray,
+    power: numpy.ndarray,
+    color: str,
+    dash_array: str,
+    opacity: float = 1.0,
+) -> dict[str, object]:
+    return {
+        "id": uuid4().hex,
+        "name": name,
+        "leadDay": int(lead_day_index + 1),
+        "wavelengthKilometers": _json_ready_array(wavelength_kilometers, decimals=6),
+        "power": _json_ready_array(power, decimals=12),
+        "color": color,
+        "dashArray": dash_array,
+        "opacity": opacity,
+    }
+
+
+def _zonal_psd_band_payload(power_spectrum: xarray.DataArray) -> list[dict[str, object]]:
+    return [
+        {
+            "name": band_name,
+            "minimumWavelengthKilometers": float(wavelength_band[0]),
+            "maximumWavelengthKilometers": float(wavelength_band[1]),
+        }
+        for band_name, wavelength_band in psd.default_zonal_wavelength_bands_km(power_spectrum).items()
+    ]
+
+
+def _zonal_psd_variable_payloads(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    variable_keys: Sequence[str],
+    first_day_index: int,
+    lead_day_indices: Sequence[int],
+    depth_selectors: Mapping[str, int | float | None] | None,
+    challenger_name: str,
+) -> list[dict[str, object]]:
+    reference_colors = ["#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+    lead_day_dash_arrays = ["", "7 4", "2 4", "10 4 2 4"]
+    reference_items = _reference_items(reference_datasets)
+    variable_payloads = []
+
+    for variable_key in variable_keys:
+        depth_selector = _depth_selector_for_variable(variable_key, depth_selectors)
+        spectral_pairs = tuple(
+            (
+                reference_label,
+                *psd.zonal_longitude_psd_pair(
+                    challenger_dataset=challenger_dataset,
+                    reference_dataset=reference_dataset,
+                    variable=variable_key,
+                    first_day_index=first_day_index,
+                    depth_selector=depth_selector,
+                ),
+            )
+            for _, reference_label, reference_dataset in reference_items
+        )
+        challenger_spectra_are_equivalent = all(
+            _zonal_psd_spectra_are_equivalent(spectral_pairs[0][1], challenger_spectrum)
+            for _, challenger_spectrum, _ in spectral_pairs[1:]
+        )
+        series_payloads: list[dict[str, object]] = []
+        for lead_day_position, lead_day_index in enumerate(lead_day_indices):
+            dash_array = lead_day_dash_arrays[lead_day_position % len(lead_day_dash_arrays)]
+            if challenger_spectra_are_equivalent:
+                challenger_wavelength, challenger_power = _zonal_psd_wavelength_power(
+                    spectral_pairs[0][1],
+                    lead_day_index,
+                )
+                if challenger_wavelength.size:
+                    series_payloads.append(
+                        _zonal_psd_series_payload(
+                            name=challenger_name,
+                            lead_day_index=lead_day_index,
+                            wavelength_kilometers=challenger_wavelength,
+                            power=challenger_power,
+                            color="#1f77b4",
+                            dash_array=dash_array,
+                        )
+                    )
+            for reference_index, (
+                reference_label,
+                challenger_spectrum,
+                reference_spectrum,
+            ) in enumerate(spectral_pairs):
+                if not challenger_spectra_are_equivalent:
+                    challenger_wavelength, challenger_power = _zonal_psd_wavelength_power(
+                        challenger_spectrum,
+                        lead_day_index,
+                    )
+                    if challenger_wavelength.size:
+                        series_payloads.append(
+                            _zonal_psd_series_payload(
+                                name=f"{challenger_name} aligned to {reference_label}",
+                                lead_day_index=lead_day_index,
+                                wavelength_kilometers=challenger_wavelength,
+                                power=challenger_power,
+                                color="#1f77b4",
+                                dash_array=dash_array,
+                                opacity=0.74,
+                            )
+                        )
+                reference_wavelength, reference_power = _zonal_psd_wavelength_power(
+                    reference_spectrum,
+                    lead_day_index,
+                )
+                if reference_wavelength.size:
+                    series_payloads.append(
+                        _zonal_psd_series_payload(
+                            name=reference_label,
+                            lead_day_index=lead_day_index,
+                            wavelength_kilometers=reference_wavelength,
+                            power=reference_power,
+                            color=reference_colors[reference_index % len(reference_colors)],
+                            dash_array=dash_array,
+                        )
+                    )
+
+        variable_payloads.append(
+            {
+                "label": _variable_label_with_unit(variable_key),
+                "series": series_payloads,
+                "bands": _zonal_psd_band_payload(spectral_pairs[0][1]),
+            }
+        )
+    return variable_payloads
+
+
+def _zonal_psd_explorer_document(element_id: str, payload: dict[str, object]) -> str:
+    return Template(
+        """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    color-scheme: light;
+    --background: #f6f8fb;
+    --panel: #ffffff;
+    --ink: #17212b;
+    --muted: #5c6977;
+    --line: #d9e0e8;
+    --grid: #e6ebf0;
+    --accent: #116a7b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .ob-psd-explorer {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+  .ob-psd-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .ob-psd-title {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.15;
+    letter-spacing: 0;
+  }
+  .ob-psd-variable-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+  .ob-psd-variable-buttons button,
+  .ob-psd-legend button {
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    border-radius: 6px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .ob-psd-variable-buttons button {
+    min-height: 32px;
+    padding: 5px 10px;
+    font-size: 13px;
+  }
+  .ob-psd-variable-buttons button.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 650;
+  }
+  .ob-psd-panel {
+    min-height: 0;
+    flex: 1;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 8px 22px rgba(23, 33, 43, 0.08);
+  }
+  .ob-psd-plot {
+    position: relative;
+    min-height: 0;
+  }
+  .ob-psd-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 420px;
+  }
+  .ob-psd-tooltip {
+    position: absolute;
+    min-width: 190px;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 9px;
+    box-shadow: 0 10px 24px rgba(23, 33, 43, 0.16);
+    font-size: 12px;
+    line-height: 1.35;
+    display: none;
+    z-index: 2;
+  }
+  .ob-psd-tooltip strong { display: block; margin-bottom: 3px; }
+  .ob-psd-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    padding: 0 4px 2px;
+  }
+  .ob-psd-legend button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .ob-psd-legend button.hidden { opacity: 0.45; }
+  .ob-psd-swatch {
+    width: 18px;
+    height: 0;
+    border-top: 3px solid currentColor;
+  }
+  @media (max-width: 760px) {
+    .ob-psd-explorer { padding: 8px; }
+    .ob-psd-header { align-items: flex-start; flex-direction: column; }
+    .ob-psd-variable-buttons { justify-content: flex-start; }
+    .ob-psd-svg { min-height: 360px; }
+  }
+</style>
+</head>
+<body>
+<div id="$element_id" class="ob-psd-explorer">
+  <header class="ob-psd-header">
+    <h1 class="ob-psd-title"></h1>
+    <div class="ob-psd-variable-buttons" role="tablist"></div>
+  </header>
+  <section class="ob-psd-panel">
+    <div class="ob-psd-plot">
+      <svg class="ob-psd-svg" role="img"></svg>
+      <div class="ob-psd-tooltip"></div>
+    </div>
+    <div class="ob-psd-legend"></div>
+  </section>
+</div>
+<script>
+(function () {
+  "use strict";
+  const payload = $payload_json;
+  const root = document.getElementById("$element_id");
+  const title = root.querySelector(".ob-psd-title");
+  const variableButtons = root.querySelector(".ob-psd-variable-buttons");
+  const plot = root.querySelector(".ob-psd-plot");
+  const svg = root.querySelector(".ob-psd-svg");
+  const tooltip = root.querySelector(".ob-psd-tooltip");
+  const legend = root.querySelector(".ob-psd-legend");
+  const namespace = "http://www.w3.org/2000/svg";
+  const bandColors = ["#e9f3f4", "#fff3df", "#f0edf8"];
+  const state = { variableIndex: 0, hidden: {} };
+  let currentPlot = null;
+
+  function svgElement(tag, attributes) {
+    const element = document.createElementNS(namespace, tag);
+    Object.entries(attributes || {}).forEach(function ([name, value]) {
+      element.setAttribute(name, String(value));
+    });
+    return element;
+  }
+
+  function clear(element) {
+    while (element.firstChild) {
+      element.removeChild(element.firstChild);
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (character) {
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[character];
+    });
+  }
+
+  function log10(value) {
+    return Math.log(value) / Math.LN10;
+  }
+
+  function formatValue(value) {
+    if (!Number.isFinite(value)) {
+      return "n/a";
+    }
+    const absolute = Math.abs(value);
+    if ((absolute > 0 && absolute < 0.01) || absolute >= 100000) {
+      return value.toExponential(3);
+    }
+    if (absolute >= 1000) {
+      return value.toFixed(0);
+    }
+    if (absolute >= 10) {
+      return value.toFixed(2);
+    }
+    return value.toFixed(4);
+  }
+
+  function activeVariable() {
+    return payload.variables[state.variableIndex];
+  }
+
+  function visibleSeries(variable) {
+    return variable.series.filter(function (series) {
+      return !state.hidden[series.id];
+    });
+  }
+
+  function finitePoints(series) {
+    const points = [];
+    for (let index = 0; index < series.wavelengthKilometers.length; index += 1) {
+      const wavelength = series.wavelengthKilometers[index];
+      const power = series.power[index];
+      if (wavelength > 0 && power > 0 && Number.isFinite(wavelength) && Number.isFinite(power)) {
+        points.push({ wavelength: wavelength, power: power });
+      }
+    }
+    return points;
+  }
+
+  function extent(seriesList) {
+    const wavelengths = [];
+    const powers = [];
+    seriesList.forEach(function (series) {
+      finitePoints(series).forEach(function (point) {
+        wavelengths.push(point.wavelength);
+        powers.push(point.power);
+      });
+    });
+    if (!wavelengths.length || !powers.length) {
+      return null;
+    }
+    return {
+      wavelengthMinimum: Math.min.apply(null, wavelengths),
+      wavelengthMaximum: Math.max.apply(null, wavelengths),
+      powerMinimum: Math.min.apply(null, powers),
+      powerMaximum: Math.max.apply(null, powers)
+    };
+  }
+
+  function logTicks(minimumLog, maximumLog) {
+    const ticks = [];
+    for (let exponent = Math.floor(minimumLog); exponent <= Math.ceil(maximumLog); exponent += 1) {
+      [1, 2, 5].forEach(function (factor) {
+        const value = factor * Math.pow(10, exponent);
+        const valueLog = log10(value);
+        if (valueLog >= minimumLog && valueLog <= maximumLog) {
+          ticks.push(value);
+        }
+      });
+    }
+    return ticks;
+  }
+
+  function bandAtWavelength(variable, wavelength) {
+    return variable.bands.find(function (band) {
+      return wavelength >= band.minimumWavelengthKilometers && wavelength <= band.maximumWavelengthKilometers;
+    });
+  }
+
+  function drawButtons() {
+    clear(variableButtons);
+    payload.variables.forEach(function (variable, index) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = variable.label;
+      button.className = index === state.variableIndex ? "active" : "";
+      button.addEventListener("click", function () {
+        state.variableIndex = index;
+        draw();
+      });
+      variableButtons.appendChild(button);
+    });
+  }
+
+  function drawLegend(variable) {
+    clear(legend);
+    variable.series.forEach(function (series) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = state.hidden[series.id] ? "hidden" : "";
+      button.addEventListener("click", function () {
+        state.hidden[series.id] = !state.hidden[series.id];
+        draw();
+      });
+      const swatch = document.createElement("span");
+      swatch.className = "ob-psd-swatch";
+      swatch.style.color = series.color;
+      swatch.style.borderTopStyle = series.dashArray ? "dashed" : "solid";
+      const label = document.createElement("span");
+      label.textContent = series.name + " day " + series.leadDay;
+      button.appendChild(swatch);
+      button.appendChild(label);
+      legend.appendChild(button);
+    });
+  }
+
+  function drawMessage(width, height, message) {
+    svg.appendChild(svgElement("text", {
+      x: width / 2,
+      y: height / 2,
+      "text-anchor": "middle",
+      fill: "#5c6977",
+      "font-size": 14
+    })).textContent = message;
+  }
+
+  function draw() {
+    const variable = activeVariable();
+    const seriesList = visibleSeries(variable);
+    const bounds = extent(seriesList);
+    const width = Math.max(720, Math.round(svg.clientWidth || plot.clientWidth || 720));
+    const height = Math.max(400, Math.round(svg.clientHeight || 440));
+    const margin = { top: 24, right: 30, bottom: 48, left: 72 };
+    const plotWidth = width - margin.left - margin.right;
+    const plotHeight = height - margin.top - margin.bottom;
+
+    title.textContent = payload.title;
+    drawButtons();
+    drawLegend(variable);
+    clear(svg);
+    tooltip.style.display = "none";
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+
+    if (!bounds) {
+      drawMessage(width, height, "No finite PSD curves are available.");
+      currentPlot = null;
+      return;
+    }
+
+    let xMinimumLog = log10(bounds.wavelengthMinimum);
+    let xMaximumLog = log10(bounds.wavelengthMaximum);
+    if (xMinimumLog === xMaximumLog) {
+      xMinimumLog -= 0.5;
+      xMaximumLog += 0.5;
+    }
+    const yPadding = Math.max(0.1, (log10(bounds.powerMaximum) - log10(bounds.powerMinimum)) * 0.08);
+    const yMinimumLog = log10(bounds.powerMinimum) - yPadding;
+    const yMaximumLog = log10(bounds.powerMaximum) + yPadding;
+
+    function xScale(value) {
+      return margin.left + ((xMaximumLog - log10(value)) / (xMaximumLog - xMinimumLog)) * plotWidth;
+    }
+
+    function yScale(value) {
+      return margin.top + ((yMaximumLog - log10(value)) / (yMaximumLog - yMinimumLog)) * plotHeight;
+    }
+
+    const bandLayer = svgElement("g");
+    variable.bands.forEach(function (band, index) {
+      const bandMinimum = Math.max(band.minimumWavelengthKilometers, bounds.wavelengthMinimum);
+      const bandMaximum = Math.min(band.maximumWavelengthKilometers, bounds.wavelengthMaximum);
+      if (bandMaximum <= bandMinimum) {
+        return;
+      }
+      const xLeft = Math.min(xScale(bandMinimum), xScale(bandMaximum));
+      const xRight = Math.max(xScale(bandMinimum), xScale(bandMaximum));
+      bandLayer.appendChild(svgElement("rect", {
+        x: xLeft,
+        y: margin.top,
+        width: xRight - xLeft,
+        height: plotHeight,
+        fill: bandColors[index % bandColors.length],
+        opacity: 0.58
+      }));
+      const label = svgElement("text", {
+        x: (xLeft + xRight) / 2,
+        y: margin.top + 14,
+        "text-anchor": "middle",
+        fill: "#5c6977",
+        "font-size": 10
+      });
+      label.textContent = band.name;
+      bandLayer.appendChild(label);
+    });
+    svg.appendChild(bandLayer);
+
+    const gridLayer = svgElement("g");
+    logTicks(xMinimumLog, xMaximumLog).forEach(function (tick) {
+      const x = xScale(tick);
+      gridLayer.appendChild(svgElement("line", {
+        x1: x,
+        y1: margin.top,
+        x2: x,
+        y2: margin.top + plotHeight,
+        stroke: "#e6ebf0",
+        "stroke-width": 1
+      }));
+      const text = svgElement("text", {
+        x: x,
+        y: margin.top + plotHeight + 24,
+        "text-anchor": "middle",
+        fill: "#5c6977",
+        "font-size": 11
+      });
+      text.textContent = formatValue(tick);
+      gridLayer.appendChild(text);
+    });
+    logTicks(yMinimumLog, yMaximumLog).forEach(function (tick) {
+      const y = yScale(tick);
+      gridLayer.appendChild(svgElement("line", {
+        x1: margin.left,
+        y1: y,
+        x2: margin.left + plotWidth,
+        y2: y,
+        stroke: "#e6ebf0",
+        "stroke-width": 1
+      }));
+      const text = svgElement("text", {
+        x: margin.left - 8,
+        y: y + 4,
+        "text-anchor": "end",
+        fill: "#5c6977",
+        "font-size": 11
+      });
+      text.textContent = formatValue(tick);
+      gridLayer.appendChild(text);
+    });
+    svg.appendChild(gridLayer);
+
+    svg.appendChild(svgElement("rect", {
+      x: margin.left,
+      y: margin.top,
+      width: plotWidth,
+      height: plotHeight,
+      fill: "none",
+      stroke: "#8793a0",
+      "stroke-width": 1
+    }));
+
+    const lineLayer = svgElement("g");
+    seriesList.forEach(function (series) {
+      const commands = finitePoints(series).map(function (point, index) {
+        const command = index === 0 ? "M" : "L";
+        return command + " " + xScale(point.wavelength).toFixed(2) + " " + yScale(point.power).toFixed(2);
+      });
+      if (!commands.length) {
+        return;
+      }
+      lineLayer.appendChild(svgElement("path", {
+        d: commands.join(" "),
+        fill: "none",
+        stroke: series.color,
+        "stroke-width": 2.2,
+        "stroke-linejoin": "round",
+        "stroke-linecap": "round",
+        "stroke-dasharray": series.dashArray,
+        opacity: series.opacity
+      }));
+    });
+    svg.appendChild(lineLayer);
+
+    const hoverLayer = svgElement("g");
+    svg.appendChild(hoverLayer);
+
+    const xLabel = svgElement("text", {
+      x: margin.left + plotWidth / 2,
+      y: height - 10,
+      "text-anchor": "middle",
+      fill: "#17212b",
+      "font-size": 12
+    });
+    xLabel.textContent = "Zonal wavelength (km)";
+    svg.appendChild(xLabel);
+
+    const yLabel = svgElement("text", {
+      x: 16,
+      y: margin.top + plotHeight / 2,
+      transform: "rotate(-90 16 " + (margin.top + plotHeight / 2) + ")",
+      "text-anchor": "middle",
+      fill: "#17212b",
+      "font-size": 12
+    });
+    yLabel.textContent = "Power spectral density";
+    svg.appendChild(yLabel);
+
+    currentPlot = {
+      variable: variable,
+      seriesList: seriesList,
+      hoverLayer: hoverLayer,
+      xScale: xScale,
+      yScale: yScale,
+      margin: margin,
+      plotWidth: plotWidth,
+      plotHeight: plotHeight
+    };
+  }
+
+  function nearestPoint(localX, localY) {
+    if (!currentPlot) {
+      return null;
+    }
+    let nearest = null;
+    currentPlot.seriesList.forEach(function (series) {
+      finitePoints(series).forEach(function (point) {
+        const x = currentPlot.xScale(point.wavelength);
+        const y = currentPlot.yScale(point.power);
+        const distance = Math.hypot(x - localX, y - localY);
+        if (!nearest || distance < nearest.distance) {
+          nearest = { series: series, point: point, x: x, y: y, distance: distance };
+        }
+      });
+    });
+    return nearest && nearest.distance <= 44 ? nearest : null;
+  }
+
+  svg.addEventListener("mousemove", function (event) {
+    const bounds = svg.getBoundingClientRect();
+    const localX = ((event.clientX - bounds.left) / bounds.width) * Number(svg.viewBox.baseVal.width);
+    const localY = ((event.clientY - bounds.top) / bounds.height) * Number(svg.viewBox.baseVal.height);
+    if (!currentPlot) {
+      tooltip.style.display = "none";
+      return;
+    }
+    const nearest = nearestPoint(localX, localY);
+    clear(currentPlot.hoverLayer);
+    if (!nearest) {
+      tooltip.style.display = "none";
+      return;
+    }
+    currentPlot.hoverLayer.appendChild(svgElement("line", {
+      x1: nearest.x,
+      y1: currentPlot.margin.top,
+      x2: nearest.x,
+      y2: currentPlot.margin.top + currentPlot.plotHeight,
+      stroke: "#63717f",
+      "stroke-width": 1,
+      "stroke-dasharray": "3 3"
+    }));
+    currentPlot.hoverLayer.appendChild(svgElement("circle", {
+      cx: nearest.x,
+      cy: nearest.y,
+      r: 4.5,
+      fill: "#ffffff",
+      stroke: nearest.series.color,
+      "stroke-width": 2.5
+    }));
+
+    const band = bandAtWavelength(currentPlot.variable, nearest.point.wavelength);
+    tooltip.innerHTML =
+      "<strong>" + escapeHtml(nearest.series.name) + " day " + nearest.series.leadDay + "</strong>" +
+      "Wavelength: " + formatValue(nearest.point.wavelength) + " km<br>" +
+      "PSD: " + formatValue(nearest.point.power) +
+      (band ? "<br>Band: " + escapeHtml(band.name) : "");
+    const plotBounds = plot.getBoundingClientRect();
+    const tooltipX = Math.min(event.clientX - plotBounds.left + 14, plotBounds.width - 225);
+    const tooltipY = Math.max(8, event.clientY - plotBounds.top - 18);
+    tooltip.style.left = Math.max(8, tooltipX) + "px";
+    tooltip.style.top = tooltipY + "px";
+    tooltip.style.display = "block";
+  });
+
+  svg.addEventListener("mouseleave", function () {
+    if (currentPlot) {
+      clear(currentPlot.hoverLayer);
+    }
+    tooltip.style.display = "none";
+  });
+
+  window.addEventListener("resize", draw);
+  draw();
+})();
+</script>
+</body>
+</html>"""
+    ).substitute(
+        element_id=element_id,
+        payload_json=json.dumps(payload),
+    )
+
+
+def _zonal_psd_explorer_iframe_html(document: str, height_pixels: int) -> str:
+    escaped_document = html.escape(document, quote=True)
+    return (
+        f'<iframe srcdoc="{escaped_document}" '
+        + 'style="width:100%; '
+        + f'height:{height_pixels}px; border:0;" '
+        + 'loading="lazy" sandbox="allow-scripts"></iframe>'
+    )
+
+
+def plot_multi_reference_zonal_psd_comparison_explorer(
+    challenger_dataset: xarray.Dataset,
+    reference_datasets: Mapping[str, xarray.Dataset],
+    variables: Sequence[Variable | str] = DEFAULT_ZONAL_PSD_VARIABLES,
+    first_day_index: int = 0,
+    lead_day_indices: Sequence[int] = DEFAULT_ZONAL_PSD_LEAD_DAY_INDICES,
+    depth_selectors: Mapping[str, int | float | None] | None = None,
+    challenger_name: str = "Challenger",
+    height_pixels: int = 620,
+    title: str = "Zonal power spectral density comparison",
+) -> HTML:
+    variable_keys = _resolved_variable_keys(variables)
+    resolved_lead_day_indices = _resolved_lead_day_indices(challenger_dataset, lead_day_indices)
+    if not resolved_lead_day_indices:
+        raise ValueError("lead_day_indices must contain at least one available lead day index.")
+    payload = {
+        "title": title,
+        "variables": _zonal_psd_variable_payloads(
+            challenger_dataset=challenger_dataset,
+            reference_datasets=reference_datasets,
+            variable_keys=variable_keys,
+            first_day_index=first_day_index,
+            lead_day_indices=resolved_lead_day_indices,
+            depth_selectors=depth_selectors,
+            challenger_name=challenger_name,
+        ),
+    }
+    element_id = f"ob-zonal-psd-{uuid4().hex}"
+    document = _zonal_psd_explorer_document(element_id, payload)
+    return _html_without_iframe_warning(_zonal_psd_explorer_iframe_html(document, height_pixels=height_pixels))
 
 
 def _resolved_variable_keys(variables: Sequence[Variable | str]) -> tuple[str, ...]:
