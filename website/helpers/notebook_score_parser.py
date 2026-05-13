@@ -63,11 +63,35 @@ _REFERENCES = [
 
 _OBSERVATIONS_METRIC_KEY = "rmsd_variables_observations"
 
-_METRIC_PATTERNS = {
+_LEGACY_METRIC_PATTERNS = {
     f"{metric['key']}_{reference['suffix']}": f"oceanbench.metrics.{metric['function']}_{reference['function_suffix']}"
     for metric in _METRICS
     for reference in _REFERENCES
 } | {_OBSERVATIONS_METRIC_KEY: "oceanbench.metrics.rmsd_of_variables_compared_to_observations"}
+
+_REPORT_CONTEXT_METRIC_PATTERNS = {
+    "rmsd_variables_glorys": "evaluation_report.glorys_variable_rmsd",
+    "rmsd_mld_glorys": "evaluation_report.glorys_mixed_layer_depth_rmsd",
+    "rmsd_geostrophic_glorys": "evaluation_report.glorys_geostrophic_current_rmsd",
+    "lagrangian_glorys": "evaluation_report.glorys_lagrangian_trajectory_deviation",
+    "rmsd_variables_glo12": "evaluation_report.glo12_variable_rmsd",
+    "rmsd_mld_glo12": "evaluation_report.glo12_mixed_layer_depth_rmsd",
+    "rmsd_geostrophic_glo12": "evaluation_report.glo12_geostrophic_current_rmsd",
+    "lagrangian_glo12": "evaluation_report.glo12_lagrangian_trajectory_deviation",
+    _OBSERVATIONS_METRIC_KEY: "evaluation_report.class4_observation.rmsd",
+}
+
+_METRIC_PATTERNS = {
+    metric_key: tuple(
+        pattern
+        for pattern in (
+            _LEGACY_METRIC_PATTERNS.get(metric_key),
+            _REPORT_CONTEXT_METRIC_PATTERNS.get(metric_key),
+        )
+        if pattern is not None
+    )
+    for metric_key in _LEGACY_METRIC_PATTERNS | _REPORT_CONTEXT_METRIC_PATTERNS
+}
 
 _DEPTH_VARIABLE_METRICS = {
     f"{metric['key']}_{reference['suffix']}" for metric in _METRICS for reference in _REFERENCES if metric["has_depths"]
@@ -117,8 +141,8 @@ def _get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
     return {
         metric_key: html
         for cell in raw_notebook["cells"]
-        for metric_key, pattern in _METRIC_PATTERNS.items()
-        if pattern in _get_cell_source(cell)
+        for metric_key, patterns in _METRIC_PATTERNS.items()
+        if any(pattern in _get_cell_source(cell) for pattern in patterns)
         if (html := _get_cell_html_output(cell))
     }
 
