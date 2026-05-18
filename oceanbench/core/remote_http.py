@@ -13,6 +13,8 @@ DEFAULT_RETRY_BACKOFF_SECONDS = 2
 RETRIABLE_HTTP_ERROR_TOKENS = (
     "Server disconnected",
     "Connection reset by peer",
+    "Not enough data to satisfy content length header",
+    "Response payload is not completed",
 )
 RETRIABLE_REMOTE_BACKEND_MODULE_PREFIXES = (
     "aiohttp",
