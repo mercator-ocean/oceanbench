@@ -2508,6 +2508,7 @@ html, body {{
   accent-color: #0f5f8f;
 }}
 .ob-eddy-map {{
+  position: relative;
   height: 620px;
   background: linear-gradient(180deg, #eef7fb, #ffffff);
 }}
@@ -2515,6 +2516,27 @@ html, body {{
   display: block;
   width: 100%;
   height: 100%;
+  cursor: crosshair;
+}}
+.ob-eddy-tooltip {{
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 10px));
+  min-width: 190px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(23, 32, 51, 0.94);
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.22);
+  z-index: 2;
+}}
+.ob-eddy-tooltip strong {{
+  display: block;
+  margin-bottom: 2px;
 }}
 .ob-eddy-status {{
   display: flex;
@@ -2524,6 +2546,12 @@ html, body {{
   border-top: 1px solid #cfd8e3;
   color: #64748b;
   font-size: 12px;
+}}
+.ob-eddy-summary {{
+  margin-top: 3px;
+  color: #334155;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }}
 .ob-eddy-legend {{
   display: flex;
@@ -2545,6 +2573,21 @@ html, body {{
 .ob-eddy-swatch.spurious {{ background: #d1495b; }}
 .ob-eddy-swatch.missed {{ background: #f59e0b; }}
 .ob-eddy-swatch.line {{ background: #475569; }}
+.ob-eddy-marker {{
+  display: inline-block;
+  width: 0;
+  height: 0;
+}}
+.ob-eddy-marker.cyclone {{
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid #334155;
+}}
+.ob-eddy-marker.anticyclone {{
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 8px solid #334155;
+}}
 </style>
 </head>
 <body>
@@ -2559,6 +2602,7 @@ html, body {{
     <div class="ob-eddy-controls">
       <div class="ob-eddy-row">
         <div class="ob-eddy-reference-buttons ob-eddy-chip-group"></div>
+        <div class="ob-eddy-polarity-buttons ob-eddy-chip-group"></div>
       </div>
       <div class="ob-eddy-row">
         <button class="ob-eddy-play" type="button">▶</button>
@@ -2569,14 +2613,22 @@ html, body {{
       </div>
     </div>
   </div>
-  <div class="ob-eddy-map"><canvas width="1180" height="620"></canvas></div>
+  <div class="ob-eddy-map">
+    <canvas width="1180" height="620"></canvas>
+    <div class="ob-eddy-tooltip"></div>
+  </div>
   <div class="ob-eddy-status">
-    <div class="ob-eddy-status-text"></div>
+    <div>
+      <div class="ob-eddy-status-text"></div>
+      <div class="ob-eddy-summary"></div>
+    </div>
     <div class="ob-eddy-legend">
       <span class="ob-eddy-key"><span class="ob-eddy-swatch match"></span>Matched eddy</span>
       <span class="ob-eddy-key"><span class="ob-eddy-swatch spurious"></span>Spurious challenger</span>
       <span class="ob-eddy-key"><span class="ob-eddy-swatch missed"></span>Missed reference</span>
       <span class="ob-eddy-key"><span class="ob-eddy-swatch line"></span>Matched center offset</span>
+      <span class="ob-eddy-key"><span class="ob-eddy-marker cyclone"></span>Cyclone</span>
+      <span class="ob-eddy-key"><span class="ob-eddy-marker anticyclone"></span>Anticyclone</span>
     </div>
   </div>
 </div>
@@ -2588,14 +2640,25 @@ html, body {{
   const context = canvas.getContext("2d");
   const title = root.querySelector(".ob-eddy-title");
   const referenceButtons = root.querySelector(".ob-eddy-reference-buttons");
+  const polarityButtons = root.querySelector(".ob-eddy-polarity-buttons");
   const playButton = root.querySelector(".ob-eddy-play");
   const leadInput = root.querySelector(".ob-eddy-lead-input");
   const leadLabel = root.querySelector(".ob-eddy-lead-label");
   const statusText = root.querySelector(".ob-eddy-status-text");
+  const summaryText = root.querySelector(".ob-eddy-summary");
+  const tooltip = root.querySelector(".ob-eddy-tooltip");
   const references = Object.fromEntries(payload.references.map((reference) => [reference.key, reference]));
+  const polarityOptions = [
+    {{key: "all", label: "All"}},
+    {{key: "cyclone", label: "Cyclones"}},
+    {{key: "anticyclone", label: "Anticyclones"}}
+  ];
   let activeReferenceKey = payload.references[0].key;
+  let activePolarity = "all";
   let activeLeadIndex = 0;
   let timer = null;
+  let eddyTargets = [];
+  let hoveredTargetKey = null;
 
   title.textContent = payload.title;
   leadInput.addEventListener("input", () => {{
@@ -2639,16 +2702,35 @@ html, body {{
       }});
       referenceButtons.appendChild(button);
     }}
+    polarityButtons.replaceChildren();
+    for (const polarity of polarityOptions) {{
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ob-eddy-chip";
+      button.textContent = polarity.label;
+      button.classList.toggle("active", polarity.key === activePolarity);
+      button.addEventListener("click", () => {{
+        activePolarity = polarity.key;
+        hoveredTargetKey = null;
+        hideTooltip();
+        renderControls();
+        draw();
+      }});
+      polarityButtons.appendChild(button);
+    }}
     const frame = references[activeReferenceKey].frames[activeLeadIndex];
+    const frameCounts = filteredFrameCounts(frame);
     leadInput.max = references[activeReferenceKey].frames.length - 1;
     leadLabel.textContent = `Lead day ${{frame.leadDay}}`;
     statusText.textContent = [
       references[activeReferenceKey].label,
       `lead day ${{frame.leadDay}}`,
-      `${{frame.matches.length}} matches`,
-      `${{frame.spurious.length}} spurious`,
-      `${{frame.missed.length}} missed`,
+      polarityOptionLabel(activePolarity),
+      `${{frameCounts.matches}} matches`,
+      `${{frameCounts.spurious}} spurious`,
+      `${{frameCounts.missed}} missed`,
     ].join(" - ");
+    summaryText.textContent = polaritySummary(frame);
   }}
 
   function project(point) {{
@@ -2663,14 +2745,32 @@ html, body {{
 
   function draw() {{
     context.clearRect(0, 0, canvas.width, canvas.height);
+    eddyTargets = [];
     drawBackground();
     const frame = references[activeReferenceKey].frames[activeLeadIndex];
-    for (const match of frame.matches) drawMatchLine(match.reference, match.challenger);
-    for (const missed of frame.missed) drawEddy(missed, "rgba(245, 158, 11, 0.15)", "rgba(245, 158, 11, 0.88)", 2.0);
-    for (const spurious of frame.spurious) drawEddy(spurious, "rgba(209, 73, 91, 0.13)", "rgba(209, 73, 91, 0.9)", 2.0);
-    for (const match of frame.matches) {{
-      drawEddy(match.reference, "rgba(100, 116, 139, 0.10)", "rgba(100, 116, 139, 0.65)", 1.3);
-      drawEddy(match.challenger, "rgba(15, 159, 143, 0.16)", "rgba(15, 159, 143, 0.95)", 2.1);
+    const matches = frame.matches.filter((match) => visiblePolarity(match.challenger.polarity));
+    for (const match of matches) drawMatchLine(match.reference, match.challenger);
+    for (const missed of frame.missed.filter((eddy) => visiblePolarity(eddy.polarity))) {{
+      drawEddy(missed, "rgba(245, 158, 11, 0.15)", "rgba(245, 158, 11, 0.88)", 2.0, {{
+        status: "Missed reference",
+        distanceKilometers: null,
+      }});
+    }}
+    for (const spurious of frame.spurious.filter((eddy) => visiblePolarity(eddy.polarity))) {{
+      drawEddy(spurious, "rgba(209, 73, 91, 0.13)", "rgba(209, 73, 91, 0.9)", 2.0, {{
+        status: "Spurious challenger",
+        distanceKilometers: null,
+      }});
+    }}
+    for (const match of matches) {{
+      drawEddy(match.reference, "rgba(100, 116, 139, 0.10)", "rgba(100, 116, 139, 0.65)", 1.3, {{
+        status: "Matched reference",
+        distanceKilometers: match.distanceKilometers,
+      }});
+      drawEddy(match.challenger, "rgba(15, 159, 143, 0.16)", "rgba(15, 159, 143, 0.95)", 2.1, {{
+        status: "Matched challenger",
+        distanceKilometers: match.distanceKilometers,
+      }});
     }}
     drawFrame();
   }}
@@ -2729,12 +2829,13 @@ html, body {{
     line(project(reference), project(challenger));
   }}
 
-  function drawEddy(candidate, fill, stroke, width) {{
+  function drawEddy(candidate, fill, stroke, width, target) {{
     const center = project(candidate);
     context.fillStyle = fill;
     context.strokeStyle = stroke;
     context.lineWidth = width;
     if (candidate.contourLongitude.length >= 3) {{
+      context.setLineDash(candidate.polarity === "anticyclone" ? [5, 3] : []);
       context.beginPath();
       for (let index = 0; index < candidate.contourLongitude.length; index += 1) {{
         const point = project({{
@@ -2747,14 +2848,41 @@ html, body {{
       context.closePath();
       context.fill();
       context.stroke();
+      context.setLineDash([]);
     }}
-    context.fillStyle = stroke;
-    context.beginPath();
-    context.arc(center.x, center.y, 3.0, 0, Math.PI * 2);
-    context.fill();
+    drawPolarityMarker(center, candidate.polarity, stroke, targetKey(candidate, target) === hoveredTargetKey);
+    registerEddyTarget(center, candidate, target);
+  }}
+
+  function drawPolarityMarker(center, polarity, color, highlighted) {{
+    const radius = highlighted ? 6.6 : 4.4;
+    context.fillStyle = color;
     context.strokeStyle = "#ffffff";
-    context.lineWidth = 1.2;
+    context.lineWidth = highlighted ? 2.0 : 1.2;
+    context.beginPath();
+    if (polarity === "cyclone") {{
+      context.moveTo(center.x, center.y + radius);
+      context.lineTo(center.x - radius, center.y - radius * 0.75);
+      context.lineTo(center.x + radius, center.y - radius * 0.75);
+    }} else {{
+      context.moveTo(center.x, center.y - radius);
+      context.lineTo(center.x - radius, center.y + radius * 0.75);
+      context.lineTo(center.x + radius, center.y + radius * 0.75);
+    }}
+    context.closePath();
+    context.fill();
     context.stroke();
+  }}
+
+  function registerEddyTarget(center, candidate, target) {{
+    eddyTargets.push({{
+      key: targetKey(candidate, target),
+      x: center.x,
+      y: center.y,
+      candidate,
+      status: target.status,
+      distanceKilometers: target.distanceKilometers
+    }});
   }}
 
   function drawFrame() {{
@@ -2769,6 +2897,133 @@ html, body {{
     context.lineTo(b.x, b.y);
     context.stroke();
   }}
+
+  function targetKey(candidate, target) {{
+    return `${{target.status}}:${{candidate.polarity}}:${{candidate.id}}`;
+  }}
+
+  function visiblePolarity(polarity) {{
+    return activePolarity === "all" || polarity === activePolarity;
+  }}
+
+  function polarityOptionLabel(polarity) {{
+    const option = polarityOptions.find((candidate) => candidate.key === polarity);
+    return option ? option.label : "All";
+  }}
+
+  function polarityLabel(polarity) {{
+    return polarity === "cyclone" ? "Cyclone" : "Anticyclone";
+  }}
+
+  function emptyPolarityCounts() {{
+    return {{
+      cyclone: {{matches: 0, spurious: 0, missed: 0}},
+      anticyclone: {{matches: 0, spurious: 0, missed: 0}}
+    }};
+  }}
+
+  function frameCountsByPolarity(frame) {{
+    const counts = emptyPolarityCounts();
+    for (const match of frame.matches) counts[match.challenger.polarity].matches += 1;
+    for (const spurious of frame.spurious) counts[spurious.polarity].spurious += 1;
+    for (const missed of frame.missed) counts[missed.polarity].missed += 1;
+    return counts;
+  }}
+
+  function filteredFrameCounts(frame) {{
+    const counts = frameCountsByPolarity(frame);
+    if (activePolarity !== "all") return counts[activePolarity];
+    return {{
+      matches: counts.cyclone.matches + counts.anticyclone.matches,
+      spurious: counts.cyclone.spurious + counts.anticyclone.spurious,
+      missed: counts.cyclone.missed + counts.anticyclone.missed
+    }};
+  }}
+
+  function polaritySummary(frame) {{
+    const counts = frameCountsByPolarity(frame);
+    return [
+      `Cyclones M/S/M ${{counts.cyclone.matches}}/${{counts.cyclone.spurious}}/${{counts.cyclone.missed}}`,
+      "Anticyclones M/S/M " +
+        `${{counts.anticyclone.matches}}/${{counts.anticyclone.spurious}}/${{counts.anticyclone.missed}}`
+    ].join(" | ");
+  }}
+
+  function eventCanvasPoint(event) {{
+    const rect = canvas.getBoundingClientRect();
+    return {{
+      x: (event.clientX - rect.left) * canvas.width / rect.width,
+      y: (event.clientY - rect.top) * canvas.height / rect.height,
+      scale: canvas.width / rect.width
+    }};
+  }}
+
+  function nearestEddyTarget(event) {{
+    const point = eventCanvasPoint(event);
+    const threshold = 13 * point.scale;
+    let nearest = null;
+    let nearestDistanceSquared = threshold * threshold;
+    for (const target of eddyTargets) {{
+      const distanceSquared =
+        (target.x - point.x) * (target.x - point.x) +
+        (target.y - point.y) * (target.y - point.y);
+      if (distanceSquared <= nearestDistanceSquared) {{
+        nearest = target;
+        nearestDistanceSquared = distanceSquared;
+      }}
+    }}
+    return nearest;
+  }}
+
+  function formatEddyValue(value, digits) {{
+    if (value === null || !Number.isFinite(value)) return "n/a";
+    return Number(value).toFixed(digits).replace(/\\.?0+$/, "");
+  }}
+
+  function showTooltip(event, target) {{
+    const mapRect = canvas.parentElement.getBoundingClientRect();
+    const offsetText = target.distanceKilometers === null
+      ? ""
+      : `<br>Matched center offset ${{formatEddyValue(target.distanceKilometers, 1)}} km`;
+    tooltip.innerHTML = [
+      `<strong>${{target.status}}</strong>`,
+      polarityLabel(target.candidate.polarity),
+      `Lon ${{formatEddyValue(target.candidate.longitude, 3)}} deg, ` +
+        `lat ${{formatEddyValue(target.candidate.latitude, 3)}} deg${{offsetText}}`
+    ].join("<br>");
+    tooltip.style.left = `${{event.clientX - mapRect.left}}px`;
+    tooltip.style.top = `${{event.clientY - mapRect.top}}px`;
+    tooltip.style.display = "block";
+  }}
+
+  function hideTooltip() {{
+    tooltip.style.display = "none";
+  }}
+
+  canvas.addEventListener("mousemove", (event) => {{
+    const target = nearestEddyTarget(event);
+    if (target === null) {{
+      if (hoveredTargetKey !== null) {{
+        hoveredTargetKey = null;
+        hideTooltip();
+        draw();
+      }}
+      return;
+    }}
+    if (target.key !== hoveredTargetKey) {{
+      hoveredTargetKey = target.key;
+      draw();
+    }}
+    showTooltip(event, target);
+  }});
+
+  canvas.addEventListener("mouseleave", () => {{
+    if (hoveredTargetKey !== null) {{
+      hoveredTargetKey = null;
+      draw();
+    }}
+    hideTooltip();
+  }});
 }})();
 </script>
 </body>

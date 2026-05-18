@@ -426,6 +426,14 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "Missed reference" in html_output.data
     assert "Matched center offset" in html_output.data
     assert "Match displacement" not in html_output.data
+    assert "ob-eddy-tooltip" in html_output.data
+    assert "ob-eddy-polarity-buttons" in html_output.data
+    assert "Cyclones" in html_output.data
+    assert "Anticyclones" in html_output.data
+    assert "Cyclones M/S/M" in html_output.data
+    assert "Matched challenger" in html_output.data
+    assert "Matched reference" in html_output.data
+    assert "setLineDash" in html_output.data
     assert "window.setInterval" in html_output.data
 
 
