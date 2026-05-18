@@ -17,6 +17,7 @@ from oceanbench.core.dataset_utils import (
     Variable,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
+from oceanbench.core.remote_http import with_remote_http_retries
 from oceanbench.core.references.observations import load_mean_dynamic_topography
 from oceanbench.core.resolution import get_dataset_resolution
 
@@ -25,6 +26,10 @@ MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 VELOCITY_TARGET_DEPTH_METERS = 15.0
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
+
+
+def _compute_with_remote_retries(operation_name: str, data):
+    return with_remote_http_retries(operation_name, data.compute)
 
 
 def _assign_depth_bins(
@@ -134,10 +139,20 @@ def _prepared_class4_observations(
     )
     lead_day = ((base_subset[time_key] - base_subset["first_day"]) / numpy.timedelta64(1, "D")).astype("int64") - 1
     base_subset = base_subset.assign(lead_day=lead_day)
-    valid_observation_mask = ((base_subset["lead_day"] >= 0) & (base_subset["lead_day"] < lead_days_count)).compute()
+    valid_observation_mask = _compute_with_remote_retries(
+        "Class IV observation lead-day mask read",
+        (base_subset["lead_day"] >= 0) & (base_subset["lead_day"] < lead_days_count),
+    )
     selected_observation_indices = numpy.flatnonzero(valid_observation_mask.values)
     base_subset = base_subset.isel({observation_dimension_key: selected_observation_indices})
-    base_dataframe = base_subset.compute().to_dataframe().reset_index()
+    base_dataframe = (
+        _compute_with_remote_retries(
+            "Class IV observation coordinate read",
+            base_subset,
+        )
+        .to_dataframe()
+        .reset_index()
+    )
     base_dataframe = base_dataframe.drop(columns=[observation_dimension_key], errors="ignore")
     base_dataframe = base_dataframe[[time_key, latitude_key, longitude_key, "first_day", depth_key, "lead_day"]]
     context = (base_dataframe, selected_observation_indices, observation_dimension_key)
@@ -157,12 +172,10 @@ def _create_observations_dataframe(
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
     depth_key = Dimension.DEPTH.key()
-    observation_values = (
-        observations_dataset[observation_variable_key]
-        .isel({observation_dimension_key: selected_observation_indices})
-        .compute()
-        .values
-    )
+    observation_values = _compute_with_remote_retries(
+        f"Class IV observation {standard_variable_key} read",
+        observations_dataset[observation_variable_key].isel({observation_dimension_key: selected_observation_indices}),
+    ).values
     valid_observation_mask = ~numpy.isnan(observation_values)
     observations_dataframe = base_observations_dataframe.loc[valid_observation_mask].copy()
     observations_dataframe["observation_value"] = observation_values[valid_observation_mask]
@@ -390,12 +403,15 @@ def _assign_model_values_for_first_day(
     variable_key: str,
 ) -> None:
     for lead_day, observation_group in first_day_group.groupby("lead_day", sort=False):
-        time_slice = model_data.isel(
-            {
-                Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
-                Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
-            }
-        ).compute()
+        time_slice = _compute_with_remote_retries(
+            f"Class IV model {variable_key} read for lead day {lead_day}",
+            model_data.isel(
+                {
+                    Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
+                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+                }
+            ),
+        )
         model_values[observation_group.index.values] = _interpolated_model_values_for_observation_group(
             time_slice,
             observation_group,
