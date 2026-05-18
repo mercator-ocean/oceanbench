@@ -1,3 +1,13 @@
+# ### Report guide
+
+# Score tables provide the quantitative OceanBench evaluation.
+
+# Interactive figures help diagnose the scores by showing spatial errors, lead-time evolution,
+# dynamic diagnostics, Lagrangian drift, eddy matching, and Class IV observation errors.
+
+# Some figure layers are downsampled or compressed for responsive notebook and website rendering;
+# metric scores are computed from the underlying datasets.
+
 import oceanbench
 
 oceanbench.__version__
@@ -13,16 +23,6 @@ challenger_dataset: xarray.Dataset = xarray.Dataset()
 # ### Evaluation configuration
 
 region = "global"
-
-# ### Report guide
-
-# Score tables provide the quantitative OceanBench evaluation.
-
-# Interactive figures help diagnose the scores by showing spatial errors, lead-time evolution,
-# dynamic diagnostics, Lagrangian drift, eddy matching, and Class IV observation errors.
-
-# Some figure layers are downsampled or compressed for responsive notebook and website rendering;
-# metric scores are computed from the underlying datasets.
 
 # ### Evaluation setup
 
