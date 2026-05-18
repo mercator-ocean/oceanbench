@@ -139,3 +139,32 @@ def test_evaluation_report_handles_unavailable_class4_observations(monkeypatch) 
     assert report.class4_observation_error_explorer is None
     assert report.class4_observation.rmsd.to_dict(orient="list") == {"Message": ["Class IV unavailable"]}
     assert calls == {"observations": 1}
+
+
+def test_evaluation_report_lagrangian_widget_uses_display_particle_count(monkeypatch) -> None:
+    captured = {}
+
+    monkeypatch.setattr(evaluation_report, "glorys_reanalysis_dataset", lambda _: _dataset())
+    monkeypatch.setattr(evaluation_report, "glo12_analysis_dataset", lambda _: _dataset())
+
+    def plot_multi_reference_lagrangian_trajectory_explorer(_, reference_datasets, particle_count):
+        captured["references"] = tuple(reference_datasets)
+        captured["particle_count"] = particle_count
+        return "lagrangian-widget"
+
+    monkeypatch.setattr(
+        evaluation_report.visualization,
+        "plot_multi_reference_lagrangian_trajectory_explorer",
+        plot_multi_reference_lagrangian_trajectory_explorer,
+    )
+
+    report = evaluation_report.prepare_evaluation_report(_dataset())
+
+    assert report.lagrangian_trajectory_explorer == "lagrangian-widget"
+    assert captured == {
+        "references": (
+            evaluation_report.GLORYS_REFERENCE_NAME,
+            evaluation_report.GLO12_REFERENCE_NAME,
+        ),
+        "particle_count": 1000,
+    }

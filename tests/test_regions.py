@@ -18,6 +18,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WESTERN_MED_REGION_FILE = PROJECT_ROOT / "assets" / "western_med_region.json"
 
 
+def _cell_source_containing(notebook, source_fragment: str) -> str:
+    for cell in notebook.cells:
+        if source_fragment in cell.source:
+            return cell.source
+    raise AssertionError(f"No notebook cell contains {source_fragment!r}.")
+
+
 def test_custom_region_roundtrip_and_subset() -> None:
     region = oceanbench.regions.custom(
         identifier="western_med",
@@ -139,10 +146,11 @@ def test_example_custom_region_file_generates_custom_region_notebook(tmp_path) -
     )
 
     notebook = nbformat.read(output_path, as_version=4)
+    region_cell_source = _cell_source_containing(notebook, "region = oceanbench.regions.custom(")
 
-    assert "region = oceanbench.regions.custom(" in notebook.cells[4].source
-    assert "identifier='western_med'" in notebook.cells[4].source
-    assert "display_name='Western Mediterranean'" in notebook.cells[4].source
+    assert "region = oceanbench.regions.custom(" in region_cell_source
+    assert "identifier='western_med'" in region_cell_source
+    assert "display_name='Western Mediterranean'" in region_cell_source
     assert notebook.metadata["oceanbench"]["region"]["id"] == "western_med"
     assert notebook.metadata["oceanbench"]["region"]["display_name"] == "Western Mediterranean"
     assert notebook.metadata["oceanbench"]["region"]["official"] is False
@@ -164,6 +172,6 @@ def test_generate_evaluation_notebook_keeps_official_region_string(tmp_path) -> 
 
     notebook = nbformat.read(output_path, as_version=4)
 
-    assert notebook.cells[4].source == "region = 'ibi'"
+    assert _cell_source_containing(notebook, "region = 'ibi'") == "region = 'ibi'"
     assert notebook.metadata["oceanbench"]["region"]["id"] == "ibi"
     assert notebook.metadata["oceanbench"]["region"]["official"] is True

@@ -10,6 +10,9 @@ import nbformat
 from oceanbench.core import templates
 from oceanbench.core.regions import RegionLike, resolve_region, region_to_dict
 
+CHALLENGER_DATASET_PLACEHOLDER = "challenger_dataset: xarray.Dataset = xarray.Dataset()"
+EVALUATION_REGION_PLACEHOLDER = 'region = "global"'
+
 
 def _parse_challenger_python_code(
     challenger_python_code_uri_or_local_path: str,
@@ -88,7 +91,7 @@ def _python_to_jupyter_notebook(python_code: str) -> nbformat.NotebookNode:
 def _replace_code_to_open_challenger_datasets(
     python_code: str, notebook: nbformat.NotebookNode
 ) -> nbformat.NotebookNode:
-    notebook["cells"][2]["source"] = python_code
+    _replace_cell_source(notebook, CHALLENGER_DATASET_PLACEHOLDER, python_code)
     return notebook
 
 
@@ -96,8 +99,24 @@ def _replace_evaluation_configuration_code(
     region,
     notebook: nbformat.NotebookNode,
 ) -> nbformat.NotebookNode:
-    notebook["cells"][4]["source"] = _generate_evaluation_configuration_code(region)
+    _replace_cell_source(
+        notebook,
+        EVALUATION_REGION_PLACEHOLDER,
+        _generate_evaluation_configuration_code(region),
+    )
     return notebook
+
+
+def _replace_cell_source(
+    notebook: nbformat.NotebookNode,
+    source_fragment: str,
+    replacement_source: str,
+) -> None:
+    for cell in notebook["cells"]:
+        if source_fragment in cell["source"]:
+            cell["source"] = replacement_source
+            return
+    raise ValueError(f"Unable to find evaluation template cell containing {source_fragment!r}.")
 
 
 def _generate_evaluation_configuration_code(region) -> str:

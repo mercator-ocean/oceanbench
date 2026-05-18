@@ -424,6 +424,8 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "Matched eddy" in html_output.data
     assert "Spurious challenger" in html_output.data
     assert "Missed reference" in html_output.data
+    assert "Matched center offset" in html_output.data
+    assert "Match displacement" not in html_output.data
     assert "window.setInterval" in html_output.data
 
 
@@ -486,6 +488,8 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "Class IV observation error maps" in html_output.data
     assert "Model minus Class IV observation errors" in html_output.data
     assert "points may be sampled for display" in html_output.data
+    assert "ob-class4-tooltip" in html_output.data
+    assert "Absolute error" in html_output.data
     assert "Observation density" not in html_output.data
     assert "Signed error" in html_output.data
     assert "robust 95%" in html_output.data
@@ -505,6 +509,8 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     notebook = nbformat.read(output_path, as_version=4)
     all_sources = "\n".join(cell.source for cell in notebook.cells)
 
+    assert notebook.cells[0].cell_type == "markdown"
+    assert notebook.cells[0].source.startswith("### Report guide")
     assert "Report guide" in all_sources
     assert "Score tables provide the quantitative OceanBench evaluation." in all_sources
     assert "Interactive figures help diagnose the scores" in all_sources

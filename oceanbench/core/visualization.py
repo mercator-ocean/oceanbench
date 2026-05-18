@@ -2576,7 +2576,7 @@ html, body {{
       <span class="ob-eddy-key"><span class="ob-eddy-swatch match"></span>Matched eddy</span>
       <span class="ob-eddy-key"><span class="ob-eddy-swatch spurious"></span>Spurious challenger</span>
       <span class="ob-eddy-key"><span class="ob-eddy-swatch missed"></span>Missed reference</span>
-      <span class="ob-eddy-key"><span class="ob-eddy-swatch line"></span>Match displacement</span>
+      <span class="ob-eddy-key"><span class="ob-eddy-swatch line"></span>Matched center offset</span>
     </div>
   </div>
 </div>
@@ -2979,6 +2979,7 @@ html, body {{
   width: 180px;
 }}
 .ob-class4-map {{
+  position: relative;
   margin: 0 14px 12px;
   border-radius: 14px;
   background: #e8eef4;
@@ -2988,6 +2989,27 @@ html, body {{
   display: block;
   width: 100%;
   height: auto;
+  cursor: crosshair;
+}}
+.ob-class4-tooltip {{
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 10px));
+  min-width: 190px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(23, 32, 51, 0.94);
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.22);
+  z-index: 2;
+}}
+.ob-class4-tooltip strong {{
+  display: block;
+  margin-bottom: 2px;
 }}
 .ob-class4-status {{
   display: flex;
@@ -3045,7 +3067,10 @@ html, body {{
       </div>
     </div>
   </div>
-  <div class="ob-class4-map"><canvas width="1180" height="620"></canvas></div>
+  <div class="ob-class4-map">
+    <canvas width="1180" height="620"></canvas>
+    <div class="ob-class4-tooltip"></div>
+  </div>
   <div class="ob-class4-status">
     <div class="ob-class4-status-text"></div>
     <div class="ob-class4-legend">
@@ -3064,6 +3089,7 @@ html, body {{
   const leadInput = root.querySelector(".ob-class4-lead-input");
   const leadLabel = root.querySelector(".ob-class4-lead-label");
   const statusText = root.querySelector(".ob-class4-status-text");
+  const tooltip = root.querySelector(".ob-class4-tooltip");
   const canvas = root.querySelector("canvas");
   const context = canvas.getContext("2d");
   const modes = [
@@ -3071,6 +3097,7 @@ html, body {{
     {{key: "absolute", label: "Absolute error"}}
   ];
   const state = {{variable: 0, depth: 0, lead: 0, mode: "signed"}};
+  let hoveredObservationIndex = null;
 
   title.textContent = payload.title;
 
@@ -3172,16 +3199,85 @@ html, body {{
       const longitude = frame.longitude[index];
       const latitude = frame.latitude[index];
       if (longitude === null || latitude === null) continue;
+      const x = project.x(longitude);
+      const y = project.y(latitude);
       if (state.mode === "absolute") {{
         context.fillStyle = colorForAbsolute(frame.absoluteError[index], absoluteScale);
       }} else {{
         context.fillStyle = colorForSigned(frame.error[index], signedScale);
       }}
       context.beginPath();
-      context.arc(project.x(longitude), project.y(latitude), 2.8, 0, Math.PI * 2);
+      context.arc(x, y, 2.8, 0, Math.PI * 2);
       context.fill();
+      if (index === hoveredObservationIndex) {{
+        context.strokeStyle = "#172033";
+        context.lineWidth = 2.0;
+        context.beginPath();
+        context.arc(x, y, 5.2, 0, Math.PI * 2);
+        context.stroke();
+      }}
     }}
     context.globalAlpha = 1;
+  }}
+
+  function eventCanvasPoint(event) {{
+    const rect = canvas.getBoundingClientRect();
+    return {{
+      x: (event.clientX - rect.left) * canvas.width / rect.width,
+      y: (event.clientY - rect.top) * canvas.height / rect.height,
+      scale: canvas.width / rect.width
+    }};
+  }}
+
+  function nearestObservation(event) {{
+    const frame = currentFrame();
+    const project = projection();
+    const point = eventCanvasPoint(event);
+    const threshold = 12 * point.scale;
+    let nearest = null;
+    let nearestDistanceSquared = threshold * threshold;
+    for (let index = 0; index < frame.longitude.length; index += 1) {{
+      const longitude = frame.longitude[index];
+      const latitude = frame.latitude[index];
+      if (longitude === null || latitude === null) continue;
+      const x = project.x(longitude);
+      const y = project.y(latitude);
+      const distanceSquared = (x - point.x) * (x - point.x) + (y - point.y) * (y - point.y);
+      if (distanceSquared <= nearestDistanceSquared) {{
+        nearest = {{index}};
+        nearestDistanceSquared = distanceSquared;
+      }}
+    }}
+    return nearest;
+  }}
+
+  function formatObservationValue(value, digits) {{
+    if (value === null || !Number.isFinite(value)) return "n/a";
+    return Number(value).toFixed(digits).replace(/\\.?0+$/, "");
+  }}
+
+  function showTooltip(event, observation) {{
+    const variable = currentVariable();
+    const depth = currentDepth();
+    const frame = currentFrame();
+    const mapRect = canvas.parentElement.getBoundingClientRect();
+    const unit = variable.unit || "";
+    const unitSuffix = unit ? ` ${{unit}}` : "";
+    tooltip.innerHTML = [
+      `<strong>${{variable.label}} - ${{depth.label}}</strong>`,
+      `Lead day ${{frame.leadDay}}`,
+      `Lon ${{formatObservationValue(frame.longitude[observation.index], 3)}} deg, ` +
+        `lat ${{formatObservationValue(frame.latitude[observation.index], 3)}} deg`,
+      `Error ${{formatObservationValue(frame.error[observation.index], 4)}}${{unitSuffix}}`,
+      `Absolute error ${{formatObservationValue(frame.absoluteError[observation.index], 4)}}${{unitSuffix}}`
+    ].join("<br>");
+    tooltip.style.left = `${{event.clientX - mapRect.left}}px`;
+    tooltip.style.top = `${{event.clientY - mapRect.top}}px`;
+    tooltip.style.display = "block";
+  }}
+
+  function hideTooltip() {{
+    tooltip.style.display = "none";
   }}
 
   function selectedClass4ScaleLabel() {{
@@ -3211,13 +3307,40 @@ html, body {{
   }}
 
   function render() {{
+    hoveredObservationIndex = null;
+    hideTooltip();
     renderButtons();
     draw();
   }}
 
   leadInput.addEventListener("input", () => {{
     state.lead = Number(leadInput.value);
+    hoveredObservationIndex = null;
+    hideTooltip();
     draw();
+  }});
+
+  canvas.addEventListener("mousemove", (event) => {{
+    const observation = nearestObservation(event);
+    if (observation === null) {{
+      if (hoveredObservationIndex !== null) {{
+        hoveredObservationIndex = null;
+        hideTooltip();
+        draw();
+      }}
+      return;
+    }}
+    hoveredObservationIndex = observation.index;
+    showTooltip(event, observation);
+    draw();
+  }});
+
+  canvas.addEventListener("mouseleave", () => {{
+    if (hoveredObservationIndex !== null) {{
+      hoveredObservationIndex = null;
+      draw();
+    }}
+    hideTooltip();
   }});
 
   render();
