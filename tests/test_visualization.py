@@ -430,9 +430,14 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "ob-eddy-polarity-buttons" in html_output.data
     assert "Cyclones" in html_output.data
     assert "Anticyclones" in html_output.data
+    assert "Cyclone contour" in html_output.data
+    assert "Anticyclone contour" in html_output.data
     assert "Cyclones M/S/M" in html_output.data
     assert "Matched challenger" in html_output.data
     assert "Matched reference" in html_output.data
+    assert "drawEddyHoverFocus" in html_output.data
+    assert "drawPolarityMarker" not in html_output.data
+    assert "ob-eddy-marker" not in html_output.data
     assert "setLineDash" in html_output.data
     assert "window.setInterval" in html_output.data
 

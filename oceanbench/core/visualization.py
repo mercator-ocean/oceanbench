@@ -2573,20 +2573,14 @@ html, body {{
 .ob-eddy-swatch.spurious {{ background: #d1495b; }}
 .ob-eddy-swatch.missed {{ background: #f59e0b; }}
 .ob-eddy-swatch.line {{ background: #475569; }}
-.ob-eddy-marker {{
-  display: inline-block;
-  width: 0;
+.ob-eddy-swatch.contour {{
   height: 0;
+  background: transparent;
+  border-top: 3px solid #334155;
+  border-radius: 0;
 }}
-.ob-eddy-marker.cyclone {{
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 8px solid #334155;
-}}
-.ob-eddy-marker.anticyclone {{
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-bottom: 8px solid #334155;
+.ob-eddy-swatch.contour.anticyclone {{
+  border-top-style: dashed;
 }}
 </style>
 </head>
@@ -2627,8 +2621,8 @@ html, body {{
       <span class="ob-eddy-key"><span class="ob-eddy-swatch spurious"></span>Spurious challenger</span>
       <span class="ob-eddy-key"><span class="ob-eddy-swatch missed"></span>Missed reference</span>
       <span class="ob-eddy-key"><span class="ob-eddy-swatch line"></span>Matched center offset</span>
-      <span class="ob-eddy-key"><span class="ob-eddy-marker cyclone"></span>Cyclone</span>
-      <span class="ob-eddy-key"><span class="ob-eddy-marker anticyclone"></span>Anticyclone</span>
+      <span class="ob-eddy-key"><span class="ob-eddy-swatch contour cyclone"></span>Cyclone contour</span>
+      <span class="ob-eddy-key"><span class="ob-eddy-swatch contour anticyclone"></span>Anticyclone contour</span>
     </div>
   </div>
 </div>
@@ -2831,6 +2825,7 @@ html, body {{
 
   function drawEddy(candidate, fill, stroke, width, target) {{
     const center = project(candidate);
+    const isHovered = targetKey(candidate, target) === hoveredTargetKey;
     context.fillStyle = fill;
     context.strokeStyle = stroke;
     context.lineWidth = width;
@@ -2850,27 +2845,21 @@ html, body {{
       context.stroke();
       context.setLineDash([]);
     }}
-    drawPolarityMarker(center, candidate.polarity, stroke, targetKey(candidate, target) === hoveredTargetKey);
+    if (isHovered) drawEddyHoverFocus(center, stroke);
     registerEddyTarget(center, candidate, target);
   }}
 
-  function drawPolarityMarker(center, polarity, color, highlighted) {{
-    const radius = highlighted ? 6.6 : 4.4;
-    context.fillStyle = color;
+  function drawEddyHoverFocus(center, color) {{
+    context.setLineDash([]);
     context.strokeStyle = "#ffffff";
-    context.lineWidth = highlighted ? 2.0 : 1.2;
+    context.lineWidth = 4.0;
     context.beginPath();
-    if (polarity === "cyclone") {{
-      context.moveTo(center.x, center.y + radius);
-      context.lineTo(center.x - radius, center.y - radius * 0.75);
-      context.lineTo(center.x + radius, center.y - radius * 0.75);
-    }} else {{
-      context.moveTo(center.x, center.y - radius);
-      context.lineTo(center.x - radius, center.y + radius * 0.75);
-      context.lineTo(center.x + radius, center.y + radius * 0.75);
-    }}
-    context.closePath();
-    context.fill();
+    context.arc(center.x, center.y, 7, 0, Math.PI * 2);
+    context.stroke();
+    context.strokeStyle = color;
+    context.lineWidth = 2.2;
+    context.beginPath();
+    context.arc(center.x, center.y, 7, 0, Math.PI * 2);
     context.stroke();
   }}
 
