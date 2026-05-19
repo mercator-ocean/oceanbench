@@ -788,11 +788,12 @@ html, body {{
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }}
 .ob-map-explorer {{
+  --ob-map-content-max-width: 1220px;
   box-sizing: border-box;
   width: 100%;
-  max-width: 1220px;
+  max-width: none;
   min-width: 320px;
-  margin: 0 auto;
+  margin: 0;
   padding: 14px 16px 12px;
   border: 1px solid #d8dee8;
   border-radius: 8px;
@@ -879,7 +880,9 @@ html, body {{
 .ob-map-canvas-wrap {{
   position: relative;
   width: 100%;
+  max-width: var(--ob-map-content-max-width);
   height: 560px;
+  margin: 0 auto;
   border: 1px solid #cfd8e3;
   border-radius: 6px;
   background: #ffffff;
@@ -894,23 +897,27 @@ html, body {{
 }}
 .ob-map-status {{
   min-height: 18px;
-  margin-top: 8px;
+  max-width: var(--ob-map-content-max-width);
+  margin: 8px auto 0;
   color: #475569;
   font-size: 12px;
 }}
 .ob-map-note {{
-  margin-top: 4px;
+  max-width: var(--ob-map-content-max-width);
+  margin: 4px auto 0;
   color: #64748b;
   font-size: 12px;
 }}
 .ob-map-rmse-panel {{
   position: relative;
   display: block;
-  margin-top: 10px;
+  max-width: var(--ob-map-content-max-width);
+  margin: 10px auto 0;
   padding: 10px 12px 8px;
   border: 1px solid #d8dee8;
   border-radius: 6px;
   background: #ffffff;
+  box-sizing: border-box;
 }}
 .ob-map-rmse-label {{
   margin-bottom: 6px;

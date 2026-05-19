@@ -111,6 +111,9 @@ def test_plot_surface_comparison_explorer_returns_self_contained_html() -> None:
     assert "ob-map-depth-buttons" in html_output.data
     assert "ob-map-layer-buttons" in html_output.data
     assert "ob-map-loading" not in html_output.data
+    assert "max-width: none" in html_output.data
+    assert "--ob-map-content-max-width: 1220px" in html_output.data
+    assert "max-width: var(--ob-map-content-max-width)" in html_output.data
     assert "0.5 m" in html_output.data
     assert "10 m" in html_output.data
     assert "depths" in html_output.data
