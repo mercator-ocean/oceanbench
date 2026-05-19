@@ -361,6 +361,8 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "drawLandMask" in html_output.data
     assert "landMask.paths" in html_output.data
     assert "landMask.land" not in html_output.data
+    assert "ob-lagrangian-zoom" in html_output.data
+    assert "createMapViewport" in html_output.data
     assert "fill(&quot;evenodd&quot;)" in html_output.data
     assert "Current separation distance" in html_output.data
     assert "Reached daily positions" in html_output.data
@@ -491,6 +493,7 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "landMask.land" not in html_output.data
     assert "fill(&quot;evenodd&quot;)" in html_output.data
     assert "ob-eddy-zoom" in html_output.data
+    assert "createMapViewport" in html_output.data
     assert "Map zoom controls" in html_output.data
     assert "Zoom in" in html_output.data
     assert "Zoom out" in html_output.data
@@ -580,6 +583,7 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "mask.land" not in html_output.data
     assert "fill(&quot;evenodd&quot;)" in html_output.data
     assert "ob-class4-zoom" in html_output.data
+    assert "createMapViewport" in html_output.data
     assert "Map zoom controls" in html_output.data
     assert "Zoom in" in html_output.data
     assert "Zoom out" in html_output.data

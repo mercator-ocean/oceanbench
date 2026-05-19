@@ -1531,6 +1531,206 @@ def _land_mask_path_payload(path: numpy.ndarray) -> dict[str, object]:
     }
 
 
+def _map_zoom_control_css(root_class: str, border_color: str) -> str:
+    return f""".{root_class}-zoom {{
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid {border_color};
+  border-radius: 999px;
+  background: #ffffff;
+}}
+.{root_class}-zoom button {{
+  min-width: 34px;
+  height: 34px;
+  border: 0;
+  border-right: 1px solid {border_color};
+  background: transparent;
+  color: #0f5f8f;
+  cursor: pointer;
+  font-size: 13px;
+}}
+.{root_class}-zoom button:last-child {{
+  border-right: 0;
+}}"""
+
+
+def _map_zoom_control_html(root_class: str) -> str:
+    return f"""<div class="{root_class}-zoom" aria-label="Map zoom controls">
+          <button class="{root_class}-zoom-out" type="button" title="Zoom out">−</button>
+          <button class="{root_class}-zoom-in" type="button" title="Zoom in">+</button>
+          <button class="{root_class}-zoom-reset" type="button" title="Reset zoom">1:1</button>
+        </div>"""
+
+
+def _map_viewport_script() -> str:
+    return """function createMapViewport(options) {
+    const canvas = options.canvas;
+    const originalBounds = { ...options.originalBounds };
+    const projectMode = options.projectMode || "stretch";
+    const fitScale = options.fitScale || 1.0;
+    const onChange = options.onChange || (() => {});
+    const onInteractionStart = options.onInteractionStart || (() => {});
+    let viewBounds = { ...originalBounds };
+    let dragStart = null;
+
+    function bounds() {
+      return viewBounds;
+    }
+
+    function projection() {
+      return projectionForBounds(viewBounds);
+    }
+
+    function projectionForBounds(targetBounds) {
+      const width = canvas.width;
+      const height = canvas.height;
+      const longitudeSpan = Math.max(1e-6, targetBounds.longitudeMaximum - targetBounds.longitudeMinimum);
+      const latitudeSpan = Math.max(1e-6, targetBounds.latitudeMaximum - targetBounds.latitudeMinimum);
+      if (projectMode === "fit") {
+        const scale = Math.min(width / longitudeSpan, height / latitudeSpan) * fitScale;
+        const xOffset = (width - longitudeSpan * scale) / 2;
+        const yOffset = (height - latitudeSpan * scale) / 2;
+        return {
+          scale,
+          x: (longitude) => xOffset + (longitude - targetBounds.longitudeMinimum) * scale,
+          y: (latitude) => height - yOffset - (latitude - targetBounds.latitudeMinimum) * scale
+        };
+      }
+      return {
+        scale: Math.min(width / longitudeSpan, height / latitudeSpan),
+        x: (longitude) => ((longitude - targetBounds.longitudeMinimum) / longitudeSpan) * width,
+        y: (latitude) => height - ((latitude - targetBounds.latitudeMinimum) / latitudeSpan) * height
+      };
+    }
+
+    function project(point) {
+      const activeProjection = projection();
+      return {
+        x: activeProjection.x(point.longitude),
+        y: activeProjection.y(point.latitude)
+      };
+    }
+
+    function constrainedSpan(currentSpan, originalSpan, factor) {
+      const minimumSpan = originalSpan / 80;
+      const maximumSpan = originalSpan * 2;
+      return Math.max(minimumSpan, Math.min(maximumSpan, currentSpan / factor));
+    }
+
+    function zoom(factor) {
+      zoomAt(
+        factor,
+        (viewBounds.longitudeMinimum + viewBounds.longitudeMaximum) / 2,
+        (viewBounds.latitudeMinimum + viewBounds.latitudeMaximum) / 2,
+      );
+    }
+
+    function zoomAt(factor, longitudeCenter, latitudeCenter) {
+      const longitudeHalfSpan = constrainedSpan(
+        viewBounds.longitudeMaximum - viewBounds.longitudeMinimum,
+        originalBounds.longitudeMaximum - originalBounds.longitudeMinimum,
+        factor,
+      ) / 2;
+      const latitudeHalfSpan = constrainedSpan(
+        viewBounds.latitudeMaximum - viewBounds.latitudeMinimum,
+        originalBounds.latitudeMaximum - originalBounds.latitudeMinimum,
+        factor,
+      ) / 2;
+      viewBounds = {
+        longitudeMinimum: longitudeCenter - longitudeHalfSpan,
+        longitudeMaximum: longitudeCenter + longitudeHalfSpan,
+        latitudeMinimum: latitudeCenter - latitudeHalfSpan,
+        latitudeMaximum: latitudeCenter + latitudeHalfSpan,
+      };
+      onInteractionStart();
+      onChange();
+    }
+
+    function reset() {
+      viewBounds = { ...originalBounds };
+      onInteractionStart();
+      onChange();
+    }
+
+    function coordinateDelta(xDeltaPixels, yDeltaPixels, targetBounds) {
+      if (projectMode === "fit") {
+        const dragProjection = projectionForBounds(targetBounds);
+        const xDelta = (xDeltaPixels / canvas.clientWidth) * canvas.width;
+        const yDelta = (yDeltaPixels / canvas.clientHeight) * canvas.height;
+        return {
+          longitude: xDelta / dragProjection.scale,
+          latitude: yDelta / dragProjection.scale
+        };
+      }
+      return {
+        longitude: (xDeltaPixels / canvas.clientWidth) *
+          (targetBounds.longitudeMaximum - targetBounds.longitudeMinimum),
+        latitude: (yDeltaPixels / canvas.clientHeight) *
+          (targetBounds.latitudeMaximum - targetBounds.latitudeMinimum)
+      };
+    }
+
+    function attachZoomControls(controls) {
+      controls.zoomOutButton.addEventListener("click", () => { zoom(0.5); });
+      controls.zoomInButton.addEventListener("click", () => { zoom(2.0); });
+      controls.zoomResetButton.addEventListener("click", reset);
+    }
+
+    function attachPan() {
+      canvas.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        canvas.setPointerCapture(event.pointerId);
+        canvas.classList.add("dragging");
+        dragStart = {
+          x: event.clientX,
+          y: event.clientY,
+          bounds: { ...viewBounds },
+        };
+        onInteractionStart();
+        onChange();
+      });
+      canvas.addEventListener("pointermove", (event) => {
+        if (dragStart === null) return;
+        event.preventDefault();
+        const delta = coordinateDelta(event.clientX - dragStart.x, event.clientY - dragStart.y, dragStart.bounds);
+        viewBounds = {
+          longitudeMinimum: dragStart.bounds.longitudeMinimum - delta.longitude,
+          longitudeMaximum: dragStart.bounds.longitudeMaximum - delta.longitude,
+          latitudeMinimum: dragStart.bounds.latitudeMinimum + delta.latitude,
+          latitudeMaximum: dragStart.bounds.latitudeMaximum + delta.latitude,
+        };
+        onChange();
+      });
+      canvas.addEventListener("pointerup", stopDrag);
+      canvas.addEventListener("pointercancel", stopDrag);
+      canvas.addEventListener("pointerleave", (event) => {
+        if (dragStart !== null && event.buttons === 0) stopDrag(event);
+      });
+    }
+
+    function stopDrag(event) {
+      if (dragStart === null) return;
+      if (event && canvas.hasPointerCapture(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId);
+      }
+      canvas.classList.remove("dragging");
+      dragStart = null;
+    }
+
+    return {
+      attachPan,
+      attachZoomControls,
+      bounds,
+      isDragging: () => dragStart !== null,
+      project,
+      projection,
+      zoom,
+      zoomAt,
+      reset,
+    };
+  }"""
+
+
 def _lagrangian_land_mask_payload(dataset: xarray.Dataset, first_day_index: int) -> dict[str, object]:
     field = _surface_mask_field(dataset, first_day_index)
     land_mask = numpy.where(numpy.isfinite(field.values), 0, 1).astype(float)
@@ -1746,26 +1946,7 @@ html, body {{
   color: #0f5f8f;
   cursor: pointer;
 }}
-.ob-lagrangian-zoom {{
-  display: inline-flex;
-  overflow: hidden;
-  border: 1px solid #cfd8e3;
-  border-radius: 999px;
-  background: #ffffff;
-}}
-.ob-lagrangian-zoom button {{
-  min-width: 34px;
-  height: 34px;
-  border: 0;
-  border-right: 1px solid #cfd8e3;
-  background: transparent;
-  color: #0f5f8f;
-  cursor: pointer;
-  font-size: 13px;
-}}
-.ob-lagrangian-zoom button:last-child {{
-  border-right: 0;
-}}
+{_map_zoom_control_css("ob-lagrangian", "#cfd8e3")}
 .ob-lagrangian-slider {{
   display: grid;
   grid-template-columns: 13ch minmax(180px, 1fr);
@@ -1867,11 +2048,7 @@ html, body {{
           <span class="ob-lagrangian-time-label"></span>
           <input class="ob-lagrangian-time-input" type="range" min="0" step="0.02" value="0">
         </label>
-        <div class="ob-lagrangian-zoom" aria-label="Map zoom controls">
-          <button class="ob-lagrangian-zoom-out" type="button" title="Zoom out">−</button>
-          <button class="ob-lagrangian-zoom-in" type="button" title="Zoom in">+</button>
-          <button class="ob-lagrangian-zoom-reset" type="button" title="Reset zoom">1:1</button>
-        </div>
+        {_map_zoom_control_html("ob-lagrangian")}
       </div>
     </div>
   </div>
@@ -1890,6 +2067,7 @@ html, body {{
 </div>
 <script>
 (() => {{
+  {_map_viewport_script()}
   const payload = {payload_json};
   const root = document.getElementById("{element_id}");
   const canvas = root.querySelector("canvas");
@@ -1904,13 +2082,15 @@ html, body {{
   const zoomResetButton = root.querySelector(".ob-lagrangian-zoom-reset");
   const statusText = root.querySelector(".ob-lagrangian-status-text");
   const references = Object.fromEntries(payload.references.map((reference) => [reference.key, reference]));
-  const originalBounds = {{ ...payload.bounds }};
   let activeReferenceKey = payload.references[0].key;
   let activeTime = 0;
-  let viewBounds = {{ ...originalBounds }};
-  let dragStart = null;
   let animationFrame = null;
   let lastFrameTime = null;
+  const viewport = createMapViewport({{
+    canvas,
+    originalBounds: payload.bounds,
+    onChange: draw,
+  }});
 
   title.textContent = payload.title;
   timeInput.max = payload.timeLabels.length - 1;
@@ -1928,46 +2108,12 @@ html, body {{
     lastFrameTime = null;
     animationFrame = window.requestAnimationFrame(tick);
   }});
-  zoomOutButton.addEventListener("click", () => {{
-    zoom(0.5);
+  viewport.attachZoomControls({{
+    zoomOutButton,
+    zoomInButton,
+    zoomResetButton,
   }});
-  zoomInButton.addEventListener("click", () => {{
-    zoom(2.0);
-  }});
-  zoomResetButton.addEventListener("click", () => {{
-    viewBounds = {{ ...originalBounds }};
-    draw();
-  }});
-  canvas.addEventListener("pointerdown", (event) => {{
-    if (event.button !== 0) return;
-    canvas.setPointerCapture(event.pointerId);
-    canvas.classList.add("dragging");
-    dragStart = {{
-      x: event.clientX,
-      y: event.clientY,
-      bounds: {{ ...viewBounds }},
-    }};
-  }});
-  canvas.addEventListener("pointermove", (event) => {{
-    if (dragStart === null) return;
-    event.preventDefault();
-    const longitudeSpan = dragStart.bounds.longitudeMaximum - dragStart.bounds.longitudeMinimum;
-    const latitudeSpan = dragStart.bounds.latitudeMaximum - dragStart.bounds.latitudeMinimum;
-    const longitudeDelta = ((event.clientX - dragStart.x) / canvas.clientWidth) * longitudeSpan;
-    const latitudeDelta = ((event.clientY - dragStart.y) / canvas.clientHeight) * latitudeSpan;
-    viewBounds = {{
-      longitudeMinimum: dragStart.bounds.longitudeMinimum - longitudeDelta,
-      longitudeMaximum: dragStart.bounds.longitudeMaximum - longitudeDelta,
-      latitudeMinimum: dragStart.bounds.latitudeMinimum + latitudeDelta,
-      latitudeMaximum: dragStart.bounds.latitudeMaximum + latitudeDelta,
-    }};
-    draw();
-  }});
-  canvas.addEventListener("pointerup", stopDrag);
-  canvas.addEventListener("pointercancel", stopDrag);
-  canvas.addEventListener("pointerleave", (event) => {{
-    if (dragStart !== null && event.buttons === 0) stopDrag(event);
-  }});
+  viewport.attachPan();
 
   renderControls();
   draw();
@@ -2045,65 +2191,7 @@ html, body {{
   }}
 
   function project(point) {{
-    const bounds = viewBounds;
-    const x = (
-      (point.longitude - bounds.longitudeMinimum) / (bounds.longitudeMaximum - bounds.longitudeMinimum)
-    ) * canvas.width;
-    const y = canvas.height - (
-      (point.latitude - bounds.latitudeMinimum) / (bounds.latitudeMaximum - bounds.latitudeMinimum)
-    ) * canvas.height;
-    return {{ x, y }};
-  }}
-
-  function zoom(factor) {{
-    zoomAt(
-      factor,
-      (viewBounds.longitudeMinimum + viewBounds.longitudeMaximum) / 2,
-      (viewBounds.latitudeMinimum + viewBounds.latitudeMaximum) / 2,
-    );
-  }}
-
-  function zoomAt(factor, longitudeCenter, latitudeCenter) {{
-    const longitudeHalfSpan = constrainedSpan(
-      viewBounds.longitudeMaximum - viewBounds.longitudeMinimum,
-      originalBounds.longitudeMaximum - originalBounds.longitudeMinimum,
-      factor,
-    ) / 2;
-    const latitudeHalfSpan = constrainedSpan(
-      viewBounds.latitudeMaximum - viewBounds.latitudeMinimum,
-      originalBounds.latitudeMaximum - originalBounds.latitudeMinimum,
-      factor,
-    ) / 2;
-    viewBounds = {{
-      longitudeMinimum: longitudeCenter - longitudeHalfSpan,
-      longitudeMaximum: longitudeCenter + longitudeHalfSpan,
-      latitudeMinimum: latitudeCenter - latitudeHalfSpan,
-      latitudeMaximum: latitudeCenter + latitudeHalfSpan,
-    }};
-    draw();
-  }}
-
-  function constrainedSpan(currentSpan, originalSpan, factor) {{
-    const minimumSpan = originalSpan / 80;
-    const maximumSpan = originalSpan * 2;
-    return Math.max(minimumSpan, Math.min(maximumSpan, currentSpan / factor));
-  }}
-
-  function canvasPoint(event) {{
-    const rectangle = canvas.getBoundingClientRect();
-    return {{
-      x: event.clientX - rectangle.left,
-      y: event.clientY - rectangle.top,
-    }};
-  }}
-
-  function stopDrag(event) {{
-    if (dragStart === null) return;
-    if (event && canvas.hasPointerCapture(event.pointerId)) {{
-      canvas.releasePointerCapture(event.pointerId);
-    }}
-    canvas.classList.remove("dragging");
-    dragStart = null;
+    return viewport.project(point);
   }}
 
   function draw() {{
@@ -2133,7 +2221,7 @@ html, body {{
     drawLandMask();
     context.strokeStyle = "rgba(51, 65, 85, 0.18)";
     context.lineWidth = 1;
-    const bounds = viewBounds;
+    const bounds = viewport.bounds();
     const longitudeStep = niceStep(bounds.longitudeMaximum - bounds.longitudeMinimum);
     const latitudeStep = niceStep(bounds.latitudeMaximum - bounds.latitudeMinimum);
     for (
@@ -2607,26 +2695,7 @@ html, body {{
   color: #0f5f8f;
   cursor: pointer;
 }}
-.ob-eddy-zoom {{
-  display: inline-flex;
-  overflow: hidden;
-  border: 1px solid #cfd8e3;
-  border-radius: 999px;
-  background: #ffffff;
-}}
-.ob-eddy-zoom button {{
-  min-width: 34px;
-  height: 34px;
-  border: 0;
-  border-right: 1px solid #cfd8e3;
-  background: transparent;
-  color: #0f5f8f;
-  cursor: pointer;
-  font-size: 13px;
-}}
-.ob-eddy-zoom button:last-child {{
-  border-right: 0;
-}}
+{_map_zoom_control_css("ob-eddy", "#cfd8e3")}
 .ob-eddy-slider {{
   display: grid;
   grid-template-columns: 11ch minmax(180px, 1fr);
@@ -2744,11 +2813,7 @@ html, body {{
           <span class="ob-eddy-lead-label"></span>
           <input class="ob-eddy-lead-input" type="range" min="0" step="1" value="0">
         </label>
-        <div class="ob-eddy-zoom" aria-label="Map zoom controls">
-          <button class="ob-eddy-zoom-out" type="button" title="Zoom out">−</button>
-          <button class="ob-eddy-zoom-in" type="button" title="Zoom in">+</button>
-          <button class="ob-eddy-zoom-reset" type="button" title="Reset zoom">1:1</button>
-        </div>
+        {_map_zoom_control_html("ob-eddy")}
       </div>
     </div>
   </div>
@@ -2773,6 +2838,7 @@ html, body {{
 </div>
 <script>
 (() => {{
+  {_map_viewport_script()}
   const payload = {payload_json};
   const root = document.getElementById("{element_id}");
   const canvas = root.querySelector("canvas");
@@ -2790,7 +2856,6 @@ html, body {{
   const summaryText = root.querySelector(".ob-eddy-summary");
   const tooltip = root.querySelector(".ob-eddy-tooltip");
   const references = Object.fromEntries(payload.references.map((reference) => [reference.key, reference]));
-  const originalBounds = {{ ...payload.bounds }};
   const polarityOptions = [
     {{key: "all", label: "All"}},
     {{key: "cyclone", label: "Cyclones"}},
@@ -2800,10 +2865,14 @@ html, body {{
   let activePolarity = "all";
   let activeLeadIndex = 0;
   let timer = null;
-  let viewBounds = {{ ...originalBounds }};
-  let dragStart = null;
   let eddyTargets = [];
   let hoveredTargetKey = null;
+  const viewport = createMapViewport({{
+    canvas,
+    originalBounds: payload.bounds,
+    onInteractionStart: clearHover,
+    onChange: draw,
+  }});
 
   title.textContent = payload.title;
   leadInput.addEventListener("input", () => {{
@@ -2826,51 +2895,12 @@ html, body {{
       draw();
     }}, 850);
   }});
-  zoomOutButton.addEventListener("click", () => {{
-    zoom(0.5);
+  viewport.attachZoomControls({{
+    zoomOutButton,
+    zoomInButton,
+    zoomResetButton,
   }});
-  zoomInButton.addEventListener("click", () => {{
-    zoom(2.0);
-  }});
-  zoomResetButton.addEventListener("click", () => {{
-    viewBounds = {{ ...originalBounds }};
-    hoveredTargetKey = null;
-    hideTooltip();
-    draw();
-  }});
-  canvas.addEventListener("pointerdown", (event) => {{
-    if (event.button !== 0) return;
-    canvas.setPointerCapture(event.pointerId);
-    canvas.classList.add("dragging");
-    dragStart = {{
-      x: event.clientX,
-      y: event.clientY,
-      bounds: {{ ...viewBounds }},
-    }};
-    hoveredTargetKey = null;
-    hideTooltip();
-    draw();
-  }});
-  canvas.addEventListener("pointermove", (event) => {{
-    if (dragStart === null) return;
-    event.preventDefault();
-    const longitudeSpan = dragStart.bounds.longitudeMaximum - dragStart.bounds.longitudeMinimum;
-    const latitudeSpan = dragStart.bounds.latitudeMaximum - dragStart.bounds.latitudeMinimum;
-    const longitudeDelta = ((event.clientX - dragStart.x) / canvas.clientWidth) * longitudeSpan;
-    const latitudeDelta = ((event.clientY - dragStart.y) / canvas.clientHeight) * latitudeSpan;
-    viewBounds = {{
-      longitudeMinimum: dragStart.bounds.longitudeMinimum - longitudeDelta,
-      longitudeMaximum: dragStart.bounds.longitudeMaximum - longitudeDelta,
-      latitudeMinimum: dragStart.bounds.latitudeMinimum + latitudeDelta,
-      latitudeMaximum: dragStart.bounds.latitudeMaximum + latitudeDelta,
-    }};
-    draw();
-  }});
-  canvas.addEventListener("pointerup", stopDrag);
-  canvas.addEventListener("pointercancel", stopDrag);
-  canvas.addEventListener("pointerleave", (event) => {{
-    if (dragStart !== null && event.buttons === 0) stopDrag(event);
-  }});
+  viewport.attachPan();
 
   renderControls();
   draw();
@@ -2924,58 +2954,7 @@ html, body {{
   }}
 
   function project(point) {{
-    const bounds = viewBounds;
-    const longitudeSpan = bounds.longitudeMaximum - bounds.longitudeMinimum;
-    const latitudeSpan = bounds.latitudeMaximum - bounds.latitudeMinimum;
-    return {{
-      x: ((point.longitude - bounds.longitudeMinimum) / longitudeSpan) * canvas.width,
-      y: canvas.height - ((point.latitude - bounds.latitudeMinimum) / latitudeSpan) * canvas.height,
-    }};
-  }}
-
-  function zoom(factor) {{
-    zoomAt(
-      factor,
-      (viewBounds.longitudeMinimum + viewBounds.longitudeMaximum) / 2,
-      (viewBounds.latitudeMinimum + viewBounds.latitudeMaximum) / 2,
-    );
-  }}
-
-  function zoomAt(factor, longitudeCenter, latitudeCenter) {{
-    const longitudeHalfSpan = constrainedSpan(
-      viewBounds.longitudeMaximum - viewBounds.longitudeMinimum,
-      originalBounds.longitudeMaximum - originalBounds.longitudeMinimum,
-      factor,
-    ) / 2;
-    const latitudeHalfSpan = constrainedSpan(
-      viewBounds.latitudeMaximum - viewBounds.latitudeMinimum,
-      originalBounds.latitudeMaximum - originalBounds.latitudeMinimum,
-      factor,
-    ) / 2;
-    viewBounds = {{
-      longitudeMinimum: longitudeCenter - longitudeHalfSpan,
-      longitudeMaximum: longitudeCenter + longitudeHalfSpan,
-      latitudeMinimum: latitudeCenter - latitudeHalfSpan,
-      latitudeMaximum: latitudeCenter + latitudeHalfSpan,
-    }};
-    hoveredTargetKey = null;
-    hideTooltip();
-    draw();
-  }}
-
-  function constrainedSpan(currentSpan, originalSpan, factor) {{
-    const minimumSpan = originalSpan / 80;
-    const maximumSpan = originalSpan * 2;
-    return Math.max(minimumSpan, Math.min(maximumSpan, currentSpan / factor));
-  }}
-
-  function stopDrag(event) {{
-    if (dragStart === null) return;
-    if (event && canvas.hasPointerCapture(event.pointerId)) {{
-      canvas.releasePointerCapture(event.pointerId);
-    }}
-    canvas.classList.remove("dragging");
-    dragStart = null;
+    return viewport.project(point);
   }}
 
   function draw() {{
@@ -3016,7 +2995,7 @@ html, body {{
     drawLandMask();
     context.strokeStyle = "rgba(51, 65, 85, 0.18)";
     context.lineWidth = 1;
-    const bounds = viewBounds;
+    const bounds = viewport.bounds();
     const longitudeStep = niceStep(bounds.longitudeMaximum - bounds.longitudeMinimum);
     const latitudeStep = niceStep(bounds.latitudeMaximum - bounds.latitudeMinimum);
     const firstLongitude = Math.ceil(bounds.longitudeMinimum / longitudeStep) * longitudeStep;
@@ -3230,8 +3209,13 @@ html, body {{
     tooltip.style.display = "none";
   }}
 
+  function clearHover() {{
+    hoveredTargetKey = null;
+    hideTooltip();
+  }}
+
   canvas.addEventListener("mousemove", (event) => {{
-    if (dragStart !== null) return;
+    if (viewport.isDragging()) return;
     const target = nearestEddyTarget(event);
     if (target === null) {{
       if (hoveredTargetKey !== null) {{
@@ -3464,26 +3448,7 @@ html, body {{
 .ob-class4-slider input {{
   width: 180px;
 }}
-.ob-class4-zoom {{
-  display: inline-flex;
-  overflow: hidden;
-  border: 1px solid #cbd5e1;
-  border-radius: 999px;
-  background: #ffffff;
-}}
-.ob-class4-zoom button {{
-  min-width: 34px;
-  height: 34px;
-  border: 0;
-  border-right: 1px solid #cbd5e1;
-  background: transparent;
-  color: #0f5f8f;
-  cursor: pointer;
-  font-size: 13px;
-}}
-.ob-class4-zoom button:last-child {{
-  border-right: 0;
-}}
+{_map_zoom_control_css("ob-class4", "#cbd5e1")}
 .ob-class4-map {{
   position: relative;
   margin: 0 14px 12px;
@@ -3574,11 +3539,7 @@ html, body {{
           <span class="ob-class4-lead-label"></span>
           <input class="ob-class4-lead-input" type="range" min="0" step="1" value="0">
         </label>
-        <div class="ob-class4-zoom" aria-label="Map zoom controls">
-          <button class="ob-class4-zoom-out" type="button" title="Zoom out">−</button>
-          <button class="ob-class4-zoom-in" type="button" title="Zoom in">+</button>
-          <button class="ob-class4-zoom-reset" type="button" title="Reset zoom">1:1</button>
-        </div>
+        {_map_zoom_control_html("ob-class4")}
       </div>
     </div>
   </div>
@@ -3595,6 +3556,7 @@ html, body {{
 </div>
 <script>
 (() => {{
+  {_map_viewport_script()}
   const payload = {payload_json};
   const root = document.getElementById({json.dumps(element_id)});
   const title = root.querySelector(".ob-class4-title");
@@ -3614,59 +3576,24 @@ html, body {{
     {{key: "signed", label: "Signed error"}},
     {{key: "absolute", label: "Absolute error"}}
   ];
-  const originalBounds = {{ ...payload.bounds }};
   const state = {{variable: 0, depth: 0, lead: 0, mode: "signed"}};
-  let viewBounds = {{ ...originalBounds }};
-  let dragStart = null;
   let hoveredObservationIndex = null;
+  const viewport = createMapViewport({{
+    canvas,
+    originalBounds: payload.bounds,
+    projectMode: "fit",
+    fitScale: 0.92,
+    onInteractionStart: clearHover,
+    onChange: draw,
+  }});
 
   title.textContent = payload.title;
-  zoomOutButton.addEventListener("click", () => {{
-    zoom(0.5);
+  viewport.attachZoomControls({{
+    zoomOutButton,
+    zoomInButton,
+    zoomResetButton,
   }});
-  zoomInButton.addEventListener("click", () => {{
-    zoom(2.0);
-  }});
-  zoomResetButton.addEventListener("click", () => {{
-    viewBounds = {{ ...originalBounds }};
-    hoveredObservationIndex = null;
-    hideTooltip();
-    draw();
-  }});
-  canvas.addEventListener("pointerdown", (event) => {{
-    if (event.button !== 0) return;
-    canvas.setPointerCapture(event.pointerId);
-    canvas.classList.add("dragging");
-    dragStart = {{
-      x: event.clientX,
-      y: event.clientY,
-      bounds: {{ ...viewBounds }},
-    }};
-    hoveredObservationIndex = null;
-    hideTooltip();
-    draw();
-  }});
-  canvas.addEventListener("pointermove", (event) => {{
-    if (dragStart === null) return;
-    event.preventDefault();
-    const dragProjection = projectionForBounds(dragStart.bounds);
-    const xDelta = ((event.clientX - dragStart.x) / canvas.clientWidth) * canvas.width;
-    const yDelta = ((event.clientY - dragStart.y) / canvas.clientHeight) * canvas.height;
-    const longitudeDelta = xDelta / dragProjection.scale;
-    const latitudeDelta = yDelta / dragProjection.scale;
-    viewBounds = {{
-      longitudeMinimum: dragStart.bounds.longitudeMinimum - longitudeDelta,
-      longitudeMaximum: dragStart.bounds.longitudeMaximum - longitudeDelta,
-      latitudeMinimum: dragStart.bounds.latitudeMinimum + latitudeDelta,
-      latitudeMaximum: dragStart.bounds.latitudeMaximum + latitudeDelta,
-    }};
-    draw();
-  }});
-  canvas.addEventListener("pointerup", stopDrag);
-  canvas.addEventListener("pointercancel", stopDrag);
-  canvas.addEventListener("pointerleave", (event) => {{
-    if (dragStart !== null && event.buttons === 0) stopDrag(event);
-  }});
+  viewport.attachPan();
 
   function currentVariable() {{ return payload.variables[state.variable]; }}
   function currentDepth() {{ return currentVariable().depths[state.depth] || currentVariable().depths[0]; }}
@@ -3708,67 +3635,7 @@ html, body {{
   }}
 
   function projection() {{
-    return projectionForBounds(viewBounds);
-  }}
-
-  function projectionForBounds(bounds) {{
-    const width = canvas.width;
-    const height = canvas.height;
-    const lonSpan = Math.max(1e-6, bounds.longitudeMaximum - bounds.longitudeMinimum);
-    const latSpan = Math.max(1e-6, bounds.latitudeMaximum - bounds.latitudeMinimum);
-    const scale = Math.min(width / lonSpan, height / latSpan) * 0.92;
-    const xOffset = (width - lonSpan * scale) / 2;
-    const yOffset = (height - latSpan * scale) / 2;
-    return {{
-      scale,
-      x: (longitude) => xOffset + (longitude - bounds.longitudeMinimum) * scale,
-      y: (latitude) => height - yOffset - (latitude - bounds.latitudeMinimum) * scale
-    }};
-  }}
-
-  function zoom(factor) {{
-    zoomAt(
-      factor,
-      (viewBounds.longitudeMinimum + viewBounds.longitudeMaximum) / 2,
-      (viewBounds.latitudeMinimum + viewBounds.latitudeMaximum) / 2,
-    );
-  }}
-
-  function zoomAt(factor, longitudeCenter, latitudeCenter) {{
-    const longitudeHalfSpan = constrainedSpan(
-      viewBounds.longitudeMaximum - viewBounds.longitudeMinimum,
-      originalBounds.longitudeMaximum - originalBounds.longitudeMinimum,
-      factor,
-    ) / 2;
-    const latitudeHalfSpan = constrainedSpan(
-      viewBounds.latitudeMaximum - viewBounds.latitudeMinimum,
-      originalBounds.latitudeMaximum - originalBounds.latitudeMinimum,
-      factor,
-    ) / 2;
-    viewBounds = {{
-      longitudeMinimum: longitudeCenter - longitudeHalfSpan,
-      longitudeMaximum: longitudeCenter + longitudeHalfSpan,
-      latitudeMinimum: latitudeCenter - latitudeHalfSpan,
-      latitudeMaximum: latitudeCenter + latitudeHalfSpan,
-    }};
-    hoveredObservationIndex = null;
-    hideTooltip();
-    draw();
-  }}
-
-  function constrainedSpan(currentSpan, originalSpan, factor) {{
-    const minimumSpan = originalSpan / 80;
-    const maximumSpan = originalSpan * 2;
-    return Math.max(minimumSpan, Math.min(maximumSpan, currentSpan / factor));
-  }}
-
-  function stopDrag(event) {{
-    if (dragStart === null) return;
-    if (event && canvas.hasPointerCapture(event.pointerId)) {{
-      canvas.releasePointerCapture(event.pointerId);
-    }}
-    canvas.classList.remove("dragging");
-    dragStart = null;
+    return viewport.projection();
   }}
 
   function drawLandMask(project) {{
@@ -3896,6 +3763,11 @@ html, body {{
     tooltip.style.display = "none";
   }}
 
+  function clearHover() {{
+    hoveredObservationIndex = null;
+    hideTooltip();
+  }}
+
   function selectedClass4ScaleLabel() {{
     const depth = currentDepth();
     const scale = state.mode === "absolute" ? depth.absoluteScale : depth.signedScale;
@@ -3937,7 +3809,7 @@ html, body {{
   }});
 
   canvas.addEventListener("mousemove", (event) => {{
-    if (dragStart !== null) return;
+    if (viewport.isDragging()) return;
     const observation = nearestObservation(event);
     if (observation === null) {{
       if (hoveredObservationIndex !== null) {{
