@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, TwoSlopeNorm
 import numpy
 import pandas
+from skimage.measure import approximate_polygon, find_contours
 import xarray
 
 from oceanbench.core import classIV
@@ -73,7 +74,7 @@ DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS = 160_000
 DEFAULT_EXPLORER_HEIGHT_PIXELS = 900
 DEFAULT_EXPLORER_IMAGE_QUALITY = 85
 DEFAULT_LAGRANGIAN_PARTICLE_COUNT = 300
-DEFAULT_LAGRANGIAN_MAXIMUM_LAND_MASK_CELLS = 80_000
+DEFAULT_LAND_MASK_SIMPLIFICATION_GRID_FRACTION = 0.25
 DEFAULT_EDDY_MAXIMUM_CONTOUR_POINTS = 80
 DEFAULT_CLASS4_MAXIMUM_POINTS_PER_FRAME = 5_000
 DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS: tuple[float, ...] = tuple(depth_level.value for depth_level in DepthLevel)
@@ -1438,14 +1439,135 @@ def _surface_mask_field(dataset: xarray.Dataset, first_day_index: int) -> xarray
     return field.compute().sortby([Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()])
 
 
+def _median_coordinate_step(values: numpy.ndarray) -> float:
+    values = numpy.asarray(values, dtype=float)
+    differences = numpy.abs(numpy.diff(values))
+    differences = differences[numpy.isfinite(differences) & (differences > 0)]
+    if differences.size == 0:
+        return 1.0
+    return float(numpy.nanmedian(differences))
+
+
+def _closed_coordinate_path(longitudes: numpy.ndarray, latitudes: numpy.ndarray) -> numpy.ndarray:
+    path = numpy.column_stack([longitudes, latitudes]).astype(float, copy=False)
+    finite_mask = numpy.isfinite(path).all(axis=1)
+    path = path[finite_mask]
+    if path.shape[0] < 3:
+        return path
+    if not numpy.allclose(path[0], path[-1], rtol=0.0, atol=1e-10):
+        path = numpy.vstack([path, path[0]])
+    return path
+
+
+def _uniformly_limited_closed_path(path: numpy.ndarray, maximum_points: int) -> numpy.ndarray:
+    if path.shape[0] <= maximum_points:
+        return path
+    closed_endpoint = path[-1:]
+    interior = path[:-1]
+    selected_positions = numpy.linspace(0, interior.shape[0] - 1, maximum_points - 1, dtype=int)
+    return numpy.vstack([interior[selected_positions], closed_endpoint])
+
+
+def _closed_path_with_budget(path: numpy.ndarray, maximum_points: int) -> numpy.ndarray:
+    if path.shape[0] < 4:
+        return path
+    if not numpy.allclose(path[0], path[-1], rtol=0.0, atol=1e-10):
+        path = numpy.vstack([path, path[0]])
+    return _uniformly_limited_closed_path(path, maximum_points)
+
+
+def _simplified_closed_path(
+    longitudes: numpy.ndarray,
+    latitudes: numpy.ndarray,
+    maximum_points: int,
+    minimum_tolerance: float = 0.0,
+) -> numpy.ndarray:
+    path = _closed_coordinate_path(longitudes, latitudes)
+    if path.shape[0] < 4:
+        return path
+    if maximum_points < 4:
+        raise ValueError("maximum_points must be at least 4 for a closed path.")
+    if path.shape[0] <= maximum_points and minimum_tolerance <= 0:
+        return path
+    if minimum_tolerance > 0:
+        simplified_path = approximate_polygon(path, minimum_tolerance)
+        if simplified_path.shape[0] >= 4 and simplified_path.shape[0] <= maximum_points:
+            return _closed_path_with_budget(simplified_path, maximum_points)
+        if path.shape[0] <= maximum_points:
+            return path
+
+    coordinate_span = float(max(numpy.ptp(path[:, 0]), numpy.ptp(path[:, 1]), 1e-9))
+    low_tolerance = max(0.0, minimum_tolerance)
+    high_tolerance = max(low_tolerance, coordinate_span / max(maximum_points, 1))
+    best_path = _uniformly_limited_closed_path(path, maximum_points)
+
+    for _ in range(24):
+        simplified_path = approximate_polygon(path, high_tolerance)
+        if simplified_path.shape[0] <= maximum_points:
+            best_path = simplified_path
+            break
+        high_tolerance *= 2.0
+    else:
+        return best_path
+
+    for _ in range(18):
+        mid_tolerance = (low_tolerance + high_tolerance) / 2.0
+        simplified_path = approximate_polygon(path, mid_tolerance)
+        if simplified_path.shape[0] <= maximum_points:
+            best_path = simplified_path
+            high_tolerance = mid_tolerance
+        else:
+            low_tolerance = mid_tolerance
+
+    if best_path.shape[0] < 4:
+        return _uniformly_limited_closed_path(path, maximum_points)
+    return _closed_path_with_budget(best_path, maximum_points)
+
+
+def _land_mask_path_payload(path: numpy.ndarray) -> dict[str, object]:
+    return {
+        "longitude": _json_ready_array(path[:, 0], decimals=4),
+        "latitude": _json_ready_array(path[:, 1], decimals=4),
+    }
+
+
 def _lagrangian_land_mask_payload(dataset: xarray.Dataset, first_day_index: int) -> dict[str, object]:
     field = _surface_mask_field(dataset, first_day_index)
-    thinned_field = _thin_field(field, _spatial_stride(field, DEFAULT_LAGRANGIAN_MAXIMUM_LAND_MASK_CELLS))
-    land_mask = numpy.where(numpy.isfinite(thinned_field.values), 0, 1).astype(int)
+    land_mask = numpy.where(numpy.isfinite(field.values), 0, 1).astype(float)
+    longitude_values = numpy.asarray(field[Dimension.LONGITUDE.key()].values, dtype=float)
+    latitude_values = numpy.asarray(field[Dimension.LATITUDE.key()].values, dtype=float)
+    longitude_step = _median_coordinate_step(longitude_values)
+    latitude_step = _median_coordinate_step(latitude_values)
+    padded_land_mask = numpy.pad(land_mask, 1, mode="constant", constant_values=0)
+    padded_longitudes = numpy.concatenate(
+        [
+            [longitude_values[0] - longitude_step],
+            longitude_values,
+            [longitude_values[-1] + longitude_step],
+        ]
+    )
+    padded_latitudes = numpy.concatenate(
+        [
+            [latitude_values[0] - latitude_step],
+            latitude_values,
+            [latitude_values[-1] + latitude_step],
+        ]
+    )
+    minimum_tolerance = max(longitude_step, latitude_step) * DEFAULT_LAND_MASK_SIMPLIFICATION_GRID_FRACTION
+    paths = []
+    for contour in find_contours(padded_land_mask, level=0.5):
+        contour_latitudes = numpy.interp(contour[:, 0], numpy.arange(len(padded_latitudes)), padded_latitudes)
+        contour_longitudes = numpy.interp(contour[:, 1], numpy.arange(len(padded_longitudes)), padded_longitudes)
+        path = _simplified_closed_path(
+            contour_longitudes,
+            contour_latitudes,
+            maximum_points=max(4, contour.shape[0]),
+            minimum_tolerance=minimum_tolerance,
+        )
+        if path.shape[0] >= 4:
+            paths.append(_land_mask_path_payload(path))
     return {
-        "longitude": _json_ready_array(thinned_field[Dimension.LONGITUDE.key()].values),
-        "latitude": _json_ready_array(thinned_field[Dimension.LATITUDE.key()].values),
-        "land": land_mask.tolist(),
+        "paths": paths,
     }
 
 
@@ -2046,29 +2168,19 @@ html, body {{
 
   function drawLandMask() {{
     const landMask = payload.landMask;
-    if (!landMask || landMask.land.length === 0) return;
-    const longitudes = landMask.longitude;
-    const latitudes = landMask.latitude;
-    const longitudeStep = coordinateStep(longitudes);
-    const latitudeStep = coordinateStep(latitudes);
+    if (!landMask || landMask.paths.length === 0) return;
     context.fillStyle = "{LAND_BACKGROUND_COLOR}";
-    for (let latitudeIndex = 0; latitudeIndex < latitudes.length; latitudeIndex += 1) {{
-      for (let longitudeIndex = 0; longitudeIndex < longitudes.length; longitudeIndex += 1) {{
-        if (landMask.land[latitudeIndex][longitudeIndex] !== 1) continue;
-        const west = longitudes[longitudeIndex] - longitudeStep / 2;
-        const east = longitudes[longitudeIndex] + longitudeStep / 2;
-        const south = latitudes[latitudeIndex] - latitudeStep / 2;
-        const north = latitudes[latitudeIndex] + latitudeStep / 2;
-        const northwest = project({{ longitude: west, latitude: north }});
-        const southeast = project({{ longitude: east, latitude: south }});
-        context.fillRect(northwest.x, northwest.y, southeast.x - northwest.x + 1, southeast.y - northwest.y + 1);
+    context.beginPath();
+    for (const path of landMask.paths) {{
+      if (path.longitude.length < 3) continue;
+      for (let index = 0; index < path.longitude.length; index += 1) {{
+        const point = project({{ longitude: path.longitude[index], latitude: path.latitude[index] }});
+        if (index === 0) context.moveTo(point.x, point.y);
+        else context.lineTo(point.x, point.y);
       }}
+      context.closePath();
     }}
-  }}
-
-  function coordinateStep(values) {{
-    if (values.length < 2) return 1;
-    return Math.abs(values[1] - values[0]);
+    context.fill("evenodd");
   }}
 
   function drawDailyMarkers(challengerTrack, referenceTrack, time) {{
@@ -2202,12 +2314,19 @@ def _lagrangian_explorer_iframe_html(document: str, height_pixels: int) -> str:
     )
 
 
-def _decimated_contour_values(values: object, maximum_points: int) -> list:
-    array = numpy.asarray(values, dtype=float)
-    if array.size == 0:
-        return []
-    stride = max(1, int(numpy.ceil(array.size / maximum_points)))
-    return _json_ready_array(array[::stride], decimals=4)
+def _simplified_contour_payload(
+    contour_longitudes: object,
+    contour_latitudes: object,
+    maximum_points: int,
+) -> tuple[list, list]:
+    path = _simplified_closed_path(
+        numpy.asarray(contour_longitudes, dtype=float),
+        numpy.asarray(contour_latitudes, dtype=float),
+        maximum_points=maximum_points,
+    )
+    if path.shape[0] < 4:
+        return [], []
+    return _json_ready_array(path[:, 0], decimals=4), _json_ready_array(path[:, 1], decimals=4)
 
 
 def _eddy_record(row: pandas.Series, contours: pandas.DataFrame, maximum_contour_points: int) -> dict[str, object]:
@@ -2216,12 +2335,9 @@ def _eddy_record(row: pandas.Series, contours: pandas.DataFrame, maximum_contour
     contour_longitudes: list = []
     if not contour.empty:
         contour_row = contour.iloc[0]
-        contour_latitudes = _decimated_contour_values(
-            contour_row[eddies.CONTOUR_LATITUDES_COLUMN],
-            maximum_contour_points,
-        )
-        contour_longitudes = _decimated_contour_values(
+        contour_longitudes, contour_latitudes = _simplified_contour_payload(
             contour_row[eddies.CONTOUR_LONGITUDES_COLUMN],
+            contour_row[eddies.CONTOUR_LATITUDES_COLUMN],
             maximum_contour_points,
         )
     return {
@@ -2491,6 +2607,26 @@ html, body {{
   color: #0f5f8f;
   cursor: pointer;
 }}
+.ob-eddy-zoom {{
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #cfd8e3;
+  border-radius: 999px;
+  background: #ffffff;
+}}
+.ob-eddy-zoom button {{
+  min-width: 34px;
+  height: 34px;
+  border: 0;
+  border-right: 1px solid #cfd8e3;
+  background: transparent;
+  color: #0f5f8f;
+  cursor: pointer;
+  font-size: 13px;
+}}
+.ob-eddy-zoom button:last-child {{
+  border-right: 0;
+}}
 .ob-eddy-slider {{
   display: grid;
   grid-template-columns: 11ch minmax(180px, 1fr);
@@ -2516,7 +2652,11 @@ html, body {{
   display: block;
   width: 100%;
   height: 100%;
-  cursor: crosshair;
+  cursor: grab;
+  touch-action: none;
+}}
+.ob-eddy-map canvas.dragging {{
+  cursor: grabbing;
 }}
 .ob-eddy-tooltip {{
   position: absolute;
@@ -2604,6 +2744,11 @@ html, body {{
           <span class="ob-eddy-lead-label"></span>
           <input class="ob-eddy-lead-input" type="range" min="0" step="1" value="0">
         </label>
+        <div class="ob-eddy-zoom" aria-label="Map zoom controls">
+          <button class="ob-eddy-zoom-out" type="button" title="Zoom out">−</button>
+          <button class="ob-eddy-zoom-in" type="button" title="Zoom in">+</button>
+          <button class="ob-eddy-zoom-reset" type="button" title="Reset zoom">1:1</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2638,10 +2783,14 @@ html, body {{
   const playButton = root.querySelector(".ob-eddy-play");
   const leadInput = root.querySelector(".ob-eddy-lead-input");
   const leadLabel = root.querySelector(".ob-eddy-lead-label");
+  const zoomOutButton = root.querySelector(".ob-eddy-zoom-out");
+  const zoomInButton = root.querySelector(".ob-eddy-zoom-in");
+  const zoomResetButton = root.querySelector(".ob-eddy-zoom-reset");
   const statusText = root.querySelector(".ob-eddy-status-text");
   const summaryText = root.querySelector(".ob-eddy-summary");
   const tooltip = root.querySelector(".ob-eddy-tooltip");
   const references = Object.fromEntries(payload.references.map((reference) => [reference.key, reference]));
+  const originalBounds = {{ ...payload.bounds }};
   const polarityOptions = [
     {{key: "all", label: "All"}},
     {{key: "cyclone", label: "Cyclones"}},
@@ -2651,6 +2800,8 @@ html, body {{
   let activePolarity = "all";
   let activeLeadIndex = 0;
   let timer = null;
+  let viewBounds = {{ ...originalBounds }};
+  let dragStart = null;
   let eddyTargets = [];
   let hoveredTargetKey = null;
 
@@ -2674,6 +2825,51 @@ html, body {{
       renderControls();
       draw();
     }}, 850);
+  }});
+  zoomOutButton.addEventListener("click", () => {{
+    zoom(0.5);
+  }});
+  zoomInButton.addEventListener("click", () => {{
+    zoom(2.0);
+  }});
+  zoomResetButton.addEventListener("click", () => {{
+    viewBounds = {{ ...originalBounds }};
+    hoveredTargetKey = null;
+    hideTooltip();
+    draw();
+  }});
+  canvas.addEventListener("pointerdown", (event) => {{
+    if (event.button !== 0) return;
+    canvas.setPointerCapture(event.pointerId);
+    canvas.classList.add("dragging");
+    dragStart = {{
+      x: event.clientX,
+      y: event.clientY,
+      bounds: {{ ...viewBounds }},
+    }};
+    hoveredTargetKey = null;
+    hideTooltip();
+    draw();
+  }});
+  canvas.addEventListener("pointermove", (event) => {{
+    if (dragStart === null) return;
+    event.preventDefault();
+    const longitudeSpan = dragStart.bounds.longitudeMaximum - dragStart.bounds.longitudeMinimum;
+    const latitudeSpan = dragStart.bounds.latitudeMaximum - dragStart.bounds.latitudeMinimum;
+    const longitudeDelta = ((event.clientX - dragStart.x) / canvas.clientWidth) * longitudeSpan;
+    const latitudeDelta = ((event.clientY - dragStart.y) / canvas.clientHeight) * latitudeSpan;
+    viewBounds = {{
+      longitudeMinimum: dragStart.bounds.longitudeMinimum - longitudeDelta,
+      longitudeMaximum: dragStart.bounds.longitudeMaximum - longitudeDelta,
+      latitudeMinimum: dragStart.bounds.latitudeMinimum + latitudeDelta,
+      latitudeMaximum: dragStart.bounds.latitudeMaximum + latitudeDelta,
+    }};
+    draw();
+  }});
+  canvas.addEventListener("pointerup", stopDrag);
+  canvas.addEventListener("pointercancel", stopDrag);
+  canvas.addEventListener("pointerleave", (event) => {{
+    if (dragStart !== null && event.buttons === 0) stopDrag(event);
   }});
 
   renderControls();
@@ -2728,13 +2924,58 @@ html, body {{
   }}
 
   function project(point) {{
-    const bounds = payload.bounds;
+    const bounds = viewBounds;
     const longitudeSpan = bounds.longitudeMaximum - bounds.longitudeMinimum;
     const latitudeSpan = bounds.latitudeMaximum - bounds.latitudeMinimum;
     return {{
       x: ((point.longitude - bounds.longitudeMinimum) / longitudeSpan) * canvas.width,
       y: canvas.height - ((point.latitude - bounds.latitudeMinimum) / latitudeSpan) * canvas.height,
     }};
+  }}
+
+  function zoom(factor) {{
+    zoomAt(
+      factor,
+      (viewBounds.longitudeMinimum + viewBounds.longitudeMaximum) / 2,
+      (viewBounds.latitudeMinimum + viewBounds.latitudeMaximum) / 2,
+    );
+  }}
+
+  function zoomAt(factor, longitudeCenter, latitudeCenter) {{
+    const longitudeHalfSpan = constrainedSpan(
+      viewBounds.longitudeMaximum - viewBounds.longitudeMinimum,
+      originalBounds.longitudeMaximum - originalBounds.longitudeMinimum,
+      factor,
+    ) / 2;
+    const latitudeHalfSpan = constrainedSpan(
+      viewBounds.latitudeMaximum - viewBounds.latitudeMinimum,
+      originalBounds.latitudeMaximum - originalBounds.latitudeMinimum,
+      factor,
+    ) / 2;
+    viewBounds = {{
+      longitudeMinimum: longitudeCenter - longitudeHalfSpan,
+      longitudeMaximum: longitudeCenter + longitudeHalfSpan,
+      latitudeMinimum: latitudeCenter - latitudeHalfSpan,
+      latitudeMaximum: latitudeCenter + latitudeHalfSpan,
+    }};
+    hoveredTargetKey = null;
+    hideTooltip();
+    draw();
+  }}
+
+  function constrainedSpan(currentSpan, originalSpan, factor) {{
+    const minimumSpan = originalSpan / 80;
+    const maximumSpan = originalSpan * 2;
+    return Math.max(minimumSpan, Math.min(maximumSpan, currentSpan / factor));
+  }}
+
+  function stopDrag(event) {{
+    if (dragStart === null) return;
+    if (event && canvas.hasPointerCapture(event.pointerId)) {{
+      canvas.releasePointerCapture(event.pointerId);
+    }}
+    canvas.classList.remove("dragging");
+    dragStart = null;
   }}
 
   function draw() {{
@@ -2775,46 +3016,46 @@ html, body {{
     drawLandMask();
     context.strokeStyle = "rgba(51, 65, 85, 0.18)";
     context.lineWidth = 1;
-    const bounds = payload.bounds;
-    const firstLongitude = Math.ceil(bounds.longitudeMinimum / 20) * 20;
-    const firstLatitude = Math.ceil(bounds.latitudeMinimum / 10) * 10;
-    for (let longitude = firstLongitude; longitude <= bounds.longitudeMaximum; longitude += 20) {{
+    const bounds = viewBounds;
+    const longitudeStep = niceStep(bounds.longitudeMaximum - bounds.longitudeMinimum);
+    const latitudeStep = niceStep(bounds.latitudeMaximum - bounds.latitudeMinimum);
+    const firstLongitude = Math.ceil(bounds.longitudeMinimum / longitudeStep) * longitudeStep;
+    const firstLatitude = Math.ceil(bounds.latitudeMinimum / latitudeStep) * latitudeStep;
+    for (let longitude = firstLongitude; longitude <= bounds.longitudeMaximum; longitude += longitudeStep) {{
       const southPoint = project({{ longitude, latitude: bounds.latitudeMinimum }});
       const northPoint = project({{ longitude, latitude: bounds.latitudeMaximum }});
       line(southPoint, northPoint);
     }}
-    for (let latitude = firstLatitude; latitude <= bounds.latitudeMaximum; latitude += 10) {{
+    for (let latitude = firstLatitude; latitude <= bounds.latitudeMaximum; latitude += latitudeStep) {{
       const westPoint = project({{ longitude: bounds.longitudeMinimum, latitude }});
       const eastPoint = project({{ longitude: bounds.longitudeMaximum, latitude }});
       line(westPoint, eastPoint);
     }}
   }}
 
-  function drawLandMask() {{
-    const landMask = payload.landMask;
-    if (!landMask || landMask.land.length === 0) return;
-    const longitudes = landMask.longitude;
-    const latitudes = landMask.latitude;
-    const longitudeStep = coordinateStep(longitudes);
-    const latitudeStep = coordinateStep(latitudes);
-    context.fillStyle = "{LAND_BACKGROUND_COLOR}";
-    for (let latitudeIndex = 0; latitudeIndex < latitudes.length; latitudeIndex += 1) {{
-      for (let longitudeIndex = 0; longitudeIndex < longitudes.length; longitudeIndex += 1) {{
-        if (landMask.land[latitudeIndex][longitudeIndex] !== 1) continue;
-        const west = longitudes[longitudeIndex] - longitudeStep / 2;
-        const east = longitudes[longitudeIndex] + longitudeStep / 2;
-        const south = latitudes[latitudeIndex] - latitudeStep / 2;
-        const north = latitudes[latitudeIndex] + latitudeStep / 2;
-        const northwest = project({{ longitude: west, latitude: north }});
-        const southeast = project({{ longitude: east, latitude: south }});
-        context.fillRect(northwest.x, northwest.y, southeast.x - northwest.x + 1, southeast.y - northwest.y + 1);
-      }}
-    }}
+  function niceStep(span) {{
+    if (span > 180) return 60;
+    if (span > 90) return 30;
+    if (span > 35) return 10;
+    if (span > 12) return 5;
+    return 2;
   }}
 
-  function coordinateStep(values) {{
-    if (values.length < 2) return 1;
-    return Math.abs(values[1] - values[0]);
+  function drawLandMask() {{
+    const landMask = payload.landMask;
+    if (!landMask || landMask.paths.length === 0) return;
+    context.fillStyle = "{LAND_BACKGROUND_COLOR}";
+    context.beginPath();
+    for (const path of landMask.paths) {{
+      if (path.longitude.length < 3) continue;
+      for (let index = 0; index < path.longitude.length; index += 1) {{
+        const point = project({{ longitude: path.longitude[index], latitude: path.latitude[index] }});
+        if (index === 0) context.moveTo(point.x, point.y);
+        else context.lineTo(point.x, point.y);
+      }}
+      context.closePath();
+    }}
+    context.fill("evenodd");
   }}
 
   function drawMatchLine(reference, challenger) {{
@@ -2990,6 +3231,7 @@ html, body {{
   }}
 
   canvas.addEventListener("mousemove", (event) => {{
+    if (dragStart !== null) return;
     const target = nearestEddyTarget(event);
     if (target === null) {{
       if (hoveredTargetKey !== null) {{
@@ -3222,6 +3464,26 @@ html, body {{
 .ob-class4-slider input {{
   width: 180px;
 }}
+.ob-class4-zoom {{
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #ffffff;
+}}
+.ob-class4-zoom button {{
+  min-width: 34px;
+  height: 34px;
+  border: 0;
+  border-right: 1px solid #cbd5e1;
+  background: transparent;
+  color: #0f5f8f;
+  cursor: pointer;
+  font-size: 13px;
+}}
+.ob-class4-zoom button:last-child {{
+  border-right: 0;
+}}
 .ob-class4-map {{
   position: relative;
   margin: 0 14px 12px;
@@ -3233,7 +3495,11 @@ html, body {{
   display: block;
   width: 100%;
   height: auto;
-  cursor: crosshair;
+  cursor: grab;
+  touch-action: none;
+}}
+.ob-class4-map canvas.dragging {{
+  cursor: grabbing;
 }}
 .ob-class4-tooltip {{
   position: absolute;
@@ -3308,6 +3574,11 @@ html, body {{
           <span class="ob-class4-lead-label"></span>
           <input class="ob-class4-lead-input" type="range" min="0" step="1" value="0">
         </label>
+        <div class="ob-class4-zoom" aria-label="Map zoom controls">
+          <button class="ob-class4-zoom-out" type="button" title="Zoom out">−</button>
+          <button class="ob-class4-zoom-in" type="button" title="Zoom in">+</button>
+          <button class="ob-class4-zoom-reset" type="button" title="Reset zoom">1:1</button>
+        </div>
       </div>
     </div>
   </div>
@@ -3332,6 +3603,9 @@ html, body {{
   const modeButtons = root.querySelector(".ob-class4-mode-buttons");
   const leadInput = root.querySelector(".ob-class4-lead-input");
   const leadLabel = root.querySelector(".ob-class4-lead-label");
+  const zoomOutButton = root.querySelector(".ob-class4-zoom-out");
+  const zoomInButton = root.querySelector(".ob-class4-zoom-in");
+  const zoomResetButton = root.querySelector(".ob-class4-zoom-reset");
   const statusText = root.querySelector(".ob-class4-status-text");
   const tooltip = root.querySelector(".ob-class4-tooltip");
   const canvas = root.querySelector("canvas");
@@ -3340,10 +3614,59 @@ html, body {{
     {{key: "signed", label: "Signed error"}},
     {{key: "absolute", label: "Absolute error"}}
   ];
+  const originalBounds = {{ ...payload.bounds }};
   const state = {{variable: 0, depth: 0, lead: 0, mode: "signed"}};
+  let viewBounds = {{ ...originalBounds }};
+  let dragStart = null;
   let hoveredObservationIndex = null;
 
   title.textContent = payload.title;
+  zoomOutButton.addEventListener("click", () => {{
+    zoom(0.5);
+  }});
+  zoomInButton.addEventListener("click", () => {{
+    zoom(2.0);
+  }});
+  zoomResetButton.addEventListener("click", () => {{
+    viewBounds = {{ ...originalBounds }};
+    hoveredObservationIndex = null;
+    hideTooltip();
+    draw();
+  }});
+  canvas.addEventListener("pointerdown", (event) => {{
+    if (event.button !== 0) return;
+    canvas.setPointerCapture(event.pointerId);
+    canvas.classList.add("dragging");
+    dragStart = {{
+      x: event.clientX,
+      y: event.clientY,
+      bounds: {{ ...viewBounds }},
+    }};
+    hoveredObservationIndex = null;
+    hideTooltip();
+    draw();
+  }});
+  canvas.addEventListener("pointermove", (event) => {{
+    if (dragStart === null) return;
+    event.preventDefault();
+    const dragProjection = projectionForBounds(dragStart.bounds);
+    const xDelta = ((event.clientX - dragStart.x) / canvas.clientWidth) * canvas.width;
+    const yDelta = ((event.clientY - dragStart.y) / canvas.clientHeight) * canvas.height;
+    const longitudeDelta = xDelta / dragProjection.scale;
+    const latitudeDelta = yDelta / dragProjection.scale;
+    viewBounds = {{
+      longitudeMinimum: dragStart.bounds.longitudeMinimum - longitudeDelta,
+      longitudeMaximum: dragStart.bounds.longitudeMaximum - longitudeDelta,
+      latitudeMinimum: dragStart.bounds.latitudeMinimum + latitudeDelta,
+      latitudeMaximum: dragStart.bounds.latitudeMaximum + latitudeDelta,
+    }};
+    draw();
+  }});
+  canvas.addEventListener("pointerup", stopDrag);
+  canvas.addEventListener("pointercancel", stopDrag);
+  canvas.addEventListener("pointerleave", (event) => {{
+    if (dragStart !== null && event.buttons === 0) stopDrag(event);
+  }});
 
   function currentVariable() {{ return payload.variables[state.variable]; }}
   function currentDepth() {{ return currentVariable().depths[state.depth] || currentVariable().depths[0]; }}
@@ -3385,7 +3708,10 @@ html, body {{
   }}
 
   function projection() {{
-    const bounds = payload.bounds;
+    return projectionForBounds(viewBounds);
+  }}
+
+  function projectionForBounds(bounds) {{
     const width = canvas.width;
     const height = canvas.height;
     const lonSpan = Math.max(1e-6, bounds.longitudeMaximum - bounds.longitudeMinimum);
@@ -3394,27 +3720,73 @@ html, body {{
     const xOffset = (width - lonSpan * scale) / 2;
     const yOffset = (height - latSpan * scale) / 2;
     return {{
+      scale,
       x: (longitude) => xOffset + (longitude - bounds.longitudeMinimum) * scale,
       y: (latitude) => height - yOffset - (latitude - bounds.latitudeMinimum) * scale
     }};
   }}
 
+  function zoom(factor) {{
+    zoomAt(
+      factor,
+      (viewBounds.longitudeMinimum + viewBounds.longitudeMaximum) / 2,
+      (viewBounds.latitudeMinimum + viewBounds.latitudeMaximum) / 2,
+    );
+  }}
+
+  function zoomAt(factor, longitudeCenter, latitudeCenter) {{
+    const longitudeHalfSpan = constrainedSpan(
+      viewBounds.longitudeMaximum - viewBounds.longitudeMinimum,
+      originalBounds.longitudeMaximum - originalBounds.longitudeMinimum,
+      factor,
+    ) / 2;
+    const latitudeHalfSpan = constrainedSpan(
+      viewBounds.latitudeMaximum - viewBounds.latitudeMinimum,
+      originalBounds.latitudeMaximum - originalBounds.latitudeMinimum,
+      factor,
+    ) / 2;
+    viewBounds = {{
+      longitudeMinimum: longitudeCenter - longitudeHalfSpan,
+      longitudeMaximum: longitudeCenter + longitudeHalfSpan,
+      latitudeMinimum: latitudeCenter - latitudeHalfSpan,
+      latitudeMaximum: latitudeCenter + latitudeHalfSpan,
+    }};
+    hoveredObservationIndex = null;
+    hideTooltip();
+    draw();
+  }}
+
+  function constrainedSpan(currentSpan, originalSpan, factor) {{
+    const minimumSpan = originalSpan / 80;
+    const maximumSpan = originalSpan * 2;
+    return Math.max(minimumSpan, Math.min(maximumSpan, currentSpan / factor));
+  }}
+
+  function stopDrag(event) {{
+    if (dragStart === null) return;
+    if (event && canvas.hasPointerCapture(event.pointerId)) {{
+      canvas.releasePointerCapture(event.pointerId);
+    }}
+    canvas.classList.remove("dragging");
+    dragStart = null;
+  }}
+
   function drawLandMask(project) {{
     const mask = payload.landMask;
-    if (!mask || !mask.longitude || mask.longitude.length < 2 || mask.latitude.length < 2) return;
+    if (!mask || mask.paths.length === 0) return;
     context.fillStyle = "#d9d5cc";
-    const lonStep = Math.abs(mask.longitude[1] - mask.longitude[0]);
-    const latStep = Math.abs(mask.latitude[1] - mask.latitude[0]);
-    for (let latIndex = 0; latIndex < mask.latitude.length; latIndex += 1) {{
-      for (let lonIndex = 0; lonIndex < mask.longitude.length; lonIndex += 1) {{
-        if (!mask.land[latIndex][lonIndex]) continue;
-        const x0 = project.x(mask.longitude[lonIndex] - lonStep / 2);
-        const x1 = project.x(mask.longitude[lonIndex] + lonStep / 2);
-        const y0 = project.y(mask.latitude[latIndex] - latStep / 2);
-        const y1 = project.y(mask.latitude[latIndex] + latStep / 2);
-        context.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0) + 0.5, Math.abs(y1 - y0) + 0.5);
+    context.beginPath();
+    for (const path of mask.paths) {{
+      if (path.longitude.length < 3) continue;
+      for (let index = 0; index < path.longitude.length; index += 1) {{
+        const x = project.x(path.longitude[index]);
+        const y = project.y(path.latitude[index]);
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
       }}
+      context.closePath();
     }}
+    context.fill("evenodd");
   }}
 
   function colorForSigned(value, scale) {{
@@ -3565,6 +3937,7 @@ html, body {{
   }});
 
   canvas.addEventListener("mousemove", (event) => {{
+    if (dragStart !== null) return;
     const observation = nearestObservation(event);
     if (observation === null) {{
       if (hoveredObservationIndex !== null) {{

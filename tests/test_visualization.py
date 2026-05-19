@@ -317,9 +317,12 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
                 "latitudeMaximum": 2.0,
             },
             "landMask": {
-                "longitude": [9.0, 10.0],
-                "latitude": [0.0, 1.0],
-                "land": [[0, 1], [1, 0]],
+                "paths": [
+                    {
+                        "longitude": [9.0, 10.0, 10.0, 9.0, 9.0],
+                        "latitude": [0.0, 0.0, 1.0, 1.0, 0.0],
+                    }
+                ],
             },
             "separationScaleKilometers": 10.0,
             "challenger": {
@@ -356,8 +359,61 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "Smooth visual interpolation between true daily particle positions" in html_output.data
     assert "particles are sampled for display" in html_output.data
     assert "drawLandMask" in html_output.data
+    assert "landMask.paths" in html_output.data
+    assert "landMask.land" not in html_output.data
+    assert "fill(&quot;evenodd&quot;)" in html_output.data
     assert "Current separation distance" in html_output.data
     assert "Reached daily positions" in html_output.data
+
+
+def test_land_mask_payload_uses_model_derived_vector_paths() -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    dataset = xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()),
+                numpy.array(
+                    [
+                        [1.0, numpy.nan, 1.0],
+                        [1.0, numpy.nan, 1.0],
+                        [1.0, 1.0, 1.0],
+                    ]
+                ),
+            )
+        },
+        coords={
+            Dimension.LATITUDE.key(): [-1.0, 0.0, 1.0],
+            Dimension.LONGITUDE.key(): [10.0, 11.0, 12.0],
+        },
+    )
+
+    payload = core_visualization._lagrangian_land_mask_payload(dataset, first_day_index=0)
+
+    assert "paths" in payload
+    assert "land" not in payload
+    assert payload["paths"]
+    assert payload["paths"][0]["longitude"]
+    assert payload["paths"][0]["latitude"]
+
+
+def test_eddy_contour_payload_uses_shape_preserving_point_budget() -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    angles = numpy.linspace(0, 2 * numpy.pi, 200)
+    longitudes = 10.0 + numpy.cos(angles)
+    latitudes = 45.0 + 0.5 * numpy.sin(angles)
+
+    contour_longitudes, contour_latitudes = core_visualization._simplified_contour_payload(
+        longitudes,
+        latitudes,
+        maximum_points=20,
+    )
+
+    assert len(contour_longitudes) == len(contour_latitudes)
+    assert len(contour_longitudes) <= 20
+    assert contour_longitudes[0] == contour_longitudes[-1]
+    assert contour_latitudes[0] == contour_latitudes[-1]
 
 
 def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monkeypatch) -> None:
@@ -383,9 +439,12 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
                 "latitudeMaximum": 2.0,
             },
             "landMask": {
-                "longitude": [9.0, 10.0],
-                "latitude": [0.0, 1.0],
-                "land": [[0, 1], [1, 0]],
+                "paths": [
+                    {
+                        "longitude": [9.0, 10.0, 10.0, 9.0, 9.0],
+                        "latitude": [0.0, 0.0, 1.0, 1.0, 0.0],
+                    }
+                ],
             },
             "references": [
                 {
@@ -428,6 +487,15 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "Match displacement" not in html_output.data
     assert "ob-eddy-tooltip" in html_output.data
     assert "ob-eddy-polarity-buttons" in html_output.data
+    assert "landMask.paths" in html_output.data
+    assert "landMask.land" not in html_output.data
+    assert "fill(&quot;evenodd&quot;)" in html_output.data
+    assert "ob-eddy-zoom" in html_output.data
+    assert "Map zoom controls" in html_output.data
+    assert "Zoom in" in html_output.data
+    assert "Zoom out" in html_output.data
+    assert "Reset zoom" in html_output.data
+    assert "viewBounds" in html_output.data
     assert "Cyclones" in html_output.data
     assert "Anticyclones" in html_output.data
     assert "Cyclone contour" in html_output.data
@@ -438,6 +506,9 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "drawEddyHoverFocus" in html_output.data
     assert "drawPolarityMarker" not in html_output.data
     assert "ob-eddy-marker" not in html_output.data
+    assert "pointerdown" in html_output.data
+    assert "dragging" in html_output.data
+    assert "constrainedSpan" in html_output.data
     assert "setLineDash" in html_output.data
     assert "window.setInterval" in html_output.data
 
@@ -457,9 +528,12 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
                 "latitudeMaximum": 2.0,
             },
             "landMask": {
-                "longitude": [9.0, 10.0],
-                "latitude": [0.0, 1.0],
-                "land": [[0, 1], [1, 0]],
+                "paths": [
+                    {
+                        "longitude": [9.0, 10.0, 10.0, 9.0, 9.0],
+                        "latitude": [0.0, 0.0, 1.0, 1.0, 0.0],
+                    }
+                ],
             },
             "variables": [
                 {
@@ -502,9 +576,21 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "Model minus Class IV observation errors" in html_output.data
     assert "points may be sampled for display" in html_output.data
     assert "ob-class4-tooltip" in html_output.data
+    assert "mask.paths" in html_output.data
+    assert "mask.land" not in html_output.data
+    assert "fill(&quot;evenodd&quot;)" in html_output.data
+    assert "ob-class4-zoom" in html_output.data
+    assert "Map zoom controls" in html_output.data
+    assert "Zoom in" in html_output.data
+    assert "Zoom out" in html_output.data
+    assert "Reset zoom" in html_output.data
+    assert "viewBounds" in html_output.data
     assert "Absolute error" in html_output.data
     assert "Observation density" not in html_output.data
     assert "Signed error" in html_output.data
+    assert "pointerdown" in html_output.data
+    assert "dragging" in html_output.data
+    assert "constrainedSpan" in html_output.data
     assert "robust 95%" in html_output.data
 
 
