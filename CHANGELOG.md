@@ -8,6 +8,18 @@ SPDX-License-Identifier: EUPL-1.2
 
 All notable changes to OceanBench are documented in this file.
 
+## 0.1.4 - 2026-05-20
+
+### Fixed
+
+- Fixed Class IV observation staging so observations in overlapping forecast windows are preserved for each matching forecast.
+- Prevented Class IV observation evaluations from reusing overlap-unsafe staged cache.
+- Fixed website report discovery tests so expected report URLs use the shared report version configuration.
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.1.4/`
+
 ## 0.1.3 - 2026-05-13
 
 ### Fixed
