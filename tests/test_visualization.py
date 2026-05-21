@@ -402,6 +402,45 @@ def test_land_mask_payload_uses_model_derived_vector_paths() -> None:
     assert payload["paths"][0]["latitude"]
 
 
+def test_map_bounds_use_periodic_pacific_centered_longitude_for_global_domains() -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    dataset = xarray.Dataset(
+        coords={
+            Dimension.LATITUDE.key(): [-77.5, 0.0, 89.5],
+            Dimension.LONGITUDE.key(): [-179.5, -0.5, 0.5, 179.5],
+        },
+    )
+
+    bounds = core_visualization._lagrangian_bounds(dataset)
+
+    assert bounds["longitudeMinimum"] == 0.0
+    assert bounds["longitudeMaximum"] == 360.0
+    assert bounds["latitudeMinimum"] == -77.5
+    assert bounds["latitudeMaximum"] == 89.5
+    assert bounds["periodicLongitude"] is True
+    assert bounds["longitudePeriod"] == 360.0
+
+
+def test_map_bounds_keep_regional_domains_clamped_to_data_extent() -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    dataset = xarray.Dataset(
+        coords={
+            Dimension.LATITUDE.key(): [-2.0, 0.0, 2.0],
+            Dimension.LONGITUDE.key(): [10.0, 12.0, 14.0],
+        },
+    )
+
+    bounds = core_visualization._lagrangian_bounds(dataset)
+
+    assert bounds["longitudeMinimum"] == 10.0
+    assert bounds["longitudeMaximum"] == 14.0
+    assert bounds["latitudeMinimum"] == -2.0
+    assert bounds["latitudeMaximum"] == 2.0
+    assert bounds["periodicLongitude"] is False
+
+
 def test_eddy_contour_payload_uses_shape_preserving_point_budget() -> None:
     from oceanbench.core import visualization as core_visualization
 
