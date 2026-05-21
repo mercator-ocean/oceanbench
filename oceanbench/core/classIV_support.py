@@ -354,13 +354,14 @@ def _horizontally_interpolated_profiles(
     longitude_key = Dimension.LONGITUDE.key()
     observation_latitudes = observation_group[latitude_key].values
     observation_longitudes = observation_group[longitude_key].values
-    return time_slice.interp(
+    interpolated_profiles = time_slice.interp(
         {
             latitude_key: xarray.DataArray(observation_latitudes, dims="observation"),
             longitude_key: xarray.DataArray(observation_longitudes, dims="observation"),
         },
         method="linear",
-    ).values
+    )
+    return interpolated_profiles.compute().values
 
 
 def _interpolated_model_values_for_observation_group(
@@ -389,13 +390,9 @@ def _assign_model_values_for_first_day(
     model_depths: numpy.ndarray,
     variable_key: str,
 ) -> None:
+    first_day_block = model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index}).compute()
     for lead_day, observation_group in first_day_group.groupby("lead_day", sort=False):
-        time_slice = model_data.isel(
-            {
-                Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
-                Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
-            }
-        ).compute()
+        time_slice = first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
         model_values[observation_group.index.values] = _interpolated_model_values_for_observation_group(
             time_slice,
             observation_group,
