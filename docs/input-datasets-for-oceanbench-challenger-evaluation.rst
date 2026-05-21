@@ -21,8 +21,7 @@ These are the current inputs already exposed in the public API:
 * ``oceanbench.datasets.input.glo12_nowcasts()`` for weekly GLO12 nowcasts.
 * ``oceanbench.datasets.input.ifs_forcings()`` for weekly IFS forcings stored as NetCDF.
 
-OceanBench also exposes additional weekly input datasets stored in the bucket
-``oceanbench-bucket/dev/additionnal-data/``.
+OceanBench also exposes additional weekly input datasets
 
 These datasets are available through:
 
@@ -38,7 +37,7 @@ The input data currently consists of three families of files:
 
 * **NetCDF files** (``.nc``) – raw model output.
 * **Zarr collections** (``.zarr``) – chunked, cloud-optimised arrays used for the 2024 nowcasts.
-* **Additional Zarr collections** under ``dev/additionnal-data`` – weekly GLO12 nowcasts and IFS forcings for 2023-2025.
+* **Additional Zarr collections** – weekly GLO12 nowcasts and IFS forcings for 2023-2025, "additional" in the sense that they are not the main inputs for the 2024 evaluation but are available for challengers to use if they wish, bearing in mind that its structure differs from the main inputs.
 
 These families are listed below with their download URLs and MD5 checksums
 (where available).
