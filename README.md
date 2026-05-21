@@ -77,7 +77,7 @@ For training on the 1 degree track, OceanBench also exposes the historical 1 deg
 ```python
 import oceanbench
 
-oceanbench.datasets.reference.glorys_reanalysis_1_degree_historical()
+oceanbench.datasets.reference.glorys_reanalysis_1_degree()
 ```
 
 ## Open official challenger datasets

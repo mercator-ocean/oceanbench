@@ -50,7 +50,7 @@ def glorys_reanalysis() -> xarray.Dataset:
     return glorys.glorys_reanalysis()
 
 
-def glorys_reanalysis_1_degree_historical() -> xarray.Dataset:
+def glorys_reanalysis_1_degree() -> xarray.Dataset:
     """
     Open the historical 1 degree GLORYS reanalysis as an `xarray.Dataset`.
 
@@ -63,7 +63,7 @@ def glorys_reanalysis_1_degree_historical() -> xarray.Dataset:
     Dataset
         The Dataset containing the historical 1 degree GLORYS reanalysis.
 
-    >>> glorys_reanalysis_1_degree_historical() # doctest: +SKIP
+    >>> glorys_reanalysis_1_degree() # doctest: +SKIP
     <xarray.Dataset> Size: 970GB
     Dimensions:                          (time: 9861, depth: 50, latitude: 170,
                                           longitude: 360)
