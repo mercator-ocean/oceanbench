@@ -81,6 +81,9 @@ DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS: tuple[float, ...] = tuple(depth_leve
 ROBUST_FIELD_PERCENTILE_RANGE = (2.0, 98.0)
 ROBUST_ERROR_PERCENTILE = 98.0
 GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES = 300.0
+GLOBAL_LONGITUDE_MINIMUM = 0.0
+GLOBAL_LONGITUDE_MAXIMUM = 360.0
+GLOBAL_LONGITUDE_PERIOD = GLOBAL_LONGITUDE_MAXIMUM - GLOBAL_LONGITUDE_MINIMUM
 
 
 @dataclass(frozen=True)
@@ -473,11 +476,19 @@ def _thin_field(field: xarray.DataArray, stride: int) -> xarray.DataArray:
     )
 
 
+def _is_global_longitude_domain(longitudes: numpy.ndarray) -> bool:
+    finite_longitudes = numpy.asarray(longitudes, dtype=float)
+    finite_longitudes = finite_longitudes[numpy.isfinite(finite_longitudes)]
+    if finite_longitudes.size == 0:
+        return False
+    longitude_span = float(numpy.nanmax(finite_longitudes) - numpy.nanmin(finite_longitudes))
+    return longitude_span >= GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES
+
+
 def _longitude_values_for_image(field: xarray.DataArray) -> numpy.ndarray:
     longitude = numpy.asarray(field[Dimension.LONGITUDE.key()].values, dtype=float)
-    longitude_span = float(numpy.nanmax(longitude) - numpy.nanmin(longitude))
-    if longitude_span >= GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES:
-        return numpy.mod(longitude, 360.0)
+    if _is_global_longitude_domain(longitude):
+        return numpy.mod(longitude, GLOBAL_LONGITUDE_PERIOD)
     return longitude
 
 
@@ -1397,17 +1408,23 @@ def _lagrangian_bounds(dataset: xarray.Dataset) -> dict[str, float]:
     standard_dataset = _standard_dataset(dataset)
     longitude = numpy.asarray(standard_dataset[Dimension.LONGITUDE.key()].values, dtype=float)
     latitude = numpy.asarray(standard_dataset[Dimension.LATITUDE.key()].values, dtype=float)
-    longitude_minimum = float(numpy.nanmin(longitude))
-    longitude_maximum = float(numpy.nanmax(longitude))
     latitude_minimum = float(numpy.nanmin(latitude))
     latitude_maximum = float(numpy.nanmax(latitude))
-    longitude_padding = max(0.5, 0.02 * (longitude_maximum - longitude_minimum))
-    latitude_padding = max(0.5, 0.02 * (latitude_maximum - latitude_minimum))
+    if _is_global_longitude_domain(longitude):
+        return {
+            "longitudeMinimum": GLOBAL_LONGITUDE_MINIMUM,
+            "longitudeMaximum": GLOBAL_LONGITUDE_MAXIMUM,
+            "latitudeMinimum": latitude_minimum,
+            "latitudeMaximum": latitude_maximum,
+            "periodicLongitude": True,
+            "longitudePeriod": GLOBAL_LONGITUDE_PERIOD,
+        }
     return {
-        "longitudeMinimum": longitude_minimum - longitude_padding,
-        "longitudeMaximum": longitude_maximum + longitude_padding,
-        "latitudeMinimum": latitude_minimum - latitude_padding,
-        "latitudeMaximum": latitude_maximum + latitude_padding,
+        "longitudeMinimum": float(numpy.nanmin(longitude)),
+        "longitudeMaximum": float(numpy.nanmax(longitude)),
+        "latitudeMinimum": latitude_minimum,
+        "latitudeMaximum": latitude_maximum,
+        "periodicLongitude": False,
     }
 
 
@@ -1573,11 +1590,13 @@ def _map_viewport_script() -> str:
     return """function createMapViewport(options) {
     const canvas = options.canvas;
     const originalBounds = { ...options.originalBounds };
+    const periodicLongitude = Boolean(options.periodicLongitude ?? originalBounds.periodicLongitude);
+    const longitudePeriod = Number(options.longitudePeriod || originalBounds.longitudePeriod || 360);
     const projectMode = options.projectMode || "stretch";
     const fitScale = options.fitScale || 1.0;
     const onChange = options.onChange || (() => {});
     const onInteractionStart = options.onInteractionStart || (() => {});
-    let viewBounds = { ...originalBounds };
+    let viewBounds = constrainViewBounds({ ...originalBounds });
     let dragStart = null;
 
     function bounds() {
@@ -1599,15 +1618,34 @@ def _map_viewport_script() -> str:
         const yOffset = (height - latitudeSpan * scale) / 2;
         return {
           scale,
-          x: (longitude) => xOffset + (longitude - targetBounds.longitudeMinimum) * scale,
+          x: (longitude) => xOffset +
+            (displayLongitude(longitude, targetBounds) - targetBounds.longitudeMinimum) * scale,
           y: (latitude) => height - yOffset - (latitude - targetBounds.latitudeMinimum) * scale
         };
       }
       return {
         scale: Math.min(width / longitudeSpan, height / latitudeSpan),
-        x: (longitude) => ((longitude - targetBounds.longitudeMinimum) / longitudeSpan) * width,
+        x: (longitude) =>
+          ((displayLongitude(longitude, targetBounds) - targetBounds.longitudeMinimum) / longitudeSpan) * width,
         y: (latitude) => height - ((latitude - targetBounds.latitudeMinimum) / latitudeSpan) * height
       };
+    }
+
+    function positiveModulo(value, period) {
+      return ((value % period) + period) % period;
+    }
+
+    function displayLongitude(longitude, targetBounds) {
+      if (!periodicLongitude) return longitude;
+      const offset = positiveModulo(longitude - targetBounds.longitudeMinimum, longitudePeriod);
+      if (offset < 1e-9 && longitude > targetBounds.longitudeMinimum) {
+        const span = Math.min(
+          longitudePeriod,
+          targetBounds.longitudeMaximum - targetBounds.longitudeMinimum,
+        );
+        return targetBounds.longitudeMinimum + span;
+      }
+      return targetBounds.longitudeMinimum + offset;
     }
 
     function project(point) {
@@ -1620,8 +1658,68 @@ def _map_viewport_script() -> str:
 
     function constrainedSpan(currentSpan, originalSpan, factor) {
       const minimumSpan = originalSpan / 80;
-      const maximumSpan = originalSpan * 2;
+      const maximumSpan = originalSpan;
       return Math.max(minimumSpan, Math.min(maximumSpan, currentSpan / factor));
+    }
+
+    function constrainAxis(minimum, maximum, originalMinimum, originalMaximum) {
+      const originalSpan = Math.max(1e-6, originalMaximum - originalMinimum);
+      const requestedSpan = Math.max(1e-6, maximum - minimum);
+      const span = Math.min(requestedSpan, originalSpan);
+      if (span >= originalSpan - 1e-9) {
+        return [originalMinimum, originalMaximum];
+      }
+      const center = (minimum + maximum) / 2;
+      let constrainedMinimum = center - span / 2;
+      let constrainedMaximum = center + span / 2;
+      if (constrainedMinimum < originalMinimum) {
+        constrainedMinimum = originalMinimum;
+        constrainedMaximum = originalMinimum + span;
+      }
+      if (constrainedMaximum > originalMaximum) {
+        constrainedMaximum = originalMaximum;
+        constrainedMinimum = originalMaximum - span;
+      }
+      return [constrainedMinimum, constrainedMaximum];
+    }
+
+    function constrainLongitudeAxis(bounds) {
+      const originalSpan = Math.max(1e-6, originalBounds.longitudeMaximum - originalBounds.longitudeMinimum);
+      const requestedSpan = Math.max(1e-6, bounds.longitudeMaximum - bounds.longitudeMinimum);
+      const span = Math.min(requestedSpan, originalSpan);
+      if (!periodicLongitude) {
+        return constrainAxis(
+          bounds.longitudeMinimum,
+          bounds.longitudeMaximum,
+          originalBounds.longitudeMinimum,
+          originalBounds.longitudeMaximum,
+        );
+      }
+      const center = (bounds.longitudeMinimum + bounds.longitudeMaximum) / 2;
+      const minimum = center - span / 2;
+      const normalizedMinimum = originalBounds.longitudeMinimum +
+        positiveModulo(minimum - originalBounds.longitudeMinimum, longitudePeriod);
+      return [normalizedMinimum, normalizedMinimum + span];
+    }
+
+    function constrainViewBounds(bounds) {
+      const [longitudeMinimum, longitudeMaximum] = constrainLongitudeAxis(bounds);
+      const [latitudeMinimum, latitudeMaximum] = constrainAxis(
+        bounds.latitudeMinimum,
+        bounds.latitudeMaximum,
+        originalBounds.latitudeMinimum,
+        originalBounds.latitudeMaximum,
+      );
+      return {
+        longitudeMinimum,
+        longitudeMaximum,
+        latitudeMinimum,
+        latitudeMaximum,
+      };
+    }
+
+    function setViewBounds(bounds) {
+      viewBounds = constrainViewBounds(bounds);
     }
 
     function zoom(factor) {
@@ -1643,18 +1741,18 @@ def _map_viewport_script() -> str:
         originalBounds.latitudeMaximum - originalBounds.latitudeMinimum,
         factor,
       ) / 2;
-      viewBounds = {
+      setViewBounds({
         longitudeMinimum: longitudeCenter - longitudeHalfSpan,
         longitudeMaximum: longitudeCenter + longitudeHalfSpan,
         latitudeMinimum: latitudeCenter - latitudeHalfSpan,
         latitudeMaximum: latitudeCenter + latitudeHalfSpan,
-      };
+      });
       onInteractionStart();
       onChange();
     }
 
     function reset() {
-      viewBounds = { ...originalBounds };
+      setViewBounds({ ...originalBounds });
       onInteractionStart();
       onChange();
     }
@@ -1700,12 +1798,12 @@ def _map_viewport_script() -> str:
         if (dragStart === null) return;
         event.preventDefault();
         const delta = coordinateDelta(event.clientX - dragStart.x, event.clientY - dragStart.y, dragStart.bounds);
-        viewBounds = {
+        setViewBounds({
           longitudeMinimum: dragStart.bounds.longitudeMinimum - delta.longitude,
           longitudeMaximum: dragStart.bounds.longitudeMaximum - delta.longitude,
           latitudeMinimum: dragStart.bounds.latitudeMinimum + delta.latitude,
           latitudeMaximum: dragStart.bounds.latitudeMaximum + delta.latitude,
-        };
+        });
         onChange();
       });
       canvas.addEventListener("pointerup", stopDrag);
@@ -1739,7 +1837,7 @@ def _map_viewport_script() -> str:
 
 
 def _lagrangian_land_mask_payload(dataset: xarray.Dataset, first_day_index: int) -> dict[str, object]:
-    field = _surface_mask_field(dataset, first_day_index)
+    field = _prepared_image_field(_surface_mask_field(dataset, first_day_index))
     land_mask = numpy.where(numpy.isfinite(field.values), 0, 1).astype(float)
     longitude_values = numpy.asarray(field[Dimension.LONGITUDE.key()].values, dtype=float)
     latitude_values = numpy.asarray(field[Dimension.LATITUDE.key()].values, dtype=float)
@@ -2179,6 +2277,18 @@ html, body {{
     return {{ longitude, latitude }};
   }}
 
+  function shortestLongitudeDelta(fromLongitude, toLongitude) {{
+    if (!payload.bounds.periodicLongitude) {{
+      return toLongitude - fromLongitude;
+    }}
+    const period = payload.bounds.longitudePeriod || 360;
+    return ((toLongitude - fromLongitude + period / 2) % period + period) % period - period / 2;
+  }}
+
+  function interpolateLongitude(fromLongitude, toLongitude, fraction) {{
+    return fromLongitude + shortestLongitudeDelta(fromLongitude, toLongitude) * fraction;
+  }}
+
   function interpolate(track, particleIndex, time) {{
     const lower = Math.max(0, Math.min(payload.timeLabels.length - 1, Math.floor(time)));
     const upper = Math.max(0, Math.min(payload.timeLabels.length - 1, lower + 1));
@@ -2192,7 +2302,7 @@ html, body {{
     }}
     const fraction = time - lower;
     return {{
-      longitude: lowerPoint.longitude * (1 - fraction) + upperPoint.longitude * fraction,
+      longitude: interpolateLongitude(lowerPoint.longitude, upperPoint.longitude, fraction),
       latitude: lowerPoint.latitude * (1 - fraction) + upperPoint.latitude * fraction,
     }};
   }}
@@ -2385,7 +2495,8 @@ html, body {{
   function separationDistanceKilometers(referencePoint, challengerPoint) {{
     const latitudeRadians = referencePoint.latitude * Math.PI / 180;
     const latitudeDistance = (challengerPoint.latitude - referencePoint.latitude) * 111;
-    const longitudeDistance = (challengerPoint.longitude - referencePoint.longitude) * 111 * Math.cos(latitudeRadians);
+    const longitudeDistance = shortestLongitudeDelta(referencePoint.longitude, challengerPoint.longitude) *
+      111 * Math.cos(latitudeRadians);
     return Math.sqrt(latitudeDistance * latitudeDistance + longitudeDistance * longitudeDistance);
   }}
 
