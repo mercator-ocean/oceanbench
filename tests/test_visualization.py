@@ -7,6 +7,7 @@ from pathlib import Path
 
 import nbformat
 import numpy
+import pandas
 import xarray
 
 import oceanbench.visualization
@@ -441,6 +442,38 @@ def test_map_bounds_keep_regional_domains_clamped_to_data_extent() -> None:
     assert bounds["periodicLongitude"] is False
 
 
+def test_class4_sampler_uses_time_sorted_bucket_centers() -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    group = pandas.DataFrame(
+        {
+            Dimension.TIME.key(): pandas.to_datetime(
+                [
+                    "2024-01-03T00:00:00",
+                    "2024-01-01T00:00:00",
+                    "2024-01-02T00:00:00",
+                    "2024-01-01T00:00:00",
+                    "2024-01-03T00:00:00",
+                    "2024-01-02T00:00:00",
+                ]
+            ),
+            Dimension.LONGITUDE.key(): [0.0, 0.0, 1.0, 1.0, 1.0, 0.0],
+            Dimension.LATITUDE.key(): [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "lead_day": [0, 0, 0, 0, 0, 0],
+            "error": [100.0, 10.0, 41.0, 11.0, 101.0, 40.0],
+            "absolute_error": [100.0, 10.0, 41.0, 11.0, 101.0, 40.0],
+        }
+    )
+
+    frame = core_visualization._class4_sampled_frame(group, maximum_points_per_frame=3)
+
+    assert frame["leadDay"] == 1
+    assert frame["totalCount"] == 6
+    assert frame["shownCount"] == 3
+    assert frame["longitude"] == [1.0, 1.0, 1.0]
+    assert frame["error"] == [11.0, 41.0, 101.0]
+
+
 def test_eddy_contour_payload_uses_shape_preserving_point_budget() -> None:
     from oceanbench.core import visualization as core_visualization
 
@@ -619,7 +652,7 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "height:500px" in html_output.data
     assert "Class IV observation error maps" in html_output.data
     assert "Model minus Class IV observation errors" in html_output.data
-    assert "points may be sampled for display" in html_output.data
+    assert "metrics use all observations" in html_output.data
     assert "ob-class4-tooltip" in html_output.data
     assert "mask.paths" in html_output.data
     assert "mask.land" not in html_output.data

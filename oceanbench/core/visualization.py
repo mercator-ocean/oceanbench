@@ -3383,11 +3383,26 @@ def _class4_depth_sort_key(depth_bin: str) -> int:
     return DEPTH_BIN_DISPLAY_ORDER.get(depth_bin, len(DEPTH_BIN_DISPLAY_ORDER))
 
 
+def _class4_display_sample(group: pandas.DataFrame, maximum_points_per_frame: int) -> pandas.DataFrame:
+    if maximum_points_per_frame <= 0:
+        raise ValueError("maximum_points_per_frame must be positive.")
+    sorted_group = group.sort_values(
+        [Dimension.TIME.key(), Dimension.LONGITUDE.key(), Dimension.LATITUDE.key()],
+        kind="mergesort",
+    )
+    total_count = len(sorted_group)
+    if total_count <= maximum_points_per_frame:
+        return sorted_group
+    selected_positions = numpy.floor(
+        (numpy.arange(maximum_points_per_frame, dtype=float) + 0.5) * total_count / maximum_points_per_frame
+    ).astype(int)
+    selected_positions = numpy.clip(selected_positions, 0, total_count - 1)
+    return sorted_group.iloc[selected_positions]
+
+
 def _class4_sampled_frame(group: pandas.DataFrame, maximum_points_per_frame: int) -> dict[str, object]:
     total_count = len(group)
-    if total_count > maximum_points_per_frame:
-        selected_positions = numpy.linspace(0, total_count - 1, maximum_points_per_frame, dtype=int)
-        group = group.iloc[selected_positions]
+    group = _class4_display_sample(group, maximum_points_per_frame)
     return {
         "leadDay": int(group["lead_day"].iloc[0]) + 1,
         "totalCount": int(total_count),
@@ -3645,7 +3660,7 @@ html, body {{
     <div>
       <div class="ob-class4-title"></div>
       <div class="ob-class4-subtitle">
-        Model minus Class IV observation errors at observation locations; points may be sampled for display.
+        Model minus Class IV observation errors at observation locations; dense frames are sampled for display.
       </div>
     </div>
     <div class="ob-class4-controls">
@@ -3908,7 +3923,8 @@ html, body {{
       currentDepth().label,
       modeLabel,
       selectedClass4ScaleLabel(),
-      `${{frame.shownCount}}/${{frame.totalCount}} observations`,
+      `${{frame.shownCount}}/${{frame.totalCount}} observations shown`,
+      "metrics use all observations",
     ].join(" - ");
   }}
 
