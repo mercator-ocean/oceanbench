@@ -19,6 +19,7 @@ from oceanbench.core.dataset_utils import (
 from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.references.observations import load_mean_dynamic_topography
 from oceanbench.core.resolution import get_dataset_resolution
+from oceanbench.core.runtime_configuration import current_runtime_configuration
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
@@ -390,9 +391,22 @@ def _assign_model_values_for_first_day(
     model_depths: numpy.ndarray,
     variable_key: str,
 ) -> None:
-    first_day_block = model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index}).compute()
+    first_day_block = (
+        model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index}).compute()
+        if current_runtime_configuration().class4_fast_interpolation
+        else None
+    )
     for lead_day, observation_group in first_day_group.groupby("lead_day", sort=False):
-        time_slice = first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
+        time_slice = (
+            first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
+            if first_day_block is not None
+            else model_data.isel(
+                {
+                    Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
+                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+                }
+            )
+        )
         model_values[observation_group.index.values] = _interpolated_model_values_for_observation_group(
             time_slice,
             observation_group,

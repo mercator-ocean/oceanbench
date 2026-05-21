@@ -9,6 +9,8 @@ import xarray
 
 from oceanbench.core.classIV_support import interpolate_class4_model_to_observations
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.runtime_configuration import RuntimeConfiguration
+import oceanbench.core.runtime_configuration as runtime_configuration
 
 
 def _model_data() -> xarray.DataArray:
@@ -47,9 +49,9 @@ def _model_data() -> xarray.DataArray:
     )
 
 
-def test_class4_model_interpolation_materializes_each_first_day_block_once(monkeypatch) -> None:
+def _observations_dataframe() -> pandas.DataFrame:
     first_days = numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]")
-    observations_dataframe = pandas.DataFrame(
+    return pandas.DataFrame(
         {
             Dimension.TIME.key(): pandas.to_datetime(
                 ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-11", "2024-01-13"]
@@ -62,6 +64,9 @@ def test_class4_model_interpolation_materializes_each_first_day_block_once(monke
             "observation_value": [0.0] * 5,
         }
     )
+
+
+def _record_first_day_block_compute_calls(monkeypatch) -> list[tuple[int, ...]]:
     original_compute = xarray.DataArray.compute
     first_day_block_compute_calls = []
 
@@ -74,8 +79,27 @@ def test_class4_model_interpolation_materializes_each_first_day_block_once(monke
         return original_compute(data_array, *args, **kwargs)
 
     monkeypatch.setattr(xarray.DataArray, "compute", record_compute)
+    return first_day_block_compute_calls
 
-    model_values = interpolate_class4_model_to_observations(_model_data(), observations_dataframe)
+
+def test_class4_model_interpolation_uses_memory_safe_materialization_by_default(monkeypatch) -> None:
+    first_day_block_compute_calls = _record_first_day_block_compute_calls(monkeypatch)
+
+    model_values = interpolate_class4_model_to_observations(_model_data(), _observations_dataframe())
+
+    numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0, 100.75, 122.25])
+    assert first_day_block_compute_calls == []
+
+
+def test_class4_fast_interpolation_materializes_each_first_day_block_once(monkeypatch) -> None:
+    monkeypatch.setattr(
+        runtime_configuration,
+        "_runtime_configuration",
+        RuntimeConfiguration(class4_fast_interpolation=True),
+    )
+    first_day_block_compute_calls = _record_first_day_block_compute_calls(monkeypatch)
+
+    model_values = interpolate_class4_model_to_observations(_model_data(), _observations_dataframe())
 
     numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0, 100.75, 122.25])
     assert first_day_block_compute_calls == [(0, 1, 2), (0, 1, 2)]
