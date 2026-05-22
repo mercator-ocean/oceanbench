@@ -1661,6 +1661,38 @@ def _map_viewport_script() -> str:
       };
     }
 
+    function shortestLongitudeDelta(fromLongitude, toLongitude) {
+      if (!periodicLongitude) return toLongitude - fromLongitude;
+      return positiveModulo(
+        toLongitude - fromLongitude + longitudePeriod / 2,
+        longitudePeriod,
+      ) - longitudePeriod / 2;
+    }
+
+    function nearestLongitudeCopy(longitude, anchorLongitude) {
+      if (!periodicLongitude) return longitude;
+      return anchorLongitude + shortestLongitudeDelta(anchorLongitude, longitude);
+    }
+
+    function unwrappedLongitudes(longitudes, longitudeShift = 0) {
+      const unwrapped = [];
+      let previousLongitude = null;
+      for (const longitude of longitudes) {
+        if (!Number.isFinite(longitude)) {
+          unwrapped.push(longitude);
+          continue;
+        }
+        let unwrappedLongitude = longitude + longitudeShift;
+        if (previousLongitude !== null) {
+          unwrappedLongitude = previousLongitude +
+            shortestLongitudeDelta(previousLongitude, unwrappedLongitude);
+        }
+        unwrapped.push(unwrappedLongitude);
+        previousLongitude = unwrappedLongitude;
+      }
+      return unwrapped;
+    }
+
     function longitudeShiftsForPath(path) {
       if (!periodicLongitude) return [0];
       const longitudes = path.longitude.filter((value) => Number.isFinite(value));
@@ -1848,8 +1880,10 @@ def _map_viewport_script() -> str:
       bounds,
       isDragging: () => dragStart !== null,
       longitudeShiftsForPath,
+      nearestLongitudeCopy,
       project,
       projection,
+      unwrappedLongitudes,
       zoom,
       zoomAt,
       reset,
@@ -2401,9 +2435,10 @@ html, body {{
     for (const path of landMask.paths) {{
       if (path.longitude.length < 3) continue;
       for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
+        const longitudes = viewport.unwrappedLongitudes(path.longitude, longitudeShift);
         for (let index = 0; index < path.longitude.length; index += 1) {{
           const point = {{
-            x: projection.xUnwrapped(path.longitude[index] + longitudeShift),
+            x: projection.xUnwrapped(longitudes[index]),
             y: projection.y(path.latitude[index]),
           }};
           if (index === 0) context.moveTo(point.x, point.y);
@@ -3102,6 +3137,16 @@ html, body {{
     return viewport.project(point);
   }}
 
+  function segmentTouchesCanvas(start, end) {{
+    const margin = 28;
+    const left = Math.min(start.x, end.x);
+    const right = Math.max(start.x, end.x);
+    const top = Math.min(start.y, end.y);
+    const bottom = Math.max(start.y, end.y);
+    return right >= -margin && left <= canvas.width + margin &&
+      bottom >= -margin && top <= canvas.height + margin;
+  }}
+
   function draw() {{
     context.clearRect(0, 0, canvas.width, canvas.height);
     eddyTargets = [];
@@ -3174,9 +3219,10 @@ html, body {{
     for (const path of landMask.paths) {{
       if (path.longitude.length < 3) continue;
       for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
+        const longitudes = viewport.unwrappedLongitudes(path.longitude, longitudeShift);
         for (let index = 0; index < path.longitude.length; index += 1) {{
           const point = {{
-            x: projection.xUnwrapped(path.longitude[index] + longitudeShift),
+            x: projection.xUnwrapped(longitudes[index]),
             y: projection.y(path.latitude[index]),
           }};
           if (index === 0) context.moveTo(point.x, point.y);
@@ -3189,9 +3235,35 @@ html, body {{
   }}
 
   function drawMatchLine(reference, challenger) {{
+    const projection = viewport.projection();
+    const referencePath = {{
+      longitude: [reference.longitude],
+      latitude: [reference.latitude],
+    }};
+    let bestSegment = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const longitudeShift of viewport.longitudeShiftsForPath(referencePath)) {{
+      const referenceLongitude = reference.longitude + longitudeShift;
+      const challengerLongitude = viewport.nearestLongitudeCopy(challenger.longitude, referenceLongitude);
+      const start = {{
+        x: projection.xUnwrapped(referenceLongitude),
+        y: projection.y(reference.latitude),
+      }};
+      const end = {{
+        x: projection.xUnwrapped(challengerLongitude),
+        y: projection.y(challenger.latitude),
+      }};
+      if (!segmentTouchesCanvas(start, end)) continue;
+      const distance = Math.hypot(start.x - end.x, start.y - end.y);
+      if (distance < bestDistance) {{
+        bestSegment = {{ start, end }};
+        bestDistance = distance;
+      }}
+    }}
+    if (bestSegment === null) return;
     context.strokeStyle = "rgba(71, 85, 105, 0.44)";
     context.lineWidth = 1.0;
-    line(project(reference), project(challenger));
+    line(bestSegment.start, bestSegment.end);
   }}
 
   function drawEddy(candidate, fill, stroke, width, target) {{
@@ -3201,19 +3273,27 @@ html, body {{
     context.strokeStyle = stroke;
     context.lineWidth = width;
     if (candidate.contourLongitude.length >= 3) {{
+      const projection = viewport.projection();
+      const contourPath = {{
+        longitude: candidate.contourLongitude,
+        latitude: candidate.contourLatitude,
+      }};
       context.setLineDash(candidate.polarity === "anticyclone" ? [5, 3] : []);
-      context.beginPath();
-      for (let index = 0; index < candidate.contourLongitude.length; index += 1) {{
-        const point = project({{
-          longitude: candidate.contourLongitude[index],
-          latitude: candidate.contourLatitude[index],
-        }});
-        if (index === 0) context.moveTo(point.x, point.y);
-        else context.lineTo(point.x, point.y);
+      for (const longitudeShift of viewport.longitudeShiftsForPath(contourPath)) {{
+        const longitudes = viewport.unwrappedLongitudes(candidate.contourLongitude, longitudeShift);
+        context.beginPath();
+        for (let index = 0; index < candidate.contourLongitude.length; index += 1) {{
+          const point = {{
+            x: projection.xUnwrapped(longitudes[index]),
+            y: projection.y(candidate.contourLatitude[index]),
+          }};
+          if (index === 0) context.moveTo(point.x, point.y);
+          else context.lineTo(point.x, point.y);
+        }}
+        context.closePath();
+        context.fill();
+        context.stroke();
       }}
-      context.closePath();
-      context.fill();
-      context.stroke();
       context.setLineDash([]);
     }}
     if (isHovered) drawEddyHoverFocus(center, stroke);
@@ -3854,8 +3934,9 @@ html, body {{
     for (const path of mask.paths) {{
       if (path.longitude.length < 3) continue;
       for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
+        const longitudes = viewport.unwrappedLongitudes(path.longitude, longitudeShift);
         for (let index = 0; index < path.longitude.length; index += 1) {{
-          const x = project.xUnwrapped(path.longitude[index] + longitudeShift);
+          const x = project.xUnwrapped(longitudes[index]);
           const y = project.y(path.latitude[index]);
           if (index === 0) context.moveTo(x, y);
           else context.lineTo(x, y);
