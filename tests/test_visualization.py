@@ -367,6 +367,8 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "landMask.land" not in html_output.data
     assert "ob-lagrangian-zoom" in html_output.data
     assert "createMapViewport" in html_output.data
+    assert "createMapBackgroundCache" in html_output.data
+    assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
     assert "viewport.longitudeShiftsForPath(path)" in html_output.data
     assert "projection.xUnwrapped" in html_output.data
     assert "fill(&quot;evenodd&quot;)" in html_output.data
@@ -603,6 +605,8 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "fill(&quot;evenodd&quot;)" in html_output.data
     assert "ob-eddy-zoom" in html_output.data
     assert "createMapViewport" in html_output.data
+    assert "createMapBackgroundCache" in html_output.data
+    assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
     assert "viewport.longitudeShiftsForPath(path)" in html_output.data
     assert "projection.xUnwrapped" in html_output.data
     assert "viewport.unwrappedLongitudes(candidate.contourLongitude" in html_output.data
@@ -699,6 +703,8 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "fill(&quot;evenodd&quot;)" in html_output.data
     assert "ob-class4-zoom" in html_output.data
     assert "createMapViewport" in html_output.data
+    assert "createMapBackgroundCache" in html_output.data
+    assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
     assert "viewport.longitudeShiftsForPath(path)" in html_output.data
     assert "project.xUnwrapped" in html_output.data
     assert "Map zoom controls" in html_output.data
