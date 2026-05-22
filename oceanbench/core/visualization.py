@@ -3563,12 +3563,12 @@ def _class4_track_display_sample(
     maximum_points_per_frame: int,
 ) -> pandas.DataFrame:
     total_count = len(group)
-    # Balance global coverage and visible track length from the single display budget.
-    chunk_count = max(1, int(round(maximum_points_per_frame ** (1 / 3))))
+    # Balance global coverage and visible along-track structure from the single display budget.
+    chunk_count = max(1, int(round(maximum_points_per_frame**0.5)))
     centers = numpy.floor((numpy.arange(chunk_count, dtype=float) + 0.5) * total_count / chunk_count).astype(int)
     base_chunk_size = max(1, maximum_points_per_frame // chunk_count)
     extra_points = maximum_points_per_frame % chunk_count
-    source_window_size = min(total_count, maximum_points_per_frame)
+    source_window_size = min(total_count, max(chunk_count, maximum_points_per_frame // 2))
     selected_position_chunks = []
     for chunk_index, center in enumerate(centers):
         chunk_size = base_chunk_size + int(chunk_index < extra_points)
