@@ -1616,17 +1616,22 @@ def _map_viewport_script() -> str:
         const scale = Math.min(width / longitudeSpan, height / latitudeSpan) * fitScale;
         const xOffset = (width - longitudeSpan * scale) / 2;
         const yOffset = (height - latitudeSpan * scale) / 2;
+        const xUnwrapped = (longitude) => xOffset + (longitude - targetBounds.longitudeMinimum) * scale;
         return {
           scale,
           x: (longitude) => xOffset +
             (displayLongitude(longitude, targetBounds) - targetBounds.longitudeMinimum) * scale,
+          xUnwrapped,
           y: (latitude) => height - yOffset - (latitude - targetBounds.latitudeMinimum) * scale
         };
       }
+      const xUnwrapped = (longitude) =>
+        ((longitude - targetBounds.longitudeMinimum) / longitudeSpan) * width;
       return {
         scale: Math.min(width / longitudeSpan, height / latitudeSpan),
         x: (longitude) =>
           ((displayLongitude(longitude, targetBounds) - targetBounds.longitudeMinimum) / longitudeSpan) * width,
+        xUnwrapped,
         y: (latitude) => height - ((latitude - targetBounds.latitudeMinimum) / latitudeSpan) * height
       };
     }
@@ -1654,6 +1659,21 @@ def _map_viewport_script() -> str:
         x: activeProjection.x(point.longitude),
         y: activeProjection.y(point.latitude)
       };
+    }
+
+    function longitudeShiftsForPath(path) {
+      if (!periodicLongitude) return [0];
+      const longitudes = path.longitude.filter((value) => Number.isFinite(value));
+      if (longitudes.length === 0) return [0];
+      const pathMinimum = Math.min(...longitudes);
+      const pathMaximum = Math.max(...longitudes);
+      const firstCopy = Math.floor((viewBounds.longitudeMinimum - pathMaximum) / longitudePeriod) - 1;
+      const lastCopy = Math.ceil((viewBounds.longitudeMaximum - pathMinimum) / longitudePeriod) + 1;
+      const shifts = [];
+      for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+        shifts.push(copy * longitudePeriod);
+      }
+      return shifts;
     }
 
     function constrainedSpan(currentSpan, originalSpan, factor) {
@@ -1827,6 +1847,7 @@ def _map_viewport_script() -> str:
       attachZoomControls,
       bounds,
       isDragging: () => dragStart !== null,
+      longitudeShiftsForPath,
       project,
       projection,
       zoom,
@@ -2374,16 +2395,22 @@ html, body {{
   function drawLandMask() {{
     const landMask = payload.landMask;
     if (!landMask || landMask.paths.length === 0) return;
+    const projection = viewport.projection();
     context.fillStyle = "{LAND_BACKGROUND_COLOR}";
     context.beginPath();
     for (const path of landMask.paths) {{
       if (path.longitude.length < 3) continue;
-      for (let index = 0; index < path.longitude.length; index += 1) {{
-        const point = project({{ longitude: path.longitude[index], latitude: path.latitude[index] }});
-        if (index === 0) context.moveTo(point.x, point.y);
-        else context.lineTo(point.x, point.y);
+      for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
+        for (let index = 0; index < path.longitude.length; index += 1) {{
+          const point = {{
+            x: projection.xUnwrapped(path.longitude[index] + longitudeShift),
+            y: projection.y(path.latitude[index]),
+          }};
+          if (index === 0) context.moveTo(point.x, point.y);
+          else context.lineTo(point.x, point.y);
+        }}
+        context.closePath();
       }}
-      context.closePath();
     }}
     context.fill("evenodd");
   }}
@@ -3141,16 +3168,22 @@ html, body {{
   function drawLandMask() {{
     const landMask = payload.landMask;
     if (!landMask || landMask.paths.length === 0) return;
+    const projection = viewport.projection();
     context.fillStyle = "{LAND_BACKGROUND_COLOR}";
     context.beginPath();
     for (const path of landMask.paths) {{
       if (path.longitude.length < 3) continue;
-      for (let index = 0; index < path.longitude.length; index += 1) {{
-        const point = project({{ longitude: path.longitude[index], latitude: path.latitude[index] }});
-        if (index === 0) context.moveTo(point.x, point.y);
-        else context.lineTo(point.x, point.y);
+      for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
+        for (let index = 0; index < path.longitude.length; index += 1) {{
+          const point = {{
+            x: projection.xUnwrapped(path.longitude[index] + longitudeShift),
+            y: projection.y(path.latitude[index]),
+          }};
+          if (index === 0) context.moveTo(point.x, point.y);
+          else context.lineTo(point.x, point.y);
+        }}
+        context.closePath();
       }}
-      context.closePath();
     }}
     context.fill("evenodd");
   }}
@@ -3778,13 +3811,15 @@ html, body {{
     context.beginPath();
     for (const path of mask.paths) {{
       if (path.longitude.length < 3) continue;
-      for (let index = 0; index < path.longitude.length; index += 1) {{
-        const x = project.x(path.longitude[index]);
-        const y = project.y(path.latitude[index]);
-        if (index === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
+      for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
+        for (let index = 0; index < path.longitude.length; index += 1) {{
+          const x = project.xUnwrapped(path.longitude[index] + longitudeShift);
+          const y = project.y(path.latitude[index]);
+          if (index === 0) context.moveTo(x, y);
+          else context.lineTo(x, y);
+        }}
+        context.closePath();
       }}
-      context.closePath();
     }}
     context.fill("evenodd");
   }}
