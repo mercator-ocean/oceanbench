@@ -480,18 +480,18 @@ def test_class4_sampler_uses_time_sorted_bucket_centers_for_profile_variables() 
     assert frame["error"] == [11.0, 41.0, 101.0]
 
 
-def test_class4_sampler_keeps_contiguous_time_chunks_for_satellite_variables() -> None:
+def test_class4_sampler_keeps_spaced_track_windows_for_satellite_variables() -> None:
     from oceanbench.core import visualization as core_visualization
 
     shuffled_indices = [9, 0, 5, 15, 6, 4, 16, 14, 19, 1, 2, 3, 7, 8, 10, 11, 12, 13, 17, 18]
     group = pandas.DataFrame(
         {
             Dimension.TIME.key(): pandas.to_datetime([f"2024-01-01T00:{minute:02d}:00" for minute in shuffled_indices]),
-            Dimension.LONGITUDE.key(): [float(minute) for minute in shuffled_indices],
+            Dimension.LONGITUDE.key(): [float(index) for index in range(len(shuffled_indices))],
             Dimension.LATITUDE.key(): [0.0] * len(shuffled_indices),
             "lead_day": [0] * len(shuffled_indices),
-            "error": [float(minute) for minute in shuffled_indices],
-            "absolute_error": [float(minute) for minute in shuffled_indices],
+            "error": [float(index) for index in range(len(shuffled_indices))],
+            "absolute_error": [float(index) for index in range(len(shuffled_indices))],
         }
     )
 
@@ -504,8 +504,8 @@ def test_class4_sampler_keeps_contiguous_time_chunks_for_satellite_variables() -
     assert frame["leadDay"] == 1
     assert frame["totalCount"] == 20
     assert frame["shownCount"] == 6
-    assert frame["longitude"] == [4.0, 5.0, 6.0, 14.0, 15.0, 16.0]
-    assert frame["error"] == [4.0, 5.0, 6.0, 14.0, 15.0, 16.0]
+    assert frame["longitude"] == [2.0, 4.0, 7.0, 12.0, 14.0, 17.0]
+    assert frame["error"] == [2.0, 4.0, 7.0, 12.0, 14.0, 17.0]
 
 
 def test_eddy_contour_payload_uses_shape_preserving_point_budget() -> None:
@@ -688,6 +688,7 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "height:500px" in html_output.data
     assert "Class IV observation error maps" in html_output.data
     assert "Model minus Class IV observation errors" in html_output.data
+    assert "SLA points are sampled along observed satellite tracks for display" in html_output.data
     assert "metrics use all observations" in html_output.data
     assert "ob-class4-tooltip" in html_output.data
     assert "mask.paths" in html_output.data
