@@ -506,8 +506,8 @@ def test_class4_sampler_keeps_spaced_track_windows_for_satellite_variables() -> 
     assert frame["leadDay"] == 1
     assert frame["totalCount"] == 20
     assert frame["shownCount"] == 6
-    assert frame["longitude"] == [2.0, 4.0, 7.0, 12.0, 14.0, 17.0]
-    assert frame["error"] == [2.0, 4.0, 7.0, 12.0, 14.0, 17.0]
+    assert frame["longitude"] == [4.0, 5.0, 6.0, 14.0, 15.0, 16.0]
+    assert frame["error"] == [4.0, 5.0, 6.0, 14.0, 15.0, 16.0]
 
 
 def test_eddy_contour_payload_uses_shape_preserving_point_budget() -> None:
