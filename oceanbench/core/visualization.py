@@ -3416,16 +3416,11 @@ def _class4_depth_sort_key(depth_bin: str) -> int:
     return DEPTH_BIN_DISPLAY_ORDER.get(depth_bin, len(DEPTH_BIN_DISPLAY_ORDER))
 
 
-def _class4_display_sample(group: pandas.DataFrame, maximum_points_per_frame: int) -> pandas.DataFrame:
-    if maximum_points_per_frame <= 0:
-        raise ValueError("maximum_points_per_frame must be positive.")
-    sorted_group = group.sort_values(
-        [Dimension.TIME.key(), Dimension.LONGITUDE.key(), Dimension.LATITUDE.key()],
-        kind="mergesort",
-    )
+def _class4_representative_display_sample(
+    sorted_group: pandas.DataFrame,
+    maximum_points_per_frame: int,
+) -> pandas.DataFrame:
     total_count = len(sorted_group)
-    if total_count <= maximum_points_per_frame:
-        return sorted_group
     selected_positions = numpy.floor(
         (numpy.arange(maximum_points_per_frame, dtype=float) + 0.5) * total_count / maximum_points_per_frame
     ).astype(int)
@@ -3433,9 +3428,54 @@ def _class4_display_sample(group: pandas.DataFrame, maximum_points_per_frame: in
     return sorted_group.iloc[selected_positions]
 
 
-def _class4_sampled_frame(group: pandas.DataFrame, maximum_points_per_frame: int) -> dict[str, object]:
+def _class4_track_display_sample(
+    sorted_group: pandas.DataFrame,
+    maximum_points_per_frame: int,
+) -> pandas.DataFrame:
+    total_count = len(sorted_group)
+    # Balance global coverage and visible track length from the single display budget.
+    chunk_count = max(1, int(numpy.sqrt(maximum_points_per_frame)))
+    centers = numpy.floor((numpy.arange(chunk_count, dtype=float) + 0.5) * total_count / chunk_count).astype(int)
+    base_chunk_size = max(1, maximum_points_per_frame // chunk_count)
+    extra_points = maximum_points_per_frame % chunk_count
+    selected_position_chunks = []
+    for chunk_index, center in enumerate(centers):
+        chunk_size = base_chunk_size + int(chunk_index < extra_points)
+        start = numpy.clip(center - chunk_size // 2, 0, max(0, total_count - chunk_size))
+        selected_position_chunks.append(numpy.arange(start, start + chunk_size))
+    selected_positions = numpy.unique(numpy.concatenate(selected_position_chunks))
+    return sorted_group.iloc[selected_positions[:maximum_points_per_frame]]
+
+
+def _class4_display_sample(
+    group: pandas.DataFrame,
+    maximum_points_per_frame: int,
+    variable_key: str,
+) -> pandas.DataFrame:
+    if maximum_points_per_frame <= 0:
+        raise ValueError("maximum_points_per_frame must be positive.")
     total_count = len(group)
-    group = _class4_display_sample(group, maximum_points_per_frame)
+    if total_count <= maximum_points_per_frame:
+        return group
+
+    if variable_key == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
+        time_sorted_group = group.sort_values(Dimension.TIME.key(), kind="mergesort")
+        return _class4_track_display_sample(time_sorted_group, maximum_points_per_frame)
+
+    sorted_group = group.sort_values(
+        [Dimension.TIME.key(), Dimension.LONGITUDE.key(), Dimension.LATITUDE.key()],
+        kind="mergesort",
+    )
+    return _class4_representative_display_sample(sorted_group, maximum_points_per_frame)
+
+
+def _class4_sampled_frame(
+    group: pandas.DataFrame,
+    maximum_points_per_frame: int,
+    variable_key: str,
+) -> dict[str, object]:
+    total_count = len(group)
+    group = _class4_display_sample(group, maximum_points_per_frame, variable_key)
     return {
         "leadDay": int(group["lead_day"].iloc[0]) + 1,
         "totalCount": int(total_count),
@@ -3457,12 +3497,13 @@ def _class4_robust_scale(values: pandas.Series) -> float:
 def _class4_depth_payloads(
     variable_dataframe: pandas.DataFrame,
     maximum_points_per_frame: int,
+    variable_key: str,
 ) -> list[dict[str, object]]:
     depth_payloads = []
     for depth_bin in sorted(variable_dataframe["depth_bin"].unique(), key=_class4_depth_sort_key):
         depth_dataframe = variable_dataframe.loc[variable_dataframe["depth_bin"] == depth_bin]
         frames = [
-            _class4_sampled_frame(lead_day_group, maximum_points_per_frame)
+            _class4_sampled_frame(lead_day_group, maximum_points_per_frame, variable_key)
             for _, lead_day_group in depth_dataframe.groupby("lead_day", sort=True)
         ]
         if frames:
@@ -3511,7 +3552,7 @@ def _class4_payload(
         variable_dataframe = finite_dataframe.loc[finite_dataframe["variable"] == variable_key]
         if variable_dataframe.empty:
             continue
-        depth_payloads = _class4_depth_payloads(variable_dataframe, maximum_points_per_frame)
+        depth_payloads = _class4_depth_payloads(variable_dataframe, maximum_points_per_frame, variable_key)
         if depth_payloads:
             variable_payloads.append(
                 {

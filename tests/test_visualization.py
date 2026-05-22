@@ -444,7 +444,7 @@ def test_map_bounds_keep_regional_domains_clamped_to_data_extent() -> None:
     assert bounds["periodicLongitude"] is False
 
 
-def test_class4_sampler_uses_time_sorted_bucket_centers() -> None:
+def test_class4_sampler_uses_time_sorted_bucket_centers_for_profile_variables() -> None:
     from oceanbench.core import visualization as core_visualization
 
     group = pandas.DataFrame(
@@ -467,13 +467,45 @@ def test_class4_sampler_uses_time_sorted_bucket_centers() -> None:
         }
     )
 
-    frame = core_visualization._class4_sampled_frame(group, maximum_points_per_frame=3)
+    frame = core_visualization._class4_sampled_frame(
+        group,
+        maximum_points_per_frame=3,
+        variable_key=Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+    )
 
     assert frame["leadDay"] == 1
     assert frame["totalCount"] == 6
     assert frame["shownCount"] == 3
     assert frame["longitude"] == [1.0, 1.0, 1.0]
     assert frame["error"] == [11.0, 41.0, 101.0]
+
+
+def test_class4_sampler_keeps_contiguous_time_chunks_for_satellite_variables() -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    shuffled_indices = [9, 0, 5, 15, 6, 4, 16, 14, 19, 1, 2, 3, 7, 8, 10, 11, 12, 13, 17, 18]
+    group = pandas.DataFrame(
+        {
+            Dimension.TIME.key(): pandas.to_datetime([f"2024-01-01T00:{minute:02d}:00" for minute in shuffled_indices]),
+            Dimension.LONGITUDE.key(): [float(minute) for minute in shuffled_indices],
+            Dimension.LATITUDE.key(): [0.0] * len(shuffled_indices),
+            "lead_day": [0] * len(shuffled_indices),
+            "error": [float(minute) for minute in shuffled_indices],
+            "absolute_error": [float(minute) for minute in shuffled_indices],
+        }
+    )
+
+    frame = core_visualization._class4_sampled_frame(
+        group,
+        maximum_points_per_frame=6,
+        variable_key=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+    )
+
+    assert frame["leadDay"] == 1
+    assert frame["totalCount"] == 20
+    assert frame["shownCount"] == 6
+    assert frame["longitude"] == [4.0, 5.0, 6.0, 14.0, 15.0, 16.0]
+    assert frame["error"] == [4.0, 5.0, 6.0, 14.0, 15.0, 16.0]
 
 
 def test_eddy_contour_payload_uses_shape_preserving_point_budget() -> None:
