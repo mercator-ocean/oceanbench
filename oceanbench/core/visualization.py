@@ -3429,22 +3429,24 @@ def _class4_representative_display_sample(
 
 
 def _class4_track_display_sample(
-    sorted_group: pandas.DataFrame,
+    group: pandas.DataFrame,
     maximum_points_per_frame: int,
 ) -> pandas.DataFrame:
-    total_count = len(sorted_group)
+    total_count = len(group)
     # Balance global coverage and visible track length from the single display budget.
-    chunk_count = max(1, int(numpy.sqrt(maximum_points_per_frame)))
+    chunk_count = max(1, int(round(maximum_points_per_frame ** (1 / 3))))
     centers = numpy.floor((numpy.arange(chunk_count, dtype=float) + 0.5) * total_count / chunk_count).astype(int)
     base_chunk_size = max(1, maximum_points_per_frame // chunk_count)
     extra_points = maximum_points_per_frame % chunk_count
+    source_window_size = min(total_count, maximum_points_per_frame)
     selected_position_chunks = []
     for chunk_index, center in enumerate(centers):
         chunk_size = base_chunk_size + int(chunk_index < extra_points)
-        start = numpy.clip(center - chunk_size // 2, 0, max(0, total_count - chunk_size))
-        selected_position_chunks.append(numpy.arange(start, start + chunk_size))
+        start = numpy.clip(center - source_window_size // 2, 0, max(0, total_count - source_window_size))
+        stop = start + source_window_size - 1
+        selected_position_chunks.append(numpy.linspace(start, stop, chunk_size, dtype=int))
     selected_positions = numpy.unique(numpy.concatenate(selected_position_chunks))
-    return sorted_group.iloc[selected_positions[:maximum_points_per_frame]]
+    return group.iloc[selected_positions[:maximum_points_per_frame]]
 
 
 def _class4_display_sample(
@@ -3459,8 +3461,7 @@ def _class4_display_sample(
         return group
 
     if variable_key == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
-        time_sorted_group = group.sort_values(Dimension.TIME.key(), kind="mergesort")
-        return _class4_track_display_sample(time_sorted_group, maximum_points_per_frame)
+        return _class4_track_display_sample(group, maximum_points_per_frame)
 
     sorted_group = group.sort_values(
         [Dimension.TIME.key(), Dimension.LONGITUDE.key(), Dimension.LATITUDE.key()],
@@ -3734,7 +3735,7 @@ html, body {{
     <div>
       <div class="ob-class4-title"></div>
       <div class="ob-class4-subtitle">
-        Model minus Class IV observation errors at observation locations; dense frames are sampled for display.
+        Model minus Class IV observation errors; SLA points are sampled along observed satellite tracks for display.
       </div>
     </div>
     <div class="ob-class4-controls">
