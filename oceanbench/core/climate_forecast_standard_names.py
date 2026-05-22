@@ -24,6 +24,11 @@ class StandardVariable(Enum):
     GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY = "geostrophic_eastward_sea_water_velocity"
 
 
+_SUPPORTED_STANDARD_NAMES = {standard_name.value for standard_name in StandardDimension} | {
+    standard_name.value for standard_name in StandardVariable
+}
+
+
 def rename_dataset_with_standard_names(
     dataset: xarray.Dataset,
 ) -> xarray.Dataset:
@@ -31,5 +36,6 @@ def rename_dataset_with_standard_names(
         variable_name: dataset[variable_name].standard_name
         for variable_name in dataset.variables
         if hasattr(dataset[variable_name], "standard_name")
+        and dataset[variable_name].standard_name in _SUPPORTED_STANDARD_NAMES
     }
     return dataset.rename(mapping)

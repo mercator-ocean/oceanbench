@@ -10,6 +10,7 @@ import xarray
 from datetime import datetime, timedelta
 from collections.abc import Callable
 
+from oceanbench.core.climate_forecast_standard_names import StandardDimension, StandardVariable
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
@@ -21,8 +22,41 @@ from oceanbench.core.interpolate import interpolate_1_degree
 _CLOUDFERRO_OCEANBENCH_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
 _CLOUDFERRO_ML_FORECASTS_URL = f"{_CLOUDFERRO_OCEANBENCH_BASE_URL}/dev/ml-forecast-outputs"
 _CLOUDFERRO_GLO12_FORECASTS_URL = f"{_CLOUDFERRO_OCEANBENCH_BASE_URL}/dev/additionnal-data/GLO12"
+_CLOUDFERRO_2024_STAGE_VARIANT = "cloudferro-2024"
 _GLO12_FORECAST_PACKAGE_OFFSET = timedelta(days=1)
 _GLO12_FORECAST_VARIABLE_GROUPS = ("zos", "thetao", "so", "uo", "vo")
+_CHALLENGER_VARIABLE_METADATA = {
+    "zos": {
+        "standard_name": StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.value,
+        "long_name": "Sea surface height",
+        "units": "m",
+    },
+    "thetao": {
+        "standard_name": StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value,
+        "long_name": "Temperature",
+        "units": "degrees_C",
+    },
+    "so": {
+        "standard_name": StandardVariable.SEA_WATER_SALINITY.value,
+        "long_name": "Salinity",
+        "units": "1e-3",
+    },
+    "uo": {
+        "standard_name": StandardVariable.EASTWARD_SEA_WATER_VELOCITY.value,
+        "long_name": "Eastward velocity",
+        "units": "m s-1",
+    },
+    "vo": {
+        "standard_name": StandardVariable.NORTHWARD_SEA_WATER_VELOCITY.value,
+        "long_name": "Northward velocity",
+        "units": "m s-1",
+    },
+}
+_CHALLENGER_COORDINATE_STANDARD_NAMES = {
+    "depth": StandardDimension.DEPTH.value,
+    "latitude": StandardDimension.LATITUDE.value,
+    "longitude": StandardDimension.LONGITUDE.value,
+}
 
 
 def _default_first_day_datetimes() -> list[datetime]:
@@ -33,6 +67,7 @@ def glo12() -> xarray.Dataset:
     return _open_multizarr_forecasts_as_challenger_dataset(
         _glo12_dataset_path,
         open_week_dataset=_opened_glo12_week_dataset,
+        stage_variant=_CLOUDFERRO_2024_STAGE_VARIANT,
     )
 
 
@@ -87,7 +122,10 @@ def _glo36v1_dataset_path(start_datetime: datetime) -> str:
 
 
 def glonet() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_glonet_dataset_path)
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _glonet_dataset_path,
+        stage_variant=_CLOUDFERRO_2024_STAGE_VARIANT,
+    )
 
 
 def glonet_1_degree() -> xarray.Dataset:
@@ -100,7 +138,10 @@ def _glonet_dataset_path(start_datetime: datetime) -> str:
 
 
 def xihe() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_xihe_dataset_path)
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _xihe_dataset_path,
+        stage_variant=_CLOUDFERRO_2024_STAGE_VARIANT,
+    )
 
 
 def xihe_1_degree() -> xarray.Dataset:
@@ -113,7 +154,10 @@ def _xihe_dataset_path(start_datetime: datetime) -> str:
 
 
 def wenhai() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_wenhai_dataset_path)
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _wenhai_dataset_path,
+        stage_variant=_CLOUDFERRO_2024_STAGE_VARIANT,
+    )
 
 
 def wenhai_1_degree() -> xarray.Dataset:
@@ -133,15 +177,27 @@ def _resolved_first_day_datetimes(first_day_datetimes: list[datetime] | None) ->
     return first_day_datetimes if first_day_datetimes is not None else _default_first_day_datetimes()
 
 
+def _with_standard_challenger_metadata(dataset: xarray.Dataset) -> xarray.Dataset:
+    dataset = dataset.copy()
+    for variable_name, variable_metadata in _CHALLENGER_VARIABLE_METADATA.items():
+        if variable_name in dataset:
+            dataset[variable_name].attrs.update(variable_metadata)
+    for coordinate_name, standard_name in _CHALLENGER_COORDINATE_STANDARD_NAMES.items():
+        if coordinate_name in dataset.coords:
+            dataset[coordinate_name].attrs["standard_name"] = standard_name
+    return dataset
+
+
 def _prepared_challenger_week_dataset(
     dataset: xarray.Dataset,
     operation_name: str,
 ) -> xarray.Dataset:
     challenger_week_dataset = require_remote_dataset_dimensions(dataset, ["time"], operation_name)
     week_lead_days_count = challenger_week_dataset.sizes["time"]
-    return challenger_week_dataset.rename({"time": "lead_day_index"}).assign_coords(
+    prepared_week_dataset = challenger_week_dataset.rename({"time": "lead_day_index"}).assign_coords(
         {"lead_day_index": range(week_lead_days_count)}
     )
+    return _with_standard_challenger_metadata(prepared_week_dataset)
 
 
 def _opened_challenger_week_dataset(
@@ -196,6 +252,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
     first_day_datetimes: list[datetime] | None = None,
     preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None = None,
     open_week_dataset: Callable[[datetime], xarray.Dataset] | None = None,
+    stage_variant: str | None = None,
 ) -> xarray.Dataset:
     resolved_first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes)
     dataset_name = _challenger_dataset_name(forecast_zarr_path_from_start_datetime)
@@ -227,6 +284,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
                 open_week_dataset,
             ),
             attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
+            stage_variant=stage_variant,
         )
 
     return with_remote_http_retries("challenger dataset open", open_dataset)
