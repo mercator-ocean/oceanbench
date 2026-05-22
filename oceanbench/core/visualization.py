@@ -1603,6 +1603,17 @@ def _map_viewport_script() -> str:
       return viewBounds;
     }
 
+    function cacheKey() {
+      return [
+        canvas.width,
+        canvas.height,
+        viewBounds.longitudeMinimum,
+        viewBounds.longitudeMaximum,
+        viewBounds.latitudeMinimum,
+        viewBounds.latitudeMaximum,
+      ].map((value) => Number(value).toFixed(6)).join(":");
+    }
+
     function projection() {
       return projectionForBounds(viewBounds);
     }
@@ -1878,6 +1889,7 @@ def _map_viewport_script() -> str:
       attachPan,
       attachZoomControls,
       bounds,
+      cacheKey,
       isDragging: () => dragStart !== null,
       longitudeShiftsForPath,
       nearestLongitudeCopy,
@@ -1887,6 +1899,29 @@ def _map_viewport_script() -> str:
       zoom,
       zoomAt,
       reset,
+    };
+  }
+
+  function createMapBackgroundCache(canvas, drawLayer) {
+    const layer = document.createElement("canvas");
+    const layerContext = layer.getContext("2d");
+    let layerKey = null;
+
+    return {
+      draw(context, key) {
+        const nextKey = key || "";
+        if (layer.width !== canvas.width || layer.height !== canvas.height) {
+          layer.width = canvas.width;
+          layer.height = canvas.height;
+          layerKey = null;
+        }
+        if (layerKey !== nextKey) {
+          layerContext.clearRect(0, 0, layer.width, layer.height);
+          drawLayer(layerContext);
+          layerKey = nextKey;
+        }
+        context.drawImage(layer, 0, 0);
+      },
     };
   }"""
 
@@ -2251,12 +2286,13 @@ html, body {{
     originalBounds: payload.bounds,
     onChange: draw,
   }});
+  const backgroundCache = createMapBackgroundCache(canvas, drawBackgroundLayer);
 
   title.textContent = payload.title;
   timeInput.max = payload.timeLabels.length - 1;
   timeInput.addEventListener("input", () => {{
     activeTime = Number(timeInput.value);
-    renderControls();
+    renderStatus();
     draw();
   }});
   playButton.addEventListener("click", () => {{
@@ -2275,7 +2311,8 @@ html, body {{
   }});
   viewport.attachPan();
 
-  renderControls();
+  renderReferenceButtons();
+  renderStatus();
   draw();
 
   function stop() {{
@@ -2295,12 +2332,12 @@ html, body {{
       activeTime = 0;
     }}
     timeInput.value = activeTime;
-    renderControls();
+    renderStatus();
     draw();
     animationFrame = window.requestAnimationFrame(tick);
   }}
 
-  function renderControls() {{
+  function renderReferenceButtons() {{
     referenceButtons.replaceChildren();
     for (const reference of payload.references) {{
       const button = document.createElement("button");
@@ -2310,11 +2347,15 @@ html, body {{
       button.classList.toggle("active", reference.key === activeReferenceKey);
       button.addEventListener("click", () => {{
         activeReferenceKey = reference.key;
-        renderControls();
+        renderReferenceButtons();
+        renderStatus();
         draw();
       }});
       referenceButtons.appendChild(button);
     }}
+  }}
+
+  function renderStatus() {{
     timeLabel.textContent = `Lead day ${{(activeTime + 1).toFixed(1)}}`;
     statusText.textContent = [
       references[activeReferenceKey].label,
@@ -2367,7 +2408,6 @@ html, body {{
   }}
 
   function draw() {{
-    context.clearRect(0, 0, canvas.width, canvas.height);
     drawBackground();
     const reference = references[activeReferenceKey];
     drawDailyMarkers(payload.challenger, reference.track, activeTime);
@@ -2388,11 +2428,15 @@ html, body {{
   }}
 
   function drawBackground() {{
-    context.fillStyle = "#eef7fb";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    drawLandMask();
-    context.strokeStyle = "rgba(51, 65, 85, 0.18)";
-    context.lineWidth = 1;
+    backgroundCache.draw(context, viewport.cacheKey());
+  }}
+
+  function drawBackgroundLayer(targetContext) {{
+    targetContext.fillStyle = "#eef7fb";
+    targetContext.fillRect(0, 0, canvas.width, canvas.height);
+    drawLandMask(targetContext);
+    targetContext.strokeStyle = "rgba(51, 65, 85, 0.18)";
+    targetContext.lineWidth = 1;
     const bounds = viewport.bounds();
     const longitudeStep = niceStep(bounds.longitudeMaximum - bounds.longitudeMinimum);
     const latitudeStep = niceStep(bounds.latitudeMaximum - bounds.latitudeMinimum);
@@ -2404,6 +2448,7 @@ html, body {{
       line(
         project({{ longitude, latitude: bounds.latitudeMinimum }}),
         project({{ longitude, latitude: bounds.latitudeMaximum }}),
+        targetContext,
       );
     }}
     for (
@@ -2414,6 +2459,7 @@ html, body {{
       line(
         project({{ longitude: bounds.longitudeMinimum, latitude }}),
         project({{ longitude: bounds.longitudeMaximum, latitude }}),
+        targetContext,
       );
     }}
   }}
@@ -2426,12 +2472,12 @@ html, body {{
     return 2;
   }}
 
-  function drawLandMask() {{
+  function drawLandMask(targetContext) {{
     const landMask = payload.landMask;
     if (!landMask || landMask.paths.length === 0) return;
     const projection = viewport.projection();
-    context.fillStyle = "{LAND_BACKGROUND_COLOR}";
-    context.beginPath();
+    targetContext.fillStyle = "{LAND_BACKGROUND_COLOR}";
+    targetContext.beginPath();
     for (const path of landMask.paths) {{
       if (path.longitude.length < 3) continue;
       for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
@@ -2441,13 +2487,13 @@ html, body {{
             x: projection.xUnwrapped(longitudes[index]),
             y: projection.y(path.latitude[index]),
           }};
-          if (index === 0) context.moveTo(point.x, point.y);
-          else context.lineTo(point.x, point.y);
+          if (index === 0) targetContext.moveTo(point.x, point.y);
+          else targetContext.lineTo(point.x, point.y);
         }}
-        context.closePath();
+        targetContext.closePath();
       }}
     }}
-    context.fill("evenodd");
+    targetContext.fill("evenodd");
   }}
 
   function drawDailyMarkers(challengerTrack, referenceTrack, time) {{
@@ -2533,11 +2579,11 @@ html, body {{
     context.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
   }}
 
-  function line(a, b) {{
-    context.beginPath();
-    context.moveTo(a.x, a.y);
-    context.lineTo(b.x, b.y);
-    context.stroke();
+  function line(a, b, targetContext = context) {{
+    targetContext.beginPath();
+    targetContext.moveTo(a.x, a.y);
+    targetContext.lineTo(b.x, b.y);
+    targetContext.stroke();
   }}
 
   function tooFarApart(a, b) {{
@@ -3053,6 +3099,7 @@ html, body {{
     onInteractionStart: clearHover,
     onChange: draw,
   }});
+  const backgroundCache = createMapBackgroundCache(canvas, drawBackgroundLayer);
 
   title.textContent = payload.title;
   leadInput.addEventListener("input", () => {{
@@ -3148,7 +3195,6 @@ html, body {{
   }}
 
   function draw() {{
-    context.clearRect(0, 0, canvas.width, canvas.height);
     eddyTargets = [];
     drawBackground();
     const frame = references[activeReferenceKey].frames[activeLeadIndex];
@@ -3180,11 +3226,15 @@ html, body {{
   }}
 
   function drawBackground() {{
-    context.fillStyle = "#eef7fb";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    drawLandMask();
-    context.strokeStyle = "rgba(51, 65, 85, 0.18)";
-    context.lineWidth = 1;
+    backgroundCache.draw(context, viewport.cacheKey());
+  }}
+
+  function drawBackgroundLayer(targetContext) {{
+    targetContext.fillStyle = "#eef7fb";
+    targetContext.fillRect(0, 0, canvas.width, canvas.height);
+    drawLandMask(targetContext);
+    targetContext.strokeStyle = "rgba(51, 65, 85, 0.18)";
+    targetContext.lineWidth = 1;
     const bounds = viewport.bounds();
     const longitudeStep = niceStep(bounds.longitudeMaximum - bounds.longitudeMinimum);
     const latitudeStep = niceStep(bounds.latitudeMaximum - bounds.latitudeMinimum);
@@ -3193,12 +3243,12 @@ html, body {{
     for (let longitude = firstLongitude; longitude <= bounds.longitudeMaximum; longitude += longitudeStep) {{
       const southPoint = project({{ longitude, latitude: bounds.latitudeMinimum }});
       const northPoint = project({{ longitude, latitude: bounds.latitudeMaximum }});
-      line(southPoint, northPoint);
+      line(southPoint, northPoint, targetContext);
     }}
     for (let latitude = firstLatitude; latitude <= bounds.latitudeMaximum; latitude += latitudeStep) {{
       const westPoint = project({{ longitude: bounds.longitudeMinimum, latitude }});
       const eastPoint = project({{ longitude: bounds.longitudeMaximum, latitude }});
-      line(westPoint, eastPoint);
+      line(westPoint, eastPoint, targetContext);
     }}
   }}
 
@@ -3210,12 +3260,12 @@ html, body {{
     return 2;
   }}
 
-  function drawLandMask() {{
+  function drawLandMask(targetContext) {{
     const landMask = payload.landMask;
     if (!landMask || landMask.paths.length === 0) return;
     const projection = viewport.projection();
-    context.fillStyle = "{LAND_BACKGROUND_COLOR}";
-    context.beginPath();
+    targetContext.fillStyle = "{LAND_BACKGROUND_COLOR}";
+    targetContext.beginPath();
     for (const path of landMask.paths) {{
       if (path.longitude.length < 3) continue;
       for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
@@ -3225,13 +3275,13 @@ html, body {{
             x: projection.xUnwrapped(longitudes[index]),
             y: projection.y(path.latitude[index]),
           }};
-          if (index === 0) context.moveTo(point.x, point.y);
-          else context.lineTo(point.x, point.y);
+          if (index === 0) targetContext.moveTo(point.x, point.y);
+          else targetContext.lineTo(point.x, point.y);
         }}
-        context.closePath();
+        targetContext.closePath();
       }}
     }}
-    context.fill("evenodd");
+    targetContext.fill("evenodd");
   }}
 
   function drawMatchLine(reference, challenger) {{
@@ -3331,11 +3381,11 @@ html, body {{
     context.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
   }}
 
-  function line(a, b) {{
-    context.beginPath();
-    context.moveTo(a.x, a.y);
-    context.lineTo(b.x, b.y);
-    context.stroke();
+  function line(a, b, targetContext = context) {{
+    targetContext.beginPath();
+    targetContext.moveTo(a.x, a.y);
+    targetContext.lineTo(b.x, b.y);
+    targetContext.stroke();
   }}
 
   function targetKey(candidate, target) {{
@@ -3874,6 +3924,7 @@ html, body {{
     onInteractionStart: clearHover,
     onChange: draw,
   }});
+  const backgroundCache = createMapBackgroundCache(canvas, drawBackgroundLayer);
 
   title.textContent = payload.title;
   viewport.attachZoomControls({{
@@ -3926,11 +3977,22 @@ html, body {{
     return viewport.projection();
   }}
 
-  function drawLandMask(project) {{
+  function drawBackground() {{
+    backgroundCache.draw(context, viewport.cacheKey());
+  }}
+
+  function drawBackgroundLayer(targetContext) {{
+    const project = projection();
+    targetContext.fillStyle = "#edf3f8";
+    targetContext.fillRect(0, 0, canvas.width, canvas.height);
+    drawLandMask(targetContext, project);
+  }}
+
+  function drawLandMask(targetContext, project) {{
     const mask = payload.landMask;
     if (!mask || mask.paths.length === 0) return;
-    context.fillStyle = "#d9d5cc";
-    context.beginPath();
+    targetContext.fillStyle = "#d9d5cc";
+    targetContext.beginPath();
     for (const path of mask.paths) {{
       if (path.longitude.length < 3) continue;
       for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
@@ -3938,13 +4000,13 @@ html, body {{
         for (let index = 0; index < path.longitude.length; index += 1) {{
           const x = project.xUnwrapped(longitudes[index]);
           const y = project.y(path.latitude[index]);
-          if (index === 0) context.moveTo(x, y);
-          else context.lineTo(x, y);
+          if (index === 0) targetContext.moveTo(x, y);
+          else targetContext.lineTo(x, y);
         }}
-        context.closePath();
+        targetContext.closePath();
       }}
     }}
-    context.fill("evenodd");
+    targetContext.fill("evenodd");
   }}
 
   function colorForSigned(value, scale) {{
@@ -4069,10 +4131,7 @@ html, body {{
   function draw() {{
     const project = projection();
     const frame = currentFrame();
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#edf3f8";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    drawLandMask(project);
+    drawBackground();
     drawPoints(project, frame);
     leadLabel.textContent = `Lead day ${{frame.leadDay}}`;
     const modeLabel = modes.find((mode) => mode.key === state.mode).label;
