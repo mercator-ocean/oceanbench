@@ -605,6 +605,9 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "createMapViewport" in html_output.data
     assert "viewport.longitudeShiftsForPath(path)" in html_output.data
     assert "projection.xUnwrapped" in html_output.data
+    assert "viewport.unwrappedLongitudes(candidate.contourLongitude" in html_output.data
+    assert "viewport.nearestLongitudeCopy" in html_output.data
+    assert "segmentTouchesCanvas" in html_output.data
     assert "Map zoom controls" in html_output.data
     assert "Zoom in" in html_output.data
     assert "Zoom out" in html_output.data
