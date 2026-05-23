@@ -2,9 +2,12 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import warnings
+from base64 import b64decode
+from io import BytesIO
 from pathlib import Path
+import warnings
 
+import matplotlib.pyplot as plt
 import nbformat
 import numpy
 import pandas
@@ -320,13 +323,16 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
                 "latitudeMinimum": -2.0,
                 "latitudeMaximum": 2.0,
             },
-            "landMask": {
-                "paths": [
-                    {
-                        "longitude": [9.0, 10.0, 10.0, 9.0, 9.0],
-                        "latitude": [0.0, 0.0, 1.0, 1.0, 0.0],
-                    }
-                ],
+            "modelMask": {
+                "image": "data:image/png;base64,",
+                "extent": {
+                    "longitudeMinimum": 9.0,
+                    "longitudeMaximum": 15.0,
+                    "latitudeMinimum": -2.0,
+                    "latitudeMaximum": 2.0,
+                },
+                "width": 2,
+                "height": 2,
             },
             "separationScaleKilometers": 10.0,
             "challenger": {
@@ -362,22 +368,27 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "requestAnimationFrame" in html_output.data
     assert "Smooth visual interpolation between true daily particle positions" in html_output.data
     assert "particles are sampled for display" in html_output.data
-    assert "drawLandMask" in html_output.data
-    assert "landMask.paths" in html_output.data
-    assert "landMask.land" not in html_output.data
+    assert "drawModelMask" in html_output.data
+    assert "payload.modelMask" in html_output.data
+    assert "modelMask&quot;:{&quot;image&quot;" in html_output.data
+    assert "landMask" not in html_output.data
     assert "ob-lagrangian-zoom" in html_output.data
     assert "createMapViewport" in html_output.data
     assert "createMapBackgroundCache" in html_output.data
+    assert "createMapRasterLayer" in html_output.data
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
-    assert "viewport.longitudeShiftsForPath(path)" in html_output.data
+    assert "backgroundCache.invalidate()" in html_output.data
+    assert "viewport.longitudeShiftsForPath(layerPath)" in html_output.data
     assert "shiftedMaximum &gt;= viewBounds.longitudeMinimum" in html_output.data
     assert "projection.xUnwrapped" in html_output.data
-    assert "fill(&quot;evenodd&quot;)" in html_output.data
+    assert "targetContext.drawImage" in html_output.data
+    assert "targetContext.imageSmoothingEnabled = false" in html_output.data
+    assert "fill(&quot;evenodd&quot;)" not in html_output.data
     assert "Current separation distance" in html_output.data
     assert "Reached daily positions" in html_output.data
 
 
-def test_land_mask_payload_uses_model_derived_vector_paths() -> None:
+def test_model_mask_payload_uses_model_derived_raster_image() -> None:
     from oceanbench.core import visualization as core_visualization
 
     dataset = xarray.Dataset(
@@ -387,25 +398,38 @@ def test_land_mask_payload_uses_model_derived_vector_paths() -> None:
                 numpy.array(
                     [
                         [1.0, numpy.nan, 1.0],
-                        [1.0, numpy.nan, 1.0],
                         [1.0, 1.0, 1.0],
+                        [1.0, 1.0, 1.0],
+                        [numpy.nan, 1.0, 1.0],
                     ]
                 ),
             )
         },
         coords={
-            Dimension.LATITUDE.key(): [-1.0, 0.0, 1.0],
+            Dimension.LATITUDE.key(): [-1.0, 0.0, 1.0, 2.0],
             Dimension.LONGITUDE.key(): [10.0, 11.0, 12.0],
         },
     )
 
-    payload = core_visualization._lagrangian_land_mask_payload(dataset, first_day_index=0)
+    payload = core_visualization._model_mask_payload(dataset, first_day_index=0)
 
-    assert "paths" in payload
-    assert "land" not in payload
-    assert payload["paths"]
-    assert payload["paths"][0]["longitude"]
-    assert payload["paths"][0]["latitude"]
+    assert payload["image"].startswith("data:image/png;base64,")
+    assert "paths" not in payload
+    assert payload["width"] == 3
+    assert payload["height"] == 4
+    assert payload["extent"] == {
+        "longitudeMinimum": 9.5,
+        "longitudeMaximum": 12.5,
+        "latitudeMinimum": -1.5,
+        "latitudeMaximum": 2.5,
+    }
+
+    image_data = b64decode(payload["image"].split(",", 1)[1])
+    assert image_data.startswith(b"\x89PNG\r\n\x1a\n")
+    decoded_image = plt.imread(BytesIO(image_data))
+    assert decoded_image.shape == (payload["height"], payload["width"], 4)
+    assert decoded_image[0, 0, 3] == 1.0
+    assert decoded_image[-1, 1, 3] == 1.0
 
 
 def test_map_bounds_use_periodic_pacific_centered_longitude_for_global_domains() -> None:
@@ -552,13 +576,16 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
                 "latitudeMinimum": -2.0,
                 "latitudeMaximum": 2.0,
             },
-            "landMask": {
-                "paths": [
-                    {
-                        "longitude": [9.0, 10.0, 10.0, 9.0, 9.0],
-                        "latitude": [0.0, 0.0, 1.0, 1.0, 0.0],
-                    }
-                ],
+            "modelMask": {
+                "image": "data:image/png;base64,",
+                "extent": {
+                    "longitudeMinimum": 9.0,
+                    "longitudeMaximum": 15.0,
+                    "latitudeMinimum": -2.0,
+                    "latitudeMaximum": 2.0,
+                },
+                "width": 2,
+                "height": 2,
             },
             "references": [
                 {
@@ -601,16 +628,20 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "Match displacement" not in html_output.data
     assert "ob-eddy-tooltip" in html_output.data
     assert "ob-eddy-polarity-buttons" in html_output.data
-    assert "landMask.paths" in html_output.data
-    assert "landMask.land" not in html_output.data
-    assert "fill(&quot;evenodd&quot;)" in html_output.data
+    assert "payload.modelMask" in html_output.data
+    assert "modelMask&quot;:{&quot;image&quot;" in html_output.data
+    assert "landMask" not in html_output.data
+    assert "fill(&quot;evenodd&quot;)" not in html_output.data
     assert "ob-eddy-zoom" in html_output.data
     assert "createMapViewport" in html_output.data
     assert "createMapBackgroundCache" in html_output.data
+    assert "createMapRasterLayer" in html_output.data
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
-    assert "viewport.longitudeShiftsForPath(path)" in html_output.data
+    assert "backgroundCache.invalidate()" in html_output.data
+    assert "viewport.longitudeShiftsForPath(layerPath)" in html_output.data
     assert "shiftedMaximum &gt;= viewBounds.longitudeMinimum" in html_output.data
     assert "projection.xUnwrapped" in html_output.data
+    assert "targetContext.drawImage" in html_output.data
     assert "viewport.unwrappedLongitudes(candidate.contourLongitude" in html_output.data
     assert "viewport.nearestLongitudeCopy" in html_output.data
     assert "segmentTouchesCanvas" in html_output.data
@@ -650,13 +681,16 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
                 "latitudeMinimum": -2.0,
                 "latitudeMaximum": 2.0,
             },
-            "landMask": {
-                "paths": [
-                    {
-                        "longitude": [9.0, 10.0, 10.0, 9.0, 9.0],
-                        "latitude": [0.0, 0.0, 1.0, 1.0, 0.0],
-                    }
-                ],
+            "modelMask": {
+                "image": "data:image/png;base64,",
+                "extent": {
+                    "longitudeMinimum": 9.0,
+                    "longitudeMaximum": 15.0,
+                    "latitudeMinimum": -2.0,
+                    "latitudeMaximum": 2.0,
+                },
+                "width": 2,
+                "height": 2,
             },
             "variables": [
                 {
@@ -700,16 +734,20 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "SLA points are sampled along observed satellite tracks for display" in html_output.data
     assert "metrics use all observations" in html_output.data
     assert "ob-class4-tooltip" in html_output.data
-    assert "mask.paths" in html_output.data
-    assert "mask.land" not in html_output.data
-    assert "fill(&quot;evenodd&quot;)" in html_output.data
+    assert "payload.modelMask" in html_output.data
+    assert "modelMask&quot;:{&quot;image&quot;" in html_output.data
+    assert "landMask" not in html_output.data
+    assert "fill(&quot;evenodd&quot;)" not in html_output.data
     assert "ob-class4-zoom" in html_output.data
     assert "createMapViewport" in html_output.data
     assert "createMapBackgroundCache" in html_output.data
+    assert "createMapRasterLayer" in html_output.data
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
-    assert "viewport.longitudeShiftsForPath(path)" in html_output.data
+    assert "backgroundCache.invalidate()" in html_output.data
+    assert "viewport.longitudeShiftsForPath(layerPath)" in html_output.data
     assert "shiftedMaximum &gt;= viewBounds.longitudeMinimum" in html_output.data
-    assert "project.xUnwrapped" in html_output.data
+    assert "projection.xUnwrapped" in html_output.data
+    assert "targetContext.drawImage" in html_output.data
     assert "Map zoom controls" in html_output.data
     assert "Zoom in" in html_output.data
     assert "Zoom out" in html_output.data
