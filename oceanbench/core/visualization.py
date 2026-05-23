@@ -1710,13 +1710,18 @@ def _map_viewport_script() -> str:
       if (longitudes.length === 0) return [0];
       const pathMinimum = Math.min(...longitudes);
       const pathMaximum = Math.max(...longitudes);
-      const firstCopy = Math.floor((viewBounds.longitudeMinimum - pathMaximum) / longitudePeriod) - 1;
-      const lastCopy = Math.ceil((viewBounds.longitudeMaximum - pathMinimum) / longitudePeriod) + 1;
+      const firstCopy = Math.floor((viewBounds.longitudeMinimum - pathMaximum) / longitudePeriod);
+      const lastCopy = Math.ceil((viewBounds.longitudeMaximum - pathMinimum) / longitudePeriod);
       const shifts = [];
       for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
-        shifts.push(copy * longitudePeriod);
+        const shift = copy * longitudePeriod;
+        const shiftedMinimum = pathMinimum + shift;
+        const shiftedMaximum = pathMaximum + shift;
+        if (shiftedMaximum >= viewBounds.longitudeMinimum && shiftedMinimum <= viewBounds.longitudeMaximum) {
+          shifts.push(shift);
+        }
       }
-      return shifts;
+      return shifts.length > 0 ? shifts : [0];
     }
 
     function constrainedSpan(currentSpan, originalSpan, factor) {
