@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, TwoSlopeNorm
 import numpy
 import pandas
-from skimage.measure import approximate_polygon, find_contours
+from skimage.measure import approximate_polygon
 import xarray
 
 from oceanbench.core import classIV
@@ -74,7 +74,6 @@ DEFAULT_EXPLORER_MAXIMUM_MAP_CELLS = 160_000
 DEFAULT_EXPLORER_HEIGHT_PIXELS = 900
 DEFAULT_EXPLORER_IMAGE_QUALITY = 85
 DEFAULT_LAGRANGIAN_PARTICLE_COUNT = 300
-DEFAULT_LAND_MASK_SIMPLIFICATION_GRID_FRACTION = 0.25
 DEFAULT_EDDY_MAXIMUM_CONTOUR_POINTS = 80
 DEFAULT_CLASS4_MAXIMUM_POINTS_PER_FRAME = 5_000
 DEFAULT_SURFACE_COMPARISON_DEPTH_SELECTORS: tuple[float, ...] = tuple(depth_level.value for depth_level in DepthLevel)
@@ -516,6 +515,48 @@ def _image_values(field: xarray.DataArray) -> numpy.ndarray:
     if len(latitude) > 1 and latitude[0] > latitude[-1]:
         return numpy.flipud(values)
     return values
+
+
+def _north_up_image_values(field: xarray.DataArray) -> numpy.ndarray:
+    values = numpy.asarray(field.values, dtype=float)
+    latitude = field[Dimension.LATITUDE.key()].values
+    if len(latitude) > 1 and latitude[0] < latitude[-1]:
+        return numpy.flipud(values)
+    return values
+
+
+def _image_cell_extent(field: xarray.DataArray) -> dict[str, float]:
+    longitude = numpy.asarray(field[Dimension.LONGITUDE.key()].values, dtype=float)
+    latitude = numpy.asarray(field[Dimension.LATITUDE.key()].values, dtype=float)
+    longitude_step = _median_coordinate_step(longitude)
+    latitude_step = _median_coordinate_step(latitude)
+    return {
+        "longitudeMinimum": float(numpy.nanmin(longitude) - longitude_step / 2),
+        "longitudeMaximum": float(numpy.nanmax(longitude) + longitude_step / 2),
+        "latitudeMinimum": float(numpy.nanmin(latitude) - latitude_step / 2),
+        "latitudeMaximum": float(numpy.nanmax(latitude) + latitude_step / 2),
+    }
+
+
+def _hex_color_to_rgba(color: str, alpha: int = 255) -> tuple[int, int, int, int]:
+    hexadecimal_color = color.removeprefix("#")
+    if len(hexadecimal_color) != 6:
+        raise ValueError(f"Expected a #RRGGBB color, got {color!r}.")
+    return (
+        int(hexadecimal_color[0:2], 16),
+        int(hexadecimal_color[2:4], 16),
+        int(hexadecimal_color[4:6], 16),
+        alpha,
+    )
+
+
+def _encoded_rgba_png_image(image: numpy.ndarray) -> str:
+    image = numpy.asarray(image, dtype=numpy.uint8)
+    if image.ndim != 3 or image.shape[2] != 4:
+        raise ValueError("PNG image data must have RGBA channels.")
+    buffer = BytesIO()
+    plt.imsave(buffer, image, format="png")
+    return "data:image/png;base64," + b64encode(buffer.getvalue()).decode("ascii")
 
 
 def _add_geostrophic_equatorial_mask_band(axis, field: xarray.DataArray, variable_key: str) -> None:
@@ -1548,13 +1589,6 @@ def _simplified_closed_path(
     return _closed_path_with_budget(best_path, maximum_points)
 
 
-def _land_mask_path_payload(path: numpy.ndarray) -> dict[str, object]:
-    return {
-        "longitude": _json_ready_array(path[:, 0], decimals=4),
-        "latitude": _json_ready_array(path[:, 1], decimals=4),
-    }
-
-
 def _map_zoom_control_css(root_class: str, border_color: str) -> str:
     return f""".{root_class}-zoom {{
   display: inline-flex;
@@ -1927,47 +1961,68 @@ def _map_viewport_script() -> str:
         }
         context.drawImage(layer, 0, 0);
       },
+      invalidate() {
+        layerKey = null;
+      },
+    };
+  }
+
+  function createMapRasterLayer(layerPayload, viewport, onLoad) {
+    if (!layerPayload || !layerPayload.image || !layerPayload.extent) {
+      return { draw: () => {} };
+    }
+    const image = new Image();
+    let isLoaded = false;
+    const notifyLoaded = onLoad || (() => {});
+    image.addEventListener("load", () => {
+      isLoaded = true;
+      notifyLoaded();
+    }, { once: true });
+    image.src = layerPayload.image;
+    if (image.complete) {
+      isLoaded = true;
+    }
+
+    return {
+      draw(targetContext) {
+        if (!isLoaded && !image.complete) return;
+        const projection = viewport.projection();
+        const extent = layerPayload.extent;
+        const layerPath = {
+          longitude: [extent.longitudeMinimum, extent.longitudeMaximum],
+          latitude: [extent.latitudeMinimum, extent.latitudeMaximum],
+        };
+        const previousImageSmoothing = targetContext.imageSmoothingEnabled;
+        targetContext.imageSmoothingEnabled = false;
+        for (const longitudeShift of viewport.longitudeShiftsForPath(layerPath)) {
+          const xMinimum = projection.xUnwrapped(extent.longitudeMinimum + longitudeShift);
+          const xMaximum = projection.xUnwrapped(extent.longitudeMaximum + longitudeShift);
+          const yMinimum = projection.y(extent.latitudeMaximum);
+          const yMaximum = projection.y(extent.latitudeMinimum);
+          targetContext.drawImage(
+            image,
+            xMinimum,
+            yMinimum,
+            xMaximum - xMinimum,
+            yMaximum - yMinimum,
+          );
+        }
+        targetContext.imageSmoothingEnabled = previousImageSmoothing;
+      },
     };
   }"""
 
 
-def _lagrangian_land_mask_payload(dataset: xarray.Dataset, first_day_index: int) -> dict[str, object]:
+def _model_mask_payload(dataset: xarray.Dataset, first_day_index: int) -> dict[str, object]:
     field = _prepared_image_field(_surface_mask_field(dataset, first_day_index))
-    land_mask = numpy.where(numpy.isfinite(field.values), 0, 1).astype(float)
-    longitude_values = numpy.asarray(field[Dimension.LONGITUDE.key()].values, dtype=float)
-    latitude_values = numpy.asarray(field[Dimension.LATITUDE.key()].values, dtype=float)
-    longitude_step = _median_coordinate_step(longitude_values)
-    latitude_step = _median_coordinate_step(latitude_values)
-    padded_land_mask = numpy.pad(land_mask, 1, mode="constant", constant_values=0)
-    padded_longitudes = numpy.concatenate(
-        [
-            [longitude_values[0] - longitude_step],
-            longitude_values,
-            [longitude_values[-1] + longitude_step],
-        ]
-    )
-    padded_latitudes = numpy.concatenate(
-        [
-            [latitude_values[0] - latitude_step],
-            latitude_values,
-            [latitude_values[-1] + latitude_step],
-        ]
-    )
-    minimum_tolerance = max(longitude_step, latitude_step) * DEFAULT_LAND_MASK_SIMPLIFICATION_GRID_FRACTION
-    paths = []
-    for contour in find_contours(padded_land_mask, level=0.5):
-        contour_latitudes = numpy.interp(contour[:, 0], numpy.arange(len(padded_latitudes)), padded_latitudes)
-        contour_longitudes = numpy.interp(contour[:, 1], numpy.arange(len(padded_longitudes)), padded_longitudes)
-        path = _simplified_closed_path(
-            contour_longitudes,
-            contour_latitudes,
-            maximum_points=max(4, contour.shape[0]),
-            minimum_tolerance=minimum_tolerance,
-        )
-        if path.shape[0] >= 4:
-            paths.append(_land_mask_path_payload(path))
+    model_mask = ~numpy.isfinite(_north_up_image_values(field))
+    rgba_image = numpy.zeros(model_mask.shape + (4,), dtype=numpy.uint8)
+    rgba_image[model_mask] = _hex_color_to_rgba(LAND_BACKGROUND_COLOR)
     return {
-        "paths": paths,
+        "image": _encoded_rgba_png_image(rgba_image),
+        "extent": _image_cell_extent(field),
+        "width": int(model_mask.shape[1]),
+        "height": int(model_mask.shape[0]),
     }
 
 
@@ -2055,7 +2110,7 @@ def _lagrangian_payload(
         "particleCount": int(challenger_particles.sizes["particle"]),
         "timeLabels": [f"{index + 1:.1f}" for index in range(time_count)],
         "bounds": _lagrangian_bounds(challenger_dataset),
-        "landMask": _lagrangian_land_mask_payload(challenger_standard_dataset, first_day_index),
+        "modelMask": _model_mask_payload(challenger_standard_dataset, first_day_index),
         "separationScaleKilometers": _lagrangian_separation_scale_kilometers(
             challenger_particles,
             reference_particles_by_key,
@@ -2292,6 +2347,10 @@ html, body {{
     onChange: draw,
   }});
   const backgroundCache = createMapBackgroundCache(canvas, drawBackgroundLayer);
+  const modelMaskLayer = createMapRasterLayer(payload.modelMask, viewport, () => {{
+    backgroundCache.invalidate();
+    draw();
+  }});
 
   title.textContent = payload.title;
   timeInput.max = payload.timeLabels.length - 1;
@@ -2439,7 +2498,7 @@ html, body {{
   function drawBackgroundLayer(targetContext) {{
     targetContext.fillStyle = "#eef7fb";
     targetContext.fillRect(0, 0, canvas.width, canvas.height);
-    drawLandMask(targetContext);
+    drawModelMask(targetContext);
     targetContext.strokeStyle = "rgba(51, 65, 85, 0.18)";
     targetContext.lineWidth = 1;
     const bounds = viewport.bounds();
@@ -2477,28 +2536,8 @@ html, body {{
     return 2;
   }}
 
-  function drawLandMask(targetContext) {{
-    const landMask = payload.landMask;
-    if (!landMask || landMask.paths.length === 0) return;
-    const projection = viewport.projection();
-    targetContext.fillStyle = "{LAND_BACKGROUND_COLOR}";
-    targetContext.beginPath();
-    for (const path of landMask.paths) {{
-      if (path.longitude.length < 3) continue;
-      for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
-        const longitudes = viewport.unwrappedLongitudes(path.longitude, longitudeShift);
-        for (let index = 0; index < path.longitude.length; index += 1) {{
-          const point = {{
-            x: projection.xUnwrapped(longitudes[index]),
-            y: projection.y(path.latitude[index]),
-          }};
-          if (index === 0) targetContext.moveTo(point.x, point.y);
-          else targetContext.lineTo(point.x, point.y);
-        }}
-        targetContext.closePath();
-      }}
-    }}
-    targetContext.fill("evenodd");
+  function drawModelMask(targetContext) {{
+    modelMaskLayer.draw(targetContext);
   }}
 
   function drawDailyMarkers(challengerTrack, referenceTrack, time) {{
@@ -2829,7 +2868,7 @@ def _eddy_payload(
     return {
         "title": title,
         "bounds": _lagrangian_bounds(challenger_dataset),
-        "landMask": _lagrangian_land_mask_payload(challenger_dataset, first_day_index),
+        "modelMask": _model_mask_payload(challenger_dataset, first_day_index),
         "references": [
             _eddy_reference_payload(
                 challenger_dataset,
@@ -3105,6 +3144,10 @@ html, body {{
     onChange: draw,
   }});
   const backgroundCache = createMapBackgroundCache(canvas, drawBackgroundLayer);
+  const modelMaskLayer = createMapRasterLayer(payload.modelMask, viewport, () => {{
+    backgroundCache.invalidate();
+    draw();
+  }});
 
   title.textContent = payload.title;
   leadInput.addEventListener("input", () => {{
@@ -3237,7 +3280,7 @@ html, body {{
   function drawBackgroundLayer(targetContext) {{
     targetContext.fillStyle = "#eef7fb";
     targetContext.fillRect(0, 0, canvas.width, canvas.height);
-    drawLandMask(targetContext);
+    drawModelMask(targetContext);
     targetContext.strokeStyle = "rgba(51, 65, 85, 0.18)";
     targetContext.lineWidth = 1;
     const bounds = viewport.bounds();
@@ -3265,28 +3308,8 @@ html, body {{
     return 2;
   }}
 
-  function drawLandMask(targetContext) {{
-    const landMask = payload.landMask;
-    if (!landMask || landMask.paths.length === 0) return;
-    const projection = viewport.projection();
-    targetContext.fillStyle = "{LAND_BACKGROUND_COLOR}";
-    targetContext.beginPath();
-    for (const path of landMask.paths) {{
-      if (path.longitude.length < 3) continue;
-      for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
-        const longitudes = viewport.unwrappedLongitudes(path.longitude, longitudeShift);
-        for (let index = 0; index < path.longitude.length; index += 1) {{
-          const point = {{
-            x: projection.xUnwrapped(longitudes[index]),
-            y: projection.y(path.latitude[index]),
-          }};
-          if (index === 0) targetContext.moveTo(point.x, point.y);
-          else targetContext.lineTo(point.x, point.y);
-        }}
-        targetContext.closePath();
-      }}
-    }}
-    targetContext.fill("evenodd");
+  function drawModelMask(targetContext) {{
+    modelMaskLayer.draw(targetContext);
   }}
 
   function drawMatchLine(reference, challenger) {{
@@ -3704,7 +3727,7 @@ def _class4_payload(
     return {
         "title": title,
         "bounds": _lagrangian_bounds(challenger_dataset),
-        "landMask": _lagrangian_land_mask_payload(challenger_dataset, first_day_index),
+        "modelMask": _model_mask_payload(challenger_dataset, first_day_index),
         "variables": variable_payloads,
     }
 
@@ -3930,6 +3953,10 @@ html, body {{
     onChange: draw,
   }});
   const backgroundCache = createMapBackgroundCache(canvas, drawBackgroundLayer);
+  const modelMaskLayer = createMapRasterLayer(payload.modelMask, viewport, () => {{
+    backgroundCache.invalidate();
+    draw();
+  }});
 
   title.textContent = payload.title;
   viewport.attachZoomControls({{
@@ -3987,31 +4014,13 @@ html, body {{
   }}
 
   function drawBackgroundLayer(targetContext) {{
-    const project = projection();
     targetContext.fillStyle = "#edf3f8";
     targetContext.fillRect(0, 0, canvas.width, canvas.height);
-    drawLandMask(targetContext, project);
+    drawModelMask(targetContext);
   }}
 
-  function drawLandMask(targetContext, project) {{
-    const mask = payload.landMask;
-    if (!mask || mask.paths.length === 0) return;
-    targetContext.fillStyle = "#d9d5cc";
-    targetContext.beginPath();
-    for (const path of mask.paths) {{
-      if (path.longitude.length < 3) continue;
-      for (const longitudeShift of viewport.longitudeShiftsForPath(path)) {{
-        const longitudes = viewport.unwrappedLongitudes(path.longitude, longitudeShift);
-        for (let index = 0; index < path.longitude.length; index += 1) {{
-          const x = project.xUnwrapped(longitudes[index]);
-          const y = project.y(path.latitude[index]);
-          if (index === 0) targetContext.moveTo(x, y);
-          else targetContext.lineTo(x, y);
-        }}
-        targetContext.closePath();
-      }}
-    }}
-    targetContext.fill("evenodd");
+  function drawModelMask(targetContext) {{
+    modelMaskLayer.draw(targetContext);
   }}
 
   function colorForSigned(value, scale) {{
