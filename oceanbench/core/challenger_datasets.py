@@ -23,6 +23,7 @@ _CLOUDFERRO_ML_FORECASTS_URL = f"{_CLOUDFERRO_OCEANBENCH_BASE_URL}/dev/ml-foreca
 _CLOUDFERRO_GLO12_FORECASTS_URL = f"{_CLOUDFERRO_OCEANBENCH_BASE_URL}/dev/additionnal-data/GLO12"
 _GLO12_FORECAST_PACKAGE_OFFSET = timedelta(days=1)
 _GLO12_FORECAST_VARIABLE_GROUPS = ("zos", "thetao", "so", "uo", "vo")
+_LANGYA_LEAD_DAYS_COUNT = 7
 
 
 def _default_first_day_datetimes() -> list[datetime]:
@@ -125,6 +126,18 @@ def _wenhai_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/wenhai/{start_datetime_string}.zarr"
 
 
+def langya() -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _langya_dataset_path,
+        lead_days_count=_LANGYA_LEAD_DAYS_COUNT,
+    )
+
+
+def _langya_dataset_path(start_datetime: datetime) -> str:
+    start_datetime_string = start_datetime.strftime("%Y%m%d")
+    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/langya/{start_datetime_string}.zarr"
+
+
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:
     return forecast_zarr_path_from_start_datetime.__name__.removeprefix("_").replace("_dataset_path", "")
 
@@ -136,8 +149,10 @@ def _resolved_first_day_datetimes(first_day_datetimes: list[datetime] | None) ->
 def _prepared_challenger_week_dataset(
     dataset: xarray.Dataset,
     operation_name: str,
+    lead_days_count: int,
 ) -> xarray.Dataset:
     challenger_week_dataset = require_remote_dataset_dimensions(dataset, ["time"], operation_name)
+    challenger_week_dataset = challenger_week_dataset.isel(time=slice(0, lead_days_count))
     week_lead_days_count = challenger_week_dataset.sizes["time"]
     return challenger_week_dataset.rename({"time": "lead_day_index"}).assign_coords(
         {"lead_day_index": range(week_lead_days_count)}
@@ -160,6 +175,7 @@ def _remote_multizarr_forecasts_as_challenger_dataset(
     dataset_name: str,
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
     first_day_datetimes: list[datetime],
+    lead_days_count: int,
     preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None,
     open_week_dataset: Callable[[datetime], xarray.Dataset] | None = None,
 ) -> xarray.Dataset:
@@ -169,6 +185,7 @@ def _remote_multizarr_forecasts_as_challenger_dataset(
                 _prepared_challenger_week_dataset(
                     open_week_dataset(first_day_datetime),
                     f"{dataset_name} challenger dataset open",
+                    lead_days_count,
                 )
                 for first_day_datetime in first_day_datetimes
             ],
@@ -182,6 +199,7 @@ def _remote_multizarr_forecasts_as_challenger_dataset(
         preprocess=lambda dataset: _prepared_challenger_week_dataset(
             preprocess_dataset(dataset) if preprocess_dataset is not None else dataset,
             f"{dataset_name} challenger dataset open",
+            lead_days_count,
         ),
         combine="nested",
         concat_dim="first_day_datetime",
@@ -194,6 +212,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
     *,
     first_day_datetimes: list[datetime] | None = None,
+    lead_days_count: int = LEAD_DAYS_COUNT,
     preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None = None,
     open_week_dataset: Callable[[datetime], xarray.Dataset] | None = None,
 ) -> xarray.Dataset:
@@ -206,7 +225,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
             dataset_kind="challenger",
             dataset_name=dataset_name,
             first_day_datetimes=resolved_first_day_datetimes,
-            lead_days_count=LEAD_DAYS_COUNT,
+            lead_days_count=lead_days_count,
             open_week_dataset=lambda first_day_datetime: _prepared_challenger_week_dataset(
                 (
                     open_week_dataset(first_day_datetime)
@@ -218,11 +237,13 @@ def _open_multizarr_forecasts_as_challenger_dataset(
                     )
                 ),
                 f"{dataset_name} challenger dataset open",
+                lead_days_count,
             ),
             open_remote_dataset=lambda: _remote_multizarr_forecasts_as_challenger_dataset(
                 dataset_name,
                 forecast_zarr_path_from_start_datetime,
                 resolved_first_day_datetimes,
+                lead_days_count,
                 preprocess_dataset,
                 open_week_dataset,
             ),

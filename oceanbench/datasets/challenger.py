@@ -310,3 +310,33 @@ def wenhai_1_degree() -> xarray.Dataset:
     """
 
     return challenger_datasets.wenhai_1_degree()
+
+
+def langya() -> xarray.Dataset:
+    """
+    Open the LangYa challenger dataset.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing LangYa forecasts.
+
+    >>> langya()
+    <xarray.Dataset> Size: 2TB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 7, depth: 32,
+                             latitude: 2040, longitude: 4320)
+    Coordinates:
+      * depth               (depth) float32 128B 0.494 1.541 ... 453.9 541.1
+      * latitude            (latitude) float64 16kB -80.0 -79.92 ... 89.83 89.92
+      * longitude           (longitude) float64 35kB -180.0 -179.9 ... 179.8 179.9
+      * lead_day_index      (lead_day_index) int64 56B 0 1 2 3 4 5 6
+      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ....
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 ...
+    """
+
+    return challenger_datasets.langya()
