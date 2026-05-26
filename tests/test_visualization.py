@@ -754,6 +754,11 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "Reset zoom" in html_output.data
     assert "viewBounds" in html_output.data
     assert "Absolute error" in html_output.data
+    assert "ob-class4-legend-label" in html_output.data
+    assert "ob-class4-legend-range" in html_output.data
+    assert ".ob-class4-gradient.absolute" in html_output.data
+    assert "renderLegend" in html_output.data
+    assert "0 / high" in html_output.data
     assert "Observation density" not in html_output.data
     assert "Signed error" in html_output.data
     assert "pointerdown" in html_output.data

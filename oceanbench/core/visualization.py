@@ -3874,6 +3874,9 @@ html, body {{
   background: linear-gradient(90deg, #2166ac, #f7f7f7, #b2182b);
   border: 1px solid #cbd5e1;
 }}
+.ob-class4-gradient.absolute {{
+  background: linear-gradient(90deg, #fcf4a4, #4d125a);
+}}
 @media (max-width: 840px) {{
   .ob-class4-header {{
     flex-direction: column;
@@ -3916,7 +3919,9 @@ html, body {{
   <div class="ob-class4-status">
     <div class="ob-class4-status-text"></div>
     <div class="ob-class4-legend">
-      <span>Signed error</span><span class="ob-class4-gradient"></span><span>negative / positive</span>
+      <span class="ob-class4-legend-label">Signed error</span>
+      <span class="ob-class4-gradient"></span>
+      <span class="ob-class4-legend-range">negative / positive</span>
     </div>
   </div>
 </div>
@@ -3935,6 +3940,9 @@ html, body {{
   const zoomInButton = root.querySelector(".ob-class4-zoom-in");
   const zoomResetButton = root.querySelector(".ob-class4-zoom-reset");
   const statusText = root.querySelector(".ob-class4-status-text");
+  const legendLabel = root.querySelector(".ob-class4-legend-label");
+  const legendGradient = root.querySelector(".ob-class4-gradient");
+  const legendRange = root.querySelector(".ob-class4-legend-range");
   const tooltip = root.querySelector(".ob-class4-tooltip");
   const canvas = root.querySelector("canvas");
   const context = canvas.getContext("2d");
@@ -4142,11 +4150,19 @@ html, body {{
     return `Color scale: ${{prefix}}${{Number(scale || 1).toPrecision(3)}} (robust 95%)`;
   }}
 
+  function renderLegend() {{
+    const absoluteMode = state.mode === "absolute";
+    legendLabel.textContent = absoluteMode ? "Absolute error" : "Signed error";
+    legendRange.textContent = absoluteMode ? "0 / high" : "negative / positive";
+    legendGradient.classList.toggle("absolute", absoluteMode);
+  }}
+
   function draw() {{
     const project = projection();
     const frame = currentFrame();
     drawBackground();
     drawPoints(project, frame);
+    renderLegend();
     leadLabel.textContent = `Lead day ${{frame.leadDay}}`;
     const modeLabel = modes.find((mode) => mode.key === state.mode).label;
     statusText.textContent = [
