@@ -740,6 +740,8 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "fill(&quot;evenodd&quot;)" not in html_output.data
     assert "ob-class4-zoom" in html_output.data
     assert "createMapViewport" in html_output.data
+    assert "projectMode: &quot;fit&quot;" not in html_output.data
+    assert "fitScale: 0.92" not in html_output.data
     assert "createMapBackgroundCache" in html_output.data
     assert "createMapRasterLayer" in html_output.data
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data

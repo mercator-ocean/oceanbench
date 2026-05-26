@@ -3955,8 +3955,6 @@ html, body {{
   const viewport = createMapViewport({{
     canvas,
     originalBounds: payload.bounds,
-    projectMode: "fit",
-    fitScale: 0.92,
     onInteractionStart: clearHover,
     onChange: draw,
   }});
