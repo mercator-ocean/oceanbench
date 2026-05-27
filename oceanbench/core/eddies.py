@@ -33,6 +33,8 @@ DEFAULT_CONTOUR_LEVEL_STEP_METERS = 0.01
 DEFAULT_MIN_CONTOUR_PIXEL_COUNT = 16
 DEFAULT_MAX_CONTOUR_PIXEL_COUNT = 6000
 DEFAULT_MIN_CONTOUR_CONVEXITY = 0.75
+GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES = 300.0
+GLOBAL_LONGITUDE_PERIOD_DEGREES = 360.0
 
 LEAD_DAY_COLUMN = "lead_day"
 LATITUDE_COLUMN = Dimension.LATITUDE.key()
@@ -412,21 +414,124 @@ def _nearest_coordinate_indices(coordinates: numpy.ndarray, values: numpy.ndarra
     return insertion_indices - choose_left.astype(int)
 
 
+def _is_periodic_longitude_domain(longitude_values: numpy.ndarray) -> bool:
+    finite_longitudes = numpy.asarray(longitude_values, dtype=float)
+    finite_longitudes = finite_longitudes[numpy.isfinite(finite_longitudes)]
+    if finite_longitudes.size < 2:
+        return False
+    longitude_span = float(numpy.nanmax(finite_longitudes) - numpy.nanmin(finite_longitudes))
+    return longitude_span >= GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES
+
+
+def _periodic_longitude_delta(start: float, end: float) -> float:
+    return (
+        (end - start + GLOBAL_LONGITUDE_PERIOD_DEGREES / 2.0) % GLOBAL_LONGITUDE_PERIOD_DEGREES
+    ) - GLOBAL_LONGITUDE_PERIOD_DEGREES / 2.0
+
+
+def _unwrapped_periodic_longitudes(longitude_values: numpy.ndarray) -> numpy.ndarray:
+    longitudes = numpy.asarray(longitude_values, dtype=float)
+    if longitudes.size == 0:
+        return longitudes
+    unwrapped_longitudes = longitudes.copy()
+    for index in range(1, unwrapped_longitudes.size):
+        unwrapped_longitudes[index] = unwrapped_longitudes[index - 1] + _periodic_longitude_delta(
+            float(longitudes[index - 1]),
+            float(longitudes[index]),
+        )
+    return unwrapped_longitudes
+
+
+def _anchor_periodic_longitudes(longitudes: numpy.ndarray, anchor_longitude: float) -> numpy.ndarray:
+    if longitudes.size == 0:
+        return longitudes
+    mean_longitude = float(numpy.nanmean(longitudes))
+    if not numpy.isfinite(mean_longitude):
+        return longitudes
+    longitude_shift = round((anchor_longitude - mean_longitude) / GLOBAL_LONGITUDE_PERIOD_DEGREES)
+    return longitudes + longitude_shift * GLOBAL_LONGITUDE_PERIOD_DEGREES
+
+
+def _merge_periodic_longitude_labels(
+    labels: numpy.ndarray,
+    component_count: int,
+) -> tuple[numpy.ndarray, int]:
+    if component_count <= 1 or labels.shape[1] < 2:
+        return labels, component_count
+
+    parent_labels = numpy.arange(component_count + 1, dtype=int)
+
+    def find(label_id: int) -> int:
+        while parent_labels[label_id] != label_id:
+            parent_labels[label_id] = parent_labels[parent_labels[label_id]]
+            label_id = int(parent_labels[label_id])
+        return label_id
+
+    def union(first_label: int, second_label: int) -> None:
+        first_root = find(first_label)
+        second_root = find(second_label)
+        if first_root != second_root:
+            parent_labels[second_root] = first_root
+
+    latitude_count = labels.shape[0]
+    for latitude_index in range(latitude_count):
+        left_label = int(labels[latitude_index, 0])
+        if left_label <= 0:
+            continue
+        for neighbor_latitude_index in range(
+            max(0, latitude_index - 1),
+            min(latitude_count, latitude_index + 2),
+        ):
+            right_label = int(labels[neighbor_latitude_index, -1])
+            if right_label > 0:
+                union(left_label, right_label)
+
+    root_to_periodic_label: dict[int, int] = {}
+    label_mapping = numpy.zeros(component_count + 1, dtype=int)
+    for label_id in range(1, component_count + 1):
+        root_label = find(label_id)
+        if root_label not in root_to_periodic_label:
+            root_to_periodic_label[root_label] = len(root_to_periodic_label) + 1
+        label_mapping[label_id] = root_to_periodic_label[root_label]
+
+    return label_mapping[labels], len(root_to_periodic_label)
+
+
+def _connected_component_labels(
+    component_mask: numpy.ndarray,
+    structure: numpy.ndarray,
+    periodic_longitude: bool,
+) -> tuple[numpy.ndarray, int]:
+    labels, component_count = label(component_mask, structure=structure)
+    if not periodic_longitude:
+        return labels, component_count
+    return _merge_periodic_longitude_labels(labels, component_count)
+
+
 def _component_contour_info(
     labels: numpy.ndarray,
     component_label: int,
     latitude_values: numpy.ndarray,
     longitude_values: numpy.ndarray,
+    center_longitude_index: int | None = None,
+    periodic_longitude: bool = False,
 ) -> dict[str, object] | None:
-    component_positions = numpy.argwhere(labels == component_label)
+    working_labels = labels
+    working_longitude_values = longitude_values
+    if periodic_longitude and center_longitude_index is not None and labels.shape[1] > 1:
+        longitude_roll = labels.shape[1] // 2 - int(center_longitude_index)
+        working_labels = numpy.roll(labels, longitude_roll, axis=1)
+        working_longitude_values = _unwrapped_periodic_longitudes(numpy.roll(longitude_values, longitude_roll))
+
+    component_positions = numpy.argwhere(working_labels == component_label)
     if component_positions.size == 0:
         return None
     latitude_min = max(int(component_positions[:, 0].min()) - 1, 0)
-    latitude_max = min(int(component_positions[:, 0].max()) + 2, labels.shape[0])
+    latitude_max = min(int(component_positions[:, 0].max()) + 2, working_labels.shape[0])
     longitude_min = max(int(component_positions[:, 1].min()) - 1, 0)
-    longitude_max = min(int(component_positions[:, 1].max()) + 2, labels.shape[1])
+    longitude_max = min(int(component_positions[:, 1].max()) + 2, working_labels.shape[1])
 
-    component_mask = labels[latitude_min:latitude_max, longitude_min:longitude_max] == component_label
+    component_mask = working_labels[latitude_min:latitude_max, longitude_min:longitude_max] == component_label
     properties = regionprops(component_mask.astype(numpy.uint8))
     if not properties:
         return None
@@ -438,7 +543,16 @@ def _component_contour_info(
     contour_latitude_indices = contour[:, 0] + latitude_min
     contour_longitude_indices = contour[:, 1] + longitude_min
     contour_latitudes = numpy.interp(contour_latitude_indices, numpy.arange(len(latitude_values)), latitude_values)
-    contour_longitudes = numpy.interp(contour_longitude_indices, numpy.arange(len(longitude_values)), longitude_values)
+    contour_longitudes = numpy.interp(
+        contour_longitude_indices,
+        numpy.arange(len(working_longitude_values)),
+        working_longitude_values,
+    )
+    if periodic_longitude and center_longitude_index is not None:
+        contour_longitudes = _anchor_periodic_longitudes(
+            contour_longitudes,
+            float(longitude_values[center_longitude_index]),
+        )
 
     region = properties[0]
     return {
@@ -481,6 +595,7 @@ def mesoscale_eddy_contours_from_detections(
         anomaly_values = numpy.asarray(anomaly_field.values, dtype=float)
         latitude_values = anomaly_field[LATITUDE_COLUMN].values
         longitude_values = anomaly_field[LONGITUDE_COLUMN].values
+        periodic_longitude = _is_periodic_longitude_domain(longitude_values)
 
         for polarity in POLARITY_ORDER:
             subset = detections.loc[
@@ -516,7 +631,11 @@ def mesoscale_eddy_contours_from_detections(
                 else:
                     component_mask = anomaly_values <= -level_value
                 component_mask = component_mask & numpy.isfinite(anomaly_values)
-                labels, component_count = label(component_mask, structure=connectivity)
+                labels, component_count = _connected_component_labels(
+                    component_mask,
+                    structure=connectivity,
+                    periodic_longitude=periodic_longitude,
+                )
                 if component_count == 0:
                     continue
 
@@ -541,6 +660,8 @@ def mesoscale_eddy_contours_from_detections(
                             component_label=component_label,
                             latitude_values=latitude_values,
                             longitude_values=longitude_values,
+                            center_longitude_index=int(center_longitude_indices[subset_index]),
+                            periodic_longitude=periodic_longitude,
                         )
                         component_cache[component_label] = contour_info
                     if contour_info is None:

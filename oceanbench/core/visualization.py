@@ -835,6 +835,8 @@ def _surface_comparison_explorer_document(element_id: str, payload: dict[str, ob
 html, body {{
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
   background: transparent;
   color: #172033;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -845,13 +847,18 @@ html, body {{
   width: 100%;
   max-width: none;
   min-width: 320px;
+  height: 100%;
   margin: 0;
   padding: 14px 16px 12px;
   border: 1px solid #d8dee8;
   border-radius: 8px;
   background: #fbfcfe;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }}
 .ob-map-header {{
+  flex: 0 0 auto;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -933,7 +940,9 @@ html, body {{
   position: relative;
   width: 100%;
   max-width: var(--ob-map-content-max-width);
-  height: 560px;
+  height: auto;
+  min-height: 360px;
+  flex: 1 1 520px;
   margin: 0 auto;
   border: 1px solid #cfd8e3;
   border-radius: 6px;
@@ -948,6 +957,7 @@ html, body {{
   background: #ffffff;
 }}
 .ob-map-status {{
+  flex: 0 0 auto;
   min-height: 18px;
   max-width: var(--ob-map-content-max-width);
   margin: 8px auto 0;
@@ -955,6 +965,7 @@ html, body {{
   font-size: 12px;
 }}
 .ob-map-note {{
+  flex: 0 0 auto;
   max-width: var(--ob-map-content-max-width);
   margin: 4px auto 0;
   color: #64748b;
@@ -963,6 +974,7 @@ html, body {{
 .ob-map-rmse-panel {{
   position: relative;
   display: block;
+  flex: 0 0 auto;
   max-width: var(--ob-map-content-max-width);
   margin: 10px auto 0;
   padding: 10px 12px 8px;
@@ -1010,7 +1022,8 @@ html, body {{
     width: 100%;
   }}
   .ob-map-canvas-wrap {{
-    height: 420px;
+    min-height: 300px;
+    flex-basis: 420px;
   }}
 }}
 </style>
@@ -1418,7 +1431,7 @@ html, body {{
 </html>"""
 
 
-def _surface_comparison_iframe_html(document: str, height_pixels: int) -> str:
+def _explorer_iframe_html(document: str, height_pixels: int) -> str:
     escaped_document = html.escape(document, quote=True)
     return (
         f'<iframe srcdoc="{escaped_document}" '
@@ -1626,8 +1639,6 @@ def _map_viewport_script() -> str:
     const originalBounds = { ...options.originalBounds };
     const periodicLongitude = Boolean(options.periodicLongitude ?? originalBounds.periodicLongitude);
     const longitudePeriod = Number(options.longitudePeriod || originalBounds.longitudePeriod || 360);
-    const projectMode = options.projectMode || "stretch";
-    const fitScale = options.fitScale || 1.0;
     const onChange = options.onChange || (() => {});
     const onInteractionStart = options.onInteractionStart || (() => {});
     let viewBounds = constrainViewBounds({ ...originalBounds });
@@ -1657,23 +1668,9 @@ def _map_viewport_script() -> str:
       const height = canvas.height;
       const longitudeSpan = Math.max(1e-6, targetBounds.longitudeMaximum - targetBounds.longitudeMinimum);
       const latitudeSpan = Math.max(1e-6, targetBounds.latitudeMaximum - targetBounds.latitudeMinimum);
-      if (projectMode === "fit") {
-        const scale = Math.min(width / longitudeSpan, height / latitudeSpan) * fitScale;
-        const xOffset = (width - longitudeSpan * scale) / 2;
-        const yOffset = (height - latitudeSpan * scale) / 2;
-        const xUnwrapped = (longitude) => xOffset + (longitude - targetBounds.longitudeMinimum) * scale;
-        return {
-          scale,
-          x: (longitude) => xOffset +
-            (displayLongitude(longitude, targetBounds) - targetBounds.longitudeMinimum) * scale,
-          xUnwrapped,
-          y: (latitude) => height - yOffset - (latitude - targetBounds.latitudeMinimum) * scale
-        };
-      }
       const xUnwrapped = (longitude) =>
         ((longitude - targetBounds.longitudeMinimum) / longitudeSpan) * width;
       return {
-        scale: Math.min(width / longitudeSpan, height / latitudeSpan),
         x: (longitude) =>
           ((displayLongitude(longitude, targetBounds) - targetBounds.longitudeMinimum) / longitudeSpan) * width,
         xUnwrapped,
@@ -1756,6 +1753,11 @@ def _map_viewport_script() -> str:
         }
       }
       return shifts.length > 0 ? shifts : [0];
+    }
+
+    function longitudeShiftsForLongitude(longitude) {
+      if (!Number.isFinite(longitude)) return [0];
+      return longitudeShiftsForPath({ longitude: [longitude], latitude: [] });
     }
 
     function constrainedSpan(currentSpan, originalSpan, factor) {
@@ -1860,15 +1862,6 @@ def _map_viewport_script() -> str:
     }
 
     function coordinateDelta(xDeltaPixels, yDeltaPixels, targetBounds) {
-      if (projectMode === "fit") {
-        const dragProjection = projectionForBounds(targetBounds);
-        const xDelta = (xDeltaPixels / canvas.clientWidth) * canvas.width;
-        const yDelta = (yDeltaPixels / canvas.clientHeight) * canvas.height;
-        return {
-          longitude: xDelta / dragProjection.scale,
-          latitude: yDelta / dragProjection.scale
-        };
-      }
       return {
         longitude: (xDeltaPixels / canvas.clientWidth) *
           (targetBounds.longitudeMaximum - targetBounds.longitudeMinimum),
@@ -1930,6 +1923,7 @@ def _map_viewport_script() -> str:
       bounds,
       cacheKey,
       isDragging: () => dragStart !== null,
+      longitudeShiftsForLongitude,
       longitudeShiftsForPath,
       nearestLongitudeCopy,
       project,
@@ -2660,16 +2654,6 @@ html, body {{
 </script>
 </body>
 </html>"""
-
-
-def _lagrangian_explorer_iframe_html(document: str, height_pixels: int) -> str:
-    escaped_document = html.escape(document, quote=True)
-    return (
-        f'<iframe srcdoc="{escaped_document}" '
-        + 'style="width:100%; '
-        + f'height:{height_pixels}px; border:0;" '
-        + 'loading="lazy" sandbox="allow-scripts"></iframe>'
-    )
 
 
 def _simplified_contour_payload(
@@ -3554,16 +3538,6 @@ html, body {{
 </html>"""
 
 
-def _eddy_explorer_iframe_html(document: str, height_pixels: int) -> str:
-    escaped_document = html.escape(document, quote=True)
-    return (
-        f'<iframe srcdoc="{escaped_document}" '
-        + 'style="width:100%; '
-        + f'height:{height_pixels}px; border:0;" '
-        + 'loading="lazy" sandbox="allow-scripts"></iframe>'
-    )
-
-
 def _class4_variable_label(variable_key: str) -> str:
     if variable_key == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
         return "Sea level anomaly"
@@ -3741,6 +3715,9 @@ def _class4_explorer_document(element_id: str, payload: dict[str, object]) -> st
 <style>
 html, body {{
   margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
   background: transparent;
   color: #172033;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -3748,21 +3725,26 @@ html, body {{
 .ob-class4 {{
   box-sizing: border-box;
   width: 100%;
+  height: 100%;
   border: 1px solid #d5dce8;
-  border-radius: 18px;
+  border-radius: 8px;
   background: #f8fafc;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }}
 .ob-class4-header {{
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   gap: 18px;
-  padding: 18px 20px 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #d5dce8;
+  background: #f8fafc;
 }}
 .ob-class4-title {{
   font-size: 18px;
   font-weight: 760;
-  letter-spacing: -0.02em;
 }}
 .ob-class4-subtitle {{
   margin-top: 4px;
@@ -3817,15 +3799,15 @@ html, body {{
 {_map_zoom_control_css("ob-class4", "#cbd5e1")}
 .ob-class4-map {{
   position: relative;
-  margin: 0 14px 12px;
-  border-radius: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
   background: #e8eef4;
   overflow: hidden;
 }}
 .ob-class4-map canvas {{
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   cursor: grab;
   touch-action: none;
 }}
@@ -3853,11 +3835,14 @@ html, body {{
   margin-bottom: 2px;
 }}
 .ob-class4-status {{
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 0 20px 16px;
+  padding: 10px 16px;
+  border-top: 1px solid #d5dce8;
+  background: #ffffff;
   color: #64748b;
   font-size: 12px;
 }}
@@ -4046,7 +4031,20 @@ html, body {{
     return `rgb(${{Math.round(252 - 175 * t)}}, ${{Math.round(244 - 226 * t)}}, ${{Math.round(164 - 74 * t)}})`;
   }}
 
-  function drawPoints(project, frame) {{
+  function observationPositions(activeProjection, longitude, latitude, margin = 10) {{
+    const positions = [];
+    for (const longitudeShift of viewport.longitudeShiftsForLongitude(longitude)) {{
+      const x = activeProjection.xUnwrapped(longitude + longitudeShift);
+      const y = activeProjection.y(latitude);
+      if (x >= -margin && x <= canvas.width + margin && y >= -margin && y <= canvas.height + margin) {{
+        positions.push({{x, y}});
+      }}
+    }}
+    return positions;
+  }}
+
+  function drawPoints(frame) {{
+    const activeProjection = projection();
     const depth = currentDepth();
     const signedScale = depth.signedScale || 1;
     const absoluteScale = depth.absoluteScale || 1;
@@ -4055,22 +4053,22 @@ html, body {{
       const longitude = frame.longitude[index];
       const latitude = frame.latitude[index];
       if (longitude === null || latitude === null) continue;
-      const x = project.x(longitude);
-      const y = project.y(latitude);
       if (state.mode === "absolute") {{
         context.fillStyle = colorForAbsolute(frame.absoluteError[index], absoluteScale);
       }} else {{
         context.fillStyle = colorForSigned(frame.error[index], signedScale);
       }}
-      context.beginPath();
-      context.arc(x, y, 2.8, 0, Math.PI * 2);
-      context.fill();
-      if (index === hoveredObservationIndex) {{
-        context.strokeStyle = "#172033";
-        context.lineWidth = 2.0;
+      for (const position of observationPositions(activeProjection, longitude, latitude)) {{
         context.beginPath();
-        context.arc(x, y, 5.2, 0, Math.PI * 2);
-        context.stroke();
+        context.arc(position.x, position.y, 2.8, 0, Math.PI * 2);
+        context.fill();
+        if (index === hoveredObservationIndex) {{
+          context.strokeStyle = "#172033";
+          context.lineWidth = 2.0;
+          context.beginPath();
+          context.arc(position.x, position.y, 5.2, 0, Math.PI * 2);
+          context.stroke();
+        }}
       }}
     }}
     context.globalAlpha = 1;
@@ -4087,7 +4085,7 @@ html, body {{
 
   function nearestObservation(event) {{
     const frame = currentFrame();
-    const project = projection();
+    const activeProjection = projection();
     const point = eventCanvasPoint(event);
     const threshold = 12 * point.scale;
     let nearest = null;
@@ -4096,12 +4094,13 @@ html, body {{
       const longitude = frame.longitude[index];
       const latitude = frame.latitude[index];
       if (longitude === null || latitude === null) continue;
-      const x = project.x(longitude);
-      const y = project.y(latitude);
-      const distanceSquared = (x - point.x) * (x - point.x) + (y - point.y) * (y - point.y);
-      if (distanceSquared <= nearestDistanceSquared) {{
-        nearest = {{index}};
-        nearestDistanceSquared = distanceSquared;
+      for (const position of observationPositions(activeProjection, longitude, latitude, threshold)) {{
+        const distanceSquared =
+          (position.x - point.x) * (position.x - point.x) + (position.y - point.y) * (position.y - point.y);
+        if (distanceSquared <= nearestDistanceSquared) {{
+          nearest = {{index}};
+          nearestDistanceSquared = distanceSquared;
+        }}
       }}
     }}
     return nearest;
@@ -4156,10 +4155,9 @@ html, body {{
   }}
 
   function draw() {{
-    const project = projection();
     const frame = currentFrame();
     drawBackground();
-    drawPoints(project, frame);
+    drawPoints(frame);
     renderLegend();
     leadLabel.textContent = `Lead day ${{frame.leadDay}}`;
     const modeLabel = modes.find((mode) => mode.key === state.mode).label;
@@ -4216,16 +4214,6 @@ html, body {{
 </script>
 </body>
 </html>"""
-
-
-def _class4_explorer_iframe_html(document: str, height_pixels: int) -> str:
-    escaped_document = html.escape(document, quote=True)
-    return (
-        f'<iframe srcdoc="{escaped_document}" '
-        + 'style="width:100%; '
-        + f'height:{height_pixels}px; border:0;" '
-        + 'loading="lazy" sandbox="allow-scripts"></iframe>'
-    )
 
 
 def plot_multi_reference_zonal_psd_comparison(
@@ -5056,16 +5044,6 @@ def _zonal_psd_explorer_document(element_id: str, payload: dict[str, object]) ->
     )
 
 
-def _zonal_psd_explorer_iframe_html(document: str, height_pixels: int) -> str:
-    escaped_document = html.escape(document, quote=True)
-    return (
-        f'<iframe srcdoc="{escaped_document}" '
-        + 'style="width:100%; '
-        + f'height:{height_pixels}px; border:0;" '
-        + 'loading="lazy" sandbox="allow-scripts"></iframe>'
-    )
-
-
 def plot_multi_reference_zonal_psd_comparison_explorer(
     challenger_dataset: xarray.Dataset,
     reference_datasets: Mapping[str, xarray.Dataset],
@@ -5095,7 +5073,7 @@ def plot_multi_reference_zonal_psd_comparison_explorer(
     }
     element_id = f"ob-zonal-psd-{uuid4().hex}"
     document = _zonal_psd_explorer_document(element_id, payload)
-    return _html_without_iframe_warning(_zonal_psd_explorer_iframe_html(document, height_pixels=height_pixels))
+    return _html_without_iframe_warning(_explorer_iframe_html(document, height_pixels=height_pixels))
 
 
 def _resolved_variable_keys(variables: Sequence[Variable | str]) -> tuple[str, ...]:
@@ -5273,7 +5251,7 @@ def plot_multi_reference_surface_comparison_explorer(
         title=title,
     )
     document = _surface_comparison_explorer_document(element_id, payload)
-    return _html_without_iframe_warning(_surface_comparison_iframe_html(document, height_pixels=height_pixels))
+    return _html_without_iframe_warning(_explorer_iframe_html(document, height_pixels=height_pixels))
 
 
 def plot_multi_reference_lagrangian_trajectory_explorer(
@@ -5297,7 +5275,7 @@ def plot_multi_reference_lagrangian_trajectory_explorer(
     )
     element_id = f"ob-lagrangian-{uuid4().hex}"
     document = _lagrangian_explorer_document(element_id, payload)
-    return _html_without_iframe_warning(_lagrangian_explorer_iframe_html(document, height_pixels=height_pixels))
+    return _html_without_iframe_warning(_explorer_iframe_html(document, height_pixels=height_pixels))
 
 
 def plot_multi_reference_eddy_matching_explorer(
@@ -5320,7 +5298,7 @@ def plot_multi_reference_eddy_matching_explorer(
     )
     element_id = f"ob-eddy-{uuid4().hex}"
     document = _eddy_explorer_document(element_id, payload)
-    return _html_without_iframe_warning(_eddy_explorer_iframe_html(document, height_pixels=height_pixels))
+    return _html_without_iframe_warning(_explorer_iframe_html(document, height_pixels=height_pixels))
 
 
 def plot_class4_observation_error_explorer(
@@ -5344,4 +5322,4 @@ def plot_class4_observation_error_explorer(
     )
     element_id = f"ob-class4-{uuid4().hex}"
     document = _class4_explorer_document(element_id, payload)
-    return _html_without_iframe_warning(_class4_explorer_iframe_html(document, height_pixels=height_pixels))
+    return _html_without_iframe_warning(_explorer_iframe_html(document, height_pixels=height_pixels))
