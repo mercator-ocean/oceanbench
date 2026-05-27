@@ -118,6 +118,7 @@ def test_plot_surface_comparison_explorer_returns_self_contained_html() -> None:
     assert "max-width: none" in html_output.data
     assert "--ob-map-content-max-width: 1220px" in html_output.data
     assert "max-width: var(--ob-map-content-max-width)" in html_output.data
+    assert "flex: 1 1 520px" in html_output.data
     assert "0.5 m" in html_output.data
     assert "10 m" in html_output.data
     assert "depths" in html_output.data
@@ -740,16 +741,21 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "fill(&quot;evenodd&quot;)" not in html_output.data
     assert "ob-class4-zoom" in html_output.data
     assert "createMapViewport" in html_output.data
-    assert "projectMode: &quot;fit&quot;" not in html_output.data
-    assert "fitScale: 0.92" not in html_output.data
+    assert "projectMode" not in html_output.data
+    assert "fitScale" not in html_output.data
     assert "createMapBackgroundCache" in html_output.data
     assert "createMapRasterLayer" in html_output.data
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
     assert "backgroundCache.invalidate()" in html_output.data
     assert "viewport.longitudeShiftsForPath(layerPath)" in html_output.data
+    assert "viewport.longitudeShiftsForLongitude(longitude)" in html_output.data
     assert "shiftedMaximum &gt;= viewBounds.longitudeMinimum" in html_output.data
     assert "projection.xUnwrapped" in html_output.data
     assert "targetContext.drawImage" in html_output.data
+    assert "height: 100%" in html_output.data
+    assert "margin: 0 14px 12px" not in html_output.data
+    assert "border-radius: 18px" not in html_output.data
+    assert "letter-spacing" not in html_output.data
     assert "Map zoom controls" in html_output.data
     assert "Zoom in" in html_output.data
     assert "Zoom out" in html_output.data
