@@ -44,7 +44,7 @@ CHALLENGERS = {
         "resolution": "1°",
     },
     "glonet2": {
-        "label": "GLO-Net2",
+        "label": "GLONET2",
         "url": "https://glonet.lab.dive.edito.eu",
         "organisation": "Mercator Ocean",
         "organisation_url": "https://mercator-ocean.eu",
