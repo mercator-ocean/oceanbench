@@ -10,9 +10,15 @@ import requests
 from helpers.challenger_metadata import KNOWN_CHALLENGERS
 from helpers.published_regions import published_region_ids
 
-S3_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench"
-REPORTS_VERSION = "0.1.4"
-REPORTS_PREFIX = f"public/evaluation-reports/{REPORTS_VERSION}/"
+S3_BASE_URL = os.environ.get("OCEANBENCH_REPORTS_BASE_URL", "https://minio.dive.edito.eu/project-oceanbench").rstrip(
+    "/"
+)
+REPORTS_PREFIX = os.environ.get(
+    "OCEANBENCH_REPORTS_PREFIX",
+    "dev/evaluation-reports/AI-59-evaluate-2024-ml-forecasts/",
+)
+if not REPORTS_PREFIX.endswith("/"):
+    REPORTS_PREFIX = f"{REPORTS_PREFIX}/"
 REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")
 
 
