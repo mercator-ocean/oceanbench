@@ -53,6 +53,16 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1/12\u00b0",
     },
+    "glonet240": {
+        "label": "GLONET240",
+        "url": "https://glonet.lab.dive.edito.eu",
+        "organisation": "Mercator Ocean",
+        "organisation_url": "https://mercator-ocean.eu",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12/IFS",
+        "resolution": "1/12\u00b0",
+    },
     "langya": {
         "label": "LangYa",
         "url": "https://arxiv.org/abs/2412.18097",
