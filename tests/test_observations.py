@@ -16,11 +16,11 @@ def _observation_source() -> xarray.Dataset:
     variables = {
         Dimension.TIME.key(): (
             observation_dimension,
-            pandas.to_datetime(["2024-01-04", "2024-01-11", "2024-01-14"]).values,
+            pandas.to_datetime(["2024-01-03", "2024-01-10", "2024-01-12", "2024-01-14"]).values,
         ),
-        Dimension.LATITUDE.key(): (observation_dimension, [0.0, 1.0, 2.0]),
-        Dimension.LONGITUDE.key(): (observation_dimension, [10.0, 11.0, 12.0]),
-        Dimension.DEPTH.key(): (observation_dimension, [0.0, 0.0, 0.0]),
+        Dimension.LATITUDE.key(): (observation_dimension, [0.0, 1.0, 2.0, 3.0]),
+        Dimension.LONGITUDE.key(): (observation_dimension, [10.0, 11.0, 12.0, 13.0]),
+        Dimension.DEPTH.key(): (observation_dimension, [0.0, 0.0, 0.0, 0.0]),
     }
     for variable in (
         Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
@@ -29,7 +29,7 @@ def _observation_source() -> xarray.Dataset:
         Variable.EASTWARD_SEA_WATER_VELOCITY,
         Variable.NORTHWARD_SEA_WATER_VELOCITY,
     ):
-        variables[variable.key()] = (observation_dimension, [1.0, 2.0, 3.0])
+        variables[variable.key()] = (observation_dimension, [1.0, 2.0, 3.0, 4.0])
     return xarray.Dataset(variables)
 
 
@@ -41,7 +41,7 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(mo
     monkeypatch.setattr(observations, "require_remote_dataset_dimensions", lambda dataset, *_: dataset)
 
     selected = observations._selected_observations_dataset(
-        observation_days=numpy.array(["2024-01-04", "2024-01-11", "2024-01-14"], dtype="datetime64[D]"),
+        observation_days=numpy.array(["2024-01-03", "2024-01-10", "2024-01-12", "2024-01-14"], dtype="datetime64[D]"),
         first_day_timestamps=pandas.to_datetime(first_day_datetimes),
         first_day_datetimes=first_day_datetimes,
         lead_days_count=10,
@@ -56,10 +56,12 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(mo
     )
 
     assert result.to_dict(orient="records") == [
-        {"time": "2024-01-04", "first_day": "2024-01-03", "value": 1.0},
-        {"time": "2024-01-11", "first_day": "2024-01-03", "value": 2.0},
-        {"time": "2024-01-11", "first_day": "2024-01-10", "value": 2.0},
-        {"time": "2024-01-14", "first_day": "2024-01-10", "value": 3.0},
+        {"time": "2024-01-03", "first_day": "2024-01-03", "value": 1.0},
+        {"time": "2024-01-10", "first_day": "2024-01-03", "value": 2.0},
+        {"time": "2024-01-12", "first_day": "2024-01-03", "value": 3.0},
+        {"time": "2024-01-10", "first_day": "2024-01-10", "value": 2.0},
+        {"time": "2024-01-12", "first_day": "2024-01-10", "value": 3.0},
+        {"time": "2024-01-14", "first_day": "2024-01-10", "value": 4.0},
     ]
 
     observations_dataframe = _create_observations_dataframe(
@@ -72,13 +74,15 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(mo
     assert observations_dataframe[["observation_value", "lead_day"]].to_dict(orient="records") == [
         {"observation_value": 1.0, "lead_day": 0},
         {"observation_value": 2.0, "lead_day": 7},
+        {"observation_value": 3.0, "lead_day": 9},
         {"observation_value": 2.0, "lead_day": 0},
-        {"observation_value": 3.0, "lead_day": 3},
+        {"observation_value": 3.0, "lead_day": 2},
+        {"observation_value": 4.0, "lead_day": 4},
     ]
 
 
 def test_observations_stage_path_uses_overlap_safe_version() -> None:
     assert (
-        observations._observations_stage_path("2024-01-03", "2025-01-04", 10).name
-        == "observations-v2-20240103-20250104-10d.zarr"
+        observations._observations_stage_path("2024-01-03", "2025-01-03", 10).name
+        == "observations-v3-20240103-20250103-10d.zarr"
     )
