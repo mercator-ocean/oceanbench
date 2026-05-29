@@ -133,7 +133,7 @@ def _prepared_class4_observations(
     base_subset = observations_dataset[[time_key, latitude_key, longitude_key, first_day_key, depth_key]].rename(
         {first_day_key: "first_day"}
     )
-    lead_day = ((base_subset[time_key] - base_subset["first_day"]) / numpy.timedelta64(1, "D")).astype("int64") - 1
+    lead_day = ((base_subset[time_key] - base_subset["first_day"]) / numpy.timedelta64(1, "D")).astype("int64")
     base_subset = base_subset.assign(lead_day=lead_day)
     valid_observation_mask = ((base_subset["lead_day"] >= 0) & (base_subset["lead_day"] < lead_days_count)).compute()
     selected_observation_indices = numpy.flatnonzero(valid_observation_mask.values)

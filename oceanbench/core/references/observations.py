@@ -25,7 +25,7 @@ from oceanbench.core.remote_http import (
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
-OBSERVATIONS_STAGE_VERSION = "v2"
+OBSERVATIONS_STAGE_VERSION = "v3"
 
 
 class ObservationDataUnavailableError(ValueError):
@@ -165,8 +165,8 @@ def _forecast_observation_matches(
     selected_observation_chunks = []
     selected_run_chunks = []
     for run_index, first_day_timestamp in enumerate(first_day_timestamps):
-        first_valid_datetime = (first_day_timestamp + pandas.Timedelta(days=1)).to_datetime64()
-        end_datetime_exclusive = (first_day_timestamp + pandas.Timedelta(days=lead_days_count + 1)).to_datetime64()
+        first_valid_datetime = first_day_timestamp.to_datetime64()
+        end_datetime_exclusive = (first_day_timestamp + pandas.Timedelta(days=lead_days_count)).to_datetime64()
         selected_observation_indices = numpy.flatnonzero(
             (observation_values >= first_valid_datetime) & (observation_values < end_datetime_exclusive)
         )
@@ -252,7 +252,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
 
     first_day_timestamps = pandas.to_datetime(first_day_datetimes)
     first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
-    last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).strftime("%Y-%m-%d")
+    last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count - 1)).strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
     local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)
 
