@@ -133,6 +133,7 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
         remote_retries=(
             args.remote_retries if args.remote_retries is not None else environment_configuration.remote_retries
         ),
+        class4_fast_interpolation=environment_configuration.class4_fast_interpolation,
     )
 
 
