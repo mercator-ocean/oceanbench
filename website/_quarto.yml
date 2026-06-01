@@ -18,7 +18,7 @@ website:
       - href: index.qmd
         text: Scores
       - href: live-evaluations.qmd
-        text: Forecast validation
+        text: NRT forecast validation
       - challengers.qmd
       - about.qmd
   repo-url: https://github.com/mercator-ocean/oceanbench

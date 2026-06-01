@@ -13,7 +13,7 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     live_page = (WEBSITE_DIRECTORY / "live-evaluations.qmd").read_text(encoding="utf-8")
 
     assert "live-evaluations.qmd" in quarto_config
-    assert "Forecast validation" in quarto_config
+    assert "NRT forecast validation" in quarto_config
     assert "Near-real-time forecast validation" in live_page
     assert "| GLONET |" in live_page
     assert "Forecast init" in live_page
