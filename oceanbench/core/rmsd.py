@@ -31,13 +31,19 @@ def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
     return dataset.assign({Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]})
 
 
+def _spatial_area_weights(dataset: xarray.Dataset) -> xarray.DataArray:
+    return numpy.cos(numpy.deg2rad(dataset[Dimension.LATITUDE.key()]))
+
+
 def _rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
 ) -> xarray.Dataset:
-    return numpy.sqrt(
-        ((challenger_dataset - reference_dataset) ** 2).mean(dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()])
-    ).mean(dim=Dimension.FIRST_DAY_DATETIME.key())
+    squared_error = (challenger_dataset - reference_dataset) ** 2
+    area_weighted_mean_squared_error = squared_error.weighted(_spatial_area_weights(squared_error)).mean(
+        dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
+    )
+    return numpy.sqrt(area_weighted_mean_squared_error).mean(dim=Dimension.FIRST_DAY_DATETIME.key())
 
 
 def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
