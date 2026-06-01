@@ -39,6 +39,21 @@ body.quarto-dark {
   text-underline-offset: 0.16em;
 }
 
+/* --- Navigation --- */
+
+.navbar .nav-link[href$="live-evaluations.html"]::before,
+.navbar .nav-link[href$="live-evaluations.qmd"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.45rem;
+  border-radius: var(--ob-radius-pill);
+  background: #d71920;
+  box-shadow: 0 0 0 0.14rem rgba(215, 25, 32, 0.18);
+  vertical-align: 0.02em;
+}
+
 /* --- Rendered notebook cells --- */
 
 .code-copy-outer-scaffold {
@@ -155,6 +170,35 @@ div.sourceCode.cell-code pre.sourceCode {
   border-color: var(--ob-accent);
   color: var(--ob-accent);
   text-decoration: none;
+}
+
+/* --- Live evaluations page --- */
+
+.live-evaluations-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface-raised);
+  box-shadow: var(--ob-soft-shadow);
+}
+
+.live-evaluations-table-wrap table {
+  width: max-content;
+  min-width: 100%;
+  font-size: 0.9rem;
+  margin-bottom: 0;
+}
+
+.live-evaluations-table-wrap th,
+.live-evaluations-table-wrap td {
+  padding: 0.5rem 0.65rem;
+  line-height: 1.25;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.live-evaluations-table-wrap code {
+  white-space: nowrap;
 }
 
 /* --- Score tables --- */

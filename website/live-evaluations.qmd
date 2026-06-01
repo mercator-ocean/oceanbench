@@ -16,9 +16,13 @@ format:
 Live evaluations monitor recent operational forecasts against recent Class IV observations and GLO12 operational analysis.
 They are intended for scientific validation and daily monitoring, not for annual benchmark ranking.
 
+::: {.live-evaluations-table-wrap}
+
 | System | Forecast init | Observation source | Observation cutoff | Report |
 |--------|---------------|--------------------|--------------------|--------|
 | GLONET | 2026-05-13 | `project-oceanbench/public/observations2026/` | 2026-05-23 | [Development report](reports/glonet.latest.global.report.html) |
+
+:::
 
 The cutoff avoids the recent current-observation gap in the development observation bucket.
 For local development, `python helper_scripts/generate_live_evaluation_notebook.py` creates a synthetic GLONET forecast bucket and a synthetic GLO12 consistency-reference bucket before writing the report notebook.
