@@ -18,11 +18,11 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     assert "| GLONET |" in live_page
     assert "Forecast init" in live_page
     assert "Validated lead days" in live_page
-    assert "Observations through" in live_page
+    assert "Observation cutoff" in live_page
     assert "Status" in live_page
     assert "2026-05-13" in live_page
     assert "2026-05-23" in live_page
-    assert "D1-D10" in live_page
+    assert "1-10 days" in live_page
     assert "Complete" in live_page
     assert "2026-06-01" not in live_page
     assert "date remapping" not in live_page
