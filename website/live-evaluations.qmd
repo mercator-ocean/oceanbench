@@ -18,9 +18,9 @@ They are intended for scientific validation and daily monitoring, not for annual
 
 ::: {.live-evaluations-table-wrap}
 
-| System | OCTO source init | Evaluation init | Observation cutoff | Report |
-|--------|------------------|-----------------|--------------------|--------|
-| GLONET | 2026-06-01 | 2026-05-13 | 2026-05-23 | [Development report](reports/glonet.latest.global.report.html) |
+| System | Source init | Eval init | Obs cutoff | Report |
+|--------|-------------|-----------|------------|--------|
+| GLONET | 2026-06-01 | 2026-05-13 | 2026-05-23 | [Report](reports/glonet.latest.global.report.html) |
 
 :::
 

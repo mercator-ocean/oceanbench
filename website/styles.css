@@ -175,7 +175,6 @@ div.sourceCode.cell-code pre.sourceCode {
 /* --- Live evaluations page --- */
 
 .live-evaluations-table-wrap {
-  overflow-x: auto;
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-md);
   background: var(--ob-surface-raised);
@@ -183,8 +182,7 @@ div.sourceCode.cell-code pre.sourceCode {
 }
 
 .live-evaluations-table-wrap table {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
   font-size: 0.9rem;
   margin-bottom: 0;
 }
@@ -194,10 +192,10 @@ div.sourceCode.cell-code pre.sourceCode {
   padding: 0.5rem 0.65rem;
   line-height: 1.25;
   vertical-align: middle;
-  white-space: nowrap;
 }
 
-.live-evaluations-table-wrap code {
+.live-evaluations-table-wrap th:nth-child(n + 2),
+.live-evaluations-table-wrap td:nth-child(n + 2) {
   white-space: nowrap;
 }
 
