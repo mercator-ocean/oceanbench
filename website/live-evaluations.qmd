@@ -11,8 +11,6 @@ format:
     echo: false
 ---
 
-# Near-real-time forecast validation
-
 Near-real-time validation compares recent operational forecasts with recent Class IV observations.
 It is intended for scientific validation and daily monitoring, not for annual benchmark ranking.
 
