@@ -16,9 +16,14 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     assert "Forecast validation" in quarto_config
     assert "Near-real-time forecast validation" in live_page
     assert "| GLONET |" in live_page
-    assert "project-oceanbench/public/observations2026/" in live_page
-    assert "2026-06-01" in live_page
+    assert "Forecast init" in live_page
+    assert "Validated lead days" in live_page
+    assert "Observations through" in live_page
+    assert "Status" in live_page
     assert "2026-05-13" in live_page
     assert "2026-05-23" in live_page
-    assert "date remapping" in live_page
+    assert "D1-D10" in live_page
+    assert "Complete" in live_page
+    assert "2026-06-01" not in live_page
+    assert "date remapping" not in live_page
     assert "reports/glonet.latest.global.report.html" in live_page
