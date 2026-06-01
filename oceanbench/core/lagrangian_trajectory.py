@@ -330,10 +330,16 @@ def _get_random_ocean_points_from_file(
 
     n = min(n, n_available_ocean_points)
 
+    sampling_probabilities = _ocean_point_area_probabilities(latitude_values)
     numpy.random.seed(seed)
-    idx = numpy.random.choice(len(latitude_values), n, replace=False)
+    idx = numpy.random.choice(len(latitude_values), n, replace=False, p=sampling_probabilities)
 
     return latitude_values[idx], longitude_values[idx]
+
+
+def _ocean_point_area_probabilities(latitude_values: numpy.ndarray) -> numpy.ndarray:
+    point_weights = numpy.cos(numpy.deg2rad(numpy.asarray(latitude_values, dtype=float)))
+    return point_weights / point_weights.sum()
 
 
 def _surface_ocean_point_mask(
