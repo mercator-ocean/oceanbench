@@ -58,15 +58,24 @@ def _wrap_longitudes(data_array: xarray.DataArray) -> xarray.DataArray:
     return data_array.assign_coords(lon=wrapped_longitudes).sortby("lon")
 
 
+def _regular_coordinate_target(coordinate_values: numpy.ndarray) -> numpy.ndarray:
+    coordinate_values = numpy.asarray(coordinate_values, dtype=numpy.float64)
+    coordinate_step = float(numpy.abs(coordinate_values[1] - coordinate_values[0]))
+    coordinate_minimum = float(coordinate_values.min())
+    coordinate_maximum = float(coordinate_values.max())
+    coordinate_span = coordinate_maximum - coordinate_minimum
+    interval_count = int(numpy.floor(coordinate_span / coordinate_step + 1e-9))
+    target = coordinate_minimum + coordinate_step * numpy.arange(interval_count + 1, dtype=numpy.float64)
+    return target[target <= coordinate_maximum]
+
+
 def _regularize_rectilinear_grid(data_array: xarray.DataArray) -> xarray.DataArray:
     if data_array.sizes["lat"] < 2 or data_array.sizes["lon"] < 2:
         return data_array
     latitude_values = data_array["lat"].values
     longitude_values = data_array["lon"].values
-    latitude_step = float(numpy.abs(latitude_values[1] - latitude_values[0]))
-    longitude_step = float(numpy.abs(longitude_values[1] - longitude_values[0]))
-    latitude_target = numpy.arange(latitude_values.min(), latitude_values.max() + latitude_step, latitude_step)
-    longitude_target = numpy.arange(longitude_values.min(), longitude_values.max() + longitude_step, longitude_step)
+    latitude_target = _regular_coordinate_target(latitude_values)
+    longitude_target = _regular_coordinate_target(longitude_values)
     return data_array.interp(lat=latitude_target, lon=longitude_target, method="linear")
 
 

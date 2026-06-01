@@ -73,3 +73,35 @@ def test_zonal_longitude_psd_metrics_exposes_wavelength_band_scores() -> None:
     assert not metrics.empty
     assert all(column in metrics.columns for column in ["Lead day 1", "Lead day 2", "Lead day 3"])
     assert any("band-integrated energy" in row_label for row_label in metrics.index)
+
+
+def test_prepare_psd_dataarray_keeps_float32_polar_grid_finite() -> None:
+    first_days = numpy.array(["2024-01-03"], dtype="datetime64[D]")
+    lead_days = numpy.array([0])
+    latitudes = numpy.arange(2041, dtype=numpy.float32) * numpy.float32(1 / 12) - numpy.float32(80)
+    longitudes = numpy.arange(4, dtype=numpy.float32) * numpy.float32(1 / 12)
+    values = numpy.zeros((len(first_days), len(lead_days), len(latitudes), len(longitudes)), dtype=numpy.float32)
+    dataset = xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                [
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ],
+                values,
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): first_days,
+            Dimension.LEAD_DAY_INDEX.key(): lead_days,
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+    data_array = oceanbench.psd.prepare_psd_dataarray(dataset, Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID)
+
+    assert numpy.isfinite(data_array["lat"].values).all()
+    assert numpy.isfinite(data_array["lon"].values).all()
