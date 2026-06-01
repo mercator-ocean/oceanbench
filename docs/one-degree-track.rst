@@ -2,25 +2,15 @@
 ..
 .. SPDX-License-Identifier: EUPL-1.2
 
-.. _one-degree-track-interpolation-page:
+.. _one-degree-track-page:
 
 =====================================================
- 1 degree track
+ 1 degree track aloooo
 =====================================================
 
 This page documents how OceanBench constructs the 1 degree evaluation track.
 It is intended to remove ambiguity for both benchmark users and technical reviewers.
-
-
-Summary
-*******
-
-
-How reference datasets are selected for the 1 degree track
-
-1 degree GLORYS dataset for training
-
-How challenger datasets are interpolated
+We will go through how reference datasets are selected for the 1 degree track, the 1 degree GLORYS dataset exposed for training and how challenger datasets are interpolated.
 
 
 How reference datasets are selected for the 1 degree track
@@ -31,10 +21,11 @@ For the 1 degree track, OceanBench uses dedicated 1 degree reference datasets fo
 * GLORYS reanalysis
 * GLO12 analysis
 
-Then, when the challenger resolution is "1_degree", OceanBench opens the precomputed 1 degree references through:
+Then, when the challenger resolution is "1_degree", OceanBench opens the precomputed 1 degree references.
+The related public dataset helpers are:
 
-* `oceanbench.core.references.glorys._glorys_reanalysis_dataset_1_degree  <https://oceanbench.readthedocs.io/en/latest/source/oceanbench.datasets.html#oceanbench.datasets.reference.glorys_reanalysis_1_degree>`_
-* `oceanbench.core.references.glo12._glo12_analysis_dataset_1_degree <https://oceanbench.readthedocs.io/en/latest/source/oceanbench.datasets.html#oceanbench.datasets.challenger.glo12_1_degree>`_
+* :func:`oceanbench.datasets.reference.glorys_reanalysis_1_degree`
+* :func:`oceanbench.datasets.reference.glo12_analysis`
 
 1 degree GLORYS dataset for training
 ***********************************************
@@ -45,7 +36,7 @@ For training outside the official evaluation workflow, OceanBench also exposes t
 
 This public API is documented in:
 
-* `oceanbench.datasets.reference <https://oceanbench.readthedocs.io/en/latest/source/oceanbench.datasets.html#module-oceanbench.datasets.reference.glorys_reanalysis_1_degree>`_
+* :mod:`oceanbench.datasets.reference`
 
 
 How challenger datasets are interpolated
@@ -59,9 +50,9 @@ The 1 degree challengers exposed in ``oceanbench.datasets.challenger`` are:
 * ``xihe_1_degree()``
 
 Those are base challengers on a higher resolution (1/4 degree for GLONET, 1/12 degree for the others) that are interpolated to the 1 degree resolution.
-These functions delegate to the core challenger dataset loaders:
+The corresponding public challenger dataset loaders are documented in:
 
-* `oceanbench.core.challenger_datasets <https://oceanbench.readthedocs.io/en/latest/source/oceanbench.datasets.html#module-oceanbench.datasets>`_
+* :mod:`oceanbench.datasets.challenger`
 
 Each of them applies the same interpolation logic:
 

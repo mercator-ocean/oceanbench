@@ -32,7 +32,7 @@ Please keep in mind that these metrics capture key aspects of forecast quality r
 
 Want to evaluate your system or get involved in OceanBench? Check out the [GitHub project](https://github.com/mercator-ocean/oceanbench/)!
 
-For the 1 degree track, the interpolation method used for challengers, the corresponding reference datasets, and the exact implementation paths are documented [here](https://oceanbench.readthedocs.io/en/latest/one-degree-track-interpolation.html).
+For the 1 degree track, the interpolation method used for challengers, the corresponding reference datasets, and the exact implementation paths are documented [here](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html).
 
 ```{python}
 #| output: false

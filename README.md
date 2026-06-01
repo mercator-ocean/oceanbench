@@ -72,7 +72,7 @@ Attributes:
     Conventions:  CF-1.4
 ```
 
-For training on the [1 degree track](https://oceanbench.readthedocs.io/en/latest/one-degree-track-interpolation.html), OceanBench also exposes the 1 degree GLORYS dataset:
+For training on the [1 degree track](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html), OceanBench also exposes the 1 degree GLORYS dataset:
 
 ```python
 import oceanbench
