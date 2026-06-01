@@ -60,6 +60,19 @@ def test_glonet_latest_loader_opens_one_local_forecast_init(tmp_path: Path) -> N
     assert dataset[Dimension.LEAD_DAY_INDEX.key()].values.tolist() == [0]
 
 
+def test_live_first_day_datetime_can_be_pinned(monkeypatch) -> None:
+    monkeypatch.setenv("OCEANBENCH_LIVE_FIRST_DAY", "2026-05-20")
+
+    assert live_datasets.live_first_day_datetime() == datetime(2026, 5, 20)
+
+
+def test_live_first_day_datetime_defaults_to_latest_fully_evaluable_init(monkeypatch) -> None:
+    monkeypatch.delenv("OCEANBENCH_LIVE_FIRST_DAY", raising=False)
+    monkeypatch.setenv("OCEANBENCH_LIVE_OBSERVATION_LAST_DAY", "2026-05-23")
+
+    assert live_datasets.live_first_day_datetime() == datetime(2026, 5, 13)
+
+
 def test_live_evaluation_report_uses_glo12_without_glorys(monkeypatch) -> None:
     calls = {"glorys": 0, "glo12": 0}
 

@@ -36,7 +36,18 @@ def live_class4_observation_last_day() -> str:
     )
 
 
+def live_first_day_datetime() -> datetime:
+    configured_first_day = environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_LIVE_FIRST_DAY.value)
+    if configured_first_day:
+        return pandas.Timestamp(configured_first_day).to_pydatetime()
+    return _latest_fully_evaluable_first_day_datetime()
+
+
 def _default_live_first_day_datetime() -> datetime:
+    return live_first_day_datetime()
+
+
+def _latest_fully_evaluable_first_day_datetime() -> datetime:
     last_observation_day = pandas.Timestamp(live_class4_observation_last_day())
     return (last_observation_day - pandas.Timedelta(days=LEAD_DAYS_COUNT)).to_pydatetime()
 
