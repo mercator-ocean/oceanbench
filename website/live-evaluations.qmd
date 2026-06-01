@@ -13,17 +13,18 @@ format:
 
 # Live evaluations
 
-Live evaluations monitor recent operational forecasts against recent Class IV observations and GLO12 operational analysis.
+Live evaluations monitor recent operational forecasts against recent Class IV observations.
 They are intended for scientific validation and daily monitoring, not for annual benchmark ranking.
 
 ::: {.live-evaluations-table-wrap}
 
-| System | Forecast init | Observation source | Observation cutoff | Report |
-|--------|---------------|--------------------|--------------------|--------|
-| GLONET | 2026-05-13 | `project-oceanbench/public/observations2026/` | 2026-05-23 | [Development report](reports/glonet.latest.global.report.html) |
+| System | OCTO source init | Evaluation init | Observation cutoff | Report |
+|--------|------------------|-----------------|--------------------|--------|
+| GLONET | 2026-06-01 | 2026-05-13 | 2026-05-23 | [Development report](reports/glonet.latest.global.report.html) |
 
 :::
 
+The observation source is `project-oceanbench/public/observations2026/`.
 The cutoff avoids the recent current-observation gap in the development observation bucket.
-For local development, `python helper_scripts/generate_live_evaluation_notebook.py` creates a synthetic GLONET forecast bucket and a synthetic GLO12 consistency-reference bucket before writing the report notebook.
-The real OCTO GLONET bucket currently keeps full forecast data only for the newest inits, so the fully observable 2026-05-13 forecast is represented synthetically on this branch.
+For local development, the report opens the real OCTO GLONET forecast from 2026-06-01 and temporarily assigns it to the older 2026-05-13 evaluation init.
+This date remapping is only a wiring test until OCTO retains forecast outputs long enough to evaluate true past inits.

@@ -66,6 +66,54 @@ def _observations_dataframe() -> pandas.DataFrame:
     )
 
 
+def _depth_last_model_data() -> xarray.DataArray:
+    first_days = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
+    lead_days = numpy.array([0])
+    latitudes = numpy.array([0.0, 1.0])
+    longitudes = numpy.array([10.0, 11.0])
+    depths = numpy.array([0.0, 10.0])
+    values = numpy.empty((len(first_days), len(lead_days), len(latitudes), len(longitudes), len(depths)))
+
+    for latitude_index, latitude in enumerate(latitudes):
+        for longitude_index, longitude in enumerate(longitudes):
+            values[0, 0, latitude_index, longitude_index, 0] = latitude + longitude
+            values[0, 0, latitude_index, longitude_index, 1] = 100 + latitude + longitude
+
+    return xarray.DataArray(
+        dask.array.from_array(values, chunks=(1, 1, len(latitudes), len(longitudes), len(depths))),
+        dims=[
+            Dimension.FIRST_DAY_DATETIME.key(),
+            Dimension.LEAD_DAY_INDEX.key(),
+            Dimension.LATITUDE.key(),
+            Dimension.LONGITUDE.key(),
+            Dimension.DEPTH.key(),
+        ],
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): first_days,
+            Dimension.LEAD_DAY_INDEX.key(): lead_days,
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+            Dimension.DEPTH.key(): depths,
+        },
+        name=Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+    )
+
+
+def _depth_last_observations_dataframe() -> pandas.DataFrame:
+    first_day = numpy.datetime64("2024-01-03")
+    return pandas.DataFrame(
+        {
+            Dimension.TIME.key(): pandas.to_datetime(["2024-01-04", "2024-01-04"]),
+            Dimension.LATITUDE.key(): [0.5, 1.0],
+            Dimension.LONGITUDE.key(): [10.5, 11.0],
+            "first_day": [first_day, first_day],
+            Dimension.DEPTH.key(): [5.0, 10.0],
+            "lead_day": [0, 0],
+            "observation_value": [0.0, 0.0],
+        }
+    )
+
+
 def _record_first_day_block_compute_calls(monkeypatch) -> list[tuple[int, ...]]:
     original_compute = xarray.DataArray.compute
     first_day_block_compute_calls = []
@@ -103,3 +151,12 @@ def test_class4_fast_interpolation_materializes_each_first_day_block_once(monkey
 
     numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0, 100.75, 122.25])
     assert first_day_block_compute_calls == [(0, 1, 2), (0, 1, 2)]
+
+
+def test_class4_model_interpolation_handles_depth_after_horizontal_dimensions() -> None:
+    model_values = interpolate_class4_model_to_observations(
+        _depth_last_model_data(),
+        _depth_last_observations_dataframe(),
+    )
+
+    numpy.testing.assert_allclose(model_values, [61.0, 112.0])

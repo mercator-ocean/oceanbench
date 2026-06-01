@@ -362,7 +362,7 @@ def _horizontally_interpolated_profiles(
         },
         method="linear",
     )
-    return interpolated_profiles.compute().values
+    return interpolated_profiles.transpose(Dimension.DEPTH.key(), "observation", ...).compute().values
 
 
 def _interpolated_model_values_for_observation_group(

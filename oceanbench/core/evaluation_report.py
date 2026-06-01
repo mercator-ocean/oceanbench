@@ -11,7 +11,6 @@ import xarray
 from dask.array.core import PerformanceWarning
 from IPython.display import HTML
 
-from oceanbench.core import live_datasets
 from oceanbench.core import visualization
 from oceanbench.core.classIV import class4_validation_dataframe, rmsd_class4_validation_dataframe
 from oceanbench.core.dataset_utils import Dimension, Variable
@@ -310,78 +309,10 @@ class LiveEvaluationReportContext:
     region: RegionLike = GLOBAL_REGION_NAME
     observation_zarr_template: str | None = None
     observation_last_available_day: str | None = None
-    glo12_zarr_template: str | None = None
 
     @cached_property
     def regional_challenger_dataset(self) -> xarray.Dataset:
         return subset_dataset_to_region(self.challenger_dataset, self.region)
-
-    @cached_property
-    def glo12_dataset(self) -> xarray.Dataset:
-        if self.glo12_zarr_template:
-            dataset = live_datasets.live_reference_dataset(
-                self.regional_challenger_dataset,
-                self.glo12_zarr_template,
-            )
-        else:
-            dataset = glo12_analysis_dataset(self.regional_challenger_dataset)
-        return subset_dataset_to_region(dataset, self.region)
-
-    @cached_property
-    def reference_datasets(self) -> dict[str, xarray.Dataset]:
-        return {
-            GLO12_REFERENCE_NAME: self.glo12_dataset,
-        }
-
-    @cached_property
-    def challenger_mixed_layer_depth_dataset(self) -> xarray.Dataset:
-        return compute_mixed_layer_depth(self.regional_challenger_dataset)
-
-    @cached_property
-    def glo12_mixed_layer_depth_dataset(self) -> xarray.Dataset:
-        return compute_mixed_layer_depth(self.glo12_dataset)
-
-    @cached_property
-    def challenger_geostrophic_current_dataset(self) -> xarray.Dataset:
-        return _compute_geostrophic_currents(self.regional_challenger_dataset)
-
-    @cached_property
-    def glo12_geostrophic_current_dataset(self) -> xarray.Dataset:
-        return _compute_geostrophic_currents(self.glo12_dataset)
-
-    @cached_property
-    def challenger_dynamic_dataset(self) -> xarray.Dataset:
-        return xarray.merge([self.challenger_mixed_layer_depth_dataset, self.challenger_geostrophic_current_dataset])
-
-    @cached_property
-    def glo12_dynamic_dataset(self) -> xarray.Dataset:
-        return xarray.merge([self.glo12_mixed_layer_depth_dataset, self.glo12_geostrophic_current_dataset])
-
-    @cached_property
-    def dynamic_reference_datasets(self) -> dict[str, xarray.Dataset]:
-        return {
-            GLO12_REFERENCE_NAME: self.glo12_dynamic_dataset,
-        }
-
-    @cached_property
-    def glo12_variable_rmsd(self) -> pandas.DataFrame:
-        return _rmsd(self.regional_challenger_dataset, self.glo12_dataset, FORECAST_COMPARISON_VARIABLES)
-
-    @cached_property
-    def glo12_mixed_layer_depth_rmsd(self) -> pandas.DataFrame:
-        return _rmsd(
-            self.challenger_mixed_layer_depth_dataset,
-            self.glo12_mixed_layer_depth_dataset,
-            [Variable.MIXED_LAYER_DEPTH],
-        )
-
-    @cached_property
-    def glo12_geostrophic_current_rmsd(self) -> pandas.DataFrame:
-        return _rmsd(
-            self.challenger_geostrophic_current_dataset,
-            self.glo12_geostrophic_current_dataset,
-            GEOSTROPHIC_CURRENT_VARIABLES,
-        )
 
     @cached_property
     def class4_observation(self) -> Class4ObservationReport:
@@ -427,44 +358,16 @@ class LiveEvaluationReportContext:
             comparison_dataframe=self.class4_observation.comparison_dataframe,
         )
 
-    @cached_property
-    def forecast_comparison_explorer(self) -> HTML:
-        return visualization.plot_multi_reference_surface_comparison_explorer(
-            self.regional_challenger_dataset,
-            self.reference_datasets,
-            variables=FORECAST_COMPARISON_VARIABLES,
-            title="Live forecast consistency maps",
-        )
-
-    @cached_property
-    def dynamic_diagnostic_explorer(self) -> HTML:
-        return visualization.plot_multi_reference_surface_comparison_explorer(
-            self.challenger_dynamic_dataset,
-            self.dynamic_reference_datasets,
-            variables=DYNAMIC_DIAGNOSTIC_VARIABLES,
-            title="Live dynamic diagnostic maps",
-        )
-
-    @cached_property
-    def zonal_psd_explorer(self) -> HTML:
-        return visualization.plot_multi_reference_zonal_psd_comparison_explorer(
-            self.regional_challenger_dataset,
-            self.reference_datasets,
-            variables=ZONAL_PSD_VARIABLES,
-        )
-
 
 def prepare_live_evaluation_report(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
     observation_zarr_template: str | None = None,
     observation_last_available_day: str | None = None,
-    glo12_zarr_template: str | None = None,
 ) -> LiveEvaluationReportContext:
     return LiveEvaluationReportContext(
         challenger_dataset=challenger_dataset,
         region=region,
         observation_zarr_template=observation_zarr_template,
         observation_last_available_day=observation_last_available_day,
-        glo12_zarr_template=glo12_zarr_template,
     )

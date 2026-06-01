@@ -4,9 +4,9 @@
 
 # ### Live evaluation guide
 
-# Live evaluation reports monitor one recent operational forecast against recent Class IV observations
-# and GLO12 operational analysis. These diagnostics are for scientific validation and operational
-# monitoring, not for annual benchmark ranking.
+# Live evaluation reports monitor one recent operational forecast against recent Class IV observations.
+# These diagnostics are for scientific validation and operational monitoring, not for annual
+# benchmark ranking.
 
 # Observation-based scores use the configured recent Class IV bucket. The default development bucket
 # is the 2026 OceanBench observation prefix, capped before the recent current-observation gap.
@@ -41,7 +41,6 @@ from oceanbench.core.evaluation_report import prepare_live_evaluation_report
 from oceanbench.core.live_datasets import (
     live_class4_observation_last_day,
     live_class4_observation_zarr_template,
-    live_glo12_analysis_zarr_template,
 )
 
 evaluation_report = prepare_live_evaluation_report(
@@ -49,7 +48,6 @@ evaluation_report = prepare_live_evaluation_report(
     region=region,
     observation_zarr_template=live_class4_observation_zarr_template(),
     observation_last_available_day=live_class4_observation_last_day(),
-    glo12_zarr_template=live_glo12_analysis_zarr_template(),
 )
 
 # ### Live evaluation of challenger dataset using OceanBench
@@ -61,34 +59,3 @@ evaluation_report.class4_observation.rmsd
 # #### Class IV observation error explorer
 
 evaluation_report.class4_observation_error_explorer
-
-# #### Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis
-
-evaluation_report.glo12_variable_rmsd
-
-# #### Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLO12 analysis
-
-evaluation_report.glo12_mixed_layer_depth_rmsd
-
-# #### Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis
-
-evaluation_report.glo12_geostrophic_current_rmsd
-
-# ### Forecast consistency maps
-
-# > GLO12 analysis is used as an operational consistency reference, not as independent truth.
-
-evaluation_report.forecast_comparison_explorer
-
-# ### Dynamic diagnostic maps
-
-# > Geostrophic currents are masked near the equator where the Coriolis parameter is too small.
-
-evaluation_report.dynamic_diagnostic_explorer
-
-# ### Spectral diagnostic
-
-# > Zonal spectra use metric longitude coordinates, linear detrending, Tukey windowing,
-# > and wavelength-band scale separation.
-
-evaluation_report.zonal_psd_explorer
