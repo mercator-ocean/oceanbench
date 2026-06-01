@@ -5,15 +5,15 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 
 ---
-title: "Live evaluations"
+title: "Near-real-time forecast validation"
 format:
   html:
     echo: false
 ---
 
-# Live evaluations
+# Near-real-time forecast validation
 
-Live evaluations monitor recent operational forecasts against recent Class IV observations.
+Near-real-time validation compares recent operational forecasts with recent Class IV observations.
 They are intended for scientific validation and daily monitoring, not for annual benchmark ranking.
 
 ::: {.live-evaluations-table-wrap}

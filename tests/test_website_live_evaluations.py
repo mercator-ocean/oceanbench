@@ -13,7 +13,8 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     live_page = (WEBSITE_DIRECTORY / "live-evaluations.qmd").read_text(encoding="utf-8")
 
     assert "live-evaluations.qmd" in quarto_config
-    assert "Live evaluations" in quarto_config
+    assert "Forecast validation" in quarto_config
+    assert "Near-real-time forecast validation" in live_page
     assert "| GLONET |" in live_page
     assert "project-oceanbench/public/observations2026/" in live_page
     assert "2026-06-01" in live_page
