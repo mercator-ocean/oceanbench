@@ -8,6 +8,7 @@ import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.classIV import _create_observations_dataframe
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.references import observations
 
 
@@ -82,3 +83,55 @@ def test_observations_stage_path_uses_overlap_safe_version() -> None:
         observations._observations_stage_path("2024-01-03", "2025-01-04", 10).name
         == "observations-v2-20240103-20250104-10d.zarr"
     )
+
+
+def test_observation_path_uses_configurable_template_and_file_urls(monkeypatch) -> None:
+    monkeypatch.setenv(
+        OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_OBSERVATION_ZARR_TEMPLATE.value,
+        "file:///tmp/synthetic_class4/{day}.zarr",
+    )
+
+    assert observations.observation_path(numpy.datetime64("2026-05-23")) == "/tmp/synthetic_class4/20260523.zarr"
+    assert (
+        observations.observation_path(
+            numpy.datetime64("2026-05-23"),
+            "https://example.invalid/observations/{date}.zarr",
+        )
+        == "https://example.invalid/observations/2026-05-23.zarr"
+    )
+
+
+def test_observations_uses_configured_last_available_day(monkeypatch) -> None:
+    source = _observation_source()
+    opened_paths = []
+    first_day_key = Dimension.FIRST_DAY_DATETIME.key()
+    lead_day_key = Dimension.LEAD_DAY_INDEX.key()
+    challenger_dataset = xarray.Dataset(
+        coords={
+            first_day_key: numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+            lead_day_key: [0, 1, 2],
+        }
+    )
+
+    def open_mfdataset(paths, *_, **__):
+        opened_paths.extend(paths)
+        return source
+
+    monkeypatch.setenv(
+        OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_OBSERVATION_ZARR_TEMPLATE.value,
+        "file:///tmp/synthetic_class4/{day}.zarr",
+    )
+    monkeypatch.setenv(
+        OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_OBSERVATION_LAST_DAY.value,
+        "2024-01-04",
+    )
+    monkeypatch.setattr(observations, "open_mfdataset", open_mfdataset)
+    monkeypatch.setattr(observations, "require_remote_dataset_dimensions", lambda dataset, *_: dataset)
+
+    selected = observations.observations(challenger_dataset)
+
+    assert opened_paths == [
+        "/tmp/synthetic_class4/20240103.zarr",
+        "/tmp/synthetic_class4/20240104.zarr",
+    ]
+    assert pandas.to_datetime(selected[Dimension.TIME.key()].values).strftime("%Y-%m-%d").tolist() == ["2024-01-04"]

@@ -158,6 +158,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# OceanBench local live-evaluation development artifacts
+/dev/live-evaluations/
+
 # pytype static type analyzer
 .pytype/
 

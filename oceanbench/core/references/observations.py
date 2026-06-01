@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from pathlib import Path
+from os import environ
+from urllib.parse import unquote, urlparse
+import hashlib
 
 import numpy
 import pandas
@@ -11,6 +14,7 @@ from xarray import Dataset, open_dataset, open_mfdataset
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.local_stage import (
     local_stage_directory,
     open_or_create_local_stage_dataset,
@@ -26,6 +30,7 @@ from oceanbench.core.remote_http import (
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
 OBSERVATIONS_STAGE_VERSION = "v2"
+DEFAULT_OBSERVATION_ZARR_TEMPLATE = "https://minio.dive.edito.eu/project-oceanbench/public/observations2024/{day}.zarr"
 
 
 class ObservationDataUnavailableError(ValueError):
@@ -95,9 +100,75 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
     return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 
 
-def observation_path(day_datetime: numpy.datetime64) -> str:
+def _configured_observation_zarr_template() -> str:
+    return environ.get(
+        OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_OBSERVATION_ZARR_TEMPLATE.value,
+        DEFAULT_OBSERVATION_ZARR_TEMPLATE,
+    )
+
+
+def _format_observation_zarr_template(
+    day_datetime: numpy.datetime64,
+    zarr_template: str | None,
+) -> str:
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/observations2024/{day_string}.zarr"
+    date_string = pandas.Timestamp(day_datetime).strftime("%Y-%m-%d")
+    template = zarr_template or _configured_observation_zarr_template()
+    path = template.format(
+        day=day_string,
+        date=date_string,
+        yyyymmdd=day_string,
+        YYYYMMDD=day_string,
+    )
+    if path.startswith("file://"):
+        parsed_path = urlparse(path)
+        return unquote(parsed_path.path)
+    return path
+
+
+def observation_path(
+    day_datetime: numpy.datetime64,
+    zarr_template: str | None = None,
+) -> str:
+    return _format_observation_zarr_template(day_datetime, zarr_template)
+
+
+def _is_empty_configuration_value(value) -> bool:
+    return value is None or (isinstance(value, str) and value == "")
+
+
+def _parse_day(day: str | numpy.datetime64 | pandas.Timestamp | None) -> numpy.datetime64 | None:
+    if _is_empty_configuration_value(day):
+        return None
+    return numpy.datetime64(pandas.Timestamp(day).strftime("%Y-%m-%d"))
+
+
+def _configured_last_available_day() -> numpy.datetime64 | None:
+    return _parse_day(
+        environ.get(
+            OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_OBSERVATION_LAST_DAY.value,
+        )
+    )
+
+
+def _observation_source_stage_identifier(
+    zarr_template: str | None,
+    last_available_day: str | numpy.datetime64 | pandas.Timestamp | None,
+) -> str:
+    configured_template = (
+        zarr_template
+        if not _is_empty_configuration_value(zarr_template)
+        else environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_OBSERVATION_ZARR_TEMPLATE.value)
+    )
+    configured_last_day = (
+        last_available_day
+        if not _is_empty_configuration_value(last_available_day)
+        else environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_OBSERVATION_LAST_DAY.value)
+    )
+    if _is_empty_configuration_value(configured_template) and _is_empty_configuration_value(configured_last_day):
+        return ""
+    source_key = f"{configured_template or DEFAULT_OBSERVATION_ZARR_TEMPLATE}|{configured_last_day or ''}"
+    return hashlib.sha1(source_key.encode("utf-8")).hexdigest()[:12]
 
 
 def _assign_standard_names(observations_dataset: Dataset) -> Dataset:
@@ -121,10 +192,17 @@ def _should_stage_observations_locally() -> bool:
     return should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY)
 
 
-def _observations_stage_path(first_day_start: str, last_day_end: str, lead_days_count: int) -> Path:
+def _observations_stage_path(
+    first_day_start: str,
+    last_day_end: str,
+    lead_days_count: int,
+    source_identifier: str = "",
+) -> Path:
+    source_suffix = f"-{source_identifier}" if source_identifier else ""
     return local_stage_directory() / (
         f"observations-{OBSERVATIONS_STAGE_VERSION}-"
-        f"{first_day_start.replace('-', '')}-{last_day_end.replace('-', '')}-{lead_days_count}d.zarr"
+        f"{first_day_start.replace('-', '')}-{last_day_end.replace('-', '')}-{lead_days_count}d"
+        f"{source_suffix}.zarr"
     )
 
 
@@ -138,12 +216,14 @@ def _build_staged_observations_dataset(
     first_day_timestamps: pandas.DatetimeIndex,
     first_day_datetimes: numpy.ndarray,
     lead_days_count: int,
+    zarr_template: str | None,
 ) -> None:
     observations_dataset = _selected_observations_dataset(
         observation_days=observation_days,
         first_day_timestamps=first_day_timestamps,
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
+        zarr_template=zarr_template,
     )
     try:
         write_dataset_to_local_stage(
@@ -185,6 +265,7 @@ def _selected_observations_dataset(
     first_day_timestamps: pandas.DatetimeIndex,
     first_day_datetimes: numpy.ndarray,
     lead_days_count: int,
+    zarr_template: str | None = None,
 ) -> Dataset:
     time_key = Dimension.TIME.key()
     source_observation_dimension_key = "obs"
@@ -192,7 +273,7 @@ def _selected_observations_dataset(
     first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
 
     observations_dataset = open_mfdataset(
-        list(map(observation_path, observation_days)),
+        [observation_path(observation_day, zarr_template) for observation_day in observation_days],
         engine="zarr",
         decode_cf=False,
         parallel=False,
@@ -234,7 +315,23 @@ def _selected_observations_dataset(
     )
 
 
-def observations(challenger_dataset: Dataset) -> Dataset:
+def _capped_last_day_end(
+    forecast_last_day_end: numpy.datetime64,
+    last_available_day: str | numpy.datetime64 | pandas.Timestamp | None,
+) -> numpy.datetime64:
+    parsed_last_available_day = _parse_day(last_available_day)
+    if parsed_last_available_day is None:
+        parsed_last_available_day = _configured_last_available_day()
+    if parsed_last_available_day is None:
+        return forecast_last_day_end
+    return min(forecast_last_day_end, parsed_last_available_day)
+
+
+def observations(
+    challenger_dataset: Dataset,
+    zarr_template: str | None = None,
+    last_available_day: str | numpy.datetime64 | pandas.Timestamp | None = None,
+) -> Dataset:
     lead_day_index_key = Dimension.LEAD_DAY_INDEX.key()
     first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
     first_day_datetimes = challenger_dataset[first_day_datetime_key].values
@@ -252,9 +349,21 @@ def observations(challenger_dataset: Dataset) -> Dataset:
 
     first_day_timestamps = pandas.to_datetime(first_day_datetimes)
     first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
-    last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).strftime("%Y-%m-%d")
+    forecast_last_day_end = (
+        (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).to_datetime64().astype("datetime64[D]")
+    )
+    capped_last_day_end = _capped_last_day_end(forecast_last_day_end, last_available_day)
+    if capped_last_day_end < first_challenger_day:
+        last_available_day_string = pandas.Timestamp(capped_last_day_end).strftime("%Y-%m-%d")
+        raise ObservationDataUnavailableError(
+            "Observation-based Class IV scores were not computed for this challenger. "
+            f"Observation data is capped at {last_available_day_string}, "
+            f"while challenger first_day_datetime starts on {first_day_start}."
+        )
+    last_day_end = pandas.Timestamp(capped_last_day_end).strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
-    local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)
+    source_identifier = _observation_source_stage_identifier(zarr_template, last_available_day)
+    local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count, source_identifier)
 
     def open_selected_observations() -> Dataset:
         if not _should_stage_observations_locally():
@@ -263,6 +372,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
                 first_day_timestamps=first_day_timestamps,
                 first_day_datetimes=first_day_datetimes,
                 lead_days_count=lead_days_count,
+                zarr_template=zarr_template,
             )
         return open_or_create_local_stage_dataset(
             local_stage_path,
@@ -273,6 +383,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
                 first_day_timestamps=first_day_timestamps,
                 first_day_datetimes=first_day_datetimes,
                 lead_days_count=lead_days_count,
+                zarr_template=zarr_template,
             ),
         )
 

@@ -8,8 +8,11 @@
 This module exposes the challenger datasets evaluated in the benchmark.
 """
 
+from datetime import datetime
+
 import xarray
 from oceanbench.core import challenger_datasets
+from oceanbench.core import live_datasets
 
 
 def glo12() -> xarray.Dataset:
@@ -139,6 +142,23 @@ def glonet_1_degree() -> xarray.Dataset:
     """
 
     return challenger_datasets.glonet_1_degree()
+
+
+def glonet_latest(
+    first_day_datetime: datetime | None = None,
+    zarr_template: str | None = None,
+) -> xarray.Dataset:
+    """
+    Open the latest dev GLONET live-evaluation challenger dataset.
+
+    This loader opens one forecast initialization and is intended for the
+    OceanBench live-evaluation development path.
+    """
+
+    return live_datasets.glonet_latest(
+        first_day_datetime=first_day_datetime,
+        zarr_template=zarr_template,
+    )
 
 
 def xihe() -> xarray.Dataset:

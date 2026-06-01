@@ -30,17 +30,48 @@ def generate_evaluation_notebook_file(
     output_notebook_file_path: str,
     region: RegionLike = None,
 ):
+    _generate_notebook_file(
+        challenger_python_code_uri_or_local_path,
+        output_notebook_file_path,
+        region=region,
+        template_file_name="evaluation_template.py",
+        metadata_updates={},
+    )
+
+
+def generate_live_evaluation_notebook_file(
+    challenger_python_code_uri_or_local_path: str,
+    output_notebook_file_path: str,
+    region: RegionLike = None,
+):
+    _generate_notebook_file(
+        challenger_python_code_uri_or_local_path,
+        output_notebook_file_path,
+        region=region,
+        template_file_name="live_evaluation_template.py",
+        metadata_updates={"live_evaluation": True},
+    )
+
+
+def _generate_notebook_file(
+    challenger_python_code_uri_or_local_path: str,
+    output_notebook_file_path: str,
+    region: RegionLike = None,
+    template_file_name: str = "evaluation_template.py",
+    metadata_updates: dict | None = None,
+):
     resolved_region = resolve_region(region)
     challenger_python_code = _parse_challenger_python_code(challenger_python_code_uri_or_local_path)
-    notebook = _generate_template_notebook()
+    notebook = _generate_template_notebook(template_file_name)
     notebook = _replace_code_to_open_challenger_datasets(challenger_python_code, notebook)
     notebook = _replace_evaluation_configuration_code(resolved_region, notebook)
     notebook.metadata.setdefault("oceanbench", {})["region"] = region_to_dict(resolved_region)
+    notebook.metadata["oceanbench"].update(metadata_updates or {})
     nbformat.write(notebook, output_notebook_file_path)
 
 
-def _generate_template_notebook() -> nbformat.NotebookNode:
-    evaluation_template_file = resources.files(templates) / "evaluation_template.py"
+def _generate_template_notebook(template_file_name: str = "evaluation_template.py") -> nbformat.NotebookNode:
+    evaluation_template_file = resources.files(templates) / template_file_name
     with evaluation_template_file.open("r", encoding="utf8") as file:
         evaluation_template_code = file.read()
         return _python_to_jupyter_notebook(evaluation_template_code)
