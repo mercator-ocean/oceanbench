@@ -5,7 +5,7 @@
 .. _one-degree-track-page:
 
 =====================================================
- 1 degree track aloooo
+ 1 degree track
 =====================================================
 
 This page documents how OceanBench constructs the 1 degree evaluation track.
