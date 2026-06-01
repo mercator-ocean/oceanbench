@@ -13,6 +13,9 @@ SCRIPT_DIRECTORY = os.path.dirname(__file__)
 REPORTS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "reports")
 ASSETS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "..", "assets")
 QUARTO_METADATA_FILE_PATH = os.path.join(REPORTS_DIRECTORY, "_metadata.yml")
+LIVE_EVALUATION_REPORTS = [
+    ("glonet.latest", "global"),
+]
 
 
 def _find_sample_notebook(challenger_name: str) -> str | None:
@@ -66,6 +69,15 @@ def main() -> None:
                 os.remove(destination)
             print("FAILED")
             raise RuntimeError(f"Failed to download notebook for {challenger_name}.{region_id}.")
+
+    for challenger_name, region_id in LIVE_EVALUATION_REPORTS:
+        print(f"Downloading {challenger_name}.{region_id}...", end=" ")
+        result = download_notebook(challenger_name, region_id, REPORTS_DIRECTORY)
+        if result:
+            print(f"OK -> {result}")
+            continue
+        print("FAILED")
+        raise RuntimeError(f"Failed to download live notebook for {challenger_name}.{region_id}.")
 
     if args.use_samples:
         sample_challengers = [
