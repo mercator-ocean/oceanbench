@@ -199,6 +199,160 @@ div.sourceCode.cell-code pre.sourceCode {
   white-space: nowrap;
 }
 
+/* --- Forecast validation report page --- */
+
+.validation-intro,
+.validation-section,
+.validation-method-note {
+  width: min(1180px, calc(100vw - 2rem));
+  margin: 0 auto 1.4rem;
+}
+
+.validation-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.validation-summary-card,
+.validation-score-card {
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface-raised);
+  box-shadow: var(--ob-soft-shadow);
+}
+
+.validation-summary-card {
+  padding: 0.72rem 0.78rem;
+}
+
+.validation-card-label,
+.validation-score-card span {
+  display: block;
+  color: var(--ob-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.validation-summary-card strong {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 1rem;
+}
+
+.validation-main-message {
+  margin: 0;
+  padding: 0.78rem 0.95rem;
+  border-left: 0.25rem solid var(--ob-accent);
+  background: var(--ob-surface);
+}
+
+.validation-section h2 {
+  margin: 1.7rem 0 0.45rem;
+  font-size: 1.35rem;
+}
+
+.validation-section > p {
+  margin: 0 0 0.85rem;
+  color: var(--ob-muted);
+}
+
+.validation-score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.85rem;
+}
+
+.validation-score-card {
+  padding: 0.78rem 0.82rem;
+}
+
+.validation-score-card h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+}
+
+.validation-score-card p {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin: 0.18rem 0;
+}
+
+.validation-score-card strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.validation-sparkline {
+  width: 100%;
+  height: 4rem;
+  margin-top: 0.45rem;
+}
+
+.validation-sparkline polyline {
+  fill: none;
+  stroke: var(--ob-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+}
+
+.validation-sparkline circle {
+  fill: var(--ob-surface-raised);
+  stroke: var(--ob-accent);
+  stroke-width: 1.7;
+}
+
+.validation-score-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface-raised);
+  box-shadow: var(--ob-soft-shadow);
+}
+
+.validation-score-table {
+  width: 100%;
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.validation-score-table th,
+.validation-score-table td {
+  padding: 0.46rem 0.55rem;
+  border: 1px solid var(--ob-border);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.validation-score-table th:first-child {
+  text-align: left;
+}
+
+.validation-score-table td {
+  text-align: right;
+}
+
+.validation-map-section iframe {
+  width: 100%;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  box-shadow: var(--ob-soft-shadow);
+}
+
+.validation-method-note {
+  padding: 0.65rem 0;
+  color: var(--ob-muted);
+}
+
+.validation-method-note summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
 /* --- Score tables --- */
 
 .score-table-wrapper {

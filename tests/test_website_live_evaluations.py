@@ -11,6 +11,7 @@ WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 def test_website_has_live_evaluations_nav_and_page() -> None:
     quarto_config = (WEBSITE_DIRECTORY / "_quarto.yml").read_text(encoding="utf-8")
     live_page = (WEBSITE_DIRECTORY / "live-evaluations.qmd").read_text(encoding="utf-8")
+    clean_report_page = (WEBSITE_DIRECTORY / "glonet-forecast-validation.qmd").read_text(encoding="utf-8")
 
     assert "live-evaluations.qmd" in quarto_config
     assert "NRT forecast validation" in quarto_config
@@ -26,4 +27,7 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     assert "Complete" in live_page
     assert "2026-06-01" not in live_page
     assert "date remapping" not in live_page
-    assert "reports/glonet.latest.global.report.html" in live_page
+    assert "glonet-forecast-validation.html" in live_page
+    assert "reports/glonet.latest.global.report.html" not in live_page
+    assert "render_forecast_validation_page" in clean_report_page
+    assert "reports/glonet.latest.global.report.ipynb" in clean_report_page

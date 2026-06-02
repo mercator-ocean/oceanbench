@@ -18,6 +18,6 @@ It is intended for scientific validation and daily monitoring, not for annual be
 
 | System | Forecast init | Validated lead days | Observation cutoff | Status | Report |
 |--------|---------------|---------------------|--------------------|--------|--------|
-| GLONET | 2026-05-13 | 1-10 days | 2026-05-23 | Complete | [Report](reports/glonet.latest.global.report.html) |
+| GLONET | 2026-05-13 | 1-10 days | 2026-05-23 | Complete | [Report](glonet-forecast-validation.html) |
 
 :::
