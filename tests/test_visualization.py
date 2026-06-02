@@ -770,6 +770,9 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "Absolute error" in html_output.data
     assert "ob-class4-legend-label" in html_output.data
     assert "ob-class4-legend-range" in html_output.data
+    assert "flex: 0 0 42px" in html_output.data
+    assert "text-overflow: ellipsis" in html_output.data
+    assert "flex-wrap: nowrap" in html_output.data
     assert ".ob-class4-gradient.absolute" in html_output.data
     assert "renderLegend" in html_output.data
     assert "0 / high" in html_output.data

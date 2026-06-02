@@ -3850,22 +3850,34 @@ html, body {{
   margin-bottom: 2px;
 }}
 .ob-class4-status {{
-  flex: 0 0 auto;
+  flex: 0 0 42px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  min-height: 42px;
+  padding: 0 16px;
   border-top: 1px solid #d5dce8;
   background: #ffffff;
   color: #64748b;
   font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+}}
+.ob-class4-status-text {{
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }}
 .ob-class4-legend {{
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }}
 .ob-class4-gradient {{
   width: 120px;
