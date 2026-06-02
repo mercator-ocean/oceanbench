@@ -3856,7 +3856,7 @@ html, body {{
   width: 120px;
   height: 10px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #2166ac, #f7f7f7, #b2182b);
+  background: linear-gradient(90deg, #2c7bb6, #d8d8d6, #ca6111);
   border: 1px solid #cbd5e1;
 }}
 .ob-class4-gradient.absolute {{
@@ -4017,12 +4017,16 @@ html, body {{
   function colorForSigned(value, scale) {{
     if (value === null || !Number.isFinite(value)) return "rgba(100,116,139,0.25)";
     const clipped = Math.max(-1, Math.min(1, value / scale));
-    if (clipped < 0) {{
-      const t = 1 + clipped;
-      return `rgb(${{Math.round(33 + 214 * t)}}, ${{Math.round(102 + 145 * t)}}, ${{Math.round(172 + 75 * t)}})`;
-    }}
-    const t = clipped;
-    return `rgb(${{Math.round(247 - 69 * t)}}, ${{Math.round(247 - 213 * t)}}, ${{Math.round(247 - 204 * t)}})`;
+    const negative = [44, 123, 182];
+    const neutral = [216, 216, 214];
+    const positive = [202, 97, 17];
+    const interpolate = (start, end, t) => start.map((channel, index) =>
+      Math.round(channel + (end[index] - channel) * t)
+    );
+    const channels = clipped < 0
+      ? interpolate(negative, neutral, 1 + clipped)
+      : interpolate(neutral, positive, clipped);
+    return `rgb(${{channels[0]}}, ${{channels[1]}}, ${{channels[2]}})`;
   }}
 
   function colorForAbsolute(value, scale) {{
@@ -4062,6 +4066,9 @@ html, body {{
         context.beginPath();
         context.arc(position.x, position.y, 2.8, 0, Math.PI * 2);
         context.fill();
+        context.strokeStyle = "rgba(15, 23, 42, 0.46)";
+        context.lineWidth = 0.75;
+        context.stroke();
         if (index === hoveredObservationIndex) {{
           context.strokeStyle = "#172033";
           context.lineWidth = 2.0;
