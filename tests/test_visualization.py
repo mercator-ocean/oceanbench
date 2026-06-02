@@ -751,6 +751,9 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
     assert "backgroundCache.invalidate()" in html_output.data
     assert "viewport.longitudeShiftsForPath(layerPath)" in html_output.data
+    assert "function rasterDestination" in html_output.data
+    assert "const overlapPixels = 1" in html_output.data
+    assert "destination.width" in html_output.data
     assert "viewport.longitudeShiftsForLongitude(longitude)" in html_output.data
     assert "shiftedMaximum &gt;= viewBounds.longitudeMinimum" in html_output.data
     assert "projection.xUnwrapped" in html_output.data

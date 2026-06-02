@@ -1977,6 +1977,20 @@ def _map_viewport_script() -> str:
       isLoaded = true;
     }
 
+    function rasterDestination(xMinimum, yMinimum, xMaximum, yMaximum) {
+      const overlapPixels = 1;
+      const left = Math.floor(Math.min(xMinimum, xMaximum)) - overlapPixels;
+      const right = Math.ceil(Math.max(xMinimum, xMaximum)) + overlapPixels;
+      const top = Math.floor(Math.min(yMinimum, yMaximum)) - overlapPixels;
+      const bottom = Math.ceil(Math.max(yMinimum, yMaximum)) + overlapPixels;
+      return {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+      };
+    }
+
     return {
       draw(targetContext) {
         if (!isLoaded && !image.complete) return;
@@ -1993,12 +2007,13 @@ def _map_viewport_script() -> str:
           const xMaximum = projection.xUnwrapped(extent.longitudeMaximum + longitudeShift);
           const yMinimum = projection.y(extent.latitudeMaximum);
           const yMaximum = projection.y(extent.latitudeMinimum);
+          const destination = rasterDestination(xMinimum, yMinimum, xMaximum, yMaximum);
           targetContext.drawImage(
             image,
-            xMinimum,
-            yMinimum,
-            xMaximum - xMinimum,
-            yMaximum - yMinimum,
+            destination.x,
+            destination.y,
+            destination.width,
+            destination.height,
           );
         }
         targetContext.imageSmoothingEnabled = previousImageSmoothing;
