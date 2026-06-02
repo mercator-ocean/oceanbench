@@ -15,6 +15,8 @@ from oceanbench.core.dataset_utils import (
     Variable,
 )
 
+MAXIMUM_MIXED_LAYER_DEPTH = 600.0
+
 
 def compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     return _compute_mixed_layer_depth(_harmonise_dataset(dataset))
@@ -53,12 +55,24 @@ def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     absolute_salinity = _compute_absolute_salinity(salinity, depth, longitude, latitude)
     potential_density = _compute_potential_density(absolute_salinity, temperature, depth)
     surface_density = potential_density.isel({Dimension.DEPTH.key(): 0})
-    delta_density = potential_density - surface_density
+    capped_depth_mask = depth <= MAXIMUM_MIXED_LAYER_DEPTH
+    capped_depth = depth.where(capped_depth_mask, drop=True)
+    capped_temperature = temperature.where(capped_depth_mask, drop=True)
+    capped_potential_density = potential_density.where(capped_depth_mask, drop=True)
+
+    delta_density = capped_potential_density - surface_density
     mask = delta_density >= density_threshold
+    threshold_crossed = mask.any(dim=Dimension.DEPTH.key())
     mixed_layer_depth_index = mask.argmax(dim=Dimension.DEPTH.key())
 
-    dask_depth = xarray.DataArray(dask.array.array(depth), dims=depth.dims)
-    mixed_layer_depth_depth = dask_depth.isel({Dimension.DEPTH.key(): mixed_layer_depth_index}).assign_attrs(
+    dask_depth = xarray.DataArray(
+        dask.array.asarray(capped_depth.data),
+        dims=capped_depth.dims,
+        coords=capped_depth.coords,
+    )
+    threshold_mixed_layer_depth = dask_depth.isel({Dimension.DEPTH.key(): mixed_layer_depth_index})
+    deepest_valid_depth = dask_depth.where(xarray.ufuncs.isfinite(capped_temperature)).max(dim=Dimension.DEPTH.key())
+    mixed_layer_depth_depth = threshold_mixed_layer_depth.where(threshold_crossed, deepest_valid_depth).assign_attrs(
         {"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value}
     )
     temperature_mask = xarray.ufuncs.isfinite(temperature.isel({Dimension.DEPTH.key(): 0}))
