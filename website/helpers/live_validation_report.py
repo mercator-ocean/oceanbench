@@ -195,9 +195,9 @@ def _sparkline(lead_days: list[str], values: list[float | None], unit: str) -> s
     polyline_points = " ".join(f"{x:.1f},{y:.1f}" for _, _, x, y in points)
     circles = "".join(
         '<circle class="validation-sparkline-point" '
-        f'cx="{x:.1f}" cy="{y:.1f}" r="3.1" tabindex="0">'
-        f"<title>Lead {escape(lead_days[index])}: {_format_number(value)} {escape(unit)}</title>"
-        "</circle>"
+        f'cx="{x:.1f}" cy="{y:.1f}" r="3.1" tabindex="0" '
+        f'aria-label="Lead {escape(lead_days[index])}: {_format_number(value)} {escape(unit)}" '
+        f'data-tooltip="Lead {escape(lead_days[index])}: {_format_number(value)} {escape(unit)}"></circle>'
         for index, value, x, y in points
     )
     return (
@@ -227,6 +227,59 @@ def _score_cards(score: ModelScore) -> str:
     return '<div class="validation-score-grid">' + "".join(cards) + "</div>"
 
 
+def _sparkline_tooltip_script() -> str:
+    return """
+<script>
+(() => {
+  const tooltip = document.createElement("div");
+  tooltip.className = "validation-sparkline-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  document.body.appendChild(tooltip);
+
+  function showTooltip(point, clientX, clientY) {
+    tooltip.textContent = point.dataset.tooltip || "";
+    tooltip.style.display = "block";
+    moveTooltip(clientX, clientY);
+  }
+
+  function moveTooltip(clientX, clientY) {
+    const offset = 12;
+    const rect = tooltip.getBoundingClientRect();
+    let left = clientX + offset;
+    let top = clientY - rect.height - offset;
+    if (left + rect.width > window.innerWidth - 8) {
+      left = clientX - rect.width - offset;
+    }
+    if (top < 8) {
+      top = clientY + offset;
+    }
+    tooltip.style.left = `${Math.max(8, left)}px`;
+    tooltip.style.top = `${Math.max(8, top)}px`;
+  }
+
+  function hideTooltip() {
+    tooltip.style.display = "none";
+  }
+
+  document.querySelectorAll(".validation-sparkline-point").forEach((point) => {
+    point.addEventListener("pointerenter", (event) => {
+      showTooltip(point, event.clientX, event.clientY);
+    });
+    point.addEventListener("pointermove", (event) => {
+      moveTooltip(event.clientX, event.clientY);
+    });
+    point.addEventListener("pointerleave", hideTooltip);
+    point.addEventListener("focus", () => {
+      const rect = point.getBoundingClientRect();
+      showTooltip(point, rect.left + rect.width / 2, rect.top);
+    });
+    point.addEventListener("blur", hideTooltip);
+  });
+})();
+</script>
+"""
+
+
 def render_forecast_validation_page(
     notebook_path: str | Path,
     metadata: ForecastValidationMetadata,
@@ -247,6 +300,7 @@ def render_forecast_validation_page(
   <h2>Lead-time scores</h2>
   <p>Representative RMSD values are shown at the first and last validated lead day.</p>
   {_score_cards(score)}
+  {_sparkline_tooltip_script()}
 </section>
 
 <section class="validation-section">

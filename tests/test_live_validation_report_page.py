@@ -65,9 +65,11 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
     assert "2026-05-23" in html
     assert "Temperature, surface" in html
     assert "Lead 10" in html
-    assert "<title>Lead 1: 1.200 C</title>" in html
-    assert "<title>Lead 10: 1.400 C</title>" in html
+    assert 'data-tooltip="Lead 1: 1.200 C"' in html
+    assert 'data-tooltip="Lead 10: 1.400 C"' in html
+    assert "validation-sparkline-tooltip" in html
     assert 'class="validation-sparkline-point"' in html
+    assert "<title>" not in html
     assert '<section class="validation-method-note">' in html
     assert "<details" not in html
     assert '<iframe class="class4-widget"></iframe>' in html

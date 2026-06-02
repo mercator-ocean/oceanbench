@@ -316,6 +316,23 @@ div.sourceCode.cell-code pre.sourceCode {
   outline: none;
 }
 
+.validation-sparkline-tooltip {
+  position: fixed;
+  z-index: 1080;
+  display: none;
+  max-width: 14rem;
+  padding: 0.38rem 0.48rem;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: var(--ob-radius-sm);
+  background: rgba(23, 33, 43, 0.94);
+  box-shadow: 0 0.25rem 0.75rem rgba(15, 23, 42, 0.18);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.25;
+  pointer-events: none;
+}
+
 .validation-score-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--ob-border);
