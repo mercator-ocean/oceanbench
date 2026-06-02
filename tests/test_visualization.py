@@ -733,8 +733,8 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "Class IV observation error maps" in html_output.data
     assert "Model minus Class IV observation errors" in html_output.data
     assert "SLA points are sampled along observed satellite tracks for display" in html_output.data
-    assert "#2c7bb6, #d8d8d6, #ca6111" in html_output.data
-    assert "const neutral = [216, 216, 214]" in html_output.data
+    assert "#2166ac, #f7f7f7, #b2182b" in html_output.data
+    assert "Math.round(33 + 214 * t)" in html_output.data
     assert "rgba(15, 23, 42, 0.46)" in html_output.data
     assert "metrics use all observations" in html_output.data
     assert "ob-class4-tooltip" in html_output.data
