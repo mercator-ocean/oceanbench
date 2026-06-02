@@ -54,7 +54,7 @@ def _observations_dataframe() -> pandas.DataFrame:
     return pandas.DataFrame(
         {
             Dimension.TIME.key(): pandas.to_datetime(
-                ["2024-01-04", "2024-01-05", "2024-01-06", "2024-01-11", "2024-01-13"]
+                ["2024-01-03", "2024-01-04", "2024-01-05", "2024-01-10", "2024-01-12"]
             ),
             Dimension.LATITUDE.key(): [0.0, 0.5, 1.0, 0.25, 0.75],
             Dimension.LONGITUDE.key(): [10.0, 10.5, 11.0, 10.25, 10.75],
