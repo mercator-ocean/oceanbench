@@ -299,10 +299,21 @@ div.sourceCode.cell-code pre.sourceCode {
   stroke-width: 2.4;
 }
 
-.validation-sparkline circle {
+.validation-sparkline-point {
   fill: var(--ob-surface-raised);
   stroke: var(--ob-accent);
   stroke-width: 1.7;
+  cursor: pointer;
+  transition:
+    r 0.15s ease,
+    stroke-width 0.15s ease;
+}
+
+.validation-sparkline-point:hover,
+.validation-sparkline-point:focus {
+  r: 4.6;
+  stroke-width: 2.4;
+  outline: none;
 }
 
 .validation-score-table-wrap {
@@ -344,13 +355,20 @@ div.sourceCode.cell-code pre.sourceCode {
 }
 
 .validation-method-note {
-  padding: 0.65rem 0;
+  padding: 0.8rem 0.95rem;
+  border-left: 0.25rem solid var(--ob-border);
+  background: var(--ob-surface);
   color: var(--ob-muted);
 }
 
-.validation-method-note summary {
-  cursor: pointer;
-  font-weight: 700;
+.validation-method-note h2 {
+  margin: 0 0 0.35rem;
+  color: var(--bs-body-color, #333940);
+  font-size: 1.1rem;
+}
+
+.validation-method-note p {
+  margin: 0;
 }
 
 /* --- Score tables --- */

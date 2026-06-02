@@ -172,7 +172,7 @@ def _representative_variables(score: ModelScore) -> list[tuple[str, ModelVariabl
     return selected_variables
 
 
-def _sparkline(values: list[float | None]) -> str:
+def _sparkline(lead_days: list[str], values: list[float | None], unit: str) -> str:
     finite_values = [value for value in values if value is not None]
     if len(finite_values) < 2:
         return ""
@@ -190,10 +190,16 @@ def _sparkline(values: list[float | None]) -> str:
             continue
         x = padding + index * step
         y = height - padding - ((value - minimum) / value_range) * (height - 2 * padding)
-        points.append((x, y))
+        points.append((index, value, x, y))
 
-    polyline_points = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
-    circles = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.4"></circle>' for x, y in points)
+    polyline_points = " ".join(f"{x:.1f},{y:.1f}" for _, _, x, y in points)
+    circles = "".join(
+        '<circle class="validation-sparkline-point" '
+        f'cx="{x:.1f}" cy="{y:.1f}" r="3.1" tabindex="0">'
+        f"<title>Lead {escape(lead_days[index])}: {_format_number(value)} {escape(unit)}</title>"
+        "</circle>"
+        for index, value, x, y in points
+    )
     return (
         f'<svg class="validation-sparkline" viewBox="0 0 {width} {height}" role="img" aria-hidden="true">'
         f'<polyline points="{polyline_points}"></polyline>{circles}</svg>'
@@ -215,7 +221,7 @@ def _score_cards(score: ModelScore) -> str:
             f"<span>Lead {escape(lead_days[-1])}</span>"
             f"<strong>{_format_number(last_value)} {escape(variable.unit)}</strong>"
             "</p>"
-            f"{_sparkline(values)}"
+            f"{_sparkline(lead_days, values, variable.unit)}"
             "</div>"
         )
     return '<div class="validation-score-grid">' + "".join(cards) + "</div>"
@@ -254,12 +260,12 @@ def render_forecast_validation_page(
   {explorer_html}
 </section>
 
-<details class="validation-method-note">
-  <summary>Validation method</summary>
+<section class="validation-method-note">
+  <h2>Validation method</h2>
   <p>
     The forecast is matched to recent Class IV observations by lead day.
     The observation cutoff defines the latest observation date included in the validation.
     RMSD is aggregated by variable, depth range, and lead day.
   </p>
-</details>
+</section>
 """
