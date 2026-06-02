@@ -46,7 +46,8 @@ Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLORYS 
 
 The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `Mixed Layer Depth (MLD) <https://en.wikipedia.org/wiki/Mixed_layer>`_ computations over the challenger dataset and the GLORYS reanalysis dataset.
 
-The mixed layer depth is computed in meters using all dataset depth levels with a density threshold of 0.03 kg/m³.
+The mixed layer depth is computed in meters on the native challenger-reference vertical grid using depth levels up to 600 meters with a density threshold of 0.03 kg/m³.
+This native-grid diagnostic preserves each system's represented vertical structure; vertical resolution therefore affects cross-challenger comparability.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS reanalysis
 **********************************************************************************************
@@ -81,7 +82,8 @@ Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLO12 a
 
 The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `Mixed Layer Depth (MLD) <https://en.wikipedia.org/wiki/Mixed_layer>`_ computations over the challenger dataset and the GLO12 analysis dataset.
 
-The mixed layer depth is computed in meters using all dataset depth levels with a density threshold of 0.03 kg/m³.
+The mixed layer depth is computed in meters on the native challenger-reference vertical grid using depth levels up to 600 meters with a density threshold of 0.03 kg/m³.
+This native-grid diagnostic preserves each system's represented vertical structure; vertical resolution therefore affects cross-challenger comparability.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis
 **********************************************************************************************
