@@ -48,7 +48,9 @@ def _mld_value(dataset: xarray.Dataset, monkeypatch) -> float:
     monkeypatch.setattr(
         mixed_layer_depth,
         "_compute_potential_density",
-        lambda _absolute_salinity, _temperature, _depth: dataset["potential_density"],
+        lambda _absolute_salinity, _temperature, depth: dataset["potential_density"].sel(
+            {Dimension.DEPTH.key(): depth}
+        ),
     )
 
     mixed_layer_depth_dataset = mixed_layer_depth.compute_mixed_layer_depth(dataset)
@@ -65,6 +67,15 @@ def test_mixed_layer_depth_keeps_native_first_threshold_depth(monkeypatch) -> No
     assert _mld_value(dataset, monkeypatch) == 47.0
 
 
+def test_mixed_layer_depth_accepts_chunked_data(monkeypatch) -> None:
+    dataset = _dataset(
+        temperature_values=[10.0, 10.0, 10.0, 10.0],
+        density_values=[1000.0, 1000.04, 1000.05, 1000.06],
+    ).chunk({Dimension.DEPTH.key(): 2})
+
+    assert _mld_value(dataset, monkeypatch) == 47.0
+
+
 def test_mixed_layer_depth_ignores_threshold_crossings_below_600_meters(monkeypatch) -> None:
     dataset = _dataset(
         temperature_values=[10.0, 10.0, 10.0, 10.0],
@@ -72,6 +83,30 @@ def test_mixed_layer_depth_ignores_threshold_crossings_below_600_meters(monkeypa
     )
 
     assert _mld_value(dataset, monkeypatch) == 600.0
+
+
+def test_mixed_layer_depth_caps_depth_before_density_computation(monkeypatch) -> None:
+    dataset = _dataset(
+        temperature_values=[10.0, 10.0, 10.0, 10.0],
+        density_values=[1000.0, 1000.01, 1000.02, 1000.05],
+    )
+    density_depths = []
+
+    monkeypatch.setattr(
+        mixed_layer_depth,
+        "_compute_absolute_salinity",
+        lambda salinity, _depth, _longitude, _latitude: salinity,
+    )
+
+    def compute_potential_density(_absolute_salinity, _temperature, depth):
+        density_depths.extend(depth.values.tolist())
+        return dataset["potential_density"].sel({Dimension.DEPTH.key(): depth})
+
+    monkeypatch.setattr(mixed_layer_depth, "_compute_potential_density", compute_potential_density)
+
+    mixed_layer_depth.compute_mixed_layer_depth(dataset)
+
+    assert density_depths == [0.5, 47.0, 600.0]
 
 
 def test_mixed_layer_depth_uses_deepest_valid_capped_depth_when_threshold_is_never_crossed(monkeypatch) -> None:
