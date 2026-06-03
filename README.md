@@ -72,6 +72,14 @@ Attributes:
     Conventions:  CF-1.4
 ```
 
+For training on the [1 degree track](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html), OceanBench also exposes the 1 degree GLORYS dataset:
+
+```python
+import oceanbench
+
+oceanbench.datasets.reference.glorys_reanalysis_1_degree()
+```
+
 ## Evaluate your system with OceanBench
 
 The evaluation of a system consists of the sequential execution of a Python notebook that runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).
