@@ -525,6 +525,8 @@ def validate_nrt_forecast(
     system_label: str = DEFAULT_NRT_SYSTEM_LABEL,
     forecast_zarr_template: str = LIVE_GLONET_FORECAST_ZARR_TEMPLATE,
     observation_zarr_template: str | None = None,
+    forecast_init: str | None = None,
+    observation_cutoff: str | None = None,
     observation_search_end_day: str | None = None,
     max_observation_lookback_days: int = DEFAULT_OBSERVATION_LOOKBACK_DAYS,
     octo_script: str | None = None,
@@ -542,12 +544,26 @@ def validate_nrt_forecast(
     region: RegionLike = None,
 ) -> tuple[NrtValidationResult, str]:
     resolved_observation_template = observation_zarr_template or live_class4_observation_zarr_template()
-    observation_cutoff = latest_complete_class4_observation_day(
-        resolved_observation_template,
-        search_end_day=observation_search_end_day,
-        max_lookback_days=max_observation_lookback_days,
-    )
-    forecast_init = forecast_init_for_observation_cutoff(observation_cutoff)
+    if (forecast_init is None) != (observation_cutoff is None):
+        raise ValueError("--forecast-init and --observation-cutoff must be provided together.")
+    if forecast_init is None or observation_cutoff is None:
+        observation_cutoff = latest_complete_class4_observation_day(
+            resolved_observation_template,
+            search_end_day=observation_search_end_day,
+            max_lookback_days=max_observation_lookback_days,
+        )
+        forecast_init = forecast_init_for_observation_cutoff(observation_cutoff)
+    else:
+        forecast_init = _day_string(forecast_init)
+        observation_cutoff = _day_string(observation_cutoff)
+        expected_forecast_init = forecast_init_for_observation_cutoff(observation_cutoff)
+        if forecast_init != expected_forecast_init:
+            raise ValueError(
+                f"Forecast init {forecast_init} is not {LEAD_DAYS_COUNT} days before "
+                f"observation cutoff {observation_cutoff}."
+            )
+        if not class4_observation_day_is_complete(observation_cutoff, resolved_observation_template):
+            raise RuntimeError(f"Class IV observation day {observation_cutoff} is not complete.")
     forecast_url = _format_zarr_template(forecast_init, forecast_zarr_template)
     octo_result: dict = {}
     if not skip_forecast_generation:

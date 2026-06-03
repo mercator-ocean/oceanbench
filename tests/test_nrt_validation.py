@@ -76,13 +76,20 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
 ) -> None:
     evaluate_calls = []
     cleanup_calls = []
+    observation_checks = []
     manifest_path = tmp_path / "manifest.json"
     forecast_path = tmp_path / "forecast.zarr"
+    observation_template = "file:///tmp/observations/{day}.zarr"
 
     monkeypatch.setattr(
         nrt_validation,
         "latest_complete_class4_observation_day",
-        lambda *_, **__: "2026-05-23",
+        lambda *_, **__: (_ for _ in ()).throw(AssertionError("Latest observation search should not be called")),
+    )
+    monkeypatch.setattr(
+        nrt_validation,
+        "class4_observation_day_is_complete",
+        lambda day, template: observation_checks.append((day, template)) or True,
     )
     monkeypatch.setattr(
         nrt_validation,
@@ -113,6 +120,9 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
     result, written_manifest = nrt_validation.validate_nrt_forecast(
         octo_script="/tmp/octo/orchestration_job.py",
         octo_forecast_output_prefix="public/octo/v0/oceanbench-nrt-ai-dev",
+        observation_zarr_template=observation_template,
+        forecast_init="2026-05-13",
+        observation_cutoff="2026-05-23",
         forecast_ready_timeout_seconds=0,
         forecast_ready_poll_seconds=1,
         manifest_path=str(manifest_path),
@@ -141,6 +151,32 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
     assert evaluation["octo_gpu_capacity_available"] is True
     assert evaluate_calls[0]["output_notebook_file_name"] == "glonet.latest.global.report.ipynb"
     assert cleanup_calls == [str(forecast_path)]
+    assert observation_checks == [("2026-05-23", observation_template)]
+
+
+def test_validate_nrt_forecast_rejects_inconsistent_pinned_target() -> None:
+    try:
+        nrt_validation.validate_nrt_forecast(
+            forecast_init="2026-05-14",
+            observation_cutoff="2026-05-23",
+            skip_forecast_generation=True,
+        )
+    except ValueError as error:
+        assert "is not 10 days before" in str(error)
+    else:
+        raise AssertionError("Expected pinned target mismatch to fail")
+
+
+def test_validate_nrt_forecast_requires_complete_pinned_target_pair() -> None:
+    try:
+        nrt_validation.validate_nrt_forecast(
+            forecast_init="2026-05-13",
+            skip_forecast_generation=True,
+        )
+    except ValueError as error:
+        assert "--forecast-init and --observation-cutoff" in str(error)
+    else:
+        raise AssertionError("Expected one-sided pinned target to fail")
 
 
 def test_validate_nrt_forecast_can_clean_external_temporary_forecast(

@@ -181,6 +181,8 @@ def _run_validate_nrt(args: argparse.Namespace) -> int:
             system_label=args.system_label,
             forecast_zarr_template=args.forecast_zarr_template,
             observation_zarr_template=args.observation_zarr_template,
+            forecast_init=args.forecast_init,
+            observation_cutoff=args.observation_cutoff,
             observation_search_end_day=args.observation_search_end_day,
             max_observation_lookback_days=args.max_observation_lookback_days,
             octo_script=args.octo_script,
@@ -314,6 +316,20 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--observation-zarr-template",
         default=None,
         help="Class IV observation Zarr URL template. Defaults to the OceanBench live observation template.",
+    )
+    validate_nrt_parser.add_argument(
+        "--forecast-init",
+        default=None,
+        help=(
+            "Pinned forecast initial day in YYYY-MM-DD format. Must be provided "
+            "with --observation-cutoff; when set, OceanBench does not search for "
+            "the latest observation day."
+        ),
+    )
+    validate_nrt_parser.add_argument(
+        "--observation-cutoff",
+        default=None,
+        help=("Pinned latest observation day in YYYY-MM-DD format. Must be provided " "with --forecast-init."),
     )
     validate_nrt_parser.add_argument(
         "--observation-search-end-day",
