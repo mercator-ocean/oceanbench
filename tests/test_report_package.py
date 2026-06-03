@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from base64 import b64encode
+import html as html_module
 import json
 from pathlib import Path
 import sys
@@ -21,14 +22,31 @@ def _score_table() -> str:
     )
 
 
-def _write_report_notebook(notebook_path: Path) -> None:
+def _widget_iframe_output(encoded_image: str) -> str:
+    document = (
+        "<!doctype html><html><body>"
+        "<script>"
+        f'const payload = {{"title":"Widget","images":["data:image/webp;base64,{encoded_image}"]}};'
+        "document.body.dataset.title = payload.title;"
+        "</script>"
+        "</body></html>"
+    )
+    return f'<iframe srcdoc="{html_module.escape(document, quote=True)}"></iframe>'
+
+
+def _write_report_notebook(notebook_path: Path, encoded_image: str) -> None:
     notebook = {
         "cells": [
             {
                 "cell_type": "code",
+                "source": ["evaluation_report.class4_observation_error_explorer"],
+                "outputs": [{"data": {"text/html": [_widget_iframe_output(encoded_image)]}}],
+            },
+            {
+                "cell_type": "code",
                 "source": ["evaluation_report.class4_observation.rmsd"],
                 "outputs": [{"data": {"text/html": [_score_table()]}}],
-            }
+            },
         ],
         "metadata": {},
         "nbformat": 4,
@@ -40,15 +58,17 @@ def _write_report_notebook(notebook_path: Path) -> None:
 def test_package_report_notebooks_writes_report_package_manifest_and_external_assets(tmp_path) -> None:
     notebook_path = tmp_path / "glonet.global.report.ipynb"
     output_directory = tmp_path / "package"
-    _write_report_notebook(notebook_path)
     encoded_image = b64encode(b"webp-payload").decode("ascii")
+    _write_report_notebook(notebook_path, encoded_image)
 
     def fake_render_html(rendered_notebook_path: Path, html_path: Path) -> None:
         assert rendered_notebook_path == output_directory / "glonet.global.report.ipynb"
-        html_path.write_text(
-            f'<html><body><img src="data:image/webp;base64,{encoded_image}"></body></html>',
-            encoding="utf-8",
-        )
+        transformed_notebook = json.loads(rendered_notebook_path.read_text(encoding="utf-8"))
+        transformed_widget = transformed_notebook["cells"][0]["outputs"][0]["data"]["text/html"]
+        assert "data:image/webp;base64" not in transformed_widget
+        assert "payload-" in transformed_widget
+        assert "XMLHttpRequest" in transformed_widget
+        html_path.write_text(f"<html><body>{transformed_widget}</body></html>", encoding="utf-8")
 
     packaged_reports = package_report_notebooks(
         notebook_paths=[notebook_path],
@@ -67,8 +87,13 @@ def test_package_report_notebooks_writes_report_package_manifest_and_external_as
 
     html = (output_directory / "glonet.global.report.html").read_text(encoding="utf-8")
     assert "data:image/webp;base64" not in html
-    assert "glonet.global.assets/image-" in html
-    assert list((output_directory / "glonet.global.assets").glob("*.webp"))
+    assert "glonet.global.assets/payload-" in html
+    image_assets = list((output_directory / "glonet.global.assets").glob("*.webp"))
+    payload_assets = list((output_directory / "glonet.global.assets").glob("*.json"))
+    assert image_assets
+    assert payload_assets
+    payload = json.loads(payload_assets[0].read_text(encoding="utf-8"))
+    assert payload["images"] == [f"glonet.global.assets/{image_assets[0].name}"]
 
     manifest = json.loads((output_directory / "manifest.json").read_text(encoding="utf-8"))
     assert manifest == {
