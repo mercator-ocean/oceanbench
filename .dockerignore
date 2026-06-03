@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+.DS_Store
+.env
+.env.*
+.git
+.github
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+*.pyc
+
+assets
+docs
+edito
+helper_scripts
+input_datasets
+tests
+validation_artifacts
+website
+
+poetry.lock
+uv.lock
