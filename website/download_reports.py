@@ -9,14 +9,6 @@ from helpers.s3_discovery import discover_official_reports, download_notebook
 SCRIPT_DIRECTORY = os.path.dirname(__file__)
 REPORTS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "reports")
 QUARTO_METADATA_FILE_PATH = os.path.join(REPORTS_DIRECTORY, "_metadata.yml")
-PRESERVED_LOCAL_REPORTS = {
-    report_name.strip()
-    for report_name in os.environ.get(
-        "OCEANBENCH_PRESERVED_LOCAL_REPORTS",
-        "",
-    ).split(",")
-    if report_name.strip()
-}
 
 
 def _clear_report_notebooks() -> None:
@@ -24,8 +16,6 @@ def _clear_report_notebooks() -> None:
         return
     for file_name in os.listdir(REPORTS_DIRECTORY):
         if file_name.endswith(".report.ipynb"):
-            if file_name in PRESERVED_LOCAL_REPORTS:
-                continue
             os.remove(os.path.join(REPORTS_DIRECTORY, file_name))
 
 
