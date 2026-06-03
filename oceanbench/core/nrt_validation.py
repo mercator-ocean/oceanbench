@@ -41,6 +41,7 @@ DEFAULT_NRT_SYSTEM_LABEL = "GLONET"
 DEFAULT_FORECAST_READY_TIMEOUT_SECONDS = 3600
 DEFAULT_FORECAST_READY_POLL_SECONDS = 60
 DEFAULT_OBSERVATION_LOOKBACK_DAYS = 45
+DEFAULT_MANIFEST_WRITE_RETRIES = 5
 
 REQUIRED_CLASS4_OBSERVATION_KEYS = (
     Dimension.TIME.key(),
@@ -361,6 +362,119 @@ def _manifest_document(result: NrtValidationResult) -> dict:
     }
 
 
+def _evaluation_manifest_key(evaluation: dict) -> tuple[str, str] | None:
+    system_id = evaluation.get("system_id")
+    region = evaluation.get("region")
+    if not system_id or not region:
+        return None
+    return str(system_id), str(region)
+
+
+def _replace_or_append_evaluation(evaluations: list[dict], new_evaluation: dict) -> list[dict]:
+    new_key = _evaluation_manifest_key(new_evaluation)
+    if new_key is None:
+        return evaluations + [new_evaluation]
+
+    merged_evaluations = []
+    replaced = False
+    for evaluation in evaluations:
+        if _evaluation_manifest_key(evaluation) == new_key:
+            if not replaced:
+                merged_evaluations.append(new_evaluation)
+                replaced = True
+            continue
+        merged_evaluations.append(evaluation)
+
+    if not replaced:
+        merged_evaluations.append(new_evaluation)
+    return merged_evaluations
+
+
+def _merge_nrt_manifest_documents(
+    existing_manifest: dict | None,
+    new_manifest: dict,
+) -> dict:
+    existing_evaluations = existing_manifest.get("evaluations", []) if isinstance(existing_manifest, dict) else []
+    new_evaluations = new_manifest.get("evaluations", [])
+    merged_evaluations = [evaluation for evaluation in existing_evaluations if isinstance(evaluation, dict)]
+
+    for new_evaluation in new_evaluations:
+        if isinstance(new_evaluation, dict):
+            merged_evaluations = _replace_or_append_evaluation(merged_evaluations, new_evaluation)
+
+    return {
+        "schema_version": new_manifest.get(
+            "schema_version",
+            existing_manifest.get("schema_version", 1) if isinstance(existing_manifest, dict) else 1,
+        ),
+        "generated_at": new_manifest.get(
+            "generated_at",
+            datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        ),
+        "evaluations": merged_evaluations,
+    }
+
+
+def _s3_manifest_key(output_prefix: str | None, manifest_name: str) -> str:
+    return f"{output_prefix}/{manifest_name}" if output_prefix else manifest_name
+
+
+def _s3_error_code(error: Exception) -> str | None:
+    response = getattr(error, "response", {})
+    if not isinstance(response, dict):
+        return None
+    error_document = response.get("Error", {})
+    if not isinstance(error_document, dict):
+        return None
+    code = error_document.get("Code")
+    return str(code) if code is not None else None
+
+
+def _s3_object_is_missing(error: Exception) -> bool:
+    return _s3_error_code(error) in {"NoSuchKey", "NotFound", "404"}
+
+
+def _s3_put_precondition_failed(error: Exception) -> bool:
+    return _s3_error_code(error) in {
+        "PreconditionFailed",
+        "ConditionalRequestConflict",
+        "409",
+        "412",
+    }
+
+
+def _read_manifest_from_s3(client, output_bucket: str, key: str) -> tuple[dict | None, str | None]:
+    try:
+        response = client.get_object(Bucket=output_bucket, Key=key)
+    except Exception as error:
+        if _s3_object_is_missing(error):
+            return None, None
+        raise
+
+    body = response["Body"].read().decode("utf-8")
+    return json.loads(body), response.get("ETag")
+
+
+def _write_manifest_to_s3_with_condition(
+    client,
+    output_bucket: str,
+    key: str,
+    manifest: dict,
+    etag: str | None,
+) -> None:
+    put_arguments = {
+        "Bucket": output_bucket,
+        "Key": key,
+        "Body": json.dumps(manifest, indent=2).encode("utf-8"),
+        "ContentType": "application/json",
+    }
+    if etag is None:
+        put_arguments["IfNoneMatch"] = "*"
+    else:
+        put_arguments["IfMatch"] = etag
+    client.put_object(**put_arguments)
+
+
 def _write_manifest_to_s3(
     manifest: dict,
     output_bucket: str,
@@ -369,17 +483,22 @@ def _write_manifest_to_s3(
 ) -> str:
     import boto3
 
-    key = f"{output_prefix}/{manifest_name}" if output_prefix else manifest_name
+    key = _s3_manifest_key(output_prefix, manifest_name)
     endpoint = os.environ.get("BOTO3_ENDPOINT_URL")
     if endpoint is None and os.environ.get("AWS_S3_ENDPOINT"):
         endpoint = f"https://{os.environ['AWS_S3_ENDPOINT']}"
     client = boto3.client("s3", endpoint_url=endpoint)
-    client.put_object(
-        Bucket=output_bucket,
-        Key=key,
-        Body=json.dumps(manifest, indent=2).encode("utf-8"),
-        ContentType="application/json",
-    )
+    for _ in range(DEFAULT_MANIFEST_WRITE_RETRIES):
+        existing_manifest, etag = _read_manifest_from_s3(client, output_bucket, key)
+        merged_manifest = _merge_nrt_manifest_documents(existing_manifest, manifest)
+        try:
+            _write_manifest_to_s3_with_condition(client, output_bucket, key, merged_manifest, etag)
+            break
+        except Exception as error:
+            if not _s3_put_precondition_failed(error):
+                raise
+    else:
+        raise RuntimeError("Could not update NRT manifest after repeated concurrent writes.")
     return f"s3://{output_bucket}/{key}"
 
 
@@ -394,7 +513,9 @@ def write_nrt_manifest(
         return _write_manifest_to_s3(manifest, output_bucket, output_prefix, manifest_name)
     resolved_path = Path(manifest_path or manifest_name)
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
-    resolved_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    existing_manifest = json.loads(resolved_path.read_text(encoding="utf-8")) if resolved_path.exists() else None
+    merged_manifest = _merge_nrt_manifest_documents(existing_manifest, manifest)
+    resolved_path.write_text(json.dumps(merged_manifest, indent=2), encoding="utf-8")
     return str(resolved_path)
 
 

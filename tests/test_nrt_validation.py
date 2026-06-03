@@ -190,6 +190,76 @@ def test_validate_nrt_forecast_can_clean_external_temporary_forecast(
     assert cleanup_calls == [forecast_url]
 
 
+def test_write_nrt_manifest_merges_existing_challenger_rows(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "nrt-validation-manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-06-02T00:00:00Z",
+                "evaluations": [
+                    {
+                        "system_id": "octo-glonet-p1d",
+                        "system_label": "GLONET",
+                        "region": "global",
+                        "forecast_init": "2026-05-12",
+                        "status": "Old",
+                    },
+                    {
+                        "system_id": "other-system",
+                        "system_label": "Other",
+                        "region": "global",
+                        "forecast_init": "2026-05-12",
+                        "status": "Complete",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    new_manifest = {
+        "schema_version": 1,
+        "generated_at": "2026-06-03T00:00:00Z",
+        "evaluations": [
+            {
+                "system_id": "octo-glonet-p1d",
+                "system_label": "GLONET",
+                "region": "global",
+                "forecast_init": "2026-05-13",
+                "status": "Complete",
+            }
+        ],
+    }
+
+    written_manifest = nrt_validation.write_nrt_manifest(
+        new_manifest,
+        manifest_path=str(manifest_path),
+        output_bucket=None,
+        output_prefix=None,
+    )
+
+    merged_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert written_manifest == str(manifest_path)
+    assert merged_manifest["generated_at"] == "2026-06-03T00:00:00Z"
+    assert merged_manifest["evaluations"] == [
+        {
+            "system_id": "octo-glonet-p1d",
+            "system_label": "GLONET",
+            "region": "global",
+            "forecast_init": "2026-05-13",
+            "status": "Complete",
+        },
+        {
+            "system_id": "other-system",
+            "system_label": "Other",
+            "region": "global",
+            "forecast_init": "2026-05-12",
+            "status": "Complete",
+        },
+    ]
+
+
 def test_request_octo_forecast_generation_passes_forecast_output_prefix(monkeypatch) -> None:
     commands = []
 
