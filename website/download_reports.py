@@ -4,18 +4,22 @@
 
 import argparse
 import glob
+import json
 import os
 import shutil
 
-from helpers.s3_discovery import discover_official_reports, download_notebook
+from helpers.s3_discovery import (
+    discover_official_reports,
+    download_notebook,
+    download_report_file,
+    download_report_url,
+)
 
 SCRIPT_DIRECTORY = os.path.dirname(__file__)
 REPORTS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "reports")
 ASSETS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "..", "assets")
 QUARTO_METADATA_FILE_PATH = os.path.join(REPORTS_DIRECTORY, "_metadata.yml")
-LIVE_EVALUATION_REPORTS = [
-    ("glonet.latest", "global"),
-]
+NRT_MANIFEST_FILE_NAME = "nrt-validation-manifest.json"
 
 
 def _find_sample_notebook(challenger_name: str) -> str | None:
@@ -32,6 +36,60 @@ def _clear_report_notebooks() -> None:
     for file_name in os.listdir(REPORTS_DIRECTORY):
         if file_name.endswith(".report.ipynb"):
             os.remove(os.path.join(REPORTS_DIRECTORY, file_name))
+
+
+def _download_nrt_report_notebooks_from_manifest(manifest_path: str) -> None:
+    with open(manifest_path, encoding="utf-8") as manifest_file:
+        manifest = json.load(manifest_file)
+    for evaluation in manifest.get("evaluations", []):
+        if evaluation.get("status") != "Complete":
+            print(f"Skipping pending NRT notebook for {evaluation.get('system_label', 'unknown system')}.")
+            continue
+        report_notebook = evaluation["report_notebook"]
+        print(f"Downloading {report_notebook}...", end=" ")
+        report_url = evaluation.get("report_url")
+        result = (
+            download_report_url(report_url, REPORTS_DIRECTORY, report_notebook)
+            if report_url
+            else download_report_file(report_notebook, REPORTS_DIRECTORY)
+        )
+        if result:
+            print(f"OK -> {result}")
+            continue
+        print("FAILED")
+        raise RuntimeError(f"Failed to download NRT notebook {report_notebook}.")
+
+
+def _write_sample_nrt_manifest() -> str:
+    manifest_path = os.path.join(REPORTS_DIRECTORY, NRT_MANIFEST_FILE_NAME)
+    manifest = {
+        "schema_version": 1,
+        "evaluations": [
+            {
+                "system_id": "octo-glonet-p1d",
+                "system_label": "GLONET",
+                "region": "global",
+                "forecast_init": "Unavailable",
+                "forecast_lead_days": 10,
+                "validated_lead_days": "1-10 days",
+                "observation_cutoff": "Unavailable",
+                "observation_zarr_template": "Unavailable",
+                "forecast_url": "Unavailable",
+                "report_notebook": "glonet.latest.global.report.ipynb",
+                "report_url": "",
+                "status": "Manifest unavailable",
+                "demo": True,
+                "initial_condition_provenance_validated": False,
+                "oceanbench_version": "sample",
+                "octo_process_package_name": None,
+                "octo_process_package_version": None,
+                "note": "Sample website build only: the NRT validation manifest was not downloaded.",
+            }
+        ],
+    }
+    with open(manifest_path, "w", encoding="utf-8") as manifest_file:
+        json.dump(manifest, manifest_file, indent=2)
+    return manifest_path
 
 
 def main() -> None:
@@ -70,14 +128,18 @@ def main() -> None:
             print("FAILED")
             raise RuntimeError(f"Failed to download notebook for {challenger_name}.{region_id}.")
 
-    for challenger_name, region_id in LIVE_EVALUATION_REPORTS:
-        print(f"Downloading {challenger_name}.{region_id}...", end=" ")
-        result = download_notebook(challenger_name, region_id, REPORTS_DIRECTORY)
-        if result:
-            print(f"OK -> {result}")
-            continue
+    print(f"Downloading {NRT_MANIFEST_FILE_NAME}...", end=" ")
+    manifest_path = download_report_file(NRT_MANIFEST_FILE_NAME, REPORTS_DIRECTORY)
+    if manifest_path:
+        print(f"OK -> {manifest_path}")
+        _download_nrt_report_notebooks_from_manifest(manifest_path)
+    elif args.use_samples:
         print("FAILED")
-        raise RuntimeError(f"Failed to download live notebook for {challenger_name}.{region_id}.")
+        sample_manifest_path = _write_sample_nrt_manifest()
+        print(f"Using sample NRT manifest -> {sample_manifest_path}")
+    else:
+        print("FAILED")
+        raise RuntimeError(f"Failed to download {NRT_MANIFEST_FILE_NAME}.")
 
     if args.use_samples:
         sample_challengers = [

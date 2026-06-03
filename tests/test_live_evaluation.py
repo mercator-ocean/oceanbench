@@ -60,12 +60,10 @@ def test_glonet_latest_loader_opens_one_local_forecast_init(tmp_path: Path) -> N
     assert dataset[Dimension.LEAD_DAY_INDEX.key()].values.tolist() == [0]
 
 
-def test_glonet_latest_default_opens_temporary_source_init_and_assigns_evaluation_init(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_glonet_latest_default_opens_latest_fully_evaluable_init(tmp_path: Path, monkeypatch) -> None:
     source_dataset = _forecast_dataset().isel({Dimension.FIRST_DAY_DATETIME.key(): 0}, drop=True)
     source_dataset = source_dataset.rename({Dimension.LEAD_DAY_INDEX.key(): "time"})
-    forecast_path = tmp_path / "2026-06-01.zarr"
+    forecast_path = tmp_path / "2026-05-13.zarr"
     source_dataset.to_zarr(forecast_path)
     monkeypatch.setattr(
         live_datasets,

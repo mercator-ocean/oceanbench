@@ -15,18 +15,19 @@ format:
 ```{python}
 #| output: asis
 
-from helpers.live_validation_report import ForecastValidationMetadata, render_forecast_validation_page
+from pathlib import Path
 
-print(
-    render_forecast_validation_page(
-        "reports/glonet.latest.global.report.ipynb",
-        ForecastValidationMetadata(
-            system_label="GLONET",
-            forecast_init="2026-05-13",
-            validated_lead_days="1-10 days",
-            observation_cutoff="2026-05-23",
-            status="Complete",
-        ),
+from helpers.live_validation_manifest import forecast_validation_metadata, report_notebook_path
+from helpers.live_validation_report import render_forecast_validation_page
+
+notebook_path = report_notebook_path("reports/nrt-validation-manifest.json", "GLONET")
+metadata = forecast_validation_metadata("reports/nrt-validation-manifest.json", "GLONET")
+if Path(notebook_path).exists():
+    print(render_forecast_validation_page(notebook_path, metadata))
+else:
+    print(
+        f'<section class="validation-intro"><p class="validation-main-message">'
+        f'{metadata.system_label} forecast validation status: {metadata.status}. '
+        'The executed report notebook is not available yet.</p></section>'
     )
-)
 ```

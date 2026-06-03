@@ -249,6 +249,14 @@ div.sourceCode.cell-code pre.sourceCode {
   background: var(--ob-surface);
 }
 
+.validation-demo-note {
+  margin: 0.75rem 0 0;
+  padding: 0.72rem 0.9rem;
+  border: 1px solid var(--ob-border);
+  border-left: 0.25rem solid #b45309;
+  background: color-mix(in srgb, #f59e0b 12%, var(--ob-surface));
+}
+
 .validation-section h2 {
   margin: 1.7rem 0 0.45rem;
   font-size: 1.35rem;

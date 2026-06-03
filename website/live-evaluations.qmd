@@ -11,13 +11,14 @@ format:
     echo: false
 ---
 
-Near-real-time validation compares recent operational forecasts with recent Class IV observations.
-It is intended for scientific validation and daily monitoring, not for annual benchmark ranking.
+```{python}
+#| output: asis
 
-::: {.live-evaluations-table-wrap}
+from helpers.live_validation_manifest import render_live_validation_table
 
-| System | Forecast init | Validated lead days | Observation cutoff | Status | Report |
-|--------|---------------|---------------------|--------------------|--------|--------|
-| GLONET | 2026-05-13 | 1-10 days | 2026-05-23 | Complete | [Report](glonet-forecast-validation.html) |
-
-:::
+print(
+    "<p>Near-real-time validation compares recent operational forecasts with recent Class IV observations. "
+    "It is intended for scientific validation and daily monitoring, not for annual benchmark ranking.</p>"
+)
+print(render_live_validation_table("reports/nrt-validation-manifest.json"))
+```

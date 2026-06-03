@@ -11,6 +11,7 @@ sys.path.insert(0, str(WEBSITE_DIRECTORY))
 from helpers.s3_discovery import REPORTS_PREFIX  # noqa: E402
 from helpers.s3_discovery import S3_BASE_URL  # noqa: E402
 from helpers.s3_discovery import download_notebook  # noqa: E402
+from helpers.s3_discovery import download_report_url  # noqa: E402
 from helpers.s3_discovery import discover_downloaded_reports  # noqa: E402
 from helpers.s3_discovery import discover_official_reports  # noqa: E402
 from helpers.s3_discovery import REPORTS_PREFIX  # noqa: E402
@@ -113,6 +114,34 @@ def test_download_notebook_uses_only_explicit_region_name(monkeypatch, tmp_path)
     assert requests_seen == [
         (
             _official_report_url("glonet", "global"),
+            30,
+        )
+    ]
+
+
+def test_download_report_url_uses_manifest_url_and_destination_name(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    requests_seen = []
+
+    def fake_get(url: str, timeout: int):
+        requests_seen.append((url, timeout))
+        return MockResponse(status_code=200, content=b"{}")
+
+    monkeypatch.setattr("helpers.s3_discovery.requests.get", fake_get)
+
+    destination = download_report_url(
+        "https://example.test/custom/reports/source-name.ipynb",
+        str(tmp_path),
+        "glonet.latest.global.report.ipynb",
+    )
+
+    assert destination == str(tmp_path / "glonet.latest.global.report.ipynb")
+    assert (tmp_path / "glonet.latest.global.report.ipynb").read_bytes() == b"{}"
+    assert requests_seen == [
+        (
+            "https://example.test/custom/reports/source-name.ipynb",
             30,
         )
     ]

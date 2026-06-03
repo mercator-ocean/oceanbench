@@ -16,18 +16,14 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     assert "live-evaluations.qmd" in quarto_config
     assert "NRT forecast validation" in quarto_config
     assert "Near-real-time forecast validation" in live_page
-    assert "| GLONET |" in live_page
-    assert "Forecast init" in live_page
-    assert "Validated lead days" in live_page
-    assert "Observation cutoff" in live_page
-    assert "Status" in live_page
-    assert "2026-05-13" in live_page
-    assert "2026-05-23" in live_page
-    assert "1-10 days" in live_page
-    assert "Complete" in live_page
-    assert "2026-06-01" not in live_page
-    assert "date remapping" not in live_page
-    assert "glonet-forecast-validation.html" in live_page
+    assert "render_live_validation_table" in live_page
+    assert "reports/nrt-validation-manifest.json" in live_page
+    assert "| GLONET |" not in live_page
+    assert "2026-05-13" not in live_page
+    assert "2026-05-23" not in live_page
     assert "reports/glonet.latest.global.report.html" not in live_page
     assert "render_forecast_validation_page" in clean_report_page
-    assert "reports/glonet.latest.global.report.ipynb" in clean_report_page
+    assert "forecast_validation_metadata" in clean_report_page
+    assert "report_notebook_path" in clean_report_page
+    assert "reports/nrt-validation-manifest.json" in clean_report_page
+    assert "2026-05-13" not in clean_report_page

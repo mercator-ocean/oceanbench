@@ -7,7 +7,7 @@ from os import environ
 from pathlib import PurePosixPath
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
+from oceanbench.core.python2jupyter import generate_evaluation_notebook_file, generate_live_evaluation_notebook_file
 from oceanbench.core.regions import RegionLike, resolve_region
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from papermill import execute_notebook
@@ -198,4 +198,27 @@ def _evaluate_challenger(
         output_bucket,
         output_prefix,
         runtime_configuration,
+    )
+
+
+def evaluate_live_challenger(
+    challenger_python_code_uri_or_local_path: str,
+    output_notebook_file_name: str,
+    output_bucket: str | None = None,
+    output_prefix: str | None = None,
+    runtime_configuration: RuntimeConfiguration | None = None,
+    region: RegionLike = None,
+) -> None:
+    resolved_region = resolve_region(_resolve_region_input(region))
+    resolved_runtime_configuration = runtime_configuration or runtime_configuration_from_environment()
+    generate_live_evaluation_notebook_file(
+        challenger_python_code_uri_or_local_path,
+        output_notebook_file_path=output_notebook_file_name,
+        region=resolved_region,
+    )
+    _execute_evaluation_notebook_file(
+        output_notebook_file_name,
+        output_bucket,
+        output_prefix,
+        resolved_runtime_configuration,
     )

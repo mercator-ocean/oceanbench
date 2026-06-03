@@ -56,6 +56,7 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
             validated_lead_days="1-10 days",
             observation_cutoff="2026-05-23",
             status="Complete",
+            note="Demonstration only: regenerated forecast.",
         ),
     )
 
@@ -63,6 +64,8 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
     assert "GLONET" in html
     assert "2026-05-13" in html
     assert "2026-05-23" in html
+    assert "Demonstration only: regenerated forecast." in html
+    assert "validation-demo-note" in html
     assert "Temperature, surface" in html
     assert "Lead 10" in html
     assert 'data-tooltip="Lead 1: 1.200 C"' in html

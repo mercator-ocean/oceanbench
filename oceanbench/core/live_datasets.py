@@ -20,7 +20,6 @@ LIVE_CLASS4_OBSERVATION_LAST_DAY = "2026-05-23"
 LIVE_GLONET_FORECAST_ZARR_TEMPLATE = (
     "https://minio.dive.edito.eu/project-moiai-octo/public/octo/v0/ai-gallery/" "octo-glonet-p1d/{date}/{date}.zarr"
 )
-LIVE_GLONET_DEVELOPMENT_SOURCE_FIRST_DAY = "2026-06-01"
 
 
 def live_class4_observation_zarr_template() -> str:
@@ -39,12 +38,6 @@ def live_class4_observation_last_day() -> str:
 
 def _default_live_first_day_datetime() -> datetime:
     return _latest_fully_evaluable_first_day_datetime()
-
-
-def _default_live_source_first_day_datetime() -> datetime:
-    # TODO: remove this temporary remapping once OCTO keeps forecasts long enough
-    # to evaluate a true past init against the 2026 Class IV observation bucket.
-    return pandas.Timestamp(LIVE_GLONET_DEVELOPMENT_SOURCE_FIRST_DAY).to_pydatetime()
 
 
 def _latest_fully_evaluable_first_day_datetime() -> datetime:
@@ -77,6 +70,19 @@ def _configured_live_glonet_forecast_zarr_template() -> str:
     )
 
 
+def open_live_forecast_zarr(
+    forecast_zarr_path: str,
+    first_day_datetime: datetime,
+) -> xarray.Dataset:
+    def open_dataset() -> xarray.Dataset:
+        return _prepared_live_forecast_dataset(
+            xarray.open_dataset(forecast_zarr_path, engine="zarr"),
+            first_day_datetime,
+        )
+
+    return with_remote_http_retries("live forecast dataset open", open_dataset)
+
+
 def _prepared_live_forecast_dataset(
     dataset: xarray.Dataset,
     first_day_datetime: datetime,
@@ -97,20 +103,8 @@ def glonet_latest(
 ) -> xarray.Dataset:
     resolved_first_day_datetime = first_day_datetime or _default_live_first_day_datetime()
     resolved_zarr_template = zarr_template or _configured_live_glonet_forecast_zarr_template()
-    source_first_day_datetime = (
-        _default_live_source_first_day_datetime()
-        if first_day_datetime is None and zarr_template is None
-        else resolved_first_day_datetime
-    )
     forecast_zarr_path = _format_forecast_zarr_template(
-        source_first_day_datetime,
+        resolved_first_day_datetime,
         resolved_zarr_template,
     )
-
-    def open_dataset() -> xarray.Dataset:
-        return _prepared_live_forecast_dataset(
-            xarray.open_dataset(forecast_zarr_path, engine="zarr"),
-            resolved_first_day_datetime,
-        )
-
-    return with_remote_http_retries("live GLONET forecast dataset open", open_dataset)
+    return open_live_forecast_zarr(forecast_zarr_path, resolved_first_day_datetime)

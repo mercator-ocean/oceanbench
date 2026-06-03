@@ -36,6 +36,7 @@ class ForecastValidationMetadata:
     validated_lead_days: str
     observation_cutoff: str
     status: str
+    note: str | None = None
 
 
 def _read_notebook(notebook_path: str | Path) -> dict:
@@ -294,6 +295,7 @@ def render_forecast_validation_page(
     Scores are RMSD against recent observations for temperature, salinity, and currents.
     These diagnostics support scientific validation and operational monitoring; they are not model rankings.
   </p>
+  {f'<p class="validation-demo-note">{escape(metadata.note)}</p>' if metadata.note else ''}
 </section>
 
 <section class="validation-section">

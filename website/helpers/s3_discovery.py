@@ -4,6 +4,7 @@
 
 import os
 import re
+from urllib.parse import unquote, urlparse
 
 import requests
 
@@ -72,4 +73,43 @@ def download_notebook(challenger_name: str, region_id: str, destination_director
         return destination_path
     except Exception as error:
         print(f"Failed to download {challenger_name}.{region_id} from {url}: {error}")
+    return None
+
+
+def download_report_file(file_name: str, destination_directory: str) -> str | None:
+    os.makedirs(destination_directory, exist_ok=True)
+    destination_path = os.path.join(destination_directory, file_name)
+    url = f"{S3_BASE_URL}/{REPORTS_PREFIX}{file_name}"
+
+    try:
+        response = requests.get(url, timeout=30)
+        if response.status_code != 200:
+            return None
+        with open(destination_path, "wb") as file:
+            file.write(response.content)
+        return destination_path
+    except Exception as error:
+        print(f"Failed to download {file_name} from {url}: {error}")
+    return None
+
+
+def download_report_url(
+    report_url: str,
+    destination_directory: str,
+    destination_file_name: str | None = None,
+) -> str | None:
+    os.makedirs(destination_directory, exist_ok=True)
+    report_url_path = unquote(urlparse(report_url).path)
+    file_name = destination_file_name or os.path.basename(report_url_path)
+    destination_path = os.path.join(destination_directory, file_name)
+
+    try:
+        response = requests.get(report_url, timeout=30)
+        if response.status_code != 200:
+            return None
+        with open(destination_path, "wb") as file:
+            file.write(response.content)
+        return destination_path
+    except Exception as error:
+        print(f"Failed to download {report_url}: {error}")
     return None

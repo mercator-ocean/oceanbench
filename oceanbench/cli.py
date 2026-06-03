@@ -172,6 +172,41 @@ def _run_evaluate(args: argparse.Namespace) -> int:
     return 0 if all(result.success for result in results) else 1
 
 
+def _run_validate_nrt(args: argparse.Namespace) -> int:
+    try:
+        from oceanbench.core.nrt_validation import validate_nrt_forecast
+
+        result, manifest_path_or_url = validate_nrt_forecast(
+            system_id=args.system_id,
+            system_label=args.system_label,
+            forecast_zarr_template=args.forecast_zarr_template,
+            observation_zarr_template=args.observation_zarr_template,
+            observation_search_end_day=args.observation_search_end_day,
+            max_observation_lookback_days=args.max_observation_lookback_days,
+            octo_script=args.octo_script,
+            octo_python=args.octo_python,
+            octo_forecast_output_prefix=args.octo_forecast_output_prefix,
+            skip_forecast_generation=args.skip_forecast_generation,
+            forecast_ready_timeout_seconds=args.forecast_ready_timeout_seconds,
+            forecast_ready_poll_seconds=args.forecast_ready_poll_seconds,
+            cleanup_forecast_after_success=not args.keep_nrt_forecast,
+            output_bucket=args.output_bucket,
+            output_prefix=args.output_prefix,
+            manifest_path=args.manifest_path,
+            runtime_configuration=_runtime_configuration_from_args(args),
+            region=_resolve_region_argument(args),
+        )
+    except Exception as error:
+        print(f"FAIL: NRT forecast validation: {error}", file=sys.stderr)
+        return 1
+
+    print(f"{result.status}: {result.system_label} {result.forecast_init}")
+    print(f"Observation cutoff: {result.observation_cutoff}")
+    print(f"Forecast: {result.forecast_url}")
+    print(f"Manifest: {manifest_path_or_url}")
+    return 0 if result.status == "Complete" else 1
+
+
 def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     parser = argparse.ArgumentParser(
         prog="oceanbench",
@@ -251,6 +286,140 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         default=None,
         help="Path to a JSON file describing a custom evaluation region",
     )
+    validate_nrt_parser = subparsers.add_parser(
+        "validate-nrt",
+        help="Validate a near-real-time forecast against recent Class IV observations",
+        description="Probe recent Class IV observations, request an Octo forecast, and run the NRT OceanBench report.",
+    )
+    validate_nrt_parser.add_argument(
+        "--system-id",
+        default="octo-glonet-p1d",
+        help="Octo system identifier",
+    )
+    validate_nrt_parser.add_argument(
+        "--system-label",
+        default="GLONET",
+        help="Human-readable system label used in reports",
+    )
+    validate_nrt_parser.add_argument(
+        "--forecast-zarr-template",
+        default=(
+            "https://minio.dive.edito.eu/project-moiai-octo/public/octo/v0/ai-gallery/"
+            "octo-glonet-p1d/{date}/{date}.zarr"
+        ),
+        help="Forecast Zarr URL template. Supports {date}, {day}, {yyyymmdd}, and {YYYYMMDD}.",
+    )
+    validate_nrt_parser.add_argument(
+        "--observation-zarr-template",
+        default=None,
+        help="Class IV observation Zarr URL template. Defaults to the OceanBench live observation template.",
+    )
+    validate_nrt_parser.add_argument(
+        "--observation-search-end-day",
+        default=None,
+        help="Last day to probe for complete observations, in YYYY-MM-DD format. Defaults to today.",
+    )
+    validate_nrt_parser.add_argument(
+        "--max-observation-lookback-days",
+        type=int,
+        default=45,
+        help="Maximum number of days to scan backwards for complete observations.",
+    )
+    validate_nrt_parser.add_argument(
+        "--octo-script",
+        default=None,
+        help="Path to Octo's orchestration_job.py. Required unless --skip-forecast-generation is used.",
+    )
+    validate_nrt_parser.add_argument(
+        "--octo-python",
+        default=None,
+        help="Python executable used to run Octo. Defaults to the current Python executable.",
+    )
+    validate_nrt_parser.add_argument(
+        "--octo-forecast-output-prefix",
+        default=None,
+        help=(
+            "S3 key prefix, without bucket, where Octo should write the temporary "
+            "NRT forecast. Defaults to Octo's dedicated OceanBench NRT prefix."
+        ),
+    )
+    validate_nrt_parser.add_argument(
+        "--skip-forecast-generation",
+        action="store_true",
+        help="Do not call Octo; only wait for and evaluate the forecast URL derived from --forecast-zarr-template.",
+    )
+    validate_nrt_parser.add_argument(
+        "--keep-nrt-forecast",
+        action="store_true",
+        help="Keep the temporary NRT forecast Zarr after successful evaluation.",
+    )
+    validate_nrt_parser.add_argument(
+        "--forecast-ready-timeout-seconds",
+        type=int,
+        default=3600,
+        help="Maximum time to wait for the forecast Zarr _SUCCESS marker.",
+    )
+    validate_nrt_parser.add_argument(
+        "--forecast-ready-poll-seconds",
+        type=int,
+        default=60,
+        help="Polling interval for the forecast Zarr _SUCCESS marker.",
+    )
+    validate_nrt_parser.add_argument(
+        "--output-bucket",
+        default=None,
+        help="S3 bucket for output notebook and manifest.",
+    )
+    validate_nrt_parser.add_argument(
+        "--output-prefix",
+        default=None,
+        help="S3 prefix for output notebook and manifest.",
+    )
+    validate_nrt_parser.add_argument(
+        "--manifest-path",
+        default=None,
+        help="Local manifest path when --output-bucket is not used.",
+    )
+    validate_nrt_parser.add_argument(
+        "--stage",
+        action="append",
+        choices=["challenger", "references", "observations", "all"],
+        help="Stage selected datasets locally before evaluation. Repeat the flag to enable multiple staging targets.",
+    )
+    validate_nrt_parser.add_argument(
+        "--stage-dir",
+        default=None,
+        help="Directory used for local staging when --stage is enabled",
+    )
+    validate_nrt_parser.add_argument(
+        "--stage-max-workers",
+        type=int,
+        default=None,
+        help="Maximum number of worker threads used to build local stage data",
+    )
+    validate_nrt_parser.add_argument(
+        "--remote-retries",
+        type=int,
+        default=None,
+        help="Number of retries for transient remote data read failures",
+    )
+    validate_nrt_parser.add_argument(
+        "--keep-stage",
+        action="store_true",
+        help="Keep staged data after a successful validation command",
+    )
+    validate_region_group = validate_nrt_parser.add_mutually_exclusive_group()
+    validate_region_group.add_argument(
+        "--region",
+        choices=get_pre_defined_region_names(),
+        default=None,
+        help="Official OceanBench region to evaluate on",
+    )
+    validate_region_group.add_argument(
+        "--region-file",
+        default=None,
+        help="Path to a JSON file describing a custom evaluation region",
+    )
     return parser, evaluate_parser
 
 
@@ -266,6 +435,8 @@ def main():
         if args.all_challengers and args.challengers:
             evaluate_parser.error("--all-challengers cannot be used with positional challenger arguments")
         sys.exit(_run_evaluate(args))
+    if args.command == "validate-nrt":
+        sys.exit(_run_validate_nrt(args))
 
 
 if __name__ == "__main__":
