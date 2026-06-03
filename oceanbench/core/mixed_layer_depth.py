@@ -52,27 +52,22 @@ def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     depth = dataset[Dimension.DEPTH.key()]
     latitude = dataset[Dimension.LATITUDE.key()]
     longitude = dataset[Dimension.LONGITUDE.key()]
-    absolute_salinity = _compute_absolute_salinity(salinity, depth, longitude, latitude)
-    potential_density = _compute_potential_density(absolute_salinity, temperature, depth)
-    surface_density = potential_density.isel({Dimension.DEPTH.key(): 0})
     capped_depth_mask = depth <= MAXIMUM_MIXED_LAYER_DEPTH
     capped_depth = depth.where(capped_depth_mask, drop=True)
     capped_temperature = temperature.where(capped_depth_mask, drop=True)
-    capped_potential_density = potential_density.where(capped_depth_mask, drop=True)
+    capped_salinity = salinity.where(capped_depth_mask, drop=True)
+    absolute_salinity = _compute_absolute_salinity(capped_salinity, capped_depth, longitude, latitude)
+    potential_density = _compute_potential_density(absolute_salinity, capped_temperature, capped_depth)
+    surface_density = potential_density.isel({Dimension.DEPTH.key(): 0})
 
-    delta_density = capped_potential_density - surface_density
+    delta_density = potential_density - surface_density
     mask = delta_density >= density_threshold
     threshold_crossed = mask.any(dim=Dimension.DEPTH.key())
-    mixed_layer_depth_index = mask.argmax(dim=Dimension.DEPTH.key())
 
-    dask_depth = xarray.DataArray(
-        dask.array.asarray(capped_depth.data),
-        dims=capped_depth.dims,
-        coords=capped_depth.coords,
-    )
-    threshold_mixed_layer_depth = dask_depth.isel({Dimension.DEPTH.key(): mixed_layer_depth_index})
-    deepest_valid_depth = dask_depth.where(xarray.ufuncs.isfinite(capped_temperature)).max(dim=Dimension.DEPTH.key())
-    mixed_layer_depth_depth = threshold_mixed_layer_depth.where(threshold_crossed, deepest_valid_depth).assign_attrs(
+    threshold_mixed_layer_depth_index = mask.argmax(dim=Dimension.DEPTH.key())
+    deepest_valid_depth_index = _deepest_valid_depth_index(capped_temperature)
+    mixed_layer_depth_index = threshold_mixed_layer_depth_index.where(threshold_crossed, deepest_valid_depth_index)
+    mixed_layer_depth_depth = _depths_for_indices(capped_depth, mixed_layer_depth_index).assign_attrs(
         {"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value}
     )
     temperature_mask = xarray.ufuncs.isfinite(temperature.isel({Dimension.DEPTH.key(): 0}))
@@ -83,3 +78,15 @@ def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
         data_vars={Variable.MIXED_LAYER_DEPTH.key(): masked_mixed_layer_depth},
         coords=dataset.coords,
     )
+
+
+def _deepest_valid_depth_index(temperature: xarray.DataArray) -> xarray.DataArray:
+    depth_dimension = Dimension.DEPTH.key()
+    reversed_valid_temperature = xarray.ufuncs.isfinite(temperature).isel({depth_dimension: slice(None, None, -1)})
+    reversed_index = reversed_valid_temperature.argmax(dim=depth_dimension)
+    return temperature.sizes[depth_dimension] - 1 - reversed_index
+
+
+def _depths_for_indices(depth: xarray.DataArray, indices: xarray.DataArray) -> xarray.DataArray:
+    dask_depth = xarray.DataArray(dask.array.asarray(depth.data), dims=depth.dims)
+    return dask_depth.isel({Dimension.DEPTH.key(): indices})
