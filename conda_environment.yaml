@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
 #
 # SPDX-License-Identifier: EUPL-1.2
+name: oceanbench-dev
 
+channels:
+  - conda-forge
+  
 dependencies:
   - pre-commit=4.1.*
   - pip=25.0.*

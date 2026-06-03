@@ -1,0 +1,809 @@
+<!--
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+SPDX-License-Identifier: EUPL-1.2
+-->
+---
+title: "Energy Impact"
+jupyter: python3
+format:
+  html:
+    echo: false
+---
+
+```{python}
+from IPython.display import HTML
+
+page_css = """
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
+
+.ei-intro {
+  font-size: 15px;
+  line-height: 1.75;
+  color: #555;
+  margin-bottom: 2rem;
+  border-left: 3px solid #3B82F6;
+  padding-left: 1rem;
+}
+
+.ei-section-title {
+  font-size: 18px;
+  font-weight: 500;
+  margin: 2.5rem 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #111;
+}
+.ei-section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.ei-sublabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 1rem 0 0.5rem;
+}
+
+.ei-ref-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 1rem;
+}
+
+.ei-ref-card {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  border: 1px solid #e5e7eb;
+}
+.ei-ref-card-label { font-size: 11px; color: #aaa; margin-bottom: 3px; }
+.ei-ref-card-item  { font-size: 14px; font-weight: 500; color: #222; margin-bottom: 4px; }
+.ei-ref-card-value { font-size: 22px; font-weight: 500; font-family: 'DM Mono', monospace; color: #111; }
+.ei-ref-card-unit  { font-size: 12px; color: #888; margin-top: 2px; }
+
+.ei-sources {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 2rem;
+  line-height: 1.8;
+}
+.ei-sources a { color: #3B82F6; text-decoration: none; border-bottom: 1px solid #bfdbfe; }
+.ei-sources a:hover { opacity: 0.8; }
+
+.ei-formula-block {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin: 1.25rem 0;
+  border: 1px solid #e5e7eb;
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  color: #222;
+  line-height: 2;
+}
+.ei-formula-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: baseline;
+  gap: 8px;
+}
+.ei-formula-label { color: #aaa; font-size: 12px; }
+
+.ei-callout {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin: 1.25rem 0;
+  font-size: 13.5px;
+  color: #1D4ED8;
+}
+.ei-callout svg { flex-shrink: 0; margin-top: 2px; }
+
+.ei-model-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.ei-model-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+.ei-model-name { font-size: 15px; font-weight: 500; color: #111; }
+.ei-model-badge {
+  font-size: 11px;
+  font-weight: 500;
+  background: #f3f4f6;
+  color: #6b7280;
+  border-radius: 20px;
+  padding: 3px 10px;
+  border: 1px solid #e5e7eb;
+}
+
+.ei-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ei-table thead tr { border-bottom: 1px solid #e5e7eb; }
+.ei-table th {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
+  padding: 6px 12px 6px 0;
+  text-align: left;
+}
+.ei-table td {
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid #f9fafb;
+  color: #222;
+}
+.ei-table td:first-child { font-weight: 500; }
+.ei-table tbody tr:last-child td { border-bottom: none; }
+
+.ei-pending {
+  display: inline-block;
+  background: #FFF9DB;
+  color: #854D0E;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-family: 'DM Mono', monospace;
+}
+
+.ei-result {
+  display: inline-block;
+  background: #F0FDF4;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-family: 'DM Mono', monospace;
+}
+
+.ei-param_infos {
+  display: inline-block;
+  background: #EBEBEB;
+  color: #242424;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 2px 4px;
+  font-family: 'DM Mono', monospace;
+}
+</style>
+"""
+HTML(page_css)
+```
+
+```{python}
+from IPython.display import HTML
+
+HTML("""
+<p class="ei-intro">
+  This section presents energy consumption and CO₂ emissions for models available on Oceanbench,
+  covering both training and inference phases.
+  A comparative reference is provided below to help interpret the results.
+</p>
+
+<div class="ei-callout">
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>
+  <div>
+    Measurements use the
+    <a href="https://github.com/mlco2/codecarbon" style="color: #1D4ED8;">codecarbon</a>
+    open-source library for carbon tracking.
+  </div>
+</div>
+
+<div class="ei-section-title">Reference values</div>
+
+<p class="ei-sublabel">Energy consumption in 1 hour</p>
+<div class="ei-ref-grid">
+  <div class="ei-ref-card">
+    <div class="ei-ref-card-label">Usage</div>
+    <div class="ei-ref-card-item">LED bulb</div>
+    <div class="ei-ref-card-value">0.002</div>
+    <div class="ei-ref-card-unit">kWh</div>
+  </div>
+  <div class="ei-ref-card">
+    <div class="ei-ref-card-label">Usage</div>
+    <div class="ei-ref-card-item">LED TV</div>
+    <div class="ei-ref-card-value">0.10</div>
+    <div class="ei-ref-card-unit">kWh</div>
+  </div>
+</div>
+
+<p class="ei-sublabel" style="margin-top: 1rem;">CO₂ emissions in 1 hour</p>
+<div class="ei-ref-grid">
+  <div class="ei-ref-card">
+    <div class="ei-ref-card-label">Usage</div>
+    <div class="ei-ref-card-item">Video call streaming</div>
+    <div class="ei-ref-card-value">0.60</div>
+    <div class="ei-ref-card-unit">kg CO₂e</div>
+  </div>
+  <div class="ei-ref-card">
+    <div class="ei-ref-card-label">Usage</div>
+    <div class="ei-ref-card-item">Petrol car (60 km/h)</div>
+    <div class="ei-ref-card-value">10.2</div>
+    <div class="ei-ref-card-unit">kg CO₂e</div>
+  </div>
+</div>
+
+<p class="ei-sources">
+  Sources:
+  <a href="https://www.energybot.com/energy-usage/led-light-bulb.html">LED Bulb</a> ·
+  <a href="https://www.nexamp.com/blog/do-tvs-use-a-lot-of-electricity">LED TV</a> ·
+  <a href="https://medium.com/@zodhyatech/how-much-co2-do-you-emit-in-a-day-60be76e491dc">Video streaming &amp; car</a>
+</p>
+""")
+```
+
+```{python}
+HTML("""
+<div class="ei-section-title">Formulas</div>
+<div class="ei-formula-block">
+  <div class="ei-formula-row">
+    <span class="ei-formula-label">Energy</span>
+    <span>= (CPU<sub>consumption</sub> + GPU<sub>consumption</sub> + RAM<sub>consumption</sub>) × PUE</span>
+  </div>
+  <div class="ei-formula-row">
+    <span class="ei-formula-label">Emissions</span>
+    <span>= Energy<sub>consumption</sub> × Coef<sub>energymix</sub></span>
+  </div>
+</div>
+
+<div class="ei-callout">
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>
+  <div><strong>PUE</strong> — Power Usage Effectiveness: ratio of total data center energy to IT equipment energy.</div>
+</div>
+""")
+```
+
+## GLO12 Energy Impact Analysis
+
+
+```{python}
+HTML("""
+
+<div class="ei-callout">
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>
+  <div><strong>Note:</strong> The result value depends a lot on the infrastructure and resources used by the code. To see the test specifications, go to the end of this page.</div>
+</div>
+
+<p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+  Results are based on average 9 runs. Measurements taken on the Météo-France (Belenos) supercomputer in Toulouse.
+  The ± margin corresponds to a 95% confidence interval based on Student’s t-distribution.
+</p>
+<div class="ei-model-card">
+  <div class="ei-model-card-header">
+    <span class="ei-model-name">GLO12</span>
+    <span class="ei-model-badge">Run</span>
+  </div>
+  <table class="ei-table">
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Energy (kWh)</td><td><span class="ei-result">18,4 (± 1,92)</span></td></tr>
+      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0,883 (± 0,0919)</span></td></tr>
+      <tr><td>Duration (seconds)</td><td><span class="ei-result">2843</span></td></tr>
+      <tr><td>Consumption of the empty machine on the same time (kWh) </td><td><span class="ei-result">3,59</span></td></tr>
+    </tbody>
+  </table>
+</div>
+""")
+```
+
+## Glonet Energy Impact Analysis
+
+```{python}
+HTML("""
+<div class="ei-model-card">
+  <div class="ei-model-card-header">
+    <span class="ei-model-name">Glonet</span>
+    <span class="ei-model-badge">Training</span>
+  </div>
+  <table class="ei-table">
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody> 
+      <tr><td>Energy (kWh)</td><td><span class="ei-pending">pending</span></td></tr>
+      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-pending">pending</span></td></tr>  
+      <tr><td>Duration (seconds)</td><td><span class="ei-pending">pending</span></td></tr>
+      <tr><td>Consumption of the empty machine on the same time (kWh) </td><td><span class="ei-pending">pending</span></td></tr>    
+    </tbody>
+  </table>
+</div>
+
+<div class="ei-model-card">
+  <div class="ei-model-card-header">
+    <span class="ei-model-name">Glonet</span>
+    <span class="ei-model-badge">Inference</span>
+  </div>
+  <table class="ei-table">
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Energy (Wh)</td><td><span class="ei-result">126.4 (± 0.496)</span></td></tr>
+      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00708 (± 0.0000278)</span></td></tr>
+      <tr><td>Duration (seconds)</td><td><span class="ei-result">1985</span></td></tr>
+      <tr><td>Consumption of the empty machine on the same time (Wh) </td><td><span class="ei-pending">pending</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+""")
+```
+
+```{python}
+from IPython.display import HTML, display
+
+display(HTML("""
+<div style="padding: 1rem 0;">
+  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
+    Which part consume the most — Glonet Inference
+  </div>
+
+  <div id="stacked-bar-glonet" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
+
+  <div id="bar-legend-glonet" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+</div>
+
+<script>
+var DATA = {
+  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "CLEAN FILES", "GENERATING THUMBNAILS", "SAVING"],
+  values: [0.036, 4.0, 91, 4.8, 0.074, 0.30, 6.8],
+  colors: ["#0C447C", "#378ADD", "#85B7EB", "#F09595", "#E24B4A", "#A32D2D", "#501313"]
+};
+
+var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
+var bar = document.getElementById('stacked-bar-glonet');
+var legend = document.getElementById('bar-legend-glonet');
+
+DATA.labels.forEach(function(label, i) {
+  var pct = (DATA.values[i] / total) * 100;
+
+  var seg = document.createElement('div');
+  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
+  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
+  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
+  seg.onmouseleave = function() { this.style.opacity = '1'; };
+  bar.appendChild(seg);
+
+  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
+    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
+    + label + ' — ' + pct.toFixed(1) + '%</span>';
+});
+</script>
+"""))
+```
+
+
+## Wenhai Energy Impact Analysis
+```{python}
+HTML("""
+
+<div class="ei-model-card">
+  <div class="ei-model-card-header">
+    <span class="ei-model-name">Wenhai</span>
+    <span class="ei-model-badge">Inference</span>
+  </div>
+  <table class="ei-table">
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Energy (Wh)</td><td><span class="ei-result">46.0 (± 0.769)</span></td></tr>
+      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00258 (± 0.0000430)</span></td></tr>
+      <tr><td>Duration (seconds)</td><td><span class="ei-result">721</span></td></tr>
+      <tr><td>Consumption of the empty machine on the same time (Wh) </td><td><span class="ei-pending">pending</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+""")
+```
+
+```{python}
+from IPython.display import HTML, display
+
+display(HTML("""
+<div style="padding: 1rem 0;">
+  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
+    Which part consume the most — Wenhai Inference
+  </div>
+
+  <div id="stacked-bar-wenhai" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
+
+  <div id="bar-legend-wenhai" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+</div>
+
+<script>
+var DATA = {
+  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "SAVING_ZARR", "ADDING_METADATA", "UPLOAD_zarr + thumnails to S3"],
+  values: [0.036, 0.26, 31, 17, 1, 0.044, 12],
+  colors: ["#0C447C", "#378ADD", "#85B7EB", "#F09595", "#E24B4A", "#A32D2D", "#501313"]
+};
+
+var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
+var bar = document.getElementById('stacked-bar-wenhai');
+var legend = document.getElementById('bar-legend-wenhai');
+
+DATA.labels.forEach(function(label, i) {
+  var pct = (DATA.values[i] / total) * 100;
+
+  var seg = document.createElement('div');
+  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
+  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
+  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
+  seg.onmouseleave = function() { this.style.opacity = '1'; };
+  bar.appendChild(seg);
+
+  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
+    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
+    + label + ' — ' + pct.toFixed(1) + '%</span>';
+});
+</script>
+"""))
+```
+
+## Xihe Energy Impact Analysis
+```{python}
+HTML("""
+
+<div class="ei-model-card">
+  <div class="ei-model-card-header">
+    <span class="ei-model-name">Xihe</span>
+    <span class="ei-model-badge">Inference</span>
+  </div>
+  <table class="ei-table">
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Energy (Wh)</td><td><span class="ei-result">41.2 (± 4.23)</span></td></tr>
+      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00231 (± 0.000237)</span></td></tr>
+      <tr><td>Duration (seconds)</td><td><span class="ei-result">648</span></td></tr>
+      <tr><td>Consumption of the empty machine on the same time (Wh) </td><td><span class="ei-pending">pending</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+""")
+```
+
+```{python}
+from IPython.display import HTML, display
+
+display(HTML("""
+<div style="padding: 1rem 0;">
+  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
+    Which part consume the most — Xihe Inference
+  </div>
+
+  <div id="stacked-bar-xihe" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
+
+  <div id="bar-legend-xihe" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+</div>
+
+<script>
+var DATA = {
+  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "Preprocessing_to_NPY", "INFERENCE", "ADD_METADATA", "GENERATING THUMBNAILS", "UPLOAD_to_S3"],
+  values: [0.036, 5.0, 13, 0.99, 7.8, 0.044, 0.98, 9.8],
+  colors: ["#0C447C", "#378ADD", "#85B7EB", "#c6d8eb", "#F09595", "#E24B4A", "#A32D2D", "#501313"]
+};
+
+var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
+var bar = document.getElementById('stacked-bar-xihe');
+var legend = document.getElementById('bar-legend-xihe');
+
+DATA.labels.forEach(function(label, i) {
+  var pct = (DATA.values[i] / total) * 100;
+
+  var seg = document.createElement('div');
+  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
+  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
+  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
+  seg.onmouseleave = function() { this.style.opacity = '1'; };
+  bar.appendChild(seg);
+
+  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
+    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
+    + label + ' — ' + pct.toFixed(1) + '%</span>';
+});
+</script>
+"""))
+```
+
+## Cumulative Energy Consumption per Number of Inferences Between AI models
+```{python}
+
+from IPython.display import HTML, Javascript, display
+
+display(HTML("""
+<div style="padding: 1rem 0;">
+
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; font-size: 12px; color: #888;">
+    
+    <span style="display: flex; align-items: center; gap: 6px;">
+      <span style="width: 20px; height: 3px; background: #378ADD; display:inline-block; border-radius:2px;"></span>
+      <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(55,138,221,0.30); display:inline-block;"></span>
+      Glonet — 126.4 Wh/run (±0.496)
+    </span>
+
+    <span style="display: flex; align-items: center; gap: 6px;">
+      <span style="width: 20px; height: 3px; background: #1D9E75; display:inline-block; border-radius:2px;"></span>
+      <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(29,158,117,0.30); display:inline-block;"></span>
+      Wenhai — 46.0 Wh/run (±0.769)
+    </span>
+
+    <span style="display: flex; align-items: center; gap: 6px;">
+      <span style="width: 20px; height: 3px; background: #D4537E; display:inline-block; border-radius:2px;"></span>
+      <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(212,83,126,0.30); display:inline-block;"></span>
+      Xihe — 41.2 Wh/run (±4.23)
+    </span>
+
+  </div>
+
+  <div style="position: relative; width: 100%; height: 400px;">
+    <canvas id="energyCompChart"></canvas>
+  </div>
+
+</div>
+"""))
+
+display(Javascript("""
+
+require.config({
+    paths: {
+        chartjs: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min'
+    }
+});
+
+require(['chartjs'], function(ChartModule) {
+
+    const Chart = ChartModule.Chart;
+
+    const runs = [0,1,2,3,4,5,6,7,8,9,10];
+
+    const models = [
+        {
+            name: 'Glonet',
+            mu: 126.4,
+            ci: 0.496,
+            color: '#378ADD',
+            fill: '55,138,221',
+            dash: []
+        },
+        {
+            name: 'Wenhai',
+            mu: 46.0,
+            ci: 0.769,
+            color: '#1D9E75',
+            fill: '29,158,117',
+            dash: [6,3]
+        },
+        {
+            name: 'Xihe',
+            mu: 41.2,
+            ci: 4.23,
+            color: '#D4537E',
+            fill: '212,83,126',
+            dash: [2,4]
+        }
+    ];
+
+    const datasets = [];
+
+    models.forEach(function(m) {
+
+        const upper = runs.map(r => (r * (m.mu + m.ci)));
+        const lower = runs.map(r => (r * (m.mu - m.ci)));
+        const mean  = runs.map(r => (r * m.mu));
+
+        // Upper bound
+        datasets.push({
+            label: m.name + ' upper',
+            data: upper,
+            borderColor: 'rgba(0,0,0,0)',
+            backgroundColor: 'rgba(' + m.fill + ',0.22)',
+            pointRadius: 0,
+            fill: false
+        });
+
+        // Lower bound + fill
+        datasets.push({
+            label: m.name + ' lower',
+            data: lower,
+            borderColor: 'rgba(0,0,0,0)',
+            backgroundColor: 'rgba(' + m.fill + ',0.22)',
+            pointRadius: 0,
+            fill: '-1'
+        });
+
+        // Mean curve
+        datasets.push({
+            label: m.name,
+            data: mean,
+            borderColor: m.color,
+            backgroundColor: 'transparent',
+            borderWidth: 2.5,
+            borderDash: m.dash,
+            pointRadius: 3,
+            pointBackgroundColor: m.color,
+            tension: 0.3
+        });
+
+    });
+
+    new Chart(
+        document.getElementById('energyCompChart'),
+        {
+            type: 'line',
+
+            data: {
+                labels: runs,
+                datasets: datasets
+            },
+
+            options: {
+
+                responsive: true,
+                maintainAspectRatio: false,
+
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+
+                plugins: {
+
+                    legend: {
+                        display: false
+                    },
+
+                    tooltip: {
+
+                        filter: function(item) {
+                            return !item.dataset.label.includes('upper')
+                                && !item.dataset.label.includes('lower');
+                        },
+
+                        callbacks: {
+
+                            title: function(ctx) {
+                                return ctx[0].label + ' run' + (ctx[0].label > 1 ? 's' : '');
+                            },
+
+                            label: function(ctx) {
+
+                                const idx = Math.floor(ctx.datasetIndex / 3);
+                                const m = models[idx];
+                                const r = ctx.dataIndex;
+
+                                const lo = (r * (m.mu - m.ci)).toFixed(1);
+                                const hi = (r * (m.mu + m.ci)).toFixed(1);
+
+                                return (
+                                    ' ' + m.name +
+                                    ': ' +
+                                    ctx.parsed.y.toFixed(1) +
+                                    ' Wh [' + lo + ' – ' + hi + ']'
+                                );
+                            }
+                        }
+                    }
+                },
+
+                scales: {
+
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Number of inferences',
+                            color: '#888',
+                            font: { size: 12 }
+                        },
+
+                        ticks: {
+                            color: '#888',
+                            font: { size: 12 }
+                        },
+
+                        grid: {
+                            color: 'rgba(128,128,128,0.08)'
+                        }
+                    },
+
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Cumulative energy (Wh)',
+                            color: '#888',
+                            font: { size: 12 }
+                        },
+
+                        beginAtZero: true,
+
+                        ticks: {
+                            color: '#888',
+                            font: { size: 12 }
+                        },
+
+                        grid: {
+                            color: 'rgba(128,128,128,0.08)'
+                        }
+                    }
+                }
+            }
+        }
+    );
+});
+"""))
+```
+
+
+### Infrastructure and Resources
+
+```{python}
+HTML("""
+<div class="ei-model-card">
+  <div class="ei-model-card-header">
+    <span class="ei-model-name">GLO12</span>
+    <span class="ei-model-badge">Run</span>
+  </div>
+  <table class="ei-table">
+    <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Supercomputer</td><td><span class="ei-param_infos">Météo-France — Belenos (Toulouse)</span></td></tr>
+      <tr><td>Number of Nodes</td><td><span class="ei-param_infos">43</span></td></tr>
+      <tr><td>Number of processes per node</td><td><span class="ei-param_infos">128</span></td></tr>
+      <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 7742</span> </td></tr>
+      <tr><td>RAM (GB)</td><td><span class="ei-param_infos">10632</span></td></tr>
+      <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
+      <tr><td>PUE</td><td><span class="ei-param_infos">1.17</span></td></tr>
+    </tbody>
+  </table>
+</div>
+""")
+```
+
+```{python}
+HTML("""
+<div class="ei-model-card">
+  <div class="ei-model-card-header">
+    <span class="ei-model-name">Glonet · Wenhai · Xihe</span>
+    <span class="ei-model-badge">Inference</span>
+  </div>
+  <table class="ei-table">
+    <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Supercomputer</td><td><span class="ei-param_infos">Mercator Ocean International — Lir (Toulouse)</span></td></tr>
+      <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
+      <tr><td>Number of processes per node</td><td><span class="ei-param_infos">8</span></td></tr>
+      <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9534</span></td></tr>
+      <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA H100 80GB</span></td></tr>
+      <tr><td>RAM (GB)</td><td><span class="ei-param_infos">755</span></td></tr>
+      <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
+      <tr><td>PUE</td><td><span class="ei-param_infos">1.45</span></td></tr>
+    </tbody>
+  </table>
+</div>
+""")
+```

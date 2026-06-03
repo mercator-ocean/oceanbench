@@ -18,7 +18,10 @@ website:
       - href: index.qmd
         text: Scores
       - challengers.qmd
+      - href: energy-impact.qmd   
+        text: Energy Impact
       - about.qmd
+
   repo-url: https://github.com/mercator-ocean/oceanbench
   repo-actions: [edit, source, issue]
   repo-subdir: website
