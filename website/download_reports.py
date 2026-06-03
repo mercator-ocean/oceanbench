@@ -13,7 +13,7 @@ PRESERVED_LOCAL_REPORTS = {
     report_name.strip()
     for report_name in os.environ.get(
         "OCEANBENCH_PRESERVED_LOCAL_REPORTS",
-        "glonet2_correct_stats.global.report.ipynb",
+        "",
     ).split(",")
     if report_name.strip()
 }
