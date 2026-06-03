@@ -10,6 +10,7 @@ import sys
 
 from helper_scripts.package_evaluation_reports import package_report_notebooks
 from helper_scripts.package_evaluation_reports import parse_report_identity
+from helper_scripts.package_evaluation_reports import render_report_html
 from helper_scripts.package_evaluation_reports import upload_package_to_s3
 
 
@@ -108,6 +109,36 @@ def test_package_report_notebooks_writes_report_package_manifest_and_external_as
             }
         ]
     }
+
+
+def test_render_report_html_uses_quarto_without_execution(monkeypatch, tmp_path) -> None:
+    notebook_path = tmp_path / "glonet.global.report.ipynb"
+    html_path = tmp_path / "glonet.global.report.html"
+    commands = []
+
+    def fake_run(command: list[str], cwd: Path, check: bool) -> None:
+        commands.append(command)
+        assert cwd == notebook_path.parent
+        assert check is True
+
+    monkeypatch.setattr("helper_scripts.package_evaluation_reports.subprocess.run", fake_run)
+
+    render_report_html(notebook_path, html_path)
+
+    assert commands == [
+        [
+            "quarto",
+            "render",
+            notebook_path.name,
+            "--to",
+            "html",
+            "--output",
+            html_path.name,
+            "--output-dir",
+            ".",
+            "--no-execute",
+        ]
+    ]
 
 
 def test_upload_package_to_s3_uses_relative_package_keys(monkeypatch, tmp_path) -> None:

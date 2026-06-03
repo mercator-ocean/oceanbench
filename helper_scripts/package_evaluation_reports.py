@@ -72,18 +72,18 @@ def parse_report_identity(notebook_path: Path) -> ReportIdentity:
 def render_report_html(notebook_path: Path, html_path: Path) -> None:
     subprocess.run(
         [
-            sys.executable,
-            "-m",
-            "jupyter",
-            "nbconvert",
+            "quarto",
+            "render",
+            notebook_path.name,
             "--to",
             "html",
-            str(notebook_path),
             "--output",
-            html_path.stem,
+            html_path.name,
             "--output-dir",
-            str(html_path.parent),
+            ".",
+            "--no-execute",
         ],
+        cwd=notebook_path.parent,
         check=True,
     )
 
