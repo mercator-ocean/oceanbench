@@ -49,6 +49,7 @@ let challengerLabels = {};
 let regionLabels = {};
 let regionMetadata = {};
 let activeTrack = "high_resolution";
+let reportUrls = {};
 let activeSection = "observations";
 let activeRegion = null;
 let isScrollRefreshScheduled = false;
@@ -183,6 +184,14 @@ function getAvailableTracks(challengerNames) {
   return tracks;
 }
 
+function reportUrl(name, regionId) {
+  return reportUrls[regionId]?.[name] || "#";
+}
+
+function modelReportLink(name, regionId) {
+  return `<a href="${reportUrl(name, regionId)}">${displayName(name)}</a>`;
+}
+
 function titleCase(text) {
   return text.replace(/(^|\s)\w/g, (character) => character.toUpperCase());
 }
@@ -224,7 +233,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col">${modelReportLink(name, regionId)}</th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -274,7 +283,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col">${modelReportLink(name, regionId)}</th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -1060,6 +1069,7 @@ function ensureParsedData() {
     challengerLabels = parsedData.challenger_labels || {};
     regionLabels = parsedData.region_labels || {};
     regionMetadata = parsedData.region_metadata || {};
+    reportUrls = parsedData.report_urls || {};
     const regionIds = parsedData.region_order || Object.keys(parsedData.regions || {});
     if (!activeRegion || !regionIds.includes(activeRegion)) {
       activeRegion = regionIds[0] || null;

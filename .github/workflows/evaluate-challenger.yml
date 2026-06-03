@@ -37,9 +37,19 @@ jobs:
           AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           CHALLENGER_PYTHON_FILE_PATH: challenger_datasets/${{ inputs.challengerPythonFileName  }}.py
-          CHALLENGER_REPORT_NAME: ${{ inputs.challengerPythonFileName }}.report.ipynb
-          OCEANBENCH_OUTPUT_BUCKET: project-oceanbench
-          OCEANBENCH_OUTPUT_PREFIX: dev/evaluation-reports/${{ github.head_ref || github.ref_name }}
           TEST_ENVIRONMENT_NAME: oceanbench_evaluate_challenger_${{ github.ref_name }}_${{ github.sha }}
         run: make evaluate-challenger
+        shell: micromamba-shell {0}
+      - name: Package report
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_ENVIRONMENT_NAME: oceanbench_evaluate_challenger_${{ github.ref_name }}_${{ github.sha }}
+        run: |
+          make package-evaluation-reports \
+            REPORT_NOTEBOOKS=${{ inputs.challengerPythonFileName }}.global.report.ipynb \
+            REPORT_PACKAGE_DIRECTORY=evaluation-report-package \
+            REPORT_PACKAGE_UPLOAD_OPTIONS="--s3-bucket project-oceanbench --s3-prefix dev/evaluation-reports/249-webp-demo"
         shell: micromamba-shell {0}

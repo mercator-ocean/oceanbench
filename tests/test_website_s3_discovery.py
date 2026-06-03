@@ -3,18 +3,21 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from pathlib import Path
+import json
 import sys
 
 WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
-from helpers.s3_discovery import REPORTS_PREFIX  # noqa: E402
-from helpers.s3_discovery import S3_BASE_URL  # noqa: E402
-from helpers.s3_discovery import download_notebook  # noqa: E402
+from helpers.s3_discovery import download_scores  # noqa: E402
 from helpers.s3_discovery import discover_downloaded_reports  # noqa: E402
 from helpers.s3_discovery import discover_official_reports  # noqa: E402
-from helpers.s3_discovery import REPORTS_PREFIX  # noqa: E402
-from helpers.s3_discovery import S3_BASE_URL  # noqa: E402
+from helpers.s3_discovery import manifest_url  # noqa: E402
+from helpers.s3_discovery import notebook_url  # noqa: E402
+from helpers.s3_discovery import report_html_url  # noqa: E402
+from helpers.s3_discovery import report_metadata  # noqa: E402
+from helpers.s3_discovery import scores_url  # noqa: E402
+from helpers.s3_discovery import write_report_catalog  # noqa: E402
 from helpers.published_regions import published_region_ids  # noqa: E402
 from helpers.published_regions import published_region_ids_with_reports  # noqa: E402
 from helpers.published_regions import published_region_metadata  # noqa: E402
@@ -26,36 +29,62 @@ class MockResponse:
         self.text = text
         self.content = content
 
+    def json(self) -> dict:
+        return json.loads(self.content.decode("utf-8"))
 
-def _official_report_url(challenger_name: str, region_id: str) -> str:
-    return f"{S3_BASE_URL}/{REPORTS_PREFIX}{challenger_name}.{region_id}.report.ipynb"
 
-
-def test_discover_official_reports_probes_only_official_region_report_names(monkeypatch) -> None:
-    existing_report_urls = {
-        _official_report_url("glo12", "global"),
-        _official_report_url("glo12", "ibi"),
-        _official_report_url("wenhai", "global"),
+def test_discover_official_reports_reads_prebuilt_report_manifest(monkeypatch) -> None:
+    manifest = {
+        "reports": [
+            {
+                "challenger": "glo12",
+                "region": "global",
+                "report_url": report_html_url("glo12", "global"),
+                "notebook_url": notebook_url("glo12", "global"),
+                "scores_url": scores_url("glo12", "global"),
+            },
+            {
+                "challenger": "glo12",
+                "region": "ibi",
+                "report_url": report_html_url("glo12", "ibi"),
+                "notebook_url": notebook_url("glo12", "ibi"),
+                "scores_url": scores_url("glo12", "ibi"),
+            },
+            {
+                "challenger": "wenhai",
+                "region": "global",
+                "report_url": report_html_url("wenhai", "global"),
+                "notebook_url": notebook_url("wenhai", "global"),
+                "scores_url": scores_url("wenhai", "global"),
+            },
+            {
+                "challenger": "xihe",
+                "region": "global",
+                "report_url": report_html_url("xihe", "global"),
+            },
+            {
+                "challenger": "unknown",
+                "region": "global",
+                "report_url": "https://example.test/unknown.global.report.html",
+                "notebook_url": "https://example.test/unknown.global.report.ipynb",
+                "scores_url": "https://example.test/unknown.global.scores.json",
+            },
+        ]
     }
     requested_urls = []
 
-    def fake_head(url: str, timeout: int):
-        assert timeout == 10
-        requested_urls.append(url)
-        return MockResponse(status_code=200 if url in existing_report_urls else 404)
+    def fake_get(url: str, timeout: int):
+        requested_urls.append((url, timeout))
+        return MockResponse(status_code=200, content=json.dumps(manifest).encode("utf-8"))
 
-    monkeypatch.setattr("helpers.s3_discovery.requests.head", fake_head)
+    monkeypatch.setattr("helpers.s3_discovery.requests.get", fake_get)
 
     reports = discover_official_reports()
 
     assert list(reports) == published_region_ids()
     assert reports["global"] == ["glo12", "wenhai"]
     assert reports["ibi"] == ["glo12"]
-    assert all(".global.report.ipynb" in url or ".ibi.report.ipynb" in url for url in requested_urls)
-    assert not any(
-        ".report.ipynb" in url and ".global.report.ipynb" not in url and ".ibi.report.ipynb" not in url
-        for url in requested_urls
-    )
+    assert requested_urls == [(manifest_url(), 30)]
 
 
 def test_published_regions_have_stable_order_and_metadata() -> None:
@@ -82,37 +111,39 @@ def test_published_region_ids_with_reports_filters_empty_regions() -> None:
     assert published_region_ids_with_reports({"global": [], "ibi": ["glo12"]}) == ["ibi"]
 
 
-def test_discover_downloaded_reports_reads_local_report_files(tmp_path) -> None:
-    (tmp_path / "glonet.global.report.ipynb").write_text("{}", encoding="utf-8")
-    (tmp_path / "glonet.ibi.report.ipynb").write_text("{}", encoding="utf-8")
-    (tmp_path / "glonet.custom_box.report.ipynb").write_text("{}", encoding="utf-8")
-    (tmp_path / "glonet.report.ipynb").write_text("{}", encoding="utf-8")
-    (tmp_path / "unknown.ibi.report.ipynb").write_text("{}", encoding="utf-8")
+def test_discover_downloaded_reports_reads_local_report_catalog(tmp_path) -> None:
+    write_report_catalog(str(tmp_path), {"global": ["glonet"], "ibi": ["glonet", "unknown"]})
 
     reports = discover_downloaded_reports(str(tmp_path))
 
     assert reports["global"] == ["glonet"]
     assert reports["ibi"] == ["glonet"]
+    assert report_metadata(str(tmp_path), "glonet", "global") == {
+        "notebook_url": notebook_url("glonet", "global"),
+        "report_url": report_html_url("glonet", "global"),
+        "scores_url": scores_url("glonet", "global"),
+        "scores_path": "reports/glonet.global.scores.json",
+    }
 
 
-def test_download_notebook_uses_only_explicit_region_name(monkeypatch, tmp_path) -> None:
+def test_download_scores_uses_only_explicit_region_name(monkeypatch, tmp_path) -> None:
     requests_seen = []
 
     def fake_get(url: str, timeout: int):
         requests_seen.append((url, timeout))
-        if url.endswith("/glonet.global.report.ipynb"):
+        if url.endswith("/glonet.global.scores.json"):
             return MockResponse(status_code=200, content=b"{}")
         return MockResponse(status_code=404)
 
     monkeypatch.setattr("helpers.s3_discovery.requests.get", fake_get)
 
-    destination = download_notebook("glonet", "global", str(tmp_path))
+    destination = download_scores("glonet", "global", str(tmp_path))
 
-    assert destination == str(tmp_path / "glonet.global.report.ipynb")
-    assert (tmp_path / "glonet.global.report.ipynb").read_bytes() == b"{}"
+    assert destination == str(tmp_path / "glonet.global.scores.json")
+    assert (tmp_path / "glonet.global.scores.json").read_bytes() == b"{}"
     assert requests_seen == [
         (
-            _official_report_url("glonet", "global"),
+            scores_url("glonet", "global"),
             30,
         )
     ]

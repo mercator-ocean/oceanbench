@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import json
 import os
-import re
 
 import requests
 
@@ -12,44 +12,58 @@ from helpers.published_regions import published_region_ids
 
 S3_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench"
 REPORTS_PREFIX = "dev/evaluation-reports/249-webp-demo/"
-REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")
+REPORT_CATALOG_FILE_NAME = "_report_catalog.json"
+REPORT_MANIFEST_FILE_NAME = "manifest.json"
 
 
-def _notebook_url(challenger_name: str, region_id: str) -> str:
-    return f"{S3_BASE_URL}/{REPORTS_PREFIX}{challenger_name}.{region_id}.report.ipynb"
+def _artifact_url(challenger_name: str, region_id: str, suffix: str) -> str:
+    return f"{S3_BASE_URL}/{REPORTS_PREFIX}{challenger_name}.{region_id}.{suffix}"
 
 
-def _report_exists(challenger_name: str, region_id: str) -> bool:
+def report_html_url(challenger_name: str, region_id: str) -> str:
+    return _artifact_url(challenger_name, region_id, "report.html")
+
+
+def notebook_url(challenger_name: str, region_id: str) -> str:
+    return _artifact_url(challenger_name, region_id, "report.ipynb")
+
+
+def scores_url(challenger_name: str, region_id: str) -> str:
+    return _artifact_url(challenger_name, region_id, "scores.json")
+
+
+def manifest_url() -> str:
+    return f"{S3_BASE_URL}/{REPORTS_PREFIX}{REPORT_MANIFEST_FILE_NAME}"
+
+
+def _load_remote_report_manifest() -> dict:
     try:
-        response = requests.head(_notebook_url(challenger_name, region_id), timeout=10)
-        return response.status_code == 200
+        response = requests.get(manifest_url(), timeout=30)
+        if response.status_code == 200:
+            return response.json()
     except Exception:
-        return False
+        pass
+    return {"reports": []}
+
+
+def _manifest_published_reports(manifest: dict) -> dict[str, set[str]]:
+    discovered_reports = {region_id: set() for region_id in published_region_ids()}
+    for report in manifest.get("reports", []):
+        challenger_name = report.get("challenger")
+        region_id = report.get("region")
+        if (
+            challenger_name in KNOWN_CHALLENGERS
+            and region_id in discovered_reports
+            and report.get("report_url")
+            and report.get("notebook_url")
+            and report.get("scores_url")
+        ):
+            discovered_reports[region_id].add(challenger_name)
+    return discovered_reports
 
 
 def discover_official_reports() -> dict[str, list[str]]:
-    return {
-        region_id: [
-            challenger_name for challenger_name in KNOWN_CHALLENGERS if _report_exists(challenger_name, region_id)
-        ]
-        for region_id in published_region_ids()
-    }
-
-
-def discover_downloaded_reports(reports_directory: str) -> dict[str, list[str]]:
-    discovered_reports = {region_id: set() for region_id in published_region_ids()}
-    if not os.path.isdir(reports_directory):
-        return {region_id: [] for region_id in published_region_ids()}
-
-    for file_name in os.listdir(reports_directory):
-        report_match = REPORT_FILE_PATTERN.match(file_name)
-        if report_match is None:
-            continue
-        challenger_name = report_match.group("challenger")
-        region_id = report_match.group("region")
-        if region_id in discovered_reports and challenger_name in KNOWN_CHALLENGERS:
-            discovered_reports[region_id].add(challenger_name)
-
+    discovered_reports = _manifest_published_reports(_load_remote_report_manifest())
     return {
         region_id: [
             challenger_name for challenger_name in KNOWN_CHALLENGERS if challenger_name in discovered_reports[region_id]
@@ -58,18 +72,71 @@ def discover_downloaded_reports(reports_directory: str) -> dict[str, list[str]]:
     }
 
 
-def download_notebook(challenger_name: str, region_id: str, destination_directory: str) -> str | None:
-    os.makedirs(destination_directory, exist_ok=True)
-    destination_path = os.path.join(destination_directory, f"{challenger_name}.{region_id}.report.ipynb")
-    url = _notebook_url(challenger_name, region_id)
+def report_catalog_path(reports_directory: str) -> str:
+    return os.path.join(reports_directory, REPORT_CATALOG_FILE_NAME)
+
+
+def _empty_report_catalog() -> dict:
+    return {"regions": {region_id: {} for region_id in published_region_ids()}}
+
+
+def write_report_catalog(reports_directory: str, published_reports: dict[str, list[str]]) -> str:
+    catalog = {
+        "regions": {
+            region_id: {
+                challenger_name: {
+                    "report_url": report_html_url(challenger_name, region_id),
+                    "notebook_url": notebook_url(challenger_name, region_id),
+                    "scores_url": scores_url(challenger_name, region_id),
+                    "scores_path": f"reports/{challenger_name}.{region_id}.scores.json",
+                }
+                for challenger_name in challengers
+            }
+            for region_id, challengers in published_reports.items()
+        }
+    }
+    path = report_catalog_path(reports_directory)
+    os.makedirs(reports_directory, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(catalog, file, indent=2, sort_keys=True)
+    return path
+
+
+def load_report_catalog(reports_directory: str) -> dict:
+    path = report_catalog_path(reports_directory)
+    if not os.path.exists(path):
+        return _empty_report_catalog()
+    with open(path, encoding="utf-8") as file:
+        return json.load(file)
+
+
+def discover_downloaded_reports(reports_directory: str) -> dict[str, list[str]]:
+    catalog = load_report_catalog(reports_directory)
+    regions = catalog.get("regions", {})
+    return {
+        region_id: [
+            challenger_name for challenger_name in KNOWN_CHALLENGERS if challenger_name in regions.get(region_id, {})
+        ]
+        for region_id in published_region_ids()
+    }
+
+
+def report_metadata(reports_directory: str, challenger_name: str, region_id: str) -> dict:
+    return load_report_catalog(reports_directory)["regions"][region_id][challenger_name]
+
+
+def download_scores(challenger_name: str, region_id: str, destination_directory: str) -> str | None:
+    destination_path = os.path.join(destination_directory, f"{challenger_name}.{region_id}.scores.json")
+    url = scores_url(challenger_name, region_id)
 
     try:
         response = requests.get(url, timeout=30)
         if response.status_code != 200:
             return None
+        os.makedirs(destination_directory, exist_ok=True)
         with open(destination_path, "wb") as file:
             file.write(response.content)
         return destination_path
     except Exception as error:
-        print(f"Failed to download {challenger_name}.{region_id} from {url}: {error}")
+        print(f"Failed to download {challenger_name}.{region_id} scores from {url}: {error}")
     return None

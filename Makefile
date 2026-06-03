@@ -54,6 +54,19 @@ evaluate-challenger:
 	pip install --editable .
 	oceanbench evaluate $(CHALLENGER_PYTHON_FILE_PATH)
 
+REPORT_NOTEBOOKS ?= *.report.ipynb
+REPORT_PACKAGE_DIRECTORY ?= evaluation-report-package
+REPORT_PUBLIC_BASE_URL ?= https://minio.dive.edito.eu/project-oceanbench/dev/evaluation-reports/249-webp-demo/
+REPORT_PACKAGE_UPLOAD_OPTIONS ?=
+
+package-evaluation-reports: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+package-evaluation-reports:
+	${ACTIVATE_ENVIRONMENT}
+	python helper_scripts/package_evaluation_reports.py ${REPORT_NOTEBOOKS} \
+		--output-directory ${REPORT_PACKAGE_DIRECTORY} \
+		--public-base-url ${REPORT_PUBLIC_BASE_URL} \
+		${REPORT_PACKAGE_UPLOAD_OPTIONS}
+
 evaluate-samples: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-samples:
 	${ACTIVATE_ENVIRONMENT}

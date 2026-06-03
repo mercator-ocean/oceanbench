@@ -40,7 +40,8 @@ For the 1 degree track, the interpolation method used for challengers, the corre
 import json
 import os
 from helpers.s3_discovery import discover_downloaded_reports
-from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
+from helpers.s3_discovery import report_metadata
+from helpers.notebook_score_parser import METRIC_TITLES, SECTIONS
 from helpers.challenger_metadata import CHALLENGERS
 from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
 
@@ -48,13 +49,20 @@ published_reports = discover_downloaded_reports("reports")
 website_region_ids = published_region_ids_with_reports(published_reports)
 
 def _load_scores(challenger_name, region_id):
-    local_path = os.path.join("reports", f"{challenger_name}.{region_id}.report.ipynb")
+    local_path = report_metadata("reports", challenger_name, region_id)["scores_path"]
     if not os.path.exists(local_path):
-        raise FileNotFoundError(f"Missing downloaded report notebook for {challenger_name}: {local_path}")
-    scores = get_all_model_scores_from_notebook(local_path, challenger_name)
+        raise FileNotFoundError(f"Missing downloaded report scores for {challenger_name}: {local_path}")
+    with open(local_path, encoding="utf-8") as file:
+        scores = json.load(file)
     if not scores:
-        raise RuntimeError(f"Failed to parse scores for {challenger_name} from {local_path}")
-    return {metric_key: score.model_dump() for metric_key, score in scores.items()}
+        raise RuntimeError(f"Empty scores for {challenger_name} from {local_path}")
+    return scores
+
+def _report_url(challenger_name, region_id):
+    return report_metadata("reports", challenger_name, region_id)["report_url"]
+
+def _notebook_url(challenger_name, region_id):
+    return report_metadata("reports", challenger_name, region_id)["notebook_url"]
 
 all_scores = {
     region_id: {
@@ -84,6 +92,20 @@ scores_json = json.dumps({
         for region in all_scores.values()
         for name in region["challenger_names"]
         if name in CHALLENGERS
+    },
+    "report_urls": {
+        region_id: {
+            challenger_name: _report_url(challenger_name, region_id)
+            for challenger_name in published_reports[region_id]
+        }
+        for region_id in website_region_ids
+    },
+    "notebook_urls": {
+        region_id: {
+            challenger_name: _notebook_url(challenger_name, region_id)
+            for challenger_name in published_reports[region_id]
+        }
+        for region_id in website_region_ids
     },
     "metric_titles": METRIC_TITLES,
     "sections": SECTIONS,

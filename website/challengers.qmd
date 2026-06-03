@@ -17,6 +17,7 @@ format:
 
 from helpers.challenger_metadata import CHALLENGERS
 from helpers.s3_discovery import discover_downloaded_reports
+from helpers.s3_discovery import report_metadata
 from helpers.published_regions import published_region_ids, published_region_label
 
 published_reports = discover_downloaded_reports("reports")
@@ -31,19 +32,26 @@ challengers = sorted({
 })
 
 header = (
-    "| System | Organisation | Method | Forecast type | Initial conditions | Output resolution | Report |\n"
-    "|--------|--------------|--------|---------------|--------------------|-------------------|--------|\n"
+    "| System | Organisation | Method | Forecast type | Initial conditions | Output resolution | Report | Notebook |\n"
+    "|--------|--------------|--------|---------------|--------------------|-------------------|--------|----------|\n"
 )
 
 def format_row(challenger_name):
     challenger_metadata = CHALLENGERS.get(challenger_name)
     report_links = "".join(
-        f'<a class="region-report-badge" href="reports/{challenger_name}.{region_id}.report.html">'
+        f'<a class="region-report-badge" href="{report_metadata("reports", challenger_name, region_id)["report_url"]}">'
+        f"{region_labels[region_id]}</a>"
+        for region_id, region_challengers in published_reports.items()
+        if challenger_name in region_challengers
+    )
+    notebook_links = "".join(
+        f'<a class="region-report-badge" href="{report_metadata("reports", challenger_name, region_id)["notebook_url"]}">'
         f"{region_labels[region_id]}</a>"
         for region_id, region_challengers in published_reports.items()
         if challenger_name in region_challengers
     )
     report_links = f'<span class="region-report-badges">{report_links}</span>' if report_links else ""
+    notebook_links = f'<span class="region-report-badges">{notebook_links}</span>' if notebook_links else ""
     if challenger_metadata:
         system = f"[{challenger_metadata['label']}]({challenger_metadata['url']})"
         organisation = (
@@ -53,9 +61,9 @@ def format_row(challenger_name):
         return (
             f"| {system} | {organisation} | {challenger_metadata['method']} | "
             f"{challenger_metadata['forecast_type']} | {challenger_metadata['initial_conditions']} | "
-            f"{challenger_metadata['resolution']} | {report_links} |"
+            f"{challenger_metadata['resolution']} | {report_links} | {notebook_links} |"
         )
-    return f"| {challenger_name} |  |  |  |  |  | {report_links} |"
+    return f"| {challenger_name} |  |  |  |  |  | {report_links} | {notebook_links} |"
 
 rows = "\n".join(map(format_row, challengers))
 
