@@ -12,6 +12,8 @@ from helpers.notebook_score_parser import get_all_model_scores_from_notebook
 from helpers.type import ModelScore, ModelVariable
 
 OBSERVATION_SCORE_KEY = "rmsd_variables_observations"
+DRIFTER_SCORE_KEY = "drifter_trajectory_observations"
+DRIFTER_EXPLORER_SOURCE = "evaluation_report.class4_drifter_trajectory_explorer"
 CLASS4_EXPLORER_SOURCE = "evaluation_report.class4_observation_error_explorer"
 REPRESENTATIVE_SERIES = [
     ("Surface", "temperature"),
@@ -59,14 +61,30 @@ def _cell_html_output(cell: dict) -> str | None:
     return None
 
 
-def _class4_explorer_html(notebook_path: str | Path) -> str:
+def _explorer_html(notebook_path: str | Path, source: str, unavailable_message: str) -> str:
     notebook = _read_notebook(notebook_path)
     for cell in notebook.get("cells", []):
-        if CLASS4_EXPLORER_SOURCE in _cell_source(cell):
+        if source in _cell_source(cell):
             html_output = _cell_html_output(cell)
             if html_output:
                 return html_output
-    return '<p class="validation-empty">Class IV observation error maps are not available in this report.</p>'
+    return f'<p class="validation-empty">{escape(unavailable_message)}</p>'
+
+
+def _drifter_explorer_html(notebook_path: str | Path) -> str:
+    return _explorer_html(
+        notebook_path,
+        DRIFTER_EXPLORER_SOURCE,
+        "Class IV drifter trajectory animation is not available in this report.",
+    )
+
+
+def _class4_explorer_html(notebook_path: str | Path) -> str:
+    return _explorer_html(
+        notebook_path,
+        CLASS4_EXPLORER_SOURCE,
+        "Class IV observation error maps are not available in this report.",
+    )
 
 
 def _observation_score(notebook_path: str | Path, system_label: str) -> ModelScore:
@@ -74,6 +92,10 @@ def _observation_score(notebook_path: str | Path, system_label: str) -> ModelSco
     if OBSERVATION_SCORE_KEY not in scores:
         raise ValueError(f"Missing {OBSERVATION_SCORE_KEY} in {notebook_path}.")
     return scores[OBSERVATION_SCORE_KEY]
+
+
+def _drifter_score(notebook_path: str | Path, system_label: str) -> ModelScore | None:
+    return get_all_model_scores_from_notebook(str(notebook_path), system_label.lower()).get(DRIFTER_SCORE_KEY)
 
 
 def _lead_days(score: ModelScore) -> list[str]:
@@ -155,6 +177,33 @@ def _score_table(score: ModelScore) -> str:
         + "".join(f"<td>{_format_number(variable.data.get(lead_day))}</td>" for lead_day in lead_days)
         + "</tr>"
         for depth, variable_name, variable in _score_rows(score)
+    )
+    return (
+        '<div class="validation-score-table-wrap">'
+        f'<table class="validation-score-table">{header}<tbody>{body}</tbody></table>'
+        "</div>"
+    )
+
+
+def _drifter_score_table(score: ModelScore | None) -> str:
+    if score is None:
+        return '<p class="validation-empty">Class IV drifter trajectory scores are not available in this report.</p>'
+    lead_days = _lead_days(score)
+    variables = score.depths.get("flat")
+    if variables is None:
+        return '<p class="validation-empty">Class IV drifter trajectory scores are not available in this report.</p>'
+    header = (
+        "<thead><tr><th>Metric</th><th>Unit</th>"
+        + "".join(f"<th>Lead {escape(lead_day)}</th>" for lead_day in lead_days)
+        + "</tr></thead>"
+    )
+    body = "".join(
+        "<tr>"
+        f"<th>{escape(variable_name)}</th>"
+        f"<td>{escape(variable.unit)}</td>"
+        + "".join(f"<td>{_format_number(variable.data.get(lead_day))}</td>" for lead_day in lead_days)
+        + "</tr>"
+        for variable_name, variable in variables.variables.items()
     )
     return (
         '<div class="validation-score-table-wrap">'
@@ -286,6 +335,8 @@ def render_forecast_validation_page(
     metadata: ForecastValidationMetadata,
 ) -> str:
     score = _observation_score(notebook_path, metadata.system_label)
+    drifter_score = _drifter_score(notebook_path, metadata.system_label)
+    drifter_explorer_html = _drifter_explorer_html(notebook_path)
     explorer_html = _class4_explorer_html(notebook_path)
     return f"""
 <section class="validation-intro">
@@ -310,10 +361,22 @@ def render_forecast_validation_page(
   {_score_table(score)}
 </section>
 
+<section class="validation-section">
+  <h2>Drifter trajectory scores</h2>
+  <p>Observed Class IV 15 m drifter tracks are compared with challenger-advected trajectories.</p>
+  {_drifter_score_table(drifter_score)}
+</section>
+
 <section class="validation-section validation-map-section">
   <h2>Observation error maps</h2>
   <p>Errors are shown at Class IV observation locations for each available variable and lead day.</p>
   {explorer_html}
+</section>
+
+<section class="validation-section validation-map-section">
+  <h2>Drifter trajectory divergence</h2>
+  <p>Observed and challenger-advected drifter tracks are animated with per-lead matched counts.</p>
+  {drifter_explorer_html}
 </section>
 
 <section class="validation-method-note">

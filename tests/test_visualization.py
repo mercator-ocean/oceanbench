@@ -389,6 +389,87 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "Reached daily positions" in html_output.data
 
 
+def test_plot_class4_drifter_trajectory_explorer_returns_animated_html(monkeypatch) -> None:
+    from oceanbench.core import visualization as core_visualization
+
+    monkeypatch.setattr(
+        core_visualization,
+        "_class4_drifter_payload",
+        lambda **_: {
+            "title": "Class IV drifter trajectory divergence",
+            "subtitle": "Animated comparison with observed Class IV 15 m drifter tracks.",
+            "challengerName": "Challenger",
+            "particleCount": 2,
+            "matchedCounts": [2, 1],
+            "statusParticleLabel": "matched drifters at this lead",
+            "drawOnlyMatchedPairs": True,
+            "referenceTrailLabel": "Observed drifter trail",
+            "challengerTrailLabel": "Challenger-advected trail",
+            "separationLabel": "Current drifter separation distance",
+            "dailyPositionLabel": "Observed daily positions",
+            "timeLabels": ["1.0", "2.0"],
+            "bounds": {
+                "longitudeMinimum": 9.0,
+                "longitudeMaximum": 15.0,
+                "latitudeMinimum": -2.0,
+                "latitudeMaximum": 2.0,
+            },
+            "modelMask": {
+                "image": "data:image/png;base64,",
+                "extent": {
+                    "longitudeMinimum": 9.0,
+                    "longitudeMaximum": 15.0,
+                    "latitudeMinimum": -2.0,
+                    "latitudeMaximum": 2.0,
+                },
+                "width": 2,
+                "height": 2,
+            },
+            "separationScaleKilometers": 10.0,
+            "challenger": {
+                "longitude": [[10.0, 11.0], [12.0, 13.0]],
+                "latitude": [[0.0, 0.5], [1.0, 1.5]],
+                "initialLongitude": [10.0, 12.0],
+                "initialLatitude": [0.0, 1.0],
+            },
+            "references": [
+                {
+                    "key": "class4_drifters",
+                    "label": "Class IV drifter observations",
+                    "track": {
+                        "longitude": [[10.0, 10.5], [12.0, 12.5]],
+                        "latitude": [[0.0, 0.2], [1.0, 1.2]],
+                        "initialLongitude": [10.0, 12.0],
+                        "initialLatitude": [0.0, 1.0],
+                    },
+                }
+            ],
+        },
+    )
+
+    html_output = oceanbench.visualization.plot_class4_drifter_trajectory_explorer(
+        xarray.Dataset(),
+        xarray.Dataset(),
+        height_pixels=515,
+    )
+
+    assert "<iframe" in html_output.data
+    assert "height:515px" in html_output.data
+    assert "Class IV drifter trajectory divergence" in html_output.data
+    assert "observed Class IV 15 m drifter tracks" in html_output.data
+    assert "Class IV drifter observations" in html_output.data
+    assert "matchedCounts" in html_output.data
+    assert "matchedCountLabel" in html_output.data
+    assert "matched drifters at this lead" in html_output.data
+    assert "drawOnlyMatchedPairs" in html_output.data
+    assert "Observed drifter trail" in html_output.data
+    assert "Challenger-advected trail" in html_output.data
+    assert "Current drifter separation distance" in html_output.data
+    assert "Observed daily positions" in html_output.data
+    assert "requestAnimationFrame" in html_output.data
+    assert "ob-lagrangian-zoom" in html_output.data
+
+
 def test_model_mask_payload_uses_model_derived_raster_image() -> None:
     from oceanbench.core import visualization as core_visualization
 
@@ -816,6 +897,8 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert "evaluation_report.glo12_lagrangian_trajectory_deviation" in all_sources
     assert "evaluation_report.class4_observation.rmsd" in all_sources
     assert "evaluation_report.class4_observation_error_explorer" in all_sources
+    assert "evaluation_report.class4_drifter_trajectory_deviation" in all_sources
+    assert "evaluation_report.class4_drifter_trajectory_explorer" in all_sources
     assert "evaluation_report.lagrangian_trajectory_explorer" in all_sources
     assert "evaluation_report.eddy_matching_explorer" in all_sources
     assert "evaluation_report.forecast_comparison_explorer" in all_sources
@@ -830,7 +913,13 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert all_sources.index("evaluation_report.glo12_geostrophic_current_rmsd") < all_sources.index(
         "evaluation_report.dynamic_diagnostic_explorer"
     )
+    assert all_sources.index("evaluation_report.class4_drifter_trajectory_deviation") < all_sources.index(
+        "evaluation_report.class4_observation_error_explorer"
+    )
     assert all_sources.index("evaluation_report.class4_observation_error_explorer") < all_sources.index(
+        "evaluation_report.class4_drifter_trajectory_explorer"
+    )
+    assert all_sources.index("evaluation_report.class4_drifter_trajectory_explorer") < all_sources.index(
         "evaluation_report.glorys_lagrangian_trajectory_deviation"
     )
     assert all_sources.index("evaluation_report.lagrangian_trajectory_explorer") < all_sources.index(

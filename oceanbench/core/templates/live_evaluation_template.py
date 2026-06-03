@@ -56,6 +56,14 @@ evaluation_report = prepare_live_evaluation_report(
 
 evaluation_report.class4_observation.rmsd
 
+# #### Deviation of Lagrangian trajectories compared to recent Class IV drifter observations
+
+evaluation_report.class4_drifter_trajectory_deviation
+
 # #### Class IV observation error explorer
 
 evaluation_report.class4_observation_error_explorer
+
+# #### Class IV drifter trajectory explorer
+
+evaluation_report.class4_drifter_trajectory_explorer

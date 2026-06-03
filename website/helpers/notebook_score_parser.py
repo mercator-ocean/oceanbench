@@ -11,6 +11,7 @@ import requests
 from helpers.type import ModelScore
 
 _VARIABLE_LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]+)\) \[([^\]]*)\](?:\{([^}]+)\})?$")
+_VARIABLE_LABEL_WITH_UNIT_PATTERN = re.compile(r"^(.*?) \(([^)]+)\)(?:\{([^}]+)\})?$")
 _LEAD_DAY_NUMBER_PATTERN = re.compile(r"(\d+)$")
 _DISPLAY_NAME_RENAMES = {
     "height": "sea surface height",
@@ -26,6 +27,9 @@ def _parse_variable_label(label: str) -> tuple[str, str, str, str]:
     match = _VARIABLE_LABEL_PATTERN.match(label)
     if match:
         return match.group(1), match.group(2), match.group(3), match.group(4) or ""
+    match = _VARIABLE_LABEL_WITH_UNIT_PATTERN.match(label)
+    if match:
+        return match.group(1), match.group(2), "", match.group(3) or ""
     return label, "", "unknown", ""
 
 
@@ -62,12 +66,18 @@ _REFERENCES = [
 ]
 
 _OBSERVATIONS_METRIC_KEY = "rmsd_variables_observations"
+_DRIFTER_OBSERVATIONS_METRIC_KEY = "drifter_trajectory_observations"
 
 _LEGACY_METRIC_PATTERNS = {
     f"{metric['key']}_{reference['suffix']}": f"oceanbench.metrics.{metric['function']}_{reference['function_suffix']}"
     for metric in _METRICS
     for reference in _REFERENCES
-} | {_OBSERVATIONS_METRIC_KEY: "oceanbench.metrics.rmsd_of_variables_compared_to_observations"}
+} | {
+    _OBSERVATIONS_METRIC_KEY: "oceanbench.metrics.rmsd_of_variables_compared_to_observations",
+    _DRIFTER_OBSERVATIONS_METRIC_KEY: (
+        "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_class4_observations"
+    ),
+}
 
 _REPORT_CONTEXT_METRIC_PATTERNS = {
     "rmsd_variables_glorys": "evaluation_report.glorys_variable_rmsd",
@@ -79,6 +89,7 @@ _REPORT_CONTEXT_METRIC_PATTERNS = {
     "rmsd_geostrophic_glo12": "evaluation_report.glo12_geostrophic_current_rmsd",
     "lagrangian_glo12": "evaluation_report.glo12_lagrangian_trajectory_deviation",
     _OBSERVATIONS_METRIC_KEY: "evaluation_report.class4_observation.rmsd",
+    _DRIFTER_OBSERVATIONS_METRIC_KEY: "evaluation_report.class4_drifter_trajectory_deviation",
 }
 
 _METRIC_PATTERNS = {
@@ -99,7 +110,10 @@ _DEPTH_VARIABLE_METRICS = {
 
 METRIC_TITLES = {
     f"{metric['key']}_{reference['suffix']}": metric["title"] for metric in _METRICS for reference in _REFERENCES
-} | {_OBSERVATIONS_METRIC_KEY: "Forecasted variables"}
+} | {
+    _OBSERVATIONS_METRIC_KEY: "Forecasted variables",
+    _DRIFTER_OBSERVATIONS_METRIC_KEY: "Drifter trajectory deviation",
+}
 
 SECTIONS = {
     reference["key"]: {
@@ -110,7 +124,7 @@ SECTIONS = {
 } | {
     "observations": {
         "depth_metric": _OBSERVATIONS_METRIC_KEY,
-        "flat_metrics": [],
+        "flat_metrics": [_DRIFTER_OBSERVATIONS_METRIC_KEY],
         "depth_groups": [
             {"depths": ["0-5m", "5-100m", "100-300m", "300-600m"], "variables": ["temperature", "salinity"]},
             {"depths": ["Surface"], "variables": ["temperature", "sea level anomaly"], "show_depth_label": True},

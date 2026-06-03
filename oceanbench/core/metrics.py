@@ -5,6 +5,10 @@
 import pandas
 import xarray
 
+from oceanbench.core.class4_drifters import (
+    Class4DrifterTrajectoryUnavailableError,
+    deviation_of_lagrangian_trajectories_compared_to_class4_observations as class4_drifter_trajectory_deviation,
+)
 from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
@@ -54,6 +58,21 @@ def rmsd_of_variables_compared_to_observations(
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
     )
+
+
+def deviation_of_lagrangian_trajectories_compared_to_class4_observations(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = GLOBAL_REGION_NAME,
+) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
+    try:
+        observation_dataset = subset_dataset_to_region(observations(challenger_dataset), region)
+        return class4_drifter_trajectory_deviation(
+            challenger_dataset=challenger_dataset,
+            observation_dataset=observation_dataset,
+        )
+    except (Class4DrifterTrajectoryUnavailableError, ObservationDataUnavailableError) as error:
+        return pandas.DataFrame({"Message": [str(error)]})
 
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(

@@ -48,9 +48,17 @@ evaluation_report.glorys_geostrophic_current_rmsd
 
 evaluation_report.class4_observation.rmsd
 
+# #### Deviation of Lagrangian trajectories compared to Class IV drifter observations
+
+evaluation_report.class4_drifter_trajectory_deviation
+
 # #### Class IV observation error explorer
 
 evaluation_report.class4_observation_error_explorer
+
+# #### Class IV drifter trajectory explorer
+
+evaluation_report.class4_drifter_trajectory_explorer
 
 # #### Deviation of Lagrangian trajectories compared to GLORYS reanalysis
 

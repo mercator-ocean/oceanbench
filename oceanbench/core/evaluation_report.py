@@ -12,6 +12,10 @@ from dask.array.core import PerformanceWarning
 from IPython.display import HTML
 
 from oceanbench.core import visualization
+from oceanbench.core.class4_drifters import (
+    Class4DrifterTrajectoryUnavailableError,
+    deviation_of_lagrangian_trajectories_compared_to_class4_observations,
+)
 from oceanbench.core.classIV import class4_validation_dataframe, rmsd_class4_validation_dataframe
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
@@ -234,6 +238,31 @@ class EvaluationReportContext:
         )
 
     @cached_property
+    def class4_drifter_trajectory_deviation(self) -> pandas.DataFrame:
+        if self.class4_observation.dataset is None:
+            return self.class4_observation.rmsd
+        try:
+            return deviation_of_lagrangian_trajectories_compared_to_class4_observations(
+                challenger_dataset=self.regional_challenger_dataset,
+                observation_dataset=self.class4_observation.dataset,
+            )
+        except Class4DrifterTrajectoryUnavailableError as error:
+            return pandas.DataFrame({"Message": [str(error)]})
+
+    @cached_property
+    def class4_drifter_trajectory_explorer(self) -> HTML | None:
+        if self.class4_observation.dataset is None:
+            return None
+        try:
+            return visualization.plot_class4_drifter_trajectory_explorer(
+                challenger_dataset=self.regional_challenger_dataset,
+                observation_dataset=self.class4_observation.dataset,
+                title="Class IV drifter trajectory divergence",
+            )
+        except Class4DrifterTrajectoryUnavailableError:
+            return None
+
+    @cached_property
     def lagrangian_trajectory_explorer(self) -> HTML:
         return visualization.plot_multi_reference_lagrangian_trajectory_explorer(
             self.regional_challenger_dataset,
@@ -354,9 +383,34 @@ class LiveEvaluationReportContext:
             challenger_dataset=self.regional_challenger_dataset,
             observation_dataset=self.class4_observation.dataset,
             variables=FORECAST_COMPARISON_VARIABLES,
-            title="Live Class IV observation error maps",
+            title="Class IV observation error maps",
             comparison_dataframe=self.class4_observation.comparison_dataframe,
         )
+
+    @cached_property
+    def class4_drifter_trajectory_deviation(self) -> pandas.DataFrame:
+        if self.class4_observation.dataset is None:
+            return self.class4_observation.rmsd
+        try:
+            return deviation_of_lagrangian_trajectories_compared_to_class4_observations(
+                challenger_dataset=self.regional_challenger_dataset,
+                observation_dataset=self.class4_observation.dataset,
+            )
+        except Class4DrifterTrajectoryUnavailableError as error:
+            return pandas.DataFrame({"Message": [str(error)]})
+
+    @cached_property
+    def class4_drifter_trajectory_explorer(self) -> HTML | None:
+        if self.class4_observation.dataset is None:
+            return None
+        try:
+            return visualization.plot_class4_drifter_trajectory_explorer(
+                challenger_dataset=self.regional_challenger_dataset,
+                observation_dataset=self.class4_observation.dataset,
+                title="Class IV drifter trajectory divergence",
+            )
+        except Class4DrifterTrajectoryUnavailableError:
+            return None
 
 
 def prepare_live_evaluation_report(

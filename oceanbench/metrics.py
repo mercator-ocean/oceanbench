@@ -40,6 +40,32 @@ def rmsd_of_variables_compared_to_observations(
     )
 
 
+def deviation_of_lagrangian_trajectories_compared_to_class4_observations(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = "global",
+) -> DataFrame:
+    """
+    Compute the deviation of Lagrangian trajectories compared to Class IV drifter observations.
+
+    Parameters
+    ----------
+    challenger_dataset : xarray.Dataset
+        The challenger dataset.
+    region : str, optional
+        The OceanBench region to evaluate on.
+
+    Returns
+    -------
+    DataFrame
+        The DataFrame containing the scores.
+    """
+
+    return metrics.deviation_of_lagrangian_trajectories_compared_to_class4_observations(
+        challenger_dataset=challenger_dataset,
+        region=region,
+    )
+
+
 def rmsd_of_variables_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = "global",

@@ -114,6 +114,14 @@ def test_generate_live_evaluation_notebook_excludes_glorys(tmp_path: Path) -> No
     assert "prepare_live_evaluation_report" in all_sources
     assert "evaluation_report.class4_observation.rmsd" in all_sources
     assert "evaluation_report.class4_observation_error_explorer" in all_sources
+    assert "evaluation_report.class4_drifter_trajectory_deviation" in all_sources
+    assert "evaluation_report.class4_drifter_trajectory_explorer" in all_sources
+    assert all_sources.index("evaluation_report.class4_drifter_trajectory_deviation") < all_sources.index(
+        "evaluation_report.class4_observation_error_explorer"
+    )
+    assert all_sources.index("evaluation_report.class4_observation_error_explorer") < all_sources.index(
+        "evaluation_report.class4_drifter_trajectory_explorer"
+    )
     assert "Live evaluation" not in all_sources
     assert "glo12" not in all_sources.lower()
     assert "glorys" not in all_sources.lower()

@@ -22,6 +22,7 @@ import pandas
 from skimage.measure import approximate_polygon
 import xarray
 
+from oceanbench.core import class4_drifters
 from oceanbench.core import classIV
 from oceanbench.core import eddies
 from oceanbench.core import lagrangian_trajectory
@@ -2131,6 +2132,18 @@ def _lagrangian_payload(
 
 def _lagrangian_explorer_document(element_id: str, payload: dict[str, object]) -> str:
     payload_json = json.dumps(payload, separators=(",", ":"))
+    subtitle = html.escape(
+        str(
+            payload.get(
+                "subtitle",
+                "Smooth visual interpolation between true daily particle positions; particles are sampled for display.",
+            )
+        )
+    )
+    reference_trail_label = html.escape(str(payload.get("referenceTrailLabel", "Reference trail")))
+    challenger_trail_label = html.escape(str(payload.get("challengerTrailLabel", "Challenger trail")))
+    separation_label = html.escape(str(payload.get("separationLabel", "Current separation distance")))
+    daily_position_label = html.escape(str(payload.get("dailyPositionLabel", "Reached daily positions")))
     return f"""<!doctype html>
 <html>
 <head>
@@ -2298,9 +2311,7 @@ html, body {{
   <div class="ob-lagrangian-header">
     <div>
       <div class="ob-lagrangian-title"></div>
-      <div class="ob-lagrangian-subtitle">
-        Smooth visual interpolation between true daily particle positions; particles are sampled for display.
-      </div>
+      <div class="ob-lagrangian-subtitle">{subtitle}</div>
     </div>
     <div class="ob-lagrangian-controls">
       <div class="ob-lagrangian-control-row">
@@ -2322,10 +2333,10 @@ html, body {{
   <div class="ob-lagrangian-status">
     <div class="ob-lagrangian-status-text"></div>
     <div class="ob-lagrangian-legend">
-      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch ref"></span>Reference trail</span>
-      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch chal"></span>Challenger trail</span>
-      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch sep"></span>Current separation distance</span>
-      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch truth"></span>Reached daily positions</span>
+      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch ref"></span>{reference_trail_label}</span>
+      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch chal"></span>{challenger_trail_label}</span>
+      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch sep"></span>{separation_label}</span>
+      <span class="ob-lagrangian-key"><span class="ob-lagrangian-swatch truth"></span>{daily_position_label}</span>
     </div>
   </div>
 </div>
@@ -2428,11 +2439,19 @@ html, body {{
     }}
   }}
 
+  function matchedCountLabel() {{
+    if (!payload.matchedCounts) {{
+      return `${{payload.particleCount}} ${{payload.statusParticleLabel || "sampled particles"}}`;
+    }}
+    const leadIndex = Math.max(0, Math.min(payload.matchedCounts.length - 1, Math.floor(activeTime)));
+    return `${{payload.matchedCounts[leadIndex]}} ${{payload.statusParticleLabel || "matched particles"}}`;
+  }}
+
   function renderStatus() {{
     timeLabel.textContent = `Lead day ${{(activeTime + 1).toFixed(1)}}`;
     statusText.textContent = [
       references[activeReferenceKey].label,
-      `${{payload.particleCount}} sampled particles`,
+      matchedCountLabel(),
       "interpolated display",
     ].join(" - ");
   }}
@@ -2556,6 +2575,9 @@ html, body {{
       for (let timeIndex = 0; timeIndex <= lastReachedIndex; timeIndex += 1) {{
         const referencePoint = point(referenceTrack, particleIndex, timeIndex);
         const challengerPoint = point(challengerTrack, particleIndex, timeIndex);
+        if (payload.drawOnlyMatchedPairs && (referencePoint === null || challengerPoint === null)) {{
+          continue;
+        }}
         context.fillStyle = "rgba(255, 255, 255, 0.62)";
         if (referencePoint !== null) {{
           context.strokeStyle = "rgba(100, 116, 139, 0.42)";
@@ -2669,6 +2691,57 @@ html, body {{
 </script>
 </body>
 </html>"""
+
+
+def _class4_drifter_payload(
+    challenger_dataset: xarray.Dataset,
+    observation_dataset: xarray.Dataset,
+    first_day_index: int,
+    challenger_name: str,
+    title: str,
+) -> dict[str, object]:
+    challenger_particles, reference_particles = class4_drifters.class4_drifter_trajectory_comparison(
+        challenger_dataset=challenger_dataset,
+        observation_dataset=observation_dataset,
+        first_day_index=first_day_index,
+    )
+    time_count = min(challenger_particles.sizes["time"], reference_particles.sizes["time"])
+    particle_distances = class4_drifters.class4_drifter_trajectory_distance_km(
+        challenger_particles=challenger_particles.isel(time=slice(0, time_count)),
+        reference_particles=reference_particles.isel(time=slice(0, time_count)),
+    )
+    reference_particles_by_key = {"class4_drifters": reference_particles}
+    return {
+        "title": title,
+        "subtitle": (
+            "Animated comparison between challenger-advected drifters and reconstructed observed Class IV "
+            "15 m drifter tracks."
+        ),
+        "challengerName": challenger_name,
+        "particleCount": int(challenger_particles.sizes["particle"]),
+        "matchedCounts": numpy.sum(numpy.isfinite(particle_distances), axis=0).astype(int).tolist(),
+        "statusParticleLabel": "matched drifters at this lead",
+        "drawOnlyMatchedPairs": True,
+        "referenceTrailLabel": "Observed drifter trail",
+        "challengerTrailLabel": "Challenger-advected trail",
+        "separationLabel": "Current drifter separation distance",
+        "dailyPositionLabel": "Observed daily positions",
+        "timeLabels": [f"{index + 1:.1f}" for index in range(time_count)],
+        "bounds": _lagrangian_bounds(challenger_dataset),
+        "modelMask": _model_mask_payload(challenger_dataset, first_day_index),
+        "separationScaleKilometers": _lagrangian_separation_scale_kilometers(
+            challenger_particles,
+            reference_particles_by_key,
+        ),
+        "challenger": _particle_track_payload(challenger_particles, time_count=time_count),
+        "references": [
+            {
+                "key": "class4_drifters",
+                "label": "Class IV drifter observations",
+                "track": _particle_track_payload(reference_particles, time_count=time_count),
+            }
+        ],
+    }
 
 
 def _simplified_contour_payload(
@@ -5304,6 +5377,26 @@ def plot_multi_reference_lagrangian_trajectory_explorer(
         title=title,
     )
     element_id = f"ob-lagrangian-{uuid4().hex}"
+    document = _lagrangian_explorer_document(element_id, payload)
+    return _html_without_iframe_warning(_explorer_iframe_html(document, height_pixels=height_pixels))
+
+
+def plot_class4_drifter_trajectory_explorer(
+    challenger_dataset: xarray.Dataset,
+    observation_dataset: xarray.Dataset,
+    first_day_index: int = 0,
+    challenger_name: str = "Challenger",
+    height_pixels: int = DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Class IV drifter trajectory divergence",
+) -> HTML:
+    payload = _class4_drifter_payload(
+        challenger_dataset=challenger_dataset,
+        observation_dataset=observation_dataset,
+        first_day_index=first_day_index,
+        challenger_name=challenger_name,
+        title=title,
+    )
+    element_id = f"ob-class4-drifters-{uuid4().hex}"
     document = _lagrangian_explorer_document(element_id, payload)
     return _html_without_iframe_warning(_explorer_iframe_html(document, height_pixels=height_pixels))
 

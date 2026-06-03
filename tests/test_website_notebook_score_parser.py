@@ -88,6 +88,15 @@ def _write_notebook(notebook_path: Path) -> None:
                     ]
                 ),
             ),
+            _metric_cell(
+                "oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_class4_observations",
+                _score_table(
+                    [
+                        ("Class-4 drifter trajectory deviation mean (km)", 3.1, 3.2),
+                        ("Class-4 matched drifter count", 4.0, 5.0),
+                    ]
+                ),
+            ),
         ]
     }
     notebook_path.write_text(json.dumps(notebook), encoding="utf-8")
@@ -105,6 +114,7 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
         "rmsd_mld_glorys",
         "rmsd_geostrophic_glorys",
         "lagrangian_glorys",
+        "drifter_trajectory_observations",
     }
 
     observation_score = scores["rmsd_variables_observations"]
@@ -122,6 +132,12 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
     lagrangian_variable = lagrangian_score.depths["flat"].variables["lagrangian trajectory deviation"]
     assert lagrangian_variable.standard_name == ""
     assert lagrangian_variable.data == {"1": 2.1, "2": 2.2}
+
+    drifter_score = scores["drifter_trajectory_observations"]
+    drifter_variable = drifter_score.depths["flat"].variables["class-4 drifter trajectory deviation mean"]
+    assert drifter_variable.unit == "km"
+    assert drifter_variable.data == {"1": 3.1, "2": 3.2}
+    assert drifter_score.depths["flat"].variables["class-4 matched drifter count"].data == {"1": 4.0, "2": 5.0}
 
 
 def test_parser_extracts_scores_from_report_context_cells(tmp_path):
@@ -144,6 +160,14 @@ def test_parser_extracts_scores_from_report_context_cells(tmp_path):
                     ]
                 ),
             ),
+            _report_context_metric_cell(
+                "evaluation_report.class4_drifter_trajectory_deviation",
+                _score_table(
+                    [
+                        ("Class-4 drifter trajectory deviation mean (km)", 3.1, 3.2),
+                    ]
+                ),
+            ),
         ]
     }
     notebook_path.write_text(json.dumps(notebook), encoding="utf-8")
@@ -155,3 +179,6 @@ def test_parser_extracts_scores_from_report_context_cells(tmp_path):
         "1": 0.5,
         "2": 0.6,
     }
+    assert scores["drifter_trajectory_observations"].depths["flat"].variables[
+        "class-4 drifter trajectory deviation mean"
+    ].data == {"1": 3.1, "2": 3.2}

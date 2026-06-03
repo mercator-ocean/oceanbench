@@ -211,6 +211,28 @@ def plot_class4_observation_error_explorer(
     )
 
 
+def plot_class4_drifter_trajectory_explorer(
+    challenger_dataset: xarray.Dataset,
+    observation_dataset: xarray.Dataset,
+    first_day_index: int = 0,
+    challenger_name: str = "Challenger",
+    height_pixels: int = visualization.DEFAULT_EXPLORER_HEIGHT_PIXELS,
+    title: str = "Class IV drifter trajectory divergence",
+):
+    """
+    Display an animated browser-side explorer for observed Class IV drifter trajectory divergence.
+    """
+
+    return visualization.plot_class4_drifter_trajectory_explorer(
+        challenger_dataset=challenger_dataset,
+        observation_dataset=observation_dataset,
+        first_day_index=first_day_index,
+        challenger_name=challenger_name,
+        height_pixels=height_pixels,
+        title=title,
+    )
+
+
 def plot_multi_reference_eddy_matching_explorer(
     challenger_dataset: xarray.Dataset,
     reference_datasets: Mapping[str, xarray.Dataset],
@@ -236,6 +258,7 @@ def plot_multi_reference_eddy_matching_explorer(
 
 
 __all__ = [
+    "plot_class4_drifter_trajectory_explorer",
     "plot_class4_observation_error_explorer",
     "plot_multi_reference_eddy_matching_explorer",
     "plot_multi_reference_lagrangian_trajectory_explorer",

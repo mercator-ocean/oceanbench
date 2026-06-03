@@ -137,8 +137,55 @@ def test_evaluation_report_handles_unavailable_class4_observations(monkeypatch) 
 
     assert report.class4_observation.rmsd.to_dict(orient="list") == {"Message": ["Class IV unavailable"]}
     assert report.class4_observation_error_explorer is None
+    assert report.class4_drifter_trajectory_deviation.to_dict(orient="list") == {"Message": ["Class IV unavailable"]}
+    assert report.class4_drifter_trajectory_explorer is None
     assert report.class4_observation.rmsd.to_dict(orient="list") == {"Message": ["Class IV unavailable"]}
     assert calls == {"observations": 1}
+
+
+def test_evaluation_report_exposes_class4_drifter_score_and_widget(monkeypatch) -> None:
+    observation_dataset = xarray.Dataset()
+    captured = {}
+
+    monkeypatch.setattr(evaluation_report, "observations", lambda _: observation_dataset)
+    monkeypatch.setattr(
+        evaluation_report,
+        "class4_validation_dataframe",
+        lambda **_: pandas.DataFrame({"variable": ["sea_surface_height_above_geoid"]}),
+    )
+    monkeypatch.setattr(
+        evaluation_report,
+        "rmsd_class4_validation_dataframe",
+        lambda *_args, **_kwargs: pandas.DataFrame({"Lead day 1": [0.0]}),
+    )
+
+    def drifter_score(challenger_dataset, observation_dataset):
+        captured["score_dataset"] = challenger_dataset
+        captured["score_observations"] = observation_dataset
+        return pandas.DataFrame({"Lead day 1": [1.0]}, index=["Class-4 drifter trajectory deviation mean (km)"])
+
+    def drifter_widget(challenger_dataset, observation_dataset, title):
+        captured["widget_dataset"] = challenger_dataset
+        captured["widget_observations"] = observation_dataset
+        captured["title"] = title
+        return "drifter-widget"
+
+    monkeypatch.setattr(
+        evaluation_report,
+        "deviation_of_lagrangian_trajectories_compared_to_class4_observations",
+        drifter_score,
+    )
+    monkeypatch.setattr(evaluation_report.visualization, "plot_class4_drifter_trajectory_explorer", drifter_widget)
+
+    report = evaluation_report.prepare_evaluation_report(_dataset())
+
+    assert report.class4_drifter_trajectory_deviation.iloc[0, 0] == 1.0
+    assert report.class4_drifter_trajectory_explorer == "drifter-widget"
+    assert captured["score_dataset"] is report.regional_challenger_dataset
+    assert captured["score_observations"] is observation_dataset
+    assert captured["widget_dataset"] is report.regional_challenger_dataset
+    assert captured["widget_observations"] is observation_dataset
+    assert captured["title"] == "Class IV drifter trajectory divergence"
 
 
 def test_evaluation_report_lagrangian_widget_uses_display_particle_count(monkeypatch) -> None:
