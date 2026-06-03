@@ -235,9 +235,7 @@ def _s3_forecast_store_from_url(forecast_url: str) -> tuple[str, str, str | None
     if parsed_url.scheme in {"http", "https"}:
         path_parts = unquote(parsed_url.path).strip("/").split("/", 1)
         if len(path_parts) != 2:
-            raise ValueError(
-                f"Cannot derive S3 bucket and prefix from {forecast_url!r}."
-            )
+            raise ValueError(f"Cannot derive S3 bucket and prefix from {forecast_url!r}.")
         endpoint_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
         return path_parts[0], path_parts[1], endpoint_url
     raise ValueError(f"Unsupported remote forecast URL scheme: {forecast_url!r}.")
@@ -285,11 +283,7 @@ def delete_forecast_zarr_store(forecast_url: str) -> str:
         forecast_path = Path(unquote(urlparse(forecast_url).path))
         existed = forecast_path.exists()
         shutil.rmtree(forecast_path, ignore_errors=True)
-        return (
-            "Deleted local forecast Zarr"
-            if existed
-            else "Forecast Zarr already absent"
-        )
+        return "Deleted local forecast Zarr" if existed else "Forecast Zarr already absent"
     if (
         not forecast_url.startswith("http://")
         and not forecast_url.startswith("https://")
@@ -298,11 +292,7 @@ def delete_forecast_zarr_store(forecast_url: str) -> str:
         forecast_path = Path(forecast_url)
         existed = forecast_path.exists()
         shutil.rmtree(forecast_path, ignore_errors=True)
-        return (
-            "Deleted local forecast Zarr"
-            if existed
-            else "Forecast Zarr already absent"
-        )
+        return "Deleted local forecast Zarr" if existed else "Forecast Zarr already absent"
     bucket_name, prefix, endpoint_url = _s3_forecast_store_from_url(forecast_url)
     deleted_objects_count = _delete_s3_prefix(bucket_name, prefix, endpoint_url)
     return f"Deleted {deleted_objects_count} forecast Zarr objects"
@@ -420,6 +410,7 @@ def validate_nrt_forecast(
     octo_python: str | None = None,
     octo_forecast_output_prefix: str | None = None,
     skip_forecast_generation: bool = False,
+    forecast_temporary: bool = False,
     forecast_ready_timeout_seconds: int = DEFAULT_FORECAST_READY_TIMEOUT_SECONDS,
     forecast_ready_poll_seconds: int = DEFAULT_FORECAST_READY_POLL_SECONDS,
     cleanup_forecast_after_success: bool = True,
@@ -450,7 +441,7 @@ def validate_nrt_forecast(
         )
         forecast_url = octo_result.get("forecast_url") or forecast_url
 
-    forecast_temporary = bool(octo_result.get("temporary", bool(octo_result)))
+    resolved_forecast_temporary = bool(octo_result.get("temporary", bool(octo_result)) or forecast_temporary)
     forecast_ready = wait_for_forecast_zarr_success(
         forecast_url,
         timeout_seconds=forecast_ready_timeout_seconds,
@@ -483,12 +474,12 @@ def validate_nrt_forecast(
                     region=region,
                 )
         status = "Complete"
-        if cleanup_forecast_after_success and forecast_temporary:
+        if cleanup_forecast_after_success and resolved_forecast_temporary:
             try:
                 forecast_cleanup_status = delete_forecast_zarr_store(forecast_url)
             except Exception as error:
                 forecast_cleanup_status = f"Cleanup failed: {error}"
-        elif forecast_temporary:
+        elif resolved_forecast_temporary:
             forecast_cleanup_status = "Kept temporary forecast Zarr"
 
     result = NrtValidationResult(
@@ -501,7 +492,7 @@ def validate_nrt_forecast(
         observation_cutoff=observation_cutoff,
         observation_zarr_template=resolved_observation_template,
         forecast_url=forecast_url,
-        forecast_temporary=forecast_temporary,
+        forecast_temporary=resolved_forecast_temporary,
         forecast_cleanup_status=forecast_cleanup_status,
         report_notebook=report_notebook,
         report_url=report_url,
@@ -514,9 +505,7 @@ def validate_nrt_forecast(
         octo_generation_status=octo_result.get("status"),
         octo_pending_reason=octo_result.get("pending_reason"),
         octo_gpu_capacity_available=octo_result.get("gpu_capacity_available"),
-        octo_running_inference_processes=octo_result.get(
-            "running_inference_processes"
-        ),
+        octo_running_inference_processes=octo_result.get("running_inference_processes"),
         note=note,
     )
     manifest_path_or_url = write_nrt_manifest(

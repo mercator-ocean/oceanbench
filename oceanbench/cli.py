@@ -187,6 +187,7 @@ def _run_validate_nrt(args: argparse.Namespace) -> int:
             octo_python=args.octo_python,
             octo_forecast_output_prefix=args.octo_forecast_output_prefix,
             skip_forecast_generation=args.skip_forecast_generation,
+            forecast_temporary=args.forecast_temporary,
             forecast_ready_timeout_seconds=args.forecast_ready_timeout_seconds,
             forecast_ready_poll_seconds=args.forecast_ready_poll_seconds,
             cleanup_forecast_after_success=not args.keep_nrt_forecast,
@@ -347,6 +348,14 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--skip-forecast-generation",
         action="store_true",
         help="Do not call Octo; only wait for and evaluate the forecast URL derived from --forecast-zarr-template.",
+    )
+    validate_nrt_parser.add_argument(
+        "--forecast-temporary",
+        action="store_true",
+        help=(
+            "Mark the forecast Zarr as temporary and delete it after a successful "
+            "evaluation unless --keep-nrt-forecast is used."
+        ),
     )
     validate_nrt_parser.add_argument(
         "--keep-nrt-forecast",

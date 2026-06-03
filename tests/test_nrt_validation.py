@@ -143,6 +143,53 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
     assert cleanup_calls == [str(forecast_path)]
 
 
+def test_validate_nrt_forecast_can_clean_external_temporary_forecast(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    cleanup_calls = []
+    manifest_path = tmp_path / "manifest.json"
+    forecast_template = str(tmp_path / "external-{date}.zarr")
+
+    monkeypatch.setattr(
+        nrt_validation,
+        "latest_complete_class4_observation_day",
+        lambda *_, **__: "2026-05-23",
+    )
+    monkeypatch.setattr(
+        nrt_validation,
+        "request_octo_forecast_generation",
+        lambda **_: (_ for _ in ()).throw(AssertionError("Octo should not be called")),
+    )
+    monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_validation, "evaluate_live_challenger", lambda **_: None)
+    monkeypatch.setattr(
+        nrt_validation,
+        "delete_forecast_zarr_store",
+        lambda forecast_url: cleanup_calls.append(forecast_url) or "Deleted temporary forecast",
+    )
+
+    result, _ = nrt_validation.validate_nrt_forecast(
+        forecast_zarr_template=forecast_template,
+        skip_forecast_generation=True,
+        forecast_temporary=True,
+        forecast_ready_timeout_seconds=0,
+        forecast_ready_poll_seconds=1,
+        manifest_path=str(manifest_path),
+    )
+
+    forecast_url = str(tmp_path / "external-2026-05-13.zarr")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    evaluation = manifest["evaluations"][0]
+
+    assert result.status == "Complete"
+    assert result.forecast_temporary is True
+    assert result.forecast_cleanup_status == "Deleted temporary forecast"
+    assert evaluation["forecast_temporary"] is True
+    assert evaluation["forecast_cleanup_status"] == "Deleted temporary forecast"
+    assert cleanup_calls == [forecast_url]
+
+
 def test_request_octo_forecast_generation_passes_forecast_output_prefix(monkeypatch) -> None:
     commands = []
 
