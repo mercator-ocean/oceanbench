@@ -26,7 +26,8 @@ def _project_version() -> str:
 DEFAULT_REPORTS_VERSION = _project_version()
 S3_BASE_URL = os.environ.get("OCEANBENCH_REPORTS_BASE_URL", "https://minio.dive.edito.eu/project-oceanbench")
 REPORTS_VERSION = os.environ.get("OCEANBENCH_REPORTS_VERSION", DEFAULT_REPORTS_VERSION)
-REPORTS_PREFIX = os.environ.get("OCEANBENCH_REPORTS_PREFIX", f"public/evaluation-reports/{REPORTS_VERSION}/")
+DEFAULT_REPORTS_PREFIX = "dev/evaluation-reports/249-webp-demo/"
+REPORTS_PREFIX = os.environ.get("OCEANBENCH_REPORTS_PREFIX", DEFAULT_REPORTS_PREFIX)
 REPORT_CATALOG_FILE_NAME = "_report_catalog.json"
 REPORT_MANIFEST_FILE_NAME = "manifest.json"
 REPORT_URL_KEYS = ("report_url", "notebook_url", "scores_url")
