@@ -40,7 +40,6 @@ DEFAULT_NRT_SYSTEM_ID = "octo-glonet-p1d"
 DEFAULT_NRT_SYSTEM_LABEL = "GLONET"
 DEFAULT_FORECAST_READY_TIMEOUT_SECONDS = 3600
 DEFAULT_FORECAST_READY_POLL_SECONDS = 60
-DEFAULT_OBSERVATION_LOOKBACK_DAYS = 45
 DEFAULT_MANIFEST_WRITE_RETRIES = 5
 
 REQUIRED_CLASS4_OBSERVATION_KEYS = (
@@ -138,24 +137,6 @@ def class4_observation_day_is_complete(
         return True
     finally:
         dataset.close()
-
-
-def latest_complete_class4_observation_day(
-    zarr_template: str | None = None,
-    search_end_day: str | datetime | numpy.datetime64 | pandas.Timestamp | None = None,
-    max_lookback_days: int = DEFAULT_OBSERVATION_LOOKBACK_DAYS,
-) -> str:
-    if max_lookback_days < 1:
-        raise ValueError("max_lookback_days must be greater than or equal to 1.")
-    end_day = pandas.Timestamp(search_end_day or pandas.Timestamp.utcnow()).normalize()
-    for day_offset in range(max_lookback_days):
-        candidate_day = end_day - pandas.Timedelta(days=day_offset)
-        if class4_observation_day_is_complete(candidate_day, zarr_template):
-            return _day_string(candidate_day)
-    end_day_string = _day_string(end_day)
-    raise RuntimeError(
-        f"No complete Class IV observation day was found within {max_lookback_days} days before {end_day_string}."
-    )
 
 
 def forecast_init_for_observation_cutoff(observation_cutoff: str) -> str:
@@ -528,8 +509,6 @@ def validate_nrt_forecast(
     observation_zarr_template: str | None = None,
     forecast_init: str | None = None,
     observation_cutoff: str | None = None,
-    observation_search_end_day: str | None = None,
-    max_observation_lookback_days: int = DEFAULT_OBSERVATION_LOOKBACK_DAYS,
     octo_script: str | None = None,
     octo_python: str | None = None,
     octo_forecast_output_prefix: str | None = None,
@@ -545,26 +524,18 @@ def validate_nrt_forecast(
     region: RegionLike = None,
 ) -> tuple[NrtValidationResult, str]:
     resolved_observation_template = observation_zarr_template or live_class4_observation_zarr_template()
-    if (forecast_init is None) != (observation_cutoff is None):
-        raise ValueError("--forecast-init and --observation-cutoff must be provided together.")
     if forecast_init is None or observation_cutoff is None:
-        observation_cutoff = latest_complete_class4_observation_day(
-            resolved_observation_template,
-            search_end_day=observation_search_end_day,
-            max_lookback_days=max_observation_lookback_days,
+        raise ValueError("--forecast-init and --observation-cutoff are required.")
+    forecast_init = _day_string(forecast_init)
+    observation_cutoff = _day_string(observation_cutoff)
+    expected_forecast_init = forecast_init_for_observation_cutoff(observation_cutoff)
+    if forecast_init != expected_forecast_init:
+        raise ValueError(
+            f"Forecast init {forecast_init} is not {LEAD_DAYS_COUNT} days before "
+            f"observation cutoff {observation_cutoff}."
         )
-        forecast_init = forecast_init_for_observation_cutoff(observation_cutoff)
-    else:
-        forecast_init = _day_string(forecast_init)
-        observation_cutoff = _day_string(observation_cutoff)
-        expected_forecast_init = forecast_init_for_observation_cutoff(observation_cutoff)
-        if forecast_init != expected_forecast_init:
-            raise ValueError(
-                f"Forecast init {forecast_init} is not {LEAD_DAYS_COUNT} days before "
-                f"observation cutoff {observation_cutoff}."
-            )
-        if not class4_observation_day_is_complete(observation_cutoff, resolved_observation_template):
-            raise RuntimeError(f"Class IV observation day {observation_cutoff} is not complete.")
+    if not class4_observation_day_is_complete(observation_cutoff, resolved_observation_template):
+        raise RuntimeError(f"Class IV observation day {observation_cutoff} is not complete.")
     forecast_url = _format_zarr_template(forecast_init, forecast_zarr_template)
     octo_result: dict = {}
     if not skip_forecast_generation:

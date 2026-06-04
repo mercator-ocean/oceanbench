@@ -183,8 +183,6 @@ def _run_validate_nrt(args: argparse.Namespace) -> int:
             observation_zarr_template=args.observation_zarr_template,
             forecast_init=args.forecast_init,
             observation_cutoff=args.observation_cutoff,
-            observation_search_end_day=args.observation_search_end_day,
-            max_observation_lookback_days=args.max_observation_lookback_days,
             octo_script=args.octo_script,
             octo_python=args.octo_python,
             octo_forecast_output_prefix=args.octo_forecast_output_prefix,
@@ -319,28 +317,16 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     )
     validate_nrt_parser.add_argument(
         "--forecast-init",
-        default=None,
+        required=True,
         help=(
-            "Pinned forecast initial day in YYYY-MM-DD format. Must be provided "
-            "with --observation-cutoff; when set, OceanBench does not search for "
-            "the latest observation day."
+            "Forecast initialization day in YYYY-MM-DD format, resolved from the "
+            "observation availability manifest."
         ),
     )
     validate_nrt_parser.add_argument(
         "--observation-cutoff",
-        default=None,
-        help=("Pinned latest observation day in YYYY-MM-DD format. Must be provided " "with --forecast-init."),
-    )
-    validate_nrt_parser.add_argument(
-        "--observation-search-end-day",
-        default=None,
-        help="Last day to probe for complete observations, in YYYY-MM-DD format. Defaults to today.",
-    )
-    validate_nrt_parser.add_argument(
-        "--max-observation-lookback-days",
-        type=int,
-        default=45,
-        help="Maximum number of days to scan backwards for complete observations.",
+        required=True,
+        help="Complete observation day in YYYY-MM-DD format, resolved from the observation availability manifest.",
     )
     validate_nrt_parser.add_argument(
         "--octo-script",

@@ -31,31 +31,6 @@ def _complete_observation_dataset() -> xarray.Dataset:
     return xarray.Dataset(variables)
 
 
-def test_latest_complete_class4_observation_day_probes_backwards(monkeypatch) -> None:
-    opened_paths = []
-
-    def open_dataset(path, *_, **__):
-        opened_paths.append(path)
-        if "20260522" not in path:
-            raise FileNotFoundError(path)
-        return _complete_observation_dataset()
-
-    monkeypatch.setattr(nrt_validation.xarray, "open_dataset", open_dataset)
-
-    latest_day = nrt_validation.latest_complete_class4_observation_day(
-        "file:///tmp/observations/{compact_date}.zarr",
-        search_end_day="2026-05-23",
-        max_lookback_days=3,
-    )
-
-    assert latest_day == "2026-05-22"
-    assert nrt_validation.forecast_init_for_observation_cutoff(latest_day) == "2026-05-12"
-    assert opened_paths == [
-        "/tmp/observations/20260523.zarr",
-        "/tmp/observations/20260522.zarr",
-    ]
-
-
 def test_class4_observation_day_requires_non_empty_current_values(monkeypatch) -> None:
     dataset = _complete_observation_dataset()
     dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()] = (
@@ -81,11 +56,6 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
     forecast_path = tmp_path / "forecast.zarr"
     observation_template = "file:///tmp/observations/{compact_date}.zarr"
 
-    monkeypatch.setattr(
-        nrt_validation,
-        "latest_complete_class4_observation_day",
-        lambda *_, **__: (_ for _ in ()).throw(AssertionError("Latest observation search should not be called")),
-    )
     monkeypatch.setattr(
         nrt_validation,
         "class4_observation_day_is_complete",
@@ -184,7 +154,7 @@ def test_validate_nrt_forecast_requires_complete_pinned_target_pair() -> None:
             skip_forecast_generation=True,
         )
     except ValueError as error:
-        assert "--forecast-init and --observation-cutoff" in str(error)
+        assert "--forecast-init and --observation-cutoff are required" in str(error)
     else:
         raise AssertionError("Expected one-sided pinned target to fail")
 
@@ -197,11 +167,7 @@ def test_validate_nrt_forecast_can_clean_external_temporary_forecast(
     manifest_path = tmp_path / "manifest.json"
     forecast_template = str(tmp_path / "external-{date}.zarr")
 
-    monkeypatch.setattr(
-        nrt_validation,
-        "latest_complete_class4_observation_day",
-        lambda *_, **__: "2026-05-23",
-    )
+    monkeypatch.setattr(nrt_validation, "class4_observation_day_is_complete", lambda *_, **__: True)
     monkeypatch.setattr(
         nrt_validation,
         "request_octo_forecast_generation",
@@ -217,6 +183,8 @@ def test_validate_nrt_forecast_can_clean_external_temporary_forecast(
 
     result, _ = nrt_validation.validate_nrt_forecast(
         forecast_zarr_template=forecast_template,
+        forecast_init="2026-05-13",
+        observation_cutoff="2026-05-23",
         skip_forecast_generation=True,
         forecast_temporary=True,
         forecast_ready_timeout_seconds=0,
