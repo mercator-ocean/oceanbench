@@ -46,7 +46,7 @@ def test_keeps_non_tolerated_diff_entries() -> None:
         {"cell": "Mixed layer depth (m)   23.491991", "other": "Temperature   13.0"},
     )
 
-    filtered_diff = compare_notebook._remove_tolerated_text_float_changes(diff)
+    filtered_diff = compare_notebook._filter_tolerated_text_float_changes(diff)
 
     assert "root['cell']" not in filtered_diff["values_changed"]
     assert "root['other']" in filtered_diff["values_changed"]

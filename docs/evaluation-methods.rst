@@ -62,7 +62,7 @@ Deviation of Lagrangian trajectories compared to GLORYS reanalysis
 
 The deviation in kilometers between the two sets of drifting particles computed over the challenger datasets and the GLORYS reanalysis dataset.
 
-The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)`` area weights, then simulated over the area.
+The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)``-weighted probabilities, then simulated over the area.
 
 Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis
 **********************************************************************************************
@@ -97,4 +97,4 @@ Deviation of Lagrangian trajectories compared to GLO12 analysis
 
 The deviation in kilometers between the two sets of drifting particles computed over the challenger datasets and the GLO12 analysis dataset.
 
-The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)`` area weights, then simulated over the area.
+The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)``-weighted probabilities, then simulated over the area.

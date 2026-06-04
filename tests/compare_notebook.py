@@ -72,7 +72,7 @@ def _strings_differ_only_by_tolerated_float_rounding(first_value: str, second_va
     )
 
 
-def _remove_tolerated_text_float_changes(diff: DeepDiff) -> DeepDiff:
+def _filter_tolerated_text_float_changes(diff: DeepDiff) -> DeepDiff:
     values_changed = diff.get("values_changed", {})
 
     for path, change in list(values_changed.items()):
@@ -102,7 +102,7 @@ def compare_notebook_files(file1_path, file2_path):
             filtered_json_data2 = ignore_ids_and_execution(json_data2)
 
             diff = DeepDiff(filtered_json_data1, filtered_json_data2)
-            diff = _remove_tolerated_text_float_changes(diff)
+            diff = _filter_tolerated_text_float_changes(diff)
 
             if diff:
                 print(diff.to_json(indent=2))
