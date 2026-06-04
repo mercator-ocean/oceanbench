@@ -12,8 +12,6 @@ import os
 from pathlib import Path
 import re
 import shutil
-import subprocess
-import sys
 import tempfile
 import time
 from urllib.parse import unquote, urlparse
@@ -81,12 +79,6 @@ class NrtValidationResult:
     demo: bool
     initial_condition_provenance_validated: bool
     oceanbench_version: str
-    octo_process_package_name: str | None = None
-    octo_process_package_version: str | None = None
-    octo_generation_status: str | None = None
-    octo_pending_reason: str | None = None
-    octo_gpu_capacity_available: bool | None = None
-    octo_running_inference_processes: int | None = None
     note: str | None = None
 
 
@@ -172,43 +164,6 @@ def wait_for_forecast_zarr_success(
         if time.monotonic() >= deadline:
             return False
         time.sleep(min(poll_seconds, max(0.0, deadline - time.monotonic())))
-
-
-def _json_object_from_output(output: str) -> dict:
-    json_start = output.rfind("{")
-    if json_start == -1:
-        return {}
-    try:
-        return json.loads(output[json_start:])
-    except json.JSONDecodeError:
-        return {}
-
-
-def request_octo_forecast_generation(
-    octo_script: str,
-    system_id: str,
-    forecast_init: str,
-    python_executable: str | None = None,
-    forecast_output_prefix: str | None = None,
-) -> dict:
-    command = [
-        python_executable or sys.executable,
-        octo_script,
-        "generate-forecast",
-        "--system-id",
-        system_id,
-        "--forecast-init",
-        forecast_init,
-    ]
-    if forecast_output_prefix:
-        command.extend(["--forecast-output-prefix", forecast_output_prefix])
-    completed_process = subprocess.run(
-        command,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return _json_object_from_output(completed_process.stdout)
 
 
 def _s3_forecast_store_from_url(forecast_url: str) -> tuple[str, str, str | None]:
@@ -509,10 +464,6 @@ def validate_nrt_forecast(
     observation_zarr_template: str | None = None,
     forecast_init: str | None = None,
     observation_cutoff: str | None = None,
-    octo_script: str | None = None,
-    octo_python: str | None = None,
-    octo_forecast_output_prefix: str | None = None,
-    skip_forecast_generation: bool = False,
     forecast_temporary: bool = False,
     forecast_ready_timeout_seconds: int = DEFAULT_FORECAST_READY_TIMEOUT_SECONDS,
     forecast_ready_poll_seconds: int = DEFAULT_FORECAST_READY_POLL_SECONDS,
@@ -537,20 +488,7 @@ def validate_nrt_forecast(
     if not class4_observation_day_is_complete(observation_cutoff, resolved_observation_template):
         raise RuntimeError(f"Class IV observation day {observation_cutoff} is not complete.")
     forecast_url = _format_zarr_template(forecast_init, forecast_zarr_template)
-    octo_result: dict = {}
-    if not skip_forecast_generation:
-        if octo_script is None:
-            raise ValueError("--octo-script is required unless --skip-forecast-generation is used.")
-        octo_result = request_octo_forecast_generation(
-            octo_script=octo_script,
-            system_id=system_id,
-            forecast_init=forecast_init,
-            python_executable=octo_python,
-            forecast_output_prefix=octo_forecast_output_prefix,
-        )
-        forecast_url = octo_result.get("forecast_url") or forecast_url
-
-    resolved_forecast_temporary = bool(octo_result.get("temporary", bool(octo_result)) or forecast_temporary)
+    resolved_forecast_temporary = bool(forecast_temporary)
     forecast_ready = wait_for_forecast_zarr_success(
         forecast_url,
         timeout_seconds=forecast_ready_timeout_seconds,
@@ -609,12 +547,6 @@ def validate_nrt_forecast(
         demo=True,
         initial_condition_provenance_validated=False,
         oceanbench_version=__version__,
-        octo_process_package_name=octo_result.get("process_package_name"),
-        octo_process_package_version=octo_result.get("process_package_version"),
-        octo_generation_status=octo_result.get("status"),
-        octo_pending_reason=octo_result.get("pending_reason"),
-        octo_gpu_capacity_available=octo_result.get("gpu_capacity_available"),
-        octo_running_inference_processes=octo_result.get("running_inference_processes"),
         note=note,
     )
     manifest_path_or_url = write_nrt_manifest(

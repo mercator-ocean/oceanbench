@@ -183,10 +183,6 @@ def _run_validate_nrt(args: argparse.Namespace) -> int:
             observation_zarr_template=args.observation_zarr_template,
             forecast_init=args.forecast_init,
             observation_cutoff=args.observation_cutoff,
-            octo_script=args.octo_script,
-            octo_python=args.octo_python,
-            octo_forecast_output_prefix=args.octo_forecast_output_prefix,
-            skip_forecast_generation=args.skip_forecast_generation,
             forecast_temporary=args.forecast_temporary,
             forecast_ready_timeout_seconds=args.forecast_ready_timeout_seconds,
             forecast_ready_poll_seconds=args.forecast_ready_poll_seconds,
@@ -290,7 +286,7 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     validate_nrt_parser = subparsers.add_parser(
         "validate-nrt",
         help="Validate a near-real-time forecast against recent Class IV observations",
-        description="Probe recent Class IV observations, request an Octo forecast, and run the NRT OceanBench report.",
+        description="Validate an Octo near-real-time forecast against pinned Class IV observations.",
     )
     validate_nrt_parser.add_argument(
         "--system-id",
@@ -327,29 +323,6 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--observation-cutoff",
         required=True,
         help="Complete observation day in YYYY-MM-DD format, resolved from the observation availability manifest.",
-    )
-    validate_nrt_parser.add_argument(
-        "--octo-script",
-        default=None,
-        help="Path to Octo's orchestration_job.py. Required unless --skip-forecast-generation is used.",
-    )
-    validate_nrt_parser.add_argument(
-        "--octo-python",
-        default=None,
-        help="Python executable used to run Octo. Defaults to the current Python executable.",
-    )
-    validate_nrt_parser.add_argument(
-        "--octo-forecast-output-prefix",
-        default=None,
-        help=(
-            "S3 key prefix, without bucket, where Octo should write the temporary "
-            "NRT forecast. Defaults to Octo's dedicated OceanBench NRT prefix."
-        ),
-    )
-    validate_nrt_parser.add_argument(
-        "--skip-forecast-generation",
-        action="store_true",
-        help="Do not call Octo; only wait for and evaluate the forecast URL derived from --forecast-zarr-template.",
     )
     validate_nrt_parser.add_argument(
         "--forecast-temporary",

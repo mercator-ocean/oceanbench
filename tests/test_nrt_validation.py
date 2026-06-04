@@ -61,20 +61,6 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
         "class4_observation_day_is_complete",
         lambda day, template: observation_checks.append((day, template)) or True,
     )
-    monkeypatch.setattr(
-        nrt_validation,
-        "request_octo_forecast_generation",
-        lambda **_: {
-            "forecast_url": str(forecast_path),
-            "status": "ready",
-            "process_package_name": "glonet-inference",
-            "process_package_version": "0.0.7",
-            "pending_reason": None,
-            "gpu_capacity_available": True,
-            "running_inference_processes": 2,
-            "temporary": True,
-        },
-    )
     monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
 
     def evaluate_live_challenger(**kwargs):
@@ -88,11 +74,11 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
     )
 
     result, written_manifest = nrt_validation.validate_nrt_forecast(
-        octo_script="/tmp/octo/orchestration_job.py",
-        octo_forecast_output_prefix="public/octo/v0/oceanbench-nrt-ai-dev",
+        forecast_zarr_template=str(forecast_path),
         observation_zarr_template=observation_template,
         forecast_init="2026-05-13",
         observation_cutoff="2026-05-23",
+        forecast_temporary=True,
         forecast_ready_timeout_seconds=0,
         forecast_ready_poll_seconds=1,
         manifest_path=str(manifest_path),
@@ -109,16 +95,9 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
     assert result.forecast_cleanup_status == "Deleted 42 forecast Zarr objects"
     assert result.demo is True
     assert result.initial_condition_provenance_validated is False
-    assert result.octo_process_package_name == "glonet-inference"
-    assert result.octo_generation_status == "ready"
-    assert result.octo_pending_reason is None
-    assert result.octo_gpu_capacity_available is True
-    assert result.octo_running_inference_processes == 2
     assert evaluation["note"].startswith("Demonstration only")
     assert evaluation["forecast_temporary"] is True
     assert evaluation["forecast_cleanup_status"] == "Deleted 42 forecast Zarr objects"
-    assert evaluation["octo_generation_status"] == "ready"
-    assert evaluation["octo_gpu_capacity_available"] is True
     assert evaluate_calls[0]["output_notebook_file_name"] == "glonet.latest.global.report.ipynb"
     assert cleanup_calls == [str(forecast_path)]
     assert observation_checks == [("2026-05-23", observation_template)]
@@ -139,7 +118,6 @@ def test_validate_nrt_forecast_rejects_inconsistent_pinned_target() -> None:
         nrt_validation.validate_nrt_forecast(
             forecast_init="2026-05-14",
             observation_cutoff="2026-05-23",
-            skip_forecast_generation=True,
         )
     except ValueError as error:
         assert "is not 10 days before" in str(error)
@@ -151,7 +129,6 @@ def test_validate_nrt_forecast_requires_complete_pinned_target_pair() -> None:
     try:
         nrt_validation.validate_nrt_forecast(
             forecast_init="2026-05-13",
-            skip_forecast_generation=True,
         )
     except ValueError as error:
         assert "--forecast-init and --observation-cutoff are required" in str(error)
@@ -168,11 +145,6 @@ def test_validate_nrt_forecast_can_clean_external_temporary_forecast(
     forecast_template = str(tmp_path / "external-{date}.zarr")
 
     monkeypatch.setattr(nrt_validation, "class4_observation_day_is_complete", lambda *_, **__: True)
-    monkeypatch.setattr(
-        nrt_validation,
-        "request_octo_forecast_generation",
-        lambda **_: (_ for _ in ()).throw(AssertionError("Octo should not be called")),
-    )
     monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
     monkeypatch.setattr(nrt_validation, "evaluate_live_challenger", lambda **_: None)
     monkeypatch.setattr(
@@ -185,7 +157,6 @@ def test_validate_nrt_forecast_can_clean_external_temporary_forecast(
         forecast_zarr_template=forecast_template,
         forecast_init="2026-05-13",
         observation_cutoff="2026-05-23",
-        skip_forecast_generation=True,
         forecast_temporary=True,
         forecast_ready_timeout_seconds=0,
         forecast_ready_poll_seconds=1,
@@ -272,38 +243,3 @@ def test_write_nrt_manifest_merges_existing_challenger_rows(tmp_path: Path) -> N
             "status": "Complete",
         },
     ]
-
-
-def test_request_octo_forecast_generation_passes_forecast_output_prefix(monkeypatch) -> None:
-    commands = []
-
-    class CompletedProcess:
-        stdout = '{"forecast_url": "https://example.test/forecast.zarr"}'
-
-    def run(command, **kwargs):
-        commands.append((command, kwargs))
-        return CompletedProcess()
-
-    monkeypatch.setattr(nrt_validation.subprocess, "run", run)
-
-    result = nrt_validation.request_octo_forecast_generation(
-        octo_script="/tmp/octo/orchestration_job.py",
-        system_id="octo-glonet-p1d",
-        forecast_init="2026-05-13",
-        python_executable="/tmp/octo/python",
-        forecast_output_prefix="public/octo/v0/oceanbench-nrt-ai-dev",
-    )
-
-    assert result["forecast_url"] == "https://example.test/forecast.zarr"
-    assert commands[0][0] == [
-        "/tmp/octo/python",
-        "/tmp/octo/orchestration_job.py",
-        "generate-forecast",
-        "--system-id",
-        "octo-glonet-p1d",
-        "--forecast-init",
-        "2026-05-13",
-        "--forecast-output-prefix",
-        "public/octo/v0/oceanbench-nrt-ai-dev",
-    ]
-    assert commands[0][1]["check"] is True
