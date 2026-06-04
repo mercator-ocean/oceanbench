@@ -5,7 +5,11 @@
 import json
 import os
 from pathlib import Path
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 import requests
 
