@@ -310,7 +310,7 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
             "https://minio.dive.edito.eu/project-moiai-octo/public/octo/v0/ai-gallery/"
             "octo-glonet-p1d/{date}/{date}.zarr"
         ),
-        help="Forecast Zarr URL template. Supports {date}, {day}, {yyyymmdd}, and {YYYYMMDD}.",
+        help="Forecast Zarr URL template. Supports {compact_date}, {date}, {day}, {yyyymmdd}, and {YYYYMMDD}.",
     )
     validate_nrt_parser.add_argument(
         "--observation-zarr-template",

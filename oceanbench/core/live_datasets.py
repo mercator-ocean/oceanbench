@@ -14,9 +14,9 @@ from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.remote_http import require_remote_dataset_dimensions, with_remote_http_retries
 
 LIVE_CLASS4_OBSERVATION_ZARR_TEMPLATE = (
-    "https://minio.dive.edito.eu/project-oceanbench/public/observations2026/{day}.zarr"
+    "https://minio.dive.edito.eu/project-oceanbench/public/live_observations/{compact_date}.zarr"
 )
-LIVE_CLASS4_OBSERVATION_LAST_DAY = "2026-05-23"
+LIVE_CLASS4_OBSERVATION_LAST_DAY = "2026-05-30"
 LIVE_GLONET_FORECAST_ZARR_TEMPLATE = (
     "https://minio.dive.edito.eu/project-moiai-octo/public/octo/v0/ai-gallery/" "octo-glonet-p1d/{date}/{date}.zarr"
 )
@@ -52,6 +52,7 @@ def _format_forecast_zarr_template(
     day_string = first_day_datetime.strftime("%Y%m%d")
     date_string = first_day_datetime.strftime("%Y-%m-%d")
     path = zarr_template.format(
+        compact_date=day_string,
         day=day_string,
         date=date_string,
         yyyymmdd=day_string,

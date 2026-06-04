@@ -43,7 +43,7 @@ def test_latest_complete_class4_observation_day_probes_backwards(monkeypatch) ->
     monkeypatch.setattr(nrt_validation.xarray, "open_dataset", open_dataset)
 
     latest_day = nrt_validation.latest_complete_class4_observation_day(
-        "file:///tmp/observations/{day}.zarr",
+        "file:///tmp/observations/{compact_date}.zarr",
         search_end_day="2026-05-23",
         max_lookback_days=3,
     )
@@ -79,7 +79,7 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
     observation_checks = []
     manifest_path = tmp_path / "manifest.json"
     forecast_path = tmp_path / "forecast.zarr"
-    observation_template = "file:///tmp/observations/{day}.zarr"
+    observation_template = "file:///tmp/observations/{compact_date}.zarr"
 
     monkeypatch.setattr(
         nrt_validation,
@@ -152,6 +152,16 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
     assert evaluate_calls[0]["output_notebook_file_name"] == "glonet.latest.global.report.ipynb"
     assert cleanup_calls == [str(forecast_path)]
     assert observation_checks == [("2026-05-23", observation_template)]
+
+
+def test_nrt_zarr_template_supports_compact_date() -> None:
+    assert (
+        nrt_validation._format_zarr_template(
+            "2026-05-23",
+            "https://example.test/observations/{compact_date}.zarr",
+        )
+        == "https://example.test/observations/20260523.zarr"
+    )
 
 
 def test_validate_nrt_forecast_rejects_inconsistent_pinned_target() -> None:

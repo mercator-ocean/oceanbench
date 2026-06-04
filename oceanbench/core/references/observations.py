@@ -115,6 +115,7 @@ def _format_observation_zarr_template(
     date_string = pandas.Timestamp(day_datetime).strftime("%Y-%m-%d")
     template = zarr_template or _configured_observation_zarr_template()
     path = template.format(
+        compact_date=day_string,
         day=day_string,
         date=date_string,
         yyyymmdd=day_string,

@@ -100,6 +100,7 @@ def _format_zarr_template(day: str | datetime | numpy.datetime64 | pandas.Timest
     day_string = timestamp.strftime("%Y%m%d")
     date_string = timestamp.strftime("%Y-%m-%d")
     path = zarr_template.format(
+        compact_date=day_string,
         day=day_string,
         date=date_string,
         yyyymmdd=day_string,

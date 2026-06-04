@@ -88,7 +88,7 @@ def test_observations_stage_path_uses_overlap_safe_version() -> None:
 def test_observation_path_uses_configurable_template_and_file_urls(monkeypatch) -> None:
     monkeypatch.setenv(
         OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_OBSERVATION_ZARR_TEMPLATE.value,
-        "file:///tmp/synthetic_class4/{day}.zarr",
+        "file:///tmp/synthetic_class4/{compact_date}.zarr",
     )
 
     assert observations.observation_path(numpy.datetime64("2026-05-23")) == "/tmp/synthetic_class4/20260523.zarr"
