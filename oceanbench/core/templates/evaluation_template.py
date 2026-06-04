@@ -23,10 +23,17 @@ challenger_dataset: xarray.Dataset = xarray.Dataset()
 # ### Evaluation configuration
 
 region = "global"
+challenger_name = "challenger"
+score_file_path = "challenger.global.scores.json"
+widget_asset_directory = "challenger.global.assets"
+widget_asset_reference_prefix = "challenger.global.assets/"
 
 # ### Evaluation setup
 
 from oceanbench.core.evaluation_report import prepare_evaluation_report
+from oceanbench.core.widget_assets import configure_widget_asset_output
+
+configure_widget_asset_output(widget_asset_directory, widget_asset_reference_prefix)
 
 evaluation_report = prepare_evaluation_report(challenger_dataset, region=region)
 
@@ -106,3 +113,7 @@ evaluation_report.dynamic_diagnostic_explorer
 # > and wavelength-band scale separation.
 
 evaluation_report.zonal_psd_explorer
+
+# ### Score artifact
+
+evaluation_report.write_scores_json(score_file_path, challenger_name)

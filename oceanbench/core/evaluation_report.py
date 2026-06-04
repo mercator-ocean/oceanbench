@@ -4,6 +4,8 @@
 
 from dataclasses import dataclass
 from functools import cached_property
+import json
+from pathlib import Path
 import warnings
 
 import pandas
@@ -22,6 +24,7 @@ from oceanbench.core.lagrangian_trajectory import (
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
+from oceanbench.core.report_scores import model_scores_from_dataframes
 from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, subset_dataset_to_region
 from oceanbench.core.rmsd import rmsd
 
@@ -51,6 +54,11 @@ ZONAL_PSD_VARIABLES = [
     Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
     Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
 ]
+REPORT_DEPTH_VARIABLE_METRIC_KEYS = {
+    "rmsd_variables_glorys",
+    "rmsd_variables_glo12",
+    "rmsd_variables_observations",
+}
 
 
 @dataclass
@@ -273,6 +281,31 @@ class EvaluationReportContext:
             self.reference_datasets,
             variables=ZONAL_PSD_VARIABLES,
         )
+
+    def score_dataframes(self) -> dict[str, pandas.DataFrame]:
+        return {
+            "rmsd_variables_glorys": self.glorys_variable_rmsd,
+            "rmsd_mld_glorys": self.glorys_mixed_layer_depth_rmsd,
+            "rmsd_geostrophic_glorys": self.glorys_geostrophic_current_rmsd,
+            "lagrangian_glorys": self.glorys_lagrangian_trajectory_deviation,
+            "rmsd_variables_glo12": self.glo12_variable_rmsd,
+            "rmsd_mld_glo12": self.glo12_mixed_layer_depth_rmsd,
+            "rmsd_geostrophic_glo12": self.glo12_geostrophic_current_rmsd,
+            "lagrangian_glo12": self.glo12_lagrangian_trajectory_deviation,
+            "rmsd_variables_observations": self.class4_observation.rmsd,
+        }
+
+    def scores(self, challenger_name: str) -> dict[str, dict]:
+        return model_scores_from_dataframes(
+            self.score_dataframes(),
+            challenger_name,
+            depth_variable_metric_keys=REPORT_DEPTH_VARIABLE_METRIC_KEYS,
+        )
+
+    def write_scores_json(self, path: str | Path, challenger_name: str) -> str:
+        scores = self.scores(challenger_name)
+        Path(path).write_text(json.dumps(scores, indent=2, sort_keys=True), encoding="utf-8")
+        return str(path)
 
 
 def _compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:

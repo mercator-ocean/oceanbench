@@ -5,6 +5,7 @@
 import numpy
 import pandas
 import xarray
+import json
 
 from oceanbench.core import evaluation_report
 from oceanbench.core.dataset_utils import Dimension, Variable
@@ -139,6 +140,38 @@ def test_evaluation_report_handles_unavailable_class4_observations(monkeypatch) 
     assert report.class4_observation_error_explorer is None
     assert report.class4_observation.rmsd.to_dict(orient="list") == {"Message": ["Class IV unavailable"]}
     assert calls == {"observations": 1}
+
+
+def test_evaluation_report_writes_scores_json_from_metric_dataframes(monkeypatch, tmp_path) -> None:
+    def score_dataframes(_):
+        return {
+            "rmsd_variables_glorys": pandas.DataFrame(
+                {"Lead day 1": [1.1], "Lead day 2": [1.2]},
+                index=["Temperature (C) [sea_water_potential_temperature]{100m}"],
+            ),
+            "lagrangian_glorys": pandas.DataFrame(
+                {"Lead day 2": [2.2]},
+                index=["Lagrangian trajectory deviation (km) []"],
+            ),
+            "rmsd_variables_observations": pandas.DataFrame({"Message": ["Class IV unavailable"]}),
+        }
+
+    monkeypatch.setattr(evaluation_report.EvaluationReportContext, "score_dataframes", score_dataframes)
+    report = evaluation_report.prepare_evaluation_report(_dataset())
+    scores_path = tmp_path / "glonet.global.scores.json"
+
+    report.write_scores_json(scores_path, "glonet")
+
+    scores = json.loads(scores_path.read_text(encoding="utf-8"))
+    assert scores["rmsd_variables_glorys"]["depths"]["100m"]["variables"]["temperature"] == {
+        "standard_name": "sea_water_potential_temperature",
+        "unit": "C",
+        "data": {"1": 1.1, "2": 1.2},
+    }
+    assert scores["lagrangian_glorys"]["depths"]["flat"]["variables"]["lagrangian trajectory deviation"]["data"] == {
+        "2": 2.2
+    }
+    assert "rmsd_variables_observations" not in scores
 
 
 def test_evaluation_report_lagrangian_widget_uses_display_particle_count(monkeypatch) -> None:

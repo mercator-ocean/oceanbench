@@ -14,6 +14,8 @@ from helpers.s3_discovery import discover_downloaded_reports  # noqa: E402
 from helpers.s3_discovery import discover_official_reports  # noqa: E402
 from helpers.s3_discovery import manifest_url  # noqa: E402
 from helpers.s3_discovery import notebook_url  # noqa: E402
+from helpers.s3_discovery import report_catalog_from_manifest  # noqa: E402
+from helpers.s3_discovery import report_catalog_published_reports  # noqa: E402
 from helpers.s3_discovery import report_html_url  # noqa: E402
 from helpers.s3_discovery import report_metadata  # noqa: E402
 from helpers.s3_discovery import scores_url  # noqa: E402
@@ -87,6 +89,32 @@ def test_discover_official_reports_reads_prebuilt_report_manifest(monkeypatch) -
     assert requested_urls == [(manifest_url(), 30)]
 
 
+def test_report_catalog_preserves_manifest_urls() -> None:
+    manifest = {
+        "reports": [
+            {
+                "challenger": "glonet",
+                "region": "global",
+                "report_url": "https://reports.example/glonet-clean.html",
+                "notebook_url": "https://reports.example/glonet.report.ipynb",
+                "scores_url": "https://reports.example/glonet.scores.json",
+                "assets_url": "https://reports.example/glonet.assets/",
+            },
+        ]
+    }
+
+    catalog = report_catalog_from_manifest(manifest)
+
+    assert report_catalog_published_reports(catalog) == {"global": ["glonet"], "ibi": []}
+    assert catalog["regions"]["global"]["glonet"] == {
+        "assets_url": "https://reports.example/glonet.assets/",
+        "notebook_url": "https://reports.example/glonet.report.ipynb",
+        "report_url": "https://reports.example/glonet-clean.html",
+        "scores_url": "https://reports.example/glonet.scores.json",
+        "scores_path": "reports/glonet.global.scores.json",
+    }
+
+
 def test_published_regions_have_stable_order_and_metadata() -> None:
     assert published_region_ids() == ["global", "ibi"]
 
@@ -112,16 +140,44 @@ def test_published_region_ids_with_reports_filters_empty_regions() -> None:
 
 
 def test_discover_downloaded_reports_reads_local_report_catalog(tmp_path) -> None:
-    write_report_catalog(str(tmp_path), {"global": ["glonet"], "ibi": ["glonet", "unknown"]})
+    write_report_catalog(
+        str(tmp_path),
+        {
+            "regions": {
+                "global": {
+                    "glonet": {
+                        "notebook_url": "https://reports.example/glonet.global.report.ipynb",
+                        "report_url": "https://reports.example/glonet.global.report.html",
+                        "scores_url": "https://reports.example/glonet.global.scores.json",
+                        "scores_path": "reports/glonet.global.scores.json",
+                    },
+                },
+                "ibi": {
+                    "glonet": {
+                        "notebook_url": "https://reports.example/glonet.ibi.report.ipynb",
+                        "report_url": "https://reports.example/glonet.ibi.report.html",
+                        "scores_url": "https://reports.example/glonet.ibi.scores.json",
+                        "scores_path": "reports/glonet.ibi.scores.json",
+                    },
+                    "unknown": {
+                        "notebook_url": "https://reports.example/unknown.ibi.report.ipynb",
+                        "report_url": "https://reports.example/unknown.ibi.report.html",
+                        "scores_url": "https://reports.example/unknown.ibi.scores.json",
+                        "scores_path": "reports/unknown.ibi.scores.json",
+                    },
+                },
+            },
+        },
+    )
 
     reports = discover_downloaded_reports(str(tmp_path))
 
     assert reports["global"] == ["glonet"]
     assert reports["ibi"] == ["glonet"]
     assert report_metadata(str(tmp_path), "glonet", "global") == {
-        "notebook_url": notebook_url("glonet", "global"),
-        "report_url": report_html_url("glonet", "global"),
-        "scores_url": scores_url("glonet", "global"),
+        "notebook_url": "https://reports.example/glonet.global.report.ipynb",
+        "report_url": "https://reports.example/glonet.global.report.html",
+        "scores_url": "https://reports.example/glonet.global.scores.json",
         "scores_path": "reports/glonet.global.scores.json",
     }
 
@@ -137,13 +193,18 @@ def test_download_scores_uses_only_explicit_region_name(monkeypatch, tmp_path) -
 
     monkeypatch.setattr("helpers.s3_discovery.requests.get", fake_get)
 
-    destination = download_scores("glonet", "global", str(tmp_path))
+    destination = download_scores(
+        "glonet",
+        "global",
+        str(tmp_path),
+        report={"scores_url": "https://reports.example/custom/glonet.global.scores.json"},
+    )
 
     assert destination == str(tmp_path / "glonet.global.scores.json")
     assert (tmp_path / "glonet.global.scores.json").read_bytes() == b"{}"
     assert requests_seen == [
         (
-            scores_url("glonet", "global"),
+            "https://reports.example/custom/glonet.global.scores.json",
             30,
         )
     ]

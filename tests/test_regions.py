@@ -172,6 +172,11 @@ def test_generate_evaluation_notebook_keeps_official_region_string(tmp_path) -> 
 
     notebook = nbformat.read(output_path, as_version=4)
 
-    assert _cell_source_containing(notebook, "region = 'ibi'") == "region = 'ibi'"
+    region_cell_source = _cell_source_containing(notebook, "region = 'ibi'")
+    assert "region = 'ibi'" in region_cell_source
+    assert "challenger_name = 'official'" in region_cell_source
+    assert "score_file_path = 'official.scores.json'" in region_cell_source
+    assert "widget_asset_directory = 'official.assets'" in region_cell_source
+    assert "widget_asset_reference_prefix = 'official.assets/'" in region_cell_source
     assert notebook.metadata["oceanbench"]["region"]["id"] == "ibi"
     assert notebook.metadata["oceanbench"]["region"]["official"] is True

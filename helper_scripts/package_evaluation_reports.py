@@ -3,14 +3,10 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import argparse
-from base64 import b64decode
 from dataclasses import dataclass
-from hashlib import sha256
-import html as html_module
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import sys
@@ -20,16 +16,50 @@ REPOSITORY_DIRECTORY = Path(__file__).resolve().parents[1]
 WEBSITE_DIRECTORY = REPOSITORY_DIRECTORY / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
-from helpers.notebook_score_parser import get_all_model_scores_from_notebook  # noqa: E402
 from helpers.s3_discovery import S3_BASE_URL  # noqa: E402
 from helpers.s3_discovery import REPORT_MANIFEST_FILE_NAME  # noqa: E402
 from helpers.s3_discovery import REPORTS_PREFIX  # noqa: E402
 
 DEFAULT_PUBLIC_BASE_URL = f"{S3_BASE_URL}/{REPORTS_PREFIX}"
 REPORT_NOTEBOOK_SUFFIX = ".report.ipynb"
-DATA_IMAGE_URI_PATTERN = re.compile(r"data:image/(?P<format>png|jpeg|jpg|webp);base64,(?P<payload>[A-Za-z0-9+/=\s]+)")
-HTML_ENTITY_PATTERN = re.compile(r"&(?:#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]+);")
-PAYLOAD_DECLARATION = "const payload = "
+REPORT_QUARTO_FILES = ("theme-light.scss", "theme-dark.scss", "styles.css", "favicon-light.png")
+REPORT_QUARTO_PROJECT = """project:
+  type: website
+website:
+  title: "OceanBench"
+  favicon: favicon-light.png
+  open-graph: true
+  navbar:
+    logo: https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-light.png
+    logo-alt: "OceanBench logo."
+  repo-url: https://github.com/mercator-ocean/oceanbench
+  repo-actions: [source, issue]
+  page-footer: |
+    Powered by:
+    <a href="https://edito.eu">
+      <img
+        class="only-light"
+        src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_A1%20Version.png"
+        alt="EDITO logo"
+        height="65"
+      />
+      <img
+        class="only-dark"
+        src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_A1%20Version%20Negative.png"
+        alt="EDITO logo"
+        height="65"
+      />
+    </a>
+execute:
+  enabled: false
+format:
+  html:
+    theme:
+      light: [flatly, theme-light.scss]
+      dark: [darkly, theme-dark.scss]
+    css: styles.css
+    page-layout: full
+"""
 
 
 @dataclass(frozen=True)
@@ -88,172 +118,46 @@ def render_report_html(notebook_path: Path, html_path: Path) -> None:
     )
 
 
-def _join_mime_value(value: str | list[str]) -> str:
-    return "".join(value) if isinstance(value, list) else value
+def _prepare_report_quarto_project(output_directory: Path) -> None:
+    for file_name in REPORT_QUARTO_FILES:
+        shutil.copy2(WEBSITE_DIRECTORY / file_name, output_directory / file_name)
+    (output_directory / "_quarto.yml").write_text(REPORT_QUARTO_PROJECT, encoding="utf-8")
 
 
-def _write_image_data_uri_asset(data_uri: str, assets_directory: Path) -> str:
-    assets_directory.mkdir(parents=True, exist_ok=True)
-    match = DATA_IMAGE_URI_PATTERN.fullmatch(data_uri)
-    if match is None:
-        raise ValueError("Expected a PNG, JPEG, or WebP data URI.")
-    image_format = match.group("format").lower()
-    extension = "jpg" if image_format == "jpeg" else image_format
-    payload = re.sub(r"\s+", "", match.group("payload"))
-    content = b64decode(payload)
-    digest = sha256(content).hexdigest()[:16]
-    asset_file_name = f"image-{digest}.{extension}"
-    (assets_directory / asset_file_name).write_bytes(content)
-    return asset_file_name
+def _source_scores_path(notebook_path: Path, report_identity: ReportIdentity) -> Path:
+    return notebook_path.with_name(f"{report_identity.stem}.scores.json")
 
 
-def _externalize_data_image_assets(text: str, assets_directory: Path, asset_reference_prefix: str) -> str:
-    assets_directory.mkdir(parents=True, exist_ok=True)
-
-    def replacement(match: re.Match) -> str:
-        asset_file_name = _write_image_data_uri_asset(match.group(0), assets_directory)
-        return f"{asset_reference_prefix}{asset_file_name}"
-
-    return DATA_IMAGE_URI_PATTERN.sub(replacement, text)
-
-
-def _externalize_payload_value(value, assets_directory: Path, asset_reference_prefix: str):
-    if isinstance(value, dict):
-        return {
-            key: _externalize_payload_value(nested_value, assets_directory, asset_reference_prefix)
-            for key, nested_value in value.items()
-        }
-    if isinstance(value, list):
-        return [
-            _externalize_payload_value(nested_value, assets_directory, asset_reference_prefix) for nested_value in value
-        ]
-    if isinstance(value, str) and DATA_IMAGE_URI_PATTERN.fullmatch(value):
-        return f"{asset_reference_prefix}{_write_image_data_uri_asset(value, assets_directory)}"
-    return value
-
-
-def _write_payload_json_asset(payload, assets_directory: Path, asset_reference_prefix: str) -> str:
-    assets_directory.mkdir(parents=True, exist_ok=True)
-    payload = _externalize_payload_value(payload, assets_directory, asset_reference_prefix)
-    content = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    digest = sha256(content).hexdigest()[:16]
-    asset_file_name = f"payload-{digest}.json"
-    (assets_directory / asset_file_name).write_bytes(content)
-    return asset_file_name
-
-
-def _payload_loader_javascript(asset_reference: str) -> str:
-    asset_reference_json = json.dumps(asset_reference)
-    return (
-        "(() => {"
-        "const request = new XMLHttpRequest();"
-        f'request.open("GET", {asset_reference_json}, false);'
-        "request.send(null);"
-        "if ((request.status >= 200 && request.status < 300) || request.status === 0) {"
-        "return JSON.parse(request.responseText);"
-        "}"
-        f'throw new Error("Failed to load OceanBench widget payload: " + {asset_reference_json});'
-        "})()"
-    )
-
-
-def _html_unescape_with_index_map(value: str) -> tuple[str, list[int]]:
-    decoded_parts = []
-    decoded_to_original_index = []
-    position = 0
-    for match in HTML_ENTITY_PATTERN.finditer(value):
-        decoded_parts.append(value[position : match.start()])
-        decoded_to_original_index.extend(range(position, match.start()))
-        decoded_entity = html_module.unescape(match.group(0))
-        decoded_parts.append(decoded_entity)
-        decoded_to_original_index.extend([match.start()] * len(decoded_entity))
-        position = match.end()
-    decoded_parts.append(value[position:])
-    decoded_to_original_index.extend(range(position, len(value)))
-    return "".join(decoded_parts), decoded_to_original_index
-
-
-def _raw_decode_html_escaped_json(value: str):
-    decoded_value, decoded_to_original_index = _html_unescape_with_index_map(value)
-    payload, decoded_end_index = json.JSONDecoder().raw_decode(decoded_value)
-    original_end_index = (
-        decoded_to_original_index[decoded_end_index]
-        if decoded_end_index < len(decoded_to_original_index)
-        else len(value)
-    )
-    return payload, original_end_index
-
-
-def _decode_payload_literal(value: str):
-    if value.startswith("{&quot;") or "&quot;" in value[:256]:
-        return (*_raw_decode_html_escaped_json(value), True)
-    payload, end_index = json.JSONDecoder().raw_decode(value)
-    return payload, end_index, False
-
-
-def _externalize_widget_payload_assets(text: str, assets_directory: Path, asset_reference_prefix: str) -> str:
-    search_start = 0
-    while True:
-        declaration_index = text.find(PAYLOAD_DECLARATION, search_start)
-        if declaration_index == -1:
-            return text
-        payload_start_index = declaration_index + len(PAYLOAD_DECLARATION)
-        try:
-            payload, payload_length, is_html_escaped = _decode_payload_literal(text[payload_start_index:])
-        except json.JSONDecodeError:
-            search_start = payload_start_index
-            continue
-
-        asset_file_name = _write_payload_json_asset(payload, assets_directory, asset_reference_prefix)
-        loader = _payload_loader_javascript(f"{asset_reference_prefix}{asset_file_name}")
-        replacement = html_module.escape(loader, quote=True) if is_html_escaped else loader
-        payload_end_index = payload_start_index + payload_length
-        text = text[:payload_start_index] + replacement + text[payload_end_index:]
-        search_start = payload_start_index + len(replacement)
-
-
-def _externalize_html_assets(text: str, assets_directory: Path, asset_reference_prefix: str) -> str:
-    return _externalize_data_image_assets(
-        _externalize_widget_payload_assets(text, assets_directory, asset_reference_prefix),
-        assets_directory,
-        asset_reference_prefix,
-    )
-
-
-def _externalize_notebook_html_outputs(
-    notebook_path: Path,
-    assets_directory: Path,
-    asset_reference_prefix: str,
+def _copy_scores_json(
+    source_notebook_path: Path,
+    scores_path: Path,
+    report_identity: ReportIdentity,
 ) -> None:
-    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
-    has_changes = False
-    for cell in notebook.get("cells", []):
-        for output in cell.get("outputs", []):
-            html_output = output.get("data", {}).get("text/html")
-            if html_output is None:
-                continue
-            html_text = _join_mime_value(html_output)
-            externalized_html_text = _externalize_html_assets(html_text, assets_directory, asset_reference_prefix)
-            if externalized_html_text != html_text:
-                output["data"]["text/html"] = externalized_html_text
-                has_changes = True
-    if has_changes:
-        notebook_path.write_text(json.dumps(notebook), encoding="utf-8")
+    source_scores_path = _source_scores_path(source_notebook_path, report_identity)
+    if not source_scores_path.exists():
+        raise RuntimeError(
+            f"Missing direct OceanBench score artifact for {source_notebook_path}: {source_scores_path.name}"
+        )
+    if source_scores_path.resolve() != scores_path.resolve():
+        shutil.copy2(source_scores_path, scores_path)
 
 
-def _write_scores_json(notebook_path: Path, scores_path: Path, challenger_name: str) -> None:
-    scores = {
-        metric_key: score.model_dump()
-        for metric_key, score in get_all_model_scores_from_notebook(str(notebook_path), challenger_name).items()
-    }
-    if not scores:
-        raise RuntimeError(f"No OceanBench scores were found in {notebook_path}.")
-    scores_path.write_text(json.dumps(scores, indent=2, sort_keys=True), encoding="utf-8")
+def _source_assets_directory(notebook_path: Path, report_identity: ReportIdentity) -> Path:
+    return notebook_path.with_name(f"{report_identity.stem}.assets")
 
 
-def _externalize_rendered_html_assets(html_path: Path, assets_directory: Path, asset_reference_prefix: str) -> None:
-    html = html_path.read_text(encoding="utf-8")
-    html_path.write_text(_externalize_html_assets(html, assets_directory, asset_reference_prefix), encoding="utf-8")
+def _copy_report_assets(
+    source_notebook_path: Path,
+    assets_directory: Path,
+    report_identity: ReportIdentity,
+) -> None:
+    assets_directory.mkdir(parents=True, exist_ok=True)
+    source_assets_directory = _source_assets_directory(source_notebook_path, report_identity)
+    if not source_assets_directory.exists():
+        return
+    if source_assets_directory.resolve() == assets_directory.resolve():
+        return
+    shutil.copytree(source_assets_directory, assets_directory, dirs_exist_ok=True)
 
 
 def _copy_report_notebook(source_path: Path, destination_path: Path) -> None:
@@ -269,6 +173,7 @@ def package_report_notebook(
 ) -> PackagedReport:
     identity = parse_report_identity(notebook_path)
     output_directory.mkdir(parents=True, exist_ok=True)
+    _prepare_report_quarto_project(output_directory)
     package_stem = identity.stem
     destination_notebook_path = output_directory / f"{package_stem}.report.ipynb"
     html_path = output_directory / f"{package_stem}.report.html"
@@ -276,10 +181,9 @@ def package_report_notebook(
     assets_directory = output_directory / f"{package_stem}.assets"
 
     _copy_report_notebook(notebook_path, destination_notebook_path)
-    _externalize_notebook_html_outputs(destination_notebook_path, assets_directory, f"{assets_directory.name}/")
+    _copy_report_assets(notebook_path, assets_directory, identity)
     render_html(destination_notebook_path, html_path)
-    _externalize_rendered_html_assets(html_path, assets_directory, f"{assets_directory.name}/")
-    _write_scores_json(destination_notebook_path, scores_path, identity.challenger)
+    _copy_scores_json(notebook_path, scores_path, identity)
 
     return PackagedReport(
         identity=identity,

@@ -4,6 +4,7 @@
 
 from base64 import b64decode
 from io import BytesIO
+import json
 from pathlib import Path
 import warnings
 
@@ -668,6 +669,78 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "window.setInterval" in html_output.data
 
 
+def test_configured_widget_asset_output_externalizes_payload_and_images(monkeypatch, tmp_path) -> None:
+    from oceanbench.core import visualization as core_visualization
+    from oceanbench.core.widget_assets import clear_widget_asset_output, configure_widget_asset_output
+
+    monkeypatch.setattr(
+        core_visualization,
+        "_lagrangian_payload",
+        lambda **_: {
+            "title": "Lagrangian trajectory divergence",
+            "challengerName": "Challenger",
+            "particleCount": 1,
+            "timeLabels": ["1.0"],
+            "bounds": {
+                "longitudeMinimum": 9.0,
+                "longitudeMaximum": 15.0,
+                "latitudeMinimum": -2.0,
+                "latitudeMaximum": 2.0,
+            },
+            "modelMask": {
+                "image": "data:image/png;base64,",
+                "extent": {
+                    "longitudeMinimum": 9.0,
+                    "longitudeMaximum": 15.0,
+                    "latitudeMinimum": -2.0,
+                    "latitudeMaximum": 2.0,
+                },
+                "width": 2,
+                "height": 2,
+            },
+            "separationScaleKilometers": 10.0,
+            "challenger": {
+                "longitude": [[10.0]],
+                "latitude": [[0.0]],
+                "initialLongitude": [10.0],
+                "initialLatitude": [0.0],
+            },
+            "references": [
+                {
+                    "key": "reference",
+                    "label": "Reference",
+                    "track": {
+                        "longitude": [[10.0]],
+                        "latitude": [[0.0]],
+                        "initialLongitude": [10.0],
+                        "initialLatitude": [0.0],
+                    },
+                }
+            ],
+        },
+    )
+
+    assets_directory = tmp_path / "glonet.global.assets"
+    configure_widget_asset_output(assets_directory, "glonet.global.assets/")
+    try:
+        html_output = oceanbench.visualization.plot_multi_reference_lagrangian_trajectory_explorer(
+            xarray.Dataset(),
+            {"Reference": xarray.Dataset()},
+        )
+    finally:
+        clear_widget_asset_output()
+
+    assert "data:image/png;base64" not in html_output.data
+    assert "XMLHttpRequest" in html_output.data
+    assert "glonet.global.assets/payload-" in html_output.data
+    payload_files = list(assets_directory.glob("payload-*.json"))
+    image_files = list(assets_directory.glob("image-*.png"))
+    assert len(payload_files) == 1
+    assert len(image_files) == 1
+    payload = json.loads(payload_files[0].read_text(encoding="utf-8"))
+    assert payload["modelMask"]["image"] == f"glonet.global.assets/{image_files[0].name}"
+
+
 def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeypatch) -> None:
     from oceanbench.core import visualization as core_visualization
 
@@ -812,6 +885,10 @@ def test_generated_evaluation_notebook_contains_diagnostic_explorers(tmp_path: P
     assert "evaluation_report.forecast_comparison_explorer" in all_sources
     assert "evaluation_report.dynamic_diagnostic_explorer" in all_sources
     assert "evaluation_report.zonal_psd_explorer" in all_sources
+    assert "evaluation_report.write_scores_json(score_file_path, challenger_name)" in all_sources
+    assert "score_file_path = 'report.scores.json'" in all_sources
+    assert "configure_widget_asset_output(widget_asset_directory, widget_asset_reference_prefix)" in all_sources
+    assert "widget_asset_directory = 'report.assets'" in all_sources
     assert "Eddy centers and contours are detected" in all_sources
     assert "wavelength-band scale separation" in all_sources
     assert "Geostrophic currents are masked near the equator" in all_sources

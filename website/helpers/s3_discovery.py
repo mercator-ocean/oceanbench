@@ -4,16 +4,35 @@
 
 import json
 import os
+from pathlib import Path
+import tomllib
 
 import requests
 
 from helpers.challenger_metadata import KNOWN_CHALLENGERS
 from helpers.published_regions import published_region_ids
 
-S3_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench"
-REPORTS_PREFIX = "dev/evaluation-reports/249-webp-demo/"
+
+def _project_version() -> str:
+    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    with open(pyproject_path, "rb") as file:
+        return tomllib.load(file)["project"]["version"]
+
+
+DEFAULT_REPORTS_VERSION = _project_version()
+S3_BASE_URL = os.environ.get("OCEANBENCH_REPORTS_BASE_URL", "https://minio.dive.edito.eu/project-oceanbench")
+REPORTS_VERSION = os.environ.get("OCEANBENCH_REPORTS_VERSION", DEFAULT_REPORTS_VERSION)
+REPORTS_PREFIX = os.environ.get("OCEANBENCH_REPORTS_PREFIX", f"public/evaluation-reports/{REPORTS_VERSION}/")
 REPORT_CATALOG_FILE_NAME = "_report_catalog.json"
 REPORT_MANIFEST_FILE_NAME = "manifest.json"
+REPORT_URL_KEYS = ("report_url", "notebook_url", "scores_url")
+
+
+def _ensure_trailing_slash(value: str) -> str:
+    return value if value.endswith("/") else f"{value}/"
+
+
+REPORTS_PREFIX = _ensure_trailing_slash(REPORTS_PREFIX)
 
 
 def _artifact_url(challenger_name: str, region_id: str, suffix: str) -> str:
@@ -47,19 +66,8 @@ def _load_remote_report_manifest() -> dict:
 
 
 def _manifest_published_reports(manifest: dict) -> dict[str, set[str]]:
-    discovered_reports = {region_id: set() for region_id in published_region_ids()}
-    for report in manifest.get("reports", []):
-        challenger_name = report.get("challenger")
-        region_id = report.get("region")
-        if (
-            challenger_name in KNOWN_CHALLENGERS
-            and region_id in discovered_reports
-            and report.get("report_url")
-            and report.get("notebook_url")
-            and report.get("scores_url")
-        ):
-            discovered_reports[region_id].add(challenger_name)
-    return discovered_reports
+    catalog = report_catalog_from_manifest(manifest)
+    return {region_id: set(region_reports) for region_id, region_reports in catalog["regions"].items()}
 
 
 def discover_official_reports() -> dict[str, list[str]]:
@@ -67,6 +75,44 @@ def discover_official_reports() -> dict[str, list[str]]:
     return {
         region_id: [
             challenger_name for challenger_name in KNOWN_CHALLENGERS if challenger_name in discovered_reports[region_id]
+        ]
+        for region_id in published_region_ids()
+    }
+
+
+def _report_catalog_metadata(report: dict) -> dict | None:
+    challenger_name = report.get("challenger")
+    region_id = report.get("region")
+    if challenger_name not in KNOWN_CHALLENGERS or region_id not in published_region_ids():
+        return None
+    if not all(report.get(key) for key in REPORT_URL_KEYS):
+        return None
+    metadata = {key: report[key] for key in REPORT_URL_KEYS}
+    if report.get("assets_url"):
+        metadata["assets_url"] = report["assets_url"]
+    metadata["scores_path"] = f"reports/{challenger_name}.{region_id}.scores.json"
+    return metadata
+
+
+def report_catalog_from_manifest(manifest: dict) -> dict:
+    catalog = _empty_report_catalog()
+    for report in manifest.get("reports", []):
+        metadata = _report_catalog_metadata(report)
+        if metadata is None:
+            continue
+        catalog["regions"][report["region"]][report["challenger"]] = metadata
+    return catalog
+
+
+def official_report_catalog() -> dict:
+    return report_catalog_from_manifest(_load_remote_report_manifest())
+
+
+def report_catalog_published_reports(catalog: dict) -> dict[str, list[str]]:
+    regions = catalog.get("regions", {})
+    return {
+        region_id: [
+            challenger_name for challenger_name in KNOWN_CHALLENGERS if challenger_name in regions.get(region_id, {})
         ]
         for region_id in published_region_ids()
     }
@@ -80,21 +126,7 @@ def _empty_report_catalog() -> dict:
     return {"regions": {region_id: {} for region_id in published_region_ids()}}
 
 
-def write_report_catalog(reports_directory: str, published_reports: dict[str, list[str]]) -> str:
-    catalog = {
-        "regions": {
-            region_id: {
-                challenger_name: {
-                    "report_url": report_html_url(challenger_name, region_id),
-                    "notebook_url": notebook_url(challenger_name, region_id),
-                    "scores_url": scores_url(challenger_name, region_id),
-                    "scores_path": f"reports/{challenger_name}.{region_id}.scores.json",
-                }
-                for challenger_name in challengers
-            }
-            for region_id, challengers in published_reports.items()
-        }
-    }
+def write_report_catalog(reports_directory: str, catalog: dict) -> str:
     path = report_catalog_path(reports_directory)
     os.makedirs(reports_directory, exist_ok=True)
     with open(path, "w", encoding="utf-8") as file:
@@ -111,23 +143,21 @@ def load_report_catalog(reports_directory: str) -> dict:
 
 
 def discover_downloaded_reports(reports_directory: str) -> dict[str, list[str]]:
-    catalog = load_report_catalog(reports_directory)
-    regions = catalog.get("regions", {})
-    return {
-        region_id: [
-            challenger_name for challenger_name in KNOWN_CHALLENGERS if challenger_name in regions.get(region_id, {})
-        ]
-        for region_id in published_region_ids()
-    }
+    return report_catalog_published_reports(load_report_catalog(reports_directory))
 
 
 def report_metadata(reports_directory: str, challenger_name: str, region_id: str) -> dict:
     return load_report_catalog(reports_directory)["regions"][region_id][challenger_name]
 
 
-def download_scores(challenger_name: str, region_id: str, destination_directory: str) -> str | None:
+def download_scores(
+    challenger_name: str,
+    region_id: str,
+    destination_directory: str,
+    report: dict | None = None,
+) -> str | None:
     destination_path = os.path.join(destination_directory, f"{challenger_name}.{region_id}.scores.json")
-    url = scores_url(challenger_name, region_id)
+    url = report["scores_url"] if report else scores_url(challenger_name, region_id)
 
     try:
         response = requests.get(url, timeout=30)

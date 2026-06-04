@@ -10,8 +10,9 @@ import os
 from helpers.challenger_metadata import KNOWN_CHALLENGERS
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook
 from helpers.s3_discovery import REPORT_CATALOG_FILE_NAME
-from helpers.s3_discovery import discover_official_reports
 from helpers.s3_discovery import download_scores
+from helpers.s3_discovery import official_report_catalog
+from helpers.s3_discovery import report_catalog_published_reports
 from helpers.s3_discovery import write_report_catalog
 
 SCRIPT_DIRECTORY = os.path.dirname(__file__)
@@ -47,8 +48,8 @@ def _sample_challenger_name(sample_notebook_path: str) -> str:
     return os.path.basename(sample_notebook_path).removesuffix(".global.report.ipynb").removesuffix("_sample")
 
 
-def _write_sample_scores() -> dict[str, list[str]]:
-    published_reports = {"global": [], "ibi": []}
+def _sample_report_catalog() -> dict:
+    catalog = {"regions": {"global": {}, "ibi": {}}}
     for sample_notebook in _find_sample_notebooks():
         challenger_name = _sample_challenger_name(sample_notebook)
         if challenger_name not in KNOWN_CHALLENGERS:
@@ -58,17 +59,23 @@ def _write_sample_scores() -> dict[str, list[str]]:
             for metric_key, score in get_all_model_scores_from_notebook(sample_notebook, challenger_name).items()
         }
         if scores:
-            _write_scores(challenger_name, "global", scores)
-            published_reports["global"].append(challenger_name)
+            scores_path = _write_scores(challenger_name, "global", scores)
+            sample_notebook_name = os.path.basename(sample_notebook)
+            catalog["regions"]["global"][challenger_name] = {
+                "report_url": f"../assets/{sample_notebook_name}",
+                "notebook_url": f"../assets/{sample_notebook_name}",
+                "scores_url": "",
+                "scores_path": os.path.relpath(scores_path, SCRIPT_DIRECTORY),
+            }
             print(f"{challenger_name}.global: OK (sample scores)")
-    return published_reports
+    return catalog
 
 
-def _download_published_scores(published_reports: dict[str, list[str]]) -> None:
-    for region_id, challengers in published_reports.items():
-        for challenger_name in challengers:
+def _download_published_scores(catalog: dict) -> None:
+    for region_id, challengers in catalog.get("regions", {}).items():
+        for challenger_name, report in challengers.items():
             print(f"Downloading {challenger_name}.{region_id} scores...", end=" ")
-            result = download_scores(challenger_name, region_id, REPORTS_DIRECTORY)
+            result = download_scores(challenger_name, region_id, REPORTS_DIRECTORY, report=report)
             if result:
                 print(f"OK -> {result}")
                 continue
@@ -92,14 +99,15 @@ def main() -> None:
     os.makedirs(REPORTS_DIRECTORY, exist_ok=True)
     _clear_report_artifacts()
 
-    published_reports = _write_sample_scores() if use_samples else discover_official_reports()
+    catalog = _sample_report_catalog() if use_samples else official_report_catalog()
+    published_reports = report_catalog_published_reports(catalog)
     print(f"Discovered reports: {published_reports}")
     if not any(published_reports.values()):
         raise RuntimeError("No complete prebuilt report packages were discovered.")
 
     if not use_samples:
-        _download_published_scores(published_reports)
-    catalog_path = write_report_catalog(REPORTS_DIRECTORY, published_reports)
+        _download_published_scores(catalog)
+    catalog_path = write_report_catalog(REPORTS_DIRECTORY, catalog)
     print(f"Created {catalog_path}")
 
     with open(QUARTO_METADATA_FILE_PATH, "w", encoding="utf-8") as file:

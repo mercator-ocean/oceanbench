@@ -51,5 +51,5 @@ jobs:
           make package-evaluation-reports \
             REPORT_NOTEBOOKS=${{ inputs.challengerPythonFileName }}.global.report.ipynb \
             REPORT_PACKAGE_DIRECTORY=evaluation-report-package \
-            REPORT_PACKAGE_UPLOAD_OPTIONS="--s3-bucket project-oceanbench --s3-prefix dev/evaluation-reports/249-webp-demo"
+            REPORT_PACKAGE_UPLOAD_OPTIONS='--s3-bucket project-oceanbench --s3-prefix $(REPORTS_PREFIX)'
         shell: micromamba-shell {0}

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from importlib import resources
+from pathlib import Path
 from urllib.request import urlopen
 
 import nbformat
@@ -12,6 +13,11 @@ from oceanbench.core.regions import RegionLike, resolve_region, region_to_dict
 
 CHALLENGER_DATASET_PLACEHOLDER = "challenger_dataset: xarray.Dataset = xarray.Dataset()"
 EVALUATION_REGION_PLACEHOLDER = 'region = "global"'
+CHALLENGER_NAME_PLACEHOLDER = 'challenger_name = "challenger"'
+SCORE_FILE_PATH_PLACEHOLDER = 'score_file_path = "challenger.global.scores.json"'
+WIDGET_ASSET_DIRECTORY_PLACEHOLDER = 'widget_asset_directory = "challenger.global.assets"'
+WIDGET_ASSET_REFERENCE_PREFIX_PLACEHOLDER = 'widget_asset_reference_prefix = "challenger.global.assets/"'
+REPORT_NOTEBOOK_SUFFIX = ".report.ipynb"
 
 
 def _parse_challenger_python_code(
@@ -35,6 +41,7 @@ def generate_evaluation_notebook_file(
     notebook = _generate_template_notebook()
     notebook = _replace_code_to_open_challenger_datasets(challenger_python_code, notebook)
     notebook = _replace_evaluation_configuration_code(resolved_region, notebook)
+    notebook = _replace_report_artifact_configuration_code(output_notebook_file_path, notebook)
     notebook.metadata.setdefault("oceanbench", {})["region"] = region_to_dict(resolved_region)
     nbformat.write(notebook, output_notebook_file_path)
 
@@ -102,7 +109,54 @@ def _replace_evaluation_configuration_code(
     _replace_cell_source(
         notebook,
         EVALUATION_REGION_PLACEHOLDER,
-        _generate_evaluation_configuration_code(region),
+        "\n".join(
+            [
+                _generate_evaluation_configuration_code(region),
+                CHALLENGER_NAME_PLACEHOLDER,
+                SCORE_FILE_PATH_PLACEHOLDER,
+                WIDGET_ASSET_DIRECTORY_PLACEHOLDER,
+                WIDGET_ASSET_REFERENCE_PREFIX_PLACEHOLDER,
+            ]
+        ),
+    )
+    return notebook
+
+
+def _report_stem(output_notebook_file_path: str) -> str:
+    file_name = Path(output_notebook_file_path).name
+    if file_name.endswith(REPORT_NOTEBOOK_SUFFIX):
+        return file_name.removesuffix(REPORT_NOTEBOOK_SUFFIX)
+    return Path(file_name).stem
+
+
+def _challenger_name_from_report_stem(report_stem: str) -> str:
+    return report_stem.rsplit(".", maxsplit=1)[0] if "." in report_stem else report_stem
+
+
+def _replace_report_artifact_configuration_code(
+    output_notebook_file_path: str,
+    notebook: nbformat.NotebookNode,
+) -> nbformat.NotebookNode:
+    report_stem = _report_stem(output_notebook_file_path)
+    _replace_cell_source_fragment(
+        notebook,
+        CHALLENGER_NAME_PLACEHOLDER,
+        f"challenger_name = {_challenger_name_from_report_stem(report_stem)!r}",
+    )
+    _replace_cell_source_fragment(
+        notebook,
+        SCORE_FILE_PATH_PLACEHOLDER,
+        f"score_file_path = {f'{report_stem}.scores.json'!r}",
+    )
+    _replace_cell_source_fragment(
+        notebook,
+        WIDGET_ASSET_DIRECTORY_PLACEHOLDER,
+        f"widget_asset_directory = {f'{report_stem}.assets'!r}",
+    )
+    _replace_cell_source_fragment(
+        notebook,
+        WIDGET_ASSET_REFERENCE_PREFIX_PLACEHOLDER,
+        f"widget_asset_reference_prefix = {f'{report_stem}.assets/'!r}",
     )
     return notebook
 
@@ -115,6 +169,18 @@ def _replace_cell_source(
     for cell in notebook["cells"]:
         if source_fragment in cell["source"]:
             cell["source"] = replacement_source
+            return
+    raise ValueError(f"Unable to find evaluation template cell containing {source_fragment!r}.")
+
+
+def _replace_cell_source_fragment(
+    notebook: nbformat.NotebookNode,
+    source_fragment: str,
+    replacement_source: str,
+) -> None:
+    for cell in notebook["cells"]:
+        if source_fragment in cell["source"]:
+            cell["source"] = cell["source"].replace(source_fragment, replacement_source)
             return
     raise ValueError(f"Unable to find evaluation template cell containing {source_fragment!r}.")
 

@@ -35,6 +35,7 @@ from oceanbench.core.dataset_utils import (
     VARIABLE_LABELS,
     VARIABLE_METADATA,
 )
+from oceanbench.core.widget_assets import widget_payload_javascript
 
 DEFAULT_SURFACE_COMPARISON_VARIABLES: tuple[Variable, ...] = (
     Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
@@ -826,7 +827,6 @@ def _surface_comparison_payload(
 
 
 def _surface_comparison_explorer_document(element_id: str, payload: dict[str, object]) -> str:
-    payload_json = json.dumps(payload, separators=(",", ":"))
     return f"""<!doctype html>
 <html>
 <head>
@@ -1062,7 +1062,7 @@ html, body {{
 </div>
 <script>
 (() => {{
-  const payload = {payload_json};
+  const payload = {widget_payload_javascript(payload)};
   const root = document.getElementById("{element_id}");
   const title = root.querySelector(".ob-map-title");
   const variableButtons = root.querySelector(".ob-map-variable-buttons");
@@ -2115,7 +2115,6 @@ def _lagrangian_payload(
 
 
 def _lagrangian_explorer_document(element_id: str, payload: dict[str, object]) -> str:
-    payload_json = json.dumps(payload, separators=(",", ":"))
     return f"""<!doctype html>
 <html>
 <head>
@@ -2317,7 +2316,7 @@ html, body {{
 <script>
 (() => {{
   {_map_viewport_script()}
-  const payload = {payload_json};
+  const payload = {widget_payload_javascript(payload)};
   const root = document.getElementById("{element_id}");
   const canvas = root.querySelector("canvas");
   const context = canvas.getContext("2d");
@@ -2869,7 +2868,6 @@ def _eddy_payload(
 
 
 def _eddy_explorer_document(element_id: str, payload: dict[str, object]) -> str:
-    payload_json = json.dumps(payload, separators=(",", ":"))
     return f"""<!doctype html>
 <html>
 <head>
@@ -3093,7 +3091,7 @@ html, body {{
 <script>
 (() => {{
   {_map_viewport_script()}
-  const payload = {payload_json};
+  const payload = {widget_payload_javascript(payload)};
   const root = document.getElementById("{element_id}");
   const canvas = root.querySelector("canvas");
   const context = canvas.getContext("2d");
@@ -3707,7 +3705,6 @@ def _class4_payload(
 
 
 def _class4_explorer_document(element_id: str, payload: dict[str, object]) -> str:
-    payload_json = json.dumps(payload, separators=(",", ":"))
     return f"""<!doctype html>
 <html>
 <head>
@@ -3913,7 +3910,7 @@ html, body {{
 <script>
 (() => {{
   {_map_viewport_script()}
-  const payload = {payload_json};
+  const payload = {widget_payload_javascript(payload)};
   const root = document.getElementById({json.dumps(element_id)});
   const title = root.querySelector(".ob-class4-title");
   const variableButtons = root.querySelector(".ob-class4-variable-buttons");
@@ -5040,7 +5037,7 @@ def _zonal_psd_explorer_document(element_id: str, payload: dict[str, object]) ->
 </html>"""
     ).substitute(
         element_id=element_id,
-        payload_json=json.dumps(payload),
+        payload_json=widget_payload_javascript(payload),
     )
 
 

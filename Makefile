@@ -56,7 +56,10 @@ evaluate-challenger:
 
 REPORT_NOTEBOOKS ?= *.report.ipynb
 REPORT_PACKAGE_DIRECTORY ?= evaluation-report-package
-REPORT_PUBLIC_BASE_URL ?= https://minio.dive.edito.eu/project-oceanbench/dev/evaluation-reports/249-webp-demo/
+REPORT_BASE_URL ?= https://minio.dive.edito.eu/project-oceanbench
+REPORT_VERSION ?= $(shell python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+REPORTS_PREFIX ?= public/evaluation-reports/${REPORT_VERSION}
+REPORT_PUBLIC_BASE_URL ?= ${REPORT_BASE_URL}/${REPORTS_PREFIX}/
 REPORT_PACKAGE_UPLOAD_OPTIONS ?=
 
 package-evaluation-reports: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
