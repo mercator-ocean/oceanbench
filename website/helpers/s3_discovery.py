@@ -4,12 +4,6 @@
 
 import json
 import os
-from pathlib import Path
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
 
 import requests
 
@@ -17,17 +11,8 @@ from helpers.challenger_metadata import KNOWN_CHALLENGERS
 from helpers.published_regions import published_region_ids
 
 
-def _project_version() -> str:
-    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
-    with open(pyproject_path, "rb") as file:
-        return tomllib.load(file)["project"]["version"]
-
-
-DEFAULT_REPORTS_VERSION = _project_version()
-S3_BASE_URL = os.environ.get("OCEANBENCH_REPORTS_BASE_URL", "https://minio.dive.edito.eu/project-oceanbench")
-REPORTS_VERSION = os.environ.get("OCEANBENCH_REPORTS_VERSION", DEFAULT_REPORTS_VERSION)
-DEFAULT_REPORTS_PREFIX = "dev/evaluation-reports/249-webp-demo/"
-REPORTS_PREFIX = os.environ.get("OCEANBENCH_REPORTS_PREFIX", DEFAULT_REPORTS_PREFIX)
+S3_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench"
+REPORTS_PREFIX = "dev/evaluation-reports/249-webp-demo/"
 REPORT_CATALOG_FILE_NAME = "_report_catalog.json"
 REPORT_MANIFEST_FILE_NAME = "manifest.json"
 REPORT_URL_KEYS = ("report_url", "notebook_url", "scores_url")
