@@ -806,6 +806,9 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "Class IV observation error maps" in html_output.data
     assert "Model minus Class IV observation errors" in html_output.data
     assert "SLA points are sampled along observed satellite tracks for display" in html_output.data
+    assert "#000080, #0000ff, #00ffff, #80ff80, #ffff00, #ff0000, #800000" in html_output.data
+    assert "function jetColor(t)" in html_output.data
+    assert "return jetColor((clipped + 1) / 2)" in html_output.data
     assert "metrics use all observations" in html_output.data
     assert "ob-class4-tooltip" in html_output.data
     assert "payload.modelMask" in html_output.data

@@ -49,15 +49,16 @@ DEFAULT_ZONAL_PSD_VARIABLES: tuple[Variable, ...] = (
     Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
 )
 DEFAULT_ZONAL_PSD_LEAD_DAY_INDICES: tuple[int, ...] = (0, -1)
+DIVERGING_FIELD_COLORMAP = "jet"
 FIELD_COLORMAPS: dict[str, str] = {
-    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): "RdBu_r",
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): DIVERGING_FIELD_COLORMAP,
     Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): "viridis",
     Variable.SEA_WATER_SALINITY.key(): "cividis",
-    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): "RdBu_r",
-    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): "RdBu_r",
+    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): DIVERGING_FIELD_COLORMAP,
+    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): DIVERGING_FIELD_COLORMAP,
     Variable.MIXED_LAYER_DEPTH.key(): "viridis",
-    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): "RdBu_r",
-    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): "RdBu_r",
+    Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(): DIVERGING_FIELD_COLORMAP,
+    Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(): DIVERGING_FIELD_COLORMAP,
 }
 DIVERGING_VARIABLES = {
     Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
@@ -66,7 +67,7 @@ DIVERGING_VARIABLES = {
     Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key(),
     Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key(),
 }
-ERROR_COLORMAP = "RdBu_r"
+ERROR_COLORMAP = "jet"
 ABSOLUTE_ERROR_COLORMAP = "magma"
 RMSE_COLORMAP = "magma"
 LAND_BACKGROUND_COLOR = "#d9d5cc"
@@ -3853,7 +3854,7 @@ html, body {{
   width: 120px;
   height: 10px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #2166ac, #f7f7f7, #b2182b);
+  background: linear-gradient(90deg, #000080, #0000ff, #00ffff, #80ff80, #ffff00, #ff0000, #800000);
   border: 1px solid #cbd5e1;
 }}
 .ob-class4-gradient.absolute {{
@@ -4011,15 +4012,38 @@ html, body {{
     modelMaskLayer.draw(targetContext);
   }}
 
+  function interpolateColorStops(stops, t) {{
+    const clipped = Math.max(0, Math.min(1, t));
+    const upperIndex = Math.min(stops.length - 1, Math.ceil(clipped * (stops.length - 1)));
+    const lowerIndex = Math.max(0, upperIndex - 1);
+    const localDenominator = 1 / (stops.length - 1);
+    const localT = localDenominator === 0 ? 0 : (clipped - lowerIndex * localDenominator) / localDenominator;
+    const lower = stops[lowerIndex];
+    const upper = stops[upperIndex];
+    return `rgb(${{Math.round(lower[0] + (upper[0] - lower[0]) * localT)}}, ` +
+      `${{Math.round(lower[1] + (upper[1] - lower[1]) * localT)}}, ` +
+      `${{Math.round(lower[2] + (upper[2] - lower[2]) * localT)}})`;
+  }}
+
+  function jetColor(t) {{
+    return interpolateColorStops(
+      [
+        [0, 0, 128],
+        [0, 0, 255],
+        [0, 255, 255],
+        [128, 255, 128],
+        [255, 255, 0],
+        [255, 0, 0],
+        [128, 0, 0]
+      ],
+      t
+    );
+  }}
+
   function colorForSigned(value, scale) {{
     if (value === null || !Number.isFinite(value)) return "rgba(100,116,139,0.25)";
     const clipped = Math.max(-1, Math.min(1, value / scale));
-    if (clipped < 0) {{
-      const t = 1 + clipped;
-      return `rgb(${{Math.round(33 + 214 * t)}}, ${{Math.round(102 + 145 * t)}}, ${{Math.round(172 + 75 * t)}})`;
-    }}
-    const t = clipped;
-    return `rgb(${{Math.round(247 - 69 * t)}}, ${{Math.round(247 - 213 * t)}}, ${{Math.round(247 - 204 * t)}})`;
+    return jetColor((clipped + 1) / 2);
   }}
 
   function colorForAbsolute(value, scale) {{
