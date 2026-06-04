@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import importlib.util
+import json
 from pathlib import Path
 
 from deepdiff import DeepDiff
@@ -44,9 +45,23 @@ def test_keeps_non_tolerated_diff_entries() -> None:
     diff = DeepDiff(
         {"cell": "Mixed layer depth (m)   23.491993", "other": "Temperature   12.0"},
         {"cell": "Mixed layer depth (m)   23.491991", "other": "Temperature   13.0"},
-    )
+    ).to_dict()
 
     filtered_diff = compare_notebook._filter_tolerated_text_float_changes(diff)
 
     assert "root['cell']" not in filtered_diff["values_changed"]
     assert "root['other']" in filtered_diff["values_changed"]
+
+
+def test_tolerated_diff_is_removed_from_serialized_plain_diff() -> None:
+    old_value = "Zonal current (m/s) [eastward_sea_water_velocit..." "    0.096224    0.099012   \n"
+    new_value = "Zonal current (m/s) [eastward_sea_water_velocit..." "    0.096223    0.099012   \n"
+    diff = DeepDiff(
+        {"cell": [old_value]},
+        {"cell": [new_value]},
+    ).to_dict()
+
+    filtered_diff = compare_notebook._filter_tolerated_text_float_changes(diff)
+
+    assert filtered_diff == {}
+    assert "0.096224" not in json.dumps(filtered_diff)
