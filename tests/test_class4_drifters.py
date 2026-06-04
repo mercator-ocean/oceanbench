@@ -113,9 +113,9 @@ def test_class4_drifter_score_reports_deviation_and_matched_counts(monkeypatch) 
         "Class-4 drifter trajectory deviation mean (km)",
         "Class-4 matched drifter count",
     ]
-    assert score.columns.tolist() == ["Lead day 1", "Lead day 2"]
-    assert score.loc["Class-4 drifter trajectory deviation mean (km)", "Lead day 1"] == 0.0
-    assert score.loc["Class-4 matched drifter count", "Lead day 1"] == 2.0
+    assert score.columns.tolist() == ["Lead day 1 (init)", "Lead day 2"]
+    assert score.loc["Class-4 drifter trajectory deviation mean (km)", "Lead day 1 (init)"] == 0.0
+    assert score.loc["Class-4 matched drifter count", "Lead day 1 (init)"] == 2.0
     assert score.loc["Class-4 matched drifter count", "Lead day 2"] == 1.0
 
 
@@ -145,4 +145,4 @@ def test_class4_drifter_score_uses_available_trajectory_lead_days(monkeypatch) -
         _observation_dataset(),
     )
 
-    assert score.columns.tolist() == ["Lead day 1", "Lead day 2"]
+    assert score.columns.tolist() == ["Lead day 1 (init)", "Lead day 2"]

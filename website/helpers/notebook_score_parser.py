@@ -12,7 +12,7 @@ from helpers.type import ModelScore
 
 _VARIABLE_LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]+)\) \[([^\]]*)\](?:\{([^}]+)\})?$")
 _VARIABLE_LABEL_WITH_UNIT_PATTERN = re.compile(r"^(.*?) \(([^)]+)\)(?:\{([^}]+)\})?$")
-_LEAD_DAY_NUMBER_PATTERN = re.compile(r"(\d+)$")
+_LEAD_DAY_NUMBER_PATTERN = re.compile(r"\b(\d+)\b")
 _DISPLAY_NAME_RENAMES = {
     "height": "sea surface height",
     "surface height": "sea surface height",

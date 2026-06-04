@@ -23,6 +23,13 @@ MATCHED_DRIFTER_COUNT_ROW_LABEL = "Class-4 matched drifter count"
 _DRIFTER_COMPARISON_CACHE: dict[tuple[int, int, int], tuple[xarray.Dataset, xarray.Dataset]] = {}
 
 
+def _drifter_lead_day_labels(lead_day_count: int) -> list[str]:
+    labels = lead_day_labels(1, lead_day_count)
+    if labels:
+        labels[0] = f"{labels[0]} (init)"
+    return labels
+
+
 class Class4DrifterTrajectoryUnavailableError(ValueError):
     pass
 
@@ -426,5 +433,5 @@ def deviation_of_lagrangian_trajectories_compared_to_class4_observations(
             DRIFTER_TRAJECTORY_DEVIATION_ROW_LABEL,
             MATCHED_DRIFTER_COUNT_ROW_LABEL,
         ],
-        columns=lead_day_labels(1, lead_day_count),
+        columns=_drifter_lead_day_labels(lead_day_count),
     )

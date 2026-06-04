@@ -29,7 +29,7 @@ def _score_table() -> str:
 def _drifter_score_table() -> str:
     return (
         "<table>"
-        "<thead><tr><th></th><th>Lead day 1</th><th>Lead day 10</th></tr></thead>"
+        "<thead><tr><th></th><th>Lead day 1 (init)</th><th>Lead day 10</th></tr></thead>"
         "<tbody>"
         "<tr><th>Class-4 drifter trajectory deviation mean (km)</th><td>12.3</td><td>45.6</td></tr>"
         "<tr><th>Class-4 matched drifter count</th><td>9</td><td>5</td></tr>"
@@ -96,6 +96,7 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
     assert 'class="validation-sparkline-point"' in html
     assert "Drifter trajectory scores" in html
     assert "Drifter trajectory divergence" in html
+    assert "Lead 1 (init)" in html
     assert "class-4 drifter trajectory deviation mean" in html
     assert "12.300 km" not in html
     assert "<td>12.300</td>" in html

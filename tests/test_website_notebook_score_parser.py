@@ -12,13 +12,13 @@ sys.path.insert(0, str(WEBSITE_DIRECTORY))
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook  # noqa: E402
 
 
-def _score_table(rows: list[tuple[str, float, float]]) -> str:
+def _score_table(rows: list[tuple[str, float, float]], first_lead_header: str = "Lead day 1") -> str:
     body = "\n".join(
         f"<tr><th>{label}</th><td>{lead_day_1}</td><td>{lead_day_2}</td></tr>" for label, lead_day_1, lead_day_2 in rows
     )
     return (
         "<table>"
-        "<thead><tr><th></th><th>Lead day 1</th><th>Lead day 2</th></tr></thead>"
+        f"<thead><tr><th></th><th>{first_lead_header}</th><th>Lead day 2</th></tr></thead>"
         f"<tbody>{body}</tbody>"
         "</table>"
     )
@@ -94,7 +94,8 @@ def _write_notebook(notebook_path: Path) -> None:
                     [
                         ("Class-4 drifter trajectory deviation mean (km)", 3.1, 3.2),
                         ("Class-4 matched drifter count", 4.0, 5.0),
-                    ]
+                    ],
+                    first_lead_header="Lead day 1 (init)",
                 ),
             ),
         ]
@@ -165,7 +166,8 @@ def test_parser_extracts_scores_from_report_context_cells(tmp_path):
                 _score_table(
                     [
                         ("Class-4 drifter trajectory deviation mean (km)", 3.1, 3.2),
-                    ]
+                    ],
+                    first_lead_header="Lead day 1 (init)",
                 ),
             ),
         ]

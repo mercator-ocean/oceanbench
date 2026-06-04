@@ -401,6 +401,7 @@ def test_plot_class4_drifter_trajectory_explorer_returns_animated_html(monkeypat
             "challengerName": "Challenger",
             "particleCount": 2,
             "matchedCounts": [2, 1],
+            "initialTimeLabel": "Lead day 1.0 (init)",
             "statusParticleLabel": "matched drifters at this lead",
             "drawOnlyMatchedPairs": True,
             "referenceTrailLabel": "Observed drifter trail",
@@ -460,6 +461,9 @@ def test_plot_class4_drifter_trajectory_explorer_returns_animated_html(monkeypat
     assert "Class IV drifter observations" in html_output.data
     assert "matchedCounts" in html_output.data
     assert "matchedCountLabel" in html_output.data
+    assert "initialTimeLabel" in html_output.data
+    assert "Lead day 1.0 (init)" in html_output.data
+    assert "timeLabelText" in html_output.data
     assert "matched drifters at this lead" in html_output.data
     assert "drawOnlyMatchedPairs" in html_output.data
     assert "Observed drifter trail" in html_output.data

@@ -2448,8 +2448,15 @@ html, body {{
     return `${{payload.matchedCounts[leadIndex]}} ${{payload.statusParticleLabel || "matched particles"}}`;
   }}
 
+  function timeLabelText() {{
+    if (payload.initialTimeLabel && activeTime < 0.005) {{
+      return payload.initialTimeLabel;
+    }}
+    return `Lead day ${{(activeTime + 1).toFixed(1)}}`;
+  }}
+
   function renderStatus() {{
-    timeLabel.textContent = `Lead day ${{(activeTime + 1).toFixed(1)}}`;
+    timeLabel.textContent = timeLabelText();
     statusText.textContent = [
       references[activeReferenceKey].label,
       matchedCountLabel(),
@@ -2721,6 +2728,7 @@ def _class4_drifter_payload(
         "challengerName": challenger_name,
         "particleCount": int(challenger_particles.sizes["particle"]),
         "matchedCounts": numpy.sum(numpy.isfinite(particle_distances), axis=0).astype(int).tolist(),
+        "initialTimeLabel": "Lead day 1.0 (init)",
         "statusParticleLabel": "matched drifters at this lead",
         "drawOnlyMatchedPairs": True,
         "referenceTrailLabel": "Observed drifter trail",

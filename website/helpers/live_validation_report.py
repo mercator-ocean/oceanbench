@@ -105,6 +105,11 @@ def _lead_days(score: ModelScore) -> list[str]:
     return []
 
 
+def _drifter_lead_label(lead_day: str) -> str:
+    suffix = " (init)" if lead_day == "1" else ""
+    return f"Lead {lead_day}{suffix}"
+
+
 def _depth_sort_key(depth: str) -> int:
     return DEPTH_ORDER.index(depth) if depth in DEPTH_ORDER else len(DEPTH_ORDER)
 
@@ -194,7 +199,7 @@ def _drifter_score_table(score: ModelScore | None) -> str:
         return '<p class="validation-empty">Class IV drifter trajectory scores are not available in this report.</p>'
     header = (
         "<thead><tr><th>Metric</th><th>Unit</th>"
-        + "".join(f"<th>Lead {escape(lead_day)}</th>" for lead_day in lead_days)
+        + "".join(f"<th>{escape(_drifter_lead_label(lead_day))}</th>" for lead_day in lead_days)
         + "</tr></thead>"
     )
     body = "".join(
