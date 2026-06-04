@@ -378,6 +378,8 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "createMapViewport" in html_output.data
     assert "createMapBackgroundCache" in html_output.data
     assert "createMapRasterLayer" in html_output.data
+    assert "function drawMapGraticule" in html_output.data
+    assert "drawMapGraticule(targetContext, viewport)" in html_output.data
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
     assert "backgroundCache.invalidate()" in html_output.data
     assert "viewport.longitudeShiftsForPath(layerPath)" in html_output.data
@@ -388,6 +390,12 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "fill(&quot;evenodd&quot;)" not in html_output.data
     assert "Current separation distance" in html_output.data
     assert "Reached daily positions" in html_output.data
+    assert ".ob-lagrangian-status-text" in html_output.data
+    assert ".ob-lagrangian-status-primary" in html_output.data
+    assert "grid-template-columns: minmax(0, 1fr) auto" in html_output.data
+    assert "min-height: 68px" in html_output.data
+    assert "white-space: nowrap" in html_output.data
+    assert "statusText.replaceChildren(referenceLine, detailLine)" in html_output.data
 
 
 def test_model_mask_payload_uses_model_derived_raster_image() -> None:
@@ -638,6 +646,8 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "createMapViewport" in html_output.data
     assert "createMapBackgroundCache" in html_output.data
     assert "createMapRasterLayer" in html_output.data
+    assert "function drawMapGraticule" in html_output.data
+    assert "drawMapGraticule(targetContext, viewport)" in html_output.data
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
     assert "backgroundCache.invalidate()" in html_output.data
     assert "viewport.longitudeShiftsForPath(layerPath)" in html_output.data
@@ -821,12 +831,18 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "fitScale" not in html_output.data
     assert "createMapBackgroundCache" in html_output.data
     assert "createMapRasterLayer" in html_output.data
+    assert "function drawMapGraticule" in html_output.data
+    assert "drawMapGraticule(targetContext, viewport)" in html_output.data
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
     assert "backgroundCache.invalidate()" in html_output.data
     assert "viewport.longitudeShiftsForPath(layerPath)" in html_output.data
+    assert "function rasterDestination" in html_output.data
+    assert "const overlapPixels = 1" in html_output.data
+    assert "destination.width" in html_output.data
     assert "viewport.longitudeShiftsForLongitude(longitude)" in html_output.data
     assert "shiftedMaximum &gt;= viewBounds.longitudeMinimum" in html_output.data
     assert "projection.xUnwrapped" in html_output.data
+    assert "rgba(15, 23, 42, 0.46)" in html_output.data
     assert "targetContext.drawImage" in html_output.data
     assert "height: 100%" in html_output.data
     assert "margin: 0 14px 12px" not in html_output.data
@@ -840,6 +856,10 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
     assert "Absolute error" in html_output.data
     assert "ob-class4-legend-label" in html_output.data
     assert "ob-class4-legend-range" in html_output.data
+    assert "flex: 0 0 68px" in html_output.data
+    assert ".ob-class4-status-primary" in html_output.data
+    assert "statusText.replaceChildren(statusPrimary, statusDetail)" in html_output.data
+    assert "text-overflow: ellipsis" not in html_output.data
     assert ".ob-class4-gradient.absolute" in html_output.data
     assert "renderLegend" in html_output.data
     assert "0 / high" in html_output.data

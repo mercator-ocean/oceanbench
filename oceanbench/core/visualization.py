@@ -1962,6 +1962,47 @@ def _map_viewport_script() -> str:
     };
   }
 
+  function mapGraticuleStep(span) {
+    if (span > 180) return 60;
+    if (span > 90) return 30;
+    if (span > 35) return 10;
+    if (span > 12) return 5;
+    return 2;
+  }
+
+  function drawMapGraticule(targetContext, viewport, options = {}) {
+    const bounds = viewport.bounds();
+    const longitudeStep = mapGraticuleStep(bounds.longitudeMaximum - bounds.longitudeMinimum);
+    const latitudeStep = mapGraticuleStep(bounds.latitudeMaximum - bounds.latitudeMinimum);
+    targetContext.strokeStyle = options.strokeStyle || "rgba(51, 65, 85, 0.18)";
+    targetContext.lineWidth = options.lineWidth || 1;
+    for (
+      let longitude = Math.ceil(bounds.longitudeMinimum / longitudeStep) * longitudeStep;
+      longitude <= bounds.longitudeMaximum;
+      longitude += longitudeStep
+    ) {
+      const southPoint = viewport.project({ longitude, latitude: bounds.latitudeMinimum });
+      const northPoint = viewport.project({ longitude, latitude: bounds.latitudeMaximum });
+      strokeMapLine(targetContext, southPoint, northPoint);
+    }
+    for (
+      let latitude = Math.ceil(bounds.latitudeMinimum / latitudeStep) * latitudeStep;
+      latitude <= bounds.latitudeMaximum;
+      latitude += latitudeStep
+    ) {
+      const westPoint = viewport.project({ longitude: bounds.longitudeMinimum, latitude });
+      const eastPoint = viewport.project({ longitude: bounds.longitudeMaximum, latitude });
+      strokeMapLine(targetContext, westPoint, eastPoint);
+    }
+  }
+
+  function strokeMapLine(targetContext, a, b) {
+    targetContext.beginPath();
+    targetContext.moveTo(a.x, a.y);
+    targetContext.lineTo(b.x, b.y);
+    targetContext.stroke();
+  }
+
   function createMapRasterLayer(layerPayload, viewport, onLoad) {
     if (!layerPayload || !layerPayload.image || !layerPayload.extent) {
       return { draw: () => {} };
@@ -1976,6 +2017,20 @@ def _map_viewport_script() -> str:
     image.src = layerPayload.image;
     if (image.complete) {
       isLoaded = true;
+    }
+
+    function rasterDestination(xMinimum, yMinimum, xMaximum, yMaximum) {
+      const overlapPixels = 1;
+      const left = Math.floor(Math.min(xMinimum, xMaximum)) - overlapPixels;
+      const right = Math.ceil(Math.max(xMinimum, xMaximum)) + overlapPixels;
+      const top = Math.floor(Math.min(yMinimum, yMaximum)) - overlapPixels;
+      const bottom = Math.ceil(Math.max(yMinimum, yMaximum)) + overlapPixels;
+      return {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+      };
     }
 
     return {
@@ -1994,12 +2049,13 @@ def _map_viewport_script() -> str:
           const xMaximum = projection.xUnwrapped(extent.longitudeMaximum + longitudeShift);
           const yMinimum = projection.y(extent.latitudeMaximum);
           const yMaximum = projection.y(extent.latitudeMinimum);
+          const destination = rasterDestination(xMinimum, yMinimum, xMaximum, yMaximum);
           targetContext.drawImage(
             image,
-            xMinimum,
-            yMinimum,
-            xMaximum - xMinimum,
-            yMaximum - yMinimum,
+            destination.x,
+            destination.y,
+            destination.width,
+            destination.height,
           );
         }
         targetContext.imageSmoothingEnabled = previousImageSmoothing;
@@ -2227,24 +2283,45 @@ html, body {{
   cursor: grabbing;
 }}
 .ob-lagrangian-status {{
-  display: flex;
-  justify-content: space-between;
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 8px 16px;
   border-top: 1px solid #cfd8e3;
   color: #64748b;
   font-size: 12px;
+  line-height: 1.3;
+}}
+.ob-lagrangian-status-text {{
+  min-width: 0;
+  min-height: 34px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+}}
+.ob-lagrangian-status-primary {{
+  color: #334155;
+  font-weight: 700;
+}}
+.ob-lagrangian-status-detail {{
+  color: #64748b;
 }}
 .ob-lagrangian-legend {{
   display: flex;
-  gap: 14px;
+  gap: 8px 14px;
   align-items: center;
+  justify-content: flex-end;
   flex-wrap: wrap;
+  max-width: 580px;
+  line-height: 1.2;
 }}
 .ob-lagrangian-key {{
   display: inline-flex;
   gap: 6px;
   align-items: center;
+  white-space: nowrap;
 }}
 .ob-lagrangian-swatch {{
   width: 18px;
@@ -2274,6 +2351,15 @@ html, body {{
   }}
   .ob-lagrangian-map {{
     height: 440px;
+  }}
+  .ob-lagrangian-status {{
+    grid-template-columns: 1fr;
+    align-content: center;
+    min-height: 96px;
+  }}
+  .ob-lagrangian-legend {{
+    justify-content: flex-start;
+    max-width: none;
   }}
 }}
 </style>
@@ -2415,11 +2501,16 @@ html, body {{
 
   function renderStatus() {{
     timeLabel.textContent = `Lead day ${{(activeTime + 1).toFixed(1)}}`;
-    statusText.textContent = [
-      references[activeReferenceKey].label,
+    const referenceLine = document.createElement("span");
+    referenceLine.className = "ob-lagrangian-status-primary";
+    referenceLine.textContent = references[activeReferenceKey].label;
+    const detailLine = document.createElement("span");
+    detailLine.className = "ob-lagrangian-status-detail";
+    detailLine.textContent = [
       `${{payload.particleCount}} sampled particles`,
       "interpolated display",
     ].join(" - ");
+    statusText.replaceChildren(referenceLine, detailLine);
   }}
 
   function point(track, particleIndex, timeIndex) {{
@@ -2493,41 +2584,7 @@ html, body {{
     targetContext.fillStyle = "#eef7fb";
     targetContext.fillRect(0, 0, canvas.width, canvas.height);
     drawModelMask(targetContext);
-    targetContext.strokeStyle = "rgba(51, 65, 85, 0.18)";
-    targetContext.lineWidth = 1;
-    const bounds = viewport.bounds();
-    const longitudeStep = niceStep(bounds.longitudeMaximum - bounds.longitudeMinimum);
-    const latitudeStep = niceStep(bounds.latitudeMaximum - bounds.latitudeMinimum);
-    for (
-      let longitude = Math.ceil(bounds.longitudeMinimum / longitudeStep) * longitudeStep;
-      longitude <= bounds.longitudeMaximum;
-      longitude += longitudeStep
-    ) {{
-      line(
-        project({{ longitude, latitude: bounds.latitudeMinimum }}),
-        project({{ longitude, latitude: bounds.latitudeMaximum }}),
-        targetContext,
-      );
-    }}
-    for (
-      let latitude = Math.ceil(bounds.latitudeMinimum / latitudeStep) * latitudeStep;
-      latitude <= bounds.latitudeMaximum;
-      latitude += latitudeStep
-    ) {{
-      line(
-        project({{ longitude: bounds.longitudeMinimum, latitude }}),
-        project({{ longitude: bounds.longitudeMaximum, latitude }}),
-        targetContext,
-      );
-    }}
-  }}
-
-  function niceStep(span) {{
-    if (span > 180) return 60;
-    if (span > 90) return 30;
-    if (span > 35) return 10;
-    if (span > 12) return 5;
-    return 2;
+    drawMapGraticule(targetContext, viewport);
   }}
 
   function drawModelMask(targetContext) {{
@@ -3264,31 +3321,7 @@ html, body {{
     targetContext.fillStyle = "#eef7fb";
     targetContext.fillRect(0, 0, canvas.width, canvas.height);
     drawModelMask(targetContext);
-    targetContext.strokeStyle = "rgba(51, 65, 85, 0.18)";
-    targetContext.lineWidth = 1;
-    const bounds = viewport.bounds();
-    const longitudeStep = niceStep(bounds.longitudeMaximum - bounds.longitudeMinimum);
-    const latitudeStep = niceStep(bounds.latitudeMaximum - bounds.latitudeMinimum);
-    const firstLongitude = Math.ceil(bounds.longitudeMinimum / longitudeStep) * longitudeStep;
-    const firstLatitude = Math.ceil(bounds.latitudeMinimum / latitudeStep) * latitudeStep;
-    for (let longitude = firstLongitude; longitude <= bounds.longitudeMaximum; longitude += longitudeStep) {{
-      const southPoint = project({{ longitude, latitude: bounds.latitudeMinimum }});
-      const northPoint = project({{ longitude, latitude: bounds.latitudeMaximum }});
-      line(southPoint, northPoint, targetContext);
-    }}
-    for (let latitude = firstLatitude; latitude <= bounds.latitudeMaximum; latitude += latitudeStep) {{
-      const westPoint = project({{ longitude: bounds.longitudeMinimum, latitude }});
-      const eastPoint = project({{ longitude: bounds.longitudeMaximum, latitude }});
-      line(westPoint, eastPoint, targetContext);
-    }}
-  }}
-
-  function niceStep(span) {{
-    if (span > 180) return 60;
-    if (span > 90) return 30;
-    if (span > 35) return 10;
-    if (span > 12) return 5;
-    return 2;
+    drawMapGraticule(targetContext, viewport);
   }}
 
   function drawModelMask(targetContext) {{
@@ -3833,22 +3866,39 @@ html, body {{
   margin-bottom: 2px;
 }}
 .ob-class4-status {{
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: space-between;
+  flex: 0 0 68px;
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 8px 16px;
   border-top: 1px solid #d5dce8;
   background: #ffffff;
   color: #64748b;
   font-size: 12px;
+  line-height: 1.3;
+}}
+.ob-class4-status-text {{
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+}}
+.ob-class4-status-primary {{
+  color: #334155;
+  font-weight: 700;
+}}
+.ob-class4-status-detail {{
+  color: #64748b;
 }}
 .ob-class4-legend {{
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }}
 .ob-class4-gradient {{
   width: 120px;
@@ -3869,6 +3919,16 @@ html, body {{
   }}
   .ob-class4-row {{
     justify-content: flex-start;
+  }}
+  .ob-class4-status {{
+    flex-basis: 96px;
+    grid-template-columns: 1fr;
+    align-content: center;
+  }}
+  .ob-class4-legend {{
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    white-space: normal;
   }}
 }}
 </style>
@@ -4006,6 +4066,7 @@ html, body {{
     targetContext.fillStyle = "#edf3f8";
     targetContext.fillRect(0, 0, canvas.width, canvas.height);
     drawModelMask(targetContext);
+    drawMapGraticule(targetContext, viewport);
   }}
 
   function drawModelMask(targetContext) {{
@@ -4083,6 +4144,9 @@ html, body {{
         context.beginPath();
         context.arc(position.x, position.y, 2.8, 0, Math.PI * 2);
         context.fill();
+        context.strokeStyle = "rgba(15, 23, 42, 0.46)";
+        context.lineWidth = 0.75;
+        context.stroke();
         if (index === hoveredObservationIndex) {{
           context.strokeStyle = "#172033";
           context.lineWidth = 2.0;
@@ -4182,14 +4246,21 @@ html, body {{
     renderLegend();
     leadLabel.textContent = `Lead day ${{frame.leadDay}}`;
     const modeLabel = modes.find((mode) => mode.key === state.mode).label;
-    statusText.textContent = [
+    const statusPrimary = document.createElement("span");
+    statusPrimary.className = "ob-class4-status-primary";
+    statusPrimary.textContent = [
       currentVariable().label,
       currentDepth().label,
       modeLabel,
+    ].join(" - ");
+    const statusDetail = document.createElement("span");
+    statusDetail.className = "ob-class4-status-detail";
+    statusDetail.textContent = [
       selectedClass4ScaleLabel(),
       `${{frame.shownCount}}/${{frame.totalCount}} observations shown`,
       "metrics use all observations",
     ].join(" - ");
+    statusText.replaceChildren(statusPrimary, statusDetail);
   }}
 
   function render() {{
