@@ -366,6 +366,7 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
 
     assert "<iframe" in html_output.data
     assert "height:510px" in html_output.data
+    assert 'scrolling="no"' in html_output.data
     assert "Lagrangian trajectory divergence" in html_output.data
     assert "requestAnimationFrame" in html_output.data
     assert "Smooth visual interpolation between true daily particle positions" in html_output.data
@@ -378,6 +379,9 @@ def test_plot_multi_reference_lagrangian_trajectory_explorer_returns_animated_ht
     assert "createMapViewport" in html_output.data
     assert "createMapBackgroundCache" in html_output.data
     assert "createMapRasterLayer" in html_output.data
+    assert "height: 100%" in html_output.data
+    assert "flex: 1 1 auto" in html_output.data
+    assert "height: 620px" not in html_output.data
     assert "function drawMapGraticule" in html_output.data
     assert "drawMapGraticule(targetContext, viewport)" in html_output.data
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
@@ -628,6 +632,7 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
 
     assert "<iframe" in html_output.data
     assert "height:520px" in html_output.data
+    assert 'scrolling="no"' in html_output.data
     assert "Mesoscale eddy matching" in html_output.data
     assert "Discrete SSH eddy detections per lead day" in html_output.data
     assert "contours are decimated for display" in html_output.data
@@ -646,6 +651,9 @@ def test_plot_multi_reference_eddy_matching_explorer_returns_animated_html(monke
     assert "createMapViewport" in html_output.data
     assert "createMapBackgroundCache" in html_output.data
     assert "createMapRasterLayer" in html_output.data
+    assert "height: 100%" in html_output.data
+    assert "flex: 1 1 auto" in html_output.data
+    assert "height: 620px" not in html_output.data
     assert "function drawMapGraticule" in html_output.data
     assert "drawMapGraticule(targetContext, viewport)" in html_output.data
     assert "backgroundCache.draw(context, viewport.cacheKey())" in html_output.data
@@ -813,6 +821,7 @@ def test_plot_class4_observation_error_explorer_returns_interactive_html(monkeyp
 
     assert "<iframe" in html_output.data
     assert "height:500px" in html_output.data
+    assert 'scrolling="no"' in html_output.data
     assert "Class IV observation error maps" in html_output.data
     assert "Model minus Class IV observation errors" in html_output.data
     assert "SLA points are sampled along observed satellite tracks for display" in html_output.data

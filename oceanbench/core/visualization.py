@@ -1437,8 +1437,8 @@ def _explorer_iframe_html(document: str, height_pixels: int) -> str:
     return (
         f'<iframe srcdoc="{escaped_document}" '
         + 'style="width:100%; '
-        + f'height:{height_pixels}px; border:0;" '
-        + 'loading="lazy" sandbox="allow-scripts"></iframe>'
+        + f'height:{height_pixels}px; border:0; overflow:hidden;" '
+        + 'loading="lazy" scrolling="no" sandbox="allow-scripts"></iframe>'
     )
 
 
@@ -2180,17 +2180,25 @@ def _lagrangian_explorer_document(element_id: str, payload: dict[str, object]) -
 html, body {{
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
   background: transparent;
   color: #172033;
   font-family: Arial, sans-serif;
 }}
 .ob-lagrangian {{
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
   border: 1px solid #cfd8e3;
   border-radius: 8px;
   background: #ffffff;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }}
 .ob-lagrangian-header {{
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   gap: 16px;
@@ -2269,7 +2277,8 @@ html, body {{
   accent-color: #0f5f8f;
 }}
 .ob-lagrangian-map {{
-  height: 620px;
+  flex: 1 1 auto;
+  min-height: 0;
   background: linear-gradient(180deg, #eef7fb, #ffffff);
 }}
 .ob-lagrangian-map canvas {{
@@ -2283,6 +2292,7 @@ html, body {{
   cursor: grabbing;
 }}
 .ob-lagrangian-status {{
+  flex: 0 0 auto;
   min-height: 68px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2348,9 +2358,6 @@ html, body {{
   }}
   .ob-lagrangian-control-row {{
     justify-content: flex-start;
-  }}
-  .ob-lagrangian-map {{
-    height: 440px;
   }}
   .ob-lagrangian-status {{
     grid-template-columns: 1fr;
@@ -2934,17 +2941,25 @@ def _eddy_explorer_document(element_id: str, payload: dict[str, object]) -> str:
 html, body {{
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
   background: transparent;
   color: #172033;
   font-family: Arial, sans-serif;
 }}
 .ob-eddy {{
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
   border: 1px solid #cfd8e3;
   border-radius: 8px;
   background: #ffffff;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }}
 .ob-eddy-header {{
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   gap: 16px;
@@ -3024,7 +3039,8 @@ html, body {{
 }}
 .ob-eddy-map {{
   position: relative;
-  height: 620px;
+  flex: 1 1 auto;
+  min-height: 0;
   background: linear-gradient(180deg, #eef7fb, #ffffff);
 }}
 .ob-eddy-map canvas {{
@@ -3058,6 +3074,7 @@ html, body {{
   margin-bottom: 2px;
 }}
 .ob-eddy-status {{
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   gap: 12px;
