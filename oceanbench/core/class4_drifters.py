@@ -17,6 +17,8 @@ from oceanbench.core.lead_day_utils import lead_day_labels
 DRIFTER_DEPTH_METERS = 15.0
 MATCH_CANDIDATE_COUNT = 5
 MATCH_DISTANCE_PER_HOUR_KM = 25.0
+MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT = 50
+MINIMUM_RELIABLE_MATCHED_DRIFTER_FRACTION = 0.05
 DRIFTER_TRAJECTORY_DEVIATION_ROW_LABEL = "Class-4 drifter trajectory deviation mean (km)"
 MATCHED_DRIFTER_COUNT_ROW_LABEL = "Class-4 matched drifter count"
 
@@ -347,14 +349,33 @@ def class4_drifter_trajectory_distance_km(
     reference_particles: xarray.Dataset,
 ) -> numpy.ndarray:
     challenger_particles, reference_particles = xarray.align(challenger_particles, reference_particles, join="inner")
-    latitude_reference_radians = numpy.deg2rad(reference_particles["lat"].values)
-    latitude_distance = (challenger_particles["lat"].values - reference_particles["lat"].values) * 111.0
-    longitude_distance = (
-        (challenger_particles["lon"].values - reference_particles["lon"].values)
-        * 111.0
-        * numpy.cos(latitude_reference_radians)
+    return _haversine_distance_km(
+        reference_particles["lat"].values,
+        reference_particles["lon"].values,
+        challenger_particles["lat"].values,
+        challenger_particles["lon"].values,
     )
-    return numpy.sqrt(latitude_distance**2 + longitude_distance**2)
+
+
+def reported_class4_drifter_time_count(
+    challenger_dataset: xarray.Dataset,
+    available_time_count: int,
+) -> int:
+    challenger_dataset = rename_dataset_with_standard_names(challenger_dataset)
+    forecast_lead_day_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
+    return min(available_time_count, max(1, forecast_lead_day_count - 1))
+
+
+def _minimum_reliable_matched_drifter_count(matched_count_row: numpy.ndarray) -> int:
+    if matched_count_row.size == 0:
+        return 1
+    initial_matched_count = int(matched_count_row[0])
+    if initial_matched_count < MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT:
+        return 1
+    return max(
+        MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT,
+        int(numpy.ceil(initial_matched_count * MINIMUM_RELIABLE_MATCHED_DRIFTER_FRACTION)),
+    )
 
 
 def class4_drifter_trajectory_comparison(
@@ -408,8 +429,8 @@ def deviation_of_lagrangian_trajectories_compared_to_class4_observations(
     if not mean_distances:
         raise Class4DrifterTrajectoryUnavailableError("No linked Class-4 drifter trajectories were reconstructed.")
 
-    lead_day_count = min(
-        challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()],
+    lead_day_count = reported_class4_drifter_time_count(
+        challenger_dataset,
         max(len(distances) for distances in mean_distances),
     )
     if lead_day_count < 1:
@@ -422,11 +443,15 @@ def deviation_of_lagrangian_trajectories_compared_to_class4_observations(
         distance_rows[run_index, :run_lead_day_count] = distances[:run_lead_day_count]
         count_rows[run_index, :run_lead_day_count] = counts[:run_lead_day_count]
 
+    mean_distance_row = numpy.nanmean(distance_rows, axis=0)
+    matched_count_row = numpy.sum(count_rows, axis=0)
+    mean_distance_row[matched_count_row < _minimum_reliable_matched_drifter_count(matched_count_row)] = numpy.nan
+
     return pandas.DataFrame(
         data=numpy.vstack(
             [
-                numpy.nanmean(distance_rows, axis=0),
-                numpy.sum(count_rows, axis=0),
+                mean_distance_row,
+                matched_count_row,
             ]
         ),
         index=[

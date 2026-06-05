@@ -184,3 +184,27 @@ def test_parser_extracts_scores_from_report_context_cells(tmp_path):
     assert scores["drifter_trajectory_observations"].depths["flat"].variables[
         "class-4 drifter trajectory deviation mean"
     ].data == {"1": 3.1, "2": 3.2}
+
+
+def test_parser_treats_non_finite_cells_as_missing(tmp_path):
+    notebook_path = tmp_path / "glonet.global.report.ipynb"
+    notebook = {
+        "cells": [
+            _report_context_metric_cell(
+                "evaluation_report.class4_drifter_trajectory_deviation",
+                _score_table(
+                    [
+                        ("Class-4 drifter trajectory deviation mean (km)", "NaN", "inf"),
+                    ],
+                    first_lead_header="Lead day 1 (init)",
+                ),
+            ),
+        ]
+    }
+    notebook_path.write_text(json.dumps(notebook), encoding="utf-8")
+
+    scores = get_all_model_scores_from_notebook(str(notebook_path), "glonet")
+
+    assert scores["drifter_trajectory_observations"].depths["flat"].variables[
+        "class-4 drifter trajectory deviation mean"
+    ].data == {"1": None, "2": None}

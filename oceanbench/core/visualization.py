@@ -1502,6 +1502,7 @@ def _trajectory_distances_kilometers(
     latitude_reference_radians = numpy.deg2rad(reference_particles["lat"].values)
     latitude_distance = (challenger_particles["lat"].values - reference_particles["lat"].values) * 111.0
     longitude_delta = challenger_particles["lon"].values - reference_particles["lon"].values
+    longitude_delta = (longitude_delta + 180.0) % 360.0 - 180.0
     longitude_distance = longitude_delta * 111.0 * numpy.cos(latitude_reference_radians)
     return numpy.sqrt(latitude_distance**2 + longitude_distance**2)
 
@@ -2762,10 +2763,13 @@ def _class4_drifter_payload(
         observation_dataset=observation_dataset,
         first_day_index=first_day_index,
     )
-    time_count = min(challenger_particles.sizes["time"], reference_particles.sizes["time"])
+    available_time_count = min(challenger_particles.sizes["time"], reference_particles.sizes["time"])
+    time_count = class4_drifters.reported_class4_drifter_time_count(challenger_dataset, available_time_count)
+    challenger_particles = challenger_particles.isel(time=slice(0, time_count))
+    reference_particles = reference_particles.isel(time=slice(0, time_count))
     particle_distances = class4_drifters.class4_drifter_trajectory_distance_km(
-        challenger_particles=challenger_particles.isel(time=slice(0, time_count)),
-        reference_particles=reference_particles.isel(time=slice(0, time_count)),
+        challenger_particles=challenger_particles,
+        reference_particles=reference_particles,
     )
     reference_particles_by_key = {"class4_drifters": reference_particles}
     return {

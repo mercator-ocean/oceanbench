@@ -5,6 +5,7 @@
 from dataclasses import dataclass
 from html import escape
 import json
+import math
 from pathlib import Path
 import re
 
@@ -138,7 +139,7 @@ def _format_variable(variable: str) -> str:
 
 
 def _format_number(value: float | None) -> str:
-    if value is None:
+    if value is None or not math.isfinite(value):
         return "NA"
     return f"{value:.3f}"
 

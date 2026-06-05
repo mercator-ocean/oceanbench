@@ -79,22 +79,46 @@ def test_class4_drifter_reference_trajectories_reconstruct_daily_tracks() -> Non
     assert trajectories["lon0"].values.tolist() == [10.0, 11.0]
 
 
+def test_class4_drifter_distance_wraps_longitude_at_dateline() -> None:
+    reference_trajectories = xarray.Dataset(
+        {
+            "lat": (("particle", "time"), numpy.array([[0.0]])),
+            "lon": (("particle", "time"), numpy.array([[179.0]])),
+        },
+        coords={"particle": [0], "time": numpy.array(["2024-01-01"], dtype="datetime64[ns]")},
+    )
+    challenger_trajectories = xarray.Dataset(
+        {
+            "lat": (("particle", "time"), numpy.array([[0.0]])),
+            "lon": (("particle", "time"), numpy.array([[-179.0]])),
+        },
+        coords={"particle": [0], "time": numpy.array(["2024-01-01"], dtype="datetime64[ns]")},
+    )
+
+    distances = class4_drifters.class4_drifter_trajectory_distance_km(
+        challenger_trajectories,
+        reference_trajectories,
+    )
+
+    assert numpy.isclose(distances[0, 0], 222.39, atol=0.1)
+
+
 def test_class4_drifter_score_reports_deviation_and_matched_counts(monkeypatch) -> None:
     reference_trajectories = xarray.Dataset(
         {
-            "lat": (("particle", "time"), numpy.array([[0.0, 0.0], [1.0, 1.0]])),
-            "lon": (("particle", "time"), numpy.array([[10.0, 10.0], [11.0, 11.0]])),
+            "lat": (("particle", "time"), numpy.array([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]])),
+            "lon": (("particle", "time"), numpy.array([[10.0, 10.0, 10.0], [11.0, 11.0, 11.0]])),
         },
         coords={
             "particle": [0, 1],
-            "time": numpy.array(["2024-01-01", "2024-01-02"], dtype="datetime64[ns]"),
+            "time": numpy.array(["2024-01-01", "2024-01-02", "2024-01-03"], dtype="datetime64[ns]"),
             "lat0": ("particle", [0.0, 1.0]),
             "lon0": ("particle", [10.0, 11.0]),
         },
     )
     challenger_trajectories = reference_trajectories.copy(deep=True)
     challenger_trajectories["lat"] = challenger_trajectories["lat"] + xarray.DataArray(
-        numpy.array([[0.0, 1.0], [0.0, numpy.nan]]),
+        numpy.array([[0.0, 1.0, 2.0], [0.0, numpy.nan, numpy.nan]]),
         dims=("particle", "time"),
     )
 
@@ -105,7 +129,7 @@ def test_class4_drifter_score_reports_deviation_and_matched_counts(monkeypatch) 
     )
 
     score = class4_drifters.deviation_of_lagrangian_trajectories_compared_to_class4_observations(
-        _challenger_dataset(lead_day_count=2),
+        _challenger_dataset(lead_day_count=3),
         _observation_dataset(),
     )
 
@@ -117,6 +141,41 @@ def test_class4_drifter_score_reports_deviation_and_matched_counts(monkeypatch) 
     assert score.loc["Class-4 drifter trajectory deviation mean (km)", "Lead day 1 (init)"] == 0.0
     assert score.loc["Class-4 matched drifter count", "Lead day 1 (init)"] == 2.0
     assert score.loc["Class-4 matched drifter count", "Lead day 2"] == 1.0
+
+
+def test_class4_drifter_score_masks_low_matched_count(monkeypatch) -> None:
+    particle_count = 60
+    reference_trajectories = xarray.Dataset(
+        {
+            "lat": (("particle", "time"), numpy.zeros((particle_count, 2))),
+            "lon": (("particle", "time"), numpy.zeros((particle_count, 2))),
+        },
+        coords={
+            "particle": numpy.arange(particle_count),
+            "time": numpy.array(["2024-01-01", "2024-01-02"], dtype="datetime64[ns]"),
+            "lat0": ("particle", numpy.zeros(particle_count)),
+            "lon0": ("particle", numpy.zeros(particle_count)),
+        },
+    )
+    challenger_trajectories = reference_trajectories.copy(deep=True)
+    challenger_latitudes = challenger_trajectories["lat"].values
+    challenger_latitudes[:49, 1] = 1.0
+    challenger_latitudes[49:, 1] = numpy.nan
+    challenger_trajectories["lat"] = (("particle", "time"), challenger_latitudes)
+
+    monkeypatch.setattr(
+        class4_drifters,
+        "class4_drifter_trajectory_comparison",
+        lambda **_: (challenger_trajectories, reference_trajectories),
+    )
+
+    score = class4_drifters.deviation_of_lagrangian_trajectories_compared_to_class4_observations(
+        _challenger_dataset(lead_day_count=3),
+        _observation_dataset(),
+    )
+
+    assert score.loc["Class-4 matched drifter count", "Lead day 2"] == 49.0
+    assert numpy.isnan(score.loc["Class-4 drifter trajectory deviation mean (km)", "Lead day 2"])
 
 
 def test_class4_drifter_score_uses_available_trajectory_lead_days(monkeypatch) -> None:

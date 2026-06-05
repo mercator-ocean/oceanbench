@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import json
+import math
 import re
 
 from bs4 import BeautifulSoup
@@ -163,9 +164,12 @@ def _get_all_metrics_from_notebook(raw_notebook: dict) -> dict[str, str]:
 
 def _parse_cell_value(text: str) -> float | None:
     try:
-        return float(text)
+        value = float(text)
     except ValueError:
         return None
+    if not math.isfinite(value):
+        return None
+    return value
 
 
 def _parse_html_table_row(row, lead_days: list[str]) -> dict:

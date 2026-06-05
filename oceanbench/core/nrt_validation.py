@@ -27,6 +27,7 @@ from oceanbench.core.evaluate import evaluate_live_challenger
 from oceanbench.core.live_datasets import (
     LIVE_GLONET_FORECAST_ZARR_TEMPLATE,
     live_class4_observation_zarr_template,
+    open_live_forecast_zarr,
 )
 from oceanbench.core.references.observations import observation_path
 from oceanbench.core.regions import RegionLike, resolve_region
@@ -244,6 +245,25 @@ def _report_url(
     endpoint = os.environ.get("AWS_S3_ENDPOINT", "minio.dive.edito.eu")
     endpoint = endpoint.removeprefix("https://").removeprefix("http://").rstrip("/")
     return f"https://{endpoint}/{output_bucket}/{output_name}"
+
+
+def _forecast_lead_day_count(forecast_url: str, forecast_init: str) -> int:
+    forecast_dataset = open_live_forecast_zarr(
+        forecast_url,
+        datetime.fromisoformat(forecast_init),
+    )
+    try:
+        return int(forecast_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()])
+    finally:
+        forecast_dataset.close()
+
+
+def _validated_lead_days_label(forecast_lead_day_count: int) -> str:
+    if forecast_lead_day_count < 1:
+        return "Pending"
+    if forecast_lead_day_count == 1:
+        return "1 day"
+    return f"1-{forecast_lead_day_count} days"
 
 
 def _write_challenger_file(
@@ -489,7 +509,9 @@ def validate_nrt_forecast(
     report_url = _report_url(report_notebook, output_bucket, output_prefix)
     status = "Forecast pending"
     forecast_cleanup_status = None
+    forecast_lead_day_count = 0
     if forecast_ready:
+        forecast_lead_day_count = _forecast_lead_day_count(forecast_url, forecast_init)
         with tempfile.TemporaryDirectory(prefix="oceanbench-nrt-") as temporary_directory:
             challenger_path = _write_challenger_file(Path(temporary_directory), forecast_url, forecast_init)
             environment_updates = {
@@ -521,8 +543,8 @@ def validate_nrt_forecast(
         system_label=system_label,
         region=resolve_region(region).id,
         forecast_init=forecast_init,
-        forecast_lead_days=LEAD_DAYS_COUNT,
-        validated_lead_days="1-10 days",
+        forecast_lead_days=forecast_lead_day_count,
+        validated_lead_days=_validated_lead_days_label(forecast_lead_day_count),
         observation_cutoff=observation_cutoff,
         observation_zarr_template=resolved_observation_template,
         forecast_url=forecast_url,

@@ -64,6 +64,7 @@ def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
         lambda day, template: observation_checks.append((day, template)) or True,
     )
     monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_validation, "_forecast_lead_day_count", lambda *_, **__: 10)
 
     def evaluate_live_challenger(**kwargs):
         evaluate_calls.append(kwargs)
@@ -92,6 +93,8 @@ def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
     assert written_manifest == str(manifest_path)
     assert result.status == "Complete"
     assert result.forecast_init == "2026-05-13"
+    assert result.forecast_lead_days == 10
+    assert result.validated_lead_days == "1-10 days"
     assert result.observation_cutoff == "2026-05-23"
     assert result.forecast_temporary is True
     assert result.forecast_cleanup_status == "Deleted 42 forecast Zarr objects"
@@ -103,6 +106,37 @@ def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
     assert evaluate_calls[0]["output_notebook_file_name"] == "glonet.latest.global.report.ipynb"
     assert cleanup_calls == [str(forecast_path)]
     assert observation_checks == [("2026-05-23", observation_template)]
+
+
+def test_validate_nrt_forecast_records_actual_forecast_lead_count(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    forecast_path = tmp_path / "langya.zarr"
+
+    monkeypatch.setattr(nrt_validation, "class4_observation_day_is_complete", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_validation, "_forecast_lead_day_count", lambda *_, **__: 7)
+    monkeypatch.setattr(nrt_validation, "evaluate_live_challenger", lambda **_: None)
+
+    result, _ = nrt_validation.validate_nrt_forecast(
+        system_label="LangYa",
+        forecast_zarr_template=str(forecast_path),
+        forecast_init="2026-05-13",
+        observation_cutoff="2026-05-23",
+        forecast_ready_timeout_seconds=0,
+        forecast_ready_poll_seconds=1,
+        manifest_path=str(manifest_path),
+    )
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    evaluation = manifest["evaluations"][0]
+
+    assert result.forecast_lead_days == 7
+    assert result.validated_lead_days == "1-7 days"
+    assert evaluation["forecast_lead_days"] == 7
+    assert evaluation["validated_lead_days"] == "1-7 days"
 
 
 def test_nrt_zarr_template_supports_compact_date() -> None:
@@ -187,6 +221,7 @@ def test_validate_nrt_forecast_can_clean_external_temporary_forecast(
 
     monkeypatch.setattr(nrt_validation, "class4_observation_day_is_complete", lambda *_, **__: True)
     monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_validation, "_forecast_lead_day_count", lambda *_, **__: 10)
     monkeypatch.setattr(nrt_validation, "evaluate_live_challenger", lambda **_: None)
     monkeypatch.setattr(
         nrt_validation,
