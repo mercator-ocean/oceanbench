@@ -93,8 +93,13 @@ def test_refresh_skips_when_process_is_running(monkeypatch, capsys) -> None:
         return FakeResponse(
             200,
             {
-                "status": "deployed",
-                "tasks": [{"status": {"status": "Running"}}],
+                "services": [
+                    {
+                        "id": observation_refresh.DAILY_OBSERVATION_PROCESS_NAME,
+                        "status": "deployed",
+                        "tasks": [{"status": {"status": "Running"}}],
+                    }
+                ],
             },
         )
 
@@ -110,6 +115,32 @@ def test_refresh_skips_when_process_is_running(monkeypatch, capsys) -> None:
     assert "already running" in capsys.readouterr().out
 
 
+def test_refresh_launches_when_service_is_absent(monkeypatch, capsys) -> None:
+    _clear_refresh_environment(monkeypatch)
+    _set_direct_credentials(monkeypatch)
+    launch_payloads = []
+
+    def fake_get(*_, **__) -> FakeResponse:
+        return FakeResponse(200, {"services": []})
+
+    def fake_put(*_, json: dict[str, object], **__) -> FakeResponse:
+        launch_payloads.append(json)
+        return FakeResponse(201)
+
+    def unexpected_delete(*_, **__) -> None:
+        raise AssertionError("Missing refresh process should not be deleted before launch")
+
+    monkeypatch.setattr(observation_refresh.requests, "get", fake_get)
+    monkeypatch.setattr(observation_refresh.requests, "delete", unexpected_delete)
+    monkeypatch.setattr(observation_refresh.requests, "put", fake_put)
+
+    observation_refresh.maybe_launch_daily_observation_refresh()
+
+    assert len(launch_payloads) == 1
+    assert launch_payloads[0]["name"] == observation_refresh.DAILY_OBSERVATION_PROCESS_NAME
+    assert "Launched daily observation data refresh process" in capsys.readouterr().out
+
+
 def test_refresh_relaunches_terminal_process(monkeypatch, capsys) -> None:
     _clear_refresh_environment(monkeypatch)
     _set_direct_credentials(monkeypatch)
@@ -120,8 +151,13 @@ def test_refresh_relaunches_terminal_process(monkeypatch, capsys) -> None:
         return FakeResponse(
             200,
             {
-                "status": "deployed",
-                "tasks": [{"status": {"status": "Succeeded"}}],
+                "services": [
+                    {
+                        "id": observation_refresh.DAILY_OBSERVATION_PROCESS_NAME,
+                        "status": "deployed",
+                        "tasks": [{"status": {"status": "Succeeded"}}],
+                    }
+                ],
             },
         )
 

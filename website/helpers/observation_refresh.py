@@ -19,6 +19,7 @@ DAILY_OBSERVATION_OUTPUT_FOLDER = "project-oceanbench/public/live_observations/{
 EDITO_REGION = "waw3-1"
 EDITO_TOKEN_URL = "https://auth.dive.edito.eu/auth/realms/datalab/protocol/openid-connect/token"
 EDITO_MY_LAB_APP_URL = "https://datalab.dive.edito.eu/api/my-lab/app"
+EDITO_MY_LAB_SERVICES_URL = "https://datalab.dive.edito.eu/api/my-lab/services"
 MINIO_ENDPOINT_URL = "https://minio.dive.edito.eu"
 MINIO_ENDPOINT_HOST = "minio.dive.edito.eu"
 
@@ -147,25 +148,32 @@ def _parse_json_or_text(response: requests.Response) -> object:
         return response.text
 
 
-def _process_state(context: ProcessLaunchContext) -> str:
-    response = requests.get(
-        EDITO_MY_LAB_APP_URL,
-        headers=_datalab_headers(context),
-        params={"serviceId": DAILY_OBSERVATION_PROCESS_NAME},
-        timeout=60,
-    )
-    if response.status_code == 404:
-        return "missing"
-    if response.status_code >= 400:
-        raise RuntimeError(f"Observation refresh process lookup failed with status {response.status_code}.")
+def _service_entries(payload: object) -> list[dict[str, object]]:
+    if isinstance(payload, list):
+        return [entry for entry in payload if isinstance(entry, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("services", "apps", "items"):
+        entries = payload.get(key)
+        if isinstance(entries, list):
+            return [entry for entry in entries if isinstance(entry, dict)]
+    return []
 
-    details = _parse_json_or_text(response)
-    if not isinstance(details, dict):
-        return "unknown"
 
-    task_statuses = [
-        task.get("status", {}).get("status") for task in details.get("tasks", []) if isinstance(task, dict)
-    ]
+def _service_matches_process(service: dict[str, object]) -> bool:
+    return DAILY_OBSERVATION_PROCESS_NAME in {
+        service.get("id"),
+        service.get("name"),
+        service.get("friendlyName"),
+    }
+
+
+def _process_state_from_details(details: dict[str, object]) -> str:
+    tasks = details.get("tasks", [])
+    if not isinstance(tasks, list):
+        tasks = []
+
+    task_statuses = [task.get("status", {}).get("status") for task in tasks if isinstance(task, dict)]
     if any(status in {"Running", "Pending"} for status in task_statuses):
         return "running"
     if any(status == "Succeeded" for status in task_statuses):
@@ -175,6 +183,23 @@ def _process_state(context: ProcessLaunchContext) -> str:
     if details.get("status") == "deployed":
         return "pending"
     return "unknown"
+
+
+def _process_state(context: ProcessLaunchContext) -> str:
+    response = requests.get(
+        EDITO_MY_LAB_SERVICES_URL,
+        headers=_datalab_headers(context),
+        timeout=60,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f"Observation refresh process lookup failed with status {response.status_code}.")
+
+    matching_services = [
+        service for service in _service_entries(_parse_json_or_text(response)) if _service_matches_process(service)
+    ]
+    if not matching_services:
+        return "missing"
+    return _process_state_from_details(matching_services[0])
 
 
 def _delete_observation_refresh_process(context: ProcessLaunchContext) -> None:
