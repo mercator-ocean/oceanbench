@@ -204,6 +204,18 @@ def _set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
     return field_set
 
 
+def _dataset_with_writable_field_arrays(dataset: xarray.Dataset, variable_names) -> xarray.Dataset:
+    writable_dataset = dataset.copy(deep=False)
+    for variable_name in variable_names:
+        data_array = dataset[variable_name]
+        writable_dataset[variable_name] = (
+            data_array.dims,
+            numpy.array(data_array.values, copy=True),
+            dict(data_array.attrs),
+        )
+    return writable_dataset
+
+
 def _run_simulation(particle_set: ParticleSet, kernels, runtime_days: int):
     unique_id = uuid.uuid4()
     output_path = f"/tmp/tmp_particles_{unique_id}.zarr"
@@ -250,15 +262,16 @@ def _get_all_particles_positions(
         "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key(),
     }
     dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
-    field_set = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
-    field_set = _set_domain_bounds(field_set, dataset)
+    field_dataset = _dataset_with_writable_field_arrays(dataset, variables.values())
+    field_set = FieldSet.from_xarray_dataset(field_dataset, variables, dimensions)
+    field_set = _set_domain_bounds(field_set, field_dataset)
 
     particle_set = ParticleSet.from_list(
         fieldset=field_set,
         pclass=FreezeParticle,
         lon=longitudes,
         lat=latitudes,
-        time=dataset.time[0],
+        time=field_dataset.time[0],
         pid=numpy.arange(len(latitudes)),
     )
 
@@ -267,7 +280,7 @@ def _get_all_particles_positions(
         _delete_error_particle,
     ]  # Keep your original kernel setup
 
-    runtime_days = len(dataset.time) - 1
+    runtime_days = len(field_dataset.time) - 1
     output_path = _run_simulation(particle_set, kernels, runtime_days)
 
     particle_latitudes, particle_longitudes, particle_ids = _read_output_file(output_path)
@@ -285,7 +298,7 @@ def _get_all_particles_positions(
             "lon": (["particle", "time"], particle_longitudes),
         },
         coords={
-            "time": dataset.time[:n_times],
+            "time": field_dataset.time[:n_times],
             "particle": numpy.arange(n_particles),
             "lat0": ("particle", latitudes),
             "lon0": ("particle", longitudes),

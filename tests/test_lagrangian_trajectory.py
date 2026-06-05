@@ -6,6 +6,7 @@ import numpy
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core import lagrangian_trajectory
 from oceanbench.core.lagrangian_trajectory import lagrangian_particle_count_for_region
 
 
@@ -61,3 +62,40 @@ def test_lagrangian_particle_count_uses_all_available_points_when_region_is_tiny
     particle_count = lagrangian_particle_count_for_region(global_dataset, tiny_regional_dataset)
 
     assert particle_count == 1000
+
+
+def test_lagrangian_field_arrays_are_writable_for_parcels() -> None:
+    eastward_values = numpy.zeros((2, 2, 2))
+    northward_values = numpy.zeros((2, 2, 2))
+    eastward_values.flags.writeable = False
+    northward_values.flags.writeable = False
+    dataset = xarray.Dataset(
+        {
+            Variable.EASTWARD_SEA_WATER_VELOCITY.key(): (
+                ("time", "latitude", "longitude"),
+                eastward_values,
+            ),
+            Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): (
+                ("time", "latitude", "longitude"),
+                northward_values,
+            ),
+        },
+        coords={
+            "time": numpy.array(["2024-01-01", "2024-01-02"], dtype="datetime64[ns]"),
+            "latitude": [0.0, 1.0],
+            "longitude": [10.0, 11.0],
+        },
+    )
+
+    writable_dataset = lagrangian_trajectory._dataset_with_writable_field_arrays(
+        dataset,
+        [
+            Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+            Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+        ],
+    )
+
+    assert not dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()].values.flags.writeable
+    assert not dataset[Variable.NORTHWARD_SEA_WATER_VELOCITY.key()].values.flags.writeable
+    assert writable_dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()].values.flags.writeable
+    assert writable_dataset[Variable.NORTHWARD_SEA_WATER_VELOCITY.key()].values.flags.writeable
