@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 
+from helpers.observation_refresh import maybe_launch_daily_observation_refresh
 from helpers.s3_discovery import (
     discover_official_reports,
     download_notebook,
@@ -100,6 +101,7 @@ def main() -> None:
     args = parser.parse_args()
 
     os.makedirs(REPORTS_DIRECTORY, exist_ok=True)
+    maybe_launch_daily_observation_refresh()
 
     published_reports = discover_official_reports()
     print(f"Discovered reports: {published_reports}")

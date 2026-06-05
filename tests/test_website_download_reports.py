@@ -12,6 +12,50 @@ sys.path.insert(0, str(WEBSITE_DIRECTORY))
 import download_reports  # noqa: E402
 
 
+def test_main_launches_observation_refresh_before_downloads(monkeypatch, tmp_path: Path) -> None:
+    events = []
+    manifest_path = tmp_path / "nrt-validation-manifest.json"
+
+    def maybe_launch_daily_observation_refresh() -> None:
+        events.append("observation-refresh")
+
+    def discover_official_reports() -> dict[str, list[str]]:
+        events.append("discover-reports")
+        return {"global": ["glonet"]}
+
+    def download_notebook(challenger_name: str, region_id: str, destination_directory: str) -> str:
+        events.append(f"download-{challenger_name}-{region_id}")
+        destination = Path(destination_directory) / f"{challenger_name}.{region_id}.report.ipynb"
+        destination.write_text("{}", encoding="utf-8")
+        return str(destination)
+
+    def download_report_file(file_name: str, destination_directory: str) -> str:
+        events.append(f"download-{file_name}")
+        assert file_name == download_reports.NRT_MANIFEST_FILE_NAME
+        manifest_path.write_text(json.dumps({"evaluations": []}), encoding="utf-8")
+        return str(manifest_path)
+
+    monkeypatch.setattr(sys, "argv", ["download_reports.py"])
+    monkeypatch.setattr(download_reports, "REPORTS_DIRECTORY", str(tmp_path))
+    monkeypatch.setattr(download_reports, "QUARTO_METADATA_FILE_PATH", str(tmp_path / "_metadata.yml"))
+    monkeypatch.setattr(
+        download_reports, "maybe_launch_daily_observation_refresh", maybe_launch_daily_observation_refresh
+    )
+    monkeypatch.setattr(download_reports, "discover_official_reports", discover_official_reports)
+    monkeypatch.setattr(download_reports, "download_notebook", download_notebook)
+    monkeypatch.setattr(download_reports, "download_report_file", download_report_file)
+
+    download_reports.main()
+
+    assert events == [
+        "observation-refresh",
+        "discover-reports",
+        "download-glonet-global",
+        f"download-{download_reports.NRT_MANIFEST_FILE_NAME}",
+    ]
+    assert Path(download_reports.QUARTO_METADATA_FILE_PATH).exists()
+
+
 def test_download_nrt_reports_skips_pending_entries(monkeypatch, tmp_path: Path) -> None:
     manifest_path = tmp_path / "nrt-validation-manifest.json"
     manifest_path.write_text(
