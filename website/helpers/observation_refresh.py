@@ -12,7 +12,7 @@ import requests
 
 DAILY_OBSERVATION_PROCESS_CATALOG_ID = "process-playground"
 DAILY_OBSERVATION_PROCESS_PACKAGE = "daily-observation-data"
-DAILY_OBSERVATION_PROCESS_VERSION = "0.1.5"
+DAILY_OBSERVATION_PROCESS_VERSION = "0.1.6"
 DAILY_OBSERVATION_PROCESS_NAME = "daily-observation-data-live-refresh"
 DAILY_OBSERVATION_PROCESS_PROJECT = "project-oceanbench"
 DAILY_OBSERVATION_OUTPUT_FOLDER = "project-oceanbench/public/live_observations/{compact_date}.zarr"

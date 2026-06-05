@@ -180,7 +180,7 @@ def test_refresh_relaunches_terminal_process(monkeypatch, capsys) -> None:
     payload = launch_payloads[0]
     assert payload["catalogId"] == "process-playground"
     assert payload["packageName"] == "daily-observation-data"
-    assert payload["packageVersion"] == "0.1.5"
+    assert payload["packageVersion"] == observation_refresh.DAILY_OBSERVATION_PROCESS_VERSION
     assert payload["name"] == observation_refresh.DAILY_OBSERVATION_PROCESS_NAME
     assert payload["options"]["s3"]["endpoint"] == "minio.dive.edito.eu"
     assert payload["options"]["inputs"]["S3_OUTPUT_FOLDER"] == (
