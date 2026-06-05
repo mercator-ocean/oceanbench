@@ -27,6 +27,13 @@ def test_tolerates_text_float_rounding_drift() -> None:
     )
 
 
+def test_tolerates_text_float_rounding_with_table_alignment_drift() -> None:
+    assert compare_notebook._strings_differ_only_by_tolerated_float_rounding(
+        "Mixed layer depth (m) [ocean_mixed_layer_thickn...   23.141319    22.92412   \n",
+        "Mixed layer depth (m) [ocean_mixed_layer_thickn...   23.141321   22.924122   \n",
+    )
+
+
 def test_rejects_material_text_float_changes() -> None:
     assert not compare_notebook._strings_differ_only_by_tolerated_float_rounding(
         "Mixed layer depth (m)   23.491993",
