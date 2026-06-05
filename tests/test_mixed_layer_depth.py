@@ -109,6 +109,31 @@ def test_mixed_layer_depth_caps_depth_before_density_computation(monkeypatch) ->
     assert density_depths == [0.5, 47.0, 600.0]
 
 
+def test_depth_cap_keeps_surface_variables_without_depth_dimension() -> None:
+    surface_variable_dimensions = (
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
+    )
+    dataset = _dataset(
+        temperature_values=[10.0, 10.0, 10.0, 10.0],
+        density_values=[1000.0, 1000.01, 1000.02, 1000.05],
+    ).assign(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                surface_variable_dimensions,
+                numpy.zeros((1, 1, 1, 1)),
+            )
+        }
+    )
+
+    capped_dataset = mixed_layer_depth._cap_depth(dataset)
+
+    assert capped_dataset[Dimension.DEPTH.key()].values.tolist() == [0.5, 47.0, 600.0]
+    assert capped_dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()].dims == surface_variable_dimensions
+
+
 def test_mixed_layer_depth_uses_deepest_valid_capped_depth_when_threshold_is_never_crossed(monkeypatch) -> None:
     dataset = _dataset(
         temperature_values=[10.0, 10.0, numpy.nan, numpy.nan],
