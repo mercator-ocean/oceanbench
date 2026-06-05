@@ -27,8 +27,9 @@ def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
 
 
 def _cap_depth(dataset: xarray.Dataset) -> xarray.Dataset:
-    depth = dataset[Dimension.DEPTH.key()]
-    return dataset.where(depth <= MAXIMUM_MIXED_LAYER_DEPTH, drop=True)
+    depth_dimension = Dimension.DEPTH.key()
+    depth = dataset[depth_dimension]
+    return dataset.isel({depth_dimension: (depth <= MAXIMUM_MIXED_LAYER_DEPTH).values})
 
 
 def _compute_absolute_salinity(
