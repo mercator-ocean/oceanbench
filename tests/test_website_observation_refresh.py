@@ -187,3 +187,44 @@ def test_refresh_relaunches_terminal_process(monkeypatch, capsys) -> None:
         "project-oceanbench/public/live_observations/{compact_date}.zarr"
     )
     assert "Launched daily observation data refresh process" in capsys.readouterr().out
+
+
+def test_refresh_relaunches_deployed_process_without_tasks(monkeypatch, capsys) -> None:
+    _clear_refresh_environment(monkeypatch)
+    _set_direct_credentials(monkeypatch)
+    deleted_params = []
+    launch_payloads = []
+
+    def fake_get(*_, **__) -> FakeResponse:
+        return FakeResponse(
+            200,
+            {
+                "apps": [
+                    {
+                        "id": observation_refresh.DAILY_OBSERVATION_PROCESS_NAME,
+                        "name": observation_refresh.DAILY_OBSERVATION_PROCESS_NAME,
+                        "friendlyName": observation_refresh.DAILY_OBSERVATION_PROCESS_NAME,
+                        "status": "deployed",
+                        "tasks": [],
+                    }
+                ],
+            },
+        )
+
+    def fake_delete(*_, params: dict[str, str], **__) -> FakeResponse:
+        deleted_params.append(params)
+        return FakeResponse(204)
+
+    def fake_put(*_, json: dict[str, object], **__) -> FakeResponse:
+        launch_payloads.append(json)
+        return FakeResponse(201)
+
+    monkeypatch.setattr(observation_refresh.requests, "get", fake_get)
+    monkeypatch.setattr(observation_refresh.requests, "delete", fake_delete)
+    monkeypatch.setattr(observation_refresh.requests, "put", fake_put)
+
+    observation_refresh.maybe_launch_daily_observation_refresh()
+
+    assert deleted_params == [{"path": observation_refresh.DAILY_OBSERVATION_PROCESS_NAME}]
+    assert len(launch_payloads) == 1
+    assert "Launched daily observation data refresh process" in capsys.readouterr().out

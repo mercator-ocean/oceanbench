@@ -181,7 +181,7 @@ def _process_state_from_details(details: dict[str, object]) -> str:
     if any(status in {"Failed", "Error"} for status in task_statuses):
         return "failed"
     if details.get("status") == "deployed":
-        return "pending"
+        return "succeeded"
     return "unknown"
 
 
