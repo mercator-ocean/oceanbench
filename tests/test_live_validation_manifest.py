@@ -29,7 +29,7 @@ def _write_manifest(path: Path) -> None:
                         "observation_cutoff": "2026-05-23",
                         "status": "Complete",
                         "report_notebook": "glonet.latest.global.report.ipynb",
-                        "note": "Demonstration only.",
+                        "note": "Forecast regenerated on demand.",
                     }
                 ],
             }
@@ -49,4 +49,4 @@ def test_live_validation_table_and_report_metadata_are_manifest_driven(tmp_path:
     assert "2026-05-13" in html
     assert "glonet-forecast-validation.html" in html
     assert report_notebook_path(manifest_path, "GLONET") == "reports/glonet.latest.global.report.ipynb"
-    assert metadata.note == "Demonstration only."
+    assert metadata.note == "Forecast regenerated on demand."

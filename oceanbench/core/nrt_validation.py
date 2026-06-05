@@ -76,10 +76,7 @@ class NrtValidationResult:
     report_notebook: str
     report_url: str
     status: str
-    demo: bool
-    initial_condition_provenance_validated: bool
     oceanbench_version: str
-    note: str | None = None
 
 
 def _day_string(day: str | datetime | numpy.datetime64 | pandas.Timestamp) -> str:
@@ -490,10 +487,6 @@ def validate_nrt_forecast(
     )
     report_notebook = _report_file_name(system_label, region)
     report_url = _report_url(report_notebook, output_bucket, output_prefix)
-    note = (
-        "Demonstration only: this forecast was regenerated on demand, and exact operational "
-        "initial-condition provenance has not been validated yet."
-    )
     status = "Forecast pending"
     forecast_cleanup_status = None
     if forecast_ready:
@@ -538,10 +531,7 @@ def validate_nrt_forecast(
         report_notebook=report_notebook,
         report_url=report_url,
         status=status,
-        demo=True,
-        initial_condition_provenance_validated=False,
         oceanbench_version=__version__,
-        note=note,
     )
     manifest_path_or_url = write_nrt_manifest(
         _manifest_document(result),

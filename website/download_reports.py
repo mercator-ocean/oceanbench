@@ -78,8 +78,6 @@ def _write_sample_nrt_manifest() -> str:
                 "report_notebook": "glonet.latest.global.report.ipynb",
                 "report_url": "",
                 "status": "Manifest unavailable",
-                "demo": True,
-                "initial_condition_provenance_validated": False,
                 "oceanbench_version": "sample",
                 "octo_process_package_name": None,
                 "octo_process_package_version": None,

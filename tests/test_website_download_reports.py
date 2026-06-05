@@ -78,9 +78,7 @@ def test_download_nrt_reports_prefers_manifest_report_url(
         return str(Path(destination_directory) / destination_file_name)
 
     def download_report_file(*_) -> str:
-        raise AssertionError(
-            "download_report_file should not be used when report_url is present"
-        )
+        raise AssertionError("download_report_file should not be used when report_url is present")
 
     monkeypatch.setattr(download_reports, "REPORTS_DIRECTORY", str(tmp_path))
     monkeypatch.setattr(download_reports, "download_report_url", download_report_url)
@@ -109,5 +107,5 @@ def test_write_sample_nrt_manifest_uses_placeholder_status(monkeypatch, tmp_path
     assert evaluation["forecast_init"] == "Unavailable"
     assert evaluation["observation_cutoff"] == "Unavailable"
     assert evaluation["status"] == "Manifest unavailable"
-    assert evaluation["demo"] is True
-    assert evaluation["initial_condition_provenance_validated"] is False
+    assert "demo" not in evaluation
+    assert "initial_condition_provenance_validated" not in evaluation

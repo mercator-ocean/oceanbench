@@ -47,7 +47,7 @@ def test_class4_observation_day_requires_non_empty_current_values(monkeypatch) -
     )
 
 
-def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
+def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -95,9 +95,9 @@ def test_validate_nrt_forecast_writes_demo_manifest_and_runs_live_report(
     assert result.observation_cutoff == "2026-05-23"
     assert result.forecast_temporary is True
     assert result.forecast_cleanup_status == "Deleted 42 forecast Zarr objects"
-    assert result.demo is True
-    assert result.initial_condition_provenance_validated is False
-    assert evaluation["note"].startswith("Demonstration only")
+    assert "demo" not in evaluation
+    assert "initial_condition_provenance_validated" not in evaluation
+    assert "note" not in evaluation
     assert evaluation["forecast_temporary"] is True
     assert evaluation["forecast_cleanup_status"] == "Deleted 42 forecast Zarr objects"
     assert evaluate_calls[0]["output_notebook_file_name"] == "glonet.latest.global.report.ipynb"
