@@ -131,7 +131,6 @@ def test_observations_uses_configured_last_available_day(monkeypatch) -> None:
     selected = observations.observations(challenger_dataset)
 
     assert opened_paths == [
-        "/tmp/synthetic_class4/20240103.zarr",
         "/tmp/synthetic_class4/20240104.zarr",
     ]
     assert pandas.to_datetime(selected[Dimension.TIME.key()].values).strftime("%Y-%m-%d").tolist() == ["2024-01-04"]

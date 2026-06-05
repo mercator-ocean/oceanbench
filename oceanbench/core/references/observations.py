@@ -350,6 +350,9 @@ def observations(
 
     first_day_timestamps = pandas.to_datetime(first_day_datetimes)
     first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
+    first_observation_day_start = (
+        first_day_timestamps.min() + pandas.Timedelta(days=1)
+    ).strftime("%Y-%m-%d")
     forecast_last_day_end = (
         (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).to_datetime64().astype("datetime64[D]")
     )
@@ -362,7 +365,7 @@ def observations(
             f"while challenger first_day_datetime starts on {first_day_start}."
         )
     last_day_end = pandas.Timestamp(capped_last_day_end).strftime("%Y-%m-%d")
-    observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
+    observation_days = numpy.array(generate_dates(first_observation_day_start, last_day_end, 1), dtype="datetime64[D]")
     source_identifier = _observation_source_stage_identifier(zarr_template, last_available_day)
     local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count, source_identifier)
 
