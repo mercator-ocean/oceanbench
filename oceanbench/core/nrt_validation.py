@@ -204,15 +204,9 @@ def _delete_s3_prefix(
         Bucket=bucket_name,
         Prefix=prefix.rstrip("/") + "/",
     ):
-        objects = [{"Key": item["Key"]} for item in page.get("Contents", [])]
-        for chunk_start in range(0, len(objects), 1000):
-            objects_chunk = objects[chunk_start : chunk_start + 1000]
-            if objects_chunk:
-                client.delete_objects(
-                    Bucket=bucket_name,
-                    Delete={"Objects": objects_chunk},
-                )
-                deleted_objects_count += len(objects_chunk)
+        for item in page.get("Contents", []):
+            client.delete_object(Bucket=bucket_name, Key=item["Key"])
+            deleted_objects_count += 1
     return deleted_objects_count
 
 

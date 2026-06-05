@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy
 import xarray
@@ -111,6 +113,45 @@ def test_nrt_zarr_template_supports_compact_date() -> None:
         )
         == "https://example.test/observations/20260523.zarr"
     )
+
+
+def test_delete_s3_prefix_deletes_objects_individually(monkeypatch) -> None:
+    deleted_objects = []
+
+    class FakePaginator:
+        def paginate(self, **kwargs):
+            assert kwargs == {
+                "Bucket": "bucket",
+                "Prefix": "forecast.zarr/",
+            }
+            return [
+                {
+                    "Contents": [
+                        {"Key": "forecast.zarr/.zgroup"},
+                        {"Key": "forecast.zarr/_SUCCESS"},
+                    ]
+                }
+            ]
+
+    class FakeClient:
+        def get_paginator(self, name):
+            assert name == "list_objects_v2"
+            return FakePaginator()
+
+        def delete_object(self, **kwargs):
+            deleted_objects.append(kwargs)
+
+        def delete_objects(self, **kwargs):
+            raise AssertionError("Bulk delete should not be used")
+
+    fake_boto3 = SimpleNamespace(client=lambda *_, **__: FakeClient())
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+
+    assert nrt_validation._delete_s3_prefix("bucket", "forecast.zarr", None) == 2
+    assert deleted_objects == [
+        {"Bucket": "bucket", "Key": "forecast.zarr/.zgroup"},
+        {"Bucket": "bucket", "Key": "forecast.zarr/_SUCCESS"},
+    ]
 
 
 def test_validate_nrt_forecast_rejects_inconsistent_pinned_target() -> None:
