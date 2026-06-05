@@ -60,6 +60,31 @@ def test_refresh_skips_without_credentials(monkeypatch, capsys) -> None:
     assert "Skipping daily observation data refresh" in capsys.readouterr().out
 
 
+def test_refresh_does_not_fail_build_when_token_refresh_fails(monkeypatch, capsys) -> None:
+    _clear_refresh_environment(monkeypatch)
+    monkeypatch.setenv("EDITO_OFFLINE_TOKEN", "invalid-edito-offline-token")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "aws-access-key")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-secret-key")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "aws-session-token")
+
+    def fake_post(*_, **__) -> FakeResponse:
+        return FakeResponse(400)
+
+    def unexpected_request(*_, **__) -> None:
+        raise AssertionError("Datalab app endpoints should not be called when token refresh fails")
+
+    monkeypatch.setattr(observation_refresh.requests, "post", fake_post)
+    monkeypatch.setattr(observation_refresh.requests, "get", unexpected_request)
+    monkeypatch.setattr(observation_refresh.requests, "put", unexpected_request)
+    monkeypatch.setattr(observation_refresh.requests, "delete", unexpected_request)
+
+    observation_refresh.maybe_launch_daily_observation_refresh()
+
+    output = capsys.readouterr().out
+    assert "Could not launch daily observation data refresh" in output
+    assert "EDITO token refresh failed with status 400" in output
+
+
 def test_refresh_skips_when_process_is_running(monkeypatch, capsys) -> None:
     _clear_refresh_environment(monkeypatch)
     _set_direct_credentials(monkeypatch)

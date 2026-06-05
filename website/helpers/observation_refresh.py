@@ -250,6 +250,9 @@ def maybe_launch_daily_observation_refresh() -> None:
     except MissingObservationRefreshCredentials as error:
         print(f"Skipping daily observation data refresh: {error}")
         return
+    except Exception as error:
+        print(f"Could not launch daily observation data refresh: {error}")
+        return
 
     try:
         state = _process_state(context)
