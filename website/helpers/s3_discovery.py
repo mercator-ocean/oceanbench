@@ -12,7 +12,7 @@ from helpers.challenger_metadata import KNOWN_CHALLENGERS
 from helpers.published_regions import published_region_ids
 
 S3_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench"
-REPORTS_PREFIX = "dev/evaluation-reports/272-live-evaluations/"
+REPORTS_PREFIX = "public/evaluation-reports/live-evaluations/"
 REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")
 
 
