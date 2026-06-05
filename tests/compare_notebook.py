@@ -52,12 +52,16 @@ def _split_numeric_text(value: str) -> tuple[list[str], list[float]]:
     return text_parts, numbers
 
 
+def _normalize_alignment_whitespace(text_parts: list[str]) -> list[str]:
+    return [re.sub(r"[ \t]+", " ", text_part) for text_part in text_parts]
+
+
 def _strings_differ_only_by_tolerated_float_rounding(first_value: str, second_value: str) -> bool:
     first_text_parts, first_numbers = _split_numeric_text(first_value)
     second_text_parts, second_numbers = _split_numeric_text(second_value)
 
     return (
-        first_text_parts == second_text_parts
+        _normalize_alignment_whitespace(first_text_parts) == _normalize_alignment_whitespace(second_text_parts)
         and len(first_numbers) == len(second_numbers)
         and len(first_numbers) > 0
         and all(
