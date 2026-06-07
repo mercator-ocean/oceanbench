@@ -123,7 +123,7 @@ def wenhai_1_degree() -> xarray.Dataset:
 
 def _wenhai_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/wenhai/{start_datetime_string}.zarr"
+    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/wenhai-ssr-2024/wenhai/{start_datetime_string}.zarr"
 
 
 def langya() -> xarray.Dataset:
