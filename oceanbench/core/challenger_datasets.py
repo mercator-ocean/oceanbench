@@ -97,7 +97,10 @@ def wenhai_1_degree() -> xarray.Dataset:
 
 def _wenhai_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/WENHAI/{start_datetime_string}.zarr"
+    return (
+        "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/"
+        f"dev/ml-forecast-outputs/wenhai-ssr-2024/wenhai/{start_datetime_string}.zarr"
+    )
 
 
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:
