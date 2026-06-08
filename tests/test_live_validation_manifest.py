@@ -23,6 +23,7 @@ def _write_manifest(path: Path) -> None:
                 "schema_version": 1,
                 "evaluations": [
                     {
+                        "system_id": "octo-glonet-p1d",
                         "system_label": "GLONET",
                         "forecast_init": "2026-05-13",
                         "validated_lead_days": "1-10 days",
@@ -43,10 +44,10 @@ def test_live_validation_table_and_report_metadata_are_manifest_driven(tmp_path:
     _write_manifest(manifest_path)
 
     html = render_live_validation_table(manifest_path)
-    metadata = forecast_validation_metadata(manifest_path, "GLONET")
+    metadata = forecast_validation_metadata(manifest_path, "octo-glonet-p1d")
 
     assert "GLONET" in html
     assert "2026-05-13" in html
     assert "glonet-forecast-validation.html" in html
-    assert report_notebook_path(manifest_path, "GLONET") == "reports/glonet.latest.global.report.ipynb"
+    assert report_notebook_path(manifest_path, "octo-glonet-p1d") == "reports/glonet.latest.global.report.ipynb"
     assert metadata.note == "Forecast regenerated on demand."

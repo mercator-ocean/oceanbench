@@ -30,10 +30,18 @@ VARIABLE_ORDER = [
     "zonal current",
     "meridional current",
 ]
+SYSTEM_SCORE_NAMES = {
+    "octo-glonet-p1d": "glonet",
+    "octo-glonet2-p1d": "glonet2",
+    "octo-langya-p1d": "langya",
+    "octo-wenhai-p1d": "wenhai",
+    "octo-xihe-p1d": "xihe",
+}
 
 
 @dataclass(frozen=True)
 class ForecastValidationMetadata:
+    system_id: str
     system_label: str
     forecast_init: str
     validated_lead_days: str
@@ -88,15 +96,19 @@ def _class4_explorer_html(notebook_path: str | Path) -> str:
     )
 
 
-def _observation_score(notebook_path: str | Path, system_label: str) -> ModelScore:
-    scores = get_all_model_scores_from_notebook(str(notebook_path), system_label.lower())
+def _observation_score(notebook_path: str | Path, score_name: str) -> ModelScore:
+    scores = get_all_model_scores_from_notebook(str(notebook_path), score_name)
     if OBSERVATION_SCORE_KEY not in scores:
         raise ValueError(f"Missing {OBSERVATION_SCORE_KEY} in {notebook_path}.")
     return scores[OBSERVATION_SCORE_KEY]
 
 
-def _drifter_score(notebook_path: str | Path, system_label: str) -> ModelScore | None:
-    return get_all_model_scores_from_notebook(str(notebook_path), system_label.lower()).get(DRIFTER_SCORE_KEY)
+def _drifter_score(notebook_path: str | Path, score_name: str) -> ModelScore | None:
+    return get_all_model_scores_from_notebook(str(notebook_path), score_name).get(DRIFTER_SCORE_KEY)
+
+
+def _notebook_score_name(metadata: ForecastValidationMetadata) -> str:
+    return SYSTEM_SCORE_NAMES[metadata.system_id]
 
 
 def _lead_days(score: ModelScore) -> list[str]:
@@ -340,8 +352,9 @@ def render_forecast_validation_page(
     notebook_path: str | Path,
     metadata: ForecastValidationMetadata,
 ) -> str:
-    score = _observation_score(notebook_path, metadata.system_label)
-    drifter_score = _drifter_score(notebook_path, metadata.system_label)
+    notebook_score_name = _notebook_score_name(metadata)
+    score = _observation_score(notebook_path, notebook_score_name)
+    drifter_score = _drifter_score(notebook_path, notebook_score_name)
     drifter_explorer_html = _drifter_explorer_html(notebook_path)
     explorer_html = _class4_explorer_html(notebook_path)
     return f"""

@@ -79,6 +79,7 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
             observation_cutoff="2026-05-23",
             status="Complete",
             note="Forecast regenerated on demand.",
+            system_id="octo-glonet-p1d",
         ),
     )
 

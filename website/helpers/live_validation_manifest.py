@@ -9,6 +9,13 @@ from pathlib import Path
 from helpers.live_validation_report import ForecastValidationMetadata
 
 DEFAULT_MANIFEST_PATH = "reports/nrt-validation-manifest.json"
+REPORT_PAGE_NAMES = {
+    "octo-glonet-p1d": "glonet-forecast-validation.html",
+    "octo-glonet2-p1d": "glonet2-forecast-validation.html",
+    "octo-langya-p1d": "langya-forecast-validation.html",
+    "octo-wenhai-p1d": "wenhai-forecast-validation.html",
+    "octo-xihe-p1d": "xihe-forecast-validation.html",
+}
 
 
 def read_live_validation_manifest(manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> dict:
@@ -22,8 +29,14 @@ def live_validation_evaluations(manifest_path: str | Path = DEFAULT_MANIFEST_PAT
 
 
 def _report_page_name(evaluation: dict) -> str:
-    system_label = str(evaluation["system_label"]).lower().replace(" ", "-")
-    return f"{system_label}-forecast-validation.html"
+    return REPORT_PAGE_NAMES[str(evaluation["system_id"])]
+
+
+def _find_evaluation(evaluations: list[dict], system_id: str) -> dict:
+    for evaluation in evaluations:
+        if evaluation["system_id"] == system_id:
+            return evaluation
+    raise ValueError(f"No NRT validation entry found for {system_id!r}.")
 
 
 def render_live_validation_table(manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> str:
@@ -59,26 +72,23 @@ def render_live_validation_table(manifest_path: str | Path = DEFAULT_MANIFEST_PA
 
 def forecast_validation_metadata(
     manifest_path: str | Path = DEFAULT_MANIFEST_PATH,
-    system_label: str = "GLONET",
+    system_id: str = "octo-glonet-p1d",
 ) -> ForecastValidationMetadata:
-    for evaluation in live_validation_evaluations(manifest_path):
-        if evaluation.get("system_label") == system_label:
-            return ForecastValidationMetadata(
-                system_label=evaluation["system_label"],
-                forecast_init=evaluation["forecast_init"],
-                validated_lead_days=evaluation["validated_lead_days"],
-                observation_cutoff=evaluation["observation_cutoff"],
-                status=evaluation["status"],
-                note=evaluation.get("note"),
-            )
-    raise ValueError(f"No NRT validation entry found for {system_label!r}.")
+    evaluation = _find_evaluation(live_validation_evaluations(manifest_path), system_id)
+    return ForecastValidationMetadata(
+        system_label=evaluation["system_label"],
+        forecast_init=evaluation["forecast_init"],
+        validated_lead_days=evaluation["validated_lead_days"],
+        observation_cutoff=evaluation["observation_cutoff"],
+        status=evaluation["status"],
+        note=evaluation.get("note"),
+        system_id=evaluation["system_id"],
+    )
 
 
 def report_notebook_path(
     manifest_path: str | Path = DEFAULT_MANIFEST_PATH,
-    system_label: str = "GLONET",
+    system_id: str = "octo-glonet-p1d",
 ) -> str:
-    for evaluation in live_validation_evaluations(manifest_path):
-        if evaluation.get("system_label") == system_label:
-            return str(Path("reports") / evaluation["report_notebook"])
-    raise ValueError(f"No NRT validation entry found for {system_label!r}.")
+    evaluation = _find_evaluation(live_validation_evaluations(manifest_path), system_id)
+    return str(Path("reports") / evaluation["report_notebook"])

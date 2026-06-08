@@ -20,8 +20,8 @@ from pathlib import Path
 from helpers.live_validation_manifest import forecast_validation_metadata, report_notebook_path
 from helpers.live_validation_report import render_forecast_validation_page
 
-notebook_path = report_notebook_path("reports/nrt-validation-manifest.json", "LangYa")
-metadata = forecast_validation_metadata("reports/nrt-validation-manifest.json", "LangYa")
+notebook_path = report_notebook_path("reports/nrt-validation-manifest.json", "octo-langya-p1d")
+metadata = forecast_validation_metadata("reports/nrt-validation-manifest.json", "octo-langya-p1d")
 if Path(notebook_path).exists():
     print(render_forecast_validation_page(notebook_path, metadata))
 else:
