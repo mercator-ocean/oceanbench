@@ -1,0 +1,33 @@
+<!--
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+title: "GLONET2 forecast validation"
+format:
+  html:
+    echo: false
+    page-layout: full
+---
+
+```{python}
+#| output: asis
+
+from pathlib import Path
+
+from helpers.live_validation_manifest import forecast_validation_metadata, report_notebook_path
+from helpers.live_validation_report import render_forecast_validation_page
+
+notebook_path = report_notebook_path("reports/nrt-validation-manifest.json", "GLONET2")
+metadata = forecast_validation_metadata("reports/nrt-validation-manifest.json", "GLONET2")
+if Path(notebook_path).exists():
+    print(render_forecast_validation_page(notebook_path, metadata))
+else:
+    print(
+        f'<section class="validation-intro"><p class="validation-main-message">'
+        f'{metadata.system_label} forecast validation status: {metadata.status}. '
+        'The executed report notebook is not available yet.</p></section>'
+    )
+```

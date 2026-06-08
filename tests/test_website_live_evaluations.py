@@ -14,6 +14,7 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     clean_report_page = (WEBSITE_DIRECTORY / "glonet-forecast-validation.qmd").read_text(encoding="utf-8")
     validation_pages = {
         "glonet": ("GLONET", "GLONET forecast validation"),
+        "glonet2": ("GLONET2", "GLONET2 forecast validation"),
         "langya": ("LangYa", "LangYa forecast validation"),
         "wenhai": ("WenHai", "WenHai forecast validation"),
         "xihe": ("XiHe", "XiHe forecast validation"),
