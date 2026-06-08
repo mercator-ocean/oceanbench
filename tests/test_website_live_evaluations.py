@@ -23,7 +23,11 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     assert "live-evaluations.qmd" in quarto_config
     assert "NRT forecast validation" in quarto_config
     assert "Near-real-time forecast validation" in live_page
+    assert "for scientific validation and daily monitoring" in live_page
+    assert "annual benchmark ranking" not in live_page
+    assert "render_live_validation_summary" in live_page
     assert "render_live_validation_table" in live_page
+    assert "render_live_validation_preview_panel" in live_page
     assert "reports/nrt-validation-manifest.json" in live_page
     assert "| GLONET |" not in live_page
     assert "2026-05-13" not in live_page

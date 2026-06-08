@@ -106,7 +106,8 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
     assert '<section class="validation-method-note">' in html
     assert "<details" not in html
     assert '<iframe class="class4-widget"></iframe>' in html
-    assert html.index("Lead-time scores") < html.index("Detailed Class IV RMSD")
+    assert "Representative lead-time scores" in html
+    assert html.index("Representative lead-time scores") < html.index("Detailed Class IV RMSD")
     assert html.index("Detailed Class IV RMSD") < html.index("Drifter trajectory scores")
     assert html.index("Drifter trajectory scores") < html.index("Observation error maps")
     assert html.index("Observation error maps") < html.index("Drifter trajectory divergence")

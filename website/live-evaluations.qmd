@@ -9,16 +9,26 @@ title: "Near-real-time forecast validation"
 format:
   html:
     echo: false
+    page-layout: full
 ---
 
 ```{python}
 #| output: asis
 
-from helpers.live_validation_manifest import render_live_validation_table
+from helpers.live_validation_manifest import (
+    render_live_validation_preview_panel,
+    render_live_validation_summary,
+    render_live_validation_table,
+)
 
 print(
-    "<p>Near-real-time validation compares recent operational forecasts with recent Class IV observations. "
-    "It is intended for scientific validation and daily monitoring, not for annual benchmark ranking.</p>"
+    '<script>document.body.classList.add("live-evaluations-page");</script>'
+    '<section class="live-evaluations-intro">'
+    "<p>Near-real-time validation compares recent operational forecasts with recent Class IV observations "
+    "for scientific validation and daily monitoring.</p>"
+    "</section>"
 )
+print(render_live_validation_summary("reports/nrt-validation-manifest.json"))
 print(render_live_validation_table("reports/nrt-validation-manifest.json"))
+print(render_live_validation_preview_panel("reports/nrt-validation-manifest.json"))
 ```

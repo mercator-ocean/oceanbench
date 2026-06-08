@@ -7,6 +7,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
@@ -78,6 +79,16 @@ class NrtValidationResult:
     report_url: str
     status: str
     oceanbench_version: str
+    score_preview: dict | None = None
+
+
+REPRESENTATIVE_SCORE_PREVIEW_ROWS = (
+    ("temperature", "surface", "Temperature, surface"),
+    ("salinity", "0-5m", "Salinity, 0-5 m"),
+    ("zonal current", "15m", "Zonal current, 15 m"),
+    ("meridional current", "15m", "Meridional current, 15 m"),
+)
+CLASS4_OBSERVATION_RMSD_SOURCE = "evaluation_report.class4_observation.rmsd"
 
 
 def _day_string(day: str | datetime | numpy.datetime64 | pandas.Timestamp) -> str:
@@ -245,6 +256,149 @@ def _report_url(
     endpoint = os.environ.get("AWS_S3_ENDPOINT", "minio.dive.edito.eu")
     endpoint = endpoint.removeprefix("https://").removeprefix("http://").rstrip("/")
     return f"https://{endpoint}/{output_bucket}/{output_name}"
+
+
+def _report_notebook_document(
+    report_notebook: str,
+    output_bucket: str | None,
+    output_prefix: str | None,
+) -> dict:
+    output_name = f"{output_prefix}/{report_notebook}" if output_prefix else report_notebook
+    if not output_bucket:
+        with open(output_name, encoding="utf-8") as notebook_file:
+            return json.load(notebook_file)
+
+    import boto3
+
+    endpoint_url = _boto3_endpoint_url(None)
+    client = boto3.client("s3", endpoint_url=endpoint_url)
+    response = client.get_object(Bucket=output_bucket, Key=output_name)
+    return json.loads(response["Body"].read().decode("utf-8"))
+
+
+def _cell_source(cell: dict) -> str:
+    source = cell.get("source", "")
+    return "".join(source) if isinstance(source, list) else source
+
+
+def _cell_html_output(cell: dict) -> str | None:
+    for output in cell.get("outputs", []):
+        data = output.get("data", {})
+        if "text/html" not in data:
+            continue
+        html_output = data["text/html"]
+        return "".join(html_output) if isinstance(html_output, list) else html_output
+    return None
+
+
+def _class4_observation_rmsd_html(notebook: dict) -> str | None:
+    for cell in notebook.get("cells", []):
+        if CLASS4_OBSERVATION_RMSD_SOURCE not in _cell_source(cell):
+            continue
+        html_output = _cell_html_output(cell)
+        if html_output:
+            return html_output
+    return None
+
+
+class _HtmlTableRowsParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.rows: list[list[str]] = []
+        self._current_row: list[str] | None = None
+        self._current_cell: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag == "tr":
+            self._current_row = []
+        elif tag in {"th", "td"} and self._current_row is not None:
+            self._current_cell = []
+
+    def handle_data(self, data: str) -> None:
+        if self._current_cell is not None:
+            self._current_cell.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"th", "td"} and self._current_cell is not None and self._current_row is not None:
+            self._current_row.append("".join(self._current_cell).strip())
+            self._current_cell = None
+        elif tag == "tr" and self._current_row is not None:
+            if self._current_row:
+                self.rows.append(self._current_row)
+            self._current_row = None
+
+
+def _html_table_rows(raw_html: str) -> list[list[str]]:
+    parser = _HtmlTableRowsParser()
+    parser.feed(raw_html)
+    return parser.rows
+
+
+def _lead_day_number(header: str) -> str:
+    match = re.search(r"\b(\d+)\b", header)
+    return match.group(1) if match else header
+
+
+def _float_or_none(value: str) -> float | None:
+    try:
+        result = float(value)
+    except ValueError:
+        return None
+    return result if numpy.isfinite(result) else None
+
+
+def _parsed_score_label(label: str) -> tuple[str, str, str] | None:
+    match = re.match(r"^(.*?) \(([^)]+)\).*?\{([^}]+)\}$", label)
+    if not match:
+        return None
+    return match.group(1).lower(), match.group(2), match.group(3).lower()
+
+
+def _score_preview_from_rmsd_html(raw_html: str) -> dict | None:
+    table_rows = _html_table_rows(raw_html)
+    if not table_rows:
+        return None
+    lead_days = [_lead_day_number(header) for header in table_rows[0][1:]]
+    representative_rows = {
+        (variable_name, depth): label for variable_name, depth, label in REPRESENTATIVE_SCORE_PREVIEW_ROWS
+    }
+    metrics_by_representative_row = {}
+    for row in table_rows[1:]:
+        if not row:
+            continue
+        parsed_label = _parsed_score_label(row[0])
+        if parsed_label is None:
+            continue
+        variable_name, unit, depth = parsed_label
+        label = representative_rows.get((variable_name, depth))
+        if label is None:
+            continue
+        metrics_by_representative_row[(variable_name, depth)] = {
+            "label": label,
+            "unit": unit,
+            "lead_values": {lead_day: _float_or_none(value) for lead_day, value in zip(lead_days, row[1:])},
+        }
+    if len(metrics_by_representative_row) != len(REPRESENTATIVE_SCORE_PREVIEW_ROWS):
+        return None
+    return {
+        "metrics": [
+            metrics_by_representative_row[(variable_name, depth)]
+            for variable_name, depth, _ in REPRESENTATIVE_SCORE_PREVIEW_ROWS
+        ],
+    }
+
+
+def _score_preview_from_report_notebook(
+    report_notebook: str,
+    output_bucket: str | None,
+    output_prefix: str | None,
+) -> dict | None:
+    try:
+        notebook = _report_notebook_document(report_notebook, output_bucket, output_prefix)
+        raw_html = _class4_observation_rmsd_html(notebook)
+        return _score_preview_from_rmsd_html(raw_html) if raw_html else None
+    except Exception:
+        return None
 
 
 def _forecast_lead_day_count(forecast_url: str, forecast_init: str) -> int:
@@ -510,6 +664,7 @@ def validate_nrt_forecast(
     status = "Forecast pending"
     forecast_cleanup_status = None
     forecast_lead_day_count = 0
+    score_preview = None
     if forecast_ready:
         forecast_lead_day_count = _forecast_lead_day_count(forecast_url, forecast_init)
         with tempfile.TemporaryDirectory(prefix="oceanbench-nrt-") as temporary_directory:
@@ -529,6 +684,7 @@ def validate_nrt_forecast(
                     runtime_configuration=runtime_configuration or runtime_configuration_from_environment(),
                     region=region,
                 )
+        score_preview = _score_preview_from_report_notebook(report_notebook, output_bucket, output_prefix)
         status = "Complete"
         if cleanup_forecast_after_success and resolved_forecast_temporary:
             try:
@@ -554,6 +710,7 @@ def validate_nrt_forecast(
         report_url=report_url,
         status=status,
         oceanbench_version=__version__,
+        score_preview=score_preview,
     )
     manifest_path_or_url = write_nrt_manifest(
         _manifest_document(result),

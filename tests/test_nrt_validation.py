@@ -33,6 +33,38 @@ def _complete_observation_dataset() -> xarray.Dataset:
     return xarray.Dataset(variables)
 
 
+def _score_table() -> str:
+    return (
+        "<table>"
+        "<thead><tr><th></th><th>Lead day 1</th><th>Lead day 10</th></tr></thead>"
+        "<tbody>"
+        "<tr><th>Temperature (C) [sea_water_potential_temperature]{surface}</th><td>1.2</td><td>1.4</td></tr>"
+        "<tr><th>Salinity (PSU) [sea_water_salinity]{0-5m}</th><td>0.3</td><td>0.4</td></tr>"
+        "<tr><th>Zonal current (m/s) [eastward_sea_water_velocity]{15m}</th><td>0.2</td><td>0.25</td></tr>"
+        "<tr><th>Meridional current (m/s) [northward_sea_water_velocity]{15m}</th><td>0.21</td><td>0.24</td></tr>"
+        "</tbody>"
+        "</table>"
+    )
+
+
+def _write_report_notebook(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "cells": [
+                    {
+                        "cell_type": "code",
+                        "source": "evaluation_report.class4_observation.rmsd",
+                        "outputs": [{"data": {"text/html": _score_table()}}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_class4_observation_day_requires_non_empty_current_values(monkeypatch) -> None:
     dataset = _complete_observation_dataset()
     dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()] = (
@@ -57,6 +89,7 @@ def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
     manifest_path = tmp_path / "manifest.json"
     forecast_path = tmp_path / "forecast.zarr"
     observation_template = "file:///tmp/observations/{compact_date}.zarr"
+    report_directory = tmp_path / "reports"
 
     monkeypatch.setattr(
         nrt_validation,
@@ -68,6 +101,7 @@ def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
 
     def evaluate_live_challenger(**kwargs):
         evaluate_calls.append(kwargs)
+        _write_report_notebook(Path(kwargs["output_prefix"]) / kwargs["output_notebook_file_name"])
 
     monkeypatch.setattr(nrt_validation, "evaluate_live_challenger", evaluate_live_challenger)
     monkeypatch.setattr(
@@ -85,6 +119,7 @@ def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
         forecast_ready_timeout_seconds=0,
         forecast_ready_poll_seconds=1,
         manifest_path=str(manifest_path),
+        output_prefix=str(report_directory),
     )
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -103,9 +138,61 @@ def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
     assert "note" not in evaluation
     assert evaluation["forecast_temporary"] is True
     assert evaluation["forecast_cleanup_status"] == "Deleted 42 forecast Zarr objects"
+    assert evaluation["score_preview"] == {
+        "metrics": [
+            {
+                "label": "Temperature, surface",
+                "unit": "C",
+                "lead_values": {"1": 1.2, "10": 1.4},
+            },
+            {
+                "label": "Salinity, 0-5 m",
+                "unit": "PSU",
+                "lead_values": {"1": 0.3, "10": 0.4},
+            },
+            {
+                "label": "Zonal current, 15 m",
+                "unit": "m/s",
+                "lead_values": {"1": 0.2, "10": 0.25},
+            },
+            {
+                "label": "Meridional current, 15 m",
+                "unit": "m/s",
+                "lead_values": {"1": 0.21, "10": 0.24},
+            },
+        ]
+    }
     assert evaluate_calls[0]["output_notebook_file_name"] == "glonet.latest.global.report.ipynb"
+    assert evaluate_calls[0]["output_prefix"] == str(report_directory)
     assert cleanup_calls == [str(forecast_path)]
     assert observation_checks == [("2026-05-23", observation_template)]
+
+
+def test_score_preview_from_rmsd_html_uses_representative_metrics() -> None:
+    assert nrt_validation._score_preview_from_rmsd_html(_score_table()) == {
+        "metrics": [
+            {
+                "label": "Temperature, surface",
+                "unit": "C",
+                "lead_values": {"1": 1.2, "10": 1.4},
+            },
+            {
+                "label": "Salinity, 0-5 m",
+                "unit": "PSU",
+                "lead_values": {"1": 0.3, "10": 0.4},
+            },
+            {
+                "label": "Zonal current, 15 m",
+                "unit": "m/s",
+                "lead_values": {"1": 0.2, "10": 0.25},
+            },
+            {
+                "label": "Meridional current, 15 m",
+                "unit": "m/s",
+                "lead_values": {"1": 0.21, "10": 0.24},
+            },
+        ]
+    }
 
 
 def test_validate_nrt_forecast_records_actual_forecast_lead_count(

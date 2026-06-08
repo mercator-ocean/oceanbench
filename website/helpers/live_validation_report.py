@@ -274,24 +274,77 @@ def _sparkline(lead_days: list[str], values: list[float | None], unit: str) -> s
     )
 
 
+def _score_card(label: str, unit: str, lead_days: list[str], values: list[float | None]) -> str:
+    if not lead_days:
+        return ""
+    return (
+        '<div class="validation-score-card">'
+        f"<h3>{escape(label)}</h3>"
+        f"<p><span>Lead {escape(lead_days[0])}</span><strong>{_format_number(values[0])} {escape(unit)}</strong></p>"
+        "<p>"
+        f"<span>Lead {escape(lead_days[-1])}</span>"
+        f"<strong>{_format_number(values[-1])} {escape(unit)}</strong>"
+        "</p>"
+        f"{_sparkline(lead_days, values, unit)}"
+        "</div>"
+    )
+
+
 def _score_cards(score: ModelScore) -> str:
     lead_days = _lead_days(score)
-    cards = []
-    for label, variable in _representative_variables(score):
-        values = [variable.data.get(lead_day) for lead_day in lead_days]
-        first_value = next((value for value in values if value is not None), None)
-        last_value = next((value for value in reversed(values) if value is not None), None)
-        cards.append(
-            '<div class="validation-score-card">'
-            f"<h3>{escape(label)}</h3>"
-            f"<p><span>Lead 1</span><strong>{_format_number(first_value)} {escape(variable.unit)}</strong></p>"
-            "<p>"
-            f"<span>Lead {escape(lead_days[-1])}</span>"
-            f"<strong>{_format_number(last_value)} {escape(variable.unit)}</strong>"
-            "</p>"
-            f"{_sparkline(lead_days, values, variable.unit)}"
-            "</div>"
+    cards = [
+        _score_card(
+            label,
+            variable.unit,
+            lead_days,
+            [variable.data.get(lead_day) for lead_day in lead_days],
         )
+        for label, variable in _representative_variables(score)
+    ]
+    return '<div class="validation-score-grid">' + "".join(cards) + "</div>"
+
+
+def _manifest_score_preview_lead_days(lead_values: dict) -> list[str]:
+    return sorted(
+        (str(lead_day) for lead_day in lead_values),
+        key=lambda lead_day: (0, int(lead_day)) if lead_day.isdecimal() else (1, lead_day),
+    )
+
+
+def _manifest_score_preview_value(value) -> float | None:
+    if not isinstance(value, (int, float)):
+        return None
+    return float(value) if math.isfinite(value) else None
+
+
+def render_forecast_validation_manifest_score_preview(score_preview: dict | None) -> str:
+    if not isinstance(score_preview, dict):
+        return '<p class="validation-empty">Preview unavailable</p>'
+    metrics = score_preview.get("metrics")
+    if not isinstance(metrics, list):
+        return '<p class="validation-empty">Preview unavailable</p>'
+
+    cards = []
+    for metric in metrics:
+        if not isinstance(metric, dict):
+            continue
+        label = metric.get("label")
+        unit = metric.get("unit")
+        lead_values = metric.get("lead_values")
+        if not isinstance(label, str) or not isinstance(unit, str) or not isinstance(lead_values, dict):
+            continue
+        lead_days = _manifest_score_preview_lead_days(lead_values)
+        cards.append(
+            _score_card(
+                label,
+                unit,
+                lead_days,
+                [_manifest_score_preview_value(lead_values.get(lead_day)) for lead_day in lead_days],
+            )
+        )
+
+    if not cards:
+        return '<p class="validation-empty">Preview unavailable</p>'
     return '<div class="validation-score-grid">' + "".join(cards) + "</div>"
 
 
@@ -348,6 +401,10 @@ def _sparkline_tooltip_script() -> str:
 """
 
 
+def render_forecast_validation_score_preview_script() -> str:
+    return _sparkline_tooltip_script()
+
+
 def render_forecast_validation_page(
     notebook_path: str | Path,
     metadata: ForecastValidationMetadata,
@@ -369,7 +426,7 @@ def render_forecast_validation_page(
 </section>
 
 <section class="validation-section">
-  <h2>Lead-time scores</h2>
+  <h2>Representative lead-time scores</h2>
   <p>Representative RMSD values are shown at the first and last validated lead day.</p>
   {_score_cards(score)}
   {_sparkline_tooltip_script()}

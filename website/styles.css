@@ -174,29 +174,115 @@ div.sourceCode.cell-code pre.sourceCode {
 
 /* --- Forecast validation page --- */
 
+.live-evaluations-intro,
+.live-evaluations-summary {
+  width: min(1180px, calc(100vw - 2rem));
+  margin: 0 auto 1rem;
+}
+
+.live-evaluations-intro p {
+  margin: 0;
+  color: var(--ob-muted);
+}
+
 .live-evaluations-table-wrap {
+  width: min(820px, calc(100vw - 2rem));
+  margin: 1.15rem auto 1rem;
+  overflow-x: auto;
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-md);
   background: var(--ob-surface-raised);
   box-shadow: var(--ob-soft-shadow);
 }
 
-.live-evaluations-table-wrap table {
+.live-evaluations-table {
   width: 100%;
-  font-size: 0.9rem;
-  margin-bottom: 0;
+  margin: 0;
+  font-size: 0.84rem;
 }
 
-.live-evaluations-table-wrap th,
-.live-evaluations-table-wrap td {
-  padding: 0.5rem 0.65rem;
+.live-evaluations-table th,
+.live-evaluations-table td {
+  padding: 0.46rem 0.62rem;
+  border-top: 1px solid var(--ob-border);
   line-height: 1.25;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
-.live-evaluations-table-wrap th:nth-child(n + 2),
-.live-evaluations-table-wrap td:nth-child(n + 2) {
-  white-space: nowrap;
+.live-evaluations-table th {
+  color: var(--ob-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.live-evaluations-table td:first-child {
+  color: var(--bs-body-color, #333940);
+  font-weight: 800;
+}
+
+.live-evaluations-table th:nth-child(n + 2),
+.live-evaluations-table td:nth-child(n + 2) {
+  text-align: center;
+}
+
+.live-evaluation-row[data-live-preview-target] {
+  cursor: pointer;
+}
+
+.live-evaluation-row[data-live-preview-target]:hover td {
+  background: color-mix(in srgb, var(--ob-accent) 5%, transparent);
+}
+
+.live-evaluation-row.is-selected td {
+  background: color-mix(in srgb, var(--ob-accent) 9%, transparent);
+}
+
+.live-evaluation-row.is-selected td:first-child {
+  box-shadow: inset 0.22rem 0 0 var(--ob-accent);
+}
+
+.live-preview-select {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+}
+
+.live-preview-select.active {
+  color: var(--ob-accent);
+}
+
+.live-preview-select:focus-visible {
+  outline: 2px solid var(--ob-accent);
+  outline-offset: 0.16rem;
+}
+
+.live-preview-panel {
+  width: min(1180px, calc(100vw - 2rem));
+  margin: 0.85rem auto 0.25rem;
+}
+
+.live-preview-panel h2 {
+  margin: 0 0 0.45rem;
+  font-size: 1.25rem;
+}
+
+.live-preview-panel > p {
+  margin: 0 0 0.75rem;
+  color: var(--ob-muted);
+}
+
+body.live-evaluations-page #quarto-content.quarto-container {
+  min-height: auto !important;
+}
+
+body.live-evaluations-page footer.footer .nav-footer {
+  padding-top: 0;
 }
 
 /* --- Forecast validation report page --- */
