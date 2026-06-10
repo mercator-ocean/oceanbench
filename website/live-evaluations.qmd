@@ -28,7 +28,7 @@ print(
     "for scientific validation and daily monitoring.</p>"
     "</section>"
 )
-print(render_live_validation_summary("reports/nrt-evaluation-manifest.json"))
-print(render_live_validation_table("reports/nrt-evaluation-manifest.json"))
-print(render_live_validation_preview_panel("reports/nrt-evaluation-manifest.json"))
+print(render_live_validation_summary("reports/nrt-validation-manifest.json"))
+print(render_live_validation_table("reports/nrt-validation-manifest.json"))
+print(render_live_validation_preview_panel("reports/nrt-validation-manifest.json"))
 ```

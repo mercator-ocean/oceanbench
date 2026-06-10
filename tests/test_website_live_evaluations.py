@@ -28,7 +28,7 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     assert "render_live_validation_summary" in live_page
     assert "render_live_validation_table" in live_page
     assert "render_live_validation_preview_panel" in live_page
-    assert "reports/nrt-evaluation-manifest.json" in live_page
+    assert "reports/nrt-validation-manifest.json" in live_page
     assert "| GLONET |" not in live_page
     assert "2026-05-13" not in live_page
     assert "2026-05-23" not in live_page
@@ -36,11 +36,11 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     assert "render_forecast_validation_page" in clean_report_page
     assert "forecast_validation_metadata" in clean_report_page
     assert "report_notebook_path" in clean_report_page
-    assert "reports/nrt-evaluation-manifest.json" in clean_report_page
+    assert "reports/nrt-validation-manifest.json" in clean_report_page
     assert "2026-05-13" not in clean_report_page
     for page_name, (system_id, title) in validation_pages.items():
         validation_page = (WEBSITE_DIRECTORY / f"{page_name}-forecast-validation.qmd").read_text(encoding="utf-8")
         assert title in validation_page
         assert f'"{system_id}"' in validation_page
         assert "render_forecast_validation_page" in validation_page
-        assert "reports/nrt-evaluation-manifest.json" in validation_page
+        assert "reports/nrt-validation-manifest.json" in validation_page

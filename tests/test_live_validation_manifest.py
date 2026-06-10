@@ -92,7 +92,7 @@ def _write_manifest_without_score_preview(path: Path) -> None:
 
 
 def test_live_validation_table_and_report_metadata_are_manifest_driven(tmp_path: Path) -> None:
-    manifest_path = tmp_path / "nrt-evaluation-manifest.json"
+    manifest_path = tmp_path / "nrt-validation-manifest.json"
     _write_manifest(manifest_path)
 
     summary_html = render_live_validation_summary(manifest_path)
@@ -144,7 +144,7 @@ def test_live_validation_table_and_report_metadata_are_manifest_driven(tmp_path:
 
 
 def test_live_validation_preview_panel_shows_unavailable_without_manifest_scores(tmp_path: Path) -> None:
-    manifest_path = tmp_path / "nrt-evaluation-manifest.json"
+    manifest_path = tmp_path / "nrt-validation-manifest.json"
     _write_manifest_without_score_preview(manifest_path)
 
     preview_html = render_live_validation_preview_panel(manifest_path)

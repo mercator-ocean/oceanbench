@@ -20,7 +20,7 @@ SCRIPT_DIRECTORY = os.path.dirname(__file__)
 REPORTS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "reports")
 ASSETS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "..", "assets")
 QUARTO_METADATA_FILE_PATH = os.path.join(REPORTS_DIRECTORY, "_metadata.yml")
-NRT_MANIFEST_FILE_NAME = "nrt-evaluation-manifest.json"
+NRT_MANIFEST_FILE_NAME = "nrt-validation-manifest.json"
 
 
 def _find_sample_notebook(challenger_name: str) -> str | None:
@@ -82,7 +82,7 @@ def _write_sample_nrt_manifest() -> str:
                 "oceanbench_version": "sample",
                 "octo_process_package_name": None,
                 "octo_process_package_version": None,
-                "note": "Sample website build only: the NRT evaluation manifest was not downloaded.",
+                "note": "Sample website build only: the NRT validation manifest was not downloaded.",
             }
         ],
     }

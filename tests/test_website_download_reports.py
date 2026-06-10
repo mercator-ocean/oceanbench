@@ -14,7 +14,7 @@ import download_reports  # noqa: E402
 
 def test_main_launches_observation_refresh_before_downloads(monkeypatch, tmp_path: Path) -> None:
     events = []
-    manifest_path = tmp_path / "nrt-evaluation-manifest.json"
+    manifest_path = tmp_path / "nrt-validation-manifest.json"
 
     def maybe_launch_daily_observation_refresh() -> None:
         events.append("observation-refresh")
@@ -57,7 +57,7 @@ def test_main_launches_observation_refresh_before_downloads(monkeypatch, tmp_pat
 
 
 def test_download_nrt_reports_skips_pending_entries(monkeypatch, tmp_path: Path) -> None:
-    manifest_path = tmp_path / "nrt-evaluation-manifest.json"
+    manifest_path = tmp_path / "nrt-validation-manifest.json"
     manifest_path.write_text(
         json.dumps(
             {
@@ -95,7 +95,7 @@ def test_download_nrt_reports_prefers_manifest_report_url(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    manifest_path = tmp_path / "nrt-evaluation-manifest.json"
+    manifest_path = tmp_path / "nrt-validation-manifest.json"
     manifest_path.write_text(
         json.dumps(
             {
@@ -146,7 +146,7 @@ def test_write_sample_nrt_manifest_uses_placeholder_status(monkeypatch, tmp_path
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     evaluation = manifest["evaluations"][0]
 
-    assert manifest_path == str(tmp_path / "nrt-evaluation-manifest.json")
+    assert manifest_path == str(tmp_path / "nrt-validation-manifest.json")
     assert evaluation["system_label"] == "GLONET"
     assert evaluation["forecast_init"] == "Unavailable"
     assert evaluation["observation_cutoff"] == "Unavailable"
