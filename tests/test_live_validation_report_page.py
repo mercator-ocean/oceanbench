@@ -83,7 +83,7 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
         ),
     )
 
-    assert "Class IV validation is complete" in html
+    assert "Class IV evaluation is complete" in html
     assert "GLONET" in html
     assert "2026-05-13" in html
     assert "2026-05-23" in html

@@ -164,7 +164,7 @@ def _summary_cards(metadata: ForecastValidationMetadata) -> str:
     cards = [
         ("System", metadata.system_label),
         ("Forecast init", metadata.forecast_init),
-        ("Validated lead days", metadata.validated_lead_days),
+        ("Evaluated lead days", metadata.validated_lead_days),
         ("Observation cutoff", metadata.observation_cutoff),
         ("Status", metadata.status),
     ]
@@ -418,16 +418,16 @@ def render_forecast_validation_page(
 <section class="validation-intro">
   {_summary_cards(metadata)}
   <p class="validation-main-message">
-    Class IV validation is complete for lead days {escape(metadata.validated_lead_days)}.
+    Class IV evaluation is complete for lead days {escape(metadata.validated_lead_days)}.
     Scores are RMSD against recent observations for temperature, salinity, and currents.
-    These diagnostics support scientific validation and operational monitoring; they are not model rankings.
+    These diagnostics support scientific evaluation and operational monitoring; they are not model rankings.
   </p>
   {f'<p class="validation-note">{escape(metadata.note)}</p>' if metadata.note else ''}
 </section>
 
 <section class="validation-section">
   <h2>Representative lead-time scores</h2>
-  <p>Representative RMSD values are shown at the first and last validated lead day.</p>
+  <p>Representative RMSD values are shown at the first and last evaluated lead day.</p>
   {_score_cards(score)}
   {_sparkline_tooltip_script()}
 </section>
@@ -456,10 +456,10 @@ def render_forecast_validation_page(
 </section>
 
 <section class="validation-method-note">
-  <h2>Validation method</h2>
+  <h2>Evaluation method</h2>
   <p>
     The forecast is matched to recent Class IV observations by lead day.
-    The observation cutoff defines the latest observation date included in the validation.
+    The observation cutoff defines the latest observation date included in the evaluation.
     RMSD is aggregated by variable, depth range, and lead day.
   </p>
 </section>

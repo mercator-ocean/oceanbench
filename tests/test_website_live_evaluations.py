@@ -13,17 +13,18 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     live_page = (WEBSITE_DIRECTORY / "live-evaluations.qmd").read_text(encoding="utf-8")
     clean_report_page = (WEBSITE_DIRECTORY / "glonet-forecast-validation.qmd").read_text(encoding="utf-8")
     validation_pages = {
-        "glonet": ("octo-glonet-p1d", "GLONET forecast validation"),
-        "glonet2": ("octo-glonet2-p1d", "GLONET2 (experimental) forecast validation"),
-        "langya": ("octo-langya-p1d", "LangYa forecast validation"),
-        "wenhai": ("octo-wenhai-p1d", "WenHai forecast validation"),
-        "xihe": ("octo-xihe-p1d", "XiHe forecast validation"),
+        "glonet": ("octo-glonet-p1d", "GLONET forecast evaluation"),
+        "glonet2": ("octo-glonet2-p1d", "GLONET2 (experimental) forecast evaluation"),
+        "langya": ("octo-langya-p1d", "LangYa forecast evaluation"),
+        "wenhai": ("octo-wenhai-p1d", "WenHai forecast evaluation"),
+        "xihe": ("octo-xihe-p1d", "XiHe forecast evaluation"),
     }
 
     assert "live-evaluations.qmd" in quarto_config
     assert "NRT forecast evaluation" in quarto_config
     assert "Near-real-time forecast evaluation" in live_page
-    assert "for scientific validation and daily monitoring" in live_page
+    assert "Near-real-time evaluation compares" in live_page
+    assert "for scientific evaluation and daily monitoring" in live_page
     assert "annual benchmark ranking" not in live_page
     assert "render_live_validation_summary" in live_page
     assert "render_live_validation_table" in live_page

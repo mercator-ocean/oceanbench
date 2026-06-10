@@ -172,7 +172,7 @@ div.sourceCode.cell-code pre.sourceCode {
   text-decoration: none;
 }
 
-/* --- Forecast validation page --- */
+/* --- Forecast evaluation page --- */
 
 .live-evaluations-intro,
 .live-evaluations-summary {
@@ -285,7 +285,7 @@ body.live-evaluations-page footer.footer .nav-footer {
   padding-top: 0;
 }
 
-/* --- Forecast validation report page --- */
+/* --- Forecast evaluation report page --- */
 
 .validation-intro,
 .validation-section,

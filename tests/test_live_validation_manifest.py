@@ -113,7 +113,7 @@ def test_live_validation_table_and_report_metadata_are_manifest_driven(tmp_path:
     assert "2026-05-23" not in html
     assert "1-10 days" in html
     assert "Forecast horizon" in html
-    assert "Validated leads" in html
+    assert "Evaluated leads" in html
     assert "10 days" in html
     assert "Score preview" not in html
     assert "data-live-preview-target" in html
@@ -126,7 +126,7 @@ def test_live_validation_table_and_report_metadata_are_manifest_driven(tmp_path:
     assert "glonet-forecast-validation.html" in html
     assert "Representative lead-time scores" in preview_html
     assert "Select a challenger to preview selected RMSD metrics" in preview_html
-    assert "reports contain the full validation tables" in preview_html
+    assert "reports contain the full evaluation tables" in preview_html
     assert "live-preview-tab" not in preview_html
     assert "<h3>GLONET</h3>" not in preview_html
     assert "Temperature, surface" in preview_html

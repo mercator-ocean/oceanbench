@@ -5,7 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 
 ---
-title: "XiHe forecast validation"
+title: "XiHe forecast evaluation"
 format:
   html:
     echo: false
@@ -27,7 +27,7 @@ if Path(notebook_path).exists():
 else:
     print(
         f'<section class="validation-intro"><p class="validation-main-message">'
-        f'{metadata.system_label} forecast validation status: {metadata.status}. '
+        f'{metadata.system_label} forecast evaluation status: {metadata.status}. '
         'The executed report notebook is not available yet.</p></section>'
     )
 ```

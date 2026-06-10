@@ -124,7 +124,7 @@ def render_live_validation_table(manifest_path: str | Path = DEFAULT_MANIFEST_PA
         '<section class="live-evaluations-table-wrap">'
         '<table class="live-evaluations-table">'
         "<thead><tr>"
-        "<th>System</th><th>Forecast horizon</th><th>Validated leads</th><th>Status</th><th>Report</th>"
+        "<th>System</th><th>Forecast horizon</th><th>Evaluated leads</th><th>Status</th><th>Report</th>"
         "</tr></thead>"
         f"<tbody>{rows}</tbody>"
         "</table>"
@@ -182,7 +182,7 @@ def render_live_validation_preview_panel(manifest_path: str | Path = DEFAULT_MAN
         '<section class="live-preview-panel">'
         "<h2>Representative lead-time scores</h2>"
         "<p>"
-        "Select a challenger to preview selected RMSD metrics; reports contain the full validation tables."
+        "Select a challenger to preview selected RMSD metrics; reports contain the full evaluation tables."
         "</p>"
         f"{panels}"
         "</section>" + _live_preview_panel_script() + render_forecast_validation_score_preview_script()

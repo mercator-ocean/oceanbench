@@ -25,7 +25,7 @@ print(
     '<script>document.body.classList.add("live-evaluations-page");</script>'
     '<section class="live-evaluations-intro">'
     "<p>Near-real-time evaluation compares recent operational forecasts with recent Class IV observations "
-    "for scientific validation and daily monitoring.</p>"
+    "for scientific evaluation and daily monitoring.</p>"
     "</section>"
 )
 print(render_live_validation_summary("reports/nrt-validation-manifest.json"))

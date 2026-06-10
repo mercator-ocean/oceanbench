@@ -63,7 +63,7 @@ def test_glonet_latest_loader_opens_one_local_forecast_init(tmp_path: Path) -> N
 def test_glonet_latest_default_opens_latest_fully_evaluable_init(tmp_path: Path, monkeypatch) -> None:
     source_dataset = _forecast_dataset().isel({Dimension.FIRST_DAY_DATETIME.key(): 0}, drop=True)
     source_dataset = source_dataset.rename({Dimension.LEAD_DAY_INDEX.key(): "time"})
-    forecast_path = tmp_path / "2026-05-13.zarr"
+    forecast_path = tmp_path / "2026-05-20.zarr"
     source_dataset.to_zarr(forecast_path)
     monkeypatch.setattr(
         live_datasets,
@@ -74,7 +74,7 @@ def test_glonet_latest_default_opens_latest_fully_evaluable_init(tmp_path: Path,
     dataset = live_datasets.glonet_latest()
 
     assert dataset.sizes[Dimension.FIRST_DAY_DATETIME.key()] == 1
-    assert dataset[Dimension.FIRST_DAY_DATETIME.key()].values[0] == numpy.datetime64("2026-05-13")
+    assert dataset[Dimension.FIRST_DAY_DATETIME.key()].values[0] == numpy.datetime64("2026-05-20")
     assert dataset[Dimension.LEAD_DAY_INDEX.key()].values.tolist() == [0]
 
 
@@ -110,7 +110,7 @@ def test_generate_live_evaluation_notebook_excludes_glorys(tmp_path: Path) -> No
 
     assert notebook.metadata["oceanbench"]["live_evaluation"] is True
     assert "Near-real-time forecast evaluation" in all_sources
-    assert "Forecast validation setup" in all_sources
+    assert "Forecast evaluation setup" in all_sources
     assert "prepare_live_evaluation_report" in all_sources
     assert "evaluation_report.class4_observation.rmsd" in all_sources
     assert "evaluation_report.class4_observation_error_explorer" in all_sources

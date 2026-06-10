@@ -5,7 +5,7 @@
 # ### Near-real-time forecast evaluation guide
 
 # Near-real-time forecast evaluation compares one recent operational forecast with recent Class IV
-# observations. These diagnostics are for scientific validation and operational monitoring, not for annual
+# observations. These diagnostics are for scientific evaluation and operational monitoring, not for annual
 # benchmark ranking.
 
 # Observation-based scores use the configured recent Class IV bucket. The default development bucket
@@ -35,7 +35,7 @@ challenger_dataset: xarray.Dataset = xarray.Dataset()
 
 region = "global"
 
-# ### Forecast validation setup
+# ### Forecast evaluation setup
 
 from oceanbench.core.evaluation_report import prepare_live_evaluation_report
 from oceanbench.core.live_datasets import (
@@ -50,7 +50,7 @@ evaluation_report = prepare_live_evaluation_report(
     observation_last_available_day=live_class4_observation_last_day(),
 )
 
-# ### Forecast validation of challenger dataset using OceanBench
+# ### Forecast evaluation of challenger dataset using OceanBench
 
 # #### Root Mean Square Deviation (RMSD) of variables compared to recent Class IV observations
 
