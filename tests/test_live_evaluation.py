@@ -109,7 +109,7 @@ def test_generate_live_evaluation_notebook_excludes_glorys(tmp_path: Path) -> No
     all_sources = "\n".join(cell.source for cell in notebook.cells)
 
     assert notebook.metadata["oceanbench"]["live_evaluation"] is True
-    assert "Near-real-time forecast validation" in all_sources
+    assert "Near-real-time forecast evaluation" in all_sources
     assert "Forecast validation setup" in all_sources
     assert "prepare_live_evaluation_report" in all_sources
     assert "evaluation_report.class4_observation.rmsd" in all_sources

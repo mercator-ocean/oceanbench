@@ -12,7 +12,7 @@ from helpers.live_validation_report import (
     render_forecast_validation_score_preview_script,
 )
 
-DEFAULT_MANIFEST_PATH = "reports/nrt-validation-manifest.json"
+DEFAULT_MANIFEST_PATH = "reports/nrt-evaluation-manifest.json"
 REPORT_PAGE_NAMES = {
     "octo-glonet-p1d": "glonet-forecast-validation.html",
     "octo-glonet2-p1d": "glonet2-forecast-validation.html",
@@ -49,7 +49,7 @@ def _find_evaluation(evaluations: list[dict], system_id: str) -> dict:
     for evaluation in evaluations:
         if evaluation["system_id"] == system_id:
             return evaluation
-    raise ValueError(f"No NRT validation entry found for {system_id!r}.")
+    raise ValueError(f"No NRT evaluation entry found for {system_id!r}.")
 
 
 def _forecast_horizon(evaluation: dict) -> str:

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import numpy
 import xarray
 
-from oceanbench.core import nrt_validation
+from oceanbench.core import nrt_evaluation
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 
@@ -71,9 +71,9 @@ def test_class4_observation_day_requires_non_empty_current_values(monkeypatch) -
         dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()].dims,
         [numpy.nan],
     )
-    monkeypatch.setattr(nrt_validation.xarray, "open_dataset", lambda *_, **__: dataset)
+    monkeypatch.setattr(nrt_evaluation.xarray, "open_dataset", lambda *_, **__: dataset)
 
-    assert not nrt_validation.class4_observation_day_is_complete(
+    assert not nrt_evaluation.class4_observation_day_is_complete(
         "2026-05-22",
         "file:///tmp/observations/{day}.zarr",
     )
@@ -92,25 +92,25 @@ def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
     report_directory = tmp_path / "reports"
 
     monkeypatch.setattr(
-        nrt_validation,
+        nrt_evaluation,
         "class4_observation_day_is_complete",
         lambda day, template: observation_checks.append((day, template)) or True,
     )
-    monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
-    monkeypatch.setattr(nrt_validation, "_forecast_lead_day_count", lambda *_, **__: 10)
+    monkeypatch.setattr(nrt_evaluation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_evaluation, "_forecast_lead_day_count", lambda *_, **__: 10)
 
     def evaluate_live_challenger(**kwargs):
         evaluate_calls.append(kwargs)
         _write_report_notebook(Path(kwargs["output_prefix"]) / kwargs["output_notebook_file_name"])
 
-    monkeypatch.setattr(nrt_validation, "evaluate_live_challenger", evaluate_live_challenger)
+    monkeypatch.setattr(nrt_evaluation, "evaluate_live_challenger", evaluate_live_challenger)
     monkeypatch.setattr(
-        nrt_validation,
+        nrt_evaluation,
         "delete_forecast_zarr_store",
         lambda forecast_url: cleanup_calls.append(forecast_url) or "Deleted 42 forecast Zarr objects",
     )
 
-    result, written_manifest = nrt_validation.validate_nrt_forecast(
+    result, written_manifest = nrt_evaluation.validate_nrt_forecast(
         forecast_zarr_template=str(forecast_path),
         observation_zarr_template=observation_template,
         forecast_init="2026-05-13",
@@ -169,7 +169,7 @@ def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
 
 
 def test_score_preview_from_rmsd_html_uses_representative_metrics() -> None:
-    assert nrt_validation._score_preview_from_rmsd_html(_score_table()) == {
+    assert nrt_evaluation._score_preview_from_rmsd_html(_score_table()) == {
         "metrics": [
             {
                 "label": "Temperature, surface",
@@ -202,12 +202,12 @@ def test_validate_nrt_forecast_records_actual_forecast_lead_count(
     manifest_path = tmp_path / "manifest.json"
     forecast_path = tmp_path / "langya.zarr"
 
-    monkeypatch.setattr(nrt_validation, "class4_observation_day_is_complete", lambda *_, **__: True)
-    monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
-    monkeypatch.setattr(nrt_validation, "_forecast_lead_day_count", lambda *_, **__: 7)
-    monkeypatch.setattr(nrt_validation, "evaluate_live_challenger", lambda **_: None)
+    monkeypatch.setattr(nrt_evaluation, "class4_observation_day_is_complete", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_evaluation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_evaluation, "_forecast_lead_day_count", lambda *_, **__: 7)
+    monkeypatch.setattr(nrt_evaluation, "evaluate_live_challenger", lambda **_: None)
 
-    result, _ = nrt_validation.validate_nrt_forecast(
+    result, _ = nrt_evaluation.validate_nrt_forecast(
         system_label="LangYa",
         forecast_zarr_template=str(forecast_path),
         forecast_init="2026-05-13",
@@ -228,7 +228,7 @@ def test_validate_nrt_forecast_records_actual_forecast_lead_count(
 
 def test_nrt_zarr_template_supports_compact_date() -> None:
     assert (
-        nrt_validation._format_zarr_template(
+        nrt_evaluation._format_zarr_template(
             "2026-05-23",
             "https://example.test/observations/{compact_date}.zarr",
         )
@@ -268,7 +268,7 @@ def test_delete_s3_prefix_deletes_objects_individually(monkeypatch) -> None:
     fake_boto3 = SimpleNamespace(client=lambda *_, **__: FakeClient())
     monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
 
-    assert nrt_validation._delete_s3_prefix("bucket", "forecast.zarr", None) == 2
+    assert nrt_evaluation._delete_s3_prefix("bucket", "forecast.zarr", None) == 2
     assert deleted_objects == [
         {"Bucket": "bucket", "Key": "forecast.zarr/.zgroup"},
         {"Bucket": "bucket", "Key": "forecast.zarr/_SUCCESS"},
@@ -277,7 +277,7 @@ def test_delete_s3_prefix_deletes_objects_individually(monkeypatch) -> None:
 
 def test_validate_nrt_forecast_rejects_inconsistent_pinned_target() -> None:
     try:
-        nrt_validation.validate_nrt_forecast(
+        nrt_evaluation.validate_nrt_forecast(
             forecast_init="2026-05-14",
             observation_cutoff="2026-05-23",
         )
@@ -289,7 +289,7 @@ def test_validate_nrt_forecast_rejects_inconsistent_pinned_target() -> None:
 
 def test_validate_nrt_forecast_requires_complete_pinned_target_pair() -> None:
     try:
-        nrt_validation.validate_nrt_forecast(
+        nrt_evaluation.validate_nrt_forecast(
             forecast_init="2026-05-13",
         )
     except ValueError as error:
@@ -306,17 +306,17 @@ def test_validate_nrt_forecast_can_clean_external_temporary_forecast(
     manifest_path = tmp_path / "manifest.json"
     forecast_template = str(tmp_path / "external-{date}.zarr")
 
-    monkeypatch.setattr(nrt_validation, "class4_observation_day_is_complete", lambda *_, **__: True)
-    monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
-    monkeypatch.setattr(nrt_validation, "_forecast_lead_day_count", lambda *_, **__: 10)
-    monkeypatch.setattr(nrt_validation, "evaluate_live_challenger", lambda **_: None)
+    monkeypatch.setattr(nrt_evaluation, "class4_observation_day_is_complete", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_evaluation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_evaluation, "_forecast_lead_day_count", lambda *_, **__: 10)
+    monkeypatch.setattr(nrt_evaluation, "evaluate_live_challenger", lambda **_: None)
     monkeypatch.setattr(
-        nrt_validation,
+        nrt_evaluation,
         "delete_forecast_zarr_store",
         lambda forecast_url: cleanup_calls.append(forecast_url) or "Deleted temporary forecast",
     )
 
-    result, _ = nrt_validation.validate_nrt_forecast(
+    result, _ = nrt_evaluation.validate_nrt_forecast(
         forecast_zarr_template=forecast_template,
         forecast_init="2026-05-13",
         observation_cutoff="2026-05-23",
@@ -339,7 +339,7 @@ def test_validate_nrt_forecast_can_clean_external_temporary_forecast(
 
 
 def test_write_nrt_manifest_merges_existing_challenger_rows(tmp_path: Path) -> None:
-    manifest_path = tmp_path / "nrt-validation-manifest.json"
+    manifest_path = tmp_path / "nrt-evaluation-manifest.json"
     manifest_path.write_text(
         json.dumps(
             {
@@ -379,7 +379,7 @@ def test_write_nrt_manifest_merges_existing_challenger_rows(tmp_path: Path) -> N
         ],
     }
 
-    written_manifest = nrt_validation.write_nrt_manifest(
+    written_manifest = nrt_evaluation.write_nrt_manifest(
         new_manifest,
         manifest_path=str(manifest_path),
         output_bucket=None,

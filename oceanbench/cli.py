@@ -174,7 +174,7 @@ def _run_evaluate(args: argparse.Namespace) -> int:
 
 def _run_validate_nrt(args: argparse.Namespace) -> int:
     try:
-        from oceanbench.core.nrt_validation import validate_nrt_forecast
+        from oceanbench.core.nrt_evaluation import validate_nrt_forecast
 
         result, manifest_path_or_url = validate_nrt_forecast(
             system_id=args.system_id,
@@ -194,7 +194,7 @@ def _run_validate_nrt(args: argparse.Namespace) -> int:
             region=_resolve_region_argument(args),
         )
     except Exception as error:
-        print(f"FAIL: NRT forecast validation: {error}", file=sys.stderr)
+        print(f"FAIL: NRT forecast evaluation: {error}", file=sys.stderr)
         return 1
 
     print(f"{result.status}: {result.system_label} {result.forecast_init}")
@@ -315,8 +315,7 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--forecast-init",
         required=True,
         help=(
-            "Forecast initialization day in YYYY-MM-DD format, resolved from the "
-            "observation availability manifest."
+            "Forecast initialization day in YYYY-MM-DD format, resolved from the " "observation availability manifest."
         ),
     )
     validate_nrt_parser.add_argument(

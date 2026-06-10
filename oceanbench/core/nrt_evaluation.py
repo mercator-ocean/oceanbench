@@ -35,7 +35,7 @@ from oceanbench.core.regions import RegionLike, resolve_region
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from oceanbench.core.version import __version__
 
-DEFAULT_NRT_MANIFEST_NAME = "nrt-validation-manifest.json"
+DEFAULT_NRT_MANIFEST_NAME = "nrt-evaluation-manifest.json"
 DEFAULT_NRT_SYSTEM_ID = "octo-glonet-p1d"
 DEFAULT_NRT_SYSTEM_LABEL = "GLONET"
 DEFAULT_FORECAST_READY_TIMEOUT_SECONDS = 3600
@@ -63,7 +63,7 @@ REQUIRED_CLASS4_OBSERVATION_VARIABLE_KEYS = (
 
 
 @dataclass(frozen=True)
-class NrtValidationResult:
+class NrtEvaluationResult:
     system_id: str
     system_label: str
     region: str
@@ -456,7 +456,7 @@ def _temporary_environment(updates: dict[str, str | None]):
                 os.environ[name] = previous_value
 
 
-def _manifest_document(result: NrtValidationResult) -> dict:
+def _manifest_document(result: NrtEvaluationResult) -> dict:
     return {
         "schema_version": 1,
         "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -638,7 +638,7 @@ def validate_nrt_forecast(
     manifest_path: str | None = None,
     runtime_configuration: RuntimeConfiguration | None = None,
     region: RegionLike = None,
-) -> tuple[NrtValidationResult, str]:
+) -> tuple[NrtEvaluationResult, str]:
     resolved_observation_template = observation_zarr_template or live_class4_observation_zarr_template()
     if forecast_init is None or observation_cutoff is None:
         raise ValueError("--forecast-init and --observation-cutoff are required.")
@@ -694,7 +694,7 @@ def validate_nrt_forecast(
         elif resolved_forecast_temporary:
             forecast_cleanup_status = "Kept temporary forecast Zarr"
 
-    result = NrtValidationResult(
+    result = NrtEvaluationResult(
         system_id=system_id,
         system_label=system_label,
         region=resolve_region(region).id,

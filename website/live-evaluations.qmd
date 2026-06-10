@@ -5,7 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 
 ---
-title: "Near-real-time forecast validation"
+title: "Near-real-time forecast evaluation"
 format:
   html:
     echo: false
@@ -24,11 +24,11 @@ from helpers.live_validation_manifest import (
 print(
     '<script>document.body.classList.add("live-evaluations-page");</script>'
     '<section class="live-evaluations-intro">'
-    "<p>Near-real-time validation compares recent operational forecasts with recent Class IV observations "
+    "<p>Near-real-time evaluation compares recent operational forecasts with recent Class IV observations "
     "for scientific validation and daily monitoring.</p>"
     "</section>"
 )
-print(render_live_validation_summary("reports/nrt-validation-manifest.json"))
-print(render_live_validation_table("reports/nrt-validation-manifest.json"))
-print(render_live_validation_preview_panel("reports/nrt-validation-manifest.json"))
+print(render_live_validation_summary("reports/nrt-evaluation-manifest.json"))
+print(render_live_validation_table("reports/nrt-evaluation-manifest.json"))
+print(render_live_validation_preview_panel("reports/nrt-evaluation-manifest.json"))
 ```

@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# ### Near-real-time forecast validation guide
+# ### Near-real-time forecast evaluation guide
 
-# Near-real-time forecast validation compares one recent operational forecast with recent Class IV
+# Near-real-time forecast evaluation compares one recent operational forecast with recent Class IV
 # observations. These diagnostics are for scientific validation and operational monitoring, not for annual
 # benchmark ranking.
 
