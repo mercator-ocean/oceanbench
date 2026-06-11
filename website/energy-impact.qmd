@@ -336,6 +336,11 @@ HTML("""
   </table>
 </div>
 
+<p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+  Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+  The ± margin corresponds to a 95% confidence interval based on Student’s t-distribution.
+</p>
+
 <div class="ei-model-card">
   <div class="ei-model-card-header">
     <span class="ei-model-name">Glonet</span>
@@ -344,9 +349,9 @@ HTML("""
   <table class="ei-table">
     <thead><tr><th>Metric</th><th>Value</th></tr></thead>
     <tbody>
-      <tr><td>Energy (Wh)</td><td><span class="ei-result">126.4 (± 0.496)</span></td></tr>
-      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00708 (± 0.0000278)</span></td></tr>
-      <tr><td>Duration (seconds)</td><td><span class="ei-result">1985</span></td></tr>
+      <tr><td>Energy (Wh)</td><td><span class="ei-result">135 (± 2.03)</span></td></tr>
+      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00754 (± 0.000114)</span></td></tr>
+      <tr><td>Duration (seconds)</td><td><span class="ei-result">2061</span></td></tr>
       <tr><td>Consumption of the empty machine on the same time (Wh) </td><td><span class="ei-pending">pending</span></td></tr>
     </tbody>
   </table>
@@ -371,9 +376,9 @@ display(HTML("""
 
 <script>
 var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "CLEAN FILES", "GENERATING THUMBNAILS", "SAVING"],
-  values: [0.036, 4.0, 91, 4.8, 0.074, 0.30, 6.8],
-  colors: ["#0C447C", "#378ADD", "#85B7EB", "#F09595", "#E24B4A", "#A32D2D", "#501313"]
+  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
+  values: [0.1, 1.2, 84.6, 5.5, 8.6],
+  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#48A8D8","#1C3A6E"]
 };
 
 var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
@@ -398,10 +403,56 @@ DATA.labels.forEach(function(label, i) {
 """))
 ```
 
+```{python}
+from IPython.display import HTML, display
+
+display(HTML("""
+<div style="padding: 1rem 0;">
+  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
+    Duration — Glonet Inference
+  </div>
+
+  <div id="stacked-bar-glonet_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
+
+  <div id="bar-legend-glonet_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+</div>
+
+<script>
+var DATA = {
+  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
+  values: [1.55, 10, 1820, 75, 131],
+  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#48A8D8","#1C3A6E"]
+};
+
+var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
+var bar = document.getElementById('stacked-bar-glonet_part2');
+var legend = document.getElementById('bar-legend-glonet_part2');
+
+DATA.labels.forEach(function(label, i) {
+  var pct = (DATA.values[i] / total) * 100;
+
+  var seg = document.createElement('div');
+  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
+  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
+  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
+  seg.onmouseleave = function() { this.style.opacity = '1'; };
+  bar.appendChild(seg);
+
+  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
+    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
+    + label + ' — ' + pct.toFixed(1) + '%</span>';
+});
+</script>
+"""))
+```
 
 ## Wenhai Energy Impact Analysis
 ```{python}
 HTML("""
+<p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+  Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+  The ± margin corresponds to a 95% confidence interval based on Student’s t-distribution.
+</p>
 
 <div class="ei-model-card">
   <div class="ei-model-card-header">
@@ -411,9 +462,9 @@ HTML("""
   <table class="ei-table">
     <thead><tr><th>Metric</th><th>Value</th></tr></thead>
     <tbody>
-      <tr><td>Energy (Wh)</td><td><span class="ei-result">46.0 (± 0.769)</span></td></tr>
-      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00258 (± 0.0000430)</span></td></tr>
-      <tr><td>Duration (seconds)</td><td><span class="ei-result">721</span></td></tr>
+      <tr><td>Energy (Wh)</td><td><span class="ei-result">49.7 (± 3.49)</span></td></tr>
+      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00278 (± 0.0000196)</span></td></tr>
+      <tr><td>Duration (seconds)</td><td><span class="ei-result">781</span></td></tr>
       <tr><td>Consumption of the empty machine on the same time (Wh) </td><td><span class="ei-pending">pending</span></td></tr>
     </tbody>
   </table>
@@ -438,9 +489,9 @@ display(HTML("""
 
 <script>
 var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "SAVING_ZARR", "ADDING_METADATA", "UPLOAD_zarr + thumnails to S3"],
-  values: [0.036, 0.26, 31, 17, 1, 0.044, 12],
-  colors: ["#0C447C", "#378ADD", "#85B7EB", "#F09595", "#E24B4A", "#A32D2D", "#501313"]
+  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
+  values: [0.24, 1.44, 30.12, 39.0, 29.2],
+  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#48A8D8","#1C3A6E"]
 };
 
 var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
@@ -465,9 +516,56 @@ DATA.labels.forEach(function(label, i) {
 """))
 ```
 
+```{python}
+from IPython.display import HTML, display
+
+display(HTML("""
+<div style="padding: 1rem 0;">
+  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
+    Duration — Wenhai Inference
+  </div>
+
+  <div id="stacked-bar-wenhai_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
+
+  <div id="bar-legend-wenhai_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+</div>
+
+<script>
+var DATA = {
+  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
+  values: [1.53, 7.0, 280, 253, 220],
+  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#48A8D8","#1C3A6E"]
+};
+
+var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
+var bar = document.getElementById('stacked-bar-wenhai_part2');
+var legend = document.getElementById('bar-legend-wenhai_part2');
+
+DATA.labels.forEach(function(label, i) {
+  var pct = (DATA.values[i] / total) * 100;
+
+  var seg = document.createElement('div');
+  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
+  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
+  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
+  seg.onmouseleave = function() { this.style.opacity = '1'; };
+  bar.appendChild(seg);
+
+  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
+    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
+    + label + ' — ' + pct.toFixed(1) + '%</span>';
+});
+</script>
+"""))
+```
+
 ## Xihe Energy Impact Analysis
 ```{python}
 HTML("""
+<p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+  Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+  The ± margin corresponds to a 95% confidence interval based on Student’s t-distribution.
+</p>
 
 <div class="ei-model-card">
   <div class="ei-model-card-header">
@@ -504,9 +602,9 @@ display(HTML("""
 
 <script>
 var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "Preprocessing_to_NPY", "INFERENCE", "ADD_METADATA", "GENERATING THUMBNAILS", "UPLOAD_to_S3"],
-  values: [0.036, 5.0, 13, 0.99, 7.8, 0.044, 0.98, 9.8],
-  colors: ["#0C447C", "#378ADD", "#85B7EB", "#c6d8eb", "#F09595", "#E24B4A", "#A32D2D", "#501313"]
+  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
+  values: [0.1, 14.1, 23.5, 22.1, 40.2],
+  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#48A8D8","#1C3A6E"]
 };
 
 var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
@@ -531,7 +629,78 @@ DATA.labels.forEach(function(label, i) {
 """))
 ```
 
-## Cumulative Energy Consumption per Number of Inferences Between AI models
+```{python}
+from IPython.display import HTML, display
+
+display(HTML("""
+<div style="padding: 1rem 0;">
+  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
+    Duration — Xihe Inference
+  </div>
+
+  <div id="stacked-bar-xihe_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
+
+  <div id="bar-legend-xihe_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+</div>
+
+<script>
+var DATA = {
+  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
+  values: [1.51, 108, 180, 117, 240],
+  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#48A8D8","#1C3A6E"]
+};
+
+var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
+var bar = document.getElementById('stacked-bar-xihe_part2');
+var legend = document.getElementById('bar-legend-xihe_part2');
+
+DATA.labels.forEach(function(label, i) {
+  var pct = (DATA.values[i] / total) * 100;
+
+  var seg = document.createElement('div');
+  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
+  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
+  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
+  seg.onmouseleave = function() { this.style.opacity = '1'; };
+  bar.appendChild(seg);
+
+  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
+    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
+    + label + ' — ' + pct.toFixed(1) + '%</span>';
+});
+</script>
+"""))
+```
+
+## LangYa Energy Impact Analysis
+```{python}
+HTML("""
+<p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+  Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+  The ± margin corresponds to a 95% confidence interval based on Student’s t-distribution.
+</p>
+
+<div class="ei-model-card">
+  <div class="ei-model-card-header">
+    <span class="ei-model-name">LangYa</span>
+    <span class="ei-model-badge">Inference</span>
+  </div>
+  <table class="ei-table">
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Energy (Wh)</td><td><span class="ei-pending">pending</span></td></tr>
+      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-pending">pending</span></td></tr>
+      <tr><td>Duration (seconds)</td><td><span class="ei-pending">pending</span></td></tr>
+      <tr><td>Consumption of the empty machine on the same time (Wh) </td><td><span class="ei-pending">pending</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+""")
+```
+
+
+## AI Models Comparison
 ```{python}
 
 from IPython.display import HTML, Javascript, display
@@ -544,13 +713,13 @@ display(HTML("""
     <span style="display: flex; align-items: center; gap: 6px;">
       <span style="width: 20px; height: 3px; background: #378ADD; display:inline-block; border-radius:2px;"></span>
       <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(55,138,221,0.30); display:inline-block;"></span>
-      Glonet — 126.4 Wh/run (±0.496)
+      Glonet — 135 Wh/run (±2.03)
     </span>
 
     <span style="display: flex; align-items: center; gap: 6px;">
       <span style="width: 20px; height: 3px; background: #1D9E75; display:inline-block; border-radius:2px;"></span>
       <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(29,158,117,0.30); display:inline-block;"></span>
-      Wenhai — 46.0 Wh/run (±0.769)
+      Wenhai — 49.7 Wh/run (±3.49)
     </span>
 
     <span style="display: flex; align-items: center; gap: 6px;">
@@ -585,16 +754,16 @@ require(['chartjs'], function(ChartModule) {
     const models = [
         {
             name: 'Glonet',
-            mu: 126.4,
-            ci: 0.496,
+            mu: 135,
+            ci: 2.03,
             color: '#378ADD',
             fill: '55,138,221',
             dash: []
         },
         {
             name: 'Wenhai',
-            mu: 46.0,
-            ci: 0.769,
+            mu: 49.7,
+            ci: 3.49,
             color: '#1D9E75',
             fill: '29,158,117',
             dash: [6,3]
@@ -758,6 +927,135 @@ require(['chartjs'], function(ChartModule) {
 """))
 ```
 
+```{python}
+from IPython.display import HTML, display
+
+display(HTML("""
+<div style="padding: 1rem 0;">
+  <p style="font-size: 13px; color: #888; margin: 0 0 1.25rem 0;">Difference between model (on Lir)</p>
+
+  <div style="display: flex; flex-direction: column; gap: 10px;" id="breakdown-container"></div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 14px; margin-top: 1.25rem; font-size: 12px; color: #888;" id="breakdown-legend"></div>
+</div>
+
+<script>
+var STAGES = ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"];
+var COLORS = ["#C8E8F0", "#96D3E2", "#5ABDD6", "#378ADD", "#1C3A6E"];
+
+var MODELS = [
+  { name: "Glonet", values: [0.1, 1.2, 84.6, 5.5, 8.6] },
+  { name: "Wenhai", values: [0.24, 1.44, 30.12, 39.0, 29.2] },
+  { name: "Xihe",   values: [0.1, 14.1, 23.5, 22.1, 40.2] }
+];
+
+var container = document.getElementById('breakdown-container');
+var legend    = document.getElementById('breakdown-legend');
+
+MODELS.forEach(function(model) {
+  var total = model.values.reduce(function(a, b) { return a + b; }, 0);
+
+  var row = document.createElement('div');
+  row.style.cssText = 'display: flex; align-items: center; gap: 12px;';
+
+  var label = document.createElement('div');
+  label.style.cssText = 'width: 64px; font-size: 13px; font-weight: 500; color: #111; flex-shrink: 0; text-align: right;';
+  label.textContent = model.name;
+  row.appendChild(label);
+
+  var bar = document.createElement('div');
+  bar.style.cssText = 'display: flex; flex: 1; height: 36px; border-radius: 6px; overflow: hidden;';
+
+  model.values.forEach(function(val, i) {
+    var pct = (val / total) * 100;
+    var seg = document.createElement('div');
+    seg.title = STAGES[i] + ': ' + val + ' Wh (' + pct.toFixed(1) + '%)';
+    seg.style.cssText = 'width:' + pct + '%; background:' + COLORS[i] + '; height: 100%; transition: opacity .15s; cursor: default;';
+    seg.onmouseenter = function() { this.style.opacity = '0.7'; };
+    seg.onmouseleave = function() { this.style.opacity = '1'; };
+    bar.appendChild(seg);
+  });
+
+  row.appendChild(bar);
+  container.appendChild(row);
+});
+
+STAGES.forEach(function(stage, i) {
+  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
+    + '<span style="width:10px;height:10px;border-radius:2px;background:' + COLORS[i] + ';flex-shrink:0;display:inline-block;"></span>'
+    + stage + '</span>';
+});
+</script>
+"""))
+```
+
+```{python}
+from IPython.display import HTML, Javascript, display
+
+display(HTML("""
+<div style="padding: 1rem 0;">
+  <p style="font-size: 13px; color: #888; margin: 0 0 1.25rem 0;">Difference between model — INFERENCE (on Lir)</p>
+</div>
+
+<div style="position: relative; width: 100%; height: 260px;">
+  <canvas id="inferenceEnergyChart"></canvas>
+</div>
+"""))
+
+display(Javascript("""
+require.config({ paths: { chartjs: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min' } });
+require(['chartjs'], function(ChartModule) {
+  new ChartModule.Chart(document.getElementById('inferenceEnergyChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Glonet', 'Wenhai', 'Xihe'],
+      datasets: [{
+        label: 'Energy (Wh)',
+        data: [7.42, 19.4, 9.10],
+        backgroundColor: ['#378ADD', '#378ADD', '#378ADD'],
+        borderColor: ['#185FA5', '#185FA5', '#185FA5'],
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return ' Energy: ' + ctx.parsed.y.toFixed(1) + ' Wh';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(128,128,128,0.08)' },
+          ticks: { color: '#888' }
+        },
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Energy (Wh)',
+            color: '#888',
+            font: { size: 12 }
+          },
+          grid: { color: 'rgba(128,128,128,0.08)' },
+          ticks: {
+            color: '#888',
+            callback: function(v) { return v + ' Wh'; }
+          }
+        }
+      }
+    }
+  });
+});
+"""))
+```
 
 ### Infrastructure and Resources
 
