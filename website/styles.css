@@ -1114,3 +1114,55 @@ body.quarto-dark {
     font-size: 0.8rem;
   }
 }
+
+/* --- Evaluation version selector --- */
+
+#version-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1.25rem 0 0.25rem;
+}
+
+.version-selector-label {
+  color: var(--ob-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.version-select {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-surface-raised);
+  color: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.version-select:hover {
+  border-color: var(--ob-accent);
+}
+
+body.quarto-dark .version-select {
+  background: var(--ob-surface);
+  border-color: var(--ob-border);
+}
+
+.version-changelog-link {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ob-accent);
+  text-decoration: none;
+}
+
+.version-changelog-link::after {
+  content: " \2197";
+}
+
+.version-changelog-link:hover {
+  text-decoration: underline;
+}
