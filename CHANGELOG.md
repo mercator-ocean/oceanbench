@@ -8,6 +8,27 @@ SPDX-License-Identifier: EUPL-1.2
 
 All notable changes to OceanBench are documented in this file.
 
+## 0.2.0 - 2026-06-15
+
+### Added
+
+- 1-degree evaluation track with 1-degree challenger and reference datasets (`glo12_1_degree`, `glonet_1_degree`, `wenhai_1_degree`, `xihe_1_degree`).
+- Weekly GLO12 nowcast and IFS forcing input datasets covering 2023-2025, exposed via `oceanbench.datasets.input`; see the [input datasets documentation](https://oceanbench.readthedocs.io/en/latest/input-datasets-for-oceanbench-challenger-evaluation.html).
+- Historical version selector on the scores website, with report discovery driven by a published version index.
+
+### Changed
+
+- Optimized Class IV model interpolation by materializing each forecast first-day block once, with an opt-in fast path enabled by `OCEANBENCH_CLASS4_FAST_INTERPOLATION`.
+
+### Fixed
+
+- Aligned Class IV observations with forecast lead days, correcting a one-day offset in observation-to-lead-day matching.
+- Capped native-grid mixed layer depth at 600 m and added a fallback to the deepest valid level when the density threshold is never crossed (previously the surface depth was returned).
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.2.0/`
+
 ## 0.1.4 - 2026-05-20
 
 ### Fixed
