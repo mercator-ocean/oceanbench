@@ -85,4 +85,6 @@ CHALLENGERS = {
     },
 }
 
-KNOWN_CHALLENGERS = list(CHALLENGERS.keys())
+
+def challenger_label(challenger_name: str) -> str:
+    return CHALLENGERS.get(challenger_name, {}).get("label", challenger_name)

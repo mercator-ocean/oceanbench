@@ -8,14 +8,17 @@ import sys
 WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
+import helpers.s3_discovery as s3_discovery  # noqa: E402
 from helpers.s3_discovery import download_notebook  # noqa: E402
 from helpers.s3_discovery import discover_downloaded_reports  # noqa: E402
 from helpers.s3_discovery import discover_official_reports  # noqa: E402
-from helpers.s3_discovery import REPORTS_PREFIX  # noqa: E402
+from helpers.s3_discovery import REPORTS_ROOT_PREFIX  # noqa: E402
 from helpers.s3_discovery import S3_BASE_URL  # noqa: E402
 from helpers.published_regions import published_region_ids  # noqa: E402
 from helpers.published_regions import published_region_ids_with_reports  # noqa: E402
 from helpers.published_regions import published_region_metadata  # noqa: E402
+
+TEST_VERSION = "0.1.4"
 
 
 class MockResponse:
@@ -25,15 +28,24 @@ class MockResponse:
         self.content = content
 
 
-def _official_report_url(challenger_name: str, region_id: str) -> str:
-    return f"{S3_BASE_URL}/{REPORTS_PREFIX}{challenger_name}.{region_id}.report.ipynb"
+def _set_report_index(monkeypatch, challengers: list[str]) -> None:
+    monkeypatch.setattr(
+        s3_discovery,
+        "_report_index_cache",
+        {"default": TEST_VERSION, "versions": {TEST_VERSION: {"challengers": list(challengers)}}},
+    )
+
+
+def _official_report_url(version: str, challenger_name: str, region_id: str) -> str:
+    return f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{challenger_name}.{region_id}.report.ipynb"
 
 
 def test_discover_official_reports_probes_only_official_region_report_names(monkeypatch) -> None:
+    _set_report_index(monkeypatch, ["glo12", "wenhai", "xihe"])
     existing_report_urls = {
-        _official_report_url("glo12", "global"),
-        _official_report_url("glo12", "ibi"),
-        _official_report_url("wenhai", "global"),
+        _official_report_url(TEST_VERSION, "glo12", "global"),
+        _official_report_url(TEST_VERSION, "glo12", "ibi"),
+        _official_report_url(TEST_VERSION, "wenhai", "global"),
     }
     requested_urls = []
 
@@ -44,16 +56,13 @@ def test_discover_official_reports_probes_only_official_region_report_names(monk
 
     monkeypatch.setattr("helpers.s3_discovery.requests.head", fake_head)
 
-    reports = discover_official_reports()
+    reports = discover_official_reports(TEST_VERSION)
 
     assert list(reports) == published_region_ids()
     assert reports["global"] == ["glo12", "wenhai"]
     assert reports["ibi"] == ["glo12"]
+    assert all(f"/{TEST_VERSION}/" in url for url in requested_urls)
     assert all(".global.report.ipynb" in url or ".ibi.report.ipynb" in url for url in requested_urls)
-    assert not any(
-        ".report.ipynb" in url and ".global.report.ipynb" not in url and ".ibi.report.ipynb" not in url
-        for url in requested_urls
-    )
 
 
 def test_published_regions_have_stable_order_and_metadata() -> None:
@@ -80,14 +89,17 @@ def test_published_region_ids_with_reports_filters_empty_regions() -> None:
     assert published_region_ids_with_reports({"global": [], "ibi": ["glo12"]}) == ["ibi"]
 
 
-def test_discover_downloaded_reports_reads_local_report_files(tmp_path) -> None:
-    (tmp_path / "glonet.global.report.ipynb").write_text("{}", encoding="utf-8")
-    (tmp_path / "glonet.ibi.report.ipynb").write_text("{}", encoding="utf-8")
-    (tmp_path / "glonet.custom_box.report.ipynb").write_text("{}", encoding="utf-8")
-    (tmp_path / "glonet.report.ipynb").write_text("{}", encoding="utf-8")
-    (tmp_path / "unknown.ibi.report.ipynb").write_text("{}", encoding="utf-8")
+def test_discover_downloaded_reports_reads_local_report_files(tmp_path, monkeypatch) -> None:
+    _set_report_index(monkeypatch, ["glonet"])
+    version_directory = tmp_path / TEST_VERSION
+    version_directory.mkdir()
+    (version_directory / "glonet.global.report.ipynb").write_text("{}", encoding="utf-8")
+    (version_directory / "glonet.ibi.report.ipynb").write_text("{}", encoding="utf-8")
+    (version_directory / "glonet.custom_box.report.ipynb").write_text("{}", encoding="utf-8")
+    (version_directory / "glonet.report.ipynb").write_text("{}", encoding="utf-8")
+    (version_directory / "unknown.ibi.report.ipynb").write_text("{}", encoding="utf-8")
 
-    reports = discover_downloaded_reports(str(tmp_path))
+    reports = discover_downloaded_reports(str(tmp_path), TEST_VERSION)
 
     assert reports["global"] == ["glonet"]
     assert reports["ibi"] == ["glonet"]
@@ -104,13 +116,13 @@ def test_download_notebook_uses_only_explicit_region_name(monkeypatch, tmp_path)
 
     monkeypatch.setattr("helpers.s3_discovery.requests.get", fake_get)
 
-    destination = download_notebook("glonet", "global", str(tmp_path))
+    destination = download_notebook(TEST_VERSION, "glonet", "global", str(tmp_path))
 
     assert destination == str(tmp_path / "glonet.global.report.ipynb")
     assert (tmp_path / "glonet.global.report.ipynb").read_bytes() == b"{}"
     assert requests_seen == [
         (
-            _official_report_url("glonet", "global"),
+            _official_report_url(TEST_VERSION, "glonet", "global"),
             30,
         )
     ]

@@ -51,6 +51,7 @@ let regionMetadata = {};
 let activeTrack = "high_resolution";
 let activeSection = "observations";
 let activeRegion = null;
+let activeVersion = null;
 let isScrollRefreshScheduled = false;
 
 const SECTION_ORDER = ["observations", "reanalysis", "analysis"];
@@ -224,7 +225,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -274,7 +275,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -529,9 +530,10 @@ function buildRegionSelectorInnerHtml(regionIds) {
   }
   markup += "</div>";
 
+  const activeVersionData = getActiveVersionData(parsedData);
   const trackKeys = getAvailableTracks(
-    regionIds.includes(activeRegion) && parsedData?.regions?.[activeRegion]?.challenger_names
-      ? parsedData.regions[activeRegion].challenger_names
+    regionIds.includes(activeRegion) && activeVersionData?.regions?.[activeRegion]?.challenger_names
+      ? activeVersionData.regions[activeRegion].challenger_names
       : [],
   );
   const trackTabs = buildTrackTabsInnerHtml(trackKeys);
@@ -545,6 +547,37 @@ function buildRegionSelectorInnerHtml(regionIds) {
   markup += "</div>";
 
   return markup;
+}
+
+function buildVersionSelectorInnerHtml(versions) {
+  let markup = '<span class="version-selector-label">Evaluation version</span>';
+  markup += '<select id="version-select" class="version-select" aria-label="Evaluation report version">';
+  for (const version of versions) {
+    const selected = version === activeVersion ? " selected" : "";
+    markup += `<option value="${version}"${selected}>${version}</option>`;
+  }
+  markup += "</select>";
+  markup += '<a class="version-changelog-link" href="https://github.com/mercator-ocean/oceanbench/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>';
+  return markup;
+}
+
+function renderVersionSelector(versions) {
+  const wrapper = document.getElementById("all-scores");
+  const existing = document.getElementById("version-selector");
+  if (!wrapper || !versions || versions.length <= 1) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  const versionSelector = existing || document.createElement("div");
+  versionSelector.id = "version-selector";
+  versionSelector.className = "version-selector";
+  versionSelector.innerHTML = buildVersionSelectorInnerHtml(versions);
+
+  if (!existing) {
+    const anchor = document.getElementById("region-selector") || wrapper;
+    anchor.parentNode.insertBefore(versionSelector, anchor);
+  }
 }
 
 function renderRegionGlobe(regionIds) {
@@ -938,6 +971,17 @@ function attachControlListeners() {
     });
   });
 
+  const versionSelect = document.getElementById("version-select");
+  if (versionSelect) {
+    versionSelect.addEventListener("change", () => {
+      const selectedVersion = versionSelect.value;
+      if (!selectedVersion || selectedVersion === activeVersion) return;
+      activeVersion = selectedVersion;
+      applyActiveVersion();
+      renderAllTables();
+    });
+  }
+
   const baselineSelect = document.getElementById("baseline-select");
   if (baselineSelect) {
     baselineSelect.addEventListener("change", renderAllTables);
@@ -1057,24 +1101,46 @@ function ensureParsedData() {
     const dataElement = document.getElementById("scores-data");
     if (!dataElement) return null;
     parsedData = JSON.parse(dataElement.textContent);
-    challengerLabels = parsedData.challenger_labels || {};
-    regionLabels = parsedData.region_labels || {};
-    regionMetadata = parsedData.region_metadata || {};
-    const regionIds = parsedData.region_order || Object.keys(parsedData.regions || {});
-    if (!activeRegion || !regionIds.includes(activeRegion)) {
-      activeRegion = regionIds[0] || null;
+    const versions = getVersions(parsedData);
+    if (!activeVersion || !versions.includes(activeVersion)) {
+      activeVersion = versions.includes(parsedData.default_version)
+        ? parsedData.default_version
+        : versions[0] || null;
     }
+    applyActiveVersion();
   }
   return parsedData;
 }
 
+function getVersions(data) {
+  return data.version_order || Object.keys(data.versions || {});
+}
+
+function getActiveVersionData(data) {
+  if (!data || !data.versions) return null;
+  return data.versions[activeVersion] || null;
+}
+
+function applyActiveVersion() {
+  const versionData = getActiveVersionData(parsedData) || {};
+  challengerLabels = versionData.challenger_labels || {};
+  regionLabels = versionData.region_labels || {};
+  regionMetadata = versionData.region_metadata || {};
+  const regionIds = versionData.region_order || Object.keys(versionData.regions || {});
+  if (!activeRegion || !regionIds.includes(activeRegion)) {
+    activeRegion = regionIds[0] || null;
+  }
+}
+
 function getRegionIds(data) {
-  return data.region_order || Object.keys(data.regions || {});
+  const versionData = getActiveVersionData(data) || {};
+  return versionData.region_order || Object.keys(versionData.regions || {});
 }
 
 function getCurrentRegionData(data) {
-  if (!activeRegion) return null;
-  return data.regions?.[activeRegion] || null;
+  const versionData = getActiveVersionData(data);
+  if (!versionData || !activeRegion) return null;
+  return versionData.regions?.[activeRegion] || null;
 }
 
 function resolveBaselineSelection(challengerNames, selectedBaseline, trackKey) {
@@ -1196,6 +1262,7 @@ function renderAllTables() {
   const controlsElement = ensureHeaderElement();
   controlsElement.innerHTML = buildControlsInnerHtml(visibleChallengerNames, baseline, availableDepths);
   renderRegionSelector(regionIds);
+  renderVersionSelector(getVersions(data));
 
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {
