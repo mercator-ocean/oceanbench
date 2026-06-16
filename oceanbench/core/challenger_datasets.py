@@ -7,7 +7,7 @@ This module exposes the challenger datasets evaluated in the benchmark.
 """
 
 import xarray
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections.abc import Callable
 
 from oceanbench.core.dataset_source import with_dataset_source
@@ -18,13 +18,31 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
 from oceanbench.core.interpolate import interpolate_1_degree
 
+_CLOUDFERRO_ML_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs"
+_GLO12_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data/GLO12"
+_GLO12_FORECAST_VARIABLE_NAMES = ["so", "thetao", "uo", "vo", "zos"]
+
 
 def _default_first_day_datetimes() -> list[datetime]:
     return generate_dates("2024-01-03", "2024-12-25", 7)
 
 
 def glo12() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_glo12_dataset_path)
+    first_day_datetimes = _default_first_day_datetimes()
+
+    def open_dataset() -> xarray.Dataset:
+        return maybe_stage_weekly_dataset(
+            stage_key="challenger",
+            dataset_kind="challenger",
+            dataset_name="glo12",
+            first_day_datetimes=first_day_datetimes,
+            lead_days_count=LEAD_DAYS_COUNT,
+            open_week_dataset=_open_glo12_forecast_week,
+            open_remote_dataset=lambda: _remote_glo12_dataset(first_day_datetimes),
+            attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
+        )
+
+    return with_remote_http_retries("glo12 challenger dataset open", open_dataset)
 
 
 def glo12_1_degree() -> xarray.Dataset:
@@ -32,8 +50,26 @@ def glo12_1_degree() -> xarray.Dataset:
 
 
 def _glo12_dataset_path(start_datetime: datetime) -> str:
-    start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/GLO12/{start_datetime_string}.zarr"
+    run_date_string = (start_datetime + timedelta(days=1)).strftime("%Y%m%d")
+    return f"{_GLO12_FORECASTS_URL}/glo12_rg_1d-m_fcst_R{run_date_string}.zarr"
+
+
+def _open_glo12_forecast_week(first_day_datetime: datetime) -> xarray.Dataset:
+    forecast_url = _glo12_dataset_path(first_day_datetime)
+    forecast_week_dataset = xarray.merge(
+        [
+            xarray.open_zarr(forecast_url, group=variable_name, consolidated=True)[[variable_name]]
+            for variable_name in _GLO12_FORECAST_VARIABLE_NAMES
+        ]
+    ).isel(time=slice(0, LEAD_DAYS_COUNT))
+    return _prepared_challenger_week_dataset(forecast_week_dataset, "glo12 challenger dataset open")
+
+
+def _remote_glo12_dataset(first_day_datetimes: list[datetime]) -> xarray.Dataset:
+    return xarray.concat(
+        [_open_glo12_forecast_week(first_day_datetime) for first_day_datetime in first_day_datetimes],
+        dim="first_day_datetime",
+    ).assign({"first_day_datetime": first_day_datetimes})
 
 
 def glo36v1() -> xarray.Dataset:
@@ -71,7 +107,7 @@ def glonet_1_degree() -> xarray.Dataset:
 
 def _glonet_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/glonet_full_2024/{start_datetime_string}.zarr"
+    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/glonet/{start_datetime_string}.zarr"
 
 
 def xihe() -> xarray.Dataset:
@@ -84,7 +120,7 @@ def xihe_1_degree() -> xarray.Dataset:
 
 def _xihe_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/XIHE/{start_datetime_string}.zarr"
+    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/xihe/{start_datetime_string}.zarr"
 
 
 def wenhai() -> xarray.Dataset:
@@ -97,7 +133,7 @@ def wenhai_1_degree() -> xarray.Dataset:
 
 def _wenhai_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/WENHAI/{start_datetime_string}.zarr"
+    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/wenhai/{start_datetime_string}.zarr"
 
 
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:

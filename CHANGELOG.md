@@ -18,6 +18,27 @@ forecasts refreshed — do **not** bump the version. They are recorded as dated 
 **Challengers** heading in the current version's section, and the affected reports are
 re-published (never silently overwritten).
 
+## 0.2.1 - 2026-06-16
+
+**Scores:** GLO12, GLONET, XiHe and WenHai change vs 0.2.0. The GLONET, XiHe and WenHai
+forecasts were recomputed with updated GLO12 nowcast initial conditions and IFS atmospheric
+forcings (WenHai substantially, correcting the surface forcing in #269; GLONET and XiHe
+slightly). GLO12 now uses the full GLO12 operational forecast (50 depth levels). Methodology
+is unchanged from 0.2.0.
+
+### Challengers
+
+- 2026-06-16 — GLONET, XiHe and WenHai forecasts recomputed with updated GLO12 nowcasts and IFS atmospheric forcings. For WenHai this resolves the surface-forcing issue reported in [#269](https://github.com/mercator-ocean/oceanbench/issues/269): the model is now forced with net shortwave radiation, replacing the previously corrupted shortwave input that had inflated its error.
+- 2026-06-16 — GLO12 now reads the full GLO12 operational forecast (50 depth levels), replacing the previous reduced-depth product.
+
+### Changed
+
+- Updated the GLO12, GLONET, XiHe and WenHai challenger dataset sources to the new forecasts.
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.2.1/`
+
 ## 0.2.0 - 2026-06-15
 
 **Scores:** change vs 0.1.4 — the 600 m mixed-layer-depth cap and the one-day Class IV
