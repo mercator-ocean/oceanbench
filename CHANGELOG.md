@@ -8,7 +8,20 @@ SPDX-License-Identifier: EUPL-1.2
 
 All notable changes to OceanBench are documented in this file.
 
+**How to read this file.** The **version number tracks how scores are computed.** A new
+version means the scoring methodology changed and scores are **not directly comparable** to
+the previous version — every challenger is re-evaluated. Each version begins with a one-line
+**Scores** summary stating whether and why scores moved.
+
+Changes that do **not** change the methodology — a challenger added, or a challenger's
+forecasts refreshed — do **not** bump the version. They are recorded as dated bullets under a
+**Challengers** heading in the current version's section, and the affected reports are
+re-published (never silently overwritten).
+
 ## 0.2.0 - 2026-06-15
+
+**Scores:** change vs 0.1.4 — the 600 m mixed-layer-depth cap and the one-day Class IV
+observation realignment change computed scores. 1-degree challenger scores added.
 
 ### Added
 
@@ -31,6 +44,9 @@ All notable changes to OceanBench are documented in this file.
 
 ## 0.1.4 - 2026-05-20
 
+**Scores:** Class IV scores change vs 0.1.3 — observations in overlapping forecast windows
+are now preserved for every matching forecast. Other scores unchanged.
+
 ### Fixed
 
 - Fixed Class IV observation staging so observations in overlapping forecast windows are preserved for each matching forecast.
@@ -43,6 +59,8 @@ All notable changes to OceanBench are documented in this file.
 
 ## 0.1.3 - 2026-05-13
 
+**Scores:** unchanged — local lagrangian staging correctness fix.
+
 ### Fixed
 
 - Fixed lagrangian local staging so cached surface-current inputs are keyed by the evaluated horizontal domain.
@@ -54,6 +72,8 @@ All notable changes to OceanBench are documented in this file.
 
 ## 0.1.2 - 2026-05-12
 
+**Scores:** unchanged — local reference staging correctness fix.
+
 ### Fixed
 
 - Fixed local staging of 1/12-degree GLORYS and GLO12 references so cached reference datasets are keyed by challenger depth grid.
@@ -64,6 +84,8 @@ All notable changes to OceanBench are documented in this file.
 - Official reports: `public/evaluation-reports/0.1.2/`
 
 ## 0.1.1 - 2026-05-06
+
+**Scores:** IBI regional scores added. Global scores unchanged.
 
 ### Added
 
@@ -81,6 +103,8 @@ All notable changes to OceanBench are documented in this file.
 - Official reports: `public/evaluation-reports/0.1.1/`
 
 ## 0.1.0 - 2026-05-06
+
+**Scores:** initial global benchmark.
 
 ### Added
 
