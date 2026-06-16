@@ -739,7 +739,7 @@ require(['chartjs'], function(ChartModule) {
     ],
     B: [
       { name: 'Glonet', mu: 13.69,  ci: 0.0, color: '#378ADD', fill: '55,138,221',  dash: [] },
-      { name: 'Wenhai', mu: 21.2, ci: 0.0, color: '#1D9E75', fill: '29,158,117',  dash: [6,3] },
+      { name: 'Wenhai', mu: 24.5, ci: 3.64, color: '#1D9E75', fill: '29,158,117',  dash: [6,3] },
       { name: 'Xihe',   mu: 17.3, ci: 0.690, color: '#D4537E', fill: '212,83,126',  dash: [2,4] }
     ]
   };
@@ -940,7 +940,7 @@ require(['chartjs'], function(ChartModule) {
 
   const DATA = {
     A: [7.42, 19.4, 9.10],
-    B: [5.28, 14, 8.98]
+    B: [5.28, 15.54, 8.98]
   };
 
   const chart = new ChartModule.Chart(document.getElementById('inferenceEnergyChart'), {
