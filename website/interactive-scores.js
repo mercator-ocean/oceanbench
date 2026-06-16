@@ -67,8 +67,11 @@ const TRACK_LABELS = {
   one_degree: "1 degree",
 };
 
-const ONE_DEGREE_TRACK_NOTE =
-  "In this track, the models are non-one-degree base models whose forecasts are interpolated to the one degree resolution";
+const TRACK_NOTES = {
+  high_resolution: "Models evaluated at their native high resolution.",
+  one_degree:
+    "Non-one-degree base models whose forecasts are interpolated to the one degree resolution.",
+};
 
 function interpolateColor(startColor, endColor, ratio) {
   return [
@@ -439,20 +442,6 @@ function buildTabsInnerHtml(sections) {
   return markup;
 }
 
-function buildTrackTabsInnerHtml(trackKeys) {
-  let markup = "";
-  for (const trackKey of trackKeys) {
-    const isActive = trackKey === activeTrack;
-    markup += `<button type="button" class="score-tab score-mode-link${isActive ? " active" : ""}" data-track="${trackKey}"${isActive ? ' aria-current="page"' : ""}>${TRACK_LABELS[trackKey]}</button>`;
-  }
-  return markup;
-}
-
-function buildTrackNoteInnerHtml() {
-  const hiddenClass = activeTrack === "one_degree" ? "" : " track-keynote--hidden";
-  return `<div class="track-keynote${hiddenClass}">${ONE_DEGREE_TRACK_NOTE}</div>`;
-}
-
 function attachTabListeners() {
   document.querySelectorAll(".score-track-link").forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -460,19 +449,6 @@ function attachTabListeners() {
       const sectionKey = link.dataset.section;
       if (sectionKey === activeSection) return;
       navigateToSection(sectionKey, { replaceHistory: false, updateHash: true });
-    });
-  });
-}
-
-function attachTrackListeners() {
-  document.querySelectorAll(".score-mode-link").forEach((button) => {
-    button.addEventListener("click", () => {
-      const trackKey = button.dataset.track;
-      if (!trackKey || trackKey === activeTrack) return;
-      activeTrack = trackKey;
-      selectedDepths = new Set();
-      showAllMode = true;
-      renderAllTables();
     });
   });
 }
@@ -508,45 +484,63 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   return markup;
 }
 
-function buildRegionSelectorInnerHtml(regionIds) {
+function buildSelectorChips(labelOf, values, activeValue, dataAttribute, ariaLabel, isDisabled = () => false) {
+  const chips = values
+    .map((value) => {
+      const active = value === activeValue ? " active" : "";
+      const disabled = isDisabled(value);
+      const disabledClass = disabled ? " disabled" : "";
+      const disabledAttributes = disabled ? ' disabled aria-disabled="true"' : "";
+      return `<button type="button" class="selector-chip${active}${disabledClass}" ${dataAttribute}="${value}" aria-pressed="${value === activeValue}"${disabledAttributes}>${labelOf(value)}</button>`;
+    })
+    .join("");
+  return `<div class="selector-chips" role="group" aria-label="${ariaLabel}">${chips}</div>`;
+}
+
+function buildSelectorRow(labelText, chipsHtml, description, descriptionClass = "") {
+  let markup = '<div class="selector-row">';
+  markup += `<span class="selector-label">${labelText}</span>`;
+  markup += chipsHtml;
+  if (description) {
+    markup += `<p class="selector-description${descriptionClass ? ` ${descriptionClass}` : ""}">${description}</p>`;
+  }
+  markup += "</div>";
+  return markup;
+}
+
+function buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks) {
   if (regionIds.length === 0) return "";
 
-  let markup = `<div class="region-selector-layout region-selector-layout--${activeRegion}">`;
-  markup += '<div class="region-selector-copy">';
-  markup += '<div class="region-selector-row">';
-  markup += '<span class="region-selector-label">Region</span>';
-  markup += '<div class="region-chip-group" role="group" aria-label="Evaluation region">';
-  for (const regionId of regionIds) {
-    const active = regionId === activeRegion ? " active" : "";
-    const label = regionLabels[regionId] || titleCase(regionId);
-    const description = regionMetadata[regionId]?.description || "";
-    markup += `<button type="button" class="region-chip${active}" data-region="${regionId}" aria-pressed="${regionId === activeRegion}" title="${description}">${label}</button>`;
-  }
-  markup += "</div>";
-
-  const activeDescription = regionMetadata[activeRegion]?.description;
-  if (activeDescription) {
-    markup += `<div class="region-selector-description">${activeDescription}</div>`;
-  }
-  markup += "</div>";
-
-  const activeVersionData = getActiveVersionData(parsedData);
-  const trackKeys = getAvailableTracks(
-    regionIds.includes(activeRegion) && activeVersionData?.regions?.[activeRegion]?.challenger_names
-      ? activeVersionData.regions[activeRegion].challenger_names
-      : [],
+  const regionChips = buildSelectorChips(
+    (regionId) => regionLabels[regionId] || titleCase(regionId),
+    regionIds,
+    activeRegion,
+    "data-region",
+    "Evaluation region",
   );
-  const trackTabs = buildTrackTabsInnerHtml(trackKeys);
-  markup += '<div class="track-selector-row">';
-  markup += '<span class="region-selector-label">Track</span>';
-  markup += `<div id="score-track-tabs" role="group" aria-label="Model resolution track">${trackTabs}</div>`;
-  markup += "</div>";
-  markup += buildTrackNoteInnerHtml();
-  markup += "</div>";
-  markup += '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
-  markup += "</div>";
+  let controls = buildSelectorRow("Region", regionChips, regionMetadata[activeRegion]?.description);
 
+  if (versionTracks.length > 1) {
+    const trackChips = buildSelectorChips(
+      (trackKey) => TRACK_LABELS[trackKey],
+      versionTracks,
+      activeTrack,
+      "data-track",
+      "Model resolution track",
+      (trackKey) => !regionTracks.includes(trackKey),
+    );
+    controls += buildSelectorRow("Track", trackChips, TRACK_NOTES[activeTrack], "selector-description--track");
+  }
+
+  let markup = '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
+  markup += `<div class="region-selector-controls">${controls}</div>`;
   return markup;
+}
+
+function getVersionTracks(versionData) {
+  const challengerNames = Object.values(versionData?.regions || {})
+    .flatMap((region) => region.challenger_names || []);
+  return getAvailableTracks(challengerNames);
 }
 
 function buildVersionSelectorInnerHtml(versions) {
@@ -584,13 +578,14 @@ function renderRegionGlobe(regionIds) {
   if (!window.OceanBenchRegionGlobe) return;
   window.OceanBenchRegionGlobe.render({
     activeRegion,
+    activeTrack,
     regionIds,
     regionLabels,
     regionMetadata,
   });
 }
 
-function renderRegionSelector(regionIds) {
+function renderRegionSelector(regionIds, versionTracks, regionTracks) {
   const existing = document.getElementById("region-selector");
   if (regionIds.length === 0) {
     if (existing) existing.remove();
@@ -602,7 +597,7 @@ function renderRegionSelector(regionIds) {
 
   const regionSelector = existing || document.createElement("div");
   regionSelector.id = "region-selector";
-  regionSelector.innerHTML = buildRegionSelectorInnerHtml(regionIds);
+  regionSelector.innerHTML = buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks);
 
   if (!existing) {
     wrapper.parentNode.insertBefore(regionSelector, wrapper);
@@ -962,15 +957,24 @@ function updateStickyOffsets() {
   }
 }
 
-function attachControlListeners() {
-  document.querySelectorAll(".region-chip").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (button.dataset.region === activeRegion) return;
-      activeRegion = button.dataset.region;
-      renderAllTables();
+function attachSelectorListeners() {
+  document.querySelectorAll("#region-selector .selector-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const { region, track } = chip.dataset;
+      if (region && region !== activeRegion) {
+        activeRegion = region;
+        renderAllTables();
+      } else if (track && track !== activeTrack) {
+        activeTrack = track;
+        selectedDepths = new Set();
+        showAllMode = true;
+        renderAllTables();
+      }
     });
   });
+}
 
+function attachControlListeners() {
   const versionSelect = document.getElementById("version-select");
   if (versionSelect) {
     versionSelect.addEventListener("change", () => {
@@ -1166,18 +1170,6 @@ function resolveTrackSelection(challengerNames) {
   return availableTracks;
 }
 
-function setActiveTrackUi() {
-  document.querySelectorAll(".score-mode-link").forEach((button) => {
-    const isActive = button.dataset.track === activeTrack;
-    button.classList.toggle("active", isActive);
-    if (isActive) {
-      button.setAttribute("aria-current", "page");
-    } else {
-      button.removeAttribute("aria-current");
-    }
-  });
-}
-
 function resolveVisibleChallengerNames(challengerNames) {
   const availableTracks = resolveTrackSelection(challengerNames);
   return {
@@ -1259,9 +1251,11 @@ function renderAllTables() {
     );
   }
 
+  const versionTracks = getVersionTracks(getActiveVersionData(data));
+
   const controlsElement = ensureHeaderElement();
   controlsElement.innerHTML = buildControlsInnerHtml(visibleChallengerNames, baseline, availableDepths);
-  renderRegionSelector(regionIds);
+  renderRegionSelector(regionIds, versionTracks, availableTracks);
   renderVersionSelector(getVersions(data));
 
   const tabNavigation = document.getElementById("score-tabs");
@@ -1271,10 +1265,9 @@ function renderAllTables() {
 
   updateColorLegend();
   updateStickyOffsets();
-  attachTrackListeners();
+  attachSelectorListeners();
   attachControlListeners();
   attachTabListeners();
-  setActiveTrackUi();
   setActiveSection(activeSection);
   refreshScrollSpy();
   setupCellHighlight();

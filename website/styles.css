@@ -308,13 +308,14 @@ body.nav-hidden #score-header {
 /* --- Region selector --- */
 
 #region-selector {
+  position: relative;
+  overflow: hidden;
   margin: 1.25rem 0 0.75rem;
-  padding: 0;
+  min-height: 10.5rem;
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-md);
   background: var(--ob-surface-raised);
   box-shadow: var(--ob-soft-shadow);
-  overflow: hidden;
 }
 
 body.quarto-dark #region-selector {
@@ -322,59 +323,32 @@ body.quarto-dark #region-selector {
   border-color: var(--ob-border);
 }
 
-.region-selector-layout {
-  position: relative;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  min-height: 9.2rem;
-  padding: 0.8rem 8.2rem 0.8rem 0.9rem;
-}
-
-.region-selector-copy {
+.region-selector-controls {
   position: relative;
   z-index: 2;
-  min-width: 0;
-  width: 100%;
-  max-width: 43rem;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 10.5rem;
+  max-width: 33rem;
+  padding: 0.95rem 1.1rem;
+}
+
+.region-selector-controls > * {
   pointer-events: none;
 }
 
-.region-selector-copy > * {
-  pointer-events: auto;
+.selector-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.75rem;
 }
 
-.region-selector-row {
-  display: grid;
-  grid-template-columns: 3.9rem auto 18rem;
-  gap: 0.5rem 0.75rem;
-  align-items: center;
-}
-
-.track-selector-row {
-  display: grid;
-  grid-template-columns: 3.9rem 1fr;
-  gap: 0.5rem 0.75rem;
-  align-items: center;
-  margin-top: 0.6rem;
-}
-
-.track-keynote {
-  margin-top: 0.45rem;
-  margin-left: 0;
-  max-width: none;
-  color: var(--ob-muted);
-  font-size: 0.68rem;
-  line-height: 1.25;
-  white-space: nowrap;
-  min-height: 0.9rem;
-}
-
-.track-keynote--hidden {
-  visibility: hidden;
-}
-
-.region-selector-label {
+.selector-label {
+  flex: 0 0 3.5rem;
   color: var(--ob-muted);
   font-size: 0.8rem;
   font-weight: 700;
@@ -382,15 +356,15 @@ body.quarto-dark #region-selector {
   text-transform: uppercase;
 }
 
-.region-chip-group {
+.selector-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-  min-width: max-content;
 }
 
-.region-chip {
-  padding: 0.25rem 0.75rem;
+.selector-chip {
+  pointer-events: auto;
+  padding: 0.25rem 0.85rem;
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-pill);
   background: var(--ob-surface);
@@ -401,91 +375,62 @@ body.quarto-dark #region-selector {
   line-height: 1.4;
 }
 
-.region-chip:hover:not(.active) {
+.selector-chip:hover:not(.active):not(.disabled) {
   border-color: var(--ob-accent);
   color: var(--ob-accent);
 }
 
-.region-chip.active {
+.selector-chip.active {
   background: var(--ob-accent);
   border-color: var(--ob-accent);
   color: var(--ob-accent-contrast);
 }
 
-.region-selector-description {
+.selector-chip.disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.selector-description {
+  flex-basis: 100%;
+  margin: 0;
+  padding-left: calc(3.5rem + 0.75rem);
   color: var(--ob-muted);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   line-height: 1.4;
-  min-width: 0;
-  max-width: 18rem;
-  min-height: 2.4rem;
-  display: flex;
-  align-items: center;
-  padding-top: 0.2rem;
 }
 
-.track-selector-row #score-track-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  justify-self: start;
-  align-self: start;
-  margin-left: -2px;
+.selector-description--track {
+  min-height: 2.3rem;
 }
 
-.track-selector-row .score-tab {
-  padding: 0.25rem 0.75rem;
-  border: 1px solid var(--ob-border);
-  border-bottom-width: 1px;
-  border-radius: var(--ob-radius-pill);
-  background: var(--ob-surface);
-  color: var(--bs-body-color, #333940);
-  font-size: 0.85rem;
-  min-height: auto;
-  justify-content: flex-start;
-  text-align: left;
-}
-
-.track-selector-row .score-tab:hover:not(.active) {
-  background: var(--ob-surface);
-}
-
-.track-selector-row .score-tab.active {
-  background: var(--ob-accent);
-  border-color: var(--ob-accent);
-  color: var(--ob-accent-contrast);
-}
-
-body.quarto-dark .region-chip {
+body.quarto-dark .selector-chip {
   background: var(--ob-surface);
   color: var(--bs-body-color, #d4d4d8);
   border-color: var(--ob-border);
 }
 
-body.quarto-dark .region-chip:hover:not(.active) {
+body.quarto-dark .selector-chip:hover:not(.active):not(.disabled) {
   border-color: var(--ob-accent);
   color: var(--ob-accent);
 }
 
-body.quarto-dark .region-chip.active {
+body.quarto-dark .selector-chip.active {
   background: var(--ob-accent);
   border-color: var(--ob-accent);
   color: var(--ob-accent-contrast);
 }
 
+/* --- Region globe --- */
+
 .region-globe {
   position: absolute;
   top: 0;
-  right: 5.6rem;
   bottom: 0;
-  width: 21rem;
+  left: 30%;
+  right: 0;
   z-index: 1;
   pointer-events: none;
-}
-
-.region-selector-layout--global .region-globe {
-  right: 5.6rem;
-  width: 43.2rem;
 }
 
 .region-globe svg {
@@ -494,7 +439,7 @@ body.quarto-dark .region-chip.active {
   height: 100%;
   cursor: grab;
   pointer-events: auto;
-  touch-action: none;
+  touch-action: pan-y;
 }
 
 .region-globe svg.dragging {
@@ -503,7 +448,7 @@ body.quarto-dark .region-chip.active {
 
 .region-globe-status {
   display: grid;
-  min-height: 8rem;
+  height: 100%;
   place-items: center;
   color: var(--ob-muted);
   font-size: 0.8rem;
@@ -590,47 +535,33 @@ body.quarto-dark .region-globe-outline {
 }
 
 @media (max-width: 720px) {
-  .region-selector-layout {
-    align-items: flex-start;
-    min-height: 11.5rem;
-    padding-right: 0.9rem;
+  #region-selector {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
-  .region-selector-copy {
+  .region-selector-controls {
+    order: 1;
+    position: static;
+    min-height: 0;
     max-width: 100%;
-  }
-
-  .region-selector-row {
-    grid-template-columns: 1fr;
-    align-items: flex-start;
-  }
-
-  .track-selector-row {
-    grid-template-columns: 1fr;
-    align-items: flex-start;
-  }
-
-  .track-keynote {
-    margin-left: 0;
-    max-width: 100%;
-    white-space: normal;
-  }
-
-  .region-chip-group {
-    min-width: 0;
+    pointer-events: auto;
   }
 
   .region-globe {
-    top: 4.2rem;
-    right: 0;
-    bottom: auto;
-    width: 10.5rem;
-    aspect-ratio: 640 / 220;
+    order: 2;
+    position: static;
+    height: 9rem;
+    pointer-events: auto;
   }
 
-  .region-selector-layout--global .region-globe {
-    right: 0;
-    width: 10.5rem;
+  .selector-label {
+    flex-basis: 100%;
+  }
+
+  .selector-description {
+    padding-left: 0;
   }
 }
 
