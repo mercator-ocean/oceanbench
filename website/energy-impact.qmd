@@ -708,26 +708,12 @@ from IPython.display import HTML, Javascript, display
 display(HTML("""
 <div style="padding: 1rem 0;">
 
-  <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; font-size: 12px; color: #888;">
-    
-    <span style="display: flex; align-items: center; gap: 6px;">
-      <span style="width: 20px; height: 3px; background: #378ADD; display:inline-block; border-radius:2px;"></span>
-      <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(55,138,221,0.30); display:inline-block;"></span>
-      Glonet — 135 Wh/run (±2.03)
-    </span>
-
-    <span style="display: flex; align-items: center; gap: 6px;">
-      <span style="width: 20px; height: 3px; background: #1D9E75; display:inline-block; border-radius:2px;"></span>
-      <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(29,158,117,0.30); display:inline-block;"></span>
-      Wenhai — 49.7 Wh/run (±3.49)
-    </span>
-
-    <span style="display: flex; align-items: center; gap: 6px;">
-      <span style="width: 20px; height: 3px; background: #D4537E; display:inline-block; border-radius:2px;"></span>
-      <span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(212,83,126,0.30); display:inline-block;"></span>
-      Xihe — 41.2 Wh/run (±4.23)
-    </span>
-
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: #888;" id="legend-container"></div>
+    <div style="display: flex; gap: 6px; flex-shrink: 0; margin-left: 12px;">
+      <button id="btn-a" onclick="switchMachine1('A')" style="cursor:pointer;padding:4px 14px;font-size:12px;border:1px solid #ccc;background:#eee;color:#111;border-radius:5px;">On Lir</button>
+      <button id="btn-b" onclick="switchMachine1('B')" style="cursor:pointer;padding:4px 14px;font-size:12px;border:1px solid #ccc;background:transparent;color:#888;border-radius:5px;">On EDITO</button>
+    </div>
   </div>
 
   <div style="position: relative; width: 100%; height: 400px;">
@@ -738,191 +724,95 @@ display(HTML("""
 """))
 
 display(Javascript("""
-
-require.config({
-    paths: {
-        chartjs: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min'
-    }
-});
+require.config({ paths: { chartjs: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min' } });
 
 require(['chartjs'], function(ChartModule) {
 
-    const Chart = ChartModule.Chart;
+  const Chart = ChartModule.Chart;
+  const runs = [0,1,2,3,4,5,6,7,8,9,10];
 
-    const runs = [0,1,2,3,4,5,6,7,8,9,10];
+  const MODELS_DATA = {
+    A: [
+      { name: 'Glonet', mu: 135,  ci: 2.03, color: '#378ADD', fill: '55,138,221',  dash: [] },
+      { name: 'Wenhai', mu: 49.7, ci: 3.49, color: '#1D9E75', fill: '29,158,117',  dash: [6,3] },
+      { name: 'Xihe',   mu: 41.2, ci: 4.23, color: '#D4537E', fill: '212,83,126',  dash: [2,4] }
+    ],
+    B: [
+      { name: 'Glonet', mu: 13.69,  ci: 0.0, color: '#378ADD', fill: '55,138,221',  dash: [] },
+      { name: 'Wenhai', mu: 21.2, ci: 0.0, color: '#1D9E75', fill: '29,158,117',  dash: [6,3] },
+      { name: 'Xihe',   mu: 17.3, ci: 0.690, color: '#D4537E', fill: '212,83,126',  dash: [2,4] }
+    ]
+  };
 
-    const models = [
-        {
-            name: 'Glonet',
-            mu: 135,
-            ci: 2.03,
-            color: '#378ADD',
-            fill: '55,138,221',
-            dash: []
-        },
-        {
-            name: 'Wenhai',
-            mu: 49.7,
-            ci: 3.49,
-            color: '#1D9E75',
-            fill: '29,158,117',
-            dash: [6,3]
-        },
-        {
-            name: 'Xihe',
-            mu: 41.2,
-            ci: 4.23,
-            color: '#D4537E',
-            fill: '212,83,126',
-            dash: [2,4]
-        }
-    ];
-
+  function buildDatasets(machine) {
+    const models = MODELS_DATA[machine];
     const datasets = [];
-
     models.forEach(function(m) {
-
-        const upper = runs.map(r => (r * (m.mu + m.ci)));
-        const lower = runs.map(r => (r * (m.mu - m.ci)));
-        const mean  = runs.map(r => (r * m.mu));
-
-        // Upper bound
-        datasets.push({
-            label: m.name + ' upper',
-            data: upper,
-            borderColor: 'rgba(0,0,0,0)',
-            backgroundColor: 'rgba(' + m.fill + ',0.22)',
-            pointRadius: 0,
-            fill: false
-        });
-
-        // Lower bound + fill
-        datasets.push({
-            label: m.name + ' lower',
-            data: lower,
-            borderColor: 'rgba(0,0,0,0)',
-            backgroundColor: 'rgba(' + m.fill + ',0.22)',
-            pointRadius: 0,
-            fill: '-1'
-        });
-
-        // Mean curve
-        datasets.push({
-            label: m.name,
-            data: mean,
-            borderColor: m.color,
-            backgroundColor: 'transparent',
-            borderWidth: 2.5,
-            borderDash: m.dash,
-            pointRadius: 3,
-            pointBackgroundColor: m.color,
-            tension: 0.3
-        });
-
+      datasets.push({ label: m.name + ' upper', data: runs.map(r => r*(m.mu+m.ci)), borderColor: 'rgba(0,0,0,0)', backgroundColor: 'rgba('+m.fill+',0.22)', pointRadius: 0, fill: false });
+      datasets.push({ label: m.name + ' lower', data: runs.map(r => r*(m.mu-m.ci)), borderColor: 'rgba(0,0,0,0)', backgroundColor: 'rgba('+m.fill+',0.22)', pointRadius: 0, fill: '-1' });
+      datasets.push({ label: m.name, data: runs.map(r => r*m.mu), borderColor: m.color, backgroundColor: 'transparent', borderWidth: 2.5, borderDash: m.dash, pointRadius: 3, pointBackgroundColor: m.color, tension: 0.3 });
     });
+    return datasets;
+  }
 
-    new Chart(
-        document.getElementById('energyCompChart'),
-        {
-            type: 'line',
+  function buildLegend(machine) {
+    const models = MODELS_DATA[machine];
+    const legend = document.getElementById('legend-container');
+    legend.innerHTML = '';
+    models.forEach(function(m) {
+      legend.innerHTML += '<span style="display:flex;align-items:center;gap:6px;">'
+        + '<span style="width:20px;height:3px;background:'+m.color+';display:inline-block;border-radius:2px;"></span>'
+        + '<span style="width:10px;height:10px;border-radius:2px;background:rgba('+m.fill+',0.30);display:inline-block;"></span>'
+        + m.name + ' — ' + m.mu + ' Wh/run (±' + m.ci + ')'
+        + '</span>';
+    });
+  }
 
-            data: {
-                labels: runs,
-                datasets: datasets
-            },
-
-            options: {
-
-                responsive: true,
-                maintainAspectRatio: false,
-
-                interaction: {
-                    mode: 'index',
-                    intersect: false
-                },
-
-                plugins: {
-
-                    legend: {
-                        display: false
-                    },
-
-                    tooltip: {
-
-                        filter: function(item) {
-                            return !item.dataset.label.includes('upper')
-                                && !item.dataset.label.includes('lower');
-                        },
-
-                        callbacks: {
-
-                            title: function(ctx) {
-                                return ctx[0].label + ' run' + (ctx[0].label > 1 ? 's' : '');
-                            },
-
-                            label: function(ctx) {
-
-                                const idx = Math.floor(ctx.datasetIndex / 3);
-                                const m = models[idx];
-                                const r = ctx.dataIndex;
-
-                                const lo = (r * (m.mu - m.ci)).toFixed(1);
-                                const hi = (r * (m.mu + m.ci)).toFixed(1);
-
-                                return (
-                                    ' ' + m.name +
-                                    ': ' +
-                                    ctx.parsed.y.toFixed(1) +
-                                    ' Wh [' + lo + ' – ' + hi + ']'
-                                );
-                            }
-                        }
-                    }
-                },
-
-                scales: {
-
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Number of inferences',
-                            color: '#888',
-                            font: { size: 12 }
-                        },
-
-                        ticks: {
-                            color: '#888',
-                            font: { size: 12 }
-                        },
-
-                        grid: {
-                            color: 'rgba(128,128,128,0.08)'
-                        }
-                    },
-
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Cumulative energy (Wh)',
-                            color: '#888',
-                            font: { size: 12 }
-                        },
-
-                        beginAtZero: true,
-
-                        ticks: {
-                            color: '#888',
-                            font: { size: 12 }
-                        },
-
-                        grid: {
-                            color: 'rgba(128,128,128,0.08)'
-                        }
-                    }
-                }
+  const chart = new Chart(document.getElementById('energyCompChart'), {
+    type: 'line',
+    data: { labels: runs, datasets: buildDatasets('A') },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 500, easing: 'easeInOutQuart' },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          filter: function(item) { return !item.dataset.label.includes('upper') && !item.dataset.label.includes('lower'); },
+          callbacks: {
+            title: function(ctx) { return ctx[0].label + ' run' + (ctx[0].label > 1 ? 's' : ''); },
+            label: function(ctx) {
+              const idx = Math.floor(ctx.datasetIndex / 3);
+              const m = MODELS_DATA[window._currentMachine][idx];
+              const r = ctx.dataIndex;
+              return ' ' + m.name + ': ' + ctx.parsed.y.toFixed(1) + ' Wh [' + (r*(m.mu-m.ci)).toFixed(1) + ' – ' + (r*(m.mu+m.ci)).toFixed(1) + ']';
             }
+          }
         }
-    );
+      },
+      scales: {
+        x: { title: { display: true, text: 'Number of inferences', color: '#888', font: { size: 12 } }, ticks: { color: '#888', font: { size: 12 } }, grid: { color: 'rgba(128,128,128,0.08)' } },
+        y: { title: { display: true, text: 'Cumulative energy (Wh)', color: '#888', font: { size: 12 } }, beginAtZero: true, ticks: { color: '#888', font: { size: 12 } }, grid: { color: 'rgba(128,128,128,0.08)' } }
+      }
+    }
+  });
+
+  window._currentMachine = 'A';
+  window._energyChart = chart;
+  buildLegend('A');
+
+  window.switchMachine1 = function(m) {
+    window._currentMachine = m;
+    document.getElementById('btn-a').style.background = m === 'A' ? '#eee' : 'transparent';
+    document.getElementById('btn-a').style.color      = m === 'A' ? '#111' : '#888';
+    document.getElementById('btn-b').style.background = m === 'B' ? '#eee' : 'transparent';
+    document.getElementById('btn-b').style.color      = m === 'B' ? '#111' : '#888';
+    chart.data.datasets = buildDatasets(m);
+    chart.update();
+    buildLegend(m);
+  };
+
 });
 """))
 ```
@@ -932,10 +822,14 @@ from IPython.display import HTML, display
 
 display(HTML("""
 <div style="padding: 1rem 0;">
-  <p style="font-size: 13px; color: #888; margin: 0 0 1.25rem 0;">Difference between model (on Lir)</p>
-
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+    <p style="font-size: 13px; color: #888; margin: 0;" id="chart-label">Difference between model</p>
+    <div style="display: flex; gap: 6px;">
+      <button id="btn-a2" onclick="switchMachine2('A')" style="cursor:pointer;padding:4px 14px;font-size:12px;border:1px solid #ccc;background:#eee;color:#111;border-radius:5px;">on Lir</button>
+      <button id="btn-b2" onclick="switchMachine2('B')" style="cursor:pointer;padding:4px 14px;font-size:12px;border:1px solid #ccc;background:transparent;color:#888;border-radius:5px;">On EDITO</button>
+    </div>
+  </div>
   <div style="display: flex; flex-direction: column; gap: 10px;" id="breakdown-container"></div>
-
   <div style="display: flex; flex-wrap: wrap; gap: 14px; margin-top: 1.25rem; font-size: 12px; color: #888;" id="breakdown-legend"></div>
 </div>
 
@@ -943,48 +837,81 @@ display(HTML("""
 var STAGES = ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"];
 var COLORS = ["#C8E8F0", "#96D3E2", "#5ABDD6", "#378ADD", "#1C3A6E"];
 
-var MODELS = [
-  { name: "Glonet", values: [0.1, 1.2, 84.6, 5.5, 8.6] },
-  { name: "Wenhai", values: [0.24, 1.44, 30.12, 39.0, 29.2] },
-  { name: "Xihe",   values: [0.1, 14.1, 23.5, 22.1, 40.2] }
-];
+var DATA = {
+  A: [
+    { name: "Glonet", values: [0.1, 1.2, 84.6, 5.5, 8.6] },
+    { name: "Wenhai", values: [0.24, 1.44, 30.12, 39.0, 29.2] },
+    { name: "Xihe",   values: [0.1, 14.1, 23.5, 22.1, 40.2] }
+  ],
+  B: [
+    { name: "Glonet", values: [0.14, 0.14, 39.4, 38.6, 21.72] },
+    { name: "Wenhai", values: [0.09, 0.19, 20.4, 66.1, 13.2] },
+    { name: "Xihe",   values: [0.115, 0.485, 23.4, 56.0, 20.0] }
+  ]
+};
 
-var container = document.getElementById('breakdown-container');
-var legend    = document.getElementById('breakdown-legend');
+function buildBars() {
+  var container = document.getElementById('breakdown-container');
+  container.innerHTML = '';
 
-MODELS.forEach(function(model) {
-  var total = model.values.reduce(function(a, b) { return a + b; }, 0);
+  DATA['A'].forEach(function(model, mi) {
+    var row = document.createElement('div');
+    row.style.cssText = 'display: flex; align-items: center; gap: 12px;';
 
-  var row = document.createElement('div');
-  row.style.cssText = 'display: flex; align-items: center; gap: 12px;';
+    var label = document.createElement('div');
+    label.style.cssText = 'width: 64px; font-size: 13px; font-weight: 500; color: #111; flex-shrink: 0; text-align: right;';
+    label.textContent = model.name;
+    row.appendChild(label);
 
-  var label = document.createElement('div');
-  label.style.cssText = 'width: 64px; font-size: 13px; font-weight: 500; color: #111; flex-shrink: 0; text-align: right;';
-  label.textContent = model.name;
-  row.appendChild(label);
+    var bar = document.createElement('div');
+    bar.style.cssText = 'display: flex; flex: 1; height: 36px; border-radius: 6px; overflow: hidden;';
+    bar.id = 'bar-' + mi;
 
-  var bar = document.createElement('div');
-  bar.style.cssText = 'display: flex; flex: 1; height: 36px; border-radius: 6px; overflow: hidden;';
+    COLORS.forEach(function(color, i) {
+      var seg = document.createElement('div');
+      seg.id = 'seg-' + mi + '-' + i;
+      seg.style.cssText = 'width: 0%; background:' + color + '; height: 100%; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); cursor: default;';
+      seg.onmouseenter = function() { this.style.opacity = '0.7'; };
+      seg.onmouseleave = function() { this.style.opacity = '1'; };
+      bar.appendChild(seg);
+    });
 
-  model.values.forEach(function(val, i) {
-    var pct = (val / total) * 100;
-    var seg = document.createElement('div');
-    seg.title = STAGES[i] + ': ' + val + ' Wh (' + pct.toFixed(1) + '%)';
-    seg.style.cssText = 'width:' + pct + '%; background:' + COLORS[i] + '; height: 100%; transition: opacity .15s; cursor: default;';
-    seg.onmouseenter = function() { this.style.opacity = '0.7'; };
-    seg.onmouseleave = function() { this.style.opacity = '1'; };
-    bar.appendChild(seg);
+    row.appendChild(bar);
+    container.appendChild(row);
   });
 
-  row.appendChild(bar);
-  container.appendChild(row);
-});
+  var legend = document.getElementById('breakdown-legend');
+  STAGES.forEach(function(stage, i) {
+    legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
+      + '<span style="width:10px;height:10px;border-radius:2px;background:' + COLORS[i] + ';flex-shrink:0;display:inline-block;"></span>'
+      + stage + '</span>';
+  });
+}
 
-STAGES.forEach(function(stage, i) {
-  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
-    + '<span style="width:10px;height:10px;border-radius:2px;background:' + COLORS[i] + ';flex-shrink:0;display:inline-block;"></span>'
-    + stage + '</span>';
-});
+function updateBars(machine) {
+  DATA[machine].forEach(function(model, mi) {
+    var total = model.values.reduce(function(a, b) { return a + b; }, 0);
+    model.values.forEach(function(val, i) {
+      var pct = (val / total) * 100;
+      var seg = document.getElementById('seg-' + mi + '-' + i);
+      if (seg) {
+        seg.style.width = pct + '%';
+        seg.title = STAGES[i] + ': ' + val + ' %';
+      }
+    });
+  });
+}
+
+function switchMachine2(m) {
+  document.getElementById('btn-a2').style.background = m === 'A' ? '#eee' : 'transparent';
+  document.getElementById('btn-a2').style.color      = m === 'A' ? '#111' : '#888';
+  document.getElementById('btn-b2').style.background = m === 'B' ? '#eee' : 'transparent';
+  document.getElementById('btn-b2').style.color      = m === 'B' ? '#111' : '#888';
+  updateBars(m);
+}
+
+buildBars();
+setTimeout(function() { updateBars('A'); }, 50);
 </script>
 """))
 ```
@@ -994,24 +921,35 @@ from IPython.display import HTML, Javascript, display
 
 display(HTML("""
 <div style="padding: 1rem 0;">
-  <p style="font-size: 13px; color: #888; margin: 0 0 1.25rem 0;">Difference between model — INFERENCE (on Lir)</p>
-</div>
-
-<div style="position: relative; width: 100%; height: 260px;">
-  <canvas id="inferenceEnergyChart"></canvas>
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+    <p style="font-size: 13px; color: #888; margin: 0;" id="inference-label">Difference between model — INFERENCE</p>
+    <div style="display: flex; gap: 6px; flex-shrink: 0; margin-left: 12px;">
+      <button id="btn-a3" onclick="switchInferenceMachine3('A')" style="cursor:pointer;padding:4px 14px;font-size:12px;border:1px solid #ccc;background:#eee;color:#111;border-radius:5px;">On Lir</button>
+      <button id="btn-b3" onclick="switchInferenceMachine3('B')" style="cursor:pointer;padding:4px 14px;font-size:12px;border:1px solid #ccc;background:transparent;color:#888;border-radius:5px;">On EDITO</button>
+    </div>
+  </div>
+  <div style="position: relative; width: 100%; height: 260px;">
+    <canvas id="inferenceEnergyChart"></canvas>
+  </div>
 </div>
 """))
 
 display(Javascript("""
 require.config({ paths: { chartjs: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min' } });
 require(['chartjs'], function(ChartModule) {
-  new ChartModule.Chart(document.getElementById('inferenceEnergyChart'), {
+
+  const DATA = {
+    A: [7.42, 19.4, 9.10],
+    B: [5.28, 14, 8.98]
+  };
+
+  const chart = new ChartModule.Chart(document.getElementById('inferenceEnergyChart'), {
     type: 'bar',
     data: {
       labels: ['Glonet', 'Wenhai', 'Xihe'],
       datasets: [{
         label: 'Energy (Wh)',
-        data: [7.42, 19.4, 9.10],
+        data: DATA['A'],
         backgroundColor: ['#378ADD', '#378ADD', '#378ADD'],
         borderColor: ['#185FA5', '#185FA5', '#185FA5'],
         borderWidth: 1,
@@ -1021,6 +959,7 @@ require(['chartjs'], function(ChartModule) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 500, easing: 'easeInOutQuart' },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -1038,21 +977,23 @@ require(['chartjs'], function(ChartModule) {
         },
         y: {
           beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Energy (Wh)',
-            color: '#888',
-            font: { size: 12 }
-          },
+          title: { display: true, text: 'Energy (Wh)', color: '#888', font: { size: 12 } },
           grid: { color: 'rgba(128,128,128,0.08)' },
-          ticks: {
-            color: '#888',
-            callback: function(v) { return v + ' Wh'; }
-          }
+          ticks: { color: '#888', callback: function(v) { return v + ' Wh'; } }
         }
       }
     }
   });
+
+  window.switchInferenceMachine3 = function(m) {
+    document.getElementById('btn-a3').style.background = m === 'A' ? '#eee' : 'transparent';
+    document.getElementById('btn-a3').style.color      = m === 'A' ? '#111' : '#888';
+    document.getElementById('btn-b3').style.background = m === 'B' ? '#eee' : 'transparent';
+    document.getElementById('btn-b3').style.color      = m === 'B' ? '#111' : '#888';
+    chart.data.datasets[0].data = DATA[m];
+    chart.update();
+  };
+
 });
 """))
 ```
@@ -1069,7 +1010,7 @@ HTML("""
   <table class="ei-table">
     <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
     <tbody>
-      <tr><td>Supercomputer</td><td><span class="ei-param_infos">Météo-France — Belenos (Toulouse)</span></td></tr>
+      <tr><td>Supercomputer</td><td><span class="ei-param_infos">Météo-France — Belenos (Toulouse, France)</span></td></tr>
       <tr><td>Number of Nodes</td><td><span class="ei-param_infos">43</span></td></tr>
       <tr><td>Number of processes per node</td><td><span class="ei-param_infos">128</span></td></tr>
       <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 7742</span> </td></tr>
@@ -1092,7 +1033,7 @@ HTML("""
   <table class="ei-table">
     <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
     <tbody>
-      <tr><td>Supercomputer</td><td><span class="ei-param_infos">Mercator Ocean International — Lir (Toulouse)</span></td></tr>
+      <tr><td>Supercomputer</td><td><span class="ei-param_infos">Mercator Ocean International — Lir (Toulouse, France)</span></td></tr>
       <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
       <tr><td>Number of processes per node</td><td><span class="ei-param_infos">8</span></td></tr>
       <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9534</span></td></tr>
@@ -1100,6 +1041,30 @@ HTML("""
       <tr><td>RAM (GB)</td><td><span class="ei-param_infos">755</span></td></tr>
       <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
       <tr><td>PUE</td><td><span class="ei-param_infos">1.45</span></td></tr>
+    </tbody>
+  </table>
+</div>
+""")
+```
+
+```{python}
+HTML("""
+<div class="ei-model-card">
+  <div class="ei-model-card-header">
+    <span class="ei-model-name">Glonet · Wenhai · Xihe</span>
+    <span class="ei-model-badge">Inference</span>
+  </div>
+  <table class="ei-table">
+    <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Supercomputer</td><td><span class="ei-param_infos">EDITO Data Lab - Cloud Ferro (Mazovia, Poland)</span></td></tr>
+      <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
+      <tr><td>Number of processes per node</td><td><span class="ei-param_infos">16</span></td></tr>
+      <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC</span></td></tr>
+      <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA RTX A6000 48GB</span></td></tr>
+      <tr><td>RAM (GB)</td><td><span class="ei-param_infos">110</span></td></tr>
+      <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
+      <tr><td>PUE</td><td><span class="ei-param_infos">1.43</span></td></tr>
     </tbody>
   </table>
 </div>
