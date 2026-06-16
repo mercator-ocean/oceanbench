@@ -25,6 +25,7 @@ from oceanbench.core.remote_http import (
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
+OBSERVATIONS_STAGE_VERSION = "v3"
 
 
 class ObservationDataUnavailableError(ValueError):
@@ -122,7 +123,8 @@ def _should_stage_observations_locally() -> bool:
 
 def _observations_stage_path(first_day_start: str, last_day_end: str, lead_days_count: int) -> Path:
     return local_stage_directory() / (
-        f"observations-{first_day_start.replace('-', '')}-{last_day_end.replace('-', '')}-{lead_days_count}d.zarr"
+        f"observations-{OBSERVATIONS_STAGE_VERSION}-"
+        f"{first_day_start.replace('-', '')}-{last_day_end.replace('-', '')}-{lead_days_count}d.zarr"
     )
 
 
@@ -152,6 +154,30 @@ def _build_staged_observations_dataset(
         )
     finally:
         observations_dataset.close()
+
+
+def _forecast_observation_matches(
+    observation_datetimes: pandas.DatetimeIndex,
+    first_day_timestamps: pandas.DatetimeIndex,
+    lead_days_count: int,
+) -> tuple[numpy.ndarray, numpy.ndarray]:
+    observation_values = observation_datetimes.values
+    selected_observation_chunks = []
+    selected_run_chunks = []
+    for run_index, first_day_timestamp in enumerate(first_day_timestamps):
+        first_valid_datetime = first_day_timestamp.to_datetime64()
+        end_datetime_exclusive = (first_day_timestamp + pandas.Timedelta(days=lead_days_count)).to_datetime64()
+        selected_observation_indices = numpy.flatnonzero(
+            (observation_values >= first_valid_datetime) & (observation_values < end_datetime_exclusive)
+        )
+        if selected_observation_indices.size == 0:
+            continue
+        selected_observation_chunks.append(selected_observation_indices)
+        selected_run_chunks.append(numpy.full(selected_observation_indices.size, run_index, dtype=numpy.intp))
+
+    if not selected_observation_chunks:
+        return numpy.array([], dtype=numpy.intp), numpy.array([], dtype=numpy.intp)
+    return numpy.concatenate(selected_observation_chunks), numpy.concatenate(selected_run_chunks)
 
 
 def _selected_observations_dataset(
@@ -191,20 +217,14 @@ def _selected_observations_dataset(
         {time_key: (observation_dimension_key, observation_datetimes)}
     )
 
-    first_valid_datetimes = (first_day_timestamps + pandas.Timedelta(days=1)).values[:, numpy.newaxis]
-    end_datetimes_exclusive = (first_day_timestamps + pandas.Timedelta(days=lead_days_count + 1)).values[
-        :, numpy.newaxis
-    ]
-
-    observation_window_masks = (observation_datetimes.values >= first_valid_datetimes) & (
-        observation_datetimes.values < end_datetimes_exclusive
+    selected_observation_indices, selected_run_indices = _forecast_observation_matches(
+        observation_datetimes,
+        first_day_timestamps,
+        lead_days_count,
     )
-
-    selected_observations_mask = numpy.any(observation_window_masks, axis=0)
-    selected_run_indices = numpy.argmax(observation_window_masks[:, selected_observations_mask], axis=0)
     selected_first_day_coord = first_day_datetimes[selected_run_indices]
 
-    return observations_dataset.isel({observation_dimension_key: selected_observations_mask}).assign_coords(
+    return observations_dataset.isel({observation_dimension_key: selected_observation_indices}).assign_coords(
         {
             first_day_datetime_key: (
                 (observation_dimension_key,),
@@ -232,7 +252,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
 
     first_day_timestamps = pandas.to_datetime(first_day_datetimes)
     first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
-    last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).strftime("%Y-%m-%d")
+    last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count - 1)).strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
     local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)
 

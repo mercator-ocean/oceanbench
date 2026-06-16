@@ -32,57 +32,77 @@ Please keep in mind that these metrics capture key aspects of forecast quality r
 
 Want to evaluate your system or get involved in OceanBench? Check out the [GitHub project](https://github.com/mercator-ocean/oceanbench/)!
 
+For the 1 degree track, the interpolation method used for challengers, the corresponding reference datasets, and the exact implementation paths are documented [here](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html).
+
 ```{python}
 #| output: false
 
 import json
 import os
-from helpers.s3_discovery import discover_downloaded_reports
+from helpers.s3_discovery import available_versions, default_version, discover_downloaded_reports
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
-from helpers.challenger_metadata import CHALLENGERS
+from helpers.challenger_metadata import challenger_label
 from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
 
-published_reports = discover_downloaded_reports("reports")
-website_region_ids = published_region_ids_with_reports(published_reports)
-
-def _load_scores(challenger_name, region_id):
-    local_path = os.path.join("reports", f"{challenger_name}.{region_id}.report.ipynb")
+def _load_scores(version, challenger_name, region_id, strict):
+    local_path = os.path.join("reports", version, f"{challenger_name}.{region_id}.report.ipynb")
     if not os.path.exists(local_path):
-        raise FileNotFoundError(f"Missing downloaded report notebook for {challenger_name}: {local_path}")
-    scores = get_all_model_scores_from_notebook(local_path, challenger_name)
+        return None
+    try:
+        scores = get_all_model_scores_from_notebook(local_path, challenger_name)
+    except Exception as error:
+        if strict:
+            raise
+        print(f"Skipping {version}/{challenger_name}.{region_id}: {error}")
+        return None
     if not scores:
-        raise RuntimeError(f"Failed to parse scores for {challenger_name} from {local_path}")
+        if strict:
+            raise RuntimeError(f"No scores parsed for {version}/{challenger_name}.{region_id}.")
+        return None
     return {metric_key: score.model_dump() for metric_key, score in scores.items()}
 
-all_scores = {
-    region_id: {
-        "display_name": published_region_label(region_id),
-        "challengers": {
-            challenger_name: _load_scores(challenger_name, region_id)
+def _version_bundle(version, strict):
+    published_reports = discover_downloaded_reports("reports", version)
+    regions = {}
+    for region_id in published_region_ids_with_reports(published_reports):
+        challengers = {
+            challenger_name: scores
             for challenger_name in published_reports[region_id]
+            if (scores := _load_scores(version, challenger_name, region_id, strict))
+        }
+        if not challengers:
+            continue
+        regions[region_id] = {
+            "display_name": published_region_label(region_id),
+            "challengers": challengers,
+            "challenger_names": list(challengers.keys()),
+        }
+    region_ids = list(regions.keys())
+    return {
+        "regions": regions,
+        "region_order": region_ids,
+        "region_labels": {region_id: published_region_label(region_id) for region_id in region_ids},
+        "region_metadata": {region_id: published_region_metadata(region_id) for region_id in region_ids},
+        "challenger_labels": {
+            challenger_name: challenger_label(challenger_name)
+            for region in regions.values()
+            for challenger_name in region["challenger_names"]
         },
-        "challenger_names": list(published_reports[region_id]),
     }
-    for region_id in website_region_ids
+
+resolved_default_version = default_version()
+version_bundles = {
+    version: bundle
+    for version in available_versions()
+    if (bundle := _version_bundle(version, strict=version == resolved_default_version))["region_order"]
 }
+if resolved_default_version not in version_bundles:
+    resolved_default_version = next(iter(version_bundles), "")
 
 scores_json = json.dumps({
-    "regions": all_scores,
-    "region_order": website_region_ids,
-    "region_labels": {
-        region_id: published_region_label(region_id)
-        for region_id in website_region_ids
-    },
-    "region_metadata": {
-        region_id: published_region_metadata(region_id)
-        for region_id in website_region_ids
-    },
-    "challenger_labels": {
-        name: CHALLENGERS[name]["label"]
-        for region in all_scores.values()
-        for name in region["challenger_names"]
-        if name in CHALLENGERS
-    },
+    "versions": version_bundles,
+    "version_order": list(version_bundles.keys()),
+    "default_version": resolved_default_version,
     "metric_titles": METRIC_TITLES,
     "sections": SECTIONS,
 })

@@ -37,6 +37,13 @@ oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
     region=region,
 )
 
+# #### Root Mean Square Deviation (RMSD) of variables compared to observations
+
+oceanbench.metrics.rmsd_of_variables_compared_to_observations(
+    challenger_dataset,
+    region=region,
+)
+
 # #### Deviation of Lagrangian trajectories compared to GLORYS reanalysis
 
 oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
@@ -68,13 +75,6 @@ oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
 # #### Deviation of Lagrangian trajectories compared to GLO12 analysis
 
 oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
-    challenger_dataset,
-    region=region,
-)
-
-# #### Root Mean Square Deviation (RMSD) of variables compared to observations
-
-oceanbench.metrics.rmsd_of_variables_compared_to_observations(
     challenger_dataset,
     region=region,
 )

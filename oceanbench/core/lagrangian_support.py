@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from datetime import datetime
+import hashlib
 from pathlib import Path
 from collections.abc import Callable
 
@@ -21,6 +22,7 @@ from oceanbench.core.local_stage import (
 )
 
 LAGRANGIAN_ROW_LABEL = "Lagrangian trajectory deviation (km) []{surface}"
+LAGRANGIAN_DOMAIN_GRID_ROUNDING_DECIMALS = 6
 
 
 def mean_weekly_lagrangian_deviations(weekly_deviations: list[numpy.ndarray]) -> numpy.ndarray:
@@ -56,10 +58,54 @@ def _lagrangian_stage_sources(
     return challenger_source, reference_source
 
 
-def _lagrangian_stage_directory(dataset_source: DatasetSource, lead_days_count: int) -> Path:
+def _normalised_domain_coordinate_values(coordinate: xarray.DataArray) -> tuple[tuple[int, ...], numpy.ndarray]:
+    coordinate_values = numpy.asarray(coordinate.values, dtype=numpy.float64)
+    if coordinate_values.size == 0:
+        raise ValueError(f"Cannot stage lagrangian data without {coordinate.name} coordinates.")
+    if not numpy.all(numpy.isfinite(coordinate_values)):
+        raise ValueError(f"Cannot stage lagrangian data with non-finite {coordinate.name} coordinates.")
+    rounded_coordinate_values = numpy.round(
+        coordinate_values.ravel(),
+        LAGRANGIAN_DOMAIN_GRID_ROUNDING_DECIMALS,
+    ).astype("<f8", copy=False)
+    return coordinate_values.shape, rounded_coordinate_values
+
+
+def _update_domain_hash(
+    domain_hash,
+    coordinate_name: str,
+    coordinate_shape: tuple[int, ...],
+    coordinate_values: numpy.ndarray,
+) -> None:
+    domain_hash.update(coordinate_name.encode("ascii"))
+    domain_hash.update(str(coordinate_shape).encode("ascii"))
+    domain_hash.update(coordinate_values.tobytes())
+
+
+def _lagrangian_domain_stage_variant(dataset: xarray.Dataset) -> str:
+    standard_dataset = rename_dataset_with_standard_names(dataset)
+    latitude_shape, latitude_values = _normalised_domain_coordinate_values(standard_dataset[Dimension.LATITUDE.key()])
+    longitude_shape, longitude_values = _normalised_domain_coordinate_values(
+        standard_dataset[Dimension.LONGITUDE.key()]
+    )
+
+    domain_hash = hashlib.sha256()
+    _update_domain_hash(domain_hash, Dimension.LATITUDE.key(), latitude_shape, latitude_values)
+    _update_domain_hash(domain_hash, Dimension.LONGITUDE.key(), longitude_shape, longitude_values)
+    return f"domain-{latitude_values.size}x{longitude_values.size}-{domain_hash.hexdigest()[:12]}"
+
+
+def _lagrangian_stage_directory(
+    dataset_source: DatasetSource,
+    lead_days_count: int,
+    domain_variant: str | None = None,
+) -> Path:
     resolution_suffix = "" if dataset_source.resolution is None else f"-{dataset_source.resolution}"
+    variant_suffix = "" if dataset_source.variant is None else f"-{dataset_source.variant}"
+    domain_variant_suffix = "" if domain_variant is None else f"-{domain_variant}"
     return local_stage_directory() / (
-        f"lagrangian-{dataset_source.kind}-{dataset_source.name}{resolution_suffix}-{lead_days_count}d"
+        f"lagrangian-{dataset_source.kind}-{dataset_source.name}"
+        f"{resolution_suffix}{variant_suffix}{domain_variant_suffix}-{lead_days_count}d"
     )
 
 
@@ -67,9 +113,10 @@ def _lagrangian_stage_path(
     dataset_source: DatasetSource,
     lead_days_count: int,
     first_day_datetime: str,
+    domain_variant: str | None = None,
 ) -> Path:
     first_day = datetime.fromisoformat(first_day_datetime).strftime("%Y%m%d")
-    return _lagrangian_stage_directory(dataset_source, lead_days_count) / f"{first_day}.zarr"
+    return _lagrangian_stage_directory(dataset_source, lead_days_count, domain_variant) / f"{first_day}.zarr"
 
 
 def _open_staged_lagrangian_dataset(stage_path: Path) -> xarray.Dataset:
@@ -82,7 +129,13 @@ def _open_or_stage_lagrangian_dataset(
     first_day_datetime: str,
 ) -> xarray.Dataset:
     lead_days_count = dataset.sizes[Dimension.TIME.key()]
-    stage_path = _lagrangian_stage_path(dataset_source, lead_days_count, first_day_datetime)
+    domain_variant = _lagrangian_domain_stage_variant(dataset)
+    stage_path = _lagrangian_stage_path(
+        dataset_source,
+        lead_days_count,
+        first_day_datetime,
+        domain_variant,
+    )
     return open_or_create_local_stage_dataset(
         stage_path,
         open_staged_dataset=_open_staged_lagrangian_dataset,

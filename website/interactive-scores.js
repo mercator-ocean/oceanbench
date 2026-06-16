@@ -48,8 +48,10 @@ let parsedData = null;
 let challengerLabels = {};
 let regionLabels = {};
 let regionMetadata = {};
+let activeTrack = "high_resolution";
 let activeSection = "observations";
 let activeRegion = null;
+let activeVersion = null;
 let isScrollRefreshScheduled = false;
 
 const SECTION_ORDER = ["observations", "reanalysis", "analysis"];
@@ -59,6 +61,14 @@ const SECTION_ID_MAP = {
   reanalysis: "comparison-to-reanalysis",
   analysis: "comparison-to-analysis",
 };
+
+const TRACK_LABELS = {
+  high_resolution: "High resolution",
+  one_degree: "1 degree",
+};
+
+const ONE_DEGREE_TRACK_NOTE =
+  "In this track, the models are non-one-degree base models whose forecasts are interpolated to the one degree resolution";
 
 function interpolateColor(startColor, endColor, ratio) {
   return [
@@ -155,6 +165,25 @@ function displayName(name) {
   return challengerLabels[name] || name;
 }
 
+function trackKeyForChallenger(name) {
+  return name.endsWith("_1_degree") ? "one_degree" : "high_resolution";
+}
+
+function getTrackChallengerNames(challengerNames, trackKey) {
+  return challengerNames.filter((name) => trackKeyForChallenger(name) === trackKey);
+}
+
+function getAvailableTracks(challengerNames) {
+  const tracks = [];
+  if (getTrackChallengerNames(challengerNames, "high_resolution").length > 0) {
+    tracks.push("high_resolution");
+  }
+  if (getTrackChallengerNames(challengerNames, "one_degree").length > 0) {
+    tracks.push("one_degree");
+  }
+  return tracks;
+}
+
 function titleCase(text) {
   return text.replace(/(^|\s)\w/g, (character) => character.toUpperCase());
 }
@@ -196,7 +225,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -246,7 +275,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -410,6 +439,20 @@ function buildTabsInnerHtml(sections) {
   return markup;
 }
 
+function buildTrackTabsInnerHtml(trackKeys) {
+  let markup = "";
+  for (const trackKey of trackKeys) {
+    const isActive = trackKey === activeTrack;
+    markup += `<button type="button" class="score-tab score-mode-link${isActive ? " active" : ""}" data-track="${trackKey}"${isActive ? ' aria-current="page"' : ""}>${TRACK_LABELS[trackKey]}</button>`;
+  }
+  return markup;
+}
+
+function buildTrackNoteInnerHtml() {
+  const hiddenClass = activeTrack === "one_degree" ? "" : " track-keynote--hidden";
+  return `<div class="track-keynote${hiddenClass}">${ONE_DEGREE_TRACK_NOTE}</div>`;
+}
+
 function attachTabListeners() {
   document.querySelectorAll(".score-track-link").forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -417,6 +460,19 @@ function attachTabListeners() {
       const sectionKey = link.dataset.section;
       if (sectionKey === activeSection) return;
       navigateToSection(sectionKey, { replaceHistory: false, updateHash: true });
+    });
+  });
+}
+
+function attachTrackListeners() {
+  document.querySelectorAll(".score-mode-link").forEach((button) => {
+    button.addEventListener("click", () => {
+      const trackKey = button.dataset.track;
+      if (!trackKey || trackKey === activeTrack) return;
+      activeTrack = trackKey;
+      selectedDepths = new Set();
+      showAllMode = true;
+      renderAllTables();
     });
   });
 }
@@ -455,7 +511,7 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
 function buildRegionSelectorInnerHtml(regionIds) {
   if (regionIds.length === 0) return "";
 
-  let markup = '<div class="region-selector-layout">';
+  let markup = `<div class="region-selector-layout region-selector-layout--${activeRegion}">`;
   markup += '<div class="region-selector-copy">';
   markup += '<div class="region-selector-row">';
   markup += '<span class="region-selector-label">Region</span>';
@@ -466,17 +522,62 @@ function buildRegionSelectorInnerHtml(regionIds) {
     const description = regionMetadata[regionId]?.description || "";
     markup += `<button type="button" class="region-chip${active}" data-region="${regionId}" aria-pressed="${regionId === activeRegion}" title="${description}">${label}</button>`;
   }
-  markup += "</div></div>";
+  markup += "</div>";
 
   const activeDescription = regionMetadata[activeRegion]?.description;
   if (activeDescription) {
     markup += `<div class="region-selector-description">${activeDescription}</div>`;
   }
   markup += "</div>";
+
+  const activeVersionData = getActiveVersionData(parsedData);
+  const trackKeys = getAvailableTracks(
+    regionIds.includes(activeRegion) && activeVersionData?.regions?.[activeRegion]?.challenger_names
+      ? activeVersionData.regions[activeRegion].challenger_names
+      : [],
+  );
+  const trackTabs = buildTrackTabsInnerHtml(trackKeys);
+  markup += '<div class="track-selector-row">';
+  markup += '<span class="region-selector-label">Track</span>';
+  markup += `<div id="score-track-tabs" role="group" aria-label="Model resolution track">${trackTabs}</div>`;
+  markup += "</div>";
+  markup += buildTrackNoteInnerHtml();
+  markup += "</div>";
   markup += '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
   markup += "</div>";
 
   return markup;
+}
+
+function buildVersionSelectorInnerHtml(versions) {
+  let markup = '<span class="version-selector-label">Evaluation version</span>';
+  markup += '<select id="version-select" class="version-select" aria-label="Evaluation report version">';
+  for (const version of versions) {
+    const selected = version === activeVersion ? " selected" : "";
+    markup += `<option value="${version}"${selected}>${version}</option>`;
+  }
+  markup += "</select>";
+  markup += '<a class="version-changelog-link" href="https://github.com/mercator-ocean/oceanbench/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>';
+  return markup;
+}
+
+function renderVersionSelector(versions) {
+  const wrapper = document.getElementById("all-scores");
+  const existing = document.getElementById("version-selector");
+  if (!wrapper || !versions || versions.length <= 1) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  const versionSelector = existing || document.createElement("div");
+  versionSelector.id = "version-selector";
+  versionSelector.className = "version-selector";
+  versionSelector.innerHTML = buildVersionSelectorInnerHtml(versions);
+
+  if (!existing) {
+    const anchor = document.getElementById("region-selector") || wrapper;
+    anchor.parentNode.insertBefore(versionSelector, anchor);
+  }
 }
 
 function renderRegionGlobe(regionIds) {
@@ -870,6 +971,17 @@ function attachControlListeners() {
     });
   });
 
+  const versionSelect = document.getElementById("version-select");
+  if (versionSelect) {
+    versionSelect.addEventListener("change", () => {
+      const selectedVersion = versionSelect.value;
+      if (!selectedVersion || selectedVersion === activeVersion) return;
+      activeVersion = selectedVersion;
+      applyActiveVersion();
+      renderAllTables();
+    });
+  }
+
   const baselineSelect = document.getElementById("baseline-select");
   if (baselineSelect) {
     baselineSelect.addEventListener("change", renderAllTables);
@@ -989,34 +1101,96 @@ function ensureParsedData() {
     const dataElement = document.getElementById("scores-data");
     if (!dataElement) return null;
     parsedData = JSON.parse(dataElement.textContent);
-    challengerLabels = parsedData.challenger_labels || {};
-    regionLabels = parsedData.region_labels || {};
-    regionMetadata = parsedData.region_metadata || {};
-    const regionIds = parsedData.region_order || Object.keys(parsedData.regions || {});
-    if (!activeRegion || !regionIds.includes(activeRegion)) {
-      activeRegion = regionIds[0] || null;
+    const versions = getVersions(parsedData);
+    if (!activeVersion || !versions.includes(activeVersion)) {
+      activeVersion = versions.includes(parsedData.default_version)
+        ? parsedData.default_version
+        : versions[0] || null;
     }
+    applyActiveVersion();
   }
   return parsedData;
 }
 
+function getVersions(data) {
+  return data.version_order || Object.keys(data.versions || {});
+}
+
+function getActiveVersionData(data) {
+  if (!data || !data.versions) return null;
+  return data.versions[activeVersion] || null;
+}
+
+function applyActiveVersion() {
+  const versionData = getActiveVersionData(parsedData) || {};
+  challengerLabels = versionData.challenger_labels || {};
+  regionLabels = versionData.region_labels || {};
+  regionMetadata = versionData.region_metadata || {};
+  const regionIds = versionData.region_order || Object.keys(versionData.regions || {});
+  if (!activeRegion || !regionIds.includes(activeRegion)) {
+    activeRegion = regionIds[0] || null;
+  }
+}
+
 function getRegionIds(data) {
-  return data.region_order || Object.keys(data.regions || {});
+  const versionData = getActiveVersionData(data) || {};
+  return versionData.region_order || Object.keys(versionData.regions || {});
 }
 
 function getCurrentRegionData(data) {
-  if (!activeRegion) return null;
-  return data.regions?.[activeRegion] || null;
+  const versionData = getActiveVersionData(data);
+  if (!versionData || !activeRegion) return null;
+  return versionData.regions?.[activeRegion] || null;
 }
 
-function resolveBaselineSelection(challengerNames, selectedBaseline) {
+function resolveBaselineSelection(challengerNames, selectedBaseline, trackKey) {
+  const trackChallengerNames = getTrackChallengerNames(challengerNames, trackKey);
+  if (trackChallengerNames.length === 0) {
+    return null;
+  }
+  if (selectedBaseline && trackChallengerNames.includes(selectedBaseline)) {
+    return selectedBaseline;
+  }
+  const preferredBaseline = trackKey === "one_degree" ? "glo12_1_degree" : "glo12";
+  if (trackChallengerNames.includes(preferredBaseline)) {
+    return preferredBaseline;
+  }
+  return trackChallengerNames[0];
+}
+
+function resolveTrackSelection(challengerNames) {
+  const availableTracks = getAvailableTracks(challengerNames);
+  if (!availableTracks.includes(activeTrack)) {
+    activeTrack = availableTracks[0] || "high_resolution";
+  }
+  return availableTracks;
+}
+
+function setActiveTrackUi() {
+  document.querySelectorAll(".score-mode-link").forEach((button) => {
+    const isActive = button.dataset.track === activeTrack;
+    button.classList.toggle("active", isActive);
+    if (isActive) {
+      button.setAttribute("aria-current", "page");
+    } else {
+      button.removeAttribute("aria-current");
+    }
+  });
+}
+
+function resolveVisibleChallengerNames(challengerNames) {
+  const availableTracks = resolveTrackSelection(challengerNames);
+  return {
+    availableTracks,
+    visibleChallengerNames: getTrackChallengerNames(challengerNames, activeTrack),
+  };
+}
+
+function resolveBaselineSelectionForTrack(challengerNames, selectedBaseline) {
   if (selectedBaseline && challengerNames.includes(selectedBaseline)) {
     return selectedBaseline;
   }
-  if (challengerNames.includes("glo12")) {
-    return "glo12";
-  }
-  return challengerNames[0];
+  return resolveBaselineSelection(challengerNames, selectedBaseline, activeTrack);
 }
 
 function renderTablesOnly() {
@@ -1027,9 +1201,12 @@ function renderTablesOnly() {
   const { challengers, challenger_names: challengerNames } = regionData;
   if (!challengerNames || challengerNames.length === 0) return;
   const { metric_titles: metricTitles, sections } = data;
+  const { visibleChallengerNames } = resolveVisibleChallengerNames(challengerNames);
+  if (visibleChallengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelection(challengerNames, existingSelect?.value);
+  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value);
+  if (!baseline) return;
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
     renderMetricSection(
@@ -1037,7 +1214,7 @@ function renderTablesOnly() {
       sectionConfig.depth_metric,
       sectionConfig.flat_metrics,
       challengers,
-      challengerNames,
+      visibleChallengerNames,
       activeRegion,
       baseline,
       metricTitles,
@@ -1059,9 +1236,12 @@ function renderAllTables() {
   const { metric_titles: metricTitles, sections } = data;
   const regionIds = getRegionIds(data);
   if (!challengerNames || challengerNames.length === 0) return;
+  const { availableTracks, visibleChallengerNames } = resolveVisibleChallengerNames(challengerNames);
+  if (visibleChallengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelection(challengerNames, existingSelect?.value);
+  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value);
+  if (!baseline) return;
   const availableDepths = getAvailableDepths(challengers, baseline, sections);
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
@@ -1070,7 +1250,7 @@ function renderAllTables() {
       sectionConfig.depth_metric,
       sectionConfig.flat_metrics,
       challengers,
-      challengerNames,
+      visibleChallengerNames,
       activeRegion,
       baseline,
       metricTitles,
@@ -1080,8 +1260,9 @@ function renderAllTables() {
   }
 
   const controlsElement = ensureHeaderElement();
-  controlsElement.innerHTML = buildControlsInnerHtml(challengerNames, baseline, availableDepths);
+  controlsElement.innerHTML = buildControlsInnerHtml(visibleChallengerNames, baseline, availableDepths);
   renderRegionSelector(regionIds);
+  renderVersionSelector(getVersions(data));
 
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {
@@ -1090,8 +1271,10 @@ function renderAllTables() {
 
   updateColorLegend();
   updateStickyOffsets();
+  attachTrackListeners();
   attachControlListeners();
   attachTabListeners();
+  setActiveTrackUi();
   setActiveSection(activeSection);
   refreshScrollSpy();
   setupCellHighlight();

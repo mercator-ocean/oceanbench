@@ -11,6 +11,10 @@ import copernicusmarine
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
+from oceanbench.core.reference_depths import (
+    reference_depth_grid_stage_variant,
+    with_reference_depth_grid_metadata,
+)
 from oceanbench.core.remote_http import with_remote_http_retries
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_reference_week_dataset
 
@@ -80,21 +84,32 @@ def _glorys_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.
     return dataset
 
 
+def _prepare_glorys_1_12_week_dataset(
+    first_day_datetime: numpy.datetime64,
+    lead_days_count: int,
+    target_depths: numpy.ndarray,
+) -> Dataset:
+    return with_reference_depth_grid_metadata(
+        prepare_reference_week_dataset(
+            _glorys_1_12_path(first_day_datetime, days_count=lead_days_count, target_depths=target_depths),
+            lead_days_count=lead_days_count,
+            operation_name="GLORYS twelfth-degree dataset open",
+        ),
+        target_depths,
+    )
+
+
 def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
 
     target_depths = challenger_dataset[Dimension.DEPTH.key()].values
+    stage_variant = reference_depth_grid_stage_variant(target_depths)
 
     def open_remote_dataset() -> Dataset:
         datasets = []
         for first_day_datetime in first_day_datetimes:
-            dataset = _glorys_1_12_path(first_day_datetime, days_count=lead_days_count, target_depths=target_depths)
-            dataset = prepare_reference_week_dataset(
-                dataset,
-                lead_days_count=lead_days_count,
-                operation_name="GLORYS twelfth-degree dataset open",
-            )
+            dataset = _prepare_glorys_1_12_week_dataset(first_day_datetime, lead_days_count, target_depths)
             datasets.append(dataset)
 
         return concat(datasets, dim=Dimension.FIRST_DAY_DATETIME.key()).assign_coords(
@@ -107,13 +122,12 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
         dataset_name="glorys",
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
-        open_week_dataset=lambda first_day_datetime: prepare_reference_week_dataset(
-            _glorys_1_12_path(first_day_datetime, days_count=lead_days_count, target_depths=target_depths),
-            lead_days_count=lead_days_count,
-            operation_name="GLORYS twelfth-degree dataset open",
+        open_week_dataset=lambda first_day_datetime: _prepare_glorys_1_12_week_dataset(
+            first_day_datetime, lead_days_count, target_depths
         ),
         open_remote_dataset=open_remote_dataset,
         resolution="twelfth_degree",
+        stage_variant=stage_variant,
     )
 
 
