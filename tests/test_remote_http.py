@@ -137,3 +137,18 @@ def test_http_status_codes_decide_retriability() -> None:
 def test_resilient_zarr_store_wraps_the_chunk_mapper() -> None:
     store = resilient_zarr_store("memory://resilient-zarr-store-test")
     assert isinstance(store.map, _RetryingRemoteMapper)
+
+
+def test_resilient_zarr_store_is_pure_online_without_local_cache(monkeypatch) -> None:
+    monkeypatch.delenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, raising=False)
+    store = resilient_zarr_store("memory://online-only-test")
+    assert "Cach" not in type(store.fs).__name__
+    assert isinstance(store.map, _RetryingRemoteMapper)
+
+
+def test_resilient_zarr_store_caches_locally_when_configured(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, str(tmp_path))
+    store = resilient_zarr_store("memory://locally-cached-test")
+    assert "Cach" in type(store.fs).__name__
+    assert str(tmp_path) in store.fs.storage
+    assert isinstance(store.map, _RetryingRemoteMapper)
