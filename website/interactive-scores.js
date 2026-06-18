@@ -128,7 +128,7 @@ function formatPercentDiffForCell(referenceValue, comparedValue) {
 
 function getValue(scoreData, depth, variable, leadDay) {
   try {
-    return scoreData.depths[depth].variables[variable].data[leadDay];
+    return scoreData.depths[depth].variables[variable].data[leadDay] ?? null;
   } catch {
     return null;
   }
