@@ -83,6 +83,12 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1°",
     },
+    "langya": {
+        "label": "LangYa",
+    },
+    "langya_1_degree": {
+        "label": "LangYa",
+    },
 }
 
 

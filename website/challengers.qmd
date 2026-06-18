@@ -45,18 +45,18 @@ def format_row(challenger_name):
         if challenger_name in region_challengers
     )
     report_links = f'<span class="region-report-badges">{report_links}</span>' if report_links else ""
-    if challenger_metadata:
-        system = f"[{challenger_metadata['label']}]({challenger_metadata['url']})"
-        organisation = (
-            f"[{challenger_metadata['organisation']}]"
-            f"({challenger_metadata['organisation_url']})"
-        )
-        return (
-            f"| {system} | {organisation} | {challenger_metadata['method']} | "
-            f"{challenger_metadata['forecast_type']} | {challenger_metadata['initial_conditions']} | "
-            f"{challenger_metadata['resolution']} | {report_links} |"
-        )
-    return f"| {challenger_name} |  |  |  |  |  | {report_links} |"
+    metadata = challenger_metadata or {}
+
+    def linked(text, url):
+        return f"[{text}]({url})" if text and url else (text or "")
+
+    system = linked(metadata.get("label", challenger_name), metadata.get("url", ""))
+    organisation = linked(metadata.get("organisation", ""), metadata.get("organisation_url", ""))
+    return (
+        f"| {system} | {organisation} | {metadata.get('method', '')} | "
+        f"{metadata.get('forecast_type', '')} | {metadata.get('initial_conditions', '')} | "
+        f"{metadata.get('resolution', '')} | {report_links} |"
+    )
 
 rows = "\n".join(map(format_row, challengers))
 
