@@ -20,6 +20,7 @@ from oceanbench.core.local_stage import (
 from oceanbench.core.remote_http import (
     RetriableRemoteDataError,
     require_remote_dataset_dimensions,
+    resilient_zarr_store,
     with_remote_http_retries,
 )
 
@@ -59,7 +60,7 @@ def _build_staged_mean_dynamic_topography_dataset(
     stage_path: Path,
 ) -> None:
     mean_dynamic_topography_dataset = open_dataset(
-        mean_dynamic_topography_url,
+        resilient_zarr_store(mean_dynamic_topography_url),
         engine="zarr",
         chunks="auto",
         consolidated=True,
@@ -75,7 +76,7 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
         mean_dynamic_topography_url = _mean_dynamic_topography_zarr_url(resolution)
         if not should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY):
             return open_dataset(
-                mean_dynamic_topography_url,
+                resilient_zarr_store(mean_dynamic_topography_url),
                 engine="zarr",
                 chunks="auto",
                 consolidated=True,
@@ -192,7 +193,7 @@ def _selected_observations_dataset(
     first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
 
     observations_dataset = open_mfdataset(
-        list(map(observation_path, observation_days)),
+        [resilient_zarr_store(observation_path(observation_day)) for observation_day in observation_days],
         engine="zarr",
         decode_cf=False,
         parallel=False,

@@ -2,10 +2,12 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from time import sleep
 from typing import TypeVar
 import logging
+
+import zarr
 
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
@@ -20,6 +22,8 @@ RETRIABLE_REMOTE_BACKEND_MODULE_PREFIXES = (
     "aiohttp",
     "botocore",
 )
+RETRIABLE_HTTP_STATUS_CODES = (408, 429, 500, 502, 503, 504)
+NON_RETRIABLE_HTTP_STATUS_CODES = (400, 401, 403, 404, 405, 409, 410, 416, 422)
 
 REMOTE_ZARR_LOGGER = logging.getLogger(__name__)
 
@@ -44,13 +48,34 @@ def _originates_from_retriable_remote_backend(exception: Exception) -> bool:
     return exception.__class__.__module__.startswith(RETRIABLE_REMOTE_BACKEND_MODULE_PREFIXES)
 
 
+def _remote_http_status_code(exception: Exception) -> int | None:
+    for attribute_name in ("status", "status_code"):
+        status = getattr(exception, attribute_name, None)
+        if isinstance(status, int):
+            return status
+    response = getattr(exception, "response", None)
+    if isinstance(response, Mapping):
+        http_status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        if isinstance(http_status, int):
+            return http_status
+    return None
+
+
+def _is_retriable_remote_data_exception(exception: Exception) -> bool:
+    if isinstance(exception, RetriableRemoteDataError):
+        return True
+    status_code = _remote_http_status_code(exception)
+    if status_code in RETRIABLE_HTTP_STATUS_CODES:
+        return True
+    if status_code in NON_RETRIABLE_HTTP_STATUS_CODES:
+        return False
+    if _originates_from_retriable_remote_backend(exception):
+        return True
+    return any(token in str(exception) for token in RETRIABLE_HTTP_ERROR_TOKENS)
+
+
 def _is_retriable_remote_data_error(error: Exception) -> bool:
-    return any(
-        isinstance(exception, RetriableRemoteDataError)
-        or _originates_from_retriable_remote_backend(exception)
-        or any(token in str(exception) for token in RETRIABLE_HTTP_ERROR_TOKENS)
-        for exception in _exception_chain(error)
-    )
+    return any(_is_retriable_remote_data_exception(exception) for exception in _exception_chain(error))
 
 
 def require_remote_dataset_dimensions(
@@ -91,3 +116,80 @@ def with_remote_http_retries(
             sleep(backoff_seconds)
 
     raise RuntimeError(f"Remote data retries exhausted for {operation_name}")
+
+
+def _resolve_getitems_on_error(fetched_values: dict, requested_keys: list, on_error: str) -> dict:
+    if on_error == "return":
+        return fetched_values
+    if on_error == "omit":
+        return {key: value for key, value in fetched_values.items() if not isinstance(value, BaseException)}
+    for key in requested_keys:
+        value = fetched_values.get(key)
+        if isinstance(value, BaseException):
+            raise value
+    return fetched_values
+
+
+class _RetryingRemoteMapper:
+    def __init__(self, inner_mapper):
+        self._inner_mapper = inner_mapper
+
+    def __getattr__(self, name):
+        if name == "_inner_mapper" or (name.startswith("__") and name.endswith("__")):
+            raise AttributeError(name)
+        return getattr(self._inner_mapper, name)
+
+    def __getitem__(self, key):
+        return with_remote_http_retries(
+            f"remote zarr key read '{key}'",
+            lambda: self._inner_mapper[key],
+        )
+
+    def getitems(self, keys, on_error="return", **keyword_arguments):
+        requested_keys = list(keys)
+        fetched_values = dict(self._inner_mapper.getitems(requested_keys, on_error="return", **keyword_arguments))
+        retry_count = current_runtime_configuration().remote_retries
+        for attempt in range(1, retry_count):
+            retriable_keys = [
+                key
+                for key, value in fetched_values.items()
+                if isinstance(value, Exception) and _is_retriable_remote_data_error(value)
+            ]
+            if not retriable_keys:
+                break
+            backoff_seconds = DEFAULT_RETRY_BACKOFF_SECONDS * attempt
+            REMOTE_ZARR_LOGGER.warning(
+                "Remote zarr chunk read failed for %s key(s) (%s/%s). Retrying in %ss.",
+                len(retriable_keys),
+                attempt,
+                retry_count,
+                backoff_seconds,
+            )
+            sleep(backoff_seconds)
+            fetched_values.update(self._inner_mapper.getitems(retriable_keys, on_error="return", **keyword_arguments))
+        return _resolve_getitems_on_error(fetched_values, requested_keys, on_error)
+
+    def __setitem__(self, key, value):
+        self._inner_mapper[key] = value
+
+    def __delitem__(self, key):
+        del self._inner_mapper[key]
+
+    def __contains__(self, key):
+        return key in self._inner_mapper
+
+    def __iter__(self):
+        return iter(self._inner_mapper)
+
+    def __len__(self):
+        return len(self._inner_mapper)
+
+
+def resilient_zarr_store(url: str, **storage_options) -> zarr.storage.FSStore:
+    """Open a remote zarr store whose every metadata and chunk read retries on transient
+    network failures and rejects truncated reads, so lazy xarray/dask computation survives
+    a flaky connection without staging. Returns a drop-in replacement for the url argument
+    of ``xarray.open_zarr``/``open_dataset``/``open_mfdataset``."""
+    store = zarr.storage.FSStore(url, mode="r", **storage_options)
+    store.map = _RetryingRemoteMapper(store.map)
+    return store
