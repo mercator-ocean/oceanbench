@@ -9,7 +9,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.request import Request, urlopen
 
-from oceanbench.core.local_stage import cleanup_local_stage_directory
 from oceanbench.core.regions import RegionLike, get_pre_defined_region_names, load_region_file
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from oceanbench.core.version import __version__
@@ -121,19 +120,14 @@ def _print_results(results: list[EvaluationResult]) -> None:
 def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfiguration:
     environment_configuration = runtime_configuration_from_environment()
     return RuntimeConfiguration(
-        staged_components=(
-            tuple(args.stage) if args.stage is not None else environment_configuration.staged_components
-        ),
-        stage_directory=args.stage_dir if args.stage_dir is not None else environment_configuration.stage_directory,
-        stage_max_workers=(
-            args.stage_max_workers
-            if args.stage_max_workers is not None
-            else environment_configuration.stage_max_workers
-        ),
         remote_retries=(
             args.remote_retries if args.remote_retries is not None else environment_configuration.remote_retries
         ),
         class4_fast_interpolation=environment_configuration.class4_fast_interpolation,
+        local_cache_directory_path=(
+            args.local_cache if args.local_cache is not None else environment_configuration.local_cache_directory_path
+        ),
+        local_cache_revalidate=environment_configuration.local_cache_revalidate,
     )
 
 
@@ -166,8 +160,6 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         runtime_configuration,
         region,
     )
-    if runtime_configuration.has_local_stage() and not args.keep_stage and all(result.success for result in results):
-        cleanup_local_stage_directory(runtime_configuration.resolved_stage_directory())
     _print_results(results)
     return 0 if all(result.success for result in results) else 1
 
@@ -212,32 +204,15 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         help="Maximum number of worker processes to use for evaluation",
     )
     evaluate_parser.add_argument(
-        "--stage",
-        action="append",
-        choices=["challenger", "references", "observations", "all"],
-        help="Stage selected datasets locally before evaluation. Repeat the flag to enable multiple staging targets.",
-    )
-    evaluate_parser.add_argument(
-        "--stage-dir",
+        "--local-cache",
         default=None,
-        help="Directory used for local staging when --stage is enabled",
-    )
-    evaluate_parser.add_argument(
-        "--stage-max-workers",
-        type=int,
-        default=None,
-        help="Maximum number of worker threads used to build local stage data",
+        help="Directory used to cache downloaded and computed datasets locally between runs",
     )
     evaluate_parser.add_argument(
         "--remote-retries",
         type=int,
         default=None,
         help="Number of retries for transient remote data read failures",
-    )
-    evaluate_parser.add_argument(
-        "--keep-stage",
-        action="store_true",
-        help="Keep staged data after a successful evaluate command",
     )
     region_group = evaluate_parser.add_mutually_exclusive_group()
     region_group.add_argument(

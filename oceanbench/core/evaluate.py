@@ -9,7 +9,12 @@ from pathlib import PurePosixPath
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
 from oceanbench.core.regions import RegionLike, resolve_region
-from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
+from oceanbench.core.runtime_configuration import (
+    FALSE_ENVIRONMENT_VALUE,
+    TRUE_ENVIRONMENT_VALUE,
+    RuntimeConfiguration,
+    runtime_configuration_from_environment,
+)
 from papermill import execute_notebook
 
 
@@ -62,9 +67,10 @@ def _derive_output_notebook_file_name(
 @contextmanager
 def _runtime_configuration_environment(runtime_configuration: RuntimeConfiguration):
     environment_updates = {
-        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value: ",".join(runtime_configuration.staged_components),
-        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value: runtime_configuration.stage_directory,
-        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value: str(runtime_configuration.stage_max_workers),
+        OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value: runtime_configuration.local_cache_directory_path,
+        OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE_REVALIDATE.value: (
+            TRUE_ENVIRONMENT_VALUE if runtime_configuration.local_cache_revalidate else FALSE_ENVIRONMENT_VALUE
+        ),
         OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value: str(runtime_configuration.remote_retries),
     }
     previous_environment = {
