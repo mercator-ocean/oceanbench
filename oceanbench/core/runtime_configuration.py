@@ -24,6 +24,7 @@ class RuntimeConfiguration:
     remote_retries: int = DEFAULT_REMOTE_HTTP_RETRIES
     class4_fast_interpolation: bool = False
     local_cache_directory_path: str | None = None
+    local_cache_revalidate: bool = True
 
     def __post_init__(self):
         normalized_components = tuple(dict.fromkeys(component.strip().lower() for component in self.staged_components))
@@ -68,6 +69,10 @@ def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
     )
     stage_directory = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value) or None
     local_cache_directory_path = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value) or None
+    local_cache_revalidate = (
+        os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE_REVALIDATE.value, TRUE_ENVIRONMENT_VALUE)
+        != FALSE_ENVIRONMENT_VALUE
+    )
     stage_max_workers = int(
         os.environ.get(
             OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value,
@@ -89,6 +94,7 @@ def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
             OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_FAST_INTERPOLATION
         ),
         local_cache_directory_path=local_cache_directory_path,
+        local_cache_revalidate=local_cache_revalidate,
     )
 
 
