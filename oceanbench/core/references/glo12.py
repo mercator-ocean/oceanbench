@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import partial
 import numpy
 import pandas
-from xarray import Dataset, open_mfdataset, merge, concat
+from xarray import Dataset, merge, concat
 import logging
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.resolution import get_dataset_resolution
@@ -17,8 +17,8 @@ from oceanbench.core.reference_depths import (
     reference_depth_grid_variant,
     with_reference_depth_grid_metadata,
 )
-from oceanbench.core.reference_week import prepare_reference_week_dataset
-from oceanbench.core.remote_http import resilient_zarr_store, with_remote_http_retries
+from oceanbench.core.reference_week import open_remote_reference_weeks, prepare_reference_week_dataset
+from oceanbench.core.remote_http import with_remote_http_retries
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
@@ -37,20 +37,12 @@ def _glo12_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
 
 
 def _glo12_analysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
-    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
-    lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
-    return open_mfdataset(
-        [resilient_zarr_store(_glo12_1_4_path(first_day_datetime)) for first_day_datetime in first_day_datetimes],
-        engine="zarr",
-        preprocess=lambda dataset: prepare_reference_week_dataset(
-            dataset,
-            lead_days_count=lead_days_count,
-            operation_name="GLO12 quarter-degree dataset open",
-        ),
-        combine="nested",
-        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-        parallel=False,
-    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+    return open_remote_reference_weeks(
+        _glo12_1_4_path,
+        challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values,
+        challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()],
+        "GLO12 quarter-degree dataset open",
+    )
 
 
 def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.ndarray) -> Dataset:
@@ -144,20 +136,12 @@ def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
 
 
 def _glo12_analysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
-    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
-    lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
-    return open_mfdataset(
-        [resilient_zarr_store(_glo12_1_degree_path(first_day_datetime)) for first_day_datetime in first_day_datetimes],
-        engine="zarr",
-        preprocess=lambda dataset: prepare_reference_week_dataset(
-            dataset,
-            lead_days_count=lead_days_count,
-            operation_name="GLO12 one-degree dataset open",
-        ),
-        combine="nested",
-        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-        parallel=False,
-    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+    return open_remote_reference_weeks(
+        _glo12_1_degree_path,
+        challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values,
+        challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()],
+        "GLO12 one-degree dataset open",
+    )
 
 
 def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:

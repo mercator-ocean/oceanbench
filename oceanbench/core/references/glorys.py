@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import partial
 import numpy
 import pandas
-from xarray import Dataset, open_mfdataset, concat
+from xarray import Dataset, concat
 import logging
 import copernicusmarine
 from oceanbench.core.resolution import get_dataset_resolution
@@ -17,8 +17,8 @@ from oceanbench.core.reference_depths import (
     reference_depth_grid_variant,
     with_reference_depth_grid_metadata,
 )
-from oceanbench.core.reference_week import prepare_reference_week_dataset
-from oceanbench.core.remote_http import resilient_zarr_store, with_remote_http_retries
+from oceanbench.core.reference_week import open_remote_reference_weeks, prepare_reference_week_dataset
+from oceanbench.core.remote_http import with_remote_http_retries
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
@@ -37,20 +37,12 @@ def _glorys_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
 
 
 def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
-    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
-    lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
-    return open_mfdataset(
-        [resilient_zarr_store(_glorys_1_4_path(first_day_datetime)) for first_day_datetime in first_day_datetimes],
-        engine="zarr",
-        preprocess=lambda dataset: prepare_reference_week_dataset(
-            dataset,
-            lead_days_count=lead_days_count,
-            operation_name="GLORYS quarter-degree dataset open",
-        ),
-        combine="nested",
-        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-        parallel=False,
-    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+    return open_remote_reference_weeks(
+        _glorys_1_4_path,
+        challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values,
+        challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()],
+        "GLORYS quarter-degree dataset open",
+    )
 
 
 def _glorys_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.ndarray) -> Dataset:
@@ -116,20 +108,12 @@ def _glorys_reanalysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
 
 
 def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
-    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
-    lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
-    return open_mfdataset(
-        [resilient_zarr_store(_glorys_1_degree_path(first_day_datetime)) for first_day_datetime in first_day_datetimes],
-        engine="zarr",
-        preprocess=lambda dataset: prepare_reference_week_dataset(
-            dataset,
-            lead_days_count=lead_days_count,
-            operation_name="GLORYS one-degree dataset open",
-        ),
-        combine="nested",
-        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-        parallel=False,
-    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+    return open_remote_reference_weeks(
+        _glorys_1_degree_path,
+        challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values,
+        challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()],
+        "GLORYS one-degree dataset open",
+    )
 
 
 def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:

@@ -120,18 +120,6 @@ def with_remote_http_retries(
     raise RuntimeError(f"Remote data retries exhausted for {operation_name}")
 
 
-def _resolve_getitems_on_error(fetched_values: dict, requested_keys: list, on_error: str) -> dict:
-    if on_error == "return":
-        return fetched_values
-    if on_error == "omit":
-        return {key: value for key, value in fetched_values.items() if not isinstance(value, BaseException)}
-    for key in requested_keys:
-        value = fetched_values.get(key)
-        if isinstance(value, BaseException):
-            raise value
-    return fetched_values
-
-
 class _RetryingRemoteMapper:
     def __init__(self, inner_mapper):
         self._inner_mapper = inner_mapper
@@ -169,7 +157,7 @@ class _RetryingRemoteMapper:
             )
             sleep(backoff_seconds)
             fetched_values.update(self._inner_mapper.getitems(retriable_keys, on_error="return", **keyword_arguments))
-        return _resolve_getitems_on_error(fetched_values, requested_keys, on_error)
+        return fetched_values
 
     def __setitem__(self, key, value):
         self._inner_mapper[key] = value

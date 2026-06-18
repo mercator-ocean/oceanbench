@@ -5,7 +5,6 @@
 import numpy
 import xarray
 
-from oceanbench.core.dataset_source import DatasetSource, get_dataset_source, with_dataset_source
 from oceanbench.core.reference_depths import (
     REFERENCE_DEPTH_GRID_HASH_ATTRIBUTE,
     REFERENCE_DEPTH_GRID_ROUNDING_ATTRIBUTE,
@@ -65,22 +64,3 @@ def test_glo12_twelfth_degree_cache_key_depends_on_target_depth_grid() -> None:
     assert cache_key(xihe_variant) == cache_key(wenhai_variant)
     assert cache_key(xihe_variant) != cache_key(glo12_variant)
     assert "twelfth_degree" in cache_key(xihe_variant)
-
-
-def test_dataset_source_keeps_internal_variant_separate_from_resolution() -> None:
-    dataset = with_dataset_source(
-        xarray.Dataset(),
-        kind="reference",
-        name="glo12",
-        resolution="twelfth_degree",
-        variant="depths-23-abc",
-    )
-
-    dataset_source = get_dataset_source(dataset)
-
-    assert dataset_source == DatasetSource(
-        kind="reference",
-        name="glo12",
-        resolution="twelfth_degree",
-        variant="depths-23-abc",
-    )

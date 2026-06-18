@@ -5,7 +5,6 @@
 import numpy
 import xarray
 
-from oceanbench.core.dataset_source import DatasetSource, get_dataset_source, with_dataset_source
 from oceanbench.core.interpolate import interpolate_1_degree
 
 
@@ -34,19 +33,8 @@ def _dataset() -> xarray.Dataset:
     )
 
 
-def test_interpolate_1_degree_marks_dataset_source_as_one_degree() -> None:
-    dataset = with_dataset_source(_dataset(), kind="challenger", name="glonet")
-
-    interpolated = interpolate_1_degree(dataset)
-
-    assert get_dataset_source(interpolated) == DatasetSource(
-        kind="challenger",
-        name="glonet",
-        resolution="one_degree",
-    )
-
-
-def test_interpolate_1_degree_preserves_missing_dataset_source() -> None:
+def test_interpolate_1_degree_produces_a_one_degree_grid() -> None:
     interpolated = interpolate_1_degree(_dataset())
 
-    assert get_dataset_source(interpolated) is None
+    assert interpolated["latitude"].values.tolist() == [-0.5, 0.5]
+    assert interpolated["longitude"].values.tolist() == [10.5, 11.5]
