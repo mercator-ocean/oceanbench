@@ -142,21 +142,16 @@ def test_resilient_zarr_store_wraps_the_chunk_mapper() -> None:
 def test_resilient_zarr_store_is_pure_online_without_local_cache(monkeypatch) -> None:
     monkeypatch.delenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, raising=False)
     store = resilient_zarr_store("memory://online-only-test")
-    assert "Cach" not in type(store.fs).__name__
-    assert isinstance(store.map, _RetryingRemoteMapper)
+    assert store.map._cache_directory is None
 
 
-def test_resilient_zarr_store_caches_locally_without_a_shared_index(monkeypatch, tmp_path) -> None:
+def test_resilient_zarr_store_caches_in_the_mapper_when_configured(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, str(tmp_path))
     store = resilient_zarr_store("memory://locally-cached-test")
-    # SimpleCacheFileSystem persists no shared metadata index, so concurrent dask chunk
-    # reads cannot race on it (the failure mode of fsspec filecache).
-    assert type(store.fs).__name__ == "SimpleCacheFileSystem"
-    assert str(tmp_path) in store.fs.storage
-    assert isinstance(store.map, _RetryingRemoteMapper)
+    assert store.map._cache_directory == tmp_path
 
 
-def test_resilient_zarr_store_caches_and_reuses_reads(monkeypatch, tmp_path) -> None:
+def test_resilient_zarr_store_caches_complete_reads_and_reuses_them(monkeypatch, tmp_path) -> None:
     import numpy
     import xarray
 
@@ -169,3 +164,23 @@ def test_resilient_zarr_store_caches_and_reuses_reads(monkeypatch, tmp_path) -> 
 
     assert cached_read["x"].values.tolist() == [0.0, 1.0, 2.0]
     assert any(cache_path.rglob("*"))
+
+
+def test_resilient_mapper_only_caches_a_complete_retried_value(monkeypatch, tmp_path) -> None:
+    _configure_fast_retries(monkeypatch)
+    transient_error = FakeAiohttpPayloadError("Response payload is not completed")
+    scripted_mapper = _ScriptedMapper(
+        [
+            {"0.0": transient_error},
+            {"0.0": b"complete-chunk"},
+        ]
+    )
+    scripted_mapper._key_to_str = lambda key: f"memory://dataset/{key}"
+    resilient_mapper = _RetryingRemoteMapper(scripted_mapper, cache_directory=tmp_path)
+
+    result = resilient_mapper.getitems(["0.0"], on_error="return")
+
+    assert result == {"0.0": b"complete-chunk"}
+    cached_files = [path for path in tmp_path.rglob("*") if path.is_file()]
+    assert len(cached_files) == 1
+    assert cached_files[0].read_bytes() == b"complete-chunk"

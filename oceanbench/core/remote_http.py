@@ -6,9 +6,11 @@ from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from time import sleep
 from typing import TypeVar
+import hashlib
 import logging
+import os
+import threading
 
-import fsspec
 import zarr
 
 from oceanbench.core.runtime_configuration import current_runtime_configuration
@@ -121,23 +123,60 @@ def with_remote_http_retries(
 
 
 class _RetryingRemoteMapper:
-    def __init__(self, inner_mapper):
+    def __init__(self, inner_mapper, cache_directory: Path | None = None):
         self._inner_mapper = inner_mapper
+        self._cache_directory = cache_directory
 
     def __getattr__(self, name):
-        if name == "_inner_mapper" or (name.startswith("__") and name.endswith("__")):
+        if name in ("_inner_mapper", "_cache_directory") or (name.startswith("__") and name.endswith("__")):
             raise AttributeError(name)
         return getattr(self._inner_mapper, name)
 
+    def _cache_path(self, key) -> Path:
+        identity = hashlib.sha1(self._inner_mapper._key_to_str(key).encode()).hexdigest()
+        return self._cache_directory / identity[:2] / identity
+
+    def _cached_value(self, key) -> bytes | None:
+        if self._cache_directory is None:
+            return None
+        cache_path = self._cache_path(key)
+        return cache_path.read_bytes() if cache_path.exists() else None
+
+    def _store_cached_value(self, key, value) -> None:
+        if self._cache_directory is None or not isinstance(value, (bytes, bytearray)):
+            return
+        cache_path = self._cache_path(key)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = cache_path.with_name(f"{cache_path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        temporary_path.write_bytes(value)
+        os.replace(temporary_path, cache_path)
+
     def __getitem__(self, key):
-        return with_remote_http_retries(
-            f"remote zarr key read '{key}'",
-            lambda: self._inner_mapper[key],
-        )
+        cached_value = self._cached_value(key)
+        if cached_value is not None:
+            return cached_value
+        value = with_remote_http_retries(f"remote zarr key read '{key}'", lambda: self._inner_mapper[key])
+        self._store_cached_value(key, value)
+        return value
 
     def getitems(self, keys, on_error="return", **keyword_arguments):
-        requested_keys = list(keys)
-        fetched_values = dict(self._inner_mapper.getitems(requested_keys, on_error="return", **keyword_arguments))
+        results = {}
+        keys_to_fetch = []
+        for key in keys:
+            cached_value = self._cached_value(key)
+            if cached_value is not None:
+                results[key] = cached_value
+            else:
+                keys_to_fetch.append(key)
+        for key, value in self._fetch_with_retries(keys_to_fetch, **keyword_arguments).items():
+            self._store_cached_value(key, value)
+            results[key] = value
+        return results
+
+    def _fetch_with_retries(self, keys, **keyword_arguments) -> dict:
+        if not keys:
+            return {}
+        fetched_values = dict(self._inner_mapper.getitems(list(keys), on_error="return", **keyword_arguments))
         retry_count = current_runtime_configuration().remote_retries
         for attempt in range(1, retry_count):
             retriable_keys = [
@@ -175,29 +214,19 @@ class _RetryingRemoteMapper:
         return len(self._inner_mapper)
 
 
-def _locally_cached_zarr_store(url: str, cache_directory: Path, storage_options: dict) -> zarr.storage.FSStore:
-    chained_storage_options: dict = {"simplecache": {"cache_storage": str(cache_directory)}}
-    if storage_options:
-        target_protocol = fsspec.core.split_protocol(url)[0] or "file"
-        chained_storage_options[target_protocol] = storage_options
-    return zarr.storage.FSStore(f"simplecache::{url}", mode="r", **chained_storage_options)
-
-
 def resilient_zarr_store(url: str, **storage_options) -> zarr.storage.FSStore:
     """Open a remote zarr store whose every metadata and chunk read retries on transient
-    network failures and rejects truncated reads, so lazy xarray/dask computation survives
-    a flaky connection without staging. Returns a drop-in replacement for the url argument
-    of ``xarray.open_zarr``/``open_dataset``/``open_mfdataset``.
+    network failures, so lazy xarray/dask computation survives a flaky connection without
+    staging. Returns a drop-in replacement for the url argument of
+    ``xarray.open_zarr``/``open_dataset``/``open_mfdataset``.
 
-    When the ``OCEANBENCH_LOCAL_CACHE`` directory is configured, reads are additionally
-    persisted there and reused across runs, so the same opener serves both the pure-online
-    and the local-cache modes without the caller branching. The cache keeps no shared index
-    (fsspec ``simplecache``), so concurrent dask chunk reads are safe; it is keyed by source
-    URL, so point it at a fresh directory when a dataset is republished at the same URL."""
+    When the ``OCEANBENCH_LOCAL_CACHE`` directory is configured, each fetched chunk is
+    additionally persisted there -- only after a complete, retried read, written atomically
+    -- and reused across runs, so the same opener serves both the pure-online and the
+    local-cache modes without the caller branching. The cache holds one file per chunk with
+    no shared index, so concurrent dask reads are safe; it is keyed by source URL, so point
+    it at a fresh directory when a dataset is republished at the same URL."""
     cache_directory = current_runtime_configuration().local_cache_directory()
-    if cache_directory is None:
-        store = zarr.storage.FSStore(url, mode="r", **storage_options)
-    else:
-        store = _locally_cached_zarr_store(url, cache_directory, storage_options)
-    store.map = _RetryingRemoteMapper(store.map)
+    store = zarr.storage.FSStore(url, mode="r", **storage_options)
+    store.map = _RetryingRemoteMapper(store.map, cache_directory)
     return store
