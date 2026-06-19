@@ -18,7 +18,6 @@ class RuntimeConfiguration:
     remote_retries: int = DEFAULT_REMOTE_HTTP_RETRIES
     class4_fast_interpolation: bool = False
     local_cache_directory_path: str | None = None
-    local_cache_revalidate: bool = True
 
     def __post_init__(self):
         if self.remote_retries < 1:
@@ -41,10 +40,6 @@ def _parse_zero_one_environment_variable(environment_variable: OceanbenchEnviron
 
 def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
     local_cache_directory_path = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value) or None
-    local_cache_revalidate = (
-        os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE_REVALIDATE.value, TRUE_ENVIRONMENT_VALUE)
-        != FALSE_ENVIRONMENT_VALUE
-    )
     remote_retries = int(
         os.environ.get(
             OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value,
@@ -57,7 +52,6 @@ def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
             OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_FAST_INTERPOLATION
         ),
         local_cache_directory_path=local_cache_directory_path,
-        local_cache_revalidate=local_cache_revalidate,
     )
 
 

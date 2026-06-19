@@ -146,39 +146,26 @@ def test_resilient_zarr_store_is_pure_online_without_local_cache(monkeypatch) ->
     assert isinstance(store.map, _RetryingRemoteMapper)
 
 
-def test_resilient_zarr_store_caches_locally_when_configured(monkeypatch, tmp_path) -> None:
+def test_resilient_zarr_store_caches_locally_without_a_shared_index(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, str(tmp_path))
     store = resilient_zarr_store("memory://locally-cached-test")
-    assert "Cach" in type(store.fs).__name__
+    # SimpleCacheFileSystem persists no shared metadata index, so concurrent dask chunk
+    # reads cannot race on it (the failure mode of fsspec filecache).
+    assert type(store.fs).__name__ == "SimpleCacheFileSystem"
     assert str(tmp_path) in store.fs.storage
     assert isinstance(store.map, _RetryingRemoteMapper)
 
 
-def test_resilient_zarr_store_revalidates_cache_by_default(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, str(tmp_path))
-    monkeypatch.delenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE_REVALIDATE.value, raising=False)
-    store = resilient_zarr_store("memory://revalidated-cache-test")
-    assert store.fs.check_files is True
-
-
-def test_resilient_zarr_store_revalidation_can_be_disabled(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, str(tmp_path))
-    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE_REVALIDATE.value, "0")
-    store = resilient_zarr_store("memory://stale-cache-test")
-    assert store.fs.check_files is False
-
-
-def test_resilient_zarr_store_refetches_a_changed_source(monkeypatch, tmp_path) -> None:
+def test_resilient_zarr_store_caches_and_reuses_reads(monkeypatch, tmp_path) -> None:
     import numpy
     import xarray
 
     source_path = tmp_path / "source.zarr"
-    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, str(tmp_path / "cache"))
+    cache_path = tmp_path / "cache"
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, str(cache_path))
 
     xarray.Dataset({"x": ("a", numpy.arange(3.0))}).to_zarr(source_path, mode="w")
-    first_read = xarray.open_dataset(resilient_zarr_store(f"file://{source_path}"), engine="zarr")
-    assert first_read["x"].values.tolist() == [0.0, 1.0, 2.0]
+    cached_read = xarray.open_dataset(resilient_zarr_store(f"file://{source_path}"), engine="zarr")
 
-    xarray.Dataset({"x": ("a", numpy.arange(10.0, 13.0))}).to_zarr(source_path, mode="w")
-    refreshed_read = xarray.open_dataset(resilient_zarr_store(f"file://{source_path}"), engine="zarr")
-    assert refreshed_read["x"].values.tolist() == [10.0, 11.0, 12.0]
+    assert cached_read["x"].values.tolist() == [0.0, 1.0, 2.0]
+    assert any(cache_path.rglob("*"))

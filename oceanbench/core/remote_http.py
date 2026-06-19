@@ -175,14 +175,12 @@ class _RetryingRemoteMapper:
         return len(self._inner_mapper)
 
 
-def _locally_cached_zarr_store(
-    url: str, cache_directory: Path, revalidate: bool, storage_options: dict
-) -> zarr.storage.FSStore:
-    chained_storage_options: dict = {"filecache": {"cache_storage": str(cache_directory), "check_files": revalidate}}
+def _locally_cached_zarr_store(url: str, cache_directory: Path, storage_options: dict) -> zarr.storage.FSStore:
+    chained_storage_options: dict = {"simplecache": {"cache_storage": str(cache_directory)}}
     if storage_options:
         target_protocol = fsspec.core.split_protocol(url)[0] or "file"
         chained_storage_options[target_protocol] = storage_options
-    return zarr.storage.FSStore(f"filecache::{url}", mode="r", **chained_storage_options)
+    return zarr.storage.FSStore(f"simplecache::{url}", mode="r", **chained_storage_options)
 
 
 def resilient_zarr_store(url: str, **storage_options) -> zarr.storage.FSStore:
@@ -192,17 +190,14 @@ def resilient_zarr_store(url: str, **storage_options) -> zarr.storage.FSStore:
     of ``xarray.open_zarr``/``open_dataset``/``open_mfdataset``.
 
     When the ``OCEANBENCH_LOCAL_CACHE`` directory is configured, reads are additionally
-    persisted there (per chunk) and reused across runs, so the same opener serves both the
-    pure-online and the local-cache modes without the caller branching. Unless
-    ``OCEANBENCH_LOCAL_CACHE_REVALIDATE`` is disabled, each cached read is revalidated
-    against the source so a changed dataset is refetched instead of served stale."""
-    runtime_configuration = current_runtime_configuration()
-    cache_directory = runtime_configuration.local_cache_directory()
+    persisted there and reused across runs, so the same opener serves both the pure-online
+    and the local-cache modes without the caller branching. The cache keeps no shared index
+    (fsspec ``simplecache``), so concurrent dask chunk reads are safe; it is keyed by source
+    URL, so point it at a fresh directory when a dataset is republished at the same URL."""
+    cache_directory = current_runtime_configuration().local_cache_directory()
     if cache_directory is None:
         store = zarr.storage.FSStore(url, mode="r", **storage_options)
     else:
-        store = _locally_cached_zarr_store(
-            url, cache_directory, runtime_configuration.local_cache_revalidate, storage_options
-        )
+        store = _locally_cached_zarr_store(url, cache_directory, storage_options)
     store.map = _RetryingRemoteMapper(store.map)
     return store

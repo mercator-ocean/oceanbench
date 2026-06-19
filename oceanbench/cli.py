@@ -127,7 +127,6 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
         local_cache_directory_path=(
             args.local_cache if args.local_cache is not None else environment_configuration.local_cache_directory_path
         ),
-        local_cache_revalidate=environment_configuration.local_cache_revalidate,
     )
 
 
