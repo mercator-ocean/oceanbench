@@ -30,6 +30,12 @@ RETRIABLE_HTTP_STATUS_CODES = (408, 429, 500, 502, 503, 504)
 NON_RETRIABLE_HTTP_STATUS_CODES = (400, 401, 403, 404, 405, 409, 410, 416, 422)
 
 REMOTE_ZARR_LOGGER = logging.getLogger(__name__)
+# Keep transparent retries out of generated report notebooks: a Jupyter kernel captures
+# every stderr write into the executing cell, so a retry warning would otherwise be baked
+# into the published report. A successful retry needs no report output; a failed one still
+# raises and surfaces a real traceback.
+REMOTE_ZARR_LOGGER.addHandler(logging.NullHandler())
+REMOTE_ZARR_LOGGER.propagate = False
 
 CALLBACK_RESULT = TypeVar("CALLBACK_RESULT")
 DATASET = TypeVar("DATASET")
