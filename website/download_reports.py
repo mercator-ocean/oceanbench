@@ -3,8 +3,10 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 from helpers.s3_discovery import (
+    MAXIMUM_PARALLEL_REQUESTS,
     available_versions,
     default_version,
     discover_downloaded_reports,
@@ -33,17 +35,24 @@ def _download_version_reports(version: str) -> bool:
     version_directory = os.path.join(REPORTS_DIRECTORY, version)
     published_reports = discover_official_reports(version)
     print(f"[{version}] discovered reports: {published_reports}")
-    downloaded_any_report = False
-    for region_id, challengers in published_reports.items():
-        for challenger_name in challengers:
-            print(f"Downloading {version}/{challenger_name}.{region_id}...", end=" ")
-            result = download_notebook(version, challenger_name, region_id, version_directory)
-            if not result:
-                print("FAILED")
-                raise RuntimeError(f"Failed to download notebook for {version}/{challenger_name}.{region_id}.")
-            print(f"OK -> {result}")
-            downloaded_any_report = True
-    return downloaded_any_report
+    pending_reports = [
+        (challenger_name, region_id)
+        for region_id, challenger_names in published_reports.items()
+        for challenger_name in challenger_names
+    ]
+
+    def download(report: tuple[str, str]) -> str | None:
+        challenger_name, region_id = report
+        return download_notebook(version, challenger_name, region_id, version_directory)
+
+    with ThreadPoolExecutor(max_workers=MAXIMUM_PARALLEL_REQUESTS) as pool:
+        downloaded_paths = list(pool.map(download, pending_reports))
+
+    for (challenger_name, region_id), downloaded_path in zip(pending_reports, downloaded_paths):
+        if not downloaded_path:
+            raise RuntimeError(f"Failed to download notebook for {version}/{challenger_name}.{region_id}.")
+        print(f"Downloaded {version}/{challenger_name}.{region_id} -> {downloaded_path}")
+    return bool(pending_reports)
 
 
 def main() -> None:
