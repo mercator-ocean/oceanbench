@@ -4,7 +4,12 @@
 
 from oceanbench.core.classIV_support import _compute_with_remote_retries
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.remote_http import with_remote_http_retries
+from oceanbench.core.remote_http import (
+    _RetryingRemoteMapper,
+    _is_retriable_remote_data_error,
+    resilient_zarr_store,
+    with_remote_http_retries,
+)
 
 
 class FakeAiohttpPayloadError(Exception):
@@ -12,6 +17,25 @@ class FakeAiohttpPayloadError(Exception):
 
 
 FakeAiohttpPayloadError.__module__ = "aiohttp.client_exceptions"
+
+
+class FakeAiohttpResponseError(Exception):
+    def __init__(self, status: int) -> None:
+        super().__init__(f"HTTP {status}")
+        self.status = status
+
+
+FakeAiohttpResponseError.__module__ = "aiohttp.client_exceptions"
+
+
+class _ScriptedMapper:
+    def __init__(self, scripted_getitems_results: list[dict]) -> None:
+        self._scripted_getitems_results = scripted_getitems_results
+        self.getitems_calls: list[list[str]] = []
+
+    def getitems(self, keys, on_error="return"):
+        self.getitems_calls.append(list(keys))
+        return self._scripted_getitems_results.pop(0)
 
 
 def _configure_fast_retries(monkeypatch) -> None:
@@ -51,3 +75,112 @@ def test_class4_compute_uses_remote_http_retries(monkeypatch) -> None:
 
     assert _compute_with_remote_retries("Class IV model read", remote_backed_array) == "loaded"
     assert remote_backed_array.calls == 2
+
+
+def test_resilient_mapper_retries_only_the_transiently_failed_chunk(monkeypatch) -> None:
+    _configure_fast_retries(monkeypatch)
+    transient_error = FakeAiohttpPayloadError("Response payload is not completed")
+    scripted_mapper = _ScriptedMapper(
+        [
+            {"0.0": b"chunk-a", "0.1": transient_error},
+            {"0.1": b"chunk-b"},
+        ]
+    )
+    resilient_mapper = _RetryingRemoteMapper(scripted_mapper)
+
+    result = resilient_mapper.getitems(["0.0", "0.1"], on_error="return")
+
+    assert result == {"0.0": b"chunk-a", "0.1": b"chunk-b"}
+    assert scripted_mapper.getitems_calls == [["0.0", "0.1"], ["0.1"]]
+
+
+def test_resilient_mapper_passes_missing_chunk_through_without_retry(monkeypatch) -> None:
+    _configure_fast_retries(monkeypatch)
+    missing_chunk_error = KeyError("0.2")
+    scripted_mapper = _ScriptedMapper([{"0.0": b"chunk-a", "0.2": missing_chunk_error}])
+    resilient_mapper = _RetryingRemoteMapper(scripted_mapper)
+
+    result = resilient_mapper.getitems(["0.0", "0.2"], on_error="return")
+
+    assert result["0.0"] == b"chunk-a"
+    assert isinstance(result["0.2"], KeyError)
+    assert scripted_mapper.getitems_calls == [["0.0", "0.2"]]
+
+
+def test_resilient_mapper_getitem_retries_transient_failure(monkeypatch) -> None:
+    _configure_fast_retries(monkeypatch)
+
+    class FlakyMapper:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __getitem__(self, key: str) -> bytes:
+            self.calls += 1
+            if self.calls == 1:
+                raise FakeAiohttpPayloadError("Server disconnected")
+            return b"value"
+
+    flaky_mapper = FlakyMapper()
+    resilient_mapper = _RetryingRemoteMapper(flaky_mapper)
+
+    assert resilient_mapper["x"] == b"value"
+    assert flaky_mapper.calls == 2
+
+
+def test_http_status_codes_decide_retriability() -> None:
+    assert _is_retriable_remote_data_error(FakeAiohttpResponseError(502)) is True
+    assert _is_retriable_remote_data_error(FakeAiohttpResponseError(503)) is True
+    assert _is_retriable_remote_data_error(FakeAiohttpResponseError(403)) is False
+    assert _is_retriable_remote_data_error(FakeAiohttpResponseError(404)) is False
+
+
+def test_resilient_zarr_store_wraps_the_chunk_mapper() -> None:
+    store = resilient_zarr_store("memory://resilient-zarr-store-test")
+    assert isinstance(store.map, _RetryingRemoteMapper)
+
+
+def test_resilient_zarr_store_is_pure_online_without_local_cache(monkeypatch) -> None:
+    monkeypatch.delenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, raising=False)
+    store = resilient_zarr_store("memory://online-only-test")
+    assert store.map._cache_directory is None
+
+
+def test_resilient_zarr_store_caches_in_the_mapper_when_configured(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, str(tmp_path))
+    store = resilient_zarr_store("memory://locally-cached-test")
+    assert store.map._cache_directory == tmp_path
+
+
+def test_resilient_zarr_store_caches_complete_reads_and_reuses_them(monkeypatch, tmp_path) -> None:
+    import numpy
+    import xarray
+
+    source_path = tmp_path / "source.zarr"
+    cache_path = tmp_path / "cache"
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value, str(cache_path))
+
+    xarray.Dataset({"x": ("a", numpy.arange(3.0))}).to_zarr(source_path, mode="w")
+    cached_read = xarray.open_dataset(resilient_zarr_store(f"file://{source_path}"), engine="zarr")
+
+    assert cached_read["x"].values.tolist() == [0.0, 1.0, 2.0]
+    assert any(cache_path.rglob("*"))
+
+
+def test_resilient_mapper_only_caches_a_complete_retried_value(monkeypatch, tmp_path) -> None:
+    _configure_fast_retries(monkeypatch)
+    transient_error = FakeAiohttpPayloadError("Response payload is not completed")
+    scripted_mapper = _ScriptedMapper(
+        [
+            {"0.0": transient_error},
+            {"0.0": b"complete-chunk"},
+        ]
+    )
+    scripted_mapper._key_to_str = lambda key: f"memory://dataset/{key}"
+    resilient_mapper = _RetryingRemoteMapper(scripted_mapper, cache_directory=tmp_path)
+
+    result = resilient_mapper.getitems(["0.0"], on_error="return")
+
+    assert result == {"0.0": b"complete-chunk"}
+    cached_files = [path for path in tmp_path.rglob("*") if path.is_file()]
+    assert len(cached_files) == 1
+    assert cached_files[0].read_bytes() == b"complete-chunk"

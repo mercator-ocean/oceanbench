@@ -62,9 +62,7 @@ def _derive_output_notebook_file_name(
 @contextmanager
 def _runtime_configuration_environment(runtime_configuration: RuntimeConfiguration):
     environment_updates = {
-        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value: ",".join(runtime_configuration.staged_components),
-        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value: runtime_configuration.stage_directory,
-        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value: str(runtime_configuration.stage_max_workers),
+        OceanbenchEnvironmentVariable.OCEANBENCH_LOCAL_CACHE.value: runtime_configuration.local_cache_directory_path,
         OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value: str(runtime_configuration.remote_retries),
     }
     previous_environment = {

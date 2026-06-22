@@ -81,8 +81,8 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(mo
     ]
 
 
-def test_observations_stage_path_uses_overlap_safe_version() -> None:
+def test_observations_selection_cache_key_uses_overlap_safe_version() -> None:
     assert (
-        observations._observations_stage_path("2024-01-03", "2025-01-03", 10).name
-        == "observations-v3-20240103-20250103-10d.zarr"
+        observations._observations_selection_cache_key("2024-01-03", "2025-01-03", 10)
+        == "observations-v3-20240103-20250103-10d"
     )
