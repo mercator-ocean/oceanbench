@@ -21,6 +21,7 @@ from oceanbench.core.interpolate import interpolate_1_degree
 _CLOUDFERRO_ML_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs"
 _GLO12_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data/GLO12"
 _GLO12_FORECAST_VARIABLE_NAMES = ["so", "thetao", "uo", "vo", "zos"]
+_LANGYA_LEAD_DAYS_COUNT = 7
 
 
 def _default_first_day_datetimes() -> list[datetime]:
@@ -136,6 +137,21 @@ def _wenhai_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/wenhai/{start_datetime_string}.zarr"
 
 
+def langya() -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _langya_dataset_path, lead_days_count=_LANGYA_LEAD_DAYS_COUNT
+    )
+
+
+def langya_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(langya())
+
+
+def _langya_dataset_path(start_datetime: datetime) -> str:
+    start_datetime_string = start_datetime.strftime("%Y%m%d")
+    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/langya/{start_datetime_string}.zarr"
+
+
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:
     return forecast_zarr_path_from_start_datetime.__name__.removeprefix("_").replace("_dataset_path", "")
 
@@ -192,6 +208,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
     *,
     first_day_datetimes: list[datetime] | None = None,
     preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None = None,
+    lead_days_count: int = LEAD_DAYS_COUNT,
 ) -> xarray.Dataset:
     resolved_first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes)
     dataset_name = _challenger_dataset_name(forecast_zarr_path_from_start_datetime)
@@ -202,7 +219,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
             dataset_kind="challenger",
             dataset_name=dataset_name,
             first_day_datetimes=resolved_first_day_datetimes,
-            lead_days_count=LEAD_DAYS_COUNT,
+            lead_days_count=lead_days_count,
             open_week_dataset=lambda first_day_datetime: _prepared_challenger_week_dataset(
                 _opened_challenger_week_dataset(
                     forecast_zarr_path_from_start_datetime,

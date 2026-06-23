@@ -83,6 +83,26 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1°",
     },
+    "langya": {
+        "label": "LangYa",
+        "url": "https://arxiv.org/abs/2412.18097",
+        "organisation": "IOCAS",
+        "organisation_url": "http://english.qdio.cas.cn/",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12/IFS",
+        "resolution": "1/12°",
+    },
+    "langya_1_degree": {
+        "label": "LangYa",
+        "url": "https://arxiv.org/abs/2412.18097",
+        "organisation": "IOCAS",
+        "organisation_url": "http://english.qdio.cas.cn/",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12/IFS",
+        "resolution": "1°",
+    },
 }
 
 
