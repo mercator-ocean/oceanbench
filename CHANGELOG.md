@@ -28,6 +28,7 @@ is unchanged from 0.2.0.
 
 ### Challengers
 
+- 2026-06-23 — LangYa added: a machine-learning model from IOCAS producing 7-day global ocean forecasts initialized from GLO12 nowcasts and IFS atmospheric forcings.
 - 2026-06-16 — GLONET, XiHe and WenHai forecasts recomputed with updated GLO12 nowcasts and IFS atmospheric forcings. For WenHai this resolves the surface-forcing issue reported in [#269](https://github.com/mercator-ocean/oceanbench/issues/269): the model is now forced with net shortwave radiation, replacing the previously corrupted shortwave input that had inflated its error.
 - 2026-06-16 — GLO12 now reads the full GLO12 operational forecast (50 depth levels), replacing the previous reduced-depth product.
 
