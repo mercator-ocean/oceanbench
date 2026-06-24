@@ -85,9 +85,19 @@ CHALLENGERS = {
     },
     "langya": {
         "label": "LangYa",
+        "resolution": "1/12°",
     },
     "langya_1_degree": {
         "label": "LangYa",
+        "resolution": "1°",
+    },
+    "langya_broken_random_weights": {
+        "label": "LangYa (old - load bug)",
+        "resolution": "1/12°",
+    },
+    "langya_broken_random_weights_1_degree": {
+        "label": "LangYa (old - load bug)",
+        "resolution": "1°",
     },
 }
 
