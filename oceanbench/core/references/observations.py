@@ -8,10 +8,16 @@ import numpy
 import pandas
 from xarray import Dataset, open_dataset, open_mfdataset
 
-from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
+from oceanbench.core.climate_forecast_standard_names import (
+    rename_dataset_with_standard_names,
+)
+from oceanbench.core.cloudferro import cloudferro_public_url, zarr_open_kwargs
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.evaluation_year import DEFAULT_EVALUATION_YEAR, validate_evaluation_year
+from oceanbench.core.evaluation_year import (
+    DEFAULT_EVALUATION_YEAR,
+    validate_evaluation_year,
+)
 from oceanbench.core.local_stage import (
     local_stage_directory,
     open_or_create_local_stage_dataset,
@@ -26,6 +32,7 @@ from oceanbench.core.remote_http import (
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2023-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
+_CLOUDFERRO_OBSERVATION_YEARS = (2023, 2025)
 
 
 class ObservationDataUnavailableError(ValueError):
@@ -98,6 +105,8 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
 def observation_path(day_datetime: numpy.datetime64, evaluation_year: int = DEFAULT_EVALUATION_YEAR) -> str:
     resolved_evaluation_year = validate_evaluation_year(evaluation_year)
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
+    if resolved_evaluation_year in _CLOUDFERRO_OBSERVATION_YEARS:
+        return cloudferro_public_url(f"observations{resolved_evaluation_year}", f"{day_string}.zarr")
     return (
         "https://minio.dive.edito.eu/project-oceanbench/public/"
         f"observations{resolved_evaluation_year}/{day_string}.zarr"
@@ -173,13 +182,15 @@ def _selected_observations_dataset(
     observation_dimension_key = "observations"
     first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
 
+    observation_paths = [observation_path(observation_day, evaluation_year) for observation_day in observation_days]
     observations_dataset = open_mfdataset(
-        [observation_path(observation_day, evaluation_year) for observation_day in observation_days],
+        observation_paths,
         engine="zarr",
         decode_cf=False,
         parallel=False,
         concat_dim=source_observation_dimension_key,
         combine="nested",
+        **zarr_open_kwargs(observation_paths[0]),
     )
     observations_dataset = require_remote_dataset_dimensions(
         observations_dataset,

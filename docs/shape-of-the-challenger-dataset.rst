@@ -10,13 +10,13 @@ Shape of the challenger dataset
 
 For people familiar with Python, `xarray <https://docs.xarray.dev/en/stable/index.html>`_ and `dask <https://www.dask.org/>`_, the fastest way to get an idea of the required challenger datacube is to look at `this notebook <https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.report.ipynb>`_.
 In addition, you can open and explore the official challenger datasets by using the ``oceanbench.datasets.challenger`` module, the documentation is `here <https://oceanbench.readthedocs.io/en/latest/source/oceanbench.datasets.html#module-oceanbench.datasets.challenger>`_.
-The module also exposes the official challenger datasets interpolated to 1 degree: ``glo12_1_degree``, ``glonet_1_degree``, ``wenhai_1_degree`` and ``xihe_1_degree``.
+The module also exposes the official challenger datasets interpolated to 1 degree: ``glo12_1_degree``, ``glonet_1_degree``, ``langya_1_degree``, ``wenhai_1_degree`` and ``xihe_1_degree``.
 
 The following figure provides an illustration of the shape of a challenger dataset at 1/12° resolution.
 
 .. image:: shape-of-the-challenger-dataset.png
 
-The challenger dataset must contain all 10-day forecasts starting on the 52 Wednesdays of the year 2024.
+The challenger dataset must contain forecasts starting on each Wednesday of the selected evaluation year: 52 Wednesdays for 2023 and 2024, and 53 Wednesdays for 2025.
 
 Hence, it must be a datacube with at least 5 dimensions and 5 variables as defined in the `Climate and Forecast Convention (CF) <https://cfconventions.org>`_.
 
@@ -25,7 +25,7 @@ Dimensions:
 - Latitude (standard grid)
 - Longitude (standard grid)
 - Depth (positive depth level in the ocean)
-- Lead day index (from 0 to 9, corresponding to the 10 days of forecasts)
+- Lead day index (from 0 to the last available forecast lead day)
 - First day datetime (datetime of the first day of forecast)
 
 Variables:

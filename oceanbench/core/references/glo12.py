@@ -7,25 +7,47 @@ import numpy
 import pandas
 from xarray import Dataset, open_dataset, open_mfdataset, merge, concat
 import logging
+from oceanbench.core.cloudferro import cloudferro_public_url, zarr_open_kwargs
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.resolution import get_dataset_resolution
 import copernicusmarine
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
 from oceanbench.core.remote_http import with_remote_http_retries
-from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_reference_week_dataset
+from oceanbench.core.weekly_stage import (
+    maybe_stage_weekly_dataset,
+    prepare_reference_week_dataset,
+)
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
 _GLO12_ANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
+_CLOUDFERRO_REFERENCE_YEARS = (2023, 2025)
+
+
+def _use_cloudferro_reference(first_day_datetime: numpy.datetime64) -> bool:
+    return pandas.Timestamp(first_day_datetime).year in _CLOUDFERRO_REFERENCE_YEARS
+
+
+def _cloudferro_reference_path(reference_name: str, first_day_datetime: numpy.datetime64) -> str:
+    first_day = pandas.Timestamp(first_day_datetime)
+    return cloudferro_public_url(
+        "references",
+        f"{reference_name}_{first_day.year}",
+        f"{first_day.strftime('%Y%m%d')}.zarr",
+    )
 
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
+    if _use_cloudferro_reference(first_day_datetime):
+        return _cloudferro_reference_path("glo12_quarter_degree", first_day_datetime)
     first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
     return f"https://minio.dive.edito.eu/project-oceanbench/public/glo14/{first_day}.zarr"
 
 
 def _glo12_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
+    if _use_cloudferro_reference(first_day_datetime):
+        return _cloudferro_reference_path("glo12_one_degree", first_day_datetime)
     first_day_datetime = datetime.fromisoformat(str(first_day_datetime))
     first_day = first_day_datetime.strftime("%Y%m%d")
     return (
@@ -45,27 +67,25 @@ def _glo12_analysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
         open_week_dataset=lambda first_day_datetime: prepare_reference_week_dataset(
-            open_dataset(_glo12_1_4_path(first_day_datetime), engine="zarr"),
+            _open_zarr_dataset(_glo12_1_4_path(first_day_datetime)),
             lead_days_count=lead_days_count,
             operation_name="GLO12 quarter-degree dataset open",
         ),
-        open_remote_dataset=lambda: open_mfdataset(
+        open_remote_dataset=lambda: _open_weekly_reference_dataset(
             list(map(_glo12_1_4_path, first_day_datetimes)),
-            engine="zarr",
-            preprocess=lambda dataset: prepare_reference_week_dataset(
-                dataset,
-                lead_days_count=lead_days_count,
-                operation_name="GLO12 quarter-degree dataset open",
-            ),
-            combine="nested",
-            concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-            parallel=False,
-        ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes}),
+            first_day_datetimes,
+            lead_days_count,
+            "GLO12 quarter-degree dataset open",
+        ),
         resolution="quarter_degree",
     )
 
 
 def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.ndarray) -> Dataset:
+    if _use_cloudferro_reference(first_day_datetime):
+        return _open_zarr_dataset(_cloudferro_reference_path("glo12_one_twelfth_degree", first_day_datetime)).sel(
+            depth=target_depths, method="nearest"
+        )
     first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
 
     start_datetime = first_day.strftime("%Y-%m-%dT00:00:00")
@@ -108,7 +128,14 @@ def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.n
     dataset_salinity = dataset_salinity.sel(depth=target_depths, method="nearest")
     dataset_current = dataset_current.sel(depth=target_depths, method="nearest")
 
-    dataset = merge([dataset_temperature, dataset_salinity, dataset_current, dataset_sea_surface_height])
+    dataset = merge(
+        [
+            dataset_temperature,
+            dataset_salinity,
+            dataset_current,
+            dataset_sea_surface_height,
+        ]
+    )
 
     return dataset
 
@@ -122,7 +149,11 @@ def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
     def open_remote_dataset() -> Dataset:
         datasets = []
         for first_day_datetime in first_day_datetimes:
-            dataset = _glo12_1_12_path(first_day_datetime, days_count=lead_days_count, target_depths=target_depths)
+            dataset = _glo12_1_12_path(
+                first_day_datetime,
+                days_count=lead_days_count,
+                target_depths=target_depths,
+            )
             dataset = prepare_reference_week_dataset(
                 dataset,
                 lead_days_count=lead_days_count,
@@ -141,7 +172,11 @@ def _glo12_analysis_dataset_1_12(challenger_dataset: Dataset) -> Dataset:
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
         open_week_dataset=lambda first_day_datetime: prepare_reference_week_dataset(
-            _glo12_1_12_path(first_day_datetime, days_count=lead_days_count, target_depths=target_depths),
+            _glo12_1_12_path(
+                first_day_datetime,
+                days_count=lead_days_count,
+                target_depths=target_depths,
+            ),
             lead_days_count=lead_days_count,
             operation_name="GLO12 twelfth-degree dataset open",
         ),
@@ -160,24 +195,43 @@ def _glo12_analysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
         open_week_dataset=lambda first_day_datetime: prepare_reference_week_dataset(
-            open_dataset(_glo12_1_degree_path(first_day_datetime), engine="zarr"),
+            _open_zarr_dataset(_glo12_1_degree_path(first_day_datetime)),
             lead_days_count=lead_days_count,
             operation_name="GLO12 one-degree dataset open",
         ),
-        open_remote_dataset=lambda: open_mfdataset(
+        open_remote_dataset=lambda: _open_weekly_reference_dataset(
             list(map(_glo12_1_degree_path, first_day_datetimes)),
-            engine="zarr",
-            preprocess=lambda dataset: prepare_reference_week_dataset(
-                dataset,
-                lead_days_count=lead_days_count,
-                operation_name="GLO12 one-degree dataset open",
-            ),
-            combine="nested",
-            concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-            parallel=False,
-        ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes}),
+            first_day_datetimes,
+            lead_days_count,
+            "GLO12 one-degree dataset open",
+        ),
         resolution="one_degree",
     )
+
+
+def _open_zarr_dataset(dataset_path: str) -> Dataset:
+    return open_dataset(dataset_path, engine="zarr", **zarr_open_kwargs(dataset_path))
+
+
+def _open_weekly_reference_dataset(
+    dataset_paths: list[str],
+    first_day_datetimes: numpy.ndarray,
+    lead_days_count: int,
+    operation_name: str,
+) -> Dataset:
+    return open_mfdataset(
+        dataset_paths,
+        engine="zarr",
+        preprocess=lambda dataset: prepare_reference_week_dataset(
+            dataset,
+            lead_days_count=lead_days_count,
+            operation_name=operation_name,
+        ),
+        combine="nested",
+        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
+        parallel=False,
+        **zarr_open_kwargs(dataset_paths[0]),
+    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 
 def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:

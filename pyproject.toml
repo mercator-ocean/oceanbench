@@ -24,6 +24,7 @@ dependencies = [
     "copernicusmarine==2.0.1",
     "requests (>=2.27.1)",
     "aiohttp (>=3.0.0)",
+    "s3fs (>=2025.0.0)",
     "jupyter (>=1.1)",
     "papermill[s3] (>=2.6.0)"
 ]

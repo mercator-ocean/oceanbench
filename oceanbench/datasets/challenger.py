@@ -190,6 +190,32 @@ def glonet_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
     return challenger_datasets.glonet_1_degree(evaluation_year=evaluation_year)
 
 
+def langya(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    """
+    Open the LangYa challenger dataset.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing LangYa forecasts.
+    """
+
+    return challenger_datasets.langya(evaluation_year=evaluation_year)
+
+
+def langya_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    """
+    Open the LangYa challenger dataset interpolated to the 1 degree resolution.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing LangYa forecasts interpolated to 1 degree resolution.
+    """
+
+    return challenger_datasets.langya_1_degree(evaluation_year=evaluation_year)
+
+
 def xihe(evaluation_year: int | str | None = None) -> xarray.Dataset:
     """
     Open the XiHe challenger dataset.
