@@ -8,21 +8,13 @@
 This module exposes the challenger datasets evaluated in the benchmark.
 """
 
-from datetime import datetime
-
 import xarray
-
 from oceanbench.core import challenger_datasets
 
 
-def glo12(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def glo12(evaluation_year: int | str | None = None) -> xarray.Dataset:
     """
     Open the GLO12 challenger dataset.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -47,17 +39,12 @@ def glo12(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
         zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 640, 1280), meta=np.ndarray>
     """
 
-    return challenger_datasets.glo12(first_day_datetimes)
+    return challenger_datasets.glo12(evaluation_year=evaluation_year)
 
 
-def glo12_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def glo12_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
     """
     Open the GLO12 challenger dataset interpolated to the 1 degree resolution.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -83,17 +70,12 @@ def glo12_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.
         sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float32 127MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
     """
 
-    return challenger_datasets.glo12_1_degree(first_day_datetimes)
+    return challenger_datasets.glo12_1_degree(evaluation_year=evaluation_year)
 
 
-def glo36v1(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def glo36v1() -> xarray.Dataset:
     """
     Open the GLO36V1 challenger dataset.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -118,17 +100,12 @@ def glo36v1(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset
         zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 13GB dask.array<chunksize=(1, 1, 256, 1080), meta=np.ndarray>
     """
 
-    return challenger_datasets.glo36v1(first_day_datetimes)
+    return challenger_datasets.glo36v1()
 
 
-def glonet(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def glonet(evaluation_year: int | str | None = None) -> xarray.Dataset:
     """
     Open the GLONET challenger dataset.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -163,17 +140,12 @@ def glonet(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
         title:                    Daily mean fields from GLONET 1/4 degree resolu...
     """
 
-    return challenger_datasets.glonet(first_day_datetimes)
+    return challenger_datasets.glonet(evaluation_year=evaluation_year)
 
 
-def glonet_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def glonet_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
     """
     Open the GLONET challenger dataset interpolated to the 1 degree resolution.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -209,17 +181,38 @@ def glonet_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
         title:                    Daily mean fields from GLONET 1/4 degree resolu...
     """
 
-    return challenger_datasets.glonet_1_degree(first_day_datetimes)
+    return challenger_datasets.glonet_1_degree(evaluation_year=evaluation_year)
 
 
-def xihe(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def langya(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    """
+    Open the LangYa challenger dataset.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing LangYa forecasts.
+    """
+
+    return challenger_datasets.langya(evaluation_year=evaluation_year)
+
+
+def langya_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    """
+    Open the LangYa challenger dataset interpolated to the 1 degree resolution.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing LangYa forecasts interpolated to 1 degree resolution.
+    """
+
+    return challenger_datasets.langya_1_degree(evaluation_year=evaluation_year)
+
+
+def xihe(evaluation_year: int | str | None = None) -> xarray.Dataset:
     """
     Open the XiHe challenger dataset.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -248,17 +241,12 @@ def xihe(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.xihe(first_day_datetimes)
+    return challenger_datasets.xihe(evaluation_year=evaluation_year)
 
 
-def xihe_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def xihe_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
     """
     Open the XiHe challenger dataset interpolated to the 1 degree resolution.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -288,17 +276,12 @@ def xihe_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.D
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.xihe_1_degree(first_day_datetimes)
+    return challenger_datasets.xihe_1_degree(evaluation_year=evaluation_year)
 
 
-def wenhai(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def wenhai(evaluation_year: int | str | None = None) -> xarray.Dataset:
     """
     Open the WenHai challenger dataset.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -327,17 +310,12 @@ def wenhai(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.wenhai(first_day_datetimes)
+    return challenger_datasets.wenhai(evaluation_year=evaluation_year)
 
 
-def wenhai_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def wenhai_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
     """
     Open the WenHai challenger dataset interpolated to the 1 degree resolution.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -367,17 +345,12 @@ def wenhai_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.wenhai_1_degree(first_day_datetimes)
+    return challenger_datasets.wenhai_1_degree()
 
 
-def langya(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def langya() -> xarray.Dataset:
     """
     Open the LangYa challenger dataset.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -387,10 +360,10 @@ def langya(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     >>> langya() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 2TB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 7, depth: 32,
-                             latitude: 2041, longitude: 4320)
+                             latitude: 2040, longitude: 4320)
     Coordinates:
       * depth               (depth) float32 128B 0.494 1.541 2.646 ... 453.9 541.1
-      * latitude            (latitude) float64 16kB -80.0 -79.92 ... 89.92 90.0
+      * latitude            (latitude) float64 16kB -80.0 -79.92 ... 89.83 89.92
       * longitude           (longitude) float64 35kB -180.0 -179.9 ... 179.8 179.9
       * lead_day_index      (lead_day_index) int64 56B 0 1 2 3 4 5 6
       * first_day_datetime  (first_day_datetime) datetime64[...] 416B 2024-01-03 ....
@@ -406,17 +379,12 @@ def langya(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.langya(first_day_datetimes)
+    return challenger_datasets.langya()
 
 
-def langya_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+def langya_1_degree() -> xarray.Dataset:
     """
     Open the LangYa challenger dataset interpolated to the 1 degree resolution.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -446,187 +414,4 @@ def langya_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.langya_1_degree(first_day_datetimes)
-
-
-def glo12_persistence(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
-    """
-    Open the GLO12 persistence baseline challenger dataset.
-
-    Repeats the GLO12 nowcast for every lead day. Any useful forecast should beat it.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
-
-    Returns
-    -------
-    Dataset
-        The Dataset containing GLO12 persistence baseline forecasts.
-
-    >>> glo12_persistence() # doctest: +ELLIPSIS
-    <xarray.Dataset> Size: 4TB
-    Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 50,
-                             latitude: 2041, longitude: 4320)
-    Coordinates:
-      * depth               (depth) float32 200B 0.494 1.541 ... 5.275e+03 5.728e+03
-      * latitude            (latitude) float32 8kB -80.0 -79.92 ... 89.92 90.0
-      * longitude           (longitude) float32 17kB -180.0 -179.9 ... 179.8 179.9
-      * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
-      * first_day_datetime  (first_day_datetime) datetime64[...] 416B 2024-01-03 ....
-    Data variables:
-        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 917GB dask.array<chunksize=(1, 1, 1, 640, 1280), meta=np.ndarray>
-        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 917GB dask.array<chunksize=(1, 1, 1, 640, 1280), meta=np.ndarray>
-        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 917GB dask.array<chunksize=(1, 1, 1, 640, 1280), meta=np.ndarray>
-        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 917GB dask.array<chunksize=(1, 1, 1, 640, 1280), meta=np.ndarray>
-        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 640, 1280), meta=np.ndarray>
-    Attributes: (12/13)
-        Conventions:                CF-1.8
-        NCO:                        netCDF Operators version 4.9.7 (Homepage = ht...
-        area:                       Global
-        contact:                    https://marine.copernicus.eu/contact
-        credit:                     E.U. Copernicus Marine Service Information (C...
-        history:                    Mon Mar 31 11:20:47 2025: ncks -A /data/rd_ex...
-        ...                         ...
-        institution:                Mercator Ocean International
-        licence:                    http://marine.copernicus.eu/services-portfoli...
-        producer:                   CMEMS - Global Monitoring and Forecasting Centre
-        references:                 http://marine.copernicus.eu
-        source:                     MOI GLO12
-        title:                      daily mean fields from Global Ocean Physics A...
-    """
-
-    return challenger_datasets.glo12_persistence(first_day_datetimes)
-
-
-def glo12_persistence_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
-    """
-    Open the GLO12 persistence baseline challenger dataset interpolated to 1 degree.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
-
-    Returns
-    -------
-    Dataset
-        The Dataset containing GLO12 persistence baseline forecasts interpolated to 1
-        degree resolution.
-
-    >>> glo12_persistence_1_degree() # doctest: +ELLIPSIS
-    <xarray.Dataset> Size: 26GB
-    Dimensions:                          (first_day_datetime: 52,
-                                          lead_day_index: 10, depth: 50,
-                                          latitude: 170, longitude: 360)
-    Coordinates:
-      * depth                            (depth) float32 200B 0.494 ... 5.728e+03
-      * lead_day_index                   (lead_day_index) int64 80B 0 1 2 ... 7 8 9
-      * first_day_datetime               (first_day_datetime) datetime64[...] 416B ...
-      * latitude                         (latitude) float64 1kB -79.5 -78.5 ... 89.5
-      * longitude                        (longitude) float64 3kB -179.5 ... 179.5
-    Data variables:
-        sea_water_salinity               (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
-        sea_water_potential_temperature  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
-        eastward_sea_water_velocity      (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
-        northward_sea_water_velocity     (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
-        sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float32 127MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
-    Attributes: (12/13)
-        Conventions:                CF-1.8
-        NCO:                        netCDF Operators version 4.9.7 (Homepage = ht...
-        area:                       Global
-        contact:                    https://marine.copernicus.eu/contact
-        credit:                     E.U. Copernicus Marine Service Information (C...
-        history:                    Mon Mar 31 11:20:47 2025: ncks -A /data/rd_ex...
-        ...                         ...
-        institution:                Mercator Ocean International
-        licence:                    http://marine.copernicus.eu/services-portfoli...
-        producer:                   CMEMS - Global Monitoring and Forecasting Centre
-        references:                 http://marine.copernicus.eu
-        source:                     MOI GLO12
-        title:                      daily mean fields from Global Ocean Physics A...
-    """
-
-    return challenger_datasets.glo12_persistence_1_degree(first_day_datetimes)
-
-
-def hclimrep(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
-    """
-    Open the HClimRep challenger dataset.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
-
-    Returns
-    -------
-    Dataset
-        The Dataset containing HClimRep forecasts.
-
-    >>> hclimrep() # doctest: +ELLIPSIS
-    <xarray.Dataset> Size: 74GB
-    Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 9,
-                             latitude: 672, longitude: 1440)
-    Coordinates:
-      * depth               (depth) float64 72B 0.494 47.37 92.33 ... 453.9 541.1
-      * latitude            (latitude) float64 5kB -78.0 -77.75 -77.5 ... 89.5 89.75
-      * longitude           (longitude) float64 12kB -180.0 -179.8 ... 179.5 179.8
-      * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
-      * first_day_datetime  (first_day_datetime) datetime64[...] 416B 2024-01-03 ....
-    Data variables:
-        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1, 672, 1440), meta=np.ndarray>
-        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1, 672, 1440), meta=np.ndarray>
-        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1, 672, 1440), meta=np.ndarray>
-        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1, 672, 1440), meta=np.ndarray>
-        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 2GB dask.array<chunksize=(1, 1, 672, 1440), meta=np.ndarray>
-    Attributes:
-        Conventions:                                        CF-1.8
-        area:                                               Global
-        challenger:                                         hclimrep
-        ...
-    """
-
-    return challenger_datasets.hclimrep(first_day_datetimes)
-
-
-def hclimrep_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
-    """
-    Open the HClimRep challenger dataset interpolated to the 1 degree resolution.
-
-    Parameters
-    ----------
-    first_day_datetimes : list[datetime], optional
-        Forecast start dates to open, all benchmark start dates by default.
-
-    Returns
-    -------
-    Dataset
-        The Dataset containing HClimRep forecasts interpolated to 1 degree resolution.
-
-    >>> hclimrep_1_degree() # doctest: +ELLIPSIS
-    <xarray.Dataset> Size: 5GB
-    Dimensions:                          (first_day_datetime: 52,
-                                          lead_day_index: 10, depth: 9,
-                                          latitude: 168, longitude: 360)
-    Coordinates:
-      * depth                            (depth) float64 72B 0.494 47.37 ... 541.1
-      * lead_day_index                   (lead_day_index) int64 80B 0 1 2 ... 7 8 9
-      * first_day_datetime               (first_day_datetime) datetime64[...] 416B ...
-      * latitude                         (latitude) float64 1kB -77.5 -76.5 ... 89.5
-      * longitude                        (longitude) float64 3kB -179.5 ... 179.5
-    Data variables:
-        sea_water_salinity               (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 1GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
-        sea_water_potential_temperature  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 1GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
-        eastward_sea_water_velocity      (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 1GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
-        northward_sea_water_velocity     (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 1GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
-        sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float32 126MB dask.array<chunksize=(1, 1, 168, 360), meta=np.ndarray>
-    Attributes:
-        Conventions:                                        CF-1.8
-        area:                                               Global
-        challenger:                                         hclimrep
-        ...
-    """
-
-    return challenger_datasets.hclimrep_1_degree(first_day_datetimes)
+    return challenger_datasets.langya_1_degree()

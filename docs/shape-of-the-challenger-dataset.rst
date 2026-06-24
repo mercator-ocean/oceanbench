@@ -16,7 +16,7 @@ The following figure provides an illustration of the shape of a challenger datas
 
 .. image:: shape-of-the-challenger-dataset.png
 
-The challenger dataset must contain all 10-day forecasts starting on the 52 Wednesdays of the year 2024.
+The challenger dataset must contain forecasts starting on each Wednesday of the selected evaluation year: 52 Wednesdays for 2023 and 2024, and 53 Wednesdays for 2025.
 
 Hence, it must be a datacube with at least 5 dimensions and 5 variables as defined in the `Climate and Forecast Convention (CF) <https://cfconventions.org>`_.
 
@@ -25,7 +25,7 @@ Dimensions:
 - Latitude (standard grid)
 - Longitude (standard grid)
 - Depth (positive depth level in the ocean)
-- Lead day index (from 0 to 9, corresponding to the 10 days of forecasts)
+- Lead day index (from 0 to the last available forecast lead day)
 - First day datetime (datetime of the first day of forecast)
 
 Variables:

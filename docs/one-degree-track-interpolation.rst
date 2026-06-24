@@ -4,9 +4,9 @@
 
 .. _one-degree-track-interpolation-page:
 
-=====================================================
+===========================================================
  Interpolation and reference data for the 1 degree track
-=====================================================
+===========================================================
 
 This page documents how OceanBench constructs the 1 degree evaluation track.
 It is intended to remove ambiguity for both benchmark users and technical reviewers.
@@ -33,6 +33,7 @@ The official 1 degree challengers exposed in ``oceanbench.datasets.challenger`` 
 
 * ``glo12_1_degree()``
 * ``glonet_1_degree()``
+* ``langya_1_degree()``
 * ``wenhai_1_degree()``
 * ``xihe_1_degree()``
 
@@ -40,6 +41,7 @@ These functions delegate to the core challenger dataset loaders:
 
 * `oceanbench.core.challenger_datasets.glo12_1_degree <https://github.com/mercator-ocean/oceanbench/blob/main/oceanbench/core/challenger_datasets.py>`_
 * `oceanbench.core.challenger_datasets.glonet_1_degree <https://github.com/mercator-ocean/oceanbench/blob/main/oceanbench/core/challenger_datasets.py>`_
+* `oceanbench.core.challenger_datasets.langya_1_degree <https://github.com/mercator-ocean/oceanbench/blob/main/oceanbench/core/challenger_datasets.py>`_
 * `oceanbench.core.challenger_datasets.wenhai_1_degree <https://github.com/mercator-ocean/oceanbench/blob/main/oceanbench/core/challenger_datasets.py>`_
 * `oceanbench.core.challenger_datasets.xihe_1_degree <https://github.com/mercator-ocean/oceanbench/blob/main/oceanbench/core/challenger_datasets.py>`_
 

@@ -5,9 +5,10 @@
 from datetime import datetime
 import numpy
 import pandas
-from xarray import Dataset, concat
+from xarray import Dataset, open_dataset, open_mfdataset, concat
 import logging
 import copernicusmarine
+from oceanbench.core.cloudferro import cloudferro_public_url, zarr_open_kwargs
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
@@ -15,23 +16,50 @@ from oceanbench.core.reference_depths import (
     reference_depth_grid_stage_variant,
     with_reference_depth_grid_metadata,
 )
-from oceanbench.core.remote_http import open_remote_multizarr, open_remote_zarr
-from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_reference_week_dataset
+from oceanbench.core.remote_http import with_remote_http_retries
+from oceanbench.core.weekly_stage import (
+    maybe_stage_weekly_dataset,
+    prepare_reference_week_dataset,
+)
 
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
 _GLORYS_REANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
+_CLOUDFERRO_REFERENCE_YEARS = (2023, 2025)
+
+
+def _use_cloudferro_reference(first_day_datetime: numpy.datetime64) -> bool:
+    return pandas.Timestamp(first_day_datetime).year in _CLOUDFERRO_REFERENCE_YEARS
+
+
+def _cloudferro_reference_path(reference_name: str, first_day_datetime: numpy.datetime64) -> str:
+    first_day = pandas.Timestamp(first_day_datetime)
+    return cloudferro_public_url(
+        "references",
+        f"{reference_name}_{first_day.year}",
+        f"{first_day.strftime('%Y%m%d')}.zarr",
+    )
 
 
 def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
-    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
-    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glorys14_refull_2024/{first_day}.zarr"
+    first_day_datetime = datetime.fromisoformat(str(first_day_datetime))
+    first_day = first_day_datetime.strftime("%Y%m%d")
+    return (
+        "https://minio.dive.edito.eu/project-glonet/public/"
+        f"glorys14_refull_{first_day_datetime.year}/{first_day}.zarr"
+    )
 
 
 def _glorys_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
-    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
-    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glorys_1degree_2024_V2/{first_day}.zarr"
+    if _use_cloudferro_reference(first_day_datetime):
+        return _cloudferro_reference_path("glorys_one_degree", first_day_datetime)
+    first_day_datetime = datetime.fromisoformat(str(first_day_datetime))
+    first_day = first_day_datetime.strftime("%Y%m%d")
+    return (
+        "https://minio.dive.edito.eu/project-oceanbench/public/"
+        f"glorys_1degree_{first_day_datetime.year}_V2/{first_day}.zarr"
+    )
 
 
 def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
@@ -44,12 +72,13 @@ def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
         open_week_dataset=lambda first_day_datetime: prepare_reference_week_dataset(
-            open_remote_zarr(_glorys_1_4_path(first_day_datetime)),
+            open_dataset(_glorys_1_4_path(first_day_datetime), engine="zarr"),
             lead_days_count=lead_days_count,
             operation_name="GLORYS quarter-degree dataset open",
         ),
-        open_remote_dataset=lambda: open_remote_multizarr(
+        open_remote_dataset=lambda: open_mfdataset(
             list(map(_glorys_1_4_path, first_day_datetimes)),
+            engine="zarr",
             preprocess=lambda dataset: prepare_reference_week_dataset(
                 dataset,
                 lead_days_count=lead_days_count,
@@ -140,23 +169,43 @@ def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
         open_week_dataset=lambda first_day_datetime: prepare_reference_week_dataset(
-            open_remote_zarr(_glorys_1_degree_path(first_day_datetime)),
+            _open_zarr_dataset(_glorys_1_degree_path(first_day_datetime)),
             lead_days_count=lead_days_count,
             operation_name="GLORYS one-degree dataset open",
         ),
-        open_remote_dataset=lambda: open_remote_multizarr(
+        open_remote_dataset=lambda: _open_weekly_reference_dataset(
             list(map(_glorys_1_degree_path, first_day_datetimes)),
-            preprocess=lambda dataset: prepare_reference_week_dataset(
-                dataset,
-                lead_days_count=lead_days_count,
-                operation_name="GLORYS one-degree dataset open",
-            ),
-            combine="nested",
-            concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
-            parallel=False,
-        ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes}),
+            first_day_datetimes,
+            lead_days_count,
+            "GLORYS one-degree dataset open",
+        ),
         resolution="one_degree",
     )
+
+
+def _open_zarr_dataset(dataset_path: str) -> Dataset:
+    return open_dataset(dataset_path, engine="zarr", **zarr_open_kwargs(dataset_path))
+
+
+def _open_weekly_reference_dataset(
+    dataset_paths: list[str],
+    first_day_datetimes: numpy.ndarray,
+    lead_days_count: int,
+    operation_name: str,
+) -> Dataset:
+    return open_mfdataset(
+        dataset_paths,
+        engine="zarr",
+        preprocess=lambda dataset: prepare_reference_week_dataset(
+            dataset,
+            lead_days_count=lead_days_count,
+            operation_name=operation_name,
+        ),
+        combine="nested",
+        concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
+        parallel=False,
+        **zarr_open_kwargs(dataset_paths[0]),
+    ).assign({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
 
 
 def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
@@ -177,6 +226,6 @@ def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
         else:
             raise ValueError(f"Unsupported resolution: {resolution}")
 
-    reference_dataset = open_dataset()
+    reference_dataset = with_remote_http_retries("GLORYS reference dataset open", open_dataset)
     _GLORYS_REANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
     return reference_dataset
