@@ -389,3 +389,52 @@ def langya_1_degree() -> xarray.Dataset:
     """
 
     return challenger_datasets.langya_1_degree()
+
+
+def persistence() -> xarray.Dataset:
+    """
+    Open the persistence baseline challenger dataset.
+
+    The persistence baseline holds the GLO12 nowcast (the initial condition
+    shared by the machine-learning challengers) constant across every lead day.
+    It is the short-lead reference floor: a forecast that does not beat
+    persistence adds no skill beyond doing nothing at that lead time.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing persistence baseline forecasts.
+
+    >>> persistence() # doctest: +SKIP
+    <xarray.Dataset> Size: 4TB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 50,
+                             latitude: 2041, longitude: 4320)
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 ...
+    """
+
+    return challenger_datasets.persistence()
+
+
+def persistence_1_degree() -> xarray.Dataset:
+    """
+    Open the persistence baseline challenger dataset interpolated to 1 degree.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing persistence baseline forecasts interpolated to 1
+        degree resolution.
+
+    >>> persistence_1_degree() # doctest: +SKIP
+    <xarray.Dataset> Size: 26GB
+    Dimensions:                          (first_day_datetime: 52,
+                                          lead_day_index: 10, depth: 50,
+                                          latitude: 170, longitude: 360)
+    """
+
+    return challenger_datasets.persistence_1_degree()

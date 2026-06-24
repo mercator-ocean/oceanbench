@@ -103,6 +103,26 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1°",
     },
+    "persistence": {
+        "label": "Persistence",
+        "url": "https://github.com/mercator-ocean/oceanbench",
+        "organisation": "OceanBench",
+        "organisation_url": "https://github.com/mercator-ocean/oceanbench",
+        "method": "Baseline",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12 nowcast",
+        "resolution": "1/12°",
+    },
+    "persistence_1_degree": {
+        "label": "Persistence",
+        "url": "https://github.com/mercator-ocean/oceanbench",
+        "organisation": "OceanBench",
+        "organisation_url": "https://github.com/mercator-ocean/oceanbench",
+        "method": "Baseline",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12 nowcast",
+        "resolution": "1°",
+    },
 }
 
 
