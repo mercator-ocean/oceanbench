@@ -33,6 +33,7 @@ VARIABLE_ORDER = [
 SYSTEM_SCORE_NAMES = {
     "octo-glonet-p1d": "glonet",
     "octo-glonet2-p1d": "glonet2",
+    "octo-glonet2-ibi-p1d": "glonet2-ibi",
     "octo-langya-p1d": "langya",
     "octo-wenhai-p1d": "wenhai",
     "octo-xihe-p1d": "xihe",
@@ -108,7 +109,10 @@ def _drifter_score(notebook_path: str | Path, score_name: str) -> ModelScore | N
 
 
 def _notebook_score_name(metadata: ForecastValidationMetadata) -> str:
-    return SYSTEM_SCORE_NAMES[metadata.system_id]
+    score_name = SYSTEM_SCORE_NAMES.get(metadata.system_id)
+    if score_name is None:
+        raise ValueError(f"No notebook score name is configured for system {metadata.system_id!r}.")
+    return score_name
 
 
 def _lead_days(score: ModelScore) -> list[str]:

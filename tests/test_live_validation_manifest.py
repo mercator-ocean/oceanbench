@@ -151,3 +151,85 @@ def test_live_validation_preview_panel_shows_unavailable_without_manifest_scores
 
     assert "Preview unavailable" in preview_html
     assert "validation-score-grid" not in preview_html
+
+
+def _completed_evaluation(system_id: str, system_label: str, region: str, report_notebook: str) -> dict:
+    return {
+        "system_id": system_id,
+        "system_label": system_label,
+        "region": region,
+        "forecast_lead_days": 10,
+        "forecast_init": "2026-05-13",
+        "validated_lead_days": "1-10 days",
+        "observation_cutoff": "2026-05-23",
+        "status": "Complete",
+        "report_notebook": report_notebook,
+    }
+
+
+def _write_manifest_with_evaluations(path: Path, evaluations: list[dict]) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-06-08T13:24:19Z",
+                "evaluations": evaluations,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_live_validation_table_links_ibi_region_to_its_report_page(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "nrt-validation-manifest.json"
+    _write_manifest_with_evaluations(
+        manifest_path,
+        [
+            _completed_evaluation(
+                "octo-glonet2-ibi-p1d",
+                "GLONET2 IBI (experimental)",
+                "ibi",
+                "glonet2-ibi-experimental.latest.ibi.report.ipynb",
+            )
+        ],
+    )
+
+    html = render_live_validation_table(manifest_path)
+
+    assert "GLONET2 IBI (experimental)" in html
+    assert '<a href="glonet2-ibi-forecast-validation.html">Report</a>' in html
+    assert (
+        report_notebook_path(manifest_path, "octo-glonet2-ibi-p1d")
+        == "reports/glonet2-ibi-experimental.latest.ibi.report.ipynb"
+    )
+    metadata = forecast_validation_metadata(manifest_path, "octo-glonet2-ibi-p1d")
+    assert metadata.system_label == "GLONET2 IBI (experimental)"
+
+
+def test_live_validation_table_renders_placeholder_for_unmapped_system_region(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "nrt-validation-manifest.json"
+    _write_manifest_with_evaluations(
+        manifest_path,
+        [
+            _completed_evaluation(
+                "octo-glonet-p1d",
+                "GLONET",
+                "global",
+                "glonet.latest.global.report.ipynb",
+            ),
+            _completed_evaluation(
+                "octo-mystery-p1d",
+                "Mystery system",
+                "antarctic",
+                "mystery.latest.antarctic.report.ipynb",
+            ),
+        ],
+    )
+
+    html = render_live_validation_table(manifest_path)
+
+    assert "GLONET" in html
+    assert "Mystery system" in html
+    assert '<a href="glonet-forecast-validation.html">Report</a>' in html
+    assert "&mdash;" in html
+    assert "mystery-forecast-validation.html" not in html

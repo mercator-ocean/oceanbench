@@ -15,6 +15,7 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
     validation_pages = {
         "glonet": ("octo-glonet-p1d", "GLONET forecast evaluation"),
         "glonet2": ("octo-glonet2-p1d", "GLONET2 (experimental) forecast evaluation"),
+        "glonet2-ibi": ("octo-glonet2-ibi-p1d", "GLONET2 IBI (experimental) forecast evaluation"),
         "langya": ("octo-langya-p1d", "LangYa forecast evaluation"),
         "wenhai": ("octo-wenhai-p1d", "WenHai forecast evaluation"),
         "xihe": ("octo-xihe-p1d", "XiHe forecast evaluation"),

@@ -9,6 +9,8 @@ import sys
 WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
+import pytest  # noqa: E402
+
 from helpers.live_validation_report import ForecastValidationMetadata, render_forecast_validation_page  # noqa: E402
 
 
@@ -116,3 +118,43 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
     )
     assert "evaluation_report" not in html
     assert "cell" not in html.lower()
+
+
+def test_render_forecast_validation_page_supports_glonet2_ibi_system(tmp_path: Path) -> None:
+    notebook_path = tmp_path / "glonet2-ibi-experimental.latest.ibi.report.ipynb"
+    _write_notebook(notebook_path)
+
+    html = render_forecast_validation_page(
+        notebook_path,
+        ForecastValidationMetadata(
+            system_label="GLONET2 IBI (experimental)",
+            forecast_init="2026-05-13",
+            validated_lead_days="1-10 days",
+            observation_cutoff="2026-05-23",
+            status="Complete",
+            system_id="octo-glonet2-ibi-p1d",
+        ),
+    )
+
+    assert "Class IV evaluation is complete" in html
+    assert "GLONET2 IBI (experimental)" in html
+    assert "Temperature, surface" in html
+    assert "Drifter trajectory scores" in html
+
+
+def test_render_forecast_validation_page_rejects_unmapped_system(tmp_path: Path) -> None:
+    notebook_path = tmp_path / "mystery.latest.global.report.ipynb"
+    _write_notebook(notebook_path)
+
+    with pytest.raises(ValueError, match="octo-mystery-p1d"):
+        render_forecast_validation_page(
+            notebook_path,
+            ForecastValidationMetadata(
+                system_label="Mystery system",
+                forecast_init="2026-05-13",
+                validated_lead_days="1-10 days",
+                observation_cutoff="2026-05-23",
+                status="Complete",
+                system_id="octo-mystery-p1d",
+            ),
+        )

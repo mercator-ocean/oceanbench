@@ -13,12 +13,14 @@ from helpers.live_validation_report import (
 )
 
 DEFAULT_MANIFEST_PATH = "reports/nrt-validation-manifest.json"
+DEFAULT_REGION = "global"
 REPORT_PAGE_NAMES = {
-    "octo-glonet-p1d": "glonet-forecast-validation.html",
-    "octo-glonet2-p1d": "glonet2-forecast-validation.html",
-    "octo-langya-p1d": "langya-forecast-validation.html",
-    "octo-wenhai-p1d": "wenhai-forecast-validation.html",
-    "octo-xihe-p1d": "xihe-forecast-validation.html",
+    ("octo-glonet-p1d", "global"): "glonet-forecast-validation.html",
+    ("octo-glonet2-p1d", "global"): "glonet2-forecast-validation.html",
+    ("octo-langya-p1d", "global"): "langya-forecast-validation.html",
+    ("octo-wenhai-p1d", "global"): "wenhai-forecast-validation.html",
+    ("octo-xihe-p1d", "global"): "xihe-forecast-validation.html",
+    ("octo-glonet2-ibi-p1d", "ibi"): "glonet2-ibi-forecast-validation.html",
 }
 
 
@@ -32,8 +34,18 @@ def live_validation_evaluations(manifest_path: str | Path = DEFAULT_MANIFEST_PAT
     return list(manifest.get("evaluations", []))
 
 
-def _report_page_name(evaluation: dict) -> str:
-    return REPORT_PAGE_NAMES[str(evaluation["system_id"])]
+def _report_page_name(evaluation: dict) -> str | None:
+    key = (str(evaluation["system_id"]), str(evaluation.get("region", DEFAULT_REGION)))
+    return REPORT_PAGE_NAMES.get(key)
+
+
+def _report_cell(evaluation: dict) -> str:
+    if evaluation.get("status") != "Complete":
+        return "<td>Pending</td>"
+    page_name = _report_page_name(evaluation)
+    if page_name is None:
+        return "<td>&mdash;</td>"
+    return f'<td><a href="{escape(page_name)}">Report</a></td>'
 
 
 def _shared_evaluation_value(evaluations: list[dict], field_name: str) -> str:
@@ -110,13 +122,7 @@ def render_live_validation_table(manifest_path: str | Path = DEFAULT_MANIFEST_PA
             f"<td>{_live_validation_system_cell(evaluation, selected_panel_id)}</td>"
             f"<td>{escape(_forecast_horizon(evaluation))}</td>"
             f"<td>{escape(evaluation['validated_lead_days'])}</td>"
-            f"<td>{escape(evaluation['status'])}</td>"
-            + (
-                f'<td><a href="{escape(_report_page_name(evaluation))}">Report</a></td>'
-                if evaluation.get("status") == "Complete"
-                else "<td>Pending</td>"
-            )
-            + "</tr>"
+            f"<td>{escape(evaluation['status'])}</td>" + _report_cell(evaluation) + "</tr>"
         )
         for evaluation in evaluations
     )
