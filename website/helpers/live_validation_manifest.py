@@ -21,6 +21,7 @@ REPORT_PAGE_NAMES = {
     ("octo-wenhai-p1d", "global"): "wenhai-forecast-validation.html",
     ("octo-xihe-p1d", "global"): "xihe-forecast-validation.html",
     ("octo-glonet2-ibi-p1d", "ibi"): "glonet2-ibi-forecast-validation.html",
+    ("octo-glonet-hr-p1d", "global"): "glonet-hr-forecast-validation.html",
 }
 
 

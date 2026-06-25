@@ -32,6 +32,7 @@ VARIABLE_ORDER = [
 ]
 SYSTEM_SCORE_NAMES = {
     "octo-glonet-p1d": "glonet",
+    "octo-glonet-hr-p1d": "glonet-hr",
     "octo-glonet2-p1d": "glonet2",
     "octo-glonet2-ibi-p1d": "glonet2-ibi",
     "octo-langya-p1d": "langya",

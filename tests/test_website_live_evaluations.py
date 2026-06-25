@@ -19,6 +19,7 @@ def test_website_has_live_evaluations_nav_and_page() -> None:
         "langya": ("octo-langya-p1d", "LangYa forecast evaluation"),
         "wenhai": ("octo-wenhai-p1d", "WenHai forecast evaluation"),
         "xihe": ("octo-xihe-p1d", "XiHe forecast evaluation"),
+        "glonet-hr": ("octo-glonet-hr-p1d", "GLONET HR forecast evaluation"),
     }
 
     assert "live-evaluations.qmd" in quarto_config
