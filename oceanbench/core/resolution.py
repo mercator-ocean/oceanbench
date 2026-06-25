@@ -14,6 +14,7 @@ from oceanbench.core.climate_forecast_standard_names import (
 ONE_DEGREE_SPACING = 1.0
 QUARTER_DEGREE_SPACING = 0.25
 TWELFTH_DEGREE_SPACING = 1.0 / 12.0  # ~0.0833
+THIRTY_SIXTH_DEGREE_SPACING = 1.0 / 36.0  # ~0.0278 (e.g. IBI regional reanalysis)
 
 
 def get_dataset_resolution(dataset: Dataset) -> str:
@@ -24,7 +25,7 @@ def get_dataset_resolution(dataset: Dataset) -> str:
     coordinate points, making it robust to different geographic coverages.
 
     Returns:
-        str: 'one_degree', 'quarter_degree', or 'twelfth_degree'
+        str: 'one_degree', 'quarter_degree', 'twelfth_degree', or 'thirty_sixth_degree'
 
     Raises:
         ValueError: If the resolution is unknown
@@ -49,9 +50,14 @@ def get_dataset_resolution(dataset: Dataset) -> str:
         longitude_spacing, TWELFTH_DEGREE_SPACING, rtol=0.1
     ):
         return "twelfth_degree"
+    if numpy.isclose(latitude_spacing, THIRTY_SIXTH_DEGREE_SPACING, rtol=0.1) and numpy.isclose(
+        longitude_spacing, THIRTY_SIXTH_DEGREE_SPACING, rtol=0.1
+    ):
+        return "thirty_sixth_degree"
 
     raise ValueError(
         f"Unknown resolution: grid spacing latitude={latitude_spacing:.4f}°, longitude={longitude_spacing:.4f}°. "
         f"Expected spacings: {ONE_DEGREE_SPACING}° (one_degree), {QUARTER_DEGREE_SPACING}° (quarter_degree), "
-        f"or {TWELFTH_DEGREE_SPACING:.4f}° (twelfth_degree)."
+        f"{TWELFTH_DEGREE_SPACING:.4f}° (twelfth_degree), "
+        f"or {THIRTY_SIXTH_DEGREE_SPACING:.4f}° (thirty_sixth_degree)."
     )

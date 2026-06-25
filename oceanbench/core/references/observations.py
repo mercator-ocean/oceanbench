@@ -48,6 +48,13 @@ def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
         return (
             "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt_1_deg.zarr"
         )
+    if resolution == "thirty_sixth_degree":
+        # IBI 1/36 regional MDT from the IBI reanalysis (IBI_MULTIYEAR_PHY_005_002,
+        # cmems_mod_ibi_phy_my_0.027deg-3D_static, part 'mdt') the IBI model was trained on.
+        return (
+            "https://minio.dive.edito.eu/project-oceanbench/public/ibi36_mdt_2024/"
+            "cmems_mod_ibi_phy_my_0.027deg_mdt.zarr"
+        )
     raise ValueError(f"Unsupported resolution : {resolution}.")
 
 
@@ -350,9 +357,7 @@ def observations(
 
     first_day_timestamps = pandas.to_datetime(first_day_datetimes)
     first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
-    first_observation_day_start = (
-        first_day_timestamps.min() + pandas.Timedelta(days=1)
-    ).strftime("%Y-%m-%d")
+    first_observation_day_start = (first_day_timestamps.min() + pandas.Timedelta(days=1)).strftime("%Y-%m-%d")
     forecast_last_day_end = (
         (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count)).to_datetime64().astype("datetime64[D]")
     )
