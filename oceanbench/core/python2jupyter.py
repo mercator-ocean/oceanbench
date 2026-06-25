@@ -13,6 +13,24 @@ from oceanbench.core.regions import RegionLike, resolve_region, region_to_dict
 CHALLENGER_DATASET_PLACEHOLDER = "challenger_dataset: xarray.Dataset = xarray.Dataset()"
 EVALUATION_REGION_PLACEHOLDER = 'region = "global"'
 
+REPORT_PROFILE_DEFAULT = "default"
+REPORT_PROFILE_SURFACE_ONLY = "surface_only"
+_LIVE_EVALUATION_TEMPLATE_NAMES = {
+    REPORT_PROFILE_DEFAULT: "live_evaluation_template.py",
+    REPORT_PROFILE_SURFACE_ONLY: "live_evaluation_surface_template.py",
+}
+
+
+def _live_evaluation_template_file_name(report_profile: str | None) -> str:
+    resolved_report_profile = report_profile or REPORT_PROFILE_DEFAULT
+    try:
+        return _LIVE_EVALUATION_TEMPLATE_NAMES[resolved_report_profile]
+    except KeyError:
+        raise ValueError(
+            f"Unknown report profile {resolved_report_profile!r}. "
+            f"Expected one of {sorted(_LIVE_EVALUATION_TEMPLATE_NAMES)}."
+        )
+
 
 def _parse_challenger_python_code(
     challenger_python_code_uri_or_local_path: str,
@@ -43,13 +61,15 @@ def generate_live_evaluation_notebook_file(
     challenger_python_code_uri_or_local_path: str,
     output_notebook_file_path: str,
     region: RegionLike = None,
+    report_profile: str | None = REPORT_PROFILE_DEFAULT,
 ):
+    resolved_report_profile = report_profile or REPORT_PROFILE_DEFAULT
     _generate_notebook_file(
         challenger_python_code_uri_or_local_path,
         output_notebook_file_path,
         region=region,
-        template_file_name="live_evaluation_template.py",
-        metadata_updates={"live_evaluation": True},
+        template_file_name=_live_evaluation_template_file_name(resolved_report_profile),
+        metadata_updates={"live_evaluation": True, "report_profile": resolved_report_profile},
     )
 
 

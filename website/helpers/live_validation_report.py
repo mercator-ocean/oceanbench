@@ -97,11 +97,9 @@ def _class4_explorer_html(notebook_path: str | Path) -> str:
     )
 
 
-def _observation_score(notebook_path: str | Path, score_name: str) -> ModelScore:
+def _observation_score(notebook_path: str | Path, score_name: str) -> ModelScore | None:
     scores = get_all_model_scores_from_notebook(str(notebook_path), score_name)
-    if OBSERVATION_SCORE_KEY not in scores:
-        raise ValueError(f"Missing {OBSERVATION_SCORE_KEY} in {notebook_path}.")
-    return scores[OBSERVATION_SCORE_KEY]
+    return scores.get(OBSERVATION_SCORE_KEY)
 
 
 def _drifter_score(notebook_path: str | Path, score_name: str) -> ModelScore | None:
@@ -417,6 +415,8 @@ def render_forecast_validation_page(
     score = _observation_score(notebook_path, notebook_score_name)
     drifter_score = _drifter_score(notebook_path, notebook_score_name)
     drifter_explorer_html = _drifter_explorer_html(notebook_path)
+    if score is None:
+        return _render_surface_only_validation_page(metadata, drifter_score, drifter_explorer_html)
     explorer_html = _class4_explorer_html(notebook_path)
     return f"""
 <section class="validation-intro">
@@ -465,6 +465,46 @@ def render_forecast_validation_page(
     The forecast is matched to recent Class IV observations by lead day.
     The observation cutoff defines the latest observation date included in the evaluation.
     RMSD is aggregated by variable, depth range, and lead day.
+  </p>
+</section>
+"""
+
+
+def _render_surface_only_validation_page(
+    metadata: ForecastValidationMetadata,
+    drifter_score: ModelScore | None,
+    drifter_explorer_html: str,
+) -> str:
+    return f"""
+<section class="validation-intro">
+  {_summary_cards(metadata)}
+  <p class="validation-main-message">
+    Surface drifter evaluation is complete for lead days {escape(metadata.validated_lead_days)}.
+    This surface-currents-only system is evaluated against recent Class IV 15 m drifter trajectories;
+    gridded Class IV observation RMSD is not available for surface-only systems.
+    These diagnostics support scientific evaluation and operational monitoring; they are not model rankings.
+  </p>
+  {f'<p class="validation-note">{escape(metadata.note)}</p>' if metadata.note else ''}
+</section>
+
+<section class="validation-section">
+  <h2>Drifter trajectory scores</h2>
+  <p>Observed Class IV 15 m drifter tracks are compared with challenger-advected trajectories.</p>
+  {_drifter_score_table(drifter_score)}
+</section>
+
+<section class="validation-section validation-map-section">
+  <h2>Drifter trajectory divergence</h2>
+  <p>Observed and challenger-advected drifter tracks are animated with per-lead matched counts.</p>
+  {drifter_explorer_html}
+</section>
+
+<section class="validation-method-note">
+  <h2>Evaluation method</h2>
+  <p>
+    The surface forecast is matched to recent Class IV drifter observations by lead day.
+    The observation cutoff defines the latest observation date included in the evaluation.
+    Lagrangian trajectory deviation is aggregated by lead day.
   </p>
 </section>
 """

@@ -192,6 +192,7 @@ def _run_validate_nrt(args: argparse.Namespace) -> int:
             manifest_path=args.manifest_path,
             runtime_configuration=_runtime_configuration_from_args(args),
             region=_resolve_region_argument(args),
+            report_profile=args.report_profile,
         )
     except Exception as error:
         print(f"FAIL: NRT forecast validation: {error}", file=sys.stderr)
@@ -335,6 +336,16 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--keep-nrt-forecast",
         action="store_true",
         help="Keep the temporary NRT forecast Zarr after successful evaluation.",
+    )
+    validate_nrt_parser.add_argument(
+        "--report-profile",
+        choices=["default", "surface_only"],
+        default="default",
+        help=(
+            "Report profile. 'default' emits the full Class IV report (gridded RMSD plus drifter "
+            "trajectories). 'surface_only' emits only the Lagrangian drifter trajectory cells, for "
+            "surface-currents-only systems that do not provide 15 m Class IV currents."
+        ),
     )
     validate_nrt_parser.add_argument(
         "--forecast-ready-timeout-seconds",

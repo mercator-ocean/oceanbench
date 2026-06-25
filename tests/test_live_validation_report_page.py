@@ -142,6 +142,54 @@ def test_render_forecast_validation_page_supports_glonet2_ibi_system(tmp_path: P
     assert "Drifter trajectory scores" in html
 
 
+def _write_surface_only_notebook(notebook_path: Path) -> None:
+    notebook = {
+        "cells": [
+            {
+                "cell_type": "code",
+                "source": "evaluation_report.class4_drifter_trajectory_deviation",
+                "outputs": [{"data": {"text/html": _drifter_score_table()}}],
+            },
+            {
+                "cell_type": "code",
+                "source": "evaluation_report.class4_drifter_trajectory_explorer",
+                "outputs": [{"data": {"text/html": '<iframe class="drifter-widget"></iframe>'}}],
+            },
+        ]
+    }
+    notebook_path.write_text(json.dumps(notebook), encoding="utf-8")
+
+
+def test_render_forecast_validation_page_renders_surface_only_report_without_class4_rmsd(tmp_path: Path) -> None:
+    notebook_path = tmp_path / "glonet.latest.global.report.ipynb"
+    _write_surface_only_notebook(notebook_path)
+
+    html = render_forecast_validation_page(
+        notebook_path,
+        ForecastValidationMetadata(
+            system_label="GLONET HR",
+            forecast_init="2026-05-13",
+            validated_lead_days="1-10 days",
+            observation_cutoff="2026-05-23",
+            status="Complete",
+            system_id="octo-glonet-p1d",
+        ),
+    )
+
+    # Drifter trajectory deviation is the headline for surface-only systems.
+    assert "Surface drifter evaluation is complete" in html
+    assert "Drifter trajectory scores" in html
+    assert "Drifter trajectory divergence" in html
+    assert "class-4 drifter trajectory deviation mean" in html
+    assert '<iframe class="drifter-widget"></iframe>' in html
+    # The gridded Class IV RMSD sections must be absent (the system has no 15 m currents).
+    assert "Detailed Class IV RMSD" not in html
+    assert "Observation error maps" not in html
+    assert "Representative lead-time scores" not in html
+    assert "Temperature, surface" not in html
+    assert "evaluation_report" not in html
+
+
 def test_render_forecast_validation_page_rejects_unmapped_system(tmp_path: Path) -> None:
     notebook_path = tmp_path / "mystery.latest.global.report.ipynb"
     _write_notebook(notebook_path)

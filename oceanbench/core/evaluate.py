@@ -208,6 +208,7 @@ def evaluate_live_challenger(
     output_prefix: str | None = None,
     runtime_configuration: RuntimeConfiguration | None = None,
     region: RegionLike = None,
+    report_profile: str | None = None,
 ) -> None:
     resolved_region = resolve_region(_resolve_region_input(region))
     resolved_runtime_configuration = runtime_configuration or runtime_configuration_from_environment()
@@ -215,6 +216,7 @@ def evaluate_live_challenger(
         challenger_python_code_uri_or_local_path,
         output_notebook_file_path=output_notebook_file_name,
         region=resolved_region,
+        report_profile=report_profile,
     )
     _execute_evaluation_notebook_file(
         output_notebook_file_name,

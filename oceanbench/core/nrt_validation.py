@@ -38,6 +38,8 @@ from oceanbench.core.version import __version__
 DEFAULT_NRT_MANIFEST_NAME = "nrt-validation-manifest.json"
 DEFAULT_NRT_SYSTEM_ID = "octo-glonet-p1d"
 DEFAULT_NRT_SYSTEM_LABEL = "GLONET"
+DEFAULT_REPORT_PROFILE = "default"
+SURFACE_ONLY_REPORT_PROFILE = "surface_only"
 DEFAULT_FORECAST_READY_TIMEOUT_SECONDS = 3600
 DEFAULT_FORECAST_READY_POLL_SECONDS = 60
 DEFAULT_MANIFEST_WRITE_RETRIES = 5
@@ -79,6 +81,7 @@ class NrtValidationResult:
     report_url: str
     status: str
     oceanbench_version: str
+    report_profile: str = DEFAULT_REPORT_PROFILE
     score_preview: dict | None = None
 
 
@@ -638,7 +641,9 @@ def validate_nrt_forecast(
     manifest_path: str | None = None,
     runtime_configuration: RuntimeConfiguration | None = None,
     region: RegionLike = None,
+    report_profile: str = DEFAULT_REPORT_PROFILE,
 ) -> tuple[NrtValidationResult, str]:
+    resolved_report_profile = report_profile or DEFAULT_REPORT_PROFILE
     resolved_observation_template = observation_zarr_template or live_class4_observation_zarr_template()
     if forecast_init is None or observation_cutoff is None:
         raise ValueError("--forecast-init and --observation-cutoff are required.")
@@ -683,8 +688,12 @@ def validate_nrt_forecast(
                     output_prefix=output_prefix,
                     runtime_configuration=runtime_configuration or runtime_configuration_from_environment(),
                     region=region,
+                    report_profile=resolved_report_profile,
                 )
-        score_preview = _score_preview_from_report_notebook(report_notebook, output_bucket, output_prefix)
+        if resolved_report_profile == SURFACE_ONLY_REPORT_PROFILE:
+            score_preview = None
+        else:
+            score_preview = _score_preview_from_report_notebook(report_notebook, output_bucket, output_prefix)
         status = "Complete"
         if cleanup_forecast_after_success and resolved_forecast_temporary:
             try:
@@ -710,6 +719,7 @@ def validate_nrt_forecast(
         report_url=report_url,
         status=status,
         oceanbench_version=__version__,
+        report_profile=resolved_report_profile,
         score_preview=score_preview,
     )
     manifest_path_or_url = write_nrt_manifest(

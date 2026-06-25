@@ -125,3 +125,86 @@ def test_generate_live_evaluation_notebook_excludes_glorys(tmp_path: Path) -> No
     assert "Live evaluation" not in all_sources
     assert "glo12" not in all_sources.lower()
     assert "glorys" not in all_sources.lower()
+
+
+def test_generate_live_evaluation_notebook_default_profile_emits_all_four_cells(tmp_path: Path) -> None:
+    challenger_path = tmp_path / "glonet_latest.py"
+    challenger_path.write_text(
+        "import oceanbench\n\nchallenger_dataset = oceanbench.datasets.challenger.glonet_latest()\n",
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "glonet.latest.global.report.ipynb"
+
+    generate_live_evaluation_notebook_file(
+        str(challenger_path),
+        str(output_path),
+        region="global",
+        report_profile="default",
+    )
+
+    notebook = nbformat.read(output_path, as_version=4)
+    all_sources = "\n".join(cell.source for cell in notebook.cells)
+
+    assert notebook.metadata["oceanbench"]["report_profile"] == "default"
+    assert "evaluation_report.class4_observation.rmsd" in all_sources
+    assert "evaluation_report.class4_observation_error_explorer" in all_sources
+    assert "evaluation_report.class4_drifter_trajectory_deviation" in all_sources
+    assert "evaluation_report.class4_drifter_trajectory_explorer" in all_sources
+
+
+def test_generate_live_evaluation_notebook_surface_only_emits_only_drifter_cells(tmp_path: Path) -> None:
+    challenger_path = tmp_path / "glonet_hr_latest.py"
+    challenger_path.write_text(
+        "import oceanbench\n\nchallenger_dataset = oceanbench.datasets.challenger.glonet_latest()\n",
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "glonet-hr.latest.global.report.ipynb"
+
+    generate_live_evaluation_notebook_file(
+        str(challenger_path),
+        str(output_path),
+        region="global",
+        report_profile="surface_only",
+    )
+
+    notebook = nbformat.read(output_path, as_version=4)
+    all_sources = "\n".join(cell.source for cell in notebook.cells)
+
+    assert notebook.metadata["oceanbench"]["live_evaluation"] is True
+    assert notebook.metadata["oceanbench"]["report_profile"] == "surface_only"
+    # Only the two Lagrangian/drifter cells must be present.
+    assert "evaluation_report.class4_drifter_trajectory_deviation" in all_sources
+    assert "evaluation_report.class4_drifter_trajectory_explorer" in all_sources
+    # The two 15 m Class IV cells must be skipped entirely.
+    assert "evaluation_report.class4_observation.rmsd" not in all_sources
+    assert "evaluation_report.class4_observation_error_explorer" not in all_sources
+    # Setup/placeholder structure is preserved so the notebook still runs.
+    assert "prepare_live_evaluation_report" in all_sources
+    assert "Forecast evaluation setup" in all_sources
+    assert "challenger_dataset" in all_sources
+    assert all_sources.index("evaluation_report.class4_drifter_trajectory_deviation") < all_sources.index(
+        "evaluation_report.class4_drifter_trajectory_explorer"
+    )
+    assert "glo12" not in all_sources.lower()
+    assert "glorys" not in all_sources.lower()
+
+
+def test_generate_live_evaluation_notebook_rejects_unknown_profile(tmp_path: Path) -> None:
+    challenger_path = tmp_path / "glonet_latest.py"
+    challenger_path.write_text(
+        "import oceanbench\n\nchallenger_dataset = oceanbench.datasets.challenger.glonet_latest()\n",
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "glonet.latest.global.report.ipynb"
+
+    try:
+        generate_live_evaluation_notebook_file(
+            str(challenger_path),
+            str(output_path),
+            region="global",
+            report_profile="not_a_profile",
+        )
+    except ValueError as error:
+        assert "Unknown report profile" in str(error)
+    else:
+        raise AssertionError("Expected an unknown report profile to fail")

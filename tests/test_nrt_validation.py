@@ -65,6 +65,24 @@ def _write_report_notebook(path: Path) -> None:
     )
 
 
+def _write_drifter_only_report_notebook(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "cells": [
+                    {
+                        "cell_type": "code",
+                        "source": "evaluation_report.class4_drifter_trajectory_deviation",
+                        "outputs": [{"data": {"text/html": "<table></table>"}}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_class4_observation_day_requires_non_empty_current_values(monkeypatch) -> None:
     dataset = _complete_observation_dataset()
     dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()] = (
@@ -166,6 +184,85 @@ def test_validate_nrt_forecast_writes_manifest_and_runs_live_report(
     assert evaluate_calls[0]["output_prefix"] == str(report_directory)
     assert cleanup_calls == [str(forecast_path)]
     assert observation_checks == [("2026-05-23", observation_template)]
+
+
+def test_validate_nrt_forecast_surface_only_threads_profile_and_skips_score_preview(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    evaluate_calls = []
+    manifest_path = tmp_path / "manifest.json"
+    forecast_path = tmp_path / "glonet-hr.zarr"
+    report_directory = tmp_path / "reports"
+
+    monkeypatch.setattr(nrt_validation, "class4_observation_day_is_complete", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_validation, "_forecast_lead_day_count", lambda *_, **__: 10)
+
+    def evaluate_live_challenger(**kwargs):
+        evaluate_calls.append(kwargs)
+        # A surface-only report has no Class IV observation RMSD cell.
+        _write_drifter_only_report_notebook(Path(kwargs["output_prefix"]) / kwargs["output_notebook_file_name"])
+
+    monkeypatch.setattr(nrt_validation, "evaluate_live_challenger", evaluate_live_challenger)
+
+    result, _ = nrt_validation.validate_nrt_forecast(
+        system_id="octo-glonet-hr-p1d",
+        system_label="GLONET HR",
+        forecast_zarr_template=str(forecast_path),
+        forecast_init="2026-05-13",
+        observation_cutoff="2026-05-23",
+        forecast_ready_timeout_seconds=0,
+        forecast_ready_poll_seconds=1,
+        manifest_path=str(manifest_path),
+        output_prefix=str(report_directory),
+        report_profile="surface_only",
+    )
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    evaluation = manifest["evaluations"][0]
+
+    assert evaluate_calls[0]["report_profile"] == "surface_only"
+    assert result.status == "Complete"
+    assert result.report_profile == "surface_only"
+    # No gridded Class IV RMSD exists for a surface-only system, so the preview is intentionally absent.
+    assert result.score_preview is None
+    assert evaluation["report_profile"] == "surface_only"
+    assert evaluation["score_preview"] is None
+
+
+def test_validate_nrt_forecast_defaults_to_full_report_profile(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    evaluate_calls = []
+    manifest_path = tmp_path / "manifest.json"
+    forecast_path = tmp_path / "forecast.zarr"
+    report_directory = tmp_path / "reports"
+
+    monkeypatch.setattr(nrt_validation, "class4_observation_day_is_complete", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_validation, "wait_for_forecast_zarr_success", lambda *_, **__: True)
+    monkeypatch.setattr(nrt_validation, "_forecast_lead_day_count", lambda *_, **__: 10)
+
+    def evaluate_live_challenger(**kwargs):
+        evaluate_calls.append(kwargs)
+        _write_report_notebook(Path(kwargs["output_prefix"]) / kwargs["output_notebook_file_name"])
+
+    monkeypatch.setattr(nrt_validation, "evaluate_live_challenger", evaluate_live_challenger)
+
+    result, _ = nrt_validation.validate_nrt_forecast(
+        forecast_zarr_template=str(forecast_path),
+        forecast_init="2026-05-13",
+        observation_cutoff="2026-05-23",
+        forecast_ready_timeout_seconds=0,
+        forecast_ready_poll_seconds=1,
+        manifest_path=str(manifest_path),
+        output_prefix=str(report_directory),
+    )
+
+    assert evaluate_calls[0]["report_profile"] == "default"
+    assert result.report_profile == "default"
+    assert result.score_preview is not None
 
 
 def test_score_preview_from_rmsd_html_uses_representative_metrics() -> None:
