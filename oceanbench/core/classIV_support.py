@@ -242,7 +242,14 @@ def _convert_forecast_ssh_to_sla(
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
     mean_dynamic_topography = load_mean_dynamic_topography(resolution)
-    return model_variable - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    return model_variable - mean_dynamic_topography - _mean_sea_surface_height_shift()
+
+
+def _mean_sea_surface_height_shift() -> float:
+    configured_shift = current_runtime_configuration().class4_mean_sea_surface_height_shift
+    if configured_shift is None:
+        return REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    return configured_shift
 
 
 def prepare_class4_model_variable(

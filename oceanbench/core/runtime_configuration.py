@@ -23,6 +23,7 @@ class RuntimeConfiguration:
     stage_max_workers: int = DEFAULT_STAGE_MAX_WORKERS
     remote_retries: int = DEFAULT_REMOTE_HTTP_RETRIES
     class4_fast_interpolation: bool = False
+    class4_mean_sea_surface_height_shift: float | None = None
 
     def __post_init__(self):
         normalized_components = tuple(dict.fromkeys(component.strip().lower() for component in self.staged_components))
@@ -54,6 +55,16 @@ def _parse_zero_one_environment_variable(environment_variable: OceanbenchEnviron
     raise ValueError(f"{environment_variable.value} must be {FALSE_ENVIRONMENT_VALUE!r} or {TRUE_ENVIRONMENT_VALUE!r}.")
 
 
+def _parse_optional_float_environment_variable(environment_variable: OceanbenchEnvironmentVariable) -> float | None:
+    raw_value = os.environ.get(environment_variable.value)
+    if raw_value is None or raw_value.strip() == "":
+        return None
+    try:
+        return float(raw_value)
+    except ValueError as error:
+        raise ValueError(f"{environment_variable.value} must be a decimal number.") from error
+
+
 def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
     staged_components = tuple(
         component.strip()
@@ -80,6 +91,9 @@ def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
         remote_retries=remote_retries,
         class4_fast_interpolation=_parse_zero_one_environment_variable(
             OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_FAST_INTERPOLATION
+        ),
+        class4_mean_sea_surface_height_shift=_parse_optional_float_environment_variable(
+            OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_MEAN_SEA_SURFACE_HEIGHT_SHIFT
         ),
     )
 
