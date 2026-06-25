@@ -21,6 +21,12 @@ from oceanbench.core.references.observations import load_mean_dynamic_topography
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
+# TODO: replace this single global SSH->SLA datum offset with a PER-MODEL offset,
+# fitted on a rolling ~1-year window of colocated observations (e.g. the mean of
+# model_SSH - MDT - observed_SLA over the trailing year). The current value is
+# GLORYS-tuned and applied to every system; each model (incl. regional ones like
+# GLONET2 IBI that use their own MDT lineage) should get its own offset matching
+# its own mean state instead. Until then, all models share this constant.
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
