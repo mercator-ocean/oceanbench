@@ -106,5 +106,19 @@ CHALLENGERS = {
 }
 
 
+# SLA (MDT, mssh) pairing variants for the dev comparison site. Each base challenger is duplicated
+# as a "GLO12 pair" and a "GLORYS pair" entry; these reuse the base metadata and differ only in the
+# SLA conversion used to produce their report (every other score is identical across the three).
+for _base_name in ("glo12", "glonet", "langya", "wenhai", "xihe"):
+    _base_metadata = CHALLENGERS.get(_base_name)
+    if _base_metadata is None:
+        continue
+    for _suffix, _pair_label in (("_glo12pair", "GLO12 pair"), ("_gloryspair", "GLORYS pair")):
+        CHALLENGERS[f"{_base_name}{_suffix}"] = {
+            **_base_metadata,
+            "label": f"{_base_metadata['label']} — {_pair_label}",
+        }
+
+
 def challenger_label(challenger_name: str) -> str:
     return CHALLENGERS.get(challenger_name, {}).get("label", challenger_name)
