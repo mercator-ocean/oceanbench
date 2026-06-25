@@ -14,4 +14,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: curl /update
-        run: curl https://oceanbench.lab.dive.edito.eu/update
+        run: curl -fsS --max-time 10 https://oceanbench.lab.dive.edito.eu/update || true
