@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import hashlib
+from os import environ
 from pathlib import Path
 
 import numpy
@@ -11,6 +13,7 @@ from xarray import Dataset, open_dataset, open_mfdataset
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.local_stage import (
     local_stage_directory,
     open_or_create_local_stage_dataset,
@@ -32,7 +35,14 @@ class ObservationDataUnavailableError(ValueError):
     pass
 
 
-def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
+_MEAN_DYNAMIC_TOPOGRAPHY_URL_OVERRIDE_BY_RESOLUTION = {
+    "twelfth_degree": OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_MEAN_DYNAMIC_TOPOGRAPHY_URL_TWELFTH_DEGREE,
+    "quarter_degree": OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_MEAN_DYNAMIC_TOPOGRAPHY_URL_QUARTER_DEGREE,
+    "one_degree": OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_MEAN_DYNAMIC_TOPOGRAPHY_URL_ONE_DEGREE,
+}
+
+
+def _default_mean_dynamic_topography_zarr_url(resolution: str) -> str:
     if resolution == "twelfth_degree":
         return "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt.zarr"
     if resolution == "quarter_degree":
@@ -46,8 +56,21 @@ def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
     raise ValueError(f"Unsupported resolution : {resolution}.")
 
 
-def _mean_dynamic_topography_stage_path(resolution: str) -> Path:
-    return local_stage_directory() / f"class4-mean-dynamic-topography-2024-{resolution}.zarr"
+def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
+    override_variable = _MEAN_DYNAMIC_TOPOGRAPHY_URL_OVERRIDE_BY_RESOLUTION.get(resolution)
+    if override_variable is not None:
+        override_url = environ.get(override_variable.value)
+        if override_url:
+            return override_url
+    return _default_mean_dynamic_topography_zarr_url(resolution)
+
+
+def _mean_dynamic_topography_stage_path(resolution: str, mean_dynamic_topography_url: str) -> Path:
+    stage_name = f"class4-mean-dynamic-topography-2024-{resolution}"
+    if mean_dynamic_topography_url != _default_mean_dynamic_topography_zarr_url(resolution):
+        source_digest = hashlib.sha1(mean_dynamic_topography_url.encode("utf-8")).hexdigest()[:12]
+        stage_name = f"{stage_name}-{source_digest}"
+    return local_stage_directory() / f"{stage_name}.zarr"
 
 
 def _open_staged_mean_dynamic_topography_dataset(stage_path: Path) -> Dataset:
@@ -80,7 +103,7 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
                 chunks="auto",
                 consolidated=True,
             )
-        local_stage_path = _mean_dynamic_topography_stage_path(resolution)
+        local_stage_path = _mean_dynamic_topography_stage_path(resolution, mean_dynamic_topography_url)
         return open_or_create_local_stage_dataset(
             local_stage_path,
             open_staged_dataset=_open_staged_mean_dynamic_topography_dataset,
