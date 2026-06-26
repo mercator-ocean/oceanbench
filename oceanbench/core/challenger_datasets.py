@@ -166,6 +166,19 @@ def _persistence_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_BASELINE_FORECASTS_URL}/persistence/{start_datetime_string}.zarr"
 
 
+def climatology() -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(_climatology_dataset_path)
+
+
+def climatology_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(climatology())
+
+
+def _climatology_dataset_path(start_datetime: datetime) -> str:
+    start_datetime_string = start_datetime.strftime("%Y%m%d")
+    return f"{_CLOUDFERRO_BASELINE_FORECASTS_URL}/climatology/{start_datetime_string}.zarr"
+
+
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:
     return forecast_zarr_path_from_start_datetime.__name__.removeprefix("_").replace("_dataset_path", "")
 
