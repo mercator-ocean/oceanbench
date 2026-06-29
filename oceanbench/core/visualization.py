@@ -1508,7 +1508,24 @@ def _trajectory_distances_kilometers(
 
 
 def _surface_mask_field(dataset: xarray.Dataset, first_day_index: int) -> xarray.DataArray:
-    field = _standard_dataset(dataset)[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
+    standard_dataset = _standard_dataset(dataset)
+    # SSH provides the land/ocean mask (land = NaN), but currents-only systems such
+    # as GLONET HR carry no SSH. Any surface field shares the same finite-over-ocean
+    # structure, so fall back to a velocity component when SSH is absent.
+    field = None
+    for variable in (
+        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+        Variable.EASTWARD_SEA_WATER_VELOCITY,
+        Variable.NORTHWARD_SEA_WATER_VELOCITY,
+    ):
+        if variable.key() in standard_dataset:
+            field = standard_dataset[variable.key()]
+            break
+    if field is None:
+        raise KeyError(
+            "surface mask requires sea_surface_height_above_geoid or a velocity component; "
+            f"dataset has {list(standard_dataset.data_vars)}"
+        )
     if Dimension.FIRST_DAY_DATETIME.key() in field.dims:
         field = field.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index})
     if Dimension.LEAD_DAY_INDEX.key() in field.dims:
