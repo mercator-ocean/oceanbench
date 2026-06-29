@@ -33,9 +33,6 @@ class ObservationDataUnavailableError(ValueError):
 
 
 def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
-    # GLO12 MDT (GLO-MFC_001_024): the global challengers are GLO12-initialised, so their SSH sits on the
-    # GLO12 datum. Pairing the GLO12 MDT with the GLO12 mssh shift removes the ~5 cm SLA bias the previous
-    # GLORYS MDT (GLO-MFC_001_030) left when paired with the GLO12-tuned shift.
     if resolution == "twelfth_degree":
         return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt.zarr"
     if resolution == "quarter_degree":
@@ -46,7 +43,6 @@ def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
 
 
 def _mean_dynamic_topography_stage_path(resolution: str) -> Path:
-    # "glo12" tag so a stage built with the previous GLORYS MDT is not silently reused.
     return local_stage_directory() / f"class4-mean-dynamic-topography-2024-glo12-{resolution}.zarr"
 
 
