@@ -235,6 +235,32 @@ def _mean_sea_surface_height_shift(resolution: str) -> float:
     return REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
 
 
+def _mean_dynamic_topography_on_model_grid(
+    mean_dynamic_topography: xarray.DataArray,
+    model_variable: xarray.DataArray,
+) -> xarray.DataArray:
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
+    already_on_grid = numpy.array_equal(
+        mean_dynamic_topography[latitude_key].values, model_variable[latitude_key].values
+    ) and numpy.array_equal(
+        mean_dynamic_topography[longitude_key].values, model_variable[longitude_key].values
+    )
+    if already_on_grid:
+        return mean_dynamic_topography
+    # Regional MDTs (e.g. the 1/36 deg IBI MDT) sit on a grid that is floating-point
+    # offset from the forecast grid. A bare `model - mdt` xarray subtraction inner-joins
+    # the coordinates to the few that match exactly (a thin western sliver for IBI) and
+    # leaves the SLA undefined across the rest of the domain, silently dropping most of
+    # the altimetry observations from the score. Resample the MDT onto the model grid so
+    # SLA stays defined everywhere the model is. Global GLO12-gridded challengers already
+    # share the MDT grid and short-circuit above.
+    return mean_dynamic_topography.interp(
+        {latitude_key: model_variable[latitude_key], longitude_key: model_variable[longitude_key]},
+        method="linear",
+    )
+
+
 def _convert_forecast_ssh_to_sla(
     model_variable: xarray.DataArray,
     variable_key: str,
@@ -244,7 +270,9 @@ def _convert_forecast_ssh_to_sla(
     model_dataset = rename_dataset_with_standard_names(model_variable.to_dataset(name=variable_key))
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
-    mean_dynamic_topography = load_mean_dynamic_topography(resolution)
+    mean_dynamic_topography = _mean_dynamic_topography_on_model_grid(
+        load_mean_dynamic_topography(resolution), model_variable
+    )
     return model_variable - mean_dynamic_topography - _mean_sea_surface_height_shift(resolution)
 
 
