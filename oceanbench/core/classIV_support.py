@@ -21,13 +21,15 @@ from oceanbench.core.references.observations import load_mean_dynamic_topography
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
-# TODO: replace this single global SSH->SLA datum offset with a PER-MODEL offset,
-# fitted on a rolling ~1-year window of colocated observations (e.g. the mean of
-# model_SSH - MDT - observed_SLA over the trailing year). The current value is
-# GLORYS-tuned and applied to every system; each model (incl. regional ones like
-# GLONET2 IBI that use their own MDT lineage) should get its own offset matching
-# its own mean state instead. Until then, all models share this constant.
+# GLO12 (GLORYS) SSH->SLA datum offset. The global models are initialized from
+# GLO12, so their SSH shares the GLO12 reanalysis mean-sea-surface datum; this
+# aligns it with the altimetry SLA reference.
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
+# IBI (1/36) uses its own IBI MDT but has no fitted datum offset yet, so use 0 (no
+# shift correction) for now.
+# TODO: derive a PER-MODEL offset for IBI / any non-GLO12 lineage (e.g. the rolling
+# ~1-year mean of model_SSH - MDT - observed_SLA over the trailing year) instead of 0.
+IBI_MEAN_SEA_SURFACE_HEIGHT_SHIFT = 0.0
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 VELOCITY_TARGET_DEPTH_METERS = 15.0
@@ -225,6 +227,14 @@ def create_class4_observations_dataframe(
     )
 
 
+def _mean_sea_surface_height_shift(resolution: str) -> float:
+    # IBI (1/36) has its own MDT but no fitted datum offset yet -> 0; the GLO12
+    # models share the GLORYS-tuned offset.
+    if resolution == "thirty_sixth_degree":
+        return IBI_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    return REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+
+
 def _convert_forecast_ssh_to_sla(
     model_variable: xarray.DataArray,
     variable_key: str,
@@ -235,7 +245,7 @@ def _convert_forecast_ssh_to_sla(
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
     mean_dynamic_topography = load_mean_dynamic_topography(resolution)
-    return model_variable - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    return model_variable - mean_dynamic_topography - _mean_sea_surface_height_shift(resolution)
 
 
 def prepare_class4_model_variable(
