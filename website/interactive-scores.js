@@ -1233,10 +1233,9 @@ function resolveBaselineSelectionForTrack(challengerNames, selectedBaseline) {
 }
 
 function renderHiddenModels(hiddenChallengerNames) {
-  const wrapper = document.getElementById("all-scores");
-  if (!wrapper) return;
+  const header = document.getElementById("score-header");
   const existing = document.getElementById("hidden-models");
-  if (!hiddenChallengerNames || hiddenChallengerNames.length === 0) {
+  if (!header || !hiddenChallengerNames || hiddenChallengerNames.length === 0) {
     if (existing) existing.remove();
     return;
   }
@@ -1249,7 +1248,7 @@ function renderHiddenModels(hiddenChallengerNames) {
     )
     .join("");
   shelf.innerHTML = `<span class="hidden-models-label">Hidden</span>${chips}`;
-  wrapper.appendChild(shelf);
+  header.appendChild(shelf);
 }
 
 function setupChallengerActionDelegation() {

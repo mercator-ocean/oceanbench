@@ -819,9 +819,10 @@ body.quarto-dark .display-toggle-btn.active {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
-  margin-top: 1.25rem;
-  padding-top: 0.85rem;
+  padding: 0.35rem 0.6rem;
+  background: var(--ob-surface-raised);
   border-top: 1px solid var(--ob-border);
+  font-size: 0.75rem;
 }
 
 .hidden-models-label {
