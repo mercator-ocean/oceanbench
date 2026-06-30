@@ -732,7 +732,6 @@ body.quarto-dark .display-toggle-btn.active {
 
 .display-toggle {
   display: flex;
-  margin-left: auto;
 }
 
 .display-toggle-btn {
@@ -818,6 +817,8 @@ body.quarto-dark .display-toggle-btn.active {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  padding-left: 0.85rem;
+  border-left: 1px solid var(--ob-border);
 }
 
 .hidden-models-label {
