@@ -64,7 +64,7 @@ def _full_score_preview() -> dict:
                 "lead_values": {"1": 0.29, "10": 0.34},
             },
             {
-                "label": "Sea level (SLA)",
+                "label": "Sea level anomaly",
                 "unit": "m",
                 "lead_values": {"1": 0.05, "10": 0.07},
             },
@@ -149,7 +149,7 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
     assert "validation-note" in html
     # The representative-scores widget is the manifest preview (same renderer as the listing page).
     assert "Temperature, surface" in html
-    assert "Sea level (SLA)" in html
+    assert "Sea level anomaly" in html
     assert "Surface drifter deviation" in html
     assert "Lead 10" in html
     assert 'data-tooltip="Lead 1: 1.200 C"' in html

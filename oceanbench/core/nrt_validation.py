@@ -91,7 +91,7 @@ class NrtValidationResult:
 # model (HR) emits only the drifter.
 TEMPERATURE_PREVIEW_ROW = ("temperature", "surface", "Temperature, surface")
 SALINITY_PREVIEW_ROW = ("salinity", "0-5m", "Salinity, 0-5 m")
-SLA_PREVIEW_ROW = ("sea level anomaly", "surface", "Sea level (SLA)")
+SLA_PREVIEW_ROW = ("sea level anomaly", "surface", "Sea level anomaly")
 # The two 15 m velocity components are combined into one vector-RMSE currents metric.
 CURRENTS_PREVIEW_COMPONENTS = (("zonal current", "15m"), ("meridional current", "15m"))
 CURRENTS_PREVIEW_LABEL = "Currents, 15 m"
