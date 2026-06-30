@@ -755,45 +755,106 @@ body.quarto-dark .display-toggle-btn.active {
   border-left: none;
 }
 
-/* --- Reference baselines toggle --- */
+/* --- Per-row actions: pin as reference / hide --- */
 
-.reference-toggle {
-  display: flex;
+.score-table .model-col {
+  padding-right: 2.6rem;
 }
 
-.reference-toggle-btn {
-  padding: 0.2rem 0.5rem;
-  border: 1px solid var(--ob-border);
-  border-radius: var(--ob-radius-sm);
-  background: var(--ob-surface);
-  color: var(--bs-body-color, #333940);
+.score-table .model-col .row-actions {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem;
+  border: none;
+  background: none;
+  color: var(--ob-muted, #6c757d);
   cursor: pointer;
-  font-size: inherit;
-  font-weight: 500;
-  line-height: 1.4;
+  opacity: 0;
+  line-height: 1;
+  transition: opacity 0.12s ease, color 0.12s ease;
 }
 
-.reference-toggle-btn:hover:not(.active) {
-  border-color: var(--ob-accent);
+.row-action svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+.score-table tr:hover .row-action {
+  opacity: 0.55;
+}
+
+.row-action:hover,
+.row-action:focus-visible {
+  opacity: 1 !important;
   color: var(--ob-accent);
 }
 
-.reference-toggle-btn.active {
-  background: var(--ob-accent);
-  color: var(--ob-accent-contrast);
-  border-color: var(--ob-accent);
+.pin-action.active {
+  opacity: 1 !important;
+  color: var(--ob-accent);
 }
 
-body.quarto-dark .reference-toggle-btn {
-  background: var(--ob-surface);
-  color: var(--ob-muted);
-  border-color: var(--ob-border);
+@media (hover: none) {
+  .row-action {
+    opacity: 0.55;
+  }
 }
 
-body.quarto-dark .reference-toggle-btn.active {
-  background: var(--ob-accent);
-  color: var(--ob-accent-contrast);
+/* --- Hidden models shelf --- */
+
+#hidden-models {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1.25rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--ob-border);
+}
+
+.hidden-models-label {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--ob-muted, #6c757d);
+}
+
+.hidden-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.12rem 0.55rem 0.12rem 0.4rem;
+  border: 1px dashed var(--ob-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ob-muted, #6c757d);
+  cursor: pointer;
+  font-size: 0.85em;
+  line-height: 1.5;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.hidden-chip svg {
+  width: 11px;
+  height: 11px;
+}
+
+.hidden-chip:hover,
+.hidden-chip:focus-visible {
+  border-style: solid;
   border-color: var(--ob-accent);
+  color: var(--ob-accent);
 }
 
 /* --- Scale input --- */
@@ -1007,21 +1068,6 @@ body.quarto-dark .score-table tr.baseline-row td {
 
 .score-table tr.reference-row th.model-col a {
   color: var(--ob-muted, #6c757d);
-}
-
-.reference-badge {
-  display: inline-block;
-  margin-left: 0.35rem;
-  padding: 0 0.3rem;
-  border-radius: var(--ob-radius-sm);
-  background: var(--ob-muted, #9aa0a6);
-  color: var(--ob-surface, #ffffff);
-  font-size: 0.68em;
-  font-style: normal;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  vertical-align: middle;
 }
 
 /* --- Section headings --- */
