@@ -496,7 +496,7 @@ function attachTabListeners() {
   });
 }
 
-function buildControlsInnerHtml(depths) {
+function buildControlsInnerHtml(depths, hiddenChallengerNames) {
   let markup = "";
 
   markup += '<span id="depth-toggle" class="depth-toggle">';
@@ -507,6 +507,14 @@ function buildControlsInnerHtml(depths) {
     markup += `<button class="depth-toggle-btn${active}" data-depth="${depth}">${depth}</button>`;
   }
   markup += "</span></span>";
+
+  if (hiddenChallengerNames && hiddenChallengerNames.length > 0) {
+    markup += '<span class="hidden-group"><span class="hidden-models-label">Hidden</span>';
+    for (const name of hiddenChallengerNames) {
+      markup += `<button type="button" class="hidden-chip" data-action="show" data-challenger="${name}" title="Show ${displayName(name)}">${ROW_ACTION_ICONS.add}<span>${displayName(name)}</span></button>`;
+    }
+    markup += "</span>";
+  }
 
   markup += '<span class="display-toggle">';
   markup += `<button class="display-toggle-btn${!showPercentDiff ? " active" : ""}" data-display="values">Values</button>`;
@@ -1232,25 +1240,6 @@ function resolveBaselineSelectionForTrack(challengerNames, selectedBaseline) {
   return resolveBaselineSelection(challengerNames, selectedBaseline, activeTrack);
 }
 
-function renderHiddenModels(hiddenChallengerNames) {
-  const header = document.getElementById("score-header");
-  const existing = document.getElementById("hidden-models");
-  if (!header || !hiddenChallengerNames || hiddenChallengerNames.length === 0) {
-    if (existing) existing.remove();
-    return;
-  }
-  const shelf = existing || document.createElement("div");
-  shelf.id = "hidden-models";
-  const chips = hiddenChallengerNames
-    .map(
-      (name) =>
-        `<button type="button" class="hidden-chip" data-action="show" data-challenger="${name}" title="Show ${displayName(name)}">${ROW_ACTION_ICONS.add}<span>${displayName(name)}</span></button>`,
-    )
-    .join("");
-  shelf.innerHTML = `<span class="hidden-models-label">Hidden</span>${chips}`;
-  header.appendChild(shelf);
-}
-
 function setupChallengerActionDelegation() {
   const wrapper = document.getElementById("all-scores");
   if (!wrapper || wrapper.dataset.challengerActionsBound === "true") return;
@@ -1271,7 +1260,9 @@ function setupChallengerActionDelegation() {
       return;
     }
     event.preventDefault();
+    const scrollPosition = window.scrollY;
     renderAllTables();
+    window.scrollTo(0, scrollPosition);
   });
 }
 
@@ -1336,10 +1327,9 @@ function renderAllTables() {
   const versionTracks = getVersionTracks(getActiveVersionData(data));
 
   const controlsElement = ensureHeaderElement();
-  controlsElement.innerHTML = buildControlsInnerHtml(availableDepths);
+  controlsElement.innerHTML = buildControlsInnerHtml(availableDepths, hiddenChallengerNames);
   renderRegionSelector(regionIds, versionTracks, availableTracks);
   renderVersionSelector(getVersions(data));
-  renderHiddenModels(hiddenChallengerNames);
 
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {
