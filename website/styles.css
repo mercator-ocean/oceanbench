@@ -755,6 +755,47 @@ body.quarto-dark .display-toggle-btn.active {
   border-left: none;
 }
 
+/* --- Reference baselines toggle --- */
+
+.reference-toggle {
+  display: flex;
+}
+
+.reference-toggle-btn {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-surface);
+  color: var(--bs-body-color, #333940);
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.reference-toggle-btn:hover:not(.active) {
+  border-color: var(--ob-accent);
+  color: var(--ob-accent);
+}
+
+.reference-toggle-btn.active {
+  background: var(--ob-accent);
+  color: var(--ob-accent-contrast);
+  border-color: var(--ob-accent);
+}
+
+body.quarto-dark .reference-toggle-btn {
+  background: var(--ob-surface);
+  color: var(--ob-muted);
+  border-color: var(--ob-border);
+}
+
+body.quarto-dark .reference-toggle-btn.active {
+  background: var(--ob-accent);
+  color: var(--ob-accent-contrast);
+  border-color: var(--ob-accent);
+}
+
 /* --- Scale input --- */
 
 #scale-input {
@@ -954,6 +995,33 @@ body.quarto-dark .depth-table thead th:last-child {
 
 body.quarto-dark .score-table tr.baseline-row td {
   background: #2a2a2a;
+}
+
+/* --- Reference baseline rows --- */
+
+.score-table tr.reference-row th.model-col {
+  box-shadow: inset 3px 0 0 var(--ob-muted, #9aa0a6);
+  font-style: italic;
+  font-weight: 500;
+}
+
+.score-table tr.reference-row th.model-col a {
+  color: var(--ob-muted, #6c757d);
+}
+
+.reference-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0 0.3rem;
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-muted, #9aa0a6);
+  color: var(--ob-surface, #ffffff);
+  font-size: 0.68em;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
 }
 
 /* --- Section headings --- */

@@ -148,3 +148,8 @@ CHALLENGERS = {
 
 def challenger_label(challenger_name: str) -> str:
     return CHALLENGERS.get(challenger_name, {}).get("label", challenger_name)
+
+
+def challenger_category(challenger_name: str) -> str:
+    method = CHALLENGERS.get(challenger_name, {}).get("method")
+    return "baseline" if method == "Baseline" else "model"
