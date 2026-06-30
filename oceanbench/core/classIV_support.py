@@ -34,6 +34,24 @@ VELOCITY_TARGET_DEPTH_METERS = 15.0
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
 
 
+def model_omits_velocity_target_depth(model_variable: xarray.DataArray, variable_key: str) -> bool:
+    """True for a velocity variable whose model field has no depth level reaching the 15 m drifter
+    target -- i.e. a surface-only current that cannot be interpolated to the Class IV observation
+    depth. The diagnostic is then skipped so the model is not scored at a depth it does not resolve
+    (its Lagrangian drifter deviation still captures its current skill). Models that DO carry a
+    depth axis spanning 15 m are unaffected -- the vertical interpolation is untouched."""
+    if variable_key not in (
+        Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+    ):
+        return False
+    depth_key = Dimension.DEPTH.key()
+    if depth_key not in model_variable.dims:
+        return True
+    depths = numpy.asarray(model_variable[depth_key].values, dtype=float)
+    return not (depths.size > 0 and bool(numpy.nanmax(depths) >= VELOCITY_TARGET_DEPTH_METERS))
+
+
 def _assign_depth_bins(
     depth_values: numpy.ndarray,
     depth_bins: dict[str, tuple[float, float]],

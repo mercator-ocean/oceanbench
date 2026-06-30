@@ -10,6 +10,7 @@ from oceanbench.core.classIV_support import (
     create_class4_observations_dataframe,
     format_class4_results,
     interpolate_class4_model_to_observations,
+    model_omits_velocity_target_depth,
     prepare_class4_model_variable,
 )
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
@@ -105,6 +106,11 @@ def class4_validation_dataframe(
 
     for standard_variable_key, observation_variable_key, challenger_variable_key in resolved_variables:
         if challenger_variable_key not in challenger or observation_variable_key not in observations:
+            continue
+        # Skip the 15 m current diagnostic for a model whose current field has no depth reaching 15 m
+        # (a surface-only field): there is no genuine 15 m current to score, only its surface. The
+        # model's Lagrangian drifter deviation still captures its current skill.
+        if model_omits_velocity_target_depth(challenger[challenger_variable_key], standard_variable_key):
             continue
         observations_dataframe = _create_observations_dataframe(
             observations,
