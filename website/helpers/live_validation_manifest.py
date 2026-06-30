@@ -25,12 +25,16 @@ REPORT_PAGE_NAMES = {
 }
 
 
-def read_live_validation_manifest(manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> dict:
+def read_live_validation_manifest(
+    manifest_path: str | Path = DEFAULT_MANIFEST_PATH,
+) -> dict:
     with open(manifest_path, encoding="utf-8") as manifest_file:
         return json.load(manifest_file)
 
 
-def live_validation_evaluations(manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> list[dict]:
+def live_validation_evaluations(
+    manifest_path: str | Path = DEFAULT_MANIFEST_PATH,
+) -> list[dict]:
     manifest = read_live_validation_manifest(manifest_path)
     return list(manifest.get("evaluations", []))
 
@@ -80,6 +84,7 @@ def _metadata_from_evaluation(evaluation: dict) -> ForecastValidationMetadata:
         status=evaluation["status"],
         note=evaluation.get("note"),
         system_id=evaluation["system_id"],
+        score_preview=evaluation.get("score_preview"),
     )
 
 
@@ -87,17 +92,28 @@ def _preview_panel_id(evaluation: dict) -> str:
     return f"live-preview-{evaluation['system_id']}"
 
 
-def render_live_validation_summary(manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> str:
+def render_live_validation_summary(
+    manifest_path: str | Path = DEFAULT_MANIFEST_PATH,
+) -> str:
     manifest = read_live_validation_manifest(manifest_path)
     evaluations = list(manifest["evaluations"])
     completed_system_count = _completed_system_count(evaluations)
     cards = [
         ("Forecast init", _shared_evaluation_value(evaluations, "forecast_init")),
-        ("Observation cutoff", _shared_evaluation_value(evaluations, "observation_cutoff")),
+        (
+            "Observation cutoff",
+            _shared_evaluation_value(evaluations, "observation_cutoff"),
+        ),
         ("Completed systems", f"{completed_system_count} / {len(evaluations)}"),
     ]
     if manifest.get("generated_at"):
-        cards.append(("Last updated", str(manifest["generated_at"]).replace("T", " ").removesuffix("Z") + " UTC"))
+        cards.append(
+            (
+                "Last updated",
+                str(manifest["generated_at"]).replace("T", " ").removesuffix("Z")
+                + " UTC",
+            )
+        )
     return (
         '<div class="live-evaluations-summary validation-summary-grid">'
         + "".join(
@@ -111,19 +127,29 @@ def render_live_validation_summary(manifest_path: str | Path = DEFAULT_MANIFEST_
     )
 
 
-def render_live_validation_table(manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> str:
+def render_live_validation_table(
+    manifest_path: str | Path = DEFAULT_MANIFEST_PATH,
+) -> str:
     evaluations = live_validation_evaluations(manifest_path)
     selected_panel_id = next(
-        (_preview_panel_id(evaluation) for evaluation in evaluations if evaluation.get("status") == "Complete"),
+        (
+            _preview_panel_id(evaluation)
+            for evaluation in evaluations
+            if evaluation.get("status") == "Complete"
+        ),
         None,
     )
     rows = "".join(
         (
-            "<tr" + _live_validation_table_row_attributes(evaluation, selected_panel_id) + ">"
+            "<tr"
+            + _live_validation_table_row_attributes(evaluation, selected_panel_id)
+            + ">"
             f"<td>{_live_validation_system_cell(evaluation, selected_panel_id)}</td>"
             f"<td>{escape(_forecast_horizon(evaluation))}</td>"
             f"<td>{escape(evaluation['validated_lead_days'])}</td>"
-            f"<td>{escape(evaluation['status'])}</td>" + _report_cell(evaluation) + "</tr>"
+            f"<td>{escape(evaluation['status'])}</td>"
+            + _report_cell(evaluation)
+            + "</tr>"
         )
         for evaluation in evaluations
     )
@@ -139,7 +165,9 @@ def render_live_validation_table(manifest_path: str | Path = DEFAULT_MANIFEST_PA
     )
 
 
-def _live_validation_table_row_attributes(evaluation: dict, selected_panel_id: str | None) -> str:
+def _live_validation_table_row_attributes(
+    evaluation: dict, selected_panel_id: str | None
+) -> str:
     if evaluation.get("status") != "Complete":
         return ' class="live-evaluation-row"'
     panel_id = _preview_panel_id(evaluation)
@@ -151,7 +179,9 @@ def _live_validation_table_row_attributes(evaluation: dict, selected_panel_id: s
     )
 
 
-def _live_validation_system_cell(evaluation: dict, selected_panel_id: str | None) -> str:
+def _live_validation_system_cell(
+    evaluation: dict, selected_panel_id: str | None
+) -> str:
     if evaluation.get("status") != "Complete":
         return escape(evaluation["system_label"])
     panel_id = _preview_panel_id(evaluation)
@@ -166,7 +196,9 @@ def _live_validation_system_cell(evaluation: dict, selected_panel_id: str | None
     )
 
 
-def render_live_validation_preview_panel(manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> str:
+def render_live_validation_preview_panel(
+    manifest_path: str | Path = DEFAULT_MANIFEST_PATH,
+) -> str:
     evaluations = [
         evaluation
         for evaluation in live_validation_evaluations(manifest_path)
@@ -180,7 +212,9 @@ def render_live_validation_preview_panel(manifest_path: str | Path = DEFAULT_MAN
             f'<section id="{escape(_preview_panel_id(evaluation))}" class="live-preview-panel-content" role="region"'
             + (" hidden" if index != 0 else "")
             + ">"
-            + render_forecast_validation_manifest_score_preview(evaluation.get("score_preview"))
+            + render_forecast_validation_manifest_score_preview(
+                evaluation.get("score_preview")
+            )
             + "</section>"
         )
         for index, evaluation in enumerate(evaluations)
@@ -192,7 +226,9 @@ def render_live_validation_preview_panel(manifest_path: str | Path = DEFAULT_MAN
         "Select a challenger to preview selected RMSD metrics; reports contain the full evaluation tables."
         "</p>"
         f"{panels}"
-        "</section>" + _live_preview_panel_script() + render_forecast_validation_score_preview_script()
+        "</section>"
+        + _live_preview_panel_script()
+        + render_forecast_validation_score_preview_script()
     )
 
 

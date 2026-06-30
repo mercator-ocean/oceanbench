@@ -11,7 +11,10 @@ sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
 import pytest  # noqa: E402
 
-from helpers.live_validation_report import ForecastValidationMetadata, render_forecast_validation_page  # noqa: E402
+from helpers.live_validation_report import (
+    ForecastValidationMetadata,
+    render_forecast_validation_page,
+)  # noqa: E402
 
 
 def _score_table() -> str:
@@ -40,6 +43,52 @@ def _drifter_score_table() -> str:
     )
 
 
+def _full_score_preview() -> dict:
+    # The variable-driven manifest preview the listing page renders; the report page reuses it
+    # verbatim so the two stay consistent. Temperature values match the notebook table below.
+    return {
+        "metrics": [
+            {
+                "label": "Temperature, surface",
+                "unit": "C",
+                "lead_values": {"1": 1.2, "10": 1.4},
+            },
+            {
+                "label": "Salinity, 0-5 m",
+                "unit": "PSU",
+                "lead_values": {"1": 0.3, "10": 0.4},
+            },
+            {
+                "label": "Currents, 15 m",
+                "unit": "m/s",
+                "lead_values": {"1": 0.29, "10": 0.34},
+            },
+            {
+                "label": "Sea level (SLA)",
+                "unit": "m",
+                "lead_values": {"1": 0.05, "10": 0.07},
+            },
+            {
+                "label": "Surface drifter deviation",
+                "unit": "km",
+                "lead_values": {"1": 12.3, "10": 45.6},
+            },
+        ]
+    }
+
+
+def _drifter_only_score_preview() -> dict:
+    return {
+        "metrics": [
+            {
+                "label": "Surface drifter deviation",
+                "unit": "km",
+                "lead_values": {"1": 12.3, "10": 45.6},
+            },
+        ]
+    }
+
+
 def _write_notebook(notebook_path: Path) -> None:
     notebook = {
         "cells": [
@@ -56,19 +105,25 @@ def _write_notebook(notebook_path: Path) -> None:
             {
                 "cell_type": "code",
                 "source": "evaluation_report.class4_drifter_trajectory_explorer",
-                "outputs": [{"data": {"text/html": '<iframe class="drifter-widget"></iframe>'}}],
+                "outputs": [
+                    {"data": {"text/html": '<iframe class="drifter-widget"></iframe>'}}
+                ],
             },
             {
                 "cell_type": "code",
                 "source": "evaluation_report.class4_observation_error_explorer",
-                "outputs": [{"data": {"text/html": '<iframe class="class4-widget"></iframe>'}}],
+                "outputs": [
+                    {"data": {"text/html": '<iframe class="class4-widget"></iframe>'}}
+                ],
             },
         ]
     }
     notebook_path.write_text(json.dumps(notebook), encoding="utf-8")
 
 
-def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_chrome(tmp_path: Path) -> None:
+def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_chrome(
+    tmp_path: Path,
+) -> None:
     notebook_path = tmp_path / "glonet.latest.global.report.ipynb"
     _write_notebook(notebook_path)
 
@@ -82,6 +137,7 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
             status="Complete",
             note="Forecast regenerated on demand.",
             system_id="octo-glonet-p1d",
+            score_preview=_full_score_preview(),
         ),
     )
 
@@ -91,17 +147,20 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
     assert "2026-05-23" in html
     assert "Forecast regenerated on demand." in html
     assert "validation-note" in html
+    # The representative-scores widget is the manifest preview (same renderer as the listing page).
     assert "Temperature, surface" in html
+    assert "Sea level (SLA)" in html
+    assert "Surface drifter deviation" in html
     assert "Lead 10" in html
     assert 'data-tooltip="Lead 1: 1.200 C"' in html
     assert 'data-tooltip="Lead 10: 1.400 C"' in html
     assert "validation-sparkline-tooltip" in html
     assert 'class="validation-sparkline-point"' in html
+    # The detailed RMSD + drifter tables still come from the executed notebook.
     assert "Drifter trajectory scores" in html
     assert "Drifter trajectory divergence" in html
     assert "Lead 1 (init)" in html
     assert "class-4 drifter trajectory deviation mean" in html
-    assert "12.300 km" not in html
     assert "<td>12.300</td>" in html
     assert '<iframe class="drifter-widget"></iframe>' in html
     assert "<title>" not in html
@@ -109,10 +168,18 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
     assert "<details" not in html
     assert '<iframe class="class4-widget"></iframe>' in html
     assert "Representative lead-time scores" in html
-    assert html.index("Representative lead-time scores") < html.index("Detailed Class IV RMSD")
-    assert html.index("Detailed Class IV RMSD") < html.index("Drifter trajectory scores")
-    assert html.index("Drifter trajectory scores") < html.index("Observation error maps")
-    assert html.index("Observation error maps") < html.index("Drifter trajectory divergence")
+    assert html.index("Representative lead-time scores") < html.index(
+        "Detailed Class IV RMSD"
+    )
+    assert html.index("Detailed Class IV RMSD") < html.index(
+        "Drifter trajectory scores"
+    )
+    assert html.index("Drifter trajectory scores") < html.index(
+        "Observation error maps"
+    )
+    assert html.index("Observation error maps") < html.index(
+        "Drifter trajectory divergence"
+    )
     assert html.index('<iframe class="class4-widget"></iframe>') < html.index(
         '<iframe class="drifter-widget"></iframe>'
     )
@@ -120,7 +187,9 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
     assert "cell" not in html.lower()
 
 
-def test_render_forecast_validation_page_supports_glonet2_ibi_system(tmp_path: Path) -> None:
+def test_render_forecast_validation_page_supports_glonet2_ibi_system(
+    tmp_path: Path,
+) -> None:
     notebook_path = tmp_path / "glonet2-ibi-experimental.latest.ibi.report.ipynb"
     _write_notebook(notebook_path)
 
@@ -133,6 +202,7 @@ def test_render_forecast_validation_page_supports_glonet2_ibi_system(tmp_path: P
             observation_cutoff="2026-05-23",
             status="Complete",
             system_id="octo-glonet2-ibi-p1d",
+            score_preview=_full_score_preview(),
         ),
     )
 
@@ -153,14 +223,18 @@ def _write_surface_only_notebook(notebook_path: Path) -> None:
             {
                 "cell_type": "code",
                 "source": "evaluation_report.class4_drifter_trajectory_explorer",
-                "outputs": [{"data": {"text/html": '<iframe class="drifter-widget"></iframe>'}}],
+                "outputs": [
+                    {"data": {"text/html": '<iframe class="drifter-widget"></iframe>'}}
+                ],
             },
         ]
     }
     notebook_path.write_text(json.dumps(notebook), encoding="utf-8")
 
 
-def test_render_forecast_validation_page_renders_surface_only_report_without_class4_rmsd(tmp_path: Path) -> None:
+def test_render_forecast_validation_page_self_suppresses_class4_rmsd_for_surface_only(
+    tmp_path: Path,
+) -> None:
     notebook_path = tmp_path / "glonet.latest.global.report.ipynb"
     _write_surface_only_notebook(notebook_path)
 
@@ -173,24 +247,28 @@ def test_render_forecast_validation_page_renders_surface_only_report_without_cla
             observation_cutoff="2026-05-23",
             status="Complete",
             system_id="octo-glonet-p1d",
+            score_preview=_drifter_only_score_preview(),
         ),
     )
 
-    # Drifter trajectory deviation is the headline for surface-only systems.
-    assert "Surface drifter evaluation is complete" in html
+    # One self-suppressing path: the unified intro + the manifest preview (drifter only).
+    assert "Class IV evaluation is complete" in html
+    assert "Representative lead-time scores" in html
+    assert "Surface drifter deviation" in html
     assert "Drifter trajectory scores" in html
     assert "Drifter trajectory divergence" in html
     assert "class-4 drifter trajectory deviation mean" in html
     assert '<iframe class="drifter-widget"></iframe>' in html
-    # The gridded Class IV RMSD sections must be absent (the system has no 15 m currents).
+    # The gridded Class IV RMSD sections self-suppress (no scorable observation variables).
     assert "Detailed Class IV RMSD" not in html
     assert "Observation error maps" not in html
-    assert "Representative lead-time scores" not in html
     assert "Temperature, surface" not in html
     assert "evaluation_report" not in html
 
 
-def test_render_forecast_validation_page_rejects_unmapped_system(tmp_path: Path) -> None:
+def test_render_forecast_validation_page_rejects_unmapped_system(
+    tmp_path: Path,
+) -> None:
     notebook_path = tmp_path / "mystery.latest.global.report.ipynb"
     _write_notebook(notebook_path)
 
