@@ -294,7 +294,7 @@ body.quarto-dark .score-table .standard-name {
   border-radius: var(--ob-radius-md);
   box-shadow: var(--ob-soft-shadow);
   min-width: max-content;
-  overflow: hidden;
+  overflow: visible;
 }
 
 body.quarto-dark #score-header {
@@ -630,6 +630,7 @@ body.quarto-dark .score-tab.active {
   padding: 0.4rem 0.6rem;
   background: var(--ob-surface-raised);
   border-top: 1px solid var(--ob-border);
+  border-radius: 0 0 var(--ob-radius-md) var(--ob-radius-md);
   margin-bottom: 0;
   align-items: center;
   font-size: 0.75rem;
@@ -811,46 +812,132 @@ body.quarto-dark .display-toggle-btn.active {
   }
 }
 
-/* --- Hidden models shelf --- */
+/* --- Collapse controls (Depths / Models) --- */
 
-.hidden-group {
+.control-dropdown {
+  position: relative;
   display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding-left: 0.85rem;
-  border-left: 1px solid var(--ob-border);
 }
 
-.hidden-models-label {
-  font-weight: 500;
-  color: var(--ob-muted, #6c757d);
-}
-
-.hidden-chip {
+.control-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.2rem 0.5rem 0.2rem 0.35rem;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-sm);
   background: var(--ob-surface);
-  color: var(--ob-muted, #6c757d);
+  color: var(--bs-body-color, #333940);
   cursor: pointer;
   font-size: inherit;
   font-weight: 500;
   line-height: 1.4;
-  transition: color 0.12s ease, border-color 0.12s ease;
+  white-space: nowrap;
 }
 
-.hidden-chip svg {
+.control-trigger:hover:not(:disabled),
+.control-dropdown.open .control-trigger {
+  border-color: var(--ob-accent);
+  color: var(--ob-accent);
+}
+
+.control-trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+body.quarto-dark .control-trigger {
+  background: var(--ob-surface);
+  color: var(--ob-muted);
+  border-color: var(--ob-border);
+}
+
+.control-caret {
+  display: inline-flex;
+  transition: transform 0.12s ease;
+}
+
+.control-caret svg {
+  display: block;
   width: 12px;
   height: 12px;
 }
 
-.hidden-chip:hover,
-.hidden-chip:focus-visible {
-  border-color: var(--ob-accent);
+.control-dropdown.open .control-caret {
+  transform: rotate(180deg);
+}
+
+.control-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: max-content;
+  padding: 0.4rem;
+  background: var(--ob-surface-raised);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  box-shadow: var(--ob-soft-shadow);
+}
+
+.model-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0.3rem;
+  white-space: nowrap;
+}
+
+.model-option-name {
+  flex: 1 1 auto;
+  font-weight: 500;
+}
+
+.model-option.is-hidden .model-option-name {
+  color: var(--ob-muted, #6c757d);
+  font-style: italic;
+}
+
+.model-option-vis,
+.model-option-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem;
+  border: none;
+  background: none;
+  color: var(--ob-muted, #6c757d);
+  cursor: pointer;
+}
+
+.model-option-vis svg,
+.model-option-pin svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.model-option-vis:hover,
+.model-option-pin:hover {
   color: var(--ob-accent);
+}
+
+.model-option-pin.active {
+  color: var(--ob-accent);
+}
+
+.model-option-vis--locked {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Display cluster stays right-pinned so the colorbar keeps a fixed position */
+
+.controls-display {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin-left: auto;
 }
 
 /* --- Scale input --- */
