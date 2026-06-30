@@ -14,22 +14,11 @@ CHALLENGER_DATASET_PLACEHOLDER = "challenger_dataset: xarray.Dataset = xarray.Da
 EVALUATION_REGION_PLACEHOLDER = 'region = "global"'
 
 REPORT_PROFILE_DEFAULT = "default"
-REPORT_PROFILE_SURFACE_ONLY = "surface_only"
-_LIVE_EVALUATION_TEMPLATE_NAMES = {
-    REPORT_PROFILE_DEFAULT: "live_evaluation_template.py",
-    REPORT_PROFILE_SURFACE_ONLY: "live_evaluation_surface_template.py",
-}
-
-
-def _live_evaluation_template_file_name(report_profile: str | None) -> str:
-    resolved_report_profile = report_profile or REPORT_PROFILE_DEFAULT
-    try:
-        return _LIVE_EVALUATION_TEMPLATE_NAMES[resolved_report_profile]
-    except KeyError:
-        raise ValueError(
-            f"Unknown report profile {resolved_report_profile!r}. "
-            f"Expected one of {sorted(_LIVE_EVALUATION_TEMPLATE_NAMES)}."
-        )
+# Single variable-driven live-evaluation template: every diagnostic cell self-suppresses
+# when the challenger lacks its variables, so one template serves all models (full global,
+# surface-currents-only HR, or any subset). report_profile is retained only as an inert
+# manifest/metadata label for back-compat; it no longer selects a template.
+LIVE_EVALUATION_TEMPLATE_NAME = "live_evaluation_template.py"
 
 
 def _parse_challenger_python_code(
@@ -68,7 +57,7 @@ def generate_live_evaluation_notebook_file(
         challenger_python_code_uri_or_local_path,
         output_notebook_file_path,
         region=region,
-        template_file_name=_live_evaluation_template_file_name(resolved_report_profile),
+        template_file_name=LIVE_EVALUATION_TEMPLATE_NAME,
         metadata_updates={"live_evaluation": True, "report_profile": resolved_report_profile},
     )
 

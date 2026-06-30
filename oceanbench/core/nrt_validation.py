@@ -85,12 +85,16 @@ class NrtValidationResult:
     score_preview: dict | None = None
 
 
-REPRESENTATIVE_SCORE_PREVIEW_ROWS = (
-    ("temperature", "surface", "Temperature, surface"),
-    ("salinity", "0-5m", "Salinity, 0-5 m"),
-    ("zonal current", "15m", "Zonal current, 15 m"),
-    ("meridional current", "15m", "Meridional current, 15 m"),
-)
+# Representative preview metrics, keyed on the (variable, depth) label as it appears in
+# the Class-4 RMSD table. A model contributes whichever it has (compute-what-you-can):
+# a full global model emits T / S / currents / SLA (+ drifter); a surface-currents-only
+# model (HR) emits only the drifter.
+TEMPERATURE_PREVIEW_ROW = ("temperature", "surface", "Temperature, surface")
+SALINITY_PREVIEW_ROW = ("salinity", "0-5m", "Salinity, 0-5 m")
+SLA_PREVIEW_ROW = ("sea level anomaly", "surface", "Sea level (SLA)")
+# The two 15 m velocity components are combined into one vector-RMSE currents metric.
+CURRENTS_PREVIEW_COMPONENTS = (("zonal current", "15m"), ("meridional current", "15m"))
+CURRENTS_PREVIEW_LABEL = "Currents, 15 m"
 CLASS4_OBSERVATION_RMSD_SOURCE = "evaluation_report.class4_observation.rmsd"
 CLASS4_DRIFTER_DEVIATION_SOURCE = "evaluation_report.class4_drifter_trajectory_deviation"
 DRIFTER_DEVIATION_PREVIEW_LABEL = "Surface drifter deviation"
@@ -359,15 +363,15 @@ def _parsed_score_label(label: str) -> tuple[str, str, str] | None:
     return match.group(1).lower(), match.group(2), match.group(3).lower()
 
 
-def _score_preview_from_rmsd_html(raw_html: str) -> dict | None:
+def _rmsd_preview_metrics(raw_html: str) -> list[dict]:
+    # Emit whichever representative Class-4 RMSD rows are present (compute-what-you-can):
+    # T/surface, S/0-5m, SLA/surface as single rows, and the two 15 m current components
+    # combined into one vector-RMSE "Currents, 15 m" metric.
     table_rows = _html_table_rows(raw_html)
     if not table_rows:
-        return None
+        return []
     lead_days = [_lead_day_number(header) for header in table_rows[0][1:]]
-    representative_rows = {
-        (variable_name, depth): label for variable_name, depth, label in REPRESENTATIVE_SCORE_PREVIEW_ROWS
-    }
-    metrics_by_representative_row = {}
+    parsed: dict[tuple[str, str], dict] = {}
     for row in table_rows[1:]:
         if not row:
             continue
@@ -375,35 +379,38 @@ def _score_preview_from_rmsd_html(raw_html: str) -> dict | None:
         if parsed_label is None:
             continue
         variable_name, unit, depth = parsed_label
-        label = representative_rows.get((variable_name, depth))
-        if label is None:
-            continue
-        metrics_by_representative_row[(variable_name, depth)] = {
-            "label": label,
+        parsed[(variable_name, depth)] = {
             "unit": unit,
             "lead_values": {lead_day: _float_or_none(value) for lead_day, value in zip(lead_days, row[1:])},
         }
-    if len(metrics_by_representative_row) != len(REPRESENTATIVE_SCORE_PREVIEW_ROWS):
-        return None
-    return {
-        "metrics": [
-            metrics_by_representative_row[(variable_name, depth)]
-            for variable_name, depth, _ in REPRESENTATIVE_SCORE_PREVIEW_ROWS
-        ],
-    }
 
+    metrics: list[dict] = []
 
-def _score_preview_from_report_notebook(
-    report_notebook: str,
-    output_bucket: str | None,
-    output_prefix: str | None,
-) -> dict | None:
-    try:
-        notebook = _report_notebook_document(report_notebook, output_bucket, output_prefix)
-        raw_html = _class4_observation_rmsd_html(notebook)
-        return _score_preview_from_rmsd_html(raw_html) if raw_html else None
-    except Exception:
-        return None
+    def _append_scalar(row_spec: tuple[str, str, str]) -> None:
+        variable_name, depth, label = row_spec
+        entry = parsed.get((variable_name, depth))
+        if entry is None:
+            return
+        metrics.append({"label": label, "unit": entry["unit"], "lead_values": entry["lead_values"]})
+
+    _append_scalar(TEMPERATURE_PREVIEW_ROW)
+    _append_scalar(SALINITY_PREVIEW_ROW)
+
+    zonal = parsed.get(CURRENTS_PREVIEW_COMPONENTS[0])
+    meridional = parsed.get(CURRENTS_PREVIEW_COMPONENTS[1])
+    if zonal is not None and meridional is not None:
+        lead_values: dict[str, float | None] = {}
+        for lead_day, zonal_value in zonal["lead_values"].items():
+            meridional_value = meridional["lead_values"].get(lead_day)
+            lead_values[lead_day] = (
+                (zonal_value**2 + meridional_value**2) ** 0.5
+                if zonal_value is not None and meridional_value is not None
+                else None
+            )
+        metrics.append({"label": CURRENTS_PREVIEW_LABEL, "unit": zonal["unit"], "lead_values": lead_values})
+
+    _append_scalar(SLA_PREVIEW_ROW)
+    return metrics
 
 
 def _class4_drifter_deviation_html(notebook: dict) -> str | None:
@@ -416,10 +423,9 @@ def _class4_drifter_deviation_html(notebook: dict) -> str | None:
     return None
 
 
-def _score_preview_from_drifter_html(raw_html: str) -> dict | None:
-    # Surface-currents-only systems (e.g. GLONET HR) report only the Lagrangian drifter
-    # diagnostic, so the in-situ RMSD preview is empty. Surface the drifter trajectory
-    # deviation as the representative preview metric instead of leaving it blank.
+def _drifter_preview_metric(raw_html: str) -> dict | None:
+    # Lagrangian surface-drifter trajectory deviation: the representative currents metric
+    # for surface-current models (HR) and the Lagrangian complement for global models.
     table_rows = _html_table_rows(raw_html)
     if len(table_rows) < 2:
         return None
@@ -429,31 +435,45 @@ def _score_preview_from_drifter_html(raw_html: str) -> dict | None:
             continue
         unit_match = re.search(r"\(([^)]+)\)", row[0])
         return {
-            "metrics": [
-                {
-                    "label": DRIFTER_DEVIATION_PREVIEW_LABEL,
-                    "unit": unit_match.group(1) if unit_match else "km",
-                    "lead_values": {
-                        lead_day: _float_or_none(value)
-                        for lead_day, value in zip(lead_days, row[1:])
-                    },
-                }
-            ],
+            "label": DRIFTER_DEVIATION_PREVIEW_LABEL,
+            "unit": unit_match.group(1) if unit_match else "km",
+            "lead_values": {
+                lead_day: _float_or_none(value) for lead_day, value in zip(lead_days, row[1:])
+            },
         }
     return None
 
 
-def _score_preview_from_drifter_notebook(
+def _score_preview_from_report_notebook(
     report_notebook: str,
     output_bucket: str | None,
     output_prefix: str | None,
 ) -> dict | None:
+    # Variable-driven preview: emit whichever representative metrics the rendered report
+    # actually contains -- i.e. whatever the model could be scored on. T/S/currents/SLA
+    # come from the Class-4 RMSD table; the surface drifter deviation from its own cell.
+    # A full global model yields up to 5 metrics; a surface-currents-only model (HR)
+    # yields just the drifter. No report_profile, no fixed metric count.
     try:
         notebook = _report_notebook_document(report_notebook, output_bucket, output_prefix)
-        raw_html = _class4_drifter_deviation_html(notebook)
-        return _score_preview_from_drifter_html(raw_html) if raw_html else None
     except Exception:
         return None
+    metrics: list[dict] = []
+    try:
+        rmsd_html = _class4_observation_rmsd_html(notebook)
+        if rmsd_html:
+            metrics.extend(_rmsd_preview_metrics(rmsd_html))
+    except Exception:
+        pass
+    try:
+        drifter_html = _class4_drifter_deviation_html(notebook)
+        if drifter_html:
+            drifter_metric = _drifter_preview_metric(drifter_html)
+            if drifter_metric is not None:
+                metrics.append(drifter_metric)
+    except Exception:
+        pass
+    return {"metrics": metrics} if metrics else None
 
 
 def _forecast_lead_day_count(forecast_url: str, forecast_init: str) -> int:
@@ -742,10 +762,7 @@ def validate_nrt_forecast(
                     region=region,
                     report_profile=resolved_report_profile,
                 )
-        if resolved_report_profile == SURFACE_ONLY_REPORT_PROFILE:
-            score_preview = _score_preview_from_drifter_notebook(report_notebook, output_bucket, output_prefix)
-        else:
-            score_preview = _score_preview_from_report_notebook(report_notebook, output_bucket, output_prefix)
+        score_preview = _score_preview_from_report_notebook(report_notebook, output_bucket, output_prefix)
         status = "Complete"
         if cleanup_forecast_after_success and resolved_forecast_temporary:
             try:

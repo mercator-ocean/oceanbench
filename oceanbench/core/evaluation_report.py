@@ -61,7 +61,7 @@ ZONAL_PSD_VARIABLES = [
 class Class4ObservationReport:
     dataset: xarray.Dataset | None
     comparison_dataframe: pandas.DataFrame | None
-    rmsd: pandas.DataFrame
+    rmsd: pandas.DataFrame | None
 
     @property
     def has_comparison_dataframe(self) -> bool:
@@ -216,12 +216,21 @@ class EvaluationReportContext:
             reference_dataset=observation_dataset,
             variables=FORECAST_COMPARISON_VARIABLES,
         )
+        # Variable-driven self-suppression: when the challenger shares no scorable
+        # variables x depths with the Class-4 observations (e.g. a surface-currents-only
+        # model), the comparison is empty -- emit rmsd=None so the cell renders nothing
+        # instead of an empty table, and the report shows only the diagnostics that apply.
+        has_scores = comparison_dataframe is not None and not comparison_dataframe.empty
         return Class4ObservationReport(
             dataset=observation_dataset,
             comparison_dataframe=comparison_dataframe,
-            rmsd=rmsd_class4_validation_dataframe(
-                comparison_dataframe,
-                lead_days_count=self.regional_challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()],
+            rmsd=(
+                rmsd_class4_validation_dataframe(
+                    comparison_dataframe,
+                    lead_days_count=self.regional_challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()],
+                )
+                if has_scores
+                else None
             ),
         )
 
@@ -366,12 +375,21 @@ class LiveEvaluationReportContext:
             reference_dataset=observation_dataset,
             variables=FORECAST_COMPARISON_VARIABLES,
         )
+        # Variable-driven self-suppression: when the challenger shares no scorable
+        # variables x depths with the Class-4 observations (e.g. a surface-currents-only
+        # model), the comparison is empty -- emit rmsd=None so the cell renders nothing
+        # instead of an empty table, and the report shows only the diagnostics that apply.
+        has_scores = comparison_dataframe is not None and not comparison_dataframe.empty
         return Class4ObservationReport(
             dataset=observation_dataset,
             comparison_dataframe=comparison_dataframe,
-            rmsd=rmsd_class4_validation_dataframe(
-                comparison_dataframe,
-                lead_days_count=self.regional_challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()],
+            rmsd=(
+                rmsd_class4_validation_dataframe(
+                    comparison_dataframe,
+                    lead_days_count=self.regional_challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()],
+                )
+                if has_scores
+                else None
             ),
         )
 
