@@ -25,11 +25,9 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 # GLO12, so their SSH shares the GLO12 reanalysis mean-sea-surface datum; this
 # aligns it with the altimetry SLA reference.
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
-# IBI (1/36) uses its own IBI MDT but has no fitted datum offset yet, so use 0 (no
-# shift correction) for now.
-# TODO: derive a PER-MODEL offset for IBI / any non-GLO12 lineage (e.g. the rolling
-# ~1-year mean of model_SSH - MDT - observed_SLA over the trailing year) instead of 0.
-IBI_MEAN_SEA_SURFACE_HEIGHT_SHIFT = 0.0
+# IBI (1/36) uses its own IBYRIS MDT; this is the fitted IBI ANFC datum offset (mean of
+# model_SSH - MDT - observed_SLA over the trailing year), analogous to the GLO12 shift.
+IBI_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.0674
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 VELOCITY_TARGET_DEPTH_METERS = 15.0
@@ -243,9 +241,7 @@ def _mean_dynamic_topography_on_model_grid(
     longitude_key = Dimension.LONGITUDE.key()
     already_on_grid = numpy.array_equal(
         mean_dynamic_topography[latitude_key].values, model_variable[latitude_key].values
-    ) and numpy.array_equal(
-        mean_dynamic_topography[longitude_key].values, model_variable[longitude_key].values
-    )
+    ) and numpy.array_equal(mean_dynamic_topography[longitude_key].values, model_variable[longitude_key].values)
     if already_on_grid:
         return mean_dynamic_topography
     # Regional MDTs (e.g. the 1/36 deg IBI MDT) sit on a grid that is floating-point
