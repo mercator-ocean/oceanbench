@@ -508,14 +508,6 @@ function buildControlsInnerHtml(depths, hiddenChallengerNames) {
   }
   markup += "</span></span>";
 
-  if (hiddenChallengerNames && hiddenChallengerNames.length > 0) {
-    markup += '<span class="hidden-group"><span class="hidden-models-label">Hidden</span>';
-    for (const name of hiddenChallengerNames) {
-      markup += `<button type="button" class="hidden-chip" data-action="show" data-challenger="${name}" title="Show ${displayName(name)}">${ROW_ACTION_ICONS.add}<span>${displayName(name)}</span></button>`;
-    }
-    markup += "</span>";
-  }
-
   markup += '<span class="display-toggle">';
   markup += `<button class="display-toggle-btn${!showPercentDiff ? " active" : ""}" data-display="values">Values</button>`;
   markup += `<button class="display-toggle-btn${showPercentDiff ? " active" : ""}" data-display="percent-diff">% diff</button>`;
@@ -524,6 +516,14 @@ function buildControlsInnerHtml(depths, hiddenChallengerNames) {
   markup += '<div id="color-legend" class="color-legend"></div>';
 
   markup += `<label>\u00b1 <input id="scale-input" type="number" min="1" step="1" value="${maxScale}"> %</label>`;
+
+  if (hiddenChallengerNames && hiddenChallengerNames.length > 0) {
+    markup += '<span class="hidden-group"><span class="hidden-models-label">Hidden</span>';
+    for (const name of hiddenChallengerNames) {
+      markup += `<button type="button" class="hidden-chip" data-action="show" data-challenger="${name}" title="Show ${displayName(name)}">${ROW_ACTION_ICONS.add}<span>${displayName(name)}</span></button>`;
+    }
+    markup += "</span>";
+  }
 
   return markup;
 }
