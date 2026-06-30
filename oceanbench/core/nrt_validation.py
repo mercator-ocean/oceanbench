@@ -92,6 +92,8 @@ REPRESENTATIVE_SCORE_PREVIEW_ROWS = (
     ("meridional current", "15m", "Meridional current, 15 m"),
 )
 CLASS4_OBSERVATION_RMSD_SOURCE = "evaluation_report.class4_observation.rmsd"
+CLASS4_DRIFTER_DEVIATION_SOURCE = "evaluation_report.class4_drifter_trajectory_deviation"
+DRIFTER_DEVIATION_PREVIEW_LABEL = "Surface drifter deviation"
 
 
 def _day_string(day: str | datetime | numpy.datetime64 | pandas.Timestamp) -> str:
@@ -404,6 +406,56 @@ def _score_preview_from_report_notebook(
         return None
 
 
+def _class4_drifter_deviation_html(notebook: dict) -> str | None:
+    for cell in notebook.get("cells", []):
+        if CLASS4_DRIFTER_DEVIATION_SOURCE not in _cell_source(cell):
+            continue
+        html_output = _cell_html_output(cell)
+        if html_output:
+            return html_output
+    return None
+
+
+def _score_preview_from_drifter_html(raw_html: str) -> dict | None:
+    # Surface-currents-only systems (e.g. GLONET HR) report only the Lagrangian drifter
+    # diagnostic, so the in-situ RMSD preview is empty. Surface the drifter trajectory
+    # deviation as the representative preview metric instead of leaving it blank.
+    table_rows = _html_table_rows(raw_html)
+    if len(table_rows) < 2:
+        return None
+    lead_days = [_lead_day_number(header) for header in table_rows[0][1:]]
+    for row in table_rows[1:]:
+        if not row or "deviation" not in row[0].lower():
+            continue
+        unit_match = re.search(r"\(([^)]+)\)", row[0])
+        return {
+            "metrics": [
+                {
+                    "label": DRIFTER_DEVIATION_PREVIEW_LABEL,
+                    "unit": unit_match.group(1) if unit_match else "km",
+                    "lead_values": {
+                        lead_day: _float_or_none(value)
+                        for lead_day, value in zip(lead_days, row[1:])
+                    },
+                }
+            ],
+        }
+    return None
+
+
+def _score_preview_from_drifter_notebook(
+    report_notebook: str,
+    output_bucket: str | None,
+    output_prefix: str | None,
+) -> dict | None:
+    try:
+        notebook = _report_notebook_document(report_notebook, output_bucket, output_prefix)
+        raw_html = _class4_drifter_deviation_html(notebook)
+        return _score_preview_from_drifter_html(raw_html) if raw_html else None
+    except Exception:
+        return None
+
+
 def _forecast_lead_day_count(forecast_url: str, forecast_init: str) -> int:
     forecast_dataset = open_live_forecast_zarr(
         forecast_url,
@@ -691,7 +743,7 @@ def validate_nrt_forecast(
                     report_profile=resolved_report_profile,
                 )
         if resolved_report_profile == SURFACE_ONLY_REPORT_PROFILE:
-            score_preview = None
+            score_preview = _score_preview_from_drifter_notebook(report_notebook, output_bucket, output_prefix)
         else:
             score_preview = _score_preview_from_report_notebook(report_notebook, output_bucket, output_prefix)
         status = "Complete"
