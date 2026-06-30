@@ -18,6 +18,74 @@ page_css = """
 <style>
 body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
 
+/* ── Tab navigation ── */
+.ei-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid #e5e7eb;
+  margin-bottom: 2rem;
+}
+.ei-tab-btn {
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #888;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  transition: color .15s, border-color .15s;
+}
+.ei-tab-btn:hover { color: #333; }
+.ei-tab-btn.active { color: #3B82F6; border-bottom-color: #3B82F6; }
+
+.ei-tab-panel { display: none; }
+.ei-tab-panel.active { display: block; }
+
+/* ── Model filter checkboxes ── */
+.ei-model-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 1.5rem;
+  padding: 0.85rem 1rem;
+  background: #f9fafb;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+}
+.ei-model-filter-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  align-self: center;
+  margin-right: 4px;
+}
+.ei-model-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1.5px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+  user-select: none;
+  transition: background .15s, border-color .15s;
+}
+.ei-model-check.checked { background: #EFF6FF; border-color: #93C5FD; color: #1D4ED8; }
+.ei-model-check .dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Existing styles ── */
 .ei-intro {
   font-size: 15px;
   line-height: 1.75;
@@ -26,10 +94,9 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   border-left: 3px solid #3B82F6;
   padding-left: 1rem;
 }
-
 .ei-section-title {
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 28px;
+  font-weight: 800;
   margin: 2.5rem 0 1rem;
   display: flex;
   align-items: center;
@@ -42,7 +109,21 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   height: 1px;
   background: #e5e7eb;
 }
-
+.ei-section-title-overview {
+  font-size: 20px;
+  font-weight: 500;
+  margin: 2.5rem 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #111;
+}
+.ei-section-title-overview::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
+}
 .ei-sublabel {
   font-size: 12px;
   font-weight: 500;
@@ -51,14 +132,12 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   letter-spacing: 0.06em;
   margin: 1rem 0 0.5rem;
 }
-
 .ei-ref-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   margin-bottom: 1rem;
 }
-
 .ei-ref-card {
   background: #f9fafb;
   border-radius: 12px;
@@ -69,7 +148,6 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
 .ei-ref-card-item  { font-size: 14px; font-weight: 500; color: #222; margin-bottom: 4px; }
 .ei-ref-card-value { font-size: 22px; font-weight: 500; font-family: 'DM Mono', monospace; color: #111; }
 .ei-ref-card-unit  { font-size: 12px; color: #888; margin-top: 2px; }
-
 .ei-sources {
   font-size: 13px;
   color: #888;
@@ -78,7 +156,6 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
 }
 .ei-sources a { color: #3B82F6; text-decoration: none; border-bottom: 1px solid #bfdbfe; }
 .ei-sources a:hover { opacity: 0.8; }
-
 .ei-formula-block {
   background: #f9fafb;
   border-radius: 12px;
@@ -97,7 +174,6 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   gap: 8px;
 }
 .ei-formula-label { color: #aaa; font-size: 12px; }
-
 .ei-callout {
   display: flex;
   gap: 10px;
@@ -111,7 +187,6 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   color: #1D4ED8;
 }
 .ei-callout svg { flex-shrink: 0; margin-top: 2px; }
-
 .ei-model-card {
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -137,26 +212,35 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   padding: 3px 10px;
   border: 1px solid #e5e7eb;
 }
-
-.ei-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.ei-table thead tr { border-bottom: 1px solid #e5e7eb; }
+.ei-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.04);
+}
+.ei-table thead tr { border-bottom: 1px solid #e8e0d0; }
 .ei-table th {
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #9ca3af;
-  padding: 6px 12px 6px 0;
+  letter-spacing: 0.06em;
+  color: #000;
+  padding: 6px 12px 6px 10px;
   text-align: left;
+  background: #f7f2e8;
 }
 .ei-table td {
-  padding: 10px 12px 10px 0;
-  border-bottom: 1px solid #f9fafb;
-  color: #222;
+  padding: 10px 12px 10px 10px;
+  border-bottom: 1px solid #f0e9d8;
+  color: #000;
+  background: #fff;
 }
 .ei-table td:first-child { font-weight: 500; }
 .ei-table tbody tr:last-child td { border-bottom: none; }
-
+.ei-table tbody tr:nth-child(even) td { background: #fafaf7; }
 .ei-pending {
   display: inline-block;
   background: #FFF9DB;
@@ -167,7 +251,6 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   padding: 2px 8px;
   font-family: 'DM Mono', monospace;
 }
-
 .ei-result {
   display: inline-block;
   background: #F0FDF4;
@@ -178,7 +261,6 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   padding: 2px 8px;
   font-family: 'DM Mono', monospace;
 }
-
 .ei-param_infos {
   display: inline-block;
   background: #EBEBEB;
@@ -189,6 +271,8 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   padding: 2px 4px;
   font-family: 'DM Mono', monospace;
 }
+.machine-btn { cursor:pointer; padding:4px 14px; font-size:12px; border:1px solid #ccc; background:transparent; color:#888; border-radius:5px; }
+.machine-btn.active { background:#eee; color:#111; }
 </style>
 """
 HTML(page_css)
@@ -198,694 +282,466 @@ HTML(page_css)
 from IPython.display import HTML
 
 HTML("""
-<p class="ei-intro">
-  This section presents energy consumption and CO₂ emissions for models available on Oceanbench,
-  covering both training and inference phases.
-  A comparative reference is provided below to help interpret the results.
-</p>
-
-<div class="ei-callout">
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-  </svg>
-  <div>
-    Measurements use the
-    <a href="https://github.com/mlco2/codecarbon" style="color: #1D4ED8;">codecarbon</a>
-    open-source library for carbon tracking.
-  </div>
+<!-- ══════════════════════════════════════════════
+     TAB NAVIGATION
+════════════════════════════════════════════════ -->
+<div class="ei-tabs">
+  <button class="ei-tab-btn active" onclick="switchTab('overview', this)">Overview</button>
+  <button class="ei-tab-btn" onclick="switchTab('individual', this)">Individual Analysis</button>
+  <button class="ei-tab-btn" onclick="switchTab('comparison', this)">AI Models Comparison</button>
+  <button class="ei-tab-btn" onclick="switchTab('infrastructure', this)">Infrastructure</button>
 </div>
 
-<div class="ei-section-title">Reference values</div>
+<!-- ══════════════════════════════════════════════
+     TAB 1 — OVERVIEW
+════════════════════════════════════════════════ -->
+<div class="ei-tab-panel active" id="tab-overview">
 
-<p class="ei-sublabel">Energy consumption in 1 hour</p>
-<div class="ei-ref-grid">
-  <div class="ei-ref-card">
-    <div class="ei-ref-card-label">Usage</div>
-    <div class="ei-ref-card-item">LED bulb</div>
-    <div class="ei-ref-card-value">0.002</div>
-    <div class="ei-ref-card-unit">kWh</div>
-  </div>
-  <div class="ei-ref-card">
-    <div class="ei-ref-card-label">Usage</div>
-    <div class="ei-ref-card-item">LED TV</div>
-    <div class="ei-ref-card-value">0.10</div>
-    <div class="ei-ref-card-unit">kWh</div>
-  </div>
-</div>
+  <p class="ei-intro">
+    This section presents energy consumption and CO₂ emissions for models available on Oceanbench,
+    covering both training and inference phases.
+    A comparative reference is provided below to help interpret the results.
+  </p>
 
-<p class="ei-sublabel" style="margin-top: 1rem;">CO₂ emissions in 1 hour</p>
-<div class="ei-ref-grid">
-  <div class="ei-ref-card">
-    <div class="ei-ref-card-label">Usage</div>
-    <div class="ei-ref-card-item">Video call streaming</div>
-    <div class="ei-ref-card-value">0.60</div>
-    <div class="ei-ref-card-unit">kg CO₂e</div>
+  <div class="ei-callout">
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <div>
+      Measurements use the
+      <a href="https://github.com/mlco2/codecarbon" style="color: #1D4ED8;">codecarbon</a>
+      open-source library for carbon tracking.
+    </div>
   </div>
-  <div class="ei-ref-card">
-    <div class="ei-ref-card-label">Usage</div>
-    <div class="ei-ref-card-item">Petrol car (60 km/h)</div>
-    <div class="ei-ref-card-value">10.2</div>
-    <div class="ei-ref-card-unit">kg CO₂e</div>
-  </div>
-</div>
 
-<p class="ei-sources">
-  Sources:
-  <a href="https://www.energybot.com/energy-usage/led-light-bulb.html">LED Bulb</a> ·
-  <a href="https://www.nexamp.com/blog/do-tvs-use-a-lot-of-electricity">LED TV</a> ·
-  <a href="https://medium.com/@zodhyatech/how-much-co2-do-you-emit-in-a-day-60be76e491dc">Video streaming &amp; car</a>
-</p>
+  <div class="ei-section-title-overview ">Reference values</div>
+
+  <p class="ei-sublabel">Energy consumption in 1 hour</p>
+  <div class="ei-ref-grid">
+    <div class="ei-ref-card">
+      <div class="ei-ref-card-label">Usage</div>
+      <div class="ei-ref-card-item">LED bulb</div>
+      <div class="ei-ref-card-value">0.002</div>
+      <div class="ei-ref-card-unit">kWh</div>
+    </div>
+    <div class="ei-ref-card">
+      <div class="ei-ref-card-label">Usage</div>
+      <div class="ei-ref-card-item">LED TV</div>
+      <div class="ei-ref-card-value">0.10</div>
+      <div class="ei-ref-card-unit">kWh</div>
+    </div>
+  </div>
+
+  <p class="ei-sublabel" style="margin-top: 1rem;">CO₂ emissions in 1 hour</p>
+  <div class="ei-ref-grid">
+    <div class="ei-ref-card">
+      <div class="ei-ref-card-label">Usage</div>
+      <div class="ei-ref-card-item">Video call streaming</div>
+      <div class="ei-ref-card-value">0.60</div>
+      <div class="ei-ref-card-unit">kg CO₂e</div>
+    </div>
+    <div class="ei-ref-card">
+      <div class="ei-ref-card-label">Usage</div>
+      <div class="ei-ref-card-item">Petrol car (60 km/h)</div>
+      <div class="ei-ref-card-value">10.2</div>
+      <div class="ei-ref-card-unit">kg CO₂e</div>
+    </div>
+  </div>
+
+  <p class="ei-sources">
+    Sources:
+    <a href="https://www.energybot.com/energy-usage/led-light-bulb.html">LED Bulb</a> ·
+    <a href="https://www.nexamp.com/blog/do-tvs-use-a-lot-of-electricity">LED TV</a> ·
+    <a href="https://medium.com/@zodhyatech/how-much-co2-do-you-emit-in-a-day-60be76e491dc">Video streaming &amp; car</a>
+  </p>
+
+  <div class="ei-section-title-overview ">Formulas</div>
+  <div class="ei-formula-block">
+    <div class="ei-formula-row">
+      <span class="ei-formula-label">Energy</span>
+      <span>= (CPU<sub>consumption</sub> + GPU<sub>consumption</sub> + RAM<sub>consumption</sub>) × PUE</span>
+    </div>
+    <div class="ei-formula-row">
+      <span class="ei-formula-label">Emissions</span>
+      <span>= Energy<sub>consumption</sub> × Coef<sub>energymix</sub></span>
+    </div>
+  </div>
+  <div class="ei-callout">
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <div><strong>PUE</strong> — Power Usage Effectiveness: ratio of total data center energy to IT equipment energy.</div>
+  </div>
+
+</div><!-- /tab-overview -->
+
+
+<!-- ══════════════════════════════════════════════
+     TAB 2 — INDIVIDUAL ANALYSIS
+════════════════════════════════════════════════ -->
+<div class="ei-tab-panel" id="tab-individual">
+
+  <!-- GLO12 -->
+  <div class="ei-section-title">GLO12</div>
+  <div class="ei-callout">
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <div><strong>Note:</strong> The result value depends a lot on the infrastructure and resources used by the code. To see the test specifications, go to the Infrastructure tab.</div>
+  </div>
+  <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+    Results are based on average 9 runs. Measurements taken on the Météo-France (Belenos) supercomputer in Toulouse.
+    The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
+  </p>
+  <div class="ei-model-card">
+    <div class="ei-model-card-header">
+      <span class="ei-model-badge">Run</span>
+    </div>
+    <table class="ei-table">
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">18,4 (± 1,92)</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0,883 (± 0,0919)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">2843</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Glonet -->
+  <div class="ei-section-title">Glonet</div>
+  <div class="ei-model-card">
+    <div class="ei-model-card-header">
+      <span class="ei-model-badge">Training</span>
+    </div>
+    <table class="ei-table">
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Energy (kWh)</td><td><span class="ei-pending">pending</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-pending">pending</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-pending">pending</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+    Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+    The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
+  </p>
+  <div class="ei-model-card">
+    <div class="ei-model-card-header">
+      <span class="ei-model-badge">Inference Process</span>
+    </div>
+    <table class="ei-table">
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Energy (Wh)</td><td><span class="ei-result">135 (± 2.03)</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00754 (± 0.000114)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">2061</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="padding: 1rem 0;">
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consume the most — Inference Process</div>
+    <div id="stacked-bar-glonet" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
+    <div id="bar-legend-glonet" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+  </div>
+  <div style="padding: 1rem 0;">
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Duration — Inference Process</div>
+    <div id="stacked-bar-glonet_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
+    <div id="bar-legend-glonet_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+  </div>
+
+  <!-- Wenhai -->
+  <div class="ei-section-title">Wenhai</div>
+  <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+    Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+    The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
+  </p>
+  <div class="ei-model-card">
+    <div class="ei-model-card-header">
+      <span class="ei-model-badge">Inference Process</span>
+    </div>
+    <table class="ei-table">
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Energy (Wh)</td><td><span class="ei-result">49.7 (± 3.49)</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00278 (± 0.0000196)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">781</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="padding: 1rem 0;">
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consume the most — Inference Process</div>
+    <div id="stacked-bar-wenhai" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
+    <div id="bar-legend-wenhai" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+  </div>
+  <div style="padding: 1rem 0;">
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Duration — Inference Process</div>
+    <div id="stacked-bar-wenhai_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
+    <div id="bar-legend-wenhai_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+  </div>
+
+  <!-- Xihe -->
+  <div class="ei-section-title">Xihe</div>
+  <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+    Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+    The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
+  </p>
+  <div class="ei-model-card">
+    <div class="ei-model-card-header">
+      <span class="ei-model-badge">Inference Process</span>
+    </div>
+    <table class="ei-table">
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Energy (Wh)</td><td><span class="ei-result">41.2 (± 4.23)</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00231 (± 0.000237)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">648</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="padding: 1rem 0;">
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consume the most — Inference Process</div>
+    <div id="stacked-bar-xihe" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
+    <div id="bar-legend-xihe" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+  </div>
+  <div style="padding: 1rem 0;">
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Duration — Inference Process</div>
+    <div id="stacked-bar-xihe_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
+    <div id="bar-legend-xihe_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+  </div>
+
+  <!-- LangYa -->
+  <div class="ei-section-title">LangYa</div>
+  <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+    Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+    The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
+  </p>
+  <div class="ei-model-card">
+    <div class="ei-model-card-header">
+      <span class="ei-model-badge">Inference Process</span>
+    </div>
+    <table class="ei-table">
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Energy (Wh)</td><td><span class="ei-result">20.9 (± 2.73)</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00117 (± 0,000153)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">328</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="padding: 1rem 0;">
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consume the most — Inference Process</div>
+    <div id="stacked-bar-langya" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
+    <div id="bar-legend-langya" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+  </div>
+  <div style="padding: 1rem 0;">
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Duration — Inference Process</div>
+    <div id="stacked-bar-langya_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
+    <div id="bar-legend-langya_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+  </div>
+
+</div><!-- /tab-individual -->
+
+
+<!-- ══════════════════════════════════════════════
+     TAB 3 — AI MODELS COMPARISON
+════════════════════════════════════════════════ -->
+<div class="ei-tab-panel" id="tab-comparison">
+
+  <!-- Model filter checkboxes -->
+  <div class="ei-model-filters">
+    <span class="ei-model-filter-label">Models:</span>
+    <div class="ei-model-check checked" id="chk-Glonet" onclick="toggleModel('Glonet')" data-model="Glonet">
+      <span class="dot" style="background:#378ADD;"></span> Glonet
+    </div>
+    <div class="ei-model-check checked" id="chk-Wenhai" onclick="toggleModel('Wenhai')" data-model="Wenhai">
+      <span class="dot" style="background:#1D9E75;"></span> Wenhai
+    </div>
+    <div class="ei-model-check checked" id="chk-Xihe" onclick="toggleModel('Xihe')" data-model="Xihe">
+      <span class="dot" style="background:#D4537E;"></span> Xihe
+    </div>
+    <div class="ei-model-check checked" id="chk-LangYa" onclick="toggleModel('LangYa')" data-model="LangYa">
+      <span class="dot" style="background:#D4C853;"></span> LangYa
+    </div>
+  </div>
+
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; padding-bottom:0.75rem; border-bottom:1px solid #eee;">
+    <span style="font-size:15px; font-weight:500;">SELECT INFRASTRUCTURE</span>
+    <div style="display:flex; gap:6px;">
+      <button class="machine-btn active" id="btn-lir" onclick="switchAll('A')">On Lir</button>
+      <button class="machine-btn" id="btn-edito" onclick="switchAll('B')">On Datalab EDITO</button>
+    </div>
+  </div>
+
+  <!-- Chart 1 -->
+  <div style="padding:1rem 0;">
+    <div style="display:flex; flex-wrap:wrap; gap:16px; font-size:12px; color:#888; margin-bottom:12px;" id="legend-container"></div>
+    <div style="position:relative; width:100%; height:400px;">
+      <canvas id="energyCompChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Chart 2 -->
+  <div style="padding:1rem 0; margin-top:1.5rem;">
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between model — energy breakdown</p>
+    <div style="display:flex; flex-direction:column; gap:10px;" id="breakdown-container"></div>
+    <div style="display:flex; flex-wrap:wrap; gap:14px; margin-top:1rem; font-size:12px; color:#888;" id="breakdown-legend"></div>
+  </div>
+
+  <!-- Chart 3 -->
+  <div style="padding:1rem 0; margin-top:1.5rem;">
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between model — INFERENCE</p>
+    <div style="position:relative; width:100%; height:260px;">
+      <canvas id="inferenceEnergyChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Chart 4 -->
+  <div style="padding:1rem 0; margin-top:1.5rem;">
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Model size — number of parameters used during inference</p>
+    <div style="position:relative; width:100%; height:260px;">
+      <canvas id="nbParamsChart"></canvas>
+    </div>
+  </div>
+  <div><strong>Note:</strong> Glonet uses only 1235M parameters, distributed across 3 models. The 850M others parameters are inactive.</div>
+
+  <!-- Chart 5 -->
+  <div style="padding:1rem 0; margin-top:1.5rem;">
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Model size — number of operations during inference</p>
+    <div style="position:relative; width:100%; height:260px;">
+      <canvas id="nbOpeChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Chart 6 -->
+  <div style="padding:1rem 0; margin-top:1.5rem;">
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Correlation — inference energy vs. number of operations during inference</p>
+    <div style="position:relative; width:100%; height:320px;">
+      <canvas id="correlationChart"></canvas>
+    </div>
+  </div>
+
+</div><!-- /tab-comparison -->
+
+
+<!-- ══════════════════════════════════════════════
+     TAB 4 — INFRASTRUCTURE
+════════════════════════════════════════════════ -->
+<div class="ei-tab-panel" id="tab-infrastructure">
+
+  <div class="ei-model-card">
+    <div class="ei-model-card-header">
+      <span class="ei-model-name">GLO12</span>
+      <span class="ei-model-badge">Run</span>
+    </div>
+    <table class="ei-table">
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Supercomputer</td><td><span class="ei-param_infos">Météo-France — Belenos (Toulouse, France)</span></td></tr>
+        <tr><td>Number of Nodes</td><td><span class="ei-param_infos">43</span></td></tr>
+        <tr><td>Number of processes per node</td><td><span class="ei-param_infos">128</span></td></tr>
+        <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 7742</span></td></tr>
+        <tr><td>RAM (GB)</td><td><span class="ei-param_infos">10632</span></td></tr>
+        <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
+        <tr><td>PUE</td><td><span class="ei-param_infos">1.17</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="ei-model-card">
+    <div class="ei-model-card-header">
+      <span class="ei-model-name">Glonet · Wenhai · Xihe</span>
+      <span class="ei-model-badge">Inference — Lir</span>
+    </div>
+    <table class="ei-table">
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Supercomputer</td><td><span class="ei-param_infos">Mercator Ocean International — Lir (Toulouse, France)</span></td></tr>
+        <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
+        <tr><td>Number of processes per node</td><td><span class="ei-param_infos">8</span></td></tr>
+        <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9534</span></td></tr>
+        <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA H100 80GB</span></td></tr>
+        <tr><td>RAM (GB)</td><td><span class="ei-param_infos">755</span></td></tr>
+        <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
+        <tr><td>PUE</td><td><span class="ei-param_infos">1.45</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="ei-model-card">
+    <div class="ei-model-card-header">
+      <span class="ei-model-name">Glonet · Wenhai · Xihe</span>
+      <span class="ei-model-badge">Inference — Datalab EDITO</span>
+    </div>
+    <table class="ei-table">
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Supercomputer</td><td><span class="ei-param_infos">Datalab EDITO - Cloud Ferro (Mazovia, Poland)</span></td></tr>
+        <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
+        <tr><td>Number of processes per node</td><td><span class="ei-param_infos">16</span></td></tr>
+        <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC</span></td></tr>
+        <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA RTX A6000 48GB</span></td></tr>
+        <tr><td>RAM (GB)</td><td><span class="ei-param_infos">110</span></td></tr>
+        <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
+        <tr><td>PUE</td><td><span class="ei-param_infos">1.43</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- /tab-infrastructure -->
+
+
+<!-- ══════════════════════════════════════════════
+     TAB CONTROLLER
+════════════════════════════════════════════════ -->
+<script>
+function switchTab(id, btn) {
+  document.querySelectorAll('.ei-tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.ei-tab-panel').forEach(function(p) { p.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+  if (id === 'individual' && window._stackedBarsReady) { window._stackedBarsReady(); }
+}
+</script>
 """)
 ```
 
 ```{python}
-HTML("""
-<div class="ei-section-title">Formulas</div>
-<div class="ei-formula-block">
-  <div class="ei-formula-row">
-    <span class="ei-formula-label">Energy</span>
-    <span>= (CPU<sub>consumption</sub> + GPU<sub>consumption</sub> + RAM<sub>consumption</sub>) × PUE</span>
-  </div>
-  <div class="ei-formula-row">
-    <span class="ei-formula-label">Emissions</span>
-    <span>= Energy<sub>consumption</sub> × Coef<sub>energymix</sub></span>
-  </div>
-</div>
-
-<div class="ei-callout">
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-  </svg>
-  <div><strong>PUE</strong> — Power Usage Effectiveness: ratio of total data center energy to IT equipment energy.</div>
-</div>
-""")
-```
-
-## GLO12 Energy Impact Analysis
-
-
-```{python}
-HTML("""
-
-<div class="ei-callout">
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-  </svg>
-  <div><strong>Note:</strong> The result value depends a lot on the infrastructure and resources used by the code. To see the test specifications, go to the end of this page.</div>
-</div>
-
-<p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
-  Results are based on average 9 runs. Measurements taken on the Météo-France (Belenos) supercomputer in Toulouse.
-  The ± margin corresponds to a 95% confidence interval based on Student’s t-distribution.
-</p>
-<div class="ei-model-card">
-  <div class="ei-model-card-header">
-    <span class="ei-model-name">GLO12</span>
-    <span class="ei-model-badge">Run</span>
-  </div>
-  <table class="ei-table">
-    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-    <tbody>
-      <tr><td>Energy (kWh)</td><td><span class="ei-result">18,4 (± 1,92)</span></td></tr>
-      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0,883 (± 0,0919)</span></td></tr>
-      <tr><td>Duration (seconds)</td><td><span class="ei-result">2843</span></td></tr>
-      <tr><td>Consumption of the empty machine on the same time (kWh) </td><td><span class="ei-result">3,59</span></td></tr>
-    </tbody>
-  </table>
-</div>
-""")
-```
-
-## Glonet Energy Impact Analysis
-
-```{python}
-HTML("""
-<div class="ei-model-card">
-  <div class="ei-model-card-header">
-    <span class="ei-model-name">Glonet</span>
-    <span class="ei-model-badge">Training</span>
-  </div>
-  <table class="ei-table">
-    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-    <tbody> 
-      <tr><td>Energy (kWh)</td><td><span class="ei-pending">pending</span></td></tr>
-      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-pending">pending</span></td></tr>  
-      <tr><td>Duration (seconds)</td><td><span class="ei-pending">pending</span></td></tr>
-      <tr><td>Consumption of the empty machine on the same time (kWh) </td><td><span class="ei-pending">pending</span></td></tr>    
-    </tbody>
-  </table>
-</div>
-
-<p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
-  Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
-  The ± margin corresponds to a 95% confidence interval based on Student’s t-distribution.
-</p>
-
-<div class="ei-model-card">
-  <div class="ei-model-card-header">
-    <span class="ei-model-name">Glonet</span>
-    <span class="ei-model-badge">Inference Process</span>
-  </div>
-  <table class="ei-table">
-    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-    <tbody>
-      <tr><td>Energy (Wh)</td><td><span class="ei-result">135 (± 2.03)</span></td></tr>
-      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00754 (± 0.000114)</span></td></tr>
-      <tr><td>Duration (seconds)</td><td><span class="ei-result">2061</span></td></tr>
-      <tr><td>Consumption of the empty machine on the same time (Wh) </td><td><span class="ei-pending">pending</span></td></tr>
-    </tbody>
-  </table>
-</div>
-
-""")
-```
-
-```{python}
-from IPython.display import HTML, display
-
-display(HTML("""
-<div style="padding: 1rem 0;">
-  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
-    Which part consume the most — Glonet Inference Process
-  </div>
-
-  <div id="stacked-bar-glonet" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
-
-  <div id="bar-legend-glonet" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
-</div>
-
-<script>
-var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
-  values: [0.1, 1.2, 84.6, 5.5, 8.6],
-  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#036aa1","#1C3A6E"]
-};
-
-var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
-var bar = document.getElementById('stacked-bar-glonet');
-var legend = document.getElementById('bar-legend-glonet');
-
-DATA.labels.forEach(function(label, i) {
-  var pct = (DATA.values[i] / total) * 100;
-
-  var seg = document.createElement('div');
-  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
-  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
-  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
-  seg.onmouseleave = function() { this.style.opacity = '1'; };
-  bar.appendChild(seg);
-
-  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
-    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
-    + label + ' — ' + pct.toFixed(1) + '%</span>';
-});
-</script>
-"""))
-```
-
-```{python}
-from IPython.display import HTML, display
-
-display(HTML("""
-<div style="padding: 1rem 0;">
-  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
-    Duration — Glonet Inference Process
-  </div>
-
-  <div id="stacked-bar-glonet_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
-
-  <div id="bar-legend-glonet_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
-</div>
-
-<script>
-var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
-  values: [1.55, 10, 1820, 75, 131],
-  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#036aa1","#1C3A6E"]
-};
-
-var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
-var bar = document.getElementById('stacked-bar-glonet_part2');
-var legend = document.getElementById('bar-legend-glonet_part2');
-
-DATA.labels.forEach(function(label, i) {
-  var pct = (DATA.values[i] / total) * 100;
-
-  var seg = document.createElement('div');
-  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
-  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
-  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
-  seg.onmouseleave = function() { this.style.opacity = '1'; };
-  bar.appendChild(seg);
-
-  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
-    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
-    + label + ' — ' + pct.toFixed(1) + '%</span>';
-});
-</script>
-"""))
-```
-
-## Wenhai Energy Impact Analysis
-```{python}
-HTML("""
-<p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
-  Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
-  The ± margin corresponds to a 95% confidence interval based on Student’s t-distribution.
-</p>
-
-<div class="ei-model-card">
-  <div class="ei-model-card-header">
-    <span class="ei-model-name">Wenhai</span>
-    <span class="ei-model-badge">Inference Process</span>
-  </div>
-  <table class="ei-table">
-    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-    <tbody>
-      <tr><td>Energy (Wh)</td><td><span class="ei-result">49.7 (± 3.49)</span></td></tr>
-      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00278 (± 0.0000196)</span></td></tr>
-      <tr><td>Duration (seconds)</td><td><span class="ei-result">781</span></td></tr>
-      <tr><td>Consumption of the empty machine on the same time (Wh) </td><td><span class="ei-pending">pending</span></td></tr>
-    </tbody>
-  </table>
-</div>
-
-""")
-```
-
-```{python}
-from IPython.display import HTML, display
-
-display(HTML("""
-<div style="padding: 1rem 0;">
-  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
-    Which part consume the most — Wenhai Inference Process
-  </div>
-
-  <div id="stacked-bar-wenhai" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
-
-  <div id="bar-legend-wenhai" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
-</div>
-
-<script>
-var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
-  values: [0.24, 1.44, 30.12, 39.0, 29.2],
-  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#036aa1","#1C3A6E"]
-};
-
-var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
-var bar = document.getElementById('stacked-bar-wenhai');
-var legend = document.getElementById('bar-legend-wenhai');
-
-DATA.labels.forEach(function(label, i) {
-  var pct = (DATA.values[i] / total) * 100;
-
-  var seg = document.createElement('div');
-  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
-  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
-  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
-  seg.onmouseleave = function() { this.style.opacity = '1'; };
-  bar.appendChild(seg);
-
-  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
-    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
-    + label + ' — ' + pct.toFixed(1) + '%</span>';
-});
-</script>
-"""))
-```
-
-```{python}
-from IPython.display import HTML, display
-
-display(HTML("""
-<div style="padding: 1rem 0;">
-  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
-    Duration — Wenhai Inference Process
-  </div>
-
-  <div id="stacked-bar-wenhai_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
-
-  <div id="bar-legend-wenhai_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
-</div>
-
-<script>
-var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
-  values: [1.53, 7.0, 280, 253, 220],
-  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#036aa1","#1C3A6E"]
-};
-
-var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
-var bar = document.getElementById('stacked-bar-wenhai_part2');
-var legend = document.getElementById('bar-legend-wenhai_part2');
-
-DATA.labels.forEach(function(label, i) {
-  var pct = (DATA.values[i] / total) * 100;
-
-  var seg = document.createElement('div');
-  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
-  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
-  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
-  seg.onmouseleave = function() { this.style.opacity = '1'; };
-  bar.appendChild(seg);
-
-  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
-    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
-    + label + ' — ' + pct.toFixed(1) + '%</span>';
-});
-</script>
-"""))
-```
-
-## Xihe Energy Impact Analysis
-```{python}
-HTML("""
-<p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
-  Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
-  The ± margin corresponds to a 95% confidence interval based on Student’s t-distribution.
-</p>
-
-<div class="ei-model-card">
-  <div class="ei-model-card-header">
-    <span class="ei-model-name">Xihe</span>
-    <span class="ei-model-badge">Inference Process</span>
-  </div>
-  <table class="ei-table">
-    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-    <tbody>
-      <tr><td>Energy (Wh)</td><td><span class="ei-result">41.2 (± 4.23)</span></td></tr>
-      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00231 (± 0.000237)</span></td></tr>
-      <tr><td>Duration (seconds)</td><td><span class="ei-result">648</span></td></tr>
-      <tr><td>Consumption of the empty machine on the same time (Wh) </td><td><span class="ei-pending">pending</span></td></tr>
-    </tbody>
-  </table>
-</div>
-
-""")
-```
-
-```{python}
-from IPython.display import HTML, display
-
-display(HTML("""
-<div style="padding: 1rem 0;">
-  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
-    Which part consume the most — Xihe Inference Process
-  </div>
-
-  <div id="stacked-bar-xihe" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
-
-  <div id="bar-legend-xihe" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
-</div>
-
-<script>
-var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
-  values: [0.1, 14.1, 23.5, 22.1, 40.2],
-  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#036aa1","#1C3A6E"]
-};
-
-var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
-var bar = document.getElementById('stacked-bar-xihe');
-var legend = document.getElementById('bar-legend-xihe');
-
-DATA.labels.forEach(function(label, i) {
-  var pct = (DATA.values[i] / total) * 100;
-
-  var seg = document.createElement('div');
-  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
-  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
-  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
-  seg.onmouseleave = function() { this.style.opacity = '1'; };
-  bar.appendChild(seg);
-
-  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
-    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
-    + label + ' — ' + pct.toFixed(1) + '%</span>';
-});
-</script>
-"""))
-```
-
-```{python}
-from IPython.display import HTML, display
-
-display(HTML("""
-<div style="padding: 1rem 0;">
-  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
-    Duration — Xihe Inference Process
-  </div>
-
-  <div id="stacked-bar-xihe_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
-
-  <div id="bar-legend-xihe_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
-</div>
-
-<script>
-var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
-  values: [1.51, 108, 180, 117, 240],
-  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#036aa1","#1C3A6E"]
-};
-
-var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
-var bar = document.getElementById('stacked-bar-xihe_part2');
-var legend = document.getElementById('bar-legend-xihe_part2');
-
-DATA.labels.forEach(function(label, i) {
-  var pct = (DATA.values[i] / total) * 100;
-
-  var seg = document.createElement('div');
-  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
-  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
-  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
-  seg.onmouseleave = function() { this.style.opacity = '1'; };
-  bar.appendChild(seg);
-
-  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
-    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
-    + label + ' — ' + pct.toFixed(1) + '%</span>';
-});
-</script>
-"""))
-```
-
-## LangYa Energy Impact Analysis
-```{python}
-HTML("""
-<p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
-  Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
-  The ± margin corresponds to a 95% confidence interval based on Student’s t-distribution.
-</p>
-
-<div class="ei-model-card">
-  <div class="ei-model-card-header">
-    <span class="ei-model-name">LangYa</span>
-    <span class="ei-model-badge">Inference Process</span>
-  </div>
-  <table class="ei-table">
-    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-    <tbody>
-      <tr><td>Energy (Wh)</td><td><span class="ei-result">20.9 (± 2.73)</span></td></tr>
-      <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00117 (± 0,000153)</span></td></tr>
-      <tr><td>Duration (seconds)</td><td><span class="ei-result">328</span></td></tr>
-      <tr><td>Consumption of the empty machine on the same time (Wh) </td><td><span class="ei-pending">pending</span></td></tr>
-    </tbody>
-  </table>
-</div>
-
-""")
-```
-
-```{python}
-from IPython.display import HTML, display
-
-display(HTML("""
-<div style="padding: 1rem 0;">
-  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
-    Which part consume the most — LangYa Inference Process
-  </div>
-
-  <div id="stacked-bar-langya" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
-
-  <div id="bar-legend-langya" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
-</div>
-
-<script>
-var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
-  values: [0.1, 14.1, 23.5, 22.1, 40.2],
-  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#036aa1","#1C3A6E"]
-};
-
-var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
-var bar = document.getElementById('stacked-bar-langya');
-var legend = document.getElementById('bar-legend-langya');
-
-DATA.labels.forEach(function(label, i) {
-  var pct = (DATA.values[i] / total) * 100;
-
-  var seg = document.createElement('div');
-  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
-  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
-  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
-  seg.onmouseleave = function() { this.style.opacity = '1'; };
-  bar.appendChild(seg);
-
-  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
-    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
-    + label + ' — ' + pct.toFixed(1) + '%</span>';
-});
-</script>
-"""))
-```
-
-```{python}
-from IPython.display import HTML, display
-
-display(HTML("""
-<div style="padding: 1rem 0;">
-  <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">
-    Duration — LangYa Inference Process
-  </div>
-
-  <div id="stacked-bar-langya_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
-
-  <div id="bar-legend-langya_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
-</div>
-
-<script>
-var DATA = {
-  labels: ["WORKSPACE_INIT", "DOWNLOAD_MODEL", "Create/recup INIT files", "INFERENCE", "POST TREATMENT"],
-  values: [1.51, 108, 180, 117, 240],
-  colors: ["#E8F7FA", "#C8EEF4", "#A0DCE8", "#036aa1","#1C3A6E"]
-};
-
-var total = DATA.values.reduce(function(a, b) { return a + b; }, 0);
-var bar = document.getElementById('stacked-bar-langya_part2');
-var legend = document.getElementById('bar-legend-langya_part2');
-
-DATA.labels.forEach(function(label, i) {
-  var pct = (DATA.values[i] / total) * 100;
-
-  var seg = document.createElement('div');
-  seg.title = label + ': ' + DATA.values[i] + ' (' + pct.toFixed(1) + '%)';
-  seg.style.cssText = 'width:' + pct + '%;background:' + DATA.colors[i] + ';height:100%;transition:opacity .2s;cursor:default;';
-  seg.onmouseenter = function() { this.style.opacity = '0.75'; };
-  seg.onmouseleave = function() { this.style.opacity = '1'; };
-  bar.appendChild(seg);
-
-  legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
-    + '<span style="width:10px;height:10px;border-radius:2px;background:' + DATA.colors[i] + ';flex-shrink:0;"></span>'
-    + label + ' — ' + pct.toFixed(1) + '%</span>';
-});
-</script>
-"""))
-```
-
-
-## AI Models Comparison
-```{python}
-
 from IPython.display import HTML, Javascript, display
- 
-display(HTML("""
-<style>
-  .machine-btn { cursor:pointer; padding:4px 14px; font-size:12px; border:1px solid #ccc; background:transparent; color:#888; border-radius:5px; }
-  .machine-btn.active { background:#eee; color:#111; }
-</style>
- 
-<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; padding-bottom:0.75rem; border-bottom:1px solid #eee;">
-  <span style="font-size:15px; font-weight:500;">SELECT INFRASTRUCTURE</span>
-  <div style="display:flex; gap:6px;">
-    <button class="machine-btn active" id="btn-lir" onclick="switchAll('A')">On Lir</button>
-    <button class="machine-btn" id="btn-edito" onclick="switchAll('B')">On Datalab EDITO</button>
-  </div>
-</div>
- 
-<!-- Chart 1 -->
-<div style="padding:1rem 0;">
-  <div style="display:flex; flex-wrap:wrap; gap:16px; font-size:12px; color:#888; margin-bottom:12px;" id="legend-container"></div>
-  <div style="position:relative; width:100%; height:400px;">
-    <canvas id="energyCompChart"></canvas>
-  </div>
-</div>
- 
-<!-- Chart 2 -->
-<div style="padding:1rem 0; margin-top:1.5rem;">
-  <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between model — energy breakdown</p>
-  <div style="display:flex; flex-direction:column; gap:10px;" id="breakdown-container"></div>
-  <div style="display:flex; flex-wrap:wrap; gap:14px; margin-top:1rem; font-size:12px; color:#888;" id="breakdown-legend"></div>
-</div>
- 
-<!-- Chart 3 -->
-<div style="padding:1rem 0; margin-top:1.5rem;">
-  <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between model — INFERENCE</p>
-  <div style="position:relative; width:100%; height:260px;">
-    <canvas id="inferenceEnergyChart"></canvas>
-  </div>
-</div>
- 
-<!-- Chart 4 -->
-<div style="padding:1rem 0; margin-top:1.5rem;">
-  <p style="font-size:13px; color:#888; margin:0 0 1rem;">Model size — number of parameters used during inference</p>
-  <div style="position:relative; width:100%; height:260px;">
-    <canvas id="nbParamsChart"></canvas>
-  </div>
-</div>
-<div><strong>Note:</strong> Glonet uses only 1235M parameters, distributed across 3 models. The 850M others  parameters are inactive. </div>
 
-<!-- Chart 5 -->
-<div style="padding:1rem 0; margin-top:1.5rem;">
-  <p style="font-size:13px; color:#888; margin:0 0 1rem;">Model size — number of operations during inference</p>
-  <div style="position:relative; width:100%; height:260px;">
-    <canvas id="nbOpeChart"></canvas>
-  </div>
-</div>
-
-<!-- Chart 6 -->
-<div style="padding:1rem 0; margin-top:1.5rem;">
-  <p style="font-size:13px; color:#888; margin:0 0 1rem;">Correlation — inference energy vs. number of operations during inference</p>
-  <div style="position:relative; width:100%; height:320px;">
-    <canvas id="correlationChart"></canvas>
-  </div>
-</div>
-  
-"""))
- 
 display(Javascript("""
 require.config({ paths: { chartjs: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min' } });
 require(['chartjs'], function(ChartModule) {
- 
+
   const Chart = ChartModule.Chart;
   const runs = [0,1,2,3,4,5,6,7,8,9,10];
- 
-  const MODELS_DATA = {
+
+  // ── All model data ──────────────────────────────────────────────────────
+  const ALL_MODELS = {
     A: [
-      { name:'Glonet', mu:135,   ci:2.03,  color:'#378ADD', fill:'55,138,221',  dash:[] },
-      { name:'Wenhai', mu:49.7,  ci:3.49,  color:'#1D9E75', fill:'29,158,117',  dash:[6,3] },
-      { name:'Xihe',   mu:41.2,  ci:4.23,  color:'#D4537E', fill:'212,83,126',  dash:[2,4] },
-      { name:'LangYa', mu:20.9,  ci:2.73,  color:'#D4C853', fill:'255,255,0',   dash:[2,4] }
+      { name:'Glonet', mu:135,  ci:2.03, color:'#378ADD', fill:'55,138,221',  dash:[] },
+      { name:'Wenhai', mu:49.7, ci:3.49, color:'#1D9E75', fill:'29,158,117',  dash:[6,3] },
+      { name:'Xihe',   mu:41.2, ci:4.23, color:'#D4537E', fill:'212,83,126',  dash:[2,4] },
+      { name:'LangYa', mu:20.9, ci:2.73, color:'#D4C853', fill:'212,200,83',  dash:[2,4] }
     ],
     B: [
       { name:'Glonet', mu:14.3,  ci:0.487, color:'#378ADD', fill:'55,138,221',  dash:[] },
       { name:'Wenhai', mu:24.5,  ci:3.64,  color:'#1D9E75', fill:'29,158,117',  dash:[6,3] },
       { name:'Xihe',   mu:17.3,  ci:0.690, color:'#D4537E', fill:'212,83,126',  dash:[2,4] },
-      { name:'LangYa', mu:4.35,  ci:1.64,  color:'#D4C853', fill:'255,255,0',   dash:[2,4] }
+      { name:'LangYa', mu:4.35,  ci:1.64,  color:'#D4C853', fill:'212,200,83',  dash:[2,4] }
     ]
   };
- 
-  const STAGES = ["WORKSPACE_INIT","DOWNLOAD_MODEL","Create/recup INIT files","INFERENCE","POST TREATMENT"];
+
+  const STAGES     = ["WORKSPACE_INIT","DOWNLOAD_MODEL","Create/recup INIT files","INFERENCE","POST TREATMENT"];
   const BAR_COLORS = ["#C8E8F0","#96D3E2","#5ABDD6","#036aa1","#1C3A6E"];
- 
-  const BREAKDOWN_DATA = {
+
+  const ALL_BREAKDOWN = {
     A: [
       { name:'Glonet', values:[0.1,1.2,84.6,5.5,8.6] },
       { name:'Wenhai', values:[0.24,1.44,30.12,39.0,29.2] },
       { name:'Xihe',   values:[0.1,14.1,23.5,22.1,40.2] },
-      { name:'LangYa', values:[0.41,32.1,6.88,19.2,36.7] }
+      { name:'LangYa', values:[0.3,16.0,3.8,3.3,76.6] }
     ],
     B: [
       { name:'Glonet', values:[0.14,0.14,39.4,38.6,21.72] },
@@ -894,41 +750,44 @@ require(['chartjs'], function(ChartModule) {
       { name:'LangYa', values:[0.41,32.1,6.88,19.2,36.7] }
     ]
   };
- 
-  const INFERENCE_DATA = { A:[7.42,19.4,9.10,0.521], B:[5.13,15.54,8.98,0.836] };
- 
-  const NB_PARAMS_DATA = {
-    A: [2085, 1250, 1170, 85.7],
-    B: [2085, 1250, 1170, 85.7]
-  };
 
-  const NB_OPE_DATA = {
-    A: [76.5,469,173,6.21],
-    B: [76.5,469,173,6.21]
-  };
- 
-  let currentMachine = 'A';
+  const ALL_INFERENCE  = { A:[7.42,19.4,9.10,0.521], B:[5.13,15.54,8.98,0.836] };
+  const ALL_NB_PARAMS  = { A:[2085,1250,1170,85.7],  B:[2085,1250,1170,85.7] };
+  const ALL_NB_OPE     = { A:[76.5,469,173,6.21],    B:[76.5,469,173,6.21] };
+  const MODEL_NAMES    = ['Glonet','Wenhai','Xihe','LangYa'];
+  const MODEL_COLORS   = ['#378ADD','#1D9E75','#D4537E','#D4C853'];
 
-  const MODEL_NAMES = ['Glonet','Wenhai','Xihe','LangYa'];
-  const MODEL_COLORS = ['#378ADD','#1D9E75','#D4537E','#D4C853'];
- 
-  // --- Chart 1 ---
+  let currentMachine  = 'A';
+  let activeModels    = { Glonet:true, Wenhai:true, Xihe:true, LangYa:true };
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  function activeIndices() {
+    return MODEL_NAMES.map(function(_,i){ return i; })
+                      .filter(function(i){ return activeModels[MODEL_NAMES[i]]; });
+  }
+
+  function filteredLabels() {
+    return activeIndices().map(function(i){ return MODEL_NAMES[i]; });
+  }
+
+  // ── Chart 1 (line) ──────────────────────────────────────────────────────
   function buildLineDatasets(machine) {
-    const models = MODELS_DATA[machine];
-    const datasets = [];
-    models.forEach(function(m) {
-      datasets.push({ label:m.name+' upper', data:runs.map(r=>r*(m.mu+m.ci)), borderColor:'rgba(0,0,0,0)', backgroundColor:'rgba('+m.fill+',0.22)', pointRadius:0, fill:false });
-      datasets.push({ label:m.name+' lower', data:runs.map(r=>r*(m.mu-m.ci)), borderColor:'rgba(0,0,0,0)', backgroundColor:'rgba('+m.fill+',0.22)', pointRadius:0, fill:'-1' });
-      datasets.push({ label:m.name, data:runs.map(r=>r*m.mu), borderColor:m.color, backgroundColor:'transparent', borderWidth:2.5, borderDash:m.dash, pointRadius:3, pointBackgroundColor:m.color, tension:0.3 });
+    var datasets = [];
+    ALL_MODELS[machine].forEach(function(m) {
+      if (!activeModels[m.name]) return;
+      datasets.push({ label:m.name+' upper', data:runs.map(function(r){ return r*(m.mu+m.ci); }), borderColor:'rgba(0,0,0,0)', backgroundColor:'rgba('+m.fill+',0.22)', pointRadius:0, fill:false });
+      datasets.push({ label:m.name+' lower', data:runs.map(function(r){ return r*(m.mu-m.ci); }), borderColor:'rgba(0,0,0,0)', backgroundColor:'rgba('+m.fill+',0.22)', pointRadius:0, fill:'-1' });
+      datasets.push({ label:m.name, data:runs.map(function(r){ return r*m.mu; }), borderColor:m.color, backgroundColor:'transparent', borderWidth:2.5, borderDash:m.dash, pointRadius:3, pointBackgroundColor:m.color, tension:0.3 });
     });
     return datasets;
   }
- 
+
   function buildLegend(machine) {
-    const models = MODELS_DATA[machine];
-    const legend = document.getElementById('legend-container');
+    var legend = document.getElementById('legend-container');
+    if (!legend) return;
     legend.innerHTML = '';
-    models.forEach(function(m) {
+    ALL_MODELS[machine].forEach(function(m) {
+      if (!activeModels[m.name]) return;
       legend.innerHTML += '<span style="display:flex;align-items:center;gap:6px;">'
         +'<span style="width:20px;height:3px;background:'+m.color+';display:inline-block;border-radius:2px;"></span>'
         +'<span style="width:10px;height:10px;border-radius:2px;background:rgba('+m.fill+',0.30);display:inline-block;"></span>'
@@ -936,8 +795,8 @@ require(['chartjs'], function(ChartModule) {
         +'</span>';
     });
   }
- 
-  const lineChart = new Chart(document.getElementById('energyCompChart'), {
+
+  var lineChart = new Chart(document.getElementById('energyCompChart'), {
     type:'line',
     data:{ labels:runs, datasets:buildLineDatasets('A') },
     options:{
@@ -951,9 +810,11 @@ require(['chartjs'], function(ChartModule) {
           callbacks:{
             title:function(ctx){ return ctx[0].label+' run'+(ctx[0].label>1?'s':''); },
             label:function(ctx){
-              const idx=Math.floor(ctx.datasetIndex/3);
-              const m=MODELS_DATA[currentMachine][idx];
-              const r=ctx.dataIndex;
+              var visIdx = Math.floor(ctx.datasetIndex/3);
+              var visModels = ALL_MODELS[currentMachine].filter(function(m){ return activeModels[m.name]; });
+              var m = visModels[visIdx];
+              if (!m) return '';
+              var r = ctx.dataIndex;
               return ' '+m.name+': '+ctx.parsed.y.toFixed(1)+' Wh ['+(r*(m.mu-m.ci)).toFixed(1)+' – '+(r*(m.mu+m.ci)).toFixed(1)+']';
             }
           }
@@ -965,22 +826,24 @@ require(['chartjs'], function(ChartModule) {
       }
     }
   });
- 
-  // --- Chart 2 ---
+
+  // ── Chart 2 (breakdown stacked bars) ────────────────────────────────────
   function buildBreakdownBars() {
-    const container = document.getElementById('breakdown-container');
+    var container = document.getElementById('breakdown-container');
+    if (!container) return;
     container.innerHTML = '';
-    BREAKDOWN_DATA['A'].forEach(function(model, mi) {
-      const row = document.createElement('div');
+    ALL_BREAKDOWN['A'].forEach(function(model, mi) {
+      var row = document.createElement('div');
+      row.id = 'breakdown-row-'+mi;
       row.style.cssText = 'display:flex;align-items:center;gap:12px;';
-      const label = document.createElement('div');
+      var label = document.createElement('div');
       label.style.cssText = 'width:64px;font-size:13px;font-weight:500;color:#111;flex-shrink:0;text-align:right;';
       label.textContent = model.name;
       row.appendChild(label);
-      const bar = document.createElement('div');
+      var bar = document.createElement('div');
       bar.style.cssText = 'display:flex;flex:1;height:36px;border-radius:6px;overflow:hidden;';
       BAR_COLORS.forEach(function(color, i) {
-        const seg = document.createElement('div');
+        var seg = document.createElement('div');
         seg.id = 'seg-'+mi+'-'+i;
         seg.style.cssText = 'width:0%;background:'+color+';height:100%;transition:width 0.5s cubic-bezier(0.4,0,0.2,1);cursor:default;';
         seg.onmouseenter = function(){ this.style.opacity='0.7'; };
@@ -990,71 +853,53 @@ require(['chartjs'], function(ChartModule) {
       row.appendChild(bar);
       container.appendChild(row);
     });
-    const legend = document.getElementById('breakdown-legend');
-    STAGES.forEach(function(stage, i) {
-      legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
-        +'<span style="width:10px;height:10px;border-radius:2px;background:'+BAR_COLORS[i]+';flex-shrink:0;display:inline-block;"></span>'
-        +stage+'</span>';
-    });
+    var legend = document.getElementById('breakdown-legend');
+    if (legend && legend.innerHTML === '') {
+      STAGES.forEach(function(stage, i) {
+        legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
+          +'<span style="width:10px;height:10px;border-radius:2px;background:'+BAR_COLORS[i]+';flex-shrink:0;display:inline-block;"></span>'
+          +stage+'</span>';
+      });
+    }
   }
- 
+
   function updateBreakdownBars(machine) {
-    BREAKDOWN_DATA[machine].forEach(function(model, mi) {
-      const total = model.values.reduce(function(a,b){ return a+b; },0);
+    ALL_BREAKDOWN[machine].forEach(function(model, mi) {
+      var row = document.getElementById('breakdown-row-'+mi);
+      if (!row) return;
+      row.style.display = activeModels[model.name] ? 'flex' : 'none';
+      var total = model.values.reduce(function(a,b){ return a+b; },0);
       model.values.forEach(function(val, i) {
-        const pct = (val/total)*100;
-        const seg = document.getElementById('seg-'+mi+'-'+i);
-        if(seg){ seg.style.width=pct+'%'; seg.title=STAGES[i]+': '+val+' %'; }
+        var pct = (val/total)*100;
+        var seg = document.getElementById('seg-'+mi+'-'+i);
+        if (seg) { seg.style.width=pct+'%'; seg.title=STAGES[i]+': '+val+' %'; }
       });
     });
   }
- 
-  // --- Chart 3 ---
-  const inferenceChart = new Chart(document.getElementById('inferenceEnergyChart'), {
+
+  // ── Chart 3 (inference bar) ──────────────────────────────────────────────
+  var inferenceChart = new Chart(document.getElementById('inferenceEnergyChart'), {
     type:'bar',
-    data:{
-      labels:['Glonet','Wenhai','Xihe','LangYa'],
-      datasets:[{
-        label:'Energy (Wh)',
-        data:INFERENCE_DATA['A'],
-        backgroundColor:['#036aa1','#036aa1','#036aa1','#036aa1'],
-        borderColor:['#185FA5','#185FA5','#185FA5','#185FA5'],
-        borderWidth:1, borderRadius:4
-      }]
-    },
+    data:{ labels:filteredLabels(), datasets:[{ label:'Energy (Wh)', data:activeIndices().map(function(i){ return ALL_INFERENCE['A'][i]; }), backgroundColor:'#036aa1', borderColor:'#185FA5', borderWidth:1, borderRadius:4 }] },
     options:{
       responsive:true, maintainAspectRatio:false,
       animation:{ duration:500, easing:'easeInOutQuart' },
-      plugins:{
-        legend:{ display:false },
-        tooltip:{ callbacks:{ label:function(ctx){ return ' Energy: '+ctx.parsed.y.toFixed(2)+' Wh'; } } }
-      },
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:function(ctx){ return ' Energy: '+ctx.parsed.y.toFixed(2)+' Wh'; } } } },
       scales:{
         x:{ grid:{color:'rgba(128,128,128,0.08)'}, ticks:{color:'#888'} },
         y:{ beginAtZero:true, title:{display:true,text:'Energy (Wh)',color:'#888',font:{size:12}}, grid:{color:'rgba(128,128,128,0.08)'}, ticks:{color:'#888',callback:function(v){ return v+' Wh'; }} }
       }
     }
   });
- 
-  // --- Chart 4 ---
-  const nbParamsChart = new Chart(document.getElementById('nbParamsChart'), {
+
+  // ── Chart 4 (nb params) ──────────────────────────────────────────────────
+  var nbParamsChart = new Chart(document.getElementById('nbParamsChart'), {
     type:'bar',
-    data:{
-      labels:['Glonet','Wenhai','Xihe','LangYa'],
-      datasets:[{
-        label:'Parameters (M)',
-        data:NB_PARAMS_DATA['A'],
-        backgroundColor:['#378ADD','#1D9E75','#D4537E','#D4C853'],
-        borderWidth:1, borderRadius:4
-      }]
-    },
+    data:{ labels:filteredLabels(), datasets:[{ label:'Parameters (M)', data:activeIndices().map(function(i){ return ALL_NB_PARAMS['A'][i]; }), backgroundColor:activeIndices().map(function(i){ return MODEL_COLORS[i]; }), borderWidth:1, borderRadius:4 }] },
     options:{
       responsive:true, maintainAspectRatio:false,
       animation:{ duration:500, easing:'easeInOutQuart' },
-      plugins:{
-        legend:{ display:false },
-        tooltip:{ callbacks:{ label:function(ctx){ return ' Parameters: '+ctx.parsed.y.toFixed(1)+' M'; } } }
-      },
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:function(ctx){ return ' Parameters: '+ctx.parsed.y.toFixed(1)+' M'; } } } },
       scales:{
         x:{ grid:{color:'rgba(128,128,128,0.08)'}, ticks:{color:'#888'} },
         y:{ beginAtZero:true, title:{display:true,text:'Parameters (millions)',color:'#888',font:{size:12}}, grid:{color:'rgba(128,128,128,0.08)'}, ticks:{color:'#888',callback:function(v){ return v+' M'; }} }
@@ -1062,25 +907,14 @@ require(['chartjs'], function(ChartModule) {
     }
   });
 
-  // --- Chart 5 ---
-  const nbOpeChart = new Chart(document.getElementById('nbOpeChart'), {
+  // ── Chart 5 (nb operations) ──────────────────────────────────────────────
+  var nbOpeChart = new Chart(document.getElementById('nbOpeChart'), {
     type:'bar',
-    data:{
-      labels:['Glonet','Wenhai','Xihe','LangYa'],
-      datasets:[{
-        label:'TFLOPs',
-        data:NB_OPE_DATA['A'],
-        backgroundColor:['#378ADD','#1D9E75','#D4537E','#D4C853'],
-        borderWidth:1, borderRadius:4
-      }]
-    },
+    data:{ labels:filteredLabels(), datasets:[{ label:'TFLOPs', data:activeIndices().map(function(i){ return ALL_NB_OPE['A'][i]; }), backgroundColor:activeIndices().map(function(i){ return MODEL_COLORS[i]; }), borderWidth:1, borderRadius:4 }] },
     options:{
       responsive:true, maintainAspectRatio:false,
       animation:{ duration:500, easing:'easeInOutQuart' },
-      plugins:{
-        legend:{ display:false },
-        tooltip:{ callbacks:{ label:function(ctx){ return ' Number of operations: '+ctx.parsed.y.toFixed(1)+' TFLOPs'; } } }
-      },
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:function(ctx){ return ' Number of operations: '+ctx.parsed.y.toFixed(1)+' TFLOPs'; } } } },
       scales:{
         x:{ grid:{color:'rgba(128,128,128,0.08)'}, ticks:{color:'#888'} },
         y:{ beginAtZero:true, title:{display:true,text:'Number of operations (TFLOPs)',color:'#888',font:{size:12}}, grid:{color:'rgba(128,128,128,0.08)'}, ticks:{color:'#888',callback:function(v){ return v+' TFLOPs'; }} }
@@ -1088,238 +922,161 @@ require(['chartjs'], function(ChartModule) {
     }
   });
 
-    // --- Regression helpers ---
+  // ── Regression helpers ───────────────────────────────────────────────────
   function linearRegression(pts) {
-    const n = pts.length;
-    const sumX  = pts.reduce(function(s,p){ return s+p.x; }, 0);
-    const sumY  = pts.reduce(function(s,p){ return s+p.y; }, 0);
-    const sumXY = pts.reduce(function(s,p){ return s+p.x*p.y; }, 0);
-    const sumX2 = pts.reduce(function(s,p){ return s+p.x*p.x; }, 0);
-    const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
-    const intercept = (sumY - slope*sumX) / n;
-    return { slope: slope, intercept: intercept };
+    var n=pts.length, sumX=0, sumY=0, sumXY=0, sumX2=0;
+    pts.forEach(function(p){ sumX+=p.x; sumY+=p.y; sumXY+=p.x*p.y; sumX2+=p.x*p.x; });
+    var slope=(n*sumXY-sumX*sumY)/(n*sumX2-sumX*sumX);
+    var intercept=(sumY-slope*sumX)/n;
+    return { slope:slope, intercept:intercept };
   }
 
   function pearson(pts) {
-    const n = pts.length;
-    const mx = pts.reduce(function(s,p){ return s+p.x; },0)/n;
-    const my = pts.reduce(function(s,p){ return s+p.y; },0)/n;
-    const num = pts.reduce(function(s,p){ return s+(p.x-mx)*(p.y-my); },0);
-    const dx  = Math.sqrt(pts.reduce(function(s,p){ return s+(p.x-mx)*(p.x-mx); },0));
-    const dy  = Math.sqrt(pts.reduce(function(s,p){ return s+(p.y-my)*(p.y-my); },0));
+    var n=pts.length;
+    var mx=pts.reduce(function(s,p){ return s+p.x; },0)/n;
+    var my=pts.reduce(function(s,p){ return s+p.y; },0)/n;
+    var num=pts.reduce(function(s,p){ return s+(p.x-mx)*(p.y-my); },0);
+    var dx=Math.sqrt(pts.reduce(function(s,p){ return s+(p.x-mx)*(p.x-mx); },0));
+    var dy=Math.sqrt(pts.reduce(function(s,p){ return s+(p.y-my)*(p.y-my); },0));
     return num/(dx*dy);
   }
 
   function buildCorrelationDatasets(machine) {
-    const inferenceVals = INFERENCE_DATA[machine];
-    const opeVals = NB_OPE_DATA[machine];
-
-    // One point per model
-    const scatterDatasets = MODEL_NAMES.map(function(name, i) {
-      return {
-        type: 'scatter',
-        label: name,
-        data: [{ x: inferenceVals[i], y: opeVals[i] }],
-        backgroundColor: MODEL_COLORS[i],
-        borderColor: MODEL_COLORS[i],
-        pointRadius: 10,
-        pointHoverRadius: 30,
-        order: 1
-      };
+    var idx = activeIndices();
+    var inferenceVals = idx.map(function(i){ return ALL_INFERENCE[machine][i]; });
+    var opeVals       = idx.map(function(i){ return ALL_NB_OPE[machine][i]; });
+    var scatterDatasets = idx.map(function(i, j) {
+      return { type:'scatter', label:MODEL_NAMES[i], data:[{ x:inferenceVals[j], y:opeVals[j] }], backgroundColor:MODEL_COLORS[i], borderColor:MODEL_COLORS[i], pointRadius:10, pointHoverRadius:30, order:1 };
     });
-
-    // Regression line
-    const pts = MODEL_NAMES.map(function(_, i) {
-      return { x: inferenceVals[i], y: opeVals[i] };
-    });
-    const reg = linearRegression(pts);
-    const xMin = Math.min.apply(null, inferenceVals);
-    const xMax = Math.max.apply(null, inferenceVals);
-    const r = pearson(pts);
-    const lineDataset = {
-      type: 'line',
-      label: 'Linear fit (r=' + r.toFixed(2) + ')',
-      data: [
-        { x: xMin * 0.85, y: reg.slope * xMin * 0.85 + reg.intercept },
-        { x: xMax * 1.10, y: reg.slope * xMax * 1.10 + reg.intercept }
-      ],
-      borderColor: 'rgba(120,120,120,0.55)',
-      borderWidth: 1.5,
-      borderDash: [5,4],
-      pointRadius: 0,
-      fill: false,
-      order: 2
-    };
-
-    return { datasets: scatterDatasets.concat([lineDataset]), r: r };
+    if (idx.length < 2) return { datasets:scatterDatasets, r:NaN };
+    var pts = idx.map(function(i,j){ return { x:inferenceVals[j], y:opeVals[j] }; });
+    var reg = linearRegression(pts);
+    var r   = pearson(pts);
+    var xMin = Math.min.apply(null,inferenceVals);
+    var xMax = Math.max.apply(null,inferenceVals);
+    var lineDataset = { type:'line', label:'Linear fit (r='+r.toFixed(2)+')', data:[{ x:xMin*0.85, y:reg.slope*xMin*0.85+reg.intercept },{ x:xMax*1.10, y:reg.slope*xMax*1.10+reg.intercept }], borderColor:'rgba(120,120,120,0.55)', borderWidth:1.5, borderDash:[5,4], pointRadius:0, fill:false, order:2 };
+    return { datasets:scatterDatasets.concat([lineDataset]), r:r };
   }
 
-  // --- Chart 6 init ---
-  const corrInit = buildCorrelationDatasets('A');
-  const correlationChart = new Chart(document.getElementById('correlationChart'), {
-    type: 'scatter',
-    data: { datasets: corrInit.datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 500, easing: 'easeInOutQuart' },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'bottom',
-          labels: { color: '#888', font: { size: 11 }, boxWidth: 10, padding: 14,
-            filter: function(item) { return !item.text.startsWith('Linear'); }
-          }
-        },
-        tooltip: {
-          callbacks: {
-            label: function(ctx) {
-              if (ctx.dataset.type === 'line') return null;
-              return ' ' + ctx.dataset.label
-                + '  —  Inference: ' + ctx.parsed.x.toFixed(2) + ' Wh'
-                + ' | Ops: ' + ctx.parsed.y.toFixed(1) + ' TFLOPs';
-            }
-          }
-        },
-        // Inline annotation for r value via afterDraw plugin
+  var corrInit = buildCorrelationDatasets('A');
+  var correlationChart = new Chart(document.getElementById('correlationChart'), {
+    type:'scatter',
+    data:{ datasets:corrInit.datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{ duration:500, easing:'easeInOutQuart' },
+      plugins:{
+        legend:{ display:true, position:'bottom', labels:{ color:'#888', font:{size:11}, boxWidth:10, padding:14, filter:function(item){ return !item.text.startsWith('Linear'); } } },
+        tooltip:{ callbacks:{ label:function(ctx){ if(ctx.dataset.type==='line') return null; return ' '+ctx.dataset.label+'  —  Inference: '+ctx.parsed.x.toFixed(2)+' Wh | Ops: '+ctx.parsed.y.toFixed(1)+' TFLOPs'; } } }
       },
-      scales: {
-        x: {
-          title: { display: true, text: 'Inference energy (Wh)', color: '#888', font: { size: 12 } },
-          ticks: { color: '#888', callback: function(v){ return v + ' Wh'; } },
-          grid: { color: 'rgba(128,128,128,0.08)' }
-        },
-        y: {
-          title: { display: true, text: 'Number of operations (TFLOPs)', color: '#888', font: { size: 12 } },
-          ticks: { color: '#888', callback: function(v){ return v < 0 ? '' : v + ' T'; }  },
-          grid: { color: 'rgba(128,128,128,0.08)' }
-        }
+      scales:{
+        x:{ title:{display:true,text:'Inference energy (Wh)',color:'#888',font:{size:12}}, ticks:{color:'#888',callback:function(v){ return v+' Wh'; }}, grid:{color:'rgba(128,128,128,0.08)'} },
+        y:{ title:{display:true,text:'Number of operations (TFLOPs)',color:'#888',font:{size:12}}, ticks:{color:'#888',callback:function(v){ return v<0?'':v+' T'; }}, grid:{color:'rgba(128,128,128,0.08)'} }
       }
     },
-    plugins: [{
-      id: 'rLabel',
-      afterDraw: function(chart) {
-        const ctx2 = chart.ctx;
-        const r = pearson(
-          MODEL_NAMES.map(function(_, i) {
-            return {
-              x: INFERENCE_DATA[currentMachine][i],
-              y: NB_OPE_DATA[currentMachine][i]
-            };
-          })
-        );
+    plugins:[{
+      id:'rLabel',
+      afterDraw:function(chart) {
+        var idx2 = activeIndices();
+        if (idx2.length < 2) return;
+        var pts2 = idx2.map(function(i){ return { x:ALL_INFERENCE[currentMachine][i], y:ALL_NB_OPE[currentMachine][i] }; });
+        var r2 = pearson(pts2);
+        var ctx2 = chart.ctx;
         ctx2.save();
-        ctx2.font = '12px sans-serif';
-        ctx2.fillStyle = '#aaa';
-        ctx2.textAlign = 'right';
-        ctx2.fillText(
-          'Pearson r = ' + r.toFixed(2),
-          chart.chartArea.right,
-          chart.chartArea.top + 16
-        );
+        ctx2.font='12px sans-serif'; ctx2.fillStyle='#aaa'; ctx2.textAlign='right';
+        ctx2.fillText('Pearson r = '+r2.toFixed(2), chart.chartArea.right, chart.chartArea.top+16);
         ctx2.restore();
       }
     }]
   });
 
-  // --- Contrôleur global ---
+  // ── Refresh all charts ───────────────────────────────────────────────────
+  function refreshCharts() {
+    var m = currentMachine;
+    // line
+    lineChart.data.datasets = buildLineDatasets(m);
+    lineChart.update();
+    buildLegend(m);
+    // breakdown
+    updateBreakdownBars(m);
+    // inference bar
+    inferenceChart.data.labels = filteredLabels();
+    inferenceChart.data.datasets[0].data = activeIndices().map(function(i){ return ALL_INFERENCE[m][i]; });
+    inferenceChart.update();
+    // params
+    nbParamsChart.data.labels = filteredLabels();
+    nbParamsChart.data.datasets[0].data = activeIndices().map(function(i){ return ALL_NB_PARAMS[m][i]; });
+    nbParamsChart.data.datasets[0].backgroundColor = activeIndices().map(function(i){ return MODEL_COLORS[i]; });
+    nbParamsChart.update();
+    // ope
+    nbOpeChart.data.labels = filteredLabels();
+    nbOpeChart.data.datasets[0].data = activeIndices().map(function(i){ return ALL_NB_OPE[m][i]; });
+    nbOpeChart.data.datasets[0].backgroundColor = activeIndices().map(function(i){ return MODEL_COLORS[i]; });
+    nbOpeChart.update();
+    // correlation
+    var corrResult = buildCorrelationDatasets(m);
+    correlationChart.data.datasets = corrResult.datasets;
+    correlationChart.update();
+  }
+
+  // ── Global controls ──────────────────────────────────────────────────────
   window.switchAll = function(m) {
     currentMachine = m;
     document.getElementById('btn-lir').classList.toggle('active', m==='A');
     document.getElementById('btn-edito').classList.toggle('active', m==='B');
-    lineChart.data.datasets = buildLineDatasets(m);
-    lineChart.update();
-    buildLegend(m);
-    updateBreakdownBars(m);
-    inferenceChart.data.datasets[0].data = INFERENCE_DATA[m];
-    inferenceChart.update();
-    nbParamsChart.data.datasets[0].data = NB_PARAMS_DATA[m];
-    nbParamsChart.update();
-    nbOpeChart.data.datasets[0].data = NB_OPE_DATA[m];
-    nbOpeChart.update();
-    const corrResult = buildCorrelationDatasets(m);
-    correlationChart.data.datasets = corrResult.datasets;
-    correlationChart.update();
+    refreshCharts();
   };
- 
+
+  window.toggleModel = function(name) {
+    activeModels[name] = !activeModels[name];
+    var chk = document.getElementById('chk-'+name);
+    if (chk) chk.classList.toggle('checked', activeModels[name]);
+    refreshCharts();
+  };
+
+  // ── Stacked bars (individual tab) ────────────────────────────────────────
+  function makeStackedBar(barId, legendId, data) {
+    var bar = document.getElementById(barId);
+    var legend = document.getElementById(legendId);
+    if (!bar) return;
+    bar.innerHTML = ''; legend.innerHTML = '';
+    var total = data.values.reduce(function(a,b){ return a+b; },0);
+    data.labels.forEach(function(label, i) {
+      var pct = (data.values[i]/total)*100;
+      var seg = document.createElement('div');
+      seg.title = label+': '+data.values[i]+' ('+pct.toFixed(1)+'%)';
+      seg.style.cssText = 'width:'+pct+'%;background:'+data.colors[i]+';height:100%;transition:opacity .2s;cursor:default;';
+      seg.onmouseenter = function(){ this.style.opacity='0.75'; };
+      seg.onmouseleave = function(){ this.style.opacity='1'; };
+      bar.appendChild(seg);
+      legend.innerHTML += '<span style="display:flex;align-items:center;gap:5px;">'
+        +'<span style="width:10px;height:10px;border-radius:2px;background:'+data.colors[i]+';flex-shrink:0;"></span>'
+        +label+' — '+pct.toFixed(1)+'%</span>';
+    });
+  }
+
+  var STAGE_COLORS = ["#E8F7FA","#C8EEF4","#A0DCE8","#036aa1","#1C3A6E"];
+  var STAGE_LABELS = ["WORKSPACE_INIT","DOWNLOAD_MODEL","Create/recup INIT files","INFERENCE","POST TREATMENT"];
+
+  function initStackedBars() {
+    makeStackedBar('stacked-bar-glonet',       'bar-legend-glonet',       { labels:STAGE_LABELS, values:[0.1,1.2,84.6,5.5,8.6],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet_part2', 'bar-legend-glonet_part2', { labels:STAGE_LABELS, values:[1.55,10,1820,75,131],            colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-wenhai',       'bar-legend-wenhai',       { labels:STAGE_LABELS, values:[0.24,1.44,30.12,39.0,29.2],      colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-wenhai_part2', 'bar-legend-wenhai_part2', { labels:STAGE_LABELS, values:[1.53,7.0,280,253,220],           colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-xihe',         'bar-legend-xihe',         { labels:STAGE_LABELS, values:[0.1,14.1,23.5,22.1,40.2],        colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-xihe_part2',   'bar-legend-xihe_part2',   { labels:STAGE_LABELS, values:[1.51,108,180,117,240],           colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-langya',       'bar-legend-langya',       { labels:STAGE_LABELS, values:[0.3,16.0,3.8,3.3,76.6],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-langya_part2', 'bar-legend-langya_part2', { labels:STAGE_LABELS, values:[0.4,18.8,5.0,3.0,72.8],          colors:STAGE_COLORS });
+  }
+
+  window._stackedBarsReady = initStackedBars;
+  setTimeout(initStackedBars, 100);
+
+  // ── Init comparison tab charts ───────────────────────────────────────────
   buildBreakdownBars();
   setTimeout(function(){ updateBreakdownBars('A'); }, 50);
   buildLegend('A');
-  
+
 });
 """))
-
-```
-
-### Infrastructure and Resources
-
-```{python}
-HTML("""
-<div class="ei-model-card">
-  <div class="ei-model-card-header">
-    <span class="ei-model-name">GLO12</span>
-    <span class="ei-model-badge">Run</span>
-  </div>
-  <table class="ei-table">
-    <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
-    <tbody>
-      <tr><td>Supercomputer</td><td><span class="ei-param_infos">Météo-France — Belenos (Toulouse, France)</span></td></tr>
-      <tr><td>Number of Nodes</td><td><span class="ei-param_infos">43</span></td></tr>
-      <tr><td>Number of processes per node</td><td><span class="ei-param_infos">128</span></td></tr>
-      <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 7742</span> </td></tr>
-      <tr><td>RAM (GB)</td><td><span class="ei-param_infos">10632</span></td></tr>
-      <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
-      <tr><td>PUE</td><td><span class="ei-param_infos">1.17</span></td></tr>
-    </tbody>
-  </table>
-</div>
-""")
-```
-
-```{python}
-HTML("""
-<div class="ei-model-card">
-  <div class="ei-model-card-header">
-    <span class="ei-model-name">Glonet · Wenhai · Xihe</span>
-    <span class="ei-model-badge">Inference</span>
-  </div>
-  <table class="ei-table">
-    <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
-    <tbody>
-      <tr><td>Supercomputer</td><td><span class="ei-param_infos">Mercator Ocean International — Lir (Toulouse, France)</span></td></tr>
-      <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
-      <tr><td>Number of processes per node</td><td><span class="ei-param_infos">8</span></td></tr>
-      <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9534</span></td></tr>
-      <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA H100 80GB</span></td></tr>
-      <tr><td>RAM (GB)</td><td><span class="ei-param_infos">755</span></td></tr>
-      <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
-      <tr><td>PUE</td><td><span class="ei-param_infos">1.45</span></td></tr>
-    </tbody>
-  </table>
-</div>
-""")
-```
-
-```{python}
-HTML("""
-<div class="ei-model-card">
-  <div class="ei-model-card-header">
-    <span class="ei-model-name">Glonet · Wenhai · Xihe</span>
-    <span class="ei-model-badge">Inference</span>
-  </div>
-  <table class="ei-table">
-    <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
-    <tbody>
-      <tr><td>Supercomputer</td><td><span class="ei-param_infos">Datalab EDITO - Cloud Ferro (Mazovia, Poland)</span></td></tr>
-      <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
-      <tr><td>Number of processes per node</td><td><span class="ei-param_infos">16</span></td></tr>
-      <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC</span></td></tr>
-      <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA RTX A6000 48GB</span></td></tr>
-      <tr><td>RAM (GB)</td><td><span class="ei-param_infos">110</span></td></tr>
-      <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
-      <tr><td>PUE</td><td><span class="ei-param_infos">1.43</span></td></tr>
-    </tbody>
-  </table>
-</div>
-""")
 ```
