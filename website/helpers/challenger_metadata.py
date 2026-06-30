@@ -63,6 +63,16 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1°",
     },
+    "wenhai-no-artifacts": {
+        "label": "WenHai (no artifacts)",
+        "url": "https://www.nature.com/articles/s41467-025-57389-2",
+        "organisation": "DOMES",
+        "organisation_url": "http://iaos.ouc.edu.cn/DeepOceanMultispheresandEarthSystem/list.htm",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12/IFS",
+        "resolution": "1/12°",
+    },
     "xihe": {
         "label": "XiHe",
         "url": "https://arxiv.org/abs/2402.02995",
