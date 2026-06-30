@@ -44,7 +44,8 @@ function getPaletteColors() {
 let selectedDepths = new Set();
 let showAllMode = true;
 let showPercentDiff = false;
-let showReferenceBaselines = false;
+let challengerVisibility = {};
+let selectedBaselineName = null;
 let parsedData = null;
 let challengerLabels = {};
 let challengerCategories = {};
@@ -180,6 +181,28 @@ function partitionReferencesLast(names) {
   return [...models, ...references];
 }
 
+function isChallengerVisible(name) {
+  if (Object.prototype.hasOwnProperty.call(challengerVisibility, name)) {
+    return challengerVisibility[name];
+  }
+  return challengerCategories[name] !== "baseline";
+}
+
+const ROW_ACTION_ICONS = {
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3.2h6"/><path d="M10.2 3.2 9.5 9 6.8 11.8h10.4L14.5 9l-.7-5.8"/><path d="M12 11.8V21"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  add: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+};
+
+function buildRowActions(name, isBaseline) {
+  const pinTitle = isBaseline ? "Comparison reference" : "Set as comparison reference";
+  let actions = `<button type="button" class="row-action pin-action${isBaseline ? " active" : ""}" data-action="pin" data-challenger="${name}" title="${pinTitle}" aria-label="${pinTitle}" aria-pressed="${isBaseline}">${ROW_ACTION_ICONS.pin}</button>`;
+  if (!isBaseline) {
+    actions += `<button type="button" class="row-action hide-action" data-action="hide" data-challenger="${name}" title="Hide" aria-label="Hide ${displayName(name)}">${ROW_ACTION_ICONS.eye}</button>`;
+  }
+  return `<span class="row-actions">${actions}</span>`;
+}
+
 function trackKeyForChallenger(name) {
   return name.endsWith("_1_degree") ? "one_degree" : "high_resolution";
 }
@@ -244,8 +267,7 @@ function buildDataRows(
     if (isBaseline) rowClasses.push("baseline-row");
     if (isReference) rowClasses.push("reference-row");
     const rowClass = rowClasses.length ? ` class="${rowClasses.join(" ")}"` : "";
-    const referenceBadge = isReference ? ' <span class="reference-badge">ref</span>' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a>${referenceBadge}</th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a>${buildRowActions(name, isBaseline)}</th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -299,8 +321,7 @@ function buildCombinedDataRows(
     if (isBaseline) rowClasses.push("baseline-row");
     if (isReference) rowClasses.push("reference-row");
     const rowClass = rowClasses.length ? ` class="${rowClasses.join(" ")}"` : "";
-    const referenceBadge = isReference ? ' <span class="reference-badge">ref</span>' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a>${referenceBadge}</th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a>${buildRowActions(name, isBaseline)}</th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -475,15 +496,8 @@ function attachTabListeners() {
   });
 }
 
-function buildControlsInnerHtml(challengerNames, baseline, depths, hasReferenceBaselines) {
+function buildControlsInnerHtml(depths) {
   let markup = "";
-
-  markup += '<label>Baseline: <select id="baseline-select">';
-  for (const name of challengerNames) {
-    const selected = name === baseline ? " selected" : "";
-    markup += `<option value="${name}"${selected}>${displayName(name)}</option>`;
-  }
-  markup += "</select></label>";
 
   markup += '<span id="depth-toggle" class="depth-toggle">';
   markup += `<button class="depth-toggle-btn${showAllMode ? " active" : ""}" data-depth="all">All</button>`;
@@ -493,12 +507,6 @@ function buildControlsInnerHtml(challengerNames, baseline, depths, hasReferenceB
     markup += `<button class="depth-toggle-btn${active}" data-depth="${depth}">${depth}</button>`;
   }
   markup += "</span></span>";
-
-  if (hasReferenceBaselines) {
-    markup += '<span class="reference-toggle">';
-    markup += `<button class="reference-toggle-btn${showReferenceBaselines ? " active" : ""}" id="reference-baselines-toggle" type="button" aria-pressed="${showReferenceBaselines}" title="Persistence and climatology reference forecasts — a skill floor, colored against the selected baseline like any model.">Reference baselines</button>`;
-    markup += "</span>";
-  }
 
   markup += '<span class="display-toggle">';
   markup += `<button class="display-toggle-btn${!showPercentDiff ? " active" : ""}" data-display="values">Values</button>`;
@@ -1018,25 +1026,12 @@ function attachControlListeners() {
     });
   }
 
-  const baselineSelect = document.getElementById("baseline-select");
-  if (baselineSelect) {
-    baselineSelect.addEventListener("change", renderAllTables);
-  }
-
   document.querySelectorAll(".display-toggle-btn").forEach((button) => {
     button.addEventListener("click", () => {
       showPercentDiff = button.dataset.display === "percent-diff";
       renderAllTables();
     });
   });
-
-  const referenceToggle = document.getElementById("reference-baselines-toggle");
-  if (referenceToggle) {
-    referenceToggle.addEventListener("click", () => {
-      showReferenceBaselines = !showReferenceBaselines;
-      renderAllTables();
-    });
-  }
 
   const scaleInput = document.getElementById("scale-input");
   if (scaleInput) {
@@ -1211,19 +1206,22 @@ function resolveTrackSelection(challengerNames) {
   return availableTracks;
 }
 
-function resolveVisibleChallengerNames(challengerNames) {
+function resolveDisplayState(challengerNames) {
   const availableTracks = resolveTrackSelection(challengerNames);
   const trackChallengerNames = getTrackChallengerNames(challengerNames, activeTrack);
-  const hasReferenceBaselines = trackChallengerNames.some(isReferenceBaseline);
-  const modelChallengerNames = trackChallengerNames.filter((name) => !isReferenceBaseline(name));
-  const visibleChallengerNames =
-    showReferenceBaselines || modelChallengerNames.length === 0
-      ? trackChallengerNames
-      : modelChallengerNames;
+  const baseline = resolveBaselineSelectionForTrack(trackChallengerNames, selectedBaselineName);
+  const visibleChallengerNames = trackChallengerNames.filter(
+    (name) => name === baseline || isChallengerVisible(name),
+  );
+  const hiddenChallengerNames = trackChallengerNames.filter(
+    (name) => name !== baseline && !isChallengerVisible(name),
+  );
   return {
     availableTracks,
+    trackChallengerNames,
+    baseline,
     visibleChallengerNames,
-    hasReferenceBaselines,
+    hiddenChallengerNames,
   };
 }
 
@@ -1234,6 +1232,50 @@ function resolveBaselineSelectionForTrack(challengerNames, selectedBaseline) {
   return resolveBaselineSelection(challengerNames, selectedBaseline, activeTrack);
 }
 
+function renderHiddenModels(hiddenChallengerNames) {
+  const wrapper = document.getElementById("all-scores");
+  if (!wrapper) return;
+  const existing = document.getElementById("hidden-models");
+  if (!hiddenChallengerNames || hiddenChallengerNames.length === 0) {
+    if (existing) existing.remove();
+    return;
+  }
+  const shelf = existing || document.createElement("div");
+  shelf.id = "hidden-models";
+  const chips = hiddenChallengerNames
+    .map(
+      (name) =>
+        `<button type="button" class="hidden-chip" data-action="show" data-challenger="${name}" title="Show ${displayName(name)}">${ROW_ACTION_ICONS.add}<span>${displayName(name)}</span></button>`,
+    )
+    .join("");
+  shelf.innerHTML = `<span class="hidden-models-label">Hidden</span>${chips}`;
+  wrapper.appendChild(shelf);
+}
+
+function setupChallengerActionDelegation() {
+  const wrapper = document.getElementById("all-scores");
+  if (!wrapper || wrapper.dataset.challengerActionsBound === "true") return;
+  wrapper.dataset.challengerActionsBound = "true";
+  wrapper.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-action]");
+    if (!trigger || !wrapper.contains(trigger)) return;
+    const name = trigger.dataset.challenger;
+    if (!name) return;
+    const action = trigger.dataset.action;
+    if (action === "hide") {
+      challengerVisibility[name] = false;
+    } else if (action === "show") {
+      challengerVisibility[name] = true;
+    } else if (action === "pin") {
+      selectedBaselineName = name;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    renderAllTables();
+  });
+}
+
 function renderTablesOnly() {
   const data = ensureParsedData();
   if (!data) return;
@@ -1242,12 +1284,8 @@ function renderTablesOnly() {
   const { challengers, challenger_names: challengerNames } = regionData;
   if (!challengerNames || challengerNames.length === 0) return;
   const { metric_titles: metricTitles, sections } = data;
-  const { visibleChallengerNames } = resolveVisibleChallengerNames(challengerNames);
-  if (visibleChallengerNames.length === 0) return;
-
-  const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value);
-  if (!baseline) return;
+  const { baseline, visibleChallengerNames } = resolveDisplayState(challengerNames);
+  if (!baseline || visibleChallengerNames.length === 0) return;
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
     renderMetricSection(
@@ -1277,12 +1315,8 @@ function renderAllTables() {
   const { metric_titles: metricTitles, sections } = data;
   const regionIds = getRegionIds(data);
   if (!challengerNames || challengerNames.length === 0) return;
-  const { availableTracks, visibleChallengerNames, hasReferenceBaselines } = resolveVisibleChallengerNames(challengerNames);
-  if (visibleChallengerNames.length === 0) return;
-
-  const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value);
-  if (!baseline) return;
+  const { availableTracks, visibleChallengerNames, hiddenChallengerNames, baseline } = resolveDisplayState(challengerNames);
+  if (!baseline || visibleChallengerNames.length === 0) return;
   const availableDepths = getAvailableDepths(challengers, baseline, sections);
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
@@ -1303,9 +1337,10 @@ function renderAllTables() {
   const versionTracks = getVersionTracks(getActiveVersionData(data));
 
   const controlsElement = ensureHeaderElement();
-  controlsElement.innerHTML = buildControlsInnerHtml(visibleChallengerNames, baseline, availableDepths, hasReferenceBaselines);
+  controlsElement.innerHTML = buildControlsInnerHtml(availableDepths);
   renderRegionSelector(regionIds, versionTracks, availableTracks);
   renderVersionSelector(getVersions(data));
+  renderHiddenModels(hiddenChallengerNames);
 
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {
@@ -1324,6 +1359,7 @@ function renderAllTables() {
 
 function init() {
   if (!document.getElementById("scores-data")) return;
+  setupChallengerActionDelegation();
   const initialSection = readSectionFromHash();
   if (initialSection) {
     activeSection = initialSection;
