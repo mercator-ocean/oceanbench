@@ -196,11 +196,11 @@ const ROW_ACTION_ICONS = {
 
 function buildRowActions(name, isBaseline) {
   const pinTitle = isBaseline ? "Comparison reference" : "Set as comparison reference";
-  let actions = `<button type="button" class="row-action pin-action${isBaseline ? " active" : ""}" data-action="pin" data-challenger="${name}" title="${pinTitle}" aria-label="${pinTitle}" aria-pressed="${isBaseline}">${ROW_ACTION_ICONS.pin}</button>`;
-  if (!isBaseline) {
-    actions += `<button type="button" class="row-action hide-action" data-action="hide" data-challenger="${name}" title="Hide" aria-label="Hide ${displayName(name)}">${ROW_ACTION_ICONS.eye}</button>`;
-  }
-  return `<span class="row-actions">${actions}</span>`;
+  const hideButton = isBaseline
+    ? ""
+    : `<button type="button" class="row-action hide-action" data-action="hide" data-challenger="${name}" title="Hide" aria-label="Hide ${displayName(name)}">${ROW_ACTION_ICONS.eye}</button>`;
+  const pinButton = `<button type="button" class="row-action pin-action${isBaseline ? " active" : ""}" data-action="pin" data-challenger="${name}" title="${pinTitle}" aria-label="${pinTitle}" aria-pressed="${isBaseline}">${ROW_ACTION_ICONS.pin}</button>`;
+  return `<span class="row-actions">${hideButton}${pinButton}</span>`;
 }
 
 function trackKeyForChallenger(name) {
