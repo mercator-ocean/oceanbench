@@ -103,8 +103,53 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1°",
     },
+    "persistence": {
+        "label": "Persistence",
+        "url": "https://github.com/mercator-ocean/oceanbench",
+        "organisation": "OceanBench",
+        "organisation_url": "https://github.com/mercator-ocean/oceanbench",
+        "method": "Baseline",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12 nowcast",
+        "resolution": "1/12°",
+    },
+    "persistence_1_degree": {
+        "label": "Persistence",
+        "url": "https://github.com/mercator-ocean/oceanbench",
+        "organisation": "OceanBench",
+        "organisation_url": "https://github.com/mercator-ocean/oceanbench",
+        "method": "Baseline",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12 nowcast",
+        "resolution": "1°",
+    },
+    "climatology": {
+        "label": "Climatology",
+        "url": "https://github.com/mercator-ocean/oceanbench",
+        "organisation": "OceanBench",
+        "organisation_url": "https://github.com/mercator-ocean/oceanbench",
+        "method": "Baseline",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLORYS 1993-2019 climatology",
+        "resolution": "1/12°",
+    },
+    "climatology_1_degree": {
+        "label": "Climatology",
+        "url": "https://github.com/mercator-ocean/oceanbench",
+        "organisation": "OceanBench",
+        "organisation_url": "https://github.com/mercator-ocean/oceanbench",
+        "method": "Baseline",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLORYS 1993-2019 climatology",
+        "resolution": "1°",
+    },
 }
 
 
 def challenger_label(challenger_name: str) -> str:
     return CHALLENGERS.get(challenger_name, {}).get("label", challenger_name)
+
+
+def challenger_category(challenger_name: str) -> str:
+    method = CHALLENGERS.get(challenger_name, {}).get("method")
+    return "baseline" if method == "Baseline" else "model"

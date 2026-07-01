@@ -19,6 +19,7 @@ from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
 from oceanbench.core.interpolate import interpolate_1_degree
 
 _CLOUDFERRO_ML_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs"
+_CLOUDFERRO_BASELINE_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/baseline-forecasts"
 _GLO12_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data/GLO12"
 _GLO12_FORECAST_VARIABLE_NAMES = ["so", "thetao", "uo", "vo", "zos"]
 _LANGYA_LEAD_DAYS_COUNT = 7
@@ -150,6 +151,32 @@ def langya_1_degree() -> xarray.Dataset:
 def _langya_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/langya/{start_datetime_string}.zarr"
+
+
+def persistence() -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(_persistence_dataset_path)
+
+
+def persistence_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(persistence())
+
+
+def _persistence_dataset_path(start_datetime: datetime) -> str:
+    start_datetime_string = start_datetime.strftime("%Y%m%d")
+    return f"{_CLOUDFERRO_BASELINE_FORECASTS_URL}/persistence/{start_datetime_string}.zarr"
+
+
+def climatology() -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(_climatology_dataset_path)
+
+
+def climatology_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(climatology())
+
+
+def _climatology_dataset_path(start_datetime: datetime) -> str:
+    start_datetime_string = start_datetime.strftime("%Y%m%d")
+    return f"{_CLOUDFERRO_BASELINE_FORECASTS_URL}/climatology/{start_datetime_string}.zarr"
 
 
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:

@@ -389,3 +389,102 @@ def langya_1_degree() -> xarray.Dataset:
     """
 
     return challenger_datasets.langya_1_degree()
+
+
+def persistence() -> xarray.Dataset:
+    """
+    Open the persistence baseline challenger dataset.
+
+    The persistence baseline holds the GLO12 nowcast (the initial condition
+    shared by the machine-learning challengers) constant across every lead day.
+    It is the short-lead reference floor: a forecast that does not beat
+    persistence adds no skill beyond doing nothing at that lead time.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing persistence baseline forecasts.
+
+    >>> persistence() # doctest: +SKIP
+    <xarray.Dataset> Size: 4TB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 50,
+                             latitude: 2041, longitude: 4320)
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 ...
+    """
+
+    return challenger_datasets.persistence()
+
+
+def persistence_1_degree() -> xarray.Dataset:
+    """
+    Open the persistence baseline challenger dataset interpolated to 1 degree.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing persistence baseline forecasts interpolated to 1
+        degree resolution.
+
+    >>> persistence_1_degree() # doctest: +SKIP
+    <xarray.Dataset> Size: 26GB
+    Dimensions:                          (first_day_datetime: 52,
+                                          lead_day_index: 10, depth: 50,
+                                          latitude: 170, longitude: 360)
+    """
+
+    return challenger_datasets.persistence_1_degree()
+
+
+def climatology() -> xarray.Dataset:
+    """
+    Open the climatology baseline challenger dataset.
+
+    The climatology baseline is the GLORYS 1993-2019 day-of-year mean (a
+    +/-15-day windowed seasonal climatology); each lead day is the climatology
+    for that lead's valid calendar date. It is the long-lead reference ceiling:
+    a forecast with no skill beyond climatology is not beating "what this time
+    of year usually looks like".
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing climatology baseline forecasts.
+
+    >>> climatology() # doctest: +SKIP
+    <xarray.Dataset> Size: 4TB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 50,
+                             latitude: 2041, longitude: 4320)
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 ...
+    """
+
+    return challenger_datasets.climatology()
+
+
+def climatology_1_degree() -> xarray.Dataset:
+    """
+    Open the climatology baseline challenger dataset interpolated to 1 degree.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing climatology baseline forecasts interpolated to 1
+        degree resolution.
+
+    >>> climatology_1_degree() # doctest: +SKIP
+    <xarray.Dataset> Size: 26GB
+    Dimensions:                          (first_day_datetime: 52,
+                                          lead_day_index: 10, depth: 50,
+                                          latitude: 170, longitude: 360)
+    """
+
+    return challenger_datasets.climatology_1_degree()
