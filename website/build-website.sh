@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR=$( dirname $(readlink -f "${BASH_SOURCE[0]}") )
 pushd "$SCRIPT_DIR" > /dev/null
 
-# install system deps (needed for pandas, matplotlib, etc.)
+# install system deps (pandas, matplotlib, etc.)
 apt-get update && apt-get install -y build-essential gcc g++ make
 
 # install quarto if missing
@@ -23,10 +23,11 @@ pip install -r requirements.txt
 # build site
 quarto render --to html
 
-# copy into website source folder expected by Static-pages
-mkdir -p /app/repository/website
-cp -r _site/* /app/repository/website/
+# copy to the expected Static-pages source path
+mkdir -p /app/repository/$WEBSITE_SOURCE_PATH
+cp -r _site/* /app/repository/$WEBSITE_SOURCE_PATH/
+
+# debug (important)
+ls -R /app/repository/$WEBSITE_SOURCE_PATH
 
 popd > /dev/null
-
-
