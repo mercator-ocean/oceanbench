@@ -8,6 +8,7 @@ import xarray
 from scipy.interpolate import CubicSpline
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
+from oceanbench.core.dataset_source import get_dataset_source
 from oceanbench.core.dataset_utils import (
     DEPTH_BINS_DEFAULT,
     DEPTH_BIN_DISPLAY_ORDER,
@@ -22,7 +23,12 @@ from oceanbench.core.references.observations import load_mean_dynamic_topography
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
-REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
+# SSH is converted to SLA by subtracting the mean dynamic topography and a mean sea surface
+# height shift that aligns the challenger's zos datum with the contemporary GLO12 datum.
+# The default is calibrated against GLO12; the climatology baseline needs a dedicated shift
+# because the GLORYS 1993-2019 day-of-year mean sits below contemporary sea level.
+DEFAULT_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
+MEAN_SEA_SURFACE_HEIGHT_SHIFTS = {"climatology": -0.1329}
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 VELOCITY_TARGET_DEPTH_METERS = 15.0
@@ -232,9 +238,14 @@ def create_class4_observations_dataframe(
     )
 
 
+def mean_sea_surface_height_shift(challenger_name: str | None) -> float:
+    return MEAN_SEA_SURFACE_HEIGHT_SHIFTS.get(challenger_name, DEFAULT_MEAN_SEA_SURFACE_HEIGHT_SHIFT)
+
+
 def _convert_forecast_ssh_to_sla(
     model_variable: xarray.DataArray,
     variable_key: str,
+    challenger_name: str | None = None,
 ) -> xarray.DataArray:
     if variable_key != Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
         return model_variable
@@ -242,14 +253,15 @@ def _convert_forecast_ssh_to_sla(
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
     mean_dynamic_topography = load_mean_dynamic_topography(resolution)
-    return model_variable - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    return model_variable - mean_dynamic_topography - mean_sea_surface_height_shift(challenger_name)
 
 
 def prepare_class4_model_variable(
     model_variable: xarray.DataArray,
     variable_key: str,
+    challenger_name: str | None = None,
 ) -> xarray.DataArray:
-    return _convert_forecast_ssh_to_sla(model_variable, variable_key)
+    return _convert_forecast_ssh_to_sla(model_variable, variable_key, challenger_name)
 
 
 def _interpolate_vertically(
@@ -551,9 +563,11 @@ def class4_variable_results(
         return pandas.DataFrame()
 
     observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
+    challenger_source = get_dataset_source(challenger)
     model_variable = _convert_forecast_ssh_to_sla(
         challenger[challenger_variable_key],
         standard_variable_key,
+        challenger_source.name if challenger_source is not None else None,
     )
     observations_dataframe = observations_dataframe.assign(
         model_value=_interpolate_model_to_observations(

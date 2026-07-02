@@ -5,9 +5,14 @@
 import dask.array
 import numpy
 import pandas
+import pytest
 import xarray
 
-from oceanbench.core.classIV_support import interpolate_class4_model_to_observations
+import oceanbench.core.classIV_support as classIV_support
+from oceanbench.core.classIV_support import (
+    interpolate_class4_model_to_observations,
+    prepare_class4_model_variable,
+)
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.runtime_configuration import RuntimeConfiguration
 import oceanbench.core.runtime_configuration as runtime_configuration
@@ -103,3 +108,44 @@ def test_class4_fast_interpolation_materializes_each_first_day_block_once(monkey
 
     numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0, 100.75, 122.25])
     assert first_day_block_compute_calls == [(0, 1, 2), (0, 1, 2)]
+
+
+def _ssh_model_variable() -> xarray.DataArray:
+    return xarray.DataArray(
+        numpy.array([[1.0, 1.0], [1.0, 1.0]]),
+        dims=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.LATITUDE.key(): [0.0, 1.0],
+            Dimension.LONGITUDE.key(): [10.0, 11.0],
+        },
+        name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+    )
+
+
+@pytest.mark.parametrize(
+    "challenger_name, expected_shift",
+    [
+        (None, -0.1148),
+        ("glo12", -0.1148),
+        ("persistence", -0.1148),
+        ("climatology", -0.1329),
+    ],
+)
+def test_ssh_to_sla_uses_per_challenger_mean_sea_surface_height_shift(
+    monkeypatch, challenger_name, expected_shift
+) -> None:
+    monkeypatch.setattr(classIV_support, "get_dataset_resolution", lambda dataset: "native")
+    monkeypatch.setattr(
+        classIV_support,
+        "load_mean_dynamic_topography",
+        lambda resolution: xarray.DataArray(0.0),
+    )
+
+    model_variable = _ssh_model_variable()
+    sea_level_anomaly = prepare_class4_model_variable(
+        model_variable,
+        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+        challenger_name,
+    )
+
+    numpy.testing.assert_allclose(sea_level_anomaly.values, model_variable.values - expected_shift)

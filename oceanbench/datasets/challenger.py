@@ -450,6 +450,11 @@ def climatology() -> xarray.Dataset:
     a forecast with no skill beyond climatology is not beating "what this time
     of year usually looks like".
 
+    The Class IV SSH-to-SLA conversion applies a dedicated mean sea surface
+    height shift for this baseline, because the 1993-2019 climatology's zos datum
+    sits below the contemporary GLO12 datum (largely sea-level rise since the
+    climatology period).
+
     Returns
     -------
     Dataset
@@ -473,6 +478,11 @@ def climatology() -> xarray.Dataset:
 def climatology_1_degree() -> xarray.Dataset:
     """
     Open the climatology baseline challenger dataset interpolated to 1 degree.
+
+    Like :func:`climatology`, the Class IV SSH-to-SLA conversion applies a
+    dedicated mean sea surface height shift for this baseline, because the
+    1993-2019 climatology's zos datum sits below the contemporary GLO12 datum
+    (largely sea-level rise since the climatology period).
 
     Returns
     -------

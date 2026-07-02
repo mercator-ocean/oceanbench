@@ -13,6 +13,7 @@ from oceanbench.core.classIV_support import (
     prepare_class4_model_variable,
 )
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
+from oceanbench.core.dataset_source import get_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 
@@ -47,8 +48,9 @@ def _compute_rmsd_table(
 def _convert_forecast_ssh_to_sla(
     model_variable: xarray.DataArray,
     variable_key: str,
+    challenger_name: str | None = None,
 ) -> xarray.DataArray:
-    return prepare_class4_model_variable(model_variable, variable_key)
+    return prepare_class4_model_variable(model_variable, variable_key, challenger_name)
 
 
 def rmsd_class4_validation(
@@ -57,6 +59,8 @@ def rmsd_class4_validation(
     variables: list[Variable],
 ) -> pandas.DataFrame:
     challenger = rename_dataset_with_standard_names(challenger_dataset)
+    challenger_source = get_dataset_source(challenger_dataset)
+    challenger_name = challenger_source.name if challenger_source is not None else None
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
     observations = reference_dataset
 
@@ -77,6 +81,7 @@ def rmsd_class4_validation(
         model_variable = _convert_forecast_ssh_to_sla(
             challenger[challenger_variable_key],
             standard_variable_key,
+            challenger_name,
         )
         observations_dataframe["model_value"] = _interpolate_model_to_observations(
             model_variable,
