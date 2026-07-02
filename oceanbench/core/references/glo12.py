@@ -44,7 +44,7 @@ def _cloudferro_reference_path(reference_name: str, first_day_datetime: numpy.da
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
     if _use_cloudferro_reference(first_day_datetime):
-        return _cloudferro_reference_path("glo12_quarter_degree", first_day_datetime)
+        return _cloudferro_reference_path("glo14", first_day_datetime)
     first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
     return f"https://minio.dive.edito.eu/project-oceanbench/public/glo14/{first_day}.zarr"
 

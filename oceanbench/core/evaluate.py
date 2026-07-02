@@ -60,7 +60,7 @@ def _derive_output_notebook_file_name(
     resolved_region = resolve_region(region)
     stem = PurePosixPath(challenger_path).stem
     if evaluation_year != DEFAULT_EVALUATION_YEAR:
-        return f"{evaluation_year}.{stem}.{resolved_region.id}.report.ipynb"
+        return f"{stem}.{evaluation_year}.{resolved_region.id}.report.ipynb"
     return f"{stem}.{resolved_region.id}.report.ipynb"
 
 
@@ -107,7 +107,8 @@ def evaluate_challenger(
     This function is used for official evaluation.
 
     The output notebook file name is automatically derived from the challenger file name:
-    ``glonet.py`` becomes ``glonet.global.report.ipynb``.
+    ``glonet.py`` becomes ``glonet.global.report.ipynb`` for the default 2024 evaluation year,
+    and ``glonet.2023.global.report.ipynb`` for the 2023 evaluation year.
 
     Parameters
     ----------
