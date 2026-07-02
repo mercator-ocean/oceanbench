@@ -142,7 +142,7 @@ def test_discover_downloaded_reports_reads_local_report_files(tmp_path, monkeypa
 
 def test_downloaded_report_file_name_keeps_default_year_backward_compatible() -> None:
     assert downloaded_report_file_name("glonet", "global", 2024) == "glonet.global.report.ipynb"
-    assert downloaded_report_file_name("glonet", "global", 2023) == "2023.glonet.global.report.ipynb"
+    assert downloaded_report_file_name("glonet", "global", 2023) == "glonet.2023.global.report.ipynb"
 
 
 def test_download_notebook_uses_only_explicit_region_name(monkeypatch, tmp_path) -> None:
@@ -181,8 +181,8 @@ def test_download_notebook_uses_year_specific_report_path(monkeypatch, tmp_path)
 
     destination = download_notebook("glonet", "global", str(tmp_path), 2025)
 
-    assert destination == str(tmp_path / "2025.glonet.global.report.ipynb")
-    assert (tmp_path / "2025.glonet.global.report.ipynb").read_bytes() == b"{}"
+    assert destination == str(tmp_path / "glonet.2025.global.report.ipynb")
+    assert (tmp_path / "glonet.2025.global.report.ipynb").read_bytes() == b"{}"
     assert requests_seen == [
         (
             f"https://minio.dive.edito.eu/project-oceanbench/{REPORTS_PREFIX}2025/glonet.global.report.ipynb",
