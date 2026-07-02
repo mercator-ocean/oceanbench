@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-SCRIPT_DIR=$( dirname $(readlink -f "${BASH_SOURCE[0]}") )
-pushd "$SCRIPT_DIR" > /dev/null
+# go to repo root
+cd /app/repository
 
-# install system deps (pandas, matplotlib, etc.)
+# install deps
 apt-get update && apt-get install -y build-essential gcc g++ make
 
 # install quarto if missing
@@ -14,20 +13,18 @@ if ! command -v quarto > /dev/null; then
   dpkg -i /tmp/quarto.deb
 fi
 
-# clean previous build
-rm -rf reports _site
+# clean
+rm -rf website/_site
 
 # install python deps
-pip install -r requirements.txt
+pip install -r website/requirements.txt
 
-# build site
-quarto render --to html
+# build
+quarto render website --to html
 
-# copy to the expected Static-pages source path
+# copy to source
 mkdir -p /app/repository/$WEBSITE_SOURCE_PATH
-cp -r _site/* /app/repository/$WEBSITE_SOURCE_PATH/
+cp -r website/_site/* /app/repository/$WEBSITE_SOURCE_PATH/
 
-# debug (important)
+# debug
 ls -R /app/repository/$WEBSITE_SOURCE_PATH
-
-popd > /dev/null
