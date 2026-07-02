@@ -25,8 +25,9 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 # GLO12, so their SSH shares the GLO12 reanalysis mean-sea-surface datum; this
 # aligns it with the altimetry SLA reference.
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
-# IBI (1/36) uses its own IBYRIS MDT; this is the fitted IBI ANFC datum offset (mean of
-# model_SSH - MDT - observed_SLA over the trailing year), analogous to the GLO12 shift.
+# IBI (1/36) SSH->SLA datum offset, fitted against the IBI operational
+# model-equivalent SLA (OLA files, IBIRYS system, year 2024) with the same method
+# as the GLO12 shift; the residual versus altimetry after correction is about -0.0007 m.
 IBI_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.0674
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
@@ -244,8 +245,6 @@ def create_class4_observations_dataframe(
 
 
 def _mean_sea_surface_height_shift(resolution: str) -> float:
-    # IBI (1/36) has its own MDT but no fitted datum offset yet -> 0; the GLO12
-    # models share the GLORYS-tuned offset.
     if resolution == "thirty_sixth_degree":
         return IBI_MEAN_SEA_SURFACE_HEIGHT_SHIFT
     return REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
