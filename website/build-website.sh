@@ -1,30 +1,25 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 set -euo pipefail
 
-# go to repo root
-cd /app/repository
+SCRIPT_DIR=$( dirname $(readlink -f "${BASH_SOURCE[0]}") )
+pushd "$SCRIPT_DIR" > /dev/null
 
-# install deps
-apt-get update && apt-get install -y build-essential gcc g++ make
-
-# install quarto if missing
 if ! command -v quarto > /dev/null; then
-  curl -L https://github.com/quarto-dev/quarto-cli/releases/download/v1.7.23/quarto-1.7.23-linux-amd64.deb --output /tmp/quarto.deb
-  dpkg -i /tmp/quarto.deb
+    curl -L https://github.com/quarto-dev/quarto-cli/releases/download/v1.7.23/quarto-1.7.23-linux-amd64.deb --output /tmp/quarto.deb
+    dpkg -i /tmp/quarto.deb
 fi
 
-# clean
-rm -rf website/_site
+rm -rf reports _site
 
-# install python deps
-pip install -r website/requirements.txt
+pip install -r requirements.txt
+quarto render --to html
 
-# build
-quarto render website --to html
+mkdir -p /app/repository
+cp -r _site/* /app/repository
 
-# copy to source
-mkdir -p /app/repository/$WEBSITE_SOURCE_PATH
-cp -r website/_site/* /app/repository/$WEBSITE_SOURCE_PATH/
-
-# debug
-ls -R /app/repository/$WEBSITE_SOURCE_PATH
+popd > /dev/null
