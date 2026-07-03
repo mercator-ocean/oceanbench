@@ -59,5 +59,57 @@ Run: `python tests/parity/provenance_check.py --starts 52` (needs network).
 - Lagrangian is excluded from golden comparison (legacy pre-#298 seeding);
   it is covered by the internal mean-equivalence check instead.
 - `golden_scores_main_1degree.parquet` is the **go-forward** golden: the runner's
-  output in production (area-weighted, main-tip) mode on
-  `glonet_1_degree`/`global`, which future changes must reproduce.
+  per-start output in production (area-weighted, main-tip) mode on
+  `glonet_1_degree`/`global`, which future changes must reproduce. This pass
+  covers surface SSH + geostrophic currents vs both references (3,120 rows, 52
+  start dates); see the scope note below.
+
+## Phase 1 local parity run (glonet_1_degree / global / 2024)
+
+Ran the runner end-to-end against public data (glonet forecasts on CloudFerro,
+1-degree GLORYS/GLO12 references on EDITO MinIO). Three like-for-like checks:
+
+**(a) Mean-equivalence (internal).** The mean over start dates of the per-start
+records equals the aggregate from the untouched metric function
+(`rmsd_of_variables_compared_to_glorys_reanalysis`), surface SSH:
+`matched=10, max|diff| = 1.4e-17` — exact, as expected (the per-start path and
+the aggregate share `_root_mean_squared_error_per_start`).
+
+**(b) Unweighted runner vs published golden.** Gridded RMSD computed with
+cos-lat weighting disabled (test-only), compared to `golden_scores.parquet`:
+
+| golden metric key | matched | max abs diff | max rel diff |
+|---|---|---|---|
+| `rmsd_variables_glorys` (SSH surface) | 10 | 4.2e-07 | 5.3e-06 |
+| `rmsd_variables_glo12` (SSH surface) | 10 | 4.8e-07 | 7.8e-06 |
+| `rmsd_geostrophic_glorys` | 20 | 5.0e-07 | 7.4e-06 |
+| `rmsd_geostrophic_glo12` | 20 | 4.6e-07 | 1.3e-05 |
+
+Gate **PASSES** at `atol=1e-4` (and `1e-3`) for every computed key. This
+confirms the golden is pre-#298 (unweighted) and that the runner reproduces it.
+
+**(c) Go-forward golden.** Production (area-weighted) output written to
+`golden_scores_main_1degree.parquet`.
+
+### Scope of this run (honest flags)
+
+This pass computed **surface SSH + geostrophic currents** vs both references
+(weighted + unweighted). The following are **wired and unit-tested** in
+`oceanbench/runner/` but were **not** run here — the 1/4-degree -> 1-degree
+download of every variable at every depth over the local network exceeds the
+compute budget (a single full `rmsd_variables/glorys` pass ran > 9 min without
+finishing):
+
+- deep T/S/U/V rows of `rmsd_variables_*` (the 240 golden rows shown as
+  `gold_only` in the table above — the SSH rows that were computed all match),
+- `rmsd_mld_*` (mixed layer depth — full-depth density download),
+- `class4_rmsd` (observation match-ups — emitted **aggregate-only**,
+  `start_date` null, by design: a pooled RMSD over obs does not decompose into
+  a per-start mean),
+- `lagrangian_deviation_km` (Parcels advection — hours for 52 global starts;
+  excluded from golden comparison anyway per the pre-#298 seeding note above).
+
+A full-scope run reproduces every key with the committed API:
+`oceanbench.runner.run.run_challenger_scores("glonet_1_degree", "global", 2024)`
+(area-weighted, all metrics) and the parity harness in
+`oceanbench.runner.parity`.
