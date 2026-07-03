@@ -1,0 +1,54 @@
+/*
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+:root {
+  --background:#fff; --surface:#f6f8fa; --surface-strong:#eceff3; --border:#d7dce2;
+  --text:#14181d; --muted:#5b6672; --accent:#1f6feb; --pinned:#fff7e6; --ci:#6b7480;
+  --your:#e7f0ff; --your-border:#1f6feb;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background:#0d1117; --surface:#161b22; --surface-strong:#1c232c; --border:#2b333d;
+    --text:#e6edf3; --muted:#97a1ac; --accent:#4c92ff; --pinned:#2a2313; --ci:#8b95a1;
+    --your:#132a4d; --your-border:#4c92ff;
+  }
+}
+* { box-sizing:border-box; }
+body { margin:0; padding:0 clamp(1rem,4vw,3rem) 3rem; color:var(--text); background:var(--background);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; line-height:1.5; }
+.page-header { max-width:60rem; margin:2rem auto 1rem; }
+h1 { font-size:1.7rem; margin:0 0 .4rem; }
+.tagline { color:var(--muted); max-width:46rem; margin:0; }
+.tagline strong { color:var(--text); }
+.controls { display:flex; flex-wrap:wrap; gap:1rem 1.5rem; align-items:end; max-width:60rem;
+  margin:1.5rem auto; padding:1rem 1.25rem; background:var(--surface); border:1px solid var(--border); border-radius:10px; }
+.controls label { display:flex; flex-direction:column; gap:.3rem; font-size:.82rem; color:var(--muted); }
+.controls select { font:inherit; padding:.35rem .5rem; color:var(--text); background:var(--background);
+  border:1px solid var(--border); border-radius:6px; }
+.status { max-width:60rem; margin:1rem auto; color:var(--muted); }
+.status.error { color:#b3261e; }
+main { max-width:72rem; margin:0 auto; }
+h2 { font-size:1.25rem; margin:2rem 0 .5rem; }
+.section-note, .legend { color:var(--muted); font-size:.85rem; }
+.legend { margin-top:.75rem; }
+.your-model-chip { background:var(--your); border:1px solid var(--your-border); border-radius:4px; padding:0 .3rem; color:var(--text); }
+.table-scroll { overflow-x:auto; border:1px solid var(--border); border-radius:10px; }
+table { border-collapse:collapse; width:100%; font-size:.9rem; }
+thead th { position:sticky; top:0; background:var(--surface-strong); text-align:right; padding:.6rem .75rem;
+  border-bottom:2px solid var(--border); white-space:nowrap; }
+thead th:first-child { text-align:left; }
+thead th .unit { display:block; font-weight:400; color:var(--muted); font-size:.75rem; }
+tbody td { padding:.55rem .75rem; border-bottom:1px solid var(--border); text-align:right; }
+tbody td:first-child { text-align:left; font-weight:600; }
+tbody tr.baseline { background:var(--pinned); }
+tbody tr.baseline td:first-child::after { content:" · baseline"; font-weight:400; color:var(--muted); font-size:.78rem; }
+tbody tr.your-model { background:var(--your); outline:2px solid var(--your-border); outline-offset:-2px; }
+tbody tr.your-model td:first-child::after { content:" · your model"; font-weight:400; color:var(--accent); font-size:.78rem; }
+.cell-mean { font-family:var(--mono); }
+.cell-ci { display:block; font-family:var(--mono); font-size:.75rem; color:var(--ci); }
+.cell-empty { color:var(--muted); }
+.page-footer { max-width:60rem; margin:3rem auto 0; padding-top:1.5rem; border-top:1px solid var(--border);
+  color:var(--muted); font-size:.8rem; }

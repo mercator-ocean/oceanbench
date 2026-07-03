@@ -25,7 +25,7 @@ import pandas
 import xarray
 
 import oceanbench.datasets.challenger as challenger_datasets
-from oceanbench.core.dataset_utils import Variable
+from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
@@ -68,10 +68,15 @@ def _open_challenger(challenger: str) -> xarray.Dataset:
     return opener()
 
 
+ReferenceOpener = Callable[[xarray.Dataset], xarray.Dataset]
+ObservationOpener = Callable[[xarray.Dataset], xarray.Dataset]
+
+
 def _gridded_records(
     regional_challenger: xarray.Dataset,
     *,
     reference_name: str,
+    reference_openers: dict[str, ReferenceOpener],
     variables: list[Variable],
     region: str,
     context: records.RunContext,
@@ -79,7 +84,7 @@ def _gridded_records(
     depth_applicable: bool,
     transform: Callable[[xarray.Dataset], xarray.Dataset] | None = None,
 ) -> list[dict]:
-    reference = subset_dataset_to_region(_REFERENCE_OPENERS[reference_name](regional_challenger), region)
+    reference = subset_dataset_to_region(reference_openers[reference_name](regional_challenger), region)
     challenger_input = transform(regional_challenger) if transform is not None else regional_challenger
     reference_input = transform(reference) if transform is not None else reference
     per_start_frames = rmsd_per_start_date(challenger_input, reference_input, variables, area_weighted=area_weighted)
@@ -100,12 +105,13 @@ def _class4_records(
     regional_challenger: xarray.Dataset,
     region: str,
     context: records.RunContext,
+    observation_opener: ObservationOpener,
 ) -> tuple[list[dict], str | None]:
     from oceanbench.core.classIV import rmsd_class4_validation_per_start
-    from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
+    from oceanbench.core.references.observations import ObservationDataUnavailableError
 
     try:
-        observation_dataset = subset_dataset_to_region(observations(regional_challenger), region)
+        observation_dataset = subset_dataset_to_region(observation_opener(regional_challenger), region)
     except ObservationDataUnavailableError as error:
         return [], f"class4_rmsd unavailable: {error}"
     per_start_table = rmsd_class4_validation_per_start(
@@ -120,6 +126,7 @@ def _lagrangian_records(
     regional_challenger: xarray.Dataset,
     *,
     reference_name: str,
+    reference_openers: dict[str, ReferenceOpener],
     region: str,
     context: records.RunContext,
 ) -> list[dict]:
@@ -134,7 +141,7 @@ def _lagrangian_records(
         lagrangian_particle_count_for_region,
     )
 
-    reference = subset_dataset_to_region(_REFERENCE_OPENERS[reference_name](regional_challenger), region)
+    reference = subset_dataset_to_region(reference_openers[reference_name](regional_challenger), region)
     particle_count = lagrangian_particle_count_for_region(regional_challenger, regional_challenger)
     harmonised_challenger = _harmonise_dataset(regional_challenger)
     harmonised_reference = _harmonise_dataset(reference)
@@ -165,6 +172,12 @@ def _lagrangian_records(
     return emitted
 
 
+def _default_observation_opener(regional_challenger: xarray.Dataset) -> xarray.Dataset:
+    from oceanbench.core.references.observations import observations
+
+    return observations(regional_challenger)
+
+
 def run_challenger_scores(
     challenger: str,
     region: str = GLOBAL_REGION_NAME,
@@ -172,15 +185,34 @@ def run_challenger_scores(
     *,
     references: tuple[str, ...] = ("glorys", "glo12"),
     include_gridded: bool = True,
+    include_mixed_layer_depth: bool = True,
+    include_geostrophic: bool = True,
     include_class4: bool = True,
     include_lagrangian: bool = True,
     area_weighted: bool = True,
     challenger_version: str = "0.2.1",
     output_root: str = "runs",
+    dataset: xarray.Dataset | None = None,
+    reference_openers: dict[str, ReferenceOpener] | None = None,
+    observation_opener: ObservationOpener | None = None,
+    start_limit: int | None = None,
 ) -> RunResult:
-    """Score ``challenger`` on ``region``/``year`` and write per-start records to parquet."""
-    dataset = _open_challenger(challenger)
-    regional_challenger = subset_dataset_to_region(dataset, region)
+    """Score ``challenger`` on ``region``/``year`` and write per-start records to parquet.
+
+    By default the challenger is opened by slug and references/observations are fetched
+    live (through the resilient engine + persistent cache). The data sources are injectable
+    so the same scoring code can run against a pre-opened forecast dataset and the bundled
+    references of an evaluation pack (contracts.md §7): pass ``dataset`` for an already-open
+    challenger, ``reference_openers`` mapping a reference name to a callable returning that
+    reference aligned to the challenger, ``observation_opener`` for the Class-4 observation
+    store, and ``start_limit`` to score only the first N forecast starts (quick-look mode).
+    """
+    opened_dataset = dataset if dataset is not None else _open_challenger(challenger)
+    if start_limit is not None:
+        opened_dataset = opened_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): slice(0, start_limit)})
+    resolved_reference_openers = reference_openers if reference_openers is not None else _REFERENCE_OPENERS
+    resolved_observation_opener = observation_opener if observation_opener is not None else _default_observation_opener
+    regional_challenger = subset_dataset_to_region(opened_dataset, region)
     context = records.RunContext(
         challenger=challenger,
         challenger_version=challenger_version,
@@ -198,6 +230,7 @@ def run_challenger_scores(
                 _gridded_records(
                     regional_challenger,
                     reference_name=reference_name,
+                    reference_openers=resolved_reference_openers,
                     variables=_GRIDDED_VARIABLES,
                     region=region,
                     context=context,
@@ -205,33 +238,37 @@ def run_challenger_scores(
                     depth_applicable=True,
                 )
             )
-            all_records.extend(
-                _gridded_records(
-                    regional_challenger,
-                    reference_name=reference_name,
-                    variables=_MIXED_LAYER_DEPTH_VARIABLES,
-                    region=region,
-                    context=context,
-                    area_weighted=area_weighted,
-                    depth_applicable=False,
-                    transform=compute_mixed_layer_depth,
+            if include_mixed_layer_depth:
+                all_records.extend(
+                    _gridded_records(
+                        regional_challenger,
+                        reference_name=reference_name,
+                        reference_openers=resolved_reference_openers,
+                        variables=_MIXED_LAYER_DEPTH_VARIABLES,
+                        region=region,
+                        context=context,
+                        area_weighted=area_weighted,
+                        depth_applicable=False,
+                        transform=compute_mixed_layer_depth,
+                    )
                 )
-            )
-            all_records.extend(
-                _gridded_records(
-                    regional_challenger,
-                    reference_name=reference_name,
-                    variables=_GEOSTROPHIC_VARIABLES,
-                    region=region,
-                    context=context,
-                    area_weighted=area_weighted,
-                    depth_applicable=False,
-                    transform=compute_geostrophic_currents,
+            if include_geostrophic:
+                all_records.extend(
+                    _gridded_records(
+                        regional_challenger,
+                        reference_name=reference_name,
+                        reference_openers=resolved_reference_openers,
+                        variables=_GEOSTROPHIC_VARIABLES,
+                        region=region,
+                        context=context,
+                        area_weighted=area_weighted,
+                        depth_applicable=False,
+                        transform=compute_geostrophic_currents,
+                    )
                 )
-            )
 
     if include_class4:
-        class4_records, class4_flag = _class4_records(regional_challenger, region, context)
+        class4_records, class4_flag = _class4_records(regional_challenger, region, context, resolved_observation_opener)
         all_records.extend(class4_records)
         if class4_flag is not None:
             flags.append(class4_flag)
@@ -243,6 +280,7 @@ def run_challenger_scores(
                     _lagrangian_records(
                         regional_challenger,
                         reference_name=reference_name,
+                        reference_openers=resolved_reference_openers,
                         region=region,
                         context=context,
                     )

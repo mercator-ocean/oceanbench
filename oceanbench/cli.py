@@ -7,6 +7,7 @@ import json
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.request import Request, urlopen
 
 from oceanbench.core.local_stage import cleanup_local_stage_directory
@@ -175,6 +176,100 @@ def _run_evaluate(args: argparse.Namespace) -> int:
     return 0 if all(result.success for result in results) else 1
 
 
+def _run_evaluate_local(args: argparse.Namespace) -> int:
+    from oceanbench.packs.evaluate import evaluate_local
+
+    output_directory = args.output if args.output is not None else "oceanbench-local-evaluation"
+    try:
+        result = evaluate_local(
+            args.forecasts,
+            pack_directory=args.pack,
+            output_directory=output_directory,
+            year=args.year,
+            region=args.region,
+            published_scores_path=args.published,
+            published_challengers_path=args.published_challengers,
+            starts_limit=args.starts_limit,
+            with_lagrangian=args.with_lagrangian,
+            include_class4=not args.no_class4,
+            include_realism=not args.no_realism,
+        )
+    except Exception as error:  # noqa: BLE001 - surface a clean message to the CLI user
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    for flag in result.flags:
+        print(f"note: {flag}", file=sys.stderr)
+    print(f"scores:    {result.scores_path}")
+    print(f"summary:   {result.summary_path}")
+    print(f"scorecard: {result.scorecard_path}")
+    print(f"\nOpen the scorecard locally (no server needed): file://{Path(result.scorecard_path).resolve()}")
+    return 0
+
+
+def _add_evaluate_local_parser(subparsers: "argparse._SubParsersAction") -> None:
+    parser = subparsers.add_parser(
+        "evaluate-local",
+        help="Score a local forecast against an evaluation pack and build an overlay scorecard",
+        description=(
+            "Score your own forecast zarr(s) against a downloaded evaluation pack (contracts.md §7) "
+            "and emit the standard long-format records parquet, the aggregated summary, and a "
+            "self-contained overlay scorecard laying your model over the published challengers.\n\n"
+            "Forecast layout (weekly-store conventions, same as challengers): either a single combined "
+            "zarr with dims (first_day_datetime, lead_day_index, depth, latitude, longitude) and the "
+            "CF-named forecast variables, or a directory of weekly zarr stores named YYYYMMDD.zarr (one "
+            "per forecast start, each with a 'time' lead-day dimension). See docs/local-evaluation.md."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("forecasts", help="Path or URL to the forecast zarr (combined store or weekly-store directory)")
+    parser.add_argument(
+        "--pack", required=True, help="Path to the evaluation pack directory (contains pack-manifest.json)"
+    )
+    parser.add_argument("--year", type=int, default=2024, help="Evaluation year (default: 2024)")
+    parser.add_argument(
+        "--region",
+        choices=get_pre_defined_region_names(),
+        default="global",
+        help="Region to evaluate on (default: global)",
+    )
+    parser.add_argument(
+        "--published",
+        default=None,
+        help="Path or URL to the published scores.parquet to overlay your model on",
+    )
+    parser.add_argument(
+        "--published-challengers",
+        default=None,
+        help="Optional path to a challengers.json giving display names for the published challengers",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output directory (default: ./oceanbench-local-evaluation)",
+    )
+    parser.add_argument(
+        "--starts-limit",
+        type=int,
+        default=None,
+        help="Quick-look mode: score only the first N forecast starts (default: all starts)",
+    )
+    parser.add_argument(
+        "--with-lagrangian",
+        action="store_true",
+        help="Also compute the Lagrangian trajectory deviation (excluded by default; slow)",
+    )
+    parser.add_argument(
+        "--no-class4",
+        action="store_true",
+        help="Skip the Class-4 observation match-up track (fast; when only gridded RMSD is wanted)",
+    )
+    parser.add_argument(
+        "--no-realism",
+        action="store_true",
+        help="Skip the realism battery (spectra / activity / eddies)",
+    )
+
+
 def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     parser = argparse.ArgumentParser(
         prog="oceanbench",
@@ -259,6 +354,8 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         default=None,
         help="Path to a JSON file describing a custom evaluation region",
     )
+
+    _add_evaluate_local_parser(subparsers)
     return parser, evaluate_parser
 
 
@@ -274,6 +371,9 @@ def main():
         if args.all_challengers and args.challengers:
             evaluate_parser.error("--all-challengers cannot be used with positional challenger arguments")
         sys.exit(_run_evaluate(args))
+
+    if args.command == "evaluate-local":
+        sys.exit(_run_evaluate_local(args))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,111 @@
+# SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+"""Local evaluation end to end (contracts.md §7): overlay agreement, self-containedness, scorecard.
+
+The key proof: scoring a forecast against a pack reproduces the published per-start values of the
+same model exactly (the overlay shows the user's model and the published challenger in agreement).
+Exercised here on synthetic, network-free data; the real glonet_1_degree run is in
+``test_evaluate_local_real.py`` (skipped by default).
+"""
+
+import json
+from pathlib import Path
+
+import pandas
+import xarray
+
+from oceanbench.packs.evaluate import (
+    load_pack_manifest,
+    open_forecast_dataset,
+    per_start_agreement,
+    _pack_observation_opener,
+    _pack_reference_opener,
+    evaluate_local,
+)
+
+_AGREEMENT_TOLERANCE = 1e-9
+
+
+def _run(fixture, tmp_path, **overrides):
+    options = dict(
+        pack_directory=fixture.pack_directory,
+        output_directory=str(tmp_path / "out"),
+        year=2024,
+        region="global",
+        published_scores_path=fixture.published_scores_path,
+        published_challengers_path=fixture.published_challengers_path,
+        starts_limit=None,
+        with_lagrangian=False,
+        include_class4=False,
+        include_realism=False,
+    )
+    options.update(overrides)
+    return evaluate_local(fixture.forecast_path, **options)
+
+
+def test_overlay_agrees_with_published_per_start(local_evaluation_fixture, tmp_path):
+    result = _run(local_evaluation_fixture, tmp_path)
+    published = pandas.read_parquet(local_evaluation_fixture.published_scores_path)
+
+    agreement = per_start_agreement(result.scores, published)
+    assert not agreement.empty
+    assert agreement["absolute_difference"].max() < _AGREEMENT_TOLERANCE
+
+
+def test_pack_is_self_contained_every_reference_resolves_from_the_manifest(local_evaluation_fixture):
+    pack_directory = Path(local_evaluation_fixture.pack_directory)
+    manifest = load_pack_manifest(str(pack_directory))
+
+    for reference_entry in manifest["contents"]["references"].values():
+        assert (pack_directory / reference_entry["path"]).exists()
+        opener = _pack_reference_opener(pack_directory, reference_entry["path"])
+        resolved = opener(xarray.Dataset())
+        assert isinstance(resolved, xarray.Dataset)
+        assert set(reference_entry["variables"]).issubset(set(resolved.data_vars))
+
+    observation_path = manifest["contents"]["observations"]["path"]
+    assert (pack_directory / observation_path).exists()
+    observation_opener = _pack_observation_opener(pack_directory, observation_path)
+    assert observation_opener is not None
+
+
+def test_emits_records_parquet_and_aggregated_summary(local_evaluation_fixture, tmp_path):
+    result = _run(local_evaluation_fixture, tmp_path)
+
+    scores = pandas.read_parquet(result.scores_path)
+    assert "rmsd" in set(scores["metric"])
+    # Quick pack scores surface only: no subsurface depth labels leak through.
+    gridded_depths = set(scores.loc[scores["metric"] == "rmsd", "depth"].dropna())
+    assert gridded_depths <= {"surface"}
+
+    summary = json.loads(Path(result.summary_path).read_text())
+    assert summary
+    assert {record["challenger"] for record in summary} == {"your_model"}
+
+
+def test_scorecard_is_self_contained_and_overlays_your_model(local_evaluation_fixture, tmp_path):
+    result = _run(local_evaluation_fixture, tmp_path)
+    html = Path(result.scorecard_path).read_text()
+
+    # Data is inlined (no fetch / no ES module), so the report opens over file:// with no server.
+    assert 'id="scorecard-data"' in html
+    assert 'getElementById("scorecard-data")' in html
+    assert 'fetch("' not in html and "fetch('" not in html
+    assert 'type="module"' not in html
+    # Both the user's model and the published challenger are present in the overlay payload.
+    assert '"your_model"' in html
+    assert f'"{local_evaluation_fixture.published_challenger_slug}"' in html
+
+
+def test_starts_limit_scores_only_the_requested_starts(local_evaluation_fixture, tmp_path):
+    result = _run(local_evaluation_fixture, tmp_path, starts_limit=1)
+    scores = pandas.read_parquet(result.scores_path)
+    assert scores["start_date"].dropna().nunique() == 1
+
+
+def test_open_forecast_accepts_a_combined_zarr(local_evaluation_fixture):
+    dataset = open_forecast_dataset(local_evaluation_fixture.forecast_path)
+    assert "first_day_datetime" in dataset.dims
+    assert "sea_surface_height_above_geoid" in dataset.data_vars
