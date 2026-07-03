@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oceanbench.mercator-ocean.fr/schemas/pack-manifest.schema.json",
+  "title": "OceanBench evaluation pack manifest",
+  "description": "pack-manifest.json at the root of an evaluation pack (contracts.md \u00a77). An evaluation pack is a downloadable, versioned bundle produced by ingest from staged reference/observation data, so a model can be scored locally with `oceanbench evaluate-local`. The manifest is self-describing: the local-evaluate CLI reads it alone to locate every reference, observation store and baseline the pack carries. It also stamps (contracts.md \u00a71) the upstream product identifiers and retrieval dates the pack derives from, and carries the Copernicus Marine attribution and disclaimer (contracts.md \u00a711).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "year",
+    "region",
+    "resolution",
+    "oceanbench_version",
+    "generated_at",
+    "start_dates",
+    "attribution",
+    "disclaimer",
+    "source_products",
+    "upstream",
+    "contents",
+    "baselines_available"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Pack manifest contract version.",
+      "const": "1.0"
+    },
+    "kind": {
+      "description": "Pack kind (contracts.md \u00a77): 'quick' (obs match-up inputs + surface reference fields + baselines, minutes to score) or 'full' (adds multi-depth gridded references for the official gridded track).",
+      "enum": [
+        "quick",
+        "full"
+      ]
+    },
+    "year": {
+      "description": "Evaluation year the pack scores against.",
+      "type": "integer"
+    },
+    "region": {
+      "description": "Region id the bundled references cover (contracts.md \u00a72).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "resolution": {
+      "description": "Grid resolution of the bundled gridded references.",
+      "enum": [
+        "one_degree",
+        "quarter_degree",
+        "twelfth_degree"
+      ]
+    },
+    "oceanbench_version": {
+      "description": "Version of the oceanbench code that built the pack.",
+      "type": "string"
+    },
+    "generated_at": {
+      "description": "ISO-8601 timestamp at which ingest produced this pack.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "start_dates": {
+      "description": "Forecast initialization dates (ISO-8601) the pack references and observations cover. A local model is scored on the intersection of its own starts with these.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "format": "date"
+      }
+    },
+    "attribution": {
+      "description": "Copernicus Marine derived-work credit (contracts.md \u00a711), verbatim.",
+      "type": "string"
+    },
+    "disclaimer": {
+      "description": "Copernicus Marine liability / no-warranty disclaimer (contracts.md \u00a711), verbatim.",
+      "type": "string"
+    },
+    "source_products": {
+      "description": "Map of short reference name to its Copernicus Marine product identifier.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "upstream": {
+      "description": "Stamping (contracts.md \u00a71): one entry per upstream product the pack derives from, with its identifier and retrieval date.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/upstreamProduct"
+      }
+    },
+    "contents": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "references",
+        "observations"
+      ],
+      "properties": {
+        "references": {
+          "description": "Map of reference name (glorys | glo12) to its bundled zarr (pack-relative path).",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/griddedReference"
+          }
+        },
+        "observations": {
+          "$ref": "#/$defs/observationStore"
+        },
+        "mean_dynamic_topography": {
+          "$ref": "#/$defs/meanDynamicTopography"
+        },
+        "baselines": {
+          "description": "Map of baseline slug (climatology | persistence) to its bundled zarr. Empty when no baselines are available yet (see baselines_available).",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/griddedReference"
+          }
+        }
+      }
+    },
+    "baselines_available": {
+      "description": "False when the pack carries no climatology/persistence baselines (skill-vs-baseline cannot be computed locally). The manifest still supports optional baseline entries for when they exist.",
+      "type": "boolean"
+    },
+    "notes": {
+      "description": "Free-text flags about the pack (e.g. absence of baselines, surface-only references).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "upstreamProduct": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "product_id",
+        "retrieved"
+      ],
+      "properties": {
+        "name": {
+          "description": "Short reference name (glorys, glo12, observations).",
+          "type": "string"
+        },
+        "product_id": {
+          "description": "Copernicus Marine product identifier, or an OceanBench-internal identifier for derived stores.",
+          "type": "string"
+        },
+        "retrieved": {
+          "description": "ISO-8601 date the upstream data was retrieved/staged.",
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "griddedReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "variables",
+        "depths"
+      ],
+      "properties": {
+        "path": {
+          "description": "Pack-relative path to the reference zarr store.",
+          "type": "string"
+        },
+        "variables": {
+          "description": "CF standard names of the bundled variables.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "depths": {
+          "description": "Depth labels present in the store (quick pack: ['surface']).",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "observationStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "description": "Pack-relative path to the Class-4 observation match-up zarr store.",
+          "type": "string"
+        }
+      }
+    },
+    "meanDynamicTopography": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "resolution"
+      ],
+      "properties": {
+        "path": {
+          "description": "Pack-relative path to the GLO12 mean-dynamic-topography zarr used for the SSH->SLA Class-4 conversion. Stored under the stage-canonical filename so the ported Class-4 code resolves it offline.",
+          "type": "string"
+        },
+        "resolution": {
+          "description": "Resolution variant of the MDT store.",
+          "enum": [
+            "one_degree",
+            "quarter_degree",
+            "twelfth_degree"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -18,6 +18,7 @@ the authoritative design contract.
 | [`eddies.schema.json`](eddies.schema.json) | §4 (`eddies` kind) | Mesoscale-eddy census payload: per reference, per lead day, `matches` (with displacement km), `spurious`, `missed`; each eddy carries id, lat/lon (4 dp), polarity and contour polygon arrays. Shape adapted from branch 249. |
 | [`viewer-manifest.schema.json`](viewer-manifest.schema.json) | §6 | Per-dataset `viewer-manifest.json` — levels, tile size, bounds, variables (units/scale/offset/default colormap+range), start_dates, lead_days. |
 | [`challengers.schema.json`](challengers.schema.json) | §2 | `challengers.json` in-repo registry — canonical slug → metadata; baselines are `is_baseline: true`. |
+| [`pack-manifest.schema.json`](pack-manifest.schema.json) | §7 (with §1 stamping, §11 attribution) | `pack-manifest.json` at an evaluation pack root — self-describing bundle index (references, observations, MDT, optional baselines), upstream product identifiers + retrieval dates, and the Copernicus Marine credit/disclaimer. Read by `oceanbench evaluate-local` to locate every reference from the manifest alone. |
 
 ## Conventions honored (contracts.md §2)
 
