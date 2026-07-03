@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oceanbench.mercator-ocean.fr/schemas/v2/eddies.schema.json",
+  "title": "OceanBench v2 eddies insight payload",
+  "description": "Payload for an insight of kind \"eddies\" (contracts.md \u00a74). Mesoscale-eddy census comparing the challenger to one or more references, per lead day: matched eddies (with displacement), spurious (challenger-only) and missed (reference-only). Adapted from the branch-249 eddy-explorer payload, snake-cased to v2 conventions and stripped of viewer/XHR scaffolding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "references"
+  ],
+  "properties": {
+    "kind": {
+      "description": "Discriminator matching the manifest entry kind.",
+      "const": "eddies"
+    },
+    "schema_version": {
+      "description": "Version of this payload schema (semver string).",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+    },
+    "variable": {
+      "description": "Optional CF standard name the detection ran on (typically sea_surface_height_above_geoid).",
+      "type": "string"
+    },
+    "bounds": {
+      "description": "Optional geographic bounds of the detection domain.",
+      "$ref": "#/$defs/bounds"
+    },
+    "references": {
+      "description": "One census per reference the challenger is matched against (e.g. glorys, glo12).",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/referenceCensus"
+      }
+    }
+  },
+  "$defs": {
+    "referenceCensus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "frames"
+      ],
+      "properties": {
+        "reference": {
+          "description": "Reference key (e.g. \"glorys\", \"glo12\").",
+          "type": "string"
+        },
+        "label": {
+          "description": "Optional human-readable reference label.",
+          "type": "string"
+        },
+        "frames": {
+          "description": "One frame per lead day.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frame"
+          }
+        }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lead_day",
+        "matches",
+        "spurious",
+        "missed"
+      ],
+      "properties": {
+        "lead_day": {
+          "description": "1-based lead day (contracts.md \u00a72).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "matches": {
+          "description": "Challenger eddies matched to a reference eddy, with the separating displacement.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/match"
+          }
+        },
+        "spurious": {
+          "description": "Challenger eddies with no matching reference eddy.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/eddy"
+          }
+        },
+        "missed": {
+          "description": "Reference eddies with no matching challenger eddy.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/eddy"
+          }
+        }
+      }
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "challenger",
+        "reference",
+        "displacement_km"
+      ],
+      "properties": {
+        "challenger": {
+          "description": "The challenger eddy of the matched pair.",
+          "$ref": "#/$defs/eddy"
+        },
+        "reference": {
+          "description": "The reference eddy of the matched pair.",
+          "$ref": "#/$defs/eddy"
+        },
+        "displacement_km": {
+          "description": "Great-circle distance in kilometres between the matched eddy centres.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "eddy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "latitude",
+        "longitude",
+        "polarity",
+        "contour_latitude",
+        "contour_longitude"
+      ],
+      "properties": {
+        "id": {
+          "description": "Detection index, unique within its detection set.",
+          "type": "integer"
+        },
+        "latitude": {
+          "description": "Eddy-centre latitude in degrees north, rounded to 4 decimals.",
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "description": "Eddy-centre longitude in degrees east, rounded to 4 decimals.",
+          "type": "number",
+          "minimum": -180,
+          "maximum": 360
+        },
+        "polarity": {
+          "description": "Eddy rotational sense (contracts.md \u00a73.2 polarity column).",
+          "type": "string",
+          "enum": [
+            "cyclone",
+            "anticyclone"
+          ]
+        },
+        "contour_latitude": {
+          "description": "Latitudes of the point-limited closed contour polygon (4 decimals). Empty when no valid contour.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          }
+        },
+        "contour_longitude": {
+          "description": "Longitudes of the point-limited closed contour polygon (4 decimals), same length as contour_latitude.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 360
+          }
+        }
+      }
+    },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_latitude",
+        "maximum_latitude",
+        "minimum_longitude",
+        "maximum_longitude"
+      ],
+      "properties": {
+        "minimum_latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "maximum_latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "minimum_longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 360
+        },
+        "maximum_longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 360
+        }
+      }
+    }
+  }
+}

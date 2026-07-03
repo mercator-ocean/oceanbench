@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oceanbench.mercator-ocean.fr/schemas/v2/insights-manifest.schema.json",
+  "title": "OceanBench v2 insights manifest",
+  "description": "insights/manifest.json for one (challenger, year, region) (contracts.md \u00a74). Maps a semantic insight key to the descriptor of a content-hash-named, immutable, CDN-cacheable blob.",
+  "type": "object",
+  "minProperties": 1,
+  "propertyNames": {
+    "description": "Semantic insight key (e.g. \"aggregate-map\", \"spectra\", \"eddies\", \"trajectories\", \"class4-matchups\"). Keys may be suffixed when several artifacts of a kind exist.",
+    "pattern": "^[a-z0-9][a-z0-9_-]*$"
+  },
+  "additionalProperties": {
+    "$ref": "#/$defs/insightEntry"
+  },
+  "$defs": {
+    "insightEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "schema_version",
+        "url",
+        "bytes"
+      ],
+      "properties": {
+        "kind": {
+          "description": "Insight artifact kind (contracts.md \u00a74 table).",
+          "type": "string",
+          "enum": [
+            "aggregate-map",
+            "spectra",
+            "eddies",
+            "trajectories",
+            "class4-matchups"
+          ]
+        },
+        "schema_version": {
+          "description": "Version of the payload schema for this kind (semver string). Lets a viewer refuse or adapt to an unknown payload shape.",
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "url": {
+          "description": "URL of the content-hash-named blob.",
+          "type": "string",
+          "format": "uri-reference"
+        },
+        "bytes": {
+          "description": "Size of the blob in bytes (aids client fetch budgeting).",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

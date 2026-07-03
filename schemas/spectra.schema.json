@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oceanbench.mercator-ocean.fr/schemas/v2/spectra.schema.json",
+  "title": "OceanBench v2 spectra insight payload",
+  "description": "Payload for an insight of kind \"spectra\" (contracts.md \u00a74). Power spectral density curves per variable x region x lead day: for each entry, the challenger PSD, the reference PSD, and the PSD of the challenger-minus-reference error, all sampled on a shared wavelength axis.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "entries"
+  ],
+  "properties": {
+    "kind": {
+      "description": "Discriminator matching the manifest entry kind.",
+      "const": "spectra"
+    },
+    "schema_version": {
+      "description": "Version of this payload schema (semver string).",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+    },
+    "entries": {
+      "description": "One spectrum bundle per (variable, region, lead_day).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/spectrum"
+      }
+    }
+  },
+  "$defs": {
+    "spectrum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variable",
+        "region",
+        "lead_day",
+        "wavelength",
+        "challenger_power",
+        "reference_power",
+        "error_power"
+      ],
+      "properties": {
+        "variable": {
+          "description": "CF standard name of the field (contracts.md \u00a72).",
+          "type": "string"
+        },
+        "region": {
+          "description": "Region id (contracts.md \u00a72).",
+          "type": "string"
+        },
+        "lead_day": {
+          "description": "1-based lead day; spectra are precomputed for {1, 5, 10}.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "reference": {
+          "description": "Optional reference key the reference_power/error_power are computed against (e.g. \"glorys\", \"glo12\").",
+          "type": "string"
+        },
+        "unit": {
+          "description": "Optional physical unit of the power values.",
+          "type": "string"
+        },
+        "wavelength": {
+          "description": "Shared wavelength axis in kilometres (descending or ascending), one value per spectral sample.",
+          "$ref": "#/$defs/nullableFloatArray"
+        },
+        "challenger_power": {
+          "description": "Challenger PSD sampled on the wavelength axis.",
+          "$ref": "#/$defs/nullableFloatArray"
+        },
+        "reference_power": {
+          "description": "Reference PSD sampled on the wavelength axis.",
+          "$ref": "#/$defs/nullableFloatArray"
+        },
+        "error_power": {
+          "description": "PSD of the challenger-minus-reference field, sampled on the wavelength axis.",
+          "$ref": "#/$defs/nullableFloatArray"
+        }
+      }
+    },
+    "nullableFloatArray": {
+      "description": "Array of floats; null encodes NaN (contracts.md \u00a72). All four arrays in a spectrum share the same length as wavelength.",
+      "type": "array",
+      "items": {
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    }
+  }
+}

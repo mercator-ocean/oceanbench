@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oceanbench.mercator-ocean.fr/schemas/v2/challengers.schema.json",
+  "title": "OceanBench v2 challenger registry",
+  "description": "challengers.json (contracts.md \u00a72): the in-repo, versioned registry mapping a canonical challenger slug to its metadata. Baselines (climatology, persistence) are challengers with is_baseline true. One slug per challenger everywhere (paths, parquet, catalog).",
+  "type": "object",
+  "minProperties": 1,
+  "propertyNames": {
+    "description": "Canonical challenger slug.",
+    "pattern": "^[a-z0-9][a-z0-9_-]*$"
+  },
+  "additionalProperties": {
+    "$ref": "#/$defs/challenger"
+  },
+  "$defs": {
+    "challenger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "display_name",
+        "is_baseline"
+      ],
+      "properties": {
+        "display_name": {
+          "description": "Human-readable name (e.g. \"GLONET\").",
+          "type": "string"
+        },
+        "is_baseline": {
+          "description": "True for baseline challengers (climatology, persistence) from which skill scores are derived at display time.",
+          "type": "boolean"
+        },
+        "organization": {
+          "description": "Producing organization (e.g. \"Mercator\").",
+          "type": "string"
+        },
+        "nominal_resolution_deg": {
+          "description": "Nominal grid resolution in degrees (e.g. 0.25, 0.0833). Each challenger is scored on its native grid.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "lead_days": {
+          "description": "Number of 1-based lead days the forecast provides (typically 10).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "description": "Location of the forecast outputs (e.g. an s3:// prefix).",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

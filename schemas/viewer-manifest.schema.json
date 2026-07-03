@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oceanbench.mercator-ocean.fr/schemas/v2/viewer-manifest.schema.json",
+  "title": "OceanBench v2 viewer manifest",
+  "description": "Per-dataset viewer-manifest.json (contracts.md \u00a76). Describes one multiscale zarr pyramid for a (challenger|reference|baseline, year) so a static client can fetch zoom-matched tiles by HTTP range read.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "levels",
+    "tile_size",
+    "bounds",
+    "variables",
+    "start_dates",
+    "lead_days"
+  ],
+  "properties": {
+    "dataset": {
+      "description": "Optional registry slug of the dataset this pyramid holds.",
+      "type": "string"
+    },
+    "year": {
+      "description": "Optional evaluation year of the dataset.",
+      "type": "integer"
+    },
+    "levels": {
+      "description": "Pyramid levels from native (level 0) up to ~1 degree, each backed by zarr group level/<k>.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/level"
+      }
+    },
+    "tile_size": {
+      "description": "Square spatial tile edge in cells (contracts.md \u00a76: 256x256).",
+      "type": "integer",
+      "minimum": 1
+    },
+    "bounds": {
+      "description": "Geographic bounds covered by the base (native) level.",
+      "$ref": "#/$defs/bounds"
+    },
+    "variables": {
+      "description": "Map of viewer variable key to its display and encoding metadata.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/variable"
+      }
+    },
+    "start_dates": {
+      "description": "Forecast initialization dates (ISO-8601) forming the start_date coordinate.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "format": "date"
+      }
+    },
+    "lead_days": {
+      "description": "1-based lead days present in the pyramid (contracts.md \u00a72).",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10
+      }
+    }
+  },
+  "$defs": {
+    "level": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ],
+      "properties": {
+        "level": {
+          "description": "Pyramid level index; 0 is the native base level, resolution halves per level.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "cell_size_deg": {
+          "description": "Approximate grid cell size in degrees at this level.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "latitude_size": {
+          "description": "Number of latitude cells at this level.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "longitude_size": {
+          "description": "Number of longitude cells at this level.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "variable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "units",
+        "scale_factor",
+        "add_offset",
+        "default_colormap",
+        "default_range"
+      ],
+      "properties": {
+        "standard_name": {
+          "description": "CF standard name of the field (contracts.md \u00a72).",
+          "type": "string"
+        },
+        "depth": {
+          "description": "Depth label of this layer (contracts.md \u00a72 machine keys, e.g. \"surface\", \"15m\"). Absent means surface.",
+          "type": "string"
+        },
+        "units": {
+          "description": "Physical unit of the decoded values.",
+          "type": "string"
+        },
+        "scale_factor": {
+          "description": "uint16 decode multiplier: value = stored * scale_factor + add_offset.",
+          "type": "number"
+        },
+        "add_offset": {
+          "description": "uint16 decode offset (see scale_factor).",
+          "type": "number"
+        },
+        "fill_value": {
+          "description": "Stored sentinel marking land / missing cells (_FillValue).",
+          "type": [
+            "integer",
+            "number"
+          ]
+        },
+        "default_colormap": {
+          "description": "Default perceptually-uniform colormap name (contracts.md \u00a76: cmocean, e.g. thermal, haline, balance).",
+          "type": "string"
+        },
+        "default_range": {
+          "description": "Default [minimum, maximum] display range in decoded units.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_latitude",
+        "maximum_latitude",
+        "minimum_longitude",
+        "maximum_longitude"
+      ],
+      "properties": {
+        "minimum_latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "maximum_latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "minimum_longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 360
+        },
+        "maximum_longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 360
+        }
+      }
+    }
+  }
+}
