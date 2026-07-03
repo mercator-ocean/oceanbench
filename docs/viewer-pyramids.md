@@ -20,7 +20,8 @@ per-dataset `viewer-manifest.json` (validated against
 - Variables: `zos, thetao, so, uo, vo` at the surface and `uo, vo` at 15 m.
 - Each variable is `uint16` with per-variable `scale_factor`/`add_offset`
   (chosen from the native data range with margin; quantization step ≪ model
-  error), explicit `_FillValue` (`65535`) for land, zstd (Blosc) compression.
+  error), explicit `_FillValue` (`65535`) for land, **DEFLATE (zlib)**
+  compression (see "Browser-decodable codec" below).
 - 256×256 spatial tiles, one `(start_date, lead_day)` per chunk. Consolidated
   metadata. Root group carries the Copernicus Marine attribution + disclaimer
   (`contracts.md` §11).
@@ -40,6 +41,30 @@ invalid one. The layer extraction (`viewer_layers`) is separate from the builder
 so pyramid tiling logic is unit-tested on synthetic multi-level grids even when
 the real 1° datasets are single-level.
 
+## Browser-decodable codec (decided Phase 5)
+
+The viewer reads chunks directly in the browser, so the tile codec must be one the
+platform decodes without shipping a heavy wasm decoder. Blosc/zstd (the zarr
+default) is not: it would force a wasm blosc build into every page. The builder
+therefore compresses every array — data tiles **and** coordinate arrays — with
+**DEFLATE (`numcodecs.Zlib`)**, which the browser inflates natively via
+`DecompressionStream('deflate')` (verified byte-exact round-trip). xarray/zarr
+writes zlib natively, so this is a one-line compressor swap, not a format change.
+
+Size impact is negligible. On the full-range quantized `uint16` fields the
+byte-shuffled Blosc/zstd advantage nearly vanishes; measured on a real SSH tile,
+zlib was even fractionally smaller (59.4 KB vs 60.8 KB), and whole-store sizes
+moved by about 2 %:
+
+| dataset | Blosc/zstd | DEFLATE (zlib) |
+|---|---|---|
+| `glonet_1_degree` | 292 MB | 299 MB |
+| `glorys_one_degree` | 295 MB | 303 MB |
+| `glo12_one_degree` | 293 MB | 303 MB |
+
+Compression stays swappable behind the builder's `_compressor()`; a future zarr v3
+sharding writer can revisit the codec without touching the layer/manifest contract.
+
 ## Zarr v2 vs v3 (flagged)
 
 The contract calls for zarr **v3 with sharding** (one shard per
@@ -56,8 +81,12 @@ compressor/codec wiring, not the layer/manifest contract.
 
 Built to scratchpad from the warm stage cache (single level each, 7 variables):
 
-| dataset | grid | size | build time |
+| dataset | grid | size (DEFLATE) | build time |
 |---|---|---|---|
-| `glonet_1_degree` | 168×360 | ~292 MB | ~35 s |
-| `glorys_one_degree` | 170×360 | ~295 MB | ~17 s |
-| `glo12_one_degree` | 170×360 | ~293 MB | ~15 s |
+| `glonet_1_degree` | 168×360 | ~299 MB | ~15 s |
+| `glorys_one_degree` | 170×360 | ~303 MB | ~17 s |
+| `glo12_one_degree` | 170×360 | ~303 MB | ~15 s |
+
+Note the two grids are offset: GLONET spans 168 latitudes (−77.5…89.5°), GLORYS and
+GLO12 span 170 (−79.5…90.5°). They share 1° spacing but not an origin, so the
+viewer registers difference pairs on coordinates, never on raw array index.

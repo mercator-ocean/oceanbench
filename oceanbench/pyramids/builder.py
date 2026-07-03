@@ -41,7 +41,7 @@ from oceanbench.pyramids.quantization import Quantization, quantization_for_rang
 START_DATE_DIMENSION = "start_date"
 LEAD_DAY_DIMENSION = "lead_day"
 DEFAULT_TILE_SIZE = 256
-_ZSTD_COMPRESSION_LEVEL = 5
+_DEFLATE_COMPRESSION_LEVEL = 6
 
 
 @dataclass(frozen=True)
@@ -78,7 +78,13 @@ def _variable_data_ranges(layers: xarray.Dataset) -> dict[str, tuple[float, floa
 
 
 def _compressor() -> numcodecs.abc.Codec:
-    return numcodecs.Blosc(cname="zstd", clevel=_ZSTD_COMPRESSION_LEVEL, shuffle=numcodecs.Blosc.SHUFFLE)
+    """Raw DEFLATE (zlib) so browsers decode tiles natively via ``DecompressionStream('deflate')``.
+
+    Blosc/zstd would force a heavy wasm codec into the viewer; plain zlib is decoded by the
+    platform ``DecompressionStream`` with no dependency, at neutral-to-smaller compressed size on
+    the full-range quantized ``uint16`` fields (contracts.md §6, docs/viewer-pyramids.md).
+    """
+    return numcodecs.Zlib(level=_DEFLATE_COMPRESSION_LEVEL)
 
 
 def _write_level(
@@ -101,6 +107,9 @@ def _write_level(
         variable_name: zarr_encoding(quantizations[variable_name], compressor)
         for variable_name in tiled_layers.data_vars
     }
+    coordinate_names = set(tiled_layers.variables) - set(tiled_layers.data_vars)
+    for coordinate_name in coordinate_names:
+        encoding[coordinate_name] = {"compressor": compressor}
     tiled_layers.to_zarr(
         store_path,
         group=f"level/{level_index}",
