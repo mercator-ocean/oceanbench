@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pandas
 
+from oceanbench.core.schema_validation import validate_against_schema
 from oceanbench.publish.aggregate import aggregate_scores, summary_to_json_records
 from oceanbench.publish.catalog import CatalogEntry, write_catalog
 from oceanbench.publish.compact import SCORES_FILENAME, compact_runs_directory
@@ -26,6 +27,37 @@ from oceanbench.publish.insights_manifest import (
 )
 
 SCORES_SUMMARY_FILENAME = "scores-summary.json"
+CHALLENGERS_REGISTRY_FILENAME = "challengers.json"
+
+
+def _repository_challengers_registry_path() -> Path:
+    for ancestor in Path(__file__).resolve().parents:
+        candidate = ancestor / CHALLENGERS_REGISTRY_FILENAME
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(f"Could not locate the repository {CHALLENGERS_REGISTRY_FILENAME}.")
+
+
+def publish_challengers_registry(output_root: str, *, registry_path: str | None = None) -> str:
+    """Emit the challenger registry (``challengers.json``) into the catalog root.
+
+    Reads the in-repo, versioned registry mapping each canonical challenger slug to its
+    metadata (display name, ``is_baseline`` flag used to pin baselines, resolution ...),
+    validates it against ``challengers.schema.json`` and copies it next to
+    ``scores.parquet`` so the static score page can read display names and pin baselines.
+    ``registry_path`` overrides the repository-root registry. Returns the written path.
+    """
+    source_path = Path(registry_path) if registry_path is not None else _repository_challengers_registry_path()
+    registry = json.loads(source_path.read_text(encoding="utf-8"))
+    validate_against_schema(registry, "challengers")
+    output_root_path = Path(output_root)
+    output_root_path.mkdir(parents=True, exist_ok=True)
+    destination_path = output_root_path / CHALLENGERS_REGISTRY_FILENAME
+    destination_path.write_text(
+        json.dumps(registry, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return str(destination_path)
 
 
 def publish_challenger_insights(

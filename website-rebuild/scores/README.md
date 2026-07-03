@@ -28,7 +28,10 @@ challenger reads the same numbers at a non-expert level.
   because recomputing a 1000-draw paired bootstrap in the browser is wasteful. The parquet
   remains the source of truth; the summary is a derived convenience.
 - `challengers.json` (optional) supplies display names and the `is_baseline` flag used to pin
-  baselines. Without it, slugs are shown and no rows are pinned.
+  baselines. Without it, slugs are shown and no rows are pinned. It is the in-repo, versioned
+  challenger registry (`challengers.json` at the repository root, schema-validated against
+  `schemas/challengers.schema.json`); `oceanbench.publish.publish_challengers_registry` copies it
+  into the catalog root next to `scores.parquet`, and the catalog's `challengers_url` points at it.
 
 ## Running locally
 
@@ -36,13 +39,16 @@ The `data/` directory is generated (git-ignored). Populate it from a publish run
 
 ```sh
 python -m oceanbench.publish...   # writes scores.parquet + scores-summary.json
-cp <output_root>/scores.parquet <output_root>/scores-summary.json website-rebuild/scores/data/
+# emit the challenger registry (display names + is_baseline) next to the scores:
+python -c "from oceanbench.publish import publish_challengers_registry; publish_challengers_registry('<output_root>')"
+cp <output_root>/scores.parquet <output_root>/scores-summary.json <output_root>/challengers.json website-rebuild/scores/data/
 python -m http.server -d website-rebuild/scores 8000
 # open http://localhost:8000/
 ```
 
 ## Status flags
 
-- Only one challenger (`glonet_1_degree`) exists so far, and no baselines yet, so the skill
-  columns are hidden. Baselines (climatology, persistence) arrive with the lir runs; the skill
-  path is already coded and switches on automatically once the summary carries `skill_vs_*`.
+- The challenger registry now carries the five official models (and their 1° variants) plus the
+  `climatology` and `persistence` baselines (`is_baseline: true`), so baseline rows are pinned to
+  the top once their scores land. The skill columns stay hidden until the summary carries
+  `skill_vs_*`; that path is already coded and switches on automatically.

@@ -1,0 +1,107 @@
+{
+  "glo12": {
+    "display_name": "GLO12",
+    "organization": "Mercator Ocean",
+    "nominal_resolution_deg": 0.0833,
+    "is_baseline": false,
+    "lead_days": 10,
+    "source": "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data/GLO12"
+  },
+  "glo12_1_degree": {
+    "display_name": "GLO12 (1\u00b0)",
+    "organization": "Mercator Ocean",
+    "nominal_resolution_deg": 1.0,
+    "is_baseline": false,
+    "lead_days": 10
+  },
+  "glonet": {
+    "display_name": "GLONET",
+    "organization": "Mercator Ocean",
+    "nominal_resolution_deg": 0.25,
+    "is_baseline": false,
+    "lead_days": 10,
+    "source": "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/glonet"
+  },
+  "glonet_1_degree": {
+    "display_name": "GLONET (1\u00b0)",
+    "organization": "Mercator Ocean",
+    "nominal_resolution_deg": 1.0,
+    "is_baseline": false,
+    "lead_days": 10
+  },
+  "wenhai": {
+    "display_name": "WenHai",
+    "organization": "DOMES",
+    "nominal_resolution_deg": 0.0833,
+    "is_baseline": false,
+    "lead_days": 10,
+    "source": "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/wenhai/v2"
+  },
+  "wenhai_1_degree": {
+    "display_name": "WenHai (1\u00b0)",
+    "organization": "DOMES",
+    "nominal_resolution_deg": 1.0,
+    "is_baseline": false,
+    "lead_days": 10
+  },
+  "xihe": {
+    "display_name": "XiHe",
+    "organization": "NUDT",
+    "nominal_resolution_deg": 0.0833,
+    "is_baseline": false,
+    "lead_days": 10,
+    "source": "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/xihe"
+  },
+  "xihe_1_degree": {
+    "display_name": "XiHe (1\u00b0)",
+    "organization": "NUDT",
+    "nominal_resolution_deg": 1.0,
+    "is_baseline": false,
+    "lead_days": 10
+  },
+  "langya": {
+    "display_name": "LangYa",
+    "organization": "IOCAS",
+    "nominal_resolution_deg": 0.0833,
+    "is_baseline": false,
+    "lead_days": 7,
+    "source": "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/langya"
+  },
+  "langya_1_degree": {
+    "display_name": "LangYa (1\u00b0)",
+    "organization": "IOCAS",
+    "nominal_resolution_deg": 1.0,
+    "is_baseline": false,
+    "lead_days": 7
+  },
+  "persistence": {
+    "display_name": "Persistence",
+    "organization": "OceanBench",
+    "nominal_resolution_deg": 0.0833,
+    "is_baseline": true,
+    "lead_days": 10,
+    "source": "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/baseline-forecasts/persistence"
+  },
+  "persistence_1_degree": {
+    "display_name": "Persistence (1\u00b0)",
+    "organization": "OceanBench",
+    "nominal_resolution_deg": 1.0,
+    "is_baseline": true,
+    "lead_days": 10
+  },
+  "climatology": {
+    "display_name": "Climatology",
+    "organization": "OceanBench",
+    "nominal_resolution_deg": 0.0833,
+    "is_baseline": true,
+    "lead_days": 10,
+    "source": "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/baseline-forecasts/climatology"
+  },
+  "climatology_1_degree": {
+    "display_name": "Climatology (1\u00b0)",
+    "organization": "OceanBench",
+    "nominal_resolution_deg": 1.0,
+    "is_baseline": true,
+    "lead_days": 10
+  }
+}
