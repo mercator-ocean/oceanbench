@@ -143,6 +143,26 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   border-radius: 12px;
   padding: 1rem 1.25rem;
   border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.03);
+  transition: transform .15s, box-shadow .15s;
+}
+.ei-ref-card:hover {
+  transform: translateY(-1px) scale(1.02);
+  transform-origin: left center;
+  box-shadow: 0 2px 6px rgba(0,0,0,.06), 0 8px 20px rgba(0,0,0,.06);
+}
+.ei-ref-card2 {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.03);
+  transition: transform .15s, box-shadow .15s;
+}
+.ei-ref-card2:hover {
+  transform: translateY(-1px) scale(1.02);
+  transform-origin: right center;
+  box-shadow: 0 2px 6px rgba(0,0,0,.06), 0 8px 20px rgba(0,0,0,.06);
 }
 .ei-ref-card-label { font-size: 11px; color: #aaa; margin-bottom: 3px; }
 .ei-ref-card-item  { font-size: 14px; font-weight: 500; color: #222; margin-bottom: 4px; }
@@ -156,6 +176,9 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
 }
 .ei-sources a { color: #3B82F6; text-decoration: none; border-bottom: 1px solid #bfdbfe; }
 .ei-sources a:hover { opacity: 0.8; }
+.ei-formulas-section {
+  padding: 0 8px;
+}
 .ei-formula-block {
   background: #f9fafb;
   border-radius: 12px;
@@ -166,6 +189,12 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   font-size: 14px;
   color: #222;
   line-height: 2;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.03);
+  transition: transform .15s, box-shadow .15s;
+}
+.ei-formula-block:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 2px 6px rgba(0,0,0,.06), 0 8px 20px rgba(0,0,0,.06);
 }
 .ei-formula-row {
   display: grid;
@@ -273,6 +302,53 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
 }
 .machine-btn { cursor:pointer; padding:4px 14px; font-size:12px; border:1px solid #ccc; background:transparent; color:#888; border-radius:5px; }
 .machine-btn.active { background:#eee; color:#111; }
+.ei-models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 2rem;
+  padding: 0 8px;
+}
+.ei-model-row-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.4rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.03);
+  transition: transform .15s, box-shadow .15s;
+}
+.ei-model-row-card:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 2px 6px rgba(0,0,0,.06), 0 8px 20px rgba(0,0,0,.06);
+}
+.ei-model-row-accent {
+  width: 4px;
+  align-self: stretch;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.ei-model-row-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #111;
+  min-width: 150px;
+  flex-shrink: 0;
+}
+.ei-model-row-provider {
+  font-size: 11.5px;
+  color: #999;
+  min-width: 130px;
+  flex-shrink: 0;
+}
+.ei-model-row-desc {
+  font-size: 13.5px;
+  color: #555;
+  line-height: 1.5;
+  flex: 1;
+}
 </style>
 """
 HTML(page_css)
@@ -324,7 +400,7 @@ HTML("""
       <div class="ei-ref-card-value">0.002</div>
       <div class="ei-ref-card-unit">kWh</div>
     </div>
-    <div class="ei-ref-card">
+    <div class="ei-ref-card2">
       <div class="ei-ref-card-label">Usage</div>
       <div class="ei-ref-card-item">LED TV</div>
       <div class="ei-ref-card-value">0.10</div>
@@ -340,7 +416,7 @@ HTML("""
       <div class="ei-ref-card-value">0.60</div>
       <div class="ei-ref-card-unit">kg CO₂e</div>
     </div>
-    <div class="ei-ref-card">
+    <div class="ei-ref-card2">
       <div class="ei-ref-card-label">Usage</div>
       <div class="ei-ref-card-item">Petrol car (60 km/h)</div>
       <div class="ei-ref-card-value">10.2</div>
@@ -356,14 +432,16 @@ HTML("""
   </p>
 
   <div class="ei-section-title-overview ">Formulas</div>
-  <div class="ei-formula-block">
-    <div class="ei-formula-row">
-      <span class="ei-formula-label">Energy</span>
-      <span>= (CPU<sub>consumption</sub> + GPU<sub>consumption</sub> + RAM<sub>consumption</sub>) × PUE</span>
-    </div>
-    <div class="ei-formula-row">
-      <span class="ei-formula-label">Emissions</span>
-      <span>= Energy<sub>consumption</sub> × Coef<sub>energymix</sub></span>
+  <div class="ei-formulas-section ">
+    <div class="ei-formula-block">
+      <div class="ei-formula-row">
+        <span class="ei-formula-label">Energy</span>
+        <span>= (CPU<sub>consumption</sub> + GPU<sub>consumption</sub> + RAM<sub>consumption</sub>) × PUE</span>
+      </div>
+      <div class="ei-formula-row">
+        <span class="ei-formula-label">Emissions</span>
+        <span>= Energy<sub>consumption</sub> × Coef<sub>energymix</sub></span>
+      </div>
     </div>
   </div>
   <div class="ei-callout">
@@ -372,6 +450,55 @@ HTML("""
     </svg>
     <div><strong>PUE</strong> — Power Usage Effectiveness: ratio of total data center energy to IT equipment energy.</div>
   </div>
+
+  <div class="ei-section-title-overview "> Models list presentation</div>
+  
+<div class="ei-models-list">
+
+  <div class="ei-model-row-card">
+    <div class="ei-model-row-accent" style="background:#D9583E;"></div>
+    <div class="ei-model-row-name">GLO12</div>
+    <div class="ei-model-row-provider">Provider · Mercator Ocean International</div>
+    <div class="ei-model-row-desc">Description coming soon.</div>
+  </div>
+
+  <div class="ei-model-row-card">
+    <div class="ei-model-row-accent" style="background:#378ADD;"></div>
+    <div class="ei-model-row-name">Glonet</div>
+    <div class="ei-model-row-provider">Provider · Mercator Ocean International</div>
+    <div class="ei-model-row-desc">Description coming soon.</div>
+  </div>
+
+  <div class="ei-model-row-card">
+    <div class="ei-model-row-accent" style="background:#4A3E8C;"></div>
+    <div class="ei-model-row-name">Glonet2</div>
+    <div class="ei-model-row-provider">Provider · Mercator Ocean International</div>
+    <div class="ei-model-row-desc">Description coming soon.</div>
+  </div>
+
+  <div class="ei-model-row-card">
+    <div class="ei-model-row-accent" style="background:#1D9E75;"></div>
+    <div class="ei-model-row-name">Wenhai</div>
+    <div class="ei-model-row-provider">Provider · </div>
+    <div class="ei-model-row-desc">Description coming soon.</div>
+  </div>
+
+  <div class="ei-model-row-card">
+    <div class="ei-model-row-accent" style="background:#D4537E;"></div>
+    <div class="ei-model-row-name">Xihe</div>
+    <div class="ei-model-row-provider">Provider · </div>
+    <div class="ei-model-row-desc">Description coming soon.</div>
+  </div>
+
+  <div class="ei-model-row-card">
+    <div class="ei-model-row-accent" style="background:#D4C853;"></div>
+    <div class="ei-model-row-name">LangYa</div>
+    <div class="ei-model-row-provider">Provider · </div>
+    <div class="ei-model-row-desc">Description coming soon.</div>
+  </div>
+
+</div>
+
 
 </div><!-- /tab-overview -->
 
@@ -440,6 +567,10 @@ HTML("""
 
     <!-- Glonet2 -->
   <div class="ei-section-title">Glonet2</div>
+  <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
+  Results are based on 10 ten-minute samples, aggregated and extrapolated to represent the entire training duration. Measurements taken on the Eumetsat HPC cluster.
+  The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
+  </p>
   <div class="ei-model-card">
     <div class="ei-model-card-header">
       <span class="ei-model-badge">Training</span>
@@ -447,9 +578,9 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-pending">pending</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-pending">pending</span></td></tr>
-        <tr><td>Duration (seconds)</td><td><span class="ei-pending">pending</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">404</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">22.7</span></td></tr>
+        <tr><td>Duration (days)</td><td><span class="ei-result">14</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -711,7 +842,7 @@ HTML("""
 
   <div class="ei-model-card">
     <div class="ei-model-card-header">
-      <span class="ei-model-name">Glonet · Wenhai · Xihe · LangYa<</span>
+      <span class="ei-model-name">Glonet · Wenhai · Xihe · LangYa</span>
       <span class="ei-model-badge">Inference — Datalab EDITO</span>
     </div>
     <table class="ei-table">
