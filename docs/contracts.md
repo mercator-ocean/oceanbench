@@ -17,8 +17,8 @@ hand-edited `index.json`, ephemeral staging) with a three-stage batch pipeline
 whose only outputs are data artifacts, plus a static website that reads them.
 
 ```
-ingest  (once per dataset-year)   → analysis-ready mirrors, obs match-ups,
-                                     viewer datasets, evaluation packs
+ingest  (once per dataset-year)   → obs match-ups, viewer datasets,
+                                     evaluation packs
 score   (incremental)             → long-format score records + insight artifacts
 publish (compaction)              → scores.parquet, catalog.json, static site data
 ```
@@ -52,26 +52,36 @@ Design principles:
 - **Incremental by content address.** A score run is keyed by
   (challenger id+version, metric version, reference version, year, region).
   Unchanged keys are never recomputed.
-- **Copernicus stays the source of truth — pinned per version, never silently
-  mutated.** `ingest` fetches references from Copernicus Marine (parallel,
-  once per reference version) into a persistent store stamped with the
-  upstream product version/DOI + retrieval date. A freshness check watches
-  upstream; a Copernicus reprocessing triggers an explicit reference-version
-  bump, re-ingest, and an announced benchmark-wide re-score. Old and new
-  scores coexist in `scores.parquet` (rows carry input versions). Evaluation
-  packs are stamped with the upstream version they derive from and refreshed
-  on bump.
-- **Ingest network engine = the PR #285 resilient chunk-fetch machinery**
+- **Reference data is fetched live at scoring time, never mirrored.** The
+  observation and gridded references are read directly from Copernicus Marine /
+  the source buckets through the resilient chunk-fetch engine (below), backed by
+  a **persistent local cache directory** — the existing stage mechanism, kept
+  between runs instead of living in `$TMPDIR`. No reference mirror is built or
+  published: reference access is internal plumbing, swappable without touching
+  any product artifact. Copernicus stays the source of truth.
+- **Reproducibility is preserved by stamping, not by pinning a mirror.** Every
+  scoring run records the upstream product identifiers/versions and retrieval
+  dates in its output metadata — `scores.parquet` rows already carry input
+  versions, and run manifests carry retrieval dates. An upstream reprocessing
+  triggers an **explicit, announced benchmark-wide re-score**, never silent
+  drift; old and new scores coexist in `scores.parquet` (rows carry input
+  versions).
+- **Product storage (MinIO) holds only product artifacts** — scores, insights,
+  viewer pyramids, evaluation packs; reference data is never among them.
+  Evaluation packs remain published snapshots, stamped with the upstream
+  versions they derive from and refreshed on an upstream bump. The
+  **single-writer / atomic-publish** discipline (build directory → rename +
+  manifest, read-only consumers) applies to these product artifacts — pyramids,
+  packs, the catalog — not to reference reads.
+- **Fetch engine = the PR #285 resilient chunk-fetch machinery**
   (`resilient-chunk-fetch` branch). Fetching is chunk-level with retries
   *during compute* (not only at dataset open), retriability is HTTP-status
   aware (retry 408/429/5xx, never a permanent 4xx), truncated bodies are
-  rejected before caching, and each chunk is written atomically (pid+tid temp
-  file + `os.replace`, no shared index, lock-free). Ingest is a **single
-  writer per reference version** publishing atomically (build directory →
-  rename + manifest); evaluators are **read-only, pinned to a version**. The
-  legacy mkdir-lock / 24 h-stale-timeout staging pattern is eliminated in the rebuild.
-  The pure-online resilient mode (no cache) is retained as the fallback for
-  local `evaluate` against un-ingested remote data.
+  rejected before caching, and each fetched chunk is written atomically to the
+  persistent cache (pid+tid temp file + `os.replace`, no shared index,
+  lock-free). The same engine protects both live scoring reads and cache
+  warm-up. The pure-online mode (no cache) is retained as the fallback for
+  local `evaluate` against remote data.
 
 Out of scope for v1 (schema-ready only): ensemble metrics (CRPS, spread-skill).
 NRT validation (branch 272) stays a separate dev branch; it will later become
@@ -352,9 +362,10 @@ non-plain-zarr datasets) — both with their tests (`tests/test_remote_http.py`,
 `tests/test_computed_dataset_cache.py`). PR #285 is not rebased onto main; its
 engine is cherry-picked into the rebuild and the PR is closed with credit at cutover.
 
-**Rebuild:** CLI/runner (no papermill), ingest stage (replaces
-`local_stage.py`/`weekly_stage.py` with persistent versioned mirrors +
-forecast-at-obs extraction), publish/compaction, website score page
+**Rebuild:** CLI/runner (no papermill), ingest stage (forecast-at-obs
+extraction, viewer pyramids, packs — reference reads stay live through the
+resilient engine + persistent cache, never a mirror), publish/compaction,
+website score page
 (reads `scores.parquet`; DuckDB-WASM or plain JS), viewer (static SPA,
 zarr range reads).
 
@@ -377,10 +388,10 @@ hand-maintained `index.json` flow.
 - **Phase 1 — score runner.** Port metrics, emit long-format per-start
   records. **Gate: reproduces published 2024 scores for glonet (1/4°) and one
   1/12° challenger within numerical tolerance.**
-- **Phase 2 — ingest.** Versioned reference store fetched from Copernicus
-  (parallel pull, upstream-version stamping + freshness check), obs match-up
-  extraction, viewer zarrs, packs. **Gate: full re-score of one 1/12°
-  challenger from the store in << 24 h; incremental re-run is a no-op.**
+- **Phase 2 — ingest.** Live reference fetch through the resilient chunk-fetch
+  engine backed by the persistent cache (upstream-version stamping in run
+  metadata), obs match-up extraction, viewer zarrs, packs. **Gate: full
+  re-score of one 1/12° challenger in << 24 h; incremental re-run is a no-op.**
 - **Phase 3 — publish + score page + local evaluate.** Compaction,
   catalog, static score page with skill-vs-baseline + CIs, overlay scorecard.
 - **Phase 4 — realism battery.** Port 249 PSD/eddies; error spectrum,
