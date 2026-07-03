@@ -61,6 +61,17 @@ Design principles:
   scores coexist in `scores.parquet` (rows carry input versions). Evaluation
   packs are stamped with the upstream version they derive from and refreshed
   on bump.
+- **Ingest network engine = the PR #285 resilient chunk-fetch machinery**
+  (`resilient-chunk-fetch` branch). Fetching is chunk-level with retries
+  *during compute* (not only at dataset open), retriability is HTTP-status
+  aware (retry 408/429/5xx, never a permanent 4xx), truncated bodies are
+  rejected before caching, and each chunk is written atomically (pid+tid temp
+  file + `os.replace`, no shared index, lock-free). Ingest is a **single
+  writer per reference version** publishing atomically (build directory →
+  rename + manifest); evaluators are **read-only, pinned to a version**. The
+  legacy mkdir-lock / 24 h-stale-timeout staging pattern is eliminated in v2.
+  The pure-online resilient mode (no cache) is retained as the fallback for
+  local `evaluate` against un-ingested remote data.
 
 Out of scope for v1 (schema-ready only): ensemble metrics (CRPS, spread-skill).
 NRT validation (branch 272) stays a separate dev branch; it will later become
@@ -333,7 +344,13 @@ remain untouched until parity (see Phase gates).
 `core/geostrophic_currents.py`, `core/lagrangian_trajectory.py`,
 `core/regions.py`, reference/challenger URL registry, and from branch 249:
 `core/psd.py`, `core/eddies.py` (plus their tests). Cherry-pick later from
-272: IBI `-0.0674` constant, `class4_drifters.py`.
+272: IBI `-0.0674` constant, `class4_drifters.py`. Ingest network engine from
+`origin/resilient-chunk-fetch` (PR #285): `core/remote_http.py` (resilient
+zarr chunk mapper + HTTP-status-aware retriability) and the content-keyed
+`core/computed_dataset_cache.py` (atomic single-writer store for computed,
+non-plain-zarr datasets) — both with their tests (`tests/test_remote_http.py`,
+`tests/test_computed_dataset_cache.py`). PR #285 is not rebased onto main; its
+engine is cherry-picked into v2 and the PR is closed with credit at cutover.
 
 **Rebuild:** CLI/runner (no papermill), ingest stage (replaces
 `local_stage.py`/`weekly_stage.py` with persistent versioned mirrors +
