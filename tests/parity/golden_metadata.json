@@ -1,0 +1,310 @@
+{
+  "index_default_version": "0.2.1",
+  "reports_root": "https://minio.dive.edito.eu/project-oceanbench/public/evaluation-reports/",
+  "retrieval_timestamp_utc": "2026-07-03T14:59:04.126242+00:00",
+  "total_records": 9810,
+  "metric_keys": [
+    "rmsd_variables_glorys",
+    "rmsd_variables_glo12",
+    "rmsd_mld_glorys",
+    "rmsd_mld_glo12",
+    "rmsd_geostrophic_glorys",
+    "rmsd_geostrophic_glo12",
+    "lagrangian_glorys",
+    "lagrangian_glo12",
+    "rmsd_variables_observations"
+  ],
+  "depth_variable_metrics": [
+    "rmsd_variables_glo12",
+    "rmsd_variables_glorys",
+    "rmsd_variables_observations"
+  ],
+  "notebooks": [
+    {
+      "file": "glo12.global.report.ipynb",
+      "challenger": "glo12",
+      "region": "global",
+      "bytes": 197558,
+      "sha256": "574050a0ffad0a55e57c1dd710f8d3b05d99aa1eab7d7f6978723d79d5cf84e3",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "glo12.ibi.report.ipynb",
+      "challenger": "glo12",
+      "region": "ibi",
+      "bytes": 197671,
+      "sha256": "ecb5ba562356483b74f99d7721a00095ba51cb6084a294ea31a28e76e59fab0d",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "glo12_1_degree.global.report.ipynb",
+      "challenger": "glo12_1_degree",
+      "region": "global",
+      "bytes": 195291,
+      "sha256": "efd604df8bc54ce843a3ca6d0f92feaa9ef62b68b4dbeed4b4b21f614bbd328a",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "glonet.global.report.ipynb",
+      "challenger": "glonet",
+      "region": "global",
+      "bytes": 182004,
+      "sha256": "9477d0ff45b744a1c7576753de3e644da8d39f6552ee4516f927b75579d8d1fe",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "glonet.ibi.report.ipynb",
+      "challenger": "glonet",
+      "region": "ibi",
+      "bytes": 182118,
+      "sha256": "f33a4c907139af6fe22d4c44845fca6549d3073fb0c304a81954db708d222c10",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "glonet_1_degree.global.report.ipynb",
+      "challenger": "glonet_1_degree",
+      "region": "global",
+      "bytes": 187435,
+      "sha256": "817e6f4d992a140605148de7d6747192923d955cdc0cc464db07186010f95cab",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "langya.global.report.ipynb",
+      "challenger": "langya",
+      "region": "global",
+      "bytes": 177169,
+      "sha256": "92e5bb7d085cab9f0505440fc99210dc152ca0988da165416aa6b390d6a67089",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "langya.ibi.report.ipynb",
+      "challenger": "langya",
+      "region": "ibi",
+      "bytes": 177336,
+      "sha256": "c6f3639179987858500c7cc214ae81106fe3cf459cbef964b08bc11b8001aedd",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "langya_1_degree.global.report.ipynb",
+      "challenger": "langya_1_degree",
+      "region": "global",
+      "bytes": 178773,
+      "sha256": "28e1a9be7c26dc12473c981b8f8e98ae6e8a35ad67ff09e9d12833ab58f02f66",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "wenhai.global.report.ipynb",
+      "challenger": "wenhai",
+      "region": "global",
+      "bytes": 172326,
+      "sha256": "09bd363c640dec63930561b84723f5a08d4fe1cd5c67d05546fad2295fa34aed",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "wenhai.ibi.report.ipynb",
+      "challenger": "wenhai",
+      "region": "ibi",
+      "bytes": 172240,
+      "sha256": "fcb330ff7926d3b4f4d8886aaeb3142a8046de0fb0bdf792711be1d3fb4a6f6e",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "wenhai_1_degree.global.report.ipynb",
+      "challenger": "wenhai_1_degree",
+      "region": "global",
+      "bytes": 165079,
+      "sha256": "d6827edbe5297a0cc64e5c48213ee0c41fa8f03def961d1fbb2c73f9890334aa",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "xihe.global.report.ipynb",
+      "challenger": "xihe",
+      "region": "global",
+      "bytes": 196401,
+      "sha256": "d0f30eb9abc74e9d821f36ee2c32cefafa69283f59a7597b1ff4a9a4ea420ea6",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "xihe.ibi.report.ipynb",
+      "challenger": "xihe",
+      "region": "ibi",
+      "bytes": 196507,
+      "sha256": "a04d67752a57eaae15613ef158cc8a95bac09bafe262e8ebff753d0a9302d66d",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    },
+    {
+      "file": "xihe_1_degree.global.report.ipynb",
+      "challenger": "xihe_1_degree",
+      "region": "global",
+      "bytes": 188312,
+      "sha256": "0724d672a3cb01224325af2a2c00f3af77264d8b6ed5ca80268afc9ea5558db3",
+      "metrics_found": [
+        "lagrangian_glo12",
+        "lagrangian_glorys",
+        "rmsd_geostrophic_glo12",
+        "rmsd_geostrophic_glorys",
+        "rmsd_mld_glo12",
+        "rmsd_mld_glorys",
+        "rmsd_variables_glo12",
+        "rmsd_variables_glorys",
+        "rmsd_variables_observations"
+      ],
+      "missing_metrics": []
+    }
+  ],
+  "parse_failures": []
+}
