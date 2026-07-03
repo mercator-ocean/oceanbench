@@ -1,0 +1,365 @@
+<!--
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+# OceanBench v2 — Architecture & Data Contracts
+
+Status: DRAFT (agreed design, 2026-07-03). This document is the contract that all
+v2 implementation work builds against. Changes here require discussion first.
+
+## 1. Overview
+
+OceanBench v2 is a benchmark for global ocean forecast models. It replaces the
+notebook-centric pipeline (papermill execution, HTML-table score parsing,
+hand-edited `index.json`, ephemeral staging) with a three-stage batch pipeline
+whose only outputs are data artifacts, plus a static website that reads them.
+
+```
+ingest  (once per dataset-year)   → analysis-ready mirrors, obs match-ups,
+                                     viewer datasets, evaluation packs
+score   (incremental)             → long-format score records + insight artifacts
+publish (compaction)              → scores.parquet, catalog.json, static site data
+```
+
+Design principles:
+
+- **Two scientific axes.** Primary skill evidence comes from the *observation
+  track* (skill vs persistence and climatology at obs points, bootstrap CIs
+  over the 52 weekly starts). The *realism battery* (PSD / effective
+  resolution, error spectrum, activity ratio, eddy census) answers "is the
+  model physically alive or a blurry RMSD-optimizer". Gridded RMSD vs
+  GLORYS/GLO12 is a diagnostic layer.
+- **No ranking.** OceanBench presents diagnostics; it does not crown a best
+  model. The score page is a sortable scorecard with **no composite score and
+  no default rank order** (neutral ordering, baselines pinned). Skill vs
+  baselines with CIs is per-metric evidence, not a leaderboard. Each model
+  additionally gets a plain-language summary card (non-expert reading level)
+  above the expert table.
+- **Native resolution everywhere.** Each challenger is scored on its native
+  grid against the matching-resolution reference (status quo). No coarsened
+  or common-grid scores. Cross-resolution honesty is provided by the obs track
+  (grid-agnostic by construction) and the effective-resolution column.
+- **Precompute the standardized battery; compute snapshots client-side.**
+  Batch precomputes only (a) aggregates over the 52-start ensemble and
+  (b) non-browser algorithms (eddy detection, Parcels advection, Class-4
+  match-ups). Single-snapshot visuals (maps, differences, animation, box PSD)
+  derive from the viewer zarr in the browser. No payload-file-per-figure.
+- **Baselines are challengers** (`is_baseline: true`): climatology,
+  persistence. Skill scores are *derived at aggregation/display time* from
+  per-start records — never hardcoded in the scoring run.
+- **Incremental by content address.** A score run is keyed by
+  (challenger id+version, metric version, reference version, year, region).
+  Unchanged keys are never recomputed.
+- **Copernicus stays the source of truth — pinned per version, never silently
+  mutated.** `ingest` fetches references from Copernicus Marine (parallel,
+  once per reference version) into a persistent store stamped with the
+  upstream product version/DOI + retrieval date. A freshness check watches
+  upstream; a Copernicus reprocessing triggers an explicit reference-version
+  bump, re-ingest, and an announced benchmark-wide re-score. Old and new
+  scores coexist in `scores.parquet` (rows carry input versions). Evaluation
+  packs are stamped with the upstream version they derive from and refreshed
+  on bump.
+
+Out of scope for v1 (schema-ready only): ensemble metrics (CRPS, spread-skill).
+NRT validation (branch 272) stays a separate dev branch; it will later become
+another producer writing these same contracts, tagged obs-only.
+
+## 2. Conventions
+
+- Variable keys: CF standard names (`sea_surface_height_above_geoid`,
+  `sea_water_potential_temperature`, `sea_water_salinity`,
+  `eastward_sea_water_velocity`, `northward_sea_water_velocity`,
+  `ocean_mixed_layer_thickness`, `geostrophic_*`). Display names/units live in
+  ONE shared metadata table consumed by both the library and the website.
+- `lead_day` is **1-based** (1..10) in every artifact, including zarr coords.
+  (The legacy 0-based `lead_day_index` does not appear in any v2 artifact.)
+- Depth labels are machine keys: `surface`, `50m`, `100m`, `200m`, `300m`,
+  `500m`; Class-4 bins `0-5m`, `5-100m`, `100-300m`, `300-600m`, `15m`.
+- Dates ISO-8601. All JSON written `sort_keys=True`. Floats: `null` for NaN.
+- Calibration constants carried forward verbatim (validated, do not re-derive):
+  GLO12/global SSH→SLA shift `-0.1148` (GLO12 MDT); IBI shift `-0.0674`
+  (IBYRIS MDT); climatology baseline shift `-0.1329`; MLD threshold
+  0.03 kg/m³ capped at 600 m; velocity obs target depth 15.0 m.
+
+### Regions (v1)
+
+| id | bounds (lat, lon) | used for |
+|---|---|---|
+| `global` | — | all metrics |
+| `ibi` | 26.17–56.08 N, −19.08–5.08 E | all metrics |
+| `gulfstream` | 30–45 N, −80 – −50 E | realism battery only |
+| `kuroshio` | 25–45 N, 130–165 E | realism battery only |
+
+### Challenger registry
+
+`challengers.json` (in-repo, versioned): canonical slug → metadata.
+
+```json
+{
+  "glonet":      {"display_name": "GLONET",  "organization": "Mercator",
+                  "nominal_resolution_deg": 0.25, "is_baseline": false,
+                  "lead_days": 10, "source": "s3://.../ml-forecast-outputs/glonet/"},
+  "climatology": {"display_name": "Climatology", "is_baseline": true, "...": "..."}
+}
+```
+
+One slug per challenger everywhere (paths, parquet, catalog). The NRT
+`octo-<name>-p1d` ids map onto these slugs when NRT integrates.
+
+## 3. Score contract
+
+### 3.1 `scores.parquet` (primary product, whole benchmark)
+
+One row per (challenger, year, region, metric, …, lead_day, start_date).
+Per-start values are the norm — aggregation (means, bootstrap CIs, skill vs
+baselines) happens downstream and is recomputable against any baseline.
+
+| column | type | notes |
+|---|---|---|
+| `challenger` | str | registry slug |
+| `challenger_version` | str | forecast dataset version/tag |
+| `year` | int32 | evaluation year (2024 at launch) |
+| `region` | str | region id |
+| `metric` | str | see 3.2 |
+| `reference` | str? | `glorys` \| `glo12` \| `observations` \| null |
+| `variable` | str? | CF standard name, null for non-variable metrics |
+| `depth` | str? | depth label or bin, null if not applicable |
+| `lead_day` | int8 | 1-based |
+| `start_date` | date | forecast initialization date |
+| `band` | str? | spectral band (`large`, `regional`, `mesoscale`), else null |
+| `polarity` | str? | `cyclone` \| `anticyclone`, else null |
+| `value` | float64 | |
+| `unit` | str | |
+| `n` | int32? | sample size (e.g. obs count in a Class-4 cell) |
+| `oceanbench_version` | str | scoring code version |
+
+### 3.2 Metric keys (v1)
+
+Gridded (vs `glorys` and `glo12`, area-weighted cos-lat, native grid):
+`rmsd` (per variable×depth), `rmsd` with `variable=ocean_mixed_layer_thickness`,
+`rmsd` with geostrophic variables, `lagrangian_deviation_km`.
+
+Observation track (vs `observations`): `class4_rmsd` (T/S bins, SLA surface,
+currents 15 m).
+
+Realism battery (native grid, per region incl. WBC boxes):
+`psd_band_energy_fraction` (band column set), `effective_resolution_km`
+(wavelength where challenger PSD falls to half of reference),
+`error_spectrum_band_energy` (PSD of challenger−reference, band column set),
+`activity_ratio` (challenger anomaly std / reference anomaly std),
+`eddy_count`, `eddy_hit_rate`, `eddy_miss_rate`, `eddy_mean_displacement_km`
+(polarity column set).
+
+Reserved for later (schema needs no change): `crps`, `spread`, `spread_skill_ratio`.
+
+### 3.3 Per-run increment
+
+Each scoring run writes
+`runs/<challenger>/<year>/<region>/scores-<content_hash>.parquet` (same schema).
+`publish` compacts all runs into the single public `scores.parquet`.
+A small per-challenger `scores.json` (aggregated means only, nested legacy
+`ModelScore` shape) is emitted by an adapter for transition-period
+compatibility with the existing website; it is deprecated from day one.
+
+### 3.4 Derived at display/aggregation time (never stored per-run)
+
+- mean over starts, bootstrap CI (resample the 52 starts, 1000 draws, 95%),
+- skill score `1 − RMSD_model / RMSD_baseline` vs `persistence` and
+  `climatology`, with CI via paired bootstrap.
+
+## 4. Insight artifacts
+
+Per (challenger, year, region), under `insights/`, referenced by a
+`manifest.json` mapping semantic key → `{kind, schema_version, url, bytes}`.
+Blobs are content-hash named (immutable, CDN-cacheable).
+
+| kind | file | content |
+|---|---|---|
+| `aggregate-map` | small zarr (or webp+json meta) | time-mean bias AND rmse per variable, leads {1,5,10}, surface |
+| `spectra` | JSON | per variable×region×lead {1,5,10}: wavelength[], challenger_power[], reference_power[], error_power[] |
+| `eddies` | JSON | per lead: matches (with displacement km), spurious, missed; contour polygons point-limited |
+| `trajectories` | JSON | Parcels particle trajectories (challenger vs reference), decimated |
+| `class4-matchups` | parquet | one row per obs point: obs value, model value, lat, lon, depth, time, variable, lead_day |
+
+Schemas for `spectra` and `eddies` are adapted from branch 249's payload
+formats (proven shapes) with `kind` + `schema_version` fields added and the
+widget/XHR coupling removed.
+
+## 5. Catalog
+
+`catalog.json` at the artifact root — **generated by `publish`, never
+hand-edited**:
+
+```json
+{
+  "schema_version": "2.0",
+  "generated_at": "…",
+  "scores_url": ".../scores.parquet",
+  "releases": {
+    "2.0.0": {
+      "years": {
+        "2024": {
+          "regions": {
+            "global": {
+              "glonet": {
+                "insights_manifest_url": "…",
+                "viewer_zarr_url": "…"
+} } } } } } }
+}
+```
+
+## 6. Viewer datasets (display copies — scoring never reads these)
+
+One multiscale zarr **pyramid** per (challenger|reference|baseline, year),
+produced by `ingest`. Viewer data is always **numeric** (never PNG/WebP) so the
+client can read values on hover, difference any two datasets, recolor, and
+compute box-PSD — images survive only as static thumbnails in insight
+artifacts.
+
+### Storage
+
+- **Base level = native grid** (1/12°, 1/4°, or 1° per dataset). Users zoom to
+  full model resolution everywhere; no regional-box subsetting.
+- Pyramid levels halve resolution from native up to ~1° (e.g. 1/12° → 4–5
+  levels), each level a zarr group `level/<k>` with dims
+  `(start_date: 52, lead_day: 10, latitude, longitude)`.
+- Variables: `zos, thetao, so, uo, vo` at surface + `uo, vo` at 15 m.
+- Encoding: uint16 with per-variable `scale_factor`/`add_offset` attrs
+  (precision-matched: ≪ model error at all variables), zstd compression,
+  explicit `_FillValue` for land.
+- Chunking: **256×256 spatial tiles**, one (start_date, lead_day) per chunk.
+  Zarr v3 **sharding**: one shard per (start_date, lead_day, level) so tiles
+  are fetched by HTTP range read without millions of small S3 objects.
+- Consolidated metadata; identical layout for references (GLORYS, GLO12) and
+  baselines so any pair can be differenced client-side.
+- Volume: ~40–50 GB per 1/12° dataset-year compressed (×1.33 pyramid
+  overhead included); ~0.5 TB per benchmark year across all datasets.
+  Write-once, content-addressed paths → immutable/CDN-cacheable.
+
+### Read path (what "fluid" means, testable)
+
+- Client (static SPA: maplibre or deck.gl + zarrita) fetches only viewport-
+  visible tiles at the zoom-matched pyramid level: **≤ ~4 MB per displayed
+  layer at any zoom**, target < 500 ms to first paint on a warm cache.
+- WebGL rendering: colormap in shader; **difference mode** = two tile
+  sources subtracted in-shader (growing-error view at native resolution);
+  animated currents = GPU particle advection over `uo/vo` tiles.
+- Time scrubbing prefetches adjacent lead days for the active layer.
+- Overlays from insight artifacts: eddy contours per lead day, Lagrangian
+  trajectories (with divergence vs reference), Class-4 obs locations/errors.
+- Per-dataset `viewer-manifest.json`: levels, tile size, bounds, variables
+  with units/scale/offset/default colormap+range, start_dates, lead_days.
+
+### Viewer UX contract
+
+- **Default theme: cinematic dark** (dark ocean canvas, glowing GPU particle
+  flows, luminous colormaps). A light "publication" theme is available for
+  exporting paper-ready figures.
+- **2D equirectangular maps, no globe.** Pixel = grid cell at native zoom.
+  (Optional polar projection is a post-v1 add-on.)
+- **Comparison is the primitive.** 1/2/4 synchronized panels (linked viewport
+  + lead day); panel = {dataset, variable, start_date, lead_day}; first-class
+  **difference panels** (A − B in shader, diverging colormap centered at 0);
+  blink/swipe toggle within a panel.
+- **Small multiples for error growth** (lead 1/3/5/7/10 strip, shared
+  colorbar); **animation only for motion** (GPU current particles, Lagrangian
+  divergence trails). Never animate error maps.
+- **Context rail**: quantitative curves for the current view (RMSE vs lead,
+  regional PSD, score rows) linked to the map state.
+- **Overlays with purpose-modes**, toggleable, never all at once: eddies
+  (matched/spurious/missed contours), Class-4 obs points colored by error,
+  particle trajectories. Default state = one panel, one field.
+- **Colors**: perceptually uniform only (cmocean: thermal/haline/balance…);
+  compared panels always share a fixed colorbar.
+- **Every view state is a URL** (panels, viewport, lead, overlays). The score
+  page deep-links into the viewer (bad score cell → preconfigured difference
+  view). Artifact contracts above already provide everything these features
+  read; no additional server-side capability is implied.
+
+### Infra prerequisites (Phase 0 checks, blocking for viewer work)
+
+- Two candidate backends exist: **EDITO MinIO** and **CloudFerro S3**. Phase 0
+  benchmarks both from a browser (public GET, **range reads**, CORS, ~50
+  concurrent 100–500 KB reads); the winner serves all public v2 artifacts.
+  If neither is fast enough, a CDN/cache goes in front — the data contract is
+  unchanged either way.
+
+## 7. Evaluation packs (local `oceanbench evaluate`)
+
+Downloadable, versioned bundles produced by `ingest`:
+
+- `pack-quick-<year>`: obs match-up inputs + 1/4° surface reference fields +
+  climatology/persistence baselines. Target: evaluate a model locally in
+  minutes–1 h; answers "is it good" + "is it blurry".
+- `pack-full-<year>`: adds multi-depth gridded references for the official
+  gridded track.
+
+`oceanbench evaluate ./forecasts/ --year 2024 --pack quick` produces the same
+artifacts as the hosted run plus a local HTML scorecard overlaying the user's
+model on the published `scores.parquet` (fetched, one file).
+
+## 8. S3 layout
+
+```
+s3://<bucket>/benchmark/v2/
+  catalog.json
+  scores.parquet
+  challengers.json                     (copy of registry at publish time)
+  <year>/<region>/<challenger>/
+    runs/scores-<hash>.parquet
+    insights/manifest.json
+    insights/<content-hash blobs>
+  viewer/<year>/<slug>.zarr            (challengers, references, baselines)
+  packs/pack-{quick,full}-<year>/
+```
+
+During transition, everything publishes under a dev prefix
+(`benchmark/v2-dev/`); the current site and `public/evaluation-reports/`
+remain untouched until parity (see Phase gates).
+
+## 9. Port vs rebuild inventory
+
+**Port (validated science — do not rewrite):** `core/rmsd.py`,
+`core/classIV*.py` (incl. SLA shifts), `core/mixed_layer_depth.py`,
+`core/geostrophic_currents.py`, `core/lagrangian_trajectory.py`,
+`core/regions.py`, reference/challenger URL registry, and from branch 249:
+`core/psd.py`, `core/eddies.py` (plus their tests). Cherry-pick later from
+272: IBI `-0.0674` constant, `class4_drifters.py`.
+
+**Rebuild:** CLI/runner (no papermill), ingest stage (replaces
+`local_stage.py`/`weekly_stage.py` with persistent versioned mirrors +
+forecast-at-obs extraction), publish/compaction, website score page
+(reads `scores.parquet`; DuckDB-WASM or plain JS), viewer (static SPA,
+zarr range reads).
+
+**Delete:** notebook templates, `python2jupyter`, papermill wiring,
+`widget_assets.py` XHR coupling, `notebook_score_parser.py`,
+hand-maintained `index.json` flow.
+
+## 10. Phase plan & gates
+
+- **Phase 0 — foundations.** Long-lived `v2` branch in this repo; this doc
+  merged; JSON Schemas for catalog/manifest/insight payloads; storage
+  benchmark MinIO vs CloudFerro (§6); Copernicus Marine redistribution-terms
+  check for evaluation packs; parity harness capturing current published 2024
+  scores as golden data.
+- **Phase 1 — score runner.** Port metrics, emit long-format per-start
+  records. **Gate: reproduces published 2024 scores for glonet (1/4°) and one
+  1/12° challenger within numerical tolerance.**
+- **Phase 2 — ingest.** Versioned reference store fetched from Copernicus
+  (parallel pull, upstream-version stamping + freshness check), obs match-up
+  extraction, viewer zarrs, packs. **Gate: full re-score of one 1/12°
+  challenger from the store in << 24 h; incremental re-run is a no-op.**
+- **Phase 3 — publish + score page + local evaluate.** Compaction,
+  catalog, static score page with skill-vs-baseline + CIs, overlay scorecard.
+- **Phase 4 — realism battery.** Port 249 PSD/eddies; error spectrum,
+  activity ratio, effective resolution; WBC regions; insight artifacts.
+  (3 and 4 parallelize.)
+- **Phase 5 — viewer v1.** Battery browser + snapshot maps/differences/
+  current animation from viewer zarr.
+- **Phase 6 — viewer v2.** Hand-drawn box PSD, free-form exploration.
+- **Cutover:** parallel run under `v2-dev` until the score page matches
+  published numbers; then switch. Then: 2023/2025 ingest (with branch 241
+  coordination), ensembles, NRT integration.
