@@ -25,7 +25,10 @@ dependencies = [
     "requests (>=2.27.1)",
     "aiohttp (>=3.0.0)",
     "jupyter (>=1.1)",
-    "papermill[s3] (>=2.6.0)"
+    "papermill[s3] (>=2.6.0)",
+    "xrft (>=1.0.1,<2.0.0)",
+    "scikit-image (>=0.25,<1.0.0)",
+    "metpy (>=1.7,<2.0.0)"
 ]
 
 [project.scripts]

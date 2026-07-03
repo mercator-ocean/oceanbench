@@ -8,6 +8,8 @@ This module exposes the package python API to evaluate a challenger.
 
 from . import metrics
 from . import datasets
+from . import eddies
+from . import psd
 from . import regions
 from .core.evaluate import evaluate_challenger
 from .core.version import __version__
@@ -15,6 +17,8 @@ from .core.version import __version__
 __all__ = [
     "metrics",
     "datasets",
+    "eddies",
+    "psd",
     "regions",
     "evaluate_challenger",
     "__version__",
