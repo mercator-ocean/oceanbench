@@ -62,17 +62,22 @@ def golden_metric_key(metric: str, reference: str | None, variable: str | None) 
     return None
 
 
-def _recombine_class4_over_starts(class4_frame: pandas.DataFrame) -> pandas.DataFrame:
+def recombine_class4_over_starts(
+    class4_frame: pandas.DataFrame,
+    grouping_columns: list[str] = _GROUPING_COLUMNS,
+) -> pandas.DataFrame:
     """N-weighted recombination of per-start Class-4 rows into the pooled-over-observations RMSD.
 
     The published Class-4 value pools every observation at a lead day into one RMSD; a
     plain mean of the per-start RMSDs would not reproduce it. Because each per-start
     ``value`` is ``sqrt(sum_of_squares_of_that_start / n)``, ``sqrt(sum(value ** 2 * n) /
-    sum(n))`` over the starts recovers the pooled RMSD exactly.
+    sum(n))`` over the starts recovers the pooled RMSD exactly. ``grouping_columns`` selects
+    the keys the recombination pools within (defaulting to the parity key set); the downstream
+    aggregation library passes its own identity keys so there is a single recombination.
     """
     contributions = class4_frame.assign(sum_of_squares=(class4_frame["value"] ** 2) * class4_frame["n"])
     pooled = (
-        contributions.groupby(_GROUPING_COLUMNS, dropna=False)
+        contributions.groupby(grouping_columns, dropna=False)
         .agg(
             sum_of_squares=("sum_of_squares", "sum"),
             sample_size=("n", "sum"),
@@ -80,7 +85,7 @@ def _recombine_class4_over_starts(class4_frame: pandas.DataFrame) -> pandas.Data
         .reset_index()
     )
     pooled["value"] = numpy.sqrt(pooled["sum_of_squares"] / pooled["sample_size"])
-    return pooled[_GROUPING_COLUMNS + ["value"]]
+    return pooled[grouping_columns + ["value"]]
 
 
 def aggregate_runner_scores(runner_scores: pandas.DataFrame) -> pandas.DataFrame:
@@ -97,7 +102,7 @@ def aggregate_runner_scores(runner_scores: pandas.DataFrame) -> pandas.DataFrame
     mean_aggregated = frame[~is_class4].groupby(_GROUPING_COLUMNS, dropna=False)["value"].mean().reset_index()
     parts = [mean_aggregated]
     if is_class4.any():
-        parts.append(_recombine_class4_over_starts(frame[is_class4]))
+        parts.append(recombine_class4_over_starts(frame[is_class4]))
     aggregated = pandas.concat(parts, ignore_index=True)
     aggregated["golden_metric_key"] = aggregated.apply(
         lambda row: golden_metric_key(row["metric"], row["reference"], row["variable"]),
