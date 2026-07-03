@@ -44,6 +44,15 @@ METRIC_ROOT_MEAN_SQUARE_DEVIATION = "rmsd"
 METRIC_CLASS4_ROOT_MEAN_SQUARE_DEVIATION = "class4_rmsd"
 METRIC_LAGRANGIAN_DEVIATION_KILOMETRES = "lagrangian_deviation_km"
 
+METRIC_PSD_BAND_ENERGY_FRACTION = "psd_band_energy_fraction"
+METRIC_EFFECTIVE_RESOLUTION_KILOMETRES = "effective_resolution_km"
+METRIC_ERROR_SPECTRUM_BAND_ENERGY = "error_spectrum_band_energy"
+METRIC_ACTIVITY_RATIO = "activity_ratio"
+METRIC_EDDY_COUNT = "eddy_count"
+METRIC_EDDY_HIT_RATE = "eddy_hit_rate"
+METRIC_EDDY_MISS_RATE = "eddy_miss_rate"
+METRIC_EDDY_MEAN_DISPLACEMENT_KILOMETRES = "eddy_mean_displacement_km"
+
 _LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]*)\) \[([^\]]*)\](?:\{([^}]+)\})?$")
 _LEAD_DAY_PATTERN = re.compile(r"(\d+)\s*$")
 
@@ -227,6 +236,50 @@ def lagrangian_records(
         start_date=start_date,
         depth_applicable=False,
     )
+
+
+def realism_record(
+    *,
+    context: RunContext,
+    metric: str,
+    value: object,
+    unit: str,
+    reference: str | None = None,
+    variable: str | None = None,
+    depth: str | None = None,
+    lead_day: int | None = None,
+    band: str | None = None,
+    polarity: str | None = None,
+    start_date: object = None,
+    sample_count: int | None = None,
+) -> dict:
+    """Build one long-format ``scores.parquet`` record for a realism-battery metric (contracts.md §3.2).
+
+    Realism metrics are computed directly (not parsed from the legacy pretty dataframes),
+    so this fills every contract column explicitly. ``band`` carries the spectral band
+    (``large`` / ``regional`` / ``mesoscale``) and ``polarity`` the eddy rotational sense
+    (``cyclone`` / ``anticyclone``); both are ``None`` when the metric does not use them.
+    Spectra and eddy metrics are aggregate over the forecast starts by nature, so
+    ``start_date`` is ``None`` unless a per-start value is emitted.
+    """
+    return {
+        "challenger": context.challenger,
+        "challenger_version": context.challenger_version,
+        "year": context.year,
+        "region": context.region,
+        "metric": metric,
+        "reference": reference,
+        "variable": variable,
+        "depth": depth,
+        "lead_day": lead_day,
+        "start_date": _normalise_start_date(start_date),
+        "band": band,
+        "polarity": polarity,
+        "value": _clean_value(value),
+        "unit": unit,
+        "n": sample_count,
+        "oceanbench_version": context.oceanbench_version,
+    }
 
 
 def records_to_dataframe(records: list[dict]) -> pandas.DataFrame:

@@ -12,7 +12,6 @@ import xarray
 
 from oceanbench.core.dataset_utils import Dimension
 
-
 GLOBAL_REGION_NAME = "global"
 REGION_IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -61,6 +60,42 @@ OFFICIAL_REGIONS = {
     ]
 }
 
+GULFSTREAM = RegionSpec(
+    id="gulfstream",
+    display_name="Gulf Stream",
+    bounds=BoundingBox(
+        minimum_latitude=30.0,
+        maximum_latitude=45.0,
+        minimum_longitude=-80.0,
+        maximum_longitude=-50.0,
+    ),
+)
+
+KUROSHIO = RegionSpec(
+    id="kuroshio",
+    display_name="Kuroshio",
+    bounds=BoundingBox(
+        minimum_latitude=25.0,
+        maximum_latitude=45.0,
+        minimum_longitude=130.0,
+        maximum_longitude=165.0,
+    ),
+)
+
+# Western-boundary-current boxes used only by the realism battery (contracts.md §2).
+# They are intentionally kept OUT of ``OFFICIAL_REGIONS`` so the gridded RMSD and
+# Class-4 score paths (which resolve their region through ``OFFICIAL_REGIONS``) can
+# never emit them; only the realism runner resolves regions through the union below.
+REALISM_BATTERY_REGIONS = {
+    region.id: region
+    for region in [
+        GULFSTREAM,
+        KUROSHIO,
+    ]
+}
+
+BATTERY_REGIONS = {**OFFICIAL_REGIONS, **REALISM_BATTERY_REGIONS}
+
 RegionLike = str | RegionSpec | None
 
 
@@ -99,6 +134,34 @@ def official_region_ids() -> list[str]:
 
 def official_regions() -> list[RegionSpec]:
     return list(OFFICIAL_REGIONS.values())
+
+
+def realism_battery_region_ids() -> list[str]:
+    return list(REALISM_BATTERY_REGIONS.keys())
+
+
+def resolve_battery_region(region: RegionLike) -> RegionSpec:
+    """Resolve a region for the realism battery, accepting the official and WBC-box regions.
+
+    Unlike ``resolve_region`` (used by the gridded and Class-4 paths, which only knows the
+    official regions), this consults the realism-battery union so ``gulfstream`` and
+    ``kuroshio`` resolve here and nowhere else.
+    """
+    if isinstance(region, RegionSpec):
+        return resolve_region(region)
+    if region in (None, ""):
+        return GLOBAL
+    normalized_region_id = _normalize_region_identifier(region)
+    battery_region = BATTERY_REGIONS.get(normalized_region_id)
+    if battery_region is None:
+        supported_regions = ", ".join(BATTERY_REGIONS.keys())
+        raise ValueError(f"Unsupported realism-battery region: {region}. Supported values are: {supported_regions}.")
+    return battery_region
+
+
+def subset_dataset_to_battery_region(dataset: xarray.Dataset, region: RegionLike) -> xarray.Dataset:
+    """Subset a dataset to a realism-battery region (official regions plus the WBC boxes)."""
+    return subset_dataset_to_region(dataset, resolve_battery_region(region))
 
 
 def get_pre_defined_region_names() -> list[str]:

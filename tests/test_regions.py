@@ -11,8 +11,16 @@ import pytest
 import xarray
 
 import oceanbench
+from oceanbench.core import regions as regions_core
 from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
-from oceanbench.core.regions import region_from_dict, region_to_dict
+from oceanbench.core.regions import (
+    normalize_region_name,
+    realism_battery_region_ids,
+    region_from_dict,
+    region_to_dict,
+    resolve_battery_region,
+    subset_dataset_to_region,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WESTERN_MED_REGION_FILE = PROJECT_ROOT / "assets" / "western_med_region.json"
@@ -146,6 +154,36 @@ def test_example_custom_region_file_generates_custom_region_notebook(tmp_path) -
     assert notebook.metadata["oceanbench"]["region"]["id"] == "western_med"
     assert notebook.metadata["oceanbench"]["region"]["display_name"] == "Western Mediterranean"
     assert notebook.metadata["oceanbench"]["region"]["official"] is False
+
+
+def test_realism_battery_regions_are_excluded_from_the_official_score_paths() -> None:
+    assert set(realism_battery_region_ids()) == {"gulfstream", "kuroshio"}
+    for realism_region_id in realism_battery_region_ids():
+        assert realism_region_id not in regions_core.official_region_ids()
+        # The gridded / Class-4 paths resolve their region through ``normalize_region_name``
+        # (OFFICIAL_REGIONS only); a WBC box must be rejected there.
+        with pytest.raises(ValueError, match="Unsupported region"):
+            normalize_region_name(realism_region_id)
+
+
+def test_realism_battery_regions_resolve_and_subset() -> None:
+    gulfstream = resolve_battery_region("gulfstream")
+    assert gulfstream.bounds.minimum_latitude == 30.0
+    assert gulfstream.bounds.maximum_longitude == -50.0
+
+    kuroshio = resolve_battery_region("kuroshio")
+    assert kuroshio.bounds.minimum_longitude == 130.0
+
+    dataset = xarray.Dataset(
+        coords={
+            "latitude": [20.0, 35.0, 50.0],
+            "longitude": [-70.0, -60.0, 0.0],
+        }
+    )
+    subset = subset_dataset_to_region(dataset, gulfstream)
+    assert subset.sizes["latitude"] == 1
+    assert float(subset["latitude"].values[0]) == 35.0
+    assert subset.sizes["longitude"] == 2
 
 
 def test_generate_evaluation_notebook_keeps_official_region_string(tmp_path) -> None:
