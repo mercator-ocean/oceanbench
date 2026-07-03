@@ -134,6 +134,9 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
             args.remote_retries if args.remote_retries is not None else environment_configuration.remote_retries
         ),
         class4_fast_interpolation=environment_configuration.class4_fast_interpolation,
+        local_cache_directory_path=(
+            args.local_cache if args.local_cache is not None else environment_configuration.local_cache_directory_path
+        ),
     )
 
 
@@ -227,6 +230,11 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         type=int,
         default=None,
         help="Maximum number of worker threads used to build local stage data",
+    )
+    evaluate_parser.add_argument(
+        "--local-cache",
+        default=None,
+        help="Directory used to cache downloaded and computed datasets locally between runs",
     )
     evaluate_parser.add_argument(
         "--remote-retries",
