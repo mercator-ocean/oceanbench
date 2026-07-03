@@ -19,6 +19,8 @@ import re
 
 import pandas
 
+from oceanbench.core.dataset_utils import VARIABLE_METADATA
+
 SCORE_COLUMNS = [
     "challenger",
     "challenger_version",
@@ -171,6 +173,42 @@ def class4_records(
         depth_applicable=True,
         sample_counts=sample_counts,
     )
+
+
+def class4_per_start_records(
+    per_start_table: pandas.DataFrame,
+    *,
+    context: RunContext,
+) -> list[dict]:
+    """Records for the per-start Class-4 table (columns: variable, first_day, depth_bin, lead_day, rmsd, count).
+
+    Emits one row per (start_date, variable, depth_bin, lead_day): ``value`` is the RMSD
+    over that forecast start's observations and ``n`` is that observation count. Consumers
+    recover the published pooled-over-observations RMSD exactly via
+    ``sqrt(sum(value ** 2 * n) / sum(n))``. ``lead_day`` is stored 1-based (the table's
+    0-based lead day plus one), matching every other artifact.
+    """
+    return [
+        {
+            "challenger": context.challenger,
+            "challenger_version": context.challenger_version,
+            "year": context.year,
+            "region": context.region,
+            "metric": METRIC_CLASS4_ROOT_MEAN_SQUARE_DEVIATION,
+            "reference": "observations",
+            "variable": str(row.variable),
+            "depth": str(row.depth_bin),
+            "lead_day": int(row.lead_day) + 1,
+            "start_date": _normalise_start_date(row.first_day),
+            "band": None,
+            "polarity": None,
+            "value": _clean_value(row.rmsd),
+            "unit": VARIABLE_METADATA[str(row.variable)][1],
+            "n": int(row.count),
+            "oceanbench_version": context.oceanbench_version,
+        }
+        for row in per_start_table.itertuples(index=False)
+    ]
 
 
 def lagrangian_records(

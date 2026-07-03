@@ -465,16 +465,17 @@ def interpolate_class4_model_to_observations(
     return _interpolate_model_to_observations(model_data, observations_dataframe, variable_key)
 
 
-def _compute_rmsd_table(
+def _rmsd_table_grouped_by(
     dataframe: pandas.DataFrame,
     variable_key: str,
+    group_columns: list[str],
 ) -> pandas.DataFrame:
     valid_dataframe = dataframe.dropna(subset=["model_value", "observation_value"])
     grouped = (
         valid_dataframe.assign(
             squared_difference=(valid_dataframe["model_value"] - valid_dataframe["observation_value"]) ** 2
         )
-        .groupby(["depth_bin", "lead_day"], as_index=False)
+        .groupby(group_columns, as_index=False)
         .agg(
             rmsd=("squared_difference", lambda values: numpy.sqrt(values.mean())),
             count=("squared_difference", "size"),
@@ -482,6 +483,14 @@ def _compute_rmsd_table(
     )
     grouped["count"] = grouped["count"].astype(int)
     grouped["variable"] = variable_key
+    return grouped
+
+
+def _compute_rmsd_table(
+    dataframe: pandas.DataFrame,
+    variable_key: str,
+) -> pandas.DataFrame:
+    grouped = _rmsd_table_grouped_by(dataframe, variable_key, ["depth_bin", "lead_day"])
     return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
 
 
@@ -490,6 +499,41 @@ def compute_class4_rmsd_table(
     variable_key: str,
 ) -> pandas.DataFrame:
     return _compute_rmsd_table(dataframe, variable_key)
+
+
+def compute_class4_rmsd_table_per_start(
+    dataframe: pandas.DataFrame,
+    variable_key: str,
+) -> pandas.DataFrame:
+    """Class-4 RMSD grouped additionally by ``first_day`` (the forecast start date).
+
+    Same numerical core as :func:`compute_class4_rmsd_table` — the RMSD of a cell
+    is ``sqrt(mean(squared_difference))`` over the observations in that cell — but the
+    grouping keys gain ``first_day`` so each row is the RMSD over the observations of
+    one forecast start (per ``variable`` x ``depth_bin`` x ``lead_day``). ``count`` is
+    that per-start observation count. The pooled value published by
+    :func:`compute_class4_rmsd_table` is recovered exactly from these per-start rows via
+    :func:`recombine_class4_pooled_from_per_start`.
+    """
+    grouped = _rmsd_table_grouped_by(dataframe, variable_key, ["first_day", "depth_bin", "lead_day"])
+    return grouped[["variable", "first_day", "depth_bin", "lead_day", "rmsd", "count"]]
+
+
+def recombine_class4_pooled_from_per_start(per_start_table: pandas.DataFrame) -> pandas.DataFrame:
+    """Recombine per-start Class-4 rows into the pooled-over-observations RMSD.
+
+    Because each per-start ``rmsd`` is ``sqrt(sum_of_squares_of_that_start / count)``,
+    ``rmsd ** 2 * count`` recovers that start's sum of squared differences exactly, so
+    ``sqrt(sum(rmsd ** 2 * count) / sum(count))`` over the starts equals the pooled RMSD
+    over every observation — the value :func:`compute_class4_rmsd_table` produces.
+    """
+    contributions = per_start_table.assign(sum_of_squares=(per_start_table["rmsd"] ** 2) * per_start_table["count"])
+    pooled = contributions.groupby(["variable", "depth_bin", "lead_day"], as_index=False).agg(
+        sum_of_squares=("sum_of_squares", "sum"),
+        count=("count", "sum"),
+    )
+    pooled["rmsd"] = numpy.sqrt(pooled["sum_of_squares"] / pooled["count"])
+    return pooled[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
 
 
 def _observation_variable_depth_label(standard_name: str, depth_bin: str) -> str:

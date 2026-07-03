@@ -103,9 +103,13 @@ finishing):
 - deep T/S/U/V rows of `rmsd_variables_*` (the 240 golden rows shown as
   `gold_only` in the table above — the SSH rows that were computed all match),
 - `rmsd_mld_*` (mixed layer depth — full-depth density download),
-- `class4_rmsd` (observation match-ups — emitted **aggregate-only**,
-  `start_date` null, by design: a pooled RMSD over obs does not decompose into
-  a per-start mean),
+- `class4_rmsd` (observation match-ups — now emitted **per forecast start**:
+  each row is the RMSD over that start's observations per variable × depth_bin ×
+  lead_day with `n` = that observation count. The published pooled-over-obs value
+  is recovered **exactly** by the n-weighted recombination
+  `sqrt(sum(value² · n) / sum(n))` — proven in `tests/test_classiv_per_start.py`
+  and applied by `oceanbench.runner.parity.aggregate_runner_scores` for the
+  `class4_rmsd` metric),
 - `lagrangian_deviation_km` (Parcels advection — hours for 52 global starts;
   excluded from golden comparison anyway per the pre-#298 seeding note above).
 

@@ -6,11 +6,15 @@
 no notebook) and write per-start long-format records to
 ``runs/<challenger>/<year>/<region>/scores.parquet``.
 
-Gridded RMSD (variables, mixed layer depth, geostrophic) and the Lagrangian
-deviation are emitted per forecast start date. Class-4 RMSD is emitted
-aggregate-only (``start_date`` null) and flagged: its published value is a
-single RMSD pooled over every observation at a given lead day across the whole
-year, which does not decompose into a per-start mean.
+Every metric is emitted per forecast start date. Gridded RMSD (variables, mixed
+layer depth, geostrophic) and the Lagrangian deviation are per-start means over
+the region. Class-4 RMSD is emitted per start too: each row is the RMSD over the
+observations of one forecast start (per variable x depth_bin x lead_day) with
+``n`` that observation count. The published value is a single RMSD pooled over
+every observation at a given lead day across the whole year; it is recovered
+exactly from the per-start rows via ``sqrt(sum(value ** 2 * n) / sum(n))`` (see
+``oceanbench.core.classIV_support.recombine_class4_pooled_from_per_start`` and the
+class4 branch of ``oceanbench.runner.parity.aggregate_runner_scores``).
 """
 
 from collections.abc import Callable
@@ -97,17 +101,19 @@ def _class4_records(
     region: str,
     context: records.RunContext,
 ) -> tuple[list[dict], str | None]:
-    from oceanbench.core.classIV import rmsd_class4_validation
+    from oceanbench.core.classIV import rmsd_class4_validation_per_start
     from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
 
     try:
         observation_dataset = subset_dataset_to_region(observations(regional_challenger), region)
     except ObservationDataUnavailableError as error:
         return [], f"class4_rmsd unavailable: {error}"
-    frame = rmsd_class4_validation(regional_challenger, observation_dataset, variables=_CLASS4_VARIABLES)
-    if frame.empty or "Message" in frame.columns:
+    per_start_table = rmsd_class4_validation_per_start(
+        regional_challenger, observation_dataset, variables=_CLASS4_VARIABLES
+    )
+    if per_start_table.empty:
         return [], "class4_rmsd produced no rows"
-    return records.class4_records(frame, context=context, start_date=None), None
+    return records.class4_per_start_records(per_start_table, context=context), None
 
 
 def _lagrangian_records(
@@ -227,10 +233,6 @@ def run_challenger_scores(
     if include_class4:
         class4_records, class4_flag = _class4_records(regional_challenger, region, context)
         all_records.extend(class4_records)
-        flags.append(
-            "class4_rmsd emitted aggregate-only (start_date null): the published value pools all "
-            "observations per lead day into one RMSD, which does not decompose into a per-start mean."
-        )
         if class4_flag is not None:
             flags.append(class4_flag)
 

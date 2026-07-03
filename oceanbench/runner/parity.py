@@ -15,6 +15,7 @@ Pure pandas/numpy — no dependency on the metric machinery.
 
 from dataclasses import dataclass
 
+import numpy
 import pandas
 
 _MIXED_LAYER_DEPTH_VARIABLE = "ocean_mixed_layer_thickness"
@@ -61,12 +62,43 @@ def golden_metric_key(metric: str, reference: str | None, variable: str | None) 
     return None
 
 
+def _recombine_class4_over_starts(class4_frame: pandas.DataFrame) -> pandas.DataFrame:
+    """N-weighted recombination of per-start Class-4 rows into the pooled-over-observations RMSD.
+
+    The published Class-4 value pools every observation at a lead day into one RMSD; a
+    plain mean of the per-start RMSDs would not reproduce it. Because each per-start
+    ``value`` is ``sqrt(sum_of_squares_of_that_start / n)``, ``sqrt(sum(value ** 2 * n) /
+    sum(n))`` over the starts recovers the pooled RMSD exactly.
+    """
+    contributions = class4_frame.assign(sum_of_squares=(class4_frame["value"] ** 2) * class4_frame["n"])
+    pooled = (
+        contributions.groupby(_GROUPING_COLUMNS, dropna=False)
+        .agg(
+            sum_of_squares=("sum_of_squares", "sum"),
+            sample_size=("n", "sum"),
+        )
+        .reset_index()
+    )
+    pooled["value"] = numpy.sqrt(pooled["sum_of_squares"] / pooled["sample_size"])
+    return pooled[_GROUPING_COLUMNS + ["value"]]
+
+
 def aggregate_runner_scores(runner_scores: pandas.DataFrame) -> pandas.DataFrame:
-    """Average the per-start runner records over start dates (mean per metric key)."""
+    """Aggregate the per-start runner records over start dates, per metric key.
+
+    Gridded and Lagrangian metrics aggregate as a plain mean over starts. Class-4 RMSD
+    instead recombines with :func:`_recombine_class4_over_starts` because its published
+    value is a single RMSD pooled over every observation, not a mean of per-start RMSDs.
+    """
     frame = runner_scores.copy()
     frame["variable"] = frame["variable"].astype(object).where(frame["variable"].notna(), None)
     frame["depth"] = frame["depth"].astype(object).where(frame["depth"].notna(), None)
-    aggregated = frame.groupby([column for column in _GROUPING_COLUMNS], dropna=False)["value"].mean().reset_index()
+    is_class4 = frame["metric"] == "class4_rmsd"
+    mean_aggregated = frame[~is_class4].groupby(_GROUPING_COLUMNS, dropna=False)["value"].mean().reset_index()
+    parts = [mean_aggregated]
+    if is_class4.any():
+        parts.append(_recombine_class4_over_starts(frame[is_class4]))
+    aggregated = pandas.concat(parts, ignore_index=True)
     aggregated["golden_metric_key"] = aggregated.apply(
         lambda row: golden_metric_key(row["metric"], row["reference"], row["variable"]),
         axis=1,
