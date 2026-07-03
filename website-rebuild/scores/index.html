@@ -1,0 +1,74 @@
+<!--
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OceanBench — scorecard</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="page-header">
+      <h1>OceanBench scorecard</h1>
+      <p class="tagline">
+        Diagnostics for global ocean forecast models — <strong>not a leaderboard</strong>. There is no composite
+        score and no default ranking. Sort any column to explore; the order carries no verdict.
+      </p>
+    </header>
+
+    <section class="controls" aria-label="View controls">
+      <label>Region <select id="region-select"></select></label>
+      <label>Reference <select id="reference-select"></select></label>
+      <label id="depth-control">Depth <select id="depth-select"></select></label>
+      <label>Reference lead day
+        <select id="lead-select"></select>
+      </label>
+      <label id="skill-control" hidden>
+        <input type="checkbox" id="skill-toggle" /> show skill vs baseline
+      </label>
+      <button id="reset-sort" type="button" class="reset-button" hidden>reset order</button>
+    </section>
+
+    <p id="status" class="status" role="status">Loading scores…</p>
+
+    <main id="main" hidden>
+      <section aria-labelledby="scorecard-heading">
+        <h2 id="scorecard-heading">Scorecard</h2>
+        <p class="section-note" id="scorecard-note"></p>
+        <div class="table-scroll">
+          <table id="scorecard">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="legend">
+          Each cell is the mean over forecast starts with its bootstrap 95% confidence interval (± half-width).
+          Lower is better for every error metric; no colour encodes a verdict.
+        </p>
+      </section>
+
+      <section aria-labelledby="summary-heading" class="summaries">
+        <h2 id="summary-heading">In plain language</h2>
+        <div class="summary-controls">
+          <label>Variable <select id="summary-variable-select"></select></label>
+          <label id="summary-depth-control">Depth <select id="summary-depth-select"></select></label>
+        </div>
+        <div id="summary-cards" class="summary-cards"></div>
+      </section>
+    </main>
+
+    <footer class="page-footer">
+      <p>
+        Canonical artifact: <code>scores.parquet</code>, read directly in your browser with a vendored
+        <a href="https://hyperparam.app">hyparquet</a> reader (MIT). Confidence intervals and skill are precomputed
+        in <code>scores-summary.json</code>. Generated using E.U. Copernicus Marine Service Information.
+      </p>
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
