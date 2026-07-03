@@ -31,10 +31,33 @@ The v2 score runner must reproduce these values within numerical tolerance
 (see `docs/contracts.md` §10, Phase 1 gate) before any published number is
 replaced.
 
-## Caveat: #298 provenance
+## Caveat: #298 provenance (RESOLVED)
 
-The published 0.2.1 reports may predate the current main-tip scoring code —
-in particular the area-weighted RMSD reapply (#298). Verifying which code
-produced the published reports, and therefore what the golden actually
-encodes, is Phase 1's opening task. Until that check is done, treat the gate
-as provisional.
+The published 0.2.1 reports predate the current main-tip scoring code. Julien
+confirmed (authoritative) that the golden was generated **before #298**:
+gridded RMSD is **unweighted** and the Lagrangian metric uses the old seeding.
+Class-4 observation metrics were **not** affected by #298 (known-identical).
+
+`provenance_check.py` confirms this empirically. It recomputes surface
+sea-surface-height RMSD for `glonet_1_degree` vs the 1-degree GLORYS reference
+over the full 52 weekly starts of 2024, both with and without cos-lat area
+weighting, and compares to the golden
+(`rmsd_variables_glorys / sea_surface_height_above_geoid / surface`):
+
+| variant | max abs diff vs golden |
+|---|---|
+| **unweighted** | **4.2e-07** (match) |
+| area-weighted (#298) | 1.4e-03 (no match) |
+
+Run: `python tests/parity/provenance_check.py --starts 52` (needs network).
+
+### Consequence for the parity gate
+
+- `class4_rmsd` rows compare **directly** against `golden_scores.parquet`.
+- Gridded RMSD compares against the golden only in **unweighted** mode
+  (test-only toggle; the production default stays area-weighted per v2 science).
+- Lagrangian is excluded from golden comparison (legacy pre-#298 seeding);
+  it is covered by the internal mean-equivalence check instead.
+- `golden_scores_v2_1degree.parquet` is the **go-forward** golden: the runner's
+  output in production (area-weighted, main-tip) mode on
+  `glonet_1_degree`/`global`, which future changes must reproduce.
