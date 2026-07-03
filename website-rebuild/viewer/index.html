@@ -1,0 +1,82 @@
+<!--
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OceanBench — fields explorer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="title">
+        <h1>OceanBench fields explorer</h1>
+        <p class="tagline">Pixel-faithful ocean forecast fields, read straight from the viewer pyramids in your browser.</p>
+      </div>
+      <button id="theme-toggle" type="button" class="ghost-button">Light theme</button>
+    </header>
+
+    <div class="workspace">
+      <aside class="controls" aria-label="View controls">
+        <label>Dataset
+          <select id="dataset-a"></select>
+        </label>
+
+        <label class="toggle">
+          <input type="checkbox" id="difference-toggle" /> Difference (A − B)
+        </label>
+        <label id="dataset-b-field" hidden>Compare against (B)
+          <select id="dataset-b"></select>
+        </label>
+
+        <label>Variable
+          <select id="variable"></select>
+        </label>
+
+        <label>Start date
+          <select id="start-date"></select>
+        </label>
+
+        <label>Lead day <span id="lead-value" class="lead-value">day 1</span>
+          <input type="range" id="lead-day" min="1" max="10" step="1" value="1" />
+        </label>
+
+        <label>Colormap
+          <select id="colormap"></select>
+        </label>
+
+        <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>
+
+        <p class="hint">Scroll to zoom, drag to pan. Hover for the value in real units.</p>
+      </aside>
+
+      <main class="map-area">
+        <div class="canvas-wrap">
+          <canvas id="map-canvas"></canvas>
+          <div id="readout" class="readout" role="status"></div>
+        </div>
+        <div class="map-footer">
+          <canvas id="colorbar" width="320" height="34" class="colorbar"></canvas>
+          <p id="layer-info" class="layer-info"></p>
+        </div>
+        <p id="status" class="status" role="status">Loading…</p>
+      </main>
+    </div>
+
+    <footer class="app-footer">
+      <p>
+        Fields explorer over OceanBench viewer pyramids (numeric zarr, uint16 scale/offset, DEFLATE tiles decoded
+        natively in the browser). Colormaps from <a href="https://matplotlib.org/cmocean/">cmocean</a> (MIT).
+        Generated using E.U. Copernicus Marine Service Information; https://doi.org/10.48670/moi-00021 ;
+        https://doi.org/10.48670/moi-00016. Derived product, OceanBench-generated; not the authoritative Copernicus
+        product. Provided "as is", without warranty of any kind.
+      </p>
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
