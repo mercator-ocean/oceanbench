@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-"""The v2 scoring runner: long-format records, per-start emission, parity harness.
+"""The scoring runner: long-format records, per-start emission, parity harness.
 
 Submodules:
 

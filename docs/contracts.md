@@ -4,14 +4,14 @@ SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-
 SPDX-License-Identifier: EUPL-1.2
 -->
 
-# OceanBench v2 — Architecture & Data Contracts
+# OceanBench — Architecture & Data Contracts
 
 Status: DRAFT (agreed design, 2026-07-03). This document is the contract that all
-v2 implementation work builds against. Changes here require discussion first.
+the pipeline rebuild builds against. Changes here require discussion first.
 
 ## 1. Overview
 
-OceanBench v2 is a benchmark for global ocean forecast models. It replaces the
+OceanBench's next release is a benchmark for global ocean forecast models. It replaces the
 notebook-centric pipeline (papermill execution, HTML-table score parsing,
 hand-edited `index.json`, ephemeral staging) with a three-stage batch pipeline
 whose only outputs are data artifacts, plus a static website that reads them.
@@ -69,7 +69,7 @@ Design principles:
   file + `os.replace`, no shared index, lock-free). Ingest is a **single
   writer per reference version** publishing atomically (build directory →
   rename + manifest); evaluators are **read-only, pinned to a version**. The
-  legacy mkdir-lock / 24 h-stale-timeout staging pattern is eliminated in v2.
+  legacy mkdir-lock / 24 h-stale-timeout staging pattern is eliminated in the rebuild.
   The pure-online resilient mode (no cache) is retained as the fallback for
   local `evaluate` against un-ingested remote data.
 
@@ -85,7 +85,7 @@ another producer writing these same contracts, tagged obs-only.
   `ocean_mixed_layer_thickness`, `geostrophic_*`). Display names/units live in
   ONE shared metadata table consumed by both the library and the website.
 - `lead_day` is **1-based** in every artifact, including zarr coords. (The
-  legacy 0-based `lead_day_index` does not appear in any v2 artifact.) A
+  legacy 0-based `lead_day_index` does not appear in any next-release artifact.) A
   metric MAY legitimately begin later than day 1 (lagrangian deviation starts
   at lead day 2) and a challenger MAY have a shorter horizon (langya: 7 days).
   Consumers MUST NOT assume lead day 1 exists or a fixed 10-day horizon.
@@ -300,7 +300,7 @@ artifacts.
   `Access-Control-Allow-Origin: *` with a working OPTIONS preflight, exposes
   `Accept-Ranges`/`Content-Range`/`ETag`, and speaks HTTP/2; CloudFerro
   returns no CORS headers and 403 on preflight. **Decision: EDITO MinIO
-  serves all browser-facing v2 artifacts.** CloudFerro remains a server-side
+  serves all browser-facing artifacts.** CloudFerro remains a server-side
   ingest source only. CDN deferred (origin is not the bottleneck); the data
   contract is unchanged if one is added later.
 
@@ -321,7 +321,7 @@ model on the published `scores.parquet` (fetched, one file).
 ## 8. S3 layout
 
 ```
-s3://<bucket>/benchmark/v2/
+s3://<bucket>/benchmark/<release>/
   catalog.json
   scores.parquet
   challengers.json                     (copy of registry at publish time)
@@ -334,7 +334,7 @@ s3://<bucket>/benchmark/v2/
 ```
 
 During transition, everything publishes under a dev prefix
-(`benchmark/v2-dev/`); the current site and `public/evaluation-reports/`
+(`benchmark-dev/`); the current site and `public/evaluation-reports/`
 remain untouched until parity (see Phase gates).
 
 ## 9. Port vs rebuild inventory
@@ -350,7 +350,7 @@ zarr chunk mapper + HTTP-status-aware retriability) and the content-keyed
 `core/computed_dataset_cache.py` (atomic single-writer store for computed,
 non-plain-zarr datasets) — both with their tests (`tests/test_remote_http.py`,
 `tests/test_computed_dataset_cache.py`). PR #285 is not rebased onto main; its
-engine is cherry-picked into v2 and the PR is closed with credit at cutover.
+engine is cherry-picked into the rebuild and the PR is closed with credit at cutover.
 
 **Rebuild:** CLI/runner (no papermill), ingest stage (replaces
 `local_stage.py`/`weekly_stage.py` with persistent versioned mirrors +
@@ -364,7 +364,7 @@ hand-maintained `index.json` flow.
 
 ## 10. Phase plan & gates
 
-- **Phase 0 — foundations.** Long-lived `v2` branch in this repo; this doc
+- **Phase 0 — foundations.** Long-lived `pipeline-rebuild` branch in this repo; this doc
   merged; JSON Schemas for catalog/manifest/insight payloads; storage
   benchmark MinIO vs CloudFerro (§6); Copernicus Marine redistribution-terms
   check for evaluation packs; parity harness capturing current published 2024
@@ -389,7 +389,7 @@ hand-maintained `index.json` flow.
 - **Phase 5 — viewer v1.** Battery browser + snapshot maps/differences/
   current animation from viewer zarr.
 - **Phase 6 — viewer v2.** Hand-drawn box PSD, free-form exploration.
-- **Cutover:** parallel run under `v2-dev` until the score page matches
+- **Cutover:** parallel run under `benchmark-dev/` until the score page matches
   published numbers; then switch. Then: 2023/2025 ingest (with branch 241
   coordination), ensembles, NRT integration.
 

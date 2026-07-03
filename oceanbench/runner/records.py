@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-"""Convert the legacy per-metric score dataframes into v2 long-format records.
+"""Convert the legacy per-metric score dataframes into long-format records.
 
 Each of the nine metric functions in ``oceanbench.core.metrics`` returns a
 pretty dataframe whose row index is a label of the form

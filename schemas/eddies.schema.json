@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://oceanbench.mercator-ocean.fr/schemas/v2/eddies.schema.json",
-  "title": "OceanBench v2 eddies insight payload",
-  "description": "Payload for an insight of kind \"eddies\" (contracts.md \u00a74). Mesoscale-eddy census comparing the challenger to one or more references, per lead day: matched eddies (with displacement), spurious (challenger-only) and missed (reference-only). Adapted from the branch-249 eddy-explorer payload, snake-cased to v2 conventions and stripped of viewer/XHR scaffolding.",
+  "$id": "https://oceanbench.mercator-ocean.fr/schemas/eddies.schema.json",
+  "title": "OceanBench eddies insight payload",
+  "description": "Payload for an insight of kind \"eddies\" (contracts.md \u00a74). Mesoscale-eddy census comparing the challenger to one or more references, per lead day: matched eddies (with displacement), spurious (challenger-only) and missed (reference-only). Adapted from the branch-249 eddy-explorer payload, snake-cased to the rebuild conventions and stripped of viewer/XHR scaffolding.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,9 +16,8 @@
       "const": "eddies"
     },
     "schema_version": {
-      "description": "Version of this payload schema (semver string).",
-      "type": "string",
-      "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+      "description": "Version of this payload schema (first version of this contract lineage).",
+      "const": "1"
     },
     "variable": {
       "description": "Optional CF standard name the detection ran on (typically sea_surface_height_above_geoid).",

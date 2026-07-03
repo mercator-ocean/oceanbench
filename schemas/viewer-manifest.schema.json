@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://oceanbench.mercator-ocean.fr/schemas/v2/viewer-manifest.schema.json",
-  "title": "OceanBench v2 viewer manifest",
+  "$id": "https://oceanbench.mercator-ocean.fr/schemas/viewer-manifest.schema.json",
+  "title": "OceanBench viewer manifest",
   "description": "Per-dataset viewer-manifest.json (contracts.md \u00a76). Describes one multiscale zarr pyramid for a (challenger|reference|baseline, year) so a static client can fetch zoom-matched tiles by HTTP range read.",
   "type": "object",
   "additionalProperties": false,

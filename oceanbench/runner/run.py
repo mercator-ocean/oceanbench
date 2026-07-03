@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-"""The v2 scoring runner: compute the metric functions directly (no papermill /
+"""The scoring runner: compute the metric functions directly (no papermill /
 no notebook) and write per-start long-format records to
 ``runs/<challenger>/<year>/<region>/scores.parquet``.
 
@@ -118,7 +118,7 @@ def _lagrangian_records(
     context: records.RunContext,
 ) -> list[dict]:
     from oceanbench.core.dataset_utils import Dimension
-    from oceanbench.core.lagrangian_support import LAGRANGIAN_ROW_LABEL, mean_weekly_lagrangian_deviations  # noqa: F401
+    from oceanbench.core.lagrangian_support import LAGRANGIAN_ROW_LABEL
     from oceanbench.core.lead_day_utils import lead_day_labels
     from oceanbench.core.lagrangian_trajectory import (
         LEAD_DAY_START,

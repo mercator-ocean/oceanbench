@@ -6,7 +6,7 @@
 
 The runner emits per-start records; the golden holds the published aggregated
 (mean-over-starts) values keyed by the legacy metric keys. This module averages
-the runner records over start dates, maps the v2 ``(metric, reference, variable)``
+the runner records over start dates, maps the ``(metric, reference, variable)``
 triple onto the legacy golden metric key, joins on the shared keys, and reports
 the maximum absolute and relative differences per metric with a tolerance gate.
 
@@ -47,7 +47,7 @@ def _fill_join_nulls(frame: pandas.DataFrame, columns: list[str]) -> pandas.Data
 
 
 def golden_metric_key(metric: str, reference: str | None, variable: str | None) -> str | None:
-    """Map a v2 ``(metric, reference, variable)`` triple onto the legacy golden metric key."""
+    """Map a ``(metric, reference, variable)`` triple onto the legacy golden metric key."""
     if metric == "lagrangian_deviation_km":
         return f"lagrangian_{reference}"
     if metric == "class4_rmsd":

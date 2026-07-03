@@ -27,7 +27,7 @@ the score tables of all published evaluation-report notebooks (report version
 
 ## Phase 1 gate
 
-The v2 score runner must reproduce these values within numerical tolerance
+The next-release score runner must reproduce these values within numerical tolerance
 (see `docs/contracts.md` §10, Phase 1 gate) before any published number is
 replaced.
 
@@ -55,9 +55,9 @@ Run: `python tests/parity/provenance_check.py --starts 52` (needs network).
 
 - `class4_rmsd` rows compare **directly** against `golden_scores.parquet`.
 - Gridded RMSD compares against the golden only in **unweighted** mode
-  (test-only toggle; the production default stays area-weighted per v2 science).
+  (test-only toggle; the production default stays area-weighted per next-release science).
 - Lagrangian is excluded from golden comparison (legacy pre-#298 seeding);
   it is covered by the internal mean-equivalence check instead.
-- `golden_scores_v2_1degree.parquet` is the **go-forward** golden: the runner's
+- `golden_scores_main_1degree.parquet` is the **go-forward** golden: the runner's
   output in production (area-weighted, main-tip) mode on
   `glonet_1_degree`/`global`, which future changes must reproduce.

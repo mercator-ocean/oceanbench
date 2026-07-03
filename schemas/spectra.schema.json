@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://oceanbench.mercator-ocean.fr/schemas/v2/spectra.schema.json",
-  "title": "OceanBench v2 spectra insight payload",
+  "$id": "https://oceanbench.mercator-ocean.fr/schemas/spectra.schema.json",
+  "title": "OceanBench spectra insight payload",
   "description": "Payload for an insight of kind \"spectra\" (contracts.md \u00a74). Power spectral density curves per variable x region x lead day: for each entry, the challenger PSD, the reference PSD, and the PSD of the challenger-minus-reference error, all sampled on a shared wavelength axis.",
   "type": "object",
   "additionalProperties": false,
@@ -16,9 +16,8 @@
       "const": "spectra"
     },
     "schema_version": {
-      "description": "Version of this payload schema (semver string).",
-      "type": "string",
-      "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+      "description": "Version of this payload schema (first version of this contract lineage).",
+      "const": "1"
     },
     "entries": {
       "description": "One spectrum bundle per (variable, region, lead_day).",

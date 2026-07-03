@@ -4,11 +4,11 @@ SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-
 SPDX-License-Identifier: EUPL-1.2
 -->
 
-# OceanBench v2 JSON Schemas
+# OceanBench JSON Schemas
 
-JSON Schema (draft 2020-12) definitions for the v2 data artifacts. Each schema
+JSON Schema (draft 2020-12) definitions for the next-release data artifacts. Each schema
 formalizes a structure specified in [`../docs/contracts.md`](../docs/contracts.md),
-the authoritative v2 design contract.
+the authoritative design contract.
 
 | schema | contracts.md section | artifact |
 |---|---|---|
