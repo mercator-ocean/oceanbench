@@ -73,8 +73,11 @@ another producer writing these same contracts, tagged obs-only.
   `eastward_sea_water_velocity`, `northward_sea_water_velocity`,
   `ocean_mixed_layer_thickness`, `geostrophic_*`). Display names/units live in
   ONE shared metadata table consumed by both the library and the website.
-- `lead_day` is **1-based** (1..10) in every artifact, including zarr coords.
-  (The legacy 0-based `lead_day_index` does not appear in any v2 artifact.)
+- `lead_day` is **1-based** in every artifact, including zarr coords. (The
+  legacy 0-based `lead_day_index` does not appear in any v2 artifact.) A
+  metric MAY legitimately begin later than day 1 (lagrangian deviation starts
+  at lead day 2) and a challenger MAY have a shorter horizon (langya: 7 days).
+  Consumers MUST NOT assume lead day 1 exists or a fixed 10-day horizon.
 - Depth labels are machine keys: `surface`, `50m`, `100m`, `200m`, `300m`,
   `500m`; Class-4 bins `0-5m`, `5-100m`, `100-300m`, `300-600m`, `15m`.
 - Dates ISO-8601. All JSON written `sort_keys=True`. Floats: `null` for NaN.
@@ -280,11 +283,15 @@ artifacts.
 
 ### Infra prerequisites (Phase 0 checks, blocking for viewer work)
 
-- Two candidate backends exist: **EDITO MinIO** and **CloudFerro S3**. Phase 0
-  benchmarks both from a browser (public GET, **range reads**, CORS, ~50
-  concurrent 100–500 KB reads); the winner serves all public v2 artifacts.
-  If neither is fast enough, a CDN/cache goes in front — the data contract is
-  unchanged either way.
+- **RESOLVED (2026-07-03).** Benchmark ran against both candidates, EDITO
+  MinIO and CloudFerro S3. They tie on throughput (50-way concurrent 256 KB
+  range reads clean on both, no throttling), but EDITO MinIO already serves
+  `Access-Control-Allow-Origin: *` with a working OPTIONS preflight, exposes
+  `Accept-Ranges`/`Content-Range`/`ETag`, and speaks HTTP/2; CloudFerro
+  returns no CORS headers and 403 on preflight. **Decision: EDITO MinIO
+  serves all browser-facing v2 artifacts.** CloudFerro remains a server-side
+  ingest source only. CDN deferred (origin is not the bottleneck); the data
+  contract is unchanged if one is added later.
 
 ## 7. Evaluation packs (local `oceanbench evaluate`)
 
@@ -345,6 +352,11 @@ hand-maintained `index.json` flow.
   benchmark MinIO vs CloudFerro (§6); Copernicus Marine redistribution-terms
   check for evaluation packs; parity harness capturing current published 2024
   scores as golden data.
+  Status (2026-07-03): storage check DONE (EDITO MinIO, §6); licensing DONE
+  (§11); parity goldens DONE (9,810 rows — 10 challengers × ≤2 regions ×
+  9 metrics, published version 0.2.1, `tests/parity/`). Caveat: published-
+  report provenance vs main-tip code (#298 area-weighted RMSD reapply) must
+  be verified as Phase 1's opening task before the parity gate is trusted.
 - **Phase 1 — score runner.** Port metrics, emit long-format per-start
   records. **Gate: reproduces published 2024 scores for glonet (1/4°) and one
   1/12° challenger within numerical tolerance.**
@@ -363,3 +375,30 @@ hand-maintained `index.json` flow.
 - **Cutover:** parallel run under `v2-dev` until the score page matches
   published numbers; then switch. Then: 2023/2025 ingest (with branch 241
   coordination), ensembles, NRT integration.
+
+## 11. Attribution & licensing (Copernicus Marine)
+
+Redistribution of CMEMS-derived packs and viewer copies is permitted under
+the Copernicus Marine Service License, which grants redistribution and
+value-added-product rights (worldwide, royalty-free, perpetual).
+
+OceanBench policy: use the **derived-work credit everywhere** (a strict
+superset of the plain-redistribution credit — never wrong):
+
+> Generated using E.U. Copernicus Marine Service Information;
+> https://doi.org/10.48670/moi-00021 ; https://doi.org/10.48670/moi-00016
+
+(GLORYS12 = `GLOBAL_MULTIYEAR_PHY_001_030`, GLO12 =
+`GLOBAL_ANALYSISFORECAST_PHY_001_024`.)
+
+The credit plus the standard CMEMS liability/no-warranty disclaimer MUST
+appear in:
+
+- zarr attrs of packs and viewer pyramids,
+- pack READMEs,
+- the viewer footer,
+- a website data-provenance page.
+
+Derivatives are labeled OceanBench-generated and never presented as the
+authoritative Copernicus product. No notification to Mercator Ocean is
+required.
