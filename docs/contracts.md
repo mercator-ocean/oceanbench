@@ -331,9 +331,10 @@ model on the published `scores.parquet` (fetched, one file).
 ## 8. S3 layout
 
 ```
-s3://<bucket>/benchmark/<release>/
+s3://project-oceanbench/dev/benchmark/<release>/
   catalog.json
   scores.parquet
+  scores-summary.json                  (precomputed aggregate for the score page)
   challengers.json                     (copy of registry at publish time)
   <year>/<region>/<challenger>/
     runs/scores-<hash>.parquet
@@ -343,9 +344,15 @@ s3://<bucket>/benchmark/<release>/
   packs/pack-{quick,full}-<year>/
 ```
 
-During transition, everything publishes under a dev prefix
-(`benchmark-dev/`); the current site and `public/evaluation-reports/`
-remain untouched until parity (see Phase gates).
+Artifacts publish under the **dev prefix** `dev/benchmark/<release>/` on the
+`project-oceanbench` bucket, uploaded by `oceanbench publish-s3` (see
+`oceanbench/publish/s3.py`). The endpoint is EDITO MinIO,
+`https://minio.dive.edito.eu`. Anonymous (public) read on the dev prefix is
+enabled manually by a maintainer through the EDITO console — the publish step
+never touches bucket policy. CORS is already configured bucket-wide, so browser
+range GETs against the published tree work without any per-publish setup. The
+current site and `public/evaluation-reports/` remain untouched until parity
+(see Phase gates). The earlier `benchmark-dev/` dev prefix is retired.
 
 ## 9. Port vs rebuild inventory
 
@@ -400,8 +407,8 @@ hand-maintained `index.json` flow.
 - **Phase 5 — viewer v1.** Battery browser + snapshot maps/differences/
   current animation from viewer zarr.
 - **Phase 6 — viewer v2.** Hand-drawn box PSD, free-form exploration.
-- **Cutover:** parallel run under `benchmark-dev/` until the score page matches
-  published numbers; then switch. Then: 2023/2025 ingest (with branch 241
+- **Cutover:** parallel run under `dev/benchmark/<release>/` until the score page
+  matches published numbers; then switch. Then: 2023/2025 ingest (with branch 241
   coordination), ensembles, NRT integration.
 
 ## 11. Attribution & licensing (Copernicus Marine)
