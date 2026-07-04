@@ -270,6 +270,100 @@ def _add_evaluate_local_parser(subparsers: "argparse._SubParsersAction") -> None
     )
 
 
+def _run_publish_s3(args: argparse.Namespace) -> int:
+    from oceanbench.publish.s3 import build_upload_plan, content_type_for_path, upload_tree
+
+    if args.dry_run:
+        try:
+            plan = build_upload_plan(args.local_root, args.prefix)
+        except (NotADirectoryError, FileNotFoundError) as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 1
+        total_bytes = sum(item.size for item in plan)
+        for item in plan:
+            print(f"  {item.size:>12,}  {content_type_for_path(item.local_path):<24}  {item.key}")
+        print(
+            f"\ndry-run: {len(plan)} objects, {total_bytes:,} bytes "
+            f"({total_bytes / 1e6:.1f} MB) -> s3://{args.bucket}/{args.prefix.strip('/')}/"
+        )
+        return 0
+
+    try:
+        summary = upload_tree(
+            args.local_root,
+            bucket=args.bucket,
+            prefix=args.prefix,
+            endpoint=args.endpoint,
+            force=args.force,
+            max_workers=args.max_workers,
+            env_file=args.env_file,
+        )
+    except Exception as error:  # noqa: BLE001 - surface a clean message to the CLI user
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+    rate = summary.uploaded_bytes / 1e6 / summary.elapsed_seconds if summary.elapsed_seconds > 0 else 0.0
+    print(
+        f"published to s3://{args.bucket}/{args.prefix.strip('/')}/ on {args.endpoint}\n"
+        f"  uploaded: {summary.uploaded_count} objects, {summary.uploaded_bytes:,} bytes "
+        f"({summary.uploaded_bytes / 1e6:.1f} MB)\n"
+        f"  skipped:  {summary.skipped_count} objects (remote size already matched)\n"
+        f"  planned:  {summary.planned_count} objects, {summary.total_bytes:,} bytes total\n"
+        f"  elapsed:  {summary.elapsed_seconds:.1f}s ({rate:.1f} MB/s uploaded)"
+    )
+    return 0
+
+
+def _add_publish_s3_parser(subparsers: "argparse._SubParsersAction") -> None:
+    from oceanbench.publish.s3 import DEFAULT_MAX_WORKERS, EDITO_MINIO_ENDPOINT
+
+    parser = subparsers.add_parser(
+        "publish-s3",
+        help="Upload a local benchmark catalog tree to S3-compatible object storage",
+        description=(
+            "Upload the local publish output (the catalog tree from the benchmark publish step) to "
+            "s3://<bucket>/<prefix>/, preserving layout (contracts.md §8). Uploads run in parallel; objects "
+            "whose remote size already matches the local size are skipped (idempotent) unless --force is given. "
+            "Credentials resolve from AWS_* env vars if set, otherwise from an EDITO offline token "
+            "(EDITO_MINIO_OFFLINE_TOKEN) minted into temporary STS credentials."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("local_root", help="Local directory containing the catalog tree to upload")
+    parser.add_argument("--bucket", required=True, help="Target S3 bucket (e.g. project-oceanbench)")
+    parser.add_argument(
+        "--prefix",
+        required=True,
+        help="Target key prefix within the bucket (e.g. dev/benchmark/<release>)",
+    )
+    parser.add_argument(
+        "--endpoint",
+        default=EDITO_MINIO_ENDPOINT,
+        help=f"S3-compatible endpoint URL (default: {EDITO_MINIO_ENDPOINT})",
+    )
+    parser.add_argument(
+        "--env-file",
+        default=None,
+        help="Optional .env file to source the EDITO offline token from (AWS_* env vars still win)",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=DEFAULT_MAX_WORKERS,
+        help=f"Number of parallel upload threads (default: {DEFAULT_MAX_WORKERS})",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-upload every object even when a same-size remote object already exists",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List the objects that would be uploaded without any network writes",
+    )
+
+
 def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     parser = argparse.ArgumentParser(
         prog="oceanbench",
@@ -356,6 +450,7 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     )
 
     _add_evaluate_local_parser(subparsers)
+    _add_publish_s3_parser(subparsers)
     return parser, evaluate_parser
 
 
@@ -374,6 +469,9 @@ def main():
 
     if args.command == "evaluate-local":
         sys.exit(_run_evaluate_local(args))
+
+    if args.command == "publish-s3":
+        sys.exit(_run_publish_s3(args))
 
 
 if __name__ == "__main__":
