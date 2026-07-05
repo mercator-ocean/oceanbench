@@ -1,0 +1,22 @@
+challenger=glonet region=global year=2024
+gridded compared in UNWEIGHTED test-only mode (production output also written to runs/).
+golden: golden_scores.parquet (published v0.2.1); lagrangian excluded (pre-#298 seeding).
+
+metric                          matched run_only gold_only    max_abs    max_rel
+--------------------------------------------------------------------------------
+rmsd_geostrophic_glo12               20        0       262   4.99e-07   2.87e-06
+rmsd_geostrophic_glorys              20        0       262   4.91e-07   2.35e-06
+rmsd_mld_glo12                       10        0       131   5.15e-06   1.12e-07
+rmsd_mld_glorys                      10        0       131   5.43e-06   9.70e-08
+rmsd_variables_glo12                250        0      3275   4.99e-07   1.60e-05
+rmsd_variables_glorys               250        0      3275   4.99e-07   6.41e-06
+rmsd_variables_observations         120        0      1572   5.70e-02   5.23e-01
+
+GATE passed=False (atol=1e-4)
+failures:
+  rmsd_variables_observations: max abs diff 5.70e-02 > 1e-04
+
+EXPECTED code-evolution differences (NOT runner bugs):
+  - rmsd_variables_observations SLA-surface rows differ ~5.5e-2 (#295: main-tip GLO12 MDT
+    vs golden GLORYS12 MDT); T/S/U/V class4 rows are MDT-independent and match at parse precision.
+  - gridded compared unweighted per the #298 area-weighting note.
