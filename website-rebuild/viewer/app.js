@@ -906,7 +906,7 @@ function updateRailLegend(panel) {
     const scale = panel.class4Scale || 0;
     container.innerHTML =
       `<div class="row"><span class="swatch" style="background:${SERIES_COLORS.error}"></span>|obs − model|, brighter = larger error</div>` +
-      `<p class="dim">${panel.class4Count || 0} points shown · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}</p>`;
+      `<p class="dim">${panel.class4Count || 0} points shown · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}${overlayData.class4 && overlayData.class4.sampled ? " · sampled subset" : ""}</p>`;
   } else if (shared.overlayMode === "trajectories") {
     container.innerHTML = `<p class="dim">${trajectoryNote}</p>`;
   }
