@@ -214,14 +214,46 @@ def resolve_credentials(
     return mint_sts_credentials(offline_token, endpoint=endpoint)
 
 
+def _walk_files_following_symlinks(root: Path) -> list[Path]:
+    """Yield every file under ``root``, descending into symlinked directories.
+
+    ``Path.rglob`` does not follow directory symlinks on Python 3.12, so the viewer
+    pyramid directories (which are symlinks) would be silently skipped. ``os.walk``
+    with ``followlinks=True`` descends into them; a set of visited real directory
+    paths guards against symlink cycles walking forever.
+    """
+    files: list[Path] = []
+    visited_directories: set[str] = set()
+    for directory, subdirectories, filenames in os.walk(root, followlinks=True):
+        real_directory = os.path.realpath(directory)
+        if real_directory in visited_directories:
+            subdirectories[:] = []
+            continue
+        visited_directories.add(real_directory)
+        subdirectories[:] = [
+            name
+            for name in subdirectories
+            if os.path.realpath(os.path.join(directory, name)) not in visited_directories
+        ]
+        for filename in filenames:
+            candidate = Path(directory) / filename
+            if candidate.is_file():
+                files.append(candidate)
+    return files
+
+
 def build_upload_plan(local_root: str | os.PathLike, prefix: str) -> list[UploadPlanItem]:
-    """Walk ``local_root`` and map every file to ``<prefix>/<relative-posix-path>``."""
+    """Walk ``local_root`` and map every file to ``<prefix>/<relative-posix-path>``.
+
+    Directory symlinks are followed (with a cycle guard) so symlinked subtrees such
+    as the viewer zarr pyramid directories are published, not silently skipped.
+    """
     root = Path(local_root)
     if not root.is_dir():
         raise NotADirectoryError(f"Local root is not a directory: {root}")
     normalized_prefix = prefix.strip("/")
     plan = []
-    for path in sorted(path for path in root.rglob("*") if path.is_file()):
+    for path in sorted(_walk_files_following_symlinks(root)):
         relative = path.relative_to(root).as_posix()
         key = f"{normalized_prefix}/{relative}" if normalized_prefix else relative
         plan.append(UploadPlanItem(local_path=path, key=key, size=path.stat().st_size))

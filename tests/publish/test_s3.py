@@ -53,6 +53,39 @@ def test_build_upload_plan_rejects_missing_root(tmp_path):
         s3.build_upload_plan(tmp_path / "does-not-exist", "p")
 
 
+def test_build_upload_plan_follows_symlinked_directories(tmp_path):
+    # The viewer pyramid dirs are symlinks; their files must be published, not skipped.
+    real_pyramid = tmp_path / "real_pyramid"
+    _write(real_pyramid / "temperature" / "0.0.0", b"chunk")
+    _write(real_pyramid / ".zattrs", b"{}")
+
+    tree = tmp_path / "tree"
+    _write(tree / "catalog.json", b"{}")
+    (tree / "viewer" / "glonet.zarr").parent.mkdir(parents=True, exist_ok=True)
+    (tree / "viewer" / "glonet.zarr").symlink_to(real_pyramid, target_is_directory=True)
+
+    plan = s3.build_upload_plan(tree, "dev/x")
+
+    keys = sorted(item.key for item in plan)
+    assert keys == [
+        "dev/x/catalog.json",
+        "dev/x/viewer/glonet.zarr/.zattrs",
+        "dev/x/viewer/glonet.zarr/temperature/0.0.0",
+    ]
+
+
+def test_build_upload_plan_survives_symlink_cycle(tmp_path):
+    tree = tmp_path / "tree"
+    _write(tree / "a.json", b"{}")
+    # A directory symlink pointing back at the tree root would loop forever without a guard.
+    (tree / "loop").symlink_to(tree, target_is_directory=True)
+
+    plan = s3.build_upload_plan(tree, "p")
+
+    assert any(item.key == "p/a.json" for item in plan)
+    assert all("does-not-exist" not in item.key for item in plan)
+
+
 def _plan_item(size=10, key="p/a.json"):
     return s3.UploadPlanItem(local_path="a.json", key=key, size=size)
 
