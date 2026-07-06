@@ -18,14 +18,18 @@
 
 import { sample as sampleColormap } from "../vendor/cmocean/colormaps.js";
 
-// Advection gain: normalized-world units travelled per (m/s) per second at speed 1.
-// Tuned so a typical 0.4 m/s current streams across ~a tenth of the world in a few
-// seconds — lively but readable. Multiplied by the user speed factor each frame.
-const ADVECTION_GAIN = 0.045;
+// Advection gain: normalized-world units travelled per (m/s) per frame at speed 1,
+// before the per-frame zoom scaling. Tuned low so flow reads: a strong ~0.5 m/s
+// current takes several seconds to cross a visible eddy at 1× — comprehensible, not a
+// blur. Multiplied by the user speed factor and by the visible world width each frame,
+// so screen speed stays roughly constant as the user zooms (physically slower world
+// step when zoomed in). Longer fade keeps trails on-screen so direction reads.
+const ADVECTION_GAIN = 0.0016;
 const BASE_PARTICLE_DENSITY = 1 / 950; // particles per css pixel² of visible panel
 const MIN_PARTICLES = 500;
 const MAX_PARTICLES = 6000;
-const MAX_AGE_FRAMES = 90;
+const MAX_AGE_FRAMES = 170;
+const TRAIL_FADE_ALPHA = 0.055;
 const SPEED_COLORMAP = "speed";
 
 function createParticle(random) {
@@ -80,7 +84,7 @@ export function startParticleField(canvas, context) {
     // Translucent fill dims previous frame — the trail memory. Composite mode
     // "destination-out" erases toward transparent so the field colour shows through.
     drawing.globalCompositeOperation = "destination-out";
-    drawing.fillStyle = "rgba(0, 0, 0, 0.14)";
+    drawing.fillStyle = `rgba(0, 0, 0, ${TRAIL_FADE_ALPHA})`;
     drawing.fillRect(0, 0, canvas.width, canvas.height);
     drawing.globalCompositeOperation = "source-over";
   }
@@ -95,7 +99,10 @@ export function startParticleField(canvas, context) {
 
     fadeTrails();
     const view = context.viewport;
-    const stepGain = ADVECTION_GAIN * context.speed;
+    // Scale the world step by the visible width so a particle crosses the viewport in
+    // a similar wall-clock time at every zoom (screen speed stays comprehensible).
+    const visibleWidth = Math.max(0.02, view.maxX - view.minX);
+    const stepGain = ADVECTION_GAIN * context.speed * visibleWidth;
     const ratio = context.devicePixelRatio;
     const glow = context.theme === "light" ? 0.9 : 1;
     drawing.lineWidth = Math.max(1, 1.1 * ratio);
