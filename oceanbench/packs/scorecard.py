@@ -40,8 +40,8 @@ def _shared_start_published(published: pandas.DataFrame, your_model: pandas.Data
 
     The overlay is a like-for-like comparison: both are aggregated over the same starts so the
     published challenger and the user's model coincide exactly when the user re-scores that
-    challenger. With ``--starts-limit`` the user scores a subset; comparing its means against
-    the full 52-start published means would show sampling noise, not the true agreement.
+    challenger. Restricting published records to the local forecast starts avoids comparing
+    means over different samples.
     """
     your_starts = pandas.to_datetime(your_model["start_date"].dropna().unique())
     published_dates = pandas.to_datetime(published["start_date"])

@@ -178,6 +178,7 @@ def _run_evaluate(args: argparse.Namespace) -> int:
 
 def _run_evaluate_local(args: argparse.Namespace) -> int:
     from oceanbench.packs.evaluate import evaluate_local
+    from oceanbench.packs.local_viewer import published_base_url
 
     output_directory = args.output if args.output is not None else "oceanbench-local-evaluation"
     try:
@@ -185,14 +186,9 @@ def _run_evaluate_local(args: argparse.Namespace) -> int:
             args.forecasts,
             pack_directory=args.pack,
             output_directory=output_directory,
-            year=args.year,
-            region=args.region,
-            published_scores_path=args.published,
-            published_challengers_path=args.published_challengers,
-            starts_limit=args.starts_limit,
-            with_lagrangian=args.with_lagrangian,
-            include_class4=not args.no_class4,
-            include_realism=not args.no_realism,
+            published_scores_path=published_base_url() + "scores.parquet",
+            published_challengers_path=published_base_url() + "challengers.json",
+            metrics=args.metrics,
             artifacts=args.artifacts,
         )
     except Exception as error:  # noqa: BLE001 - surface a clean message to the CLI user
@@ -215,6 +211,8 @@ def _run_evaluate_local(args: argparse.Namespace) -> int:
 
 
 def _add_evaluate_local_parser(subparsers: "argparse._SubParsersAction") -> None:
+    from oceanbench.packs.evaluate import METRIC_NAMES
+
     parser = subparsers.add_parser(
         "evaluate-local",
         help="Score a local forecast against an evaluation pack and build an overlay scorecard",
@@ -227,28 +225,15 @@ def _add_evaluate_local_parser(subparsers: "argparse._SubParsersAction") -> None
             "CF-named forecast variables, or a directory of weekly zarr stores named YYYYMMDD.zarr (one "
             "per forecast start, each with a 'time' lead-day dimension). See docs/local-evaluation.md."
         ),
+        epilog=(
+            "Published scores, challenger metadata, and viewer datasets default to the official "
+            "OceanBench MinIO release. Set OCEANBENCH_PUBLISHED_BASE to override that base URL."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("forecasts", help="Path or URL to the forecast zarr (combined store or weekly-store directory)")
     parser.add_argument(
         "--pack", required=True, help="Path to the evaluation pack directory (contains pack-manifest.json)"
-    )
-    parser.add_argument("--year", type=int, default=2024, help="Evaluation year (default: 2024)")
-    parser.add_argument(
-        "--region",
-        choices=get_pre_defined_region_names(),
-        default="global",
-        help="Region to evaluate on (default: global)",
-    )
-    parser.add_argument(
-        "--published",
-        default=None,
-        help="Path or URL to the published scores.parquet to overlay your model on",
-    )
-    parser.add_argument(
-        "--published-challengers",
-        default=None,
-        help="Optional path to a challengers.json giving display names for the published challengers",
     )
     parser.add_argument(
         "--output",
@@ -257,30 +242,17 @@ def _add_evaluate_local_parser(subparsers: "argparse._SubParsersAction") -> None
     )
     parser.add_argument(
         "--artifacts",
-        choices=("scores", "viewer", "all"),
+        choices=("scores", "all"),
         default="scores",
-        help="Artifacts to build: scores (default), viewer, or all",
+        help="Artifacts to build: scores (default), or all (scores and viewer)",
     )
     parser.add_argument(
-        "--starts-limit",
-        type=int,
+        "--metrics",
+        nargs="+",
+        choices=METRIC_NAMES,
         default=None,
-        help="Quick-look mode: score only the first N forecast starts (default: all starts)",
-    )
-    parser.add_argument(
-        "--with-lagrangian",
-        action="store_true",
-        help="Also compute the Lagrangian trajectory deviation (excluded by default; slow)",
-    )
-    parser.add_argument(
-        "--no-class4",
-        action="store_true",
-        help="Skip the Class-4 observation match-up track (fast; when only gridded RMSD is wanted)",
-    )
-    parser.add_argument(
-        "--no-realism",
-        action="store_true",
-        help="Skip the realism battery (spectra / activity / eddies)",
+        metavar="M",
+        help="Metrics to run (default: all): " + ", ".join(METRIC_NAMES),
     )
 
 

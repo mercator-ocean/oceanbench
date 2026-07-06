@@ -329,12 +329,14 @@ Downloadable, versioned bundles produced by `ingest`:
 - `pack-full-<year>`: adds multi-depth gridded references for the official
   gridded track.
 
-`oceanbench evaluate-local ./forecasts/ --year 2024 --pack ./pack-quick-2024`
+`oceanbench evaluate-local ./forecasts/ --pack ./pack-quick-2024`
 produces the same
 artifacts as the hosted run plus a local HTML scorecard overlaying the user's
-model on the published `scores.parquet` (fetched, one file).
+model on the published `scores.parquet`. The required `year` and `region` fields
+in `pack-manifest.json` define the evaluation context; the command never accepts
+independent overrides for them.
 
-With `--artifacts viewer` or `--artifacts all`, it also produces a local viewer
+With `--artifacts all`, it also produces a local viewer
 pyramid and static viewer directory. Its `datasets.json` combines the local
 challenger (relative store/manifest URLs) with official products (absolute public
 MinIO URLs), so official pyramids do not need to be downloaded.

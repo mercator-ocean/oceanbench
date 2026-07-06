@@ -63,14 +63,9 @@ def test_glonet_1_degree_local_evaluation_matches_published(tmp_path):
         str(forecast_path),
         pack_directory=str(pack_directory),
         output_directory=str(tmp_path / "out"),
-        year=2024,
-        region="global",
         published_scores_path=_PUBLISHED_SCORES,
         published_challengers_path=_PUBLISHED_CHALLENGERS,
-        starts_limit=_START_LIMIT,
-        with_lagrangian=False,
-        include_class4=False,
-        include_realism=False,
+        metrics=("rmsd",),
     )
 
     published = pandas.read_parquet(_PUBLISHED_SCORES)

@@ -16,6 +16,7 @@ from pathlib import Path
 import pandas
 import xarray
 
+from oceanbench.cli import _build_parser
 from oceanbench.packs.evaluate import (
     load_pack_manifest,
     open_forecast_dataset,
@@ -28,18 +29,28 @@ from oceanbench.packs.evaluate import (
 _AGREEMENT_TOLERANCE = 1e-9
 
 
+def test_evaluate_local_cli_has_only_the_approved_surface():
+    parser, _ = _build_parser()
+    arguments = parser.parse_args(
+        ["evaluate-local", "forecast.zarr", "--pack", "pack", "--metrics", "rmsd", "lagrangian"]
+    )
+    assert arguments.metrics == ["rmsd", "lagrangian"]
+    evaluate_local_parser = next(
+        action.choices["evaluate-local"]
+        for action in parser._actions
+        if getattr(action, "choices", None) and "evaluate-local" in action.choices
+    )
+    option_strings = {option for action in evaluate_local_parser._actions for option in action.option_strings}
+    assert option_strings == {"-h", "--help", "--pack", "--output", "--artifacts", "--metrics"}
+
+
 def _run(fixture, tmp_path, **overrides):
     options = dict(
         pack_directory=fixture.pack_directory,
         output_directory=str(tmp_path / "out"),
-        year=2024,
-        region="global",
         published_scores_path=fixture.published_scores_path,
         published_challengers_path=fixture.published_challengers_path,
-        starts_limit=None,
-        with_lagrangian=False,
-        include_class4=False,
-        include_realism=False,
+        metrics=("rmsd",),
     )
     options.update(overrides)
     return evaluate_local(fixture.forecast_path, **options)
@@ -99,10 +110,17 @@ def test_scorecard_is_self_contained_and_overlays_your_model(local_evaluation_fi
     assert f'"{local_evaluation_fixture.published_challenger_slug}"' in html
 
 
-def test_starts_limit_scores_only_the_requested_starts(local_evaluation_fixture, tmp_path):
-    result = _run(local_evaluation_fixture, tmp_path, starts_limit=1)
+def test_metrics_selects_only_requested_metric_family(local_evaluation_fixture, tmp_path):
+    result = _run(local_evaluation_fixture, tmp_path, metrics=("rmsd",))
     scores = pandas.read_parquet(result.scores_path)
-    assert scores["start_date"].dropna().nunique() == 1
+    assert set(scores["metric"]) == {"rmsd"}
+
+
+def test_year_and_region_are_inferred_from_manifest(local_evaluation_fixture, tmp_path):
+    result = _run(local_evaluation_fixture, tmp_path)
+    scores = pandas.read_parquet(result.scores_path)
+    assert set(scores["year"]) == {2024}
+    assert set(scores["region"]) == {"global"}
 
 
 def test_open_forecast_accepts_a_combined_zarr(local_evaluation_fixture):
@@ -111,7 +129,7 @@ def test_open_forecast_accepts_a_combined_zarr(local_evaluation_fixture):
     assert "sea_surface_height_above_geoid" in dataset.data_vars
 
 
-def test_viewer_artifact_builds_local_pyramid_and_mixed_catalog(local_evaluation_fixture, tmp_path, monkeypatch):
+def test_all_artifacts_builds_local_pyramid_and_mixed_catalog(local_evaluation_fixture, tmp_path, monkeypatch):
     remote = {
         "slug": "official",
         "label": "Official",
@@ -120,9 +138,9 @@ def test_viewer_artifact_builds_local_pyramid_and_mixed_catalog(local_evaluation
     }
     monkeypatch.setattr("oceanbench.packs.local_viewer._official_datasets", lambda: [remote])
 
-    result = _run(local_evaluation_fixture, tmp_path, artifacts="viewer")
+    result = _run(local_evaluation_fixture, tmp_path, artifacts="all")
 
-    assert result.scores_path is None
+    assert Path(result.scores_path).exists()
     assert Path(result.viewer_zarr_path, ".zmetadata").exists()
     manifest = json.loads(Path(result.viewer_manifest_path).read_text())
     assert manifest["dataset"] == "your_model"

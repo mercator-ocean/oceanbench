@@ -28,12 +28,9 @@ the public EDITO MinIO objects named by `datasets.json`.
 
 ```sh
 oceanbench evaluate-local ./my-forecasts.zarr \
-  --year 2024 --region global \
   --pack ./pack-quick-2024 \
-  --published ./scores.parquet \
-  --published-challengers ./challengers.json \
   --output ./my-evaluation \
-  --starts-limit 8
+  --metrics rmsd class4
 ```
 
 ## What a pack is
@@ -49,7 +46,8 @@ locate every reference. A pack carries:
   SSH → SLA Class-4 conversion (stored under its stage-canonical name so the ported Class-4
   code resolves it offline).
 - `pack-manifest.json` — stamps the upstream products + retrieval dates (contracts.md §1) and
-  carries the Copernicus Marine credit and disclaimer (contracts.md §11).
+  carries the evaluation year and region, plus the Copernicus Marine credit and
+  disclaimer (contracts.md §11).
 - `README.md` — the Copernicus Marine attribution, verbatim.
 
 Baselines (climatology / persistence) are not available yet: the manifest supports optional
@@ -83,7 +81,7 @@ Under `--output`:
 - `scores-summary.json` — the aggregated means and 95% bootstrap CIs (contracts.md §3.4),
   produced by the same aggregation library as the hosted page.
 - `scorecard/index.html` — a self-contained overlay scorecard.
-- With `--artifacts viewer` or `all`, `viewer/` — the static viewer application,
+- With `--artifacts all`, `viewer/` — the static viewer application,
   `data/your_model.zarr`, its viewer manifest, and a mixed `data/datasets.json`. The local
   descriptor uses relative URLs; official descriptors use absolute public MinIO URLs.
 
@@ -91,7 +89,7 @@ Under `--output`:
 
 The scorecard reuses the no-ranking scorecard semantics of the website scores page
 (`website-rebuild/scores/`): mean ± 95% CI over forecast starts, baselines pinned, neutral
-order, no composite score. Your model is laid over the published challengers from `--published`
+order, no composite score. Your model is laid over the official published challengers
 and highlighted as **"your model"**.
 
 The overlay data is **inlined** into `index.html` (not fetched), and the renderer is a classic
@@ -103,18 +101,17 @@ sibling files nor load an ES module — both are blocked by the browser same-ori
 
 Published challengers are aggregated over the **same forecast starts** as your model, so if you
 re-score a published challenger with `evaluate-local` its row coincides with your model's row
-exactly. (With `--starts-limit N`, a quick-look mode, comparing your N-start means against the
-full 52-start published means would show sampling noise, not the true agreement.)
+exactly.
 
 ## Flags
 
 | flag | meaning |
 |---|---|
 | `--pack` | pack directory (required) |
-| `--published` | published `scores.parquet` to overlay onto |
-| `--published-challengers` | optional `challengers.json` for display names |
-| `--artifacts scores\|viewer\|all` | build scores (default), only the viewer, or both |
-| `--starts-limit N` | quick-look mode: score only the first N forecast starts (default: all) |
-| `--with-lagrangian` | also compute the Lagrangian deviation (excluded by default; slow) |
-| `--no-class4` | skip the Class-4 observation track (fast; gridded only) |
-| `--no-realism` | skip the realism battery |
+| `--artifacts scores\|all` | build scores (default), or scores plus viewer artifacts |
+| `--output DIR` | output directory (default: `./oceanbench-local-evaluation`) |
+| `--metrics M [M ...]` | select metric families: `rmsd`, `mld`, `geostrophic`, `class4`, `lagrangian`, `realism` (default: all) |
+
+The evaluation year and region are inferred from `pack-manifest.json`. Published
+scores, challenger metadata, and viewer datasets use the official MinIO release.
+Set `OCEANBENCH_PUBLISHED_BASE` to override that base URL.

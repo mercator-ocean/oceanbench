@@ -6,6 +6,7 @@
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import shutil
 from urllib.parse import urljoin
@@ -16,8 +17,17 @@ import xarray
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.pyramids import build_pyramid, viewer_layers
 
-OFFICIAL_DATA_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench/dev/benchmark/rebuild-preview/viewer/data/"
+# Keep aligned with website/viewer/config.js. Update both rebuild-preview values at release.
+OFFICIAL_PUBLISHED_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench/dev/benchmark/rebuild-preview/"
 LOCAL_VIEWER_DIRECTORY = "viewer"
+
+
+def published_base_url() -> str:
+    return os.environ.get("OCEANBENCH_PUBLISHED_BASE", OFFICIAL_PUBLISHED_BASE_URL).rstrip("/") + "/"
+
+
+def official_data_base_url() -> str:
+    return urljoin(published_base_url(), "viewer/data/")
 
 
 @dataclass(frozen=True)
@@ -29,13 +39,14 @@ class LocalViewerResult:
 
 
 def _official_datasets() -> list[dict]:
-    with urlopen(urljoin(OFFICIAL_DATA_BASE_URL, "datasets.json"), timeout=30) as response:  # noqa: S310
+    data_base_url = official_data_base_url()
+    with urlopen(urljoin(data_base_url, "datasets.json"), timeout=30) as response:  # noqa: S310
         catalog = json.load(response)
     return [
         {
             **entry,
-            "store": urljoin(OFFICIAL_DATA_BASE_URL, entry["store"].removeprefix("./data/")),
-            "manifest": urljoin(OFFICIAL_DATA_BASE_URL, entry["manifest"].removeprefix("./data/")),
+            "store": urljoin(data_base_url, entry["store"].removeprefix("./data/")),
+            "manifest": urljoin(data_base_url, entry["manifest"].removeprefix("./data/")),
         }
         for entry in catalog["datasets"]
     ]

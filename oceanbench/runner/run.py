@@ -112,11 +112,11 @@ def _class4_records(
 
     try:
         observation_dataset = subset_dataset_to_region(observation_opener(regional_challenger), region)
-    except ObservationDataUnavailableError as error:
+        per_start_table = rmsd_class4_validation_per_start(
+            regional_challenger, observation_dataset, variables=_CLASS4_VARIABLES
+        )
+    except (ObservationDataUnavailableError, KeyError, ValueError) as error:
         return [], f"class4_rmsd unavailable: {error}"
-    per_start_table = rmsd_class4_validation_per_start(
-        regional_challenger, observation_dataset, variables=_CLASS4_VARIABLES
-    )
     if per_start_table.empty:
         return [], "class4_rmsd produced no rows"
     return records.class4_per_start_records(per_start_table, context=context), None
@@ -224,8 +224,8 @@ def run_challenger_scores(
     all_records: list[dict] = []
     flags: list[str] = []
 
-    if include_gridded:
-        for reference_name in references:
+    for reference_name in references:
+        if include_gridded:
             all_records.extend(
                 _gridded_records(
                     regional_challenger,
@@ -238,34 +238,34 @@ def run_challenger_scores(
                     depth_applicable=True,
                 )
             )
-            if include_mixed_layer_depth:
-                all_records.extend(
-                    _gridded_records(
-                        regional_challenger,
-                        reference_name=reference_name,
-                        reference_openers=resolved_reference_openers,
-                        variables=_MIXED_LAYER_DEPTH_VARIABLES,
-                        region=region,
-                        context=context,
-                        area_weighted=area_weighted,
-                        depth_applicable=False,
-                        transform=compute_mixed_layer_depth,
-                    )
+        if include_mixed_layer_depth:
+            all_records.extend(
+                _gridded_records(
+                    regional_challenger,
+                    reference_name=reference_name,
+                    reference_openers=resolved_reference_openers,
+                    variables=_MIXED_LAYER_DEPTH_VARIABLES,
+                    region=region,
+                    context=context,
+                    area_weighted=area_weighted,
+                    depth_applicable=False,
+                    transform=compute_mixed_layer_depth,
                 )
-            if include_geostrophic:
-                all_records.extend(
-                    _gridded_records(
-                        regional_challenger,
-                        reference_name=reference_name,
-                        reference_openers=resolved_reference_openers,
-                        variables=_GEOSTROPHIC_VARIABLES,
-                        region=region,
-                        context=context,
-                        area_weighted=area_weighted,
-                        depth_applicable=False,
-                        transform=compute_geostrophic_currents,
-                    )
+            )
+        if include_geostrophic:
+            all_records.extend(
+                _gridded_records(
+                    regional_challenger,
+                    reference_name=reference_name,
+                    reference_openers=resolved_reference_openers,
+                    variables=_GEOSTROPHIC_VARIABLES,
+                    region=region,
+                    context=context,
+                    area_weighted=area_weighted,
+                    depth_applicable=False,
+                    transform=compute_geostrophic_currents,
                 )
+            )
 
     if include_class4:
         class4_records, class4_flag = _class4_records(regional_challenger, region, context, resolved_observation_opener)

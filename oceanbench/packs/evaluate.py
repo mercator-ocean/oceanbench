@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+from urllib.request import urlopen
 
 import numpy
 import pandas
@@ -49,6 +50,7 @@ SCORES_SUMMARY_FILENAME = "scores-summary.json"
 SCORECARD_DIRECTORY = "scorecard"
 
 _PER_START_KEY_COLUMNS = ["metric", "reference", "variable", "depth", "lead_day", "start_date"]
+METRIC_NAMES = ("rmsd", "mld", "geostrophic", "class4", "lagrangian", "realism")
 
 
 @dataclass(frozen=True)
@@ -68,7 +70,17 @@ def load_pack_manifest(pack_directory: str) -> dict:
     """Load and schema-validate a pack's ``pack-manifest.json`` (contracts.md §7)."""
     manifest = json.loads((Path(pack_directory) / PACK_MANIFEST_FILENAME).read_text(encoding="utf-8"))
     validate_against_schema(manifest, "pack-manifest")
+    missing = [field for field in ("year", "region") if field not in manifest]
+    if missing:
+        raise ValueError(f"pack manifest is missing required field(s): {', '.join(missing)}")
     return manifest
+
+
+def _load_json(path_or_url: str) -> dict:
+    if "://" in path_or_url:
+        with urlopen(path_or_url, timeout=30) as response:  # noqa: S310
+            return json.load(response)
+    return json.loads(Path(path_or_url).read_text(encoding="utf-8"))
 
 
 def _looks_like_weekly_store_directory(path: Path) -> bool:
@@ -212,43 +224,42 @@ def evaluate_local(
     *,
     pack_directory: str,
     output_directory: str,
-    year: int = 2024,
-    region: str = "global",
     published_scores_path: str | None = None,
     published_challengers_path: str | None = None,
-    starts_limit: int | None = None,
-    with_lagrangian: bool = False,
-    include_class4: bool = True,
-    include_realism: bool = True,
+    metrics: tuple[str, ...] | list[str] | None = None,
     artifacts: str = "scores",
 ) -> EvaluateLocalResult:
     """Score ``forecasts_path`` against ``pack_directory`` and emit records, summary and overlay scorecard."""
-    if artifacts not in {"scores", "viewer", "all"}:
-        raise ValueError("artifacts must be one of: scores, viewer, all")
+    if artifacts not in {"scores", "all"}:
+        raise ValueError("artifacts must be one of: scores, all")
     pack_path = Path(pack_directory)
     manifest = load_pack_manifest(pack_directory)
     kind = manifest["kind"]
+    year = manifest["year"]
+    region = manifest["region"]
+    selected_metrics = set(METRIC_NAMES if metrics is None else metrics)
+    unknown_metrics = selected_metrics.difference(METRIC_NAMES)
+    if unknown_metrics:
+        raise ValueError(f"unknown metrics: {', '.join(sorted(unknown_metrics))}")
 
     output_path = Path(output_directory)
     output_path.mkdir(parents=True, exist_ok=True)
 
     forecast_dataset = open_forecast_dataset(forecasts_path)
+    forecast_start_values = forecast_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    pack_start_values = numpy.asarray(manifest["start_dates"], dtype="datetime64[D]")
+    selected_start_indices = numpy.flatnonzero(
+        numpy.isin(forecast_start_values.astype("datetime64[D]"), pack_start_values)
+    )
+    if not len(selected_start_indices):
+        raise ValueError("forecast and pack manifest have no start dates in common")
+    forecast_dataset = forecast_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): selected_start_indices})
 
     viewer_result = None
-    if artifacts in {"viewer", "all"}:
+    if artifacts == "all":
         from oceanbench.packs.local_viewer import build_local_viewer
 
-        viewer_result = build_local_viewer(
-            forecast_dataset, output_directory=output_directory, year=year, starts_limit=starts_limit
-        )
-
-    if artifacts == "viewer":
-        return EvaluateLocalResult(
-            viewer_directory=viewer_result.viewer_directory,
-            viewer_datasets_path=viewer_result.datasets_path,
-            viewer_zarr_path=viewer_result.zarr_path,
-            viewer_manifest_path=viewer_result.manifest_path,
-        )
+        viewer_result = build_local_viewer(forecast_dataset, output_directory=output_directory, year=year)
 
     reference_openers = {
         name: _pack_reference_opener(pack_path, entry["path"])
@@ -263,18 +274,17 @@ def evaluate_local(
             region,
             year,
             references=references,
-            include_gridded=True,
-            include_mixed_layer_depth=(kind == "full"),
-            include_geostrophic=True,
-            include_class4=include_class4,
-            include_lagrangian=with_lagrangian,
+            include_gridded="rmsd" in selected_metrics,
+            include_mixed_layer_depth=(kind == "full" and "mld" in selected_metrics),
+            include_geostrophic="geostrophic" in selected_metrics,
+            include_class4="class4" in selected_metrics,
+            include_lagrangian="lagrangian" in selected_metrics,
             area_weighted=True,
             challenger_version="local",
             output_root=str(output_path / "_run"),
             dataset=forecast_dataset,
             reference_openers=reference_openers,
             observation_opener=observation_opener,
-            start_limit=starts_limit,
         )
         flags = list(run_result.flags)
         scores = run_result.scores
@@ -282,13 +292,9 @@ def evaluate_local(
         if kind == "quick":
             scores = scores[scores["depth"].isna() | (scores["depth"] == "surface")].reset_index(drop=True)
 
-        if include_realism:
+        if "realism" in selected_metrics:
             regional_challenger = subset_dataset_to_region(
-                (
-                    forecast_dataset
-                    if starts_limit is None
-                    else forecast_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): slice(0, starts_limit)})
-                ),
+                forecast_dataset,
                 region,
             )
             context = records.RunContext(
@@ -300,7 +306,7 @@ def evaluate_local(
             )
             try:
                 realism_records, realism_flags = _realism_records(
-                    regional_challenger, reference_openers, region, context, starts_limit
+                    regional_challenger, reference_openers, region, context, None
                 )
                 scores = pandas.concat([scores, records.records_to_dataframe(realism_records)], ignore_index=True)
                 flags.extend(realism_flags)
@@ -322,11 +328,7 @@ def evaluate_local(
     )
 
     published_scores = pandas.read_parquet(published_scores_path) if published_scores_path is not None else None
-    published_challengers = (
-        json.loads(Path(published_challengers_path).read_text(encoding="utf-8"))
-        if published_challengers_path is not None
-        else None
-    )
+    published_challengers = _load_json(published_challengers_path) if published_challengers_path is not None else None
     scorecard_directory = output_path / SCORECARD_DIRECTORY
     write_overlay_scorecard(
         scorecard_directory,
