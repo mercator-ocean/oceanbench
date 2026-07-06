@@ -172,6 +172,15 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 }
 .panel-grid[data-layout="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
 .panel-grid[data-layout="2"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+/* Swipe display: one shared map (Forecast 1) plus a compact Forecast 2 picker strip. */
+.panel-grid[data-display="swipe"] { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+.panel.head-only { box-shadow: none; }
+.panel.head-only .panel-canvas-wrap,
+.panel.head-only .panel-badge { display: none; }
+
+.display-switch { display: inline-flex; gap: 0.25rem; }
+.display-switch[hidden] { display: none; }
+.display-switch .ghost-button { padding: 0.4rem 0.7rem; }
 
 .panel {
   display: flex;
@@ -287,6 +296,33 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   min-height: 0;
 }
 .context-rail[hidden] { display: none; }
+.context-rail.collapsed {
+  width: 2rem;
+  padding: 0.5rem 0;
+  overflow: hidden;
+}
+.context-rail.collapsed > *:not(.rail-collapse) { display: none; }
+.rail-collapse {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.4rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--muted);
+  cursor: pointer;
+  z-index: 2;
+}
+.rail-collapse:hover { border-color: var(--accent); color: var(--accent); }
+.rail-collapse::before { content: "\203A"; font-size: 1rem; line-height: 1; } /* › expand */
+.rail-collapse[aria-expanded="true"]::before { content: "\2039"; } /* ‹ collapse */
+.context-rail:not(.collapsed) .rail-title { padding-left: 1.6rem; }
 .rail-resize-handle {
   position: absolute;
   top: 0;
@@ -325,6 +361,10 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   border-radius: var(--radius-sm);
 }
 .rail-products input[readonly] { color: var(--muted); }
+.rail-forecast-toggle { display: inline-flex; gap: 0.25rem; margin: 0 0 0.9rem; }
+.rail-forecast-toggle[hidden] { display: none; }
+.rail-forecast-toggle .ghost-button { padding: 0.3rem 0.6rem; font-size: 0.72rem; }
+.rail-caption { font-size: 0.68rem; color: var(--muted); margin: 0.35rem 0 0; line-height: 1.35; }
 .rail-chart-slot { width: 100%; }
 .rail-chart { width: 100%; height: auto; display: block; }
 .rail-chart .axis { stroke: var(--border); stroke-width: 1; }

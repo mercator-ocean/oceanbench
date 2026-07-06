@@ -28,7 +28,10 @@ SPDX-License-Identifier: EUPL-1.2
           <button type="button" data-layout="1" class="ghost-button">1 forecast</button>
           <button type="button" data-layout="2" class="ghost-button">2 forecasts</button>
         </div>
-        <button id="rail-toggle" type="button" class="ghost-button">Context rail</button>
+        <div class="display-switch" role="group" aria-label="Two-forecast display" hidden>
+          <button type="button" data-display="side" class="ghost-button">Side by side</button>
+          <button type="button" data-display="swipe" class="ghost-button">Swipe</button>
+        </div>
         <button id="theme-toggle" type="button" class="ghost-button">Light theme</button>
       </div>
     </header>
@@ -77,7 +80,7 @@ SPDX-License-Identifier: EUPL-1.2
         </fieldset>
 
         <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>
-        <p class="hint">Scroll to zoom, drag to pan — all panels move together. Hover for the value in real units. In a compare panel: drag the divider, or hold <kbd>B</kbd> to blink.</p>
+        <p class="hint">Scroll to zoom, drag to pan — all panels move together. Hover for the value in real units. With two forecasts, switch between side-by-side and swipe; in swipe, drag the divider.</p>
       </aside>
 
       <main class="map-area">
@@ -92,24 +95,22 @@ SPDX-License-Identifier: EUPL-1.2
 
       <aside id="context-rail" class="context-rail" aria-label="Context rail">
         <div id="rail-resize-handle" class="rail-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize context rail"></div>
+        <button id="rail-collapse" type="button" class="rail-collapse" aria-label="Collapse context rail" title="Collapse / expand rail"></button>
         <h2 class="rail-title">Context</h2>
         <p id="rail-subtitle" class="rail-subtitle"></p>
-        <section class="rail-section rail-products">
-          <h3>Products</h3>
-          <label>Product A
-            <input id="rail-product-a" type="text" readonly />
-          </label>
-          <label>Product B
-            <select id="rail-product-b"></select>
-          </label>
-        </section>
+        <div id="rail-forecast-toggle" class="rail-forecast-toggle" role="group" aria-label="Forecast to inspect" hidden>
+          <button type="button" data-forecast="0" class="ghost-button">F1</button>
+          <button type="button" data-forecast="1" class="ghost-button">F2</button>
+        </div>
         <section class="rail-section">
           <h3>Skill vs lead day</h3>
           <div id="rail-lead-curve" class="rail-chart-slot"></div>
+          <p id="rail-skill-note" class="rail-caption"></p>
         </section>
         <section class="rail-section">
-          <h3>Power spectrum</h3>
+          <h3>Live power spectrum</h3>
           <div id="rail-spectra" class="rail-chart-slot"></div>
+          <p id="rail-psd-note" class="rail-caption"></p>
         </section>
         <section class="rail-section" id="rail-legend-section" hidden>
           <h3>Overlay legend</h3>

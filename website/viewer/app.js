@@ -28,17 +28,16 @@ import { startParticleField, makeVelocitySampler, speedMagnitudeField } from "./
 import {
   loadInsightIndex,
   loadEddies,
-  loadSpectra,
   loadScoresSummary,
   loadClass4,
   insightsFor,
   eddyFrame,
-  spectraEntry,
   class4Points,
   loadTrajectories,
 } from "./modules/insights.js";
 import { drawEddyFrame, drawClass4Points, class4ErrorScale, EDDY_COLORS } from "./modules/overlays.js";
-import { leadCurveSVG, spectraSVG, SERIES_COLORS } from "./modules/charts.js";
+import { leadCurveSVG, psdSpectraSVG, SERIES_COLORS } from "./modules/charts.js";
+import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
 import { resolveViewerDataUrl } from "./config.js";
 
 const DATASETS_URL = resolveViewerDataUrl("./data/datasets.json");
@@ -107,9 +106,12 @@ const shared = {
   eddyReference: "glorys",
   showParticles: true,
   particleSpeed: 1,
-  railOpen: true,
+  railCollapsed: localStorage.getItem("oceanbench.viewer.railCollapsed") === "1",
   railWidth: Number(localStorage.getItem("oceanbench.viewer.railWidth")) || 352,
-  railProductB: "glorys_one_degree",
+  // 2-forecast display: "side" (two panels) or "swipe" (one map, F1 left / F2 right).
+  displayMode: "side",
+  // Which forecast the rail shows when 2 forecasts carry different variables.
+  railForecast: 0,
 };
 
 const stores = new Map();
@@ -165,12 +167,6 @@ function scoreProductKey(slug) {
   return slug;
 }
 
-function slugForProductKey(key) {
-  if (key === "glorys") return "glorys_one_degree";
-  if (key === "glo12") return "glo12_one_degree";
-  return key;
-}
-
 function prettyName(standardName) {
   return standardName.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
@@ -210,8 +206,7 @@ function defaultPanelState(index) {
     dataset,
     variable: "sea_surface_height_above_geoid",
     mode: "field",
-    datasetB: otherSlug(dataset), // always a different dataset so diff/compare is meaningful
-    compare: false,
+    datasetB: otherSlug(dataset), // always a different dataset so difference is meaningful
     colormap: null,
   };
 }
@@ -229,8 +224,7 @@ function buildPanel(index) {
         <option value="field">Field</option>
         <option value="diff">Difference</option>
       </select>
-      <select class="panel-dataset-b" aria-label="Compare dataset" hidden></select>
-      <label class="panel-compare" hidden><input type="checkbox" class="panel-compare-toggle" /> swipe</label>
+      <select class="panel-dataset-b" aria-label="Difference dataset" hidden></select>
       <span class="spacer"></span>
       <span class="panel-badge"></span>
     </div>
@@ -251,8 +245,6 @@ function buildPanel(index) {
       variable: container.querySelector(".panel-variable"),
       mode: container.querySelector(".panel-mode"),
       datasetB: container.querySelector(".panel-dataset-b"),
-      compareField: container.querySelector(".panel-compare"),
-      compareToggle: container.querySelector(".panel-compare-toggle"),
       badge: container.querySelector(".panel-badge"),
       wrap: container.querySelector(".panel-canvas-wrap"),
       field: container.querySelector(".panel-field"),
@@ -275,7 +267,6 @@ function buildPanel(index) {
     label: "",
     particleHandle: null,
     particleContext: null,
-    blink: false,
     swipeX: 0.5,
     renderToken: 0,
     dragging: null,
@@ -310,7 +301,6 @@ function refreshPanelControls(panel) {
     populateSelect(panel.els.variable, options.concat(currentsVariableOptions(manifest)), panel.state.variable);
   }
   const currents = isCurrentsVariable(panel.state.variable);
-  if (shared.layout !== 1 || currents) panel.state.compare = false; // swipe is single-pane, field-only
   panel.els.mode.value = panel.state.mode;
   panel.els.mode.disabled = currents; // currents render as a field; diff of speed is not offered
   populateSelect(
@@ -318,10 +308,8 @@ function refreshPanelControls(panel) {
     datasetCatalog.map((entry) => ({ value: entry.slug, label: entry.label })),
     panel.state.datasetB,
   );
-  // Swipe (A/B compare) is single-panel only; hidden in 2-up and for currents.
-  panel.els.compareField.hidden = shared.layout !== 1 || currents || panel.state.mode !== "field";
-  panel.els.compareToggle.checked = panel.state.compare;
-  panel.els.datasetB.hidden = currents || !(panel.state.mode === "diff" || (panel.state.mode === "field" && panel.state.compare));
+  // The B dataset selector is only meaningful for the Difference mode.
+  panel.els.datasetB.hidden = currents || panel.state.mode !== "diff";
 }
 
 function wirePanel(panel) {
@@ -374,16 +362,6 @@ function wirePanel(panel) {
     await updateContextRail();
     writeHash();
   });
-  panel.els.compareToggle.addEventListener("change", async (event) => {
-    panel.state.compare = event.target.checked;
-    setActivePanel(panel.index);
-    refreshPanelControls(panel);
-    if (panel.state.compare) await ensureStore(panel.state.datasetB);
-    await renderPanel(panel);
-    await updateContextRail();
-    writeHash();
-  });
-
   const field = panel.els.field;
   field.addEventListener("mousedown", (event) => beginPanelDrag(panel, event));
   field.addEventListener("wheel", (event) => onPanelWheel(panel, event), { passive: false });
@@ -474,24 +452,6 @@ async function renderFieldPanel(panel, token, manifest, level, start, leadIndex)
   panel.units = entry.units;
   panel.label = `${labelFor(panel.state.dataset)} · ${prettyName(entry.standard_name)}`;
   stopParticles(panel);
-
-  if (panel.state.compare && panel.state.datasetB) {
-    await ensureStore(panel.state.datasetB);
-    const compareLevel = renderLevelForSlug(panel.state.datasetB);
-    const compare = await readAlignedField(
-      panel,
-      panel.state.datasetB,
-      panel.state.variable,
-      compareLevel,
-      start,
-      leadIndex,
-      primary.latitudes,
-      primary.longitudes,
-    );
-    if (token !== panel.renderToken) return;
-    panel.offscreenB = colorize(compare.field, compare.latitudes, colormap, range);
-    panel.edgesB = panel.edgesA;
-  }
   prefetchNeighbours(panel, level, start, leadIndex);
 }
 
@@ -617,6 +577,10 @@ function drawImageWorld(context, offscreen, edges, projection) {
   }
 }
 
+function isSwipeHost(panel) {
+  return shared.layout === 2 && shared.displayMode === "swipe" && panel.index === 0;
+}
+
 function drawPanel(panel) {
   const canvas = panel.els.field;
   const context = canvas.getContext("2d", { willReadFrequently: true });
@@ -626,8 +590,14 @@ function drawPanel(panel) {
   const projection = projectionFor(panel);
   context.imageSmoothingEnabled = false;
 
-  const showBlink = panel.blink && panel.offscreenB;
-  if (panel.state.mode === "field" && panel.state.compare && panel.offscreenB && !showBlink) {
+  // In swipe display the single host panel (Forecast 1) overlays Forecast 2 on its
+  // right side; take Forecast 2's coloured field straight from the second panel.
+  if (isSwipeHost(panel)) {
+    panel.offscreenB = panels[1] ? panels[1].offscreenA : null;
+    panel.edgesB = panels[1] ? panels[1].edgesA : null;
+  }
+
+  if (isSwipeHost(panel) && panel.offscreenB) {
     drawImageWorld(context, panel.offscreenA, panel.edgesA, projection);
     const dividerX = panel.swipeX * canvas.width;
     context.save();
@@ -643,11 +613,10 @@ function drawPanel(panel) {
     context.lineTo(dividerX, canvas.height);
     context.stroke();
     panel.els.swipeHint.hidden = false;
-    panel.els.swipeHint.textContent = `◀ Forecast 1 · ${labelFor(panel.state.dataset)}  |  Forecast 2 · ${labelFor(panel.state.datasetB)} ▶`;
+    panel.els.swipeHint.textContent = `◀ Forecast 1 · ${labelFor(panels[0].state.dataset)}  |  Forecast 2 · ${labelFor(panels[1].state.dataset)} ▶`;
   } else {
-    drawImageWorld(context, showBlink ? panel.offscreenB : panel.offscreenA, showBlink ? panel.edgesB : panel.edgesA, projection);
-    panel.els.swipeHint.hidden = !(panel.state.mode === "field" && panel.state.compare);
-    if (!panel.els.swipeHint.hidden) panel.els.swipeHint.textContent = "hold B to blink";
+    drawImageWorld(context, panel.offscreenA, panel.edgesA, projection);
+    panel.els.swipeHint.hidden = true;
   }
   updateParticleProjection(panel, projection);
   updatePanelBadge(panel);
@@ -702,10 +671,14 @@ function drawOverlays(panel) {
   if (shared.overlayMode === "none") return;
   const projection = projectionFor(panel);
   const ratio = window.devicePixelRatio || 1;
+  // Points/contours belong to the periodic world too: draw them on every visible
+  // wrapped copy so they stay on the field when panning across the dateline.
+  const copyOffsets = visibleCopyOffsets(projection, canvas);
+  const projectOnCopy = (offset) => (nx, ny) => projection.project(nx + offset, ny);
 
   if (shared.overlayMode === "eddies" && overlayData.eddies) {
     const frame = eddyFrame(overlayData.eddies, shared.eddyReference, shared.leadDay);
-    if (frame) drawEddyFrame(context, projection.project, frame.frame, { devicePixelRatio: ratio });
+    if (frame) for (const offset of copyOffsets) drawEddyFrame(context, projectOnCopy(offset), frame.frame, { devicePixelRatio: ratio });
   } else if (shared.overlayMode === "class4" && overlayData.class4) {
     const manifest = manifestFor(panel.state.dataset);
     const entry = manifest && manifest.variables[panel.state.variable];
@@ -713,23 +686,70 @@ function drawOverlays(panel) {
     const startDate = manifest ? manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)] : null;
     // Fewer points at low zoom (density-manage §4); refine as the user zooms in.
     const limit = Math.round(1500 + 3500 * Math.min(1, (view.zoom - 1) / 6));
-    const points = class4Points(overlayData.class4, {
+    const selector = {
       variable: panel.state.variable,
       depthBin,
       leadDay: shared.leadDay,
       startDate,
-      limit,
-    });
+    };
+    const matchedTotal = countClass4Matches(overlayData.class4, selector);
+    const points = class4Points(overlayData.class4, { ...selector, limit });
     const scale = class4ErrorScale(points);
-    drawClass4Points(context, projection.project, points, {
-      devicePixelRatio: ratio,
-      errorScale: scale,
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
-    });
+    for (const offset of copyOffsets) {
+      drawClass4Points(context, projectOnCopy(offset), points, {
+        devicePixelRatio: ratio,
+        errorScale: scale,
+        canvasWidth: canvas.width,
+        canvasHeight: canvas.height,
+      });
+    }
     panel.class4Scale = scale;
-    panel.class4Count = points.length;
+    panel.class4Count = countVisiblePoints(points, projection, copyOffsets, canvas);
+    panel.class4Matched = matchedTotal;
   }
+}
+
+// How many selected obs points actually fall inside the viewport (on any visible
+// copy) — the live "N shown" that tracks panning and zooming (item 5).
+function countVisiblePoints(points, projection, copyOffsets, canvas) {
+  let visible = 0;
+  for (const point of points) {
+    const nx = (point.longitude + 180) / 360;
+    const ny = (90 - point.latitude) / 180;
+    for (const offset of copyOffsets) {
+      const screen = projection.project(nx + offset, ny);
+      if (screen.x >= 0 && screen.y >= 0 && screen.x <= canvas.width && screen.y <= canvas.height) {
+        visible += 1;
+        break;
+      }
+    }
+  }
+  return visible;
+}
+
+// Integer world-copy offsets whose earth copy is currently visible (periodic wrap).
+function visibleCopyOffsets(projection, canvas) {
+  const left = projection.unproject(0, 0).nx;
+  const right = projection.unproject(canvas.width, 0).nx;
+  const offsets = [];
+  for (let k = Math.floor(Math.min(left, right)); k <= Math.ceil(Math.max(left, right)); k += 1) offsets.push(k);
+  return offsets.length ? offsets : [0];
+}
+
+// Number of Class-4 rows matching the active selector before spatial thinning — the
+// "of M sampled" denominator the legend reports so low counts read as weak (item 5).
+function countClass4Matches(rows, { variable, depthBin, leadDay, startDate }) {
+  if (!rows) return 0;
+  const requestedLead = leadDay == null ? null : Number(leadDay);
+  let total = 0;
+  for (const row of rows) {
+    if (row.variable !== variable) continue;
+    if (depthBin && row.depth_bin !== depthBin) continue;
+    if (requestedLead !== null && Number(row.lead_day) !== requestedLead) continue;
+    if (startDate && String(row.start_date).slice(0, 10) !== startDate) continue;
+    total += 1;
+  }
+  return total;
 }
 
 function class4DepthBin(entry) {
@@ -799,7 +819,7 @@ function visibleViewport(projection, canvas) {
 
 function beginPanelDrag(panel, event) {
   const projection = projectionFor(panel);
-  if (panel.state.mode === "field" && panel.state.compare && panel.offscreenB) {
+  if (isSwipeHost(panel) && panel.offscreenB) {
     const ratio = window.devicePixelRatio || 1;
     const rectangle = panel.els.field.getBoundingClientRect();
     const localX = (event.clientX - rectangle.left) * ratio;
@@ -828,6 +848,7 @@ function onGlobalMove(event) {
       clampView();
       redrawAllPanels();
       scheduleHashWrite();
+      scheduleRailUpdate();
       return;
     }
   }
@@ -879,6 +900,7 @@ function onPanelWheel(panel, event) {
     redrawAllPanels();
   }
   scheduleHashWrite();
+  scheduleRailUpdate();
 }
 
 function clampView() {
@@ -938,13 +960,18 @@ function nearestIndex(coordinates, value) {
 
 function syncPanelGrid() {
   const grid = elements["panel-grid"];
-  grid.dataset.layout = String(shared.layout);
+  const swipe = shared.layout === 2 && shared.displayMode === "swipe";
+  // In swipe there is a single shared map (Forecast 1 hosts it); CSS lays it out as
+  // one column and collapses Forecast 2's panel to just its picker strip.
+  grid.dataset.layout = String(swipe ? 1 : shared.layout);
+  grid.dataset.display = shared.displayMode;
   while (panels.length < shared.layout) {
     const panel = buildPanel(panels.length);
     panels.push(panel);
   }
   grid.innerHTML = "";
   for (let i = 0; i < shared.layout; i += 1) {
+    panels[i].container.classList.toggle("head-only", swipe && i === 1);
     grid.appendChild(panels[i].container);
     refreshPanelControls(panels[i]);
   }
@@ -971,7 +998,6 @@ function setPanelLoading(panel, loading) {
   for (const select of [panel.els.dataset, panel.els.variable, panel.els.mode, panel.els.datasetB]) {
     select.disabled = loading;
   }
-  panel.els.compareToggle.disabled = loading;
 }
 
 function resizePanelCanvases(panel) {
@@ -998,10 +1024,13 @@ function redrawAllPanels() {
   }
 }
 
-function renderAllPanels() {
+async function renderAllPanels() {
   const jobs = [];
   for (let i = 0; i < shared.layout; i += 1) jobs.push(renderPanel(panels[i]));
-  return Promise.all(jobs);
+  await Promise.all(jobs);
+  // Panels render concurrently, so the swipe host may have drawn before Forecast 2's
+  // field existed; redraw it now that both are ready so the divider composite appears.
+  if (isSwipeHost(panels[0])) drawPanel(panels[0]);
 }
 
 // ---- shared colorbar --------------------------------------------------------
@@ -1027,124 +1056,210 @@ function updateSharedColorbar() {
 
 // ---- context rail -----------------------------------------------------------
 
+// The rail is derived entirely from the Forecast 1 / Forecast 2 pickers (the panels),
+// never from its own selectors (item 2). One forecast → its diagnostics. Two with the
+// SAME variable → an overlaid comparison (Forecast 2 is the reference for the error
+// spectrum). Two with DIFFERENT variables → a small F1/F2 toggle, one forecast at a time.
 async function updateContextRail() {
-  const panel = panels[activePanelIndex];
-  if (!panel) return;
+  const forecasts = railForecasts();
+  if (!forecasts.length) return;
+  const comparison = forecasts.length === 2 && sameForecastVariable(forecasts[0], forecasts[1]);
+  const toggleForecasts = forecasts.length === 2 && !comparison;
+
+  const toggle = elements["rail-forecast-toggle"];
+  toggle.hidden = !toggleForecasts;
+  if (toggleForecasts) {
+    if (shared.railForecast > 1) shared.railForecast = 0;
+    for (const button of toggle.querySelectorAll("button")) {
+      const index = Number(button.dataset.forecast);
+      button.classList.toggle("active", index === shared.railForecast);
+      button.textContent = `F${index + 1} · ${labelFor(forecasts[index].state.dataset)}`;
+    }
+  }
+
+  const shown = comparison ? forecasts : [forecasts[toggleForecasts ? shared.railForecast : 0]];
+  elements["rail-subtitle"].textContent = comparison
+    ? `${shown.map((p) => labelFor(p.state.dataset)).join(" vs ")} · ${prettyVariable(shown[0])} · ${shared.region}`
+    : `${shown[0].label} · ${shared.region}`;
+
+  renderRailSkill(shown, comparison);
+  renderRailPsd(shown, comparison);
+  updateRailLegend(panels[activePanelIndex] || panels[0]);
+}
+
+function railForecasts() {
+  const scope = shared.layout === 2 ? panels.slice(0, 2) : panels.slice(0, 1);
+  return scope.filter(Boolean);
+}
+
+function sameForecastVariable(a, b) {
+  return a.state.variable === b.state.variable;
+}
+
+function prettyVariable(panel) {
+  const manifest = manifestFor(panel.state.dataset);
+  const entry = manifest && variableEntry(manifest, panel.state.variable);
+  if (isCurrentsVariable(panel.state.variable)) return `currents (${currentsVariableDepth(panel.state.variable)})`;
+  return entry ? `${prettyName(entry.standard_name)} · ${entry.depth}` : panel.state.variable;
+}
+
+// Obs-based skill (Class-4 RMSD vs observations) for a forecast's selected variable.
+// Returns { rows, unit, n } or null when no observation-based metric exists (item 4).
+function obsSkillSeries(panel) {
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && manifest.variables[panel.state.variable];
-  const depth = entry ? entry.depth : null;
-  elements["rail-subtitle"].textContent = `${panel.label} · ${shared.region}`;
-  updateRailProductControls(panel);
-
-  // Lead-time curve: every score series matching this variable/depth (region = summary's global).
-  const depthKey = entry ? mapDepthToScoreDepth(entry) : null;
-  const grouped = new Map();
+  if (!entry) return null;
+  const depthKey = mapDepthToScoreDepth(entry);
+  const challenger = scoreProductKey(panel.state.dataset);
+  const rows = [];
   let unit = "";
+  let starts = 0;
   for (const row of scoresSummary) {
     if (row.variable !== panel.state.variable) continue;
+    if (row.reference !== "observations") continue; // observation-based only, no gridded fallback
     if (depthKey && row.depth !== depthKey) continue;
-    if (row.challenger && row.challenger !== scoreProductKey(panel.state.dataset)) continue;
+    if (row.challenger !== challenger) continue;
+    if (shared.region && row.region && row.region !== shared.region) continue;
     unit = row.unit || unit;
-    const key = row.reference || "reference";
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key).push(row);
+    starts = Math.max(starts, Number(row.n_starts) || 0);
+    rows.push(row);
   }
-  const series = aggregateLeadSeries(grouped);
-  const labels = new Map([...series.keys()].map((key) => [key, `RMSE vs ${labelForReference(key)}`]));
-  elements["rail-lead-curve"].innerHTML = leadCurveSVG(series, { unit, labels });
+  if (!rows.length) return null;
+  return { rows, unit, n: starts };
+}
 
-  // Spectrum for variable + region (only SSH spectra are produced today).
-  const spectra = await loadSpectra(insightsFor(insightIndex, panel.state.dataset, shared.region).spectra);
-  const productBKey = scoreProductKey(shared.railProductB);
-  const spectrumEntry = spectra ? spectraEntry(spectra, panel.state.variable, productBKey, shared.leadDay) : null;
-  elements["rail-spectra"].innerHTML = spectraSVG(spectrumEntry, {
-    productA: shortProductLabel(panel.state.dataset),
-    productB: shortProductLabel(shared.railProductB),
+function renderRailSkill(shown, comparison) {
+  const series = new Map();
+  const labels = new Map();
+  let unit = "";
+  const notes = [];
+  for (const panel of shown) {
+    const skill = obsSkillSeries(panel);
+    const key = scoreProductKey(panel.state.dataset);
+    if (!skill) {
+      notes.push(`${labelFor(panel.state.dataset)}: no observation-based skill for this variable`);
+      continue;
+    }
+    unit = skill.unit || unit;
+    const aggregated = aggregateLeadSeries(new Map([[key, skill.rows]]));
+    if (aggregated.has(key)) series.set(key, aggregated.get(key));
+    labels.set(key, comparison ? labelFor(panel.state.dataset) : `RMSD vs observations`);
+    // n_starts is available from the summary, so report the real number of start dates
+    // behind the aggregate (item 5). TODO(pipeline): expose per-lead matchup counts too.
+    notes.push(`${labelFor(panel.state.dataset)}: n = ${skill.n} start dates${skill.n < 10 ? " (low — weak statistic)" : ""}`);
+  }
+  elements["rail-lead-curve"].innerHTML = leadCurveSVG(series, {
+    unit,
+    labels,
+    title: comparison ? "Skill vs lead (both forecasts)" : "Skill vs lead",
   });
-  wireChartHover(elements["rail-lead-curve"]);
-  wireChartHover(elements["rail-spectra"]);
-
-  updateRailLegend(panel);
-  void depth;
+  elements["rail-skill-note"].textContent = notes.join(" · ");
+  wireCursorTooltip(elements["rail-lead-curve"]);
 }
 
-function updateRailProductControls(panel) {
-  elements["rail-product-a"].value = labelFor(panel.state.dataset);
-  if (shared.railProductB === panel.state.dataset) shared.railProductB = otherSlug(panel.state.dataset);
-  const availableReferences = availableSpectraReferences(panel.state.dataset, shared.region);
-  const options = datasetCatalog
-    .filter((entry) => entry.slug !== panel.state.dataset)
-    .map((entry) => {
-      const referenceKey = scoreProductKey(entry.slug);
-      const hasSpectra = availableReferences === null || availableReferences.has(referenceKey);
-      return {
-        value: entry.slug,
-        label: hasSpectra ? entry.label : `${entry.label} (no spectra)`,
-        disabled: !hasSpectra,
-      };
-    });
-  const selectedOption = options.find((option) => option.value === shared.railProductB && !option.disabled);
-  if (!selectedOption) shared.railProductB = options.find((option) => !option.disabled)?.value || options[0]?.value || shared.railProductB;
-  const select = elements["rail-product-b"];
-  select.innerHTML = "";
-  for (const option of options) {
-    const element = document.createElement("option");
-    element.value = option.value;
-    element.textContent = option.label;
-    element.disabled = option.disabled;
-    element.selected = option.value === shared.railProductB;
-    select.appendChild(element);
+function renderRailPsd(shown, comparison) {
+  const viewport = currentViewport();
+  const curves = [];
+  const colors = [SERIES_COLORS.challenger, SERIES_COLORS.glo12];
+  const boxes = [];
+  shown.forEach((panel, index) => {
+    if (!panel.field) return;
+    const spectrum = boxPowerSpectrum(panel.field, panel.latitudes, panel.longitudes, viewport);
+    boxes.push({ panel, spectrum });
+    if (spectrum) {
+      curves.push({ label: labelFor(panel.state.dataset), color: colors[index] || SERIES_COLORS.reference, ...spectrum });
+    }
+  });
+  if (comparison && boxes.length === 2 && boxes[0].panel.field && boxes[1].panel.field) {
+    const [a, b] = boxes.map((box) => box.panel);
+    const alignedB = resampleOntoGrid(b.field, b.latitudes, b.longitudes, a.latitudes, a.longitudes);
+    const errorSpectrum = differenceBoxSpectrum(a.field, a.latitudes, a.longitudes, alignedB, viewport, true);
+    if (errorSpectrum) {
+      curves.push({ label: `error (F1−F2)`, color: SERIES_COLORS.error, dashed: true, ...errorSpectrum });
+    }
   }
+  elements["rail-spectra"].innerHTML = psdSpectraSVG(curves, {
+    title: comparison ? "Live spectrum (both forecasts)" : "Live spectrum of visible box",
+  });
+  const cellKm = boxes.find((box) => box.spectrum)?.spectrum.cellKm;
+  elements["rail-psd-note"].textContent = curves.length
+    ? `In-browser FFT of the visible box · Hann window + land mean-filled · grid ≈ ${cellKm ? cellKm.toFixed(cellKm < 10 ? 1 : 0) : "—"} km/cell`
+    : "Pan/zoom over ocean to compute a spectrum (box is mostly land or too small).";
+  wireCursorTooltip(elements["rail-spectra"]);
 }
 
-function availableSpectraReferences(slug, region) {
-  const url = insightsFor(insightIndex, slug, region).spectra;
-  if (!url) return new Set();
-  if (slug === "glonet_1_degree") return new Set(["glorys", "glo12"]);
-  return null;
+function currentViewport() {
+  const host = panels[0];
+  const projection = projectionFor(host);
+  return visibleViewport(projection, host.els.field);
 }
 
-function shortProductLabel(slug) {
-  const label = labelFor(slug);
-  return label.replace(/\s*\([^)]*\)\s*/g, "").toLowerCase();
-}
-
-function wireChartHover(container) {
+// Cursor-following tooltip: snap the crosshair to the nearest data x, list the value
+// for each series under the cursor, and place the tooltip right next to the pointer —
+// no delay, no fixed corner (rail chart interaction requirement).
+function wireCursorTooltip(container) {
   const svg = container.querySelector("svg");
-  if (!svg || svg.dataset.hoverWired === "1") return;
-  svg.dataset.hoverWired = "1";
+  if (!svg) return;
   const crosshair = svg.querySelector(".chart-crosshair");
   const tooltip = svg.querySelector(".chart-tooltip");
-  const tooltipLines = tooltip ? tooltip.querySelectorAll("text") : [];
+  const rect = tooltip ? tooltip.querySelector("rect") : null;
   const points = [...svg.querySelectorAll(".chart-point")];
-  if (!crosshair || !tooltip || !tooltipLines.length || !points.length) return;
-  svg.addEventListener("mousemove", (event) => {
+  if (!crosshair || !tooltip || !rect || !points.length) return;
+  const bySeries = new Map();
+  for (const point of points) {
+    const line = point.dataset.line || "";
+    if (!bySeries.has(line)) bySeries.set(line, []);
+    bySeries.get(line).push(point);
+  }
+  const setText = (lines) => {
+    for (const old of [...tooltip.querySelectorAll("text")]) old.remove();
+    lines.forEach((text, index) => {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      node.setAttribute("x", "6");
+      node.setAttribute("y", String(13 + index * 12));
+      node.textContent = text;
+      tooltip.appendChild(node);
+    });
+    rect.setAttribute("height", String(8 + lines.length * 12));
+    rect.setAttribute("width", String(Math.max(96, 7 * Math.max(...lines.map((line) => line.length)))));
+  };
+  const move = (event) => {
     const svgPoint = svg.createSVGPoint();
     svgPoint.x = event.clientX;
     svgPoint.y = event.clientY;
     const local = svgPoint.matrixTransform(svg.getScreenCTM().inverse());
-    let nearest = null;
+    let nearestX = null;
     let nearestDistance = Infinity;
-    for (const point of points) {
-      const dx = Number(point.getAttribute("cx")) - local.x;
-      const dy = Number(point.getAttribute("cy")) - local.y;
-      const distance = dx * dx + dy * dy;
-      if (distance < nearestDistance) {
-        nearest = point;
-        nearestDistance = distance;
+    const lines = [];
+    for (const [, seriesPoints] of bySeries) {
+      let best = null;
+      let bestDistance = Infinity;
+      for (const point of seriesPoints) {
+        const distance = Math.abs(Number(point.getAttribute("cx")) - local.x);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = point;
+        }
+      }
+      if (!best) continue;
+      lines.push(`${best.dataset.line}: ${best.dataset.yLabel} @ ${best.dataset.xLabel}`);
+      if (bestDistance < nearestDistance) {
+        nearestDistance = bestDistance;
+        nearestX = Number(best.getAttribute("cx"));
       }
     }
-    if (!nearest) return;
-    const x = Number(nearest.getAttribute("cx"));
-    const y = Number(nearest.getAttribute("cy"));
-    crosshair.setAttribute("x1", String(x));
-    crosshair.setAttribute("x2", String(x));
+    if (nearestX === null) return;
+    crosshair.setAttribute("x1", String(nearestX));
+    crosshair.setAttribute("x2", String(nearestX));
     crosshair.hidden = false;
-    tooltipLines[0].textContent = nearest.dataset.line || "";
-    tooltipLines[1].textContent = `${nearest.dataset.xLabel}: ${nearest.dataset.yLabel}`;
-    tooltip.setAttribute("transform", `translate(${Math.min(226, x + 8)} ${Math.max(16, y - 40)})`);
+    setText(lines);
+    const width = Number(rect.getAttribute("width"));
+    const x = Math.min(360 - width - 2, local.x + 10);
+    const y = Math.max(2, Math.min(200, local.y + 10));
+    tooltip.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
     tooltip.hidden = false;
-  });
+  };
+  svg.addEventListener("mousemove", move);
   svg.addEventListener("mouseleave", () => {
     crosshair.hidden = true;
     tooltip.hidden = true;
@@ -1192,13 +1307,6 @@ function scoreValue(row) {
   return NaN;
 }
 
-function labelForReference(reference) {
-  if (reference === "observations") return "observations";
-  if (reference === "glorys") return "GLORYS";
-  if (reference === "glo12") return "GLO12";
-  return labelFor(reference);
-}
-
 function mapDepthToScoreDepth(entry) {
   if (entry.standard_name.includes("velocity") && entry.depth === "15m") return "15m";
   if (entry.depth === "surface") return "surface";
@@ -1222,14 +1330,16 @@ function updateRailLegend(panel) {
       row(EDDY_COLORS.missed, "Missed (reference only)", (counts.missed || []).length) +
       `<p class="dim">vs ${shared.eddyReference}, lead ${frame ? frame.frame.lead_day : "—"} (nearest available)</p>`;
   } else if (shared.overlayMode === "class4") {
-    const visiblePanels = panels.slice(0, shared.layout);
-    const count = visiblePanels.reduce((total, candidate) => total + (candidate.class4Count || 0), 0);
-    const scale = Math.max(...visiblePanels.map((candidate) => candidate.class4Scale || 0), 0);
+    const hostPanel = panels[0];
+    const shown = hostPanel ? hostPanel.class4Count || 0 : 0;
+    const matched = hostPanel ? hostPanel.class4Matched || 0 : 0;
+    const scale = Math.max(...panels.slice(0, shared.layout).map((candidate) => candidate.class4Scale || 0), 0);
     const sampled = overlayData.class4 && overlayData.class4.sampled;
     const noData = !overlayData.class4 ? " · no match-ups for this dataset/region" : "";
+    const weak = matched > 0 && matched < 30 ? " · low count — statistic is weak" : "";
     container.innerHTML =
       `<div class="row"><span class="swatch" style="background:${SERIES_COLORS.error}"></span>|obs − model|, brighter = larger error</div>` +
-      `<p class="dim">${count} points shown across visible panels · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}${sampled ? " · sampled subset" : ""}${noData}</p>`;
+      `<p class="dim"><strong>${shown} points shown</strong> (of ${matched} sampled) · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}${sampled ? " · sampled subset" : ""}${weak}${noData}</p>`;
   } else if (shared.overlayMode === "trajectories") {
     container.innerHTML = `<p class="dim">${trajectoryNote}</p>`;
   }
@@ -1361,19 +1471,35 @@ function wireGlobalControls() {
     });
     writeHash();
   });
-  elements["rail-toggle"].addEventListener("click", () => {
-    shared.railOpen = !shared.railOpen;
-    elements["context-rail"].hidden = !shared.railOpen;
-    applyRailWidth();
+  elements["rail-collapse"].addEventListener("click", () => {
+    shared.railCollapsed = !shared.railCollapsed;
+    localStorage.setItem("oceanbench.viewer.railCollapsed", shared.railCollapsed ? "1" : "0");
+    applyRailCollapsed();
     redrawAllPanels();
+    if (!shared.railCollapsed) updateContextRail();
     writeHash();
   });
   elements["rail-resize-handle"].addEventListener("mousedown", beginRailResize);
-  elements["rail-product-b"].addEventListener("change", (event) => {
-    shared.railProductB = event.target.value;
-    updateContextRail();
-    writeHash();
-  });
+  for (const button of elements["rail-forecast-toggle"].querySelectorAll("button")) {
+    button.addEventListener("click", () => {
+      shared.railForecast = Number(button.dataset.forecast);
+      updateContextRail();
+      writeHash();
+    });
+  }
+  for (const button of document.querySelectorAll(".display-switch [data-display]")) {
+    button.addEventListener("click", () => {
+      shared.displayMode = button.dataset.display;
+      markDisplayButtons();
+      syncPanelGrid();
+      renderAllPanels().then(() => {
+        redrawOverlaysAll();
+        updateSharedColorbar();
+        updateContextRail();
+      });
+      writeHash();
+    });
+  }
   elements["reset-view"].addEventListener("click", () => {
     const previousLevels = panels.slice(0, shared.layout).map((panel) => selectRenderLevel(manifestFor(panel.state.dataset)));
     view.zoom = 1;
@@ -1390,27 +1516,7 @@ function wireGlobalControls() {
   window.addEventListener("resize", () => {
     clampView();
     redrawAllPanels();
-    wireChartHover(elements["rail-lead-curve"]);
-    wireChartHover(elements["rail-spectra"]);
-  });
-  window.addEventListener("keydown", (event) => {
-    if (event.key.toLowerCase() === "b") {
-      const panel = panels[activePanelIndex];
-      if (panel && panel.offscreenB) {
-        panel.blink = true;
-        drawPanel(panel);
-      }
-    }
-  });
-  window.addEventListener("keyup", (event) => {
-    if (event.key.toLowerCase() === "b") {
-      for (const panel of panels) {
-        if (panel.blink) {
-          panel.blink = false;
-          drawPanel(panel);
-        }
-      }
-    }
+    scheduleRailUpdate();
   });
 }
 
@@ -1420,6 +1526,16 @@ function applyRailWidth() {
   const rail = elements["context-rail"];
   if (!rail) return;
   rail.style.setProperty("--rail-width", `${shared.railWidth}px`);
+}
+
+// Collapse the rail to a thin strip (just the expand chevron), restoring the previous
+// width on expand. Collapsed state persists like the width (item: rail collapse control).
+function applyRailCollapsed() {
+  const rail = elements["context-rail"];
+  if (!rail) return;
+  rail.classList.toggle("collapsed", shared.railCollapsed);
+  elements["rail-collapse"].setAttribute("aria-expanded", String(!shared.railCollapsed));
+  elements["rail-collapse"].setAttribute("aria-label", shared.railCollapsed ? "Expand context rail" : "Collapse context rail");
 }
 
 function beginRailResize(event) {
@@ -1457,6 +1573,24 @@ function markLayoutButtons() {
   for (const button of document.querySelectorAll(".layout-switch [data-layout]")) {
     button.classList.toggle("active", Number(button.dataset.layout) === shared.layout);
   }
+  // The side-by-side / swipe display switch is meaningful only with two forecasts.
+  const displaySwitch = document.querySelector(".display-switch");
+  if (displaySwitch) displaySwitch.hidden = shared.layout !== 2;
+  markDisplayButtons();
+}
+
+function markDisplayButtons() {
+  for (const button of document.querySelectorAll(".display-switch [data-display]")) {
+    button.classList.toggle("active", button.dataset.display === shared.displayMode);
+  }
+}
+
+// PSD of the visible box is CPU work; recompute the rail on a short debounce when the
+// user pans / zooms / scrubs lead so the spectra track the viewport without jank.
+let railUpdateTimer = null;
+function scheduleRailUpdate() {
+  clearTimeout(railUpdateTimer);
+  railUpdateTimer = setTimeout(() => updateContextRail(), 220);
 }
 
 // ---- URL hash (every view state is a URL — §6) ------------------------------
@@ -1468,7 +1602,7 @@ function scheduleHashWrite() {
 }
 
 function encodePanel(panel) {
-  return [panel.state.dataset, panel.state.variable, panel.state.mode, panel.state.datasetB, panel.state.compare ? "1" : "0"].join(",");
+  return [panel.state.dataset, panel.state.variable, panel.state.mode, panel.state.datasetB].join(",");
 }
 
 function writeHash() {
@@ -1483,9 +1617,9 @@ function writeHash() {
   if (shared.overlayMode !== "none") parameters.set("ov", shared.overlayMode);
   parameters.set("region", shared.region);
   if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
-  if (!shared.railOpen) parameters.set("rail", "0");
+  if (shared.railCollapsed) parameters.set("rail", "collapsed");
   parameters.set("rw", String(shared.railWidth));
-  parameters.set("pb", shared.railProductB);
+  if (shared.layout === 2) parameters.set("dm", shared.displayMode);
   parameters.set("play", shared.showParticles ? "1" : "0");
   parameters.set("spd", shared.particleSpeed.toFixed(1));
   for (let i = 0; i < shared.layout; i += 1) parameters.set(`p${i}`, encodePanel(panels[i]));
@@ -1505,9 +1639,9 @@ function readHash() {
   if (parameters.has("ov")) shared.overlayMode = parameters.get("ov");
   if (parameters.has("region")) shared.region = parameters.get("region");
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
-  if (parameters.get("rail") === "0") shared.railOpen = false;
+  if (parameters.get("rail") === "0" || parameters.get("rail") === "collapsed") shared.railCollapsed = true;
   if (parameters.has("rw")) shared.railWidth = Math.min(620, Math.max(280, Number(parameters.get("rw"))));
-  if (parameters.has("pb")) shared.railProductB = slugForProductKey(parameters.get("pb"));
+  if (parameters.get("dm") === "swipe" || parameters.get("dm") === "side") shared.displayMode = parameters.get("dm");
   if (parameters.has("play")) shared.showParticles = parameters.get("play") === "1";
   if (parameters.has("spd")) shared.particleSpeed = Number(parameters.get("spd"));
   return parameters;
@@ -1517,16 +1651,16 @@ function applyPanelHash(parameters) {
   for (let i = 0; i < shared.layout; i += 1) {
     const encoded = parameters.get(`p${i}`);
     if (!encoded) continue;
-    const [dataset, variable, mode, datasetB, compare] = encoded.split(",");
+    const [dataset, variable, mode, datasetB] = encoded.split(",");
     if (!panels[i]) panels[i] = buildPanel(i);
-    // Old hashes encoded currents as a mode; it is a variable now. Degrade gracefully.
+    // Old hashes encoded currents as a mode (and a trailing swipe flag); both degrade
+    // gracefully — currents is a variable now and single-pane swipe no longer exists.
     const migratedCurrents = mode === "currents";
     Object.assign(panels[i].state, {
       dataset: dataset || panels[i].state.dataset,
       variable: migratedCurrents ? CURRENTS_VARIABLE_SURFACE : variable || panels[i].state.variable,
       mode: migratedCurrents ? "field" : mode || panels[i].state.mode,
       datasetB: datasetB || panels[i].state.datasetB,
-      compare: compare === "1",
     });
   }
 }
@@ -1555,18 +1689,19 @@ function selectElements() {
     "speed-value",
     "reset-view",
     "theme-toggle",
-    "rail-toggle",
+    "rail-collapse",
     "panel-grid",
     "colorbar",
     "layer-info",
     "status",
     "context-rail",
     "rail-resize-handle",
-    "rail-product-a",
-    "rail-product-b",
     "rail-subtitle",
+    "rail-forecast-toggle",
     "rail-lead-curve",
+    "rail-skill-note",
     "rail-spectra",
+    "rail-psd-note",
     "rail-legend",
     "rail-legend-section",
   ]) {
@@ -1597,8 +1732,8 @@ async function main() {
   if (!Number.isFinite(shared.layout) || shared.layout < 1) shared.layout = 1;
   else if (shared.layout > 2) shared.layout = 2;
   applyTheme();
-  elements["context-rail"].hidden = !shared.railOpen;
   applyRailWidth();
+  applyRailCollapsed();
   elements["lead-value"].textContent = `day ${shared.leadDay}`;
   elements["speed-value"].textContent = `${shared.particleSpeed.toFixed(1)}×`;
   elements["particles-play"].checked = shared.showParticles;

@@ -206,6 +206,81 @@ export function spectraSVG(entry, { title = "Power spectrum", productA = "produc
   return svgOpen(title) + axes(area, "wavelength", "power") + body + legend + interactionLayer() + "</svg>";
 }
 
+/**
+ * Live PSD chart (log-log) from one or more in-browser-computed curves. `curves` is
+ * an array of { label, color, wavelength: number[] (metres), power: number[], dashed }.
+ * Wavelength axis in km (large scales left). Points carry per-series data attributes
+ * so the cursor tooltip can report wavelength + power for the curve under the cursor.
+ */
+export function psdSpectraSVG(curves, { title = "Live power spectrum" } = {}) {
+  const area = plotArea();
+  const usable = (curves || []).filter((curve) => curve && curve.wavelength && curve.wavelength.length);
+  if (!usable.length) return emptyChart(title, "no field in view for a spectrum");
+
+  const positive = (list, pick) => {
+    const out = [];
+    for (let i = 0; i < list.wavelength.length; i += 1) {
+      const wavelength = list.wavelength[i];
+      const power = list.power[i];
+      if (wavelength > 0 && power > 0) out.push(pick(wavelength, power));
+    }
+    return out;
+  };
+  const xValues = usable.flatMap((curve) => positive(curve, (wavelength) => Math.log10(wavelength)));
+  const yValues = usable.flatMap((curve) => positive(curve, (_, power) => Math.log10(power)));
+  if (!xValues.length || !yValues.length) return emptyChart(title, "spectrum values non-positive");
+  const xMin = Math.min(...xValues);
+  const xMax = Math.max(...xValues);
+  const yMin = Math.min(...yValues);
+  const yMax = Math.max(...yValues);
+  const xOf = (wavelength) => area.x1 - ((Math.log10(wavelength) - xMin) / (xMax - xMin || 1)) * area.width;
+  const yOf = (power) => area.y1 - ((Math.log10(power) - yMin) / (yMax - yMin || 1)) * area.height;
+
+  let body = "";
+  for (let t = 0; t <= 3; t += 1) {
+    const y = area.y0 + (area.height * t) / 3;
+    body += `<line x1="${area.x0}" y1="${y.toFixed(1)}" x2="${area.x1}" y2="${y.toFixed(1)}" class="grid"/>`;
+  }
+  for (let exponent = Math.ceil(xMin); exponent <= Math.floor(xMax); exponent += 1) {
+    const wavelengthMetres = Math.pow(10, exponent);
+    const x = xOf(wavelengthMetres);
+    body += `<line x1="${x.toFixed(1)}" y1="${area.y0}" x2="${x.toFixed(1)}" y2="${area.y1}" class="grid"/>`;
+    body += `<text x="${x.toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="middle">${formatKm(wavelengthMetres)}</text>`;
+  }
+
+  for (const curve of usable) {
+    const path = [];
+    for (let i = 0; i < curve.wavelength.length; i += 1) {
+      const wavelength = curve.wavelength[i];
+      const power = curve.power[i];
+      if (!(wavelength > 0) || !(power > 0)) continue;
+      path.push(`${path.length === 0 ? "M" : "L"}${xOf(wavelength).toFixed(1)} ${yOf(power).toFixed(1)}`);
+    }
+    body += `<path d="${path.join(" ")}" fill="none" stroke="${curve.color}" stroke-width="1.6" ${
+      curve.dashed ? 'stroke-dasharray="4 3"' : ""
+    }/>`;
+    for (let i = 0; i < curve.wavelength.length; i += 1) {
+      const wavelength = curve.wavelength[i];
+      const power = curve.power[i];
+      if (!(wavelength > 0) || !(power > 0)) continue;
+      body += `<circle class="chart-point" data-line="${escapeText(curve.label)}" data-x-label="${formatKm(
+        wavelength,
+      )}" data-y-label="${formatPower(power)}" cx="${xOf(wavelength).toFixed(1)}" cy="${yOf(power).toFixed(1)}" r="6"/>`;
+    }
+  }
+
+  const legend = usable
+    .map((curve, index) => {
+      const x = area.x0 + index * 96;
+      return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${curve.color}"/><text x="${
+        x + 12
+      }" y="10" class="legend">${escapeText(curve.label)}</text>`;
+    })
+    .join("");
+
+  return svgOpen(title) + axes(area, "wavelength (km)", "power") + body + legend + interactionLayer() + "</svg>";
+}
+
 function emptyChart(title, message) {
   return (
     svgOpen(title) +
