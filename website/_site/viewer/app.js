@@ -892,7 +892,7 @@ function onPanelWheel(panel, event) {
   const before = projection.unproject(cursorX, cursorY);
   const factor = Math.exp(-event.deltaY * 0.0015);
   const previousZoom = view.zoom;
-  view.zoom = Math.min(60, Math.max(1, view.zoom * factor));
+  view.zoom = Math.min(60, Math.max(minimumZoomFor(panel), view.zoom * factor));
   if (view.zoom === previousZoom) return;
   // Keep the world point under the cursor fixed.
   const after = projectionFor(panel).unproject(cursorX, cursorY);
@@ -915,12 +915,26 @@ function onPanelWheel(panel, event) {
   scheduleRailUpdate();
 }
 
+function minimumZoomFor(panel) {
+  const bounds = REGION_BOUNDS[shared.region];
+  if (!bounds || !panel) return 1;
+  const width = panel.els.field.width;
+  const height = panel.els.field.height;
+  const fit = Math.min(height, width / 2);
+  const longitudeSpan = (bounds.east - bounds.west) / 360;
+  const latitudeSpan = (bounds.north - bounds.south) / 180;
+  const horizontalZoom = width / (2 * fit * longitudeSpan);
+  const verticalZoom = height / (fit * latitudeSpan);
+  return Math.min(60, Math.max(1, Math.min(horizontalZoom, verticalZoom)));
+}
+
 function clampView() {
   const panel = panels.find((candidate) => candidate && candidate.els && candidate.els.field.width > 0);
   if (!panel) {
     view.centerNY = Math.min(1, Math.max(0, view.centerNY));
     return;
   }
+  view.zoom = Math.min(60, Math.max(minimumZoomFor(panel), view.zoom));
   const projection = projectionFor(panel);
   const bounds = REGION_BOUNDS[shared.region];
   if (bounds) {
@@ -960,12 +974,7 @@ function fitRegionView() {
   view.centerNX = ((bounds.west + bounds.east) / 2 + 180) / 360;
   view.centerNY = (90 - (bounds.south + bounds.north) / 2) / 180;
   if (!panel) return;
-  const projection = projectionFor(panel);
-  const longitudeSpan = (bounds.east - bounds.west) / 360;
-  const latitudeSpan = (bounds.north - bounds.south) / 180;
-  const horizontalZoom = projection.width / (2 * Math.min(projection.height, projection.width / 2) * longitudeSpan);
-  const verticalZoom = projection.height / (Math.min(projection.height, projection.width / 2) * latitudeSpan);
-  view.zoom = Math.min(60, Math.max(1, Math.min(horizontalZoom, verticalZoom)));
+  view.zoom = minimumZoomFor(panel);
   clampView();
 }
 
@@ -1890,13 +1899,16 @@ async function main() {
   elements["overlay-region"].value = shared.region;
   elements["eddy-reference"].value = shared.eddyReference;
 
+  for (let i = 0; i < shared.layout; i += 1) if (!panels[i]) panels[i] = buildPanel(i);
+  applyPanelHash(parameters);
+  clampView();
+  writeHash();
+
   // Insight index + score summary load in the background; overlays/rail wait on them.
   insightIndex = await loadInsightIndex();
   scoresSummary = await loadScoresSummary(insightIndex);
 
   // Ensure the primary dataset store so start-date / lead options are known.
-  for (let i = 0; i < shared.layout; i += 1) if (!panels[i]) panels[i] = buildPanel(i);
-  applyPanelHash(parameters);
   // Warm every visible panel's store so variable/start selectors populate on first paint.
   await Promise.all(panels.slice(0, shared.layout).map((panel) => ensureStore(panel.state.dataset).catch(() => {})));
   const manifest = manifestFor(panels[0].state.dataset);
