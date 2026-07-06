@@ -1152,6 +1152,7 @@ function renderRailSkill(shown, comparison) {
     unit,
     labels,
     title: comparison ? "Skill vs lead (both forecasts)" : "Skill vs lead",
+    emptyMessage: "no observation-based skill for this variable/product",
   });
   elements["rail-skill-note"].textContent = notes.join(" · ");
   wireCursorTooltip(elements["rail-lead-curve"]);
@@ -1251,18 +1252,18 @@ function wireCursorTooltip(container) {
     if (nearestX === null) return;
     crosshair.setAttribute("x1", String(nearestX));
     crosshair.setAttribute("x2", String(nearestX));
-    crosshair.hidden = false;
+    crosshair.removeAttribute("hidden");
     setText(lines);
     const width = Number(rect.getAttribute("width"));
     const x = Math.min(360 - width - 2, local.x + 10);
     const y = Math.max(2, Math.min(200, local.y + 10));
     tooltip.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
-    tooltip.hidden = false;
+    tooltip.removeAttribute("hidden");
   };
   svg.addEventListener("mousemove", move);
   svg.addEventListener("mouseleave", () => {
-    crosshair.hidden = true;
-    tooltip.hidden = true;
+    crosshair.setAttribute("hidden", "");
+    tooltip.setAttribute("hidden", "");
   });
 }
 

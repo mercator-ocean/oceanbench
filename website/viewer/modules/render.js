@@ -122,7 +122,9 @@ export function drawColorbar(canvas, colormapName, range, { label = "", textColo
   const height = canvas.height;
   context.clearRect(0, 0, width, height);
   const lut = lookupTable(colormapName);
-  const barHeight = Math.min(14, height - 18);
+  const labelHeight = label ? 18 : 0;
+  const barTop = labelHeight;
+  const barHeight = Math.min(14, height - labelHeight - 18);
   const gradient = context.createImageData(width, barHeight);
   for (let column = 0; column < width; column += 1) {
     const lutIndex = Math.round((column / (width - 1)) * 255) * 3;
@@ -134,18 +136,18 @@ export function drawColorbar(canvas, colormapName, range, { label = "", textColo
       gradient.data[destination + 3] = 255;
     }
   }
-  context.putImageData(gradient, 0, 0);
+  context.putImageData(gradient, 0, barTop);
   context.fillStyle = textColor;
   context.font = "11px system-ui, sans-serif";
   context.textBaseline = "top";
-  context.textAlign = "left";
-  context.fillText(formatTick(range[0]), 0, barHeight + 3);
-  context.textAlign = "right";
-  context.fillText(formatTick(range[1]), width, barHeight + 3);
   if (label) {
     context.textAlign = "center";
-    context.fillText(label, width / 2, barHeight + 3);
+    context.fillText(label, width / 2, 1);
   }
+  context.textAlign = "left";
+  context.fillText(formatTick(range[0]), 0, barTop + barHeight + 3);
+  context.textAlign = "right";
+  context.fillText(formatTick(range[1]), width, barTop + barHeight + 3);
 }
 
 function formatTick(value) {

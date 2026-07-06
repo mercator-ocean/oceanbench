@@ -77,10 +77,13 @@ function niceMax(value) {
  * RMSE / Class-4 RMSD vs lead day, one series per reference present, each with its
  * bootstrap-CI band. `series` is a Map(reference -> [{lead_day, mean, ci_low, ci_high}]).
  */
-export function leadCurveSVG(series, { title = "Skill vs lead", unit = "", labels = new Map() } = {}) {
+export function leadCurveSVG(
+  series,
+  { title = "Skill vs lead", unit = "", labels = new Map(), emptyMessage = "no score rows for this variable/depth" } = {},
+) {
   const area = plotArea();
   const references = [...series.keys()];
-  if (!references.length) return emptyChart(title, "no score rows for this variable/depth");
+  if (!references.length) return emptyChart(title, emptyMessage);
 
   let maxLead = 1;
   let maxValue = 0;

@@ -278,7 +278,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 }
 
 .map-footer { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
-.colorbar { border-radius: 4px; }
+.colorbar { width: min(32rem, 100%); height: 3.25rem; border-radius: 4px; }
 .layer-info { color: var(--muted); font-family: var(--mono); font-size: 0.76rem; margin: 0; }
 
 .status { color: var(--muted); font-size: 0.82rem; margin: 0; min-height: 1rem; }
@@ -320,8 +320,8 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   z-index: 2;
 }
 .rail-collapse:hover { border-color: var(--accent); color: var(--accent); }
-.rail-collapse::before { content: "\203A"; font-size: 1rem; line-height: 1; } /* › expand */
-.rail-collapse[aria-expanded="true"]::before { content: "\2039"; } /* ‹ collapse */
+.rail-collapse::before { content: "\2039"; font-size: 1rem; line-height: 1; } /* ‹ expand left */
+.rail-collapse[aria-expanded="true"]::before { content: "\203A"; } /* › collapse right */
 .context-rail:not(.collapsed) .rail-title { padding-left: 1.6rem; }
 .rail-resize-handle {
   position: absolute;
