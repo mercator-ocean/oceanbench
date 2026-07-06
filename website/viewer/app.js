@@ -4,15 +4,15 @@
 
 // OceanBench viewer — comparison-first field explorer (contracts.md §6).
 //
-// Comparison is the primitive: 1/2/4 synchronized panels sharing viewport, lead day
-// and start date; each panel is {dataset, variable, mode}. Modes are field, first-
-// class difference (A − B in a diverging colormap centred on 0), and animated
-// currents (GPU-style advected particles over uo/vo). Any field panel can A/B
-// compare a second dataset by swipe divider or a blink key. Insight overlays (eddy
-// census, Class-4 obs error, Lagrangian trajectory stub) attach as purpose-modes,
-// never all at once. A context rail carries the quantitative curves (skill vs lead,
-// PSD spectrum) for the active view, and a small-multiples strip shows error growth
-// across leads. Every bit of view state lives in the URL hash.
+// Comparison is the primitive: 1 or 2 synchronized panels (Forecast 1 / Forecast 2)
+// sharing viewport, lead day and start date; each panel is {dataset, variable, mode}.
+// Modes are field and first-class difference (A − B in a diverging colormap centred on
+// 0). Currents are a variable (speed magnitude √(u²+v²)) with an optional particle
+// animation. In single-panel mode a field can A/B compare a second forecast by a swipe
+// divider or a blink key. Insight overlays (eddy census, Class-4 obs error, Lagrangian
+// trajectory stub) attach as purpose-modes, never all at once. A context rail carries
+// the quantitative curves (skill vs lead, PSD spectrum) for the active view. Every bit
+// of view state lives in the URL hash.
 
 import { loadStore, loadManifest, readLayer, readCoordinate, prefetchLayer } from "./modules/zarr.js";
 import { COLORMAP_NAMES } from "./vendor/cmocean/colormaps.js";
@@ -291,7 +291,6 @@ function wirePanel(panel) {
       await loadOverlayData();
       redrawOverlaysAll();
       updateContextRail();
-      updateSmallMultiples();
       writeHash();
     } catch (error) {
       setStatus(String(error.message || error), true);
@@ -305,7 +304,6 @@ function wirePanel(panel) {
     setActivePanel(panel.index);
     await renderPanel(panel);
     await updateContextRail();
-    await updateSmallMultiples();
     writeHash();
   });
   panel.els.mode.addEventListener("change", async (event) => {
@@ -314,7 +312,6 @@ function wirePanel(panel) {
     refreshPanelControls(panel);
     await renderPanel(panel);
     await updateContextRail();
-    await updateSmallMultiples();
     updateCurrentsControlVisibility();
     writeHash();
   });
@@ -324,7 +321,6 @@ function wirePanel(panel) {
     await ensureStore(panel.state.datasetB);
     await renderPanel(panel);
     await updateContextRail();
-    await updateSmallMultiples();
     writeHash();
   });
   panel.els.compareToggle.addEventListener("change", async (event) => {
@@ -334,7 +330,6 @@ function wirePanel(panel) {
     if (panel.state.compare) await ensureStore(panel.state.datasetB);
     await renderPanel(panel);
     await updateContextRail();
-    await updateSmallMultiples();
     writeHash();
   });
 
@@ -819,7 +814,6 @@ function onPanelWheel(panel, event) {
     renderAllPanels().then(() => {
       redrawOverlaysAll();
       updateContextRail();
-      updateSmallMultiples();
     });
   } else {
     redrawAllPanels();
@@ -909,7 +903,6 @@ function setActivePanel(index) {
   markActivePanel();
   updateContextRail();
   updateSharedColorbar();
-  updateSmallMultiples();
 }
 
 function setPanelLoading(panel, loading) {
@@ -1251,7 +1244,6 @@ function wireGlobalControls() {
         updateSharedColorbar();
         updateContextRail();
         updateCurrentsControlVisibility();
-        updateSmallMultiples();
       });
       writeHash();
     });
@@ -1262,7 +1254,6 @@ function wireGlobalControls() {
     await loadOverlayData();
     redrawOverlaysAll();
     await updateContextRail();
-    await updateSmallMultiples();
     writeHash();
   });
   elements["lead-day"].addEventListener("input", (event) => {
@@ -1307,7 +1298,6 @@ function wireGlobalControls() {
     applyTheme();
     renderAllPanels().then(() => {
       redrawOverlaysAll();
-      updateSmallMultiples();
     });
     writeHash();
   });
@@ -1409,108 +1399,6 @@ function markLayoutButtons() {
   }
 }
 
-// ---- small-multiples error strip (feature 6) --------------------------------
-
-const STRIP_LEADS = [1, 3, 5, 7, 10];
-
-async function updateSmallMultiples() {
-  const strip = elements["small-multiples"];
-  const panel = panels[activePanelIndex];
-  // Needs an A and a B to difference: a diff panel, or a field panel with compare on.
-  const hasPair = panel && (panel.state.mode === "diff" || (panel.state.mode === "field" && panel.state.compare && panel.state.datasetB));
-  if (!hasPair) {
-    strip.hidden = true;
-    return;
-  }
-  strip.hidden = false;
-  const manifest = manifestFor(panel.state.dataset);
-  const compareManifest = manifestFor(panel.state.datasetB);
-  const entry = manifest && manifest.variables[panel.state.variable];
-  if (!manifest || !compareManifest || !entry || !(panel.state.variable in compareManifest.variables)) {
-    showSmallMultiplesNoData("No data for this comparison.");
-    return;
-  }
-  elements["strip-title"].textContent = `Error growth: ${labelFor(panel.state.dataset)} - ${labelFor(panel.state.datasetB)} · ${prettyName(entry.standard_name)}`;
-  const level = selectRenderLevel(manifest);
-  const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
-  const maxLead = Math.max(...manifest.lead_days);
-  const leads = STRIP_LEADS.filter((lead) => lead <= maxLead);
-
-  const diffs = [];
-  await ensureStore(panel.state.datasetB);
-  const compareLevel = renderLevelForSlug(panel.state.datasetB);
-  for (const lead of leads) {
-    try {
-      const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, lead - 1);
-      const compare = await readAlignedField(
-        panel,
-        panel.state.datasetB,
-        panel.state.variable,
-        compareLevel,
-        start,
-        lead - 1,
-        primary.latitudes,
-        primary.longitudes,
-      );
-      diffs.push({ lead, field: differenceField(primary.field, compare.field), latitudes: primary.latitudes });
-    } catch (error) {
-      diffs.push({ lead, error });
-    }
-  }
-  // Shared diverging scale across all leads (contracts.md §6).
-  let magnitude = 0;
-  for (const item of diffs) {
-    if (!item.field) continue;
-    const range = symmetricRange(item.field);
-    magnitude = Math.max(magnitude, range[1]);
-  }
-  const sharedRange = [-magnitude || -1, magnitude || 1];
-
-  const row = elements["strip-row"];
-  row.innerHTML = "";
-  const ratio = window.devicePixelRatio || 1;
-  for (const item of diffs) {
-    const cell = document.createElement("div");
-    cell.className = "strip-cell";
-    if (!item.field) {
-      cell.classList.add("no-data");
-      const message = document.createElement("div");
-      message.className = "strip-no-data";
-      message.textContent = "no data";
-      const caption = document.createElement("span");
-      caption.textContent = `lead ${item.lead}`;
-      cell.appendChild(message);
-      cell.appendChild(caption);
-      row.appendChild(cell);
-      continue;
-    }
-    const canvas = document.createElement("canvas");
-    const flip = item.latitudes[0] < item.latitudes[item.latitudes.length - 1];
-    const image = fieldToImageData(item.field, DIFFERENCE_COLORMAP, sharedRange, { flipVertical: flip, theme: shared.theme });
-    const displayWidth = Math.round((row.clientWidth - 16) / diffs.length);
-    const displayHeight = Math.round((displayWidth * item.field.height) / item.field.width);
-    canvas.width = Math.max(1, Math.round(displayWidth * ratio));
-    canvas.height = Math.max(1, Math.round(displayHeight * ratio));
-    const source = new OffscreenCanvas(item.field.width, item.field.height);
-    source.getContext("2d", { willReadFrequently: true }).putImageData(image, 0, 0);
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    context.imageSmoothingEnabled = false;
-    context.drawImage(source, 0, 0, canvas.width, canvas.height);
-    const caption = document.createElement("span");
-    caption.textContent = `lead ${item.lead}`;
-    cell.appendChild(canvas);
-    cell.appendChild(caption);
-    row.appendChild(cell);
-  }
-  elements["strip-title"].textContent += `  ·  ±${magnitude ? magnitude.toFixed(3) : "1"} ${panel.units}`;
-}
-
-function showSmallMultiplesNoData(message) {
-  elements["small-multiples"].hidden = false;
-  elements["strip-title"].textContent = message;
-  elements["strip-row"].innerHTML = `<div class="strip-cell no-data"><div class="strip-no-data">no data</div></div>`;
-}
-
 // ---- URL hash (every view state is a URL — §6) ------------------------------
 
 let hashWriteTimer = null;
@@ -1607,9 +1495,6 @@ function selectElements() {
     "theme-toggle",
     "rail-toggle",
     "panel-grid",
-    "small-multiples",
-    "strip-title",
-    "strip-row",
     "colorbar",
     "layer-info",
     "status",
@@ -1679,7 +1564,6 @@ async function main() {
   updateSharedColorbar();
   await applyOverlayMode();
   await updateContextRail();
-  await updateSmallMultiples();
   writeHash();
 }
 
