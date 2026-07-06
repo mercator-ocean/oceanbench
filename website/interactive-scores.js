@@ -54,6 +54,21 @@ let activeRegion = null;
 let activeVersion = null;
 let isScrollRefreshScheduled = false;
 
+const URL_STATE_PARAMETERS = {
+  version: "version",
+  region: "region",
+  track: "track",
+  baseline: "baseline",
+  display: "display",
+  depths: "depths",
+  scale: "scale",
+};
+
+let selectedBaseline = null;
+let defaultVersionValue = null;
+let defaultRegionValue = null;
+let defaultBaselineValue = null;
+
 const SECTION_ORDER = ["observations", "reanalysis", "analysis"];
 
 const SECTION_ID_MAP = {
@@ -1197,7 +1212,7 @@ function renderTablesOnly() {
   if (visibleChallengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value);
+  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value ?? selectedBaseline);
   if (!baseline) return;
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
@@ -1217,6 +1232,9 @@ function renderTablesOnly() {
 
   updateColorLegend();
   setupCellHighlight();
+
+  selectedBaseline = baseline;
+  writeUrlState();
 }
 
 function renderAllTables() {
@@ -1232,7 +1250,7 @@ function renderAllTables() {
   if (visibleChallengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value);
+  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value ?? selectedBaseline);
   if (!baseline) return;
   const availableDepths = getAvailableDepths(challengers, baseline, sections);
 
@@ -1271,6 +1289,85 @@ function renderAllTables() {
   setActiveSection(activeSection);
   refreshScrollSpy();
   setupCellHighlight();
+
+  const versions = getVersions(data);
+  defaultVersionValue = versions.includes(data.default_version) ? data.default_version : versions[0] || null;
+  defaultRegionValue = regionIds[0] || null;
+  defaultBaselineValue = resolveBaselineSelectionForTrack(visibleChallengerNames, null);
+  selectedBaseline = baseline;
+  writeUrlState();
+}
+
+function applyUrlStateFromLocation() {
+  const parameters = new URLSearchParams(window.location.search);
+
+  const versionParameter = parameters.get(URL_STATE_PARAMETERS.version);
+  if (versionParameter) activeVersion = versionParameter;
+
+  const regionParameter = parameters.get(URL_STATE_PARAMETERS.region);
+  if (regionParameter) activeRegion = regionParameter;
+
+  const trackParameter = parameters.get(URL_STATE_PARAMETERS.track);
+  if (trackParameter) activeTrack = trackParameter;
+
+  const baselineParameter = parameters.get(URL_STATE_PARAMETERS.baseline);
+  if (baselineParameter) selectedBaseline = baselineParameter;
+
+  const displayParameter = parameters.get(URL_STATE_PARAMETERS.display);
+  if (displayParameter) showPercentDiff = displayParameter === "percent";
+
+  const depthsParameter = parameters.get(URL_STATE_PARAMETERS.depths);
+  if (depthsParameter) {
+    if (depthsParameter === "all") {
+      showAllMode = true;
+      selectedDepths = new Set();
+    } else {
+      showAllMode = false;
+      selectedDepths = new Set(depthsParameter.split(",").filter((depth) => depth !== ""));
+    }
+  }
+
+  const scaleParameter = parameters.get(URL_STATE_PARAMETERS.scale);
+  if (scaleParameter) {
+    const parsedScale = Number(scaleParameter);
+    if (isFinite(parsedScale) && parsedScale > 0) {
+      maxScale = parsedScale;
+      colorScaleEdges = buildBinEdges(maxScale);
+    }
+  }
+}
+
+function writeUrlState() {
+  if (!parsedData) return;
+  const parameters = new URLSearchParams();
+
+  if (activeVersion && activeVersion !== defaultVersionValue) {
+    parameters.set(URL_STATE_PARAMETERS.version, activeVersion);
+  }
+  if (activeRegion && activeRegion !== defaultRegionValue) {
+    parameters.set(URL_STATE_PARAMETERS.region, activeRegion);
+  }
+  if (activeTrack && activeTrack !== "high_resolution") {
+    parameters.set(URL_STATE_PARAMETERS.track, activeTrack);
+  }
+  if (selectedBaseline && selectedBaseline !== defaultBaselineValue) {
+    parameters.set(URL_STATE_PARAMETERS.baseline, selectedBaseline);
+  }
+  if (showPercentDiff) {
+    parameters.set(URL_STATE_PARAMETERS.display, "percent");
+  }
+  if (!showAllMode && selectedDepths.size > 0) {
+    const orderedDepths = [...selectedDepths].sort((first, second) => Number(first) - Number(second));
+    parameters.set(URL_STATE_PARAMETERS.depths, orderedDepths.join(","));
+  }
+  if (maxScale !== 80) {
+    parameters.set(URL_STATE_PARAMETERS.scale, `${maxScale}`);
+  }
+
+  const queryString = parameters.toString();
+  const newRelativeUrl =
+    window.location.pathname + (queryString ? `?${queryString}` : "") + window.location.hash;
+  window.history.replaceState(null, "", newRelativeUrl);
 }
 
 function init() {
@@ -1279,6 +1376,7 @@ function init() {
   if (initialSection) {
     activeSection = initialSection;
   }
+  applyUrlStateFromLocation();
   renderAllTables();
 
   if (initialSection) {
