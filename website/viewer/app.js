@@ -545,9 +545,15 @@ function projectionFor(panel) {
 }
 
 function drawImageWorld(context, offscreen, edges, projection) {
-  const topLeft = projection.project(edges.nx0, edges.nyTop);
-  const bottomRight = projection.project(edges.nx1, edges.nyBottom);
-  context.drawImage(offscreen, topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  const visibleLeft = projection.unproject(0, 0).nx;
+  const visibleRight = projection.unproject(projection.width, 0).nx;
+  const firstCopy = Math.floor(visibleLeft - edges.nx1);
+  const lastCopy = Math.ceil(visibleRight - edges.nx0);
+  for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+    const topLeft = projection.project(edges.nx0 + copy, edges.nyTop);
+    const bottomRight = projection.project(edges.nx1 + copy, edges.nyBottom);
+    context.drawImage(offscreen, topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  }
 }
 
 function drawPanel(panel) {
@@ -710,8 +716,8 @@ function visibleViewport(projection, canvas) {
   const topLeft = projection.unproject(0, 0);
   const bottomRight = projection.unproject(canvas.width, canvas.height);
   return {
-    minX: Math.max(0, Math.min(topLeft.nx, bottomRight.nx)),
-    maxX: Math.min(1, Math.max(topLeft.nx, bottomRight.nx)),
+    minX: Math.min(topLeft.nx, bottomRight.nx),
+    maxX: Math.max(topLeft.nx, bottomRight.nx),
     minY: Math.max(0, Math.min(topLeft.ny, bottomRight.ny)),
     maxY: Math.min(1, Math.max(topLeft.ny, bottomRight.ny)),
   };
@@ -803,8 +809,18 @@ function onPanelWheel(panel, event) {
 }
 
 function clampView() {
-  view.centerNX = Math.min(1, Math.max(0, view.centerNX));
-  view.centerNY = Math.min(1, Math.max(0, view.centerNY));
+  const panel = panels.find((candidate) => candidate && candidate.els && candidate.els.field.width > 0);
+  if (!panel) {
+    view.centerNY = Math.min(1, Math.max(0, view.centerNY));
+    return;
+  }
+  const projection = projectionFor(panel);
+  if (projection.displayHeight <= projection.height) {
+    view.centerNY = 0.5;
+    return;
+  }
+  const halfViewport = projection.height / (2 * projection.displayHeight);
+  view.centerNY = Math.min(1 - halfViewport, Math.max(halfViewport, view.centerNY));
 }
 
 function updateHover(event) {
@@ -822,7 +838,8 @@ function updateHover(event) {
     const ratio = window.devicePixelRatio || 1;
     const projection = projectionFor(panel);
     const point = projection.unproject((event.clientX - rectangle.left) * ratio, (event.clientY - rectangle.top) * ratio);
-    const lon = point.nx * 360 - 180;
+    const wrappedNX = ((point.nx % 1) + 1) % 1;
+    const lon = wrappedNX * 360 - 180;
     const lat = 90 - point.ny * 180;
     const column = nearestIndex(panel.longitudes, lon);
     const row = nearestIndex(panel.latitudes, lat);
