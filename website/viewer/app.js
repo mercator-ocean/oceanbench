@@ -38,6 +38,7 @@ import {
 import { drawEddyFrame, drawClass4Points, class4ErrorScale, EDDY_COLORS } from "./modules/overlays.js";
 import { leadCurveSVG, psdSpectraSVG, SERIES_COLORS } from "./modules/charts.js";
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
+import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
 import { resolveViewerDataUrl } from "./config.js";
 
 const DATASETS_URL = resolveViewerDataUrl("./data/datasets.json");
@@ -130,6 +131,9 @@ let scoresSummary = [];
 const panels = [];
 let activePanelIndex = 0;
 const elements = {};
+const trajectoryWorker = new Worker(new URL("./modules/trajectory-worker.js", import.meta.url), { type: "module" });
+let trajectoryState = null;
+let trajectoryRequestId = 0;
 
 // ---- store / manifest / coordinate helpers (shared cache) -------------------
 
@@ -321,7 +325,8 @@ function refreshPanelControls(panel) {
 
 function wirePanel(panel) {
   panel.container.addEventListener("mousedown", () => setActivePanel(panel.index), true);
-  panel.els.dataset.addEventListener("change", async (event) => {
+    panel.els.dataset.addEventListener("change", async (event) => {
+    clearTrajectories();
     panel.state.dataset = event.target.value;
     setPanelLoading(panel, true);
     try {
@@ -344,6 +349,7 @@ function wirePanel(panel) {
     }
   });
   panel.els.variable.addEventListener("change", async (event) => {
+    clearTrajectories();
     panel.state.variable = event.target.value;
     setActivePanel(panel.index);
     refreshPanelControls(panel);
@@ -423,6 +429,7 @@ async function renderPanel(panel) {
     resizePanelCanvases(panel);
     drawPanel(panel);
     drawOverlays(panel);
+    drawTrajectoryFans(panel);
     updateSharedColorbar();
     setStatus("");
   } catch (error) {
@@ -716,6 +723,146 @@ function drawOverlays(panel) {
   }
 }
 
+function drawTrajectoryFans(panel) {
+  if (!trajectoryState || !trajectoryState.trajectories) return;
+  const context = panel.els.overlay.getContext("2d");
+  const projection = projectionFor(panel);
+  const ratio = window.devicePixelRatio || 1;
+  const shownLead = Math.min(shared.leadDay, trajectoryState.maximumLead);
+  const copyOffsets = visibleCopyOffsets(projection, panel.els.overlay);
+  context.save();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  trajectoryState.trajectories.forEach((fan, forecastIndex) => {
+    for (const trajectory of fan) {
+      const points = trajectory.slice(0, shownLead + 1);
+      for (let segment = 1; segment < points.length; segment += 1) {
+        const alpha = 0.2 + 0.65 * segment / Math.max(1, points.length - 1);
+        context.strokeStyle = `${TRAJECTORY_COLORS[forecastIndex]}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
+        context.lineWidth = (forecastIndex === 0 ? 1.7 : 1.4) * ratio;
+        for (const offset of copyOffsets) {
+          const from = projection.project((points[segment - 1].longitude + 180) / 360 + offset, (90 - points[segment - 1].latitude) / 180);
+          const to = projection.project((points[segment].longitude + 180) / 360 + offset, (90 - points[segment].latitude) / 180);
+          context.beginPath();
+          context.moveTo(from.x, from.y);
+          context.lineTo(to.x, to.y);
+          context.stroke();
+        }
+      }
+    }
+  });
+  context.restore();
+}
+
+function trajectoryEligiblePanels() {
+  return panels.slice(0, shared.layout).filter((panel) => panel && isCurrentsVariable(panel.state.variable) && panel.velocity);
+}
+
+function makeSeedCluster(longitude, latitude, radiusDegrees) {
+  const seeds = [];
+  const count = 20;
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  for (let index = 0; index < count; index += 1) {
+    const radius = radiusDegrees * Math.sqrt((index + 0.5) / count);
+    const angle = index * goldenAngle;
+    seeds.push({
+      longitude: longitude + radius * Math.cos(angle) / Math.max(0.2, Math.cos(latitude * Math.PI / 180)),
+      latitude: latitude + radius * Math.sin(angle),
+    });
+  }
+  return seeds;
+}
+
+async function loadTrajectoryFields(panel, maximumLead) {
+  const manifest = manifestFor(panel.state.dataset);
+  const level = selectRenderLevel(manifest);
+  const coordinates = await loadCoordinates(panel.state.dataset, level);
+  const variables = currentDepthVariables(panel);
+  const startIndex = Math.min(shared.startIndex, manifest.start_dates.length - 1);
+  const fields = [];
+  for (let leadIndex = 0; leadIndex < maximumLead; leadIndex += 1) {
+    const [u, v] = await Promise.all([
+      readLayer(stores.get(panel.state.dataset), { variable: variables.u, level, startIndex, leadIndex }),
+      readLayer(stores.get(panel.state.dataset), { variable: variables.v, level, startIndex, leadIndex }),
+    ]);
+    const lonStep = coordinates.longitudes.length > 1 ? coordinates.longitudes[1] - coordinates.longitudes[0] : 1;
+    fields.push({
+      u: u.data,
+      v: v.data,
+      width: u.width,
+      height: u.height,
+      lon0: coordinates.longitudes[0],
+      lat0: coordinates.latitudes[0],
+      lonStep,
+      latStep: coordinates.latitudes.length > 1 ? coordinates.latitudes[1] - coordinates.latitudes[0] : 1,
+      periodic: Math.abs(lonStep) * u.width >= 359,
+    });
+  }
+  return { fields };
+}
+
+async function seedTrajectories(panel, event) {
+  const eligible = trajectoryEligiblePanels();
+  if (!eligible.length || (shared.layout === 2 && eligible.length !== 2)) return;
+  const rectangle = panel.els.field.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  const world = projectionFor(panel).unproject((event.clientX - rectangle.left) * ratio, (event.clientY - rectangle.top) * ratio);
+  let longitude = world.nx * 360 - 180;
+  if (shared.region === "global") longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  const latitude = 90 - world.ny * 180;
+  const cellSize = Math.max(
+    Math.abs(panel.longitudes[1] - panel.longitudes[0]),
+    Math.abs(panel.latitudes[1] - panel.latitudes[0]),
+  );
+  const seeds = makeSeedCluster(longitude, latitude, cellSize * 1.5);
+  const maximumLead = Math.min(...eligible.map((candidate) => Math.max(...manifestFor(candidate.state.dataset).lead_days)));
+  const requestId = ++trajectoryRequestId;
+  trajectoryState = { requestId, maximumLead, loading: true };
+  renderTrajectoryRail();
+  setStatus("Computing illustrative trajectories…");
+  try {
+    const forecasts = await Promise.all(eligible.map((candidate) => loadTrajectoryFields(candidate, maximumLead)));
+    if (requestId !== trajectoryRequestId) return;
+    trajectoryWorker.postMessage({ requestId, seeds, forecasts, maximumLead });
+  } catch (error) {
+    if (requestId === trajectoryRequestId) {
+      clearTrajectories();
+      setStatus(`Trajectory computation failed: ${error.message}`, true);
+    }
+  }
+}
+
+trajectoryWorker.addEventListener("message", ({ data }) => {
+  if (!trajectoryState || data.requestId !== trajectoryState.requestId) return;
+  Object.assign(trajectoryState, data, { loading: false });
+  setStatus("");
+  redrawOverlaysAll();
+  renderTrajectoryRail();
+});
+
+function clearTrajectories() {
+  trajectoryRequestId += 1;
+  trajectoryState = null;
+  if (elements["rail-trajectory-section"]) renderTrajectoryRail();
+  if (panels.length) redrawOverlaysAll();
+}
+
+function renderTrajectoryRail() {
+  const section = elements["rail-trajectory-section"];
+  if (!section) return;
+  section.hidden = !trajectoryState;
+  if (!trajectoryState) return;
+  elements["rail-trajectory-chart"].innerHTML = trajectoryState.separation
+    ? trajectorySeparationSVG(trajectoryState.separation)
+    : "";
+  elements["rail-trajectory-note"].textContent = trajectoryState.loading
+    ? "Loading current fields and advecting 20 shared seeds…"
+    : trajectoryState.separation.length
+      ? "Mean separation between corresponding Forecast 1 and Forecast 2 particles."
+      : "Single-forecast trajectory fan.";
+  wireCursorTooltip(elements["rail-trajectory-chart"]);
+}
+
 // How many selected obs points actually fall inside the viewport (on any visible
 // copy) — the live "N shown" that tracks panning and zooming (item 5).
 function countVisiblePoints(points, projection, copyOffsets, canvas) {
@@ -857,6 +1004,7 @@ function onPanelPointerMove(event) {
     panel.swipeX = Math.min(0.98, Math.max(0.02, ((event.clientX - rectangle.left) * ratio) / panel.els.field.width));
     drawPanel(panel);
   } else if (panel.dragging) {
+    if (Math.hypot(event.clientX - panel.dragging.x, event.clientY - panel.dragging.y) > 4) panel.dragging.moved = true;
     const ratio = window.devicePixelRatio || 1;
     view.centerNX = panel.dragging.centerNX - ((event.clientX - panel.dragging.x) * ratio) / panel.dragging.projection.displayWidth;
     view.centerNY = panel.dragging.centerNY - ((event.clientY - panel.dragging.y) * ratio) / panel.dragging.projection.displayHeight;
@@ -871,10 +1019,12 @@ function onPanelPointerMove(event) {
 
 function endPanelDrag(event) {
   const panel = panels.find((candidate) => candidate.els.field === event.currentTarget);
+  const shouldSeed = panel.dragging && !panel.dragging.moved;
   panel.els.field.removeEventListener("pointermove", onPanelPointerMove);
   if (shared.region === "global") view.centerNX = ((view.centerNX % 1) + 1) % 1;
   panel.dragging = null;
   panel.draggingSwipe = false;
+  if (shouldSeed) seedTrajectories(panel, event);
   writeHash();
 }
 
@@ -1081,6 +1231,7 @@ function redrawAllPanels() {
     resizePanelCanvases(panels[i]);
     drawPanel(panels[i]);
     drawOverlays(panels[i]);
+    drawTrajectoryFans(panels[i]);
   }
 }
 
@@ -1144,6 +1295,7 @@ async function updateContextRail() {
 
   renderRailSkill(shown, comparison);
   renderRailPsd(shown, comparison);
+  renderTrajectoryRail();
   updateRailLegend(panels[activePanelIndex] || panels[0]);
 }
 
@@ -1446,6 +1598,11 @@ let trajectoryNote = "";
 function updateCurrentsControlVisibility() {
   const anyCurrents = panels.slice(0, shared.layout).some((panel) => isCurrentsVariable(panel.state.variable));
   elements["currents-group"].hidden = !anyCurrents;
+  const eligible = trajectoryEligiblePanels();
+  const ready = eligible.length > 0 && (shared.layout === 1 || eligible.length === 2);
+  for (let index = 0; index < shared.layout; index += 1) {
+    panels[index].els.wrap.classList.toggle("trajectory-ready", ready);
+  }
 }
 
 function updateSharedTimeControls(manifest) {
@@ -1509,6 +1666,7 @@ function wireGlobalControls() {
     });
   }
   elements["start-date"].addEventListener("change", async (event) => {
+    clearTrajectories();
     shared.startIndex = Number(event.target.value);
     await renderAllPanels();
     await loadOverlayData();
@@ -1531,6 +1689,7 @@ function wireGlobalControls() {
     writeHash();
   });
   elements["overlay-region"].addEventListener("change", (event) => {
+    clearTrajectories();
     shared.region = event.target.value;
     fitRegionView();
     renderAllPanels().then(() => {
@@ -1601,6 +1760,10 @@ function wireGlobalControls() {
     if (needsRerender) renderAllPanels().then(() => redrawOverlaysAll());
     else redrawAllPanels();
     writeHash();
+  });
+  elements["trajectory-clear"].addEventListener("click", clearTrajectories);
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") clearTrajectories();
   });
 
   window.addEventListener("pointermove", (event) => {
@@ -1716,7 +1879,10 @@ function applyRailCollapsed() {
 }
 
 function redrawOverlaysAll() {
-  for (let i = 0; i < shared.layout; i += 1) drawOverlays(panels[i]);
+  for (let i = 0; i < shared.layout; i += 1) {
+    drawOverlays(panels[i]);
+    drawTrajectoryFans(panels[i]);
+  }
   updateRailLegend(panels[activePanelIndex]);
 }
 
@@ -1861,6 +2027,10 @@ function selectElements() {
     "rail-psd-note",
     "rail-legend",
     "rail-legend-section",
+    "rail-trajectory-section",
+    "rail-trajectory-chart",
+    "rail-trajectory-note",
+    "trajectory-clear",
   ]) {
     elements[id] = document.getElementById(id);
   }
