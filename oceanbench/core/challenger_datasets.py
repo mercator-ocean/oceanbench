@@ -26,18 +26,14 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
 from oceanbench.core.interpolate import interpolate_1_degree
 
-_CLOUDFERRO_ML_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs"
-_GLO12_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data/GLO12"
+_CLOUDFERRO_ML_FORECASTS_URL = cloudferro_public_url("ml-forecast-outputs")
+_GLO12_FORECASTS_URL = "s3://oceanbench-bucket/dev/additionnal-data/GLO12"
 _GLO12_FORECAST_VARIABLE_NAMES = ["so", "thetao", "uo", "vo", "zos"]
 _LANGYA_LEAD_DAYS_COUNT = 7
 
 
-def _default_first_day_datetimes() -> list[datetime]:
-    return generate_dates("2024-01-03", "2024-12-25", 7)
-
-
-def glo12() -> xarray.Dataset:
-    first_day_datetimes = _default_first_day_datetimes()
+def glo12(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    first_day_datetimes = _resolved_first_day_datetimes(None, evaluation_year)
 
     def open_dataset() -> xarray.Dataset:
         return maybe_stage_weekly_dataset(
@@ -54,17 +50,6 @@ def glo12() -> xarray.Dataset:
     return with_remote_http_retries("glo12 challenger dataset open", open_dataset)
 
 
-def glo12_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(glo12())
-
-
-def glo12(evaluation_year: int | str | None = None) -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(
-        _glo12_dataset_path,
-        evaluation_year=evaluation_year,
-    )
-
-
 def glo12_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
     return interpolate_1_degree(glo12(evaluation_year=evaluation_year))
 
@@ -78,7 +63,12 @@ def _open_glo12_forecast_week(first_day_datetime: datetime) -> xarray.Dataset:
     forecast_url = _glo12_dataset_path(first_day_datetime)
     forecast_week_dataset = xarray.merge(
         [
-            xarray.open_zarr(forecast_url, group=variable_name, consolidated=True)[[variable_name]]
+            xarray.open_zarr(
+                forecast_url,
+                group=variable_name,
+                consolidated=True,
+                **zarr_open_kwargs(forecast_url),
+            )[[variable_name]]
             for variable_name in _GLO12_FORECAST_VARIABLE_NAMES
         ]
     ).isel(time=slice(0, LEAD_DAYS_COUNT))
@@ -166,17 +156,20 @@ def _wenhai_dataset_path(start_datetime: datetime) -> str:
 
 def _ml_forecast_output_dataset_path(model_name: str, start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/wenhai/v2/{start_datetime_string}.zarr"
+    model_path = "wenhai/v2" if model_name == "wenhai" else model_name
+    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/{model_path}/{start_datetime_string}.zarr"
 
 
-def langya() -> xarray.Dataset:
+def langya(evaluation_year: int | str | None = None) -> xarray.Dataset:
     return _open_multizarr_forecasts_as_challenger_dataset(
-        _langya_dataset_path, lead_days_count=_LANGYA_LEAD_DAYS_COUNT
+        _langya_dataset_path,
+        evaluation_year=evaluation_year,
+        lead_days_count=_LANGYA_LEAD_DAYS_COUNT,
     )
 
 
-def langya_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(langya())
+def langya_1_degree(evaluation_year: int | str | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(langya(evaluation_year=evaluation_year))
 
 
 def _langya_dataset_path(start_datetime: datetime) -> str:
@@ -189,7 +182,9 @@ def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[d
 
 
 def _resolved_evaluation_year(evaluation_year: int | str | None) -> int:
-    return validate_evaluation_year(evaluation_year if evaluation_year is not None else _default_evaluation_year())
+    return validate_evaluation_year(
+        evaluation_year if evaluation_year is not None else current_runtime_configuration().evaluation_year
+    )
 
 
 def _resolved_first_day_datetimes(
