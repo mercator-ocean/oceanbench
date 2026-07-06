@@ -293,7 +293,8 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 
 /* Context rail */
 .context-rail {
-  width: 20rem;
+  position: relative;
+  width: var(--rail-width, 22rem);
   flex-shrink: 0;
   padding: 1rem 1rem 1.5rem;
   background: var(--surface);
@@ -302,6 +303,27 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   min-height: 0;
 }
 .context-rail[hidden] { display: none; }
+.rail-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.rail-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0.8rem;
+  bottom: 0.8rem;
+  left: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+.rail-resize-handle:hover::after,
+.context-rail.resizing .rail-resize-handle::after { background: var(--accent); }
 .rail-title { font-size: 0.95rem; margin: 0 0 0.15rem; }
 .rail-subtitle { font-size: 0.74rem; color: var(--muted); margin: 0 0 1rem; font-family: var(--mono); }
 .rail-section { margin-bottom: 1.25rem; }
@@ -314,6 +336,11 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .rail-chart .axis-label { fill: var(--muted); font-size: 8px; }
 .rail-chart .legend { fill: var(--text); font-size: 8px; }
 .rail-chart .empty { fill: var(--muted); font-size: 9px; }
+.rail-chart .chart-point { fill: transparent; stroke: none; pointer-events: all; cursor: crosshair; }
+.rail-chart .chart-crosshair { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.rail-chart .chart-tooltip { pointer-events: none; }
+.rail-chart .chart-tooltip rect { fill: var(--readout-bg); stroke: var(--border); }
+.rail-chart .chart-tooltip text { fill: var(--text); font-size: 8px; font-family: var(--mono); }
 .rail-legend { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.74rem; }
 .rail-legend .swatch { display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 3px; margin-right: 0.4rem; vertical-align: -1px; }
 .rail-legend .row { color: var(--text); }
@@ -331,6 +358,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   .workspace { flex-direction: column; overflow: auto; }
   .controls { width: auto; max-height: 14rem; border-right: none; border-bottom: 1px solid var(--border); }
   .context-rail { width: auto; border-left: none; border-top: 1px solid var(--border); }
+  .rail-resize-handle { display: none; }
 }
 
 @media (max-height: 760px) {
@@ -345,7 +373,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 
 @media (max-width: 1320px) {
   .controls { width: 14.5rem; }
-  .context-rail { width: 18rem; }
+  .context-rail { width: min(var(--rail-width, 20rem), 24rem); }
   .panel-grid { gap: 0.45rem; }
   .panel-head { gap: 0.25rem; padding: 0.3rem 0.35rem; }
   .panel-head select { min-width: 4.8rem; max-width: 7.6rem; }

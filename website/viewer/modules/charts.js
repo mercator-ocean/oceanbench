@@ -9,8 +9,8 @@
 // Styling references the page CSS variables so both themes stay consistent; no
 // chart library is vendored.
 
-const VIEW_WIDTH = 320;
-const VIEW_HEIGHT = 180;
+const VIEW_WIDTH = 360;
+const VIEW_HEIGHT = 220;
 const PAD_LEFT = 40;
 const PAD_RIGHT = 12;
 const PAD_TOP = 14;
@@ -45,6 +45,13 @@ function svgOpen(title) {
   return (
     `<svg viewBox="0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}" class="rail-chart" role="img" aria-label="${escapeText(title)}" ` +
     `preserveAspectRatio="xMidYMid meet">`
+  );
+}
+
+function interactionLayer() {
+  return (
+    `<line class="chart-crosshair" x1="0" y1="${PAD_TOP}" x2="0" y2="${VIEW_HEIGHT - PAD_BOTTOM}" hidden/>` +
+    `<g class="chart-tooltip" hidden><rect x="0" y="0" width="128" height="34" rx="4"/><text x="6" y="13"></text><text x="6" y="27"></text></g>`
   );
 }
 
@@ -111,7 +118,10 @@ export function leadCurveSVG(series, { title = "Skill vs lead", unit = "", label
     const line = rows.map((row, index) => `${index === 0 ? "M" : "L"}${xOf(row.lead_day).toFixed(1)} ${yOf(row.mean).toFixed(1)}`);
     body += `<path d="${line.join(" ")}" fill="none" stroke="${color}" stroke-width="1.8"/>`;
     for (const row of rows) {
-      body += `<circle cx="${xOf(row.lead_day).toFixed(1)}" cy="${yOf(row.mean).toFixed(1)}" r="1.8" fill="${color}"/>`;
+      const x = xOf(row.lead_day).toFixed(1);
+      const y = yOf(row.mean).toFixed(1);
+      body += `<circle cx="${x}" cy="${y}" r="1.8" fill="${color}"/>`;
+      body += `<circle class="chart-point" data-line="${escapeText(labels.get(reference) || reference)}" data-x-label="lead day ${row.lead_day}" data-y-label="${formatValue(row.mean, unit)}" cx="${x}" cy="${y}" r="8"/>`;
     }
   }
 
@@ -127,7 +137,7 @@ export function leadCurveSVG(series, { title = "Skill vs lead", unit = "", label
     })
     .join("");
 
-  return svgOpen(title) + axes(area, "lead day", unit || "RMSD") + body + legend + "</svg>";
+  return svgOpen(title) + axes(area, "lead day", unit || "RMSD") + body + legend + interactionLayer() + "</svg>";
 }
 
 /** PSD spectrum (log-log): challenger vs reference power, plus error power. */
@@ -178,6 +188,12 @@ export function spectraSVG(entry, { title = "Power spectrum" } = {}) {
     body += `<path d="${path.join(" ")}" fill="none" stroke="${line.color}" stroke-width="1.6" ${
       line.key === "error" ? 'stroke-dasharray="4 3"' : ""
     }/>`;
+    for (let i = 0; i < wavelengths.length; i += 1) {
+      const wavelength = wavelengths[i];
+      const power = line.values[i];
+      if (!(wavelength > 0) || !(power > 0)) continue;
+      body += `<circle class="chart-point" data-line="${escapeText(line.label)}" data-x-label="${formatKm(wavelength)}" data-y-label="${formatPower(power)}" cx="${xOf(wavelength).toFixed(1)}" cy="${yOf(power).toFixed(1)}" r="7"/>`;
+    }
   }
 
   const legend = lines
@@ -187,7 +203,7 @@ export function spectraSVG(entry, { title = "Power spectrum" } = {}) {
     })
     .join("");
 
-  return svgOpen(title) + axes(area, "wavelength", "power") + body + legend + "</svg>";
+  return svgOpen(title) + axes(area, "wavelength", "power") + body + legend + interactionLayer() + "</svg>";
 }
 
 function emptyChart(title, message) {
@@ -208,4 +224,13 @@ function formatKm(metres) {
   if (km >= 1000) return `${Math.round(km / 1000)}Mm`;
   if (km >= 1) return `${Math.round(km)}km`;
   return `${km.toFixed(1)}km`;
+}
+
+function formatValue(value, unit) {
+  const formatted = Math.abs(value) < 0.01 || Math.abs(value) >= 1000 ? value.toExponential(3) : value.toFixed(4);
+  return unit ? `${formatted} ${unit}` : formatted;
+}
+
+function formatPower(value) {
+  return Math.abs(value) < 0.01 || Math.abs(value) >= 1000 ? value.toExponential(3) : value.toPrecision(4);
 }

@@ -60,6 +60,7 @@ const shared = {
   particlesPlaying: true,
   particleSpeed: 1,
   railOpen: true,
+  railWidth: Number(localStorage.getItem("oceanbench.viewer.railWidth")) || 352,
 };
 
 const stores = new Map();
@@ -746,6 +747,7 @@ function beginPanelDrag(panel, event) {
 }
 
 function onGlobalMove(event) {
+  if (updateRailResize(event)) return;
   for (const panel of panels) {
     if (panel.draggingSwipe) {
       const ratio = window.devicePixelRatio || 1;
@@ -768,6 +770,7 @@ function onGlobalMove(event) {
 }
 
 function onGlobalUp() {
+  if (endRailResize()) return;
   let wasDragging = false;
   for (const panel of panels) {
     if (panel.dragging || panel.draggingSwipe) wasDragging = true;
@@ -990,9 +993,53 @@ async function updateContextRail() {
   const spectra = await loadSpectra(insightsFor(insightIndex, "glonet_1_degree", shared.region).spectra);
   const spectrumEntry = spectra ? spectraEntry(spectra, panel.state.variable, shared.eddyReference, shared.leadDay) : null;
   elements["rail-spectra"].innerHTML = spectraSVG(spectrumEntry, {});
+  wireChartHover(elements["rail-lead-curve"]);
+  wireChartHover(elements["rail-spectra"]);
 
   updateRailLegend(panel);
   void depth;
+}
+
+function wireChartHover(container) {
+  const svg = container.querySelector("svg");
+  if (!svg || svg.dataset.hoverWired === "1") return;
+  svg.dataset.hoverWired = "1";
+  const crosshair = svg.querySelector(".chart-crosshair");
+  const tooltip = svg.querySelector(".chart-tooltip");
+  const tooltipLines = tooltip ? tooltip.querySelectorAll("text") : [];
+  const points = [...svg.querySelectorAll(".chart-point")];
+  if (!crosshair || !tooltip || !tooltipLines.length || !points.length) return;
+  svg.addEventListener("mousemove", (event) => {
+    const svgPoint = svg.createSVGPoint();
+    svgPoint.x = event.clientX;
+    svgPoint.y = event.clientY;
+    const local = svgPoint.matrixTransform(svg.getScreenCTM().inverse());
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const point of points) {
+      const dx = Number(point.getAttribute("cx")) - local.x;
+      const dy = Number(point.getAttribute("cy")) - local.y;
+      const distance = dx * dx + dy * dy;
+      if (distance < nearestDistance) {
+        nearest = point;
+        nearestDistance = distance;
+      }
+    }
+    if (!nearest) return;
+    const x = Number(nearest.getAttribute("cx"));
+    const y = Number(nearest.getAttribute("cy"));
+    crosshair.setAttribute("x1", String(x));
+    crosshair.setAttribute("x2", String(x));
+    crosshair.hidden = false;
+    tooltipLines[0].textContent = nearest.dataset.line || "";
+    tooltipLines[1].textContent = `${nearest.dataset.xLabel}: ${nearest.dataset.yLabel}`;
+    tooltip.setAttribute("transform", `translate(${Math.min(226, x + 8)} ${Math.max(16, y - 40)})`);
+    tooltip.hidden = false;
+  });
+  svg.addEventListener("mouseleave", () => {
+    crosshair.hidden = true;
+    tooltip.hidden = true;
+  });
 }
 
 function aggregateLeadSeries(grouped) {
@@ -1211,8 +1258,11 @@ function wireGlobalControls() {
   elements["rail-toggle"].addEventListener("click", () => {
     shared.railOpen = !shared.railOpen;
     elements["context-rail"].hidden = !shared.railOpen;
+    applyRailWidth();
+    redrawAllPanels();
     writeHash();
   });
+  elements["rail-resize-handle"].addEventListener("mousedown", beginRailResize);
   elements["reset-view"].addEventListener("click", () => {
     const previousLevels = panels.slice(0, shared.layout).map((panel) => selectRenderLevel(manifestFor(panel.state.dataset)));
     view.zoom = 1;
@@ -1226,7 +1276,12 @@ function wireGlobalControls() {
 
   window.addEventListener("mousemove", onGlobalMove);
   window.addEventListener("mouseup", onGlobalUp);
-  window.addEventListener("resize", () => redrawAllPanels());
+  window.addEventListener("resize", () => {
+    clampView();
+    redrawAllPanels();
+    wireChartHover(elements["rail-lead-curve"]);
+    wireChartHover(elements["rail-spectra"]);
+  });
   window.addEventListener("keydown", (event) => {
     if (event.key.toLowerCase() === "b") {
       const panel = panels[activePanelIndex];
@@ -1246,6 +1301,40 @@ function wireGlobalControls() {
       }
     }
   });
+}
+
+let railResize = null;
+
+function applyRailWidth() {
+  const rail = elements["context-rail"];
+  if (!rail) return;
+  rail.style.setProperty("--rail-width", `${shared.railWidth}px`);
+}
+
+function beginRailResize(event) {
+  event.preventDefault();
+  railResize = { startX: event.clientX, startWidth: shared.railWidth };
+  elements["context-rail"].classList.add("resizing");
+}
+
+function updateRailResize(event) {
+  if (!railResize) return false;
+  const nextWidth = Math.round(railResize.startWidth - (event.clientX - railResize.startX));
+  shared.railWidth = Math.min(620, Math.max(280, nextWidth));
+  localStorage.setItem("oceanbench.viewer.railWidth", String(shared.railWidth));
+  applyRailWidth();
+  clampView();
+  redrawAllPanels();
+  scheduleHashWrite();
+  return true;
+}
+
+function endRailResize() {
+  if (!railResize) return false;
+  railResize = null;
+  elements["context-rail"].classList.remove("resizing");
+  writeHash();
+  return true;
 }
 
 function redrawOverlaysAll() {
@@ -1386,6 +1475,7 @@ function writeHash() {
   parameters.set("region", shared.region);
   if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
   if (!shared.railOpen) parameters.set("rail", "0");
+  parameters.set("rw", String(shared.railWidth));
   parameters.set("play", shared.particlesPlaying ? "1" : "0");
   parameters.set("spd", shared.particleSpeed.toFixed(1));
   for (let i = 0; i < shared.layout; i += 1) parameters.set(`p${i}`, encodePanel(panels[i]));
@@ -1406,6 +1496,7 @@ function readHash() {
   if (parameters.has("region")) shared.region = parameters.get("region");
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
   if (parameters.get("rail") === "0") shared.railOpen = false;
+  if (parameters.has("rw")) shared.railWidth = Math.min(620, Math.max(280, Number(parameters.get("rw"))));
   if (parameters.has("play")) shared.particlesPlaying = parameters.get("play") === "1";
   if (parameters.has("spd")) shared.particleSpeed = Number(parameters.get("spd"));
   return parameters;
@@ -1460,6 +1551,7 @@ function selectElements() {
     "layer-info",
     "status",
     "context-rail",
+    "rail-resize-handle",
     "rail-subtitle",
     "rail-lead-curve",
     "rail-spectra",
@@ -1492,6 +1584,7 @@ async function main() {
   if (!Number.isFinite(shared.layout) || ![1, 2, 4].includes(shared.layout)) shared.layout = 1;
   applyTheme();
   elements["context-rail"].hidden = !shared.railOpen;
+  applyRailWidth();
   elements["lead-value"].textContent = `day ${shared.leadDay}`;
   elements["speed-value"].textContent = `${shared.particleSpeed.toFixed(1)}×`;
   elements["particles-play"].checked = shared.particlesPlaying;
