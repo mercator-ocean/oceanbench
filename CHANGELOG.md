@@ -18,6 +18,22 @@ forecasts refreshed — do **not** bump the version. They are recorded as dated 
 **Challengers** heading in the current version's section, and the affected reports are
 re-published (never silently overwritten).
 
+## 0.3.0 - 2026-07-07
+
+**Scores:** global sea-level-anomaly scores change for every challenger vs 0.2.1 — global SSH
+is now converted to SLA using the GLO12 mean dynamic topography instead of the GLORYS MDT,
+matching the GLO12 datum the global challengers are initialised on and correcting the
+overestimated SLA reported in [#293](https://github.com/mercator-ocean/oceanbench/issues/293).
+IBI SLA and all other scores are unchanged.
+
+### Changed
+
+- Global SSH→SLA conversion now uses the GLO12 mean dynamic topography (GLO-MFC_001_024) paired with the GLO12 datum shift, replacing the GLORYS MDT ([#295](https://github.com/mercator-ocean/oceanbench/issues/295)).
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.3.0/`
+
 ## 0.2.1 - 2026-06-16
 
 **Scores:** GLO12, GLONET, XiHe and WenHai change vs 0.2.0. The GLONET, XiHe and WenHai
