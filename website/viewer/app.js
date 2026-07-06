@@ -1107,27 +1107,29 @@ function prettyVariable(panel) {
 // Returns { rows, unit, n } or null when no observation-based metric exists (item 4).
 function obsSkillSeries(panel) {
   const manifest = manifestFor(panel.state.dataset);
-  const entry = manifest && manifest.variables[panel.state.variable];
+  const entry = manifest && variableEntry(manifest, panel.state.variable);
   if (!entry) return null;
   const depthKey = mapDepthToScoreDepth(entry);
-  const scoreVariable = entry.standard_name;
+  const scoreVariables = isCurrentsVariable(panel.state.variable)
+    ? ["eastward_sea_water_velocity", "northward_sea_water_velocity"]
+    : [entry.standard_name];
   const challenger = scoreProductKey(panel.state.dataset);
-  const rows = [];
+  const rowsByVariable = new Map(scoreVariables.map((variable) => [variable, []]));
   let unit = "";
   let starts = 0;
   for (const row of scoresSummary) {
     if (row.metric !== "class4_rmsd") continue;
-    if (row.variable !== scoreVariable) continue;
+    if (!rowsByVariable.has(row.variable)) continue;
     if (row.reference !== "observations") continue; // observation-based only, no gridded fallback
     if (depthKey && row.depth !== depthKey) continue;
     if (row.challenger !== challenger) continue;
     if (shared.region && row.region && row.region !== shared.region) continue;
     unit = row.unit || unit;
     starts = Math.max(starts, Number(row.n_starts) || 0);
-    rows.push(row);
+    rowsByVariable.get(row.variable).push(row);
   }
-  if (!rows.length) return null;
-  return { rows, unit, n: starts };
+  if (![...rowsByVariable.values()].some((rows) => rows.length)) return null;
+  return { rowsByVariable, unit, n: starts };
 }
 
 function renderRailSkill(shown, comparison) {
@@ -1140,13 +1142,30 @@ function renderRailSkill(shown, comparison) {
       const skill = obsSkillSeries(panel);
       const key = scoreProductKey(panel.state.dataset);
       if (!skill) {
-        notes.push(`${labelFor(panel.state.dataset)}: no observation-based skill for this variable`);
+        const suffix = isCurrentsVariable(panel.state.variable)
+          ? `currents at ${currentsVariableDepth(panel.state.variable)}`
+          : "this variable";
+        notes.push(`${labelFor(panel.state.dataset)}: no observation-based skill for ${suffix}`);
         continue;
       }
       unit = skill.unit || unit;
-      const aggregated = aggregateLeadSeries(new Map([[key, skill.rows]]));
-      if (aggregated.has(key)) series.set(key, aggregated.get(key));
-      labels.set(key, comparison ? labelFor(panel.state.dataset) : `RMSD vs observations`);
+      for (const [variable, rows] of skill.rowsByVariable) {
+        if (!rows.length) continue;
+        const component = variable === "eastward_sea_water_velocity" ? "eastward" : "northward";
+        const seriesKey = isCurrentsVariable(panel.state.variable) ? `${key}:${component}` : key;
+        const aggregated = aggregateLeadSeries(new Map([[seriesKey, rows]]));
+        if (aggregated.has(seriesKey)) series.set(seriesKey, aggregated.get(seriesKey));
+        labels.set(
+          seriesKey,
+          isCurrentsVariable(panel.state.variable)
+            ? `${comparison ? `${labelFor(panel.state.dataset)} · ` : ""}${
+                component === "eastward" ? "u (eastward)" : "v (northward)"
+              }`
+            : comparison
+              ? labelFor(panel.state.dataset)
+              : "RMSD vs observations",
+        );
+      }
       // n_starts is available from the summary, so report the real number of start dates
       // behind the aggregate (item 5). TODO(pipeline): expose per-lead matchup counts too.
       notes.push(

@@ -22,6 +22,8 @@ export const SERIES_COLORS = {
   glo12: "#f0a020",
   observations: "#3ddc97",
   challenger: "#38bdf8",
+  eastward: "#38bdf8",
+  northward: "#f0a020",
   reference: "#8b97a6",
   error: "#ff6b6b",
 };
@@ -98,6 +100,11 @@ export function leadCurveSVG(
   const yOf = (value) => area.y1 - (value / yMax) * area.height;
 
   let body = "";
+  const seriesColor = (key) =>
+    SERIES_COLORS[key] ||
+    (String(key).endsWith(":eastward") ? SERIES_COLORS.eastward : null) ||
+    (String(key).endsWith(":northward") ? SERIES_COLORS.northward : null) ||
+    SERIES_COLORS.reference;
   // Horizontal gridlines + y ticks.
   for (let t = 0; t <= 4; t += 1) {
     const value = (yMax * t) / 4;
@@ -111,7 +118,7 @@ export function leadCurveSVG(
 
   for (const reference of references) {
     const rows = [...series.get(reference)].sort((a, b) => a.lead_day - b.lead_day);
-    const color = SERIES_COLORS[reference] || SERIES_COLORS.reference;
+    const color = seriesColor(reference);
     const bandTop = rows.map((row) => `${xOf(row.lead_day).toFixed(1)},${yOf(row.ci_high ?? row.mean).toFixed(1)}`);
     const bandBottom = rows
       .slice()
@@ -130,7 +137,7 @@ export function leadCurveSVG(
 
   const legend = references
     .map((reference, index) => {
-      const color = SERIES_COLORS[reference] || SERIES_COLORS.reference;
+      const color = seriesColor(reference);
       const label = labels.get(reference) || reference;
       const x = area.x0 + index * 92;
       return (
