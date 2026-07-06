@@ -6,7 +6,7 @@
 
 An evaluation pack is a self-describing directory produced by ``ingest`` from staged
 reference / observation data so a model can be scored locally with
-``oceanbench evaluate-local``. The pack carries the gridded references, the Class-4
+``oceanbench evaluate``. The pack carries the gridded references, the Class-4
 observation match-up store, the mean-dynamic-topography needed for the SSH->SLA
 conversion, a ``pack-manifest.json`` stamping the upstream products it derives from,
 and a ``README.md`` with the Copernicus Marine credit and disclaimer (contracts.md §11).

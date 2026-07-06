@@ -16,7 +16,7 @@ from pathlib import Path
 import pandas
 import xarray
 
-from oceanbench.cli import _build_parser
+from oceanbench.cli import _build_parser, main
 from oceanbench.packs.evaluate import (
     load_pack_manifest,
     open_forecast_dataset,
@@ -30,18 +30,35 @@ _AGREEMENT_TOLERANCE = 1e-9
 
 
 def test_evaluate_local_cli_has_only_the_approved_surface():
-    parser, _ = _build_parser()
-    arguments = parser.parse_args(
-        ["evaluate-local", "forecast.zarr", "--pack", "pack", "--metrics", "rmsd", "lagrangian"]
-    )
+    parser = _build_parser()
+    arguments = parser.parse_args(["evaluate", "forecast.zarr", "--pack", "pack", "--metrics", "rmsd", "lagrangian"])
     assert arguments.metrics == ["rmsd", "lagrangian"]
     evaluate_local_parser = next(
-        action.choices["evaluate-local"]
+        action.choices["evaluate"]
         for action in parser._actions
-        if getattr(action, "choices", None) and "evaluate-local" in action.choices
+        if getattr(action, "choices", None) and "evaluate" in action.choices
     )
     option_strings = {option for action in evaluate_local_parser._actions for option in action.option_strings}
     assert option_strings == {"-h", "--help", "--pack", "--output", "--artifacts", "--metrics"}
+
+
+def test_evaluate_local_is_a_hidden_deprecated_alias(monkeypatch, capsys):
+    parser = _build_parser()
+    assert "evaluate-local" not in parser.format_help()
+    monkeypatch.setattr(
+        "sys.argv",
+        ["oceanbench", "evaluate-local", "forecast.zarr", "--pack", "pack"],
+    )
+    monkeypatch.setattr("oceanbench.cli._run_evaluate", lambda _args: 0)
+
+    try:
+        main()
+    except SystemExit as exit:
+        assert exit.code == 0
+    else:
+        raise AssertionError("Expected CLI entry point to exit")
+
+    assert capsys.readouterr().err == ("note: 'oceanbench evaluate-local' is deprecated; use 'oceanbench evaluate'\n")
 
 
 def _run(fixture, tmp_path, **overrides):

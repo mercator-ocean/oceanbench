@@ -329,7 +329,7 @@ Downloadable, versioned bundles produced by `ingest`:
 - `pack-full-<year>`: adds multi-depth gridded references for the official
   gridded track.
 
-`oceanbench evaluate-local ./forecasts/ --pack ./pack-quick-2024`
+`oceanbench evaluate ./forecasts/ --pack ./pack-quick-2024`
 produces the same
 artifacts as the hosted run plus a local HTML scorecard overlaying the user's
 model on the published `scores.parquet`. The required `year` and `region` fields

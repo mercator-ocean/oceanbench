@@ -189,7 +189,7 @@ SPDX-License-Identifier: EUPL-1.2
 # OceanBench evaluation pack — {manifest["kind"]} ({manifest["year"]})
 
 Self-describing bundle for scoring an ocean-forecast model locally with
-`oceanbench evaluate-local`. The `pack-manifest.json` next to this file locates
+`oceanbench evaluate`. The `pack-manifest.json` next to this file locates
 every reference, the observation match-up store and the mean-dynamic-topography.
 
 - kind: {manifest["kind"]}

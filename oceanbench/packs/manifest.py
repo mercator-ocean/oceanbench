@@ -4,7 +4,7 @@
 
 """Evaluation-pack ``pack-manifest.json`` writer (contracts.md §7).
 
-The manifest is the pack's self-describing index: ``oceanbench evaluate-local`` reads it
+The manifest is the pack's self-describing index: ``oceanbench evaluate`` reads it
 alone to locate every bundled reference, the observation store and the mean-dynamic-topography.
 It stamps (contracts.md §1) the upstream product identifiers and retrieval dates the pack
 derives from and carries the Copernicus Marine attribution/disclaimer (contracts.md §11). The

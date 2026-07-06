@@ -48,18 +48,6 @@ SAMPLE_FILES := $(wildcard assets/*_sample.py)
 IBI_SAMPLE_FILE := assets/glonet_sample.py
 IBI_NOTEBOOK := glonet_sample.ibi.report.ipynb
 
-evaluate-challenger: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
-evaluate-challenger:
-	${ACTIVATE_ENVIRONMENT}
-	pip install --editable .
-	oceanbench evaluate $(CHALLENGER_PYTHON_FILE_PATH)
-
-evaluate-samples: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
-evaluate-samples:
-	${ACTIVATE_ENVIRONMENT}
-	oceanbench evaluate --max-workers 1 $(SAMPLE_FILES)
-	oceanbench evaluate ${IBI_SAMPLE_FILE} --region ibi
-
 compare-notebooks: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-notebooks:
 	${ACTIVATE_ENVIRONMENT}

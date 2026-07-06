@@ -136,55 +136,31 @@ You can open and manually execute the example notebook in EDITO datalab by click
 
 ### Programmatic evaluation
 
-Once [installed](#installation), you can evaluate your system from the command line or using python.
+Once [installed](#installation), evaluate your forecasts locally against an evaluation pack.
 
 #### CLI
 
 
 ```bash
-oceanbench evaluate path/to/challenger.py
+oceanbench evaluate ./my-forecasts.zarr --pack ./pack-quick-2024
 ```
 
-To evaluate multiple challengers in parallel:
+To build the score artifacts and a local viewer:
 
 ```bash
-oceanbench evaluate challenger_a.py challenger_b.py
+oceanbench evaluate ./my-forecasts.zarr \
+  --pack ./pack-quick-2024 \
+  --artifacts all \
+  --output ./my-evaluation
 ```
 
-By default, OceanBench evaluates the global domain. To evaluate an official region, pass its identifier:
+The evaluation year and region come from the pack manifest. Publishing remains a separate step:
 
 ```bash
-oceanbench evaluate path/to/challenger.py --region ibi
+oceanbench publish-s3 ./catalog --bucket my-bucket --prefix results/
 ```
 
-To evaluate a custom region, write its bounding box in a JSON file:
-
-```json
-{
-  "id": "western_med",
-  "display_name": "Western Mediterranean",
-  "bounds": {
-    "minimum_latitude": 34.0,
-    "maximum_latitude": 44.5,
-    "minimum_longitude": -1.0,
-    "maximum_longitude": 18.0
-  }
-}
-```
-
-Then pass it to the CLI:
-
-```bash
-oceanbench evaluate path/to/challenger.py --region-file path/to/region.json
-```
-
-To upload the resulting notebooks to an S3 bucket:
-
-```bash
-oceanbench evaluate path/to/challenger.py --output-bucket my-bucket --output-prefix results/
-```
-
-The output notebook name is automatically derived from the challenger file name and region (e.g. `challenger.py` produces `challenger.global.report.ipynb` for the global benchmark and `challenger.ibi.report.ipynb` for the IBI benchmark).
+See [Local evaluation](docs/local-evaluation.md) for forecast layouts, metrics, and outputs.
 
 #### Python
 

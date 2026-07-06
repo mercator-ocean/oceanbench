@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-
 SPDX-License-Identifier: EUPL-1.2
 -->
 
-# Local evaluation (`oceanbench evaluate-local`)
+# Local evaluation (`oceanbench evaluate`)
 
 Score your own ocean-forecast model locally against an OceanBench **evaluation pack**
 (contracts.md §7) and get the same artifacts as the hosted run plus a self-contained
@@ -15,7 +15,7 @@ overlay scorecard that lays your model over the published challengers.
 From scores to a browser comparison with the official products:
 
 ```sh
-oceanbench evaluate-local ./my-forecasts.zarr --pack ./pack-quick-2024 --artifacts all --output ./my-evaluation
+oceanbench evaluate ./my-forecasts.zarr --pack ./pack-quick-2024 --artifacts all --output ./my-evaluation
 python -m http.server --directory ./my-evaluation/viewer 8799
 # open http://127.0.0.1:8799/?data_base=local
 ```
@@ -27,7 +27,7 @@ challenger remains local, while displaying official comparison layers needs netw
 the public EDITO MinIO objects named by `datasets.json`.
 
 ```sh
-oceanbench evaluate-local ./my-forecasts.zarr \
+oceanbench evaluate ./my-forecasts.zarr \
   --pack ./pack-quick-2024 \
   --output ./my-evaluation \
   --metrics rmsd class4
@@ -36,7 +36,7 @@ oceanbench evaluate-local ./my-forecasts.zarr \
 ## What a pack is
 
 An evaluation pack is a downloadable, versioned directory built by `ingest` from the staged
-reference data. It is **self-describing**: `evaluate-local` reads `pack-manifest.json` alone to
+reference data. It is **self-describing**: `evaluate` reads `pack-manifest.json` alone to
 locate every reference. A pack carries:
 
 - `references/<name>.zarr` — the gridded references (GLORYS, GLO12). A `quick` pack carries
@@ -100,7 +100,7 @@ sibling files nor load an ES module — both are blocked by the browser same-ori
 `oceanbench.publish.aggregate` code the hosted page uses, so the numbers match.
 
 Published challengers are aggregated over the **same forecast starts** as your model, so if you
-re-score a published challenger with `evaluate-local` its row coincides with your model's row
+re-score a published challenger with `evaluate` its row coincides with your model's row
 exactly.
 
 ## Flags
