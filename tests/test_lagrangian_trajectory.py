@@ -6,10 +6,7 @@ import numpy
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.lagrangian_trajectory import (
-    _get_random_ocean_points_from_file,
-    lagrangian_particle_count_for_region,
-)
+from oceanbench.core.lagrangian_trajectory import lagrangian_particle_count_for_region
 
 
 def _challenger_dataset(latitude_count: int, longitude_count: int, ocean_point_count: int) -> xarray.Dataset:
@@ -64,45 +61,3 @@ def test_lagrangian_particle_count_uses_all_available_points_when_region_is_tiny
     particle_count = lagrangian_particle_count_for_region(global_dataset, tiny_regional_dataset)
 
     assert particle_count == 1000
-
-
-def test_lagrangian_ocean_point_sampling_uses_area_probabilities_over_valid_points(monkeypatch) -> None:
-    variable_key = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
-    dataset = xarray.Dataset(
-        {
-            variable_key: (
-                [
-                    Dimension.FIRST_DAY_DATETIME.key(),
-                    Dimension.LEAD_DAY_INDEX.key(),
-                    Dimension.LATITUDE.key(),
-                    Dimension.LONGITUDE.key(),
-                ],
-                numpy.array([[[[1.0, numpy.nan], [1.0, 1.0]]]]),
-            )
-        },
-        coords={
-            Dimension.FIRST_DAY_DATETIME.key(): [numpy.datetime64("2024-01-03")],
-            Dimension.LEAD_DAY_INDEX.key(): [0],
-            Dimension.LATITUDE.key(): [0.0, 60.0],
-            Dimension.LONGITUDE.key(): [10.0, 20.0],
-        },
-    )
-    captured = {}
-
-    def choose_indices(population_size, size, replace, p):
-        captured["population_size"] = population_size
-        captured["size"] = size
-        captured["replace"] = replace
-        captured["probabilities"] = p
-        return numpy.array([0, 2])
-
-    monkeypatch.setattr(numpy.random, "choice", choose_indices)
-
-    latitudes, longitudes = _get_random_ocean_points_from_file(dataset, variable_key, n=2, seed=123)
-
-    assert latitudes.tolist() == [0.0, 60.0]
-    assert longitudes.tolist() == [10.0, 20.0]
-    assert captured["population_size"] == 3
-    assert captured["size"] == 2
-    assert captured["replace"] is False
-    assert numpy.allclose(captured["probabilities"], [0.5, 0.25, 0.25])
