@@ -8,7 +8,10 @@ from pathlib import Path
 import tempfile
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.evaluation_year import DEFAULT_EVALUATION_YEAR, validate_evaluation_year
+from oceanbench.core.evaluation_year import (
+    DEFAULT_EVALUATION_YEAR,
+    validate_evaluation_year,
+)
 
 STAGE_ALL_KEY = "all"
 DEFAULT_STAGE_MAX_WORKERS = min(4, os.cpu_count() or 1)
@@ -23,6 +26,7 @@ class RuntimeConfiguration:
     stage_directory: str | None = None
     stage_max_workers: int = DEFAULT_STAGE_MAX_WORKERS
     remote_retries: int = DEFAULT_REMOTE_HTTP_RETRIES
+    evaluation_year: int = DEFAULT_EVALUATION_YEAR
     class4_fast_interpolation: bool = False
 
     def __post_init__(self):
@@ -47,7 +51,9 @@ class RuntimeConfiguration:
         return Path(tempfile.gettempdir()) / "oceanbench-stage"
 
 
-def _parse_zero_one_environment_variable(environment_variable: OceanbenchEnvironmentVariable) -> bool:
+def _parse_zero_one_environment_variable(
+    environment_variable: OceanbenchEnvironmentVariable,
+) -> bool:
     raw_value = os.environ.get(environment_variable.value, FALSE_ENVIRONMENT_VALUE)
     if raw_value == TRUE_ENVIRONMENT_VALUE:
         return True
@@ -86,6 +92,7 @@ def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
         stage_directory=stage_directory,
         stage_max_workers=stage_max_workers,
         remote_retries=remote_retries,
+        evaluation_year=evaluation_year,
         class4_fast_interpolation=_parse_zero_one_environment_variable(
             OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_FAST_INTERPOLATION
         ),

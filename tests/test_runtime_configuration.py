@@ -12,6 +12,7 @@ RUNTIME_ENVIRONMENT_VARIABLES = [
     OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR,
     OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS,
     OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES,
+    OceanbenchEnvironmentVariable.OCEANBENCH_EVALUATION_YEAR,
     OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_FAST_INTERPOLATION,
 ]
 
@@ -24,7 +25,10 @@ def _clear_runtime_environment(monkeypatch):
 def test_runtime_configuration_reads_environment(monkeypatch):
     _clear_runtime_environment(monkeypatch)
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value, "references, observations")
-    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value, "/tmp/oceanbench-stage-env")
+    monkeypatch.setenv(
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value,
+        "/tmp/oceanbench-stage-env",
+    )
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value, "2")
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value, "7")
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_FAST_INTERPOLATION.value, "1")
@@ -35,6 +39,7 @@ def test_runtime_configuration_reads_environment(monkeypatch):
     assert runtime_configuration.stage_directory == "/tmp/oceanbench-stage-env"
     assert runtime_configuration.stage_max_workers == 2
     assert runtime_configuration.remote_retries == 7
+    assert runtime_configuration.evaluation_year == 2024
     assert runtime_configuration.class4_fast_interpolation is True
 
 
@@ -53,7 +58,10 @@ def test_runtime_configuration_rejects_invalid_class4_fast_interpolation(monkeyp
 def test_evaluate_cli_runtime_arguments_override_environment(monkeypatch):
     _clear_runtime_environment(monkeypatch)
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value, "references")
-    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value, "/tmp/oceanbench-stage-env")
+    monkeypatch.setenv(
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value,
+        "/tmp/oceanbench-stage-env",
+    )
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value, "2")
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value, "7")
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_FAST_INTERPOLATION.value, "1")
@@ -83,13 +91,17 @@ def test_evaluate_cli_runtime_arguments_override_environment(monkeypatch):
     assert runtime_configuration.stage_directory == "/tmp/oceanbench-stage-cli"
     assert runtime_configuration.stage_max_workers == 3
     assert runtime_configuration.remote_retries == 4
+    assert runtime_configuration.evaluation_year == 2025
     assert runtime_configuration.class4_fast_interpolation is True
 
 
 def test_evaluate_cli_uses_environment_runtime_configuration_by_default(monkeypatch):
     _clear_runtime_environment(monkeypatch)
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value, "all")
-    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value, "/tmp/oceanbench-stage-env")
+    monkeypatch.setenv(
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value,
+        "/tmp/oceanbench-stage-env",
+    )
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value, "2")
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value, "7")
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_EVALUATION_YEAR.value, "2025")
