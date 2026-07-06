@@ -53,7 +53,6 @@ SPDX-License-Identifier: EUPL-1.2
               <option value="none">None</option>
               <option value="eddies">Eddy census</option>
               <option value="class4">Class-4 obs error</option>
-              <option value="trajectories">Lagrangian trajectories</option>
             </select>
           </label>
           <label>Region
@@ -77,6 +76,7 @@ SPDX-License-Identifier: EUPL-1.2
           <label>Particle speed <span id="speed-value" class="lead-value">1.0×</span>
             <input type="range" id="particle-speed" min="0.2" max="3" step="0.1" value="1" />
           </label>
+          <p class="hint">With 2 forecasts on currents, click the map to seed comparison trajectories.</p>
         </fieldset>
 
         <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>

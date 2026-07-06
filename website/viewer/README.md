@@ -33,8 +33,7 @@ into this viewer).
 - **Insight overlays with purpose-modes** (never all at once): eddy census
   (matched / spurious / missed contours vs GLORYS or GLO12), Class-4 obs points
   coloured by `|obs − model|` (read from the decimated match-up parquet with the
-  vendored hyparquet, density-managed by zoom), and a stubbed Lagrangian-trajectory
-  loader (no artifact is produced yet — it reports that).
+  vendored hyparquet, density-managed by zoom).
 - **Context rail** — for the active view: the skill-vs-lead curve with bootstrap CI
   band (from `scores-summary.json`, one series per reference) and the realism PSD
   spectrum (challenger vs reference vs error power, from `spectra.json`). Plain SVG,

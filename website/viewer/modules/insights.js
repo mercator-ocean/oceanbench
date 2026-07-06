@@ -166,12 +166,3 @@ function formatClass4Date(value) {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return String(value).slice(0, 10);
 }
-
-/** Trajectories are not yet produced (contracts.md §4 lists the kind; no artifact exists). */
-export async function loadTrajectories(index, slug, region) {
-  const urls = insightsFor(index, slug, region);
-  if (!urls.trajectories) return { available: false, reason: "no trajectories artifact produced yet (stub loader)" };
-  return fetchJSON(urls.trajectories)
-    .then((data) => ({ available: true, data }))
-    .catch(() => ({ available: false, reason: "trajectories artifact failed to load" }));
-}

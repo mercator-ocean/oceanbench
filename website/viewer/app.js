@@ -9,8 +9,8 @@
 // Modes are field and first-class difference (A − B in a diverging colormap centred on
 // 0). Currents are a variable (speed magnitude √(u²+v²)) with an optional particle
 // animation. In single-panel mode a field can A/B compare a second forecast by a swipe
-// divider or a blink key. Insight overlays (eddy census, Class-4 obs error, Lagrangian
-// trajectory stub) attach as purpose-modes, never all at once. A context rail carries
+// divider or a blink key. Insight overlays (eddy census, Class-4 obs error)
+// attach as purpose-modes, never all at once. A context rail carries
 // the quantitative curves (skill vs lead, PSD spectrum) for the active view. Every bit
 // of view state lives in the URL hash.
 
@@ -33,7 +33,6 @@ import {
   insightsFor,
   eddyFrame,
   class4Points,
-  loadTrajectories,
 } from "./modules/insights.js";
 import { drawEddyFrame, drawClass4Points, class4ErrorScale, EDDY_COLORS } from "./modules/overlays.js";
 import { leadCurveSVG, psdSpectraSVG, SERIES_COLORS } from "./modules/charts.js";
@@ -1582,8 +1581,6 @@ function updateRailLegend(panel) {
     container.innerHTML =
       `<div class="row"><span class="swatch" style="background:${SERIES_COLORS.error}"></span>|obs − model|, brighter = larger error</div>` +
       `<p class="dim"><strong>${shown} points shown</strong> (of ${matched} sampled) · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}${sampled ? " · sampled subset" : ""}${weak}${noData}</p>`;
-  } else if (shared.overlayMode === "trajectories") {
-    container.innerHTML = `<p class="dim">${trajectoryNote}</p>`;
   }
 }
 
@@ -1592,8 +1589,6 @@ function row(color, label, count) {
 }
 
 // ---- global controls --------------------------------------------------------
-
-let trajectoryNote = "";
 
 function updateCurrentsControlVisibility() {
   const anyCurrents = panels.slice(0, shared.layout).some((panel) => isCurrentsVariable(panel.state.variable));
@@ -1627,11 +1622,7 @@ async function applyOverlayMode() {
   const region = shared.region;
   elements["eddy-reference-field"].hidden = shared.overlayMode !== "eddies";
   const note = elements["overlay-note"];
-  if (shared.overlayMode === "trajectories") {
-    const result = await loadTrajectories(insightIndex, "glonet_1_degree", region);
-    trajectoryNote = result.available ? "trajectories loaded" : `Trajectories: ${result.reason}.`;
-    note.textContent = trajectoryNote;
-  } else if (shared.overlayMode === "eddies" || shared.overlayMode === "class4") {
+  if (shared.overlayMode === "eddies" || shared.overlayMode === "class4") {
     note.textContent = shared.overlayMode === "class4" ? "Loading Class-4 match-ups..." : "Overlay shows glonet_1_degree insights.";
   } else {
     note.textContent = "";

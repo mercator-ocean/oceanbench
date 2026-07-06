@@ -5,7 +5,7 @@
 // Insight overlays drawn on a panel's overlay canvas (contracts.md §6: overlays
 // with purpose-modes, never all at once). Two live modes here — eddy census
 // (matched / spurious / missed contours vs a reference) and Class-4 obs points
-// coloured by |obs − model| — plus a stubbed trajectory mode. All drawing is in
+// coloured by |obs − model|. All drawing is in
 // normalized-world → device-pixel space via the panel's `project`, so overlays
 // stay registered to the field under pan, zoom and difference views.
 
