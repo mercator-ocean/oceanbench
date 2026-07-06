@@ -176,6 +176,36 @@ Realism battery (native grid, per region incl. WBC boxes):
 `eddy_count`, `eddy_hit_rate`, `eddy_miss_rate`, `eddy_mean_displacement_km`
 (polarity column set).
 
+The eddy census detects SSH-anomaly extrema using physical, grid-independent
+parameters. Gaussian background and detection scales are specified in kilometres
+and converted to latitude/longitude cell sigmas from the grid spacing (longitude
+spacing is scaled by the cosine of the domain-mean latitude). Candidate peaks are
+separated by great-circle distance. Closed contours are accepted by spherical
+cell area in km² and convexity; matching also uses great-circle distance. The
+default parameter set is:
+
+| parameter | default |
+|---|---:|
+| `background_sigma_km` | 1334.3391 km |
+| `detection_sigma_km` | 166.7924 km |
+| `min_peak_separation_km` | 889.5594 km |
+| `amplitude_threshold_meters` | 0.04 m |
+| `contour_level_step_meters` | 0.01 m |
+| `min_eddy_area_km2` | 197,828.9874 km² |
+| `max_eddy_area_km2` | 74,185,870.2689 km² |
+| `min_contour_convexity` | 0.75 |
+| `max_match_distance_km` | 200 km |
+
+These physical defaults calibrate to the former 12, 1.5 and 8 cell scales and
+16–6000 cell contour range on an equator-centred 1° grid. Census and matching
+currently retain raw peaks by default to reproduce the already-published
+`glonet_1_degree` artifact. `apply_eddy_contour_filtering=true` applies the closed
+contour definition consistently to metrics, matching and census; this opt-in is
+intended to become the default at the next benchmark re-score.
+
+Each eddy census reference entry includes a `parameters` object containing the
+complete parameter set, the contour-filter switch and the OceanBench code version.
+
 Reserved for later (schema needs no change): `crps`, `spread`, `spread_skill_ratio`.
 
 ### 3.3 Per-run increment

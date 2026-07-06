@@ -33,6 +33,7 @@ import pandas
 import xarray
 
 from oceanbench.core import eddies as eddies_core
+from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 from oceanbench.core import psd as psd_core
 from oceanbench.core.dataset_utils import VARIABLE_METADATA, Dimension, Variable
 from oceanbench.runner import records
@@ -403,6 +404,7 @@ def _eddy_records_and_census(
     context: records.RunContext,
     lead_days: list[int],
     eddy_start_indices: list[int],
+    apply_contour_filtering: bool,
 ) -> tuple[list[dict], list[dict], list[str]]:
     lead_day_indices = [lead_day - 1 for lead_day in lead_days]
     metric_records: list[dict] = []
@@ -416,6 +418,7 @@ def _eddy_records_and_census(
             reference_dataset,
             lead_day_indices=lead_day_indices,
             start_indices=eddy_start_indices,
+            apply_contour_filtering=apply_contour_filtering,
         )
         for polarity in eddies_core.POLARITY_ORDER:
             for lead_day in lead_days:
@@ -477,6 +480,7 @@ def _eddy_records_and_census(
                 reference_name=reference_name,
                 lead_days=lead_days,
                 census_start_index=eddy_start_indices[0],
+                apply_contour_filtering=apply_contour_filtering,
             )
         )
 
@@ -495,6 +499,7 @@ def _aggregate_eddy_statistics_over_starts(
     *,
     lead_day_indices: list[int],
     start_indices: list[int],
+    apply_contour_filtering: bool,
 ) -> dict[tuple[int, str], dict[str, float]]:
     per_start_statistics: dict[tuple[int, str], list[dict[str, float]]] = {
         (lead_day_index + 1, polarity): []
@@ -508,6 +513,9 @@ def _aggregate_eddy_statistics_over_starts(
         reference_detections = eddies_core.detect_mesoscale_eddies(
             reference_dataset, first_day_index=start_index, lead_day_indices=lead_day_indices
         )
+        if apply_contour_filtering:
+            challenger_detections = _contour_filtered_detections(challenger_dataset, challenger_detections, start_index)
+            reference_detections = _contour_filtered_detections(reference_dataset, reference_detections, start_index)
         matches = eddies_core.match_mesoscale_eddies(challenger_detections, reference_detections)
         for lead_day_index in lead_day_indices:
             for polarity in eddies_core.POLARITY_ORDER:
@@ -597,6 +605,7 @@ def _eddy_reference_census(
     reference_name: str,
     lead_days: list[int],
     census_start_index: int,
+    apply_contour_filtering: bool,
 ) -> dict:
     lead_day_indices = [lead_day - 1 for lead_day in lead_days]
     challenger_detections = eddies_core.detect_mesoscale_eddies(
@@ -605,6 +614,11 @@ def _eddy_reference_census(
     reference_detections = eddies_core.detect_mesoscale_eddies(
         reference_dataset, first_day_index=census_start_index, lead_day_indices=lead_day_indices
     )
+    if apply_contour_filtering:
+        challenger_detections = _contour_filtered_detections(
+            challenger_dataset, challenger_detections, census_start_index
+        )
+        reference_detections = _contour_filtered_detections(reference_dataset, reference_detections, census_start_index)
     matches = eddies_core.match_mesoscale_eddies(challenger_detections, reference_detections)
     challenger_contours = _contours(challenger_dataset, challenger_detections, census_start_index)
     reference_contours = _contours(reference_dataset, reference_detections, census_start_index)
@@ -619,7 +633,24 @@ def _eddy_reference_census(
         )
         for lead_day in lead_days
     ]
-    return {"reference": reference_name, "frames": frames}
+    return {
+        "reference": reference_name,
+        "parameters": {
+            **eddies_core.default_eddy_detection_parameters(),
+            "apply_contour_filtering": apply_contour_filtering,
+            "oceanbench_version": OCEANBENCH_VERSION,
+        },
+        "frames": frames,
+    }
+
+
+def _contour_filtered_detections(
+    dataset: xarray.Dataset,
+    detections: pandas.DataFrame,
+    first_day_index: int,
+) -> pandas.DataFrame:
+    contours = _contours(dataset, detections, first_day_index)
+    return eddies_core.filter_mesoscale_eddy_detections_by_contours(detections, contours)
 
 
 def _contours(
@@ -729,6 +760,8 @@ def compute_realism_battery(
     lead_days: tuple[int, ...] = (1, 5, 10),
     start_indices: list[int] | None = None,
     eddy_start_indices: list[int] | None = None,
+    # TODO: default to True at the next benchmark-wide re-score.
+    apply_eddy_contour_filtering: bool = False,
 ) -> RealismResult:
     """Compute the realism battery for one (challenger, region) over the requested references.
 
@@ -736,6 +769,8 @@ def compute_realism_battery(
     activity ratio are aggregated over ``start_indices`` (all starts when ``None``). Eddy
     metrics are aggregated over ``eddy_start_indices`` (the first start when ``None``), whose
     first entry also supplies the single-start eddy census returned for the insight artifact.
+    Contour filtering defaults off to preserve already-published census values; set
+    ``apply_eddy_contour_filtering`` to opt into the core summary's contour definition.
     ``variable`` selects the spectral/activity field (eddy detection is always on SSH).
     """
     resolved_start_indices = _resolved_start_indices(challenger_dataset, start_indices)
@@ -759,6 +794,7 @@ def compute_realism_battery(
         context=context,
         lead_days=resolved_lead_days,
         eddy_start_indices=resolved_eddy_start_indices,
+        apply_contour_filtering=apply_eddy_contour_filtering,
     )
     return RealismResult(
         records=metric_records + eddy_records,

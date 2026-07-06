@@ -6,6 +6,7 @@ import numpy
 import xarray
 from scipy.ndimage import gaussian_filter1d
 
+from oceanbench.core import eddies
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.runner import realism, records
 
@@ -163,6 +164,10 @@ def test_two_shifted_gaussian_eddies_produce_one_match_with_expected_displacemen
     assert numpy.isclose(anticyclone[records.METRIC_EDDY_MEAN_DISPLACEMENT_KILOMETRES], 111.2, atol=2.0)
 
     census_frame = result.eddy_census[0]["frames"][0]
+    parameters = result.eddy_census[0]["parameters"]
+    assert parameters["background_sigma_km"] == eddies.DEFAULT_BACKGROUND_SIGMA_KM
+    assert parameters["apply_contour_filtering"] is False
+    assert parameters["oceanbench_version"]
     assert len(census_frame["matches"]) == 1
     assert census_frame["matches"][0]["challenger"]["polarity"] == "anticyclone"
     assert numpy.isclose(census_frame["matches"][0]["displacement_km"], 111.2, atol=2.0)
