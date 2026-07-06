@@ -306,9 +306,8 @@ function formatTick(value) {
 
 function formatKm(metres) {
   const km = metres / 1000;
-  if (km >= 1000) return `${Math.round(km / 1000)}Mm`;
-  if (km >= 1) return `${Math.round(km)}km`;
-  return `${km.toFixed(1)}km`;
+  if (km >= 1) return `${Math.round(km).toLocaleString("en-US")} km`;
+  return `${km.toFixed(1)} km`;
 }
 
 function formatValue(value, unit) {

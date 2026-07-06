@@ -91,6 +91,26 @@ python -m http.server -d website/viewer 8799
 In the Quarto website, `store`/`manifest`/insight URLs resolve against the EDITO
 MinIO rebuild-preview viewer data prefix by default (CORS-enabled, §6).
 
+### Developing the viewer inside the Quarto site (one command)
+
+Quarto ships the viewer via `resources:` in `website/_quarto.yml`, but it only copies
+resources into `_site/` on a full **render** — `quarto preview` never picks up viewer
+edits on its own. Instead of manually copying changed files into `_site/viewer/`
+(the old, cache-confusing workflow), run once per checkout:
+
+```sh
+website/scripts/dev-viewer-sync.sh
+```
+
+This replaces `website/_site/viewer/` with a symlink to `../viewer`, so every edit to
+a viewer file is served live — no re-copy, no stale-cache guesswork. Then serve the
+site as usual (`quarto preview`, or `python -m http.server -d website/_site`) and edit
+viewer files freely.
+
+`_site/` is a build output (git-ignored). `quarto render` wipes and regenerates it
+with real file copies for production, so the symlink is a dev-only convenience — just
+re-run the one-liner (it is idempotent) after any full render.
+
 ## Verification
 
 Two harnesses (in the pipeline scratchpad, not shipped):
