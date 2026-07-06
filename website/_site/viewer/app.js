@@ -1891,6 +1891,7 @@ async function main() {
   wireGlobalControls();
 
   clampView();
+  writeHash();
   await renderAllPanels();
   updateCurrentsControlVisibility();
   updateSharedColorbar();
