@@ -8,7 +8,6 @@
 // match-ups (parquet, read with the vendored hyparquet). Everything is fetched
 // lazily and memoised by URL — a panel only pays for the overlay it turns on.
 
-import { parquetReadObjects, parquetMetadataAsync } from "../vendor/hyparquet/hyparquet.min.js";
 import { resolveViewerDataUrl } from "../config.js";
 
 const INDEX_URL = resolveViewerDataUrl("./data/insights.json");
@@ -16,17 +15,10 @@ const jsonCache = new Map();
 const parquetCache = new Map();
 let indexPromise = null;
 
-// A whole-file fetch is only acceptable for the small regional match-up parquets
-// (the IBI file is ~0.9 MB). The global match-up parquets are multi-gigabyte
-// (glonet/global and xihe/global are ~7.5 GB / 306M rows) and MUST NOT be pulled
-// whole into a browser: they are streamed with HTTP Range requests, reading the
-// footer then a bounded number of leading row groups for a sampled overlay.
-const WHOLE_FILE_MAX_BYTES = 50 * 1024 * 1024;
-// Byte budget for the sampled read of a large file. Row groups in the global
-// parquets are ~35 MB each; a ~40 MB budget selects the first row group (~1M
-// rows) and stops, keeping every individual Range request (per column chunk,
-// <10 MB here) and the total download far below the 64 MB cap a browser needs.
-const RANGE_BYTE_BUDGET = 40 * 1024 * 1024;
+const CLASS4_WORKER_URL = new URL("./class4-worker.js", import.meta.url);
+let class4Worker = null;
+let class4RequestId = 0;
+const class4Pending = new Map();
 
 export function loadInsightIndex() {
   if (!indexPromise) indexPromise = fetchJSON(INDEX_URL).catch(() => null);
@@ -60,22 +52,6 @@ export async function loadScoresSummary(index) {
   return fetchJSON(index.scores_summary).catch(() => []);
 }
 
-/** An AsyncBuffer for hyparquet backed by HTTP Range requests (no whole-file fetch). */
-function httpRangeAsyncBuffer(url, byteLength) {
-  const resolvedUrl = resolveViewerDataUrl(url);
-  return {
-    byteLength,
-    async slice(start, end) {
-      const last = (end ?? byteLength) - 1;
-      const response = await fetch(resolvedUrl, { headers: { Range: `bytes=${start}-${last}` } });
-      if (response.status !== 206 && response.status !== 200) {
-        throw new Error(`${resolvedUrl} range ${start}-${last} -> HTTP ${response.status}`);
-      }
-      return response.arrayBuffer();
-    },
-  };
-}
-
 async function resolveByteLength(url, hint) {
   if (Number.isFinite(hint) && hint > 0) return hint;
   const resolvedUrl = resolveViewerDataUrl(url);
@@ -87,53 +63,46 @@ async function resolveByteLength(url, hint) {
 }
 
 /**
- * Stream a large match-up parquet with Range requests: read the footer for
- * metadata, then read only the leading row groups that fit the byte budget. The
- * returned array carries `.sampled = true` so the overlay can note it shows a
- * subsample rather than all rows.
- */
-async function readClass4Sampled(url, byteLength) {
-  const file = httpRangeAsyncBuffer(url, byteLength);
-  const metadata = await parquetMetadataAsync(file);
-  const rowGroups = metadata.row_groups || [];
-  let remainingBudget = RANGE_BYTE_BUDGET;
-  let rowEnd = 0;
-  for (const group of rowGroups) {
-    const groupBytes = Number(group.total_byte_size) || 0;
-    if (rowEnd > 0 && groupBytes > remainingBudget) break;
-    remainingBudget -= groupBytes;
-    rowEnd += Number(group.num_rows);
-  }
-  const rows = await parquetReadObjects({ file, metadata, rowStart: 0, rowEnd, rowFormat: "object" });
-  if (rowEnd < Number(metadata.num_rows)) rows.sampled = true;
-  return rows;
-}
-
-/**
  * Load the Class-4 match-up parquet for the overlay. Small regional files are read
  * whole; large global files (multi-GB) are streamed with Range requests and
- * sampled (see `readClass4Sampled`). `byteLength` may be passed from the sibling
- * manifest's `bytes` field to skip a HEAD request.
+ * sampled in a Web Worker. `byteLength` may be passed from the sibling manifest's
+ * `bytes` field to skip a HEAD request.
  */
-export async function loadClass4(url, { byteLength } = {}) {
+export async function loadClass4(url, { byteLength, rowGroupIndex, sampleVariables } = {}) {
   if (!url) return null;
   const resolvedUrl = resolveViewerDataUrl(url);
   if (parquetCache.has(resolvedUrl)) return parquetCache.get(resolvedUrl);
   const promise = (async () => {
     const size = await resolveByteLength(resolvedUrl, byteLength);
-    if (size > WHOLE_FILE_MAX_BYTES) return readClass4Sampled(resolvedUrl, size);
-    const response = await fetch(resolvedUrl);
-    if (!response.ok) throw new Error(`${resolvedUrl} -> HTTP ${response.status}`);
-    const buffer = await response.arrayBuffer();
-    const file = {
-      byteLength: buffer.byteLength,
-      async slice(start, end) {
-        return buffer.slice(start, end ?? buffer.byteLength);
-      },
-    };
-    return parquetReadObjects({ file, rowFormat: "object" });
+    return requestClass4Worker({ url: resolvedUrl, byteLength: size, rowGroupIndex, sampleVariables });
   })().catch(() => null);
   parquetCache.set(resolvedUrl, promise);
+  return promise;
+}
+
+function ensureClass4Worker() {
+  if (class4Worker) return class4Worker;
+  class4Worker = new Worker(CLASS4_WORKER_URL, { type: "module" });
+  class4Worker.addEventListener("message", (event) => {
+    const { id, rows, error } = event.data;
+    const pending = class4Pending.get(id);
+    if (!pending) return;
+    class4Pending.delete(id);
+    if (error) pending.reject(new Error(error));
+    else pending.resolve(rows);
+  });
+  class4Worker.addEventListener("error", (event) => {
+    for (const pending of class4Pending.values()) pending.reject(new Error(event.message || "Class-4 worker failed"));
+    class4Pending.clear();
+  });
+  return class4Worker;
+}
+
+function requestClass4Worker(message) {
+  const worker = ensureClass4Worker();
+  const id = ++class4RequestId;
+  const promise = new Promise((resolve, reject) => class4Pending.set(id, { resolve, reject }));
+  worker.postMessage({ id, ...message });
   return promise;
 }
 

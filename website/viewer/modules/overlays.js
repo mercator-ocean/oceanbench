@@ -117,6 +117,7 @@ function normPair(longitude, latitude) {
 export function drawClass4Points(drawing, project, points, options = {}) {
   const ratio = options.devicePixelRatio || 1;
   const radius = (options.radius || 2.2) * ratio;
+  const diameter = radius * 2;
   const scale = options.errorScale || 1;
   const width = options.canvasWidth || Infinity;
   const height = options.canvasHeight || Infinity;
@@ -127,9 +128,7 @@ export function drawClass4Points(drawing, project, points, options = {}) {
     const normalized = Math.min(1, Math.abs(point.abs_error) / scale);
     const [r, g, b] = sampleColormap(CLASS4_COLORMAP, 0.12 + normalized * 0.88);
     drawing.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
-    drawing.beginPath();
-    drawing.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
-    drawing.fill();
+    drawing.fillRect(screen.x - radius, screen.y - radius, diameter, diameter);
   }
 }
 

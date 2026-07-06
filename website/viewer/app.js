@@ -633,8 +633,11 @@ async function loadOverlayData() {
   } else if (shared.overlayMode === "class4") {
     const class4Url = urls.class4_matchups || glonetUrls.class4_matchups;
     const manifest = await loadInsightManifest(urls.class4_matchups ? urls.manifest : glonetUrls.manifest);
-    const byteLength = manifest && manifest["class4-matchups"] && manifest["class4-matchups"].bytes;
-    overlayData.class4 = await loadClass4(class4Url, { byteLength });
+    const class4Manifest = manifest && manifest["class4-matchups"];
+    overlayData.class4 = await loadClass4(class4Url, {
+      byteLength: class4Manifest && class4Manifest.bytes,
+      rowGroupIndex: class4Manifest && class4Manifest.row_group_index,
+    });
   }
 }
 
