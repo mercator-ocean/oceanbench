@@ -35,17 +35,25 @@ EDITO_OFFLINE_TOKEN_ENVIRONMENT_VARIABLE = "EDITO_MINIO_OFFLINE_TOKEN"
 DEFAULT_MAX_WORKERS = 24
 DEFAULT_ASSUME_ROLE_DURATION_SECONDS = 86400
 
-_CONTENT_TYPE_BY_SUFFIX = {".json": "application/json"}
+_CONTENT_TYPE_BY_SUFFIX = {
+    ".css": "text/css",
+    ".html": "text/html",
+    ".ico": "image/x-icon",
+    ".js": "text/javascript",
+    ".json": "application/json",
+    ".md": "text/markdown",
+    ".parquet": "application/vnd.apache.parquet",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+}
 _DEFAULT_CONTENT_TYPE = "application/octet-stream"
 
 
 def content_type_for_path(path: str | os.PathLike) -> str:
     """Return the Content-Type to store an object under, keyed on file extension.
 
-    ``.json`` maps to ``application/json``; everything else — ``.parquet`` and the
-    zarr pyramid chunk/metadata files that make up the bulk of the tree — maps to
-    ``application/octet-stream``. Browser range GETs and zlib chunk decoding do not
-    depend on the stored Content-Type, so a coarse extension map is sufficient.
+    Browser-facing site assets and known data/document extensions get explicit
+    MIME types. Extensionless zarr pyramid chunks stay ``application/octet-stream``.
     """
     return _CONTENT_TYPE_BY_SUFFIX.get(Path(path).suffix, _DEFAULT_CONTENT_TYPE)
 

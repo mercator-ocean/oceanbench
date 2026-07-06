@@ -11,12 +11,36 @@ import pytest
 from oceanbench.publish import s3
 
 
-def test_content_type_maps_json_and_defaults_to_octet_stream():
-    assert s3.content_type_for_path("catalog.json") == "application/json"
-    assert s3.content_type_for_path("2024/global/glonet/insights/manifest.json") == "application/json"
-    assert s3.content_type_for_path("scores.parquet") == "application/octet-stream"
-    assert s3.content_type_for_path("viewer/2024/glonet.zarr/temperature/0.0.0") == "application/octet-stream"
-    assert s3.content_type_for_path("viewer/2024/glonet.zarr/.zattrs") == "application/octet-stream"
+@pytest.mark.parametrize(
+    ("path", "content_type"),
+    [
+        ("viewer/index.html", "text/html"),
+        ("viewer/app.js", "text/javascript"),
+        ("viewer/style.css", "text/css"),
+        ("catalog.json", "application/json"),
+        ("viewer/icon.svg", "image/svg+xml"),
+        ("viewer/preview.png", "image/png"),
+        ("favicon.ico", "image/x-icon"),
+        ("README.md", "text/markdown"),
+        ("scores.parquet", "application/vnd.apache.parquet"),
+    ],
+)
+def test_content_type_maps_known_suffixes(path, content_type):
+    assert s3.content_type_for_path(path) == content_type
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "viewer/2024/glonet.zarr/temperature/0.0.0",
+        "viewer/2024/glonet.zarr/.zattrs",
+        "viewer/2024/glonet.zarr/.zmetadata",
+        "viewer/2024/glonet.zarr/temperature/0",
+        "viewer/2024/glonet.zarr/temperature/chunk",
+    ],
+)
+def test_content_type_keeps_zarr_chunks_and_metadata_as_octet_stream(path):
+    assert s3.content_type_for_path(path) == "application/octet-stream"
 
 
 def _write(path, data=b"x"):
