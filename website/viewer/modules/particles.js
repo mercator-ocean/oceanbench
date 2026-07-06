@@ -169,10 +169,18 @@ export function makeVelocitySampler(uField, vField, latitudes, longitudes) {
   const lonStep = longitudes.length > 1 ? longitudes[1] - longitudes[0] : 1;
   const latMin = latitudes[0];
   const latStep = latitudes.length > 1 ? latitudes[1] - latitudes[0] : 1;
+  // A global field is periodic in longitude: sampling a wrapped copy (nx outside
+  // [0,1], i.e. across the dateline) must fold back onto the data so particles keep
+  // flowing on every visible copy. Regional fields (span well under 360°) do not wrap.
+  const longitudeSpan = Math.abs(lonStep) * width;
+  const periodic = longitudeSpan >= 359;
 
   return function sampleVelocity(nx, ny) {
-    const lon = nx * 360 - 180;
+    let lon = nx * 360 - 180;
     const lat = 90 - ny * 180;
+    if (periodic) {
+      lon = ((((lon - lonMin) % 360) + 360) % 360) + lonMin;
+    }
     const fx = (lon - lonMin) / lonStep;
     const fy = (lat - latMin) / latStep;
     const x0 = Math.floor(fx);
