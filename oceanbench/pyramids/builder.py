@@ -8,18 +8,24 @@ The builder takes a *layer dataset* — dims ``(start_date, lead_day, latitude,
 longitude)``, one data variable per viewer layer — plus a display/encoding spec
 per layer, and writes a zarr store whose groups ``level/<k>`` hold the field at
 halving resolutions from native up to about one degree. Each variable is stored
-as quantized ``uint16`` (256x256 spatial tiles, one ``(start_date, lead_day)`` per
-chunk, zstd-compressed, explicit land ``_FillValue``). The root group carries the
-Copernicus Marine attribution and disclaimer (contracts.md §11) and the store's
-metadata is consolidated. A schema-valid ``viewer-manifest.json`` is written next
-to the store.
+as quantized ``uint16`` (1024x1024 spatial tiles, one ``(start_date, lead_day)``
+per chunk, DEFLATE-compressed, explicit land ``_FillValue``). The root group
+carries the Copernicus Marine attribution and disclaimer (contracts.md §11) and
+the store's metadata is consolidated. A schema-valid ``viewer-manifest.json`` is
+written next to the store.
 
 Zarr format note: the running environment ships zarr-python 2.x, which cannot
 write v3 sharding, so the pyramid is zarr v2 with plain tile chunks. The object
-count is therefore ``levels x variables x start_dates x lead_days x tiles`` small
-files; sharding (one shard per ``(start_date, lead_day, level)``) is the intended
-production layout and is swappable behind this builder once a v3 writer is
-available.
+count is therefore ``levels x variables x start_dates x lead_days x tiles`` files.
+Sharding (one shard per ``(start_date, lead_day, level)``) is the eventual layout
+and is swappable behind this builder once a v3 writer is available. Until then the
+tile is sized so each chunk object is a browser-friendly HTTP fetch: at the
+1024-cell default a native 1/12° tile is ~2 MB raw (≈1 MB DEFLATE, worst case ≤4
+MB uncompressed for incompressible data), which both hits the "1-4 MB per fetch"
+read-path target (contracts.md §6) and collapses coarse levels to a single tile,
+cutting the fine-level object count by ~10x versus the former 256-cell tile. The
+viewer reader (``website/viewer/modules/zarr.js``) is driven by each array's own
+``.zarray`` chunk grid, so a larger tile needs no reader change.
 """
 
 from dataclasses import dataclass
@@ -40,7 +46,7 @@ from oceanbench.pyramids.quantization import Quantization, quantization_for_rang
 
 START_DATE_DIMENSION = "start_date"
 LEAD_DAY_DIMENSION = "lead_day"
-DEFAULT_TILE_SIZE = 256
+DEFAULT_TILE_SIZE = 1024
 _DEFLATE_COMPRESSION_LEVEL = 6
 
 

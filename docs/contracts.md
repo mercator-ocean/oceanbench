@@ -292,9 +292,18 @@ artifacts.
 - Encoding: uint16 with per-variable `scale_factor`/`add_offset` attrs
   (precision-matched: ≪ model error at all variables), zstd compression,
   explicit `_FillValue` for land.
-- Chunking: **256×256 spatial tiles**, one (start_date, lead_day) per chunk.
-  Zarr v3 **sharding**: one shard per (start_date, lead_day, level) so tiles
-  are fetched by HTTP range read without millions of small S3 objects.
+- Chunking: **1024×1024 spatial tiles**, one (start_date, lead_day) per chunk.
+  The tile is sized so each chunk object is a browser-friendly HTTP fetch: a
+  native 1/12° tile is ~2 MB raw (≈1–2 MB DEFLATE, ≤4 MB uncompressed worst
+  case), hitting the ≤4 MB read-path target below, and coarse levels collapse to
+  a single tile. This cuts a 1/12° dataset-year from ~680k tiny objects (the old
+  256-cell tile, ~0.12 MB/fetch) to ~62k objects (~11×), with proportional S3
+  publish-time savings. Eventual zarr v3 **sharding** (one shard per
+  (start_date, lead_day, level), tiles fetched by HTTP range read) is swappable
+  behind the builder once a v3 writer ships; until then the running zarr-python
+  2.x writes plain v2 tile chunks. The viewer reader
+  (`website/viewer/modules/zarr.js`) is driven by each array's `.zarray` chunk
+  grid, so the tile size is a builder parameter with no reader change.
 - Consolidated metadata; identical layout for references (GLORYS, GLO12) and
   baselines so any pair can be differenced client-side.
 - Volume: ~40–50 GB per 1/12° dataset-year compressed (×1.33 pyramid

@@ -22,9 +22,29 @@ per-dataset `viewer-manifest.json` (validated against
   (chosen from the native data range with margin; quantization step ≪ model
   error), explicit `_FillValue` (`65535`) for land, **DEFLATE (zlib)**
   compression (see "Browser-decodable codec" below).
-- 256×256 spatial tiles, one `(start_date, lead_day)` per chunk. Consolidated
+- 1024×1024 spatial tiles, one `(start_date, lead_day)` per chunk. Consolidated
   metadata. Root group carries the Copernicus Marine attribution + disclaimer
   (`contracts.md` §11).
+
+## Tile size / fetch size (decided during rebuild)
+
+The tile is sized so each chunk object is a single browser-friendly HTTP fetch.
+The viewer reads one `(start_date, lead_day)` slice at a time and fetches every
+spatial tile of the visible level, so per-fetch size = per-tile compressed size.
+At the former 256-cell tile a native 1/12° tile was ~0.12 MB (uint16 barely
+compresses on full-range ocean fields) and a 1/12° dataset-year emitted **~680k**
+chunk objects — masses of tiny S3 objects, ~4 h to publish. The **1024-cell**
+tile makes a full native tile ~2 MB raw (≈1–2 MB DEFLATE, ≤4 MB uncompressed
+worst case: `2 × 1024² = 2 MB`, so even incompressible data stays under the
+4 MB read-path ceiling), collapses coarse levels to a single tile, and cuts the
+object count to **~62k (~11×)** with proportional publish-time savings. Measured
+on a synthetic near-incompressible 1/12° field (1200×2400, 7 vars × 2 starts × 3
+leads): objects 3252 → 606, whole-store size unchanged (308 → 309 MB), max data
+tile 0.127 MB → 2.03 MB. Tile size is a `build_pyramid(tile_size=…)` parameter;
+the reader is driven by each array's `.zarray` chunk grid, so no reader change is
+needed. Zarr v3 sharding (many sub-chunks per object via byte-range reads) would
+let tiles shrink again while keeping few objects, but needs a v3 writer (not in
+zarr-python 2.x) and reader byte-range support — deferred.
 
 ## API
 
@@ -70,12 +90,15 @@ sharding writer can revisit the codec without touching the layer/manifest contra
 The contract calls for zarr **v3 with sharding** (one shard per
 `(start_date, lead_day, level)`) so tiles are HTTP range reads without millions
 of small objects. The environment ships **zarr-python 2.18** (no v3 sharding
-writer), so the builder writes **zarr v2 with plain tile chunks**. Object-count
-implication: level 0 of a 1° pyramid holds `variables × start_dates × lead_days ×
-lon_tiles × lat_tiles` = `7 × 52 × 10 × 2 × 1 = 7,280` chunk objects per dataset
-(more for finer, multi-level datasets). The format is swappable behind the
-builder API: moving to v3 sharding changes only the `to_zarr` writer and the
-compressor/codec wiring, not the layer/manifest contract.
+writer), so the builder writes **zarr v2 with plain tile chunks**, sized at
+1024 cells (see "Tile size / fetch size" above) so each object is a 1–2 MB
+fetch and coarse levels stay a single tile. Object-count implication: level 0 of
+a 1° pyramid (180×360, one tile) holds `variables × start_dates × lead_days ×
+lon_tiles × lat_tiles` = `7 × 52 × 10 × 1 × 1 = 3,640` chunk objects per dataset;
+a 1/12° pyramid across its 5 levels holds ~62k (vs ~680k at the old 256 tile).
+The format is swappable behind the builder API: moving to v3 sharding changes
+only the `to_zarr` writer and the compressor/codec wiring, not the layer/manifest
+contract.
 
 ## Real 1° pyramids (parity data, 2024)
 
