@@ -852,7 +852,7 @@ function renderTrajectoryRail() {
   section.hidden = !trajectoryState;
   if (!trajectoryState) return;
   elements["rail-trajectory-chart"].innerHTML = trajectoryState.separation
-    ? trajectorySeparationSVG(trajectoryState.separation)
+    ? trajectorySeparationSVG(trajectoryState.separation, shared.leadDay)
     : "";
   elements["rail-trajectory-note"].textContent = trajectoryState.loading
     ? "Loading current fields and advecting 20 shared seeds…"

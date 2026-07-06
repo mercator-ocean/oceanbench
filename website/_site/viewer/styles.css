@@ -394,6 +394,11 @@ body.resizing-layout.row { cursor: row-resize; }
 .rail-chart .chart-tooltip { pointer-events: none; }
 .rail-chart .chart-tooltip rect { fill: var(--readout-bg); stroke: var(--border); }
 .rail-chart .chart-tooltip text { fill: var(--text); font-size: 8px; font-family: var(--mono); }
+.rail-chart .chart-lead-line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.5; pointer-events: none; }
+.rail-chart .chart-lead-marker { fill: var(--accent); stroke: var(--readout-bg); stroke-width: 1.5; pointer-events: none; }
+.rail-chart .chart-lead-readout { pointer-events: none; }
+.rail-chart .chart-lead-readout rect { fill: var(--readout-bg); stroke: var(--accent); stroke-width: 1; }
+.rail-chart .chart-lead-readout text { fill: var(--accent); font-size: 8px; font-family: var(--mono); }
 .rail-legend { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.74rem; }
 .rail-legend .swatch { display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 3px; margin-right: 0.4rem; vertical-align: -1px; }
 .rail-legend .row { color: var(--text); }
