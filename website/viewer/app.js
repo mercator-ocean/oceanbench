@@ -177,6 +177,7 @@ function buildPanel(index) {
       <canvas class="panel-particles"></canvas>
       <canvas class="panel-overlay"></canvas>
       <div class="panel-readout" role="status"></div>
+      <div class="panel-loading" hidden>Loading dataset...</div>
       <div class="panel-swipe-hint" hidden></div>
     </div>`;
   const panel = {
@@ -196,6 +197,7 @@ function buildPanel(index) {
       particles: container.querySelector(".panel-particles"),
       overlay: container.querySelector(".panel-overlay"),
       readout: container.querySelector(".panel-readout"),
+      loading: container.querySelector(".panel-loading"),
       swipeHint: container.querySelector(".panel-swipe-hint"),
     },
     offscreenA: null,
@@ -261,46 +263,64 @@ function refreshPanelControls(panel) {
 
 function wirePanel(panel) {
   panel.container.addEventListener("mousedown", () => setActivePanel(panel.index), true);
-  panel.els.dataset.addEventListener("change", (event) => {
+  panel.els.dataset.addEventListener("change", async (event) => {
     panel.state.dataset = event.target.value;
-    setActivePanel(panel.index);
-    ensureStore(panel.state.dataset).then(() => {
+    setPanelLoading(panel, true);
+    try {
+      await ensureStore(panel.state.dataset);
       const manifest = manifestFor(panel.state.dataset);
       if (!(panel.state.variable in manifest.variables)) panel.state.variable = Object.keys(manifest.variables)[0];
+      updateSharedTimeControls(manifest);
       refreshPanelControls(panel);
-      renderPanel(panel).then(() => updateSmallMultiples());
+      setActivePanel(panel.index);
+      await renderPanel(panel);
+      await loadOverlayData();
+      redrawOverlaysAll();
+      updateContextRail();
+      updateSmallMultiples();
       writeHash();
-    });
+    } catch (error) {
+      setStatus(String(error.message || error), true);
+      console.error(error);
+    } finally {
+      setPanelLoading(panel, false);
+    }
   });
-  panel.els.variable.addEventListener("change", (event) => {
+  panel.els.variable.addEventListener("change", async (event) => {
     panel.state.variable = event.target.value;
     setActivePanel(panel.index);
-    renderPanel(panel).then(() => updateSmallMultiples());
-    updateContextRail();
+    await renderPanel(panel);
+    await updateContextRail();
+    await updateSmallMultiples();
     writeHash();
   });
-  panel.els.mode.addEventListener("change", (event) => {
+  panel.els.mode.addEventListener("change", async (event) => {
     panel.state.mode = event.target.value;
     setActivePanel(panel.index);
     refreshPanelControls(panel);
-    renderPanel(panel).then(() => updateSmallMultiples());
+    await renderPanel(panel);
+    await updateContextRail();
+    await updateSmallMultiples();
     updateCurrentsControlVisibility();
     writeHash();
   });
-  panel.els.datasetB.addEventListener("change", (event) => {
+  panel.els.datasetB.addEventListener("change", async (event) => {
     panel.state.datasetB = event.target.value;
     setActivePanel(panel.index);
-    ensureStore(panel.state.datasetB)
-      .then(() => renderPanel(panel))
-      .then(() => updateSmallMultiples())
-      .then(writeHash);
+    await ensureStore(panel.state.datasetB);
+    await renderPanel(panel);
+    await updateContextRail();
+    await updateSmallMultiples();
+    writeHash();
   });
-  panel.els.compareToggle.addEventListener("change", (event) => {
+  panel.els.compareToggle.addEventListener("change", async (event) => {
     panel.state.compare = event.target.checked;
     setActivePanel(panel.index);
     refreshPanelControls(panel);
-    const done = panel.state.compare ? ensureStore(panel.state.datasetB).then(() => renderPanel(panel)) : renderPanel(panel);
-    done.then(() => updateSmallMultiples());
+    if (panel.state.compare) await ensureStore(panel.state.datasetB);
+    await renderPanel(panel);
+    await updateContextRail();
+    await updateSmallMultiples();
     writeHash();
   });
 
@@ -331,11 +351,14 @@ function selectRenderLevel(manifest) {
 }
 
 function renderLevelForSlug(slug) {
-  return selectRenderLevel(manifestFor(slug));
+  const manifest = manifestFor(slug);
+  if (!manifest) return null;
+  return selectRenderLevel(manifest);
 }
 
 async function renderPanel(panel) {
   const token = ++panel.renderToken;
+  setPanelLoading(panel, true);
   try {
     await ensureStore(panel.state.dataset);
     const manifest = manifestFor(panel.state.dataset);
@@ -360,6 +383,8 @@ async function renderPanel(panel) {
   } catch (error) {
     if (token === panel.renderToken) setStatus(String(error.message || error), true);
     console.error(error);
+  } finally {
+    if (token === panel.renderToken) setPanelLoading(panel, false);
   }
 }
 
@@ -476,7 +501,7 @@ function colorize(field, latitudes, colormap, range) {
   const flip = latitudes[0] < latitudes[latitudes.length - 1];
   const image = fieldToImageData(field, colormap, range, { flipVertical: flip, theme: shared.theme });
   const canvas = new OffscreenCanvas(field.width, field.height);
-  canvas.getContext("2d").putImageData(image, 0, 0);
+  canvas.getContext("2d", { willReadFrequently: true }).putImageData(image, 0, 0);
   return canvas;
 }
 
@@ -527,7 +552,7 @@ function drawImageWorld(context, offscreen, edges, projection) {
 
 function drawPanel(panel) {
   const canvas = panel.els.field;
-  const context = canvas.getContext("2d");
+  const context = canvas.getContext("2d", { willReadFrequently: true });
   context.fillStyle = shared.theme === "light" ? "#eef2f6" : "#080b11";
   context.fillRect(0, 0, canvas.width, canvas.height);
   if (!panel.offscreenA) return;
@@ -571,22 +596,38 @@ function updatePanelBadge(panel) {
 
 let overlayData = { eddies: null, class4: null, region: null };
 
+async function loadInsightManifest(url) {
+  if (!url) return null;
+  try {
+    const response = await fetch(resolveViewerDataUrl(url));
+    if (!response.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
+}
+
 async function loadOverlayData() {
   const slug = panels[activePanelIndex] ? panels[activePanelIndex].state.dataset : datasetCatalog[0].slug;
   const region = shared.region;
-  const urls = insightsFor(insightIndex, "glonet_1_degree", region); // insights exist for glonet only
-  void slug;
+  const urls = insightsFor(insightIndex, slug, region);
+  const glonetUrls = insightsFor(insightIndex, "glonet_1_degree", region);
   overlayData.region = region;
+  overlayData.eddies = null;
+  overlayData.class4 = null;
   if (shared.overlayMode === "eddies") {
-    overlayData.eddies = await loadEddies(urls.eddies);
+    overlayData.eddies = await loadEddies(urls.eddies || glonetUrls.eddies);
   } else if (shared.overlayMode === "class4") {
-    overlayData.class4 = await loadClass4(urls.class4_matchups);
+    const class4Url = urls.class4_matchups || glonetUrls.class4_matchups;
+    const manifest = await loadInsightManifest(urls.class4_matchups ? urls.manifest : glonetUrls.manifest);
+    const byteLength = manifest && manifest["class4-matchups"] && manifest["class4-matchups"].bytes;
+    overlayData.class4 = await loadClass4(class4Url, { byteLength });
   }
 }
 
 function drawOverlays(panel) {
   const canvas = panel.els.overlay;
-  const context = canvas.getContext("2d");
+  const context = canvas.getContext("2d", { willReadFrequently: true });
   context.clearRect(0, 0, canvas.width, canvas.height);
   if (shared.overlayMode === "none") return;
   const projection = projectionFor(panel);
@@ -835,6 +876,15 @@ function setActivePanel(index) {
   updateSmallMultiples();
 }
 
+function setPanelLoading(panel, loading) {
+  panel.container.classList.toggle("loading", loading);
+  panel.els.loading.hidden = !loading;
+  for (const select of [panel.els.dataset, panel.els.variable, panel.els.mode, panel.els.datasetB]) {
+    select.disabled = loading;
+  }
+  panel.els.compareToggle.disabled = loading;
+}
+
 function resizePanelCanvases(panel) {
   const ratio = window.devicePixelRatio || 1;
   const rectangle = panel.els.wrap.getBoundingClientRect();
@@ -879,6 +929,10 @@ function updateSharedColorbar() {
     textColor: shared.theme === "light" ? "#14181d" : "#e6edf3",
   });
   const manifest = manifestFor(panel.state.dataset);
+  if (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length) {
+    elements["layer-info"].textContent = `lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}× · loading metadata`;
+    return;
+  }
   elements["layer-info"].textContent = `start ${manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)]} · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}× · level ${selectRenderLevel(manifest)}`;
 }
 
@@ -938,10 +992,14 @@ function updateRailLegend(panel) {
       row(EDDY_COLORS.missed, "Missed (reference only)", (counts.missed || []).length) +
       `<p class="dim">vs ${shared.eddyReference}, lead ${frame ? frame.frame.lead_day : "—"} (nearest available)</p>`;
   } else if (shared.overlayMode === "class4") {
-    const scale = panel.class4Scale || 0;
+    const visiblePanels = panels.slice(0, shared.layout);
+    const count = visiblePanels.reduce((total, candidate) => total + (candidate.class4Count || 0), 0);
+    const scale = Math.max(...visiblePanels.map((candidate) => candidate.class4Scale || 0), 0);
+    const sampled = overlayData.class4 && overlayData.class4.sampled;
+    const noData = !overlayData.class4 ? " · no match-ups for this dataset/region" : "";
     container.innerHTML =
       `<div class="row"><span class="swatch" style="background:${SERIES_COLORS.error}"></span>|obs − model|, brighter = larger error</div>` +
-      `<p class="dim">${panel.class4Count || 0} points shown · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}${overlayData.class4 && overlayData.class4.sampled ? " · sampled subset" : ""}</p>`;
+      `<p class="dim">${count} points shown across visible panels · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}${sampled ? " · sampled subset" : ""}${noData}</p>`;
   } else if (shared.overlayMode === "trajectories") {
     container.innerHTML = `<p class="dim">${trajectoryNote}</p>`;
   }
@@ -960,6 +1018,24 @@ function updateCurrentsControlVisibility() {
   elements["currents-group"].hidden = !anyCurrents;
 }
 
+function updateSharedTimeControls(manifest) {
+  if (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length) return;
+  shared.startIndex = Math.min(shared.startIndex, manifest.start_dates.length - 1);
+  populateSelect(
+    elements["start-date"],
+    manifest.start_dates.map((date, index) => ({ value: index, label: date })),
+    shared.startIndex,
+  );
+  if (!Array.isArray(manifest.lead_days) || !manifest.lead_days.length) return;
+  const minimumLead = Math.min(...manifest.lead_days);
+  const maximumLead = Math.max(...manifest.lead_days);
+  shared.leadDay = Math.min(Math.max(shared.leadDay, minimumLead), maximumLead);
+  elements["lead-day"].min = String(minimumLead);
+  elements["lead-day"].max = String(maximumLead);
+  elements["lead-day"].value = String(shared.leadDay);
+  elements["lead-value"].textContent = `day ${shared.leadDay}`;
+}
+
 async function applyOverlayMode() {
   const region = shared.region;
   elements["eddy-reference-field"].hidden = shared.overlayMode !== "eddies";
@@ -968,14 +1044,17 @@ async function applyOverlayMode() {
     const result = await loadTrajectories(insightIndex, "glonet_1_degree", region);
     trajectoryNote = result.available ? "trajectories loaded" : `Trajectories: ${result.reason}.`;
     note.textContent = trajectoryNote;
-  } else if (shared.overlayMode === "class4" && region !== "ibi") {
-    note.textContent = "Class-4 match-ups are only available for the IBI region — switch region to IBI.";
   } else if (shared.overlayMode === "eddies" || shared.overlayMode === "class4") {
-    note.textContent = "Overlay shows glonet_1_degree insights.";
+    note.textContent = shared.overlayMode === "class4" ? "Loading Class-4 match-ups..." : "Overlay shows glonet_1_degree insights.";
   } else {
     note.textContent = "";
   }
   await loadOverlayData();
+  if (shared.overlayMode === "class4") {
+    note.textContent = overlayData.class4
+      ? `Class-4 match-ups loaded${overlayData.class4.sampled ? " as a sampled subset" : ""}.`
+      : "No Class-4 match-ups are available for this dataset and region.";
+  }
   for (let i = 0; i < shared.layout; i += 1) drawOverlays(panels[i]);
   updateContextRail();
 }
@@ -1000,13 +1079,13 @@ function wireGlobalControls() {
       writeHash();
     });
   }
-  elements["start-date"].addEventListener("change", (event) => {
+  elements["start-date"].addEventListener("change", async (event) => {
     shared.startIndex = Number(event.target.value);
-    renderAllPanels().then(() => {
-      loadOverlayData().then(() => redrawOverlaysAll());
-      updateContextRail();
-      updateSmallMultiples();
-    });
+    await renderAllPanels();
+    await loadOverlayData();
+    redrawOverlaysAll();
+    await updateContextRail();
+    await updateSmallMultiples();
     writeHash();
   });
   elements["lead-day"].addEventListener("input", (event) => {
@@ -1120,8 +1199,14 @@ async function updateSmallMultiples() {
     return;
   }
   strip.hidden = false;
-  elements["strip-title"].textContent = `Error growth: ${labelFor(panel.state.dataset)} − ${labelFor(panel.state.datasetB)} · ${prettyName(manifestFor(panel.state.dataset).variables[panel.state.variable].standard_name)}`;
   const manifest = manifestFor(panel.state.dataset);
+  const compareManifest = manifestFor(panel.state.datasetB);
+  const entry = manifest && manifest.variables[panel.state.variable];
+  if (!manifest || !compareManifest || !entry || !(panel.state.variable in compareManifest.variables)) {
+    showSmallMultiplesNoData("No data for this comparison.");
+    return;
+  }
+  elements["strip-title"].textContent = `Error growth: ${labelFor(panel.state.dataset)} - ${labelFor(panel.state.datasetB)} · ${prettyName(entry.standard_name)}`;
   const level = selectRenderLevel(manifest);
   const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
   const maxLead = Math.max(...manifest.lead_days);
@@ -1131,22 +1216,27 @@ async function updateSmallMultiples() {
   await ensureStore(panel.state.datasetB);
   const compareLevel = renderLevelForSlug(panel.state.datasetB);
   for (const lead of leads) {
-    const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, lead - 1);
-    const compare = await readAlignedField(
-      panel,
-      panel.state.datasetB,
-      panel.state.variable,
-      compareLevel,
-      start,
-      lead - 1,
-      primary.latitudes,
-      primary.longitudes,
-    );
-    diffs.push({ lead, field: differenceField(primary.field, compare.field), latitudes: primary.latitudes });
+    try {
+      const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, lead - 1);
+      const compare = await readAlignedField(
+        panel,
+        panel.state.datasetB,
+        panel.state.variable,
+        compareLevel,
+        start,
+        lead - 1,
+        primary.latitudes,
+        primary.longitudes,
+      );
+      diffs.push({ lead, field: differenceField(primary.field, compare.field), latitudes: primary.latitudes });
+    } catch (error) {
+      diffs.push({ lead, error });
+    }
   }
   // Shared diverging scale across all leads (contracts.md §6).
   let magnitude = 0;
   for (const item of diffs) {
+    if (!item.field) continue;
     const range = symmetricRange(item.field);
     magnitude = Math.max(magnitude, range[1]);
   }
@@ -1158,6 +1248,18 @@ async function updateSmallMultiples() {
   for (const item of diffs) {
     const cell = document.createElement("div");
     cell.className = "strip-cell";
+    if (!item.field) {
+      cell.classList.add("no-data");
+      const message = document.createElement("div");
+      message.className = "strip-no-data";
+      message.textContent = "no data";
+      const caption = document.createElement("span");
+      caption.textContent = `lead ${item.lead}`;
+      cell.appendChild(message);
+      cell.appendChild(caption);
+      row.appendChild(cell);
+      continue;
+    }
     const canvas = document.createElement("canvas");
     const flip = item.latitudes[0] < item.latitudes[item.latitudes.length - 1];
     const image = fieldToImageData(item.field, DIFFERENCE_COLORMAP, sharedRange, { flipVertical: flip, theme: shared.theme });
@@ -1166,8 +1268,8 @@ async function updateSmallMultiples() {
     canvas.width = Math.max(1, Math.round(displayWidth * ratio));
     canvas.height = Math.max(1, Math.round(displayHeight * ratio));
     const source = new OffscreenCanvas(item.field.width, item.field.height);
-    source.getContext("2d").putImageData(image, 0, 0);
-    const context = canvas.getContext("2d");
+    source.getContext("2d", { willReadFrequently: true }).putImageData(image, 0, 0);
+    const context = canvas.getContext("2d", { willReadFrequently: true });
     context.imageSmoothingEnabled = false;
     context.drawImage(source, 0, 0, canvas.width, canvas.height);
     const caption = document.createElement("span");
@@ -1177,6 +1279,12 @@ async function updateSmallMultiples() {
     row.appendChild(cell);
   }
   elements["strip-title"].textContent += `  ·  ±${magnitude ? magnitude.toFixed(3) : "1"} ${panel.units}`;
+}
+
+function showSmallMultiplesNoData(message) {
+  elements["small-multiples"].hidden = false;
+  elements["strip-title"].textContent = message;
+  elements["strip-row"].innerHTML = `<div class="strip-cell no-data"><div class="strip-no-data">no data</div></div>`;
 }
 
 // ---- URL hash (every view state is a URL — §6) ------------------------------
@@ -1328,14 +1436,7 @@ async function main() {
   // Warm every visible panel's store so variable/start selectors populate on first paint.
   await Promise.all(panels.slice(0, shared.layout).map((panel) => ensureStore(panel.state.dataset).catch(() => {})));
   const manifest = manifestFor(panels[0].state.dataset);
-  populateSelect(
-    elements["start-date"],
-    manifest.start_dates.map((date, index) => ({ value: index, label: date })),
-    shared.startIndex,
-  );
-  elements["lead-day"].min = String(Math.min(...manifest.lead_days));
-  elements["lead-day"].max = String(Math.max(...manifest.lead_days));
-  elements["lead-day"].value = String(shared.leadDay);
+  updateSharedTimeControls(manifest);
 
   markLayoutButtons();
   syncPanelGrid();

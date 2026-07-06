@@ -44,6 +44,7 @@ SPDX-License-Identifier: EUPL-1.2
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body { height: 100%; }
 
@@ -105,6 +106,7 @@ body {
   display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .controls {
@@ -117,6 +119,7 @@ body {
   background: var(--surface);
   border-right: 1px solid var(--border);
   overflow-y: auto;
+  min-height: 0;
 }
 .controls label {
   display: flex;
@@ -153,6 +156,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .map-area {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 1rem clamp(0.75rem, 1.5vw, 1.25rem);
@@ -191,8 +195,9 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
+  min-height: 2.35rem;
 }
-.panel-head select { font-size: 0.72rem; max-width: 9rem; }
+.panel-head select { font-size: 0.72rem; max-width: min(9rem, 100%); min-width: 5.5rem; }
 .panel-head .panel-compare { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; color: var(--muted); }
 .panel-head .spacer { flex: 1; }
 .panel-badge { font-size: 0.68rem; font-family: var(--mono); color: var(--muted); }
@@ -230,6 +235,19 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   max-width: 90%;
   backdrop-filter: blur(4px);
 }
+.panel-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  background: color-mix(in srgb, var(--canvas-void) 72%, transparent);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  pointer-events: none;
+}
+.panel-loading[hidden] { display: none; }
+.panel.loading .panel-canvas-wrap { opacity: 0.78; }
 .panel-swipe-hint {
   position: absolute;
   top: 0.5rem;
@@ -254,6 +272,17 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .strip-cell { display: flex; flex-direction: column; gap: 0.2rem; }
 .strip-cell canvas { width: 100%; height: auto; border-radius: 5px; background: var(--canvas-void); display: block; }
 .strip-cell span { font-size: 0.68rem; color: var(--muted); text-align: center; font-family: var(--mono); }
+.strip-no-data {
+  min-height: 2.7rem;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--canvas-void);
+  font-size: 0.7rem;
+  font-family: var(--mono);
+}
 
 .map-footer { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
 .colorbar { border-radius: 4px; }
@@ -270,6 +299,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   background: var(--surface);
   border-left: 1px solid var(--border);
   overflow-y: auto;
+  min-height: 0;
 }
 .context-rail[hidden] { display: none; }
 .rail-title { font-size: 0.95rem; margin: 0 0 0.15rem; }
@@ -298,7 +328,26 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .app-footer a { color: var(--accent); }
 
 @media (max-width: 980px) {
-  .workspace { flex-direction: column; }
-  .controls { width: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .workspace { flex-direction: column; overflow: auto; }
+  .controls { width: auto; max-height: 14rem; border-right: none; border-bottom: 1px solid var(--border); }
   .context-rail { width: auto; border-left: none; border-top: 1px solid var(--border); }
+}
+
+@media (max-height: 760px) {
+  .app-header { padding-top: 0.45rem; padding-bottom: 0.45rem; }
+  .app-footer { display: none; }
+  .controls { padding: 0.75rem; gap: 0.6rem; }
+  .control-group { padding: 0.45rem 0.55rem 0.55rem; gap: 0.4rem; }
+  .map-area { padding-top: 0.65rem; padding-bottom: 0.65rem; gap: 0.45rem; }
+  .small-multiples { padding: 0.4rem 0.5rem; }
+  .context-rail { padding: 0.75rem; }
+}
+
+@media (max-width: 1320px) {
+  .controls { width: 14.5rem; }
+  .context-rail { width: 18rem; }
+  .panel-grid { gap: 0.45rem; }
+  .panel-head { gap: 0.25rem; padding: 0.3rem 0.35rem; }
+  .panel-head select { min-width: 4.8rem; max-width: 7.6rem; }
+  .panel-badge { display: none; }
 }

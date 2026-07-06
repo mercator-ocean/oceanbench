@@ -176,12 +176,14 @@ export function spectraEntry(spectra, variable, reference, leadDay) {
  */
 export function class4Points(rows, { variable, depthBin, leadDay, startDate, limit = 4000 }) {
   if (!rows) return [];
+  const requestedLead = leadDay == null ? null : Number(leadDay);
+  const requestedStart = startDate || null;
   const matched = [];
   for (const row of rows) {
     if (row.variable !== variable) continue;
     if (depthBin && row.depth_bin !== depthBin) continue;
-    if (row.lead_day !== leadDay) continue;
-    if (startDate && row.start_date !== startDate) continue;
+    if (requestedLead !== null && Number(row.lead_day) !== requestedLead) continue;
+    if (requestedStart && formatClass4Date(row.start_date) !== requestedStart) continue;
     matched.push(row);
   }
   if (matched.length <= limit) return matched;
@@ -189,6 +191,11 @@ export function class4Points(rows, { variable, depthBin, leadDay, startDate, lim
   const thinned = [];
   for (let i = 0; i < matched.length; i += stride) thinned.push(matched[i]);
   return thinned;
+}
+
+function formatClass4Date(value) {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
 }
 
 /** Trajectories are not yet produced (contracts.md §4 lists the kind; no artifact exists). */

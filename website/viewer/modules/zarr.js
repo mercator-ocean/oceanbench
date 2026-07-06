@@ -135,7 +135,10 @@ export async function readCoordinate(store, level, name) {
   const tiles = Math.ceil(size / chunk);
   for (let t = 0; t < tiles; t += 1) {
     const record = await fetchChunk(store, path, `${t}`, codecId);
-    const view = new Float64Array(record.bytes.buffer, record.bytes.byteOffset, record.bytes.byteLength / 8);
+    const view =
+      zarray.dtype === "<f4" || zarray.dtype === "|f4"
+        ? new Float32Array(record.bytes.buffer, record.bytes.byteOffset, record.bytes.byteLength / 4)
+        : new Float64Array(record.bytes.buffer, record.bytes.byteOffset, record.bytes.byteLength / 8);
     const start = t * chunk;
     const extent = Math.min(chunk, size - start);
     for (let i = 0; i < extent; i += 1) values[start + i] = view[i];
