@@ -1,0 +1,130 @@
+<!--
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OceanBench - Viewer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand-title">
+        <a class="site-brand" href="../index.html" aria-label="Back to OceanBench scores">
+          <img src="../favicon-light.png" alt="OceanBench logo" />
+          <span>OceanBench</span>
+        </a>
+        <div class="title">
+          <h1>Viewer</h1>
+          <p class="tagline">Compare ocean forecast fields with synchronized panels, current flows, and insight overlays.</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="layout-switch" role="group" aria-label="Panel layout">
+          <button type="button" data-layout="1" class="ghost-button">1</button>
+          <button type="button" data-layout="2" class="ghost-button">2</button>
+          <button type="button" data-layout="4" class="ghost-button">4</button>
+        </div>
+        <button id="rail-toggle" type="button" class="ghost-button">Context rail</button>
+        <button id="theme-toggle" type="button" class="ghost-button">Light theme</button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="controls" aria-label="Shared view controls">
+        <label>Start date
+          <select id="start-date"></select>
+        </label>
+
+        <label>Lead day <span id="lead-value" class="lead-value">day 1</span>
+          <input type="range" id="lead-day" min="1" max="10" step="1" value="1" />
+        </label>
+
+        <fieldset class="control-group">
+          <legend>Overlays</legend>
+          <label>Purpose mode
+            <select id="overlay-mode">
+              <option value="none">None</option>
+              <option value="eddies">Eddy census</option>
+              <option value="class4">Class-4 obs error</option>
+              <option value="trajectories">Lagrangian trajectories</option>
+            </select>
+          </label>
+          <label>Region
+            <select id="overlay-region">
+              <option value="global">Global</option>
+              <option value="ibi">IBI</option>
+            </select>
+          </label>
+          <label id="eddy-reference-field" hidden>Eddy reference
+            <select id="eddy-reference">
+              <option value="glorys">GLORYS</option>
+              <option value="glo12">GLO12</option>
+            </select>
+          </label>
+          <p id="overlay-note" class="hint"></p>
+        </fieldset>
+
+        <fieldset class="control-group" id="currents-group" hidden>
+          <legend>Currents</legend>
+          <label class="toggle"><input type="checkbox" id="particles-play" checked /> Animate</label>
+          <label>Speed <span id="speed-value" class="lead-value">1.0×</span>
+            <input type="range" id="particle-speed" min="0.2" max="3" step="0.1" value="1" />
+          </label>
+        </fieldset>
+
+        <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>
+        <p class="hint">Scroll to zoom, drag to pan — all panels move together. Hover for the value in real units. In a compare panel: drag the divider, or hold <kbd>B</kbd> to blink.</p>
+      </aside>
+
+      <main class="map-area">
+        <div id="panel-grid" class="panel-grid" data-layout="1"></div>
+
+        <div id="small-multiples" class="small-multiples" hidden>
+          <div class="strip-head"><span id="strip-title">Error growth (A − B)</span></div>
+          <div id="strip-row" class="strip-row"></div>
+        </div>
+
+        <div class="map-footer">
+          <canvas id="colorbar" width="320" height="34" class="colorbar"></canvas>
+          <p id="layer-info" class="layer-info"></p>
+        </div>
+        <p id="status" class="status" role="status">Loading…</p>
+      </main>
+
+      <aside id="context-rail" class="context-rail" aria-label="Context rail">
+        <h2 class="rail-title">Context</h2>
+        <p id="rail-subtitle" class="rail-subtitle"></p>
+        <section class="rail-section">
+          <h3>Skill vs lead day</h3>
+          <div id="rail-lead-curve" class="rail-chart-slot"></div>
+        </section>
+        <section class="rail-section">
+          <h3>Power spectrum</h3>
+          <div id="rail-spectra" class="rail-chart-slot"></div>
+        </section>
+        <section class="rail-section" id="rail-legend-section" hidden>
+          <h3>Overlay legend</h3>
+          <div id="rail-legend" class="rail-legend"></div>
+        </section>
+      </aside>
+    </div>
+
+    <footer class="app-footer">
+      <p>
+        Fields explorer over OceanBench viewer pyramids (numeric zarr, uint16 scale/offset, DEFLATE tiles decoded
+        natively in the browser). Colormaps from <a href="https://matplotlib.org/cmocean/">cmocean</a> (MIT).
+        Class-4 match-ups read with <a href="https://github.com/hyparam/hyparquet">hyparquet</a> (MIT).
+        Generated using E.U. Copernicus Marine Service Information; https://doi.org/10.48670/moi-00021 ;
+        https://doi.org/10.48670/moi-00016. Derived product, OceanBench-generated; not the authoritative Copernicus
+        product. Provided "as is", without warranty of any kind.
+      </p>
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

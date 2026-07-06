@@ -8,6 +8,7 @@ project:
   post-render: python generate_report_redirects.py
   resources:
     - assets/land-110m.json
+    - viewer/
 website:
   title: "OceanBench"
   favicon: favicon-light.png
@@ -18,6 +19,8 @@ website:
     left:
       - href: index.qmd
         text: Scores
+      - href: viewer/
+        text: Viewer
       - challengers.qmd
       - about.qmd
   repo-url: https://github.com/mercator-ocean/oceanbench
