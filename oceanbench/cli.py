@@ -193,16 +193,24 @@ def _run_evaluate_local(args: argparse.Namespace) -> int:
             with_lagrangian=args.with_lagrangian,
             include_class4=not args.no_class4,
             include_realism=not args.no_realism,
+            artifacts=args.artifacts,
         )
     except Exception as error:  # noqa: BLE001 - surface a clean message to the CLI user
         print(f"Error: {error}", file=sys.stderr)
         return 1
     for flag in result.flags:
         print(f"note: {flag}", file=sys.stderr)
-    print(f"scores:    {result.scores_path}")
-    print(f"summary:   {result.summary_path}")
-    print(f"scorecard: {result.scorecard_path}")
-    print(f"\nOpen the scorecard locally (no server needed): file://{Path(result.scorecard_path).resolve()}")
+    if result.scores_path:
+        print(f"scores:    {result.scores_path}")
+        print(f"summary:   {result.summary_path}")
+        print(f"scorecard: {result.scorecard_path}")
+        print(f"\nOpen the scorecard locally (no server needed): file://{Path(result.scorecard_path).resolve()}")
+    if result.viewer_directory:
+        print(f"viewer:    {result.viewer_directory}")
+        print(
+            "serve:     " f"{sys.executable} -m http.server --directory {Path(result.viewer_directory).resolve()} 8799"
+        )
+        print("open:      http://127.0.0.1:8799/")
     return 0
 
 
@@ -246,6 +254,12 @@ def _add_evaluate_local_parser(subparsers: "argparse._SubParsersAction") -> None
         "--output",
         default=None,
         help="Output directory (default: ./oceanbench-local-evaluation)",
+    )
+    parser.add_argument(
+        "--artifacts",
+        choices=("scores", "viewer", "all"),
+        default="scores",
+        help="Artifacts to build: scores (default), viewer, or all",
     )
     parser.add_argument(
         "--starts-limit",

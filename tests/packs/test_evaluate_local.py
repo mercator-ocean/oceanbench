@@ -109,3 +109,33 @@ def test_open_forecast_accepts_a_combined_zarr(local_evaluation_fixture):
     dataset = open_forecast_dataset(local_evaluation_fixture.forecast_path)
     assert "first_day_datetime" in dataset.dims
     assert "sea_surface_height_above_geoid" in dataset.data_vars
+
+
+def test_viewer_artifact_builds_local_pyramid_and_mixed_catalog(local_evaluation_fixture, tmp_path, monkeypatch):
+    remote = {
+        "slug": "official",
+        "label": "Official",
+        "store": "https://example.test/official.zarr",
+        "manifest": "https://example.test/official.viewer-manifest.json",
+    }
+    monkeypatch.setattr("oceanbench.packs.local_viewer._official_datasets", lambda: [remote])
+
+    result = _run(local_evaluation_fixture, tmp_path, artifacts="viewer")
+
+    assert result.scores_path is None
+    assert Path(result.viewer_zarr_path, ".zmetadata").exists()
+    manifest = json.loads(Path(result.viewer_manifest_path).read_text())
+    assert manifest["dataset"] == "your_model"
+    catalog = json.loads(Path(result.viewer_datasets_path).read_text())
+    assert catalog["datasets"][0]["store"] == "./data/your_model.zarr"
+    assert catalog["datasets"][1] == remote
+    assert Path(result.viewer_directory, "index.html").exists()
+
+
+def test_all_artifacts_keeps_scores_and_adds_viewer(local_evaluation_fixture, tmp_path, monkeypatch):
+    monkeypatch.setattr("oceanbench.packs.local_viewer._official_datasets", lambda: [])
+
+    result = _run(local_evaluation_fixture, tmp_path, artifacts="all")
+
+    assert Path(result.scores_path).exists()
+    assert Path(result.viewer_zarr_path, ".zmetadata").exists()

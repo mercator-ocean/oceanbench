@@ -53,10 +53,14 @@ _PER_START_KEY_COLUMNS = ["metric", "reference", "variable", "depth", "lead_day"
 
 @dataclass(frozen=True)
 class EvaluateLocalResult:
-    scores_path: str
-    summary_path: str
-    scorecard_path: str
-    scores: pandas.DataFrame
+    scores_path: str | None = None
+    summary_path: str | None = None
+    scorecard_path: str | None = None
+    scores: pandas.DataFrame = field(default_factory=pandas.DataFrame)
+    viewer_directory: str | None = None
+    viewer_datasets_path: str | None = None
+    viewer_zarr_path: str | None = None
+    viewer_manifest_path: str | None = None
     flags: list[str] = field(default_factory=list)
 
 
@@ -216,8 +220,11 @@ def evaluate_local(
     with_lagrangian: bool = False,
     include_class4: bool = True,
     include_realism: bool = True,
+    artifacts: str = "scores",
 ) -> EvaluateLocalResult:
     """Score ``forecasts_path`` against ``pack_directory`` and emit records, summary and overlay scorecard."""
+    if artifacts not in {"scores", "viewer", "all"}:
+        raise ValueError("artifacts must be one of: scores, viewer, all")
     pack_path = Path(pack_directory)
     manifest = load_pack_manifest(pack_directory)
     kind = manifest["kind"]
@@ -226,6 +233,22 @@ def evaluate_local(
     output_path.mkdir(parents=True, exist_ok=True)
 
     forecast_dataset = open_forecast_dataset(forecasts_path)
+
+    viewer_result = None
+    if artifacts in {"viewer", "all"}:
+        from oceanbench.packs.local_viewer import build_local_viewer
+
+        viewer_result = build_local_viewer(
+            forecast_dataset, output_directory=output_directory, year=year, starts_limit=starts_limit
+        )
+
+    if artifacts == "viewer":
+        return EvaluateLocalResult(
+            viewer_directory=viewer_result.viewer_directory,
+            viewer_datasets_path=viewer_result.datasets_path,
+            viewer_zarr_path=viewer_result.zarr_path,
+            viewer_manifest_path=viewer_result.manifest_path,
+        )
 
     reference_openers = {
         name: _pack_reference_opener(pack_path, entry["path"])
@@ -321,4 +344,8 @@ def evaluate_local(
         scorecard_path=str(scorecard_directory / "index.html"),
         scores=scores,
         flags=flags,
+        viewer_directory=viewer_result.viewer_directory if viewer_result else None,
+        viewer_datasets_path=viewer_result.datasets_path if viewer_result else None,
+        viewer_zarr_path=viewer_result.zarr_path if viewer_result else None,
+        viewer_manifest_path=viewer_result.manifest_path if viewer_result else None,
     )

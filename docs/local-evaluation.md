@@ -10,6 +10,22 @@ Score your own ocean-forecast model locally against an OceanBench **evaluation p
 (contracts.md §7) and get the same artifacts as the hosted run plus a self-contained
 overlay scorecard that lays your model over the published challengers.
 
+## Evaluate your own forecast
+
+From scores to a browser comparison with the official products:
+
+```sh
+oceanbench evaluate-local ./my-forecasts.zarr --pack ./pack-quick-2024 --artifacts all --output ./my-evaluation
+python -m http.server --directory ./my-evaluation/viewer 8799
+# open http://127.0.0.1:8799/
+```
+
+The first command needs network access to read the current official viewer catalog; obtaining
+the evaluation pack also needs network access unless it is already downloaded. The generated
+challenger pyramid, scores, scorecard, and viewer application are fully local. Browsing the
+challenger remains local, while displaying official comparison layers needs network access to
+the public EDITO MinIO objects named by `datasets.json`.
+
 ```sh
 oceanbench evaluate-local ./my-forecasts.zarr \
   --year 2024 --region global \
@@ -67,6 +83,9 @@ Under `--output`:
 - `scores-summary.json` — the aggregated means and 95% bootstrap CIs (contracts.md §3.4),
   produced by the same aggregation library as the hosted page.
 - `scorecard/index.html` — a self-contained overlay scorecard.
+- With `--artifacts viewer` or `all`, `viewer/` — the static viewer application,
+  `data/your_model.zarr`, its viewer manifest, and a mixed `data/datasets.json`. The local
+  descriptor uses relative URLs; official descriptors use absolute public MinIO URLs.
 
 ## The overlay scorecard
 
@@ -94,6 +113,7 @@ full 52-start published means would show sampling noise, not the true agreement.
 | `--pack` | pack directory (required) |
 | `--published` | published `scores.parquet` to overlay onto |
 | `--published-challengers` | optional `challengers.json` for display names |
+| `--artifacts scores\|viewer\|all` | build scores (default), only the viewer, or both |
 | `--starts-limit N` | quick-look mode: score only the first N forecast starts (default: all) |
 | `--with-lagrangian` | also compute the Lagrangian deviation (excluded by default; slow) |
 | `--no-class4` | skip the Class-4 observation track (fast; gridded only) |
