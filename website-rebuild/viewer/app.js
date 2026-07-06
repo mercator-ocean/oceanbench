@@ -319,13 +319,24 @@ function currentDepthVariables(panel) {
   };
 }
 
+function selectRenderLevel(manifest) {
+  const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+  const finest = levels[0];
+  const targetCellSize = finest.cell_size_deg * Math.max(1, 24 / view.zoom);
+  return levels.findLast((level) => level.cell_size_deg <= targetCellSize)?.level ?? levels[levels.length - 1].level;
+}
+
+function renderLevelForSlug(slug) {
+  return selectRenderLevel(manifestFor(slug));
+}
+
 async function renderPanel(panel) {
   const token = ++panel.renderToken;
   try {
     await ensureStore(panel.state.dataset);
     const manifest = manifestFor(panel.state.dataset);
     if (!(panel.state.variable in manifest.variables)) panel.state.variable = Object.keys(manifest.variables)[0];
-    const level = manifest.levels[0].level;
+    const level = selectRenderLevel(manifest);
     const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
     const leadIndex = shared.leadDay - 1;
 
@@ -376,11 +387,13 @@ async function renderFieldPanel(panel, token, manifest, level, start, leadIndex)
   stopParticles(panel);
 
   if (panel.state.compare && panel.state.datasetB) {
+    await ensureStore(panel.state.datasetB);
+    const compareLevel = renderLevelForSlug(panel.state.datasetB);
     const compare = await readAlignedField(
       panel,
       panel.state.datasetB,
       panel.state.variable,
-      level,
+      compareLevel,
       start,
       leadIndex,
       primary.latitudes,
@@ -397,11 +410,13 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   const entry = manifest.variables[panel.state.variable];
   const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, leadIndex);
   if (token !== panel.renderToken) return;
+  await ensureStore(panel.state.datasetB);
+  const compareLevel = renderLevelForSlug(panel.state.datasetB);
   const compare = await readAlignedField(
     panel,
     panel.state.datasetB,
     panel.state.variable,
-    level,
+    compareLevel,
     start,
     leadIndex,
     primary.latitudes,
@@ -708,6 +723,10 @@ function onGlobalUp() {
 function onPanelWheel(panel, event) {
   event.preventDefault();
   const projection = projectionFor(panel);
+  const previousLevels = panels.slice(0, shared.layout).map((candidate) => {
+    const manifest = manifests.get(candidate.state.dataset);
+    return manifest ? selectRenderLevel(manifest) : null;
+  });
   const ratio = window.devicePixelRatio || 1;
   const rectangle = panel.els.field.getBoundingClientRect();
   const cursorX = (event.clientX - rectangle.left) * ratio;
@@ -722,7 +741,19 @@ function onPanelWheel(panel, event) {
   view.centerNX += before.nx - after.nx;
   view.centerNY += before.ny - after.ny;
   clampView();
-  redrawAllPanels();
+  const needsRerender = panels.slice(0, shared.layout).some((candidate, index) => {
+    const manifest = manifests.get(candidate.state.dataset);
+    return manifest && previousLevels[index] !== selectRenderLevel(manifest);
+  });
+  if (needsRerender) {
+    renderAllPanels().then(() => {
+      redrawOverlaysAll();
+      updateContextRail();
+      updateSmallMultiples();
+    });
+  } else {
+    redrawAllPanels();
+  }
   scheduleHashWrite();
 }
 
@@ -844,7 +875,7 @@ function updateSharedColorbar() {
     textColor: shared.theme === "light" ? "#14181d" : "#e6edf3",
   });
   const manifest = manifestFor(panel.state.dataset);
-  elements["layer-info"].textContent = `start ${manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)]} · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
+  elements["layer-info"].textContent = `start ${manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)]} · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}× · level ${selectRenderLevel(manifest)}`;
 }
 
 // ---- context rail -----------------------------------------------------------
@@ -1026,10 +1057,13 @@ function wireGlobalControls() {
     writeHash();
   });
   elements["reset-view"].addEventListener("click", () => {
+    const previousLevels = panels.slice(0, shared.layout).map((panel) => selectRenderLevel(manifestFor(panel.state.dataset)));
     view.zoom = 1;
     view.centerNX = 0.5;
     view.centerNY = 0.5;
-    redrawAllPanels();
+    const needsRerender = panels.slice(0, shared.layout).some((panel, index) => previousLevels[index] !== selectRenderLevel(manifestFor(panel.state.dataset)));
+    if (needsRerender) renderAllPanels().then(() => redrawOverlaysAll());
+    else redrawAllPanels();
     writeHash();
   });
 
@@ -1084,19 +1118,21 @@ async function updateSmallMultiples() {
   strip.hidden = false;
   elements["strip-title"].textContent = `Error growth: ${labelFor(panel.state.dataset)} − ${labelFor(panel.state.datasetB)} · ${prettyName(manifestFor(panel.state.dataset).variables[panel.state.variable].standard_name)}`;
   const manifest = manifestFor(panel.state.dataset);
-  const level = manifest.levels[0].level;
+  const level = selectRenderLevel(manifest);
   const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
   const maxLead = Math.max(...manifest.lead_days);
   const leads = STRIP_LEADS.filter((lead) => lead <= maxLead);
 
   const diffs = [];
+  await ensureStore(panel.state.datasetB);
+  const compareLevel = renderLevelForSlug(panel.state.datasetB);
   for (const lead of leads) {
     const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, lead - 1);
     const compare = await readAlignedField(
       panel,
       panel.state.datasetB,
       panel.state.variable,
-      level,
+      compareLevel,
       start,
       lead - 1,
       primary.latitudes,
