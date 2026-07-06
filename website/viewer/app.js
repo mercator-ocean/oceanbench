@@ -549,6 +549,7 @@ function colorize(field, latitudes, colormap, range) {
 
 function prefetchNeighbours(panel, level, start, leadIndex) {
   const manifest = manifestFor(panel.state.dataset);
+  if (!manifest || !manifest.lead_days) return;
   const maxLead = Math.max(...manifest.lead_days);
   for (const delta of [1, -1]) {
     const lead = shared.leadDay + delta;
