@@ -5,6 +5,8 @@
 import numpy
 import pandas
 import xarray
+from scipy.ndimage import gaussian_filter
+from skimage.feature import peak_local_max
 
 from oceanbench.core import eddies
 from oceanbench.core.dataset_utils import Dimension, Variable
@@ -56,11 +58,11 @@ def test_mesoscale_eddy_contours_are_periodic_at_longitude_boundary() -> None:
     contours = eddies.mesoscale_eddy_contours_from_detections(
         detections,
         dataset,
-        background_sigma_grid=12.0,
-        detection_sigma_grid=0.0,
+        background_sigma_km=12.0 * eddies.ONE_DEGREE_LATITUDE_KM,
+        detection_sigma_km=0.0,
         amplitude_threshold_meters=0.2,
-        min_contour_pixel_count=1,
-        max_contour_pixel_count=10_000,
+        min_eddy_area_km2=0.0,
+        max_eddy_area_km2=1.0e9,
         min_contour_convexity=0.0,
     )
 
@@ -72,3 +74,51 @@ def test_mesoscale_eddy_contours_are_periodic_at_longitude_boundary() -> None:
 
     accepted_detections = eddies.filter_mesoscale_eddy_detections_by_contours(detections, contours)
     assert len(accepted_detections) == 1
+
+
+def test_km_defaults_reproduce_legacy_one_degree_census() -> None:
+    latitudes = numpy.arange(-20.0, 21.0)
+    longitudes = numpy.arange(0.0, 80.0)
+    latitude_grid = latitudes[:, None]
+    longitude_grid = longitudes[None, :]
+    values = 0.5 * numpy.exp(
+        -(((latitude_grid + 5.0) / 2.0) ** 2 + ((longitude_grid - 20.0) / 2.0) ** 2)
+    ) - 0.6 * numpy.exp(-(((latitude_grid - 7.0) / 2.5) ** 2 + ((longitude_grid - 55.0) / 2.5) ** 2))
+    dataset = xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                (
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ),
+                values[None, None],
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-01"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+    legacy_background = gaussian_filter(values, sigma=12.0, mode=("nearest", "wrap"))
+    legacy_anomaly = gaussian_filter(values - legacy_background, sigma=1.5, mode=("nearest", "wrap"))
+    legacy_rows = []
+    for polarity, image in (
+        (eddies.ANTICYCLONE, legacy_anomaly),
+        (eddies.CYCLONE, -legacy_anomaly),
+    ):
+        for latitude_index, longitude_index in peak_local_max(
+            image, min_distance=8, threshold_abs=0.04, exclude_border=False
+        ):
+            legacy_rows.append((polarity, float(latitudes[latitude_index]), float(longitudes[longitude_index])))
+
+    detections = eddies.detect_mesoscale_eddies(dataset)
+    new_rows = [
+        (row.polarity, row.latitude, row.longitude)
+        for row in detections.sort_values([eddies.POLARITY_COLUMN]).itertuples(index=False)
+    ]
+    assert sorted(new_rows) == sorted(legacy_rows)

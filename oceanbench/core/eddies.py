@@ -23,15 +23,17 @@ POLARITY_LABELS = {
     ANTICYCLONE: "Anticyclones",
 }
 
-DEFAULT_BACKGROUND_SIGMA_GRID = 12.0
-DEFAULT_DETECTION_SIGMA_GRID = 1.5
-DEFAULT_MIN_DISTANCE_GRID = 8
+EARTH_RADIUS_KM = 6371.0
+ONE_DEGREE_LATITUDE_KM = numpy.pi * EARTH_RADIUS_KM / 180.0
+DEFAULT_BACKGROUND_SIGMA_KM = 12.0 * ONE_DEGREE_LATITUDE_KM
+DEFAULT_DETECTION_SIGMA_KM = 1.5 * ONE_DEGREE_LATITUDE_KM
+DEFAULT_MIN_PEAK_SEPARATION_KM = 8.0 * ONE_DEGREE_LATITUDE_KM
 DEFAULT_AMPLITUDE_THRESHOLD_METERS = 0.04
 DEFAULT_MAX_ABS_LATITUDE_DEGREES = 70.0
 DEFAULT_MATCH_DISTANCE_KM = 200.0
 DEFAULT_CONTOUR_LEVEL_STEP_METERS = 0.01
-DEFAULT_MIN_CONTOUR_PIXEL_COUNT = 16
-DEFAULT_MAX_CONTOUR_PIXEL_COUNT = 6000
+DEFAULT_MIN_EDDY_AREA_KM2 = 16.0 * ONE_DEGREE_LATITUDE_KM**2
+DEFAULT_MAX_EDDY_AREA_KM2 = 6000.0 * ONE_DEGREE_LATITUDE_KM**2
 DEFAULT_MIN_CONTOUR_CONVEXITY = 0.75
 GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES = 300.0
 GLOBAL_LONGITUDE_PERIOD_DEGREES = 360.0
@@ -45,6 +47,7 @@ SEA_SURFACE_HEIGHT_COLUMN = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
 DISTANCE_COLUMN = "distance_km"
 CONTOUR_LEVEL_COLUMN = "contour_level"
 CONTOUR_PIXEL_COUNT_COLUMN = "contour_pixel_count"
+CONTOUR_AREA_KM2_COLUMN = "contour_area_km2"
 CONTOUR_CONVEXITY_COLUMN = "contour_convexity"
 CONTOUR_LATITUDES_COLUMN = "contour_latitudes"
 CONTOUR_LONGITUDES_COLUMN = "contour_longitudes"
@@ -83,7 +86,10 @@ def _lead_day_indices(dataset: xarray.Dataset, lead_day_indices: list[int] | Non
     return [lead_day_index for lead_day_index in lead_day_indices if 0 <= lead_day_index < available_count]
 
 
-def _gaussian_filter_with_mask(values: numpy.ndarray, sigma: float) -> numpy.ndarray:
+def _gaussian_filter_with_mask(
+    values: numpy.ndarray,
+    sigma: float | tuple[float, float],
+) -> numpy.ndarray:
     valid_mask = numpy.isfinite(values)
     if not numpy.any(valid_mask):
         return numpy.full_like(values, numpy.nan, dtype=float)
@@ -99,13 +105,35 @@ def _gaussian_filter_with_mask(values: numpy.ndarray, sigma: float) -> numpy.nda
 
 def _ssh_anomaly(
     field: xarray.DataArray,
-    background_sigma_grid: float,
-    detection_sigma_grid: float,
+    background_sigma_km: float,
+    detection_sigma_km: float,
 ) -> numpy.ndarray:
     field_values = numpy.asarray(field.values, dtype=float)
-    background_values = _gaussian_filter_with_mask(field_values, sigma=background_sigma_grid)
+    background_values = _gaussian_filter_with_mask(
+        field_values, sigma=_kilometres_to_grid_sigma(field, background_sigma_km)
+    )
     anomaly_values = field_values - background_values
-    return _gaussian_filter_with_mask(anomaly_values, sigma=detection_sigma_grid)
+    return _gaussian_filter_with_mask(anomaly_values, sigma=_kilometres_to_grid_sigma(field, detection_sigma_km))
+
+
+def _median_positive_spacing(values: numpy.ndarray) -> float:
+    differences = numpy.abs(numpy.diff(numpy.asarray(values, dtype=float)))
+    positive = differences[numpy.isfinite(differences) & (differences > 0)]
+    if positive.size == 0:
+        raise ValueError("eddy detection requires at least two distinct coordinate values")
+    return float(numpy.median(positive))
+
+
+def _kilometres_to_grid_sigma(field: xarray.DataArray, sigma_km: float) -> tuple[float, float]:
+    latitude_values = numpy.asarray(field[LATITUDE_COLUMN].values, dtype=float)
+    latitude_spacing_km = _median_positive_spacing(latitude_values) * ONE_DEGREE_LATITUDE_KM
+    characteristic_latitude = float(numpy.nanmean(latitude_values))
+    longitude_spacing_km = (
+        _median_positive_spacing(field[LONGITUDE_COLUMN].values)
+        * ONE_DEGREE_LATITUDE_KM
+        * numpy.cos(numpy.deg2rad(characteristic_latitude))
+    )
+    return sigma_km / latitude_spacing_km, sigma_km / longitude_spacing_km
 
 
 def _valid_detection_mask(field: xarray.DataArray, max_abs_latitude_degrees: float) -> numpy.ndarray:
@@ -120,8 +148,10 @@ def _detect_polarity_peaks(
     anomaly_values: numpy.ndarray,
     valid_mask: numpy.ndarray,
     polarity: str,
-    min_distance_grid: int,
+    min_peak_separation_km: float,
     amplitude_threshold_meters: float,
+    latitude_values: numpy.ndarray,
+    longitude_values: numpy.ndarray,
 ) -> numpy.ndarray:
     masked_values = numpy.where(valid_mask, anomaly_values, numpy.nan)
     if polarity == ANTICYCLONE:
@@ -130,7 +160,7 @@ def _detect_polarity_peaks(
         image_values = numpy.where(numpy.isfinite(masked_values), -masked_values, -numpy.inf)
     coordinates = peak_local_max(
         image_values,
-        min_distance=min_distance_grid,
+        min_distance=1,
         threshold_abs=amplitude_threshold_meters,
         exclude_border=False,
     )
@@ -141,16 +171,34 @@ def _detect_polarity_peaks(
         polarity_mask = amplitude_values >= amplitude_threshold_meters
     else:
         polarity_mask = amplitude_values <= -amplitude_threshold_meters
-    return coordinates[polarity_mask]
+    coordinates = coordinates[polarity_mask]
+    if coordinates.size == 0:
+        return coordinates
+    ranked = coordinates[numpy.argsort(-numpy.abs(masked_values[coordinates[:, 0], coordinates[:, 1]]))]
+    accepted: list[numpy.ndarray] = []
+    for coordinate in ranked:
+        if not accepted:
+            accepted.append(coordinate)
+            continue
+        accepted_array = numpy.asarray(accepted)
+        distances = _haversine_distance_km(
+            numpy.asarray([latitude_values[coordinate[0]]]),
+            numpy.asarray([longitude_values[coordinate[1]]]),
+            latitude_values[accepted_array[:, 0]],
+            longitude_values[accepted_array[:, 1]],
+        )
+        if numpy.all(distances >= min_peak_separation_km):
+            accepted.append(coordinate)
+    return numpy.asarray(sorted(accepted, key=lambda item: (item[0], item[1])), dtype=int)
 
 
 def detect_mesoscale_eddies(
     dataset: xarray.Dataset,
     first_day_index: int = 0,
     lead_day_indices: list[int] | None = None,
-    background_sigma_grid: float = DEFAULT_BACKGROUND_SIGMA_GRID,
-    detection_sigma_grid: float = DEFAULT_DETECTION_SIGMA_GRID,
-    min_distance_grid: int = DEFAULT_MIN_DISTANCE_GRID,
+    background_sigma_km: float = DEFAULT_BACKGROUND_SIGMA_KM,
+    detection_sigma_km: float = DEFAULT_DETECTION_SIGMA_KM,
+    min_peak_separation_km: float = DEFAULT_MIN_PEAK_SEPARATION_KM,
     amplitude_threshold_meters: float = DEFAULT_AMPLITUDE_THRESHOLD_METERS,
     max_abs_latitude_degrees: float = DEFAULT_MAX_ABS_LATITUDE_DEGREES,
 ) -> pandas.DataFrame:
@@ -159,8 +207,8 @@ def detect_mesoscale_eddies(
         field = _surface_ssh_field(dataset, first_day_index=first_day_index, lead_day_index=lead_day_index)
         anomaly_values = _ssh_anomaly(
             field,
-            background_sigma_grid=background_sigma_grid,
-            detection_sigma_grid=detection_sigma_grid,
+            background_sigma_km=background_sigma_km,
+            detection_sigma_km=detection_sigma_km,
         )
         valid_mask = _valid_detection_mask(field, max_abs_latitude_degrees=max_abs_latitude_degrees)
         latitude_values = field[LATITUDE_COLUMN].values
@@ -170,8 +218,10 @@ def detect_mesoscale_eddies(
                 anomaly_values=anomaly_values,
                 valid_mask=valid_mask,
                 polarity=polarity,
-                min_distance_grid=min_distance_grid,
+                min_peak_separation_km=min_peak_separation_km,
                 amplitude_threshold_meters=amplitude_threshold_meters,
+                latitude_values=latitude_values,
+                longitude_values=longitude_values,
             )
             for latitude_index, longitude_index in peak_coordinates:
                 detection_rows.append(
@@ -203,7 +253,6 @@ def _haversine_distance_km(
     latitude_b: numpy.ndarray,
     longitude_b: numpy.ndarray,
 ) -> numpy.ndarray:
-    earth_radius_km = 6371.0
     latitude_a_rad = numpy.deg2rad(latitude_a)[:, None]
     longitude_a_rad = numpy.deg2rad(longitude_a)[:, None]
     latitude_b_rad = numpy.deg2rad(latitude_b)[None, :]
@@ -217,7 +266,7 @@ def _haversine_distance_km(
         numpy.sin(dlatitude / 2.0) ** 2
         + numpy.cos(latitude_a_rad) * numpy.cos(latitude_b_rad) * numpy.sin(dlongitude / 2.0) ** 2
     )
-    return 2.0 * earth_radius_km * numpy.arcsin(numpy.sqrt(haversine))
+    return 2.0 * EARTH_RADIUS_KM * numpy.arcsin(numpy.sqrt(haversine))
 
 
 def match_mesoscale_eddies(
@@ -322,15 +371,15 @@ def mesoscale_eddy_summary(
     reference_dataset: xarray.Dataset,
     first_day_index: int = 0,
     lead_day_indices: list[int] | None = None,
-    background_sigma_grid: float = DEFAULT_BACKGROUND_SIGMA_GRID,
-    detection_sigma_grid: float = DEFAULT_DETECTION_SIGMA_GRID,
-    min_distance_grid: int = DEFAULT_MIN_DISTANCE_GRID,
+    background_sigma_km: float = DEFAULT_BACKGROUND_SIGMA_KM,
+    detection_sigma_km: float = DEFAULT_DETECTION_SIGMA_KM,
+    min_peak_separation_km: float = DEFAULT_MIN_PEAK_SEPARATION_KM,
     amplitude_threshold_meters: float = DEFAULT_AMPLITUDE_THRESHOLD_METERS,
     max_abs_latitude_degrees: float = DEFAULT_MAX_ABS_LATITUDE_DEGREES,
     max_match_distance_km: float = DEFAULT_MATCH_DISTANCE_KM,
     contour_level_step_meters: float = DEFAULT_CONTOUR_LEVEL_STEP_METERS,
-    min_contour_pixel_count: int = DEFAULT_MIN_CONTOUR_PIXEL_COUNT,
-    max_contour_pixel_count: int = DEFAULT_MAX_CONTOUR_PIXEL_COUNT,
+    min_eddy_area_km2: float = DEFAULT_MIN_EDDY_AREA_KM2,
+    max_eddy_area_km2: float = DEFAULT_MAX_EDDY_AREA_KM2,
     min_contour_convexity: float = DEFAULT_MIN_CONTOUR_CONVEXITY,
     challenger_name: str = "GLONET",
     reference_name: str = "GLORYS",
@@ -339,9 +388,9 @@ def mesoscale_eddy_summary(
         challenger_dataset,
         first_day_index=first_day_index,
         lead_day_indices=lead_day_indices,
-        background_sigma_grid=background_sigma_grid,
-        detection_sigma_grid=detection_sigma_grid,
-        min_distance_grid=min_distance_grid,
+        background_sigma_km=background_sigma_km,
+        detection_sigma_km=detection_sigma_km,
+        min_peak_separation_km=min_peak_separation_km,
         amplitude_threshold_meters=amplitude_threshold_meters,
         max_abs_latitude_degrees=max_abs_latitude_degrees,
     )
@@ -349,13 +398,13 @@ def mesoscale_eddy_summary(
         challenger_detections,
         challenger_dataset,
         first_day_index=first_day_index,
-        background_sigma_grid=background_sigma_grid,
-        detection_sigma_grid=detection_sigma_grid,
+        background_sigma_km=background_sigma_km,
+        detection_sigma_km=detection_sigma_km,
         amplitude_threshold_meters=amplitude_threshold_meters,
         max_abs_latitude_degrees=max_abs_latitude_degrees,
         contour_level_step_meters=contour_level_step_meters,
-        min_contour_pixel_count=min_contour_pixel_count,
-        max_contour_pixel_count=max_contour_pixel_count,
+        min_eddy_area_km2=min_eddy_area_km2,
+        max_eddy_area_km2=max_eddy_area_km2,
         min_contour_convexity=min_contour_convexity,
     )
     challenger_detections = filter_mesoscale_eddy_detections_by_contours(
@@ -366,9 +415,9 @@ def mesoscale_eddy_summary(
         reference_dataset,
         first_day_index=first_day_index,
         lead_day_indices=lead_day_indices,
-        background_sigma_grid=background_sigma_grid,
-        detection_sigma_grid=detection_sigma_grid,
-        min_distance_grid=min_distance_grid,
+        background_sigma_km=background_sigma_km,
+        detection_sigma_km=detection_sigma_km,
+        min_peak_separation_km=min_peak_separation_km,
         amplitude_threshold_meters=amplitude_threshold_meters,
         max_abs_latitude_degrees=max_abs_latitude_degrees,
     )
@@ -376,13 +425,13 @@ def mesoscale_eddy_summary(
         reference_detections,
         reference_dataset,
         first_day_index=first_day_index,
-        background_sigma_grid=background_sigma_grid,
-        detection_sigma_grid=detection_sigma_grid,
+        background_sigma_km=background_sigma_km,
+        detection_sigma_km=detection_sigma_km,
         amplitude_threshold_meters=amplitude_threshold_meters,
         max_abs_latitude_degrees=max_abs_latitude_degrees,
         contour_level_step_meters=contour_level_step_meters,
-        min_contour_pixel_count=min_contour_pixel_count,
-        max_contour_pixel_count=max_contour_pixel_count,
+        min_eddy_area_km2=min_eddy_area_km2,
+        max_eddy_area_km2=max_eddy_area_km2,
         min_contour_convexity=min_contour_convexity,
     )
     reference_detections = filter_mesoscale_eddy_detections_by_contours(
@@ -555,10 +604,20 @@ def _component_contour_info(
         )
 
     region = properties[0]
+    component_latitude_indices = component_positions[:, 0]
+    latitude_spacing_radians = numpy.deg2rad(_median_positive_spacing(latitude_values))
+    longitude_spacing_radians = numpy.deg2rad(_median_positive_spacing(longitude_values))
+    cell_areas_km2 = (
+        EARTH_RADIUS_KM**2
+        * latitude_spacing_radians
+        * longitude_spacing_radians
+        * numpy.cos(numpy.deg2rad(latitude_values[component_latitude_indices]))
+    )
     return {
         CONTOUR_LATITUDES_COLUMN: contour_latitudes,
         CONTOUR_LONGITUDES_COLUMN: contour_longitudes,
         CONTOUR_PIXEL_COUNT_COLUMN: int(region.area),
+        CONTOUR_AREA_KM2_COLUMN: float(numpy.sum(cell_areas_km2)),
         CONTOUR_CONVEXITY_COLUMN: float(region.solidity),
     }
 
@@ -567,13 +626,13 @@ def mesoscale_eddy_contours_from_detections(
     detections: pandas.DataFrame,
     dataset: xarray.Dataset,
     first_day_index: int = 0,
-    background_sigma_grid: float = DEFAULT_BACKGROUND_SIGMA_GRID,
-    detection_sigma_grid: float = DEFAULT_DETECTION_SIGMA_GRID,
+    background_sigma_km: float = DEFAULT_BACKGROUND_SIGMA_KM,
+    detection_sigma_km: float = DEFAULT_DETECTION_SIGMA_KM,
     amplitude_threshold_meters: float = DEFAULT_AMPLITUDE_THRESHOLD_METERS,
     max_abs_latitude_degrees: float = DEFAULT_MAX_ABS_LATITUDE_DEGREES,
     contour_level_step_meters: float = DEFAULT_CONTOUR_LEVEL_STEP_METERS,
-    min_contour_pixel_count: int = DEFAULT_MIN_CONTOUR_PIXEL_COUNT,
-    max_contour_pixel_count: int = DEFAULT_MAX_CONTOUR_PIXEL_COUNT,
+    min_eddy_area_km2: float = DEFAULT_MIN_EDDY_AREA_KM2,
+    max_eddy_area_km2: float = DEFAULT_MAX_EDDY_AREA_KM2,
     min_contour_convexity: float = DEFAULT_MIN_CONTOUR_CONVEXITY,
 ) -> pandas.DataFrame:
     if contour_level_step_meters <= 0:
@@ -588,8 +647,8 @@ def mesoscale_eddy_contours_from_detections(
             dataset,
             first_day_index=first_day_index,
             lead_day_index=int(lead_day_index),
-            background_sigma_grid=background_sigma_grid,
-            detection_sigma_grid=detection_sigma_grid,
+            background_sigma_km=background_sigma_km,
+            detection_sigma_km=detection_sigma_km,
             max_abs_latitude_degrees=max_abs_latitude_degrees,
         )
         anomaly_values = numpy.asarray(anomaly_field.values, dtype=float)
@@ -666,9 +725,9 @@ def mesoscale_eddy_contours_from_detections(
                         component_cache[component_label] = contour_info
                     if contour_info is None:
                         continue
-                    if contour_info[CONTOUR_PIXEL_COUNT_COLUMN] < min_contour_pixel_count:
+                    if contour_info[CONTOUR_AREA_KM2_COLUMN] < min_eddy_area_km2:
                         continue
-                    if contour_info[CONTOUR_PIXEL_COUNT_COLUMN] > max_contour_pixel_count:
+                    if contour_info[CONTOUR_AREA_KM2_COLUMN] > max_eddy_area_km2:
                         continue
                     if contour_info[CONTOUR_CONVEXITY_COLUMN] < min_contour_convexity:
                         continue
@@ -682,6 +741,7 @@ def mesoscale_eddy_contours_from_detections(
                             LONGITUDE_COLUMN: float(subset.loc[subset_index, LONGITUDE_COLUMN]),
                             CONTOUR_LEVEL_COLUMN: float(level_value),
                             CONTOUR_PIXEL_COUNT_COLUMN: contour_info[CONTOUR_PIXEL_COUNT_COLUMN],
+                            CONTOUR_AREA_KM2_COLUMN: contour_info[CONTOUR_AREA_KM2_COLUMN],
                             CONTOUR_CONVEXITY_COLUMN: contour_info[CONTOUR_CONVEXITY_COLUMN],
                             CONTOUR_LATITUDES_COLUMN: contour_info[CONTOUR_LATITUDES_COLUMN],
                             CONTOUR_LONGITUDES_COLUMN: contour_info[CONTOUR_LONGITUDES_COLUMN],
@@ -702,6 +762,7 @@ def mesoscale_eddy_contours_from_detections(
             LONGITUDE_COLUMN,
             CONTOUR_LEVEL_COLUMN,
             CONTOUR_PIXEL_COUNT_COLUMN,
+            CONTOUR_AREA_KM2_COLUMN,
             CONTOUR_CONVEXITY_COLUMN,
             CONTOUR_LATITUDES_COLUMN,
             CONTOUR_LONGITUDES_COLUMN,
@@ -845,15 +906,15 @@ def mesoscale_eddy_concentration_from_contours(
 
 def default_eddy_detection_parameters() -> dict[str, float | int]:
     return {
-        "background_sigma_grid": DEFAULT_BACKGROUND_SIGMA_GRID,
-        "detection_sigma_grid": DEFAULT_DETECTION_SIGMA_GRID,
-        "min_distance_grid": DEFAULT_MIN_DISTANCE_GRID,
+        "background_sigma_km": DEFAULT_BACKGROUND_SIGMA_KM,
+        "detection_sigma_km": DEFAULT_DETECTION_SIGMA_KM,
+        "min_peak_separation_km": DEFAULT_MIN_PEAK_SEPARATION_KM,
         "amplitude_threshold_meters": DEFAULT_AMPLITUDE_THRESHOLD_METERS,
         "max_abs_latitude_degrees": DEFAULT_MAX_ABS_LATITUDE_DEGREES,
         "max_match_distance_km": DEFAULT_MATCH_DISTANCE_KM,
         "contour_level_step_meters": DEFAULT_CONTOUR_LEVEL_STEP_METERS,
-        "min_contour_pixel_count": DEFAULT_MIN_CONTOUR_PIXEL_COUNT,
-        "max_contour_pixel_count": DEFAULT_MAX_CONTOUR_PIXEL_COUNT,
+        "min_eddy_area_km2": DEFAULT_MIN_EDDY_AREA_KM2,
+        "max_eddy_area_km2": DEFAULT_MAX_EDDY_AREA_KM2,
         "min_contour_convexity": DEFAULT_MIN_CONTOUR_CONVEXITY,
     }
 
@@ -870,15 +931,15 @@ def surface_ssh_anomaly_field(
     dataset: xarray.Dataset,
     first_day_index: int = 0,
     lead_day_index: int = 0,
-    background_sigma_grid: float = DEFAULT_BACKGROUND_SIGMA_GRID,
-    detection_sigma_grid: float = DEFAULT_DETECTION_SIGMA_GRID,
+    background_sigma_km: float = DEFAULT_BACKGROUND_SIGMA_KM,
+    detection_sigma_km: float = DEFAULT_DETECTION_SIGMA_KM,
     max_abs_latitude_degrees: float | None = None,
 ) -> xarray.DataArray:
     field = _surface_ssh_field(dataset=dataset, first_day_index=first_day_index, lead_day_index=lead_day_index)
     anomaly_values = _ssh_anomaly(
         field,
-        background_sigma_grid=background_sigma_grid,
-        detection_sigma_grid=detection_sigma_grid,
+        background_sigma_km=background_sigma_km,
+        detection_sigma_km=detection_sigma_km,
     )
     if max_abs_latitude_degrees is not None:
         valid_mask = _valid_detection_mask(field, max_abs_latitude_degrees=max_abs_latitude_degrees)
