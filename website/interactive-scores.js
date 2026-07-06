@@ -54,16 +54,6 @@ let activeRegion = null;
 let activeVersion = null;
 let isScrollRefreshScheduled = false;
 
-const URL_STATE_PARAMETERS = {
-  version: "version",
-  region: "region",
-  track: "track",
-  baseline: "baseline",
-  display: "display",
-  depths: "depths",
-  scale: "scale",
-};
-
 let selectedBaseline = null;
 let defaultVersionValue = null;
 let defaultRegionValue = null;
@@ -1122,9 +1112,7 @@ function ensureParsedData() {
     parsedData = JSON.parse(dataElement.textContent);
     const versions = getVersions(parsedData);
     if (!activeVersion || !versions.includes(activeVersion)) {
-      activeVersion = versions.includes(parsedData.default_version)
-        ? parsedData.default_version
-        : versions[0] || null;
+      activeVersion = resolveDefaultVersion(parsedData);
     }
     applyActiveVersion();
   }
@@ -1133,6 +1121,11 @@ function ensureParsedData() {
 
 function getVersions(data) {
   return data.version_order || Object.keys(data.versions || {});
+}
+
+function resolveDefaultVersion(data) {
+  const versions = getVersions(data);
+  return versions.includes(data.default_version) ? data.default_version : versions[0] || null;
 }
 
 function getActiveVersionData(data) {
@@ -1290,8 +1283,7 @@ function renderAllTables() {
   refreshScrollSpy();
   setupCellHighlight();
 
-  const versions = getVersions(data);
-  defaultVersionValue = versions.includes(data.default_version) ? data.default_version : versions[0] || null;
+  defaultVersionValue = resolveDefaultVersion(data);
   defaultRegionValue = regionIds[0] || null;
   defaultBaselineValue = resolveBaselineSelectionForTrack(visibleChallengerNames, null);
   selectedBaseline = baseline;
@@ -1301,22 +1293,22 @@ function renderAllTables() {
 function applyUrlStateFromLocation() {
   const parameters = new URLSearchParams(window.location.search);
 
-  const versionParameter = parameters.get(URL_STATE_PARAMETERS.version);
+  const versionParameter = parameters.get("version");
   if (versionParameter) activeVersion = versionParameter;
 
-  const regionParameter = parameters.get(URL_STATE_PARAMETERS.region);
+  const regionParameter = parameters.get("region");
   if (regionParameter) activeRegion = regionParameter;
 
-  const trackParameter = parameters.get(URL_STATE_PARAMETERS.track);
+  const trackParameter = parameters.get("track");
   if (trackParameter) activeTrack = trackParameter;
 
-  const baselineParameter = parameters.get(URL_STATE_PARAMETERS.baseline);
+  const baselineParameter = parameters.get("baseline");
   if (baselineParameter) selectedBaseline = baselineParameter;
 
-  const displayParameter = parameters.get(URL_STATE_PARAMETERS.display);
+  const displayParameter = parameters.get("display");
   if (displayParameter) showPercentDiff = displayParameter === "percent";
 
-  const depthsParameter = parameters.get(URL_STATE_PARAMETERS.depths);
+  const depthsParameter = parameters.get("depths");
   if (depthsParameter) {
     if (depthsParameter === "all") {
       showAllMode = true;
@@ -1327,7 +1319,7 @@ function applyUrlStateFromLocation() {
     }
   }
 
-  const scaleParameter = parameters.get(URL_STATE_PARAMETERS.scale);
+  const scaleParameter = parameters.get("scale");
   if (scaleParameter) {
     const parsedScale = Number(scaleParameter);
     if (isFinite(parsedScale) && parsedScale > 0) {
@@ -1342,26 +1334,26 @@ function writeUrlState() {
   const parameters = new URLSearchParams();
 
   if (activeVersion && activeVersion !== defaultVersionValue) {
-    parameters.set(URL_STATE_PARAMETERS.version, activeVersion);
+    parameters.set("version", activeVersion);
   }
   if (activeRegion && activeRegion !== defaultRegionValue) {
-    parameters.set(URL_STATE_PARAMETERS.region, activeRegion);
+    parameters.set("region", activeRegion);
   }
   if (activeTrack && activeTrack !== "high_resolution") {
-    parameters.set(URL_STATE_PARAMETERS.track, activeTrack);
+    parameters.set("track", activeTrack);
   }
   if (selectedBaseline && selectedBaseline !== defaultBaselineValue) {
-    parameters.set(URL_STATE_PARAMETERS.baseline, selectedBaseline);
+    parameters.set("baseline", selectedBaseline);
   }
   if (showPercentDiff) {
-    parameters.set(URL_STATE_PARAMETERS.display, "percent");
+    parameters.set("display", "percent");
   }
   if (!showAllMode && selectedDepths.size > 0) {
     const orderedDepths = [...selectedDepths].sort((first, second) => Number(first) - Number(second));
-    parameters.set(URL_STATE_PARAMETERS.depths, orderedDepths.join(","));
+    parameters.set("depths", orderedDepths.join(","));
   }
   if (maxScale !== 80) {
-    parameters.set(URL_STATE_PARAMETERS.scale, `${maxScale}`);
+    parameters.set("scale", `${maxScale}`);
   }
 
   const queryString = parameters.toString();
