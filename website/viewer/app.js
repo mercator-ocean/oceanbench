@@ -47,6 +47,54 @@ const SPEED_COLORMAP = "speed";
 const CURRENTS_MAX_SPEED = 1.2; // m/s mapping to the top of the speed colormap
 const PARTICLE_MAGNITUDE_SCALE = 1.0;
 
+// Currents are a synthetic variable (speed magnitude √(u²+v²)) built from the u/v
+// velocity components, one per available depth, so they sit in the variable dropdown
+// like any other channel. The particle animation is an optional overlay on top.
+const CURRENTS_VARIABLE_SURFACE = "current_speed";
+const CURRENTS_VARIABLE_15M = "current_speed_15m";
+
+function isCurrentsVariable(key) {
+  return key === CURRENTS_VARIABLE_SURFACE || key === CURRENTS_VARIABLE_15M;
+}
+
+function currentsVariableDepth(key) {
+  return key === CURRENTS_VARIABLE_15M ? "15m" : "surface";
+}
+
+function syntheticCurrentsEntry(key) {
+  return {
+    standard_name: "sea_water_speed",
+    units: "m/s",
+    depth: currentsVariableDepth(key),
+    default_colormap: SPEED_COLORMAP,
+    default_range: [0, CURRENTS_MAX_SPEED],
+  };
+}
+
+// Real manifest entry, or a synthetic descriptor for the currents variables.
+function variableEntry(manifest, key) {
+  if (isCurrentsVariable(key)) return syntheticCurrentsEntry(key);
+  return manifest && manifest.variables[key];
+}
+
+function variableExists(manifest, key) {
+  if (isCurrentsVariable(key)) return currentsVariableOptions(manifest).some((option) => option.value === key);
+  return Boolean(manifest && key in manifest.variables);
+}
+
+// Currents variable options available for this manifest, gated on the u/v components.
+function currentsVariableOptions(manifest) {
+  if (!manifest || !manifest.variables) return [];
+  const options = [];
+  if ("eastward_sea_water_velocity" in manifest.variables && "northward_sea_water_velocity" in manifest.variables) {
+    options.push({ value: CURRENTS_VARIABLE_SURFACE, label: "Currents · surface" });
+  }
+  if ("eastward_sea_water_velocity_15m" in manifest.variables && "northward_sea_water_velocity_15m" in manifest.variables) {
+    options.push({ value: CURRENTS_VARIABLE_15M, label: "Currents · 15m" });
+  }
+  return options;
+}
+
 // Shared state — linked across every panel (contracts.md §6).
 const view = { zoom: 1, centerNX: 0.5, centerNY: 0.5 };
 const shared = {
@@ -57,7 +105,7 @@ const shared = {
   overlayMode: "none",
   region: "global",
   eddyReference: "glorys",
-  particlesPlaying: true,
+  showParticles: true,
   particleSpeed: 1,
   railOpen: true,
   railWidth: Number(localStorage.getItem("oceanbench.viewer.railWidth")) || 352,
@@ -174,12 +222,12 @@ function buildPanel(index) {
   container.dataset.index = String(index);
   container.innerHTML = `
     <div class="panel-head">
+      <span class="panel-forecast-label">Forecast ${index + 1}</span>
       <select class="panel-dataset" aria-label="Panel dataset"></select>
       <select class="panel-variable" aria-label="Panel variable"></select>
       <select class="panel-mode" aria-label="Panel mode">
         <option value="field">Field</option>
         <option value="diff">Difference</option>
-        <option value="currents">Currents</option>
       </select>
       <select class="panel-dataset-b" aria-label="Compare dataset" hidden></select>
       <label class="panel-compare" hidden><input type="checkbox" class="panel-compare-toggle" /> swipe</label>
@@ -257,22 +305,23 @@ function refreshPanelControls(panel) {
   );
   const manifest = manifestFor(panel.state.dataset);
   if (manifest) {
-    if (!(panel.state.variable in manifest.variables)) panel.state.variable = Object.keys(manifest.variables)[0];
-    populateSelect(
-      panel.els.variable,
-      Object.keys(manifest.variables).map((key) => ({ value: key, label: variableLabel(manifest, key) })),
-      panel.state.variable,
-    );
+    if (!variableExists(manifest, panel.state.variable)) panel.state.variable = Object.keys(manifest.variables)[0];
+    const options = Object.keys(manifest.variables).map((key) => ({ value: key, label: variableLabel(manifest, key) }));
+    populateSelect(panel.els.variable, options.concat(currentsVariableOptions(manifest)), panel.state.variable);
   }
+  const currents = isCurrentsVariable(panel.state.variable);
+  if (shared.layout !== 1 || currents) panel.state.compare = false; // swipe is single-pane, field-only
   panel.els.mode.value = panel.state.mode;
+  panel.els.mode.disabled = currents; // currents render as a field; diff of speed is not offered
   populateSelect(
     panel.els.datasetB,
     datasetCatalog.map((entry) => ({ value: entry.slug, label: entry.label })),
     panel.state.datasetB,
   );
-  panel.els.compareField.hidden = panel.state.mode !== "field";
+  // Swipe (A/B compare) is single-panel only; hidden in 2-up and for currents.
+  panel.els.compareField.hidden = shared.layout !== 1 || currents || panel.state.mode !== "field";
   panel.els.compareToggle.checked = panel.state.compare;
-  panel.els.datasetB.hidden = !(panel.state.mode === "diff" || (panel.state.mode === "field" && panel.state.compare));
+  panel.els.datasetB.hidden = currents || !(panel.state.mode === "diff" || (panel.state.mode === "field" && panel.state.compare));
 }
 
 function wirePanel(panel) {
@@ -302,8 +351,10 @@ function wirePanel(panel) {
   panel.els.variable.addEventListener("change", async (event) => {
     panel.state.variable = event.target.value;
     setActivePanel(panel.index);
+    refreshPanelControls(panel);
     await renderPanel(panel);
     await updateContextRail();
+    updateCurrentsControlVisibility();
     writeHash();
   });
   panel.els.mode.addEventListener("change", async (event) => {
@@ -371,12 +422,12 @@ async function renderPanel(panel) {
   try {
     await ensureStore(panel.state.dataset);
     const manifest = manifestFor(panel.state.dataset);
-    if (!(panel.state.variable in manifest.variables)) panel.state.variable = Object.keys(manifest.variables)[0];
+    if (!variableExists(manifest, panel.state.variable)) panel.state.variable = Object.keys(manifest.variables)[0];
     const level = selectRenderLevel(manifest);
     const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
     const leadIndex = shared.leadDay - 1;
 
-    if (panel.state.mode === "currents") {
+    if (isCurrentsVariable(panel.state.variable)) {
       await renderCurrentsPanel(panel, token, manifest, level, start, leadIndex);
     } else if (panel.state.mode === "diff") {
       await renderDifferencePanel(panel, token, manifest, level, start, leadIndex);
@@ -480,7 +531,7 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
 async function renderCurrentsPanel(panel, token, manifest, level, start, leadIndex) {
   const variables = currentDepthVariables(panel);
   if (!(variables.u in manifest.variables)) {
-    setStatus(`${labelFor(panel.state.dataset)} has no velocity fields for currents mode`, true);
+    setStatus(`${labelFor(panel.state.dataset)} has no velocity fields for currents`, true);
     return;
   }
   const uPrimary = await readAlignedField(panel, panel.state.dataset, variables.u, level, start, leadIndex);
@@ -502,7 +553,8 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   panel.velocity = {
     sampler: makeVelocitySampler(uPrimary.field, vPrimary.field, uPrimary.latitudes, uPrimary.longitudes),
   };
-  startPanelParticles(panel);
+  if (shared.showParticles) startPanelParticles(panel);
+  else stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
 }
 
@@ -520,7 +572,7 @@ function prefetchNeighbours(panel, level, start, leadIndex) {
   for (const delta of [1, -1]) {
     const lead = shared.leadDay + delta;
     if (lead < 1 || lead > maxLead) continue;
-    if (panel.state.mode === "currents") {
+    if (isCurrentsVariable(panel.state.variable)) {
       const variables = currentDepthVariables(panel);
       prefetchLayer(stores.get(panel.state.dataset), { variable: variables.u, level, startIndex: start, leadIndex: lead - 1 });
       prefetchLayer(stores.get(panel.state.dataset), { variable: variables.v, level, startIndex: start, leadIndex: lead - 1 });
@@ -701,7 +753,7 @@ function startPanelParticles(panel) {
     theme: shared.theme,
     speed: shared.particleSpeed,
     devicePixelRatio: window.devicePixelRatio || 1,
-    playing: shared.particlesPlaying,
+    playing: true,
   };
   panel.particleHandle = startParticleField(panel.els.particles, panel.particleContext);
 }
@@ -714,13 +766,21 @@ function stopParticles(panel) {
   }
 }
 
+// Start or stop the particle overlay on every visible panel to match the checkbox.
+function applyParticleVisibility() {
+  for (let i = 0; i < shared.layout; i += 1) {
+    const panel = panels[i];
+    if (isCurrentsVariable(panel.state.variable) && shared.showParticles && panel.velocity) startPanelParticles(panel);
+    else stopParticles(panel);
+  }
+}
+
 function updateParticleProjection(panel, projection) {
   if (!panel.particleContext) return;
   panel.particleContext.project = projection.project;
   panel.particleContext.viewport = visibleViewport(projection, panel.els.particles);
   panel.particleContext.theme = shared.theme;
   panel.particleContext.speed = shared.particleSpeed;
-  panel.particleContext.playing = shared.particlesPlaying;
   panel.particleContext.devicePixelRatio = window.devicePixelRatio || 1;
 }
 
@@ -1184,7 +1244,7 @@ function row(color, label, count) {
 let trajectoryNote = "";
 
 function updateCurrentsControlVisibility() {
-  const anyCurrents = panels.slice(0, shared.layout).some((panel) => panel.state.mode === "currents");
+  const anyCurrents = panels.slice(0, shared.layout).some((panel) => isCurrentsVariable(panel.state.variable));
   elements["currents-group"].hidden = !anyCurrents;
 }
 
@@ -1283,8 +1343,8 @@ function wireGlobalControls() {
     writeHash();
   });
   elements["particles-play"].addEventListener("change", (event) => {
-    shared.particlesPlaying = event.target.checked;
-    for (const panel of panels) if (panel.particleContext) panel.particleContext.playing = shared.particlesPlaying;
+    shared.showParticles = event.target.checked;
+    applyParticleVisibility();
     writeHash();
   });
   elements["particle-speed"].addEventListener("input", (event) => {
@@ -1426,7 +1486,7 @@ function writeHash() {
   if (!shared.railOpen) parameters.set("rail", "0");
   parameters.set("rw", String(shared.railWidth));
   parameters.set("pb", shared.railProductB);
-  parameters.set("play", shared.particlesPlaying ? "1" : "0");
+  parameters.set("play", shared.showParticles ? "1" : "0");
   parameters.set("spd", shared.particleSpeed.toFixed(1));
   for (let i = 0; i < shared.layout; i += 1) parameters.set(`p${i}`, encodePanel(panels[i]));
   const encoded = `#${parameters.toString()}`;
@@ -1448,7 +1508,7 @@ function readHash() {
   if (parameters.get("rail") === "0") shared.railOpen = false;
   if (parameters.has("rw")) shared.railWidth = Math.min(620, Math.max(280, Number(parameters.get("rw"))));
   if (parameters.has("pb")) shared.railProductB = slugForProductKey(parameters.get("pb"));
-  if (parameters.has("play")) shared.particlesPlaying = parameters.get("play") === "1";
+  if (parameters.has("play")) shared.showParticles = parameters.get("play") === "1";
   if (parameters.has("spd")) shared.particleSpeed = Number(parameters.get("spd"));
   return parameters;
 }
@@ -1459,10 +1519,12 @@ function applyPanelHash(parameters) {
     if (!encoded) continue;
     const [dataset, variable, mode, datasetB, compare] = encoded.split(",");
     if (!panels[i]) panels[i] = buildPanel(i);
+    // Old hashes encoded currents as a mode; it is a variable now. Degrade gracefully.
+    const migratedCurrents = mode === "currents";
     Object.assign(panels[i].state, {
       dataset: dataset || panels[i].state.dataset,
-      variable: variable || panels[i].state.variable,
-      mode: mode || panels[i].state.mode,
+      variable: migratedCurrents ? CURRENTS_VARIABLE_SURFACE : variable || panels[i].state.variable,
+      mode: migratedCurrents ? "field" : mode || panels[i].state.mode,
       datasetB: datasetB || panels[i].state.datasetB,
       compare: compare === "1",
     });
