@@ -1593,13 +1593,15 @@ async function main() {
   }
 
   const parameters = readHash();
-  if (!Number.isFinite(shared.layout) || ![1, 2, 4].includes(shared.layout)) shared.layout = 1;
+  // Only 1 or 2 panels are supported; old 4-panel hashes degrade to 2.
+  if (!Number.isFinite(shared.layout) || shared.layout < 1) shared.layout = 1;
+  else if (shared.layout > 2) shared.layout = 2;
   applyTheme();
   elements["context-rail"].hidden = !shared.railOpen;
   applyRailWidth();
   elements["lead-value"].textContent = `day ${shared.leadDay}`;
   elements["speed-value"].textContent = `${shared.particleSpeed.toFixed(1)}×`;
-  elements["particles-play"].checked = shared.particlesPlaying;
+  elements["particles-play"].checked = shared.showParticles;
   elements["particle-speed"].value = String(shared.particleSpeed);
   elements["overlay-mode"].value = shared.overlayMode;
   elements["overlay-region"].value = shared.region;
