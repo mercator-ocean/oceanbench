@@ -111,6 +111,7 @@ const shared = {
   particleSpeed: 1,
   railCollapsed: localStorage.getItem("oceanbench.viewer.railCollapsed") === "1",
   railWidth: Number(localStorage.getItem("oceanbench.viewer.railWidth")) || 352,
+  mapHeight: null,
   // 2-forecast display: "side" (two panels) or "swipe" (one map, F1 left / F2 right).
   displayMode: "side",
   // Which forecast the rail shows when 2 forecasts carry different variables.
@@ -836,6 +837,7 @@ function beginPanelDrag(panel, event) {
 }
 
 function onGlobalMove(event) {
+  if (updateMapResize(event)) return;
   if (updateRailResize(event)) return;
   for (const panel of panels) {
     if (panel.draggingSwipe) {
@@ -860,6 +862,7 @@ function onGlobalMove(event) {
 }
 
 function onGlobalUp() {
+  if (endMapResize()) return;
   if (endRailResize()) return;
   let wasDragging = false;
   for (const panel of panels) {
@@ -1557,6 +1560,7 @@ function wireGlobalControls() {
     writeHash();
   });
   elements["rail-resize-handle"].addEventListener("mousedown", beginRailResize);
+  elements["map-resize-handle"].addEventListener("mousedown", beginMapResize);
   for (const button of elements["rail-forecast-toggle"].querySelectorAll("button")) {
     button.addEventListener("click", () => {
       shared.railForecast = Number(button.dataset.forecast);
@@ -1589,6 +1593,7 @@ function wireGlobalControls() {
   window.addEventListener("mousemove", onGlobalMove);
   window.addEventListener("mouseup", onGlobalUp);
   window.addEventListener("resize", () => {
+    applyMapHeight();
     clampView();
     redrawAllPanels();
     scheduleRailUpdate();
@@ -1596,6 +1601,54 @@ function wireGlobalControls() {
 }
 
 let railResize = null;
+let mapResize = null;
+
+function mapHeightLimits() {
+  const workspace = document.querySelector(".workspace");
+  const available = workspace ? workspace.getBoundingClientRect().height : window.innerHeight;
+  return { minimum: Math.min(320, available), maximum: Math.max(320, available) };
+}
+
+function applyMapHeight() {
+  const mapArea = document.querySelector(".map-area");
+  if (!mapArea) return;
+  if (window.matchMedia("(max-width: 980px)").matches || !Number.isFinite(shared.mapHeight)) {
+    mapArea.style.removeProperty("height");
+    mapArea.style.removeProperty("flex");
+    return;
+  }
+  const limits = mapHeightLimits();
+  shared.mapHeight = Math.min(limits.maximum, Math.max(limits.minimum, shared.mapHeight));
+  mapArea.style.height = `${shared.mapHeight}px`;
+  mapArea.style.flex = "0 0 auto";
+}
+
+function beginMapResize(event) {
+  event.preventDefault();
+  const mapArea = document.querySelector(".map-area");
+  mapResize = { startY: event.clientY, startHeight: mapArea.getBoundingClientRect().height };
+  mapArea.classList.add("resizing");
+}
+
+function updateMapResize(event) {
+  if (!mapResize) return false;
+  const limits = mapHeightLimits();
+  shared.mapHeight = Math.min(limits.maximum, Math.max(limits.minimum, Math.round(mapResize.startHeight + event.clientY - mapResize.startY)));
+  applyMapHeight();
+  clampView();
+  redrawAllPanels();
+  scheduleRailUpdate();
+  scheduleHashWrite();
+  return true;
+}
+
+function endMapResize() {
+  if (!mapResize) return false;
+  mapResize = null;
+  document.querySelector(".map-area").classList.remove("resizing");
+  writeHash();
+  return true;
+}
 
 function applyRailWidth() {
   const rail = elements["context-rail"];
@@ -1694,6 +1747,7 @@ function writeHash() {
   if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
   if (shared.railCollapsed) parameters.set("rail", "collapsed");
   parameters.set("rw", String(shared.railWidth));
+  if (Number.isFinite(shared.mapHeight)) parameters.set("mh", String(shared.mapHeight));
   if (shared.layout === 2) parameters.set("dm", shared.displayMode);
   parameters.set("play", shared.showParticles ? "1" : "0");
   parameters.set("spd", shared.particleSpeed.toFixed(1));
@@ -1716,6 +1770,7 @@ function readHash() {
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
   if (parameters.get("rail") === "0" || parameters.get("rail") === "collapsed") shared.railCollapsed = true;
   if (parameters.has("rw")) shared.railWidth = Math.min(620, Math.max(280, Number(parameters.get("rw"))));
+  if (parameters.has("mh")) shared.mapHeight = Number(parameters.get("mh"));
   if (parameters.get("dm") === "swipe" || parameters.get("dm") === "side") shared.displayMode = parameters.get("dm");
   if (parameters.has("play")) shared.showParticles = parameters.get("play") === "1";
   if (parameters.has("spd")) shared.particleSpeed = Number(parameters.get("spd"));
@@ -1771,6 +1826,7 @@ function selectElements() {
     "status",
     "context-rail",
     "rail-resize-handle",
+    "map-resize-handle",
     "rail-subtitle",
     "rail-forecast-toggle",
     "rail-lead-curve",
@@ -1809,6 +1865,7 @@ async function main() {
   applyTheme();
   applyRailWidth();
   applyRailCollapsed();
+  applyMapHeight();
   elements["lead-value"].textContent = `day ${shared.leadDay}`;
   elements["speed-value"].textContent = `${shared.particleSpeed.toFixed(1)}×`;
   elements["particles-play"].checked = shared.showParticles;
