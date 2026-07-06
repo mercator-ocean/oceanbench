@@ -11,9 +11,10 @@ from oceanbench.core.evaluation_year import (
 from oceanbench.core.challenger_datasets import (
     _glonet_dataset_path,
     _langya_dataset_path,
+    _wenhai_dataset_path,
 )
 from oceanbench.core.references.glo12 import _glo12_1_degree_path, _glo12_1_4_path
-from oceanbench.core.references.glorys import _glorys_1_degree_path
+from oceanbench.core.references.glorys import _glorys_1_degree_path, _glorys_1_4_path
 from oceanbench.core.references.observations import observation_path
 
 
@@ -48,6 +49,9 @@ def test_ml_forecast_output_paths_use_true_evaluation_dates() -> None:
     assert _langya_dataset_path(first_day_datetimes_2025[-1]) == (
         "s3://oceanbench-bucket/public/ml-forecast-outputs/langya/20251231.zarr"
     )
+    assert _wenhai_dataset_path(first_day_datetimes_2023[0]) == (
+        "s3://oceanbench-bucket/public/ml-forecast-outputs/wenhai/v2/20230104.zarr"
+    )
 
 
 def test_observation_path_uses_evaluation_year_bucket() -> None:
@@ -60,9 +64,8 @@ def test_reference_paths_use_cloudferro_for_true_2023_and_2025_evaluations() -> 
     assert _glo12_1_degree_path("2023-01-04") == (
         "s3://oceanbench-bucket/public/references/glo12_one_degree_2023/20230104.zarr"
     )
-    assert _glo12_1_4_path("2025-12-31") == (
-        "s3://oceanbench-bucket/public/references/glo12_quarter_degree_2025/20251231.zarr"
-    )
+    assert _glo12_1_4_path("2025-12-31") == ("s3://oceanbench-bucket/public/references/glo14_2025/20251231.zarr")
+    assert _glorys_1_4_path("2023-01-04") == ("s3://oceanbench-bucket/public/references/glorys14_2023/20230104.zarr")
     assert _glorys_1_degree_path("2023-12-27") == (
         "s3://oceanbench-bucket/public/references/glorys_one_degree_2023/20231227.zarr"
     )

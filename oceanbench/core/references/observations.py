@@ -33,6 +33,7 @@ from oceanbench.core.remote_http import (
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2023-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
 OBSERVATIONS_STAGE_VERSION = "v3"
+_CLOUDFERRO_OBSERVATION_YEARS = (2023, 2025)
 
 
 class ObservationDataUnavailableError(ValueError):
