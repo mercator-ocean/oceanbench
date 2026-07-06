@@ -141,16 +141,16 @@ export function leadCurveSVG(series, { title = "Skill vs lead", unit = "", label
 }
 
 /** PSD spectrum (log-log): challenger vs reference power, plus error power. */
-export function spectraSVG(entry, { title = "Power spectrum" } = {}) {
+export function spectraSVG(entry, { title = "Power spectrum", productA = "product A", productB = "product B" } = {}) {
   const area = plotArea();
   if (!entry || !entry.wavelength || !entry.wavelength.length) {
     return emptyChart(title, "no spectrum for this variable/region");
   }
   const wavelengths = entry.wavelength;
   const lines = [
-    { key: "challenger", values: entry.challenger_power, color: SERIES_COLORS.challenger, label: "challenger" },
-    { key: "reference", values: entry.reference_power, color: SERIES_COLORS.reference, label: "reference" },
-    { key: "error", values: entry.error_power, color: SERIES_COLORS.error, label: "error" },
+    { key: "challenger", values: entry.challenger_power, color: SERIES_COLORS.challenger, label: productA },
+    { key: "reference", values: entry.reference_power, color: SERIES_COLORS.reference, label: productB },
+    { key: "error", values: entry.error_power, color: SERIES_COLORS.error, label: `error (${productA}-${productB})` },
   ].filter((line) => Array.isArray(line.values) && line.values.length);
 
   const positive = (list) => list.filter((value) => value > 0);

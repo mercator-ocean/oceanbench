@@ -61,6 +61,7 @@ const shared = {
   particleSpeed: 1,
   railOpen: true,
   railWidth: Number(localStorage.getItem("oceanbench.viewer.railWidth")) || 352,
+  railProductB: "glorys_one_degree",
 };
 
 const stores = new Map();
@@ -114,6 +115,12 @@ function scoreProductKey(slug) {
   if (slug === "glorys_one_degree") return "glorys";
   if (slug === "glo12_one_degree") return "glo12";
   return slug;
+}
+
+function slugForProductKey(key) {
+  if (key === "glorys") return "glorys_one_degree";
+  if (key === "glo12") return "glo12_one_degree";
+  return key;
 }
 
 function prettyName(standardName) {
@@ -974,6 +981,7 @@ async function updateContextRail() {
   const entry = manifest && manifest.variables[panel.state.variable];
   const depth = entry ? entry.depth : null;
   elements["rail-subtitle"].textContent = `${panel.label} · ${shared.region}`;
+  updateRailProductControls(panel);
 
   // Lead-time curve: every score series matching this variable/depth (region = summary's global).
   const depthKey = entry ? mapDepthToScoreDepth(entry) : null;
@@ -993,14 +1001,59 @@ async function updateContextRail() {
   elements["rail-lead-curve"].innerHTML = leadCurveSVG(series, { unit, labels });
 
   // Spectrum for variable + region (only SSH spectra are produced today).
-  const spectra = await loadSpectra(insightsFor(insightIndex, "glonet_1_degree", shared.region).spectra);
-  const spectrumEntry = spectra ? spectraEntry(spectra, panel.state.variable, shared.eddyReference, shared.leadDay) : null;
-  elements["rail-spectra"].innerHTML = spectraSVG(spectrumEntry, {});
+  const spectra = await loadSpectra(insightsFor(insightIndex, panel.state.dataset, shared.region).spectra);
+  const productBKey = scoreProductKey(shared.railProductB);
+  const spectrumEntry = spectra ? spectraEntry(spectra, panel.state.variable, productBKey, shared.leadDay) : null;
+  elements["rail-spectra"].innerHTML = spectraSVG(spectrumEntry, {
+    productA: shortProductLabel(panel.state.dataset),
+    productB: shortProductLabel(shared.railProductB),
+  });
   wireChartHover(elements["rail-lead-curve"]);
   wireChartHover(elements["rail-spectra"]);
 
   updateRailLegend(panel);
   void depth;
+}
+
+function updateRailProductControls(panel) {
+  elements["rail-product-a"].value = labelFor(panel.state.dataset);
+  if (shared.railProductB === panel.state.dataset) shared.railProductB = otherSlug(panel.state.dataset);
+  const availableReferences = availableSpectraReferences(panel.state.dataset, shared.region);
+  const options = datasetCatalog
+    .filter((entry) => entry.slug !== panel.state.dataset)
+    .map((entry) => {
+      const referenceKey = scoreProductKey(entry.slug);
+      const hasSpectra = availableReferences === null || availableReferences.has(referenceKey);
+      return {
+        value: entry.slug,
+        label: hasSpectra ? entry.label : `${entry.label} (no spectra)`,
+        disabled: !hasSpectra,
+      };
+    });
+  const selectedOption = options.find((option) => option.value === shared.railProductB && !option.disabled);
+  if (!selectedOption) shared.railProductB = options.find((option) => !option.disabled)?.value || options[0]?.value || shared.railProductB;
+  const select = elements["rail-product-b"];
+  select.innerHTML = "";
+  for (const option of options) {
+    const element = document.createElement("option");
+    element.value = option.value;
+    element.textContent = option.label;
+    element.disabled = option.disabled;
+    element.selected = option.value === shared.railProductB;
+    select.appendChild(element);
+  }
+}
+
+function availableSpectraReferences(slug, region) {
+  const url = insightsFor(insightIndex, slug, region).spectra;
+  if (!url) return new Set();
+  if (slug === "glonet_1_degree") return new Set(["glorys", "glo12"]);
+  return null;
+}
+
+function shortProductLabel(slug) {
+  const label = labelFor(slug);
+  return label.replace(/\s*\([^)]*\)\s*/g, "").toLowerCase();
 }
 
 function wireChartHover(container) {
@@ -1266,6 +1319,11 @@ function wireGlobalControls() {
     writeHash();
   });
   elements["rail-resize-handle"].addEventListener("mousedown", beginRailResize);
+  elements["rail-product-b"].addEventListener("change", (event) => {
+    shared.railProductB = event.target.value;
+    updateContextRail();
+    writeHash();
+  });
   elements["reset-view"].addEventListener("click", () => {
     const previousLevels = panels.slice(0, shared.layout).map((panel) => selectRenderLevel(manifestFor(panel.state.dataset)));
     view.zoom = 1;
@@ -1479,6 +1537,7 @@ function writeHash() {
   if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
   if (!shared.railOpen) parameters.set("rail", "0");
   parameters.set("rw", String(shared.railWidth));
+  parameters.set("pb", shared.railProductB);
   parameters.set("play", shared.particlesPlaying ? "1" : "0");
   parameters.set("spd", shared.particleSpeed.toFixed(1));
   for (let i = 0; i < shared.layout; i += 1) parameters.set(`p${i}`, encodePanel(panels[i]));
@@ -1500,6 +1559,7 @@ function readHash() {
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
   if (parameters.get("rail") === "0") shared.railOpen = false;
   if (parameters.has("rw")) shared.railWidth = Math.min(620, Math.max(280, Number(parameters.get("rw"))));
+  if (parameters.has("pb")) shared.railProductB = slugForProductKey(parameters.get("pb"));
   if (parameters.has("play")) shared.particlesPlaying = parameters.get("play") === "1";
   if (parameters.has("spd")) shared.particleSpeed = Number(parameters.get("spd"));
   return parameters;
@@ -1555,6 +1615,8 @@ function selectElements() {
     "status",
     "context-rail",
     "rail-resize-handle",
+    "rail-product-a",
+    "rail-product-b",
     "rail-subtitle",
     "rail-lead-curve",
     "rail-spectra",

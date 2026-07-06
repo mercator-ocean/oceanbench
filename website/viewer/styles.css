@@ -328,6 +328,19 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .rail-subtitle { font-size: 0.74rem; color: var(--muted); margin: 0 0 1rem; font-family: var(--mono); }
 .rail-section { margin-bottom: 1.25rem; }
 .rail-section h3 { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.4rem; }
+.rail-products { display: flex; flex-direction: column; gap: 0.45rem; }
+.rail-products label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.74rem; color: var(--muted); }
+.rail-products input,
+.rail-products select {
+  width: 100%;
+  font: inherit;
+  padding: 0.35rem 0.45rem;
+  color: var(--text);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.rail-products input[readonly] { color: var(--muted); }
 .rail-chart-slot { width: 100%; }
 .rail-chart { width: 100%; height: auto; display: block; }
 .rail-chart .axis { stroke: var(--border); stroke-width: 1; }
