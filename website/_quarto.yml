@@ -5,6 +5,7 @@
 project:
   type: website
   pre-render: python download_reports.py
+  post-render: python generate_report_redirects.py
   resources:
     - assets/land-110m.json
 website:

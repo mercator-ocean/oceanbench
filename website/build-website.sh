@@ -19,6 +19,7 @@ rm -rf reports _site
 pip install -r requirements.txt
 quarto render --to html
 
+rm -rf /app/repository
 mkdir -p /app/repository
 cp -r _site/* /app/repository
 
