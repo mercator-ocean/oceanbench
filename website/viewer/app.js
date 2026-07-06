@@ -34,7 +34,7 @@ import {
   eddyFrame,
   class4Points,
 } from "./modules/insights.js";
-import { drawEddyFrame, drawClass4Points, class4ErrorScale, EDDY_COLORS } from "./modules/overlays.js";
+import { drawEddyFrame, drawClass4Points, class4ErrorScale, numericOrNaN, EDDY_COLORS } from "./modules/overlays.js";
 import { leadCurveSVG, psdSpectraSVG, SERIES_COLORS } from "./modules/charts.js";
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
 import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
@@ -243,6 +243,7 @@ function buildPanel(index) {
       <canvas class="panel-particles"></canvas>
       <canvas class="panel-overlay"></canvas>
       <div class="panel-readout" role="status"></div>
+      <div class="panel-obs-tooltip" hidden></div>
       <div class="panel-loading" hidden>Loading dataset...</div>
       <div class="panel-swipe-hint" hidden></div>
     </div>`;
@@ -261,6 +262,7 @@ function buildPanel(index) {
       particles: container.querySelector(".panel-particles"),
       overlay: container.querySelector(".panel-overlay"),
       readout: container.querySelector(".panel-readout"),
+      obsTooltip: container.querySelector(".panel-obs-tooltip"),
       loading: container.querySelector(".panel-loading"),
       swipeHint: container.querySelector(".panel-swipe-hint"),
     },
@@ -379,6 +381,12 @@ function wirePanel(panel) {
   field.addEventListener("wheel", (event) => onPanelWheel(panel, event), { passive: false });
   field.addEventListener("mouseleave", () => {
     panel.els.readout.textContent = "";
+    if (panel.els.obsTooltip) panel.els.obsTooltip.hidden = true;
+  });
+  // Tap/click also surfaces the obs tooltip (touch has no hover).
+  field.addEventListener("click", (event) => {
+    if (shared.overlayMode !== "class4") return;
+    updateClass4Tooltip(panel, event, panel.els.field.getBoundingClientRect());
   });
 }
 
@@ -680,8 +688,18 @@ async function loadOverlayData() {
     overlayData.class4 = await loadClass4(class4Url, {
       byteLength: class4Manifest && class4Manifest.bytes,
       rowGroupIndex: class4Manifest && class4Manifest.row_group_index,
+      startDate: currentStartDate(slug),
+      leadDay: shared.leadDay,
     });
   }
+}
+
+// The forecast start date currently selected, as the YYYY-MM-DD string the
+// match-up parquet's start_date column and row-group statistics use.
+function currentStartDate(slug) {
+  const manifest = manifestFor(slug) || (panels[0] && manifestFor(panels[0].state.dataset));
+  if (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length) return null;
+  return manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)];
 }
 
 function drawOverlays(panel) {
@@ -704,28 +722,40 @@ function drawOverlays(panel) {
     const entry = manifest && manifest.variables[panel.state.variable];
     const depthBin = class4DepthBin(entry);
     const startDate = manifest ? manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)] : null;
-    // Fewer points at low zoom (density-manage §4); refine as the user zooms in.
-    const limit = Math.round(1500 + 3500 * Math.min(1, (view.zoom - 1) / 6));
+    const rows = overlayData.class4.rows || [];
+    const targeted = overlayData.class4.targeted;
+    // Targeted mode already fetched exactly the selected pair — draw every matching
+    // point (no cap). Legacy sampling thins the scattered preview, fewer at low zoom
+    // (density-manage §4), refined as the user zooms in.
+    const limit = targeted ? Infinity : Math.round(1500 + 3500 * Math.min(1, (view.zoom - 1) / 6));
     const selector = {
       variable: panel.state.variable,
       depthBin,
       leadDay: shared.leadDay,
       startDate,
     };
-    const matchedTotal = countClass4Matches(overlayData.class4, selector);
-    const points = class4Points(overlayData.class4, { ...selector, limit });
+    const matchedTotal = countClass4Matches(rows, selector);
+    const points = class4Points(rows, { ...selector, limit });
     const scale = class4ErrorScale(points);
+    // Larger points at high zoom so individual obs are distinguishable from a line.
+    const radius = 2.2 + 2.6 * Math.min(1, (view.zoom - 1) / 20);
     for (const offset of copyOffsets) {
       drawClass4Points(context, projectOnCopy(offset), points, {
         devicePixelRatio: ratio,
         errorScale: scale,
+        radius,
         canvasWidth: canvas.width,
         canvasHeight: canvas.height,
       });
     }
     panel.class4Scale = scale;
-    panel.class4Count = countVisiblePoints(points, projection, copyOffsets, canvas);
+    panel.class4Count = targeted ? points.length : countVisiblePoints(points, projection, copyOffsets, canvas);
     panel.class4Matched = matchedTotal;
+    panel.class4Targeted = targeted;
+    panel.class4HitPoints = points;
+    panel.class4PointRadius = radius;
+  } else {
+    panel.class4HitPoints = null;
   }
 }
 
@@ -1175,7 +1205,81 @@ function updateHover(event) {
     const value = panel.field.data[row * panel.field.width + column];
     const valueText = Number.isNaN(value) ? "land / no data" : `${value.toFixed(3)} ${panel.units}`;
     panel.els.readout.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}° — ${valueText}`;
+    updateClass4Tooltip(panel, event, rectangle);
   }
+}
+
+// Nearest-point hit-test over the Class-4 obs drawn on this panel (canvas points
+// have no DOM nodes, so we project the small filtered set and pick the closest to
+// the cursor). Shows an instant tooltip with obs/forecast/error + location.
+function updateClass4Tooltip(panel, event, rectangle) {
+  const tooltip = panel.els.obsTooltip;
+  if (!tooltip) return;
+  if (shared.overlayMode !== "class4" || !panel.class4HitPoints || !panel.class4HitPoints.length) {
+    tooltip.hidden = true;
+    return;
+  }
+  const ratio = window.devicePixelRatio || 1;
+  const cursorX = (event.clientX - rectangle.left) * ratio;
+  const cursorY = (event.clientY - rectangle.top) * ratio;
+  const projection = projectionFor(panel);
+  const copyOffsets = visibleCopyOffsets(projection, panel.els.overlay);
+  const threshold = Math.max((panel.class4PointRadius || 2.2) * ratio + 6 * ratio, 11 * ratio);
+  let nearest = null;
+  let nearestDistance = threshold;
+  for (const record of panel.class4HitPoints) {
+    const nx = (record.longitude + 180) / 360;
+    const ny = (90 - record.latitude) / 180;
+    for (const offset of copyOffsets) {
+      const screen = projection.project(nx + offset, ny);
+      const distance = Math.hypot(screen.x - cursorX, screen.y - cursorY);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = { record, screen };
+      }
+    }
+  }
+  if (!nearest) {
+    tooltip.hidden = true;
+    return;
+  }
+  tooltip.innerHTML = class4TooltipMarkup(nearest.record, panel.units);
+  tooltip.hidden = false;
+  // Position next to the cursor in CSS pixels, flipping to stay inside the panel.
+  const localX = (event.clientX - rectangle.left) + 14;
+  const localY = (event.clientY - rectangle.top) + 14;
+  const maxX = rectangle.width - tooltip.offsetWidth - 6;
+  const maxY = rectangle.height - tooltip.offsetHeight - 6;
+  tooltip.style.left = `${Math.max(6, Math.min(localX, maxX))}px`;
+  tooltip.style.top = `${Math.max(6, Math.min(localY, maxY))}px`;
+}
+
+const CLASS4_PLATFORM_KEYS = ["platform", "satellite", "platform_id", "source", "wmo_platform_code", "sensor"];
+
+function class4TooltipMarkup(record, units) {
+  const obs = numericOrNaN(record.observation_value);
+  const model = numericOrNaN(record.model_value);
+  const hasObs = Number.isFinite(obs);
+  const hasModel = Number.isFinite(model);
+  const error = hasObs && hasModel ? model - obs : numericOrNaN(record.abs_error);
+  const unit = units || "";
+  const rows = [];
+  const platformKey = CLASS4_PLATFORM_KEYS.find((key) => record[key] != null && record[key] !== "");
+  if (platformKey) rows.push(`<div><span>platform</span><strong>${escapeHtml(String(record[platformKey]))}</strong></div>`);
+  rows.push(`<div><span>obs</span><strong>${hasObs ? `${obs.toFixed(3)} ${unit}` : "—"}</strong></div>`);
+  rows.push(`<div><span>forecast</span><strong>${hasModel ? `${model.toFixed(3)} ${unit}` : "—"}</strong></div>`);
+  rows.push(`<div><span>error</span><strong>${Number.isFinite(error) ? `${error.toFixed(3)} ${unit}` : "—"}</strong></div>`);
+  if (record.depth_bin) rows.push(`<div><span>depth bin</span><strong>${escapeHtml(String(record.depth_bin))}</strong></div>`);
+  rows.push(
+    `<div><span>lat / lon</span><strong>${Number(record.latitude).toFixed(2)}°, ${Number(record.longitude).toFixed(2)}°</strong></div>`,
+  );
+  return rows.join("");
+}
+
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (character) => {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character];
+  });
 }
 
 function nearestIndex(coordinates, value) {
@@ -1596,12 +1700,18 @@ function updateRailLegend(panel) {
     const shown = hostPanel ? hostPanel.class4Count || 0 : 0;
     const matched = hostPanel ? hostPanel.class4Matched || 0 : 0;
     const scale = Math.max(...panels.slice(0, shared.layout).map((candidate) => candidate.class4Scale || 0), 0);
+    const targeted = overlayData.class4 && overlayData.class4.targeted;
     const sampled = overlayData.class4 && overlayData.class4.sampled;
     const noData = !overlayData.class4 ? " · no match-ups for this dataset/region" : "";
     const weak = matched > 0 && matched < 30 ? " · low count — statistic is weak" : "";
+    // Targeted mode holds every obs for the selected (start, lead) — report the
+    // full count plainly. Legacy sampling reports "shown of matched" with the note.
+    const countText = targeted
+      ? `<strong>${matched} obs</strong>`
+      : `<strong>${shown} points shown</strong> (of ${matched} sampled)`;
     container.innerHTML =
       `<div class="row"><span class="swatch" style="background:${SERIES_COLORS.error}"></span>|obs − model|, brighter = larger error</div>` +
-      `<p class="dim"><strong>${shown} points shown</strong> (of ${matched} sampled) · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}${sampled ? " · sampled subset" : ""}${weak}${noData}</p>`;
+      `<p class="dim">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}${!targeted && sampled ? " · sampled subset" : ""}${weak}${noData}</p>`;
   }
 }
 
@@ -1656,12 +1766,38 @@ async function applyOverlayMode() {
   await loadOverlayData();
   if (shared.overlayMode === "class4") {
     note.textContent = overlayData.class4
-      ? `Class-4 match-ups loaded${overlayData.class4.sampled ? " as a sampled subset" : ""}.`
+      ? overlayData.class4.targeted
+        ? "Class-4 match-ups: full obs for the selected start and lead. Hover a point for details."
+        : `Class-4 match-ups loaded${overlayData.class4.sampled ? " as a sampled subset" : ""}.`
       : "No Class-4 match-ups are available for this dataset and region.";
   }
   for (let i = 0; i < shared.layout; i += 1) drawOverlays(panels[i]);
   updateCurrentsControlVisibility();
   updateContextRail();
+}
+
+// When the parquet is targeted (one pair per row group), a start/lead change means
+// a different set of obs must be fetched — reload just the overlay and redraw. Small
+// (~1-2MB) row groups keep this sub-second; a short debounce avoids a fetch storm
+// while the lead slider is dragged. Legacy files hold all pairs, so this is a no-op.
+let class4ReloadTimer = null;
+function scheduleClass4Reload() {
+  if (shared.overlayMode !== "class4") return;
+  if (!overlayData.class4 || !overlayData.class4.targeted) return;
+  const note = elements["overlay-note"];
+  if (note) note.textContent = `Loading obs for lead ${shared.leadDay}...`;
+  if (class4ReloadTimer) clearTimeout(class4ReloadTimer);
+  class4ReloadTimer = setTimeout(async () => {
+    class4ReloadTimer = null;
+    await loadOverlayData();
+    if (note && overlayData.class4) {
+      note.textContent = overlayData.class4.targeted
+        ? "Class-4 match-ups: full obs for the selected start and lead. Hover a point for details."
+        : "Class-4 match-ups loaded.";
+    }
+    redrawOverlaysAll();
+    updateContextRail();
+  }, 120);
 }
 
 function applyTheme() {
@@ -1699,6 +1835,7 @@ function wireGlobalControls() {
       redrawOverlaysAll();
       updateContextRail();
     });
+    scheduleClass4Reload();
     scheduleHashWrite();
   });
   elements["overlay-mode"].addEventListener("change", (event) => {

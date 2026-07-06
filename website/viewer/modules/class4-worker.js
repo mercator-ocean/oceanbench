@@ -2,6 +2,18 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+// Class-4 match-up reader (runs in a Web Worker so parquet decoding never blocks
+// the map). Two loading strategies, chosen from the footer metadata:
+//
+//   TARGETED — the served parquet follows the match-up contract: rows sorted by
+//   (start_date, lead_day) with every row group holding exactly one such pair
+//   (min == max in the group's start_date/lead_day statistics). We fetch only the
+//   row group(s) for the selected forecast start + lead — complete rows, no cap.
+//
+//   SAMPLED (legacy) — files whose stats are absent or mixed keep the old
+//   behaviour: small files read whole, multi-GB files streamed and sampled across
+//   scattered row groups so an altimeter month never OOMs the worker.
+
 import { parquetReadObjects, parquetMetadataAsync } from "../vendor/hyparquet/hyparquet.min.js";
 
 const WHOLE_FILE_MAX_BYTES = 50 * 1024 * 1024;
@@ -12,23 +24,137 @@ const MIN_SCATTERED_GROUPS = 8;
 // A few thousand rows per sampled group is plenty for a scattered overlay preview.
 const ROWS_PER_SAMPLED_GROUP = 4000;
 
-const parsedCache = new Map();
+// Per-file footer + open handle (shared by mode detection and targeted reads).
+const fileInfoCache = new Map();
+// Legacy whole/sampled row arrays, keyed by url.
+const legacyRowsCache = new Map();
+// Targeted pair reads, keyed by `${url}|${startDate}|${leadDay}`.
+const targetedCache = new Map();
 
 self.addEventListener("message", (event) => {
-  const { id, url, byteLength, rowGroupIndex, sampleVariables } = event.data;
-  loadClass4Rows(url, { byteLength, rowGroupIndex, sampleVariables })
-    .then((rows) => self.postMessage({ id, rows }))
+  const { id, op, url, byteLength, rowGroupIndex, sampleVariables, startDate, leadDay } = event.data;
+  handle(op, url, { byteLength, rowGroupIndex, sampleVariables, startDate, leadDay })
+    .then((payload) => self.postMessage({ id, ...payload }))
     .catch((error) => self.postMessage({ id, error: String(error.message || error) }));
 });
 
-async function loadClass4Rows(url, { byteLength, rowGroupIndex, sampleVariables }) {
-  if (parsedCache.has(url)) return parsedCache.get(url);
+async function handle(op, url, options) {
+  const info = await ensureFileInfo(url, options.byteLength);
+  if (op === "probe") return { targeted: info.targeted };
+  if (op === "targeted" && info.targeted) {
+    const rows = await targetedPair(url, info, options.startDate, options.leadDay);
+    // `sampled`/`total` are sent as explicit fields: array-attached properties do
+    // not survive the structured clone across postMessage.
+    return { targeted: true, rows, total: rows.length, sampled: false };
+  }
+  const rows = await legacyRows(url, info, options);
+  return { targeted: false, rows, total: rows.length, sampled: Boolean(rows.sampled) };
+}
+
+function ensureFileInfo(url, byteLengthHint) {
+  if (fileInfoCache.has(url)) return fileInfoCache.get(url);
   const promise = (async () => {
-    const size = await resolveByteLength(url, byteLength);
-    if (size <= WHOLE_FILE_MAX_BYTES) return readWhole(url);
-    return readSampled(url, size, { rowGroupIndex, sampleVariables });
+    const size = await resolveByteLength(url, byteLengthHint);
+    const file = httpRangeAsyncBuffer(url, size);
+    const metadata = await parquetMetadataAsync(file);
+    const rowGroups = metadata.row_groups || [];
+    const targeted = rowGroups.length > 0 && allRowGroupsSinglePair(rowGroups);
+    return { size, file, metadata, rowGroups, offsets: rowGroupRowOffsets(rowGroups), targeted };
   })();
-  parsedCache.set(url, promise);
+  fileInfoCache.set(url, promise);
+  return promise;
+}
+
+// ---- targeted mode ----------------------------------------------------------
+
+function allRowGroupsSinglePair(rowGroups) {
+  for (const group of rowGroups) {
+    const startStat = columnStatistics(group, "start_date");
+    const leadStat = columnStatistics(group, "lead_day");
+    if (!startStat || !leadStat) return false;
+    if (!statIsSingular(startStat) || !statIsSingular(leadStat)) return false;
+  }
+  return true;
+}
+
+function statIsSingular(statistics) {
+  const min = statMin(statistics);
+  const max = statMax(statistics);
+  if (min == null || max == null) return false;
+  return String(min) === String(max);
+}
+
+function columnStatistics(rowGroup, name) {
+  for (const column of rowGroup.columns || []) {
+    const meta = column.meta_data;
+    if (meta && Array.isArray(meta.path_in_schema) && meta.path_in_schema.join(".") === name) {
+      return meta.statistics || null;
+    }
+  }
+  return null;
+}
+
+function statMin(statistics) {
+  return statistics.min_value != null ? statistics.min_value : statistics.min;
+}
+function statMax(statistics) {
+  return statistics.max_value != null ? statistics.max_value : statistics.max;
+}
+
+async function targetedPair(url, info, startDate, leadDay) {
+  const key = `${url}|${startDate}|${leadDay}`;
+  if (targetedCache.has(key)) return targetedCache.get(key);
+  const promise = (async () => {
+    const indices = matchingRowGroups(info.rowGroups, startDate, leadDay);
+    if (!indices.length) {
+      const empty = [];
+      empty.targeted = true;
+      empty.total = 0;
+      return empty;
+    }
+    const rowStart = info.offsets[indices[0]];
+    const lastIndex = indices[indices.length - 1];
+    const rowEnd = info.offsets[lastIndex] + Number(info.rowGroups[lastIndex].num_rows || 0);
+    const rows = await parquetReadObjects({
+      file: info.file,
+      metadata: info.metadata,
+      rowStart,
+      rowEnd,
+      rowFormat: "object",
+    });
+    rows.targeted = true;
+    rows.total = rows.length;
+    return rows;
+  })();
+  targetedCache.set(key, promise);
+  return promise;
+}
+
+function matchingRowGroups(rowGroups, startDate, leadDay) {
+  const requestedStart = startDate == null ? null : String(startDate).slice(0, 10);
+  const requestedLead = leadDay == null ? null : Number(leadDay);
+  const indices = [];
+  for (let index = 0; index < rowGroups.length; index += 1) {
+    const startStat = columnStatistics(rowGroups[index], "start_date");
+    const leadStat = columnStatistics(rowGroups[index], "lead_day");
+    const groupStart = String(statMin(startStat)).slice(0, 10);
+    const groupLead = Number(statMin(leadStat));
+    if (requestedStart !== null && groupStart !== requestedStart) continue;
+    if (requestedLead !== null && groupLead !== requestedLead) continue;
+    indices.push(index);
+  }
+  return indices;
+}
+
+// ---- legacy (whole / sampled) mode ------------------------------------------
+
+function legacyRows(url, info, options) {
+  if (legacyRowsCache.has(url)) return legacyRowsCache.get(url);
+  const promise = (async () => {
+    if (info.size <= WHOLE_FILE_MAX_BYTES) return readWhole(url);
+    return readSampled(info, options);
+  })();
+  legacyRowsCache.set(url, promise);
   return promise;
 }
 
@@ -45,11 +171,8 @@ async function readWhole(url) {
   return parquetReadObjects({ file, rowFormat: "object" });
 }
 
-async function readSampled(url, byteLength, { rowGroupIndex, sampleVariables }) {
-  const file = httpRangeAsyncBuffer(url, byteLength);
-  const metadata = await parquetMetadataAsync(file);
-  const rowGroups = metadata.row_groups || [];
-  const offsets = rowGroupRowOffsets(rowGroups);
+async function readSampled(info, { rowGroupIndex, sampleVariables }) {
+  const { file, metadata, rowGroups, offsets } = info;
   const indices = selectRowGroups(rowGroups, { rowGroupIndex, sampleVariables });
   const chunks = [];
   for (const index of indices) {

@@ -12,13 +12,15 @@ import { resolveViewerDataUrl } from "../config.js";
 
 const INDEX_URL = resolveViewerDataUrl("./data/insights.json");
 const jsonCache = new Map();
-const parquetCache = new Map();
 let indexPromise = null;
 
 const CLASS4_WORKER_URL = new URL("./class4-worker.js", import.meta.url);
 let class4Worker = null;
 let class4RequestId = 0;
 const class4Pending = new Map();
+const class4ModeCache = new Map(); // resolvedUrl -> Promise<boolean targeted>
+const class4LegacyCache = new Map(); // resolvedUrl -> Promise<result>
+const class4TargetedCache = new Map(); // `${resolvedUrl}|${start}|${lead}` -> Promise<result>
 
 export function loadInsightIndex() {
   if (!indexPromise) indexPromise = fetchJSON(INDEX_URL).catch(() => null);
@@ -52,44 +54,78 @@ export async function loadScoresSummary(index) {
   return fetchJSON(index.scores_summary).catch(() => []);
 }
 
-async function resolveByteLength(url, hint) {
-  if (Number.isFinite(hint) && hint > 0) return hint;
-  const resolvedUrl = resolveViewerDataUrl(url);
-  const response = await fetch(resolvedUrl, { method: "HEAD" });
-  if (!response.ok) throw new Error(`${resolvedUrl} HEAD -> HTTP ${response.status}`);
-  const length = Number(response.headers.get("content-length"));
-  if (!Number.isFinite(length) || length <= 0) throw new Error(`${resolvedUrl} HEAD returned no content-length`);
-  return length;
-}
-
 /**
- * Load the Class-4 match-up parquet for the overlay. Small regional files are read
- * whole; large global files (multi-GB) are streamed with Range requests and
- * sampled in a Web Worker. `byteLength` may be passed from the sibling manifest's
+ * Load the Class-4 match-up overlay data. When the parquet follows the match-up
+ * contract (one (start_date, lead_day) pair per row group, with statistics), only
+ * the row group(s) for the requested `startDate`/`leadDay` are fetched — complete
+ * rows, no sampling. Legacy files fall back to whole-file or scattered sampling.
+ *
+ * Returns `{ targeted, rows, total, sampled }` (or null on failure). In targeted
+ * mode `rows` is exactly the selected pair; in legacy mode it is the (possibly
+ * sampled) whole set as before. `byteLength` may come from the sibling manifest's
  * `bytes` field to skip a HEAD request.
  */
-export async function loadClass4(url, { byteLength, rowGroupIndex, sampleVariables } = {}) {
+export async function loadClass4(url, { byteLength, rowGroupIndex, sampleVariables, startDate, leadDay } = {}) {
   if (!url) return null;
   const resolvedUrl = resolveViewerDataUrl(url);
-  if (parquetCache.has(resolvedUrl)) return parquetCache.get(resolvedUrl);
-  const promise = (async () => {
-    const size = await resolveByteLength(resolvedUrl, byteLength);
-    return requestClass4Worker({ url: resolvedUrl, byteLength: size, rowGroupIndex, sampleVariables });
-  })().catch(() => null);
-  parquetCache.set(resolvedUrl, promise);
-  return promise;
+  try {
+    const targeted = await probeClass4Mode(resolvedUrl, byteLength);
+    if (!targeted) {
+      if (!class4LegacyCache.has(resolvedUrl)) {
+        class4LegacyCache.set(
+          resolvedUrl,
+          requestClass4Worker({ op: "legacy", url: resolvedUrl, byteLength, rowGroupIndex, sampleVariables }).then(
+            (payload) => normalizeClass4Payload(payload),
+          ),
+        );
+      }
+      return await class4LegacyCache.get(resolvedUrl);
+    }
+    const key = `${resolvedUrl}|${startDate ?? ""}|${leadDay ?? ""}`;
+    if (!class4TargetedCache.has(key)) {
+      class4TargetedCache.set(
+        key,
+        requestClass4Worker({ op: "targeted", url: resolvedUrl, byteLength, startDate, leadDay }).then((payload) =>
+          normalizeClass4Payload(payload),
+        ),
+      );
+    }
+    return await class4TargetedCache.get(key);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeClass4Payload(payload) {
+  const rows = payload && payload.rows ? payload.rows : [];
+  return {
+    targeted: Boolean(payload && payload.targeted),
+    rows,
+    total: payload && Number.isFinite(payload.total) ? payload.total : rows.length,
+    sampled: Boolean(payload && payload.sampled),
+  };
+}
+
+function probeClass4Mode(resolvedUrl, byteLength) {
+  if (!class4ModeCache.has(resolvedUrl)) {
+    class4ModeCache.set(
+      resolvedUrl,
+      requestClass4Worker({ op: "probe", url: resolvedUrl, byteLength }).then((payload) => Boolean(payload.targeted)),
+    );
+  }
+  return class4ModeCache.get(resolvedUrl);
 }
 
 function ensureClass4Worker() {
   if (class4Worker) return class4Worker;
   class4Worker = new Worker(CLASS4_WORKER_URL, { type: "module" });
   class4Worker.addEventListener("message", (event) => {
-    const { id, rows, error } = event.data;
+    const { id, error } = event.data;
     const pending = class4Pending.get(id);
     if (!pending) return;
     class4Pending.delete(id);
     if (error) pending.reject(new Error(error));
-    else pending.resolve(rows);
+    else pending.resolve(event.data);
   });
   class4Worker.addEventListener("error", (event) => {
     for (const pending of class4Pending.values()) pending.reject(new Error(event.message || "Class-4 worker failed"));

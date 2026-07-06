@@ -125,17 +125,37 @@ export function drawClass4Points(drawing, project, points, options = {}) {
     const { nx, ny } = toNorm(point.longitude, point.latitude);
     const screen = project(nx, ny);
     if (screen.x < -8 || screen.y < -8 || screen.x > width + 8 || screen.y > height + 8) continue;
-    const normalized = Math.min(1, Math.abs(point.abs_error) / scale);
+    const error = class4AbsoluteError(point);
+    const normalized = Number.isFinite(error) ? Math.min(1, error / scale) : 0;
     const [r, g, b] = sampleColormap(CLASS4_COLORMAP, 0.12 + normalized * 0.88);
     drawing.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
     drawing.fillRect(screen.x - radius, screen.y - radius, diameter, diameter);
   }
 }
 
+// Absolute obs−model error for a match-up row. Prefers a precomputed `abs_error`
+// column, otherwise derives it from `observation_value`/`model_value`.
+export function class4AbsoluteError(point) {
+  const abs = numericOrNaN(point.abs_error);
+  if (Number.isFinite(abs)) return Math.abs(abs);
+  const obs = numericOrNaN(point.observation_value);
+  const model = numericOrNaN(point.model_value);
+  if (Number.isFinite(obs) && Number.isFinite(model)) return Math.abs(model - obs);
+  return NaN;
+}
+
+// Number() maps null/"" to 0, which would fake a real value; treat those as missing.
+export function numericOrNaN(value) {
+  if (value == null || value === "") return NaN;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : NaN;
+}
+
 /** Robust upper error bound (~p90) for the Class-4 colour scale. */
 export function class4ErrorScale(points) {
   if (!points.length) return 1;
-  const errors = points.map((point) => Math.abs(point.abs_error)).sort((a, b) => a - b);
+  const errors = points.map((point) => class4AbsoluteError(point)).filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  if (!errors.length) return 1;
   const index = Math.min(errors.length - 1, Math.floor(errors.length * 0.9));
   return errors[index] || errors[errors.length - 1] || 1;
 }
