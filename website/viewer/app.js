@@ -643,7 +643,7 @@ function drawPanel(panel) {
     context.lineTo(dividerX, canvas.height);
     context.stroke();
     panel.els.swipeHint.hidden = false;
-    panel.els.swipeHint.textContent = `◀ ${labelFor(panel.state.dataset)}  |  ${labelFor(panel.state.datasetB)} ▶`;
+    panel.els.swipeHint.textContent = `◀ Forecast 1 · ${labelFor(panel.state.dataset)}  |  Forecast 2 · ${labelFor(panel.state.datasetB)} ▶`;
   } else {
     drawImageWorld(context, showBlink ? panel.offscreenB : panel.offscreenA, showBlink ? panel.edgesB : panel.edgesA, projection);
     panel.els.swipeHint.hidden = !(panel.state.mode === "field" && panel.state.compare);
