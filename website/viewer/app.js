@@ -656,6 +656,13 @@ async function loadInsightManifest(url) {
   }
 }
 
+function overlayInsightSource(kind) {
+  const slug = panels[activePanelIndex] ? panels[activePanelIndex].state.dataset : datasetCatalog[0].slug;
+  const urls = insightsFor(insightIndex, slug, shared.region);
+  const key = kind === "class4" ? "class4_matchups" : "eddies";
+  return urls[key] ? slug : "glonet_1_degree";
+}
+
 async function loadOverlayData() {
   const slug = panels[activePanelIndex] ? panels[activePanelIndex].state.dataset : datasetCatalog[0].slug;
   const region = shared.region;
@@ -1639,8 +1646,10 @@ async function applyOverlayMode() {
   if (shared.overlayMode !== "trajectories") clearTrajectories();
   if (shared.overlayMode === "trajectories") {
     note.textContent = "Click the map to seed trajectories advected through both forecasts' currents.";
-  } else if (shared.overlayMode === "eddies" || shared.overlayMode === "class4") {
-    note.textContent = shared.overlayMode === "class4" ? "Loading Class-4 match-ups..." : "Overlay shows glonet_1_degree insights.";
+  } else if (shared.overlayMode === "class4") {
+    note.textContent = "Loading Class-4 match-ups...";
+  } else if (shared.overlayMode === "eddies") {
+    note.textContent = `Overlay shows ${overlayInsightSource("eddies")} insights.`;
   } else {
     note.textContent = "";
   }
