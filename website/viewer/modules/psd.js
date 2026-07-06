@@ -33,7 +33,7 @@ export function boxPowerSpectrum(field, latitudes, longitudes, viewport) {
   const latHigh = 90 - viewport.minY * 180;
   const latLow = 90 - viewport.maxY * 180;
 
-  const columns = coordinateRange(longitudes, Math.min(lonMin, lonMax), Math.max(lonMin, lonMax));
+  const columns = longitudeRange(longitudes, Math.min(lonMin, lonMax), Math.max(lonMin, lonMax));
   const rows = coordinateRange(latitudes, Math.min(latLow, latHigh), Math.max(latLow, latHigh));
   if (!columns || !rows) return null;
   if (columns.count < 8 || rows.count < 8) return null;
@@ -79,6 +79,26 @@ function coordinateRange(coordinates, lowValue, highValue) {
   return { start: low, end: high, count: high - low + 1, ascending };
 }
 
+function longitudeRange(longitudes, lowValue, highValue) {
+  const size = longitudes.length;
+  if (size < 2) return null;
+  const step = longitudes[1] - longitudes[0];
+  const periodic = Math.abs(step) * size >= 359;
+  if (!periodic) return coordinateRange(longitudes, lowValue, highValue);
+
+  const count = Math.min(size, Math.floor(Math.abs(highValue - lowValue) / Math.abs(step)) + 1);
+  if (count < 2) return null;
+  const origin = longitudes[0];
+  return {
+    count,
+    indexAt(fraction) {
+      const longitude = lowValue + fraction * (highValue - lowValue);
+      const unwrappedIndex = (longitude - origin) / step;
+      return Math.round(((unwrappedIndex % size) + size) % size) % size;
+    },
+  };
+}
+
 function powerOfTwoAtMost(value) {
   let power = 1;
   while (power * 2 <= value) power *= 2;
@@ -95,7 +115,10 @@ function resampleBox(field, rows, columns, side) {
   for (let y = 0; y < side; y += 1) {
     const sourceRow = rows.start + Math.round((y / (side - 1)) * (rows.count - 1));
     for (let x = 0; x < side; x += 1) {
-      const sourceColumn = columns.start + Math.round((x / (side - 1)) * (columns.count - 1));
+      const fraction = x / (side - 1);
+      const sourceColumn = columns.indexAt
+        ? columns.indexAt(fraction)
+        : columns.start + Math.round(fraction * (columns.count - 1));
       const value = field.data[sourceRow * field.width + sourceColumn];
       const target = y * side + x;
       if (Number.isNaN(value)) {
