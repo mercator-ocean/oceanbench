@@ -753,8 +753,21 @@ function drawTrajectoryFans(panel) {
   context.restore();
 }
 
+function trajectoryModeActive() {
+  return shared.overlayMode === "trajectories";
+}
+
+// In trajectory purpose-mode, any visible panel is eligible whatever variable it
+// renders (SSH, salinity, currents…): the worker fetches that forecast's u/v current
+// fields directly, so eligibility only needs the panel drawn and its manifest to carry
+// velocity components.
 function trajectoryEligiblePanels() {
-  return panels.slice(0, shared.layout).filter((panel) => panel && isCurrentsVariable(panel.state.variable) && panel.velocity);
+  if (!trajectoryModeActive()) return [];
+  return panels.slice(0, shared.layout).filter((panel) => {
+    if (!panel || !panel.longitudes) return false;
+    const manifest = manifestFor(panel.state.dataset);
+    return manifest && currentDepthVariables(panel).u in manifest.variables;
+  });
 }
 
 function makeSeedCluster(longitude, latitude, radiusDegrees) {
@@ -801,6 +814,7 @@ async function loadTrajectoryFields(panel, maximumLead) {
 }
 
 async function seedTrajectories(panel, event) {
+  if (!trajectoryModeActive()) return;
   const eligible = trajectoryEligiblePanels();
   if (!eligible.length || (shared.layout === 2 && eligible.length !== 2)) return;
   const rectangle = panel.els.field.getBoundingClientRect();
@@ -1557,7 +1571,7 @@ function mapDepthToScoreDepth(entry) {
 function updateRailLegend(panel) {
   const section = elements["rail-legend-section"];
   const container = elements["rail-legend"];
-  if (shared.overlayMode === "none") {
+  if (shared.overlayMode === "none" || shared.overlayMode === "trajectories") {
     section.hidden = true;
     return;
   }
@@ -1622,7 +1636,10 @@ async function applyOverlayMode() {
   const region = shared.region;
   elements["eddy-reference-field"].hidden = shared.overlayMode !== "eddies";
   const note = elements["overlay-note"];
-  if (shared.overlayMode === "eddies" || shared.overlayMode === "class4") {
+  if (shared.overlayMode !== "trajectories") clearTrajectories();
+  if (shared.overlayMode === "trajectories") {
+    note.textContent = "Click the map to seed trajectories advected through both forecasts' currents.";
+  } else if (shared.overlayMode === "eddies" || shared.overlayMode === "class4") {
     note.textContent = shared.overlayMode === "class4" ? "Loading Class-4 match-ups..." : "Overlay shows glonet_1_degree insights.";
   } else {
     note.textContent = "";
@@ -1634,6 +1651,7 @@ async function applyOverlayMode() {
       : "No Class-4 match-ups are available for this dataset and region.";
   }
   for (let i = 0; i < shared.layout; i += 1) drawOverlays(panels[i]);
+  updateCurrentsControlVisibility();
   updateContextRail();
 }
 
