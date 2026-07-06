@@ -1110,12 +1110,14 @@ function obsSkillSeries(panel) {
   const entry = manifest && manifest.variables[panel.state.variable];
   if (!entry) return null;
   const depthKey = mapDepthToScoreDepth(entry);
+  const scoreVariable = entry.standard_name;
   const challenger = scoreProductKey(panel.state.dataset);
   const rows = [];
   let unit = "";
   let starts = 0;
   for (const row of scoresSummary) {
-    if (row.variable !== panel.state.variable) continue;
+    if (row.metric !== "class4_rmsd") continue;
+    if (row.variable !== scoreVariable) continue;
     if (row.reference !== "observations") continue; // observation-based only, no gridded fallback
     if (depthKey && row.depth !== depthKey) continue;
     if (row.challenger !== challenger) continue;
@@ -1133,20 +1135,28 @@ function renderRailSkill(shown, comparison) {
   const labels = new Map();
   let unit = "";
   const notes = [];
-  for (const panel of shown) {
-    const skill = obsSkillSeries(panel);
-    const key = scoreProductKey(panel.state.dataset);
-    if (!skill) {
-      notes.push(`${labelFor(panel.state.dataset)}: no observation-based skill for this variable`);
-      continue;
+  try {
+    for (const panel of shown) {
+      const skill = obsSkillSeries(panel);
+      const key = scoreProductKey(panel.state.dataset);
+      if (!skill) {
+        notes.push(`${labelFor(panel.state.dataset)}: no observation-based skill for this variable`);
+        continue;
+      }
+      unit = skill.unit || unit;
+      const aggregated = aggregateLeadSeries(new Map([[key, skill.rows]]));
+      if (aggregated.has(key)) series.set(key, aggregated.get(key));
+      labels.set(key, comparison ? labelFor(panel.state.dataset) : `RMSD vs observations`);
+      // n_starts is available from the summary, so report the real number of start dates
+      // behind the aggregate (item 5). TODO(pipeline): expose per-lead matchup counts too.
+      notes.push(
+        `${labelFor(panel.state.dataset)}: n = ${skill.n} start dates${skill.n < 10 ? " (low — weak statistic)" : ""}`,
+      );
     }
-    unit = skill.unit || unit;
-    const aggregated = aggregateLeadSeries(new Map([[key, skill.rows]]));
-    if (aggregated.has(key)) series.set(key, aggregated.get(key));
-    labels.set(key, comparison ? labelFor(panel.state.dataset) : `RMSD vs observations`);
-    // n_starts is available from the summary, so report the real number of start dates
-    // behind the aggregate (item 5). TODO(pipeline): expose per-lead matchup counts too.
-    notes.push(`${labelFor(panel.state.dataset)}: n = ${skill.n} start dates${skill.n < 10 ? " (low — weak statistic)" : ""}`);
+  } catch (error) {
+    console.error("Cannot render observation-based skill", error);
+    notes.length = 0;
+    notes.push("Observation-based skill is unavailable for this variable/product");
   }
   elements["rail-lead-curve"].innerHTML = leadCurveSVG(series, {
     unit,
