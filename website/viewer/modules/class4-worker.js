@@ -7,6 +7,10 @@ import { parquetReadObjects, parquetMetadataAsync } from "../vendor/hyparquet/hy
 const WHOLE_FILE_MAX_BYTES = 50 * 1024 * 1024;
 const RANGE_BYTE_BUDGET = 48 * 1024 * 1024;
 const MIN_SCATTERED_GROUPS = 8;
+// Row groups in a global match-up parquet hold ~1M rows each; reading whole groups
+// would pull millions of objects into the worker (OOM) and choke the postMessage.
+// A few thousand rows per sampled group is plenty for a scattered overlay preview.
+const ROWS_PER_SAMPLED_GROUP = 4000;
 
 const parsedCache = new Map();
 
@@ -50,7 +54,8 @@ async function readSampled(url, byteLength, { rowGroupIndex, sampleVariables }) 
   const chunks = [];
   for (const index of indices) {
     const rowStart = offsets[index];
-    const rowEnd = rowStart + Number(rowGroups[index].num_rows || 0);
+    const groupRows = Number(rowGroups[index].num_rows || 0);
+    const rowEnd = rowStart + Math.min(groupRows, ROWS_PER_SAMPLED_GROUP);
     if (rowEnd <= rowStart) continue;
     const rows = await parquetReadObjects({ file, metadata, rowStart, rowEnd, rowFormat: "object" });
     chunks.push(...rows);
