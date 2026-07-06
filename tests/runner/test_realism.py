@@ -166,8 +166,62 @@ def test_two_shifted_gaussian_eddies_produce_one_match_with_expected_displacemen
     census_frame = result.eddy_census[0]["frames"][0]
     parameters = result.eddy_census[0]["parameters"]
     assert parameters["background_sigma_km"] == eddies.DEFAULT_BACKGROUND_SIGMA_KM
-    assert parameters["apply_contour_filtering"] is False
+    assert parameters["apply_contour_filtering"] is True
     assert parameters["oceanbench_version"]
     assert len(census_frame["matches"]) == 1
     assert census_frame["matches"][0]["challenger"]["polarity"] == "anticyclone"
     assert numpy.isclose(census_frame["matches"][0]["displacement_km"], 111.2, atol=2.0)
+
+
+def _challenger_count_by_polarity(result: realism.RealismResult, lead_day: int) -> dict[str, float]:
+    frame = _metric_frame(result)
+    counts = frame[(frame["metric"] == records.METRIC_EDDY_COUNT) & (frame["lead_day"] == lead_day)]
+    return counts.set_index("polarity")["value"].to_dict()
+
+
+def test_contour_filtering_yields_a_consistent_and_no_larger_census() -> None:
+    latitudes = numpy.linspace(-15.0, 15.0, 31)
+    longitudes = numpy.arange(0.0, 60.0, 1.0)
+    start_dates = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
+    lead_days = numpy.array([0])
+    challenger_values = (
+        _gaussian_eddy_field(latitudes, longitudes, 15.0) + _gaussian_eddy_field(latitudes, longitudes, 40.0)
+    )[None, None]
+    reference_values = (
+        _gaussian_eddy_field(latitudes, longitudes, 16.0) + _gaussian_eddy_field(latitudes, longitudes, 45.0)
+    )[None, None]
+
+    challenger = _sea_surface_height_dataset(challenger_values, latitudes, longitudes, start_dates, lead_days)
+    reference = _sea_surface_height_dataset(reference_values, latitudes, longitudes, start_dates, lead_days)
+
+    common_arguments = dict(
+        region="global",
+        context=_context(),
+        lead_days=(1,),
+        start_indices=[0],
+        eddy_start_indices=[0],
+    )
+    filtered = realism.compute_realism_battery(
+        challenger, {"glorys": reference}, apply_eddy_contour_filtering=True, **common_arguments
+    )
+    unfiltered = realism.compute_realism_battery(
+        challenger, {"glorys": reference}, apply_eddy_contour_filtering=False, **common_arguments
+    )
+
+    filtered_counts = _challenger_count_by_polarity(filtered, lead_day=1)
+    unfiltered_counts = _challenger_count_by_polarity(unfiltered, lead_day=1)
+    for polarity in eddies.POLARITY_ORDER:
+        assert filtered_counts[polarity] <= unfiltered_counts[polarity]
+
+    assert filtered.eddy_census[0]["parameters"]["apply_contour_filtering"] is True
+
+    census_frame = filtered.eddy_census[0]["frames"][0]
+    matched_challenger_ids = [match["challenger"]["id"] for match in census_frame["matches"]]
+    spurious_challenger_ids = [eddy["id"] for eddy in census_frame["spurious"]]
+    all_challenger_ids = matched_challenger_ids + spurious_challenger_ids
+    assert len(all_challenger_ids) == len(set(all_challenger_ids))
+    assert len(all_challenger_ids) == int(sum(filtered_counts.values()))
+
+    for match in census_frame["matches"]:
+        assert match["challenger"]["contour_latitude"]
+        assert match["reference"]["contour_latitude"]

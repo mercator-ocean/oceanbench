@@ -197,14 +197,18 @@ default parameter set is:
 | `max_match_distance_km` | 200 km |
 
 These physical defaults calibrate to the former 12, 1.5 and 8 cell scales and
-16–6000 cell contour range on an equator-centred 1° grid. Census and matching
-currently retain raw peaks by default to reproduce the already-published
-`glonet_1_degree` artifact. `apply_eddy_contour_filtering=true` applies the closed
-contour definition consistently to metrics, matching and census; this opt-in is
-intended to become the default at the next benchmark re-score.
+16–6000 cell contour range on an equator-centred 1° grid. Contour filtering is on
+by default (`apply_eddy_contour_filtering=true`): a detected peak is retained only
+if it anchors a closed SSH-anomaly contour whose spherical cell area falls within
+the `min_eddy_area_km2`–`max_eddy_area_km2` bounds and whose convexity (region
+solidity) is at least `min_contour_convexity` (0.75). This closed-contour
+definition is applied consistently to the eddy metrics, matching and the census.
+`apply_eddy_contour_filtering=false` recovers the raw-peak census that reproduces
+the already-published `glonet_1_degree` artifact.
 
 Each eddy census reference entry includes a `parameters` object containing the
-complete parameter set, the contour-filter switch and the OceanBench code version.
+complete parameter set, the resolved contour-filter switch and the OceanBench code
+version, so filtered and raw-peak artifacts remain distinguishable.
 
 Reserved for later (schema needs no change): `crps`, `spread`, `spread_skill_ratio`.
 

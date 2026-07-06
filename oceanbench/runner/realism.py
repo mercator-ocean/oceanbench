@@ -760,8 +760,7 @@ def compute_realism_battery(
     lead_days: tuple[int, ...] = (1, 5, 10),
     start_indices: list[int] | None = None,
     eddy_start_indices: list[int] | None = None,
-    # TODO: default to True at the next benchmark-wide re-score.
-    apply_eddy_contour_filtering: bool = False,
+    apply_eddy_contour_filtering: bool = eddies_core.DEFAULT_APPLY_CONTOUR_FILTERING,
 ) -> RealismResult:
     """Compute the realism battery for one (challenger, region) over the requested references.
 
@@ -769,8 +768,11 @@ def compute_realism_battery(
     activity ratio are aggregated over ``start_indices`` (all starts when ``None``). Eddy
     metrics are aggregated over ``eddy_start_indices`` (the first start when ``None``), whose
     first entry also supplies the single-start eddy census returned for the insight artifact.
-    Contour filtering defaults off to preserve already-published census values; set
-    ``apply_eddy_contour_filtering`` to opt into the core summary's contour definition.
+    Contour filtering defaults on so that metrics, matching and census share the core
+    summary's closed-contour definition (area bounds in km² and convexity >= 0.75); set
+    ``apply_eddy_contour_filtering=False`` to recover the raw-peak census of the
+    already-published ``glonet_1_degree`` artifact. The census ``parameters`` object stamps
+    the filtering mode and OceanBench version so artifacts stay distinguishable.
     ``variable`` selects the spectral/activity field (eddy detection is always on SSH).
     """
     resolved_start_indices = _resolved_start_indices(challenger_dataset, start_indices)
