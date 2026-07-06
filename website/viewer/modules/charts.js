@@ -70,7 +70,7 @@ function niceMax(value) {
  * RMSE / Class-4 RMSD vs lead day, one series per reference present, each with its
  * bootstrap-CI band. `series` is a Map(reference -> [{lead_day, mean, ci_low, ci_high}]).
  */
-export function leadCurveSVG(series, { title = "Skill vs lead", unit = "" } = {}) {
+export function leadCurveSVG(series, { title = "Skill vs lead", unit = "", labels = new Map() } = {}) {
   const area = plotArea();
   const references = [...series.keys()];
   if (!references.length) return emptyChart(title, "no score rows for this variable/depth");
@@ -118,10 +118,11 @@ export function leadCurveSVG(series, { title = "Skill vs lead", unit = "" } = {}
   const legend = references
     .map((reference, index) => {
       const color = SERIES_COLORS[reference] || SERIES_COLORS.reference;
+      const label = labels.get(reference) || reference;
       const x = area.x0 + index * 92;
       return (
         `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${color}"/>` +
-        `<text x="${x + 12}" y="10" class="legend">${escapeText(reference)}</text>`
+        `<text x="${x + 12}" y="10" class="legend">${escapeText(label)}</text>`
       );
     })
     .join("");

@@ -109,6 +109,12 @@ function labelFor(slug) {
   return descriptor ? descriptor.label : slug;
 }
 
+function scoreProductKey(slug) {
+  if (slug === "glorys_one_degree") return "glorys";
+  if (slug === "glo12_one_degree") return "glo12";
+  return slug;
+}
+
 function prettyName(standardName) {
   return standardName.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
@@ -965,17 +971,20 @@ async function updateContextRail() {
 
   // Lead-time curve: every score series matching this variable/depth (region = summary's global).
   const depthKey = entry ? mapDepthToScoreDepth(entry) : null;
-  const series = new Map();
+  const grouped = new Map();
   let unit = "";
   for (const row of scoresSummary) {
     if (row.variable !== panel.state.variable) continue;
     if (depthKey && row.depth !== depthKey) continue;
+    if (row.challenger && row.challenger !== scoreProductKey(panel.state.dataset)) continue;
     unit = row.unit || unit;
     const key = row.reference || "reference";
-    if (!series.has(key)) series.set(key, []);
-    series.get(key).push(row);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
   }
-  elements["rail-lead-curve"].innerHTML = leadCurveSVG(series, { unit });
+  const series = aggregateLeadSeries(grouped);
+  const labels = new Map([...series.keys()].map((key) => [key, `RMSE vs ${labelForReference(key)}`]));
+  elements["rail-lead-curve"].innerHTML = leadCurveSVG(series, { unit, labels });
 
   // Spectrum for variable + region (only SSH spectra are produced today).
   const spectra = await loadSpectra(insightsFor(insightIndex, "glonet_1_degree", shared.region).spectra);
@@ -984,6 +993,54 @@ async function updateContextRail() {
 
   updateRailLegend(panel);
   void depth;
+}
+
+function aggregateLeadSeries(grouped) {
+  const series = new Map();
+  for (const [key, rows] of grouped) {
+    const byLead = new Map();
+    for (const row of rows) {
+      const leadDay = Number(row.lead_day);
+      const value = scoreValue(row);
+      if (!Number.isFinite(leadDay) || !Number.isFinite(value)) continue;
+      if (!byLead.has(leadDay)) byLead.set(leadDay, []);
+      byLead.get(leadDay).push({ row, value });
+    }
+    const aggregated = [];
+    for (const [leadDay, values] of byLead) {
+      const mean = values.reduce((total, item) => total + item.value, 0) / values.length;
+      let ciLow = mean;
+      let ciHigh = mean;
+      if (values.length === 1) {
+        const row = values[0].row;
+        ciLow = Number.isFinite(row.ci_low) ? row.ci_low : mean;
+        ciHigh = Number.isFinite(row.ci_high) ? row.ci_high : mean;
+      } else {
+        const variance = values.reduce((total, item) => total + (item.value - mean) ** 2, 0) / (values.length - 1);
+        const error = 1.96 * Math.sqrt(variance / values.length);
+        ciLow = mean - error;
+        ciHigh = mean + error;
+      }
+      aggregated.push({ lead_day: leadDay, mean, ci_low: ciLow, ci_high: ciHigh });
+    }
+    if (aggregated.length) series.set(key, aggregated.sort((a, b) => a.lead_day - b.lead_day));
+  }
+  return series;
+}
+
+function scoreValue(row) {
+  for (const key of ["mean", "value", "rmse", "rmsd", "score"]) {
+    const value = Number(row[key]);
+    if (Number.isFinite(value)) return value;
+  }
+  return NaN;
+}
+
+function labelForReference(reference) {
+  if (reference === "observations") return "observations";
+  if (reference === "glorys") return "GLORYS";
+  if (reference === "glo12") return "GLO12";
+  return labelFor(reference);
 }
 
 function mapDepthToScoreDepth(entry) {
