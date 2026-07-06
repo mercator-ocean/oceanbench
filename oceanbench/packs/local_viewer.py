@@ -54,6 +54,21 @@ def build_local_viewer(
     shutil.copytree(source_viewer, viewer_directory, dirs_exist_ok=True, ignore=shutil.ignore_patterns("data"))
     data_directory = viewer_directory / "data"
     data_directory.mkdir(parents=True, exist_ok=True)
+    (data_directory / "insights.json").write_text(
+        json.dumps({"datasets": {}, "regions": {}}, sort_keys=True, indent=2),
+        encoding="utf-8",
+    )
+    index_path = viewer_directory / "index.html"
+    index_path.write_text(
+        index_path.read_text(encoding="utf-8")
+        .replace("../favicon-light.png", "./favicon-light.png")
+        .replace(
+            "</head>",
+            '  <link rel="icon" href="data:image/svg+xml,' '<svg xmlns=%22http://www.w3.org/2000/svg%22/>">\n</head>',
+        ),
+        encoding="utf-8",
+    )
+    shutil.copyfile(source_viewer.parent / "favicon-light.png", viewer_directory / "favicon-light.png")
 
     selected = (
         forecast_dataset

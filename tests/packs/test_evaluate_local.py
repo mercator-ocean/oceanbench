@@ -130,6 +130,8 @@ def test_viewer_artifact_builds_local_pyramid_and_mixed_catalog(local_evaluation
     assert catalog["datasets"][0]["store"] == "./data/your_model.zarr"
     assert catalog["datasets"][1] == remote
     assert Path(result.viewer_directory, "index.html").exists()
+    assert Path(result.viewer_directory, "data", "insights.json").exists()
+    assert 'rel="icon" href="data:image/svg+xml' in Path(result.viewer_directory, "index.html").read_text()
 
 
 def test_all_artifacts_keeps_scores_and_adds_viewer(local_evaluation_fixture, tmp_path, monkeypatch):

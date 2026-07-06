@@ -17,7 +17,7 @@ From scores to a browser comparison with the official products:
 ```sh
 oceanbench evaluate-local ./my-forecasts.zarr --pack ./pack-quick-2024 --artifacts all --output ./my-evaluation
 python -m http.server --directory ./my-evaluation/viewer 8799
-# open http://127.0.0.1:8799/
+# open http://127.0.0.1:8799/?data_base=local
 ```
 
 The first command needs network access to read the current official viewer catalog; obtaining

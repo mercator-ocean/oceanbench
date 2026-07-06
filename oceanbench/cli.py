@@ -210,7 +210,7 @@ def _run_evaluate_local(args: argparse.Namespace) -> int:
         print(
             "serve:     " f"{sys.executable} -m http.server --directory {Path(result.viewer_directory).resolve()} 8799"
         )
-        print("open:      http://127.0.0.1:8799/")
+        print("open:      http://127.0.0.1:8799/?data_base=local")
     return 0
 
 
