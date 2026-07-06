@@ -99,6 +99,8 @@ function currentsVariableOptions(manifest) {
 
 // Shared state — linked across every panel (contracts.md §6).
 const view = { zoom: 1, centerNX: 0.5, centerNY: 0.5 };
+const DEFAULT_LAYOUT = { controlsWidth: 256, railWidth: 352, mapHeight: null };
+const savedLayout = JSON.parse(localStorage.getItem("oceanbench.viewer.layout") || "null") || {};
 const shared = {
   startIndex: 0,
   leadDay: 1,
@@ -110,8 +112,9 @@ const shared = {
   showParticles: true,
   particleSpeed: 1,
   railCollapsed: localStorage.getItem("oceanbench.viewer.railCollapsed") === "1",
-  railWidth: Number(localStorage.getItem("oceanbench.viewer.railWidth")) || 352,
-  mapHeight: null,
+  controlsWidth: Number(savedLayout.controlsWidth) || DEFAULT_LAYOUT.controlsWidth,
+  railWidth: Number(savedLayout.railWidth) || Number(localStorage.getItem("oceanbench.viewer.railWidth")) || DEFAULT_LAYOUT.railWidth,
+  mapHeight: Number(savedLayout.mapHeight) || null,
   // 2-forecast display: "side" (two panels) or "swipe" (one map, F1 left / F2 right).
   displayMode: "side",
   // Which forecast the rail shows when 2 forecasts carry different variables.
@@ -367,7 +370,7 @@ function wirePanel(panel) {
     writeHash();
   });
   const field = panel.els.field;
-  field.addEventListener("mousedown", (event) => beginPanelDrag(panel, event));
+  field.addEventListener("pointerdown", (event) => beginPanelDrag(panel, event));
   field.addEventListener("wheel", (event) => onPanelWheel(panel, event), { passive: false });
   field.addEventListener("mouseleave", () => {
     panel.els.readout.textContent = "";
@@ -823,6 +826,7 @@ function visibleViewport(projection, canvas) {
 // ---- pointer interaction (pan / zoom shared, hover per panel) ---------------
 
 function beginPanelDrag(panel, event) {
+  if (event.button !== 0) return;
   const projection = projectionFor(panel);
   if (isSwipeHost(panel) && panel.offscreenB) {
     const ratio = window.devicePixelRatio || 1;
@@ -830,47 +834,48 @@ function beginPanelDrag(panel, event) {
     const localX = (event.clientX - rectangle.left) * ratio;
     if (Math.abs(localX - panel.swipeX * panel.els.field.width) < 12 * ratio) {
       panel.draggingSwipe = true;
+      panel.els.field.setPointerCapture(event.pointerId);
+      panel.els.field.addEventListener("pointermove", onPanelPointerMove);
+      panel.els.field.addEventListener("pointerup", endPanelDrag, { once: true });
+      panel.els.field.addEventListener("pointercancel", endPanelDrag, { once: true });
       return;
     }
   }
   panel.dragging = { x: event.clientX, y: event.clientY, centerNX: view.centerNX, centerNY: view.centerNY, projection };
+  panel.els.field.setPointerCapture(event.pointerId);
+  panel.els.field.addEventListener("pointermove", onPanelPointerMove);
+  panel.els.field.addEventListener("pointerup", endPanelDrag, { once: true });
+  panel.els.field.addEventListener("pointercancel", endPanelDrag, { once: true });
+  event.preventDefault();
 }
 
-function onGlobalMove(event) {
-  if (updateMapResize(event)) return;
-  if (updateRailResize(event)) return;
-  for (const panel of panels) {
-    if (panel.draggingSwipe) {
-      const ratio = window.devicePixelRatio || 1;
-      const rectangle = panel.els.field.getBoundingClientRect();
-      panel.swipeX = Math.min(0.98, Math.max(0.02, ((event.clientX - rectangle.left) * ratio) / panel.els.field.width));
-      drawPanel(panel);
-      return;
-    }
-    if (panel.dragging) {
-      const ratio = window.devicePixelRatio || 1;
-      view.centerNX = panel.dragging.centerNX - ((event.clientX - panel.dragging.x) * ratio) / panel.dragging.projection.displayWidth;
-      view.centerNY = panel.dragging.centerNY - ((event.clientY - panel.dragging.y) * ratio) / panel.dragging.projection.displayHeight;
-      clampView();
-      redrawAllPanels();
-      scheduleHashWrite();
-      scheduleRailUpdate();
-      return;
-    }
+function onPanelPointerMove(event) {
+  const panel = panels.find((candidate) => candidate.els.field === event.currentTarget);
+  if (panel.draggingSwipe) {
+    const ratio = window.devicePixelRatio || 1;
+    const rectangle = panel.els.field.getBoundingClientRect();
+    panel.swipeX = Math.min(0.98, Math.max(0.02, ((event.clientX - rectangle.left) * ratio) / panel.els.field.width));
+    drawPanel(panel);
+  } else if (panel.dragging) {
+    const ratio = window.devicePixelRatio || 1;
+    view.centerNX = panel.dragging.centerNX - ((event.clientX - panel.dragging.x) * ratio) / panel.dragging.projection.displayWidth;
+    view.centerNY = panel.dragging.centerNY - ((event.clientY - panel.dragging.y) * ratio) / panel.dragging.projection.displayHeight;
+    clampView();
+    redrawAllPanels();
+    scheduleHashWrite();
+    scheduleRailUpdate();
+  } else {
+    updateHover(event);
   }
-  updateHover(event);
 }
 
-function onGlobalUp() {
-  if (endMapResize()) return;
-  if (endRailResize()) return;
-  let wasDragging = false;
-  for (const panel of panels) {
-    if (panel.dragging || panel.draggingSwipe) wasDragging = true;
-    panel.dragging = null;
-    panel.draggingSwipe = false;
-  }
-  if (wasDragging) writeHash();
+function endPanelDrag(event) {
+  const panel = panels.find((candidate) => candidate.els.field === event.currentTarget);
+  panel.els.field.removeEventListener("pointermove", onPanelPointerMove);
+  if (shared.region === "global") view.centerNX = ((view.centerNX % 1) + 1) % 1;
+  panel.dragging = null;
+  panel.draggingSwipe = false;
+  writeHash();
 }
 
 function onPanelWheel(panel, event) {
@@ -1559,8 +1564,7 @@ function wireGlobalControls() {
     if (!shared.railCollapsed) updateContextRail();
     writeHash();
   });
-  elements["rail-resize-handle"].addEventListener("mousedown", beginRailResize);
-  elements["map-resize-handle"].addEventListener("mousedown", beginMapResize);
+  wireLayoutSplitters();
   for (const button of elements["rail-forecast-toggle"].querySelectorAll("button")) {
     button.addEventListener("click", () => {
       shared.railForecast = Number(button.dataset.forecast);
@@ -1590,70 +1594,105 @@ function wireGlobalControls() {
     writeHash();
   });
 
-  window.addEventListener("mousemove", onGlobalMove);
-  window.addEventListener("mouseup", onGlobalUp);
+  window.addEventListener("pointermove", (event) => {
+    if (!panels.some((panel) => panel.dragging || panel.draggingSwipe)) updateHover(event);
+  });
   window.addEventListener("resize", () => {
-    applyMapHeight();
+    applyLayout();
     clampView();
-    redrawAllPanels();
-    scheduleRailUpdate();
+    scheduleLayoutRender();
   });
 }
 
-let railResize = null;
-let mapResize = null;
+let layoutRenderTimer = null;
 
-function mapHeightLimits() {
+function layoutLimits() {
+  const workspace = document.querySelector(".workspace").getBoundingClientRect();
+  return {
+    controlsWidth: [208, Math.min(380, workspace.width * 0.32)],
+    railWidth: [280, Math.min(620, workspace.width * 0.42)],
+    mapHeight: [320, Math.max(320, workspace.height - 24)],
+  };
+}
+
+function clampLayoutValue(name, value) {
+  const [minimum, maximum] = layoutLimits()[name];
+  return Math.round(Math.min(maximum, Math.max(minimum, value)));
+}
+
+function applyLayout() {
   const workspace = document.querySelector(".workspace");
-  const available = workspace ? workspace.getBoundingClientRect().height : window.innerHeight;
-  return { minimum: Math.min(320, available), maximum: Math.max(320, available) };
-}
-
-function applyMapHeight() {
-  const mapArea = document.querySelector(".map-area");
-  if (!mapArea) return;
-  if (window.matchMedia("(max-width: 980px)").matches || !Number.isFinite(shared.mapHeight)) {
-    mapArea.style.removeProperty("height");
-    mapArea.style.removeProperty("flex");
-    return;
+  if (!workspace || window.matchMedia("(max-width: 980px)").matches) return;
+  shared.controlsWidth = clampLayoutValue("controlsWidth", shared.controlsWidth);
+  shared.railWidth = clampLayoutValue("railWidth", shared.railWidth);
+  if (shared.controlsWidth + shared.railWidth > workspace.clientWidth - 420) {
+    shared.railWidth = Math.max(280, workspace.clientWidth - 420 - shared.controlsWidth);
   }
-  const limits = mapHeightLimits();
-  shared.mapHeight = Math.min(limits.maximum, Math.max(limits.minimum, shared.mapHeight));
-  mapArea.style.height = `${shared.mapHeight}px`;
-  mapArea.style.flex = "0 0 auto";
+  if (Number.isFinite(shared.mapHeight)) shared.mapHeight = clampLayoutValue("mapHeight", shared.mapHeight);
+  workspace.style.setProperty("--controls-width", `${shared.controlsWidth}px`);
+  workspace.style.setProperty("--rail-width", `${shared.railCollapsed ? 32 : shared.railWidth}px`);
+  workspace.style.setProperty("--map-height", Number.isFinite(shared.mapHeight) ? `${shared.mapHeight}px` : "calc(100% - 1px)");
 }
 
-function beginMapResize(event) {
-  event.preventDefault();
-  const mapArea = document.querySelector(".map-area");
-  mapResize = { startY: event.clientY, startHeight: mapArea.getBoundingClientRect().height };
-  mapArea.classList.add("resizing");
+function persistLayout() {
+  localStorage.setItem("oceanbench.viewer.layout", JSON.stringify({
+    controlsWidth: shared.controlsWidth,
+    railWidth: shared.railWidth,
+    mapHeight: shared.mapHeight,
+  }));
 }
 
-function updateMapResize(event) {
-  if (!mapResize) return false;
-  const limits = mapHeightLimits();
-  shared.mapHeight = Math.min(limits.maximum, Math.max(limits.minimum, Math.round(mapResize.startHeight + event.clientY - mapResize.startY)));
-  applyMapHeight();
-  clampView();
-  redrawAllPanels();
-  scheduleRailUpdate();
-  scheduleHashWrite();
-  return true;
+function scheduleLayoutRender() {
+  clearTimeout(layoutRenderTimer);
+  layoutRenderTimer = setTimeout(() => {
+    clampView();
+    redrawAllPanels();
+    updateContextRail();
+  }, 80);
 }
 
-function endMapResize() {
-  if (!mapResize) return false;
-  mapResize = null;
-  document.querySelector(".map-area").classList.remove("resizing");
-  writeHash();
-  return true;
+function wireSplitter(element, name, axis, direction) {
+  element.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    element.setPointerCapture(event.pointerId);
+    element.classList.add("active");
+    document.body.classList.add("resizing-layout");
+    document.body.classList.toggle("row", axis === "y");
+    const start = axis === "x" ? event.clientX : event.clientY;
+    const startValue = name === "mapHeight" && !Number.isFinite(shared.mapHeight)
+      ? document.querySelector(".map-content").getBoundingClientRect().height
+      : shared[name];
+    const move = (moveEvent) => {
+      const coordinate = axis === "x" ? moveEvent.clientX : moveEvent.clientY;
+      shared[name] = clampLayoutValue(name, startValue + direction * (coordinate - start));
+      applyLayout();
+      scheduleLayoutRender();
+    };
+    const end = () => {
+      element.removeEventListener("pointermove", move);
+      element.classList.remove("active");
+      document.body.classList.remove("resizing-layout", "row");
+      persistLayout();
+      writeHash();
+    };
+    element.addEventListener("pointermove", move);
+    element.addEventListener("pointerup", end, { once: true });
+    element.addEventListener("pointercancel", end, { once: true });
+  });
+  element.addEventListener("dblclick", () => {
+    shared[name] = DEFAULT_LAYOUT[name];
+    applyLayout();
+    persistLayout();
+    scheduleLayoutRender();
+    writeHash();
+  });
 }
 
-function applyRailWidth() {
-  const rail = elements["context-rail"];
-  if (!rail) return;
-  rail.style.setProperty("--rail-width", `${shared.railWidth}px`);
+function wireLayoutSplitters() {
+  wireSplitter(elements["controls-map-splitter"], "controlsWidth", "x", 1);
+  wireSplitter(elements["map-rail-splitter"], "railWidth", "x", -1);
+  wireSplitter(elements["map-height-splitter"], "mapHeight", "y", 1);
 }
 
 // Collapse the rail to a thin strip (just the expand chevron), restoring the previous
@@ -1664,32 +1703,7 @@ function applyRailCollapsed() {
   rail.classList.toggle("collapsed", shared.railCollapsed);
   elements["rail-collapse"].setAttribute("aria-expanded", String(!shared.railCollapsed));
   elements["rail-collapse"].setAttribute("aria-label", shared.railCollapsed ? "Expand context rail" : "Collapse context rail");
-}
-
-function beginRailResize(event) {
-  event.preventDefault();
-  railResize = { startX: event.clientX, startWidth: shared.railWidth };
-  elements["context-rail"].classList.add("resizing");
-}
-
-function updateRailResize(event) {
-  if (!railResize) return false;
-  const nextWidth = Math.round(railResize.startWidth - (event.clientX - railResize.startX));
-  shared.railWidth = Math.min(620, Math.max(280, nextWidth));
-  localStorage.setItem("oceanbench.viewer.railWidth", String(shared.railWidth));
-  applyRailWidth();
-  clampView();
-  redrawAllPanels();
-  scheduleHashWrite();
-  return true;
-}
-
-function endRailResize() {
-  if (!railResize) return false;
-  railResize = null;
-  elements["context-rail"].classList.remove("resizing");
-  writeHash();
-  return true;
+  applyLayout();
 }
 
 function redrawOverlaysAll() {
@@ -1747,6 +1761,7 @@ function writeHash() {
   if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
   if (shared.railCollapsed) parameters.set("rail", "collapsed");
   parameters.set("rw", String(shared.railWidth));
+  parameters.set("cw", String(shared.controlsWidth));
   if (Number.isFinite(shared.mapHeight)) parameters.set("mh", String(shared.mapHeight));
   if (shared.layout === 2) parameters.set("dm", shared.displayMode);
   parameters.set("play", shared.showParticles ? "1" : "0");
@@ -1770,6 +1785,7 @@ function readHash() {
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
   if (parameters.get("rail") === "0" || parameters.get("rail") === "collapsed") shared.railCollapsed = true;
   if (parameters.has("rw")) shared.railWidth = Math.min(620, Math.max(280, Number(parameters.get("rw"))));
+  if (parameters.has("cw")) shared.controlsWidth = Number(parameters.get("cw"));
   if (parameters.has("mh")) shared.mapHeight = Number(parameters.get("mh"));
   if (parameters.get("dm") === "swipe" || parameters.get("dm") === "side") shared.displayMode = parameters.get("dm");
   if (parameters.has("play")) shared.showParticles = parameters.get("play") === "1";
@@ -1825,8 +1841,9 @@ function selectElements() {
     "layer-info",
     "status",
     "context-rail",
-    "rail-resize-handle",
-    "map-resize-handle",
+    "controls-map-splitter",
+    "map-rail-splitter",
+    "map-height-splitter",
     "rail-subtitle",
     "rail-forecast-toggle",
     "rail-lead-curve",
@@ -1863,9 +1880,8 @@ async function main() {
   if (!Number.isFinite(shared.layout) || shared.layout < 1) shared.layout = 1;
   else if (shared.layout > 2) shared.layout = 2;
   applyTheme();
-  applyRailWidth();
   applyRailCollapsed();
-  applyMapHeight();
+  applyLayout();
   elements["lead-value"].textContent = `day ${shared.leadDay}`;
   elements["speed-value"].textContent = `${shared.particleSpeed.toFixed(1)}×`;
   elements["particles-play"].checked = shared.showParticles;

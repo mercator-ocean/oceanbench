@@ -83,19 +83,24 @@ SPDX-License-Identifier: EUPL-1.2
         <p class="hint">Scroll to zoom, drag to pan — all panels move together. Hover for the value in real units. With two forecasts, switch between side-by-side and swipe; in swipe, drag the divider.</p>
       </aside>
 
-      <main class="map-area">
-        <div id="panel-grid" class="panel-grid" data-layout="1"></div>
+      <div id="controls-map-splitter" class="splitter splitter-column" role="separator" aria-orientation="vertical" aria-label="Resize controls"></div>
 
-        <div class="map-footer">
-          <canvas id="colorbar" width="512" height="52" class="colorbar"></canvas>
-          <p id="layer-info" class="layer-info"></p>
+      <main class="map-area">
+        <div class="map-content">
+          <div id="panel-grid" class="panel-grid" data-layout="1"></div>
+
+          <div class="map-footer">
+            <canvas id="colorbar" width="512" height="52" class="colorbar"></canvas>
+            <p id="layer-info" class="layer-info"></p>
+          </div>
+          <p id="status" class="status" role="status">Loading…</p>
         </div>
-        <p id="status" class="status" role="status">Loading…</p>
-        <div id="map-resize-handle" class="map-resize-handle" role="separator" aria-orientation="horizontal" aria-label="Resize map height"></div>
+        <div id="map-height-splitter" class="splitter splitter-row" role="separator" aria-orientation="horizontal" aria-label="Resize map height"></div>
       </main>
 
+      <div id="map-rail-splitter" class="splitter splitter-column" role="separator" aria-orientation="vertical" aria-label="Resize context rail"></div>
+
       <aside id="context-rail" class="context-rail" aria-label="Context rail">
-        <div id="rail-resize-handle" class="rail-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize context rail"></div>
         <button id="rail-collapse" type="button" class="rail-collapse" aria-label="Collapse context rail" title="Collapse / expand rail"></button>
         <h2 class="rail-title">Context</h2>
         <p id="rail-subtitle" class="rail-subtitle"></p>

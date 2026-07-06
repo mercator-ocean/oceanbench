@@ -103,15 +103,18 @@ body {
 .ghost-button:hover { border-color: var(--accent); color: var(--accent); }
 
 .workspace {
-  display: flex;
+  --controls-width: 16rem;
+  --rail-width: 22rem;
+  --map-height: calc(100% - 1px);
+  display: grid;
+  grid-template-columns: var(--controls-width) 1px minmax(20rem, 1fr) 1px var(--rail-width);
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
 
 .controls {
-  width: 16rem;
-  flex-shrink: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
@@ -154,39 +157,43 @@ body {
 kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-strong); border: 1px solid var(--border); border-radius: 4px; padding: 0 0.25rem; }
 
 .map-area {
-  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: var(--map-height) 1px minmax(0, 1fr);
+}
+
+.map-content {
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 1rem clamp(0.75rem, 1.5vw, 1.25rem);
   gap: 0.7rem;
-  position: relative;
+  overflow: hidden;
 }
 
-.map-resize-handle {
-  position: absolute;
+.splitter {
+  position: relative;
   z-index: 8;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 10px;
-  cursor: row-resize;
   touch-action: none;
+  background: var(--border);
+  transition: background-color 120ms ease;
 }
-.map-resize-handle::after {
+.splitter::before {
   content: "";
   position: absolute;
-  bottom: 3px;
-  left: 50%;
-  width: 3rem;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--border);
-  transform: translateX(-50%);
+  z-index: 1;
 }
-.map-resize-handle:hover::after,
-.map-area.resizing .map-resize-handle::after { background: var(--accent); }
+.splitter-column { cursor: col-resize; }
+.splitter-column::before { inset: 0 -5px; }
+.splitter-row { cursor: row-resize; }
+.splitter-row::before { inset: -5px 0; }
+.splitter:hover,
+.splitter.active { background: var(--accent); }
+body.resizing-layout { cursor: col-resize; user-select: none; }
+body.resizing-layout.row { cursor: row-resize; }
 
 /* Panel grid — 1 / 2 / 4 synchronized panels. */
 .panel-grid {
@@ -312,8 +319,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 /* Context rail */
 .context-rail {
   position: relative;
-  width: var(--rail-width, 22rem);
-  flex-shrink: 0;
+  min-width: 0;
   padding: 1rem 1rem 1.5rem;
   background: var(--surface);
   border-left: 1px solid var(--border);
@@ -322,7 +328,6 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 }
 .context-rail[hidden] { display: none; }
 .context-rail.collapsed {
-  width: 2rem;
   padding: 0.5rem 0;
   overflow: hidden;
 }
@@ -348,27 +353,6 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .rail-collapse::before { content: "\2039"; font-size: 1rem; line-height: 1; } /* ‹ expand left */
 .rail-collapse[aria-expanded="true"]::before { content: "\203A"; } /* › collapse right */
 .context-rail:not(.collapsed) .rail-title { padding-left: 1.6rem; }
-.rail-resize-handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -4px;
-  width: 8px;
-  cursor: col-resize;
-  touch-action: none;
-}
-.rail-resize-handle::after {
-  content: "";
-  position: absolute;
-  top: 0.8rem;
-  bottom: 0.8rem;
-  left: 3px;
-  width: 2px;
-  border-radius: 2px;
-  background: transparent;
-}
-.rail-resize-handle:hover::after,
-.context-rail.resizing .rail-resize-handle::after { background: var(--accent); }
 .rail-title { font-size: 0.95rem; margin: 0 0 0.15rem; }
 .rail-subtitle { font-size: 0.74rem; color: var(--muted); margin: 0 0 1rem; font-family: var(--mono); }
 .rail-section { margin-bottom: 1.25rem; }
@@ -417,11 +401,11 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .app-footer a { color: var(--accent); }
 
 @media (max-width: 980px) {
-  .workspace { flex-direction: column; overflow: auto; }
+  .workspace { display: flex; flex-direction: column; overflow: auto; }
   .controls { width: auto; max-height: 14rem; border-right: none; border-bottom: 1px solid var(--border); }
   .context-rail { width: auto; border-left: none; border-top: 1px solid var(--border); }
-  .rail-resize-handle { display: none; }
-  .map-resize-handle { display: none; }
+  .splitter { display: none; }
+  .map-area { display: block; overflow: visible; }
 }
 
 @media (max-height: 760px) {
