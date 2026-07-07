@@ -56,6 +56,7 @@ import {
   yearGeographyMax,
   yearBiasMax,
   yearRmsdSeries,
+  yearRmsdSeriesMax,
 } from "./modules/year.js";
 import { attachMethodNote, attachEddyMethodNote } from "./modules/method-popover.js";
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
@@ -1988,6 +1989,11 @@ async function renderRailYearRmsd(shown) {
   const lines = [];
   let unit = "";
   let missing = 0;
+  // Lead-independent y-bound (max across ALL leads, over the shown datasets): the axis
+  // stays fixed while the lead slider scrubs, so the curve visibly grows/shifts within a
+  // constant frame. yearRmsdSeriesMax is a pure function of the loaded artifact, so this
+  // effectively only changes with the dataset/variable/region/metric selection.
+  let yBound = 0;
   for (const panel of shown) {
     if (isSurfaceCurrentVariable(panel.state.variable)) continue; // 15 m obs only; covered by switch note
     const url = insightsFor(insightIndex, panel.state.dataset, shared.region).year_rmsd_by_start;
@@ -2000,6 +2006,7 @@ async function renderRailYearRmsd(shown) {
       missing += 1;
       continue;
     }
+    yBound = Math.max(yBound, yearRmsdSeriesMax(rmsd, mapping.short, { signed: biasMode }));
     unit = unit || (mapping.unit ? mapping.unit : "");
     lines.push({
       label: `${labelFor(panel.state.dataset)}${mapping.component ? " · u" : ""}`,
@@ -2013,6 +2020,7 @@ async function renderRailYearRmsd(shown) {
     title: biasMode ? "Bias by start date" : "RMSD by start date",
     unit,
     signed: biasMode,
+    yBound,
   });
   note.textContent = lines.length
     ? biasMode

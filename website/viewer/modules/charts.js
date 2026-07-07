@@ -305,8 +305,11 @@ export function psdSpectraSVG(curves, { title = "Live power spectrum" } = {}) {
  * The x-axis is the union of start dates (chronological); y is RMSD at the
  * selected lead. Absolute values are area-weighted super-ob RMSD — not the
  * official scores — so this never shares an axis with the skill-vs-lead chart.
+ * `yBound` (optional): a fixed y-extent — [0, niceMax(yBound)] for RMSD, ±niceMax(yBound)
+ * when signed — so the axis stays STABLE across lead-day scrubs (the caller passes the
+ * max across ALL leads). Without it the axis fits the plotted series, as before.
  */
-export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = "", signed = false } = {}) {
+export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = "", signed = false, yBound = 0 } = {}) {
   const area = plotArea();
   const usable = (series || []).filter((line) => line && line.dates && line.dates.length);
   if (!usable.length) return emptyChart(title, "no year RMSD for this variable");
@@ -320,9 +323,11 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
   // Signed (bias) mode: symmetric y-axis centred on 0, with negative values plotted
   // below a zero baseline. |error|/RMSD mode keeps the original [0, niceMax] scale.
   if (signed) {
-    let magnitude = 0;
-    for (const line of usable) {
-      for (const value of line.rmsd) if (Number.isFinite(value) && Math.abs(value) > magnitude) magnitude = Math.abs(value);
+    let magnitude = yBound > 0 ? yBound : 0;
+    if (!magnitude) {
+      for (const line of usable) {
+        for (const value of line.rmsd) if (Number.isFinite(value) && Math.abs(value) > magnitude) magnitude = Math.abs(value);
+      }
     }
     const bound = niceMax(magnitude);
     const yOf = (value) => area.y1 - ((value + bound) / (2 * bound)) * area.height;
@@ -364,9 +369,11 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
     return svgOpen(title) + axes(area, "start date", unit ? `bias (${unit})` : "bias") + body + legend + interactionLayer() + "</svg>";
   }
 
-  let maxValue = 0;
-  for (const line of usable) {
-    for (const value of line.rmsd) if (Number.isFinite(value) && value > maxValue) maxValue = value;
+  let maxValue = yBound > 0 ? yBound : 0;
+  if (!maxValue) {
+    for (const line of usable) {
+      for (const value of line.rmsd) if (Number.isFinite(value) && value > maxValue) maxValue = value;
+    }
   }
   const yMax = niceMax(maxValue);
   const yOf = (value) => area.y1 - (value / yMax) * area.height;

@@ -131,6 +131,26 @@ export function yearBiasMax(geography, shortName, leadDay) {
   return finite[index];
 }
 
+// Lead-independent y-bound for the RMSD/bias-by-start rail chart: the max finite value
+// (max |value| when signed) across EVERY lead's series of a variable. Scrubbing the
+// lead slider then moves the curve within a constant frame instead of rescaling the
+// axis on each lead. Pure function of the loaded artifact — it only changes when the
+// dataset/variable/region (or metric) changes, never with the selected lead.
+export function yearRmsdSeriesMax(rmsd, shortName, { signed = false } = {}) {
+  if (!rmsd || !rmsd.variables) return 0;
+  const variable = rmsd.variables[shortName];
+  if (!variable || !variable.leads) return 0;
+  let maximum = 0;
+  for (const entry of Object.values(variable.leads)) {
+    const values = entry && (signed ? entry.bias : entry.rmsd);
+    if (!Array.isArray(values)) continue;
+    for (const value of values) {
+      if (Number.isFinite(value) && Math.abs(value) > maximum) maximum = Math.abs(value);
+    }
+  }
+  return maximum;
+}
+
 // Per-start-date RMSD series for a short variable at the requested lead day, or null.
 // When the artifact carries a parallel `bias` array (area-weighted mean(model − obs) per
 // start), it is returned too; otherwise `bias` is null and the caller stays in |error|.
