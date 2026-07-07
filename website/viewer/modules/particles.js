@@ -131,8 +131,18 @@ export function startParticleField(canvas, context) {
       const to = context.project(particle.x, particle.y);
       const magnitude = Math.hypot(velocity.u, velocity.v);
       const normalized = Math.min(1, magnitude / context.magnitudeScale);
-      const [r, g, b] = sampleColormap(SPEED_COLORMAP, 0.15 + normalized * 0.85);
-      drawing.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.65 * glow})`;
+      if (context.muted) {
+        // Over a muted/grayscale field the flow lines drop their speed colormap and
+        // render theme-appropriate black-and-white (dark on light, light on dark), so
+        // the overlay colours (obs points, eddy outlines, trajectory fans) stay the
+        // only coloured marks. Speed still modulates brightness for legibility.
+        const level = context.theme === "light" ? 90 - normalized * 60 : 165 + normalized * 90;
+        const shade = Math.max(0, Math.min(255, Math.round(level)));
+        drawing.strokeStyle = `rgba(${shade}, ${shade}, ${shade}, ${0.7 * glow})`;
+      } else {
+        const [r, g, b] = sampleColormap(SPEED_COLORMAP, 0.15 + normalized * 0.85);
+        drawing.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.65 * glow})`;
+      }
       drawing.beginPath();
       drawing.moveTo(from.x, from.y);
       drawing.lineTo(to.x, to.y);

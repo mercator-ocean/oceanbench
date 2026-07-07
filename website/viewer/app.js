@@ -1463,6 +1463,7 @@ function startPanelParticles(panel) {
     viewport: visibleViewport(projection, panel.els.particles),
     magnitudeScale: PARTICLE_MAGNITUDE_SCALE,
     theme: shared.theme,
+    muted: fieldMutedUnderOverlay(),
     speed: shared.particleSpeed,
     devicePixelRatio: window.devicePixelRatio || 1,
     playing: true,
@@ -1492,6 +1493,7 @@ function updateParticleProjection(panel, projection) {
   panel.particleContext.project = projection.project;
   panel.particleContext.viewport = visibleViewport(projection, panel.els.particles);
   panel.particleContext.theme = shared.theme;
+  panel.particleContext.muted = fieldMutedUnderOverlay();
   panel.particleContext.speed = shared.particleSpeed;
   panel.particleContext.devicePixelRatio = window.devicePixelRatio || 1;
 }
