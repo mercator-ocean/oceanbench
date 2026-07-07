@@ -12,6 +12,15 @@ from oceanbench.publish.benchmark import (
 from oceanbench.publish.catalog import CatalogEntry, build_catalog, write_catalog
 from oceanbench.publish.content_address import PublishedBlob, content_addressed_name, publish_blob, sha256_hex
 from oceanbench.publish.insights_manifest import InsightArtifact, write_insights_manifest
+from oceanbench.publish.viewer_artifacts import (
+    ViewerArtifactsResult,
+    class4_bias_per_start_records,
+    dataset_eddy_census,
+    verify_matchup_parquet,
+    write_eddy_census,
+    write_matchup_parquet,
+    write_viewer_artifacts,
+)
 from oceanbench.publish.s3 import (
     AwsCredentials,
     UploadPlanItem,
@@ -31,10 +40,13 @@ __all__ = [
     "PublishedBlob",
     "UploadPlanItem",
     "UploadSummary",
+    "ViewerArtifactsResult",
     "build_catalog",
     "build_upload_plan",
+    "class4_bias_per_start_records",
     "content_addressed_name",
     "content_type_for_path",
+    "dataset_eddy_census",
     "mint_sts_credentials",
     "publish_benchmark_catalog",
     "publish_blob",
@@ -44,6 +56,10 @@ __all__ = [
     "sha256_hex",
     "should_skip_upload",
     "upload_tree",
+    "verify_matchup_parquet",
     "write_catalog",
+    "write_eddy_census",
     "write_insights_manifest",
+    "write_matchup_parquet",
+    "write_viewer_artifacts",
 ]
