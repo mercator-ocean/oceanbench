@@ -159,7 +159,7 @@ function legacyRows(url, info, options) {
 }
 
 async function readWhole(url) {
-  const response = await fetch(url);
+  const response = await fetch(url, { cache: "no-cache" });
   if (!response.ok) throw new Error(`${url} -> HTTP ${response.status}`);
   const buffer = await response.arrayBuffer();
   const file = {
@@ -239,7 +239,7 @@ function httpRangeAsyncBuffer(url, byteLength) {
     byteLength,
     async slice(start, end) {
       const last = (end ?? byteLength) - 1;
-      const response = await fetch(url, { headers: { Range: `bytes=${start}-${last}` } });
+      const response = await fetch(url, { cache: "no-cache", headers: { Range: `bytes=${start}-${last}` } });
       if (response.status !== 206 && response.status !== 200) {
         throw new Error(`${url} range ${start}-${last} -> HTTP ${response.status}`);
       }
@@ -250,7 +250,7 @@ function httpRangeAsyncBuffer(url, byteLength) {
 
 async function resolveByteLength(url, hint) {
   if (Number.isFinite(hint) && hint > 0) return hint;
-  const response = await fetch(url, { method: "HEAD" });
+  const response = await fetch(url, { method: "HEAD", cache: "no-cache" });
   if (!response.ok) throw new Error(`${url} HEAD -> HTTP ${response.status}`);
   const length = Number(response.headers.get("content-length"));
   if (!Number.isFinite(length) || length <= 0) throw new Error(`${url} HEAD returned no content-length`);

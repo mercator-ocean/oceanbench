@@ -859,7 +859,7 @@ let redrawAllPanelsFrame = 0;
 async function loadInsightManifest(url) {
   if (!url) return null;
   try {
-    const response = await fetch(resolveViewerDataUrl(url));
+    const response = await fetch(resolveViewerDataUrl(url), { cache: "no-cache" });
     if (!response.ok) return null;
     return response.json();
   } catch {
@@ -2798,7 +2798,7 @@ async function main() {
   selectElements();
   setStatus("Loading catalog…");
   try {
-    const response = await fetch(DATASETS_URL);
+    const response = await fetch(DATASETS_URL, { cache: "no-cache" });
     if (!response.ok) throw new Error(`Cannot load ${DATASETS_URL} (${response.status})`);
     datasetCatalog = (await response.json()).datasets;
   } catch (error) {

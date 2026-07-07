@@ -31,7 +31,7 @@ async function fetchJSON(url) {
   const resolvedUrl = resolveViewerDataUrl(url);
   if (jsonCache.has(resolvedUrl)) return jsonCache.get(resolvedUrl);
   const promise = (async () => {
-    const response = await fetch(resolvedUrl);
+    const response = await fetch(resolvedUrl, { cache: "no-cache" });
     if (!response.ok) throw new Error(`${resolvedUrl} -> HTTP ${response.status}`);
     return response.json();
   })();

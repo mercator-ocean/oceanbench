@@ -28,7 +28,7 @@ async function inflate(compressed, codecId) {
 
 export async function loadStore(storeUrl) {
   const base = storeUrl.replace(/\/$/, "");
-  const response = await fetch(`${base}/.zmetadata`);
+  const response = await fetch(`${base}/.zmetadata`, { cache: "no-cache" });
   if (!response.ok) throw new Error(`Cannot load ${base}/.zmetadata (${response.status})`);
   const consolidated = await response.json();
   return {
@@ -40,7 +40,7 @@ export async function loadStore(storeUrl) {
 }
 
 export async function loadManifest(manifestUrl) {
-  const response = await fetch(manifestUrl);
+  const response = await fetch(manifestUrl, { cache: "no-cache" });
   if (!response.ok) throw new Error(`Cannot load manifest ${manifestUrl} (${response.status})`);
   return response.json();
 }
