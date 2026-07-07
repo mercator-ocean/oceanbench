@@ -29,6 +29,7 @@ import xarray
 from oceanbench.core import eddies as eddies_core
 from oceanbench.core.schema_validation import load_schema
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
+from oceanbench.publish.aggregate import DEFAULT_SEED as _LEAD_CURVE_BOOTSTRAP_SEED, _confidence_interval
 from oceanbench.pyramids import build_pyramid, viewer_layers
 from oceanbench.runner import realism
 
@@ -82,6 +83,16 @@ _YEAR_TARGETS = [
     ("northward_sea_water_velocity", "15m", "v"),
 ]
 _YEAR_GEOGRAPHY_DECIMALS = {"SSH": 4, "T": 3, "S": 4, "u": 4, "v": 4}
+
+# Uncertainty on the per-start point estimates. The RMSD interval reuses the lead-curve method
+# (seeded percentile bootstrap, aggregate.py) — same seed and 95% percentile interval — but
+# resamples the per-start super-observation cells rather than the whole-year start axis, so the
+# band reflects the spatial spread of that single start. The bias interval is the analytic normal
+# interval mean ± 1.96 · area-weighted std(model − obs) / sqrt(n).
+_YEAR_RMSD_CI_BOOTSTRAP_DRAWS = 200
+_YEAR_CI_SEED = _LEAD_CURVE_BOOTSTRAP_SEED
+_YEAR_CI_CONFIDENCE = 0.95
+_BIAS_CI_Z = 1.96
 
 PROVENANCE_KEY = "provenance"
 _MATCHUP_PROVENANCE_METADATA_KEY = b"oceanbench_provenance"
@@ -405,6 +416,50 @@ def _grid_cells(latitude: numpy.ndarray, longitude: numpy.ndarray, grid: dict) -
     return latitude_bin * grid["nlon"] + longitude_bin, valid
 
 
+def _cell_bias_standard_error(square_sum: float, signed_sum: float, count: int, decimals: int) -> float | None:
+    """Per-cell analytic standard error of the bias: std(model − obs) / sqrt(n), None below n = 2."""
+    if count < 2:
+        return None
+    mean = signed_sum / count
+    variance = max((square_sum / count) - mean * mean, 0.0)
+    return round(float(numpy.sqrt(variance / count)), decimals)
+
+
+def _bootstrap_rmsd_ci(
+    difference: numpy.ndarray, weight: numpy.ndarray, generator: numpy.random.Generator
+) -> tuple[float | None, float | None]:
+    """95% percentile-bootstrap CI for one start's area-weighted RMSD, resampling the super-obs cells.
+
+    Same method and confidence as the lead-curve bootstrap (percentile interval, seeded generator);
+    the resampled unit here is the per-cell super-observation, so the band reflects the spatial
+    spread across cells contributing to that single start's RMSD.
+    """
+    cell_count = difference.size
+    if cell_count < 2:
+        return (None, None)
+    draws = generator.integers(0, cell_count, size=(_YEAR_RMSD_CI_BOOTSTRAP_DRAWS, cell_count))
+    sampled_difference = difference[draws]
+    sampled_weight = weight[draws]
+    weight_total = sampled_weight.sum(axis=1)
+    with numpy.errstate(invalid="ignore", divide="ignore"):
+        bootstrap_rmsd = numpy.sqrt((sampled_weight * sampled_difference * sampled_difference).sum(axis=1) / weight_total)
+    low, high = _confidence_interval(bootstrap_rmsd, _YEAR_CI_CONFIDENCE)
+    if not (numpy.isfinite(low) and numpy.isfinite(high)):
+        return (None, None)
+    return (round(float(low), 6), round(float(high), 6))
+
+
+def _analytic_bias_ci(
+    signed: numpy.ndarray, weight: numpy.ndarray, weight_total: float, bias: float, n_present: int
+) -> tuple[float | None, float | None]:
+    """Analytic normal CI for one start's bias: mean ± 1.96 · area-weighted std(model − obs) / sqrt(n)."""
+    if n_present < 2:
+        return (None, None)
+    variance = float(numpy.sum(weight * (signed - bias) ** 2) / weight_total)
+    half_width = _BIAS_CI_Z * numpy.sqrt(max(variance, 0.0) / n_present)
+    return (round(bias - half_width, 6), round(bias + half_width, 6))
+
+
 def _write_year_artifacts(
     matchup_parquet_path: str,
     region: str,
@@ -419,12 +474,14 @@ def _write_year_artifacts(
     target_index = {(variable, depth_bin): index for index, (variable, depth_bin, _) in enumerate(_YEAR_TARGETS)}
 
     error_sum = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count))
+    error_square_sum = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count))
     bias_sum = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count))
     error_count = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count), dtype=numpy.int64)
     rmsd_rows = {(variable, lead): [] for variable in range(variable_count) for lead in range(_YEAR_LEAD_DAY_COUNT)}
     start_dates: list[str] = []
     current_start = None
     start_accumulators: dict[tuple[int, int], list] = {}
+    bootstrap_generator = numpy.random.default_rng(_YEAR_CI_SEED)
 
     def flush(start_date):
         for (variable, lead), (observation_sum, model_sum, count) in start_accumulators.items():
@@ -439,7 +496,12 @@ def _write_year_artifacts(
             weight_total = numpy.sum(weight)
             root_mean_square = float(numpy.sqrt(numpy.sum(weight * difference * difference) / weight_total))
             bias = float(numpy.sum(weight * signed) / weight_total)
-            rmsd_rows[(variable, lead)].append((start_date, root_mean_square, int(present.sum()), bias))
+            n_present = int(present.sum())
+            rmsd_low, rmsd_high = _bootstrap_rmsd_ci(difference, weight, bootstrap_generator)
+            bias_low, bias_high = _analytic_bias_ci(signed, weight, weight_total, bias, n_present)
+            rmsd_rows[(variable, lead)].append(
+                (start_date, root_mean_square, n_present, bias, rmsd_low, rmsd_high, bias_low, bias_high)
+            )
         start_accumulators.clear()
 
     parquet_file = pyarrow.parquet.ParquetFile(matchup_parquet_path)
@@ -502,7 +564,9 @@ def _write_year_artifacts(
             cell = cell[valid]
             if cell.size == 0:
                 continue
-            numpy.add.at(error_sum[variable, lead], cell, absolute_error[valid])
+            valid_absolute_error = absolute_error[valid]
+            numpy.add.at(error_sum[variable, lead], cell, valid_absolute_error)
+            numpy.add.at(error_square_sum[variable, lead], cell, valid_absolute_error * valid_absolute_error)
             numpy.add.at(bias_sum[variable, lead], cell, (model[valid] - observation[valid]))
             numpy.add.at(error_count[variable, lead], cell, 1)
             key = (variable, lead)
@@ -527,6 +591,10 @@ def _write_year_artifacts(
             "generated_from": source,
             "depth_bin": {short: depth_bin for _, depth_bin, short in _YEAR_TARGETS},
             "aggregation": "time-mean of |obs-model| per cell",
+            "bias_standard_error": (
+                "per cell std(model-obs)/sqrt(n) under bias_se; n is the shared per-cell match-up "
+                "count under n (identical sampling for the |error| and bias rasters)"
+            ),
         },
         PROVENANCE_KEY: provenance_block(source=source, parameters={"grid": grid, "region": region}),
     }
@@ -534,9 +602,12 @@ def _write_year_artifacts(
         decimals = _YEAR_GEOGRAPHY_DECIMALS[short]
         leads = {}
         bias_leads = {}
+        count_leads = {}
+        bias_se_leads = {}
         for lead in range(_YEAR_LEAD_DAY_COUNT):
             count = error_count[variable, lead]
             summed = error_sum[variable, lead]
+            square_summed = error_square_sum[variable, lead]
             signed_summed = bias_sum[variable, lead]
             leads[str(lead + 1)] = [
                 None if cell_count_value == 0 else round(float(summed[cell] / cell_count_value), decimals)
@@ -546,7 +617,19 @@ def _write_year_artifacts(
                 None if cell_count_value == 0 else round(float(signed_summed[cell] / cell_count_value), decimals)
                 for cell, cell_count_value in enumerate(count)
             ]
-        geography["variables"][short] = {"leads": leads, "bias": bias_leads}
+            count_leads[str(lead + 1)] = [int(cell_count_value) for cell_count_value in count]
+            bias_se_leads[str(lead + 1)] = [
+                _cell_bias_standard_error(square_summed[cell], signed_summed[cell], cell_count_value, decimals)
+                for cell, cell_count_value in enumerate(count)
+            ]
+        # n is shared verbatim by the |error| and bias rasters (identical per-cell sampling); it is
+        # emitted once rather than duplicated. bias_se is the per-cell analytic standard error.
+        geography["variables"][short] = {
+            "leads": leads,
+            "bias": bias_leads,
+            "n": count_leads,
+            "bias_se": bias_se_leads,
+        }
     Path(os.path.dirname(geography_path) or ".").mkdir(parents=True, exist_ok=True)
     Path(geography_path).write_text(json.dumps(geography), encoding="utf-8")
 
@@ -556,6 +639,13 @@ def _write_year_artifacts(
             "method": "area-weighted RMSD of per-cell super-obs (obs & model binned to grid, cos-lat weighted)",
             "grid": grid,
             "generated_from": source,
+            "ci_method": (
+                f"rmsd_ci: seeded percentile bootstrap over the per-start super-obs cells "
+                f"({_YEAR_RMSD_CI_BOOTSTRAP_DRAWS} resamples, seed {_YEAR_CI_SEED}, "
+                f"{int(_YEAR_CI_CONFIDENCE * 100)}% percentile interval — same method/seed as the "
+                f"lead-curve bootstrap, resampling cells rather than starts). "
+                f"bias_ci: analytic normal interval mean ± {_BIAS_CI_Z} · area-weighted std(model − obs) / sqrt(n)"
+            ),
         },
         PROVENANCE_KEY: provenance_block(source=source, parameters={"grid": grid, "region": region}),
     }
@@ -568,6 +658,10 @@ def _write_year_artifacts(
                 "rmsd": [round(row[1], 6) for row in rows],
                 "n": [row[2] for row in rows],
                 "bias": [round(row[3], 6) for row in rows],
+                "rmsd_ci_low": [row[4] for row in rows],
+                "rmsd_ci_high": [row[5] for row in rows],
+                "bias_ci_low": [row[6] for row in rows],
+                "bias_ci_high": [row[7] for row in rows],
             }
         rmsd["variables"][short] = {"depth_bin": depth_bin, "leads": leads}
     Path(rmsd_path).write_text(json.dumps(rmsd), encoding="utf-8")

@@ -169,6 +169,74 @@ def test_year_artifacts_handle_a_mixed_variable_row_group(tmp_path) -> None:
     assert rmsd["variables"]["T"]["depth_bin"] == "0-5m"
 
 
+def _year_ci_frame() -> pandas.DataFrame:
+    """Many SSH super-obs spread across cells over two starts, so per-start CIs are well defined."""
+    generator = numpy.random.default_rng(7)
+    rows = []
+    for start_date in ("2024-01-03", "2024-01-10"):
+        for _ in range(200):
+            observation_value = float(generator.normal())
+            model_value = observation_value + float(generator.normal(0.5, 0.2))
+            rows.append(
+                {
+                    "variable": "sea_surface_height_above_geoid",
+                    "depth_bin": "surface",
+                    "lead_day": 1,
+                    "start_date": numpy.datetime64(start_date),
+                    "latitude": float(generator.uniform(-60, 60)),
+                    "longitude": float(generator.uniform(-180, 180)),
+                    "observation_value": observation_value,
+                    "model_value": model_value,
+                }
+            )
+    return pandas.DataFrame(rows)
+
+
+def _write_year_pair(tmp_path):
+    matchup_path = str(tmp_path / "class4-matchups.parquet")
+    viewer_artifacts.write_matchup_parquet(_year_ci_frame(), matchup_path)
+    geography_path = str(tmp_path / "year-error-geography.json")
+    rmsd_path = str(tmp_path / "year-rmsd-by-start.json")
+    viewer_artifacts._write_year_artifacts(matchup_path, "global", geography_path, rmsd_path, source="synthetic")
+    return (json.loads(open(geography_path).read()), json.loads(open(rmsd_path).read()))
+
+
+def test_year_rmsd_by_start_carries_bracketing_confidence_intervals(tmp_path) -> None:
+    _, rmsd = _write_year_pair(tmp_path)
+    series = rmsd["variables"]["SSH"]["leads"]["1"]
+    n_dates = len(series["dates"])
+    for key in ("rmsd_ci_low", "rmsd_ci_high", "bias_ci_low", "bias_ci_high"):
+        assert len(series[key]) == n_dates
+    for index in range(n_dates):
+        assert series["rmsd_ci_low"][index] <= series["rmsd"][index] <= series["rmsd_ci_high"][index]
+        assert series["bias_ci_low"][index] <= series["bias"][index] <= series["bias_ci_high"][index]
+    assert "seed" in rmsd["meta"]["ci_method"] and "bootstrap" in rmsd["meta"]["ci_method"]
+
+
+def test_year_ci_is_deterministic_under_fixed_seed(tmp_path) -> None:
+    first = _write_year_pair(tmp_path / "a")
+    second = _write_year_pair(tmp_path / "b")
+    assert first[1]["variables"]["SSH"]["leads"]["1"] == second[1]["variables"]["SSH"]["leads"]["1"]
+    assert first[0]["variables"]["SSH"]["bias_se"] == second[0]["variables"]["SSH"]["bias_se"]
+
+
+def test_year_geography_carries_shared_counts_and_bias_standard_error(tmp_path) -> None:
+    geography, _ = _write_year_pair(tmp_path)
+    ssh = geography["variables"]["SSH"]
+    assert set(ssh) == {"leads", "bias", "n", "bias_se"}
+    counts = ssh["n"]["1"]
+    bias_se = ssh["bias_se"]["1"]
+    bias = ssh["bias"]["1"]
+    grid = geography["grid"]
+    assert len(counts) == len(bias_se) == grid["nlat"] * grid["nlon"]
+    for cell, count in enumerate(counts):
+        if count >= 2:
+            assert bias_se[cell] is not None and bias_se[cell] >= 0.0
+            assert bias[cell] is not None
+        else:
+            assert bias_se[cell] is None
+
+
 def test_class4_bias_per_start_records_are_signed_means() -> None:
     from oceanbench.runner.records import RunContext
 
