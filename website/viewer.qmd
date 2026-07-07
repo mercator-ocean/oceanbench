@@ -1,0 +1,94 @@
+<!--
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+pagetitle: "Viewer — OceanBench"
+description: "Interactive explorer of OceanBench forecast fields — synchronized panels, currents and insight overlays."
+format:
+  html:
+    page-layout: custom
+---
+
+::: {#viewer-embed}
+<iframe id="viewer-frame" title="OceanBench fields explorer" src="viewer/index.html?embed=1"></iframe>
+:::
+
+```{=html}
+<style>
+/* Full-bleed: the app fills the viewport between the site navbar and footer.
+   These overrides are scoped to this page's body id so other pages are untouched. */
+#viewer-embed {
+  width: 100%;
+  height: calc(100dvh - var(--viewer-chrome, 0px));
+  min-height: 420px;
+  margin: 0;
+  padding: 0;
+}
+#viewer-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+/* Drop Quarto's article grid margins for this page only so the map is edge to edge. */
+body.viewer-page #quarto-content,
+body.viewer-page main.content,
+body.viewer-page .page-columns {
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+  grid-template-columns: 1fr !important;
+}
+body.viewer-page #quarto-content > * { grid-column: 1 / -1 !important; }
+</style>
+<script>
+(function () {
+  document.body.classList.add("viewer-page");
+  var frame = document.getElementById("viewer-frame");
+
+  // Size the app to the space left under the fixed navbar (and above the footer if in view).
+  function chromeHeight() {
+    var header = document.getElementById("quarto-header");
+    var footer = document.querySelector("footer.footer");
+    var top = header ? header.getBoundingClientRect().height : 0;
+    var bottom = footer ? footer.getBoundingClientRect().height : 0;
+    return top + bottom;
+  }
+  function sizeApp() {
+    document.documentElement.style.setProperty("--viewer-chrome", chromeHeight() + "px");
+  }
+  window.addEventListener("resize", sizeApp);
+  sizeApp();
+
+  // Theme: the site's toggle stamps quarto-dark / quarto-light on <body>; forward it.
+  function currentTheme() {
+    return document.body.classList.contains("quarto-dark") ? "dark" : "light";
+  }
+  function sendTheme() {
+    if (frame.contentWindow) frame.contentWindow.postMessage({ type: "oceanbench-theme", theme: currentTheme() }, "*");
+  }
+  new MutationObserver(sendTheme).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  window.addEventListener("message", function (event) {
+    if (event.data && event.data.type === "oceanbench-viewer-ready") sendTheme();
+  });
+
+  // Deep links: seed the iframe from this page's hash, and mirror the app's hash back
+  // so shared URLs (…/viewer.html#…) reproduce the exact view.
+  var base = "viewer/index.html?embed=1&theme=" + currentTheme();
+  frame.src = base + (location.hash || "#theme=" + currentTheme());
+  frame.addEventListener("load", function () {
+    sizeApp();
+    sendTheme();
+    try {
+      frame.contentWindow.addEventListener("hashchange", function () {
+        var h = frame.contentWindow.location.hash;
+        if (h && h !== location.hash) history.replaceState(null, "", location.pathname + location.search + h);
+      });
+    } catch (e) { /* cross-origin (shouldn't happen, same host) */ }
+  });
+})();
+</script>
+```

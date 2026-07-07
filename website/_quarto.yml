@@ -19,7 +19,7 @@ website:
     left:
       - href: index.qmd
         text: Scores
-      - href: viewer/
+      - href: viewer.qmd
         text: Viewer
       - challengers.qmd
       - about.qmd

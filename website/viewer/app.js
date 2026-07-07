@@ -2328,6 +2328,32 @@ function applyTheme() {
   elements["theme-toggle"].textContent = shared.theme === "light" ? "Dark theme" : "Light theme";
 }
 
+// Single entry point for a theme change, shared by the in-app toggle and, when the
+// viewer is embedded in the Quarto site, the parent page's theme switch (postMessage).
+function setViewerTheme(theme) {
+  if (theme !== "light" && theme !== "dark") return;
+  if (theme === shared.theme) return;
+  shared.theme = theme;
+  applyTheme();
+  renderAllPanels().then(() => redrawOverlaysAll());
+  writeHash();
+}
+
+// The viewer runs standalone (its own Dark theme button) and embedded inside the
+// Quarto site (?embed=1): there the button is hidden and the host page drives the
+// theme so the site's single toggle controls everything.
+const VIEWER_EMBEDDED = new URLSearchParams(location.search).has("embed");
+
+function wireEmbeddedTheme() {
+  if (!VIEWER_EMBEDDED) return;
+  elements["theme-toggle"].hidden = true;
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (data && data.type === "oceanbench-theme") setViewerTheme(data.theme);
+  });
+  if (window.parent !== window) window.parent.postMessage({ type: "oceanbench-viewer-ready" }, "*");
+}
+
 function markScopeButtons() {
   for (const button of document.querySelectorAll(".scope-switch [data-scope]")) {
     button.classList.toggle("active", button.dataset.scope === shared.scope);
@@ -2430,12 +2456,7 @@ function wireGlobalControls() {
     scheduleHashWrite();
   });
   elements["theme-toggle"].addEventListener("click", () => {
-    shared.theme = shared.theme === "light" ? "dark" : "light";
-    applyTheme();
-    renderAllPanels().then(() => {
-      redrawOverlaysAll();
-    });
-    writeHash();
+    setViewerTheme(shared.theme === "light" ? "dark" : "light");
   });
   elements["about-toggle"].addEventListener("click", () => {
     const dialog = elements["about-dialog"];
@@ -2826,6 +2847,7 @@ async function main() {
   markLayoutButtons();
   syncPanelGrid();
   wireGlobalControls();
+  wireEmbeddedTheme();
 
   clampView();
   writeHash();
