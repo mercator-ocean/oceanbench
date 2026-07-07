@@ -452,13 +452,31 @@ body.resizing-layout.row { cursor: row-resize; }
 .rail-legend .row { color: var(--text); }
 .rail-legend .dim { color: var(--muted); font-size: 0.7rem; }
 
-.app-footer {
-  padding: 0.9rem clamp(1rem, 3vw, 2rem);
-  border-top: 1px solid var(--border);
+.hint-details { margin: 0.15rem 0 0; }
+.hint-details > summary {
+  cursor: pointer;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
+  list-style: none;
 }
-.app-footer a { color: var(--accent); }
+.hint-details > summary::-webkit-details-marker { display: none; }
+.hint-details > summary::before { content: "? "; font-weight: 600; }
+.hint-details[open] > summary::before { content: "× "; }
+
+.about-dialog {
+  max-width: 40rem;
+  width: calc(100% - 2rem);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 1.1rem 1.3rem 1.3rem;
+}
+.about-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.about-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.4rem; }
+.about-dialog-head h2 { margin: 0; font-size: 1rem; }
+.about-dialog p { color: var(--muted); font-size: 0.78rem; line-height: 1.5; margin: 0; }
+.about-dialog a { color: var(--accent); }
 
 @media (max-width: 980px) {
   .workspace { display: flex; flex-direction: column; overflow: auto; }
@@ -470,7 +488,6 @@ body.resizing-layout.row { cursor: row-resize; }
 
 @media (max-height: 760px) {
   .app-header { padding-top: 0.45rem; padding-bottom: 0.45rem; }
-  .app-footer { display: none; }
   .controls { padding: 0.75rem; gap: 0.6rem; }
   .control-group { padding: 0.45rem 0.55rem 0.55rem; gap: 0.4rem; }
   .map-area { padding-top: 0.65rem; padding-bottom: 0.65rem; gap: 0.45rem; }

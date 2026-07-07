@@ -872,7 +872,7 @@ function drawRasterBorder(context, edges, projection) {
 function updatePanelBadge(panel) {
   const stats = panel.field ? fieldStatistics(panel.field) : { mean: NaN };
   const mean = Number.isFinite(stats.mean) ? stats.mean.toFixed(3) : "—";
-  panel.els.badge.textContent = `${panel.units} · μ ${mean}`;
+  panel.els.badge.textContent = `${panel.units} · mean ${mean}`;
 }
 
 // ---- overlays ---------------------------------------------------------------
@@ -1725,7 +1725,7 @@ function updateSharedColorbar() {
     elements["layer-info"].textContent = `lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}× · loading metadata`;
     return;
   }
-  elements["layer-info"].textContent = `start ${manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)]} · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}× · level ${selectRenderLevel(manifest)}`;
+  elements["layer-info"].textContent = `start ${manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)]} · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
 }
 
 // ---- context rail -----------------------------------------------------------
@@ -2292,8 +2292,8 @@ async function applyOverlayMode() {
       note.textContent = class4SelectionNote();
     } else {
       note.textContent = overlayData.class4.targeted
-        ? "Class-4 match-ups: full obs for the selected start and lead. Hover a point for details."
-        : `Class-4 match-ups loaded${overlayData.class4.sampled ? " as a sampled subset" : ""}.`;
+        ? "Class-4 match-ups for the selected start and lead — hover a point for details."
+        : `Class-4 match-ups loaded${overlayData.class4.sampled ? " (sampled subset)" : ""} — hover a point for details.`;
     }
   }
   for (let i = 0; i < shared.layout; i += 1) drawOverlays(panels[i]);
@@ -2323,8 +2323,8 @@ function scheduleClass4Reload() {
           : (overlayData.class4.rows || []).length === 0
             ? class4SelectionNote()
             : overlayData.class4.targeted
-        ? "Class-4 match-ups: full obs for the selected start and lead. Hover a point for details."
-        : "Class-4 match-ups loaded.";
+        ? "Class-4 match-ups for the selected start and lead — hover a point for details."
+        : "Class-4 match-ups loaded — hover a point for details.";
     }
     redrawOverlaysAll();
     updateContextRail();
@@ -2437,6 +2437,15 @@ function wireGlobalControls() {
       redrawOverlaysAll();
     });
     writeHash();
+  });
+  elements["about-toggle"].addEventListener("click", () => {
+    const dialog = elements["about-dialog"];
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  });
+  elements["about-close"].addEventListener("click", () => elements["about-dialog"].close());
+  elements["about-dialog"].addEventListener("click", (event) => {
+    if (event.target === elements["about-dialog"]) elements["about-dialog"].close();
   });
   elements["rail-collapse"].addEventListener("click", () => {
     shared.railCollapsed = !shared.railCollapsed;
@@ -2726,6 +2735,9 @@ function selectElements() {
     "speed-value",
     "reset-view",
     "theme-toggle",
+    "about-toggle",
+    "about-dialog",
+    "about-close",
     "rail-collapse",
     "panel-grid",
     "colorbar",

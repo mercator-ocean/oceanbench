@@ -9,13 +9,14 @@ SPDX-License-Identifier: EUPL-1.2
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>OceanBench - Viewer</title>
+    <link rel="icon" href="./favicon-light.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header class="app-header">
       <div class="brand-title">
         <a class="site-brand" href="../index.html" aria-label="Back to OceanBench scores">
-          <img src="../favicon-light.png" alt="OceanBench logo" />
+          <img src="./favicon-light.png" alt="OceanBench logo" />
           <span>OceanBench</span>
         </a>
         <div class="title">
@@ -33,8 +34,24 @@ SPDX-License-Identifier: EUPL-1.2
           <button type="button" data-display="swipe" class="ghost-button">Swipe</button>
         </div>
         <button id="theme-toggle" type="button" class="ghost-button">Light theme</button>
+        <button id="about-toggle" type="button" class="ghost-button" aria-label="About and credits" title="About and credits">ⓘ About</button>
       </div>
     </header>
+
+    <dialog id="about-dialog" class="about-dialog" aria-label="About and credits">
+      <div class="about-dialog-head">
+        <h2>About &amp; credits</h2>
+        <button id="about-close" type="button" class="ghost-button" aria-label="Close">✕</button>
+      </div>
+      <p>
+        Fields explorer over OceanBench viewer pyramids (numeric zarr, uint16 scale/offset, DEFLATE tiles decoded
+        natively in the browser). Colormaps from <a href="https://matplotlib.org/cmocean/">cmocean</a> (MIT).
+        Class-4 match-ups read with <a href="https://github.com/hyparam/hyparquet">hyparquet</a> (MIT).
+        Generated using E.U. Copernicus Marine Service Information; https://doi.org/10.48670/moi-00021 ;
+        https://doi.org/10.48670/moi-00016. Derived product, OceanBench-generated; not the authoritative Copernicus
+        product. Provided "as is", without warranty of any kind.
+      </p>
+    </dialog>
 
     <div class="workspace">
       <aside class="controls" aria-label="Shared view controls">
@@ -85,7 +102,10 @@ SPDX-License-Identifier: EUPL-1.2
         </fieldset>
 
         <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>
-        <p class="hint">Scroll to zoom, drag to pan — all panels move together. Hover for the value in real units. With two forecasts, switch between side-by-side and swipe; in swipe, drag the divider.</p>
+        <details class="hint-details">
+          <summary>Navigation tips</summary>
+          <p class="hint">Scroll to zoom, drag to pan — all panels move together. Hover for the value in real units. With two forecasts, switch between side-by-side and swipe; in swipe, drag the divider.</p>
+        </details>
       </aside>
 
       <div id="controls-map-splitter" class="splitter splitter-column" role="separator" aria-orientation="vertical" aria-label="Resize controls"></div>
@@ -146,16 +166,6 @@ SPDX-License-Identifier: EUPL-1.2
       </aside>
     </div>
 
-    <footer class="app-footer">
-      <p>
-        Fields explorer over OceanBench viewer pyramids (numeric zarr, uint16 scale/offset, DEFLATE tiles decoded
-        natively in the browser). Colormaps from <a href="https://matplotlib.org/cmocean/">cmocean</a> (MIT).
-        Class-4 match-ups read with <a href="https://github.com/hyparam/hyparquet">hyparquet</a> (MIT).
-        Generated using E.U. Copernicus Marine Service Information; https://doi.org/10.48670/moi-00021 ;
-        https://doi.org/10.48670/moi-00016. Derived product, OceanBench-generated; not the authoritative Copernicus
-        product. Provided "as is", without warranty of any kind.
-      </p>
-    </footer>
 
     <script type="module" src="./app.js"></script>
   </body>
