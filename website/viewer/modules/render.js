@@ -145,13 +145,26 @@ export function drawColorbar(canvas, colormapName, range, { label = "", textColo
   context.font = "11px system-ui, sans-serif";
   context.textBaseline = "top";
   if (label) {
-    context.textAlign = "center";
-    context.fillText(label, width / 2, 1);
+    // Left-align and ellipsize on the right so the leading, most meaningful part of
+    // a long label ("mean |obs − model| …") stays readable instead of overflowing
+    // and being clipped on the left by centre alignment.
+    context.textAlign = "left";
+    context.fillText(fitLabel(context, label, width), 0, 1);
   }
   context.textAlign = "left";
   context.fillText(formatTick(range[0]), 0, barTop + barHeight + 3);
   context.textAlign = "right";
   context.fillText(formatTick(range[1]), width, barTop + barHeight + 3);
+}
+
+function fitLabel(context, label, maxWidth) {
+  if (context.measureText(label).width <= maxWidth) return label;
+  const ellipsis = "…";
+  let truncated = label;
+  while (truncated.length > 1 && context.measureText(truncated + ellipsis).width > maxWidth) {
+    truncated = truncated.slice(0, -1);
+  }
+  return truncated + ellipsis;
 }
 
 function formatTick(value) {

@@ -104,6 +104,75 @@ export function drawEddyFrame(drawing, project, frame, options = {}) {
   };
 }
 
+// Neutral colour for eddies both forecasts agree on. Only-in-F1 / only-in-F2 use the
+// canonical forecast colours supplied by the caller — no category implies truth.
+export const EDDY_MATCHED_COLOR = EDDY_COLORS.matched;
+
+const EARTH_RADIUS_KM = 6371.0088;
+
+function haversineDistanceKm(a, b) {
+  const toRadians = Math.PI / 180;
+  const latitude1 = a.latitude * toRadians;
+  const latitude2 = b.latitude * toRadians;
+  const deltaLatitude = (b.latitude - a.latitude) * toRadians;
+  const deltaLongitude = (b.longitude - a.longitude) * toRadians;
+  const h =
+    Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(latitude1) * Math.cos(latitude2) * Math.sin(deltaLongitude / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * Symmetric in-browser pairing of two forecast eddy censuses. Mirrors the offline
+ * matcher's rules (oceanbench/core/eddies.match_mesoscale_eddies): pairing is per
+ * polarity only, on great-circle centre distance, capped at `maxDistanceKm` (200 km,
+ * DEFAULT_MATCH_DISTANCE_KM). The offline matcher solves an optimal assignment; here a
+ * greedy nearest-first pass (shortest candidate pairs consumed first) approximates it,
+ * which is what the design calls for. Returns matched pairs plus the eddies only one
+ * forecast produced — neither side is a reference.
+ */
+export function matchCensuses(detectionsA, detectionsB, maxDistanceKm = 200) {
+  const candidates = [];
+  for (const a of detectionsA) {
+    for (const b of detectionsB) {
+      if (a.polarity !== b.polarity) continue;
+      const distanceKm = haversineDistanceKm(a, b);
+      if (distanceKm <= maxDistanceKm) candidates.push({ a, b, distanceKm });
+    }
+  }
+  candidates.sort((first, second) => first.distanceKm - second.distanceKm);
+  const usedA = new Set();
+  const usedB = new Set();
+  const matched = [];
+  for (const candidate of candidates) {
+    if (usedA.has(candidate.a) || usedB.has(candidate.b)) continue;
+    usedA.add(candidate.a);
+    usedB.add(candidate.b);
+    matched.push(candidate);
+  }
+  const onlyA = detectionsA.filter((eddy) => !usedA.has(eddy));
+  const onlyB = detectionsB.filter((eddy) => !usedB.has(eddy));
+  const meanDisplacementKm = matched.length
+    ? matched.reduce((sum, pair) => sum + pair.distanceKm, 0) / matched.length
+    : NaN;
+  return { matched, onlyA, onlyB, meanDisplacementKm };
+}
+
+/** Draw a set of eddy contours + centre dots in a single colour. */
+export function drawEddyDetections(drawing, project, detections, color, options = {}) {
+  const ratio = options.devicePixelRatio || 1;
+  const dotRadius = 2.5 * ratio;
+  drawing.lineWidth = 1.5 * ratio;
+  drawing.lineJoin = "round";
+  drawing.setLineDash([]);
+  drawing.strokeStyle = color;
+  for (const eddy of detections || []) {
+    tracePolygon(drawing, project, eddy.contour_longitude, eddy.contour_latitude);
+    drawing.stroke();
+    centerDot(drawing, project, eddy, color, dotRadius);
+  }
+}
+
 function normPair(longitude, latitude) {
   const { nx, ny } = toNorm(longitude, latitude);
   return [nx, ny];

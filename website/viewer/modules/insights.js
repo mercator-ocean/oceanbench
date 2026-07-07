@@ -143,6 +143,49 @@ export function insightsFor(index, slug, region) {
   return (index && index.datasets && index.datasets[slug] && index.datasets[slug][region]) || {};
 }
 
+function nearestLeadFrame(frames, leadDay) {
+  if (!Array.isArray(frames) || !frames.length) return null;
+  let best = frames[0];
+  for (const frame of frames) {
+    if (Math.abs(frame.lead_day - leadDay) < Math.abs(best.lead_day - leadDay)) best = frame;
+  }
+  return best;
+}
+
+/**
+ * Per-lead census of a dataset's OWN eddy detections, read from EITHER artifact
+ * schema, at the available lead nearest `leadDay`:
+ *   - "eddy-census": frame.detections directly.
+ *   - legacy "eddies": the dataset's own detections are the challenger side of every
+ *     match plus its spurious eddies (matches[].challenger ∪ spurious); the truth-side
+ *     detections are never treated as this dataset's own.
+ * Returns { detections, leadDay, parameters } or null. Nothing here privileges any
+ * dataset as ground truth — a census is symmetric across forecasts and references.
+ */
+export function eddyCensus(eddies, leadDay) {
+  if (!eddies) return null;
+  if (Array.isArray(eddies.frames)) {
+    const frame = nearestLeadFrame(eddies.frames, leadDay);
+    if (!frame) return null;
+    return {
+      detections: Array.isArray(frame.detections) ? frame.detections : [],
+      leadDay: frame.lead_day,
+      parameters: eddies.parameters || null,
+    };
+  }
+  if (Array.isArray(eddies.references)) {
+    const entry = eddies.references[0];
+    const frame = entry ? nearestLeadFrame(entry.frames, leadDay) : null;
+    if (!frame) return null;
+    const detections = [
+      ...(frame.matches || []).map((match) => match.challenger).filter(Boolean),
+      ...(frame.spurious || []),
+    ];
+    return { detections, leadDay: frame.lead_day, parameters: eddies.parameters || null };
+  }
+  return null;
+}
+
 /** Eddy frame for the requested reference and the available lead nearest `leadDay`. */
 export function eddyFrame(eddies, reference, leadDay) {
   if (!eddies || !Array.isArray(eddies.references)) return null;

@@ -31,10 +31,18 @@ import {
   loadScoresSummary,
   loadClass4,
   insightsFor,
-  eddyFrame,
+  eddyCensus,
   class4Points,
 } from "./modules/insights.js";
-import { drawEddyFrame, drawClass4Points, class4ErrorScale, numericOrNaN, EDDY_COLORS } from "./modules/overlays.js";
+import {
+  drawEddyDetections,
+  matchCensuses,
+  drawClass4Points,
+  class4ErrorScale,
+  numericOrNaN,
+  EDDY_COLORS,
+  EDDY_MATCHED_COLOR,
+} from "./modules/overlays.js";
 import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, SERIES_COLORS } from "./modules/charts.js";
 import {
   loadYearGeography,
@@ -775,24 +783,31 @@ async function loadInsightManifest(url) {
   }
 }
 
-function overlayInsightSource(kind) {
-  const slug = panels[activePanelIndex] ? panels[activePanelIndex].state.dataset : datasetCatalog[0].slug;
-  const urls = insightsFor(insightIndex, slug, shared.region);
-  const key = kind === "class4" ? "class4_matchups" : "eddies";
-  return urls[key] ? slug : "glonet_1_degree";
-}
-
 async function loadOverlayData() {
   const slug = panels[activePanelIndex] ? panels[activePanelIndex].state.dataset : datasetCatalog[0].slug;
   const region = shared.region;
   const urls = insightsFor(insightIndex, slug, region);
   const glonetUrls = insightsFor(insightIndex, "glonet_1_degree", region);
   overlayData.region = region;
-  overlayData.eddies = null;
+  overlayData.eddiesCensuses = [];
+  overlayData.eddiesMatch = null;
   overlayData.class4 = null;
   overlayData.class4Error = null;
   if (shared.overlayMode === "eddies") {
-    overlayData.eddies = await loadEddies(urls.eddies || glonetUrls.eddies);
+    // Load each visible forecast's own eddy artifact and reduce it to a census. The
+    // two forecasts come from the panel pickers; no dataset is a hardcoded truth.
+    const eddiesByPanel = await Promise.all(
+      panels.slice(0, shared.layout).map((panel) => {
+        const panelUrls = insightsFor(insightIndex, panel.state.dataset, region);
+        return loadEddies(panelUrls.eddies || null);
+      }),
+    );
+    overlayData.eddiesCensuses = eddiesByPanel.map((eddies) => eddyCensus(eddies, shared.leadDay));
+    const censuses = overlayData.eddiesCensuses;
+    overlayData.eddiesMatch =
+      shared.layout === 2 && censuses[0] && censuses[1]
+        ? matchCensuses(censuses[0].detections, censuses[1].detections)
+        : null;
   } else if (shared.overlayMode === "class4") {
     const class4Url = urls.class4_matchups || glonetUrls.class4_matchups;
     const manifest = await loadInsightManifest(urls.class4_matchups ? urls.manifest : glonetUrls.manifest);
@@ -846,9 +861,26 @@ function drawOverlays(panel) {
   const copyOffsets = visibleCopyOffsets(projection, canvas);
   const projectOnCopy = (offset) => (nx, ny) => projection.project(nx + offset, ny);
 
-  if (shared.overlayMode === "eddies" && overlayData.eddies) {
-    const frame = eddyFrame(overlayData.eddies, shared.eddyReference, shared.leadDay);
-    if (frame) for (const offset of copyOffsets) drawEddyFrame(context, projectOnCopy(offset), frame.frame, { devicePixelRatio: ratio });
+  if (shared.overlayMode === "eddies") {
+    const index = panel.index;
+    const match = overlayData.eddiesMatch;
+    if (shared.layout === 2 && match) {
+      const own = index === 0 ? match.matched.map((pair) => pair.a) : match.matched.map((pair) => pair.b);
+      const only = index === 0 ? match.onlyA : match.onlyB;
+      for (const offset of copyOffsets) {
+        drawEddyDetections(context, projectOnCopy(offset), own, EDDY_MATCHED_COLOR, { devicePixelRatio: ratio });
+        drawEddyDetections(context, projectOnCopy(offset), only, forecastColor(index), { devicePixelRatio: ratio });
+      }
+    } else {
+      const census = overlayData.eddiesCensuses[index];
+      if (census) {
+        for (const offset of copyOffsets) {
+          drawEddyDetections(context, projectOnCopy(offset), census.detections, forecastColor(index), {
+            devicePixelRatio: ratio,
+          });
+        }
+      }
+    }
   } else if (shared.overlayMode === "class4" && overlayData.class4) {
     const manifest = manifestFor(panel.state.dataset);
     const entry = manifest && manifest.variables[panel.state.variable];
@@ -1973,13 +2005,28 @@ function updateRailLegend(panel) {
   }
   section.hidden = false;
   if (shared.overlayMode === "eddies") {
-    const frame = overlayData.eddies ? eddyFrame(overlayData.eddies, shared.eddyReference, shared.leadDay) : null;
-    const counts = frame ? frame.frame : { matches: [], spurious: [], missed: [] };
-    container.innerHTML =
-      row(EDDY_COLORS.matched, "Matched", (counts.matches || []).length) +
-      row(EDDY_COLORS.spurious, "Spurious (model only)", (counts.spurious || []).length) +
-      row(EDDY_COLORS.missed, "Missed (reference only)", (counts.missed || []).length) +
-      `<p class="dim">vs ${shared.eddyReference}, lead ${frame ? frame.frame.lead_day : "—"} (nearest available)</p>`;
+    const censuses = overlayData.eddiesCensuses || [];
+    const match = overlayData.eddiesMatch;
+    const lead = (censuses.find(Boolean) || {}).leadDay;
+    const leadNote = `lead ${lead ?? "—"} (nearest available)`;
+    if (shared.layout === 2 && match) {
+      const forecast1 = labelFor(panels[0].state.dataset);
+      const forecast2 = labelFor(panels[1].state.dataset);
+      const meanText = Number.isFinite(match.meanDisplacementKm)
+        ? `${match.meanDisplacementKm.toFixed(0)} km`
+        : "—";
+      container.innerHTML =
+        row(EDDY_MATCHED_COLOR, "Matched pairs", match.matched.length) +
+        row(forecastColor(0), `Only in ${forecast1}`, match.onlyA.length) +
+        row(forecastColor(1), `Only in ${forecast2}`, match.onlyB.length) +
+        `<p class="dim">mean centre displacement of matched pairs ${meanText} · ${leadNote}</p>`;
+    } else if (censuses[0]) {
+      container.innerHTML =
+        row(forecastColor(0), `${labelFor(panels[0].state.dataset)} eddies`, censuses[0].detections.length) +
+        `<p class="dim">single forecast census · ${leadNote}</p>`;
+    } else {
+      container.innerHTML = `<p class="dim">No eddy detections for this selection.</p>`;
+    }
   } else if (shared.overlayMode === "class4") {
     const hostPanel = panels[0];
     const shown = hostPanel ? hostPanel.class4Count || 0 : 0;
@@ -2043,7 +2090,9 @@ function updateSharedTimeControls(manifest) {
 
 async function applyOverlayMode() {
   const region = shared.region;
-  elements["eddy-reference-field"].hidden = shared.overlayMode !== "eddies";
+  // The two forecasts are chosen from the panel pickers; there is no separate truth
+  // selector any more, so the legacy eddy-reference control stays hidden.
+  elements["eddy-reference-field"].hidden = true;
   const note = elements["overlay-note"];
   if (shared.overlayMode !== "trajectories") clearTrajectories();
   if (shared.overlayMode === "trajectories") {
@@ -2051,11 +2100,22 @@ async function applyOverlayMode() {
   } else if (shared.overlayMode === "class4") {
     note.textContent = "Loading Class-4 match-ups...";
   } else if (shared.overlayMode === "eddies") {
-    note.textContent = `Overlay shows ${overlayInsightSource("eddies")} insights.`;
+    note.textContent = "Loading eddy census...";
   } else {
     note.textContent = "";
   }
   await loadOverlayData();
+  if (shared.overlayMode === "eddies") {
+    const censuses = overlayData.eddiesCensuses || [];
+    if (!censuses.some(Boolean)) {
+      note.textContent = "No eddy detections are available for this selection.";
+    } else if (shared.layout === 2 && overlayData.eddiesMatch) {
+      note.textContent =
+        "Eddy intercomparison between the two selected forecasts — agreement, not ground truth.";
+    } else {
+      note.textContent = "Showing this forecast's own eddy census.";
+    }
+  }
   if (shared.overlayMode === "class4") {
     if (overlayData.class4Error) {
       note.textContent = `Class-4 data failed to load (${overlayData.class4Error}).`;
