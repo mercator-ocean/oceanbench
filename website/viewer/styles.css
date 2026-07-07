@@ -274,8 +274,7 @@ body.resizing-layout.row { cursor: row-resize; }
   height: 100%;
   display: block;
 }
-.panel-field { cursor: grab; }
-.panel-field:active { cursor: grabbing; }
+.panel-field { cursor: crosshair; }
 .panel-particles, .panel-overlay { pointer-events: none; }
 .panel-canvas-wrap.trajectory-ready .panel-field { cursor: crosshair; }
 

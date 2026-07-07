@@ -80,6 +80,40 @@ export function buildYearGeographyField(geography, shortName, leadDay) {
   return { field: { data, width: nlon, height: nlat }, latitudes, longitudes };
 }
 
+function leadArray(record, leadDay) {
+  return record && Array.isArray(record[String(leadDay)]) ? record[String(leadDay)] : null;
+}
+
+function yearCountArray(variable, leadDay, { bias = false } = {}) {
+  if (!variable) return null;
+  // Current artifacts use a parallel per-lead count array for the |error| raster.
+  // Accept a few explicit names so older/newer publishes degrade without breaking
+  // hover readouts. Bias reuses the same sampling when it has no dedicated count.
+  const candidates = bias
+    ? [variable.bias_n, variable.bias_counts, variable.bias_count, variable.n, variable.counts, variable.count, variable.leads_n, variable.leads_counts]
+    : [variable.n, variable.counts, variable.count, variable.leads_n, variable.leads_counts];
+  for (const candidate of candidates) {
+    const flat = leadArray(candidate, leadDay);
+    if (flat) return flat;
+  }
+  return null;
+}
+
+export function buildYearObservationCounts(geography, shortName, leadDay, options = {}) {
+  if (!geography || !geography.grid || !geography.variables) return null;
+  const variable = geography.variables[shortName];
+  const flat = yearCountArray(variable, leadDay, options);
+  if (!flat) return null;
+  const { nlat, nlon } = geography.grid;
+  if (flat.length !== nlat * nlon) return null;
+  const data = new Uint32Array(flat.length);
+  for (let i = 0; i < flat.length; i += 1) {
+    const value = Number(flat[i]);
+    data[i] = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+  }
+  return { data, width: nlon, height: nlat };
+}
+
 // Robust upper bound (98th percentile) of finite |obs − model| across the requested
 // lead for a short variable, used to build one shared color scale across panels
 // showing the same variable. A percentile rather than the raw max keeps a handful of

@@ -49,7 +49,7 @@ export function boxPowerSpectrum(field, latitudes, longitudes, viewport) {
   const boxHeightKm = Math.abs(latHigh - latLow) * EARTH_KM_PER_DEGREE;
   const cellKm = (boxWidthKm + boxHeightKm) / (2 * side);
 
-  const radial = radialAveragedPower(box, side);
+  const radial = radialAveragedPower(box.data, side);
   const wavelength = [];
   const power = [];
   for (let r = 1; r < radial.length; r += 1) {
@@ -59,7 +59,7 @@ export function boxPowerSpectrum(field, latitudes, longitudes, viewport) {
     power.push(radial[r].sum / radial[r].count);
   }
   if (!wavelength.length) return null;
-  return { wavelength, power, samples: side * side, cellKm };
+  return { wavelength, power, samples: side * side, cellKm, oceanFraction: box.oceanFraction };
 }
 
 function coordinateRange(coordinates, lowValue, highValue) {
@@ -131,7 +131,8 @@ function resampleBox(field, rows, columns, side) {
       }
     }
   }
-  if (finiteCount < side * side * 0.25) return null; // mostly land — no meaningful spectrum
+  const oceanFraction = finiteCount / (side * side);
+  if (oceanFraction < 0.25) return null; // mostly land — no meaningful spectrum
   const mean = sum / finiteCount;
   const hann = new Float64Array(side);
   for (let i = 0; i < side; i += 1) hann[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (side - 1));
@@ -142,7 +143,7 @@ function resampleBox(field, rows, columns, side) {
       raw[target] = detrended * hann[y] * hann[x];
     }
   }
-  return raw;
+  return { data: raw, oceanFraction };
 }
 
 // 2D FFT (rows then columns) of a real box, radially averaging |F|² into bins by the

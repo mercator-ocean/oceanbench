@@ -53,6 +53,7 @@ import {
   yearVariableMapping,
   buildYearGeographyField,
   buildYearBiasField,
+  buildYearObservationCounts,
   yearGeographyMax,
   yearBiasMax,
   yearRmsdSeries,
@@ -415,6 +416,7 @@ function wirePanel(panel) {
   field.addEventListener("wheel", (event) => onPanelWheel(panel, event), { passive: false });
   field.addEventListener("mouseleave", () => {
     panel.els.readout.textContent = "";
+    panel.els.field.style.cursor = "";
     if (panel.els.obsTooltip) panel.els.obsTooltip.hidden = true;
   });
   // Tap/click also surfaces the obs tooltip (touch has no hover).
@@ -509,6 +511,7 @@ async function renderFieldPanel(panel, token, manifest, level, start, leadIndex)
   const colormap = panel.state.colormap || entry.default_colormap;
   const range = entry.default_range;
   panel.field = primary.field;
+  clearYearReadoutMetadata(panel);
   panel.latitudes = primary.latitudes;
   panel.longitudes = primary.longitudes;
   panel.edgesA = worldEdges(primary.latitudes, primary.longitudes);
@@ -542,6 +545,7 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   const difference = differenceField(primary.field, compare.field);
   const range = symmetricRange(difference);
   panel.field = difference;
+  clearYearReadoutMetadata(panel);
   panel.latitudes = primary.latitudes;
   panel.longitudes = primary.longitudes;
   panel.edgesA = worldEdges(primary.latitudes, primary.longitudes);
@@ -568,6 +572,7 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   const speed = speedMagnitudeField(uPrimary.field, vPrimary.field);
   const range = [0, CURRENTS_MAX_SPEED];
   panel.field = speed;
+  clearYearReadoutMetadata(panel);
   panel.latitudes = uPrimary.latitudes;
   panel.longitudes = uPrimary.longitudes;
   panel.edgesA = worldEdges(uPrimary.latitudes, uPrimary.longitudes);
@@ -608,7 +613,14 @@ function clearYearPanel(panel, note) {
   panel.units = "";
   panel.label = "";
   panel.yearMeta = null;
+  panel.yearCounts = null;
   panel.yearMissing = note;
+}
+
+function clearYearReadoutMetadata(panel) {
+  panel.yearMeta = null;
+  panel.yearCounts = null;
+  panel.yearMetric = null;
 }
 
 // Shared [0, max] scale across the visible panels that show the same year variable,
@@ -700,6 +712,7 @@ async function renderYearPanel(panel, token, manifest) {
   const landMask = await yearLandMask(panel, built.latitudes, built.longitudes);
   if (token !== panel.renderToken) return;
   panel.field = built.field;
+  panel.yearCounts = buildYearObservationCounts(geography, mapping.short, shared.leadDay, { bias: biasMode });
   panel.latitudes = built.latitudes;
   panel.longitudes = built.longitudes;
   panel.edgesA = worldEdges(built.latitudes, built.longitudes);
@@ -1529,6 +1542,7 @@ function beginPanelDrag(panel, event) {
     }
   }
   panel.dragging = { x: event.clientX, y: event.clientY, centerNX: view.centerNX, centerNY: view.centerNY, projection };
+  panel.els.field.style.cursor = "grabbing";
   panel.els.field.setPointerCapture(event.pointerId);
   panel.els.field.addEventListener("pointermove", onPanelPointerMove);
   panel.els.field.addEventListener("pointerup", endPanelDrag, { once: true });
@@ -1575,6 +1589,7 @@ function endPanelDrag(event) {
   panel.dragging = null;
   panel.draggingSwipe = false;
   panel.draggingPsd = null;
+  panel.els.field.style.cursor = "";
   if (shouldSeed) seedTrajectories(panel, event);
   writeHash();
 }
@@ -1680,7 +1695,9 @@ function fitRegionView() {
 }
 
 function updateHover(event) {
-  for (const panel of panels) {
+  let hoverPanel = null;
+  let hoverRectangle = null;
+  for (const panel of panels.slice(0, shared.layout)) {
     const rectangle = panel.els.field.getBoundingClientRect();
     if (
       event.clientX < rectangle.left ||
@@ -1688,33 +1705,70 @@ function updateHover(event) {
       event.clientY < rectangle.top ||
       event.clientY > rectangle.bottom
     ) {
+      panel.els.readout.textContent = "";
+      updateClass4Tooltip(panel, event, rectangle);
       continue;
     }
     if (!panel.field) continue;
-    const ratio = window.devicePixelRatio || 1;
-    const projection = projectionFor(panel);
-    // Cursor affordance for the PSD rectangle (move over the interior, resize on edges).
-    if (psdBoxVisible()) {
-      const hit = psdBoxHitTest(panel, (event.clientX - rectangle.left) * ratio, (event.clientY - rectangle.top) * ratio, projection);
-      panel.els.field.style.cursor = psdCursorFor(hit);
-    } else if (panel.els.field.style.cursor) {
-      panel.els.field.style.cursor = "";
+    hoverPanel = panel;
+    hoverRectangle = rectangle;
+    break;
+  }
+  if (!hoverPanel || !hoverRectangle) return;
+  const ratio = window.devicePixelRatio || 1;
+  const projection = projectionFor(hoverPanel);
+  // Cursor affordance for the PSD rectangle (move over the interior, resize on edges).
+  if (psdBoxVisible()) {
+    const hit = psdBoxHitTest(
+      hoverPanel,
+      (event.clientX - hoverRectangle.left) * ratio,
+      (event.clientY - hoverRectangle.top) * ratio,
+      projection,
+    );
+    hoverPanel.els.field.style.cursor = psdCursorFor(hit);
+  } else if (hoverPanel.els.field.style.cursor) {
+    hoverPanel.els.field.style.cursor = "";
+  }
+  const point = projection.unproject((event.clientX - hoverRectangle.left) * ratio, (event.clientY - hoverRectangle.top) * ratio);
+  const wrappedNX = ((point.nx % 1) + 1) % 1;
+  const lon = wrappedNX * 360 - 180;
+  const lat = 90 - point.ny * 180;
+  const readoutPanels = shared.layout === 2 ? panels.slice(0, 2) : [hoverPanel];
+  for (const panel of panels.slice(0, shared.layout)) {
+    if (!readoutPanels.includes(panel)) panel.els.readout.textContent = "";
+  }
+  for (const panel of readoutPanels) {
+    if (!panel.field) {
+      panel.els.readout.textContent = "";
+      continue;
     }
-    const point = projection.unproject((event.clientX - rectangle.left) * ratio, (event.clientY - rectangle.top) * ratio);
-    const wrappedNX = ((point.nx % 1) + 1) % 1;
-    const lon = wrappedNX * 360 - 180;
-    const lat = 90 - point.ny * 180;
+    updatePanelReadout(panel, lat, lon);
+  }
+  updateClass4Tooltip(hoverPanel, event, hoverRectangle);
+}
+
+function updatePanelReadout(panel, lat, lon) {
     const column = nearestIndex(panel.longitudes, lon);
     const row = nearestIndex(panel.latitudes, lat);
     if (column < 0 || row < 0) {
       panel.els.readout.textContent = "";
-      continue;
+      return;
     }
     const value = panel.field.data[row * panel.field.width + column];
-    const valueText = Number.isNaN(value) ? "land / no data" : `${value.toFixed(3)} ${panel.units}`;
+    const count = panel.yearCounts && panel.yearCounts.width === panel.field.width ? panel.yearCounts.data[row * panel.yearCounts.width + column] : null;
+    const valueText = fieldReadoutValue(panel, value, count);
     panel.els.readout.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}° — ${valueText}`;
-    updateClass4Tooltip(panel, event, rectangle);
+}
+
+function fieldReadoutValue(panel, value, count) {
+  if (shared.scope === "year") {
+    if (!Number.isFinite(value) || count === 0) return "no observations";
+    const metric = panel.yearMetric === "bias" ? "bias" : "rmsd";
+    const sign = panel.yearMetric === "bias" && value > 0 ? "+" : "";
+    const countText = Number.isFinite(count) && count > 0 ? ` · n = ${count.toLocaleString("en-US")}` : "";
+    return `${metric} ${sign}${value.toFixed(3)} ${panel.units}${countText}`;
   }
+  return Number.isNaN(value) ? "land / no data" : `${value.toFixed(3)} ${panel.units}`;
 }
 
 // Nearest-point hit-test over the Class-4 obs drawn on this panel (canvas points
@@ -2572,8 +2626,18 @@ async function renderRailPsd(shown, comparison) {
     Number.isFinite(wavelengthMin) && wavelengthMax > 0
       ? `resolves ≈ ${Math.round(wavelengthMin / 1000)}–${Math.round(wavelengthMax / 1000)} km`
       : "";
+  const oceanFractions = sources
+    .filter((entry) => entry.spectrum && Number.isFinite(entry.spectrum.oceanFraction))
+    .map((entry) => entry.spectrum.oceanFraction);
+  const oceanFraction = oceanFractions.length ? Math.min(...oceanFractions) : NaN;
+  const oceanLabel = Number.isFinite(oceanFraction) ? `${Math.round(oceanFraction * 100)}% ocean · ` : "";
+  const landFraction = Number.isFinite(oceanFraction) ? 1 - oceanFraction : 0;
+  const landWarning =
+    landFraction > 0.25
+      ? `⚠ ${Math.round(landFraction * 100)}% land — spectrum damped by mean-fill; prefer an open-ocean box. `
+      : "";
   elements["rail-psd-note"].textContent = curves.length
-    ? `box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}° · native ${gridLabels.join(" & ")} grid${kmRange ? " · " + kmRange : ""} — drag the box on the map, resize by its handles`
+    ? `${landWarning}box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}° · ${oceanLabel}native ${gridLabels.join(" & ")} grid${kmRange ? " · " + kmRange : ""} — drag the box on the map, resize by its handles`
     : "Move the box over ocean to compute a spectrum (boxed area is mostly land).";
   wireCursorTooltip(elements["rail-spectra"]);
 }

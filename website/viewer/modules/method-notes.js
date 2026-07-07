@@ -89,6 +89,7 @@ export const METHOD_NOTES = {
     body:
       "Spectrum of the boxed region on the map, computed in-browser at the model's native " +
       "(finest published) grid: Hann window, land mean-filled, radially averaged FFT. The " +
+      "Mean-filled land can damp coastal spectra, so open-ocean boxes are preferable. " +
       "box size is capped so the spectrum always reflects native resolution — wavelengths " +
       "from 2× the grid spacing up to the box size. In compare mode one shared box drives " +
       "both forecasts; a coarser model's curve simply stops at its own resolution limit. " +
