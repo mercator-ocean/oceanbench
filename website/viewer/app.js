@@ -304,7 +304,6 @@ function buildPanel(index) {
       <canvas class="panel-particles"></canvas>
       <canvas class="panel-overlay"></canvas>
       <div class="panel-readout" role="status"></div>
-      <div class="panel-obs-tooltip" hidden></div>
       <div class="panel-loading" hidden>Loading dataset…</div>
       <div class="panel-swipe-hint" hidden></div>
     </div>`;
@@ -321,7 +320,6 @@ function buildPanel(index) {
       particles: container.querySelector(".panel-particles"),
       overlay: container.querySelector(".panel-overlay"),
       readout: container.querySelector(".panel-readout"),
-      obsTooltip: container.querySelector(".panel-obs-tooltip"),
       loading: container.querySelector(".panel-loading"),
       swipeHint: container.querySelector(".panel-swipe-hint"),
     },
@@ -430,13 +428,9 @@ function wirePanel(panel) {
   field.addEventListener("mouseleave", () => {
     panel.els.readout.textContent = "";
     panel.els.field.style.cursor = "";
-    if (panel.els.obsTooltip) panel.els.obsTooltip.hidden = true;
   });
-  // Tap/click also surfaces the obs tooltip (touch has no hover).
-  field.addEventListener("click", (event) => {
-    if (shared.overlayMode !== "class4") return;
-    updateClass4Tooltip(panel, event, panel.els.field.getBoundingClientRect());
-  });
+  // Tap/click also populates the consolidated readout pill (touch has no hover).
+  field.addEventListener("click", (event) => updateHover(event));
 }
 
 // ---- rendering a single panel ----------------------------------------------
@@ -1730,7 +1724,6 @@ function updateHover(event) {
       event.clientY > rectangle.bottom
     ) {
       panel.els.readout.textContent = "";
-      updateClass4Tooltip(panel, event, rectangle);
       continue;
     }
     if (!panel.field) continue;
@@ -1761,21 +1754,24 @@ function updateHover(event) {
   for (const panel of panels.slice(0, shared.layout)) {
     if (!readoutPanels.includes(panel)) panel.els.readout.textContent = "";
   }
+  // All hover information consolidates into the fixed bottom-left pill: when the cursor
+  // is on a Class-4 obs point, its details are appended to the hovered panel's readout
+  // instead of floating a tooltip with the cursor.
+  const obsRecord = nearestClass4Record(hoverPanel, event, hoverRectangle);
   for (const panel of readoutPanels) {
     if (!panel.field) {
       panel.els.readout.textContent = "";
       continue;
     }
-    updatePanelReadout(panel, lat, lon);
+    updatePanelReadout(panel, lat, lon, panel === hoverPanel && obsRecord ? class4ReadoutSuffix(obsRecord, panel.units) : "");
   }
-  updateClass4Tooltip(hoverPanel, event, hoverRectangle);
 }
 
-function updatePanelReadout(panel, lat, lon) {
+function updatePanelReadout(panel, lat, lon, suffix = "") {
     const column = nearestIndex(panel.longitudes, lon);
     const row = nearestIndex(panel.latitudes, lat);
     if (column < 0 || row < 0) {
-      panel.els.readout.textContent = "";
+      panel.els.readout.textContent = suffix ? `${lat.toFixed(2)}°, ${lon.toFixed(2)}°${suffix}` : "";
       return;
     }
     const value = panel.field.data[row * panel.field.width + column];
@@ -1785,7 +1781,7 @@ function updatePanelReadout(panel, lat, lon) {
         ? panel.yearBiasSE.data[row * panel.yearBiasSE.width + column]
         : null;
     const valueText = fieldReadoutValue(panel, value, count, standardError);
-    panel.els.readout.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}° — ${valueText}`;
+    panel.els.readout.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}° — ${valueText}${suffix}`;
 }
 
 function fieldReadoutValue(panel, value, count, standardError) {
@@ -1804,14 +1800,10 @@ function fieldReadoutValue(panel, value, count, standardError) {
 
 // Nearest-point hit-test over the Class-4 obs drawn on this panel (canvas points
 // have no DOM nodes, so we project the small filtered set and pick the closest to
-// the cursor). Shows an instant tooltip with obs/forecast/error + location.
-function updateClass4Tooltip(panel, event, rectangle) {
-  const tooltip = panel.els.obsTooltip;
-  if (!tooltip) return;
-  if (shared.overlayMode !== "class4" || !panel.class4HitPoints || !panel.class4HitPoints.length) {
-    tooltip.hidden = true;
-    return;
-  }
+// the cursor). The details render inside the panel's fixed readout pill — nothing
+// floats with the cursor.
+function nearestClass4Record(panel, event, rectangle) {
+  if (shared.overlayMode !== "class4" || !panel.class4HitPoints || !panel.class4HitPoints.length) return null;
   const ratio = window.devicePixelRatio || 1;
   const cursorX = (event.clientX - rectangle.left) * ratio;
   const cursorY = (event.clientY - rectangle.top) * ratio;
@@ -1828,28 +1820,18 @@ function updateClass4Tooltip(panel, event, rectangle) {
       const distance = Math.hypot(screen.x - cursorX, screen.y - cursorY);
       if (distance < nearestDistance) {
         nearestDistance = distance;
-        nearest = { record, screen };
+        nearest = record;
       }
     }
   }
-  if (!nearest) {
-    tooltip.hidden = true;
-    return;
-  }
-  tooltip.innerHTML = class4TooltipMarkup(nearest.record, panel.units);
-  tooltip.hidden = false;
-  // Position next to the cursor in CSS pixels, flipping to stay inside the panel.
-  const localX = (event.clientX - rectangle.left) + 14;
-  const localY = (event.clientY - rectangle.top) + 14;
-  const maxX = rectangle.width - tooltip.offsetWidth - 6;
-  const maxY = rectangle.height - tooltip.offsetHeight - 6;
-  tooltip.style.left = `${Math.max(6, Math.min(localX, maxX))}px`;
-  tooltip.style.top = `${Math.max(6, Math.min(localY, maxY))}px`;
+  return nearest;
 }
 
 const CLASS4_PLATFORM_KEYS = ["platform", "satellite", "platform_id", "source", "wmo_platform_code", "sensor"];
 
-function class4TooltipMarkup(record, units) {
+// Compact one-line obs details appended to the readout pill, e.g.
+// " · obs 0.402 · fcst 0.451 · err 0.049 · argo".
+function class4ReadoutSuffix(record, units) {
   const obs = numericOrNaN(record.observation_value);
   const model = numericOrNaN(record.model_value);
   const hasObs = Number.isFinite(obs);
@@ -1859,18 +1841,15 @@ function class4TooltipMarkup(record, units) {
     : hasObs && hasModel
       ? Math.abs(model - obs)
       : NaN;
-  const unit = units || "";
-  const rows = [];
+  const parts = [
+    `obs ${hasObs ? obs.toFixed(3) : "—"}`,
+    `fcst ${hasModel ? model.toFixed(3) : "—"}`,
+    `err ${Number.isFinite(error) ? error.toFixed(3) : "—"}${units ? ` ${units}` : ""}`,
+  ];
   const platformKey = CLASS4_PLATFORM_KEYS.find((key) => record[key] != null && record[key] !== "");
-  if (platformKey) rows.push(`<div><span>platform</span><strong>${escapeHtml(String(record[platformKey]))}</strong></div>`);
-  rows.push(`<div><span>obs</span><strong>${hasObs ? `${obs.toFixed(3)} ${unit}` : "—"}</strong></div>`);
-  rows.push(`<div><span>forecast</span><strong>${hasModel ? `${model.toFixed(3)} ${unit}` : "—"}</strong></div>`);
-  rows.push(`<div><span>error</span><strong>${Number.isFinite(error) ? `${error.toFixed(3)} ${unit}` : "—"}</strong></div>`);
-  if (record.depth_bin) rows.push(`<div><span>depth bin</span><strong>${escapeHtml(String(record.depth_bin))}</strong></div>`);
-  rows.push(
-    `<div><span>lat / lon</span><strong>${Number(record.latitude).toFixed(2)}°, ${Number(record.longitude).toFixed(2)}°</strong></div>`,
-  );
-  return rows.join("");
+  if (platformKey) parts.push(String(record[platformKey]));
+  else if (record.depth_bin) parts.push(String(record.depth_bin));
+  return ` · ${parts.join(" · ")}`;
 }
 
 function escapeHtml(value) {
@@ -2910,10 +2889,11 @@ function wireCursorTooltip(container) {
     crosshair.setAttribute("x2", String(nearestX));
     crosshair.removeAttribute("hidden");
     setText(lines);
+    // Anchored readout: the tooltip sits in a fixed top corner (opposite the crosshair
+    // so it never covers the hovered points) instead of floating with the cursor.
     const width = Number(rect.getAttribute("width"));
-    const x = Math.min(360 - width - 2, local.x + 10);
-    const y = Math.max(2, Math.min(200, local.y + 10));
-    tooltip.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+    const x = nearestX < 180 ? 360 - width - 4 : 44;
+    tooltip.setAttribute("transform", `translate(${x.toFixed(1)} 16)`);
     tooltip.removeAttribute("hidden");
   };
   svg.addEventListener("mousemove", move);
