@@ -306,7 +306,7 @@ export function psdSpectraSVG(curves, { title = "Live power spectrum" } = {}) {
  * selected lead. Absolute values are area-weighted super-ob RMSD — not the
  * official scores — so this never shares an axis with the skill-vs-lead chart.
  */
-export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = "" } = {}) {
+export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = "", signed = false } = {}) {
   const area = plotArea();
   const usable = (series || []).filter((line) => line && line.dates && line.dates.length);
   if (!usable.length) return emptyChart(title, "no year RMSD for this variable");
@@ -314,16 +314,63 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
   const allDates = [...new Set(usable.flatMap((line) => line.dates))].sort();
   const indexOfDate = new Map(allDates.map((date, index) => [date, index]));
   const lastIndex = Math.max(1, allDates.length - 1);
+  const xOf = (date) => area.x0 + (indexOfDate.get(date) / lastIndex) * area.width;
+
+  let body = "";
+  // Signed (bias) mode: symmetric y-axis centred on 0, with negative values plotted
+  // below a zero baseline. |error|/RMSD mode keeps the original [0, niceMax] scale.
+  if (signed) {
+    let magnitude = 0;
+    for (const line of usable) {
+      for (const value of line.rmsd) if (Number.isFinite(value) && Math.abs(value) > magnitude) magnitude = Math.abs(value);
+    }
+    const bound = niceMax(magnitude);
+    const yOf = (value) => area.y1 - ((value + bound) / (2 * bound)) * area.height;
+    for (let t = 0; t <= 4; t += 1) {
+      const value = bound - (2 * bound * t) / 4;
+      const y = yOf(value);
+      body += `<line x1="${area.x0}" y1="${y.toFixed(1)}" x2="${area.x1}" y2="${y.toFixed(1)}" class="${
+        value === 0 ? "axis" : "grid"
+      }"/>`;
+      body += `<text x="${area.x0 - 4}" y="${(y + 3).toFixed(1)}" class="tick" text-anchor="end">${formatTick(value)}</text>`;
+    }
+    const tickStep = Math.max(1, Math.round(allDates.length / 6));
+    for (let i = 0; i < allDates.length; i += tickStep) {
+      const date = allDates[i];
+      body += `<text x="${xOf(date).toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="middle">${date.slice(5)}</text>`;
+    }
+    for (const line of usable) {
+      const points = line.dates
+        .map((date, index) => ({ date, value: line.rmsd[index] }))
+        .filter((point) => Number.isFinite(point.value));
+      const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${xOf(point.date).toFixed(1)} ${yOf(point.value).toFixed(1)}`);
+      body += `<path d="${path.join(" ")}" fill="none" stroke="${line.color}" stroke-width="1.6"/>`;
+      for (const point of points) {
+        const x = xOf(point.date).toFixed(1);
+        const y = yOf(point.value).toFixed(1);
+        body += `<circle cx="${x}" cy="${y}" r="1.8" fill="${line.color}"/>`;
+        body +=
+          `<circle class="chart-point year-point" data-date="${escapeText(point.date)}" ` +
+          `data-line="${escapeText(line.label)}" data-x-label="${escapeText(point.date)}" ` +
+          `data-y-label="${formatValue(point.value, unit)}" cx="${x}" cy="${y}" r="7"/>`;
+      }
+    }
+    const legend = usable
+      .map((line, index) => {
+        const x = area.x0 + index * 118;
+        return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="10" class="legend">${escapeText(line.label)}</text>`;
+      })
+      .join("");
+    return svgOpen(title) + axes(area, "start date", unit ? `bias (${unit})` : "bias") + body + legend + interactionLayer() + "</svg>";
+  }
 
   let maxValue = 0;
   for (const line of usable) {
     for (const value of line.rmsd) if (Number.isFinite(value) && value > maxValue) maxValue = value;
   }
   const yMax = niceMax(maxValue);
-  const xOf = (date) => area.x0 + (indexOfDate.get(date) / lastIndex) * area.width;
   const yOf = (value) => area.y1 - (value / yMax) * area.height;
 
-  let body = "";
   for (let t = 0; t <= 4; t += 1) {
     const value = (yMax * t) / 4;
     const y = yOf(value);

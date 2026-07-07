@@ -95,12 +95,56 @@ export function yearGeographyMax(geography, shortName, leadDay) {
   return finite[index];
 }
 
+// Build a renderable signed-bias field (mean(model − obs) per cell) from the year
+// error-geography artifact, mirroring buildYearGeographyField but reading the parallel
+// `bias` structure the data agent appends. Returns null when the bias field is absent,
+// so callers can fall back to the |error| path or a "not available" note.
+export function buildYearBiasField(geography, shortName, leadDay) {
+  if (!geography || !geography.grid || !geography.variables) return null;
+  const variable = geography.variables[shortName];
+  if (!variable || !variable.bias) return null;
+  const flat = variable.bias[String(leadDay)];
+  if (!Array.isArray(flat)) return null;
+  const { lat0, dlat, nlat, lon0, dlon, nlon } = geography.grid;
+  if (flat.length !== nlat * nlon) return null;
+  const data = new Float32Array(flat.length);
+  for (let i = 0; i < flat.length; i += 1) {
+    const value = flat[i];
+    data[i] = value == null ? NaN : value;
+  }
+  const latitudes = Array.from({ length: nlat }, (_, i) => lat0 + i * dlat);
+  const longitudes = Array.from({ length: nlon }, (_, j) => lon0 + j * dlon);
+  return { field: { data, width: nlon, height: nlat }, latitudes, longitudes };
+}
+
+// Symmetric upper bound for the diverging bias scale: the 98th percentile of the finite
+// |bias| values, so a balanced [-M, +M] range keeps the diverging colormap centred on 0
+// while a handful of extreme cells do not wash out the map. Returns 0 when bias absent.
+export function yearBiasMax(geography, shortName, leadDay) {
+  const built = buildYearBiasField(geography, shortName, leadDay);
+  if (!built) return 0;
+  const finite = [];
+  for (const value of built.field.data) if (Number.isFinite(value)) finite.push(Math.abs(value));
+  if (!finite.length) return 0;
+  finite.sort((a, b) => a - b);
+  const index = Math.min(finite.length - 1, Math.floor(finite.length * 0.98));
+  return finite[index];
+}
+
 // Per-start-date RMSD series for a short variable at the requested lead day, or null.
+// When the artifact carries a parallel `bias` array (area-weighted mean(model − obs) per
+// start), it is returned too; otherwise `bias` is null and the caller stays in |error|.
 export function yearRmsdSeries(rmsd, shortName, leadDay) {
   if (!rmsd || !rmsd.variables) return null;
   const variable = rmsd.variables[shortName];
   if (!variable || !variable.leads) return null;
   const entry = variable.leads[String(leadDay)];
   if (!entry || !Array.isArray(entry.dates)) return null;
-  return { dates: entry.dates, rmsd: entry.rmsd || [], counts: entry.n || [], depthBin: variable.depth_bin };
+  return {
+    dates: entry.dates,
+    rmsd: entry.rmsd || [],
+    bias: Array.isArray(entry.bias) ? entry.bias : null,
+    counts: entry.n || [],
+    depthBin: variable.depth_bin,
+  };
 }
