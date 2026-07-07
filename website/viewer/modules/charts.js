@@ -345,6 +345,8 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
       body += `<text x="${xOf(date).toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="middle">${date.slice(5)}</text>`;
     }
     for (const line of usable) {
+      const band = ciBandPolygon(line, xOf, yOf);
+      if (band) body += `<polygon points="${band}" fill="${line.color}" fill-opacity="0.16" stroke="none"/>`;
       const points = line.dates
         .map((date, index) => ({ date, value: line.rmsd[index] }))
         .filter((point) => Number.isFinite(point.value));
@@ -392,6 +394,8 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
   }
 
   for (const line of usable) {
+    const band = ciBandPolygon(line, xOf, yOf);
+    if (band) body += `<polygon points="${band}" fill="${line.color}" fill-opacity="0.16" stroke="none"/>`;
     const points = line.dates
       .map((date, index) => ({ date, value: line.rmsd[index] }))
       .filter((point) => Number.isFinite(point.value));
@@ -416,6 +420,28 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
     .join("");
 
   return svgOpen(title) + axes(area, "start date", unit || "RMSD") + body + legend + interactionLayer() + "</svg>";
+}
+
+// 95% CI band polygon for a start-date line, in the same visual idiom as the lead-curve band.
+// `line.ciLow`/`line.ciHigh` are parallel to `line.dates` (the caller selects the RMSD or bias
+// pair for the active metric). Returns null when the arrays are absent (old artifacts) or too
+// sparse to shade, so the chart degrades to a plain line.
+function ciBandPolygon(line, xOf, yOf) {
+  const low = line.ciLow;
+  const high = line.ciHigh;
+  if (!Array.isArray(low) || !Array.isArray(high)) return null;
+  const top = [];
+  const bottom = [];
+  for (let index = 0; index < line.dates.length; index += 1) {
+    const lo = low[index];
+    const hi = high[index];
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) continue;
+    const x = xOf(line.dates[index]).toFixed(1);
+    top.push(`${x},${yOf(hi).toFixed(1)}`);
+    bottom.push(`${x},${yOf(lo).toFixed(1)}`);
+  }
+  if (top.length < 2) return null;
+  return top.concat(bottom.reverse()).join(" ");
 }
 
 function emptyChart(title, message) {

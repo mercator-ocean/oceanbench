@@ -55,6 +55,7 @@ import {
   buildYearGeographyField,
   buildYearBiasField,
   buildYearObservationCounts,
+  buildYearBiasStandardError,
   yearGeographyMax,
   yearBiasMax,
   yearRmsdSeries,
@@ -631,12 +632,14 @@ function clearYearPanel(panel, note) {
   panel.label = "";
   panel.yearMeta = null;
   panel.yearCounts = null;
+  panel.yearBiasSE = null;
   panel.yearMissing = note;
 }
 
 function clearYearReadoutMetadata(panel) {
   panel.yearMeta = null;
   panel.yearCounts = null;
+  panel.yearBiasSE = null;
   panel.yearMetric = null;
 }
 
@@ -730,6 +733,8 @@ async function renderYearPanel(panel, token, manifest) {
   if (token !== panel.renderToken) return;
   panel.field = built.field;
   panel.yearCounts = buildYearObservationCounts(geography, mapping.short, shared.leadDay, { bias: biasMode });
+  // Per-cell bias standard error for the hover readout (bias mode only; null on old artifacts).
+  panel.yearBiasSE = biasMode ? buildYearBiasStandardError(geography, mapping.short, shared.leadDay) : null;
   panel.latitudes = built.latitudes;
   panel.longitudes = built.longitudes;
   panel.edgesA = worldEdges(built.latitudes, built.longitudes);
@@ -1775,17 +1780,24 @@ function updatePanelReadout(panel, lat, lon) {
     }
     const value = panel.field.data[row * panel.field.width + column];
     const count = panel.yearCounts && panel.yearCounts.width === panel.field.width ? panel.yearCounts.data[row * panel.yearCounts.width + column] : null;
-    const valueText = fieldReadoutValue(panel, value, count);
+    const standardError =
+      panel.yearBiasSE && panel.yearBiasSE.width === panel.field.width
+        ? panel.yearBiasSE.data[row * panel.yearBiasSE.width + column]
+        : null;
+    const valueText = fieldReadoutValue(panel, value, count, standardError);
     panel.els.readout.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}° — ${valueText}`;
 }
 
-function fieldReadoutValue(panel, value, count) {
+function fieldReadoutValue(panel, value, count, standardError) {
   if (shared.scope === "year") {
     if (!Number.isFinite(value) || count === 0) return "no observations";
-    const metric = panel.yearMetric === "bias" ? "bias" : "rmsd";
-    const sign = panel.yearMetric === "bias" && value > 0 ? "+" : "";
+    const biasMode = panel.yearMetric === "bias";
+    const metric = biasMode ? "bias" : "rmsd";
+    const sign = biasMode && value > 0 ? "+" : "";
+    // Bias cells carry a ±1 standard error (std(model − obs)/sqrt(n)); absent on old artifacts.
+    const errorText = biasMode && Number.isFinite(standardError) ? ` ± ${standardError.toFixed(3)}` : "";
     const countText = Number.isFinite(count) && count > 0 ? ` · n = ${count.toLocaleString("en-US")}` : "";
-    return `${metric} ${sign}${value.toFixed(3)} ${panel.units}${countText}`;
+    return `${metric} ${sign}${value.toFixed(3)}${errorText} ${panel.units}${countText}`;
   }
   return Number.isNaN(value) ? "land / no data" : `${value.toFixed(3)} ${panel.units}`;
 }
@@ -2235,6 +2247,9 @@ async function renderRailYearRmsd(shown) {
       panelIndex: panel.index,
       dates: entry.dates,
       rmsd: biasMode ? entry.bias : entry.rmsd,
+      // Parallel 95% CI edges for the active metric; null on old artifacts (chart draws no band).
+      ciLow: biasMode ? entry.biasCiLow : entry.ciLow,
+      ciHigh: biasMode ? entry.biasCiHigh : entry.ciHigh,
     });
   }
   slot.innerHTML = rmsdByStartSVG(lines, {

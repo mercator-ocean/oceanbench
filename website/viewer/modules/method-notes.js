@@ -58,6 +58,7 @@ export const METHOD_NOTES = {
     body:
       "Class-4 RMSD per start date, same method as the official scores (pooled over all " +
       "match-ups for that start). In bias mode: pooled mean(model − obs) per start date. " +
+      "Shaded band: 95% CI, bootstrap per start date. " +
       "Click a point to open that start date.",
   },
 
@@ -67,6 +68,7 @@ export const METHOD_NOTES = {
     body:
       "Time-mean |obs − model| (or signed model − obs in bias mode) per grid cell over " +
       "all 52 start dates, from the full Class-4 match-up set. Global grid 2°, IBI 0.25°. " +
+      "In bias mode the hover shows ±1 SE. " +
       "Observations are the pre-QC'd 2024 set " +
       "(project-oceanbench/public/observations2024/*.zarr); the model is interpolated to " +
       "each obs by bilinear horizontal plus vertical interpolation. SSH is scored as SLA " +
