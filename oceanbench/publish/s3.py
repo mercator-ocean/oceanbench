@@ -309,7 +309,30 @@ def _build_s3_client(endpoint: str, credentials: AwsCredentials, max_workers: in
     )
 
 
-def _upload_one(s3_client, bucket: str, item: UploadPlanItem, *, force: bool) -> tuple[UploadPlanItem, bool]:
+def _gzip_bytes(raw: bytes) -> bytes:
+    import gzip
+
+    # mtime=0 keeps the compressed bytes deterministic for a given input.
+    return gzip.compress(raw, mtime=0)
+
+
+def _upload_one(
+    s3_client, bucket: str, item: UploadPlanItem, *, force: bool, compress_json: bool
+) -> tuple[UploadPlanItem, bool]:
+    is_json = str(item.local_path).endswith(".json")
+    if compress_json and is_json:
+        body = _gzip_bytes(Path(item.local_path).read_bytes())
+        stored_item = UploadPlanItem(local_path=item.local_path, key=item.key, size=len(body))
+        if should_skip_upload(s3_client, bucket, stored_item, force=force):
+            return stored_item, False
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=item.key,
+            Body=body,
+            ContentType="application/json",
+            ContentEncoding="gzip",
+        )
+        return stored_item, True
     if should_skip_upload(s3_client, bucket, item, force=force):
         return item, False
     s3_client.upload_file(
@@ -331,6 +354,7 @@ def upload_tree(
     force: bool = False,
     max_workers: int = DEFAULT_MAX_WORKERS,
     env_file: str | os.PathLike | None = None,
+    compress_json: bool = False,
 ) -> UploadSummary:
     """Upload the catalog tree at ``local_root`` to ``s3://<bucket>/<prefix>/``.
 
@@ -338,6 +362,10 @@ def upload_tree(
     size already matches the local size are skipped unless ``force`` is set (see
     ``should_skip_upload``). Resolves credentials via ``resolve_credentials`` when
     ``credentials`` is not supplied. Returns an ``UploadSummary`` (no secrets).
+
+    When ``compress_json`` is set, every ``.json`` object is stored gzip-compressed with
+    ``Content-Encoding: gzip`` and ``Content-Type: application/json`` so the browser decompresses
+    it transparently (large viewer JSON compresses roughly 7-15x); other objects are unchanged.
     """
     plan = build_upload_plan(local_root, prefix)
     total_bytes = sum(item.size for item in plan)
@@ -348,7 +376,10 @@ def upload_tree(
     uploaded_count = 0
     uploaded_bytes = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(_upload_one, s3_client, bucket, item, force=force) for item in plan]
+        futures = [
+            executor.submit(_upload_one, s3_client, bucket, item, force=force, compress_json=compress_json)
+            for item in plan
+        ]
         for future in as_completed(futures):
             item, was_uploaded = future.result()
             if was_uploaded:

@@ -223,3 +223,43 @@ def test_mint_sts_credentials_parses_namespaced_xml():
     assert credentials.source == "edito-sts"
     # The offline token is sent as the refresh_token, never as a bare positional argument.
     assert post.call_args_list[0].kwargs["data"]["refresh_token"] == "offline-token"
+
+
+def test_upload_one_gzips_json_with_content_encoding(tmp_path):
+    import gzip
+
+    json_path = tmp_path / "eddies.json"
+    payload = b'{"kind": "eddy-census", "frames": []}'
+    json_path.write_bytes(payload)
+    client = mock.Mock()
+    client.head_object.side_effect = _missing_object()
+    item = s3.UploadPlanItem(local_path=json_path, key="p/eddies.json", size=len(payload))
+
+    stored_item, was_uploaded = s3._upload_one(client, "bucket", item, force=False, compress_json=True)
+
+    assert was_uploaded is True
+    call = client.put_object.call_args.kwargs
+    assert call["ContentType"] == "application/json"
+    assert call["ContentEncoding"] == "gzip"
+    assert gzip.decompress(call["Body"]) == payload
+    assert stored_item.size == len(call["Body"])
+    client.upload_file.assert_not_called()
+
+
+def test_upload_one_leaves_non_json_untouched(tmp_path):
+    parquet_path = tmp_path / "scores.parquet"
+    parquet_path.write_bytes(b"PAR1")
+    client = mock.Mock()
+    client.head_object.side_effect = _missing_object()
+    item = s3.UploadPlanItem(local_path=parquet_path, key="p/scores.parquet", size=4)
+
+    s3._upload_one(client, "bucket", item, force=False, compress_json=True)
+
+    client.put_object.assert_not_called()
+    client.upload_file.assert_called_once()
+
+
+def _missing_object():
+    from botocore.exceptions import ClientError
+
+    return ClientError({"Error": {"Code": "404"}}, "HeadObject")
