@@ -304,6 +304,7 @@ function buildPanel(index) {
       <canvas class="panel-particles"></canvas>
       <canvas class="panel-overlay"></canvas>
       <div class="panel-readout" role="status"></div>
+      <div class="panel-ghost-cursor" aria-hidden="true" hidden></div>
       <div class="panel-loading" hidden>Loading dataset…</div>
       <div class="panel-swipe-hint" hidden></div>
     </div>`;
@@ -320,6 +321,7 @@ function buildPanel(index) {
       particles: container.querySelector(".panel-particles"),
       overlay: container.querySelector(".panel-overlay"),
       readout: container.querySelector(".panel-readout"),
+      ghostCursor: container.querySelector(".panel-ghost-cursor"),
       loading: container.querySelector(".panel-loading"),
       swipeHint: container.querySelector(".panel-swipe-hint"),
     },
@@ -428,6 +430,9 @@ function wirePanel(panel) {
   field.addEventListener("mouseleave", () => {
     panel.els.readout.textContent = "";
     panel.els.field.style.cursor = "";
+    for (const other of panels) {
+      if (other && other.els.ghostCursor) other.els.ghostCursor.hidden = true;
+    }
   });
   // Tap/click also populates the consolidated readout pill (touch has no hover).
   field.addEventListener("click", (event) => updateHover(event));
@@ -1716,6 +1721,9 @@ function updateHover(event) {
   let hoverPanel = null;
   let hoverRectangle = null;
   for (const panel of panels.slice(0, shared.layout)) {
+    if (panel.els.ghostCursor) panel.els.ghostCursor.hidden = true;
+  }
+  for (const panel of panels.slice(0, shared.layout)) {
     const rectangle = panel.els.field.getBoundingClientRect();
     if (
       event.clientX < rectangle.left ||
@@ -1765,6 +1773,37 @@ function updateHover(event) {
     }
     updatePanelReadout(panel, lat, lon, panel === hoverPanel && obsRecord ? class4ReadoutSuffix(obsRecord, panel.units) : "");
   }
+  updateGhostCursor(hoverPanel, wrappedNX, point.ny);
+}
+
+// Ghost cursor: in side-by-side 2-forecast mode, mark the mirrored geographic position
+// on the panel the user is NOT hovering — an open accent-colored ring + crosshair,
+// clearly distinct from the OS pointer, so the same spot is visible on both forecasts.
+function updateGhostCursor(hoverPanel, wrappedNX, ny) {
+  if (shared.layout !== 2 || shared.displayMode !== "side") return;
+  const other = panels[1 - hoverPanel.index];
+  const ghost = other && other.els.ghostCursor;
+  if (!ghost || !other.field) return;
+  const projection = projectionFor(other);
+  const ratio = window.devicePixelRatio || 1;
+  // Pick the world copy of the longitude closest to the visible view.
+  let best = null;
+  for (const offset of visibleCopyOffsets(projection, other.els.field)) {
+    const screen = projection.project(wrappedNX + offset, ny);
+    if (screen.x >= 0 && screen.x <= projection.width && screen.y >= 0 && screen.y <= projection.height) {
+      best = screen;
+      break;
+    }
+    if (!best) best = screen;
+  }
+  if (!best) return;
+  const x = best.x / ratio;
+  const y = best.y / ratio;
+  const wrap = other.els.wrap.getBoundingClientRect();
+  const field = other.els.field.getBoundingClientRect();
+  if (x < 0 || x > field.width || y < 0 || y > field.height) return;
+  ghost.style.transform = `translate(${(x + field.left - wrap.left).toFixed(1)}px, ${(y + field.top - wrap.top).toFixed(1)}px)`;
+  ghost.hidden = false;
 }
 
 function updatePanelReadout(panel, lat, lon, suffix = "") {

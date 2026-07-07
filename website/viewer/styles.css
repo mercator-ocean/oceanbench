@@ -297,6 +297,33 @@ body.resizing-layout.row { cursor: row-resize; }
   max-width: 90%;
   backdrop-filter: blur(4px);
 }
+/* Ghost cursor: the mirrored pointer position on the panel NOT being hovered —
+   an open accent ring with crosshair hairlines, visually distinct from the OS
+   pointer (which stays a plain crosshair on the hovered panel). */
+.panel-ghost-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px var(--readout-bg);
+  pointer-events: none;
+  z-index: 6;
+}
+.panel-ghost-cursor::before,
+.panel-ghost-cursor::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+}
+.panel-ghost-cursor::before { left: 50%; top: -7px; width: 1.5px; height: 26px; margin-left: -0.75px; }
+.panel-ghost-cursor::after { top: 50%; left: -7px; height: 1.5px; width: 26px; margin-top: -0.75px; }
+.panel-ghost-cursor[hidden] { display: none; }
+
 .panel-loading {
   position: absolute;
   inset: 0;
