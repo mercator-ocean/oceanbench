@@ -14,7 +14,7 @@
 // the quantitative curves (skill vs lead, PSD spectrum) for the active view. Every bit
 // of view state lives in the URL hash.
 
-import { loadStore, loadManifest, readLayer, readCoordinate, prefetchLayer } from "./modules/zarr.js";
+import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, prefetchLayer } from "./modules/zarr.js";
 import { COLORMAP_NAMES } from "./vendor/cmocean/colormaps.js";
 import {
   fieldToImageData,
@@ -154,6 +154,9 @@ const shared = {
   // Year-scope map metric: "error" = time-mean |obs − model| (sequential), "bias" =
   // time-mean signed model − obs (diverging, centred 0). Single-forecast scope ignores it.
   yearMetric: "error",
+  // PSD rectangle tool: { lon, lat, w, h } in degrees (centre + size), or null until
+  // the first rail render creates the default box centred in the viewport.
+  psdBox: null,
   overlayMode: "none",
   region: "global",
   eddyReference: "glorys",
@@ -462,6 +465,7 @@ async function renderPanel(panel) {
     }
 
     const level = selectRenderLevel(manifest);
+    panel.renderedLevel = level; // the pyramid level the displayed field came from
     const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
     const leadIndex = shared.leadDay - 1;
 
@@ -1068,11 +1072,14 @@ function drawOverlays(panel) {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   context.clearRect(0, 0, canvas.width, canvas.height);
   if (shared.scope === "year") return;
+  const projection = projectionFor(panel);
+  // The PSD rectangle is a spectrum tool, not a purpose overlay: it draws in every
+  // single-forecast display (incl. swipe and difference — one shared box, both spectra).
+  if (psdBoxVisible()) drawPsdBox(panel, context, projection);
   // Class-4 points and eddies are per-forecast; the difference view has no single
   // forecast to attach them to, so it stays overlay-free (see the quiet note).
   if (isDiffView()) return;
   if (shared.overlayMode === "none") return;
-  const projection = projectionFor(panel);
   const ratio = window.devicePixelRatio || 1;
   // Points/contours belong to the periodic world too: draw them on every visible
   // wrapped copy so they stay on the field when panning across the dateline.
@@ -1225,29 +1232,53 @@ function makeSeedCluster(longitude, latitude, radiusDegrees) {
   return seeds;
 }
 
-async function loadTrajectoryFields(panel, maximumLead) {
+// Trajectory advection always runs on the model's FINEST published pyramid level,
+// whatever the display zoom — coarse levels smooth the currents and change the physics
+// of the fan. A whole-domain finest read (10 leads × u,v at 1/12°) would be far too
+// heavy, so only the tiles covering the seed cluster plus a generous drift margin are
+// fetched (readLayerWindow). Particles that outrun the margin stop, exactly as they
+// would at a domain edge; the margin scales with the lead range so that stays rare.
+const TRAJECTORY_MARGIN_BASE_DEG = 8;
+const TRAJECTORY_MARGIN_PER_LEAD_DEG = 0.5;
+
+function finestLevel(manifest) {
+  const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+  return levels[0].level;
+}
+
+async function loadTrajectoryFields(panel, maximumLead, seedCentre) {
   const manifest = manifestFor(panel.state.dataset);
-  const level = selectRenderLevel(manifest);
+  const level = finestLevel(manifest);
   const coordinates = await loadCoordinates(panel.state.dataset, level);
   const variables = currentDepthVariables(panel);
   const startIndex = Math.min(shared.startIndex, manifest.start_dates.length - 1);
+  const margin = TRAJECTORY_MARGIN_BASE_DEG + TRAJECTORY_MARGIN_PER_LEAD_DEG * maximumLead;
+  const box = {
+    latMin: seedCentre.latitude - margin,
+    latMax: seedCentre.latitude + margin,
+    lonMin: seedCentre.longitude - margin,
+    lonMax: seedCentre.longitude + margin,
+  };
+  const store = stores.get(panel.state.dataset);
   const fields = [];
   for (let leadIndex = 0; leadIndex < maximumLead; leadIndex += 1) {
     const [u, v] = await Promise.all([
-      readLayer(stores.get(panel.state.dataset), { variable: variables.u, level, startIndex, leadIndex }),
-      readLayer(stores.get(panel.state.dataset), { variable: variables.v, level, startIndex, leadIndex }),
+      readLayerWindow(store, { variable: variables.u, level, startIndex, leadIndex }, coordinates.latitudes, coordinates.longitudes, box),
+      readLayerWindow(store, { variable: variables.v, level, startIndex, leadIndex }, coordinates.latitudes, coordinates.longitudes, box),
     ]);
-    const lonStep = coordinates.longitudes.length > 1 ? coordinates.longitudes[1] - coordinates.longitudes[0] : 1;
+    if (!u || !v) throw new Error("Seed point is outside this forecast's domain");
     fields.push({
       u: u.data,
       v: v.data,
       width: u.width,
       height: u.height,
-      lon0: coordinates.longitudes[0],
-      lat0: coordinates.latitudes[0],
-      lonStep,
-      latStep: coordinates.latitudes.length > 1 ? coordinates.latitudes[1] - coordinates.latitudes[0] : 1,
-      periodic: Math.abs(lonStep) * u.width >= 359,
+      lon0: u.lon0,
+      lat0: u.lat0,
+      lonStep: u.lonStep,
+      latStep: u.latStep,
+      // The window is a regional cut-out with a continuous longitude axis: never
+      // periodic, even on a global grid (the margin absorbs dateline crossings).
+      periodic: false,
     });
   }
   return { fields };
@@ -1263,18 +1294,22 @@ async function seedTrajectories(panel, event) {
   let longitude = world.nx * 360 - 180;
   if (shared.region === "global") longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
   const latitude = 90 - world.ny * 180;
-  const cellSize = Math.max(
-    Math.abs(panel.longitudes[1] - panel.longitudes[0]),
-    Math.abs(panel.latitudes[1] - panel.latitudes[0]),
-  );
-  const seeds = makeSeedCluster(longitude, latitude, cellSize * 1.5);
+  // Seed-cluster radius from the model's FINEST grid (the grid the particles advect
+  // on), not the zoom-dependent display grid — so the same click yields the same fan
+  // at any zoom. Falls back to the display spacing if the manifest lacks levels.
+  const finestCellDeg =
+    finestCellDegFor(panel.state.dataset) ??
+    Math.max(Math.abs(panel.longitudes[1] - panel.longitudes[0]), Math.abs(panel.latitudes[1] - panel.latitudes[0]));
+  const seeds = makeSeedCluster(longitude, latitude, Math.max(0.75, finestCellDeg * 1.5));
   const maximumLead = Math.min(...eligible.map((candidate) => Math.max(...manifestFor(candidate.state.dataset).lead_days)));
   const requestId = ++trajectoryRequestId;
   trajectoryState = { requestId, maximumLead, loading: true };
   renderTrajectoryRail();
   setStatus("Computing illustrative trajectories…");
   try {
-    const forecasts = await Promise.all(eligible.map((candidate) => loadTrajectoryFields(candidate, maximumLead)));
+    const forecasts = await Promise.all(
+      eligible.map((candidate) => loadTrajectoryFields(candidate, maximumLead, { longitude, latitude })),
+    );
     if (requestId !== trajectoryRequestId) return;
     trajectoryWorker.postMessage({ requestId, seeds, forecasts, maximumLead });
   } catch (error) {
@@ -1288,6 +1323,9 @@ async function seedTrajectories(panel, event) {
 trajectoryWorker.addEventListener("message", ({ data }) => {
   if (!trajectoryState || data.requestId !== trajectoryState.requestId) return;
   Object.assign(trajectoryState, data, { loading: false });
+  // Debug/verification surface (like __oceanbenchViewerDataBaseUrl): lets tooling assert
+  // that the same seed yields identical trajectories regardless of display zoom.
+  window.__oceanbenchTrajectories = trajectoryState;
   setStatus("");
   redrawOverlaysAll();
   renderTrajectoryRail();
@@ -1454,6 +1492,27 @@ function visibleViewport(projection, canvas) {
 function beginPanelDrag(panel, event) {
   if (event.button !== 0) return;
   const projection = projectionFor(panel);
+  // PSD rectangle grabs take priority over map panning: a pointerdown on the box
+  // interior moves it, on a handle/edge resizes it.
+  if (psdBoxVisible()) {
+    const ratio = window.devicePixelRatio || 1;
+    const rectangle = panel.els.field.getBoundingClientRect();
+    const hit = psdBoxHitTest(
+      panel,
+      (event.clientX - rectangle.left) * ratio,
+      (event.clientY - rectangle.top) * ratio,
+      projection,
+    );
+    if (hit) {
+      panel.draggingPsd = { hit, startBox: { ...shared.psdBox }, x: event.clientX, y: event.clientY, projection };
+      panel.els.field.setPointerCapture(event.pointerId);
+      panel.els.field.addEventListener("pointermove", onPanelPointerMove);
+      panel.els.field.addEventListener("pointerup", endPanelDrag, { once: true });
+      panel.els.field.addEventListener("pointercancel", endPanelDrag, { once: true });
+      event.preventDefault();
+      return;
+    }
+  }
   if (isSwipeHost(panel) && panel.offscreenB) {
     const ratio = window.devicePixelRatio || 1;
     const rectangle = panel.els.field.getBoundingClientRect();
@@ -1477,7 +1536,17 @@ function beginPanelDrag(panel, event) {
 
 function onPanelPointerMove(event) {
   const panel = panels.find((candidate) => candidate.els.field === event.currentTarget);
-  if (panel.draggingSwipe) {
+  if (panel.draggingPsd) {
+    const ratio = window.devicePixelRatio || 1;
+    applyPsdBoxDrag(
+      panel.draggingPsd,
+      (event.clientX - panel.draggingPsd.x) * ratio,
+      (event.clientY - panel.draggingPsd.y) * ratio,
+    );
+    scheduleRedrawAllPanels();
+    scheduleRailUpdate();
+    scheduleHashWrite();
+  } else if (panel.draggingSwipe) {
     const ratio = window.devicePixelRatio || 1;
     const rectangle = panel.els.field.getBoundingClientRect();
     panel.swipeX = Math.min(0.98, Math.max(0.02, ((event.clientX - rectangle.left) * ratio) / panel.els.field.width));
@@ -1503,6 +1572,7 @@ function endPanelDrag(event) {
   if (shared.region === "global") view.centerNX = ((view.centerNX % 1) + 1) % 1;
   panel.dragging = null;
   panel.draggingSwipe = false;
+  panel.draggingPsd = null;
   if (shouldSeed) seedTrajectories(panel, event);
   writeHash();
 }
@@ -1621,6 +1691,13 @@ function updateHover(event) {
     if (!panel.field) continue;
     const ratio = window.devicePixelRatio || 1;
     const projection = projectionFor(panel);
+    // Cursor affordance for the PSD rectangle (move over the interior, resize on edges).
+    if (psdBoxVisible()) {
+      const hit = psdBoxHitTest(panel, (event.clientX - rectangle.left) * ratio, (event.clientY - rectangle.top) * ratio, projection);
+      panel.els.field.style.cursor = psdCursorFor(hit);
+    } else if (panel.els.field.style.cursor) {
+      panel.els.field.style.cursor = "";
+    }
     const point = projection.unproject((event.clientX - rectangle.left) * ratio, (event.clientY - rectangle.top) * ratio);
     const wrappedNX = ((point.nx % 1) + 1) % 1;
     const lon = wrappedNX * 360 - 180;
@@ -2129,14 +2206,323 @@ function renderRailSkill(shown, comparison) {
   wireCursorTooltip(elements["rail-lead-curve"]);
 }
 
-function renderRailPsd(shown, comparison) {
-  const viewport = currentViewport();
+// ---- live PSD: explicit size-capped rectangle at the model's native grid -----
+//
+// The spectrum is computed over an explicit rectangle drawn on the map — draggable,
+// resizable, shared between both forecasts in compare mode. Its size is HARD-CAPPED at
+// what the finest (native) pyramid grid honestly resolves with the 256-cell FFT budget
+// (≈ 256 × finest cell size per axis), so the PSD is ALWAYS computed at native
+// resolution from a windowed tile-cropped read — downsampled spectra never exist.
+
+const PSD_FFT_CELLS = 256; // matches psd.js MAX_SIDE
+const PSD_MIN_CELLS = 32; // minimum native cells across for a meaningful FFT
+const PSD_DEFAULT_WIDTH_DEG = 10;
+const PSD_FLASH_MILLISECONDS = 700;
+
+// Current cap/min (degrees) for the visible forecasts; refreshed by ensurePsdBox so
+// resize gestures clamp against the latest model pair. With two different native
+// grids the cap is the SMALLER of the two maxima (the finer grid's cap): each curve
+// then stops at its own model's resolution limit, which is honest signal.
+let psdBoxLimits = { capDeg: PSD_FFT_CELLS, minDeg: 0.5 };
+let psdBoxFlashUntil = 0;
+
+function finestCellDegFor(slug) {
+  const manifest = manifestFor(slug);
+  if (!manifest || !Array.isArray(manifest.levels) || !manifest.levels.length) return null;
+  return Math.min(...manifest.levels.map((level) => level.cell_size_deg));
+}
+
+// Human label for a grid cell size: 1/12° for fractional-degree grids, 0.5° otherwise.
+function cellDegreesLabel(cellDeg) {
+  const inverse = 1 / cellDeg;
+  if (inverse > 1.01 && Math.abs(inverse - Math.round(inverse)) < 0.05) return `1/${Math.round(inverse)}°`;
+  return `${Number(cellDeg.toFixed(2))}°`;
+}
+
+// Create the box if absent (centred in the viewport) and clamp it to the current cap —
+// also handles switching to a coarser/finer model pair: the box persists, only its
+// limits move. Returns the box.
+function ensurePsdBox(shown) {
+  const cells = (shown || panels.slice(0, shared.layout))
+    .map((panel) => finestCellDegFor(panel.state.dataset))
+    .filter((value) => value != null);
+  if (cells.length) {
+    const capDeg = PSD_FFT_CELLS * Math.min(...cells);
+    let minDeg = PSD_MIN_CELLS * Math.max(...cells);
+    if (minDeg > capDeg) minDeg = capDeg / 4;
+    psdBoxLimits = { capDeg, minDeg };
+  }
+  if (!shared.psdBox) {
+    const viewport = currentViewport();
+    const lon = ((viewport.minX + viewport.maxX) / 2) * 360 - 180;
+    const lat = 90 - ((viewport.minY + viewport.maxY) / 2) * 180;
+    const width = Math.min(PSD_DEFAULT_WIDTH_DEG, psdBoxLimits.capDeg);
+    shared.psdBox = { lon, lat, w: width, h: width };
+  }
+  clampPsdBox(false);
+  return shared.psdBox;
+}
+
+// Clamp size to [min, cap] and keep the box on the globe. Returns true when the SIZE
+// was reduced by the cap (used to trigger the "max size" flash during a resize).
+function clampPsdBox(fromResize) {
+  const box = shared.psdBox;
+  if (!box) return false;
+  const capped = box.w > psdBoxLimits.capDeg + 1e-9 || box.h > psdBoxLimits.capDeg + 1e-9;
+  box.w = Math.min(psdBoxLimits.capDeg, Math.max(psdBoxLimits.minDeg, box.w));
+  box.h = Math.min(psdBoxLimits.capDeg, Math.max(psdBoxLimits.minDeg, box.h));
+  box.lon = ((box.lon + 180) % 360 + 360) % 360 - 180;
+  box.lat = Math.min(90 - box.h / 2, Math.max(-90 + box.h / 2, box.lat));
+  if (capped && fromResize) psdBoxFlashUntil = performance.now() + PSD_FLASH_MILLISECONDS;
+  return capped;
+}
+
+function psdBoxWorldRect() {
+  const box = shared.psdBox;
+  if (!box) return null;
+  return {
+    nx0: (box.lon - box.w / 2 + 180) / 360,
+    nx1: (box.lon + box.w / 2 + 180) / 360,
+    nyTop: (90 - (box.lat + box.h / 2)) / 180,
+    nyBottom: (90 - (box.lat - box.h / 2)) / 180,
+  };
+}
+
+// The rectangle is a spectrum tool, not an overlay mode: it shows on every panel in
+// single-forecast scope (incl. swipe/difference — one shared box drives both spectra).
+function psdBoxVisible() {
+  return shared.scope !== "year" && Boolean(shared.psdBox);
+}
+
+function drawPsdBox(panel, context, projection) {
+  const rect = psdBoxWorldRect();
+  if (!rect) return;
+  const ratio = window.devicePixelRatio || 1;
+  const accent = shared.theme === "light" ? "#046293" : "#38bdf8";
+  const flashing = performance.now() < psdBoxFlashUntil;
+  const border = flashing ? "#ff6b6b" : accent;
+  const copyOffsets = visibleCopyOffsets(projection, panel.els.overlay);
+  context.save();
+  for (const offset of copyOffsets) {
+    const topLeft = projection.project(rect.nx0 + offset, rect.nyTop);
+    const bottomRight = projection.project(rect.nx1 + offset, rect.nyBottom);
+    const width = bottomRight.x - topLeft.x;
+    const height = bottomRight.y - topLeft.y;
+    context.fillStyle = shared.theme === "light" ? "rgba(4, 98, 147, 0.07)" : "rgba(56, 189, 248, 0.08)";
+    context.fillRect(topLeft.x, topLeft.y, width, height);
+    context.strokeStyle = border;
+    context.lineWidth = (flashing ? 2.4 : 1.5) * ratio;
+    context.setLineDash(flashing ? [] : [6 * ratio, 4 * ratio]);
+    context.strokeRect(topLeft.x, topLeft.y, width, height);
+    // Handles: corners + edge midpoints.
+    context.setLineDash([]);
+    const half = 3.5 * ratio;
+    context.fillStyle = shared.theme === "light" ? "#ffffff" : "#10151f";
+    for (const [hx, hy] of psdHandlePoints(topLeft, bottomRight)) {
+      context.fillRect(hx - half, hy - half, 2 * half, 2 * half);
+      context.strokeRect(hx - half, hy - half, 2 * half, 2 * half);
+    }
+    if (flashing) {
+      context.font = `${11 * ratio}px system-ui, sans-serif`;
+      context.fillStyle = border;
+      context.textAlign = "center";
+      context.textBaseline = "bottom";
+      context.fillText("max size for native-resolution spectrum", (topLeft.x + bottomRight.x) / 2, topLeft.y - 6 * ratio);
+    }
+  }
+  context.restore();
+  if (flashing) setTimeout(() => scheduleRedrawAllPanels(), PSD_FLASH_MILLISECONDS + 30);
+}
+
+function psdHandlePoints(topLeft, bottomRight) {
+  const midX = (topLeft.x + bottomRight.x) / 2;
+  const midY = (topLeft.y + bottomRight.y) / 2;
+  return [
+    [topLeft.x, topLeft.y], [bottomRight.x, topLeft.y], [topLeft.x, bottomRight.y], [bottomRight.x, bottomRight.y],
+    [midX, topLeft.y], [midX, bottomRight.y], [topLeft.x, midY], [bottomRight.x, midY],
+  ];
+}
+
+// Hit test in canvas pixels: corner/edge handles (resize) first, then interior (move).
+// Returns { type: "resize", left, right, top, bottom } | { type: "move" } | null.
+function psdBoxHitTest(panel, cursorX, cursorY, projection) {
+  if (!psdBoxVisible()) return null;
+  const rect = psdBoxWorldRect();
+  const ratio = window.devicePixelRatio || 1;
+  const grab = 9 * ratio;
+  const copyOffsets = visibleCopyOffsets(projection, panel.els.overlay);
+  for (const offset of copyOffsets) {
+    const topLeft = projection.project(rect.nx0 + offset, rect.nyTop);
+    const bottomRight = projection.project(rect.nx1 + offset, rect.nyBottom);
+    const nearLeft = Math.abs(cursorX - topLeft.x) <= grab;
+    const nearRight = Math.abs(cursorX - bottomRight.x) <= grab;
+    const nearTop = Math.abs(cursorY - topLeft.y) <= grab;
+    const nearBottom = Math.abs(cursorY - bottomRight.y) <= grab;
+    const withinX = cursorX >= topLeft.x - grab && cursorX <= bottomRight.x + grab;
+    const withinY = cursorY >= topLeft.y - grab && cursorY <= bottomRight.y + grab;
+    if (withinX && withinY && (nearLeft || nearRight || nearTop || nearBottom)) {
+      return { type: "resize", left: nearLeft, right: nearRight && !nearLeft, top: nearTop, bottom: nearBottom && !nearTop };
+    }
+    if (cursorX > topLeft.x && cursorX < bottomRight.x && cursorY > topLeft.y && cursorY < bottomRight.y) {
+      return { type: "move" };
+    }
+  }
+  return null;
+}
+
+function psdCursorFor(hit) {
+  if (!hit) return "";
+  if (hit.type === "move") return "move";
+  const horizontal = hit.left || hit.right;
+  const vertical = hit.top || hit.bottom;
+  if (horizontal && vertical) return (hit.left && hit.top) || (hit.right && hit.bottom) ? "nwse-resize" : "nesw-resize";
+  return horizontal ? "ew-resize" : "ns-resize";
+}
+
+// Apply a drag delta (canvas px) to the box for the gesture captured at pointerdown.
+function applyPsdBoxDrag(drag, deltaX, deltaY) {
+  const dLon = (deltaX / drag.projection.displayWidth) * 360;
+  const dLat = -(deltaY / drag.projection.displayHeight) * 180;
+  const start = drag.startBox;
+  const box = shared.psdBox;
+  if (drag.hit.type === "move") {
+    box.lon = start.lon + dLon;
+    box.lat = start.lat + dLat;
+    clampPsdBox(false);
+    return;
+  }
+  // Resize: the grabbed edges follow the cursor; opposite edges stay fixed.
+  let west = start.lon - start.w / 2;
+  let east = start.lon + start.w / 2;
+  let south = start.lat - start.h / 2;
+  let north = start.lat + start.h / 2;
+  if (drag.hit.left) west += dLon;
+  if (drag.hit.right) east += dLon;
+  if (drag.hit.top) north += dLat;
+  if (drag.hit.bottom) south += dLat;
+  if (east - west < psdBoxLimits.minDeg) {
+    if (drag.hit.left) west = east - psdBoxLimits.minDeg;
+    else east = west + psdBoxLimits.minDeg;
+  }
+  if (north - south < psdBoxLimits.minDeg) {
+    if (drag.hit.bottom) south = north - psdBoxLimits.minDeg;
+    else north = south + psdBoxLimits.minDeg;
+  }
+  // Cap: clamp the grabbed edge so the fixed edge stays put, and flash the hint.
+  if (east - west > psdBoxLimits.capDeg) {
+    if (drag.hit.left) west = east - psdBoxLimits.capDeg;
+    else east = west + psdBoxLimits.capDeg;
+    psdBoxFlashUntil = performance.now() + PSD_FLASH_MILLISECONDS;
+  }
+  if (north - south > psdBoxLimits.capDeg) {
+    if (drag.hit.bottom) south = north - psdBoxLimits.capDeg;
+    else north = south + psdBoxLimits.capDeg;
+    psdBoxFlashUntil = performance.now() + PSD_FLASH_MILLISECONDS;
+  }
+  box.w = east - west;
+  box.h = north - south;
+  box.lon = (east + west) / 2;
+  box.lat = (north + south) / 2;
+  clampPsdBox(true);
+}
+
+// Windowed finest-level reads for the PSD rectangle (shares readLayerWindow with the
+// trajectory regional fetch). Memoised with a small LRU keyed by dataset/variable/
+// lead/box; the underlying compressed tiles are cached by the zarr store anyway.
+const psdWindowCache = new Map();
+const PSD_WINDOW_CACHE_LIMIT = 8;
+
+function psdWindowKey(slug, variable, level, start, leadIndex, boxRange) {
+  const rounded = [boxRange.lonMin, boxRange.lonMax, boxRange.latMin, boxRange.latMax]
+    .map((value) => value.toFixed(2))
+    .join(",");
+  return `${slug}|${variable}|${level}|${start}|${leadIndex}|${rounded}`;
+}
+
+async function psdWindowRead(slug, variable, level, start, leadIndex, boxRange) {
+  const key = psdWindowKey(slug, variable, level, start, leadIndex, boxRange);
+  if (psdWindowCache.has(key)) {
+    const hit = psdWindowCache.get(key);
+    psdWindowCache.delete(key);
+    psdWindowCache.set(key, hit);
+    return hit;
+  }
+  const promise = (async () => {
+    const coordinates = await loadCoordinates(slug, level);
+    const window = await readLayerWindow(
+      stores.get(slug),
+      { variable, level, startIndex: start, leadIndex },
+      coordinates.latitudes,
+      coordinates.longitudes,
+      boxRange,
+    );
+    if (!window) return null;
+    const latitudes = Array.from({ length: window.height }, (_, i) => window.lat0 + i * window.latStep);
+    const longitudes = Array.from({ length: window.width }, (_, j) => window.lon0 + j * window.lonStep);
+    return { field: { data: window.data, width: window.width, height: window.height }, latitudes, longitudes };
+  })();
+  psdWindowCache.set(key, promise);
+  while (psdWindowCache.size > PSD_WINDOW_CACHE_LIMIT) psdWindowCache.delete(psdWindowCache.keys().next().value);
+  return promise;
+}
+
+// Native-grid field for one panel over the PSD rectangle (speed magnitude for the
+// derived currents variables). Returns { field, latitudes, longitudes, cellDeg } | null.
+async function psdSourceFor(panel, boxRange) {
+  const manifest = manifestFor(panel.state.dataset);
+  if (!manifest) return null;
+  const cellDeg = finestCellDegFor(panel.state.dataset);
+  const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+  const level = levels[0].level;
+  const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
+  const leadIndex = shared.leadDay - 1;
+  try {
+    if (isCurrentsVariable(panel.state.variable)) {
+      const components = currentDepthVariables(panel);
+      if (!(components.u in manifest.variables)) return null;
+      const [u, v] = await Promise.all([
+        psdWindowRead(panel.state.dataset, components.u, level, start, leadIndex, boxRange),
+        psdWindowRead(panel.state.dataset, components.v, level, start, leadIndex, boxRange),
+      ]);
+      if (!u || !v) return null;
+      return { field: speedMagnitudeField(u.field, v.field), latitudes: u.latitudes, longitudes: u.longitudes, cellDeg };
+    }
+    if (!variableExists(manifest, panel.state.variable)) return null;
+    const record = await psdWindowRead(panel.state.dataset, panel.state.variable, level, start, leadIndex, boxRange);
+    if (!record) return null;
+    return { ...record, cellDeg };
+  } catch {
+    return null;
+  }
+}
+
+let psdRenderToken = 0;
+
+async function renderRailPsd(shown, comparison) {
+  const token = ++psdRenderToken;
+  const box = ensurePsdBox(shown);
+  const boxRange = {
+    latMin: box.lat - box.h / 2,
+    latMax: box.lat + box.h / 2,
+    lonMin: box.lon - box.w / 2,
+    lonMax: box.lon + box.w / 2,
+  };
+  // The box expressed as the normalized-world viewport psd.js already consumes; its
+  // longitude frame matches the continuous axis readLayerWindow returns.
+  const boxViewport = {
+    minX: (boxRange.lonMin + 180) / 360,
+    maxX: (boxRange.lonMax + 180) / 360,
+    minY: (90 - boxRange.latMax) / 180,
+    maxY: (90 - boxRange.latMin) / 180,
+  };
   const curves = [];
-  const boxes = [];
-  shown.forEach((panel) => {
-    if (!panel.field) return;
-    const spectrum = boxPowerSpectrum(panel.field, panel.latitudes, panel.longitudes, viewport);
-    boxes.push({ panel, spectrum });
+  const sources = [];
+  for (const panel of shown) {
+    const source = await psdSourceFor(panel, boxRange);
+    if (token !== psdRenderToken) return; // stale (box moved / view changed again)
+    if (!source) continue;
+    const spectrum = boxPowerSpectrum(source.field, source.latitudes, source.longitudes, boxViewport);
+    sources.push({ panel, spectrum, source });
     if (spectrum) {
       curves.push({
         label: comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}` : labelFor(panel.state.dataset),
@@ -2144,22 +2530,36 @@ function renderRailPsd(shown, comparison) {
         ...spectrum,
       });
     }
-  });
-  if (comparison && boxes.length === 2 && boxes[0].panel.field && boxes[1].panel.field) {
-    const [a, b] = boxes.map((box) => box.panel);
+  }
+  if (comparison && sources.length === 2 && sources[0].source.field && sources[1].source.field) {
+    const [a, b] = sources.map((entry) => entry.source);
     const alignedB = resampleOntoGrid(b.field, b.latitudes, b.longitudes, a.latitudes, a.longitudes);
-    const errorSpectrum = differenceBoxSpectrum(a.field, a.latitudes, a.longitudes, alignedB, viewport, true);
+    const errorSpectrum = differenceBoxSpectrum(a.field, a.latitudes, a.longitudes, alignedB, boxViewport, true);
     if (errorSpectrum) {
       curves.push({ label: `error (F1−F2)`, color: SERIES_COLORS.error, dashed: true, ...errorSpectrum });
     }
   }
+  if (token !== psdRenderToken) return;
   elements["rail-spectra"].innerHTML = psdSpectraSVG(curves, {
-    title: comparison ? "Live spectrum (both forecasts)" : "Live spectrum of visible box",
+    title: comparison ? "Spectrum of the box (both forecasts)" : "Spectrum of the box",
   });
-  const cellKm = boxes.find((box) => box.spectrum)?.spectrum.cellKm;
+  // Caption: box dimensions + native grid spacing + resolved wavelength range.
+  const gridLabels = [...new Set(sources.filter((entry) => entry.spectrum).map((entry) => cellDegreesLabel(entry.source.cellDeg)))];
+  let wavelengthMin = Infinity;
+  let wavelengthMax = 0;
+  for (const curve of curves) {
+    for (const metres of curve.wavelength) {
+      if (metres < wavelengthMin) wavelengthMin = metres;
+      if (metres > wavelengthMax) wavelengthMax = metres;
+    }
+  }
+  const kmRange =
+    Number.isFinite(wavelengthMin) && wavelengthMax > 0
+      ? `resolves ≈ ${Math.round(wavelengthMin / 1000)}–${Math.round(wavelengthMax / 1000)} km`
+      : "";
   elements["rail-psd-note"].textContent = curves.length
-    ? `In-browser FFT of the visible box · Hann window + land mean-filled · grid ≈ ${cellKm ? cellKm.toFixed(cellKm < 10 ? 1 : 0) : "—"} km/cell`
-    : "Pan/zoom over ocean to compute a spectrum (box is mostly land or too small).";
+    ? `box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}° · native ${gridLabels.join(" & ")} grid${kmRange ? " · " + kmRange : ""} — drag the box on the map, resize by its handles`
+    : "Move the box over ocean to compute a spectrum (boxed area is mostly land).";
   wireCursorTooltip(elements["rail-spectra"]);
 }
 
@@ -2874,7 +3274,7 @@ function markDisplayButtons() {
   }
 }
 
-// PSD of the visible box is CPU work; recompute the rail on a short debounce when the
+// PSD of the boxed region is fetch+CPU work; recompute the rail on a short debounce when the
 // user pans / zooms / scrubs lead so the spectra track the viewport without jank.
 let railUpdateTimer = null;
 function scheduleRailUpdate() {
@@ -2908,6 +3308,9 @@ function writeHash() {
   parameters.set("theme", shared.theme);
   if (shared.scope !== "single") parameters.set("scope", shared.scope);
   if (shared.yearMetric !== "error") parameters.set("metric", shared.yearMetric);
+  if (shared.psdBox) {
+    parameters.set("psd", [shared.psdBox.lon, shared.psdBox.lat, shared.psdBox.w, shared.psdBox.h].map((v) => v.toFixed(2)).join(","));
+  }
   if (shared.overlayMode !== "none") parameters.set("ov", shared.overlayMode);
   parameters.set("region", shared.region);
   if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
@@ -2934,6 +3337,10 @@ function readHash() {
   if (parameters.has("theme")) shared.theme = parameters.get("theme");
   if (parameters.get("scope") === "year") shared.scope = "year";
   if (parameters.get("metric") === "bias") shared.yearMetric = "bias";
+  if (parameters.has("psd")) {
+    const [lon, lat, w, h] = parameters.get("psd").split(",").map(Number);
+    if ([lon, lat, w, h].every(Number.isFinite) && w > 0 && h > 0) shared.psdBox = { lon, lat, w, h };
+  }
   if (parameters.has("ov")) shared.overlayMode = parameters.get("ov");
   if (parameters.has("region")) shared.region = parameters.get("region");
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");

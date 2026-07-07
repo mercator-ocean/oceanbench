@@ -83,12 +83,16 @@ export const METHOD_NOTES = {
       "≤200 km — agreement between forecasts, not ground truth.",
   },
 
-  // Live power spectrum (rail-psd, live FFT).
+  // Live power spectrum (rail-psd, live FFT over the map rectangle).
   psd: {
     title: "Live power spectrum",
     body:
-      "In-browser FFT of the visible box (Hann window, land mean-filled). Qualitative — " +
-      "depends on the visible region; official spectral metrics come from the offline pipeline.",
+      "Spectrum of the boxed region on the map, computed in-browser at the model's native " +
+      "(finest published) grid: Hann window, land mean-filled, radially averaged FFT. The " +
+      "box size is capped so the spectrum always reflects native resolution — wavelengths " +
+      "from 2× the grid spacing up to the box size. In compare mode one shared box drives " +
+      "both forecasts; a coarser model's curve simply stops at its own resolution limit. " +
+      "Exploratory diagnostic — official spectral metrics live on the scores page.",
   },
 
   // Trajectories overlay.
@@ -96,7 +100,8 @@ export const METHOD_NOTES = {
     title: "Illustrative trajectories",
     body:
       "Illustrative RK2 advection (6-hour steps) of 20 click-seeded particles through each " +
-      "forecast's current fields at the displayed depth (surface or 15 m). The official " +
+      "forecast's current fields at the displayed depth (surface or 15 m), always on the " +
+      "model's native (finest published) grid regardless of zoom. The official " +
       "Lagrangian score is different: OceanParcels RK4 (hourly), 10,000 area-weighted seeds, " +
       "advected in surface currents of the forecast and of the GLORYS/GLO12 reference from " +
       "identical seeds — a model-vs-model transport-agreement metric (mean separation in km " +
