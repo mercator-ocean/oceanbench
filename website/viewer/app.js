@@ -457,6 +457,11 @@ async function renderPanel(panel) {
     await ensureStore(panel.state.dataset);
     const manifest = manifestFor(panel.state.dataset);
     if (!variableExists(manifest, panel.state.variable)) panel.state.variable = Object.keys(manifest.variables)[0];
+    // A panel can be shown before its manifest is cached (e.g. switching to 2 forecasts
+    // warms only the initially visible panels). refreshPanelControls only fills the
+    // variable select when the manifest is present, so re-run it here — now that the
+    // store is loaded — to populate the (otherwise empty) select. Idempotent and cheap.
+    refreshPanelControls(panel);
 
     if (shared.scope === "year") {
       await renderYearPanel(panel, token, manifest);
