@@ -65,7 +65,7 @@ export async function loadScoresSummary(index) {
  * sampled) whole set as before. `byteLength` may come from the sibling manifest's
  * `bytes` field to skip a HEAD request, but callers should omit stale hints.
  */
-export async function loadClass4(url, { byteLength, rowGroupIndex, sampleVariables, startDate, leadDay } = {}) {
+export async function loadClass4(url, { byteLength, rowGroupIndex, sampleVariables, startDate, leadDay, variables } = {}) {
   if (!url) throw new Error("Class-4 URL is missing");
   const resolvedUrl = resolveViewerDataUrl(url);
   const targeted = await probeClass4Mode(resolvedUrl, byteLength);
@@ -80,11 +80,14 @@ export async function loadClass4(url, { byteLength, rowGroupIndex, sampleVariabl
     }
     return await class4LegacyCache.get(resolvedUrl);
   }
-  const key = `${resolvedUrl}|${startDate ?? ""}|${leadDay ?? ""}`;
+  // Row groups are variable-partitioned within a (start, lead) block, so the requested
+  // variables refine which groups are fetched — they belong in the targeted cache key.
+  const variableKey = Array.isArray(variables) && variables.length ? [...variables].sort().join(",") : "";
+  const key = `${resolvedUrl}|${startDate ?? ""}|${leadDay ?? ""}|${variableKey}`;
   if (!class4TargetedCache.has(key)) {
     class4TargetedCache.set(
       key,
-      requestClass4Worker({ op: "targeted", url: resolvedUrl, byteLength, startDate, leadDay }).then((payload) =>
+      requestClass4Worker({ op: "targeted", url: resolvedUrl, byteLength, startDate, leadDay, variables }).then((payload) =>
         normalizeClass4Payload(payload),
       ),
     );

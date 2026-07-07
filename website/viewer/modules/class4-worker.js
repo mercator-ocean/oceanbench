@@ -32,8 +32,8 @@ const legacyRowsCache = new Map();
 const targetedCache = new Map();
 
 self.addEventListener("message", (event) => {
-  const { id, op, url, byteLength, rowGroupIndex, sampleVariables, startDate, leadDay } = event.data;
-  handle(op, url, { byteLength, rowGroupIndex, sampleVariables, startDate, leadDay })
+  const { id, op, url, byteLength, rowGroupIndex, sampleVariables, startDate, leadDay, variables } = event.data;
+  handle(op, url, { byteLength, rowGroupIndex, sampleVariables, startDate, leadDay, variables })
     .then((payload) => self.postMessage({ id, ...payload }))
     .catch((error) => self.postMessage({ id, error: String(error.message || error) }));
 });
@@ -42,7 +42,7 @@ async function handle(op, url, options) {
   const info = await ensureFileInfo(url, options.byteLength);
   if (op === "probe") return { targeted: info.targeted };
   if (op === "targeted" && info.targeted) {
-    const rows = await targetedPair(url, info, options.startDate, options.leadDay);
+    const rows = await targetedPair(url, info, options.startDate, options.leadDay, options.variables);
     // `sampled`/`total` are sent as explicit fields: array-attached properties do
     // not survive the structured clone across postMessage.
     return { targeted: true, rows, total: rows.length, sampled: false };
@@ -101,11 +101,12 @@ function statMax(statistics) {
   return statistics.max_value != null ? statistics.max_value : statistics.max;
 }
 
-async function targetedPair(url, info, startDate, leadDay) {
-  const key = `${url}|${startDate}|${leadDay}`;
+async function targetedPair(url, info, startDate, leadDay, variables) {
+  const requestedVariables = Array.isArray(variables) && variables.length ? [...variables].sort() : null;
+  const key = `${url}|${startDate}|${leadDay}|${requestedVariables ? requestedVariables.join(",") : ""}`;
   if (targetedCache.has(key)) return targetedCache.get(key);
   const promise = (async () => {
-    const indices = matchingRowGroups(info.rowGroups, startDate, leadDay);
+    const indices = matchingRowGroups(info.rowGroups, startDate, leadDay, requestedVariables);
     if (!indices.length) {
       const empty = [];
       empty.targeted = true;
@@ -130,7 +131,7 @@ async function targetedPair(url, info, startDate, leadDay) {
   return promise;
 }
 
-function matchingRowGroups(rowGroups, startDate, leadDay) {
+function matchingRowGroups(rowGroups, startDate, leadDay, variables) {
   const requestedStart = startDate == null ? null : String(startDate).slice(0, 10);
   const requestedLead = leadDay == null ? null : Number(leadDay);
   const indices = [];
@@ -141,9 +142,25 @@ function matchingRowGroups(rowGroups, startDate, leadDay) {
     const groupLead = Number(statMin(leadStat));
     if (requestedStart !== null && groupStart !== requestedStart) continue;
     if (requestedLead !== null && groupLead !== requestedLead) continue;
+    // Rows are sorted (start, lead, variable): within a matched (start, lead) block, skip
+    // row groups whose `variable` min/max stats prove they hold no requested variable.
+    // Groups straddling a variable boundary (min < v < max) still pass. Missing stats →
+    // keep (cannot prove absence). Derived current speed asks for both u and v.
+    if (variables && !rowGroupHasVariable(rowGroups[index], variables)) continue;
     indices.push(index);
   }
   return indices;
+}
+
+function rowGroupHasVariable(rowGroup, variables) {
+  const stat = columnStatistics(rowGroup, "variable");
+  if (!stat) return true;
+  const min = statMin(stat);
+  const max = statMax(stat);
+  if (min == null || max == null) return true;
+  const low = String(min);
+  const high = String(max);
+  return variables.some((variable) => String(variable) >= low && String(variable) <= high);
 }
 
 // ---- legacy (whole / sampled) mode ------------------------------------------
