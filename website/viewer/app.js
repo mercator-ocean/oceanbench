@@ -85,6 +85,22 @@ function currentsVariableDepth(key) {
   return key === CURRENTS_VARIABLE_15M ? "15m" : "surface";
 }
 
+// Class-4 current observations are surface drifters drogued at 15 m: obs and skill for
+// velocities exist ONLY at the "15m" depth. A surface current selection (surface u, v,
+// or derived surface current_speed) therefore has no honest obs to compare against.
+function isVelocityFamilyVariable(key) {
+  return isCurrentsVariable(key) || String(key).includes("sea_water_velocity");
+}
+
+function isSurfaceCurrentVariable(key) {
+  return isVelocityFamilyVariable(key) && !String(key).endsWith("_15m");
+}
+
+// Matching 15 m variable for a surface current selection (u→u_15m, current_speed→…_15m).
+function matching15mCurrentVariable(key) {
+  return isSurfaceCurrentVariable(key) ? `${key}_15m` : key;
+}
+
 function syntheticCurrentsEntry(key) {
   return {
     standard_name: "sea_water_speed",
@@ -622,6 +638,12 @@ async function sharedYearRange(shortName, leadDay) {
 
 async function renderYearPanel(panel, token, manifest) {
   stopParticles(panel);
+  // The velocity error geography and RMSD-by-start are built from 15 m drifter obs.
+  // A surface current selection cannot be honestly mapped onto them.
+  if (isSurfaceCurrentVariable(panel.state.variable)) {
+    clearYearPanel(panel, "Current observations (drifters) are measured at 15 m depth — switch to 15 m currents to compare against them.");
+    return;
+  }
   const urls = insightsFor(insightIndex, panel.state.dataset, shared.region);
   const geoUrl = urls.year_error_geography;
   if (!geoUrl) {
@@ -967,7 +989,7 @@ function drawOverlays(panel) {
         }
       }
     }
-  } else if (shared.overlayMode === "class4" && overlayData.class4) {
+  } else if (shared.overlayMode === "class4" && overlayData.class4 && !isSurfaceCurrentVariable(panel.state.variable)) {
     const manifest = manifestFor(panel.state.dataset);
     const entry = manifest && manifest.variables[panel.state.variable];
     const depthBin = class4DepthBin(entry);
@@ -1007,6 +1029,10 @@ function drawOverlays(panel) {
   } else {
     panel.class4HitPoints = null;
     panel.class4Thinned = false;
+    panel.class4Count = 0;
+    panel.class4VisibleTotal = 0;
+    panel.class4Matched = 0;
+    panel.class4Scale = 0;
   }
 }
 
@@ -1730,6 +1756,7 @@ async function updateContextRail() {
     ? `${shown.map((p) => labelFor(p.state.dataset)).join(" vs ")} · ${prettyVariable(shown[0])} · ${shared.region}`
     : `${shown[0].label} · ${shared.region}`;
 
+  updateCurrentDepthGateNote(shown);
   renderRailSkill(shown, comparison);
   const yearSection = elements["rail-year-rmsd-section"];
   if (shared.scope === "year") {
@@ -1752,6 +1779,7 @@ async function renderRailYearRmsd(shown) {
   let unit = "";
   let missing = 0;
   for (const panel of shown) {
+    if (isSurfaceCurrentVariable(panel.state.variable)) continue; // 15 m obs only; covered by switch note
     const url = insightsFor(insightIndex, panel.state.dataset, shared.region).year_rmsd_by_start;
     const mapping = url ? yearVariableMapping(panel.state.variable) : null;
     const rmsd = url ? await loadYearRmsd(url) : null;
@@ -1812,6 +1840,40 @@ function drillDownToStartDate(date) {
   setScope("single");
 }
 
+// When a surface current variable is selected in an obs-based context (Class-4 overlay
+// or year scope), there are no honest surface observations to compare against: the
+// drifter obs sit at 15 m. Explain this and offer a one-click switch to the 15 m field.
+function updateCurrentDepthGateNote(shown) {
+  const note = elements["rail-current-depth-note"];
+  if (!note) return;
+  const obsContext = shared.overlayMode === "class4" || shared.scope === "year";
+  const gated = obsContext && shown.filter((panel) => isSurfaceCurrentVariable(panel.state.variable));
+  if (!obsContext || !gated.length) {
+    note.hidden = true;
+    note.innerHTML = "";
+    return;
+  }
+  note.hidden = false;
+  note.innerHTML =
+    `<p>Current observations (drifters) are measured at 15&nbsp;m depth — switch to 15&nbsp;m currents to compare against them.</p>` +
+    `<button type="button" class="ghost-button" id="rail-switch-15m-currents">Switch to 15&nbsp;m currents</button>`;
+  const button = note.querySelector("#rail-switch-15m-currents");
+  if (button) button.addEventListener("click", () => switchShownPanelsTo15mCurrents(gated));
+}
+
+async function switchShownPanelsTo15mCurrents(gatedPanels) {
+  const targets = gatedPanels && gatedPanels.length ? gatedPanels : panels.slice(0, shared.layout);
+  for (const panel of targets) {
+    if (!isSurfaceCurrentVariable(panel.state.variable)) continue;
+    panel.state.variable = matching15mCurrentVariable(panel.state.variable);
+    refreshPanelControls(panel);
+    await renderPanel(panel);
+  }
+  await updateContextRail();
+  updateCurrentsControlVisibility();
+  writeHash();
+}
+
 function railForecasts() {
   const scope = shared.layout === 2 ? panels.slice(0, 2) : panels.slice(0, 1);
   return scope.filter(Boolean);
@@ -1831,6 +1893,9 @@ function prettyVariable(panel) {
 // Obs-based skill (Class-4 RMSD vs observations) for a forecast's selected variable.
 // Returns { rows, unit, n } or null when no observation-based metric exists (item 4).
 function obsSkillSeries(panel) {
+  // Surface currents have no 15 m drifter obs to compare against — the switch note
+  // handles this case, so emit no skill curve for them.
+  if (isSurfaceCurrentVariable(panel.state.variable)) return null;
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && variableEntry(manifest, panel.state.variable);
   if (!entry) return null;
@@ -1868,6 +1933,7 @@ function renderRailSkill(shown, comparison) {
       const skill = obsSkillSeries(panel);
       const key = scoreProductKey(panel.state.dataset);
       if (!skill) {
+        if (isSurfaceCurrentVariable(panel.state.variable)) continue; // covered by the 15 m switch note
         const suffix = isCurrentsVariable(panel.state.variable)
           ? `currents at ${currentsVariableDepth(panel.state.variable)}`
           : "this variable";
@@ -2671,6 +2737,7 @@ function selectElements() {
     "map-rail-splitter",
     "map-height-splitter",
     "rail-subtitle",
+    "rail-current-depth-note",
     "rail-forecast-toggle",
     "rail-lead-curve",
     "rail-skill-note",

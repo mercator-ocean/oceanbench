@@ -394,6 +394,16 @@ body.resizing-layout.row { cursor: row-resize; }
 .context-rail:not(.collapsed) .rail-title { padding-left: 1.6rem; }
 .rail-title { font-size: 0.95rem; margin: 0 0 0.15rem; }
 .rail-subtitle { font-size: 0.74rem; color: var(--muted); margin: 0 0 1rem; font-family: var(--mono); }
+.rail-current-depth-note {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.rail-current-depth-note p { margin: 0 0 0.6rem; font-size: 0.74rem; line-height: 1.4; color: var(--text); }
+.rail-current-depth-note .ghost-button { padding: 0.35rem 0.65rem; font-size: 0.72rem; }
 .rail-section { margin-bottom: 1.25rem; }
 .rail-section h3 { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.4rem; }
 .rail-card-heading { display: flex; align-items: center; justify-content: space-between; }
