@@ -78,12 +78,12 @@ SPDX-License-Identifier: EUPL-1.2
 
         <fieldset class="control-group">
           <legend>Overlays</legend>
-          <label>Purpose mode
+          <label>Overlay
             <select id="overlay-mode">
               <option value="none">None</option>
               <option value="eddies">Eddy census</option>
-              <option value="class4">Class-4 obs error</option>
-              <option value="trajectories">Lagrangian trajectories</option>
+              <option value="class4">Observation errors (Class-4)</option>
+              <option value="trajectories">Trajectories (Lagrangian)</option>
             </select>
           </label>
           <label>Region
@@ -145,7 +145,7 @@ SPDX-License-Identifier: EUPL-1.2
           <button type="button" data-forecast="1" class="ghost-button">F2</button>
         </div>
         <section class="rail-section">
-          <h3>Skill vs lead day</h3>
+          <h3>RMSD vs lead day</h3>
           <div id="rail-lead-curve" class="rail-chart-slot"></div>
           <p id="rail-skill-note" class="rail-caption"></p>
         </section>

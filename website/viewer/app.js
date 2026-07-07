@@ -97,6 +97,12 @@ function currentsVariableDepth(key) {
   return key === CURRENTS_VARIABLE_15M ? "15m" : "surface";
 }
 
+// Human-facing depth label ("15 m" with a thin space), separate from the "15m" token
+// used for depth-bin logic elsewhere.
+function currentsDepthLabel(key) {
+  return key === CURRENTS_VARIABLE_15M ? "15 m" : "surface";
+}
+
 // Class-4 current observations are surface drifters drogued at 15 m: obs and skill for
 // velocities exist ONLY at the "15m" depth. A surface current selection (surface u, v,
 // or derived surface current_speed) therefore has no honest obs to compare against.
@@ -142,7 +148,7 @@ function currentsVariableOptions(manifest) {
     options.push({ value: CURRENTS_VARIABLE_SURFACE, label: "Currents · surface" });
   }
   if ("eastward_sea_water_velocity_15m" in manifest.variables && "northward_sea_water_velocity_15m" in manifest.variables) {
-    options.push({ value: CURRENTS_VARIABLE_15M, label: "Currents · 15m" });
+    options.push({ value: CURRENTS_VARIABLE_15M, label: "Currents · 15 m" });
   }
   return options;
 }
@@ -298,7 +304,7 @@ function buildPanel(index) {
       <canvas class="panel-overlay"></canvas>
       <div class="panel-readout" role="status"></div>
       <div class="panel-obs-tooltip" hidden></div>
-      <div class="panel-loading" hidden>Loading dataset...</div>
+      <div class="panel-loading" hidden>Loading dataset…</div>
       <div class="panel-swipe-hint" hidden></div>
     </div>`;
   const panel = {
@@ -592,7 +598,7 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   panel.range = range;
   panel.colormap = SPEED_COLORMAP;
   panel.units = "m/s";
-  panel.label = `${labelFor(panel.state.dataset)} · currents (${variables.depth})`;
+  panel.label = `${labelFor(panel.state.dataset)} · currents (${currentsDepthLabel(panel.state.variable)})`;
   panel.velocity = {
     sampler: makeVelocitySampler(uPrimary.field, vPrimary.field, uPrimary.latitudes, uPrimary.longitudes),
   };
@@ -704,9 +710,9 @@ async function renderYearPanel(panel, token, manifest) {
       !geography
         ? "Year diagnostics not available for this dataset/region."
         : biasAbsent
-          ? "Signed bias not available for this dataset — republish pending."
+          ? "Bias not available for this dataset — republish pending."
           : biasMode
-            ? "Signed bias not available for this variable at this lead."
+            ? "Bias not available for this variable at this lead."
             : "Year diagnostics not available for this variable at this lead.",
     );
     return;
@@ -741,7 +747,7 @@ async function renderYearPanel(panel, token, manifest) {
   const entry = variableEntry(manifest, panel.state.variable);
   const varLabel = entry ? prettyName(entry.standard_name) : panel.state.variable;
   panel.label =
-    `${labelFor(panel.state.dataset)} · ${biasMode ? "signed bias" : "mean |obs − model|"} · ${varLabel}` +
+    `${labelFor(panel.state.dataset)} · ${biasMode ? "bias" : "mean |obs − model|"} · ${varLabel}` +
     (mapping.component ? ` (${mapping.component})` : "");
 }
 
@@ -981,7 +987,7 @@ function drawRasterBorder(context, edges, projection) {
 function updatePanelBadge(panel) {
   const stats = panel.field ? fieldStatistics(panel.field) : { mean: NaN };
   const mean = Number.isFinite(stats.mean) ? stats.mean.toFixed(3) : "—";
-  panel.els.badge.textContent = `${panel.units} · mean ${mean}`;
+  panel.els.badge.textContent = `${panel.units} · field mean ${mean}`;
 }
 
 // ---- overlays ---------------------------------------------------------------
@@ -2166,7 +2172,8 @@ async function updateContextRail() {
     for (const button of toggle.querySelectorAll("button")) {
       const index = Number(button.dataset.forecast);
       button.classList.toggle("active", index === shared.railForecast);
-      button.textContent = `F${index + 1} · ${labelFor(forecasts[index].state.dataset)}`;
+      button.textContent = `F${index + 1}`;
+      button.title = `Forecast ${index + 1} · ${labelFor(forecasts[index].state.dataset)}`;
     }
   }
 
@@ -2194,6 +2201,12 @@ async function renderRailYearRmsd(shown) {
   const slot = elements["rail-year-rmsd"];
   const note = elements["rail-year-rmsd-note"];
   const biasMode = shared.yearMetric === "bias";
+  // Keep the section title in step with the metric (the "?" button is a later child,
+  // so only the leading text node is retitled).
+  const yearHeading = elements["rail-year-rmsd-section"].querySelector("h3");
+  if (yearHeading && yearHeading.firstChild) {
+    yearHeading.firstChild.textContent = biasMode ? "Bias by start date" : "RMSD by start date";
+  }
   const lines = [];
   let unit = "";
   let missing = 0;
@@ -2235,7 +2248,7 @@ async function renderRailYearRmsd(shown) {
       ? "Pooled mean(model − obs) per start date, same method as the official scores. Click a point to open that start date."
       : "Class-4 RMSD per start date, same method as the official scores (pooled over all match-ups for that start). Click a point to open that start date."
     : biasMode
-      ? "Signed bias by start not available for this dataset/region."
+      ? "Bias by start not available for this dataset/region."
       : "Year RMSD-by-start not available for this dataset/region.";
   wireCursorTooltip(slot);
   wireYearRmsdDrilldown(slot, lines);
@@ -2322,7 +2335,7 @@ function sameForecastVariable(a, b) {
 function prettyVariable(panel) {
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && variableEntry(manifest, panel.state.variable);
-  if (isCurrentsVariable(panel.state.variable)) return `currents (${currentsVariableDepth(panel.state.variable)})`;
+  if (isCurrentsVariable(panel.state.variable)) return `currents (${currentsDepthLabel(panel.state.variable)})`;
   return entry ? `${prettyName(entry.standard_name)} · ${entry.depth}` : panel.state.variable;
 }
 
@@ -2371,9 +2384,9 @@ function renderRailSkill(shown, comparison) {
       if (!skill) {
         if (isSurfaceCurrentVariable(panel.state.variable)) continue; // covered by the 15 m switch note
         const suffix = isCurrentsVariable(panel.state.variable)
-          ? `currents at ${currentsVariableDepth(panel.state.variable)}`
+          ? `currents at ${currentsDepthLabel(panel.state.variable)}`
           : "this variable";
-        notes.push(`${labelFor(panel.state.dataset)}: no observation-based skill for ${suffix}`);
+        notes.push(`${labelFor(panel.state.dataset)}: no scored observations for ${suffix}`);
         continue;
       }
       unit = skill.unit || unit;
@@ -2404,19 +2417,19 @@ function renderRailSkill(shown, comparison) {
           skill.n < 10 ? " (low — weak statistic)" : ""
         }`,
       );
-      if (isCurrentsVariable(panel.state.variable)) notes.push("Current speed map points are paired u/v speeds; skill curves show u/v component RMSD.");
+      if (isCurrentsVariable(panel.state.variable)) notes.push("Current speed map points are paired u/v speeds; curves show u/v component RMSD.");
     }
   } catch (error) {
     console.error("Cannot render observation-based skill", error);
     notes.length = 0;
-    notes.push("Observation-based skill is unavailable for this variable/product");
+    notes.push("No scored observations for this variable/product");
   }
   elements["rail-lead-curve"].innerHTML = leadCurveSVG(series, {
     unit,
     labels,
     colors,
-    title: comparison ? "Skill vs lead (both forecasts)" : "Skill vs lead",
-    emptyMessage: "no observation-based skill for this variable/product",
+    title: comparison ? "RMSD vs lead day (both forecasts)" : "RMSD vs lead day",
+    emptyMessage: "no scored observations for this variable/product",
   });
   elements["rail-skill-note"].textContent = notes.join(" · ");
   wireCursorTooltip(elements["rail-lead-curve"]);
@@ -2763,7 +2776,7 @@ async function renderRailPsd(shown, comparison) {
   }
   if (token !== psdRenderToken) return;
   elements["rail-spectra"].innerHTML = psdSpectraSVG(curves, {
-    title: comparison ? "Spectrum of the box (both forecasts)" : "Spectrum of the box",
+    title: comparison ? "Live power spectrum (both forecasts)" : "Live power spectrum",
   });
   // Caption: box dimensions + native grid spacing + resolved wavelength range.
   const gridLabels = [...new Set(sources.filter((entry) => entry.spectrum).map((entry) => cellDegreesLabel(entry.source.cellDeg)))];
@@ -3017,9 +3030,9 @@ async function applyOverlayMode() {
   if (shared.overlayMode === "trajectories") {
     note.textContent = "Click the map to seed trajectories advected through both forecasts' currents.";
   } else if (shared.overlayMode === "class4") {
-    note.textContent = "Loading Class-4 match-ups...";
+    note.textContent = "Loading Class-4 match-ups…";
   } else if (shared.overlayMode === "eddies") {
-    note.textContent = "Loading eddy census...";
+    note.textContent = "Loading eddy census…";
   } else {
     note.textContent = "";
   }
@@ -3037,7 +3050,7 @@ async function applyOverlayMode() {
   }
   if (shared.overlayMode === "class4") {
     if (overlayData.class4Unpublished) {
-      note.textContent = "No class-4 match-ups are published for this dataset.";
+      note.textContent = "No Class-4 match-ups are published for this dataset.";
     } else if (overlayData.class4Error) {
       note.textContent = `Class-4 data failed to load (${overlayData.class4Error}).`;
     } else if (!overlayData.class4) {
@@ -3068,7 +3081,7 @@ function scheduleClass4Reload() {
   if (shared.overlayMode !== "class4") return;
   if (!overlayData.class4 || !overlayData.class4.targeted) return;
   const note = elements["overlay-note"];
-  if (note) note.textContent = `Loading obs for lead ${shared.leadDay}...`;
+  if (note) note.textContent = `Loading obs for lead ${shared.leadDay}…`;
   if (class4ReloadTimer) clearTimeout(class4ReloadTimer);
   class4ReloadTimer = setTimeout(async () => {
     class4ReloadTimer = null;

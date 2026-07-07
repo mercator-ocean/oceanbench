@@ -82,7 +82,7 @@ function niceMax(value) {
 export function leadCurveSVG(
   series,
   {
-    title = "Skill vs lead",
+    title = "RMSD vs lead day",
     unit = "",
     labels = new Map(),
     colors = new Map(),

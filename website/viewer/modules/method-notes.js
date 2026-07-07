@@ -45,9 +45,9 @@ export const METHOD_NOTES = {
 
   // Skill vs lead day chart (rail-lead-curve).
   "lead-curve": {
-    title: "Skill vs lead day",
+    title: "RMSD vs lead day",
     body:
-      "Official class-4 RMSD vs observations per lead day, aggregated over 52 start dates " +
+      "Official Class-4 RMSD vs observations per lead day, aggregated over 52 start dates " +
       "(2024). Shaded band: 95% CI from 1000-iteration bootstrap over start dates. " +
       "Computed offline by the oceanbench library.",
   },
@@ -66,7 +66,7 @@ export const METHOD_NOTES = {
     title: "Year error geography",
     body:
       "Time-mean |obs − model| (or signed model − obs in bias mode) per grid cell over " +
-      "all 52 start dates, from the full class-4 match-up set. Global grid 2°, IBI 0.25°. " +
+      "all 52 start dates, from the full Class-4 match-up set. Global grid 2°, IBI 0.25°. " +
       "Observations are the pre-QC'd 2024 set " +
       "(project-oceanbench/public/observations2024/*.zarr); the model is interpolated to " +
       "each obs by bilinear horizontal plus vertical interpolation. SSH is scored as SLA " +
