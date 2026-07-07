@@ -2758,6 +2758,27 @@ async function psdSourceFor(panel, boxRange) {
   }
 }
 
+// Drop the error-spectrum points below the coarser model's resolution limit:
+// wavelengths shorter than 2× the coarser native cell size (km at the box centre
+// latitude, zonal/meridional mean — the same convention as the spectrum's cellKm).
+function truncateToCommonScales(spectrum, cellDegrees, centreLatitudeDegrees) {
+  if (!spectrum) return null;
+  const coarsest = Math.max(...cellDegrees.filter(Number.isFinite));
+  if (!Number.isFinite(coarsest) || coarsest <= 0) return spectrum;
+  const kmPerDegree = 111.32 * (1 + Math.cos((centreLatitudeDegrees * Math.PI) / 180)) / 2;
+  const cutoffMetres = 2 * coarsest * kmPerDegree * 1000;
+  const wavelength = [];
+  const power = [];
+  for (let i = 0; i < spectrum.wavelength.length; i += 1) {
+    if (spectrum.wavelength[i] >= cutoffMetres) {
+      wavelength.push(spectrum.wavelength[i]);
+      power.push(spectrum.power[i]);
+    }
+  }
+  if (!wavelength.length) return null;
+  return { ...spectrum, wavelength, power };
+}
+
 let psdRenderToken = 0;
 
 async function renderRailPsd(shown, comparison) {
@@ -2802,7 +2823,12 @@ async function renderRailPsd(shown, comparison) {
   if (comparison && sources.length === 2 && sources[0].source.field && sources[1].source.field) {
     const [a, b] = sources.map((entry) => entry.source);
     const alignedB = resampleOntoGrid(b.field, b.latitudes, b.longitudes, a.latitudes, a.longitudes);
-    const errorSpectrum = differenceBoxSpectrum(a.field, a.latitudes, a.longitudes, alignedB, boxViewport, true);
+    let errorSpectrum = differenceBoxSpectrum(a.field, a.latitudes, a.longitudes, alignedB, boxViewport, true);
+    // A difference spectrum is only meaningful over the commonly-resolved scales: below
+    // 2× the COARSER model's native cell size the "difference" is interpolation artifact,
+    // not model disagreement, so the error curve is truncated there. The two individual
+    // model curves stay full-range (each to its own native limit).
+    errorSpectrum = truncateToCommonScales(errorSpectrum, [a.cellDeg, b.cellDeg], box.lat);
     if (errorSpectrum) {
       curves.push({ label: `error (F1−F2)`, color: SERIES_COLORS.error, dashed: true, ...errorSpectrum });
     }

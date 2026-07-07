@@ -94,7 +94,11 @@ export const METHOD_NOTES = {
       "Mean-filled land can damp coastal spectra, so open-ocean boxes are preferable. " +
       "box size is capped so the spectrum always reflects native resolution — wavelengths " +
       "from 2× the grid spacing up to the box size. In compare mode one shared box drives " +
-      "both forecasts; a coarser model's curve simply stops at its own resolution limit. " +
+      "both forecasts; a coarser model's curve simply stops at its own resolution limit, " +
+      "and the error (F1−F2) curve is truncated at the coarser model's limit — below it a " +
+      "difference is interpolation artifact, not model disagreement. " +
+      "Near each model's own grid scale (the last ~octave of its curve) spectra are damped " +
+      "by model numerical dissipation; compare models at scales both resolve. " +
       "Exploratory diagnostic — official spectral metrics live on the scores page.",
   },
 
