@@ -182,29 +182,44 @@ and converted to latitude/longitude cell sigmas from the grid spacing (longitude
 spacing is scaled by the cosine of the domain-mean latitude). Candidate peaks are
 separated by great-circle distance. Closed contours are accepted by spherical
 cell area in km² and convexity; matching also uses great-circle distance. The
-default parameter set is:
+default parameter set is literature-derived (Chelton et al. 2011,
+[DOI:10.1016/j.pocean.2011.01.002](https://doi.org/10.1016/j.pocean.2011.01.002);
+the META / py-eddy-tracker product line, Mason et al. 2014):
 
 | parameter | default |
 |---|---:|
-| `background_sigma_km` | 1334.3391 km |
-| `detection_sigma_km` | 166.7924 km |
-| `min_peak_separation_km` | 889.5594 km |
-| `amplitude_threshold_meters` | 0.04 m |
+| `background_sigma_km` | 1334.3391 km (~12°) |
+| `detection_sigma_km` | `null` (no second smoothing pass) |
+| `min_peak_separation_km` | 100 km |
+| `amplitude_threshold_meters` | 0.01 m |
 | `contour_level_step_meters` | 0.01 m |
-| `min_eddy_area_km2` | 197,828.9874 km² |
-| `max_eddy_area_km2` | 74,185,870.2689 km² |
+| `min_eddy_area_km2` | 2,000 km² (radius ~25 km) |
+| `max_eddy_area_km2` | 3,500,000 km² (radius ~1000 km) |
 | `min_contour_convexity` | 0.75 |
 | `max_match_distance_km` | 200 km |
 
-These physical defaults calibrate to the former 12, 1.5 and 8 cell scales and
-16–6000 cell contour range on an equator-centred 1° grid. Contour filtering is on
-by default (`apply_eddy_contour_filtering=true`): a detected peak is retained only
-if it anchors a closed SSH-anomaly contour whose spherical cell area falls within
-the `min_eddy_area_km2`–`max_eddy_area_km2` bounds and whose convexity (region
-solidity) is at least `min_contour_convexity` (0.75). This closed-contour
-definition is applied consistently to the eddy metrics, matching and the census.
-`apply_eddy_contour_filtering=false` recovers the raw-peak census that reproduces
-the already-published `glonet_1_degree` artifact.
+The `background_sigma_km` high-pass stays; the second anomaly-smoothing pass is
+off by default (Chelton/META and py-eddy-tracker do not blur the mesoscale field
+before peak detection). `detection_sigma_km` is retained so pre-change artifacts
+stay reproducible by passing an explicit value.
+
+**Parameter history (breaking change 2026-07-07).** Through commit c1f1099 these
+constants encoded *1°-grid-cell counts* rather than physical scales — e.g.
+`min_peak_separation` "8" meant 8 cells (~890 km on a 1° grid, and even smaller in
+km on finer grids). At native resolution this made detection wildly
+over-restrictive: an adversarial audit measured only ~70 eddies globally at 1°,
+versus the ~1,500–2,500 expected from the literature. The values above are the
+corrected physical scales, resolution-independent (the same km apply at 1°, 1/4°
+and 1/12°). **Eddy artifacts published before this change used the old
+parameters** and are not comparable to those recomputed afterwards.
+
+Contour filtering is on by default (`apply_eddy_contour_filtering=true`): a
+detected peak is retained only if it anchors a closed SSH-anomaly contour whose
+spherical cell area falls within the `min_eddy_area_km2`–`max_eddy_area_km2`
+bounds and whose convexity (region solidity) is at least `min_contour_convexity`
+(0.75). This closed-contour definition is applied consistently to the eddy
+metrics, matching and the census. `apply_eddy_contour_filtering=false` recovers
+the raw-peak census.
 
 Each eddy census reference entry includes a `parameters` object containing the
 complete parameter set, the resolved contour-filter switch and the OceanBench code
