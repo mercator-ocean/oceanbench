@@ -83,7 +83,18 @@ body {
 .title { min-width: 0; }
 .title h1 { font-size: 1.1rem; margin: 0; font-weight: 500; }
 .tagline { color: var(--muted); margin: 0.12rem 0 0; font-size: 0.82rem; max-width: 44rem; }
-.header-actions { display: flex; align-items: center; gap: 0.5rem; }
+.header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+/* Embedded in the Quarto site: the parent navbar already carries the OceanBench
+   logo and page title, so the app's own brand block (logo + "Viewer" + tagline)
+   is redundant. Hide it and keep the header as a slim strip holding only the
+   functional controls (layout switch, theme, About). Standalone mode is untouched. */
+.viewer-embedded .brand-title { display: none; }
+.viewer-embedded .app-header {
+  justify-content: flex-end;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
 .layout-switch { display: inline-flex; gap: 0.25rem; }
 .layout-switch .ghost-button { padding: 0.4rem 0.7rem; font-variant-numeric: tabular-nums; }
 .layout-switch .ghost-button.active,

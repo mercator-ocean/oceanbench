@@ -362,9 +362,10 @@ function wirePanel(panel) {
       setActivePanel(panel.index);
       await renderPanel(panel);
       if (isDiffView() && panel.index === 1) await renderPanel(panels[0]);
-      await loadOverlayData();
-      redrawOverlaysAll();
-      updateContextRail();
+      // Reload overlays through applyOverlayMode so the overlay note is refreshed too:
+      // switching to a dataset without published match-ups must flip the note to the
+      // quiet "not published" message instead of leaving the previous dataset's note.
+      await applyOverlayMode();
       writeHash();
     } catch (error) {
       setStatus(String(error.message || error), true);
@@ -877,6 +878,7 @@ async function loadOverlayData() {
   overlayData.eddiesMatch = null;
   overlayData.class4 = null;
   overlayData.class4Error = null;
+  overlayData.class4Unpublished = false;
   if (shared.overlayMode === "eddies") {
     // Load each visible forecast's own eddy artifact and reduce it to a census. The
     // two forecasts come from the panel pickers; no dataset is a hardcoded truth.
@@ -894,6 +896,14 @@ async function loadOverlayData() {
         : null;
   } else if (shared.overlayMode === "class4") {
     const class4Url = urls.class4_matchups || glonetUrls.class4_matchups;
+    // Reference datasets (and any dataset without published match-ups) carry an
+    // explicit null class4_matchups in insights.json. That is a legitimate absence,
+    // not a failure — skip the load and let the quiet informative note explain it,
+    // mirroring the skill-curve note, rather than surfacing a scary "URL is missing".
+    if (!class4Url) {
+      overlayData.class4Unpublished = true;
+      return;
+    }
     const manifest = await loadInsightManifest(urls.class4_matchups ? urls.manifest : glonetUrls.manifest);
     const class4Manifest = manifest && manifest["class4-matchups"];
     try {
@@ -2185,7 +2195,11 @@ function updateRailLegend(panel) {
     const targeted = overlayData.class4 && overlayData.class4.targeted;
     const sampled = overlayData.class4 && overlayData.class4.sampled;
     const thinned = Boolean(hostPanel && hostPanel.class4Thinned);
-    const noData = !overlayData.class4 && !overlayData.class4Error ? " · no match-ups for this dataset/region" : "";
+    const noData = overlayData.class4Unpublished
+      ? " · match-ups not published for this dataset"
+      : !overlayData.class4 && !overlayData.class4Error
+        ? " · no match-ups for this dataset/region"
+        : "";
     const weak = matched > 0 && matched < 30 ? " · low count — statistic is weak" : "";
     const fullDensityNote = thinned ? " · zoom in for full density" : "";
     const countText = thinned
@@ -2276,7 +2290,9 @@ async function applyOverlayMode() {
     }
   }
   if (shared.overlayMode === "class4") {
-    if (overlayData.class4Error) {
+    if (overlayData.class4Unpublished) {
+      note.textContent = "No class-4 match-ups are published for this dataset.";
+    } else if (overlayData.class4Error) {
       note.textContent = `Class-4 data failed to load (${overlayData.class4Error}).`;
     } else if (!overlayData.class4) {
       note.textContent = "No Class-4 match-ups are available for this dataset and region.";
@@ -2308,7 +2324,9 @@ function scheduleClass4Reload() {
     class4ReloadTimer = null;
     await loadOverlayData();
     if (note) {
-      note.textContent = overlayData.class4Error
+      note.textContent = overlayData.class4Unpublished
+        ? "No class-4 match-ups are published for this dataset."
+        : overlayData.class4Error
         ? `Class-4 data failed to load (${overlayData.class4Error}).`
         : !overlayData.class4
           ? "No Class-4 match-ups are available for this dataset and region."
@@ -2346,6 +2364,7 @@ const VIEWER_EMBEDDED = new URLSearchParams(location.search).has("embed");
 
 function wireEmbeddedTheme() {
   if (!VIEWER_EMBEDDED) return;
+  document.body.classList.add("viewer-embedded");
   elements["theme-toggle"].hidden = true;
   window.addEventListener("message", (event) => {
     const data = event.data;
