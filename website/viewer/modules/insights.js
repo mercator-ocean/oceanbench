@@ -176,6 +176,7 @@ export function spectraEntry(spectra, variable, reference, leadDay) {
  */
 export function class4Points(rows, { variable, depthBin, leadDay, startDate }) {
   if (!rows) return [];
+  if (isClass4CurrentSpeedVariable(variable)) return class4SpeedPoints(rows, { variable, depthBin, leadDay, startDate });
   const requestedLead = leadDay == null ? null : Number(leadDay);
   const requestedStart = startDate || null;
   const matched = [];
@@ -187,6 +188,72 @@ export function class4Points(rows, { variable, depthBin, leadDay, startDate }) {
     matched.push(row);
   }
   return matched;
+}
+
+const CLASS4_CURRENT_COMPONENTS = {
+  u: "eastward_sea_water_velocity",
+  v: "northward_sea_water_velocity",
+};
+
+function isClass4CurrentSpeedVariable(variable) {
+  return variable === "current_speed" || variable === "current_speed_15m";
+}
+
+function class4SpeedPoints(rows, { variable, depthBin, leadDay, startDate }) {
+  const requestedLead = leadDay == null ? null : Number(leadDay);
+  const requestedStart = startDate || null;
+  const byLocation = new Map();
+  for (const row of rows) {
+    if (row.variable !== CLASS4_CURRENT_COMPONENTS.u && row.variable !== CLASS4_CURRENT_COMPONENTS.v) continue;
+    if (depthBin && row.depth_bin !== depthBin) continue;
+    if (requestedLead !== null && Number(row.lead_day) !== requestedLead) continue;
+    if (requestedStart && formatClass4Date(row.start_date) !== requestedStart) continue;
+    const key = class4PairKey(row);
+    const pair = byLocation.get(key) || {};
+    if (row.variable === CLASS4_CURRENT_COMPONENTS.u) pair.u = row;
+    else pair.v = row;
+    byLocation.set(key, pair);
+  }
+  const matched = [];
+  for (const pair of byLocation.values()) {
+    const point = class4SpeedPoint(pair, variable);
+    if (point) matched.push(point);
+  }
+  return matched;
+}
+
+function class4PairKey(row) {
+  return [
+    row.latitude,
+    row.longitude,
+    row.depth_bin || "",
+    formatClass4Date(row.start_date),
+    Number(row.lead_day),
+  ].join("|");
+}
+
+function class4SpeedPoint(pair, variable) {
+  if (!pair.u || !pair.v) return null;
+  const obsU = numericOrNaN(pair.u.observation_value);
+  const obsV = numericOrNaN(pair.v.observation_value);
+  const modelU = numericOrNaN(pair.u.model_value);
+  const modelV = numericOrNaN(pair.v.model_value);
+  if (![obsU, obsV, modelU, modelV].every(Number.isFinite)) return null;
+  const observation = Math.hypot(obsU, obsV);
+  const model = Math.hypot(modelU, modelV);
+  return {
+    ...pair.u,
+    variable,
+    observation_value: observation,
+    model_value: model,
+    abs_error: Math.abs(observation - model),
+  };
+}
+
+function numericOrNaN(value) {
+  if (value == null || value === "") return NaN;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : NaN;
 }
 
 function formatClass4Date(value) {

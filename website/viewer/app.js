@@ -988,6 +988,7 @@ function visibleCopyOffsets(projection, canvas) {
 // Number of Class-4 rows matching the active selector before spatial thinning — the
 // "of M sampled" denominator the legend reports so low counts read as weak (item 5).
 function countClass4Matches(rows, { variable, depthBin, leadDay, startDate }) {
+  if (isCurrentsVariable(variable)) return class4Points(rows, { variable, depthBin, leadDay, startDate }).length;
   if (!rows) return 0;
   const requestedLead = leadDay == null ? null : Number(leadDay);
   let total = 0;
@@ -1311,7 +1312,11 @@ function class4TooltipMarkup(record, units) {
   const model = numericOrNaN(record.model_value);
   const hasObs = Number.isFinite(obs);
   const hasModel = Number.isFinite(model);
-  const error = hasObs && hasModel ? model - obs : numericOrNaN(record.abs_error);
+  const error = Number.isFinite(numericOrNaN(record.abs_error))
+    ? numericOrNaN(record.abs_error)
+    : hasObs && hasModel
+      ? Math.abs(model - obs)
+      : NaN;
   const unit = units || "";
   const rows = [];
   const platformKey = CLASS4_PLATFORM_KEYS.find((key) => record[key] != null && record[key] !== "");
