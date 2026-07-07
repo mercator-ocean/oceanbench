@@ -155,8 +155,9 @@ const shared = {
   // Year-scope map metric: "error" = time-mean |obs − model| (sequential), "bias" =
   // time-mean signed model − obs (diverging, centred 0). Single-forecast scope ignores it.
   yearMetric: "error",
-  // PSD rectangle tool: { lon, lat, w, h } in degrees (centre + size), or null until
-  // the first rail render creates the default box centred in the viewport.
+  // PSD rectangle tool: { lon, lat, w, h } in degrees (centre + size). Disabled by
+  // default so the initial map stays clean; enabling creates a centred default box.
+  psdEnabled: false,
   psdBox: null,
   overlayMode: "none",
   region: "global",
@@ -2299,7 +2300,7 @@ function psdBoxWorldRect() {
 // The rectangle is a spectrum tool, not an overlay mode: it shows on every panel in
 // single-forecast scope (incl. swipe/difference — one shared box drives both spectra).
 function psdBoxVisible() {
-  return shared.scope !== "year" && Boolean(shared.psdBox);
+  return shared.psdEnabled && shared.scope !== "year" && Boolean(shared.psdBox);
 }
 
 function drawPsdBox(panel, context, projection) {
@@ -2508,6 +2509,12 @@ let psdRenderToken = 0;
 
 async function renderRailPsd(shown, comparison) {
   const token = ++psdRenderToken;
+  updatePsdToggle();
+  if (!shared.psdEnabled || shared.scope === "year") {
+    elements["rail-spectra"].innerHTML = "";
+    elements["rail-psd-note"].textContent = "";
+    return;
+  }
   const box = ensurePsdBox(shown);
   const boxRange = {
     latMin: box.lat - box.h / 2,
@@ -2569,6 +2576,28 @@ async function renderRailPsd(shown, comparison) {
     ? `box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}° · native ${gridLabels.join(" & ")} grid${kmRange ? " · " + kmRange : ""} — drag the box on the map, resize by its handles`
     : "Move the box over ocean to compute a spectrum (boxed area is mostly land).";
   wireCursorTooltip(elements["rail-spectra"]);
+}
+
+function updatePsdToggle() {
+  const section = document.getElementById("rail-spectra-section");
+  const button = elements["psd-toggle"];
+  if (!section || !button) return;
+  const enabled = shared.psdEnabled && shared.scope !== "year";
+  section.classList.toggle("psd-disabled", !enabled);
+  button.setAttribute("aria-pressed", enabled ? "true" : "false");
+  button.setAttribute("aria-label", enabled ? "Hide live power spectrum" : "Show live power spectrum");
+  button.title = enabled ? "Hide live power spectrum" : "Show live power spectrum";
+  button.textContent = enabled ? "◉" : "◌";
+}
+
+function setPsdEnabled(enabled) {
+  if (shared.psdEnabled === enabled) return;
+  shared.psdEnabled = enabled;
+  if (enabled) ensurePsdBox(panels.slice(0, shared.layout));
+  updatePsdToggle();
+  redrawOverlaysAll();
+  updateContextRail();
+  writeHash();
 }
 
 function currentViewport() {
@@ -3094,6 +3123,9 @@ function wireGlobalControls() {
   elements["theme-toggle"].addEventListener("click", () => {
     setViewerTheme(shared.theme === "light" ? "dark" : "light");
   });
+  elements["psd-toggle"].addEventListener("click", () => {
+    setPsdEnabled(!shared.psdEnabled);
+  });
   elements["about-toggle"].addEventListener("click", () => {
     const dialog = elements["about-dialog"];
     if (typeof dialog.showModal === "function") dialog.showModal();
@@ -3316,7 +3348,10 @@ function writeHash() {
   parameters.set("theme", shared.theme);
   if (shared.scope !== "single") parameters.set("scope", shared.scope);
   if (shared.yearMetric !== "error") parameters.set("metric", shared.yearMetric);
-  if (shared.psdBox) {
+  if (shared.psdEnabled) {
+    parameters.set("psdOn", "1");
+  }
+  if (shared.psdEnabled && shared.psdBox) {
     parameters.set("psd", [shared.psdBox.lon, shared.psdBox.lat, shared.psdBox.w, shared.psdBox.h].map((v) => v.toFixed(2)).join(","));
   }
   if (shared.overlayMode !== "none") parameters.set("ov", shared.overlayMode);
@@ -3345,9 +3380,13 @@ function readHash() {
   if (parameters.has("theme")) shared.theme = parameters.get("theme");
   if (parameters.get("scope") === "year") shared.scope = "year";
   if (parameters.get("metric") === "bias") shared.yearMetric = "bias";
+  shared.psdEnabled = parameters.get("psdOn") === "1";
   if (parameters.has("psd")) {
     const [lon, lat, w, h] = parameters.get("psd").split(",").map(Number);
-    if ([lon, lat, w, h].every(Number.isFinite) && w > 0 && h > 0) shared.psdBox = { lon, lat, w, h };
+    if ([lon, lat, w, h].every(Number.isFinite) && w > 0 && h > 0) {
+      shared.psdBox = { lon, lat, w, h };
+      if (!parameters.has("psdOn")) shared.psdEnabled = true;
+    }
   }
   if (parameters.has("ov")) shared.overlayMode = parameters.get("ov");
   if (parameters.has("region")) shared.region = parameters.get("region");
@@ -3421,6 +3460,7 @@ function selectElements() {
     "rail-forecast-toggle",
     "rail-lead-curve",
     "rail-skill-note",
+    "psd-toggle",
     "rail-spectra",
     "rail-psd-note",
     "rail-year-rmsd-section",
