@@ -29,7 +29,8 @@ dependencies = [
     "papermill[s3] (>=2.6.0)",
     "xrft (>=1.0.1,<2.0.0)",
     "scikit-image (>=0.25,<1.0.0)",
-    "metpy (>=1.7,<2.0.0)"
+    "metpy (>=1.7,<2.0.0)",
+    "pyarrow (>=15,<21)"
 ]
 
 [project.scripts]
