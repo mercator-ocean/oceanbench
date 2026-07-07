@@ -17,7 +17,7 @@ export const EDDY_COLORS = {
   spurious: "#ff9f45", // model eddy with no reference counterpart
   missed: "#c77dff", // reference eddy the model failed to produce
 };
-const CLASS4_COLORMAP = "thermal";
+export const CLASS4_COLORMAP = "thermal";
 
 function toNorm(longitude, latitude) {
   return { nx: (longitude + 180) / 360, ny: (90 - latitude) / 180 };

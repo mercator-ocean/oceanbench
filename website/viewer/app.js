@@ -45,6 +45,7 @@ import {
   numericOrNaN,
   EDDY_COLORS,
   EDDY_MATCHED_COLOR,
+  CLASS4_COLORMAP,
 } from "./modules/overlays.js";
 import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, SERIES_COLORS } from "./modules/charts.js";
 import {
@@ -1970,39 +1971,180 @@ function updateYearLegend(visible) {
   attachMethodNote(legend, "year-geography");
 }
 
+// The single bottom legend strip always describes the PRIMARY layer actually drawn:
+// the field colorbar with no overlay, or the overlay's own key (obs-error ramp,
+// eddy/trajectory swatches) while a purpose overlay mutes the field. The right rail
+// carries no legend block any more — all legend information lives here.
 function updateSharedColorbar() {
   const panel = isDiffView() ? panels[0] : panels[activePanelIndex];
   updateYearLegend(shared.scope === "year");
+  const colorbar = elements.colorbar;
+  const legend = elements["map-legend"];
+  const textColor = themeToken("--ob-viewer-colorbar-text", shared.theme === "light" ? "#14181d" : "#e6edf3");
+
+  // Year scope keeps its own colorbar untouched (design: don't touch year legend).
   if (shared.scope === "year") {
+    colorbar.hidden = false;
+    hideMapLegend(legend);
     if (!panel || !panel.colormap || !panel.range) {
       elements["layer-info"].textContent = `entire year · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
       return;
     }
     const nStarts = panel.yearMeta && panel.yearMeta.nStarts;
     const biasMode = panel.yearMetric === "bias";
-    drawColorbar(elements.colorbar, panel.colormap, panel.range, {
+    drawColorbar(colorbar, panel.colormap, panel.range, {
       label: `${biasMode ? "mean (model − obs)" : "mean |obs − model|"} over ${nStarts || "?"} start dates · ${panel.label} (${panel.units})`,
-      textColor: themeToken("--ob-viewer-colorbar-text", shared.theme === "light" ? "#14181d" : "#e6edf3"),
+      textColor,
     });
     elements["layer-info"].textContent = `entire year (${nStarts || "?"} start dates) · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
     return;
   }
   if (!panel || !panel.colormap || !panel.range) return;
-  const sameVariable = panels
-    .slice(0, shared.layout)
-    .every((candidate) => candidate.state.variable === panel.state.variable);
-  const suffix = isDiffView() ? "" : shared.layout > 1 ? (sameVariable ? " (shared)" : ` (panel ${activePanelIndex + 1})`) : "";
-  const mutedNote = fieldMutedUnderOverlay() ? " · muted under overlay" : "";
-  drawColorbar(elements.colorbar, panel.colormap, panel.range, {
-    label: `${panel.label} (${panel.units})${suffix}${mutedNote}`,
-    textColor: themeToken("--ob-viewer-colorbar-text", shared.theme === "light" ? "#14181d" : "#e6edf3"),
-  });
+
+  const mode = isDiffView() ? "none" : shared.overlayMode;
+  if (mode === "class4") {
+    const scale = Math.max(...panels.slice(0, shared.layout).map((candidate) => candidate.class4Scale || 0), 0);
+    colorbar.hidden = false;
+    drawColorbar(colorbar, CLASS4_COLORMAP, [0, scale || 1], {
+      label: `|obs − model| (${panel.units})`,
+      textColor,
+    });
+    renderClass4Legend(legend, panel, scale);
+  } else if (mode === "eddies") {
+    colorbar.hidden = true;
+    renderEddyLegend(legend, panel);
+  } else if (mode === "trajectories") {
+    colorbar.hidden = true;
+    renderTrajectoryLegend(legend, panel);
+  } else {
+    colorbar.hidden = false;
+    hideMapLegend(legend);
+    const sameVariable = panels
+      .slice(0, shared.layout)
+      .every((candidate) => candidate.state.variable === panel.state.variable);
+    const suffix = isDiffView() ? "" : shared.layout > 1 ? (sameVariable ? " (shared)" : ` (panel ${activePanelIndex + 1})`) : "";
+    drawColorbar(colorbar, panel.colormap, panel.range, {
+      label: `${panel.label} (${panel.units})${suffix}`,
+      textColor,
+    });
+  }
+  setLayerInfo(panel);
+}
+
+function setLayerInfo(panel) {
   const manifest = manifestFor(panel.state.dataset);
   if (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length) {
     elements["layer-info"].textContent = `lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}× · loading metadata`;
     return;
   }
   elements["layer-info"].textContent = `start ${manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)]} · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
+}
+
+function hideMapLegend(legend) {
+  legend.hidden = true;
+  legend.innerHTML = "";
+}
+
+function mutedBackgroundNote(panel) {
+  return `<span class="legend-bg">background: ${escapeHtml(prettyVariable(panel))} (muted)</span>`;
+}
+
+function legendHelpAnchor() {
+  return `<span class="legend-help"></span>`;
+}
+
+function legendSwatch(color, label, count) {
+  const countText = count == null ? "" : ` — <strong>${formatCount(count)}</strong>`;
+  return `<span class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escapeHtml(label)}${countText}</span>`;
+}
+
+function legendLine(color, label) {
+  return `<span class="legend-item"><span class="legend-line" style="background:${color}"></span>${escapeHtml(label)}</span>`;
+}
+
+// Class-4 obs mode: the obs-error ramp is the primary key (drawn on the colorbar
+// canvas). This strip carries the density note (moved out of the right rail), the
+// muted-background note and the "?" helper.
+function renderClass4Legend(legend, panel, scale) {
+  const hostPanel = panels[0];
+  const shown = hostPanel ? hostPanel.class4Count || 0 : 0;
+  const visibleTotal = hostPanel ? hostPanel.class4VisibleTotal || shown : shown;
+  const matched = hostPanel ? hostPanel.class4Matched || 0 : 0;
+  const targeted = overlayData.class4 && overlayData.class4.targeted;
+  const sampled = overlayData.class4 && overlayData.class4.sampled;
+  const thinned = Boolean(hostPanel && hostPanel.class4Thinned);
+  const noData = overlayData.class4Unpublished
+    ? " · match-ups not published for this dataset"
+    : !overlayData.class4 && !overlayData.class4Error
+      ? " · no match-ups for this dataset/region"
+      : "";
+  const weak = matched > 0 && matched < 30 ? " · low count — statistic is weak" : "";
+  const fullDensityNote = thinned ? " · zoom in for full density" : "";
+  const countText = thinned
+    ? `<strong>showing ${formatCount(shown)} of ${formatCount(visibleTotal)} obs</strong>${fullDensityNote}`
+    : targeted
+      ? `<strong>${formatCount(matched)} obs</strong>`
+      : `<strong>${formatCount(shown)} obs</strong>`;
+  legend.hidden = false;
+  legend.innerHTML =
+    `<span class="legend-note">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${escapeHtml(panel.units)} · region ${escapeHtml(shared.region)}${!targeted && sampled ? " · sampled subset" : ""}${weak}${noData}</span>` +
+    mutedBackgroundNote(panel) +
+    legendHelpAnchor();
+  attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
+}
+
+// Eddies mode: categorical swatch row faithful to what is drawn — matched pairs (the
+// intercomparison neutral colour) and each forecast's only-eddies, or a single census.
+function renderEddyLegend(legend, panel) {
+  const censuses = overlayData.eddiesCensuses || [];
+  const match = overlayData.eddiesMatch;
+  const lead = (censuses.find(Boolean) || {}).leadDay;
+  const leadNote = `lead ${lead ?? "—"} (nearest available)`;
+  let swatches;
+  let caption;
+  if (shared.layout === 2 && match) {
+    const forecast1 = labelFor(panels[0].state.dataset);
+    const forecast2 = labelFor(panels[1].state.dataset);
+    const meanText = Number.isFinite(match.meanDisplacementKm) ? `${match.meanDisplacementKm.toFixed(0)} km` : "—";
+    swatches =
+      legendSwatch(EDDY_MATCHED_COLOR, "Matched pairs", match.matched.length) +
+      legendSwatch(forecastColor(0), `Only in ${forecast1}`, match.onlyA.length) +
+      legendSwatch(forecastColor(1), `Only in ${forecast2}`, match.onlyB.length);
+    caption = `mean centre displacement of matched pairs ${meanText} · ${leadNote}`;
+  } else if (censuses[0]) {
+    swatches = legendSwatch(forecastColor(0), `${labelFor(panels[0].state.dataset)} eddies`, censuses[0].detections.length);
+    caption = `single forecast census · ${leadNote}`;
+  } else {
+    swatches = `<span class="legend-note">No eddy detections for this selection.</span>`;
+    caption = "";
+  }
+  legend.hidden = false;
+  legend.innerHTML =
+    `<span class="legend-row">${swatches}</span>` +
+    (caption ? `<span class="legend-note dim">${escapeHtml(caption)}</span>` : "") +
+    mutedBackgroundNote(panel) +
+    legendHelpAnchor();
+  const census = censuses.find(Boolean);
+  attachEddyMethodNote(legend.querySelector(".legend-help"), census && census.parameters);
+}
+
+// Trajectories mode: the two forecast colours the fans are drawn in, plus the seed note.
+function renderTrajectoryLegend(legend, panel) {
+  const forecast1 = labelFor(panels[0].state.dataset);
+  let swatches = legendLine(TRAJECTORY_COLORS[0], `${forecast1} drift`);
+  if (shared.layout === 2) swatches += legendLine(TRAJECTORY_COLORS[1], `${labelFor(panels[1].state.dataset)} drift`);
+  swatches += `<span class="legend-item"><span class="legend-seed">◦</span>seed cluster</span>`;
+  const seeded = trajectoryState && trajectoryState.trajectories;
+  const caption = seeded
+    ? "20 shared seeds advected through each forecast's currents"
+    : "click the map to seed a 20-particle cluster";
+  legend.hidden = false;
+  legend.innerHTML =
+    `<span class="legend-row">${swatches}</span>` +
+    `<span class="legend-note dim">${escapeHtml(caption)}</span>` +
+    mutedBackgroundNote(panel) +
+    legendHelpAnchor();
+  attachMethodNote(legend.querySelector(".legend-help"), "trajectories");
 }
 
 // ---- context rail -----------------------------------------------------------
@@ -2044,7 +2186,6 @@ async function updateContextRail() {
   if (yearSection) yearSection.hidden = true;
   renderRailPsd(shown, comparison);
   renderTrajectoryRail();
-  updateRailLegend(panels[activePanelIndex] || panels[0]);
 }
 
 // RMSD by start date, one line per visible forecast at the selected lead day. Clicking
@@ -2819,82 +2960,8 @@ function class4SelectionNote() {
   return `No ${variable} match-ups at ${class4DepthLabel(entry, class4DepthBin(entry))} for this start/lead.`;
 }
 
-function updateRailLegend(panel) {
-  const section = elements["rail-legend-section"];
-  const container = elements["rail-legend"];
-  if (shared.overlayMode === "none" || shared.overlayMode === "trajectories") {
-    section.hidden = true;
-    return;
-  }
-  section.hidden = false;
-  // Method note on the legend heading: class-4 match-ups, or eddy detection with the
-  // live census parameters. Cleared first so switching overlay modes swaps the note.
-  const legendHeading = section.querySelector("h3");
-  if (legendHeading) {
-    legendHeading.querySelectorAll(".method-note-btn").forEach((button) => button.remove());
-    if (shared.overlayMode === "class4") {
-      attachMethodNote(legendHeading, "class4-legend");
-    } else if (shared.overlayMode === "eddies") {
-      const census = (overlayData.eddiesCensuses || []).find(Boolean);
-      attachEddyMethodNote(legendHeading, census && census.parameters);
-    }
-  }
-  if (shared.overlayMode === "eddies") {
-    const censuses = overlayData.eddiesCensuses || [];
-    const match = overlayData.eddiesMatch;
-    const lead = (censuses.find(Boolean) || {}).leadDay;
-    const leadNote = `lead ${lead ?? "—"} (nearest available)`;
-    if (shared.layout === 2 && match) {
-      const forecast1 = labelFor(panels[0].state.dataset);
-      const forecast2 = labelFor(panels[1].state.dataset);
-      const meanText = Number.isFinite(match.meanDisplacementKm)
-        ? `${match.meanDisplacementKm.toFixed(0)} km`
-        : "—";
-      container.innerHTML =
-        row(EDDY_MATCHED_COLOR, "Matched pairs", match.matched.length) +
-        row(forecastColor(0), `Only in ${forecast1}`, match.onlyA.length) +
-        row(forecastColor(1), `Only in ${forecast2}`, match.onlyB.length) +
-        `<p class="dim">mean centre displacement of matched pairs ${meanText} · ${leadNote}</p>`;
-    } else if (censuses[0]) {
-      container.innerHTML =
-        row(forecastColor(0), `${labelFor(panels[0].state.dataset)} eddies`, censuses[0].detections.length) +
-        `<p class="dim">single forecast census · ${leadNote}</p>`;
-    } else {
-      container.innerHTML = `<p class="dim">No eddy detections for this selection.</p>`;
-    }
-  } else if (shared.overlayMode === "class4") {
-    const hostPanel = panels[0];
-    const shown = hostPanel ? hostPanel.class4Count || 0 : 0;
-    const visibleTotal = hostPanel ? hostPanel.class4VisibleTotal || shown : shown;
-    const matched = hostPanel ? hostPanel.class4Matched || 0 : 0;
-    const scale = Math.max(...panels.slice(0, shared.layout).map((candidate) => candidate.class4Scale || 0), 0);
-    const targeted = overlayData.class4 && overlayData.class4.targeted;
-    const sampled = overlayData.class4 && overlayData.class4.sampled;
-    const thinned = Boolean(hostPanel && hostPanel.class4Thinned);
-    const noData = overlayData.class4Unpublished
-      ? " · match-ups not published for this dataset"
-      : !overlayData.class4 && !overlayData.class4Error
-        ? " · no match-ups for this dataset/region"
-        : "";
-    const weak = matched > 0 && matched < 30 ? " · low count — statistic is weak" : "";
-    const fullDensityNote = thinned ? " · zoom in for full density" : "";
-    const countText = thinned
-      ? `<strong>showing ${formatCount(shown)} of ${formatCount(visibleTotal)} obs</strong>${fullDensityNote}`
-      : targeted
-        ? `<strong>${formatCount(matched)} obs</strong>`
-        : `<strong>${formatCount(shown)} obs</strong>`;
-    container.innerHTML =
-      `<div class="row"><span class="swatch" style="background:${SERIES_COLORS.error}"></span>|obs − model|, brighter = larger error</div>` +
-      `<p class="dim">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}${!targeted && sampled ? " · sampled subset" : ""}${weak}${noData}</p>`;
-  }
-}
-
 function formatCount(value) {
   return Math.round(Number(value) || 0).toLocaleString("en-US");
-}
-
-function row(color, label, count) {
-  return `<div class="row"><span class="swatch" style="background:${color}"></span>${label} — <strong>${count}</strong></div>`;
 }
 
 // ---- global controls --------------------------------------------------------
@@ -3371,7 +3438,7 @@ function redrawOverlaysAll() {
     drawOverlays(panels[i]);
     drawTrajectoryFans(panels[i]);
   }
-  updateRailLegend(panels[activePanelIndex]);
+  updateSharedColorbar();
 }
 
 function markLayoutButtons() {
@@ -3524,6 +3591,7 @@ function selectElements() {
     "rail-collapse",
     "panel-grid",
     "colorbar",
+    "map-legend",
     "year-legend",
     "layer-info",
     "status",
@@ -3542,8 +3610,6 @@ function selectElements() {
     "rail-year-rmsd-section",
     "rail-year-rmsd",
     "rail-year-rmsd-note",
-    "rail-legend",
-    "rail-legend-section",
     "rail-trajectory-section",
     "rail-trajectory-chart",
     "rail-trajectory-note",

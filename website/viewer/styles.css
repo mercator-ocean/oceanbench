@@ -347,6 +347,26 @@ body.resizing-layout.row { cursor: row-resize; }
 .year-legend .item { display: inline-flex; align-items: center; gap: 0.3rem; }
 .year-legend .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 3px; border: 1px solid rgba(128, 128, 128, 0.35); }
 
+/* Adaptive bottom legend strip. Sized like the colorbar so switching purpose modes
+   (colorbar <-> swatch row) does not jump the footer height. */
+.map-legend {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3rem;
+  width: min(32rem, 100%);
+  min-height: 3.25rem;
+  font-size: 0.74rem;
+}
+.map-legend .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
+.map-legend .legend-item { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text); }
+.map-legend .legend-dot { display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 50%; }
+.map-legend .legend-line { display: inline-block; width: 1.1rem; height: 0.28rem; border-radius: 2px; }
+.map-legend .legend-seed { color: var(--muted); font-size: 0.95rem; line-height: 1; }
+.map-legend .legend-note { color: var(--text); }
+.map-legend .legend-note.dim, .map-legend .legend-bg { color: var(--muted); font-size: 0.7rem; }
+.map-legend .legend-help { display: inline-flex; }
+
 .status { color: var(--muted); font-size: 0.82rem; margin: 0; min-height: 1rem; }
 .status.error { color: #ff6b6b; }
 
