@@ -23,6 +23,11 @@ def _run_evaluate(args: argparse.Namespace) -> int:
             published_challengers_path=published_base_url() + "challengers.json",
             metrics=args.metrics,
             artifacts=args.artifacts,
+            viewer_artifacts=args.viewer_artifacts,
+            s3_bucket=args.s3_bucket,
+            s3_prefix=args.s3_prefix,
+            s3_endpoint=args.s3_endpoint,
+            s3_env_file=args.s3_env_file,
         )
     except Exception as error:  # noqa: BLE001 - surface a clean message to the CLI user
         print(f"Error: {error}", file=sys.stderr)
@@ -40,6 +45,15 @@ def _run_evaluate(args: argparse.Namespace) -> int:
             "serve:     " f"{sys.executable} -m http.server --directory {Path(result.viewer_directory).resolve()} 8799"
         )
         print("open:      http://127.0.0.1:8799/?data_base=local")
+    if result.matchup_parquet_path:
+        print(f"matchups:  {result.matchup_parquet_path}")
+    if result.eddy_census_path:
+        print(f"eddies:    {result.eddy_census_path}")
+    if result.year_error_geography_path:
+        print(f"year-geo:  {result.year_error_geography_path}")
+        print(f"year-rmsd: {result.year_rmsd_by_start_path}")
+    if result.published_prefix:
+        print(f"published: {result.published_prefix}")
     return 0
 
 
@@ -92,6 +106,34 @@ def _add_evaluate_parser(
         default=None,
         metavar="M",
         help="Metrics to run (default: all): " + ", ".join(METRIC_NAMES),
+    )
+    parser.add_argument(
+        "--viewer-artifacts",
+        action="store_true",
+        help=(
+            "Also produce the viewer serving artifacts (Class-4 match-up parquet, eddy census, "
+            "field pyramid and year-mode JSON) under the output directory"
+        ),
+    )
+    parser.add_argument(
+        "--s3-bucket",
+        default=None,
+        help="Optional S3 bucket to upload the produced output tree to (e.g. project-oceanbench)",
+    )
+    parser.add_argument(
+        "--s3-prefix",
+        default=None,
+        help="Target key prefix within --s3-bucket (required when --s3-bucket is given)",
+    )
+    parser.add_argument(
+        "--s3-endpoint",
+        default=None,
+        help="S3-compatible endpoint URL (defaults to the EDITO MinIO endpoint)",
+    )
+    parser.add_argument(
+        "--s3-env-file",
+        default=None,
+        help="Optional .env file to source the EDITO offline token from (AWS_* env vars still win)",
     )
 
 

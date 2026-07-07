@@ -39,7 +39,19 @@ def test_evaluate_local_cli_has_only_the_approved_surface():
         if getattr(action, "choices", None) and "evaluate" in action.choices
     )
     option_strings = {option for action in evaluate_local_parser._actions for option in action.option_strings}
-    assert option_strings == {"-h", "--help", "--pack", "--output", "--artifacts", "--metrics"}
+    assert option_strings == {
+        "-h",
+        "--help",
+        "--pack",
+        "--output",
+        "--artifacts",
+        "--metrics",
+        "--viewer-artifacts",
+        "--s3-bucket",
+        "--s3-prefix",
+        "--s3-endpoint",
+        "--s3-env-file",
+    }
 
 
 def test_evaluate_local_is_a_hidden_deprecated_alias(monkeypatch, capsys):

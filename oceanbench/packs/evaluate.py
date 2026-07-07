@@ -63,6 +63,11 @@ class EvaluateLocalResult:
     viewer_datasets_path: str | None = None
     viewer_zarr_path: str | None = None
     viewer_manifest_path: str | None = None
+    matchup_parquet_path: str | None = None
+    eddy_census_path: str | None = None
+    year_error_geography_path: str | None = None
+    year_rmsd_by_start_path: str | None = None
+    published_prefix: str | None = None
     flags: list[str] = field(default_factory=list)
 
 
@@ -228,8 +233,19 @@ def evaluate_local(
     published_challengers_path: str | None = None,
     metrics: tuple[str, ...] | list[str] | None = None,
     artifacts: str = "scores",
+    viewer_artifacts: bool = False,
+    s3_bucket: str | None = None,
+    s3_prefix: str | None = None,
+    s3_endpoint: str | None = None,
+    s3_env_file: str | None = None,
 ) -> EvaluateLocalResult:
-    """Score ``forecasts_path`` against ``pack_directory`` and emit records, summary and overlay scorecard."""
+    """Score ``forecasts_path`` against ``pack_directory`` and emit records, summary and overlay scorecard.
+
+    When ``viewer_artifacts`` is set the viewer serving artifacts (Class-4 match-up parquet, eddy
+    census, field pyramid and year-mode JSON) are produced under ``output_directory`` too. When
+    ``s3_bucket`` is set the whole ``output_directory`` tree is uploaded to
+    ``s3://<s3_bucket>/<s3_prefix>/`` using the existing publish machinery.
+    """
     if artifacts not in {"scores", "all"}:
         raise ValueError("artifacts must be one of: scores, all")
     pack_path = Path(pack_directory)
@@ -340,12 +356,80 @@ def evaluate_local(
         generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
     )
 
+    viewer_artifacts_result = None
+    if viewer_artifacts:
+        from oceanbench.publish.viewer_artifacts import write_viewer_artifacts
+
+        matchups_context = records.RunContext(
+            challenger=YOUR_MODEL_SLUG,
+            challenger_version="local",
+            year=year,
+            region=region,
+            oceanbench_version=OCEANBENCH_VERSION,
+        )
+        regional_forecast = subset_dataset_to_region(forecast_dataset, region)
+        with _pack_runtime_configuration(pack_path):
+            observation_dataset = subset_dataset_to_region(observation_opener(regional_forecast), region)
+            viewer_artifacts_result = write_viewer_artifacts(
+                forecast_dataset=regional_forecast,
+                observation_dataset=observation_dataset,
+                region=region,
+                dataset_slug=YOUR_MODEL_SLUG,
+                output_directory=output_directory,
+                year=year,
+                matchups_context=matchups_context,
+            )
+        flags.extend(viewer_artifacts_result.flags)
+
+        if viewer_artifacts_result.class4_bias_records:
+            bias_frame = records.records_to_dataframe(viewer_artifacts_result.class4_bias_records)
+            scores = pandas.concat([scores, bias_frame], ignore_index=True)
+            scores.to_parquet(str(scores_path), index=False)
+            per_start_scores = scores[scores["start_date"].notna()].reset_index(drop=True)
+            summary = aggregate_scores(per_start_scores)
+            summary_path.write_text(
+                json.dumps(summary_to_json_records(summary), sort_keys=True, indent=2, default=str),
+                encoding="utf-8",
+            )
+
+        # Per-challenger scores file: the viewer loads one challenger at a time, so a per-challenger
+        # file avoids the monolithic-summary cold-load cost. The merged scores-summary.json above
+        # stays for the scores site's compatibility.
+        per_challenger_path = output_path / f"scores-{YOUR_MODEL_SLUG}.json"
+        per_challenger_path.write_text(
+            json.dumps(summary_to_json_records(summary), sort_keys=True, indent=2, default=str),
+            encoding="utf-8",
+        )
+
+    published_prefix = None
+    if s3_bucket is not None:
+        from oceanbench.publish.s3 import EDITO_MINIO_ENDPOINT, upload_tree
+
+        if s3_prefix is None:
+            raise ValueError("s3_prefix is required when s3_bucket is given")
+        upload_tree(
+            output_directory,
+            bucket=s3_bucket,
+            prefix=s3_prefix,
+            endpoint=s3_endpoint if s3_endpoint is not None else EDITO_MINIO_ENDPOINT,
+            env_file=s3_env_file,
+            compress_json=True,
+        )
+        published_prefix = f"s3://{s3_bucket}/{s3_prefix.strip('/')}/"
+
     return EvaluateLocalResult(
         scores_path=str(scores_path),
         summary_path=str(summary_path),
         scorecard_path=str(scorecard_directory / "index.html"),
         scores=scores,
         flags=flags,
+        matchup_parquet_path=viewer_artifacts_result.matchup_parquet_path if viewer_artifacts_result else None,
+        eddy_census_path=viewer_artifacts_result.eddy_census_path if viewer_artifacts_result else None,
+        year_error_geography_path=(
+            viewer_artifacts_result.year_error_geography_path if viewer_artifacts_result else None
+        ),
+        year_rmsd_by_start_path=viewer_artifacts_result.year_rmsd_by_start_path if viewer_artifacts_result else None,
+        published_prefix=published_prefix,
         viewer_directory=viewer_result.viewer_directory if viewer_result else None,
         viewer_datasets_path=viewer_result.datasets_path if viewer_result else None,
         viewer_zarr_path=viewer_result.zarr_path if viewer_result else None,
