@@ -220,11 +220,12 @@ export function spectraEntry(spectra, variable, reference, leadDay) {
 export function class4Points(rows, { variable, depthBin, leadDay, startDate }) {
   if (!rows) return [];
   if (isClass4CurrentSpeedVariable(variable)) return class4SpeedPoints(rows, { variable, depthBin, leadDay, startDate });
+  const parquetVariable = class4ParquetVariable(variable);
   const requestedLead = leadDay == null ? null : Number(leadDay);
   const requestedStart = startDate || null;
   const matched = [];
   for (const row of rows) {
-    if (row.variable !== variable) continue;
+    if (row.variable !== parquetVariable) continue;
     if (depthBin && row.depth_bin !== depthBin) continue;
     if (requestedLead !== null && Number(row.lead_day) !== requestedLead) continue;
     if (requestedStart && formatClass4Date(row.start_date) !== requestedStart) continue;
@@ -237,6 +238,15 @@ const CLASS4_CURRENT_COMPONENTS = {
   u: "eastward_sea_water_velocity",
   v: "northward_sea_water_velocity",
 };
+
+// Depth-suffixed velocity components (…_15m) are stored in the match-up parquet under
+// their depth-less standard name (eastward/northward_sea_water_velocity); the 15 m depth
+// is carried by depth_bin, not the variable name. Map the viewer field key back to the
+// parquet variable name so the 15 m velocity components match their drifter obs rows.
+export function class4ParquetVariable(variable) {
+  if (/sea_water_velocity_15m$/.test(String(variable))) return String(variable).replace(/_15m$/, "");
+  return variable;
+}
 
 function isClass4CurrentSpeedVariable(variable) {
   return variable === "current_speed" || variable === "current_speed_15m";

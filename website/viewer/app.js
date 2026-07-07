@@ -35,6 +35,7 @@ import {
   insightsFor,
   eddyCensus,
   class4Points,
+  class4ParquetVariable,
 } from "./modules/insights.js";
 import {
   drawEddyDetections,
@@ -1240,10 +1241,11 @@ function visibleCopyOffsets(projection, canvas) {
 function countClass4Matches(rows, { variable, depthBin, leadDay, startDate }) {
   if (isCurrentsVariable(variable)) return class4Points(rows, { variable, depthBin, leadDay, startDate }).length;
   if (!rows) return 0;
+  const parquetVariable = class4ParquetVariable(variable);
   const requestedLead = leadDay == null ? null : Number(leadDay);
   let total = 0;
   for (const row of rows) {
-    if (row.variable !== variable) continue;
+    if (row.variable !== parquetVariable) continue;
     if (depthBin && row.depth_bin !== depthBin) continue;
     if (requestedLead !== null && Number(row.lead_day) !== requestedLead) continue;
     if (startDate && String(row.start_date).slice(0, 10) !== startDate) continue;
@@ -1254,6 +1256,7 @@ function countClass4Matches(rows, { variable, depthBin, leadDay, startDate }) {
 
 function class4DepthBin(entry) {
   if (!entry) return null;
+  if (entry.depth === "15m") return "15m";
   if (entry.standard_name.includes("velocity")) return "15m";
   if (entry.standard_name === "sea_surface_height_above_geoid") return "surface";
   return "0-5m"; // temperature / salinity near-surface bin matching the surface viewer field
