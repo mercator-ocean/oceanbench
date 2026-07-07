@@ -76,30 +76,28 @@ SPDX-License-Identifier: EUPL-1.2
           <input type="range" id="lead-day" min="1" max="10" step="1" value="1" />
         </label>
 
-        <fieldset class="control-group">
-          <legend>Overlays</legend>
-          <label>Overlay
-            <select id="overlay-mode">
-              <option value="none">None</option>
-              <option value="eddies">Eddy census</option>
-              <option value="class4">Observation errors (Class-4)</option>
-              <option value="trajectories">Trajectories (Lagrangian)</option>
-            </select>
-          </label>
-          <label>Region
-            <select id="overlay-region">
-              <option value="global">Global</option>
-              <option value="ibi">IBI</option>
-            </select>
-          </label>
-          <label id="eddy-reference-field" hidden>Eddy reference
-            <select id="eddy-reference">
-              <option value="glorys">GLORYS</option>
-              <option value="glo12">GLO12</option>
-            </select>
-          </label>
-          <p id="overlay-note" class="hint"></p>
-        </fieldset>
+        <label>Region
+          <select id="overlay-region">
+            <option value="global">Global</option>
+            <option value="ibi">IBI</option>
+          </select>
+        </label>
+
+        <label>Overlay
+          <select id="overlay-mode">
+            <option value="none">None</option>
+            <option value="eddies">Eddy census</option>
+            <option value="class4">Observation errors (Class-4)</option>
+            <option value="trajectories">Trajectories (Lagrangian)</option>
+          </select>
+        </label>
+        <label id="eddy-reference-field" hidden>Eddy reference
+          <select id="eddy-reference">
+            <option value="glorys">GLORYS</option>
+            <option value="glo12">GLO12</option>
+          </select>
+        </label>
+        <p id="overlay-note" class="hint"></p>
 
         <fieldset class="control-group" id="currents-group" hidden>
           <legend>Currents</legend>
