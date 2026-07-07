@@ -14,9 +14,11 @@ artifacts from the objects a local ``evaluate`` already has in hand, reusing the
 """
 
 from dataclasses import dataclass, field
+import datetime
 import json
 import os
 from pathlib import Path
+import subprocess
 
 import numpy
 import pyarrow
@@ -80,6 +82,42 @@ _YEAR_TARGETS = [
     ("northward_sea_water_velocity", "15m", "v"),
 ]
 _YEAR_GEOGRAPHY_DECIMALS = {"SSH": 4, "T": 3, "S": 4, "u": 4, "v": 4}
+
+PROVENANCE_KEY = "provenance"
+_MATCHUP_PROVENANCE_METADATA_KEY = b"oceanbench_provenance"
+
+
+def _git_commit() -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+    except Exception:  # noqa: BLE001 - provenance is best-effort, absence of git is not an error
+        return None
+    commit = completed.stdout.strip()
+    return commit or None
+
+
+def provenance_block(*, source: str, parameters: dict | None = None) -> dict:
+    """Provenance stamp carried by every viewer artifact.
+
+    Records the emitting library version, the git commit when the source tree is a checkout, the
+    UTC generation timestamp and the source dataset identifier the artifact derives from. Any
+    relevant generating parameters are carried verbatim under ``parameters``.
+    """
+    block = {
+        "oceanbench_version": OCEANBENCH_VERSION,
+        "git_commit": _git_commit(),
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": source,
+    }
+    if parameters is not None:
+        block["parameters"] = parameters
+    return block
 
 
 @dataclass(frozen=True)
@@ -175,7 +213,7 @@ def _group_boundaries(columns: list[numpy.ndarray]) -> numpy.ndarray:
     return numpy.flatnonzero(changed)
 
 
-def write_matchup_parquet(matchups, output_path: str) -> str:
+def write_matchup_parquet(matchups, output_path: str, *, source: str | None = None) -> str:
     """Write the Class-4 match-ups to the viewer serving parquet and validate the layout.
 
     The match-up dataframe (``oceanbench.runner.matchups.class4_matchups``) is projected to the
@@ -185,18 +223,22 @@ def write_matchup_parquet(matchups, output_path: str) -> str:
     spanning more than ``MAXIMUM_ROW_GROUP_ROWS`` rows is split across consecutive groups). The
     written file is then re-opened and validated by :func:`verify_matchup_parquet`.
     """
-    source = pyarrow.Table.from_pandas(
+    source_table = pyarrow.Table.from_pandas(
         matchups[[column for column in _MATCHUP_SOURCE_COLUMNS if column in matchups.columns]],
         preserve_index=False,
     )
-    projected = _project_matchups(source)
+    projected = _project_matchups(source_table)
     order = pyarrow.compute.sort_indices(
         projected, sort_keys=[(column, "ascending") for column in _MATCHUP_GROUP_COLUMNS]
     )
     projected = projected.take(order)
 
+    provenance = provenance_block(source=source if source is not None else os.path.basename(output_path))
+    provenance_metadata = {_MATCHUP_PROVENANCE_METADATA_KEY: json.dumps(provenance).encode("utf-8")}
+    projected = projected.replace_schema_metadata(provenance_metadata)
+
     Path(os.path.dirname(output_path) or ".").mkdir(parents=True, exist_ok=True)
-    writer = pyarrow.parquet.ParquetWriter(output_path, _MATCHUP_TARGET_SCHEMA, compression="snappy")
+    writer = pyarrow.parquet.ParquetWriter(output_path, projected.schema, compression="snappy")
     row_count = projected.num_rows
     if row_count:
         group_columns = [projected.column(column).to_numpy(zero_copy_only=False) for column in _MATCHUP_GROUP_COLUMNS]
@@ -295,16 +337,18 @@ def dataset_eddy_census(
     if apply_contour_filtering:
         detections = realism._contour_filtered_detections(dataset, detections, start_index)
     contours = realism._contours(dataset, detections, start_index)
+    parameters = {
+        **eddies_core.default_eddy_detection_parameters(),
+        "apply_contour_filtering": apply_contour_filtering,
+        "oceanbench_version": OCEANBENCH_VERSION,
+    }
     return {
         "kind": "eddy-census",
         "schema_version": _EDDY_CENSUS_SCHEMA_VERSION,
         "variable": _SEA_SURFACE_HEIGHT_VARIABLE,
         "dataset": dataset_slug,
-        "parameters": {
-            **eddies_core.default_eddy_detection_parameters(),
-            "apply_contour_filtering": apply_contour_filtering,
-            "oceanbench_version": OCEANBENCH_VERSION,
-        },
+        "parameters": parameters,
+        PROVENANCE_KEY: provenance_block(source=dataset_slug, parameters=parameters),
         "frames": [_eddy_frame(dataset, detections, contours, lead_day) for lead_day in lead_days],
     }
 
@@ -324,7 +368,8 @@ def write_eddy_census(dataset: xarray.Dataset, output_path: str, *, dataset_slug
     census = dataset_eddy_census(dataset, dataset_slug=dataset_slug, **census_options)
     directory = Path(os.path.dirname(output_path) or ".")
     directory.mkdir(parents=True, exist_ok=True)
-    metadata = {key: census[key] for key in ("kind", "schema_version", "variable", "dataset", "parameters")}
+    metadata_keys = ("kind", "schema_version", "variable", "dataset", "parameters", PROVENANCE_KEY)
+    metadata = {key: census[key] for key in metadata_keys}
 
     lead_entries = []
     for frame in census["frames"]:
@@ -483,6 +528,7 @@ def _write_year_artifacts(
             "depth_bin": {short: depth_bin for _, depth_bin, short in _YEAR_TARGETS},
             "aggregation": "time-mean of |obs-model| per cell",
         },
+        PROVENANCE_KEY: provenance_block(source=source, parameters={"grid": grid, "region": region}),
     }
     for variable, (_, _, short) in enumerate(_YEAR_TARGETS):
         decimals = _YEAR_GEOGRAPHY_DECIMALS[short]
@@ -511,6 +557,7 @@ def _write_year_artifacts(
             "grid": grid,
             "generated_from": source,
         },
+        PROVENANCE_KEY: provenance_block(source=source, parameters={"grid": grid, "region": region}),
     }
     for variable, (_, depth_bin, short) in enumerate(_YEAR_TARGETS):
         leads = {}
@@ -558,7 +605,11 @@ def write_viewer_artifacts(
         forecast_dataset, observation_dataset, variables, context=matchups_context
     )
     matchup_parquet_path = str(insights_directory / MATCHUP_PARQUET_FILENAME)
-    write_matchup_parquet(matchup_frame, matchup_parquet_path)
+    write_matchup_parquet(
+        matchup_frame,
+        matchup_parquet_path,
+        source=f"insights/{dataset_slug}/{region}/{MATCHUP_PARQUET_FILENAME}",
+    )
     class4_bias_records = class4_bias_per_start_records(matchup_frame, context=matchups_context)
 
     eddy_census_path = str(insights_directory / EDDY_CENSUS_FILENAME)

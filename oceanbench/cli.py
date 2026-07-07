@@ -231,18 +231,61 @@ def _add_publish_s3_parser(subparsers: "argparse._SubParsersAction") -> None:
     )
 
 
+def _run_reconcile_viewer_artifacts(args: argparse.Namespace) -> int:
+    from oceanbench.publish.reconcile import ReconciliationError, reconcile_viewer_artifacts
+
+    try:
+        reconcile_viewer_artifacts(
+            args.artifacts_base,
+            dataset=args.dataset,
+            region=args.region,
+            output_path=args.output,
+            starts_per_variable=args.starts_per_variable,
+            cells_per_variable=args.cells_per_variable,
+        )
+    except ReconciliationError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    except Exception as error:  # noqa: BLE001 - surface a clean message to the CLI user
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _add_reconcile_viewer_artifacts_parser(subparsers: "argparse._SubParsersAction") -> None:
+    parser = subparsers.add_parser(
+        "reconcile-viewer-artifacts",
+        help="Recompute headline numbers from published viewer artifacts and verify they match",
+        description=(
+            "Given a published viewer-artifact base (a local directory or an https:// prefix holding "
+            "insights.json and scores-summary.json), recompute the Class-4 pooled RMSD, year per-start "
+            "RMSD/bias and error-geography straight from the match-up parquet and assert they match the "
+            "official aggregates, and structurally validate the eddy census. Writes a verification report "
+            "JSON and exits non-zero on any mismatch."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("artifacts_base", help="Published viewer/data base (local directory or https:// prefix)")
+    parser.add_argument("--dataset", default=None, help="Reconcile only this dataset slug (default: all)")
+    parser.add_argument("--region", default=None, help="Reconcile only this region (default: all)")
+    parser.add_argument("--output", default=None, help="Path for the verification report JSON")
+    parser.add_argument("--starts-per-variable", type=int, default=4, help="Sampled year starts per variable")
+    parser.add_argument("--cells-per-variable", type=int, default=20, help="Sampled geography cells per variable")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="oceanbench",
         description="OceanBench CLI",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    subparsers = parser.add_subparsers(dest="command", metavar="{evaluate,publish-s3}")
+    subparsers = parser.add_subparsers(dest="command", metavar="{evaluate,publish-s3,reconcile-viewer-artifacts}")
 
     _add_evaluate_parser(subparsers)
     _add_evaluate_parser(subparsers, "evaluate-local", hidden=True)
     subparsers._choices_actions = [choice for choice in subparsers._choices_actions if choice.dest != "evaluate-local"]
     _add_publish_s3_parser(subparsers)
+    _add_reconcile_viewer_artifacts_parser(subparsers)
     return parser
 
 
@@ -263,6 +306,9 @@ def main():
 
     if args.command == "publish-s3":
         sys.exit(_run_publish_s3(args))
+
+    if args.command == "reconcile-viewer-artifacts":
+        sys.exit(_run_reconcile_viewer_artifacts(args))
 
 
 if __name__ == "__main__":

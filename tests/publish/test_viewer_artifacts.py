@@ -230,6 +230,8 @@ def test_dataset_eddy_census_payload_shape_and_stamp(tmp_path) -> None:
     assert census["dataset"] == "your_model"
     assert census["parameters"]["apply_contour_filtering"] is True
     assert "oceanbench_version" in census["parameters"]
+    assert census["provenance"]["source"] == "your_model"
+    assert census["provenance"]["parameters"] == census["parameters"]
     assert [frame["lead_day"] for frame in census["frames"]] == [1]
     for frame in census["frames"]:
         for eddy in frame["detections"]:
@@ -249,3 +251,37 @@ def test_dataset_eddy_census_payload_shape_and_stamp(tmp_path) -> None:
         lead_payload = json.loads(open(tmp_path / entry["file"]).read())
         assert lead_payload["frame"]["lead_day"] == entry["lead_day"]
         assert lead_payload["kind"] == "eddy-census"
+
+
+def test_matchup_parquet_carries_provenance_metadata(tmp_path) -> None:
+    output_path = str(tmp_path / "class4-matchups.parquet")
+    source = "insights/model/global/class4-matchups.parquet"
+    viewer_artifacts.write_matchup_parquet(_matchup_frame(), output_path, source=source)
+
+    metadata = pyarrow.parquet.ParquetFile(output_path).schema_arrow.metadata
+    provenance = json.loads(metadata[viewer_artifacts._MATCHUP_PROVENANCE_METADATA_KEY])
+    assert provenance["oceanbench_version"]
+    assert provenance["source"] == "insights/model/global/class4-matchups.parquet"
+    assert provenance["generated_at"].endswith("Z")
+    assert "git_commit" in provenance
+
+
+def test_year_artifacts_carry_provenance(tmp_path) -> None:
+    matchup_path = str(tmp_path / "class4-matchups.parquet")
+    viewer_artifacts.write_matchup_parquet(_matchup_frame(), matchup_path)
+    geography_path = str(tmp_path / "year-error-geography.json")
+    rmsd_path = str(tmp_path / "year-rmsd-by-start.json")
+    source = "insights/model/global/class4-matchups.parquet"
+    viewer_artifacts._write_year_artifacts(matchup_path, "global", geography_path, rmsd_path, source=source)
+
+    for path in (geography_path, rmsd_path):
+        provenance = json.loads(open(path).read())["provenance"]
+        assert provenance["oceanbench_version"]
+        assert provenance["source"] == "insights/model/global/class4-matchups.parquet"
+        assert provenance["parameters"]["region"] == "global"
+
+
+def test_provenance_block_shape() -> None:
+    block = viewer_artifacts.provenance_block(source="thing", parameters={"a": 1})
+    assert set(block) == {"oceanbench_version", "git_commit", "generated_at", "source", "parameters"}
+    assert block["parameters"] == {"a": 1}
