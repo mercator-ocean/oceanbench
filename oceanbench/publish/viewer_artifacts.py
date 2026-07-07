@@ -86,10 +86,15 @@ _YEAR_GEOGRAPHY_DECIMALS = {"SSH": 4, "T": 3, "S": 4, "u": 4, "v": 4}
 
 # Uncertainty on the per-start point estimates. The RMSD interval reuses the lead-curve method
 # (seeded percentile bootstrap, aggregate.py) — same seed and 95% percentile interval — but
-# resamples the per-start super-observation cells rather than the whole-year start axis, so the
-# band reflects the spatial spread of that single start. The bias interval is the analytic normal
-# interval mean ± 1.96 · area-weighted std(model − obs) / sqrt(n).
+# resamples the match-ups of that single start rather than the whole-year start axis, so the band
+# reflects the observation spread inside that start, consistent with the pooled per-start
+# reduction. Above ``_YEAR_RMSD_CI_EXACT_MAXIMUM`` match-ups the resampling switches to an
+# equal-count quantile-binned multinomial bootstrap of the mean squared error (statistically
+# equivalent at that n, cost independent of n). The bias interval is the analytic normal interval
+# mean ± 1.96 · std(model − obs) / sqrt(n).
 _YEAR_RMSD_CI_BOOTSTRAP_DRAWS = 200
+_YEAR_RMSD_CI_EXACT_MAXIMUM = 10_000
+_YEAR_RMSD_CI_BINS = 1_000
 _YEAR_CI_SEED = _LEAD_CURVE_BOOTSTRAP_SEED
 _YEAR_CI_CONFIDENCE = 0.95
 _BIAS_CI_Z = 1.96
@@ -426,37 +431,45 @@ def _cell_bias_standard_error(square_sum: float, signed_sum: float, count: int, 
 
 
 def _bootstrap_rmsd_ci(
-    difference: numpy.ndarray, weight: numpy.ndarray, generator: numpy.random.Generator
+    squared_error: numpy.ndarray, generator: numpy.random.Generator
 ) -> tuple[float | None, float | None]:
-    """95% percentile-bootstrap CI for one start's area-weighted RMSD, resampling the super-obs cells.
+    """95% percentile-bootstrap CI for one start's pooled RMSD, resampling its match-ups.
 
-    Same method and confidence as the lead-curve bootstrap (percentile interval, seeded generator);
-    the resampled unit here is the per-cell super-observation, so the band reflects the spatial
-    spread across cells contributing to that single start's RMSD.
+    Same method and confidence as the lead-curve bootstrap (seeded percentile interval); the
+    resampled unit here is the individual match-up of that start, matching the pooled per-start
+    reduction ``sqrt(mean(error ** 2))``. Small starts resample match-ups exactly; large starts
+    (above ``_YEAR_RMSD_CI_EXACT_MAXIMUM``) use an equal-count quantile-binned multinomial
+    bootstrap of the mean squared error — the resample weight of each of the
+    ``_YEAR_RMSD_CI_BINS`` sorted equal-count bins is drawn from Multinomial(n, count_bin / n),
+    which reproduces the bootstrap distribution of the mean up to the (negligible at that n)
+    within-bin variance, at a cost independent of n.
     """
-    cell_count = difference.size
-    if cell_count < 2:
+    n = squared_error.size
+    if n < 2:
         return (None, None)
-    draws = generator.integers(0, cell_count, size=(_YEAR_RMSD_CI_BOOTSTRAP_DRAWS, cell_count))
-    sampled_difference = difference[draws]
-    sampled_weight = weight[draws]
-    weight_total = sampled_weight.sum(axis=1)
-    with numpy.errstate(invalid="ignore", divide="ignore"):
-        bootstrap_rmsd = numpy.sqrt((sampled_weight * sampled_difference * sampled_difference).sum(axis=1) / weight_total)
+    if n <= _YEAR_RMSD_CI_EXACT_MAXIMUM:
+        draws = generator.integers(0, n, size=(_YEAR_RMSD_CI_BOOTSTRAP_DRAWS, n))
+        bootstrap_mean = squared_error[draws].mean(axis=1)
+    else:
+        sorted_squares = numpy.sort(squared_error)
+        bins = numpy.array_split(sorted_squares, _YEAR_RMSD_CI_BINS)
+        bin_means = numpy.array([bin_values.mean() for bin_values in bins])
+        bin_counts = numpy.array([bin_values.size for bin_values in bins])
+        counts = generator.multinomial(n, bin_counts / n, size=_YEAR_RMSD_CI_BOOTSTRAP_DRAWS)
+        bootstrap_mean = counts @ bin_means / n
+    bootstrap_rmsd = numpy.sqrt(numpy.maximum(bootstrap_mean, 0.0))
     low, high = _confidence_interval(bootstrap_rmsd, _YEAR_CI_CONFIDENCE)
     if not (numpy.isfinite(low) and numpy.isfinite(high)):
         return (None, None)
     return (round(float(low), 6), round(float(high), 6))
 
 
-def _analytic_bias_ci(
-    signed: numpy.ndarray, weight: numpy.ndarray, weight_total: float, bias: float, n_present: int
-) -> tuple[float | None, float | None]:
-    """Analytic normal CI for one start's bias: mean ± 1.96 · area-weighted std(model − obs) / sqrt(n)."""
-    if n_present < 2:
+def _analytic_bias_ci(signed_error: numpy.ndarray, bias: float) -> tuple[float | None, float | None]:
+    """Analytic normal CI for one start's pooled bias: mean ± 1.96 · std(model − obs) / sqrt(n)."""
+    n = signed_error.size
+    if n < 2:
         return (None, None)
-    variance = float(numpy.sum(weight * (signed - bias) ** 2) / weight_total)
-    half_width = _BIAS_CI_Z * numpy.sqrt(max(variance, 0.0) / n_present)
+    half_width = _BIAS_CI_Z * float(signed_error.std()) / numpy.sqrt(n)
     return (round(bias - half_width, 6), round(bias + half_width, 6))
 
 
@@ -470,7 +483,6 @@ def _write_year_artifacts(
     grid = _year_grid_for_region(region)
     cell_count = grid["nlat"] * grid["nlon"]
     variable_count = len(_YEAR_TARGETS)
-    cosine_weights = _cosine_latitude_weights(grid)
     target_index = {(variable, depth_bin): index for index, (variable, depth_bin, _) in enumerate(_YEAR_TARGETS)}
 
     error_sum = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count))
@@ -480,27 +492,24 @@ def _write_year_artifacts(
     rmsd_rows = {(variable, lead): [] for variable in range(variable_count) for lead in range(_YEAR_LEAD_DAY_COUNT)}
     start_dates: list[str] = []
     current_start = None
+    # Per (variable, lead): the current start's raw signed errors (model - obs), pooled at flush
+    # into the per-start RMSD/bias/n and their intervals (contiguity in start is guaranteed by the
+    # serving sort order of the match-up parquet).
     start_accumulators: dict[tuple[int, int], list] = {}
     bootstrap_generator = numpy.random.default_rng(_YEAR_CI_SEED)
 
     def flush(start_date):
-        for (variable, lead), (observation_sum, model_sum, count) in start_accumulators.items():
-            present = count > 0
-            if not present.any():
+        for (variable, lead), chunks in start_accumulators.items():
+            signed = numpy.concatenate(chunks)
+            if signed.size == 0:
                 continue
-            mean_observation = observation_sum[present] / count[present]
-            mean_model = model_sum[present] / count[present]
-            difference = mean_observation - mean_model
-            signed = mean_model - mean_observation
-            weight = cosine_weights[present]
-            weight_total = numpy.sum(weight)
-            root_mean_square = float(numpy.sqrt(numpy.sum(weight * difference * difference) / weight_total))
-            bias = float(numpy.sum(weight * signed) / weight_total)
-            n_present = int(present.sum())
-            rmsd_low, rmsd_high = _bootstrap_rmsd_ci(difference, weight, bootstrap_generator)
-            bias_low, bias_high = _analytic_bias_ci(signed, weight, weight_total, bias, n_present)
+            squared = signed * signed
+            root_mean_square = float(numpy.sqrt(squared.mean()))
+            bias = float(signed.mean())
+            rmsd_low, rmsd_high = _bootstrap_rmsd_ci(squared, bootstrap_generator)
+            bias_low, bias_high = _analytic_bias_ci(signed, bias)
             rmsd_rows[(variable, lead)].append(
-                (start_date, root_mean_square, n_present, bias, rmsd_low, rmsd_high, bias_low, bias_high)
+                (start_date, root_mean_square, int(signed.size), bias, rmsd_low, rmsd_high, bias_low, bias_high)
             )
         start_accumulators.clear()
 
@@ -560,6 +569,9 @@ def _write_year_artifacts(
                 absolute_error, observation, model = absolute_error[finite], observation[finite], model[finite]
             if latitude.size == 0:
                 continue
+            # Per-start pooled series: every finite match-up of the start counts, exactly like the
+            # official per-start reduction (no grid filtering).
+            start_accumulators.setdefault((variable, lead), []).append(model - observation)
             cell, valid = _grid_cells(latitude, longitude, grid)
             cell = cell[valid]
             if cell.size == 0:
@@ -569,17 +581,6 @@ def _write_year_artifacts(
             numpy.add.at(error_square_sum[variable, lead], cell, valid_absolute_error * valid_absolute_error)
             numpy.add.at(bias_sum[variable, lead], cell, (model[valid] - observation[valid]))
             numpy.add.at(error_count[variable, lead], cell, 1)
-            key = (variable, lead)
-            if key not in start_accumulators:
-                start_accumulators[key] = [
-                    numpy.zeros(cell_count),
-                    numpy.zeros(cell_count),
-                    numpy.zeros(cell_count, dtype=numpy.int64),
-                ]
-            observation_sum, model_sum, count = start_accumulators[key]
-            numpy.add.at(observation_sum, cell, observation[valid])
-            numpy.add.at(model_sum, cell, model[valid])
-            numpy.add.at(count, cell, 1)
     if current_start is not None:
         flush(current_start)
 
@@ -636,15 +637,19 @@ def _write_year_artifacts(
     rmsd = {
         "variables": {},
         "meta": {
-            "method": "area-weighted RMSD of per-cell super-obs (obs & model binned to grid, cos-lat weighted)",
+            "method": "pooled RMSD over all class-4 match-ups per start date (same reduction as official scores)",
+            "bias_method": "pooled mean(model - obs) per start date",
             "grid": grid,
             "generated_from": source,
             "ci_method": (
-                f"rmsd_ci: seeded percentile bootstrap over the per-start super-obs cells "
+                f"rmsd_ci: seeded percentile bootstrap over the start's match-ups "
                 f"({_YEAR_RMSD_CI_BOOTSTRAP_DRAWS} resamples, seed {_YEAR_CI_SEED}, "
                 f"{int(_YEAR_CI_CONFIDENCE * 100)}% percentile interval — same method/seed as the "
-                f"lead-curve bootstrap, resampling cells rather than starts). "
-                f"bias_ci: analytic normal interval mean ± {_BIAS_CI_Z} · area-weighted std(model − obs) / sqrt(n)"
+                f"lead-curve bootstrap, resampling match-ups within the start rather than starts; "
+                f"above {_YEAR_RMSD_CI_EXACT_MAXIMUM} match-ups an equal-count quantile-binned "
+                f"({_YEAR_RMSD_CI_BINS} bins) multinomial bootstrap of the mean squared error is "
+                f"used, statistically equivalent at that n). "
+                f"bias_ci: analytic normal interval mean +/- {_BIAS_CI_Z} * std(model - obs) / sqrt(n)"
             ),
         },
         PROVENANCE_KEY: provenance_block(source=source, parameters={"grid": grid, "region": region}),

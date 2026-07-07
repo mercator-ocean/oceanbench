@@ -220,6 +220,36 @@ def test_year_ci_is_deterministic_under_fixed_seed(tmp_path) -> None:
     assert first[0]["variables"]["SSH"]["bias_se"] == second[0]["variables"]["SSH"]["bias_se"]
 
 
+def test_year_rmsd_by_start_is_the_pooled_reduction(tmp_path) -> None:
+    frame = _year_ci_frame()
+    matchup_path = str(tmp_path / "class4-matchups.parquet")
+    viewer_artifacts.write_matchup_parquet(frame, matchup_path)
+    geography_path = str(tmp_path / "year-error-geography.json")
+    rmsd_path = str(tmp_path / "year-rmsd-by-start.json")
+    viewer_artifacts._write_year_artifacts(matchup_path, "global", geography_path, rmsd_path, source="synthetic")
+    series = json.loads(open(rmsd_path).read())["variables"]["SSH"]["leads"]["1"]
+    for index, start_date in enumerate(series["dates"]):
+        subset = frame[frame["start_date"] == numpy.datetime64(start_date)]
+        error = (subset["model_value"] - subset["observation_value"]).to_numpy()
+        assert series["rmsd"][index] == pytest.approx(float(numpy.sqrt((error * error).mean())), rel=2e-5)
+        assert series["bias"][index] == pytest.approx(float(error.mean()), abs=2e-5)
+        assert series["n"][index] == len(subset)
+
+
+def test_binned_bootstrap_matches_analytic_interval_at_large_n() -> None:
+    generator = numpy.random.default_rng(5)
+    squared = generator.gamma(2.0, 0.01, size=50_000)
+    low, high = viewer_artifacts._bootstrap_rmsd_ci(squared, numpy.random.default_rng(1))
+    point = float(numpy.sqrt(squared.mean()))
+    assert low < point < high
+    # At this n the bootstrap interval of the mean of squares must agree with the analytic normal
+    # interval within 10% of the half-width.
+    mean = squared.mean()
+    standard_error = squared.std() / numpy.sqrt(squared.size)
+    analytic_half = float(numpy.sqrt(mean + 1.96 * standard_error) - numpy.sqrt(mean - 1.96 * standard_error)) / 2.0
+    assert (high - low) / 2.0 == pytest.approx(analytic_half, rel=0.10)
+
+
 def test_year_geography_carries_shared_counts_and_bias_standard_error(tmp_path) -> None:
     geography, _ = _write_year_pair(tmp_path)
     ssh = geography["variables"]["SSH"]
