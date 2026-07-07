@@ -122,6 +122,99 @@ export async function readLayer(store, { variable, level, startIndex, leadIndex 
   return { data, width: longitudeSize, height: latitudeSize, compressedBytes, fetchMilliseconds };
 }
 
+/**
+ * Read a geographic WINDOW of one 2D layer — only the 256×256 tiles intersecting the
+ * requested lat/lon box are fetched, so a finest-level regional read (e.g. the seed
+ * neighbourhood for trajectory advection) stays a handful of tiles instead of the
+ * whole global grid. `latitudes`/`longitudes` are the level's coordinate axes (from
+ * readCoordinate); the box is `{ latMin, latMax, lonMin, lonMax }` in degrees. On a
+ * periodic (global) grid the longitude range may cross the dateline: the returned
+ * axis is CONTINUOUS (unwrapped, may exceed ±180) so windows never carry a seam.
+ * Returns { data, width, height, lat0, latStep, lon0, lonStep } or null when the box
+ * misses the grid entirely.
+ */
+export async function readLayerWindow(store, { variable, level, startIndex, leadIndex }, latitudes, longitudes, box) {
+  const path = `level/${level}/${variable}`;
+  const { zarray, zattrs } = arrayMetadata(store, path);
+  if (zarray.dtype !== "<u2" && zarray.dtype !== "|u2") {
+    throw new Error(`Expected uint16 data, got ${zarray.dtype} for ${path}`);
+  }
+  const [, , latitudeSize, longitudeSize] = zarray.shape;
+  const [, , latitudeChunk, longitudeChunk] = zarray.chunks;
+  const scale = zattrs.scale_factor ?? 1;
+  const offset = zattrs.add_offset ?? 0;
+  const fill = zarray.fill_value ?? 65535;
+  const codecId = compressorId(zarray);
+
+  const latStep = latitudes.length > 1 ? latitudes[1] - latitudes[0] : 1;
+  const lonStep = longitudes.length > 1 ? longitudes[1] - longitudes[0] : 1;
+  const periodic = Math.abs(lonStep) * longitudeSize >= 359;
+
+  // Row (latitude) range — clamped to the grid.
+  const rowOf = (lat) => (lat - latitudes[0]) / latStep;
+  let rowMin = Math.floor(Math.min(rowOf(box.latMin), rowOf(box.latMax)));
+  let rowMax = Math.ceil(Math.max(rowOf(box.latMin), rowOf(box.latMax)));
+  rowMin = Math.max(0, rowMin);
+  rowMax = Math.min(latitudeSize - 1, rowMax);
+  if (rowMax < rowMin) return null;
+
+  // Column (longitude) range — continuous/unwrapped; wrapped onto source columns when
+  // periodic, clamped otherwise. Capped at one full revolution.
+  const colOf = (lon) => (lon - longitudes[0]) / lonStep;
+  let colMin = Math.floor(Math.min(colOf(box.lonMin), colOf(box.lonMax)));
+  let colMax = Math.ceil(Math.max(colOf(box.lonMin), colOf(box.lonMax)));
+  if (!periodic) {
+    colMin = Math.max(0, colMin);
+    colMax = Math.min(longitudeSize - 1, colMax);
+    if (colMax < colMin) return null;
+  } else if (colMax - colMin + 1 > longitudeSize) {
+    colMax = colMin + longitudeSize - 1;
+  }
+
+  const height = rowMax - rowMin + 1;
+  const width = colMax - colMin + 1;
+  const wrap = (column) => ((column % longitudeSize) + longitudeSize) % longitudeSize;
+
+  // Distinct source tiles covering the window.
+  const tileYs = new Set();
+  for (let row = rowMin; row <= rowMax; row += 1) tileYs.add(Math.floor(row / latitudeChunk));
+  const tileXs = new Set();
+  for (let column = colMin; column <= colMax; column += 1) tileXs.add(Math.floor(wrap(column) / longitudeChunk));
+
+  const tiles = new Map();
+  await Promise.all(
+    [...tileYs].flatMap((ty) =>
+      [...tileXs].map(async (tx) => {
+        const record = await fetchChunk(store, path, `${startIndex}.${leadIndex}.${ty}.${tx}`, codecId);
+        tiles.set(`${ty}.${tx}`, new Uint16Array(record.bytes.buffer, record.bytes.byteOffset, record.bytes.byteLength / 2));
+      }),
+    ),
+  );
+
+  const data = new Float32Array(height * width);
+  for (let row = 0; row < height; row += 1) {
+    const sourceRow = rowMin + row;
+    const ty = Math.floor(sourceRow / latitudeChunk);
+    const tileRow = sourceRow - ty * latitudeChunk;
+    for (let column = 0; column < width; column += 1) {
+      const sourceColumn = wrap(colMin + column);
+      const tx = Math.floor(sourceColumn / longitudeChunk);
+      const stored = tiles.get(`${ty}.${tx}`);
+      const raw = stored[tileRow * longitudeChunk + (sourceColumn - tx * longitudeChunk)];
+      data[row * width + column] = raw === fill ? NaN : raw * scale + offset;
+    }
+  }
+  return {
+    data,
+    width,
+    height,
+    lat0: latitudes[0] + rowMin * latStep,
+    latStep,
+    lon0: longitudes[0] + colMin * lonStep, // continuous (unwrapped) axis origin
+    lonStep,
+  };
+}
+
 export async function readCoordinate(store, level, name) {
   const cacheKey = `level/${level}/${name}`;
   const cached = store.coordinateCache.get(cacheKey);
