@@ -652,7 +652,7 @@ function updatePanelBadge(panel) {
 
 // ---- overlays ---------------------------------------------------------------
 
-let overlayData = { eddies: null, class4: null, region: null };
+let overlayData = { eddies: null, class4: null, class4Error: null, region: null };
 
 async function loadInsightManifest(url) {
   if (!url) return null;
@@ -680,18 +680,38 @@ async function loadOverlayData() {
   overlayData.region = region;
   overlayData.eddies = null;
   overlayData.class4 = null;
+  overlayData.class4Error = null;
   if (shared.overlayMode === "eddies") {
     overlayData.eddies = await loadEddies(urls.eddies || glonetUrls.eddies);
   } else if (shared.overlayMode === "class4") {
     const class4Url = urls.class4_matchups || glonetUrls.class4_matchups;
     const manifest = await loadInsightManifest(urls.class4_matchups ? urls.manifest : glonetUrls.manifest);
     const class4Manifest = manifest && manifest["class4-matchups"];
-    overlayData.class4 = await loadClass4(class4Url, {
-      byteLength: class4Manifest && class4Manifest.bytes,
-      rowGroupIndex: class4Manifest && class4Manifest.row_group_index,
-      startDate: currentStartDate(slug),
-      leadDay: shared.leadDay,
-    });
+    try {
+      overlayData.class4 = await loadClass4(class4Url, {
+        byteLength: class4ByteLengthHint(class4Url, class4Manifest),
+        rowGroupIndex: class4Manifest && class4Manifest.row_group_index,
+        startDate: currentStartDate(slug),
+        leadDay: shared.leadDay,
+      });
+    } catch (error) {
+      overlayData.class4 = null;
+      overlayData.class4Error = error instanceof Error ? error.message : String(error);
+    }
+  }
+}
+
+function class4ByteLengthHint(class4Url, class4Manifest) {
+  const byteLength = Number(class4Manifest && class4Manifest.bytes);
+  if (!Number.isFinite(byteLength) || byteLength <= 0) return undefined;
+  const manifestUrl = class4Manifest.url || class4Manifest.href || class4Manifest.path;
+  if (!manifestUrl) return byteLength;
+  try {
+    const expected = new URL(resolveViewerDataUrl(class4Url), window.location.href).href;
+    const hinted = new URL(resolveViewerDataUrl(manifestUrl), window.location.href).href;
+    return expected === hinted ? byteLength : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -963,6 +983,12 @@ function class4DepthBin(entry) {
   if (entry.standard_name.includes("velocity")) return "15m";
   if (entry.standard_name === "sea_surface_height_above_geoid") return "surface";
   return "0-5m"; // temperature / salinity near-surface bin matching the surface viewer field
+}
+
+function class4DepthLabel(entry, depthBin) {
+  if (!entry) return depthBin || "selected depth";
+  if (entry.depth && entry.depth !== "surface") return entry.depth;
+  return depthBin || entry.depth || "selected depth";
 }
 
 // ---- particles --------------------------------------------------------------
@@ -1446,7 +1472,7 @@ function obsSkillSeries(panel) {
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && variableEntry(manifest, panel.state.variable);
   if (!entry) return null;
-  const depthKey = mapDepthToScoreDepth(entry);
+  const depthKeys = scoreDepthKeys(entry);
   const scoreVariables = isCurrentsVariable(panel.state.variable)
     ? ["eastward_sea_water_velocity", "northward_sea_water_velocity"]
     : [entry.standard_name];
@@ -1458,7 +1484,7 @@ function obsSkillSeries(panel) {
     if (row.metric !== "class4_rmsd") continue;
     if (!rowsByVariable.has(row.variable)) continue;
     if (row.reference !== "observations") continue; // observation-based only, no gridded fallback
-    if (depthKey && row.depth !== depthKey) continue;
+    if (depthKeys.length && !depthKeys.includes(row.depth)) continue;
     if (row.challenger !== challenger) continue;
     if (shared.region && row.region && row.region !== shared.region) continue;
     unit = row.unit || unit;
@@ -1680,6 +1706,24 @@ function mapDepthToScoreDepth(entry) {
   return entry.depth;
 }
 
+function scoreDepthKeys(entry) {
+  const keys = [];
+  const class4Bin = class4DepthBin(entry);
+  if (class4Bin) keys.push(class4Bin);
+  const legacyDepth = mapDepthToScoreDepth(entry);
+  if (legacyDepth && !keys.includes(legacyDepth)) keys.push(legacyDepth);
+  return keys;
+}
+
+function class4SelectionNote() {
+  const panel = panels[0];
+  if (!panel) return "No Class-4 match-ups for this selection.";
+  const manifest = manifestFor(panel.state.dataset);
+  const entry = manifest && variableEntry(manifest, panel.state.variable);
+  const variable = entry ? prettyName(entry.standard_name) : panel.state.variable;
+  return `No ${variable} match-ups at ${class4DepthLabel(entry, class4DepthBin(entry))} for this start/lead.`;
+}
+
 function updateRailLegend(panel) {
   const section = elements["rail-legend-section"];
   const container = elements["rail-legend"];
@@ -1703,7 +1747,7 @@ function updateRailLegend(panel) {
     const scale = Math.max(...panels.slice(0, shared.layout).map((candidate) => candidate.class4Scale || 0), 0);
     const targeted = overlayData.class4 && overlayData.class4.targeted;
     const sampled = overlayData.class4 && overlayData.class4.sampled;
-    const noData = !overlayData.class4 ? " · no match-ups for this dataset/region" : "";
+    const noData = !overlayData.class4 && !overlayData.class4Error ? " · no match-ups for this dataset/region" : "";
     const weak = matched > 0 && matched < 30 ? " · low count — statistic is weak" : "";
     // Targeted mode holds every obs for the selected (start, lead) — report the
     // full count plainly. Legacy sampling reports "shown of matched" with the note.
@@ -1766,11 +1810,17 @@ async function applyOverlayMode() {
   }
   await loadOverlayData();
   if (shared.overlayMode === "class4") {
-    note.textContent = overlayData.class4
-      ? overlayData.class4.targeted
+    if (overlayData.class4Error) {
+      note.textContent = `Class-4 data failed to load (${overlayData.class4Error}).`;
+    } else if (!overlayData.class4) {
+      note.textContent = "No Class-4 match-ups are available for this dataset and region.";
+    } else if ((overlayData.class4.rows || []).length === 0) {
+      note.textContent = class4SelectionNote();
+    } else {
+      note.textContent = overlayData.class4.targeted
         ? "Class-4 match-ups: full obs for the selected start and lead. Hover a point for details."
-        : `Class-4 match-ups loaded${overlayData.class4.sampled ? " as a sampled subset" : ""}.`
-      : "No Class-4 match-ups are available for this dataset and region.";
+        : `Class-4 match-ups loaded${overlayData.class4.sampled ? " as a sampled subset" : ""}.`;
+    }
   }
   for (let i = 0; i < shared.layout; i += 1) drawOverlays(panels[i]);
   updateCurrentsControlVisibility();
@@ -1791,8 +1841,14 @@ function scheduleClass4Reload() {
   class4ReloadTimer = setTimeout(async () => {
     class4ReloadTimer = null;
     await loadOverlayData();
-    if (note && overlayData.class4) {
-      note.textContent = overlayData.class4.targeted
+    if (note) {
+      note.textContent = overlayData.class4Error
+        ? `Class-4 data failed to load (${overlayData.class4Error}).`
+        : !overlayData.class4
+          ? "No Class-4 match-ups are available for this dataset and region."
+          : (overlayData.class4.rows || []).length === 0
+            ? class4SelectionNote()
+            : overlayData.class4.targeted
         ? "Class-4 match-ups: full obs for the selected start and lead. Hover a point for details."
         : "Class-4 match-ups loaded.";
     }

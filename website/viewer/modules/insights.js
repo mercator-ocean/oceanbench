@@ -60,40 +60,36 @@ export async function loadScoresSummary(index) {
  * the row group(s) for the requested `startDate`/`leadDay` are fetched — complete
  * rows, no sampling. Legacy files fall back to whole-file or scattered sampling.
  *
- * Returns `{ targeted, rows, total, sampled }` (or null on failure). In targeted
+ * Returns `{ targeted, rows, total, sampled }`. In targeted
  * mode `rows` is exactly the selected pair; in legacy mode it is the (possibly
  * sampled) whole set as before. `byteLength` may come from the sibling manifest's
- * `bytes` field to skip a HEAD request.
+ * `bytes` field to skip a HEAD request, but callers should omit stale hints.
  */
 export async function loadClass4(url, { byteLength, rowGroupIndex, sampleVariables, startDate, leadDay } = {}) {
-  if (!url) return null;
+  if (!url) throw new Error("Class-4 URL is missing");
   const resolvedUrl = resolveViewerDataUrl(url);
-  try {
-    const targeted = await probeClass4Mode(resolvedUrl, byteLength);
-    if (!targeted) {
-      if (!class4LegacyCache.has(resolvedUrl)) {
-        class4LegacyCache.set(
-          resolvedUrl,
-          requestClass4Worker({ op: "legacy", url: resolvedUrl, byteLength, rowGroupIndex, sampleVariables }).then(
-            (payload) => normalizeClass4Payload(payload),
-          ),
-        );
-      }
-      return await class4LegacyCache.get(resolvedUrl);
-    }
-    const key = `${resolvedUrl}|${startDate ?? ""}|${leadDay ?? ""}`;
-    if (!class4TargetedCache.has(key)) {
-      class4TargetedCache.set(
-        key,
-        requestClass4Worker({ op: "targeted", url: resolvedUrl, byteLength, startDate, leadDay }).then((payload) =>
-          normalizeClass4Payload(payload),
+  const targeted = await probeClass4Mode(resolvedUrl, byteLength);
+  if (!targeted) {
+    if (!class4LegacyCache.has(resolvedUrl)) {
+      class4LegacyCache.set(
+        resolvedUrl,
+        requestClass4Worker({ op: "legacy", url: resolvedUrl, byteLength, rowGroupIndex, sampleVariables }).then(
+          (payload) => normalizeClass4Payload(payload),
         ),
       );
     }
-    return await class4TargetedCache.get(key);
-  } catch {
-    return null;
+    return await class4LegacyCache.get(resolvedUrl);
   }
+  const key = `${resolvedUrl}|${startDate ?? ""}|${leadDay ?? ""}`;
+  if (!class4TargetedCache.has(key)) {
+    class4TargetedCache.set(
+      key,
+      requestClass4Worker({ op: "targeted", url: resolvedUrl, byteLength, startDate, leadDay }).then((payload) =>
+        normalizeClass4Payload(payload),
+      ),
+    );
+  }
+  return await class4TargetedCache.get(key);
 }
 
 function normalizeClass4Payload(payload) {
