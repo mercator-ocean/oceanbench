@@ -11,6 +11,19 @@ import { lookupTable } from "../vendor/cmocean/colormaps.js";
 
 const LAND_LIGHT = [214, 219, 226];
 const LAND_DARK = [22, 27, 35];
+// "Sea but unobserved" in the entire-year error raster: a faint blue-grey that is
+// clearly lighter/bluer than land, so land, no-obs ocean and scored ocean each read
+// distinctly (year scope only; single-forecast fields keep land ↔ ocean as before).
+export const NO_OBS_LIGHT = [222, 231, 243];
+export const NO_OBS_DARK = [42, 54, 72];
+
+export function landColor(theme) {
+  return theme === "light" ? LAND_LIGHT : LAND_DARK;
+}
+
+export function noObsColor(theme) {
+  return theme === "light" ? NO_OBS_LIGHT : NO_OBS_DARK;
+}
 
 /**
  * Colorize a field into an ImageData sized to the grid.
@@ -18,19 +31,32 @@ const LAND_DARK = [22, 27, 35];
  * `flipVertical` flips rows so ascending-latitude data renders north-up.
  */
 export function fieldToImageData({ data, width, height }, colormapName, range, options = {}) {
-  const { flipVertical = false, theme = "dark", transparentNaN = false } = options;
+  const { flipVertical = false, theme = "dark", transparentNaN = false, landMask = null } = options;
   const lut = lookupTable(colormapName);
   const [minimum, maximum] = range;
   const span = maximum - minimum || 1;
   const land = theme === "light" ? LAND_LIGHT : LAND_DARK;
+  const noObs = theme === "light" ? NO_OBS_LIGHT : NO_OBS_DARK;
   const image = new ImageData(width, height);
   const pixels = image.data;
   for (let row = 0; row < height; row += 1) {
     const sourceRow = flipVertical ? height - 1 - row : row;
     for (let column = 0; column < width; column += 1) {
-      const value = data[sourceRow * width + column];
+      const sourceIndex = sourceRow * width + column;
+      const value = data[sourceIndex];
       const destination = (row * width + column) * 4;
       if (Number.isNaN(value)) {
+        // With a land mask (year scope): land renders opaque; NaN over ocean is
+        // "sea but unobserved" and gets the faint no-obs tint. Without a mask,
+        // transparentNaN drops the cell; otherwise NaN is land as before.
+        if (landMask) {
+          const fill = landMask[sourceIndex] ? land : noObs;
+          pixels[destination] = fill[0];
+          pixels[destination + 1] = fill[1];
+          pixels[destination + 2] = fill[2];
+          pixels[destination + 3] = 255;
+          continue;
+        }
         if (transparentNaN) {
           pixels[destination + 3] = 0;
           continue;

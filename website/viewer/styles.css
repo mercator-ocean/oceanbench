@@ -348,6 +348,9 @@ body.resizing-layout.row { cursor: row-resize; }
 .map-footer { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
 .colorbar { width: min(32rem, 100%); height: 3.25rem; border-radius: 4px; }
 .layer-info { color: var(--muted); font-family: var(--mono); font-size: 0.76rem; margin: 0; }
+.year-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.72rem; color: var(--muted); margin: 0.15rem 0 0; }
+.year-legend .item { display: inline-flex; align-items: center; gap: 0.3rem; }
+.year-legend .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 3px; border: 1px solid rgba(128, 128, 128, 0.35); }
 
 .status { color: var(--muted); font-size: 0.82rem; margin: 0; min-height: 1rem; }
 .status.error { color: #ff6b6b; }

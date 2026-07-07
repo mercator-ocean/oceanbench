@@ -23,6 +23,8 @@ import {
   differenceField,
   resampleOntoGrid,
   drawColorbar,
+  landColor,
+  noObsColor,
 } from "./modules/render.js";
 import { startParticleField, makeVelocitySampler, speedMagnitudeField } from "./modules/particles.js";
 import {
@@ -574,9 +576,14 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   prefetchNeighbours(panel, level, start, leadIndex);
 }
 
-function colorize(field, latitudes, colormap, range, transparentNaN = false) {
+function colorize(field, latitudes, colormap, range, transparentNaN = false, landMask = null) {
   const flip = latitudes[0] < latitudes[latitudes.length - 1];
-  const image = fieldToImageData(field, colormap, range, { flipVertical: flip, theme: shared.theme, transparentNaN });
+  const image = fieldToImageData(field, colormap, range, {
+    flipVertical: flip,
+    theme: shared.theme,
+    transparentNaN,
+    landMask,
+  });
   const canvas = new OffscreenCanvas(field.width, field.height);
   canvas.getContext("2d", { willReadFrequently: true }).putImageData(image, 0, 0);
   return canvas;
@@ -636,11 +643,20 @@ async function renderYearPanel(panel, token, manifest) {
   }
   const range = await sharedYearRange(mapping.short, shared.leadDay);
   if (token !== panel.renderToken) return;
+  // Separate land from unobserved ocean: both are NaN in the error raster, so derive a
+  // land mask from the dataset's own coarsest pyramid level (tiny) and resample it onto
+  // the raster grid. Land then renders in the field land colour, ocean-without-obs in a
+  // faint tint — consistent with single-forecast rendering. A failed fetch degrades to
+  // the previous transparent-NaN behaviour.
+  const landMask = await yearLandMask(panel, built.latitudes, built.longitudes);
+  if (token !== panel.renderToken) return;
   panel.field = built.field;
   panel.latitudes = built.latitudes;
   panel.longitudes = built.longitudes;
   panel.edgesA = worldEdges(built.latitudes, built.longitudes);
-  panel.offscreenA = colorize(built.field, built.latitudes, YEAR_ERROR_COLORMAP, range, true);
+  panel.offscreenA = landMask
+    ? colorize(built.field, built.latitudes, YEAR_ERROR_COLORMAP, range, false, landMask)
+    : colorize(built.field, built.latitudes, YEAR_ERROR_COLORMAP, range, true);
   panel.offscreenB = null;
   panel.range = range;
   panel.colormap = YEAR_ERROR_COLORMAP;
@@ -652,6 +668,45 @@ async function renderYearPanel(panel, token, manifest) {
   panel.label =
     `${labelFor(panel.state.dataset)} · mean |obs − model| · ${varLabel}` +
     (mapping.component ? ` (${mapping.component})` : "");
+}
+
+const yearLandMaskCache = new Map();
+
+// The raw variable whose land/ocean pattern defines the mask. Derived current speed
+// has no store variable of its own, so borrow its eastward component.
+function landMaskVariable(panel) {
+  if (panel.state.variable === "current_speed" || panel.state.variable === "current_speed_15m") {
+    return currentDepthVariables(panel).u;
+  }
+  return panel.state.variable;
+}
+
+async function yearLandMask(panel, latitudes, longitudes) {
+  const slug = panel.state.dataset;
+  const variable = landMaskVariable(panel);
+  const key = `${slug}/${variable}/${shared.region}/${latitudes.length}x${longitudes.length}`;
+  if (yearLandMaskCache.has(key)) return yearLandMaskCache.get(key);
+  const promise = (async () => {
+    try {
+      await ensureStore(slug);
+      const manifest = manifestFor(slug);
+      if (!manifest || !Array.isArray(manifest.levels) || !manifest.levels.length) return null;
+      if (!variableExists(manifest, variable)) return null;
+      const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+      const coarsest = levels[levels.length - 1].level;
+      const layer = await readLayer(stores.get(slug), { variable, level: coarsest, startIndex: 0, leadIndex: 0 });
+      const coordinates = await loadCoordinates(slug, coarsest);
+      const resampled = resampleOntoGrid(layer, coordinates.latitudes, coordinates.longitudes, latitudes, longitudes);
+      const mask = new Uint8Array(resampled.data.length);
+      for (let i = 0; i < mask.length; i += 1) mask[i] = Number.isNaN(resampled.data[i]) ? 1 : 0;
+      return mask;
+    } catch (error) {
+      console.warn("year land mask unavailable", error);
+      return null;
+    }
+  })();
+  yearLandMaskCache.set(key, promise);
+  return promise;
 }
 
 function prefetchNeighbours(panel, level, start, leadIndex) {
@@ -757,8 +812,39 @@ function drawPanel(panel) {
     drawImageWorld(context, panel.offscreenA, panel.edgesA, projection);
     panel.els.swipeHint.hidden = true;
   }
+  // In year scope outline the raster extent so the map's data limits are legible at
+  // zoom 1 — especially the regional (ibi) domain against the empty page outside it.
+  if (shared.scope === "year" && panel.edgesA) drawRasterBorder(context, panel.edgesA, projection);
   updateParticleProjection(panel, projection);
   updatePanelBadge(panel);
+}
+
+function drawRasterBorder(context, edges, projection) {
+  const ratio = window.devicePixelRatio || 1;
+  const visibleLeft = projection.unproject(0, 0).nx;
+  const visibleRight = projection.unproject(projection.width, 0).nx;
+  const firstCopy = shared.region === "global" ? Math.floor(visibleLeft - edges.nx1) : 0;
+  const lastCopy = shared.region === "global" ? Math.ceil(visibleRight - edges.nx0) : 0;
+  context.save();
+  context.strokeStyle = shared.theme === "light" ? "rgba(40, 52, 72, 0.5)" : "rgba(184, 200, 224, 0.5)";
+  context.lineWidth = 1.5 * ratio;
+  for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+    const topLeft = projection.project(edges.nx0 + copy, edges.nyTop);
+    const bottomRight = projection.project(edges.nx1 + copy, edges.nyBottom);
+    if (shared.region === "global") {
+      // Longitude wraps, so vertical edges would draw a spurious seam mid-ocean; only
+      // the top/bottom latitude limits are real boundaries of the raster.
+      context.beginPath();
+      context.moveTo(topLeft.x, topLeft.y);
+      context.lineTo(bottomRight.x, topLeft.y);
+      context.moveTo(topLeft.x, bottomRight.y);
+      context.lineTo(bottomRight.x, bottomRight.y);
+      context.stroke();
+    } else {
+      context.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+    }
+  }
+  context.restore();
 }
 
 function updatePanelBadge(panel) {
@@ -769,7 +855,7 @@ function updatePanelBadge(panel) {
 
 // ---- overlays ---------------------------------------------------------------
 
-let overlayData = { eddies: null, class4: null, class4Error: null, region: null };
+let overlayData = { eddiesCensuses: [], eddiesMatch: null, class4: null, class4Error: null, region: null };
 let redrawAllPanelsFrame = 0;
 
 async function loadInsightManifest(url) {
@@ -1569,8 +1655,23 @@ async function renderAllPanels() {
 
 // ---- shared colorbar --------------------------------------------------------
 
+function rgbCss(rgb) {
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+}
+
+function updateYearLegend(visible) {
+  const legend = elements["year-legend"];
+  if (!legend) return;
+  legend.hidden = !visible;
+  if (!visible) return;
+  legend.innerHTML =
+    `<span class="item"><span class="swatch" style="background:${rgbCss(landColor(shared.theme))}"></span>land</span>` +
+    `<span class="item"><span class="swatch" style="background:${rgbCss(noObsColor(shared.theme))}"></span>ocean, no observations</span>`;
+}
+
 function updateSharedColorbar() {
   const panel = panels[activePanelIndex];
+  updateYearLegend(shared.scope === "year");
   if (shared.scope === "year") {
     if (!panel || !panel.colormap || !panel.range) {
       elements["layer-info"].textContent = `entire year · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
@@ -2562,6 +2663,7 @@ function selectElements() {
     "rail-collapse",
     "panel-grid",
     "colorbar",
+    "year-legend",
     "layer-info",
     "status",
     "context-rail",
