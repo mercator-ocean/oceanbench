@@ -73,6 +73,11 @@ const CURRENTS_MAX_SPEED = 1.2; // m/s mapping to the top of the speed colormap
 const REGION_BOUNDS = {
   ibi: { west: -19.08, east: 5.08, south: 26.17, north: 56.08 },
 };
+// The global default view is Pacific-centred (central meridian 180°), matching the
+// OceanBench site globe (region-globe.js rotates the global view to [180, 0, 0]).
+// centerNX = (lon + 180) / 360, so lon 180° ≡ nx 1.0 ≡ nx 0.0 after the periodic
+// wrap the global map applies. Rendering already tiles wrapped longitude copies.
+const GLOBAL_DEFAULT_CENTER_NX = 0.0;
 const PARTICLE_MAGNITUDE_SCALE = 1.0;
 const CLASS4_DISPLAY_POINT_BUDGET = 18000;
 const CLASS4_FULL_DENSITY_ZOOM = 12;
@@ -142,7 +147,7 @@ function currentsVariableOptions(manifest) {
 }
 
 // Shared state — linked across every panel (contracts.md §6).
-const view = { zoom: 1, centerNX: 0.5, centerNY: 0.5 };
+const view = { zoom: 1, centerNX: GLOBAL_DEFAULT_CENTER_NX, centerNY: 0.5 };
 const DEFAULT_LAYOUT = { controlsWidth: 256, railWidth: 352, mapHeight: null };
 const savedLayout = JSON.parse(localStorage.getItem("oceanbench.viewer.layout") || "null") || {};
 const shared = {
@@ -1689,7 +1694,7 @@ function fitRegionView() {
   const bounds = REGION_BOUNDS[shared.region];
   if (!bounds) {
     view.zoom = 1;
-    view.centerNX = 0.5;
+    view.centerNX = GLOBAL_DEFAULT_CENTER_NX;
     view.centerNY = 0.5;
     return;
   }
