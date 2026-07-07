@@ -39,4 +39,6 @@ format:
     theme:
       light: [flatly, theme-light.scss]
       dark: [darkly, theme-dark.scss]
-    css: styles.css
+    css:
+      - theme/tokens.css
+      - styles.css

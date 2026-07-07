@@ -1,0 +1,106 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+ *
+ * SPDX-License-Identifier: EUPL-1.2
+ */
+
+/*
+ * OceanBench design tokens — the single source of truth for design primitives
+ * shared by the Quarto site and the viewer app.
+ *
+ * Two tiers:
+ *   --ob-*         site-wide primitives. Values mirror the Quarto theme
+ *                  (flatly/darkly + theme-light.scss / theme-dark.scss); on
+ *                  rendered site pages they defer to the live Bootstrap
+ *                  variables so a SCSS theme change propagates automatically.
+ *   --ob-viewer-*  the viewer app's palette. Light mode follows the site
+ *                  tokens; dark mode is the viewer's deliberate near-black
+ *                  field-inspection palette (darker than the site's dark
+ *                  theme so the data raster owns the contrast).
+ *
+ * Theme switching:
+ *   site pages     Quarto stamps `quarto-dark` on <body>.
+ *   viewer app     app.js stamps `data-theme="light|dark"` on <html>.
+ * Both selectors are handled here so one file serves both contexts.
+ *
+ * The viewer ships a verbatim copy of this file as website/viewer/tokens.css
+ * so the standalone app stays self-contained (a symlink breaks Quarto's
+ * resource copy). After editing here, refresh the copy:
+ *   cp website/theme/tokens.css website/viewer/tokens.css
+ */
+
+/* ---- site primitives: light (default) -------------------------------------- */
+:root {
+  --ob-accent: var(--bs-primary, #046293);
+  --ob-accent-contrast: #ffffff;
+  --ob-text: var(--bs-body-color, #333940);
+  --ob-bg: var(--bs-body-bg, #fafaf7);
+  --ob-border: var(--bs-border-color, #dee2e6);
+  --ob-muted: var(--bs-secondary, #6c757d);
+  --ob-radius-sm: 0.35rem;
+  --ob-radius-md: 0.55rem;
+  --ob-radius-pill: 999px;
+  --ob-surface: var(--bs-tertiary-bg, #f4f6f7);
+  --ob-surface-raised: var(--bs-body-bg, #fafaf7);
+  --ob-soft-shadow: 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06);
+  --ob-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ob-font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+}
+
+/* ---- site primitives: dark -------------------------------------------------- */
+body.quarto-dark {
+  --ob-accent: var(--bs-primary, #3aa6d3);
+  --ob-accent-contrast: #111827;
+  --ob-text: var(--bs-body-color, #d4d4d8);
+  --ob-bg: var(--bs-body-bg, #1a1a2e);
+  --ob-border: var(--bs-border-color, #495057);
+  --ob-muted: #adb5bd;
+  --ob-surface: #202032;
+  --ob-surface-raised: var(--bs-body-bg, #1a1a2e);
+  --ob-soft-shadow: none;
+}
+
+/* ---- viewer palette: light (follows the site tokens) ------------------------ */
+:root,
+:root[data-theme="light"] {
+  --ob-viewer-bg: var(--ob-bg, #fafaf7);
+  --ob-viewer-canvas-void: #eef2f5;
+  --ob-viewer-surface: #ffffff;
+  --ob-viewer-surface-strong: var(--ob-surface, #f4f6f7);
+  --ob-viewer-border: var(--ob-border, #dee2e6);
+  --ob-viewer-text: var(--ob-text, #333940);
+  --ob-viewer-muted: var(--ob-muted, #6c757d);
+  --ob-viewer-accent: var(--ob-accent, #046293);
+  --ob-viewer-accent-glow: rgba(4, 98, 147, 0.18);
+  --ob-viewer-readout-bg: rgba(255, 255, 255, 0.88);
+  --ob-viewer-grid-line: rgba(108, 117, 125, 0.18);
+  --ob-viewer-shadow: var(--ob-soft-shadow, 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06));
+  /* canvas-drawn theme colors (read from JS via getComputedStyle) */
+  --ob-viewer-canvas-bg: #eef2f6;
+  --ob-viewer-canvas-note: #5b6675;
+  --ob-viewer-swipe-divider: #1f6feb;
+  --ob-viewer-raster-border: rgba(40, 52, 72, 0.5);
+  --ob-viewer-colorbar-text: #14181d;
+}
+
+/* ---- viewer palette: dark (near-black field-inspection theme) --------------- */
+:root[data-theme="dark"] {
+  --ob-viewer-bg: #060910;
+  --ob-viewer-canvas-void: #080b11;
+  --ob-viewer-surface: #10151f;
+  --ob-viewer-surface-strong: #161c28;
+  --ob-viewer-border: #232c3a;
+  --ob-viewer-text: #e6edf3;
+  --ob-viewer-muted: #8b97a6;
+  --ob-viewer-accent: #38bdf8;
+  --ob-viewer-accent-glow: rgba(56, 189, 248, 0.35);
+  --ob-viewer-readout-bg: rgba(8, 11, 17, 0.82);
+  --ob-viewer-grid-line: rgba(139, 151, 166, 0.16);
+  --ob-viewer-shadow: none;
+  /* canvas-drawn theme colors (read from JS via getComputedStyle) */
+  --ob-viewer-canvas-bg: #080b11;
+  --ob-viewer-canvas-note: #8b97a6;
+  --ob-viewer-swipe-divider: #38bdf8;
+  --ob-viewer-raster-border: rgba(184, 200, 224, 0.5);
+  --ob-viewer-colorbar-text: #e6edf3;
+}

@@ -5,42 +5,26 @@ SPDX-License-Identifier: EUPL-1.2
 */
 
 /* Default theme follows the OceanBench Quarto site. Dark remains available from
-   the in-viewer toggle for field inspection. */
-:root,
-:root[data-theme="light"] {
-  --background: #fafaf7;
-  --canvas-void: #eef2f5;
-  --surface: #ffffff;
-  --surface-strong: #f4f6f7;
-  --border: #dee2e6;
-  --text: #333940;
-  --muted: #6c757d;
-  --accent: #046293;
-  --accent-glow: rgba(4, 98, 147, 0.18);
-  --readout-bg: rgba(255, 255, 255, 0.88);
-  --grid-line: rgba(108, 117, 125, 0.18);
-  --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
-  --radius-sm: 0.35rem;
-  --radius-md: 0.55rem;
-  --shadow: 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06);
-}
-
-:root[data-theme="dark"] {
-  --background: #060910;
-  --canvas-void: #080b11;
-  --surface: #10151f;
-  --surface-strong: #161c28;
-  --border: #232c3a;
-  --text: #e6edf3;
-  --muted: #8b97a6;
-  --accent: #38bdf8;
-  --accent-glow: rgba(56, 189, 248, 0.35);
-  --readout-bg: rgba(8, 11, 17, 0.82);
-  --grid-line: rgba(139, 151, 166, 0.16);
-  --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
-  --radius-sm: 0.35rem;
-  --radius-md: 0.55rem;
-  --shadow: none;
+   the in-viewer toggle for field inspection.
+   Palette values are single-sourced from the shared design tokens in
+   ./tokens.css (--ob-viewer-*, themed via data-theme on <html>); the literals
+   below are fallbacks only, kept in sync with that file. */
+:root {
+  --background: var(--ob-viewer-bg, #fafaf7);
+  --canvas-void: var(--ob-viewer-canvas-void, #eef2f5);
+  --surface: var(--ob-viewer-surface, #ffffff);
+  --surface-strong: var(--ob-viewer-surface-strong, #f4f6f7);
+  --border: var(--ob-viewer-border, #dee2e6);
+  --text: var(--ob-viewer-text, #333940);
+  --muted: var(--ob-viewer-muted, #6c757d);
+  --accent: var(--ob-viewer-accent, #046293);
+  --accent-glow: var(--ob-viewer-accent-glow, rgba(4, 98, 147, 0.18));
+  --readout-bg: var(--ob-viewer-readout-bg, rgba(255, 255, 255, 0.88));
+  --grid-line: var(--ob-viewer-grid-line, rgba(108, 117, 125, 0.18));
+  --mono: var(--ob-font-mono, ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace);
+  --radius-sm: var(--ob-radius-sm, 0.35rem);
+  --radius-md: var(--ob-radius-md, 0.55rem);
+  --shadow: var(--ob-viewer-shadow, 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06));
 }
 
 * { box-sizing: border-box; }
@@ -53,7 +37,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--ob-font-sans, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
   color: var(--text);
   background: var(--background);
   line-height: 1.45;

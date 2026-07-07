@@ -829,14 +829,22 @@ function fieldMutedUnderOverlay() {
   return shared.overlayMode === "class4" || shared.overlayMode === "eddies" || shared.overlayMode === "trajectories";
 }
 
+// Theme colors drawn on canvas come from the shared design tokens (tokens.css,
+// --ob-viewer-*, themed by data-theme on <html>); the per-theme literal is a
+// fallback kept in sync with that file.
+function themeToken(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
 function drawPanel(panel) {
   const canvas = panel.els.field;
   const context = canvas.getContext("2d", { willReadFrequently: true });
-  context.fillStyle = shared.theme === "light" ? "#eef2f6" : "#080b11";
+  context.fillStyle = themeToken("--ob-viewer-canvas-bg", shared.theme === "light" ? "#eef2f6" : "#080b11");
   context.fillRect(0, 0, canvas.width, canvas.height);
   if (!panel.offscreenA) {
     if (shared.scope === "year" && panel.yearMissing) {
-      context.fillStyle = shared.theme === "light" ? "#5b6675" : "#8b97a6";
+      context.fillStyle = themeToken("--ob-viewer-canvas-note", shared.theme === "light" ? "#5b6675" : "#8b97a6");
       context.font = `${14 * (window.devicePixelRatio || 1)}px system-ui, sans-serif`;
       context.textAlign = "center";
       context.textBaseline = "middle";
@@ -874,7 +882,7 @@ function drawPanel(panel) {
     drawImageWorld(context, panel.offscreenB, panel.edgesB, projection);
     context.restore();
     context.filter = "none";
-    context.strokeStyle = shared.theme === "light" ? "#1f6feb" : "#38bdf8";
+    context.strokeStyle = themeToken("--ob-viewer-swipe-divider", shared.theme === "light" ? "#1f6feb" : "#38bdf8");
     context.lineWidth = 2 * (window.devicePixelRatio || 1);
     context.beginPath();
     context.moveTo(dividerX, 0);
@@ -919,7 +927,7 @@ function drawRasterBorder(context, edges, projection) {
   const firstCopy = shared.region === "global" ? Math.floor(visibleLeft - edges.nx1) : 0;
   const lastCopy = shared.region === "global" ? Math.ceil(visibleRight - edges.nx0) : 0;
   context.save();
-  context.strokeStyle = shared.theme === "light" ? "rgba(40, 52, 72, 0.5)" : "rgba(184, 200, 224, 0.5)";
+  context.strokeStyle = themeToken("--ob-viewer-raster-border", shared.theme === "light" ? "rgba(40, 52, 72, 0.5)" : "rgba(184, 200, 224, 0.5)");
   context.lineWidth = 1.5 * ratio;
   for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
     const topLeft = projection.project(edges.nx0 + copy, edges.nyTop);
@@ -1829,7 +1837,7 @@ function updateSharedColorbar() {
     const biasMode = panel.yearMetric === "bias";
     drawColorbar(elements.colorbar, panel.colormap, panel.range, {
       label: `${biasMode ? "mean (model − obs)" : "mean |obs − model|"} over ${nStarts || "?"} start dates · ${panel.label} (${panel.units})`,
-      textColor: shared.theme === "light" ? "#14181d" : "#e6edf3",
+      textColor: themeToken("--ob-viewer-colorbar-text", shared.theme === "light" ? "#14181d" : "#e6edf3"),
     });
     elements["layer-info"].textContent = `entire year (${nStarts || "?"} start dates) · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
     return;
@@ -1842,7 +1850,7 @@ function updateSharedColorbar() {
   const mutedNote = fieldMutedUnderOverlay() ? " · muted under overlay" : "";
   drawColorbar(elements.colorbar, panel.colormap, panel.range, {
     label: `${panel.label} (${panel.units})${suffix}${mutedNote}`,
-    textColor: shared.theme === "light" ? "#14181d" : "#e6edf3",
+    textColor: themeToken("--ob-viewer-colorbar-text", shared.theme === "light" ? "#14181d" : "#e6edf3"),
   });
   const manifest = manifestFor(panel.state.dataset);
   if (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length) {

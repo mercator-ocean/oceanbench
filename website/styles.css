@@ -4,28 +4,8 @@
  * SPDX-License-Identifier: EUPL-1.2
  */
 
-:root {
-  --ob-accent: var(--bs-primary, #046293);
-  --ob-accent-contrast: #ffffff;
-  --ob-border: var(--bs-border-color, #dee2e6);
-  --ob-muted: var(--bs-secondary, #6c757d);
-  --ob-radius-sm: 0.35rem;
-  --ob-radius-md: 0.55rem;
-  --ob-radius-pill: 999px;
-  --ob-surface: var(--bs-tertiary-bg, #f4f6f7);
-  --ob-surface-raised: var(--bs-body-bg, #fafaf7);
-  --ob-soft-shadow: 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06);
-}
-
-body.quarto-dark {
-  --ob-accent: var(--bs-primary, #3aa6d3);
-  --ob-accent-contrast: #111827;
-  --ob-border: var(--bs-border-color, #495057);
-  --ob-muted: #adb5bd;
-  --ob-surface: #202032;
-  --ob-surface-raised: var(--bs-body-bg, #1a1a2e);
-  --ob-soft-shadow: none;
-}
+/* Design primitives (--ob-*) live in theme/tokens.css, loaded site-wide via
+   _quarto.yml `css:` — shared with the viewer app (website/viewer/tokens.css). */
 
 /* --- Shared surfaces and markdown content --- */
 
