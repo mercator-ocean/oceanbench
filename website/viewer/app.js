@@ -48,6 +48,8 @@ const REGION_BOUNDS = {
   ibi: { west: -19.08, east: 5.08, south: 26.17, north: 56.08 },
 };
 const PARTICLE_MAGNITUDE_SCALE = 1.0;
+const CLASS4_DISPLAY_POINT_BUDGET = 45000;
+const CLASS4_FULL_DENSITY_ZOOM = 12;
 
 // Currents are a synthetic variable (speed magnitude √(u²+v²)) built from the u/v
 // velocity components, one per available depth, so they sit in the variable dropdown
@@ -653,6 +655,7 @@ function updatePanelBadge(panel) {
 // ---- overlays ---------------------------------------------------------------
 
 let overlayData = { eddies: null, class4: null, class4Error: null, region: null };
+let redrawAllPanelsFrame = 0;
 
 async function loadInsightManifest(url) {
   if (!url) return null;
@@ -745,10 +748,6 @@ function drawOverlays(panel) {
     const startDate = manifest ? manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)] : null;
     const rows = overlayData.class4.rows || [];
     const targeted = overlayData.class4.targeted;
-    // Targeted mode already fetched exactly the selected pair — draw every matching
-    // point (no cap). Legacy sampling thins the scattered preview, fewer at low zoom
-    // (density-manage §4), refined as the user zooms in.
-    const limit = targeted ? Infinity : Math.round(1500 + 3500 * Math.min(1, (view.zoom - 1) / 6));
     const selector = {
       variable: panel.state.variable,
       depthBin,
@@ -756,12 +755,13 @@ function drawOverlays(panel) {
       startDate,
     };
     const matchedTotal = countClass4Matches(rows, selector);
-    const points = class4Points(rows, { ...selector, limit });
+    const points = class4Points(rows, selector);
+    const display = class4DisplayPoints(points, projection, copyOffsets, canvas);
     const scale = class4ErrorScale(points);
     // Larger points at high zoom so individual obs are distinguishable from a line.
     const radius = 2.2 + 2.6 * Math.min(1, (view.zoom - 1) / 20);
     for (const offset of copyOffsets) {
-      drawClass4Points(context, projectOnCopy(offset), points, {
+      drawClass4Points(context, projectOnCopy(offset), display.points, {
         devicePixelRatio: ratio,
         errorScale: scale,
         radius,
@@ -770,13 +770,17 @@ function drawOverlays(panel) {
       });
     }
     panel.class4Scale = scale;
-    panel.class4Count = targeted ? points.length : countVisiblePoints(points, projection, copyOffsets, canvas);
+    panel.class4Count = display.drawnVisible;
+    panel.class4VisibleTotal = display.visibleTotal;
+    panel.class4Stride = display.stride;
+    panel.class4Thinned = display.thinned;
     panel.class4Matched = matchedTotal;
     panel.class4Targeted = targeted;
-    panel.class4HitPoints = points;
+    panel.class4HitPoints = display.points;
     panel.class4PointRadius = radius;
   } else {
     panel.class4HitPoints = null;
+    panel.class4Thinned = false;
   }
 }
 
@@ -934,22 +938,39 @@ function renderTrajectoryRail() {
   wireCursorTooltip(elements["rail-trajectory-chart"]);
 }
 
-// How many selected obs points actually fall inside the viewport (on any visible
-// copy) — the live "N shown" that tracks panning and zooming (item 5).
-function countVisiblePoints(points, projection, copyOffsets, canvas) {
-  let visible = 0;
-  for (const point of points) {
+function class4DisplayPoints(points, projection, copyOffsets, canvas) {
+  if (!points.length) return { points: [], visibleTotal: 0, drawnVisible: 0, stride: 1, thinned: false };
+  const visibleIndexes = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
     const nx = (point.longitude + 180) / 360;
     const ny = (90 - point.latitude) / 180;
     for (const offset of copyOffsets) {
       const screen = projection.project(nx + offset, ny);
       if (screen.x >= 0 && screen.y >= 0 && screen.x <= canvas.width && screen.y <= canvas.height) {
-        visible += 1;
+        visibleIndexes.push(index);
         break;
       }
     }
   }
-  return visible;
+  const visibleTotal = visibleIndexes.length;
+  if (view.zoom >= CLASS4_FULL_DENSITY_ZOOM || visibleTotal <= CLASS4_DISPLAY_POINT_BUDGET) {
+    return { points, visibleTotal, drawnVisible: visibleTotal, stride: 1, thinned: false };
+  }
+  const stride = Math.ceil(visibleTotal / CLASS4_DISPLAY_POINT_BUDGET);
+  const selectedIndexes = new Set();
+  for (let i = 0; i < visibleIndexes.length; i += stride) selectedIndexes.add(visibleIndexes[i]);
+  const drawn = [];
+  for (let index = 0; index < points.length; index += 1) {
+    if (selectedIndexes.has(index)) drawn.push(points[index]);
+  }
+  return {
+    points: drawn,
+    visibleTotal,
+    drawnVisible: selectedIndexes.size,
+    stride,
+    thinned: true,
+  };
 }
 
 // Integer world-copy offsets whose earth copy is currently visible (periodic wrap).
@@ -1086,7 +1107,7 @@ function onPanelPointerMove(event) {
     view.centerNX = panel.dragging.centerNX - ((event.clientX - panel.dragging.x) * ratio) / panel.dragging.projection.displayWidth;
     view.centerNY = panel.dragging.centerNY - ((event.clientY - panel.dragging.y) * ratio) / panel.dragging.projection.displayHeight;
     clampView();
-    redrawAllPanels();
+    scheduleRedrawAllPanels();
     scheduleHashWrite();
     scheduleRailUpdate();
   } else {
@@ -1136,7 +1157,7 @@ function onPanelWheel(panel, event) {
       updateContextRail();
     });
   } else {
-    redrawAllPanels();
+    scheduleRedrawAllPanels();
   }
   scheduleHashWrite();
   scheduleRailUpdate();
@@ -1378,12 +1399,18 @@ function resizePanelCanvases(panel) {
 }
 
 function redrawAllPanels() {
+  redrawAllPanelsFrame = 0;
   for (let i = 0; i < shared.layout; i += 1) {
     resizePanelCanvases(panels[i]);
     drawPanel(panels[i]);
     drawOverlays(panels[i]);
     drawTrajectoryFans(panels[i]);
   }
+}
+
+function scheduleRedrawAllPanels() {
+  if (redrawAllPanelsFrame) return;
+  redrawAllPanelsFrame = requestAnimationFrame(redrawAllPanels);
 }
 
 async function renderAllPanels() {
@@ -1743,21 +1770,28 @@ function updateRailLegend(panel) {
   } else if (shared.overlayMode === "class4") {
     const hostPanel = panels[0];
     const shown = hostPanel ? hostPanel.class4Count || 0 : 0;
+    const visibleTotal = hostPanel ? hostPanel.class4VisibleTotal || shown : shown;
     const matched = hostPanel ? hostPanel.class4Matched || 0 : 0;
     const scale = Math.max(...panels.slice(0, shared.layout).map((candidate) => candidate.class4Scale || 0), 0);
     const targeted = overlayData.class4 && overlayData.class4.targeted;
     const sampled = overlayData.class4 && overlayData.class4.sampled;
+    const thinned = Boolean(hostPanel && hostPanel.class4Thinned);
     const noData = !overlayData.class4 && !overlayData.class4Error ? " · no match-ups for this dataset/region" : "";
     const weak = matched > 0 && matched < 30 ? " · low count — statistic is weak" : "";
-    // Targeted mode holds every obs for the selected (start, lead) — report the
-    // full count plainly. Legacy sampling reports "shown of matched" with the note.
-    const countText = targeted
-      ? `<strong>${matched} obs</strong>`
-      : `<strong>${shown} points shown</strong> (of ${matched} sampled)`;
+    const fullDensityNote = thinned ? " · zoom in for full density" : "";
+    const countText = thinned
+      ? `<strong>showing ${formatCount(shown)} of ${formatCount(visibleTotal)} obs</strong>${fullDensityNote}`
+      : targeted
+        ? `<strong>${formatCount(matched)} obs</strong>`
+        : `<strong>${formatCount(shown)} obs</strong>`;
     container.innerHTML =
       `<div class="row"><span class="swatch" style="background:${SERIES_COLORS.error}"></span>|obs − model|, brighter = larger error</div>` +
       `<p class="dim">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${panel.units} · region ${shared.region}${!targeted && sampled ? " · sampled subset" : ""}${weak}${noData}</p>`;
   }
+}
+
+function formatCount(value) {
+  return Math.round(Number(value) || 0).toLocaleString("en-US");
 }
 
 function row(color, label, count) {

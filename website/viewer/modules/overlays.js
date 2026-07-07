@@ -121,15 +121,26 @@ export function drawClass4Points(drawing, project, points, options = {}) {
   const scale = options.errorScale || 1;
   const width = options.canvasWidth || Infinity;
   const height = options.canvasHeight || Infinity;
+  const bucketCount = 18;
+  const buckets = Array.from({ length: bucketCount }, () => []);
   for (const point of points) {
     const { nx, ny } = toNorm(point.longitude, point.latitude);
     const screen = project(nx, ny);
     if (screen.x < -8 || screen.y < -8 || screen.x > width + 8 || screen.y > height + 8) continue;
     const error = class4AbsoluteError(point);
     const normalized = Number.isFinite(error) ? Math.min(1, error / scale) : 0;
+    const bucketIndex = Math.min(bucketCount - 1, Math.max(0, Math.floor(normalized * (bucketCount - 1))));
+    buckets[bucketIndex].push(screen.x, screen.y);
+  }
+  for (let bucketIndex = 0; bucketIndex < buckets.length; bucketIndex += 1) {
+    const coordinates = buckets[bucketIndex];
+    if (!coordinates.length) continue;
+    const normalized = bucketCount <= 1 ? 0 : bucketIndex / (bucketCount - 1);
     const [r, g, b] = sampleColormap(CLASS4_COLORMAP, 0.12 + normalized * 0.88);
     drawing.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
-    drawing.fillRect(screen.x - radius, screen.y - radius, diameter, diameter);
+    for (let i = 0; i < coordinates.length; i += 2) {
+      drawing.fillRect(coordinates[i] - radius, coordinates[i + 1] - radius, diameter, diameter);
+    }
   }
 }
 

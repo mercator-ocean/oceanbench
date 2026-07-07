@@ -171,11 +171,10 @@ export function spectraEntry(spectra, variable, reference, leadDay) {
 
 /**
  * Class-4 points for the active (variable, depth bin, lead day, start date),
- * spatially thinned to at most `limit` points so a whole altimeter month does not
- * choke the overlay at low zoom. Thinning is a deterministic stride (density-manage
- * §4), refined by the panel as the user zooms into fewer visible points.
+ * without display thinning. The viewer may thin the drawn subset, but statistics
+ * and skill curves must keep using the complete loaded match-up set.
  */
-export function class4Points(rows, { variable, depthBin, leadDay, startDate, limit = 4000 }) {
+export function class4Points(rows, { variable, depthBin, leadDay, startDate }) {
   if (!rows) return [];
   const requestedLead = leadDay == null ? null : Number(leadDay);
   const requestedStart = startDate || null;
@@ -187,11 +186,7 @@ export function class4Points(rows, { variable, depthBin, leadDay, startDate, lim
     if (requestedStart && formatClass4Date(row.start_date) !== requestedStart) continue;
     matched.push(row);
   }
-  if (matched.length <= limit) return matched;
-  const stride = Math.ceil(matched.length / limit);
-  const thinned = [];
-  for (let i = 0; i < matched.length; i += stride) thinned.push(matched[i]);
-  return thinned;
+  return matched;
 }
 
 function formatClass4Date(value) {
