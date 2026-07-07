@@ -35,7 +35,15 @@ import {
   class4Points,
 } from "./modules/insights.js";
 import { drawEddyFrame, drawClass4Points, class4ErrorScale, numericOrNaN, EDDY_COLORS } from "./modules/overlays.js";
-import { leadCurveSVG, psdSpectraSVG, SERIES_COLORS } from "./modules/charts.js";
+import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, SERIES_COLORS } from "./modules/charts.js";
+import {
+  loadYearGeography,
+  loadYearRmsd,
+  yearVariableMapping,
+  buildYearGeographyField,
+  yearGeographyMax,
+  yearRmsdSeries,
+} from "./modules/year.js";
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
 import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
 import { forecastColor } from "./modules/forecast-colors.js";
@@ -44,6 +52,7 @@ import { resolveViewerDataUrl } from "./config.js";
 const DATASETS_URL = resolveViewerDataUrl("./data/datasets.json");
 const DIFFERENCE_COLORMAP = "balance";
 const SPEED_COLORMAP = "speed";
+const YEAR_ERROR_COLORMAP = "dense"; // sequential map for time-mean |obs − model|
 const CURRENTS_MAX_SPEED = 1.2; // m/s mapping to the top of the speed colormap
 const REGION_BOUNDS = {
   ibi: { west: -19.08, east: 5.08, south: 26.17, north: 56.08 },
@@ -109,6 +118,9 @@ const shared = {
   leadDay: 1,
   theme: "light",
   layout: 1,
+  // "single" = per-start-date fields (the default view); "year" = precomputed
+  // whole-year error-geography raster + RMSD-by-start diagnostics.
+  scope: "single",
   overlayMode: "none",
   region: "global",
   eddyReference: "glorys",
@@ -425,6 +437,17 @@ async function renderPanel(panel) {
     await ensureStore(panel.state.dataset);
     const manifest = manifestFor(panel.state.dataset);
     if (!variableExists(manifest, panel.state.variable)) panel.state.variable = Object.keys(manifest.variables)[0];
+
+    if (shared.scope === "year") {
+      await renderYearPanel(panel, token, manifest);
+      if (token !== panel.renderToken) return;
+      resizePanelCanvases(panel);
+      drawPanel(panel);
+      updateSharedColorbar();
+      setStatus("");
+      return;
+    }
+
     const level = selectRenderLevel(manifest);
     const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
     const leadIndex = shared.leadDay - 1;
@@ -543,12 +566,84 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   prefetchNeighbours(panel, level, start, leadIndex);
 }
 
-function colorize(field, latitudes, colormap, range) {
+function colorize(field, latitudes, colormap, range, transparentNaN = false) {
   const flip = latitudes[0] < latitudes[latitudes.length - 1];
-  const image = fieldToImageData(field, colormap, range, { flipVertical: flip, theme: shared.theme });
+  const image = fieldToImageData(field, colormap, range, { flipVertical: flip, theme: shared.theme, transparentNaN });
   const canvas = new OffscreenCanvas(field.width, field.height);
   canvas.getContext("2d", { willReadFrequently: true }).putImageData(image, 0, 0);
   return canvas;
+}
+
+// ---- entire-year scope: precomputed error geography raster ------------------
+
+function clearYearPanel(panel, note) {
+  panel.field = null;
+  panel.offscreenA = null;
+  panel.offscreenB = null;
+  panel.range = null;
+  panel.units = "";
+  panel.label = "";
+  panel.yearMeta = null;
+  panel.yearMissing = note;
+}
+
+// Shared [0, max] scale across the visible panels that show the same year variable,
+// so two-forecast rasters stay directly comparable.
+async function sharedYearRange(shortName, leadDay) {
+  let maximum = 0;
+  for (let i = 0; i < shared.layout; i += 1) {
+    const candidate = panels[i];
+    if (!candidate) continue;
+    const mapping = yearVariableMapping(candidate.state.variable);
+    if (!mapping || mapping.short !== shortName) continue;
+    const url = insightsFor(insightIndex, candidate.state.dataset, shared.region).year_error_geography;
+    if (!url) continue;
+    const geography = await loadYearGeography(url);
+    if (!geography) continue;
+    maximum = Math.max(maximum, yearGeographyMax(geography, shortName, leadDay));
+  }
+  return [0, maximum || 1];
+}
+
+async function renderYearPanel(panel, token, manifest) {
+  stopParticles(panel);
+  const urls = insightsFor(insightIndex, panel.state.dataset, shared.region);
+  const geoUrl = urls.year_error_geography;
+  if (!geoUrl) {
+    clearYearPanel(panel, "Year diagnostics not available for this dataset/region.");
+    return;
+  }
+  const geography = await loadYearGeography(geoUrl);
+  if (token !== panel.renderToken) return;
+  const mapping = geography ? yearVariableMapping(panel.state.variable) : null;
+  const built = mapping ? buildYearGeographyField(geography, mapping.short, shared.leadDay) : null;
+  if (!geography || !mapping || !built) {
+    clearYearPanel(
+      panel,
+      geography
+        ? "Year diagnostics not available for this variable at this lead."
+        : "Year diagnostics not available for this dataset/region.",
+    );
+    return;
+  }
+  const range = await sharedYearRange(mapping.short, shared.leadDay);
+  if (token !== panel.renderToken) return;
+  panel.field = built.field;
+  panel.latitudes = built.latitudes;
+  panel.longitudes = built.longitudes;
+  panel.edgesA = worldEdges(built.latitudes, built.longitudes);
+  panel.offscreenA = colorize(built.field, built.latitudes, YEAR_ERROR_COLORMAP, range, true);
+  panel.offscreenB = null;
+  panel.range = range;
+  panel.colormap = YEAR_ERROR_COLORMAP;
+  panel.units = mapping.unit;
+  panel.yearMissing = null;
+  panel.yearMeta = { nStarts: geography.meta && geography.meta.n_starts, component: mapping.component };
+  const entry = variableEntry(manifest, panel.state.variable);
+  const varLabel = entry ? prettyName(entry.standard_name) : panel.state.variable;
+  panel.label =
+    `${labelFor(panel.state.dataset)} · mean |obs − model| · ${varLabel}` +
+    (mapping.component ? ` (${mapping.component})` : "");
 }
 
 function prefetchNeighbours(panel, level, start, leadIndex) {
@@ -612,7 +707,17 @@ function drawPanel(panel) {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   context.fillStyle = shared.theme === "light" ? "#eef2f6" : "#080b11";
   context.fillRect(0, 0, canvas.width, canvas.height);
-  if (!panel.offscreenA) return;
+  if (!panel.offscreenA) {
+    if (shared.scope === "year" && panel.yearMissing) {
+      context.fillStyle = shared.theme === "light" ? "#5b6675" : "#8b97a6";
+      context.font = `${14 * (window.devicePixelRatio || 1)}px system-ui, sans-serif`;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(panel.yearMissing, canvas.width / 2, canvas.height / 2);
+      panel.els.swipeHint.hidden = true;
+    }
+    return;
+  }
   const projection = projectionFor(panel);
   context.imageSmoothingEnabled = false;
 
@@ -732,6 +837,7 @@ function drawOverlays(panel) {
   const canvas = panel.els.overlay;
   const context = canvas.getContext("2d", { willReadFrequently: true });
   context.clearRect(0, 0, canvas.width, canvas.height);
+  if (shared.scope === "year") return;
   if (shared.overlayMode === "none") return;
   const projection = projectionFor(panel);
   const ratio = window.devicePixelRatio || 1;
@@ -1433,6 +1539,19 @@ async function renderAllPanels() {
 
 function updateSharedColorbar() {
   const panel = panels[activePanelIndex];
+  if (shared.scope === "year") {
+    if (!panel || !panel.colormap || !panel.range) {
+      elements["layer-info"].textContent = `entire year · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
+      return;
+    }
+    const nStarts = panel.yearMeta && panel.yearMeta.nStarts;
+    drawColorbar(elements.colorbar, panel.colormap, panel.range, {
+      label: `mean |obs − model| over ${nStarts || "?"} start dates · ${panel.label} (${panel.units})`,
+      textColor: shared.theme === "light" ? "#14181d" : "#e6edf3",
+    });
+    elements["layer-info"].textContent = `entire year (${nStarts || "?"} start dates) · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
+    return;
+  }
   if (!panel || !panel.colormap || !panel.range) return;
   const sameVariable = panels
     .slice(0, shared.layout)
@@ -1479,9 +1598,85 @@ async function updateContextRail() {
     : `${shown[0].label} · ${shared.region}`;
 
   renderRailSkill(shown, comparison);
+  const yearSection = elements["rail-year-rmsd-section"];
+  if (shared.scope === "year") {
+    if (yearSection) yearSection.hidden = false;
+    renderRailYearRmsd(shown);
+    return;
+  }
+  if (yearSection) yearSection.hidden = true;
   renderRailPsd(shown, comparison);
   renderTrajectoryRail();
   updateRailLegend(panels[activePanelIndex] || panels[0]);
+}
+
+// RMSD by start date, one line per visible forecast at the selected lead day. Clicking
+// a point drills down into single-forecast scope with that start date selected.
+async function renderRailYearRmsd(shown) {
+  const slot = elements["rail-year-rmsd"];
+  const note = elements["rail-year-rmsd-note"];
+  const lines = [];
+  let unit = "";
+  let missing = 0;
+  for (const panel of shown) {
+    const url = insightsFor(insightIndex, panel.state.dataset, shared.region).year_rmsd_by_start;
+    const mapping = url ? yearVariableMapping(panel.state.variable) : null;
+    const rmsd = url ? await loadYearRmsd(url) : null;
+    const entry = rmsd && mapping ? yearRmsdSeries(rmsd, mapping.short, shared.leadDay) : null;
+    if (!entry) {
+      missing += 1;
+      continue;
+    }
+    unit = unit || (mapping.unit ? mapping.unit : "");
+    lines.push({
+      label: `${labelFor(panel.state.dataset)}${mapping.component ? " · u" : ""}`,
+      color: forecastColor(panel.index),
+      panelIndex: panel.index,
+      dates: entry.dates,
+      rmsd: entry.rmsd,
+    });
+  }
+  slot.innerHTML = rmsdByStartSVG(lines, { title: "RMSD by start date", unit });
+  note.textContent = lines.length
+    ? "Area-weighted super-ob RMSD — relative variation across start dates; absolute values differ from the official scores. Click a point to open that start date."
+    : "Year RMSD-by-start not available for this dataset/region.";
+  wireCursorTooltip(slot);
+  wireYearRmsdDrilldown(slot, lines);
+}
+
+function wireYearRmsdDrilldown(slot, lines) {
+  const svg = slot.querySelector("svg");
+  if (!svg) return;
+  svg.querySelectorAll(".year-point").forEach((point) => {
+    point.style.cursor = "pointer";
+    point.addEventListener("click", () => {
+      const date = point.getAttribute("data-date");
+      if (date) drillDownToStartDate(date);
+    });
+  });
+}
+
+// Switch from year scope to single-forecast scope, selecting the clicked start date
+// (matched against the primary forecast's manifest start_dates; nearest if inexact).
+function drillDownToStartDate(date) {
+  const manifest = manifestFor(panels[0].state.dataset);
+  const dates = (manifest && manifest.start_dates) || [];
+  let index = dates.findIndex((candidate) => String(candidate).slice(0, 10) === date);
+  if (index < 0 && dates.length) {
+    const target = Date.parse(date);
+    let best = 0;
+    let bestDelta = Infinity;
+    dates.forEach((candidate, i) => {
+      const delta = Math.abs(Date.parse(String(candidate).slice(0, 10)) - target);
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        best = i;
+      }
+    });
+    index = best;
+  }
+  if (index >= 0) shared.startIndex = index;
+  setScope("single");
 }
 
 function railForecasts() {
@@ -1914,7 +2109,35 @@ function applyTheme() {
   elements["theme-toggle"].textContent = shared.theme === "light" ? "Dark theme" : "Light theme";
 }
 
+function markScopeButtons() {
+  for (const button of document.querySelectorAll(".scope-switch [data-scope]")) {
+    button.classList.toggle("active", button.dataset.scope === shared.scope);
+  }
+}
+
+function applyScope() {
+  document.documentElement.dataset.scope = shared.scope;
+  markScopeButtons();
+}
+
+function setScope(scope) {
+  if (shared.scope === scope) return;
+  shared.scope = scope;
+  clearTrajectories();
+  applyScope();
+  renderAllPanels().then(() => {
+    redrawOverlaysAll();
+    updateSharedColorbar();
+    updateContextRail();
+    updateCurrentsControlVisibility();
+  });
+  writeHash();
+}
+
 function wireGlobalControls() {
+  for (const button of document.querySelectorAll(".scope-switch [data-scope]")) {
+    button.addEventListener("click", () => setScope(button.dataset.scope));
+  }
   for (const button of document.querySelectorAll(".layout-switch [data-layout]")) {
     button.addEventListener("click", () => {
       shared.layout = Number(button.dataset.layout);
@@ -2195,6 +2418,7 @@ function writeHash() {
   parameters.set("cx", view.centerNX.toFixed(4));
   parameters.set("cy", view.centerNY.toFixed(4));
   parameters.set("theme", shared.theme);
+  if (shared.scope !== "single") parameters.set("scope", shared.scope);
   if (shared.overlayMode !== "none") parameters.set("ov", shared.overlayMode);
   parameters.set("region", shared.region);
   if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
@@ -2219,6 +2443,7 @@ function readHash() {
   if (parameters.has("cx")) view.centerNX = Number(parameters.get("cx"));
   if (parameters.has("cy")) view.centerNY = Number(parameters.get("cy"));
   if (parameters.has("theme")) shared.theme = parameters.get("theme");
+  if (parameters.get("scope") === "year") shared.scope = "year";
   if (parameters.has("ov")) shared.overlayMode = parameters.get("ov");
   if (parameters.has("region")) shared.region = parameters.get("region");
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
@@ -2289,6 +2514,9 @@ function selectElements() {
     "rail-skill-note",
     "rail-spectra",
     "rail-psd-note",
+    "rail-year-rmsd-section",
+    "rail-year-rmsd",
+    "rail-year-rmsd-note",
     "rail-legend",
     "rail-legend-section",
     "rail-trajectory-section",
@@ -2323,6 +2551,7 @@ async function main() {
   if (!Number.isFinite(shared.layout) || shared.layout < 1) shared.layout = 1;
   else if (shared.layout > 2) shared.layout = 2;
   applyTheme();
+  applyScope();
   applyRailCollapsed();
   applyLayout();
   elements["lead-value"].textContent = `day ${shared.leadDay}`;

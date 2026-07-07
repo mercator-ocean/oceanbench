@@ -38,7 +38,12 @@ SPDX-License-Identifier: EUPL-1.2
 
     <div class="workspace">
       <aside class="controls" aria-label="Shared view controls">
-        <label>Start date
+        <div class="scope-switch" role="group" aria-label="View scope">
+          <button type="button" data-scope="single" class="ghost-button">Single forecast</button>
+          <button type="button" data-scope="year" class="ghost-button">Entire year</button>
+        </div>
+
+        <label class="start-date-field">Start date
           <select id="start-date"></select>
         </label>
 
@@ -113,7 +118,12 @@ SPDX-License-Identifier: EUPL-1.2
           <div id="rail-lead-curve" class="rail-chart-slot"></div>
           <p id="rail-skill-note" class="rail-caption"></p>
         </section>
-        <section class="rail-section">
+        <section class="rail-section" id="rail-year-rmsd-section" hidden>
+          <h3>RMSD by start date</h3>
+          <div id="rail-year-rmsd" class="rail-chart-slot"></div>
+          <p id="rail-year-rmsd-note" class="rail-caption"></p>
+        </section>
+        <section class="rail-section" id="rail-spectra-section">
           <h3>Live power spectrum</h3>
           <div id="rail-spectra" class="rail-chart-slot"></div>
           <p id="rail-psd-note" class="rail-caption"></p>

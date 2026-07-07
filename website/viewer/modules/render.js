@@ -18,7 +18,7 @@ const LAND_DARK = [22, 27, 35];
  * `flipVertical` flips rows so ascending-latitude data renders north-up.
  */
 export function fieldToImageData({ data, width, height }, colormapName, range, options = {}) {
-  const { flipVertical = false, theme = "dark" } = options;
+  const { flipVertical = false, theme = "dark", transparentNaN = false } = options;
   const lut = lookupTable(colormapName);
   const [minimum, maximum] = range;
   const span = maximum - minimum || 1;
@@ -31,6 +31,10 @@ export function fieldToImageData({ data, width, height }, colormapName, range, o
       const value = data[sourceRow * width + column];
       const destination = (row * width + column) * 4;
       if (Number.isNaN(value)) {
+        if (transparentNaN) {
+          pixels[destination + 3] = 0;
+          continue;
+        }
         pixels[destination] = land[0];
         pixels[destination + 1] = land[1];
         pixels[destination + 2] = land[2];

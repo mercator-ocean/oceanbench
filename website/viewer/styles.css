@@ -124,6 +124,20 @@ body {
   overflow-y: auto;
   min-height: 0;
 }
+.scope-switch { display: inline-flex; gap: 0.25rem; }
+.scope-switch .ghost-button { flex: 1; padding: 0.4rem 0.5rem; font-size: 0.74rem; }
+
+/* Entire-year scope hides single-forecast-only controls; the lead slider and
+   region selector stay. Overlays collapse to just the Region field. */
+:root[data-scope="year"] .start-date-field,
+:root[data-scope="year"] #currents-group,
+:root[data-scope="year"] .controls label:has(#overlay-mode),
+:root[data-scope="year"] #eddy-reference-field,
+:root[data-scope="year"] #overlay-note,
+:root[data-scope="year"] #rail-spectra-section,
+:root[data-scope="year"] #rail-trajectory-section,
+:root[data-scope="year"] #rail-legend-section { display: none !important; }
+
 .controls label {
   display: flex;
   flex-direction: column;
