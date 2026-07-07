@@ -2,7 +2,9 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-export const TRAJECTORY_COLORS = ["#046293", "#e67817"];
+import { FORECAST_COLORS } from "./forecast-colors.js";
+
+export const TRAJECTORY_COLORS = FORECAST_COLORS;
 
 export function trajectorySeparationSVG(rows, currentLead) {
   if (!rows || rows.length < 2) return "";

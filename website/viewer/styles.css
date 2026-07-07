@@ -241,7 +241,7 @@ body.resizing-layout.row { cursor: row-resize; }
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--accent, #1f6feb);
+  color: var(--forecast-color, var(--accent, #1f6feb));
   padding-right: 0.15rem;
   white-space: nowrap;
 }
@@ -381,7 +381,7 @@ body.resizing-layout.row { cursor: row-resize; }
 .rail-section h3 { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.4rem; }
 .rail-card-heading { display: flex; align-items: center; justify-content: space-between; }
 .rail-card-heading h3 { margin-bottom: 0; }
-.trajectory-card { border-left: 3px solid #046293; padding-left: 0.65rem; }
+.trajectory-card { border-left: 3px solid #0072B2; padding-left: 0.65rem; }
 .trajectory-label { margin: 0.35rem 0 0.45rem; color: var(--text); font-size: 0.8rem; font-weight: 600; }
 .trajectory-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 0.9rem; padding: 0.15rem 0.3rem; }
 .trajectory-clear:hover { color: var(--accent); }

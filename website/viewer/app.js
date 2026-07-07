@@ -38,6 +38,7 @@ import { drawEddyFrame, drawClass4Points, class4ErrorScale, numericOrNaN, EDDY_C
 import { leadCurveSVG, psdSpectraSVG, SERIES_COLORS } from "./modules/charts.js";
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
 import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
+import { forecastColor } from "./modules/forecast-colors.js";
 import { resolveViewerDataUrl } from "./config.js";
 
 const DATASETS_URL = resolveViewerDataUrl("./data/datasets.json");
@@ -227,6 +228,7 @@ function buildPanel(index) {
   const container = document.createElement("div");
   container.className = "panel";
   container.dataset.index = String(index);
+  container.style.setProperty("--forecast-color", forecastColor(index));
   container.innerHTML = `
     <div class="panel-head">
       <span class="panel-forecast-label">Forecast ${index + 1}</span>
@@ -1525,6 +1527,7 @@ function obsSkillSeries(panel) {
 function renderRailSkill(shown, comparison) {
   const series = new Map();
   const labels = new Map();
+  const colors = new Map();
   let unit = "";
   const notes = [];
   try {
@@ -1542,25 +1545,31 @@ function renderRailSkill(shown, comparison) {
       for (const [variable, rows] of skill.rowsByVariable) {
         if (!rows.length) continue;
         const component = variable === "eastward_sea_water_velocity" ? "eastward" : "northward";
-        const seriesKey = isCurrentsVariable(panel.state.variable) ? `${key}:${component}` : key;
+        const seriesKey = isCurrentsVariable(panel.state.variable)
+          ? `forecast-${panel.index}:${key}:${component}`
+          : `forecast-${panel.index}:${key}`;
         const aggregated = aggregateLeadSeries(new Map([[seriesKey, rows]]));
         if (aggregated.has(seriesKey)) series.set(seriesKey, aggregated.get(seriesKey));
+        colors.set(seriesKey, forecastColor(panel.index));
         labels.set(
           seriesKey,
           isCurrentsVariable(panel.state.variable)
-            ? `${comparison ? `${labelFor(panel.state.dataset)} · ` : ""}${
+            ? `${comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)} · ` : ""}${
                 component === "eastward" ? "u (eastward)" : "v (northward)"
               }`
             : comparison
-              ? labelFor(panel.state.dataset)
+              ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}`
               : "RMSD vs observations",
         );
       }
       // n_starts is available from the summary, so report the real number of start dates
       // behind the aggregate (item 5). TODO(pipeline): expose per-lead matchup counts too.
       notes.push(
-        `${labelFor(panel.state.dataset)}: n = ${skill.n} start dates${skill.n < 10 ? " (low — weak statistic)" : ""}`,
+        `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}: n = ${skill.n} start dates${
+          skill.n < 10 ? " (low — weak statistic)" : ""
+        }`,
       );
+      if (isCurrentsVariable(panel.state.variable)) notes.push("Current speed map points are paired u/v speeds; skill curves show u/v component RMSD.");
     }
   } catch (error) {
     console.error("Cannot render observation-based skill", error);
@@ -1570,6 +1579,7 @@ function renderRailSkill(shown, comparison) {
   elements["rail-lead-curve"].innerHTML = leadCurveSVG(series, {
     unit,
     labels,
+    colors,
     title: comparison ? "Skill vs lead (both forecasts)" : "Skill vs lead",
     emptyMessage: "no observation-based skill for this variable/product",
   });
@@ -1580,14 +1590,17 @@ function renderRailSkill(shown, comparison) {
 function renderRailPsd(shown, comparison) {
   const viewport = currentViewport();
   const curves = [];
-  const colors = [SERIES_COLORS.challenger, SERIES_COLORS.glo12];
   const boxes = [];
-  shown.forEach((panel, index) => {
+  shown.forEach((panel) => {
     if (!panel.field) return;
     const spectrum = boxPowerSpectrum(panel.field, panel.latitudes, panel.longitudes, viewport);
     boxes.push({ panel, spectrum });
     if (spectrum) {
-      curves.push({ label: labelFor(panel.state.dataset), color: colors[index] || SERIES_COLORS.reference, ...spectrum });
+      curves.push({
+        label: comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}` : labelFor(panel.state.dataset),
+        color: forecastColor(panel.index),
+        ...spectrum,
+      });
     }
   });
   if (comparison && boxes.length === 2 && boxes[0].panel.field && boxes[1].panel.field) {

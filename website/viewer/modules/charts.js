@@ -81,7 +81,13 @@ function niceMax(value) {
  */
 export function leadCurveSVG(
   series,
-  { title = "Skill vs lead", unit = "", labels = new Map(), emptyMessage = "no score rows for this variable/depth" } = {},
+  {
+    title = "Skill vs lead",
+    unit = "",
+    labels = new Map(),
+    colors = new Map(),
+    emptyMessage = "no score rows for this variable/depth",
+  } = {},
 ) {
   const area = plotArea();
   const references = [...series.keys()];
@@ -101,6 +107,7 @@ export function leadCurveSVG(
 
   let body = "";
   const seriesColor = (key) =>
+    colors.get(key) ||
     SERIES_COLORS[key] ||
     (String(key).endsWith(":eastward") ? SERIES_COLORS.eastward : null) ||
     (String(key).endsWith(":northward") ? SERIES_COLORS.northward : null) ||
