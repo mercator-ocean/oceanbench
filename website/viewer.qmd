@@ -18,7 +18,7 @@ format:
 
 ```{=html}
 <style>
-/* Full-bleed: the app fills the viewport between the site navbar and footer.
+/* Full-bleed: the app fills the viewport below the site navbar.
    These overrides are scoped to this page's body id so other pages are untouched. */
 #viewer-embed {
   width: 100%;
@@ -32,6 +32,7 @@ format:
   width: 100%;
   height: 100%;
   border: 0;
+  resize: none;
 }
 /* Drop Quarto's article grid margins for this page only so the map is edge to edge. */
 body.viewer-page #quarto-content,
@@ -49,13 +50,10 @@ body.viewer-page #quarto-content > * { grid-column: 1 / -1 !important; }
   document.body.classList.add("viewer-page");
   var frame = document.getElementById("viewer-frame");
 
-  // Size the app to the space left under the fixed navbar (and above the footer if in view).
+  // Size the app to the space left under the fixed navbar; keep the footer below the fold.
   function chromeHeight() {
     var header = document.getElementById("quarto-header");
-    var footer = document.querySelector("footer.footer");
-    var top = header ? header.getBoundingClientRect().height : 0;
-    var bottom = footer ? footer.getBoundingClientRect().height : 0;
-    return top + bottom;
+    return header ? header.getBoundingClientRect().height : 0;
   }
   function sizeApp() {
     document.documentElement.style.setProperty("--viewer-chrome", chromeHeight() + "px");
