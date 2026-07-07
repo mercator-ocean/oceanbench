@@ -514,3 +514,79 @@ body.resizing-layout.row { cursor: row-resize; }
   .panel-head select { min-width: 4.8rem; max-width: 7.6rem; }
   .panel-badge { display: none; }
 }
+
+/* ---- year metric switch (|error| / bias), year scope only ------------------ */
+.metric-switch { display: none; align-items: center; }
+:root[data-scope="year"] .metric-switch { display: inline-flex; }
+.metric-switch-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-right: 0.35rem;
+  align-self: center;
+}
+
+/* ---- transparent-science method notes ("?" affordance + popover) ----------- */
+.method-note-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin-left: 0.3rem;
+  padding: 0;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: help;
+  vertical-align: middle;
+  flex: 0 0 auto;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.method-note-btn:hover,
+.method-note-btn:focus-visible,
+.method-note-btn[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  outline: none;
+}
+h3 .method-note-btn { margin-left: 0.35rem; }
+
+.method-popover {
+  position: fixed;
+  z-index: 60;
+  max-width: 320px;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0.5rem 1.5rem rgba(15, 23, 42, 0.18);
+}
+.method-popover-title {
+  font-weight: 600;
+  font-size: 0.74rem;
+  margin-bottom: 0.3rem;
+  color: var(--text);
+}
+.method-popover-body { color: var(--muted); }
+.method-params {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.1rem 0.6rem;
+  margin: 0 0 0.45rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+}
+.method-param { display: contents; }
+.method-param span { color: var(--muted); }
+.method-param strong { color: var(--text); font-weight: 600; text-align: right; }

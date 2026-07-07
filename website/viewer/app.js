@@ -52,9 +52,12 @@ import {
   loadYearRmsd,
   yearVariableMapping,
   buildYearGeographyField,
+  buildYearBiasField,
   yearGeographyMax,
+  yearBiasMax,
   yearRmsdSeries,
 } from "./modules/year.js";
+import { attachMethodNote, attachEddyMethodNote } from "./modules/method-popover.js";
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
 import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
 import { forecastColor } from "./modules/forecast-colors.js";
@@ -69,7 +72,7 @@ const REGION_BOUNDS = {
   ibi: { west: -19.08, east: 5.08, south: 26.17, north: 56.08 },
 };
 const PARTICLE_MAGNITUDE_SCALE = 1.0;
-const CLASS4_DISPLAY_POINT_BUDGET = 45000;
+const CLASS4_DISPLAY_POINT_BUDGET = 18000;
 const CLASS4_FULL_DENSITY_ZOOM = 12;
 
 // Currents are a synthetic variable (speed magnitude √(u²+v²)) built from the u/v
@@ -148,6 +151,9 @@ const shared = {
   // "single" = per-start-date fields (the default view); "year" = precomputed
   // whole-year error-geography raster + RMSD-by-start diagnostics.
   scope: "single",
+  // Year-scope map metric: "error" = time-mean |obs − model| (sequential), "bias" =
+  // time-mean signed model − obs (diverging, centred 0). Single-forecast scope ignores it.
+  yearMetric: "error",
   overlayMode: "none",
   region: "global",
   eddyReference: "glorys",
@@ -356,7 +362,19 @@ function wirePanel(panel) {
     try {
       await ensureStore(panel.state.dataset);
       const manifest = manifestFor(panel.state.dataset);
-      if (!(panel.state.variable in manifest.variables)) panel.state.variable = Object.keys(manifest.variables)[0];
+      // Preserve the current selection across a dataset switch: variables are keyed by
+      // standard name + depth, so the same channel (incl. derived currents) carries over
+      // when the new dataset has it. Only fall back — with a brief note — when it does not.
+      // Lead day, zoom/pan, purpose mode, region and scope live in shared/view state and
+      // are untouched here, so they are preserved automatically.
+      let fallbackNote = "";
+      if (!variableExists(manifest, panel.state.variable)) {
+        const previousVariable = panel.state.variable;
+        const fallback = Object.keys(manifest.variables)[0];
+        panel.state.variable = fallback;
+        const fallbackLabel = manifest.variables[fallback] ? prettyName(manifest.variables[fallback].standard_name) : fallback;
+        fallbackNote = `${prettyName(previousVariable)} not available for ${labelFor(panel.state.dataset)} — showing ${fallbackLabel}`;
+      }
       updateSharedTimeControls(manifest);
       refreshPanelControls(panel);
       setActivePanel(panel.index);
@@ -366,6 +384,8 @@ function wirePanel(panel) {
       // switching to a dataset without published match-ups must flip the note to the
       // quiet "not published" message instead of leaving the previous dataset's note.
       await applyOverlayMode();
+      // renderPanel clears the status on success, so surface the fallback note afterwards.
+      if (fallbackNote) setStatus(fallbackNote);
       writeHash();
     } catch (error) {
       setStatus(String(error.message || error), true);
@@ -603,6 +623,26 @@ async function sharedYearRange(shortName, leadDay) {
   return [0, maximum || 1];
 }
 
+// Symmetric [-M, +M] scale for the signed-bias raster, shared across the visible panels
+// showing the same year variable so the diverging (balance) colormap stays centred on 0
+// and directly comparable between two forecasts.
+async function sharedYearBiasRange(shortName, leadDay) {
+  let maximum = 0;
+  for (let i = 0; i < shared.layout; i += 1) {
+    const candidate = panels[i];
+    if (!candidate) continue;
+    const mapping = yearVariableMapping(candidate.state.variable);
+    if (!mapping || mapping.short !== shortName) continue;
+    const url = insightsFor(insightIndex, candidate.state.dataset, shared.region).year_error_geography;
+    if (!url) continue;
+    const geography = await loadYearGeography(url);
+    if (!geography) continue;
+    maximum = Math.max(maximum, yearBiasMax(geography, shortName, leadDay));
+  }
+  const bound = maximum || 1;
+  return [-bound, bound];
+}
+
 async function renderYearPanel(panel, token, manifest) {
   stopParticles(panel);
   // The velocity error geography and RMSD-by-start are built from 15 m drifter obs.
@@ -619,18 +659,32 @@ async function renderYearPanel(panel, token, manifest) {
   }
   const geography = await loadYearGeography(geoUrl);
   if (token !== panel.renderToken) return;
+  const biasMode = shared.yearMetric === "bias";
   const mapping = geography ? yearVariableMapping(panel.state.variable) : null;
-  const built = mapping ? buildYearGeographyField(geography, mapping.short, shared.leadDay) : null;
+  const built = mapping
+    ? biasMode
+      ? buildYearBiasField(geography, mapping.short, shared.leadDay)
+      : buildYearGeographyField(geography, mapping.short, shared.leadDay)
+    : null;
   if (!geography || !mapping || !built) {
+    // |error| must still work when bias is absent: the bias-specific note fires only when
+    // the geography and variable/lead exist but carry no bias field for this selection.
+    const biasAbsent = biasMode && geography && mapping && buildYearGeographyField(geography, mapping.short, shared.leadDay);
     clearYearPanel(
       panel,
-      geography
-        ? "Year diagnostics not available for this variable at this lead."
-        : "Year diagnostics not available for this dataset/region.",
+      !geography
+        ? "Year diagnostics not available for this dataset/region."
+        : biasAbsent
+          ? "Signed bias not available for this dataset — republish pending."
+          : biasMode
+            ? "Signed bias not available for this variable at this lead."
+            : "Year diagnostics not available for this variable at this lead.",
     );
     return;
   }
-  const range = await sharedYearRange(mapping.short, shared.leadDay);
+  const range = biasMode
+    ? await sharedYearBiasRange(mapping.short, shared.leadDay)
+    : await sharedYearRange(mapping.short, shared.leadDay);
   if (token !== panel.renderToken) return;
   // Separate land from unobserved ocean: both are NaN in the error raster, so derive a
   // land mask from the dataset's own coarsest pyramid level (tiny) and resample it onto
@@ -643,19 +697,21 @@ async function renderYearPanel(panel, token, manifest) {
   panel.latitudes = built.latitudes;
   panel.longitudes = built.longitudes;
   panel.edgesA = worldEdges(built.latitudes, built.longitudes);
+  const colormap = biasMode ? DIFFERENCE_COLORMAP : YEAR_ERROR_COLORMAP;
   panel.offscreenA = landMask
-    ? colorize(built.field, built.latitudes, YEAR_ERROR_COLORMAP, range, false, landMask)
-    : colorize(built.field, built.latitudes, YEAR_ERROR_COLORMAP, range, true);
+    ? colorize(built.field, built.latitudes, colormap, range, false, landMask)
+    : colorize(built.field, built.latitudes, colormap, range, true);
   panel.offscreenB = null;
   panel.range = range;
-  panel.colormap = YEAR_ERROR_COLORMAP;
+  panel.colormap = colormap;
   panel.units = mapping.unit;
   panel.yearMissing = null;
+  panel.yearMetric = shared.yearMetric;
   panel.yearMeta = { nStarts: geography.meta && geography.meta.n_starts, component: mapping.component };
   const entry = variableEntry(manifest, panel.state.variable);
   const varLabel = entry ? prettyName(entry.standard_name) : panel.state.variable;
   panel.label =
-    `${labelFor(panel.state.dataset)} · mean |obs − model| · ${varLabel}` +
+    `${labelFor(panel.state.dataset)} · ${biasMode ? "signed bias" : "mean |obs − model|"} · ${varLabel}` +
     (mapping.component ? ` (${mapping.component})` : "");
 }
 
@@ -764,6 +820,15 @@ function isDiffHost(panel) {
   return isDiffView() && panel.index === 0;
 }
 
+// The background forecast field is desaturated while a colored purpose overlay is active
+// (class-4 obs, eddy census, trajectories) so the overlay colors stay legible. Field mode,
+// the difference view, and the year raster keep their full-color scale.
+function fieldMutedUnderOverlay() {
+  if (shared.scope === "year") return false;
+  if (isDiffView()) return false;
+  return shared.overlayMode === "class4" || shared.overlayMode === "eddies" || shared.overlayMode === "trajectories";
+}
+
 function drawPanel(panel) {
   const canvas = panel.els.field;
   const context = canvas.getContext("2d", { willReadFrequently: true });
@@ -778,10 +843,18 @@ function drawPanel(panel) {
       context.fillText(panel.yearMissing, canvas.width / 2, canvas.height / 2);
       panel.els.swipeHint.hidden = true;
     }
+    updatePanelMethodNote(panel);
     return;
   }
   const projection = projectionFor(panel);
   context.imageSmoothingEnabled = false;
+
+  // Under a colored purpose overlay (class-4 obs, eddies, trajectories) desaturate the
+  // background field so the overlay owns the color channel and its points/contours read
+  // clearly. Field mode and the difference view keep full color. Applied as a cheap
+  // canvas filter on the field blit only — no re-colorize, no tile refetch; the hover
+  // readout still reads the raw field values.
+  const fieldFilter = fieldMutedUnderOverlay() ? "grayscale(1) contrast(0.9)" : "none";
 
   // In swipe display the single host panel (Forecast 1) overlays Forecast 2 on its
   // right side; take Forecast 2's coloured field straight from the second panel.
@@ -791,6 +864,7 @@ function drawPanel(panel) {
   }
 
   if (isSwipeHost(panel) && panel.offscreenB) {
+    context.filter = fieldFilter;
     drawImageWorld(context, panel.offscreenA, panel.edgesA, projection);
     const dividerX = panel.swipeX * canvas.width;
     context.save();
@@ -799,6 +873,7 @@ function drawPanel(panel) {
     context.clip();
     drawImageWorld(context, panel.offscreenB, panel.edgesB, projection);
     context.restore();
+    context.filter = "none";
     context.strokeStyle = shared.theme === "light" ? "#1f6feb" : "#38bdf8";
     context.lineWidth = 2 * (window.devicePixelRatio || 1);
     context.beginPath();
@@ -808,7 +883,9 @@ function drawPanel(panel) {
     panel.els.swipeHint.hidden = false;
     panel.els.swipeHint.textContent = `◀ Forecast 1 · ${labelFor(panels[0].state.dataset)}  |  Forecast 2 · ${labelFor(panels[1].state.dataset)} ▶`;
   } else {
+    context.filter = fieldFilter;
     drawImageWorld(context, panel.offscreenA, panel.edgesA, projection);
+    context.filter = "none";
     panel.els.swipeHint.hidden = true;
   }
   // In year scope outline the raster extent so the map's data limits are legible at
@@ -816,6 +893,23 @@ function drawPanel(panel) {
   if (shared.scope === "year" && panel.edgesA) drawRasterBorder(context, panel.edgesA, projection);
   updateParticleProjection(panel, projection);
   updatePanelBadge(panel);
+  updatePanelMethodNote(panel);
+}
+
+// Attach the right "?" method note to a panel's header: the difference-view note on the
+// diff host, the year error-geography note in year scope, otherwise the field-map note
+// (with the panel's dataset label). Cleared and re-attached each draw so it tracks state.
+function updatePanelMethodNote(panel) {
+  const head = panel.container.querySelector(".panel-head");
+  if (!head) return;
+  head.querySelectorAll(".method-note-btn").forEach((button) => button.remove());
+  if (shared.scope === "year") {
+    if (!panel.yearMissing) attachMethodNote(head, "year-geography");
+  } else if (isDiffHost(panel)) {
+    attachMethodNote(head, "diff-view");
+  } else {
+    attachMethodNote(head, "field-map", { dataset: labelFor(panel.state.dataset) });
+  }
 }
 
 function drawRasterBorder(context, edges, projection) {
@@ -912,12 +1006,31 @@ async function loadOverlayData() {
         rowGroupIndex: class4Manifest && class4Manifest.row_group_index,
         startDate: currentStartDate(slug),
         leadDay: shared.leadDay,
+        variables: class4RequestVariables(),
       });
     } catch (error) {
       overlayData.class4 = null;
       overlayData.class4Error = error instanceof Error ? error.message : String(error);
     }
   }
+}
+
+// The parquet variable name(s) needed to draw the class-4 overlay for every visible
+// panel. Derived current speed needs both velocity components. Used to skip row groups
+// that provably hold no requested variable (rows sorted start,lead,variable).
+function class4RequestVariables() {
+  const set = new Set();
+  for (let i = 0; i < shared.layout; i += 1) {
+    const variable = panels[i] && panels[i].state.variable;
+    if (!variable) continue;
+    if (isCurrentsVariable(variable)) {
+      set.add("eastward_sea_water_velocity");
+      set.add("northward_sea_water_velocity");
+    } else {
+      set.add(class4ParquetVariable(variable));
+    }
+  }
+  return [...set];
 }
 
 function class4ByteLengthHint(class4Url, class4Manifest) {
@@ -991,10 +1104,25 @@ function drawOverlays(panel) {
       leadDay: shared.leadDay,
       startDate,
     };
-    const matchedTotal = countClass4Matches(rows, selector);
-    const points = class4Points(rows, selector);
+    // Row-scan (filtering + error scale + match count) depends only on the selector and
+    // the loaded rows, not the viewport — cache it so pan/zoom rAF redraws only reproject
+    // the already-filtered points instead of rescanning every row again (perf).
+    const cacheKey = `${panel.state.variable}|${depthBin || ""}|${shared.leadDay}|${startDate || ""}|${rows.length}|${overlayData.class4.targeted}`;
+    let prepared = panel.class4Prepared;
+    if (!prepared || prepared.key !== cacheKey) {
+      const preparedPoints = class4Points(rows, selector);
+      prepared = {
+        key: cacheKey,
+        points: preparedPoints,
+        matchedTotal: countClass4Matches(rows, selector),
+        scale: class4ErrorScale(preparedPoints),
+      };
+      panel.class4Prepared = prepared;
+    }
+    const points = prepared.points;
+    const matchedTotal = prepared.matchedTotal;
     const display = class4DisplayPoints(points, projection, copyOffsets, canvas);
-    const scale = class4ErrorScale(points);
+    const scale = prepared.scale;
     // Larger points at high zoom so individual obs are distinguishable from a line.
     const radius = 2.2 + 2.6 * Math.min(1, (view.zoom - 1) / 20);
     for (const offset of copyOffsets) {
@@ -1685,6 +1813,8 @@ function updateYearLegend(visible) {
   legend.innerHTML =
     `<span class="item"><span class="swatch" style="background:${rgbCss(landColor(shared.theme))}"></span>land</span>` +
     `<span class="item"><span class="swatch" style="background:${rgbCss(noObsColor(shared.theme))}"></span>ocean, no observations</span>`;
+  // Colorbar-adjacent method note for the year raster (the colorbar itself is a canvas).
+  attachMethodNote(legend, "year-geography");
 }
 
 function updateSharedColorbar() {
@@ -1696,8 +1826,9 @@ function updateSharedColorbar() {
       return;
     }
     const nStarts = panel.yearMeta && panel.yearMeta.nStarts;
+    const biasMode = panel.yearMetric === "bias";
     drawColorbar(elements.colorbar, panel.colormap, panel.range, {
-      label: `mean |obs − model| over ${nStarts || "?"} start dates · ${panel.label} (${panel.units})`,
+      label: `${biasMode ? "mean (model − obs)" : "mean |obs − model|"} over ${nStarts || "?"} start dates · ${panel.label} (${panel.units})`,
       textColor: shared.theme === "light" ? "#14181d" : "#e6edf3",
     });
     elements["layer-info"].textContent = `entire year (${nStarts || "?"} start dates) · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
@@ -1708,8 +1839,9 @@ function updateSharedColorbar() {
     .slice(0, shared.layout)
     .every((candidate) => candidate.state.variable === panel.state.variable);
   const suffix = isDiffView() ? "" : shared.layout > 1 ? (sameVariable ? " (shared)" : ` (panel ${activePanelIndex + 1})`) : "";
+  const mutedNote = fieldMutedUnderOverlay() ? " · muted under overlay" : "";
   drawColorbar(elements.colorbar, panel.colormap, panel.range, {
-    label: `${panel.label} (${panel.units})${suffix}`,
+    label: `${panel.label} (${panel.units})${suffix}${mutedNote}`,
     textColor: shared.theme === "light" ? "#14181d" : "#e6edf3",
   });
   const manifest = manifestFor(panel.state.dataset);
@@ -1767,6 +1899,7 @@ async function updateContextRail() {
 async function renderRailYearRmsd(shown) {
   const slot = elements["rail-year-rmsd"];
   const note = elements["rail-year-rmsd-note"];
+  const biasMode = shared.yearMetric === "bias";
   const lines = [];
   let unit = "";
   let missing = 0;
@@ -1776,7 +1909,9 @@ async function renderRailYearRmsd(shown) {
     const mapping = url ? yearVariableMapping(panel.state.variable) : null;
     const rmsd = url ? await loadYearRmsd(url) : null;
     const entry = rmsd && mapping ? yearRmsdSeries(rmsd, mapping.short, shared.leadDay) : null;
-    if (!entry) {
+    // In bias mode a series without a parallel bias array degrades gracefully (skipped,
+    // counted as missing) — the |error| path is unaffected.
+    if (!entry || (biasMode && !entry.bias)) {
       missing += 1;
       continue;
     }
@@ -1786,13 +1921,21 @@ async function renderRailYearRmsd(shown) {
       color: forecastColor(panel.index),
       panelIndex: panel.index,
       dates: entry.dates,
-      rmsd: entry.rmsd,
+      rmsd: biasMode ? entry.bias : entry.rmsd,
     });
   }
-  slot.innerHTML = rmsdByStartSVG(lines, { title: "RMSD by start date", unit });
+  slot.innerHTML = rmsdByStartSVG(lines, {
+    title: biasMode ? "Bias by start date" : "RMSD by start date",
+    unit,
+    signed: biasMode,
+  });
   note.textContent = lines.length
-    ? "Area-weighted super-ob RMSD — relative variation across start dates; absolute values differ from the official scores. Click a point to open that start date."
-    : "Year RMSD-by-start not available for this dataset/region.";
+    ? biasMode
+      ? "Pooled mean(model − obs) per start date, same method as the official scores. Click a point to open that start date."
+      : "Class-4 RMSD per start date, same method as the official scores (pooled over all match-ups for that start). Click a point to open that start date."
+    : biasMode
+      ? "Signed bias by start not available for this dataset/region."
+      : "Year RMSD-by-start not available for this dataset/region.";
   wireCursorTooltip(slot);
   wireYearRmsdDrilldown(slot, lines);
 }
@@ -2163,6 +2306,18 @@ function updateRailLegend(panel) {
     return;
   }
   section.hidden = false;
+  // Method note on the legend heading: class-4 match-ups, or eddy detection with the
+  // live census parameters. Cleared first so switching overlay modes swaps the note.
+  const legendHeading = section.querySelector("h3");
+  if (legendHeading) {
+    legendHeading.querySelectorAll(".method-note-btn").forEach((button) => button.remove());
+    if (shared.overlayMode === "class4") {
+      attachMethodNote(legendHeading, "class4-legend");
+    } else if (shared.overlayMode === "eddies") {
+      const census = (overlayData.eddiesCensuses || []).find(Boolean);
+      attachEddyMethodNote(legendHeading, census && census.parameters);
+    }
+  }
   if (shared.overlayMode === "eddies") {
     const censuses = overlayData.eddiesCensuses || [];
     const match = overlayData.eddiesMatch;
@@ -2262,7 +2417,10 @@ async function applyOverlayMode() {
   if (isDiffView()) {
     clearTrajectories();
     note.textContent = shared.overlayMode === "none" ? "" : "Switch to side-by-side to see overlays.";
-    for (let i = 0; i < shared.layout; i += 1) drawOverlays(panels[i]);
+    for (let i = 0; i < shared.layout; i += 1) {
+      drawPanel(panels[i]);
+      drawOverlays(panels[i]);
+    }
     updateCurrentsControlVisibility();
     updateContextRail();
     return;
@@ -2304,7 +2462,11 @@ async function applyOverlayMode() {
         : `Class-4 match-ups loaded${overlayData.class4.sampled ? " (sampled subset)" : ""} — hover a point for details.`;
     }
   }
-  for (let i = 0; i < shared.layout; i += 1) drawOverlays(panels[i]);
+  for (let i = 0; i < shared.layout; i += 1) {
+    drawPanel(panels[i]);
+    drawOverlays(panels[i]);
+  }
+  updateSharedColorbar();
   updateCurrentsControlVisibility();
   updateContextRail();
 }
@@ -2405,9 +2567,48 @@ function setScope(scope) {
   writeHash();
 }
 
+function markMetricButtons() {
+  for (const button of document.querySelectorAll(".metric-switch [data-metric]")) {
+    button.classList.toggle("active", button.dataset.metric === shared.yearMetric);
+  }
+}
+
+// One-time "?" method notes on the fixed rail-chart headings and the currents control,
+// whose anchor elements persist for the app lifetime (unlike the per-render legends).
+function wireStaticMethodNotes() {
+  const skillHeading = elements["rail-lead-curve"] && elements["rail-lead-curve"].closest(".rail-section")?.querySelector("h3");
+  if (skillHeading) attachMethodNote(skillHeading, "lead-curve");
+  const yearHeading = elements["rail-year-rmsd-section"] && elements["rail-year-rmsd-section"].querySelector("h3");
+  if (yearHeading) attachMethodNote(yearHeading, "year-rmsd");
+  const psdHeading = document.getElementById("rail-spectra-section")?.querySelector("h3");
+  if (psdHeading) attachMethodNote(psdHeading, "psd");
+  const trajectoryHeading = elements["rail-trajectory-section"] && elements["rail-trajectory-section"].querySelector("h3");
+  if (trajectoryHeading) attachMethodNote(trajectoryHeading, "trajectories");
+  const currentsLegend = elements["currents-group"] && elements["currents-group"].querySelector("legend");
+  if (currentsLegend) attachMethodNote(currentsLegend, "currents");
+}
+
+// Switch the year-scope map + rail between |error| and signed bias. Re-renders the
+// panels (which pick the field/colormap/range per metric), the rail, and the colorbar.
+function setYearMetric(metric) {
+  if (metric !== "error" && metric !== "bias") return;
+  if (shared.yearMetric === metric) return;
+  shared.yearMetric = metric;
+  markMetricButtons();
+  renderAllPanels().then(() => {
+    redrawOverlaysAll();
+    updateSharedColorbar();
+    updateContextRail();
+  });
+  writeHash();
+}
+
 function wireGlobalControls() {
   for (const button of document.querySelectorAll(".scope-switch [data-scope]")) {
     button.addEventListener("click", () => setScope(button.dataset.scope));
+  }
+  for (const button of document.querySelectorAll(".metric-switch [data-metric]")) {
+    button.addEventListener("click", () => setYearMetric(button.dataset.metric));
   }
   for (const button of document.querySelectorAll(".layout-switch [data-layout]")) {
     button.addEventListener("click", () => {
@@ -2698,6 +2899,7 @@ function writeHash() {
   parameters.set("cy", view.centerNY.toFixed(4));
   parameters.set("theme", shared.theme);
   if (shared.scope !== "single") parameters.set("scope", shared.scope);
+  if (shared.yearMetric !== "error") parameters.set("metric", shared.yearMetric);
   if (shared.overlayMode !== "none") parameters.set("ov", shared.overlayMode);
   parameters.set("region", shared.region);
   if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
@@ -2723,6 +2925,7 @@ function readHash() {
   if (parameters.has("cy")) view.centerNY = Number(parameters.get("cy"));
   if (parameters.has("theme")) shared.theme = parameters.get("theme");
   if (parameters.get("scope") === "year") shared.scope = "year";
+  if (parameters.get("metric") === "bias") shared.yearMetric = "bias";
   if (parameters.has("ov")) shared.overlayMode = parameters.get("ov");
   if (parameters.has("region")) shared.region = parameters.get("region");
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
@@ -2838,6 +3041,7 @@ async function main() {
   if (shared.scope === "year" && shared.displayMode === "diff") shared.displayMode = "side";
   applyTheme();
   applyScope();
+  markMetricButtons();
   applyRailCollapsed();
   applyLayout();
   elements["lead-value"].textContent = `day ${shared.leadDay}`;
@@ -2866,6 +3070,7 @@ async function main() {
   markLayoutButtons();
   syncPanelGrid();
   wireGlobalControls();
+  wireStaticMethodNotes();
   wireEmbeddedTheme();
 
   clampView();
