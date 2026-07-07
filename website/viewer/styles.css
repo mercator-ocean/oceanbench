@@ -219,7 +219,8 @@ body.resizing-layout.row { cursor: row-resize; }
 .panel-grid[data-layout="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
 .panel-grid[data-layout="2"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
 /* Swipe display: one shared map (Forecast 1) plus a compact Forecast 2 picker strip. */
-.panel-grid[data-display="swipe"] { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+.panel-grid[data-display="swipe"],
+.panel-grid[data-display="diff"] { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
 .panel.head-only { box-shadow: none; }
 .panel.head-only .panel-canvas-wrap,
 .panel.head-only .panel-badge { display: none; }

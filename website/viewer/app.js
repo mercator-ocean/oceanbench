@@ -257,8 +257,6 @@ function defaultPanelState(index) {
   return {
     dataset,
     variable: "sea_surface_height_above_geoid",
-    mode: "field",
-    datasetB: otherSlug(dataset), // always a different dataset so difference is meaningful
     colormap: null,
   };
 }
@@ -273,11 +271,6 @@ function buildPanel(index) {
       <span class="panel-forecast-label">Forecast ${index + 1}</span>
       <select class="panel-dataset" aria-label="Panel dataset"></select>
       <select class="panel-variable" aria-label="Panel variable"></select>
-      <select class="panel-mode" aria-label="Panel mode">
-        <option value="field">Field</option>
-        <option value="diff">Difference</option>
-      </select>
-      <select class="panel-dataset-b" aria-label="Difference dataset" hidden></select>
       <span class="spacer"></span>
       <span class="panel-badge"></span>
     </div>
@@ -297,8 +290,6 @@ function buildPanel(index) {
     els: {
       dataset: container.querySelector(".panel-dataset"),
       variable: container.querySelector(".panel-variable"),
-      mode: container.querySelector(".panel-mode"),
-      datasetB: container.querySelector(".panel-dataset-b"),
       badge: container.querySelector(".panel-badge"),
       wrap: container.querySelector(".panel-canvas-wrap"),
       field: container.querySelector(".panel-field"),
@@ -343,7 +334,6 @@ function populateSelect(select, options, selectedValue) {
 }
 
 function refreshPanelControls(panel) {
-  if (panel.state.datasetB === panel.state.dataset) panel.state.datasetB = otherSlug(panel.state.dataset);
   populateSelect(
     panel.els.dataset,
     datasetCatalog.map((entry) => ({ value: entry.slug, label: entry.label })),
@@ -355,16 +345,6 @@ function refreshPanelControls(panel) {
     const options = Object.keys(manifest.variables).map((key) => ({ value: key, label: variableLabel(manifest, key) }));
     populateSelect(panel.els.variable, options.concat(currentsVariableOptions(manifest)), panel.state.variable);
   }
-  const currents = isCurrentsVariable(panel.state.variable);
-  panel.els.mode.value = panel.state.mode;
-  panel.els.mode.disabled = currents; // currents render as a field; diff of speed is not offered
-  populateSelect(
-    panel.els.datasetB,
-    datasetCatalog.map((entry) => ({ value: entry.slug, label: entry.label })),
-    panel.state.datasetB,
-  );
-  // The B dataset selector is only meaningful for the Difference mode.
-  panel.els.datasetB.hidden = currents || panel.state.mode !== "diff";
 }
 
 function wirePanel(panel) {
@@ -381,6 +361,7 @@ function wirePanel(panel) {
       refreshPanelControls(panel);
       setActivePanel(panel.index);
       await renderPanel(panel);
+      if (isDiffView() && panel.index === 1) await renderPanel(panels[0]);
       await loadOverlayData();
       redrawOverlaysAll();
       updateContextRail();
@@ -398,25 +379,9 @@ function wirePanel(panel) {
     setActivePanel(panel.index);
     refreshPanelControls(panel);
     await renderPanel(panel);
+    if (isDiffView() && panel.index === 1) await renderPanel(panels[0]);
     await updateContextRail();
     updateCurrentsControlVisibility();
-    writeHash();
-  });
-  panel.els.mode.addEventListener("change", async (event) => {
-    panel.state.mode = event.target.value;
-    setActivePanel(panel.index);
-    refreshPanelControls(panel);
-    await renderPanel(panel);
-    await updateContextRail();
-    updateCurrentsControlVisibility();
-    writeHash();
-  });
-  panel.els.datasetB.addEventListener("change", async (event) => {
-    panel.state.datasetB = event.target.value;
-    setActivePanel(panel.index);
-    await ensureStore(panel.state.datasetB);
-    await renderPanel(panel);
-    await updateContextRail();
     writeHash();
   });
   const field = panel.els.field;
@@ -479,10 +444,10 @@ async function renderPanel(panel) {
     const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
     const leadIndex = shared.leadDay - 1;
 
-    if (isCurrentsVariable(panel.state.variable)) {
+    if (isDiffHost(panel) && !isCurrentsVariable(panel.state.variable)) {
+      await renderDifferencePanel(panel, token, manifest, level, start, leadIndex, panels[1].state.dataset);
+    } else if (isCurrentsVariable(panel.state.variable)) {
       await renderCurrentsPanel(panel, token, manifest, level, start, leadIndex);
-    } else if (panel.state.mode === "diff") {
-      await renderDifferencePanel(panel, token, manifest, level, start, leadIndex);
     } else {
       await renderFieldPanel(panel, token, manifest, level, start, leadIndex);
     }
@@ -530,15 +495,15 @@ async function renderFieldPanel(panel, token, manifest, level, start, leadIndex)
   prefetchNeighbours(panel, level, start, leadIndex);
 }
 
-async function renderDifferencePanel(panel, token, manifest, level, start, leadIndex) {
+async function renderDifferencePanel(panel, token, manifest, level, start, leadIndex, compareSlug) {
   const entry = manifest.variables[panel.state.variable];
   const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, leadIndex);
   if (token !== panel.renderToken) return;
-  await ensureStore(panel.state.datasetB);
-  const compareLevel = renderLevelForSlug(panel.state.datasetB);
+  await ensureStore(compareSlug);
+  const compareLevel = renderLevelForSlug(compareSlug);
   const compare = await readAlignedField(
     panel,
-    panel.state.datasetB,
+    compareSlug,
     panel.state.variable,
     compareLevel,
     start,
@@ -558,7 +523,7 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   panel.range = range;
   panel.colormap = DIFFERENCE_COLORMAP;
   panel.units = entry.units;
-  panel.label = `${labelFor(panel.state.dataset)} − ${labelFor(panel.state.datasetB)} · ${prettyName(entry.standard_name)}`;
+  panel.label = `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · ${prettyName(entry.standard_name)}`;
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
 }
@@ -788,6 +753,16 @@ function isSwipeHost(panel) {
   return shared.layout === 2 && shared.displayMode === "swipe" && panel.index === 0;
 }
 
+// The Difference comparison view exists only with two forecasts; it collapses to a
+// single map (hosted by Forecast 1) showing Forecast 1 − Forecast 2.
+function isDiffView() {
+  return shared.layout === 2 && shared.displayMode === "diff";
+}
+
+function isDiffHost(panel) {
+  return isDiffView() && panel.index === 0;
+}
+
 function drawPanel(panel) {
   const canvas = panel.els.field;
   const context = canvas.getContext("2d", { willReadFrequently: true });
@@ -962,6 +937,9 @@ function drawOverlays(panel) {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   context.clearRect(0, 0, canvas.width, canvas.height);
   if (shared.scope === "year") return;
+  // Class-4 points and eddies are per-forecast; the difference view has no single
+  // forecast to attach them to, so it stays overlay-free (see the quiet note).
+  if (isDiffView()) return;
   if (shared.overlayMode === "none") return;
   const projection = projectionFor(panel);
   const ratio = window.devicePixelRatio || 1;
@@ -1038,6 +1016,7 @@ function drawOverlays(panel) {
 }
 
 function drawTrajectoryFans(panel) {
+  if (isDiffView()) return;
   if (!trajectoryState || !trajectoryState.trajectories) return;
   const context = panel.els.overlay.getContext("2d");
   const projection = projectionFor(panel);
@@ -1602,10 +1581,10 @@ function nearestIndex(coordinates, value) {
 
 function syncPanelGrid() {
   const grid = elements["panel-grid"];
-  const swipe = shared.layout === 2 && shared.displayMode === "swipe";
-  // In swipe there is a single shared map (Forecast 1 hosts it); CSS lays it out as
-  // one column and collapses Forecast 2's panel to just its picker strip.
-  grid.dataset.layout = String(swipe ? 1 : shared.layout);
+  // Both swipe and difference collapse to a single shared map hosted by Forecast 1;
+  // CSS lays it out as one column and reduces Forecast 2's panel to its picker strip.
+  const single = shared.layout === 2 && (shared.displayMode === "swipe" || shared.displayMode === "diff");
+  grid.dataset.layout = String(single ? 1 : shared.layout);
   grid.dataset.display = shared.displayMode;
   while (panels.length < shared.layout) {
     const panel = buildPanel(panels.length);
@@ -1613,7 +1592,7 @@ function syncPanelGrid() {
   }
   grid.innerHTML = "";
   for (let i = 0; i < shared.layout; i += 1) {
-    panels[i].container.classList.toggle("head-only", swipe && i === 1);
+    panels[i].container.classList.toggle("head-only", single && i === 1);
     grid.appendChild(panels[i].container);
     refreshPanelControls(panels[i]);
   }
@@ -1637,7 +1616,7 @@ function setActivePanel(index) {
 function setPanelLoading(panel, loading) {
   panel.container.classList.toggle("loading", loading);
   panel.els.loading.hidden = !loading;
-  for (const select of [panel.els.dataset, panel.els.variable, panel.els.mode, panel.els.datasetB]) {
+  for (const select of [panel.els.dataset, panel.els.variable]) {
     select.disabled = loading;
   }
 }
@@ -1699,7 +1678,7 @@ function updateYearLegend(visible) {
 }
 
 function updateSharedColorbar() {
-  const panel = panels[activePanelIndex];
+  const panel = isDiffView() ? panels[0] : panels[activePanelIndex];
   updateYearLegend(shared.scope === "year");
   if (shared.scope === "year") {
     if (!panel || !panel.colormap || !panel.range) {
@@ -1717,8 +1696,8 @@ function updateSharedColorbar() {
   if (!panel || !panel.colormap || !panel.range) return;
   const sameVariable = panels
     .slice(0, shared.layout)
-    .every((candidate) => candidate.state.variable === panel.state.variable && candidate.state.mode === panel.state.mode);
-  const suffix = shared.layout > 1 ? (sameVariable ? " (shared)" : ` (panel ${activePanelIndex + 1})`) : "";
+    .every((candidate) => candidate.state.variable === panel.state.variable);
+  const suffix = isDiffView() ? "" : shared.layout > 1 ? (sameVariable ? " (shared)" : ` (panel ${activePanelIndex + 1})`) : "";
   drawColorbar(elements.colorbar, panel.colormap, panel.range, {
     label: `${panel.label} (${panel.units})${suffix}`,
     textColor: shared.theme === "light" ? "#14181d" : "#e6edf3",
@@ -2264,6 +2243,16 @@ async function applyOverlayMode() {
   // selector any more, so the legacy eddy-reference control stays hidden.
   elements["eddy-reference-field"].hidden = true;
   const note = elements["overlay-note"];
+  // Overlays are per-forecast; the difference view has no forecast to host them, so
+  // leave the map clean and nudge the user back to a per-forecast view.
+  if (isDiffView()) {
+    clearTrajectories();
+    note.textContent = shared.overlayMode === "none" ? "" : "Switch to side-by-side to see overlays.";
+    for (let i = 0; i < shared.layout; i += 1) drawOverlays(panels[i]);
+    updateCurrentsControlVisibility();
+    updateContextRail();
+    return;
+  }
   if (shared.overlayMode !== "trajectories") clearTrajectories();
   if (shared.overlayMode === "trajectories") {
     note.textContent = "Click the map to seed trajectories advected through both forecasts' currents.";
@@ -2353,6 +2342,13 @@ function applyScope() {
 function setScope(scope) {
   if (shared.scope === scope) return;
   shared.scope = scope;
+  // The year raster is a per-forecast view; the difference comparison has no meaning
+  // there, so entering year scope while in difference falls back to side-by-side.
+  if (scope === "year" && isDiffView()) {
+    shared.displayMode = "side";
+    markDisplayButtons();
+    syncPanelGrid();
+  }
   clearTrajectories();
   applyScope();
   renderAllPanels().then(() => {
@@ -2475,6 +2471,7 @@ function wireGlobalControls() {
         redrawOverlaysAll();
         updateSharedColorbar();
         updateContextRail();
+        if (shared.overlayMode !== "none") applyOverlayMode();
       });
       writeHash();
     });
@@ -2644,8 +2641,11 @@ function scheduleHashWrite() {
   hashWriteTimer = setTimeout(writeHash, 250);
 }
 
+// The third token is the legacy per-panel display mode. It no longer exists — the
+// comparison view is a shared dm choice now — but we keep writing a stable "field"
+// so old parsers and roundtrips stay happy; readers tolerate any value (see below).
 function encodePanel(panel) {
-  return [panel.state.dataset, panel.state.variable, panel.state.mode, panel.state.datasetB].join(",");
+  return [panel.state.dataset, panel.state.variable, "field"].join(",");
 }
 
 function writeHash() {
@@ -2690,7 +2690,7 @@ function readHash() {
   if (parameters.has("rw")) shared.railWidth = Math.min(620, Math.max(280, Number(parameters.get("rw"))));
   if (parameters.has("cw")) shared.controlsWidth = Number(parameters.get("cw"));
   if (parameters.has("mh")) shared.mapHeight = Number(parameters.get("mh"));
-  if (parameters.get("dm") === "swipe" || parameters.get("dm") === "side") shared.displayMode = parameters.get("dm");
+  if (["side", "swipe", "diff"].includes(parameters.get("dm"))) shared.displayMode = parameters.get("dm");
   if (parameters.has("play")) shared.showParticles = parameters.get("play") === "1";
   if (parameters.has("spd")) shared.particleSpeed = Number(parameters.get("spd"));
   return parameters;
@@ -2700,16 +2700,15 @@ function applyPanelHash(parameters) {
   for (let i = 0; i < shared.layout; i += 1) {
     const encoded = parameters.get(`p${i}`);
     if (!encoded) continue;
-    const [dataset, variable, mode, datasetB] = encoded.split(",");
+    const [dataset, variable, mode] = encoded.split(",");
     if (!panels[i]) panels[i] = buildPanel(i);
-    // Old hashes encoded currents as a mode (and a trailing swipe flag); both degrade
-    // gracefully — currents is a variable now and single-pane swipe no longer exists.
+    // The third token is the legacy per-panel mode; it is ignored now (any value reads
+    // as "field") except the old "currents" mode, which migrates to the currents
+    // variable. A trailing fourth token (old difference dataset) is simply dropped.
     const migratedCurrents = mode === "currents";
     Object.assign(panels[i].state, {
       dataset: dataset || panels[i].state.dataset,
       variable: migratedCurrents ? CURRENTS_VARIABLE_SURFACE : variable || panels[i].state.variable,
-      mode: migratedCurrents ? "field" : mode || panels[i].state.mode,
-      datasetB: datasetB || panels[i].state.datasetB,
     });
   }
 }
@@ -2794,6 +2793,9 @@ async function main() {
   // Only 1 or 2 panels are supported; old 4-panel hashes degrade to 2.
   if (!Number.isFinite(shared.layout) || shared.layout < 1) shared.layout = 1;
   else if (shared.layout > 2) shared.layout = 2;
+  // The difference view has no meaning in the year raster scope; a deep link that
+  // asks for both falls back to side-by-side (mirrors the runtime scope switch).
+  if (shared.scope === "year" && shared.displayMode === "diff") shared.displayMode = "side";
   applyTheme();
   applyScope();
   applyRailCollapsed();
