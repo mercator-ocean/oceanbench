@@ -97,6 +97,8 @@ export const METHOD_NOTES = {
       "both forecasts; a coarser model's curve simply stops at its own resolution limit, " +
       "and the error (F1−F2) curve is truncated at the coarser model's limit — below it a " +
       "difference is interpolation artifact, not model disagreement. " +
+      "In compare mode the box is bounded so both models stay at native resolution with " +
+      "enough samples; very different resolutions (e.g. 1° vs 1/12°) can't share a fair box. " +
       "Near each model's own grid scale (the last ~octave of its curve) spectra are damped " +
       "by model numerical dissipation; compare models at scales both resolve. " +
       "Exploratory diagnostic — official spectral metrics live on the scores page.",

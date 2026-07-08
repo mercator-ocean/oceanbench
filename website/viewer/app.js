@@ -2482,10 +2482,15 @@ const PSD_DEFAULT_WIDTH_DEG = 10;
 const PSD_FLASH_MILLISECONDS = 700;
 
 // Current cap/min (degrees) for the visible forecasts; refreshed by ensurePsdBox so
-// resize gestures clamp against the latest model pair. With two different native
-// grids the cap is the SMALLER of the two maxima (the finer grid's cap): each curve
-// then stops at its own model's resolution limit, which is honest signal.
-let psdBoxLimits = { capDeg: PSD_FFT_CELLS, minDeg: 0.5 };
+// resize gestures clamp against the latest model pair. A shared box must be valid for
+// BOTH models at their native grids, so:
+//   sharedMax = min over models of (256 × native cell size)  — the FINER model's max,
+//               so the fine model is never decimated;
+//   sharedMin = max over models of (32 × native cell size)   — the COARSER model's min,
+//               so the coarse model still has ≥32 of its own native cells.
+// For very disparate pairs sharedMin > sharedMax: no box is fair to both. Then the box
+// is degenerate (psdBoxLimits.degenerate) and PSD-compare is disabled with a note.
+let psdBoxLimits = { capDeg: PSD_FFT_CELLS, minDeg: 0.5, degenerate: false, resolutionLabels: [] };
 let psdBoxFlashUntil = 0;
 
 function finestCellDegFor(slug) {
@@ -2509,10 +2514,11 @@ function ensurePsdBox(shown) {
     .map((panel) => finestCellDegFor(panel.state.dataset))
     .filter((value) => value != null);
   if (cells.length) {
-    const capDeg = PSD_FFT_CELLS * Math.min(...cells);
-    let minDeg = PSD_MIN_CELLS * Math.max(...cells);
-    if (minDeg > capDeg) minDeg = capDeg / 4;
-    psdBoxLimits = { capDeg, minDeg };
+    const capDeg = PSD_FFT_CELLS * Math.min(...cells); // finer model's max (smaller in degrees)
+    const minDeg = PSD_MIN_CELLS * Math.max(...cells); // coarser model's min (larger in degrees)
+    const degenerate = minDeg > capDeg + 1e-9;
+    const resolutionLabels = [...new Set(cells.map((cell) => cellDegreesLabel(cell)))];
+    psdBoxLimits = { capDeg, minDeg, degenerate, resolutionLabels };
   }
   if (!shared.psdBox) {
     const viewport = currentViewport();
@@ -2553,7 +2559,7 @@ function psdBoxWorldRect() {
 // The rectangle is a spectrum tool, not an overlay mode: it shows on every panel in
 // single-forecast scope (incl. swipe/difference — one shared box drives both spectra).
 function psdBoxVisible() {
-  return shared.psdEnabled && shared.scope !== "year" && Boolean(shared.psdBox);
+  return shared.psdEnabled && shared.scope !== "year" && Boolean(shared.psdBox) && !psdBoxLimits.degenerate;
 }
 
 function drawPsdBox(panel, context, projection) {
@@ -2790,6 +2796,17 @@ async function renderRailPsd(shown, comparison) {
     return;
   }
   const box = ensurePsdBox(shown);
+  if (psdBoxLimits.degenerate) {
+    // No box size is fair to both models simultaneously (e.g. 1° vs 1/12°): the coarse
+    // model's 32-cell minimum is larger than the fine model's native-resolution cap.
+    scheduleRedrawAllPanels(); // drop the now-hidden box from the map (psdBoxVisible is false)
+    elements["rail-spectra"].innerHTML = "";
+    const pair = psdBoxLimits.resolutionLabels.join(" vs ");
+    elements["rail-psd-note"].textContent =
+      `Resolutions too different for a shared-box spectrum${pair ? ` (${pair})` : ""}. ` +
+      "Switch to a single forecast to inspect each.";
+    return;
+  }
   const boxRange = {
     latMin: box.lat - box.h / 2,
     latMax: box.lat + box.h / 2,
