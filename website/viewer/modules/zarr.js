@@ -62,8 +62,16 @@ async function fetchChunk(store, path, chunkKey, codecId) {
   if (cached) return cached;
   const url = `${store.baseUrl}/${path}/${chunkKey}`;
   const started = performance.now();
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Cannot fetch chunk ${url} (${response.status})`);
+  // Name the resource (the variable/level path) rather than echoing the raw tile
+  // URL, and turn a bare network failure ("Failed to fetch") into the same
+  // friendly, resource-named message.
+  let response;
+  try {
+    response = await fetch(url);
+  } catch {
+    throw new Error(`Could not load a map tile for ${path} (network error — check your connection).`);
+  }
+  if (!response.ok) throw new Error(`Could not load a map tile for ${path} (HTTP ${response.status}).`);
   const compressed = await response.arrayBuffer();
   const bytes = await inflate(compressed, codecId);
   const record = { bytes, compressedBytes: compressed.byteLength, milliseconds: performance.now() - started };
@@ -101,6 +109,11 @@ export async function readLayer(store, { variable, level, startIndex, leadIndex 
       tileReads.push({ ty, tx, record: fetchChunk(store, path, `${startIndex}.${leadIndex}.${ty}.${tx}`, codecId) });
     }
   }
+  // The tiles are fetched concurrently but consumed sequentially below. If an early
+  // tile rejects, the loop throws before later (still-pending) tile promises are
+  // awaited, so attach a benign handler now to keep a blocked tile from surfacing as
+  // an uncaught promise rejection; the await still observes and rethrows the first error.
+  for (const tile of tileReads) tile.record.catch(() => {});
   for (const tile of tileReads) {
     const record = await tile.record;
     compressedBytes += record.compressedBytes;

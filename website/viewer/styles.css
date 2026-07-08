@@ -27,6 +27,11 @@ SPDX-License-Identifier: EUPL-1.2
   --shadow: var(--ob-viewer-shadow, 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06));
 }
 
+/* Nudge muted text a touch darker in the light theme so small muted text
+   (e.g. .layer-info, rail captions) clears WCAG AA 4.5:1 on the light surfaces;
+   the shared #6c757d sat at ~4.33–4.48 against them. Dark theme is unaffected. */
+:root[data-theme="light"] { --muted: #676d75; }
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
@@ -258,6 +263,13 @@ body.resizing-layout.row { cursor: row-resize; }
   color: var(--forecast-color, var(--accent, #1f6feb));
   padding-right: 0.15rem;
   white-space: nowrap;
+}
+/* The Okabe-Ito forecast blue (#0072B2) fails WCAG AA on the near-black dark
+   panel head (~3.5:1). Lighten the label toward white in dark theme only — hue is
+   preserved so Forecast 1 / Forecast 2 stay distinct — to clear 4.5:1 for the
+   small bold text. */
+:root[data-theme="dark"] .panel-forecast-label {
+  color: color-mix(in srgb, var(--forecast-color, var(--accent, #1f6feb)) 78%, #ffffff);
 }
 .panel-head select { font-size: 0.72rem; max-width: min(9rem, 100%); min-width: 5.5rem; }
 .panel-head .panel-compare { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; color: var(--muted); }
