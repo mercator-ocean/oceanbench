@@ -229,6 +229,36 @@ def _group_boundaries(columns: list[numpy.ndarray]) -> numpy.ndarray:
     return numpy.flatnonzero(changed)
 
 
+def _projected_sorted_partition(matchups) -> pyarrow.Table:
+    source_table = pyarrow.Table.from_pandas(
+        matchups[[column for column in _MATCHUP_SOURCE_COLUMNS if column in matchups.columns]],
+        preserve_index=False,
+    )
+    projected = _project_matchups(source_table)
+    order = pyarrow.compute.sort_indices(
+        projected, sort_keys=[(column, "ascending") for column in _MATCHUP_GROUP_COLUMNS]
+    )
+    return projected.take(order)
+
+
+def _write_matchup_row_groups(writer: "pyarrow.parquet.ParquetWriter", projected: pyarrow.Table) -> None:
+    row_count = projected.num_rows
+    if not row_count:
+        return
+    group_columns = [projected.column(column).to_numpy(zero_copy_only=False) for column in _MATCHUP_GROUP_COLUMNS]
+    boundaries = _group_boundaries(group_columns)
+    ends = numpy.append(boundaries[1:], row_count)
+    for group_start, group_end in zip(boundaries, ends):
+        for chunk_start in range(int(group_start), int(group_end), MAXIMUM_ROW_GROUP_ROWS):
+            chunk_end = min(chunk_start + MAXIMUM_ROW_GROUP_ROWS, int(group_end))
+            writer.write_table(projected.slice(chunk_start, chunk_end - chunk_start))
+
+
+def _matchup_provenance_metadata(output_path: str, source: str | None) -> dict:
+    provenance = provenance_block(source=source if source is not None else os.path.basename(output_path))
+    return {_MATCHUP_PROVENANCE_METADATA_KEY: json.dumps(provenance).encode("utf-8")}
+
+
 def write_matchup_parquet(matchups, output_path: str, *, source: str | None = None) -> str:
     """Write the Class-4 match-ups to the viewer serving parquet and validate the layout.
 
@@ -239,32 +269,51 @@ def write_matchup_parquet(matchups, output_path: str, *, source: str | None = No
     spanning more than ``MAXIMUM_ROW_GROUP_ROWS`` rows is split across consecutive groups). The
     written file is then re-opened and validated by :func:`verify_matchup_parquet`.
     """
-    source_table = pyarrow.Table.from_pandas(
-        matchups[[column for column in _MATCHUP_SOURCE_COLUMNS if column in matchups.columns]],
-        preserve_index=False,
-    )
-    projected = _project_matchups(source_table)
-    order = pyarrow.compute.sort_indices(
-        projected, sort_keys=[(column, "ascending") for column in _MATCHUP_GROUP_COLUMNS]
-    )
-    projected = projected.take(order)
-
-    provenance = provenance_block(source=source if source is not None else os.path.basename(output_path))
-    provenance_metadata = {_MATCHUP_PROVENANCE_METADATA_KEY: json.dumps(provenance).encode("utf-8")}
-    projected = projected.replace_schema_metadata(provenance_metadata)
-
+    provenance_metadata = _matchup_provenance_metadata(output_path, source)
+    projected = _projected_sorted_partition(matchups).replace_schema_metadata(provenance_metadata)
     Path(os.path.dirname(output_path) or ".").mkdir(parents=True, exist_ok=True)
     writer = pyarrow.parquet.ParquetWriter(output_path, projected.schema, compression="snappy")
-    row_count = projected.num_rows
-    if row_count:
-        group_columns = [projected.column(column).to_numpy(zero_copy_only=False) for column in _MATCHUP_GROUP_COLUMNS]
-        boundaries = _group_boundaries(group_columns)
-        ends = numpy.append(boundaries[1:], row_count)
-        for group_start, group_end in zip(boundaries, ends):
-            for chunk_start in range(int(group_start), int(group_end), MAXIMUM_ROW_GROUP_ROWS):
-                chunk_end = min(chunk_start + MAXIMUM_ROW_GROUP_ROWS, int(group_end))
-                writer.write_table(projected.slice(chunk_start, chunk_end - chunk_start))
+    _write_matchup_row_groups(writer, projected)
     writer.close()
+    verify_matchup_parquet(output_path)
+    return output_path
+
+
+def write_matchup_parquet_streamed(
+    start_partitions, output_path: str, *, source: str | None = None, on_partition=None
+) -> str:
+    """Stream per-start match-up frames to the serving parquet without materialising the year.
+
+    ``start_partitions`` yields one match-up dataframe per forecast start in ascending
+    ``start_date`` order (as :func:`oceanbench.runner.matchups.iter_class4_matchups_by_start`
+    produces). Because ``start_date`` is the leading sort key and the starts are disjoint and
+    ascending, sorting each start on its own ``(start_date, lead_day, variable, depth_bin)`` keys
+    and appending its row groups yields a file byte-for-byte equivalent in row content and layout to
+    :func:`write_matchup_parquet` over the concatenated frame — but peak memory is one start, not the
+    whole year, which also keeps every written array well under Arrow's 2 GiB single-array limit.
+    ``on_partition`` is invoked with each raw (pre-projection) frame for callers that also aggregate
+    from the match-ups (e.g. per-start bias records).
+    """
+    provenance_metadata = _matchup_provenance_metadata(output_path, source)
+    Path(os.path.dirname(output_path) or ".").mkdir(parents=True, exist_ok=True)
+    writer = None
+    try:
+        for partition in start_partitions:
+            if on_partition is not None:
+                on_partition(partition)
+            if partition is None or len(partition) == 0:
+                continue
+            projected = _projected_sorted_partition(partition).replace_schema_metadata(provenance_metadata)
+            if writer is None:
+                writer = pyarrow.parquet.ParquetWriter(output_path, projected.schema, compression="snappy")
+            _write_matchup_row_groups(writer, projected)
+        if writer is None:
+            writer = pyarrow.parquet.ParquetWriter(
+                output_path, _MATCHUP_TARGET_SCHEMA.with_metadata(provenance_metadata), compression="snappy"
+            )
+    finally:
+        if writer is not None:
+            writer.close()
     verify_matchup_parquet(output_path)
     return output_path
 
@@ -676,6 +725,7 @@ def write_viewer_artifacts(
     year: int | None = None,
     matchups_context,
     matchup_variables=None,
+    matchup_max_workers: int | None = None,
 ) -> ViewerArtifactsResult:
     """Produce every viewer serving artifact for one evaluated dataset into ``output_directory``.
 
@@ -694,16 +744,22 @@ def write_viewer_artifacts(
     flags: list[str] = []
 
     variables = matchup_variables if matchup_variables is not None else list(_CLASS4_VARIABLES)
-    matchup_frame = matchups_module.class4_matchups(
-        forecast_dataset, observation_dataset, variables, context=matchups_context
-    )
     matchup_parquet_path = str(insights_directory / MATCHUP_PARQUET_FILENAME)
-    write_matchup_parquet(
-        matchup_frame,
+    # Compute the match-ups per forecast start in parallel and stream them straight to the serving
+    # parquet, accumulating the per-start bias records from the same frames, so the whole year is
+    # never held in memory at once.
+    class4_bias_records: list[dict] = []
+    start_partitions = matchups_module.iter_class4_matchups_by_start(
+        forecast_dataset, observation_dataset, variables, context=matchups_context, max_workers=matchup_max_workers
+    )
+    write_matchup_parquet_streamed(
+        start_partitions,
         matchup_parquet_path,
         source=f"insights/{dataset_slug}/{region}/{MATCHUP_PARQUET_FILENAME}",
+        on_partition=lambda partition: class4_bias_records.extend(
+            class4_bias_per_start_records(partition, context=matchups_context)
+        ),
     )
-    class4_bias_records = class4_bias_per_start_records(matchup_frame, context=matchups_context)
 
     eddy_census_path = str(insights_directory / EDDY_CENSUS_FILENAME)
     try:

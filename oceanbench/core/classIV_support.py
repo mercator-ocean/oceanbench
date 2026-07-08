@@ -42,6 +42,17 @@ VELOCITY_TARGET_DEPTH_METERS = 15.0
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
 
 
+def reset_class4_observations_cache() -> None:
+    """Drop the prepared-observations cache.
+
+    The cache is keyed on ``id(observations_dataset)``, which is only safe while that dataset is
+    alive. Callers that prepare many short-lived observation subsets (for example the per-start
+    match-up workers) must reset it between subsets so a recycled object id cannot return another
+    subset's coordinates.
+    """
+    _CLASS4_OBSERVATIONS_CACHE.clear()
+
+
 def _compute_with_remote_retries(operation_name: str, data):
     return with_remote_http_retries(operation_name, data.compute)
 

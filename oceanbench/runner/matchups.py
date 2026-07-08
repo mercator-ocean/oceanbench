@@ -18,7 +18,10 @@ functions (``create_class4_observations_dataframe``,
 ``tests/runner/test_matchups.py``).
 """
 
+from collections.abc import Iterator
+import concurrent.futures
 import math
+import multiprocessing
 import os
 
 import numpy
@@ -30,10 +33,24 @@ from oceanbench.core.classIV_support import (
     interpolate_class4_model_to_observations,
     mean_sea_surface_height_shift,
     prepare_class4_model_variable,
+    reset_class4_observations_cache,
 )
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.runner.records import RunContext
+
+# The per-observation grid interpolation dominates the match-up cost and is effectively
+# single-threaded (dask threaded scheduler, BLAS pinned low), so a whole-year run is
+# parallelised across forecast start dates: each start loads one forecast field and
+# interpolates at its own observations, fully independent of the others. Workers are forked
+# so the lazy challenger/observation datasets are inherited through copy-on-write memory
+# rather than pickled across the process boundary (pickling remote-backed xarray graphs is
+# what makes naive process parallelism awkward here); only the small per-start observation
+# index array is sent as a task argument. The datasets are published to this module-level
+# handle before the fork so every worker reads the same objects.
+_DEFAULT_MATCHUP_WORKER_CAP = 32
+_parallel_matchup_state: dict | None = None
 
 MATCHUP_COLUMNS = [
     "challenger",
@@ -135,6 +152,95 @@ def class4_matchups(
     if not per_variable:
         return pandas.DataFrame(columns=MATCHUP_COLUMNS)
     return pandas.concat(per_variable, ignore_index=True)
+
+
+def default_matchup_worker_count() -> int:
+    """Resolve the match-up worker count from the environment (default ``min(32, cpu_count)``)."""
+    override = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_MATCHUP_WORKERS.value)
+    if override:
+        return max(1, int(override))
+    return max(1, min(_DEFAULT_MATCHUP_WORKER_CAP, os.cpu_count() or 1))
+
+
+def _limit_worker_thread_pools() -> None:
+    # One match-up per process already saturates a core; keep the numeric libraries single
+    # threaded so N workers use N cores rather than oversubscribing.
+    for variable_name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        os.environ[variable_name] = "1"
+
+
+def _matchups_for_single_start(task: tuple[int, numpy.ndarray]) -> pandas.DataFrame:
+    start_index, observation_indices = task
+    _limit_worker_thread_pools()
+    # The prepared-observations cache is keyed on object id; each start's observation slice is a
+    # fresh short-lived object, so reset the cache to forbid a recycled id returning another
+    # start's coordinates (the cache still serves this start's variables, which share the slice).
+    reset_class4_observations_cache()
+    state = _parallel_matchup_state
+    forecast_slice = state["forecast"].isel({state["first_day_key"]: [start_index]})
+    observation_slice = state["observations"].isel({state["observation_dimension"]: observation_indices})
+    return class4_matchups(forecast_slice, observation_slice, state["variables"], context=state["context"])
+
+
+def _fork_executor(worker_count: int) -> concurrent.futures.ProcessPoolExecutor | None:
+    if worker_count <= 1 or "fork" not in multiprocessing.get_all_start_methods():
+        return None
+    return concurrent.futures.ProcessPoolExecutor(
+        max_workers=worker_count, mp_context=multiprocessing.get_context("fork")
+    )
+
+
+def iter_class4_matchups_by_start(
+    challenger_dataset: xarray.Dataset,
+    observation_dataset: xarray.Dataset,
+    variables: list[Variable],
+    *,
+    context: RunContext,
+    max_workers: int | None = None,
+) -> Iterator[pandas.DataFrame]:
+    """Yield the Class-4 match-up dataframe of each forecast start in ascending start-date order.
+
+    Each yielded frame is the match-up of one forecast start (all ``variables``, all lead days),
+    computed by the same untouched core as :func:`class4_matchups`. Starts are independent and are
+    computed in parallel across forked worker processes when ``max_workers > 1`` and forking is
+    available, otherwise serially; either way the frames are produced in ascending start-date order
+    so a consumer can stream them to a globally-sorted parquet without buffering the whole year.
+    """
+    global _parallel_matchup_state
+    worker_count = default_matchup_worker_count() if max_workers is None else max(1, max_workers)
+    first_day_key = Dimension.FIRST_DAY_DATETIME.key()
+    start_values = numpy.asarray(challenger_dataset[first_day_key].values)
+    ascending_order = numpy.argsort(start_values, kind="stable")
+    observation_first_day = observation_dataset[first_day_key]
+    observation_dimension = observation_first_day.dims[0]
+    observation_first_day_values = numpy.asarray(observation_first_day.values)
+    tasks = [
+        (
+            int(start_index),
+            numpy.flatnonzero(observation_first_day_values == start_values[start_index]).astype("int64"),
+        )
+        for start_index in ascending_order
+    ]
+    _parallel_matchup_state = {
+        "forecast": challenger_dataset,
+        "observations": observation_dataset,
+        "first_day_key": first_day_key,
+        "observation_dimension": observation_dimension,
+        "variables": variables,
+        "context": context,
+    }
+    try:
+        executor = _fork_executor(worker_count if len(tasks) > 1 else 1)
+        if executor is None:
+            for task in tasks:
+                yield _matchups_for_single_start(task)
+            return
+        try:
+            yield from executor.map(_matchups_for_single_start, tasks)
+        finally:
+            executor.shutdown()
+    finally:
+        _parallel_matchup_state = None
 
 
 def recompute_class4_rmsd(matchups: pandas.DataFrame) -> pandas.DataFrame:
