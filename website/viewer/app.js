@@ -15,7 +15,7 @@
 // of view state lives in the URL hash.
 
 import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, prefetchLayer } from "./modules/zarr.js";
-import { COLORMAP_NAMES } from "./vendor/cmocean/colormaps.js";
+import { COLORMAP_NAMES, DIVERGING } from "./vendor/cmocean/colormaps.js";
 import {
   fieldToImageData,
   fieldStatistics,
@@ -521,12 +521,64 @@ async function readAlignedField(panel, sourceSlug, variable, level, start, leadI
   return { field: aligned, latitudes: targetLat, longitudes: targetLon, compressedBytes: layer.compressedBytes };
 }
 
+// True when more than one panel is shown and every shown panel holds this panel's
+// variable — the condition under which same-variable panels share one colour scale (and
+// the field colorbar is labelled "(shared)"). Mirrors the colorbar's `sameVariable` test.
+function shownPanelsShareVariable(panel) {
+  if (shared.layout <= 1) return false;
+  for (let i = 0; i < shared.layout; i += 1) {
+    if (!panels[i] || panels[i].state.variable !== panel.state.variable) return false;
+  }
+  return true;
+}
+
+// Combine one or more [low, high] variable ranges into the range a field is colorized
+// with. A diverging colormap (balance/delta) is centred on physical zero — [-M, +M],
+// M = max|bound| — so its neutral colour reads as 0; a sequential map keeps the data
+// bounds ([min low, max high]).
+function combineFieldRange(ranges, diverging) {
+  if (diverging) {
+    let magnitude = 0;
+    for (const [low, high] of ranges) magnitude = Math.max(magnitude, Math.abs(low), Math.abs(high));
+    const bound = magnitude || 1;
+    return [-bound, bound];
+  }
+  let low = Infinity;
+  let high = -Infinity;
+  for (const [rangeLow, rangeHigh] of ranges) {
+    if (rangeLow < low) low = rangeLow;
+    if (rangeHigh > high) high = rangeHigh;
+  }
+  return [Number.isFinite(low) ? low : 0, Number.isFinite(high) ? high : 1];
+}
+
+// The value range a field panel is colorized with. Diverging maps are zero-centred (see
+// combineFieldRange). When several panels show the same variable, the range spans all of
+// them so identical physical values render as identical colours and the "(shared)" label
+// is truthful. ensureStore is memoised, so awaiting the sibling manifests is cheap and
+// makes the shared range deterministic regardless of which panel renders first.
+async function fieldColorRange(panel, colormap, defaultRange) {
+  const diverging = DIVERGING.has(colormap);
+  const ranges = [defaultRange];
+  if (shownPanelsShareVariable(panel)) {
+    for (let i = 0; i < shared.layout; i += 1) {
+      const candidate = panels[i];
+      if (!candidate || candidate === panel) continue;
+      await ensureStore(candidate.state.dataset);
+      const otherEntry = manifestFor(candidate.state.dataset).variables[candidate.state.variable];
+      if (otherEntry && otherEntry.default_range) ranges.push(otherEntry.default_range);
+    }
+  }
+  return combineFieldRange(ranges, diverging);
+}
+
 async function renderFieldPanel(panel, token, manifest, level, start, leadIndex) {
   const entry = manifest.variables[panel.state.variable];
   const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, leadIndex);
   if (token !== panel.renderToken) return;
   const colormap = panel.state.colormap || entry.default_colormap;
-  const range = entry.default_range;
+  const range = await fieldColorRange(panel, colormap, entry.default_range);
+  if (token !== panel.renderToken) return;
   panel.field = primary.field;
   clearYearReadoutMetadata(panel);
   panel.latitudes = primary.latitudes;
