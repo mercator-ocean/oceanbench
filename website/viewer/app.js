@@ -34,6 +34,7 @@ import {
   loadClass4,
   insightsFor,
   eddyCensus,
+  alignedEddyCensuses,
   class4Points,
   class4ParquetVariable,
 } from "./modules/insights.js";
@@ -1070,6 +1071,7 @@ async function loadOverlayData() {
   overlayData.region = region;
   overlayData.eddiesCensuses = [];
   overlayData.eddiesMatch = null;
+  overlayData.eddiesLeadMismatch = false;
   overlayData.class4 = null;
   overlayData.class4Error = null;
   overlayData.class4Unpublished = false;
@@ -1082,12 +1084,22 @@ async function loadOverlayData() {
         return loadEddies(panelUrls.eddies || null);
       }),
     );
-    overlayData.eddiesCensuses = eddiesByPanel.map((eddies) => eddyCensus(eddies, shared.leadDay));
-    const censuses = overlayData.eddiesCensuses;
-    overlayData.eddiesMatch =
-      shared.layout === 2 && censuses[0] && censuses[1]
-        ? matchCensuses(censuses[0].detections, censuses[1].detections)
-        : null;
+    // Two forecasts are cross-matched only at a lead day BOTH publish: snap the requested
+    // lead to the intersection of their available leads and read both censuses there, so a
+    // wave challenger with a different lead set can never silently match different leads.
+    // No shared lead → suppress the match and report both leads (see renderEddyLegend).
+    if (shared.layout === 2 && eddiesByPanel[0] && eddiesByPanel[1]) {
+      const aligned = alignedEddyCensuses(eddiesByPanel[0], eddiesByPanel[1], shared.leadDay);
+      overlayData.eddiesCensuses = aligned.censuses;
+      overlayData.eddiesLeadMismatch = aligned.mismatch;
+      overlayData.eddiesMatch =
+        !aligned.mismatch && aligned.censuses[0] && aligned.censuses[1]
+          ? matchCensuses(aligned.censuses[0].detections, aligned.censuses[1].detections)
+          : null;
+    } else {
+      overlayData.eddiesCensuses = eddiesByPanel.map((eddies) => eddyCensus(eddies, shared.leadDay));
+      overlayData.eddiesMatch = null;
+    }
   } else if (shared.overlayMode === "class4") {
     const class4Url = urls.class4_matchups || glonetUrls.class4_matchups;
     // Reference datasets (and any dataset without published match-ups) carry an
@@ -2186,22 +2198,31 @@ function renderClass4Legend(legend, panel, scale) {
 function renderEddyLegend(legend, panel) {
   const censuses = overlayData.eddiesCensuses || [];
   const match = overlayData.eddiesMatch;
-  const lead = (censuses.find(Boolean) || {}).leadDay;
-  const leadNote = `lead ${lead ?? "—"} (nearest available)`;
+  const mismatch = Boolean(overlayData.eddiesLeadMismatch);
   let swatches;
   let caption;
   if (shared.layout === 2 && match) {
     const forecast1 = labelFor(panels[0].state.dataset);
     const forecast2 = labelFor(panels[1].state.dataset);
+    const lead = (censuses.find(Boolean) || {}).leadDay;
     const meanText = Number.isFinite(match.meanDisplacementKm) ? `${match.meanDisplacementKm.toFixed(0)} km` : "—";
     swatches =
       legendSwatch(EDDY_MATCHED_COLOR, "Matched pairs", match.matched.length) +
       legendSwatch(forecastColor(0), `Only in ${forecast1}`, match.onlyA.length) +
       legendSwatch(forecastColor(1), `Only in ${forecast2}`, match.onlyB.length);
-    caption = `mean centre displacement of matched pairs ${meanText} · ${leadNote}`;
+    caption = `mean centre displacement of matched pairs ${meanText} · lead ${lead ?? "—"} (nearest shared)`;
+  } else if (shared.layout === 2 && mismatch && censuses[0] && censuses[1]) {
+    // No lead day in common between the two forecasts: never cross-match different leads —
+    // show each forecast's own census at its own nearest lead, and say so.
+    const forecast1 = labelFor(panels[0].state.dataset);
+    const forecast2 = labelFor(panels[1].state.dataset);
+    swatches =
+      legendSwatch(forecastColor(0), `${forecast1} eddies · lead ${censuses[0].leadDay ?? "—"}`, censuses[0].detections.length) +
+      legendSwatch(forecastColor(1), `${forecast2} eddies · lead ${censuses[1].leadDay ?? "—"}`, censuses[1].detections.length);
+    caption = "no lead day in common — shown at each forecast's nearest lead, not cross-matched";
   } else if (censuses[0]) {
     swatches = legendSwatch(forecastColor(0), `${labelFor(panels[0].state.dataset)} eddies`, censuses[0].detections.length);
-    caption = `single forecast census · ${leadNote}`;
+    caption = `single forecast census · lead ${censuses[0].leadDay ?? "—"} (nearest available)`;
   } else {
     swatches = `<span class="legend-note">No eddy detections for this selection.</span>`;
     caption = "";

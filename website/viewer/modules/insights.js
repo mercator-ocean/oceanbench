@@ -189,6 +189,44 @@ export function eddyCensus(eddies, leadDay) {
   return null;
 }
 
+/** Sorted, de-duplicated lead days present in an eddy artifact (either schema). */
+export function eddyLeads(eddies) {
+  if (!eddies) return [];
+  const frames = Array.isArray(eddies.frames)
+    ? eddies.frames
+    : Array.isArray(eddies.references) && eddies.references[0]
+      ? eddies.references[0].frames || []
+      : [];
+  const leads = new Set();
+  for (const frame of frames) if (Number.isFinite(frame.lead_day)) leads.add(frame.lead_day);
+  return [...leads].sort((a, b) => a - b);
+}
+
+function nearestLead(leads, leadDay) {
+  let best = leads[0];
+  for (const lead of leads) {
+    if (Math.abs(lead - leadDay) < Math.abs(best - leadDay)) best = lead;
+  }
+  return best;
+}
+
+/**
+ * Two forecasts' eddy censuses at a SINGLE shared lead day, so a cross-match compares like
+ * with like. The requested `leadDay` is snapped to the nearest lead present in BOTH
+ * forecasts' available leads (their intersection), and both censuses are read at that one
+ * lead. When the two forecasts publish no lead in common the intersection is empty: each
+ * census is read at its own nearest lead and `mismatch` is set so the caller suppresses the
+ * cross-match and reports both leads. Returns `{ censuses: [censusA, censusB], lead, mismatch }`.
+ */
+export function alignedEddyCensuses(eddiesA, eddiesB, leadDay) {
+  const common = eddyLeads(eddiesA).filter((lead) => eddyLeads(eddiesB).includes(lead));
+  if (common.length) {
+    const lead = nearestLead(common, leadDay);
+    return { censuses: [eddyCensus(eddiesA, lead), eddyCensus(eddiesB, lead)], lead, mismatch: false };
+  }
+  return { censuses: [eddyCensus(eddiesA, leadDay), eddyCensus(eddiesB, leadDay)], lead: null, mismatch: true };
+}
+
 /** Eddy frame for the requested reference and the available lead nearest `leadDay`. */
 export function eddyFrame(eddies, reference, leadDay) {
   if (!eddies || !Array.isArray(eddies.references)) return null;
