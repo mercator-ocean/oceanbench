@@ -12,7 +12,12 @@ report can be trusted without re-running the whole evaluation:
 
 - **Class-4 pooled RMSD** per ``(variable, depth_bin, lead)`` recomputed as the observation-pooled
   ``sqrt(mean(abs_error ** 2))`` (algebraically the n-weighted recombination the official
-  ``class4_rmsd`` aggregate uses) and compared to ``scores-summary.json`` at ``class4_rtol``.
+  ``class4_rmsd`` aggregate uses) and compared to ``scores-summary.json`` at ``class4_rtol``. When
+  the official record carries the pooled observation count ``n`` (emitted by the aggregation
+  library), the parquet's finite-obs count is additionally asserted against it — an independent
+  guard that catches uniform obs thinning an RMSD tolerance alone would miss. On older
+  ``scores-summary.json`` without ``n`` the count assertion is skipped (and logged as skipped, so
+  it degrades gracefully rather than silently passing as if checked).
 - **Year per-start RMSD/bias** recomputed pooled over all match-ups of a sampled start and compared
   to ``year-rmsd-by-start.json`` (a documented sample of starts per variable keeps runtime sane).
 - **Year error-geography** recomputed as the per-cell mean absolute error and compared to
@@ -29,6 +34,7 @@ failure, and the CLI turns that into a non-zero exit.
 from collections import defaultdict
 from dataclasses import dataclass
 import json
+import logging
 from pathlib import Path
 import tempfile
 import urllib.request
@@ -55,6 +61,13 @@ DEFAULT_YEAR_RMSD_RELATIVE_TOLERANCE = 1e-4
 DEFAULT_YEAR_STARTS_PER_VARIABLE = 4
 DEFAULT_GEOGRAPHY_CELLS_PER_VARIABLE = 20
 DEFAULT_SEED = 20260707
+
+# The pooled obs count and the parquet finite-obs count are both integer counts of the same
+# match-ups, so an exact match is expected; a sub-unit tolerance passes exact-integer equality
+# (including the float representation the JSON carries) while failing any off-by-one drift.
+DEFAULT_CLASS4_OBS_COUNT_TOLERANCE = 0.5
+
+_LOGGER = logging.getLogger(__name__)
 
 _CLASS4_METRIC = "class4_rmsd"
 _SHORT_TO_TARGET = {short: (variable, depth_bin) for variable, depth_bin, short in _YEAR_TARGETS}
@@ -214,18 +227,25 @@ def _relative_difference(recomputed: float, official: float) -> float:
 
 
 def _class4_checks(
-    accumulators: _Accumulators, summary, dataset: str, region: str, relative_tolerance: float
+    accumulators: _Accumulators,
+    summary,
+    dataset: str,
+    region: str,
+    relative_tolerance: float,
+    obs_count_tolerance: float = DEFAULT_CLASS4_OBS_COUNT_TOLERANCE,
 ) -> list[dict]:
     official = {
-        (record["variable"], record["depth"], record["lead_day"]): record["mean"]
+        (record["variable"], record["depth"], record["lead_day"]): record
         for record in summary
         if record.get("metric") == _CLASS4_METRIC
         and record.get("challenger") == dataset
         and record.get("region") == region
     }
     checks = []
-    for metric_key, expected in sorted(official.items()):
+    for metric_key, record in sorted(official.items()):
         variable, depth_bin, lead_day = metric_key
+        expected = record["mean"]
+        official_n = record.get("n")
         count = accumulators.class4_count.get(metric_key, 0)
         if count == 0:
             checks.append(
@@ -239,6 +259,36 @@ def _class4_checks(
             continue
         recomputed = float(numpy.sqrt(accumulators.class4_square_sum[metric_key] / count))
         difference = _relative_difference(recomputed, expected)
+        rmsd_passed = difference <= relative_tolerance
+
+        # Independent obs-count guard: the official pooled n (sum of per-start n) must equal the
+        # parquet's finite-obs count. Uniform obs thinning leaves the RMSD ~unchanged but shrinks
+        # the count, so this catches a regression the RMSD tolerance alone would pass. Skipped
+        # (and logged) when the official record predates the pooled-n emission.
+        obs_count_checked = official_n is not None
+        if obs_count_checked:
+            obs_count_difference = abs(count - float(official_n))
+            obs_count_passed = obs_count_difference <= obs_count_tolerance
+        else:
+            obs_count_difference = None
+            obs_count_passed = True
+            _LOGGER.info(
+                "class4 obs-count guard skipped for %s/%s %s/%s/lead%s: scores-summary.json record "
+                "carries no pooled n (older artifact); RMSD checked, count not asserted",
+                dataset,
+                region,
+                variable,
+                depth_bin,
+                lead_day,
+            )
+
+        passed = rmsd_passed and obs_count_passed
+        if not rmsd_passed:
+            message = "class4 pooled RMSD exceeds relative tolerance"
+        elif obs_count_checked and not obs_count_passed:
+            message = "class4 pooled obs count disagrees with official n"
+        else:
+            message = None
         checks.append(
             {
                 "check": "class4_pooled_rmsd",
@@ -246,12 +296,14 @@ def _class4_checks(
                 "recomputed": recomputed,
                 "official": expected,
                 "observation_count": count,
+                "official_n": official_n,
+                "obs_count_checked": obs_count_checked,
+                "obs_count_difference": obs_count_difference,
+                "obs_count_tolerance": obs_count_tolerance,
                 "relative_difference": difference,
                 "tolerance": relative_tolerance,
-                "passed": difference <= relative_tolerance,
-                "message": (
-                    None if difference <= relative_tolerance else "class4 pooled RMSD exceeds relative tolerance"
-                ),
+                "passed": passed,
+                "message": message,
             }
         )
     return checks
@@ -440,6 +492,7 @@ def reconcile_viewer_artifacts(
     region: str | None = None,
     output_path: str | None = None,
     class4_relative_tolerance: float = DEFAULT_CLASS4_RELATIVE_TOLERANCE,
+    class4_obs_count_tolerance: float = DEFAULT_CLASS4_OBS_COUNT_TOLERANCE,
     year_rmsd_relative_tolerance: float = DEFAULT_YEAR_RMSD_RELATIVE_TOLERANCE,
     starts_per_variable: int = DEFAULT_YEAR_STARTS_PER_VARIABLE,
     cells_per_variable: int = DEFAULT_GEOGRAPHY_CELLS_PER_VARIABLE,
@@ -469,7 +522,14 @@ def reconcile_viewer_artifacts(
             parquet_path = _local_parquet_path(_join(root, artifacts["class4_matchups"]), downloads)
             accumulators = _accumulate_parquet(parquet_path, grid)
 
-            checks = _class4_checks(accumulators, summary, dataset_name, region_name, class4_relative_tolerance)
+            checks = _class4_checks(
+                accumulators,
+                summary,
+                dataset_name,
+                region_name,
+                class4_relative_tolerance,
+                class4_obs_count_tolerance,
+            )
             if artifacts.get("year_rmsd_by_start"):
                 year_rmsd = _read_json(_join(root, artifacts["year_rmsd_by_start"]))
                 checks += _year_rmsd_checks(
@@ -504,6 +564,7 @@ def reconcile_viewer_artifacts(
         "base": artifacts_base,
         "tolerances": {
             "class4_relative": class4_relative_tolerance,
+            "class4_obs_count": class4_obs_count_tolerance,
             "year_rmsd_relative": year_rmsd_relative_tolerance,
         },
         "sampling": {

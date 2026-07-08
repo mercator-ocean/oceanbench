@@ -10,6 +10,7 @@ geography) are checked to reconcile, and a deliberately corrupted aggregate to f
 """
 
 import json
+import logging
 from pathlib import Path
 
 import numpy
@@ -52,20 +53,38 @@ def _pooled_rmsd(group: pandas.DataFrame) -> float:
     return float(numpy.sqrt((error * error).mean()))
 
 
-def _class4_summary(frame: pandas.DataFrame, dataset: str, region: str) -> list[dict]:
+def _class4_summary(
+    frame: pandas.DataFrame,
+    dataset: str,
+    region: str,
+    *,
+    pooled_n_frame: pandas.DataFrame | None = None,
+) -> list[dict]:
+    """Class-4 summary records whose ``mean`` pools ``frame``.
+
+    When ``pooled_n_frame`` is given, each record also carries the pooled observation count ``n``
+    taken from that frame (letting a test record the full-data count while serving a thinned
+    parquet); when it is omitted the records carry no ``n`` (the pre-pooled-n artifact shape).
+    """
     records = []
     for (variable, depth_bin, lead_day), group in frame.groupby(["variable", "depth_bin", "lead_day"]):
-        records.append(
-            {
-                "metric": "class4_rmsd",
-                "challenger": dataset,
-                "region": region,
-                "variable": variable,
-                "depth": depth_bin,
-                "lead_day": int(lead_day),
-                "mean": _pooled_rmsd(group),
-            }
-        )
+        record = {
+            "metric": "class4_rmsd",
+            "challenger": dataset,
+            "region": region,
+            "variable": variable,
+            "depth": depth_bin,
+            "lead_day": int(lead_day),
+            "mean": _pooled_rmsd(group),
+        }
+        if pooled_n_frame is not None:
+            count_frame = pooled_n_frame[
+                (pooled_n_frame["variable"] == variable)
+                & (pooled_n_frame["depth_bin"] == depth_bin)
+                & (pooled_n_frame["lead_day"] == lead_day)
+            ]
+            record["n"] = int(len(count_frame))
+        records.append(record)
     return records
 
 
@@ -112,11 +131,17 @@ def _year_geography_json(frame: pandas.DataFrame, grid: dict) -> dict:
     return {"grid": grid, "variables": variables, "meta": {"aggregation": "time-mean of |obs-model| per cell"}}
 
 
-def _write_tree(tmp_path: Path, dataset: str, region: str, summary: list[dict]) -> tuple[str, dict]:
+def _write_tree(
+    tmp_path: Path,
+    dataset: str,
+    region: str,
+    summary: list[dict],
+    matchup_frame: pandas.DataFrame | None = None,
+) -> tuple[str, dict]:
     data_directory = tmp_path / "data"
     insights_directory = data_directory / "insights" / dataset / region
     insights_directory.mkdir(parents=True, exist_ok=True)
-    frame = _matchup_frame()
+    frame = matchup_frame if matchup_frame is not None else _matchup_frame()
     viewer_artifacts.write_matchup_parquet(frame, str(insights_directory / "class4-matchups.parquet"))
 
     grid = viewer_artifacts._year_grid_for_region(region)
@@ -170,3 +195,69 @@ def test_reconcile_flags_corrupted_class4_aggregate(tmp_path) -> None:
     report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
     failed = [check for entry in report["datasets"] for check in entry["checks"] if not check["passed"]]
     assert any(check["check"] == "class4_pooled_rmsd" for check in failed)
+
+
+def _class4_checks_in(report: dict) -> list[dict]:
+    return [
+        check
+        for entry in report["datasets"]
+        for check in entry["checks"]
+        if check["check"] == "class4_pooled_rmsd"
+    ]
+
+
+# ---- FIX 1: independent pooled-obs-count guard ---------------------------------------------------
+
+
+def test_obs_count_guard_passes_when_pooled_n_matches(tmp_path) -> None:
+    dataset, region = "synthetic", "global"
+    frame = _matchup_frame()
+    summary = _class4_summary(frame, dataset, region, pooled_n_frame=frame)
+    base, _ = _write_tree(tmp_path, dataset, region, summary, matchup_frame=frame)
+
+    report = reconcile_viewer_artifacts(base, dataset=dataset, region=region)
+
+    assert report["passed"] is True
+    class4 = _class4_checks_in(report)
+    assert class4 and all(check["obs_count_checked"] is True for check in class4)
+    assert all(check["obs_count_difference"] == 0.0 for check in class4)
+
+
+def test_obs_count_guard_flags_uniform_thinning_the_rmsd_misses(tmp_path) -> None:
+    dataset, region = "synthetic", "global"
+    full = _matchup_frame()
+    # Drop 30% of the observations uniformly at random. The pooled RMSD is (statistically)
+    # unchanged, so the RMSD check still passes; the pooled n was recorded on the full data.
+    thinned = full.sample(frac=0.7, random_state=3).reset_index(drop=True)
+    summary = _class4_summary(thinned, dataset, region, pooled_n_frame=full)
+    base, _ = _write_tree(tmp_path, dataset, region, summary, matchup_frame=thinned)
+
+    with pytest.raises(ReconciliationError):
+        reconcile_viewer_artifacts(base, dataset=dataset, region=region, output_path=str(tmp_path / "report.json"))
+
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    class4 = _class4_checks_in(report)
+    # The RMSD tolerance alone would have missed the thinning: every key agrees on RMSD ...
+    assert all(check["relative_difference"] <= check["tolerance"] for check in class4)
+    # ... yet the obs-count guard fires on every key (parquet count < recorded pooled n).
+    failures = [check for check in class4 if not check["passed"]]
+    assert failures
+    assert all(check["obs_count_checked"] is True for check in failures)
+    assert all(check["obs_count_difference"] > check["obs_count_tolerance"] for check in failures)
+    assert all(check["message"] == "class4 pooled obs count disagrees with official n" for check in failures)
+
+
+def test_obs_count_guard_skips_and_logs_when_pooled_n_absent(tmp_path, caplog) -> None:
+    dataset, region = "synthetic", "global"
+    # No pooled_n_frame -> summary records carry no ``n`` (older scores-summary.json shape).
+    summary = _class4_summary(_matchup_frame(), dataset, region)
+    base, _ = _write_tree(tmp_path, dataset, region, summary)
+
+    with caplog.at_level(logging.INFO, logger="oceanbench.publish.reconcile"):
+        report = reconcile_viewer_artifacts(base, dataset=dataset, region=region)
+
+    assert report["passed"] is True  # degrades gracefully: RMSD still checked, no crash
+    class4 = _class4_checks_in(report)
+    assert class4 and all(check["obs_count_checked"] is False for check in class4)
+    assert all(check["official_n"] is None for check in class4)
+    assert any("obs-count guard skipped" in message for message in caplog.messages)

@@ -148,3 +148,22 @@ def test_golden_parquet_smoke():
     assert (aggregated["mean"] <= aggregated["ci_high"] + 1e-9).all()
     assert (aggregated["n_starts"] == 52).all()
     assert aggregated["mean"].notna().all()
+
+
+def test_class4_records_carry_pooled_obs_count():
+    scores = pandas.read_parquet(_GOLDEN)
+    aggregated = aggregate_scores(scores, seed=5)
+
+    class4 = aggregated[aggregated["metric"] == "class4_rmsd"]
+    gridded = aggregated[aggregated["metric"] == "rmsd"]
+    # Additive: only class-4 rows carry the pooled n; other metrics leave it null.
+    assert class4["n"].notna().all()
+    assert gridded["n"].isna().all()
+    # The pooled n equals the sum of the per-start n over that metric key's starts (the golden
+    # parquet holds a single challenger/year/region, so (variable, depth, lead_day) keys it).
+    keys = ["variable", "depth", "lead_day"]
+    pooled_n = class4.set_index(keys)["n"].rename("pooled")
+    expected_n = scores[scores["metric"] == "class4_rmsd"].groupby(keys, dropna=False)["n"].sum().rename("expected")
+    merged = pandas.concat([pooled_n, expected_n], axis=1)
+    assert merged["pooled"].notna().all() and merged["expected"].notna().all()
+    assert (merged["pooled"].astype("int64") == merged["expected"].astype("int64")).all()

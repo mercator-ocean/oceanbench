@@ -13,7 +13,10 @@ Three derivations, all over the forecast-start axis (the 52 weekly starts):
 - **mean over starts** — a plain mean for gridded/Lagrangian metrics; for Class-4
   RMSD the n-weighted recombination ``sqrt(sum(value ** 2 * n) / sum(n))`` (the single
   pooled-over-observations RMSD), reusing
-  :func:`oceanbench.runner.parity.recombine_class4_over_starts`.
+  :func:`oceanbench.runner.parity.recombine_class4_over_starts`. Class-4 rows additionally
+  carry the pooled observation count ``n`` (= ``sum`` of the per-start ``n`` over the present
+  starts) so a downstream reconcile can assert the served match-up count independently of the
+  RMSD value; other metrics leave ``n`` null.
 - **bootstrap 95% CI** — resample the starts with replacement, ``n_bootstrap`` draws
   under a fixed seed, percentile interval. Class-4 carries each start's ``(value, n)``
   pair through the recombination inside every draw.
@@ -159,12 +162,19 @@ def _summarise_group(group: _StartAlignedGroup, bootstrap_indices: numpy.ndarray
     mean = _point_aggregate(group.values, group.counts, group.present, group.is_class4)
     bootstrap = _bootstrap_aggregate(group.values[bootstrap_indices], group.counts[bootstrap_indices], group.is_class4)
     ci_low, ci_high = _confidence_interval(bootstrap, confidence)
-    return {
+    summary = {
         "mean": mean,
         "ci_low": ci_low,
         "ci_high": ci_high,
         "n_starts": int(group.present.sum()),
     }
+    if group.is_class4:
+        # Pooled observation count = sum(per-start n) over the present starts. An independent
+        # magnitude the reconcile harness asserts against the parquet finite-obs count, catching
+        # uniform obs thinning that an RMSD tolerance alone would miss. Additive: only class-4
+        # rows carry ``n``; other metrics leave it null.
+        summary["n"] = int(group.counts[group.present].sum())
+    return summary
 
 
 def _skill_for_pair(
