@@ -455,6 +455,48 @@ body.resizing-layout.row { cursor: row-resize; }
 }
 .rail-section.psd-disabled .rail-chart-slot,
 .rail-section.psd-disabled .rail-caption { display: none; }
+.psd-card-heading { justify-content: flex-start; gap: 0.5rem; }
+.psd-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.psd-switch-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.psd-switch:hover,
+.psd-switch:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+  outline: none;
+}
+.psd-switch:focus-visible { box-shadow: 0 0 0 2px var(--accent-glow); }
+.psd-switch[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+.psd-switch[aria-pressed="true"] .psd-switch-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
 .trajectory-card { border-left: 3px solid #0072B2; padding-left: 0.65rem; }
 .trajectory-label { margin: 0.35rem 0 0.45rem; color: var(--text); font-size: 0.8rem; font-weight: 600; }
 .trajectory-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 0.9rem; padding: 0.15rem 0.3rem; }

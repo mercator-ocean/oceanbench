@@ -2876,7 +2876,8 @@ function updatePsdToggle() {
   button.setAttribute("aria-pressed", enabled ? "true" : "false");
   button.setAttribute("aria-label", enabled ? "Hide live power spectrum" : "Show live power spectrum");
   button.title = enabled ? "Hide live power spectrum" : "Show live power spectrum";
-  button.textContent = enabled ? "◉" : "◌";
+  const label = button.querySelector(".psd-switch-label");
+  if (label) label.textContent = enabled ? "Hide" : "Show";
 }
 
 function setPsdEnabled(enabled) {

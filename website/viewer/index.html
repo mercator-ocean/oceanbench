@@ -153,9 +153,12 @@ SPDX-License-Identifier: EUPL-1.2
           <p id="rail-year-rmsd-note" class="rail-caption"></p>
         </section>
         <section class="rail-section" id="rail-spectra-section">
-          <div class="rail-card-heading">
+          <div class="rail-card-heading psd-card-heading">
             <h3>Live power spectrum</h3>
-            <button id="psd-toggle" type="button" class="rail-icon-button" aria-label="Show live power spectrum" title="Show live power spectrum" aria-pressed="false">◌</button>
+            <button id="psd-toggle" type="button" class="psd-switch" aria-label="Show live power spectrum" title="Show live power spectrum" aria-pressed="false">
+              <span class="psd-switch-dot" aria-hidden="true"></span>
+              <span class="psd-switch-label">Show</span>
+            </button>
           </div>
           <div id="rail-spectra" class="rail-chart-slot"></div>
           <p id="rail-psd-note" class="rail-caption"></p>
