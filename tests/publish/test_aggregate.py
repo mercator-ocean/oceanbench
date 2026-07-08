@@ -167,3 +167,33 @@ def test_class4_records_carry_pooled_obs_count():
     merged = pandas.concat([pooled_n, expected_n], axis=1)
     assert merged["pooled"].notna().all() and merged["expected"].notna().all()
     assert (merged["pooled"].astype("int64") == merged["expected"].astype("int64")).all()
+
+
+def test_year_by_start_recombination_matches_official_on_golden():
+    """FIX 2 independent reference: pooling the per-start Class-4 RMSD over starts recovers the
+    official pooled value. The reconcile harness recombines the published ``year-rmsd-by-start``
+    exactly this way and compares it to the official ``class4_rmsd`` from ``scores.parquet``.
+    """
+    scores = pandas.read_parquet(_GOLDEN)
+    aggregated = aggregate_scores(scores, seed=5)
+    aggregated = aggregated[aggregated["metric"] == "class4_rmsd"]
+    official = aggregated.set_index(["variable", "depth", "lead_day", "region"])["mean"]
+
+    class4 = scores[scores["metric"] == "class4_rmsd"]
+    keys = ["variable", "depth", "lead_day", "region"]
+    worst_full = 0.0
+    worst_published = 0.0  # per-start RMSD rounded to six decimals, as published in the year artifact
+    for key, group in class4.groupby(keys, dropna=False):
+        expected = float(official.loc[key])
+        counts = group["n"].to_numpy(dtype=float)
+
+        rmsd_full = group["value"].to_numpy(dtype=float)
+        pooled_full = float(numpy.sqrt((rmsd_full**2 * counts).sum() / counts.sum()))
+        worst_full = max(worst_full, abs(pooled_full - expected) / abs(expected))
+
+        rmsd_published = numpy.round(rmsd_full, 6)
+        pooled_published = float(numpy.sqrt((rmsd_published**2 * counts).sum() / counts.sum()))
+        worst_published = max(worst_published, abs(pooled_published - expected) / abs(expected))
+
+    assert worst_full < 1e-7  # full-precision series recovers the official value to machine epsilon
+    assert worst_published < 1e-4  # the six-decimal published series stays well inside the year tolerance

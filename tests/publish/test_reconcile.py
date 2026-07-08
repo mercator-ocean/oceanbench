@@ -261,3 +261,52 @@ def test_obs_count_guard_skips_and_logs_when_pooled_n_absent(tmp_path, caplog) -
     assert class4 and all(check["obs_count_checked"] is False for check in class4)
     assert all(check["official_n"] is None for check in class4)
     assert any("obs-count guard skipped" in message for message in caplog.messages)
+
+
+# ---- FIX 2: independent year-by-start recombination vs official ----------------------------------
+
+
+def test_year_by_start_pooled_matches_official(tmp_path) -> None:
+    dataset, region = "synthetic", "global"
+    summary = _class4_summary(_matchup_frame(), dataset, region)
+    base, _ = _write_tree(tmp_path, dataset, region, summary)
+
+    report = reconcile_viewer_artifacts(base, dataset=dataset, region=region)
+
+    independent = [
+        check
+        for entry in report["datasets"]
+        for check in entry["checks"]
+        if check["check"] == "year_by_start_pooled_vs_official"
+    ]
+    assert independent, "the independent by-start-vs-official check must run"
+    assert all(check["passed"] for check in independent)
+    assert all(check["relative_difference"] <= check["tolerance"] for check in independent)
+
+
+def test_year_by_start_recombination_flags_disagreement_with_official(tmp_path) -> None:
+    dataset, region = "synthetic", "global"
+    summary = _class4_summary(_matchup_frame(), dataset, region)
+    # Corrupt an official class-4 mean only. The by-start series is untouched, so recombining it
+    # over starts now disagrees with the (corrupted) official value: an independent catch that a
+    # pure parquet<->JSON materialization check could not make.
+    ssh_lead1 = next(
+        record
+        for record in summary
+        if record["variable"] == "sea_surface_height_above_geoid" and record["lead_day"] == 1
+    )
+    ssh_lead1["mean"] *= 1.10
+    base, _ = _write_tree(tmp_path, dataset, region, summary)
+
+    with pytest.raises(ReconciliationError):
+        reconcile_viewer_artifacts(base, dataset=dataset, region=region, output_path=str(tmp_path / "report.json"))
+
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    independent_failures = [
+        check
+        for entry in report["datasets"]
+        for check in entry["checks"]
+        if check["check"] == "year_by_start_pooled_vs_official" and not check["passed"]
+    ]
+    assert independent_failures
+    assert any(check["key"]["variable"] == "SSH" and check["key"]["lead_day"] == 1 for check in independent_failures)

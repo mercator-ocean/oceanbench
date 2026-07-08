@@ -18,10 +18,21 @@ report can be trusted without re-running the whole evaluation:
   guard that catches uniform obs thinning an RMSD tolerance alone would miss. On older
   ``scores-summary.json`` without ``n`` the count assertion is skipped (and logged as skipped, so
   it degrades gracefully rather than silently passing as if checked).
-- **Year per-start RMSD/bias** recomputed pooled over all match-ups of a sampled start and compared
-  to ``year-rmsd-by-start.json`` (a documented sample of starts per variable keeps runtime sane).
-- **Year error-geography** recomputed as the per-cell mean absolute error and compared to
-  ``year-error-geography.json`` for a random sample of cells per variable.
+- **Year by-start pooled vs official** — the published ``year-rmsd-by-start.json`` per-start RMSD
+  series recombined n-weighted over its starts (``sqrt(sum(rmsd ** 2 * n) / sum(n))``) and compared
+  to the official ``class4_rmsd`` in ``scores-summary.json``. This is an *independent* cross-check:
+  the year JSON derives from the match-up parquet while the official value derives from the
+  separate canonical ``scores.parquet``, so agreement validates the year artifact against the
+  official score (not merely its own materialization).
+- **Year per-start RMSD/bias (materialization)** recomputed pooled over all match-ups of a sampled
+  start and compared to ``year-rmsd-by-start.json`` (a documented sample of starts per variable
+  keeps runtime sane). This is a *materialization-consistency* check (parquet <-> derived JSON): it
+  proves the JSON was faithfully materialized from the same parquet, not that it agrees with the
+  official scores (the by-start-vs-official check above covers that).
+- **Year error-geography (materialization)** recomputed as the per-cell mean absolute error and
+  compared to ``year-error-geography.json`` for a random sample of cells per variable. Also a
+  materialization-consistency check (parquet <-> derived JSON), with no independent official
+  counterpart (the official scores carry no per-cell geography).
 - **Eddy census** structurally validated (schema of every detection, provenance/parameter block
   presence); no recompute, only integrity.
 
@@ -309,6 +320,72 @@ def _class4_checks(
     return checks
 
 
+def _official_class4_means(summary, dataset: str, region: str) -> dict:
+    """Official ``class4_rmsd`` pooled means keyed by ``(variable, depth_bin, lead_day)``."""
+    return {
+        (record["variable"], record["depth"], record["lead_day"]): record["mean"]
+        for record in summary
+        if record.get("metric") == _CLASS4_METRIC
+        and record.get("challenger") == dataset
+        and record.get("region") == region
+    }
+
+
+def _year_by_start_recombination_checks(
+    year_rmsd: dict,
+    summary,
+    dataset: str,
+    region: str,
+    relative_tolerance: float,
+) -> list[dict]:
+    """Independent cross-check: pool ``year-rmsd-by-start`` over starts and compare to official.
+
+    Each variable/lead's published per-start RMSD series is recombined n-weighted over its starts
+    (``sqrt(sum(rmsd ** 2 * n) / sum(n))``, the same recombination the official ``class4_rmsd``
+    aggregate uses) and compared to the official pooled value in ``scores-summary.json``. Unlike
+    :func:`_year_rmsd_checks` this is *not* a parquet<->JSON materialization check: the official
+    value comes from the separate canonical ``scores.parquet``, so agreement validates the year
+    artifact against the official score. The published per-start RMSD is rounded to six decimals,
+    so the pooled value tracks the official one to a few 1e-6 (full-precision it matches to machine
+    epsilon); ``relative_tolerance`` (the year-RMSD tolerance) comfortably covers the rounding.
+    """
+    official = _official_class4_means(summary, dataset, region)
+    checks = []
+    for short, block in year_rmsd["variables"].items():
+        if short not in _SHORT_TO_TARGET:
+            continue
+        variable, depth_bin = _SHORT_TO_TARGET[short]
+        for lead_key, series in block["leads"].items():
+            lead_day = int(lead_key)
+            rmsd_values = numpy.asarray(series["rmsd"], dtype=float)
+            counts = numpy.asarray(series["n"], dtype=float)
+            key = (variable, depth_bin, lead_day)
+            if rmsd_values.size == 0 or counts.sum() <= 0 or key not in official:
+                continue
+            pooled = float(numpy.sqrt((rmsd_values**2 * counts).sum() / counts.sum()))
+            expected = official[key]
+            difference = _relative_difference(pooled, expected)
+            passed = difference <= relative_tolerance
+            checks.append(
+                {
+                    "check": "year_by_start_pooled_vs_official",
+                    "verifies": "independent: year-rmsd-by-start recombined over starts vs official class4_rmsd",
+                    "key": {"variable": short, "lead_day": lead_day},
+                    "recomputed": pooled,
+                    "official": expected,
+                    "starts": int(rmsd_values.size),
+                    "observation_count": int(counts.sum()),
+                    "relative_difference": difference,
+                    "tolerance": relative_tolerance,
+                    "passed": passed,
+                    "message": (
+                        None if passed else "pooled year-rmsd-by-start disagrees with official class4_rmsd"
+                    ),
+                }
+            )
+    return checks
+
+
 def _year_rmsd_checks(
     accumulators: _Accumulators,
     year_rmsd: dict,
@@ -316,6 +393,13 @@ def _year_rmsd_checks(
     starts_per_variable: int,
     generator: numpy.random.Generator,
 ) -> list[dict]:
+    """Materialization consistency (parquet <-> derived JSON), not official-score validation.
+
+    Re-derives a sampled start's pooled RMSD/bias/n straight from the match-up parquet the year
+    JSON was itself materialized from and checks they agree, proving the JSON is a faithful
+    materialization of that parquet. It does *not* establish agreement with the official scores;
+    :func:`_year_by_start_recombination_checks` covers that independent comparison.
+    """
     checks = []
     for short, block in year_rmsd["variables"].items():
         if short not in _SHORT_TO_TARGET:
@@ -357,6 +441,7 @@ def _year_rmsd_checks(
                 checks.append(
                     {
                         "check": "year_rmsd_by_start",
+                        "verifies": "materialization (parquet <-> derived JSON), not official scores",
                         "key": {"variable": short, "lead_day": lead_day, "start_date": start_date},
                         "recomputed_rmsd": recomputed_rmsd,
                         "official_rmsd": published_rmsd,
@@ -380,6 +465,13 @@ def _geography_checks(
     cells_per_variable: int,
     generator: numpy.random.Generator,
 ) -> list[dict]:
+    """Materialization consistency (parquet <-> derived JSON) for the per-cell error geography.
+
+    Re-derives a sampled cell's mean absolute error from the same match-up parquet and checks it
+    against the published raster. Like :func:`_year_rmsd_checks` this proves faithful
+    materialization, not agreement with official scores; the official scores carry no per-cell
+    geography, so there is no independent counterpart to compare against.
+    """
     checks = []
     for short, block in year_geography["variables"].items():
         if short not in _SHORT_TO_TARGET:
@@ -417,6 +509,7 @@ def _geography_checks(
             checks.append(
                 {
                     "check": "year_error_geography",
+                    "verifies": "materialization (parquet <-> derived JSON), not official scores",
                     "key": {"variable": short, "lead_day": lead_day, "cell": cell},
                     "recomputed": recomputed_value,
                     "official": published_value,
@@ -532,6 +625,9 @@ def reconcile_viewer_artifacts(
             )
             if artifacts.get("year_rmsd_by_start"):
                 year_rmsd = _read_json(_join(root, artifacts["year_rmsd_by_start"]))
+                checks += _year_by_start_recombination_checks(
+                    year_rmsd, summary, dataset_name, region_name, year_rmsd_relative_tolerance
+                )
                 checks += _year_rmsd_checks(
                     accumulators, year_rmsd, year_rmsd_relative_tolerance, starts_per_variable, generator
                 )
