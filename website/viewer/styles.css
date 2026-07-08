@@ -534,14 +534,6 @@ body.resizing-layout.row { cursor: row-resize; }
 .about-dialog p { color: var(--muted); font-size: 0.78rem; line-height: 1.5; margin: 0; }
 .about-dialog a { color: var(--accent); }
 
-@media (max-width: 980px) {
-  .workspace { display: flex; flex-direction: column; overflow: auto; }
-  .controls { width: auto; max-height: 14rem; border-right: none; border-bottom: 1px solid var(--border); }
-  .context-rail { width: auto; border-left: none; border-top: 1px solid var(--border); }
-  .splitter { display: none; }
-  .map-area { display: block; overflow: visible; }
-}
-
 @media (max-height: 760px) {
   .app-header { padding-top: 0.45rem; padding-bottom: 0.45rem; }
   .controls { padding: 0.75rem; gap: 0.6rem; }
@@ -557,6 +549,20 @@ body.resizing-layout.row { cursor: row-resize; }
   .panel-head { gap: 0.25rem; padding: 0.3rem 0.35rem; }
   .panel-head select { min-width: 4.8rem; max-width: 7.6rem; }
   .panel-badge { display: none; }
+}
+
+/* Stacked/column layout for narrow viewports. This block MUST come after the
+   ≤1320px block above: at ≤980px both queries match, and same-specificity rules
+   resolve by source order — so the full-width .controls/.context-rail here have
+   to win over the fixed sidebar widths the ≤1320px block sets. .map-area keeps a
+   floor height so the field canvas can never collapse to 0px when stacked. */
+@media (max-width: 980px) {
+  .workspace { display: flex; flex-direction: column; overflow: auto; }
+  .controls { width: auto; max-height: 14rem; border-right: none; border-bottom: 1px solid var(--border); }
+  .context-rail { width: auto; border-left: none; border-top: 1px solid var(--border); }
+  .splitter { display: none; }
+  .map-area { display: flex; flex-direction: column; overflow: visible; min-height: 60vh; }
+  .map-content { flex: 1; min-height: 0; }
 }
 
 /* ---- year metric switch (|error| / bias), year scope only ------------------ */
