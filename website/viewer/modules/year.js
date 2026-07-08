@@ -197,8 +197,9 @@ export function yearRmsdSeriesMax(rmsd, shortName, { signed = false } = {}) {
 }
 
 // Per-start-date RMSD series for a short variable at the requested lead day, or null.
-// When the artifact carries a parallel `bias` array (area-weighted mean(model − obs) per
-// start), it is returned too; otherwise `bias` is null and the caller stays in |error|.
+// When the artifact carries a parallel `bias` array (pooled mean(model − obs) per start,
+// same method as the official scores), it is returned too; otherwise `bias` is null and
+// the caller stays in |error|.
 export function yearRmsdSeries(rmsd, shortName, leadDay) {
   if (!rmsd || !rmsd.variables) return null;
   const variable = rmsd.variables[shortName];

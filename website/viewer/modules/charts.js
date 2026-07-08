@@ -303,8 +303,9 @@ export function psdSpectraSVG(curves, { title = "Live power spectrum" } = {}) {
  * { label, color, dates: string[], rmsd: number[] }. Points carry a `data-date`
  * and `data-series-index` so the host can drill down into single-forecast scope.
  * The x-axis is the union of start dates (chronological); y is RMSD at the
- * selected lead. Absolute values are area-weighted super-ob RMSD — not the
- * official scores — so this never shares an axis with the skill-vs-lead chart.
+ * selected lead. Values are the Class-4 RMSD pooled over all match-ups for each
+ * start — the same method as the official scores — so this never shares an axis
+ * with the skill-vs-lead chart (which plots RMSD against lead, not start date).
  * `yBound` (optional): a fixed y-extent — [0, niceMax(yBound)] for RMSD, ±niceMax(yBound)
  * when signed — so the axis stays STABLE across lead-day scrubs (the caller passes the
  * max across ALL leads). Without it the axis fits the plotted series, as before.
