@@ -27,7 +27,7 @@ OceanBench evaluates challengers against the following reference datasets:
 
 You can open and explore these datasets by using the :mod:`oceanbench.datasets.reference` module.
 
-For gridded RMSD metrics, OceanBench computes an area-weighted spatial mean of squared errors using ``cos(latitude)`` weights, ignoring missing land values during the weighted reduction, then averages the daily RMSE over forecast initialization days.
+For gridded RMSD metrics, OceanBench computes an area-weighted spatial mean of squared errors using ``cos(latitude)`` weights, so each grid cell contributes in proportion to the ocean area it represents rather than counting equally, ignoring missing land values during the weighted reduction, then averages the daily RMSE over forecast initialization days.
 
 Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
 **********************************************************************************************
