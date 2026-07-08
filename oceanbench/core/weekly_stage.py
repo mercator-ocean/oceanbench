@@ -11,6 +11,7 @@ import xarray
 
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.multistore import MultiStoreConcatRecipe, attach_multistore_recipe
 from oceanbench.core.local_stage import (
     ensure_local_stage,
     local_stage_directory,
@@ -91,6 +92,15 @@ def staged_weekly_dataset(
         concat_dim=Dimension.FIRST_DAY_DATETIME.key(),
         parallel=False,
     ).assign_coords({Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes})
+    staged_dataset = attach_multistore_recipe(
+        staged_dataset,
+        MultiStoreConcatRecipe(
+            member_stores=tuple(str(stage_path) for stage_path in stage_paths),
+            member_opener="oceanbench.core.multistore:open_zarr_member",
+            concat_dimension=Dimension.FIRST_DAY_DATETIME.key(),
+            concat_coordinate=tuple(first_day_datetimes),
+        ),
+    )
     return with_dataset_source(
         staged_dataset,
         kind=dataset_kind,

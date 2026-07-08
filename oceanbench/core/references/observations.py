@@ -26,7 +26,11 @@ from oceanbench.core.remote_http import (
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
-OBSERVATIONS_STAGE_VERSION = "v3"
+# v4: the raw observation concat now carries an integer ``observations`` index coordinate so the
+# coord-less concat dimension becomes reconstructable/label-selectable by the Class-4 match-up
+# parallelism (a store-backed single staged zarr and a multi-daily-store reconstruction alike).
+OBSERVATIONS_STAGE_VERSION = "v4"
+_OBSERVATIONS_INDEX_COORDINATE = "observations"
 
 
 class ObservationDataUnavailableError(ValueError):
@@ -177,25 +181,21 @@ def _forecast_observation_matches(
     return numpy.concatenate(selected_observation_chunks), numpy.concatenate(selected_run_chunks)
 
 
-def _selected_observations_dataset(
-    observation_days: numpy.ndarray,
-    first_day_timestamps: pandas.DatetimeIndex,
-    first_day_datetimes: numpy.ndarray,
-    lead_days_count: int,
-) -> Dataset:
+def _open_raw_observation_day(store: str) -> Dataset:
+    return open_dataset(resilient_zarr_store(store), engine="zarr", decode_cf=False)
+
+
+def _prepare_raw_observations_concat(observations_dataset: Dataset) -> Dataset:
+    """Rename, standard-name, time-decode and index the raw daily-store concat (no start selection).
+
+    This runs identically in the production open and in a spawned match-up worker that rebuilds the
+    concat from the daily stores, so both agree on the ``observations`` integer index coordinate that
+    makes the otherwise coord-less concat dimension label-selectable.
+    """
     time_key = Dimension.TIME.key()
     source_observation_dimension_key = "obs"
-    observation_dimension_key = "observations"
-    first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
+    observation_dimension_key = _OBSERVATIONS_INDEX_COORDINATE
 
-    observations_dataset = open_mfdataset(
-        [resilient_zarr_store(observation_path(observation_day)) for observation_day in observation_days],
-        engine="zarr",
-        decode_cf=False,
-        parallel=False,
-        concat_dim=source_observation_dimension_key,
-        combine="nested",
-    )
     observations_dataset = require_remote_dataset_dimensions(
         observations_dataset,
         [source_observation_dimension_key],
@@ -213,6 +213,36 @@ def _selected_observations_dataset(
     observations_dataset = observations_dataset.assign_coords(
         {time_key: (observation_dimension_key, observation_datetimes)}
     )
+    observation_count = observations_dataset.sizes[observation_dimension_key]
+    return observations_dataset.assign_coords(
+        {observation_dimension_key: (observation_dimension_key, numpy.arange(observation_count))}
+    )
+
+
+def _selected_observations_dataset(
+    observation_days: numpy.ndarray,
+    first_day_timestamps: pandas.DatetimeIndex,
+    first_day_datetimes: numpy.ndarray,
+    lead_days_count: int,
+) -> Dataset:
+    from oceanbench.core.multistore import MultiStoreConcatRecipe, attach_multistore_recipe
+
+    time_key = Dimension.TIME.key()
+    source_observation_dimension_key = "obs"
+    observation_dimension_key = _OBSERVATIONS_INDEX_COORDINATE
+    first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
+
+    observation_stores = [observation_path(observation_day) for observation_day in observation_days]
+    observations_dataset = open_mfdataset(
+        [resilient_zarr_store(store) for store in observation_stores],
+        engine="zarr",
+        decode_cf=False,
+        parallel=False,
+        concat_dim=source_observation_dimension_key,
+        combine="nested",
+    )
+    observations_dataset = _prepare_raw_observations_concat(observations_dataset)
+    observation_datetimes = pandas.to_datetime(observations_dataset[time_key].values)
 
     selected_observation_indices, selected_run_indices = _forecast_observation_matches(
         observation_datetimes,
@@ -221,13 +251,24 @@ def _selected_observations_dataset(
     )
     selected_first_day_coord = first_day_datetimes[selected_run_indices]
 
-    return observations_dataset.isel({observation_dimension_key: selected_observation_indices}).assign_coords(
+    selected_dataset = observations_dataset.isel(
+        {observation_dimension_key: selected_observation_indices}
+    ).assign_coords(
         {
             first_day_datetime_key: (
                 (observation_dimension_key,),
                 selected_first_day_coord,
             )
         }
+    )
+    return attach_multistore_recipe(
+        selected_dataset,
+        MultiStoreConcatRecipe(
+            member_stores=tuple(observation_stores),
+            member_opener="oceanbench.core.references.observations:_open_raw_observation_day",
+            concat_dimension=source_observation_dimension_key,
+            post_process="oceanbench.core.references.observations:_prepare_raw_observations_concat",
+        ),
     )
 
 

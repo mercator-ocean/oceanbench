@@ -21,6 +21,7 @@ from oceanbench.core.remote_http import (
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
 from oceanbench.core.interpolate import interpolate_1_degree
+from oceanbench.core.multistore import MultiStoreConcatRecipe, attach_multistore_recipe
 
 _CLOUDFERRO_ML_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs"
 _CLOUDFERRO_BASELINE_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/baseline-forecasts"
@@ -211,6 +212,11 @@ def _opened_challenger_week_dataset(
     return preprocess_dataset(opened_dataset) if preprocess_dataset is not None else opened_dataset
 
 
+def _open_prepared_remote_challenger_week(store_url: str, dataset_name: str) -> xarray.Dataset:
+    opened_dataset = xarray.open_dataset(resilient_zarr_store(store_url), engine="zarr")
+    return _prepared_challenger_week_dataset(opened_dataset, f"{dataset_name} challenger dataset open")
+
+
 def _remote_multizarr_forecasts_as_challenger_dataset(
     dataset_name: str,
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
@@ -228,6 +234,19 @@ def _remote_multizarr_forecasts_as_challenger_dataset(
         concat_dim="first_day_datetime",
         parallel=False,
     ).assign({"first_day_datetime": first_day_datetimes})
+    if preprocess_dataset is None:
+        challenger_dataset = attach_multistore_recipe(
+            challenger_dataset,
+            MultiStoreConcatRecipe(
+                member_stores=tuple(
+                    forecast_zarr_path_from_start_datetime(dt) for dt in first_day_datetimes
+                ),
+                member_opener="oceanbench.core.challenger_datasets:_open_prepared_remote_challenger_week",
+                concat_dimension="first_day_datetime",
+                concat_coordinate=tuple(first_day_datetimes),
+                member_open_arguments=(dataset_name,),
+            ),
+        )
     return challenger_dataset
 
 

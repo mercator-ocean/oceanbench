@@ -42,6 +42,11 @@ from oceanbench.core.classIV_support import (
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
+from oceanbench.core.multistore import (
+    MultiStoreConcatRecipe,
+    get_multistore_recipe,
+    open_multistore_dataset,
+)
 from oceanbench.runner.records import RunContext
 
 # The per-observation grid interpolation dominates the match-up cost and is effectively
@@ -218,13 +223,32 @@ class _StoreBackedDatasetSpec:
 
 
 @dataclass(frozen=True)
+class _MultiStoreDatasetSpec:
+    """Picklable recipe to re-open a MULTI-store concat dataset (challenger weeks / observation days).
+
+    ``recipe`` rebuilds the full lazy concat over the ORIGINAL member stores; ``selection`` label-
+    selects the subset the parent dataset had applied (region boxes, start limits, the observation
+    forecast-window match) against the reconstructed concat; ``assigned_coordinates`` re-attaches the
+    coordinates the parent injected that are not reconstructable from the stores (the observation
+    ``first_day_datetime``). Every reconstructable coordinate is validated array-exactly in the
+    parent before the spec is trusted, so a divergent reconstruction degrades to serial.
+    """
+
+    recipe: MultiStoreConcatRecipe
+    variable_names: tuple[str, ...]
+    selection: dict[str, numpy.ndarray]
+    assigned_coordinates: dict[str, tuple[tuple[str, ...], numpy.ndarray]]
+    attributes: dict
+
+
+@dataclass(frozen=True)
 class _MaterialisedDatasetSpec:
     """Picklable fallback for genuinely in-memory datasets: the path of a temporary zarr copy."""
 
     zarr_path: str
 
 
-_DatasetSpec = _StoreBackedDatasetSpec | _MaterialisedDatasetSpec
+_DatasetSpec = _StoreBackedDatasetSpec | _MultiStoreDatasetSpec | _MaterialisedDatasetSpec
 
 
 def _open_source_store(source: str) -> xarray.Dataset:
@@ -276,31 +300,117 @@ def _store_backed_spec(dataset: xarray.Dataset) -> _StoreBackedDatasetSpec | Non
     return spec
 
 
+def _apply_multistore_spec(reconstructed_base: xarray.Dataset, spec: _MultiStoreDatasetSpec) -> xarray.Dataset:
+    selected = reconstructed_base[list(spec.variable_names)].sel(dict(spec.selection))
+    if spec.assigned_coordinates:
+        selected = selected.assign_coords(
+            {
+                name: (dimensions, values)
+                for name, (dimensions, values) in spec.assigned_coordinates.items()
+            }
+        )
+    selected.attrs = dict(spec.attributes)
+    return selected
+
+
+def _multistore_spec(dataset: xarray.Dataset) -> tuple[_MultiStoreDatasetSpec | None, str]:
+    """Build (and validate) a multi-store reconstruction spec, or ``(None, reason)`` when unavailable."""
+    recipe = get_multistore_recipe(dataset)
+    if recipe is None:
+        return None, "no multi-store recipe attached to the dataset"
+    try:
+        base = open_multistore_dataset(recipe)
+    except Exception as error:  # noqa: BLE001 - any reconstruction failure means the spec is unusable
+        return None, f"reconstruction from member stores failed ({error})"
+
+    selection: dict[str, numpy.ndarray] = {}
+    for dimension in dataset.dims:
+        if dimension not in dataset.coords:
+            return None, f"concat dimension {dimension!r} has no coordinate to select on"
+        if dimension not in base.coords:
+            return None, f"dimension {dimension!r} is absent from the reconstruction"
+        selection[dimension] = numpy.asarray(dataset[dimension].values)
+
+    try:
+        candidate = _apply_multistore_spec(
+            base,
+            _MultiStoreDatasetSpec(
+                recipe=recipe,
+                variable_names=tuple(dataset.data_vars),
+                selection=selection,
+                assigned_coordinates={},
+                attributes=dict(dataset.attrs),
+            ),
+        )
+    except Exception as error:  # noqa: BLE001
+        return None, f"selecting the reconstruction failed ({error})"
+
+    if dict(candidate.sizes) != dict(dataset.sizes):
+        return None, "reconstructed sizes differ from the dataset"
+
+    assigned_coordinates: dict[str, tuple[tuple[str, ...], numpy.ndarray]] = {}
+    for name, coordinate in dataset.coords.items():
+        if name in candidate.coords:
+            if not numpy.array_equal(
+                numpy.asarray(candidate[name].values), numpy.asarray(coordinate.values)
+            ):
+                return None, f"reconstructed coordinate {name!r} differs from the dataset"
+        else:
+            assigned_coordinates[name] = (
+                tuple(coordinate.dims),
+                numpy.asarray(coordinate.values),
+            )
+
+    spec = _MultiStoreDatasetSpec(
+        recipe=recipe,
+        variable_names=tuple(dataset.data_vars),
+        selection=selection,
+        assigned_coordinates=assigned_coordinates,
+        attributes=dict(dataset.attrs),
+    )
+    return spec, f"multi-store, {len(recipe.member_stores)} members"
+
+
 def _materialise_dataset_spec(dataset: xarray.Dataset, directory: str, name: str) -> _MaterialisedDatasetSpec:
     zarr_path = os.path.join(directory, name)
     prepared = dataset.copy()
     for variable in prepared.variables.values():
         variable.encoding = {}
+    # Ragged dask chunks (remote observations concat) make ``to_zarr`` raise "Zarr requires uniform
+    # chunk sizes"; rechunk to a single uniform chunk per dimension so the temporary copy can never
+    # crash spec-building on that.
+    if prepared.chunks:
+        prepared = prepared.chunk({dimension: -1 for dimension in prepared.dims})
     prepared.to_zarr(zarr_path, mode="w", consolidated=True)
     return _MaterialisedDatasetSpec(zarr_path)
 
 
-def _dataset_spec(dataset: xarray.Dataset, directory: str, name: str) -> _DatasetSpec:
+def _dataset_spec(dataset: xarray.Dataset, directory: str, name: str) -> tuple[_DatasetSpec, str]:
+    multistore, multistore_reason = _multistore_spec(dataset)
+    if multistore is not None:
+        return multistore, multistore_reason
     store_backed = _store_backed_spec(dataset)
     if store_backed is not None:
-        return store_backed
+        return store_backed, "single store-backed reconstruction"
     if int(dataset.nbytes) > _MATERIALISE_MAXIMUM_BYTES:
         raise _DatasetSpecUnavailableError(
-            f"dataset {name!r} is not reconstructable from a store and its "
+            f"dataset {name!r} is not reconstructable from a store ({multistore_reason}) and its "
             f"~{dataset.nbytes / 2**30:.0f} GiB exceed the "
             f"{_MATERIALISE_MAXIMUM_BYTES / 2**30:.0f} GiB temporary-copy guard"
         )
-    return _materialise_dataset_spec(dataset, directory, name)
+    try:
+        return _materialise_dataset_spec(dataset, directory, name), "materialised to a temporary zarr copy"
+    except Exception as error:  # noqa: BLE001 - a materialise failure must degrade to serial, never raise out
+        raise _DatasetSpecUnavailableError(
+            f"dataset {name!r} could not be materialised to a temporary copy ({error})"
+        ) from error
 
 
 def _open_dataset_from_spec(spec: _DatasetSpec) -> xarray.Dataset:
     if isinstance(spec, _StoreBackedDatasetSpec):
         return _apply_store_backed_spec(_open_source_store(spec.source), spec)
+    if isinstance(spec, _MultiStoreDatasetSpec):
+        return _apply_multistore_spec(open_multistore_dataset(spec.recipe), spec)
     return xarray.open_zarr(spec.zarr_path, consolidated=True)
 
 
@@ -337,13 +447,25 @@ def _worker_initializer(
     }
 
 
+def _dataset_spec_logged(
+    label: str, dataset: xarray.Dataset, directory: str, name: str
+) -> _DatasetSpec:
+    try:
+        spec, reason = _dataset_spec(dataset, directory, name)
+    except _DatasetSpecUnavailableError as error:
+        _LOGGER.info("matchups: %s serial because %s", label, error)
+        raise
+    _LOGGER.info("matchups: %s parallel (%s)", label, reason)
+    return spec
+
+
 def _build_dataset_specs(
     challenger_dataset: xarray.Dataset,
     observation_dataset: xarray.Dataset,
     directory: str,
 ) -> tuple[_DatasetSpec, _DatasetSpec]:
-    challenger_spec = _dataset_spec(challenger_dataset, directory, "challenger.zarr")
-    observation_spec = _dataset_spec(observation_dataset, directory, "observations.zarr")
+    challenger_spec = _dataset_spec_logged("challenger", challenger_dataset, directory, "challenger.zarr")
+    observation_spec = _dataset_spec_logged("observations", observation_dataset, directory, "observations.zarr")
     return challenger_spec, observation_spec
 
 
@@ -398,6 +520,16 @@ def iter_class4_matchups_by_start(
             dataset_specs = None
 
     if dataset_specs is None:
+        if not wants_parallel:
+            if worker_count <= 1:
+                serial_reason = "worker count is 1"
+            elif len(tasks) <= 1:
+                serial_reason = "only one forecast start"
+            else:
+                serial_reason = "the spawn start method is unavailable"
+        else:
+            serial_reason = "no picklable dataset spec could be built"
+        _LOGGER.info("class-4 matchups: SERIAL (%s)", serial_reason)
         _matchup_worker_state = {
             "forecast": challenger_dataset,
             "observations": observation_dataset,
@@ -412,6 +544,8 @@ def iter_class4_matchups_by_start(
         finally:
             _matchup_worker_state = None
         return
+
+    _LOGGER.info("class-4 matchups: PARALLEL %d workers", worker_count)
 
     initializer_arguments = (
         dataset_specs[0],

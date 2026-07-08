@@ -247,6 +247,166 @@ def test_oversized_unreconstructable_dataset_degrades_to_serial(monkeypatch) -> 
     assert len(produced) == len(_FIRST_DAYS)
 
 
+def _write_weekly_challenger_members(directory) -> tuple[list[str], numpy.ndarray]:
+    """Write the challenger as ≥3 on-disk weekly zarrs, one per forecast start, as production does.
+
+    Each member is a single prepared week (``lead_day_index`` coordinate, no ``first_day_datetime``
+    dimension); the multi-store concat over them with the injected ``first_day_datetime`` coordinate
+    is exactly the shape ``weekly_stage.staged_weekly_dataset`` produces.
+    """
+    whole = _challenger()
+    member_stores = []
+    for index, first_day in enumerate(_FIRST_DAYS):
+        member = whole.isel({Dimension.FIRST_DAY_DATETIME.key(): index}).drop_vars(
+            Dimension.FIRST_DAY_DATETIME.key()
+        )
+        store = str(directory / f"week-{index}.zarr")
+        member.to_zarr(store, consolidated=True)
+        member_stores.append(store)
+    return member_stores, _FIRST_DAYS
+
+
+def _multistore_challenger(directory) -> xarray.Dataset:
+    from oceanbench.core.multistore import MultiStoreConcatRecipe, open_multistore_dataset, attach_multistore_recipe
+
+    member_stores, first_days = _write_weekly_challenger_members(directory)
+    recipe = MultiStoreConcatRecipe(
+        member_stores=tuple(member_stores),
+        member_opener="oceanbench.core.multistore:open_zarr_member",
+        concat_dimension=Dimension.FIRST_DAY_DATETIME.key(),
+        concat_coordinate=tuple(first_days),
+    )
+    return attach_multistore_recipe(open_multistore_dataset(recipe), recipe)
+
+
+def _write_daily_observation_members(directory) -> list[str]:
+    """Write the observations as ≥3 daily zarrs whose concat dimension ``observations`` has no coord."""
+    observations = _observations()
+    member_stores = []
+    for index, first_day in enumerate(_FIRST_DAYS):
+        day_mask = observations[Dimension.FIRST_DAY_DATETIME.key()].values == first_day
+        member = observations.isel(obs=numpy.flatnonzero(day_mask)).drop_vars(
+            Dimension.FIRST_DAY_DATETIME.key()
+        )
+        store = str(directory / f"day-{index}.zarr")
+        member.to_zarr(store, consolidated=True)
+        member_stores.append(store)
+    return member_stores
+
+
+def test_multistore_challenger_reconstructs_and_matches_serial(tmp_path, monkeypatch) -> None:
+    challenger = _multistore_challenger(tmp_path)
+    observations = _observations()
+    variables = [_MATCHUP_VARIABLE]
+    context = _context()
+
+    def forbidden_materialise(dataset, directory, name):
+        raise AssertionError("a multi-store challenger must reconstruct from its member stores, not materialise")
+
+    monkeypatch.setattr(matchups, "_materialise_dataset_spec", forbidden_materialise)
+
+    spec, reason = matchups._dataset_spec(challenger, str(tmp_path), "challenger.zarr")
+    assert isinstance(spec, matchups._MultiStoreDatasetSpec)
+    assert reason == "multi-store, 3 members"
+
+    serial = list(
+        matchups.iter_class4_matchups_by_start(challenger, observations, variables, context=context, max_workers=1)
+    )
+    parallel = list(
+        matchups.iter_class4_matchups_by_start(challenger, observations, variables, context=context, max_workers=2)
+    )
+    assert len(parallel) == len(serial) == len(_FIRST_DAYS)
+    for serial_frame, parallel_frame in zip(serial, parallel):
+        pandas.testing.assert_frame_equal(parallel_frame, serial_frame)
+
+
+def test_multistore_observations_reconstructs_and_matches_serial(tmp_path, monkeypatch) -> None:
+    from oceanbench.core.multistore import MultiStoreConcatRecipe, open_multistore_dataset, attach_multistore_recipe
+
+    challenger = _challenger()
+    variables = [_MATCHUP_VARIABLE]
+    context = _context()
+
+    member_stores = _write_daily_observation_members(tmp_path)
+    recipe = MultiStoreConcatRecipe(
+        member_stores=tuple(member_stores),
+        member_opener="oceanbench.core.multistore:open_zarr_member",
+        concat_dimension="obs",
+        rename=(("obs", "observations"),),
+        assign_index_dimension="observations",
+    )
+    reconstructed = open_multistore_dataset(recipe)
+    # Re-attach the first_day_datetime coordinate production injects on the selected observations.
+    first_day_of_observation = numpy.empty(reconstructed.sizes["observations"], dtype="datetime64[ns]")
+    times = reconstructed[Dimension.TIME.key()].values
+    for first_day in _FIRST_DAYS:
+        window = (times >= numpy.datetime64(first_day)) & (
+            times < numpy.datetime64(first_day) + numpy.timedelta64(3, "D")
+        )
+        first_day_of_observation[window] = first_day
+    observations = attach_multistore_recipe(
+        reconstructed.assign_coords(
+            {Dimension.FIRST_DAY_DATETIME.key(): ("observations", first_day_of_observation)}
+        ),
+        recipe,
+    )
+
+    def forbidden_materialise(dataset, directory, name):
+        raise AssertionError("multi-store observations must reconstruct from their daily stores")
+
+    monkeypatch.setattr(matchups, "_materialise_dataset_spec", forbidden_materialise)
+
+    spec, reason = matchups._dataset_spec(observations, str(tmp_path), "observations.zarr")
+    assert isinstance(spec, matchups._MultiStoreDatasetSpec)
+    assert reason == "multi-store, 3 members"
+    # first_day_datetime is not reconstructable from the daily stores: it must travel as an assigned coord.
+    assert Dimension.FIRST_DAY_DATETIME.key() in spec.assigned_coordinates
+
+    serial = list(
+        matchups.iter_class4_matchups_by_start(challenger, observations, variables, context=context, max_workers=1)
+    )
+    parallel = list(
+        matchups.iter_class4_matchups_by_start(challenger, observations, variables, context=context, max_workers=2)
+    )
+    assert len(parallel) == len(serial) == len(_FIRST_DAYS)
+    for serial_frame, parallel_frame in zip(serial, parallel):
+        pandas.testing.assert_frame_equal(parallel_frame, serial_frame)
+
+
+def test_multistore_interpolated_variant_reconstructs_and_validates(tmp_path) -> None:
+    from dataclasses import replace
+    from oceanbench.core.multistore import (
+        OneDegreeInterpolation,
+        attach_multistore_recipe,
+        open_multistore_dataset,
+    )
+
+    native = _multistore_challenger(tmp_path)
+    native_recipe = matchups.get_multistore_recipe(native)
+    interpolated_recipe = replace(
+        native_recipe,
+        interpolation=OneDegreeInterpolation(latitude=(0.5, 1.5, 2.5), longitude=(10.5, 11.5, 12.5)),
+    )
+    interpolated = attach_multistore_recipe(open_multistore_dataset(interpolated_recipe), interpolated_recipe)
+
+    spec, _reason = matchups._dataset_spec(interpolated, str(tmp_path), "challenger.zarr")
+    assert isinstance(spec, matchups._MultiStoreDatasetSpec)
+    assert spec.recipe.interpolation is not None
+    rebuilt = matchups._open_dataset_from_spec(spec)
+    assert dict(rebuilt.sizes) == dict(interpolated.sizes)
+    for coordinate in (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()):
+        assert numpy.array_equal(rebuilt[coordinate].values, interpolated[coordinate].values)
+
+
+def test_ragged_chunk_dataset_does_not_crash_spec_building(tmp_path) -> None:
+    """A dataset with ragged dask chunks must materialise (uniform rechunk) rather than crash."""
+    observations = _observations().chunk({"obs": (10, 20, 15)})
+    spec = matchups._materialise_dataset_spec(observations, str(tmp_path), "observations.zarr")
+    assert isinstance(spec, matchups._MaterialisedDatasetSpec)
+    reopened = matchups._open_dataset_from_spec(spec)
+    assert reopened.sizes["obs"] == observations.sizes["obs"]
+
+
 def test_streamed_write_empty_produces_valid_empty_parquet(tmp_path) -> None:
     output_path = str(tmp_path / "empty.parquet")
     viewer_artifacts.write_matchup_parquet_streamed(iter(()), output_path)
