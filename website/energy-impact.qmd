@@ -591,8 +591,8 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">557 (± 15.1)</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">31.3 (± 0.849)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">509 (± 13.8)</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">28.6 (± 0.791)</span></td></tr>
         <tr><td>Duration (days)</td><td><span class="ei-result">14</span></td></tr>
       </tbody>
     </table>
@@ -838,12 +838,12 @@ HTML("""
   <div class="ei-model-card">
     <div class="ei-model-card-header">
       <span class="ei-model-name">Glonet2</span>
-      <span class="ei-model-badge">Training — Eumetsat</span>
+      <span class="ei-model-badge">Training</span>
     </div>
     <table class="ei-table">
       <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Supercomputer</td><td><span class="ei-pending">pending - Germany</span></td></tr>
+        <tr><td>Supercomputer</td><td><span class="ei-param_infos">Eumetsat - Germany</span></td></tr>
         <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
         <tr><td>Number of processes per node</td><td><span class="ei-param_infos"">16</span></td></tr>
         <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9454</span></td></tr>
@@ -858,7 +858,7 @@ HTML("""
   <div class="ei-model-card">
     <div class="ei-model-card-header">
       <span class="ei-model-name">Glonet · Wenhai · Xihe · LangYa</span>
-      <span class="ei-model-badge">Inference — Lir</span>
+      <span class="ei-model-badge">Inference - On Lir</span>
     </div>
     <table class="ei-table">
       <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
@@ -878,7 +878,7 @@ HTML("""
   <div class="ei-model-card">
     <div class="ei-model-card-header">
       <span class="ei-model-name">Glonet · Wenhai · Xihe · LangYa</span>
-      <span class="ei-model-badge">Inference — Datalab EDITO</span>
+      <span class="ei-model-badge">Inference - On Datalab EDITO</span>
     </div>
     <table class="ei-table">
       <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
@@ -1041,7 +1041,7 @@ require(['chartjs'], function(ChartModule) {
     // GLO12: purely linear (no training phase) — cumulative energy = n runs × per-run energy
     { name:'GLO12',   training:0,      trainingCi:0,    mu:18.4, ci:1.92, color:'#D9583E', fill:'217,88,62',  dash:[] },
     // Glonet2: affine — fixed training cost (± its own CI) + n inferences × per-inference energy (placeholder: 0 Wh, ±0 CI, until measured)
-    { name:'Glonet2', training:557, trainingCi:15.1,    mu:0.00742,     ci:0.000190,    color:'#4A3E8C', fill:'74,62,140',  dash:[6,3] }
+    { name:'Glonet2', training:509, trainingCi:13.8,    mu:0.00742,     ci:0.000190,    color:'#4A3E8C', fill:'74,62,140',  dash:[6,3] }
   ];
 
   function buildComparisonDatasets() {
