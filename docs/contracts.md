@@ -103,9 +103,13 @@ another producer writing these same contracts, tagged obs-only.
   `500m`; Class-4 bins `0-5m`, `5-100m`, `100-300m`, `300-600m`, `15m`.
 - Dates ISO-8601. All JSON written `sort_keys=True`. Floats: `null` for NaN.
 - Calibration constants carried forward verbatim (validated, do not re-derive):
-  GLO12/global SSH→SLA shift `-0.1148` (GLO12 MDT); IBI shift `-0.0674`
-  (IBYRIS MDT); climatology baseline shift `-0.1329`; MLD threshold
-  0.03 kg/m³ capped at 600 m; velocity obs target depth 15.0 m.
+  the rebuild scores SLA against the GLO12 MDT in every region, so a single
+  global SSH→SLA shift `-0.1148` (GLO12 MDT) applies everywhere; the old
+  region-specific IBI shift `-0.0674` (IBYRIS MDT) is intentionally NOT used —
+  it was calibrated for the retired IBYRIS MDT and does not transfer, and
+  `-0.1148` empirically gives the better IBI bias. Climatology baseline shift
+  `-0.1329`; MLD threshold 0.03 kg/m³ capped at 600 m; velocity obs target
+  depth 15.0 m.
 
 ### Regions (v1)
 
@@ -473,7 +477,11 @@ current site and `public/evaluation-reports/` remain untouched until parity
 `core/geostrophic_currents.py`, `core/lagrangian_trajectory.py`,
 `core/regions.py`, reference/challenger URL registry, and from branch 249:
 `core/psd.py`, `core/eddies.py` (plus their tests). Cherry-pick later from
-272: IBI `-0.0674` constant, `class4_drifters.py`. Ingest network engine from
+272: `class4_drifters.py`. The IBI `-0.0674` constant from 272 is deliberately
+NOT ported: the rebuild uses the GLO12 MDT in every region and applies the
+single global SSH→SLA shift `-0.1148` (climatology `-0.1329`), because the
+region-specific IBYRIS `-0.0674` was calibrated for the old IBYRIS MDT and does
+not transfer (empirically `-0.1148` gives the better IBI bias). Ingest network engine from
 `origin/resilient-chunk-fetch` (PR #285): `core/remote_http.py` (resilient
 zarr chunk mapper + HTTP-status-aware retriability) and the content-keyed
 `core/computed_dataset_cache.py` (atomic single-writer store for computed,
