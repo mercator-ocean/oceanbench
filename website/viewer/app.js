@@ -42,6 +42,7 @@ import {
   drawEddyDetections,
   matchCensuses,
   drawClass4Points,
+  class4AbsoluteError,
   class4ErrorScale,
   numericOrNaN,
   EDDY_COLORS,
@@ -1512,6 +1513,9 @@ function countClass4Matches(rows, { variable, depthBin, leadDay, startDate }) {
     if (depthBin && row.depth_bin !== depthBin) continue;
     if (requestedLead !== null && Number(row.lead_day) !== requestedLead) continue;
     if (startDate && String(row.start_date).slice(0, 10) !== startDate) continue;
+    // Match the drawn set: masked-model rows (non-finite error) are not drawn, so they
+    // must not inflate the "N obs" / "of Y" denominator either.
+    if (!Number.isFinite(class4AbsoluteError(row))) continue;
     total += 1;
   }
   return total;

@@ -9,6 +9,7 @@
 // lazily and memoised by URL — a panel only pays for the overlay it turns on.
 
 import { resolveViewerDataUrl } from "../config.js";
+import { class4AbsoluteError } from "./overlays.js";
 
 const INDEX_URL = resolveViewerDataUrl("./data/insights.json");
 const jsonCache = new Map();
@@ -270,6 +271,9 @@ export function class4Points(rows, { variable, depthBin, leadDay, startDate }) {
     if (depthBin && row.depth_bin !== depthBin) continue;
     if (requestedLead !== null && Number(row.lead_day) !== requestedLead) continue;
     if (requestedStart && formatClass4Date(row.start_date) !== requestedStart) continue;
+    // Masked-model rows (finite obs, NaN model → non-finite error) carry no comparison to
+    // draw or count; drop them so they neither paint as false zero-error nor inflate "N obs".
+    if (!Number.isFinite(class4AbsoluteError(row))) continue;
     matched.push(row);
   }
   return matched;

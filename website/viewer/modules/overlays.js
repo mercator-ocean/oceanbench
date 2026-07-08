@@ -197,7 +197,11 @@ export function drawClass4Points(drawing, project, points, options = {}) {
     const screen = project(nx, ny);
     if (screen.x < -8 || screen.y < -8 || screen.x > width + 8 || screen.y > height + 8) continue;
     const error = class4AbsoluteError(point);
-    const normalized = Number.isFinite(error) ? Math.min(1, error / scale) : 0;
+    // A masked model gives model_value = NaN and a non-finite error. The obs is real, but
+    // there is no comparison to colour, so skip it rather than paint it as bucket 0 (the
+    // darkest, lowest-error colour — a phantom "perfect match" near coastlines).
+    if (!Number.isFinite(error)) continue;
+    const normalized = Math.min(1, error / scale);
     const bucketIndex = Math.min(bucketCount - 1, Math.max(0, Math.floor(normalized * (bucketCount - 1))));
     buckets[bucketIndex].push(screen.x, screen.y);
   }
