@@ -1736,6 +1736,12 @@ function minimumZoomFor(panel) {
 }
 
 function clampView() {
+  // Backstop for any non-finite view value that slipped past readHash (a stale
+  // localStorage entry, a manual assignment, arithmetic underflow): a NaN zoom or
+  // centre otherwise propagates into projection maths and blanks the map.
+  if (!Number.isFinite(view.zoom)) view.zoom = 1;
+  if (!Number.isFinite(view.centerNX)) view.centerNX = GLOBAL_DEFAULT_CENTER_NX;
+  if (!Number.isFinite(view.centerNY)) view.centerNY = 0.5;
   const panel = panels.find((candidate) => candidate && candidate.els && candidate.els.field.width > 0);
   if (!panel) {
     view.centerNY = Math.min(1, Math.max(0, view.centerNY));
@@ -3513,7 +3519,10 @@ function layoutLimits() {
 
 function clampLayoutValue(name, value) {
   const [minimum, maximum] = layoutLimits()[name];
-  return Math.round(Math.min(maximum, Math.max(minimum, value)));
+  // A non-finite width would collapse the workspace grid (NaNpx track); fall back
+  // to the default column size rather than clamping NaN into the layout.
+  const safe = Number.isFinite(value) ? value : DEFAULT_LAYOUT[name];
+  return Math.round(Math.min(maximum, Math.max(minimum, safe)));
 }
 
 function applyLayout() {
@@ -3683,12 +3692,21 @@ function writeHash() {
 
 function readHash() {
   const parameters = new URLSearchParams(location.hash.slice(1));
-  if (parameters.has("layout")) shared.layout = Number(parameters.get("layout"));
-  if (parameters.has("s")) shared.startIndex = Number(parameters.get("s"));
-  if (parameters.has("l")) shared.leadDay = Number(parameters.get("l"));
-  if (parameters.has("z")) view.zoom = Number(parameters.get("z"));
-  if (parameters.has("cx")) view.centerNX = Number(parameters.get("cx"));
-  if (parameters.has("cy")) view.centerNY = Number(parameters.get("cy"));
+  // Only accept FINITE numbers from the hash; a malformed value (e.g. #z=abc)
+  // must fall back to the current default rather than poisoning view/layout math
+  // with NaN — which otherwise blanks the map ("zoom NaN×"), issues a 0.NaN.0.0
+  // chunk fetch (404 + uncaught rejection), or sets grid tracks to NaNpx.
+  const number = (key, fallback) => {
+    if (!parameters.has(key)) return fallback;
+    const value = Number(parameters.get(key));
+    return Number.isFinite(value) ? value : fallback;
+  };
+  shared.layout = number("layout", shared.layout);
+  shared.startIndex = number("s", shared.startIndex);
+  shared.leadDay = number("l", shared.leadDay);
+  view.zoom = number("z", view.zoom);
+  view.centerNX = number("cx", view.centerNX);
+  view.centerNY = number("cy", view.centerNY);
   if (parameters.has("theme")) shared.theme = parameters.get("theme");
   if (parameters.get("scope") === "year") shared.scope = "year";
   if (parameters.get("metric") === "bias") shared.yearMetric = "bias";
@@ -3704,12 +3722,13 @@ function readHash() {
   if (parameters.has("region")) shared.region = parameters.get("region");
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
   if (parameters.get("rail") === "0" || parameters.get("rail") === "collapsed") shared.railCollapsed = true;
-  if (parameters.has("rw")) shared.railWidth = Math.min(620, Math.max(280, Number(parameters.get("rw"))));
-  if (parameters.has("cw")) shared.controlsWidth = Number(parameters.get("cw"));
-  if (parameters.has("mh")) shared.mapHeight = Number(parameters.get("mh"));
+  const railWidth = number("rw", null);
+  if (railWidth !== null) shared.railWidth = Math.min(620, Math.max(280, railWidth));
+  shared.controlsWidth = number("cw", shared.controlsWidth);
+  shared.mapHeight = number("mh", shared.mapHeight);
   if (["side", "swipe", "diff"].includes(parameters.get("dm"))) shared.displayMode = parameters.get("dm");
   if (parameters.has("play")) shared.showParticles = parameters.get("play") === "1";
-  if (parameters.has("spd")) shared.particleSpeed = Number(parameters.get("spd"));
+  shared.particleSpeed = number("spd", shared.particleSpeed);
   return parameters;
 }
 
