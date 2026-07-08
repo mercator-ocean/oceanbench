@@ -113,7 +113,10 @@ def _class4_records(
     try:
         observation_dataset = subset_dataset_to_region(observation_opener(regional_challenger), region)
         per_start_table = rmsd_class4_validation_per_start(
-            regional_challenger, observation_dataset, variables=_CLASS4_VARIABLES
+            regional_challenger,
+            observation_dataset,
+            variables=_CLASS4_VARIABLES,
+            challenger_slug=context.challenger,
         )
     except (ObservationDataUnavailableError, KeyError, ValueError) as error:
         return [], f"class4_rmsd unavailable: {error}"

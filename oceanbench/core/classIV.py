@@ -23,6 +23,15 @@ def _challenger_name(challenger_dataset: xarray.Dataset) -> str | None:
     return challenger_source.name if challenger_source is not None else None
 
 
+def _challenger_identity(challenger_dataset: xarray.Dataset, challenger_slug: str | None) -> str | None:
+    # The SSH-to-SLA datum shift is keyed on the challenger identity. Prefer the explicit
+    # slug (always available on the scoring path) so the shift resolves with or without a
+    # local stage; fall back to the staging-only source attribute for the library API.
+    if challenger_slug is not None:
+        return challenger_slug
+    return _challenger_name(challenger_dataset)
+
+
 def _create_observations_dataframe(
     observations_dataset: xarray.Dataset,
     observation_variable_key: str,
@@ -63,9 +72,10 @@ def rmsd_class4_validation(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
+    challenger_slug: str | None = None,
 ) -> pandas.DataFrame:
     challenger = rename_dataset_with_standard_names(challenger_dataset)
-    challenger_name = _challenger_name(challenger_dataset)
+    challenger_name = _challenger_identity(challenger_dataset, challenger_slug)
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
     observations = reference_dataset
 
@@ -137,6 +147,7 @@ def rmsd_class4_validation_per_start(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
+    challenger_slug: str | None = None,
 ) -> pandas.DataFrame:
     """Per-forecast-start Class-4 RMSD in long form (one row per start x variable x depth_bin x lead_day).
 
@@ -149,7 +160,7 @@ def rmsd_class4_validation_per_start(
     :func:`rmsd_class4_validation`.
     """
     challenger = rename_dataset_with_standard_names(challenger_dataset)
-    challenger_name = _challenger_name(challenger_dataset)
+    challenger_name = _challenger_identity(challenger_dataset, challenger_slug)
     per_variable_tables = _class4_matchups_per_variable(challenger, reference_dataset, variables, challenger_name)
     if not per_variable_tables:
         return pandas.DataFrame()

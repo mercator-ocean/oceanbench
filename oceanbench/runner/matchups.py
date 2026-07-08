@@ -32,7 +32,6 @@ from oceanbench.core.classIV_support import (
     prepare_class4_model_variable,
 )
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
-from oceanbench.core.dataset_source import get_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.runner.records import RunContext
 
@@ -60,7 +59,7 @@ def _observation_frame_with_model(
     observations: xarray.Dataset,
     variable_key: str,
     lead_days_count: int,
-    challenger_name: str | None = None,
+    challenger_slug: str | None = None,
 ) -> pandas.DataFrame:
     observation_frame = create_class4_observations_dataframe(
         observations,
@@ -71,7 +70,7 @@ def _observation_frame_with_model(
     if observation_frame.empty:
         return observation_frame
     observation_frame = observation_frame.dropna(subset=["observation_value"])
-    model_variable = prepare_class4_model_variable(challenger[variable_key], variable_key, challenger_name)
+    model_variable = prepare_class4_model_variable(challenger[variable_key], variable_key, challenger_slug)
     observation_frame = observation_frame.assign(
         model_value=interpolate_class4_model_to_observations(model_variable, observation_frame)
     )
@@ -82,7 +81,7 @@ def _shaped_matchups(
     observation_frame: pandas.DataFrame,
     variable_key: str,
     context: RunContext,
-    challenger_name: str | None = None,
+    challenger_slug: str | None = None,
 ) -> pandas.DataFrame:
     is_sea_surface_height = variable_key == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
     return pandas.DataFrame(
@@ -101,7 +100,7 @@ def _shaped_matchups(
             "longitude": observation_frame[Dimension.LONGITUDE.key()].to_numpy(),
             "observation_value": observation_frame["observation_value"].to_numpy(),
             "model_value": observation_frame["model_value"].to_numpy(),
-            "sla_shift": mean_sea_surface_height_shift(challenger_name) if is_sea_surface_height else numpy.nan,
+            "sla_shift": mean_sea_surface_height_shift(challenger_slug) if is_sea_surface_height else numpy.nan,
         },
         columns=MATCHUP_COLUMNS,
     )
@@ -121,15 +120,14 @@ def class4_matchups(
     ``sla_shift`` records the applied constant.
     """
     challenger = rename_dataset_with_standard_names(challenger_dataset)
-    challenger_source = get_dataset_source(challenger_dataset)
-    challenger_name = challenger_source.name if challenger_source is not None else context.challenger
+    challenger_slug = context.challenger
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
     per_variable = [
-        _shaped_matchups(observation_frame, variable.key(), context, challenger_name)
+        _shaped_matchups(observation_frame, variable.key(), context, challenger_slug)
         for variable in variables
         for observation_frame in [
             _observation_frame_with_model(
-                challenger, observation_dataset, variable.key(), lead_days_count, challenger_name
+                challenger, observation_dataset, variable.key(), lead_days_count, challenger_slug
             )
         ]
         if not observation_frame.empty

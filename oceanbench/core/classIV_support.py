@@ -27,8 +27,15 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 # height shift that aligns the challenger's zos datum with the contemporary GLO12 datum.
 # The default is calibrated against GLO12; the climatology baseline needs a dedicated shift
 # because the GLORYS 1993-2019 day-of-year mean sits below contemporary sea level.
+# The shift is keyed on the always-present challenger identity (the challenger slug, or the
+# equivalent ``oceanbench_source_name`` when a dataset is staged), not on any staging-only
+# attribute, so it resolves identically with or without a local stage. The lookup is
+# resolution-independent: the 1-degree challenger variants share their source's datum, so the
+# ``_1_degree`` slug suffix is stripped before the lookup (``climatology_1_degree`` -> the
+# ``climatology`` shift).
 DEFAULT_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 MEAN_SEA_SURFACE_HEIGHT_SHIFTS = {"climatology": -0.1329}
+_RESOLUTION_VARIANT_SLUG_SUFFIX = "_1_degree"
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 VELOCITY_TARGET_DEPTH_METERS = 15.0
@@ -238,14 +245,19 @@ def create_class4_observations_dataframe(
     )
 
 
-def mean_sea_surface_height_shift(challenger_name: str | None) -> float:
-    return MEAN_SEA_SURFACE_HEIGHT_SHIFTS.get(challenger_name, DEFAULT_MEAN_SEA_SURFACE_HEIGHT_SHIFT)
+def mean_sea_surface_height_shift(challenger: str | None) -> float:
+    if challenger is None:
+        return DEFAULT_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    return MEAN_SEA_SURFACE_HEIGHT_SHIFTS.get(
+        challenger.removesuffix(_RESOLUTION_VARIANT_SLUG_SUFFIX),
+        DEFAULT_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
+    )
 
 
 def _convert_forecast_ssh_to_sla(
     model_variable: xarray.DataArray,
     variable_key: str,
-    challenger_name: str | None = None,
+    challenger: str | None = None,
 ) -> xarray.DataArray:
     if variable_key != Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
         return model_variable
@@ -253,15 +265,15 @@ def _convert_forecast_ssh_to_sla(
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
     mean_dynamic_topography = load_mean_dynamic_topography(resolution)
-    return model_variable - mean_dynamic_topography - mean_sea_surface_height_shift(challenger_name)
+    return model_variable - mean_dynamic_topography - mean_sea_surface_height_shift(challenger)
 
 
 def prepare_class4_model_variable(
     model_variable: xarray.DataArray,
     variable_key: str,
-    challenger_name: str | None = None,
+    challenger: str | None = None,
 ) -> xarray.DataArray:
-    return _convert_forecast_ssh_to_sla(model_variable, variable_key, challenger_name)
+    return _convert_forecast_ssh_to_sla(model_variable, variable_key, challenger)
 
 
 def _interpolate_vertically(
