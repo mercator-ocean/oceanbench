@@ -18,6 +18,25 @@ forecasts refreshed — do **not** bump the version. They are recorded as dated 
 **Challengers** heading in the current version's section, and the affected reports are
 re-published (never silently overwritten).
 
+## 0.4.0 - 2026-07-07
+
+**Scores:** every score computed against the gridded GLORYS/GLO12 reference changes for every
+challenger vs 0.3.0 — grid-averaged RMSD (variables, mixed-layer depth, geostrophic currents)
+now uses cos(latitude) area weighting, and Lagrangian trajectory seeds are drawn with the same
+cos-latitude weighting, so scores reflect skill per unit ocean area rather than per grid cell.
+The observation-based Class IV scores (temperature, salinity, sea level anomaly and currents vs
+observations) are unchanged. See the
+[evaluation methods documentation](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
+
+### Changed
+
+- Grid-averaged RMSD — variables, mixed-layer depth and geostrophic currents against both GLORYS and GLO12 — now uses cos-latitude area weighting instead of an unweighted lat/lon mean.
+- Lagrangian trajectory seed points are drawn with cos-latitude area probabilities.
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.4.0/`
+
 ## 0.3.0 - 2026-07-07
 
 **Scores:** global sea-level-anomaly scores change for every challenger vs 0.2.1 — global SSH
