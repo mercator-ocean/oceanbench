@@ -2286,7 +2286,9 @@ async function updateContextRail() {
     if (shared.railForecast > 1) shared.railForecast = 0;
     for (const button of toggle.querySelectorAll("button")) {
       const index = Number(button.dataset.forecast);
-      button.classList.toggle("active", index === shared.railForecast);
+      const selected = index === shared.railForecast;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-pressed", String(selected));
       button.textContent = `F${index + 1}`;
       button.title = `Forecast ${index + 1} · ${labelFor(forecasts[index].state.dataset)}`;
     }
@@ -3300,7 +3302,9 @@ function wireEmbeddedTheme() {
 
 function markScopeButtons() {
   for (const button of document.querySelectorAll(".scope-switch [data-scope]")) {
-    button.classList.toggle("active", button.dataset.scope === shared.scope);
+    const selected = button.dataset.scope === shared.scope;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
   }
 }
 
@@ -3332,7 +3336,9 @@ function setScope(scope) {
 
 function markMetricButtons() {
   for (const button of document.querySelectorAll(".metric-switch [data-metric]")) {
-    button.classList.toggle("active", button.dataset.metric === shared.yearMetric);
+    const selected = button.dataset.metric === shared.yearMetric;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
   }
 }
 
@@ -3621,7 +3627,9 @@ function redrawOverlaysAll() {
 
 function markLayoutButtons() {
   for (const button of document.querySelectorAll(".layout-switch [data-layout]")) {
-    button.classList.toggle("active", Number(button.dataset.layout) === shared.layout);
+    const selected = Number(button.dataset.layout) === shared.layout;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
   }
   // The side-by-side / swipe display switch is meaningful only with two forecasts.
   const displaySwitch = document.querySelector(".display-switch");
@@ -3631,7 +3639,9 @@ function markLayoutButtons() {
 
 function markDisplayButtons() {
   for (const button of document.querySelectorAll(".display-switch [data-display]")) {
-    button.classList.toggle("active", button.dataset.display === shared.displayMode);
+    const selected = button.dataset.display === shared.displayMode;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
   }
 }
 
