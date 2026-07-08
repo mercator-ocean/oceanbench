@@ -56,7 +56,12 @@ export function boxPowerSpectrum(field, latitudes, longitudes, viewport) {
     if (radial[r].count === 0) continue;
     const wavelengthSamples = side / r; // one radial ring = r cycles across the box
     wavelength.push(wavelengthSamples * cellKm * 1000); // metres, chart converts to km
-    power.push(radial[r].sum / radial[r].count);
+    // Normalize raw ring-averaged |F|² to a grid-independent 2D periodogram density
+    // (variance·km²): raw |F|² scales as side⁴ for the same physical field, so the
+    // factor cellKm²/side² (= boxKm²/side⁴) cancels that resolution-dependent inflation
+    // and makes spectra from models of different grid size directly comparable.
+    const density = (cellKm * cellKm) / (side * side);
+    power.push((radial[r].sum / radial[r].count) * density);
   }
   if (!wavelength.length) return null;
   return { wavelength, power, samples: side * side, cellKm, oceanFraction: box.oceanFraction };
