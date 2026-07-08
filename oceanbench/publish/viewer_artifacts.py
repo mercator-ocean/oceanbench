@@ -311,9 +311,17 @@ def write_matchup_parquet_streamed(
             writer = pyarrow.parquet.ParquetWriter(
                 output_path, _MATCHUP_TARGET_SCHEMA.with_metadata(provenance_metadata), compression="snappy"
             )
-    finally:
+        writer.close()
+    except BaseException:
+        # A worker (or the projection) may raise mid-stream; the half-written parquet on disk is
+        # corrupt and must not be mistaken for a complete artifact, so delete it before re-raising.
         if writer is not None:
-            writer.close()
+            try:
+                writer.close()
+            except Exception:  # noqa: BLE001 - the file is being discarded anyway
+                pass
+        Path(output_path).unlink(missing_ok=True)
+        raise
     verify_matchup_parquet(output_path)
     return output_path
 
