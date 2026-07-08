@@ -89,19 +89,15 @@ export const METHOD_NOTES = {
   psd: {
     title: "Live power spectrum",
     body:
-      "Spectrum of the boxed region on the map, computed in-browser at the model's native " +
-      "(finest published) grid: Hann window, land mean-filled, radially averaged FFT. The " +
-      "Mean-filled land can damp coastal spectra, so open-ocean boxes are preferable. " +
-      "box size is capped so the spectrum always reflects native resolution — wavelengths " +
-      "from 2× the grid spacing up to the box size. In compare mode one shared box drives " +
-      "both forecasts; a coarser model's curve simply stops at its own resolution limit, " +
-      "and the error (F1−F2) curve is truncated at the coarser model's limit — below it a " +
-      "difference is interpolation artifact, not model disagreement. " +
-      "In compare mode the box is bounded so both models stay at native resolution with " +
-      "enough samples; very different resolutions (e.g. 1° vs 1/12°) can't share a fair box. " +
-      "Near each model's own grid scale (the last ~octave of its curve) spectra are damped " +
-      "by model numerical dissipation; compare models at scales both resolve. " +
-      "Exploratory diagnostic — official spectral metrics live on the scores page.",
+      "In-browser FFT power spectrum of the boxed region, computed at the model's native " +
+      "(finest published) grid — exploratory; the official spectra are on the scores page. " +
+      "Method: Hann window, land mean-filled, radially averaged, shown as a grid-independent " +
+      "power density so different-resolution models are comparable. " +
+      "The box is draggable/resizable but size-capped to stay at native resolution with " +
+      "enough samples; in compare mode one shared box drives both forecasts, and very " +
+      "different resolutions (e.g. 1° vs 1/12°) can't share a fair box. " +
+      "Caveat: near each model's grid scale the spectrum is damped by the model's own " +
+      "dissipation, so compare where both resolve.",
   },
 
   // Trajectories overlay.
