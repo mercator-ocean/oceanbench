@@ -1895,7 +1895,9 @@ function fieldReadoutValue(panel, value, count, standardError) {
   if (shared.scope === "year") {
     if (!Number.isFinite(value) || count === 0) return "no observations";
     const biasMode = panel.yearMetric === "bias";
-    const metric = biasMode ? "bias" : "rmsd";
+    // Non-bias year cells are the time-mean |obs − model| (MAE), matching the panel title
+    // and method note — not RMSD. Label it "|error|" so the hover does not misname it.
+    const metric = biasMode ? "bias" : "|error|";
     const sign = biasMode && value > 0 ? "+" : "";
     // Bias cells carry a ±1 standard error (std(model − obs)/sqrt(n)); absent on old artifacts.
     const errorText = biasMode && Number.isFinite(standardError) ? ` ± ${standardError.toFixed(3)}` : "";
