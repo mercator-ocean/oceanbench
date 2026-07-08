@@ -1068,7 +1068,6 @@ async function loadOverlayData() {
   const slug = panels[activePanelIndex] ? panels[activePanelIndex].state.dataset : datasetCatalog[0].slug;
   const region = shared.region;
   const urls = insightsFor(insightIndex, slug, region);
-  const glonetUrls = insightsFor(insightIndex, "glonet_1_degree", region);
   overlayData.region = region;
   overlayData.eddiesCensuses = [];
   overlayData.eddiesMatch = null;
@@ -1102,16 +1101,18 @@ async function loadOverlayData() {
       overlayData.eddiesMatch = null;
     }
   } else if (shared.overlayMode === "class4") {
-    const class4Url = urls.class4_matchups || glonetUrls.class4_matchups;
+    const class4Url = urls.class4_matchups;
     // Reference datasets (and any dataset without published match-ups) carry an
     // explicit null class4_matchups in insights.json. That is a legitimate absence,
-    // not a failure — skip the load and let the quiet informative note explain it,
-    // mirroring the skill-curve note, rather than surfacing a scary "URL is missing".
+    // not a failure — show the honest "not published" empty state and paint no
+    // points. We never substitute another model's obs: a fallback to some other
+    // dataset's match-ups would paint provenance-mismatched points under this
+    // dataset's name while the rail truthfully says it has none.
     if (!class4Url) {
       overlayData.class4Unpublished = true;
       return;
     }
-    const manifest = await loadInsightManifest(urls.class4_matchups ? urls.manifest : glonetUrls.manifest);
+    const manifest = await loadInsightManifest(urls.manifest);
     const class4Manifest = manifest && manifest["class4-matchups"];
     try {
       overlayData.class4 = await loadClass4(class4Url, {
