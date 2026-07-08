@@ -99,7 +99,10 @@ def _observations() -> xarray.Dataset:
             Dimension.LATITUDE.key(): (observation_dimension, numpy.array(latitudes)),
             Dimension.LONGITUDE.key(): (observation_dimension, numpy.array(longitudes)),
             Dimension.DEPTH.key(): (observation_dimension, numpy.zeros(len(values))),
-            Dimension.FIRST_DAY_DATETIME.key(): (observation_dimension, numpy.array(first_days, dtype="datetime64[ns]")),
+            Dimension.FIRST_DAY_DATETIME.key(): (
+                observation_dimension,
+                numpy.array(first_days, dtype="datetime64[ns]"),
+            ),
             _MATCHUP_VARIABLE.key(): (observation_dimension, numpy.array(values)),
         }
     )
@@ -158,9 +161,7 @@ def test_parallel_path_uses_spawn_not_fork(monkeypatch) -> None:
     monkeypatch.setattr(matchups.multiprocessing, "get_context", recording_get_context)
 
     produced = list(
-        matchups.iter_class4_matchups_by_start(
-            challenger, observations, variables, context=context, max_workers=2
-        )
+        matchups.iter_class4_matchups_by_start(challenger, observations, variables, context=context, max_workers=2)
     )
     assert len(produced) == len(_FIRST_DAYS)
     # The parallel executor must be built on the spawn context; fork must never be requested.
@@ -240,9 +241,7 @@ def test_oversized_unreconstructable_dataset_degrades_to_serial(monkeypatch) -> 
 
     monkeypatch.setattr(matchups, "_materialise_dataset_spec", forbidden_materialise)
     produced = list(
-        matchups.iter_class4_matchups_by_start(
-            challenger, observations, variables, context=context, max_workers=2
-        )
+        matchups.iter_class4_matchups_by_start(challenger, observations, variables, context=context, max_workers=2)
     )
     assert len(produced) == len(_FIRST_DAYS)
 
@@ -257,9 +256,7 @@ def _write_weekly_challenger_members(directory) -> tuple[list[str], numpy.ndarra
     whole = _challenger()
     member_stores = []
     for index, first_day in enumerate(_FIRST_DAYS):
-        member = whole.isel({Dimension.FIRST_DAY_DATETIME.key(): index}).drop_vars(
-            Dimension.FIRST_DAY_DATETIME.key()
-        )
+        member = whole.isel({Dimension.FIRST_DAY_DATETIME.key(): index}).drop_vars(Dimension.FIRST_DAY_DATETIME.key())
         store = str(directory / f"week-{index}.zarr")
         member.to_zarr(store, consolidated=True)
         member_stores.append(store)
@@ -285,9 +282,7 @@ def _write_daily_observation_members(directory) -> list[str]:
     member_stores = []
     for index, first_day in enumerate(_FIRST_DAYS):
         day_mask = observations[Dimension.FIRST_DAY_DATETIME.key()].values == first_day
-        member = observations.isel(obs=numpy.flatnonzero(day_mask)).drop_vars(
-            Dimension.FIRST_DAY_DATETIME.key()
-        )
+        member = observations.isel(obs=numpy.flatnonzero(day_mask)).drop_vars(Dimension.FIRST_DAY_DATETIME.key())
         store = str(directory / f"day-{index}.zarr")
         member.to_zarr(store, consolidated=True)
         member_stores.append(store)
@@ -345,9 +340,7 @@ def test_multistore_observations_reconstructs_and_matches_serial(tmp_path, monke
         )
         first_day_of_observation[window] = first_day
     observations = attach_multistore_recipe(
-        reconstructed.assign_coords(
-            {Dimension.FIRST_DAY_DATETIME.key(): ("observations", first_day_of_observation)}
-        ),
+        reconstructed.assign_coords({Dimension.FIRST_DAY_DATETIME.key(): ("observations", first_day_of_observation)}),
         recipe,
     )
 
@@ -396,6 +389,68 @@ def test_multistore_interpolated_variant_reconstructs_and_validates(tmp_path) ->
     assert dict(rebuilt.sizes) == dict(interpolated.sizes)
     for coordinate in (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()):
         assert numpy.array_equal(rebuilt[coordinate].values, interpolated[coordinate].values)
+
+
+def test_interpolated_multistore_streamed_parallel_matches_serial_whole_frame(tmp_path, monkeypatch) -> None:
+    """A 1°-interpolated multi-store challenger must stream in parallel identically to the serial frame.
+
+    This is the end-to-end check: the challenger goes through the real ``interpolate_1_degree`` (which
+    threads the interpolation grid onto the multi-store recipe), then the spawned parallel path must
+    reconstruct that interpolated concat from its member stores — never a temporary materialisation —
+    and produce a served parquet identical to the whole-frame serial path byte for byte and in row-
+    group layout.
+    """
+    from oceanbench.core.interpolate import interpolate_1_degree
+
+    challenger = interpolate_1_degree(_multistore_challenger(tmp_path))
+    observations = _observations()
+    variables = [_MATCHUP_VARIABLE]
+    context = _context()
+
+    def forbidden_materialise(dataset, directory, name):
+        raise AssertionError("an interpolated multi-store challenger must reconstruct from its member stores")
+
+    monkeypatch.setattr(matchups, "_materialise_dataset_spec", forbidden_materialise)
+
+    # The spec taken must be the multi-store one carrying the interpolation grid.
+    spec, reason = matchups._dataset_spec(challenger, str(tmp_path), "challenger.zarr")
+    assert isinstance(spec, matchups._MultiStoreDatasetSpec)
+    assert spec.recipe.interpolation is not None
+    assert reason == "multi-store, 3 members"
+
+    serial_frame = matchups.class4_matchups(challenger, observations, variables, context=context)
+    serial_path = str(tmp_path / "serial.parquet")
+    viewer_artifacts.write_matchup_parquet(serial_frame, serial_path)
+
+    streamed_path = str(tmp_path / "streamed.parquet")
+    partitions = matchups.iter_class4_matchups_by_start(
+        challenger, observations, variables, context=context, max_workers=2
+    )
+    viewer_artifacts.write_matchup_parquet_streamed(partitions, streamed_path)
+
+    pandas.testing.assert_frame_equal(_read(streamed_path), _read(serial_path))
+    assert _row_group_row_counts(streamed_path) == _row_group_row_counts(serial_path)
+
+
+def test_recipe_registry_is_bounded_across_sequential_attachments() -> None:
+    from oceanbench.core import multistore
+    from oceanbench.core.multistore import MultiStoreConcatRecipe
+
+    def make_recipe(index: int):
+        return MultiStoreConcatRecipe(
+            member_stores=(f"store-{index}.zarr",),
+            member_opener="oceanbench.core.multistore:open_zarr_member",
+            concat_dimension="first_day_datetime",
+        )
+
+    attachments = multistore._RECIPE_REGISTRY_MAXIMUM_ENTRIES + 20
+    latest = None
+    for index in range(attachments):
+        latest = multistore.attach_multistore_recipe(xarray.Dataset(), make_recipe(index))
+
+    assert len(multistore._recipe_registry) <= multistore._RECIPE_REGISTRY_MAXIMUM_ENTRIES
+    # The most recent attachment (the one a parent resolves shortly after) must still resolve.
+    assert multistore.get_multistore_recipe(latest) is not None
 
 
 def test_ragged_chunk_dataset_does_not_crash_spec_building(tmp_path) -> None:

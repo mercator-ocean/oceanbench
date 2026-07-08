@@ -23,6 +23,11 @@ import numpy
 import xarray
 
 _RECIPE_TOKEN_ATTRIBUTE = "oceanbench_multistore_recipe_token"
+# Tokens are resolved parent-side shortly after attachment (to build the picklable match-up spec),
+# so only the most recent handful ever need to stay resolvable. Cap the insertion-ordered registry
+# and drop the oldest entries so a process that opens many challengers in sequence cannot grow it
+# without bound; the cap is far larger than the few live datasets any single run resolves.
+_RECIPE_REGISTRY_MAXIMUM_ENTRIES = 64
 _recipe_registry: dict[str, "MultiStoreConcatRecipe"] = {}
 _recipe_token_counter = 0
 
@@ -66,9 +71,7 @@ def open_zarr_member(store: str) -> xarray.Dataset:
     return xarray.open_zarr(store)
 
 
-def apply_one_degree_interpolation(
-    dataset: xarray.Dataset, interpolation: OneDegreeInterpolation
-) -> xarray.Dataset:
+def apply_one_degree_interpolation(dataset: xarray.Dataset, interpolation: OneDegreeInterpolation) -> xarray.Dataset:
     from oceanbench.core.interpolate import apply_one_degree_interpolation as _apply
 
     return _apply(dataset, numpy.asarray(interpolation.latitude), numpy.asarray(interpolation.longitude))
@@ -80,9 +83,7 @@ def open_multistore_dataset(recipe: MultiStoreConcatRecipe) -> xarray.Dataset:
     members = [open_member(store, *recipe.member_open_arguments) for store in recipe.member_stores]
     combined = members[0] if len(members) == 1 else xarray.concat(members, dim=recipe.concat_dimension)
     if recipe.concat_coordinate is not None:
-        combined = combined.assign_coords(
-            {recipe.concat_dimension: numpy.asarray(recipe.concat_coordinate)}
-        )
+        combined = combined.assign_coords({recipe.concat_dimension: numpy.asarray(recipe.concat_coordinate)})
     if recipe.rename:
         combined = combined.rename(dict(recipe.rename))
     if recipe.assign_index_dimension is not None:
@@ -101,15 +102,31 @@ def open_multistore_dataset(recipe: MultiStoreConcatRecipe) -> xarray.Dataset:
     return combined
 
 
-def attach_multistore_recipe(
-    dataset: xarray.Dataset, recipe: MultiStoreConcatRecipe
-) -> xarray.Dataset:
+def attach_multistore_recipe(dataset: xarray.Dataset, recipe: MultiStoreConcatRecipe) -> xarray.Dataset:
     """Register ``recipe`` for ``dataset`` and stamp the dataset with the lookup token."""
     global _recipe_token_counter
     _recipe_token_counter += 1
     token = f"multistore-{_recipe_token_counter}"
     _recipe_registry[token] = recipe
+    while len(_recipe_registry) > _RECIPE_REGISTRY_MAXIMUM_ENTRIES:
+        oldest_token = next(iter(_recipe_registry))
+        del _recipe_registry[oldest_token]
     return dataset.assign_attrs({_RECIPE_TOKEN_ATTRIBUTE: token})
+
+
+def without_multistore_recipe_token(dataset: xarray.Dataset) -> xarray.Dataset:
+    """Return ``dataset`` with the multi-store recipe token attribute removed.
+
+    A staged single store must not carry the daily/weekly multi-store recipe token: once persisted
+    and reopened in the same process, that token would still resolve to the multi-store recipe and
+    make the single staged store re-open as the whole concat. Stripping it lets the reopened store
+    take the single-store spec instead.
+    """
+    if _RECIPE_TOKEN_ATTRIBUTE not in dataset.attrs:
+        return dataset
+    stripped = dataset.copy()
+    del stripped.attrs[_RECIPE_TOKEN_ATTRIBUTE]
+    return stripped
 
 
 def get_multistore_recipe(dataset: xarray.Dataset) -> MultiStoreConcatRecipe | None:

@@ -81,6 +81,41 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(mo
     ]
 
 
+def test_staged_observations_store_does_not_persist_multistore_recipe_token(tmp_path, monkeypatch) -> None:
+    """The staged single store must not carry the daily multi-store recipe token.
+
+    Otherwise a same-process reopen of the staged store would re-resolve the daily multi-store recipe
+    instead of taking the single-store spec.
+    """
+    from oceanbench.core.multistore import _RECIPE_TOKEN_ATTRIBUTE, get_multistore_recipe
+
+    source = _observation_source()
+    first_day_datetimes = numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]")
+    monkeypatch.setattr(observations, "open_mfdataset", lambda *_, **__: source)
+    monkeypatch.setattr(observations, "require_remote_dataset_dimensions", lambda dataset, *_: dataset)
+    monkeypatch.setattr(observations, "resilient_zarr_store", lambda store: store)
+
+    # The in-memory selected dataset does carry the recipe token; the staged store must not.
+    selected = observations._selected_observations_dataset(
+        observation_days=numpy.array(["2024-01-03", "2024-01-10", "2024-01-12", "2024-01-14"], dtype="datetime64[D]"),
+        first_day_timestamps=pandas.to_datetime(first_day_datetimes),
+        first_day_datetimes=first_day_datetimes,
+        lead_days_count=10,
+    )
+    assert get_multistore_recipe(selected) is not None
+
+    stage_path = tmp_path / "observations.zarr"
+    observations._build_staged_observations_dataset(
+        stage_path=stage_path,
+        observation_days=numpy.array(["2024-01-03", "2024-01-10", "2024-01-12", "2024-01-14"], dtype="datetime64[D]"),
+        first_day_timestamps=pandas.to_datetime(first_day_datetimes),
+        first_day_datetimes=first_day_datetimes,
+        lead_days_count=10,
+    )
+    reopened = xarray.open_dataset(stage_path, engine="zarr")
+    assert _RECIPE_TOKEN_ATTRIBUTE not in reopened.attrs
+
+
 def test_observations_stage_path_uses_overlap_safe_version() -> None:
     assert (
         observations._observations_stage_path("2024-01-03", "2025-01-03", 10).name

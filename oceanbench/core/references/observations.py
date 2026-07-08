@@ -10,6 +10,7 @@ from xarray import Dataset, open_dataset, open_mfdataset
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.datetime_utils import generate_dates
+from oceanbench.core.multistore import without_multistore_recipe_token
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.local_stage import (
     local_stage_directory,
@@ -140,11 +141,13 @@ def _build_staged_observations_dataset(
     first_day_datetimes: numpy.ndarray,
     lead_days_count: int,
 ) -> None:
-    observations_dataset = _selected_observations_dataset(
-        observation_days=observation_days,
-        first_day_timestamps=first_day_timestamps,
-        first_day_datetimes=first_day_datetimes,
-        lead_days_count=lead_days_count,
+    observations_dataset = without_multistore_recipe_token(
+        _selected_observations_dataset(
+            observation_days=observation_days,
+            first_day_timestamps=first_day_timestamps,
+            first_day_datetimes=first_day_datetimes,
+            lead_days_count=lead_days_count,
+        )
     )
     try:
         write_dataset_to_local_stage(
