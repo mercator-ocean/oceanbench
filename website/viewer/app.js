@@ -18,7 +18,7 @@ import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, pr
 import { COLORMAP_NAMES, DIVERGING } from "./vendor/cmocean/colormaps.js";
 import {
   fieldToImageData,
-  fieldStatistics,
+  areaWeightedMean,
   symmetricRange,
   differenceField,
   resampleOntoGrid,
@@ -1042,9 +1042,9 @@ function drawRasterBorder(context, edges, projection) {
 }
 
 function updatePanelBadge(panel) {
-  const stats = panel.field ? fieldStatistics(panel.field) : { mean: NaN };
-  const mean = Number.isFinite(stats.mean) ? stats.mean.toFixed(3) : "—";
-  panel.els.badge.textContent = `${panel.units} · field mean ${mean}`;
+  const mean = panel.field ? areaWeightedMean(panel.field, panel.latitudes) : NaN;
+  const meanText = Number.isFinite(mean) ? mean.toFixed(3) : "—";
+  panel.els.badge.textContent = `${panel.units} · field mean ${meanText}`;
 }
 
 // ---- overlays ---------------------------------------------------------------

@@ -97,6 +97,28 @@ export function fieldStatistics({ data }) {
   return { minimum, maximum, mean: sum / count, count };
 }
 
+/**
+ * cos(latitude)-weighted mean over the finite cells of a field — a true area-weighted
+ * spatial mean, since equal-area on a lat/lon grid shrinks with cos(latitude) toward the
+ * poles. `latitudes` are the field's row coordinates (length === height). Falls back to
+ * the unweighted mean when no latitudes are supplied.
+ */
+export function areaWeightedMean({ data, width, height }, latitudes) {
+  if (!latitudes || latitudes.length !== height) return fieldStatistics({ data }).mean;
+  let weightedSum = 0;
+  let weightTotal = 0;
+  for (let row = 0; row < height; row += 1) {
+    const weight = Math.max(0, Math.cos((latitudes[row] * Math.PI) / 180));
+    for (let column = 0; column < width; column += 1) {
+      const value = data[row * width + column];
+      if (Number.isNaN(value)) continue;
+      weightedSum += value * weight;
+      weightTotal += weight;
+    }
+  }
+  return weightTotal === 0 ? NaN : weightedSum / weightTotal;
+}
+
 /** Symmetric range about zero covering a difference field's magnitude. */
 export function symmetricRange({ data }) {
   let magnitude = 0;
