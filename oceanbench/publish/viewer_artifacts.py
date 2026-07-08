@@ -406,12 +406,6 @@ def _year_grid_for_region(region: str) -> dict:
     return _YEAR_GRIDS[region]
 
 
-def _cosine_latitude_weights(grid: dict) -> numpy.ndarray:
-    cell_indices = numpy.arange(grid["nlat"] * grid["nlon"])
-    latitude_row = cell_indices // grid["nlon"]
-    return numpy.cos(numpy.deg2rad(grid["lat0"] + (latitude_row + 0.5) * grid["dlat"]))
-
-
 def _grid_cells(latitude: numpy.ndarray, longitude: numpy.ndarray, grid: dict) -> tuple[numpy.ndarray, numpy.ndarray]:
     longitude_span = grid["nlon"] * grid["dlon"]
     wrapped_longitude = ((longitude - grid["lon0"]) % longitude_span) + grid["lon0"]

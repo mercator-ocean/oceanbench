@@ -58,7 +58,6 @@ from oceanbench.core.schema_validation import load_schema
 from oceanbench.publish.viewer_artifacts import (
     _YEAR_GEOGRAPHY_DECIMALS,
     _YEAR_TARGETS,
-    _cosine_latitude_weights,  # noqa: F401 - kept alongside the year grid helpers for provenance parity
     _grid_cells,
     _year_grid_for_region,
     provenance_block,

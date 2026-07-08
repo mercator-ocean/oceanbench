@@ -445,26 +445,6 @@ body.resizing-layout.row { cursor: row-resize; }
 .rail-section h3 { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.4rem; }
 .rail-card-heading { display: flex; align-items: center; justify-content: space-between; }
 .rail-card-heading h3 { margin-bottom: 0; }
-.rail-icon-button {
-  width: 1.45rem;
-  height: 1.45rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--background);
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.8rem;
-  line-height: 1;
-}
-.rail-icon-button:hover,
-.rail-icon-button[aria-pressed="true"] {
-  border-color: var(--accent);
-  color: var(--accent);
-}
 .rail-section.psd-disabled .rail-chart-slot,
 .rail-section.psd-disabled .rail-caption { display: none; }
 .psd-card-heading { justify-content: flex-start; gap: 0.5rem; }
