@@ -367,8 +367,11 @@ def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset)
     reference_set["time"] = reference_set["time"].dt.floor("D")
     latitude_reference_set_rad = numpy.deg2rad(reference_set["lat"])
 
-    dlatitude = (model_set["lat"] - reference_set["lat"]) * 111  # meters
-    dlongitude = (model_set["lon"] - reference_set["lon"]) * 111 * numpy.cos(latitude_reference_set_rad)
+    longitude_difference = model_set["lon"] - reference_set["lon"]
+    wrapped_longitude_difference = longitude_difference - 360 * numpy.round(longitude_difference / 360)
+
+    dlatitude = (model_set["lat"] - reference_set["lat"]) * 111  # km
+    dlongitude = wrapped_longitude_difference * 111 * numpy.cos(latitude_reference_set_rad)  # km
 
     distance = numpy.sqrt(dlatitude**2 + dlongitude**2)  # shape: (particle, time)
     distance = distance.mean(axis=0)  # shape: (time,)

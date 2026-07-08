@@ -8,6 +8,7 @@ import xarray
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.lagrangian_trajectory import (
     _get_random_ocean_points_from_file,
+    euclidean_distance,
     lagrangian_particle_count_for_region,
 )
 
@@ -106,3 +107,47 @@ def test_lagrangian_ocean_point_sampling_uses_area_probabilities_over_valid_poin
     assert captured["size"] == 2
     assert captured["replace"] is False
     assert numpy.allclose(captured["probabilities"], [0.5, 0.25, 0.25])
+
+
+def _trajectory_dataset(latitudes, longitudes) -> xarray.Dataset:
+    latitudes = numpy.asarray(latitudes, dtype=float)
+    longitudes = numpy.asarray(longitudes, dtype=float)
+    times = numpy.datetime64("2024-01-02") + numpy.arange(latitudes.shape[1]) * numpy.timedelta64(1, "D")
+    return xarray.Dataset(
+        {
+            "lat": (["particle", "time"], latitudes),
+            "lon": (["particle", "time"], longitudes),
+        },
+        coords={"time": times, "particle": numpy.arange(latitudes.shape[0])},
+    )
+
+
+def test_euclidean_distance_is_unchanged_away_from_the_antimeridian() -> None:
+    reference = _trajectory_dataset(
+        latitudes=[[10.0, 10.2, 10.5], [-30.0, -30.1, -29.7]],
+        longitudes=[[20.0, 20.3, 20.9], [-45.0, -45.4, -46.1]],
+    )
+    challenger = _trajectory_dataset(
+        latitudes=[[10.4, 10.9, 11.3], [-29.6, -29.2, -28.5]],
+        longitudes=[[20.6, 21.2, 22.0], [-44.2, -43.5, -42.6]],
+    )
+
+    wrapped_distance = euclidean_distance(challenger.copy(deep=True), reference.copy(deep=True))
+
+    latitude_reference_rad = numpy.deg2rad(reference["lat"])
+    unwrapped_dlatitude = (challenger["lat"] - reference["lat"]) * 111
+    unwrapped_dlongitude = (challenger["lon"] - reference["lon"]) * 111 * numpy.cos(latitude_reference_rad)
+    unwrapped_distance = numpy.sqrt(unwrapped_dlatitude**2 + unwrapped_dlongitude**2).mean(axis=0).values
+
+    numpy.testing.assert_array_equal(wrapped_distance, unwrapped_distance)
+
+
+def test_euclidean_distance_wraps_longitude_across_the_antimeridian() -> None:
+    reference = _trajectory_dataset(latitudes=[[0.0, 0.0]], longitudes=[[-179.9, -179.9]])
+    challenger = _trajectory_dataset(latitudes=[[0.0, 0.0]], longitudes=[[179.9, 179.9]])
+
+    distance = euclidean_distance(challenger, reference)
+
+    # 0.2 deg of longitude at the equator is about 22 km, not the ~39937 km an unwrapped delta gives.
+    numpy.testing.assert_allclose(distance, 22.2, atol=0.1)
+    assert numpy.all(distance < 100.0)
