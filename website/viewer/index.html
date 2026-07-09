@@ -89,6 +89,7 @@ SPDX-License-Identifier: EUPL-1.2
             <option value="eddies">Eddy census</option>
             <option value="class4">Observation errors (Class-4)</option>
             <option value="trajectories">Trajectories (Lagrangian)</option>
+            <option value="column" hidden disabled>Water column (click)</option>
           </select>
         </label>
         <label id="eddy-reference-field" hidden>Eddy reference
@@ -151,6 +152,15 @@ SPDX-License-Identifier: EUPL-1.2
           <h3>RMSD vs depth</h3>
           <div id="rail-depth-profile" class="rail-chart-slot"></div>
           <p id="rail-depth-profile-note" class="rail-caption"></p>
+        </section>
+        <section class="rail-section trajectory-card" id="rail-column-section" hidden>
+          <div class="rail-card-heading">
+            <h3>Water column</h3>
+            <button id="column-clear" type="button" class="trajectory-clear" aria-label="Close water-column profile" title="Close water-column profile">✕</button>
+          </div>
+          <p id="rail-column-point" class="trajectory-label"></p>
+          <div id="rail-column-chart" class="rail-chart-slot"></div>
+          <p id="rail-column-note" class="rail-caption"></p>
         </section>
         <section class="rail-section" id="rail-year-rmsd-section" hidden>
           <h3>RMSD by start date</h3>

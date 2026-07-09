@@ -14,7 +14,7 @@
 // the quantitative curves (skill vs lead, PSD spectrum) for the active view. Every bit
 // of view state lives in the URL hash.
 
-import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, prefetchLayer } from "./modules/zarr.js";
+import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, readRootCoordinate, readColumn, prefetchLayer } from "./modules/zarr.js";
 import { COLORMAP_NAMES, DIVERGING } from "./vendor/cmocean/colormaps.js";
 import {
   fieldToImageData,
@@ -52,7 +52,7 @@ import {
   EDDY_MATCHED_COLOR,
   CLASS4_COLORMAP,
 } from "./modules/overlays.js";
-import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, rmsdByDepthSVG, SERIES_COLORS } from "./modules/charts.js";
+import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, rmsdByDepthSVG, columnProfileSVG, SERIES_COLORS } from "./modules/charts.js";
 import {
   loadYearGeography,
   loadYearRmsd,
@@ -70,7 +70,7 @@ import { attachMethodNote, attachEddyMethodNote } from "./modules/method-popover
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
 import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
 import { forecastColor } from "./modules/forecast-colors.js";
-import { resolveViewerDataUrl } from "./config.js";
+import { resolveViewerDataUrl, resolveColumnStoreUrl } from "./config.js";
 
 const DATASETS_URL = resolveViewerDataUrl("./data/datasets.json");
 const DIFFERENCE_COLORMAP = "balance";
@@ -179,6 +179,9 @@ const shared = {
   psdEnabled: false,
   psdBox: null,
   overlayMode: "none",
+  // Water-column click point { lon, lat } (profile-on-click mode); null when unset. Kept
+  // in the hash so a link reproduces the clicked profile.
+  columnPoint: null,
   region: "global",
   eddyReference: "glorys",
   showParticles: true,
@@ -205,6 +208,13 @@ const elements = {};
 const trajectoryWorker = new Worker(new URL("./modules/trajectory-worker.js", import.meta.url), { type: "module" });
 let trajectoryState = null;
 let trajectoryRequestId = 0;
+// Water-column stores: slug -> store handle, or false when none is published (404 on
+// .zmetadata) so the profile-on-click mode degrades gracefully to "not offered".
+const columnStores = new Map();
+// Decoded water column at the last clicked point: all leads/depths held in memory so
+// the lead slider re-renders the profile with NO new fetch. Null when nothing is shown.
+let columnProfile = null;
+let columnRequestId = 0;
 
 // ---- store / manifest / coordinate helpers (shared cache) -------------------
 
@@ -408,6 +418,10 @@ function wirePanel(panel) {
       // switching to a dataset without published match-ups must flip the note to the
       // quiet "not published" message instead of leaving the previous dataset's note.
       await applyOverlayMode();
+      // A different challenger may or may not publish a column store; re-probe, then
+      // re-read the clicked column against the new challenger if the mode stays active.
+      await updateColumnModeAvailability();
+      if (columnModeActive() && shared.columnPoint) await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
       // renderPanel clears the status on success, so surface the fallback note afterwards.
       if (fallbackNote) setStatus(fallbackNote);
       writeHash();
@@ -427,6 +441,8 @@ function wirePanel(panel) {
     if (isDiffView() && panel.index === 1) await renderPanel(panels[0]);
     await updateContextRail();
     updateCurrentsControlVisibility();
+    // The column variable follows the panel variable (temperature/salinity); re-read.
+    if (columnModeActive() && shared.columnPoint) await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
     writeHash();
   });
   const field = panel.els.field;
@@ -1191,6 +1207,10 @@ function drawOverlays(panel) {
   const copyOffsets = visibleCopyOffsets(projection, canvas);
   const projectOnCopy = (offset) => (nx, ny) => projection.project(nx + offset, ny);
 
+  if (shared.overlayMode === "column") {
+    if (shared.columnPoint) drawColumnMarker(panel, context, projection, copyOffsets);
+    return;
+  }
   if (shared.overlayMode === "eddies") {
     const index = panel.index;
     const match = overlayData.eddiesMatch;
@@ -1270,6 +1290,33 @@ function drawOverlays(panel) {
     panel.class4Matched = 0;
     panel.class4Scale = 0;
   }
+}
+
+// Crosshair marker at the clicked water-column point, drawn on every visible world copy so
+// it stays on the field when panning across the dateline.
+function drawColumnMarker(panel, context, projection, copyOffsets) {
+  const ratio = window.devicePixelRatio || 1;
+  const nx = (shared.columnPoint.lon + 180) / 360;
+  const ny = (90 - shared.columnPoint.lat) / 180;
+  context.save();
+  context.strokeStyle = themeToken("--ob-viewer-canvas-note", shared.theme === "light" ? "#1f2937" : "#e5edf5");
+  context.lineWidth = 1.6 * ratio;
+  const arm = 9 * ratio;
+  for (const offset of copyOffsets) {
+    const point = projection.project(nx + offset, ny);
+    context.beginPath();
+    context.arc(point.x, point.y, 6 * ratio, 0, Math.PI * 2);
+    context.moveTo(point.x - arm, point.y);
+    context.lineTo(point.x - 3 * ratio, point.y);
+    context.moveTo(point.x + 3 * ratio, point.y);
+    context.lineTo(point.x + arm, point.y);
+    context.moveTo(point.x, point.y - arm);
+    context.lineTo(point.x, point.y - 3 * ratio);
+    context.moveTo(point.x, point.y + 3 * ratio);
+    context.lineTo(point.x, point.y + arm);
+    context.stroke();
+  }
+  context.restore();
 }
 
 function drawTrajectoryFans(panel) {
@@ -1456,6 +1503,194 @@ function renderTrajectoryRail() {
       ? "Mean separation between corresponding Forecast 1 and Forecast 2 particles."
       : "Single-forecast trajectory fan.";
   wireCursorTooltip(elements["rail-trajectory-chart"]);
+}
+
+// ---- water-column profile on click ------------------------------------------
+
+const COLUMN_STORE_VARIABLES = ["sea_water_potential_temperature", "sea_water_salinity"];
+
+function columnModeActive() {
+  return shared.overlayMode === "column" && !isDiffView();
+}
+
+// Resolve (once, cached) whether a challenger publishes a water-column store. A missing
+// store 404s on its .zmetadata; loadStore then rejects and we remember `false` so the
+// feature is simply not offered for that challenger — no retries, no console noise.
+async function ensureColumnStore(slug) {
+  if (columnStores.has(slug)) return columnStores.get(slug);
+  let store = false;
+  try {
+    store = await loadStore(resolveColumnStoreUrl(slug));
+  } catch {
+    store = false;
+  }
+  columnStores.set(slug, store);
+  return store;
+}
+
+// Show/enable the "Water column (click)" overlay option only when at least one visible
+// challenger has a column store. When none do (e.g. nothing published yet), the option
+// stays hidden and, if it was somehow active, the mode reverts to none.
+async function updateColumnModeAvailability() {
+  const option = elements["overlay-mode"] && elements["overlay-mode"].querySelector('option[value="column"]');
+  if (!option) return;
+  const visible = panels.slice(0, shared.layout).filter(Boolean);
+  const stores = await Promise.all(visible.map((panel) => ensureColumnStore(panel.state.dataset)));
+  const available = stores.some(Boolean);
+  option.hidden = !available;
+  option.disabled = !available;
+  if (!available && shared.overlayMode === "column") {
+    shared.overlayMode = "none";
+    elements["overlay-mode"].value = "none";
+    clearColumnProfile();
+  }
+}
+
+function nearestCoordinateIndex(coordinates, target) {
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  for (let i = 0; i < coordinates.length; i += 1) {
+    const distance = Math.abs(coordinates[i] - target);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
+}
+
+// Which column-store variable a panel maps to: its own variable when that is temperature
+// or salinity, otherwise temperature (the sensible default for a non-T/S panel).
+function columnVariableFor(panel) {
+  const entry = variableEntry(manifestFor(panel.state.dataset), panel.state.variable);
+  const standardName = entry && entry.standard_name;
+  if (standardName === "sea_water_salinity") return { name: standardName, unit: entry.units || "", label: "Salinity" };
+  if (standardName === "sea_water_potential_temperature") return { name: standardName, unit: entry.units || "°C", label: "Temperature" };
+  return { name: "sea_water_potential_temperature", unit: "°C", label: "Temperature" };
+}
+
+function clearColumnProfile() {
+  columnRequestId += 1;
+  columnProfile = null;
+  shared.columnPoint = null;
+  window.__oceanbenchColumnProfile = null;
+  renderColumnProfileRail();
+  if (panels.length) redrawOverlaysAll();
+}
+
+// Read the full water column (all leads + all depths) at a clicked lon/lat for every
+// visible challenger that has a store. One chunk per challenger — held in memory so the
+// lead slider re-renders with no refetch (renderColumnProfileRail slices in-memory).
+async function readColumnProfileAt(longitude, latitude) {
+  const eligiblePanels = [];
+  for (const panel of panels.slice(0, shared.layout).filter(Boolean)) {
+    const store = await ensureColumnStore(panel.state.dataset);
+    if (store) eligiblePanels.push({ panel, store });
+  }
+  if (!eligiblePanels.length) return;
+  shared.columnPoint = { lon: longitude, lat: latitude };
+  const requestId = ++columnRequestId;
+  const forecasts = [];
+  for (const { panel, store } of eligiblePanels) {
+    const choice = columnVariableFor(panel);
+    const arrayMeta = store.metadata[`${choice.name}/.zarray`];
+    if (!arrayMeta) continue;
+    // The column store may hold fewer starts than the pyramid it sits beside; clamp so a
+    // high start index never requests a chunk past the store's start axis.
+    const startIndex = Math.min(shared.startIndex, arrayMeta.shape[0] - 1);
+    const [depths, latitudes, longitudes] = await Promise.all([
+      readRootCoordinate(store, "depth"),
+      readRootCoordinate(store, "latitude"),
+      readRootCoordinate(store, "longitude"),
+    ]);
+    const latIndex = nearestCoordinateIndex(latitudes, latitude);
+    const lonIndex = nearestCoordinateIndex(longitudes, longitude);
+    const column = await readColumn(store, { variable: choice.name, startIndex, latIndex, lonIndex });
+    if (requestId !== columnRequestId) return;
+    forecasts.push({
+      panelIndex: panel.index,
+      slug: panel.state.dataset,
+      variable: choice.name,
+      startIndex,
+      latIndex,
+      lonIndex,
+      color: forecastColor(panel.index),
+      datasetLabel: labelFor(panel.state.dataset),
+      variableLabel: choice.label,
+      unit: choice.unit,
+      depths: Array.from(depths),
+      values: column.values,
+      leads: column.leads,
+      depthSize: column.depths,
+      allNaN: !column.values.some((value) => Number.isFinite(value)),
+    });
+  }
+  if (requestId !== columnRequestId) return;
+  columnProfile = { lon: longitude, lat: latitude, forecasts };
+  // Deterministic hook for tests: the decoded values at the clicked point.
+  window.__oceanbenchColumnProfile = columnProfile;
+  const note = elements["overlay-note"];
+  if (note) note.textContent = "Click the map to read the model water column at another point.";
+  renderColumnProfileRail();
+  if (panels.length) redrawOverlaysAll();
+  writeHash();
+}
+
+function formatLatLon(lon, lat) {
+  const latText = `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}`;
+  const lonText = `${Math.abs(lon).toFixed(2)}°${lon >= 0 ? "E" : "W"}`;
+  return `${latText}, ${lonText}`;
+}
+
+// Render the profile chart for the CURRENT lead day from the in-memory column (no fetch).
+// Both forecasts are drawn in their panel accent colours; a point over land/missing (all
+// fill values) yields the honest "no water column" note.
+function renderColumnProfileRail() {
+  const section = elements["rail-column-section"];
+  if (!section) return;
+  if (!columnProfile || !columnModeActive()) {
+    section.hidden = true;
+    elements["rail-column-chart"].innerHTML = "";
+    elements["rail-column-point"].textContent = "";
+    elements["rail-column-note"].textContent = "";
+    return;
+  }
+  section.hidden = false;
+  elements["rail-column-point"].textContent = formatLatLon(columnProfile.lon, columnProfile.lat);
+  const comparison = columnProfile.forecasts.length === 2;
+  const leadIndex = Math.max(0, shared.leadDay - 1);
+  const lines = [];
+  let unit = "";
+  for (const forecast of columnProfile.forecasts) {
+    if (forecast.allNaN) continue;
+    const lead = Math.min(leadIndex, forecast.leads - 1);
+    const points = [];
+    for (let depth = 0; depth < forecast.depthSize; depth += 1) {
+      const value = forecast.values[lead * forecast.depthSize + depth];
+      if (Number.isFinite(value)) points.push({ depth: forecast.depths[depth], value });
+    }
+    if (!points.length) continue;
+    unit = unit || forecast.unit;
+    lines.push({
+      label: comparison ? `F${forecast.panelIndex + 1} · ${forecast.variableLabel}` : forecast.variableLabel,
+      color: forecast.color,
+      points,
+    });
+  }
+  const variableLabel = columnProfile.forecasts.find((forecast) => !forecast.allNaN)?.variableLabel || "Value";
+  elements["rail-column-chart"].innerHTML = columnProfileSVG(lines, {
+    title: comparison ? "Water column (both forecasts)" : "Water column",
+    unit,
+    xLabel: variableLabel,
+  });
+  if (!lines.length) {
+    elements["rail-column-note"].textContent = "No water column at this point.";
+  } else {
+    elements["rail-column-note"].textContent = `Model ${variableLabel.toLowerCase()} profile at the selected start and lead day ${shared.leadDay}. Move the lead slider to re-read from the same download.`;
+  }
+  const heading = section.querySelector("h3");
+  if (heading) attachMethodNote(heading, "column-profile");
+  wireCursorTooltip(elements["rail-column-chart"]);
 }
 
 const CLASS4_INDEX_COLS = 360;
@@ -1817,7 +2052,19 @@ function endPanelDrag(event) {
   panel.draggingPsd = null;
   panel.els.field.style.cursor = "";
   if (shouldSeed) seedTrajectories(panel, event);
+  if (shouldSeed && columnModeActive()) readColumnProfileAt(...pointerLonLat(panel, event));
   writeHash();
+}
+
+// Geographic lon/lat under a pointer event on a panel (longitude wrapped to ±180 on the
+// periodic global grid), shared by the trajectory and water-column click handlers.
+function pointerLonLat(panel, event) {
+  const rectangle = panel.els.field.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  const world = projectionFor(panel).unproject((event.clientX - rectangle.left) * ratio, (event.clientY - rectangle.top) * ratio);
+  let longitude = world.nx * 360 - 180;
+  if (shared.region === "global") longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  return [longitude, 90 - world.ny * 180];
 }
 
 function onPanelWheel(panel, event) {
@@ -1963,6 +2210,8 @@ function updateHover(event) {
       projection,
     );
     hoverPanel.els.field.style.cursor = psdCursorFor(hit);
+  } else if (columnModeActive()) {
+    hoverPanel.els.field.style.cursor = "crosshair";
   } else if (hoverPanel.els.field.style.cursor) {
     hoverPanel.els.field.style.cursor = "";
   }
@@ -3404,6 +3653,20 @@ async function applyOverlayMode() {
     return;
   }
   if (shared.overlayMode !== "trajectories") clearTrajectories();
+  if (shared.overlayMode !== "column") clearColumnProfile();
+  if (shared.overlayMode === "column") {
+    note.textContent = columnProfile
+      ? "Click the map to read the model water column at another point."
+      : "Click the map to read the model temperature/salinity water column at that point.";
+    for (let i = 0; i < shared.layout; i += 1) {
+      drawPanel(panels[i]);
+      drawOverlays(panels[i]);
+    }
+    renderColumnProfileRail();
+    updateCurrentsControlVisibility();
+    updateContextRail();
+    return;
+  }
   if (shared.overlayMode === "trajectories") {
     note.textContent = "Click the map to seed trajectories advected through both forecasts' currents.";
   } else if (shared.overlayMode === "class4") {
@@ -3603,6 +3866,10 @@ function wireGlobalControls() {
         updateSharedColorbar();
         updateContextRail();
         updateCurrentsControlVisibility();
+        // A second forecast may add/remove a column store; re-probe and re-read the point.
+        updateColumnModeAvailability().then(() => {
+          if (columnModeActive() && shared.columnPoint) readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
+        });
       });
       writeHash();
     });
@@ -3614,6 +3881,8 @@ function wireGlobalControls() {
     await loadOverlayData();
     redrawOverlaysAll();
     await updateContextRail();
+    // The clicked column is start-specific; re-read it at the same point for the new start.
+    if (columnModeActive() && shared.columnPoint) await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
     writeHash();
   });
   elements["lead-day"].addEventListener("input", (event) => {
@@ -3623,6 +3892,9 @@ function wireGlobalControls() {
       redrawOverlaysAll();
       updateContextRail();
     });
+    // Re-render the water-column profile from the in-memory column — no refetch: the
+    // clicked chunk already holds every lead day (this is the design win).
+    renderColumnProfileRail();
     scheduleClass4Reload();
     scheduleHashWrite();
   });
@@ -3633,6 +3905,7 @@ function wireGlobalControls() {
   });
   elements["overlay-region"].addEventListener("change", (event) => {
     clearTrajectories();
+    clearColumnProfile();
     shared.region = event.target.value;
     fitRegionView();
     renderAllPanels().then(() => {
@@ -3713,8 +3986,17 @@ function wireGlobalControls() {
     writeHash();
   });
   elements["trajectory-clear"].addEventListener("click", clearTrajectories);
+  elements["column-clear"].addEventListener("click", () => {
+    clearColumnProfile();
+    const note = elements["overlay-note"];
+    if (columnModeActive() && note) note.textContent = "Click the map to read the model temperature/salinity water column at that point.";
+    writeHash();
+  });
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") clearTrajectories();
+    if (event.key === "Escape") {
+      clearTrajectories();
+      clearColumnProfile();
+    }
   });
 
   window.addEventListener("pointermove", (event) => {
@@ -3901,6 +4183,9 @@ function writeHash() {
     parameters.set("psd", [shared.psdBox.lon, shared.psdBox.lat, shared.psdBox.w, shared.psdBox.h].map((v) => v.toFixed(2)).join(","));
   }
   if (shared.overlayMode !== "none") parameters.set("ov", shared.overlayMode);
+  if (shared.overlayMode === "column" && shared.columnPoint) {
+    parameters.set("col", `${shared.columnPoint.lon.toFixed(3)},${shared.columnPoint.lat.toFixed(3)}`);
+  }
   parameters.set("region", shared.region);
   if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
   if (shared.railCollapsed) parameters.set("rail", "collapsed");
@@ -3944,6 +4229,10 @@ function readHash() {
     }
   }
   if (parameters.has("ov")) shared.overlayMode = parameters.get("ov");
+  if (parameters.has("col")) {
+    const [lon, lat] = parameters.get("col").split(",").map(Number);
+    if (Number.isFinite(lon) && Number.isFinite(lat)) shared.columnPoint = { lon, lat };
+  }
   if (parameters.has("region")) shared.region = parameters.get("region");
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
   if (parameters.get("rail") === "0" || parameters.get("rail") === "collapsed") shared.railCollapsed = true;
@@ -4030,6 +4319,11 @@ function selectElements() {
     "rail-trajectory-chart",
     "rail-trajectory-note",
     "trajectory-clear",
+    "rail-column-section",
+    "rail-column-chart",
+    "rail-column-point",
+    "rail-column-note",
+    "column-clear",
   ]) {
     elements[id] = document.getElementById(id);
   }
@@ -4101,6 +4395,12 @@ async function main() {
   updateSharedColorbar();
   await applyOverlayMode();
   await updateContextRail();
+  // Probe column-store availability (shows/hides the "Water column (click)" option) and
+  // replay a deep-linked clicked point once stores are known.
+  await updateColumnModeAvailability();
+  if (columnModeActive() && shared.columnPoint) {
+    await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
+  }
   writeHash();
 }
 

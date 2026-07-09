@@ -504,6 +504,85 @@ export function rmsdByDepthSVG(series, { title = "RMSD vs depth", unit = "", emp
   return svgOpen(title) + axes(area, unit || "RMSD", "depth") + body + legend + interactionLayer() + "</svg>";
 }
 
+/**
+ * Water-column profile: a model variable's value on the x-axis against DEPTH on the
+ * y-axis increasing DOWNWARD (surface at the top), one line per forecast. `series` is
+ * an array of { label, color, points: [{ depth, value }] } where `depth` is in metres
+ * and `value` is the model's temperature/salinity at that depth. Unlike the RMSD-vs-depth
+ * chart, the y-axis carries REAL numeric depths (each forecast may have its own depth
+ * levels; both are plotted faithfully on a shared metric axis) and the x-axis is a plain
+ * value scale padded to the data. Points carry `data-line`/`data-x-label`/`data-y-label`
+ * so the shared cursor tooltip reports the depth and the value on hover.
+ */
+export function columnProfileSVG(series, { title = "Water column", unit = "", xLabel = "value", emptyMessage = "no water column at this point" } = {}) {
+  const base = plotArea();
+  const DEPTH_PAD_LEFT = 52;
+  const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
+  const usable = (series || []).filter(
+    (line) => line && Array.isArray(line.points) && line.points.some((point) => Number.isFinite(point.value) && Number.isFinite(point.depth)),
+  );
+  if (!usable.length) return emptyChart(title, emptyMessage);
+
+  let depthMax = 0;
+  let valueMin = Infinity;
+  let valueMax = -Infinity;
+  for (const line of usable) {
+    for (const point of line.points) {
+      if (!Number.isFinite(point.value) || !Number.isFinite(point.depth)) continue;
+      depthMax = Math.max(depthMax, point.depth);
+      valueMin = Math.min(valueMin, point.value);
+      valueMax = Math.max(valueMax, point.value);
+    }
+  }
+  if (!(valueMax > valueMin)) valueMax = valueMin + 1;
+  const padding = (valueMax - valueMin) * 0.06 || 1;
+  const xLo = valueMin - padding;
+  const xHi = valueMax + padding;
+  const yOf = (depth) => area.y0 + (depthMax > 0 ? depth / depthMax : 0) * area.height;
+  const xOf = (value) => area.x0 + ((value - xLo) / (xHi - xLo)) * area.width;
+
+  let body = "";
+  for (let t = 0; t <= 4; t += 1) {
+    const value = xLo + ((xHi - xLo) * t) / 4;
+    const x = xOf(value);
+    body += `<line x1="${x.toFixed(1)}" y1="${area.y0}" x2="${x.toFixed(1)}" y2="${area.y1}" class="grid"/>`;
+    body += `<text x="${x.toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="middle">${formatTick(value)}</text>`;
+  }
+  for (let t = 0; t <= 4; t += 1) {
+    const depth = (depthMax * t) / 4;
+    const y = yOf(depth);
+    body += `<line x1="${area.x0}" y1="${y.toFixed(1)}" x2="${area.x1}" y2="${y.toFixed(1)}" class="grid"/>`;
+    body += `<text x="${area.x0 - 4}" y="${(y + 3).toFixed(1)}" class="tick" text-anchor="end">${Math.round(depth).toLocaleString("en-US")}</text>`;
+  }
+
+  for (const line of usable) {
+    const points = line.points
+      .filter((point) => Number.isFinite(point.value) && Number.isFinite(point.depth))
+      .slice()
+      .sort((a, b) => a.depth - b.depth);
+    const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${xOf(point.value).toFixed(1)} ${yOf(point.depth).toFixed(1)}`);
+    body += `<path d="${path.join(" ")}" fill="none" stroke="${line.color}" stroke-width="1.8"/>`;
+    for (const point of points) {
+      const x = xOf(point.value).toFixed(1);
+      const y = yOf(point.depth).toFixed(1);
+      body += `<circle cx="${x}" cy="${y}" r="1.8" fill="${line.color}"/>`;
+      body +=
+        `<circle class="chart-point" data-line="${escapeText(line.label)}" ` +
+        `data-x-label="${formatValue(point.value, unit)}" data-y-label="${Math.round(point.depth).toLocaleString("en-US")} m" ` +
+        `cx="${x}" cy="${y}" r="8"/>`;
+    }
+  }
+
+  const legend = usable
+    .map((line, index) => {
+      const x = area.x0 + index * 118;
+      return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="10" class="legend">${escapeText(line.label)}</text>`;
+    })
+    .join("");
+
+  return svgOpen(title) + axes(area, unit ? `${xLabel} (${unit})` : xLabel, "depth (m)") + body + legend + interactionLayer() + "</svg>";
+}
+
 // 95% CI band polygon for a start-date line, in the same visual idiom as the lead-curve band.
 // `line.ciLow`/`line.ciHigh` are parallel to `line.dates` (the caller selects the RMSD or bias
 // pair for the active metric). Returns null when the arrays are absent (old artifacts) or too

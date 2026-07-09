@@ -28,3 +28,25 @@ export function resolveViewerDataUrl(url) {
   const withoutDataPrefix = url.replace(/^\.?\/*data\//, "");
   return new URL(withoutDataPrefix, DATA_BASE_URL).href;
 }
+
+// Water-column stores (<slug>.columns.zarr) may live beside the pyramids or at a
+// separate location (they are large and published independently). They default to the
+// same base as the pyramids; a `columns_base` query param (or window config) overrides
+// just the column store, so a developer can point the pyramids at the live bucket while
+// serving a locally-built column store from a local server.
+function configuredColumnsBaseUrl() {
+  const parameters = new URLSearchParams(window.location.search);
+  const queryValue = parameters.get("columns_base");
+  if (queryValue === "local") return "./data/";
+  return window.OCEANBENCH_VIEWER_CONFIG?.columnsBaseUrl || queryValue || DATA_BASE_URL;
+}
+
+export const COLUMNS_BASE_URL = new URL(
+  normalizeBaseUrl(configuredColumnsBaseUrl()),
+  window.location.href,
+).href;
+
+// The column store conventionally sits beside the pyramid as `<slug>.columns.zarr`.
+export function resolveColumnStoreUrl(slug) {
+  return new URL(`${slug}.columns.zarr`, COLUMNS_BASE_URL).href;
+}

@@ -253,6 +253,75 @@ export async function readCoordinate(store, level, name) {
   return values;
 }
 
+/**
+ * Read a 1-D coordinate array stored at the ROOT of a store (name is the array path
+ * itself, not under `level/<k>/`) — used by the water-column store whose `depth`,
+ * `latitude` and `longitude` axes live at the root. Handles f4/f8 (the coordinate
+ * dtypes the column store writes). Cached like readCoordinate.
+ */
+export async function readRootCoordinate(store, name) {
+  const cacheKey = `root/${name}`;
+  const cached = store.coordinateCache.get(cacheKey);
+  if (cached) return cached;
+  const { zarray } = arrayMetadata(store, name);
+  const size = zarray.shape[0];
+  const chunk = zarray.chunks[0];
+  const codecId = compressorId(zarray);
+  const values = new Float64Array(size);
+  const tiles = Math.ceil(size / chunk);
+  for (let t = 0; t < tiles; t += 1) {
+    const record = await fetchChunk(store, name, `${t}`, codecId);
+    const view =
+      zarray.dtype === "<f4" || zarray.dtype === "|f4"
+        ? new Float32Array(record.bytes.buffer, record.bytes.byteOffset, record.bytes.byteLength / 4)
+        : new Float64Array(record.bytes.buffer, record.bytes.byteOffset, record.bytes.byteLength / 8);
+    const start = t * chunk;
+    const extent = Math.min(chunk, size - start);
+    for (let i = 0; i < extent; i += 1) values[start + i] = view[i];
+  }
+  store.coordinateCache.set(cacheKey, values);
+  return values;
+}
+
+/**
+ * Read one point's full water column from a `.columns.zarr` store: ALL lead days and
+ * ALL depths of a single (start, latitude, longitude) point of one variable, decoded to
+ * real units (NaN over land/missing). The store packs every lead and every depth of a
+ * point into ONE chunk (dims start_date, lead_day, depth, latitude, longitude; chunk
+ * [1, all-leads, all-depths, latTile, lonTile]), so a click is a single chunk fetch — and
+ * because that chunk is cached, scrubbing the lead slider re-reads it with no new request.
+ * Returns { values: Float32Array indexed [leadIndex * depths + depthIndex], leads, depths,
+ * compressedBytes }.
+ */
+export async function readColumn(store, { variable, startIndex, latIndex, lonIndex }) {
+  const { zarray, zattrs } = arrayMetadata(store, variable);
+  if (zarray.dtype !== "<u2" && zarray.dtype !== "|u2") {
+    throw new Error(`Expected uint16 column data, got ${zarray.dtype} for ${variable}`);
+  }
+  const [, leadSize, depthSize] = zarray.shape;
+  const [, , depthChunk, latChunk, lonChunk] = zarray.chunks;
+  const scale = zattrs.scale_factor ?? 1;
+  const offset = zattrs.add_offset ?? 0;
+  const fill = zarray.fill_value ?? 65535;
+  const codecId = compressorId(zarray);
+  const ty = Math.floor(latIndex / latChunk);
+  const tx = Math.floor(lonIndex / lonChunk);
+  // Leads and depths are packed into a single chunk (index 0 on both axes).
+  const record = await fetchChunk(store, variable, `${startIndex}.0.0.${ty}.${tx}`, codecId);
+  const stored = new Uint16Array(record.bytes.buffer, record.bytes.byteOffset, record.bytes.byteLength / 2);
+  const localLat = latIndex - ty * latChunk;
+  const localLon = lonIndex - tx * lonChunk;
+  const values = new Float32Array(leadSize * depthSize);
+  for (let lead = 0; lead < leadSize; lead += 1) {
+    for (let depth = 0; depth < depthSize; depth += 1) {
+      const flat = ((lead * depthChunk + depth) * latChunk + localLat) * lonChunk + localLon;
+      const raw = stored[flat];
+      values[lead * depthSize + depth] = raw === fill ? NaN : raw * scale + offset;
+    }
+  }
+  return { values, leads: leadSize, depths: depthSize, compressedBytes: record.compressedBytes };
+}
+
 /** Warm the chunk cache for a layer without decoding — used for lead-day prefetch. */
 export function prefetchLayer(store, { variable, level, startIndex, leadIndex }) {
   const path = `level/${level}/${variable}`;

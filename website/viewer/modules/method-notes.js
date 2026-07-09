@@ -116,6 +116,16 @@ export const METHOD_NOTES = {
       "between models; drifter observations only enter the Class-4 currents diagnostic.",
   },
 
+  // Water-column profile (profile-on-click) chart.
+  "column-profile": {
+    title: "Water column",
+    body:
+      "Model temperature and salinity at the clicked point, read from a quantized copy of " +
+      "the native-resolution forecast (16-bit, error below half a display step). Values are " +
+      "the model's own water column at the selected start and lead. Display only; scores use " +
+      "the raw model outputs.",
+  },
+
   // Currents particle animation overlay.
   currents: {
     title: "Current animation",
