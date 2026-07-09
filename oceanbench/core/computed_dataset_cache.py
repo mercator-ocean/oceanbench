@@ -31,7 +31,13 @@ _BUILD_LOCK_POLL_SECONDS = 5.0
 def cached_computed_dataset(content_key: str, build_dataset: Callable[[], xarray.Dataset]) -> xarray.Dataset:
     """Return ``build_dataset()``, persisting the computed result under the local cache
     directory keyed by ``content_key`` and reusing it on later runs. The dataset is
-    recomputed every call when no local cache directory is configured."""
+    recomputed every call when no local cache directory is configured.
+
+    No invalidation contract: once a ``content_key`` is cached the stored dataset is
+    returned verbatim forever. Nothing is revalidated against the source, so if the
+    upstream data is republished under the same identity the stale copy keeps being
+    served. Point at a fresh cache directory (or delete the entry) when data is
+    republished at the same URL."""
     cache_directory = current_runtime_configuration().local_cache_directory()
     if cache_directory is None:
         return build_dataset()

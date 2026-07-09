@@ -230,8 +230,13 @@ def resilient_zarr_store(url: str, **storage_options) -> zarr.storage.FSStore:
     additionally persisted there -- only after a complete, retried read, written atomically
     -- and reused across runs, so the same opener serves both the pure-online and the
     local-cache modes without the caller branching. The cache holds one file per chunk with
-    no shared index, so concurrent dask reads are safe; it is keyed by source URL, so point
-    it at a fresh directory when a dataset is republished at the same URL."""
+    no shared index, so concurrent dask reads are safe.
+
+    No invalidation contract: a cached chunk is keyed only by its source URL and is served
+    verbatim forever. Nothing is revalidated against the source -- there is no re-check,
+    no ETag/last-modified comparison, no re-download -- so if the data is republished under
+    the same URL the stale chunk keeps being returned. Point the cache at a fresh directory
+    when data is republished at the same URL."""
     cache_directory = current_runtime_configuration().local_cache_directory()
     store = zarr.storage.FSStore(url, mode="r", **storage_options)
     store.map = _RetryingRemoteMapper(store.map, cache_directory)
