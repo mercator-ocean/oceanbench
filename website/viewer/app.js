@@ -1668,6 +1668,12 @@ function onPanelPointerMove(event) {
     scheduleRedrawAllPanels();
     scheduleHashWrite();
     scheduleRailUpdate();
+    // The world point under the pointer changes as the view pans, so the mirrored
+    // companion cursor and both bottom-left readouts must keep tracking during the
+    // drag — not only on plain mouse moves. updateHover would clear the "grabbing"
+    // pointer style, so restore it afterwards.
+    updateHover(event);
+    panel.els.field.style.cursor = "grabbing";
   } else {
     updateHover(event);
   }
@@ -1721,6 +1727,9 @@ function onPanelWheel(panel, event) {
   }
   scheduleHashWrite();
   scheduleRailUpdate();
+  // Zooming moves the world point under a stationary pointer, so refresh the
+  // companion cursor and readouts for the new projection while hovering.
+  updateHover(event);
 }
 
 function minimumZoomFor(panel) {
@@ -1852,7 +1861,7 @@ function updateHover(event) {
 }
 
 // Ghost cursor: in side-by-side 2-forecast mode, mark the mirrored geographic position
-// on the panel the user is NOT hovering — an open accent-colored ring + crosshair,
+// on the panel the user is NOT hovering — a small basic accent-colored crosshair,
 // clearly distinct from the OS pointer, so the same spot is visible on both forecasts.
 function updateGhostCursor(hoverPanel, wrappedNX, ny) {
   if (shared.layout !== 2 || shared.displayMode !== "side") return;

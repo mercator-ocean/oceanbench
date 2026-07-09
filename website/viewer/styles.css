@@ -310,30 +310,31 @@ body.resizing-layout.row { cursor: row-resize; }
   backdrop-filter: blur(4px);
 }
 /* Ghost cursor: the mirrored pointer position on the panel NOT being hovered —
-   an open accent ring with crosshair hairlines, visually distinct from the OS
-   pointer (which stays a plain crosshair on the hovered panel). */
+   a small basic crosshair in a distinct accent (orange) color with a subtle
+   outline, visually distinct from the OS pointer (which stays a plain crosshair
+   on the hovered panel). */
 .panel-ghost-cursor {
   position: absolute;
   left: 0;
   top: 0;
-  width: 16px;
-  height: 16px;
-  margin: -8px 0 0 -8px;
-  border: 2px solid var(--accent);
-  border-radius: 50%;
-  background: transparent;
-  box-shadow: 0 0 0 1px var(--readout-bg);
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
   pointer-events: none;
   z-index: 6;
+  --ghost-cursor-color: #ff8c1a;
 }
 .panel-ghost-cursor::before,
 .panel-ghost-cursor::after {
   content: "";
   position: absolute;
-  background: var(--accent);
+  background: var(--ghost-cursor-color);
+  /* Subtle dark outline so the accent cross stays legible on any field colormap
+     in both light and dark themes. */
+  box-shadow: 0 0 0 0.75px rgba(0, 0, 0, 0.55);
 }
-.panel-ghost-cursor::before { left: 50%; top: -7px; width: 1.5px; height: 26px; margin-left: -0.75px; }
-.panel-ghost-cursor::after { top: 50%; left: -7px; height: 1.5px; width: 26px; margin-top: -0.75px; }
+.panel-ghost-cursor::before { left: 50%; top: 0; width: 1.5px; height: 100%; margin-left: -0.75px; }
+.panel-ghost-cursor::after { top: 50%; left: 0; height: 1.5px; width: 100%; margin-top: -0.75px; }
 .panel-ghost-cursor[hidden] { display: none; }
 
 .panel-loading {
