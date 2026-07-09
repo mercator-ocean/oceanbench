@@ -168,6 +168,113 @@ def _write_tree(
     return str(data_directory), {"frame": frame, "grid": grid}
 
 
+_DEPTH_TARGETS = [
+    ("sea_water_potential_temperature", "0-5m"),
+    ("sea_water_potential_temperature", "100-300m"),
+    ("sea_water_salinity", "0-5m"),
+    ("sea_water_salinity", "100-300m"),
+]
+
+
+def _depth_matchup_frame() -> pandas.DataFrame:
+    generator = numpy.random.default_rng(23)
+    rows = []
+    for start_date in ("2024-01-03", "2024-01-10"):
+        for lead_day in (1, 5):
+            for variable, depth_bin in _DEPTH_TARGETS:
+                for _ in range(20):
+                    observation_value = float(generator.normal())
+                    model_value = observation_value + float(generator.normal(0.2, 0.3))
+                    rows.append(
+                        {
+                            "variable": variable,
+                            "depth_bin": depth_bin,
+                            "lead_day": lead_day,
+                            "start_date": numpy.datetime64(start_date),
+                            "latitude": float(generator.uniform(-70, 70)),
+                            "longitude": float(generator.uniform(-180, 180)),
+                            "observation_value": observation_value,
+                            "model_value": model_value,
+                        }
+                    )
+    return pandas.DataFrame(rows)
+
+
+def _write_depth_tree(tmp_path: Path, dataset: str, region: str, frame: pandas.DataFrame) -> str:
+    data_directory = tmp_path / "data"
+    insights_directory = data_directory / "insights" / dataset / region
+    insights_directory.mkdir(parents=True, exist_ok=True)
+    viewer_artifacts.write_matchup_parquet(frame, str(insights_directory / "class4-matchups.parquet"))
+    viewer_artifacts.write_rmsd_by_depth(
+        str(insights_directory / "class4-matchups.parquet"),
+        str(insights_directory / "rmsd-by-depth.json"),
+        challenger=dataset,
+        region=region,
+        source="synthetic",
+    )
+    prefix = f"./data/insights/{dataset}/{region}"
+    insights = {
+        "datasets": {
+            dataset: {
+                region: {
+                    "class4_matchups": f"{prefix}/class4-matchups.parquet",
+                    "rmsd_by_depth": f"{prefix}/rmsd-by-depth.json",
+                }
+            }
+        },
+        "scores_summary": "./data/scores-summary.json",
+    }
+    (data_directory / "insights.json").write_text(json.dumps(insights), encoding="utf-8")
+    (data_directory / "scores-summary.json").write_text(json.dumps([]), encoding="utf-8")
+    return str(data_directory)
+
+
+def test_rmsd_by_depth_reconciles_with_the_writer(tmp_path) -> None:
+    dataset, region = "synthetic", "global"
+    base = _write_depth_tree(tmp_path, dataset, region, _depth_matchup_frame())
+
+    report = reconcile_viewer_artifacts(base, dataset=dataset, region=region)
+
+    assert report["passed"] is True
+    depth_checks = [
+        check for entry in report["datasets"] for check in entry["checks"] if check["check"] == "rmsd_by_depth"
+    ]
+    assert depth_checks
+    assert all(check["passed"] for check in depth_checks)
+    assert all(check["obs_count_difference"] == 0.0 for check in depth_checks)
+
+
+def test_rmsd_by_depth_reconcile_catches_thinned_n(tmp_path) -> None:
+    dataset, region = "synthetic", "global"
+    frame = _depth_matchup_frame()
+    base = _write_depth_tree(tmp_path, dataset, region, frame)
+    # Inflate every published n by 25% while leaving RMSD untouched: the parquet still carries the
+    # true count, so the exact obs-count guard must fire even though RMSD agrees.
+    rmsd_path = tmp_path / "data" / "insights" / dataset / region / "rmsd-by-depth.json"
+    payload = json.loads(rmsd_path.read_text(encoding="utf-8"))
+    for block in payload["variables"].values():
+        block["n"] = [[int(value * 1.25) for value in row] for row in block["n"]]
+    rmsd_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ReconciliationError):
+        reconcile_viewer_artifacts(base, dataset=dataset, region=region, output_path=str(tmp_path / "report.json"))
+
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    depth_failures = [
+        check
+        for entry in report["datasets"]
+        for check in entry["checks"]
+        if check["check"] == "rmsd_by_depth" and not check["passed"]
+    ]
+    assert depth_failures
+    # RMSD still agrees on every failing cell; only the obs-count guard fires.
+    assert all(check["relative_difference"] <= check["tolerance"] for check in depth_failures)
+    assert all(check["obs_count_difference"] > check["obs_count_tolerance"] for check in depth_failures)
+    assert all(
+        check["message"] == "rmsd-by-depth pooled obs count disagrees with published n" for check in depth_failures
+    )
+
+
 def test_reconcile_passes_on_consistent_artifacts(tmp_path) -> None:
     dataset, region = "synthetic", "global"
     summary = _class4_summary(_matchup_frame(), dataset, region)

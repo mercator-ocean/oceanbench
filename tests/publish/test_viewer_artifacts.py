@@ -291,6 +291,84 @@ def test_class4_bias_per_start_records_are_signed_means() -> None:
     assert records[0]["depth"] == "0-5m"
 
 
+def _depth_matchup_frame() -> pandas.DataFrame:
+    """3D temperature/salinity (multiple depth bins) plus surface-only SSH, over two starts."""
+    generator = numpy.random.default_rng(19)
+    rows = []
+    for start_date in ("2024-01-03", "2024-01-10"):
+        for lead_day in (1, 5):
+            for variable, depth_bin in (
+                ("sea_water_potential_temperature", "0-5m"),
+                ("sea_water_potential_temperature", "100-300m"),
+                ("sea_water_salinity", "0-5m"),
+                ("sea_water_salinity", "100-300m"),
+                ("sea_surface_height_above_geoid", "surface"),
+            ):
+                for _ in range(6):
+                    observation_value = float(generator.normal())
+                    model_value = observation_value + float(generator.normal(0.3, 0.2))
+                    rows.append(
+                        {
+                            "variable": variable,
+                            "depth_bin": depth_bin,
+                            "lead_day": lead_day,
+                            "start_date": numpy.datetime64(start_date),
+                            "latitude": float(generator.uniform(-60, 60)),
+                            "longitude": float(generator.uniform(-180, 180)),
+                            "observation_value": observation_value,
+                            "model_value": model_value,
+                        }
+                    )
+    return pandas.DataFrame(rows)
+
+
+def test_rmsd_by_depth_pools_over_all_starts_and_skips_surface_only(tmp_path) -> None:
+    frame = _depth_matchup_frame()
+    matchup_path = str(tmp_path / "class4-matchups.parquet")
+    viewer_artifacts.write_matchup_parquet(frame, matchup_path)
+    output_path = str(tmp_path / "rmsd-by-depth.json")
+    returned = viewer_artifacts.write_rmsd_by_depth(
+        matchup_path, output_path, challenger="your_model", region="global", source="synthetic"
+    )
+    assert returned == output_path
+    payload = json.loads(open(output_path).read())
+    assert payload["schema_version"] == 1
+    assert payload["challenger"] == "your_model"
+    assert payload["region"] == "global"
+    assert payload["provenance"]["source"] == "synthetic"
+
+    # Only the 3D multi-depth variables appear; surface-only SSH is skipped.
+    assert set(payload["variables"]) == {"sea_water_potential_temperature", "sea_water_salinity"}
+    block = payload["variables"]["sea_water_potential_temperature"]
+    assert block["depth_bins"] == ["0-5m", "100-300m"]  # surface -> deep
+    assert block["leads"] == [1, 5]
+
+    # Every cell pools ALL match-ups of that (variable, depth_bin, lead) over both starts.
+    for depth_index, depth_bin in enumerate(block["depth_bins"]):
+        for lead_index, lead in enumerate(block["leads"]):
+            subset = frame[
+                (frame["variable"] == "sea_water_potential_temperature")
+                & (frame["depth_bin"] == depth_bin)
+                & (frame["lead_day"] == lead)
+            ]
+            error = (subset["model_value"] - subset["observation_value"]).to_numpy()
+            assert block["rmsd"][depth_index][lead_index] == pytest.approx(
+                float(numpy.sqrt((error * error).mean())), rel=1e-5
+            )
+            assert block["bias"][depth_index][lead_index] == pytest.approx(float(error.mean()), abs=1e-5)
+            assert block["n"][depth_index][lead_index] == len(subset)
+
+
+def test_rmsd_by_depth_returns_none_when_no_multi_depth_variable(tmp_path) -> None:
+    matchup_path = str(tmp_path / "class4-matchups.parquet")
+    viewer_artifacts.write_matchup_parquet(_matchup_frame(), matchup_path)  # SSH surface + T single 0-5m bin
+    output_path = str(tmp_path / "rmsd-by-depth.json")
+    assert viewer_artifacts.write_rmsd_by_depth(
+        matchup_path, output_path, challenger="m", region="global"
+    ) is None
+    assert not (tmp_path / "rmsd-by-depth.json").exists()
+
+
 def _sea_surface_height_dataset() -> xarray.Dataset:
     latitudes = numpy.linspace(-10.0, 10.0, 41)
     longitudes = numpy.linspace(-10.0, 10.0, 41)

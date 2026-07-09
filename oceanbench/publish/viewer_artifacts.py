@@ -21,6 +21,7 @@ from pathlib import Path
 import subprocess
 
 import numpy
+import pandas
 import pyarrow
 import pyarrow.compute
 import pyarrow.parquet
@@ -37,6 +38,9 @@ MATCHUP_PARQUET_FILENAME = "class4-matchups.parquet"
 EDDY_CENSUS_FILENAME = "eddies.json"
 YEAR_ERROR_GEOGRAPHY_FILENAME = "year-error-geography.json"
 YEAR_RMSD_BY_START_FILENAME = "year-rmsd-by-start.json"
+RMSD_BY_DEPTH_FILENAME = "rmsd-by-depth.json"
+
+_RMSD_BY_DEPTH_SCHEMA_VERSION = 1
 
 MAXIMUM_ROW_GROUP_ROWS = 200_000
 
@@ -142,8 +146,10 @@ class ViewerArtifactsResult:
     eddy_census_path: str | None = None
     pyramid_zarr_path: str | None = None
     pyramid_manifest_path: str | None = None
+    column_store_zarr_path: str | None = None
     year_error_geography_path: str | None = None
     year_rmsd_by_start_path: str | None = None
+    rmsd_by_depth_path: str | None = None
     class4_bias_records: list[dict] = field(default_factory=list)
     flags: list[str] = field(default_factory=list)
 
@@ -723,6 +729,146 @@ def _write_year_artifacts(
     Path(rmsd_path).write_text(json.dumps(rmsd), encoding="utf-8")
 
 
+def _depth_bin_sort_key(label: str) -> tuple[int, float, str]:
+    """Order depth-bin labels surface -> deep.
+
+    Known labels use the canonical ``DEPTH_BIN_DISPLAY_ORDER`` ranking; any other label falls back
+    to the numeric value that begins it (so ``"100-300m"`` sorts on 100), and finally on the raw
+    string so the order is always total and deterministic.
+    """
+    from oceanbench.core.dataset_utils import DEPTH_BIN_DISPLAY_ORDER
+
+    if label in DEPTH_BIN_DISPLAY_ORDER:
+        return (0, float(DEPTH_BIN_DISPLAY_ORDER[label]), label)
+    leading = ""
+    for character in label:
+        if character.isdigit() or character == ".":
+            leading += character
+        else:
+            break
+    return (1, float(leading) if leading else float("inf"), label)
+
+
+def rmsd_by_depth(matchup_parquet_path: str) -> dict:
+    """Per ``(variable, depth_bin, lead_day)`` pooled RMSD, bias and obs count over the whole year.
+
+    Streams the Class-4 match-up parquet once, accumulating over *all* match-ups of the year (every
+    forecast start pooled together) the squared error ``(model - obs) ** 2``, the signed error
+    ``model - obs`` and the finite-observation count for each ``(variable, depth_bin, lead_day)``
+    cell. The pooled RMSD is ``sqrt(mean(squared error))`` — the same observation-pooled reduction
+    the official Class-4 score uses — the bias is ``mean(model - obs)`` and ``n`` is the pooled obs
+    count. Only 3D variables carrying more than one depth bin are returned (surface-only variables
+    such as SSH or the 15 m currents are skipped); depth bins are ordered surface -> deep with the
+    exact labels found in the parquet.
+    """
+    square_sum: dict = {}
+    signed_sum: dict = {}
+    count: dict = {}
+    depth_bins_by_variable: dict[str, set] = {}
+    leads_by_variable: dict[str, set] = {}
+
+    parquet_file = pyarrow.parquet.ParquetFile(matchup_parquet_path)
+    columns = ["variable", "depth_bin", "lead_day", "observation_value", "model_value", "abs_error"]
+    for group_index in range(parquet_file.num_row_groups):
+        batch = parquet_file.read_row_group(group_index, columns=columns)
+        variable_names = numpy.asarray(batch["variable"].to_pylist())
+        depth_names = numpy.asarray(batch["depth_bin"].to_pylist())
+        lead_days = batch["lead_day"].to_numpy().astype("int64")
+        observation = batch["observation_value"].to_numpy().astype("float64")
+        model = batch["model_value"].to_numpy().astype("float64")
+        absolute_error = batch["abs_error"].to_numpy().astype("float64")
+        finite = numpy.isfinite(absolute_error) & numpy.isfinite(observation) & numpy.isfinite(model)
+        if not finite.any():
+            continue
+        variable_names = variable_names[finite]
+        depth_names = depth_names[finite]
+        lead_days = lead_days[finite]
+        signed = model[finite] - observation[finite]
+        squared = absolute_error[finite] ** 2
+
+        frame = pandas.DataFrame(
+            {
+                "variable": variable_names,
+                "depth_bin": depth_names,
+                "lead_day": lead_days,
+                "squared": squared,
+                "signed": signed,
+            }
+        )
+        for (variable_name, depth_name, lead_value), group in frame.groupby(
+            ["variable", "depth_bin", "lead_day"], sort=False
+        ):
+            key = (str(variable_name), str(depth_name), int(lead_value))
+            square_sum[key] = square_sum.get(key, 0.0) + float(group["squared"].sum())
+            signed_sum[key] = signed_sum.get(key, 0.0) + float(group["signed"].sum())
+            count[key] = count.get(key, 0) + int(len(group))
+            depth_bins_by_variable.setdefault(str(variable_name), set()).add(str(depth_name))
+            leads_by_variable.setdefault(str(variable_name), set()).add(int(lead_value))
+
+    variables: dict = {}
+    for variable_name, depth_bin_set in depth_bins_by_variable.items():
+        if len(depth_bin_set) < 2:
+            continue
+        depth_bins = sorted(depth_bin_set, key=_depth_bin_sort_key)
+        leads = sorted(leads_by_variable[variable_name])
+        rmsd_matrix = []
+        bias_matrix = []
+        count_matrix = []
+        for depth_bin in depth_bins:
+            rmsd_row = []
+            bias_row = []
+            count_row = []
+            for lead in leads:
+                key = (variable_name, depth_bin, lead)
+                cell_count = count.get(key, 0)
+                if cell_count == 0:
+                    rmsd_row.append(None)
+                    bias_row.append(None)
+                    count_row.append(0)
+                    continue
+                rmsd_row.append(float(numpy.sqrt(square_sum[key] / cell_count)))
+                bias_row.append(float(signed_sum[key] / cell_count))
+                count_row.append(int(cell_count))
+            rmsd_matrix.append(rmsd_row)
+            bias_matrix.append(bias_row)
+            count_matrix.append(count_row)
+        variables[variable_name] = {
+            "depth_bins": depth_bins,
+            "leads": leads,
+            "rmsd": rmsd_matrix,
+            "bias": bias_matrix,
+            "n": count_matrix,
+        }
+    return variables
+
+
+def write_rmsd_by_depth(
+    matchup_parquet_path: str, output_path: str, *, challenger: str, region: str, source: str | None = None
+) -> str | None:
+    """Write the ``rmsd-by-depth.json`` viewer artifact, returning its path (``None`` if empty).
+
+    Computes :func:`rmsd_by_depth` from the match-up parquet and serializes it to ``output_path``
+    under the frozen viewer schema (``schema_version`` 1). When no 3D multi-depth variable is
+    present nothing is written and ``None`` is returned.
+    """
+    variables = rmsd_by_depth(matchup_parquet_path)
+    if not variables:
+        return None
+    payload = {
+        "schema_version": _RMSD_BY_DEPTH_SCHEMA_VERSION,
+        "challenger": challenger,
+        "region": region,
+        "variables": variables,
+        PROVENANCE_KEY: provenance_block(
+            source=source if source is not None else os.path.basename(matchup_parquet_path),
+            parameters={"region": region},
+        ),
+    }
+    Path(os.path.dirname(output_path) or ".").mkdir(parents=True, exist_ok=True)
+    Path(output_path).write_text(json.dumps(payload), encoding="utf-8")
+    return output_path
+
+
 def write_viewer_artifacts(
     *,
     forecast_dataset: xarray.Dataset,
@@ -734,6 +880,7 @@ def write_viewer_artifacts(
     matchups_context,
     matchup_variables=None,
     matchup_max_workers: int | None = None,
+    enable_column_store: bool = False,
 ) -> ViewerArtifactsResult:
     """Produce every viewer serving artifact for one evaluated dataset into ``output_directory``.
 
@@ -792,6 +939,21 @@ def write_viewer_artifacts(
     except Exception as error:  # noqa: BLE001
         flags.append(f"pyramid skipped: {error}")
 
+    column_store_zarr_path = None
+    if enable_column_store:
+        from oceanbench.publish.column_store import COLUMN_STORE_SUFFIX, build_column_store
+
+        try:
+            column_store = build_column_store(
+                forecast_dataset,
+                output_path=str(output_path / "viewer" / "data" / f"{dataset_slug}{COLUMN_STORE_SUFFIX}"),
+                dataset_slug=dataset_slug,
+                year=year,
+            )
+            column_store_zarr_path = column_store.zarr_path
+        except Exception as error:  # noqa: BLE001
+            flags.append(f"column store skipped: {error}")
+
     year_error_geography_path = str(insights_directory / YEAR_ERROR_GEOGRAPHY_FILENAME)
     year_rmsd_by_start_path = str(insights_directory / YEAR_RMSD_BY_START_FILENAME)
     try:
@@ -807,13 +969,28 @@ def write_viewer_artifacts(
         year_error_geography_path = None
         year_rmsd_by_start_path = None
 
+    rmsd_by_depth_path = str(insights_directory / RMSD_BY_DEPTH_FILENAME)
+    try:
+        rmsd_by_depth_path = write_rmsd_by_depth(
+            matchup_parquet_path,
+            rmsd_by_depth_path,
+            challenger=dataset_slug,
+            region=region,
+            source=f"insights/{dataset_slug}/{region}/{MATCHUP_PARQUET_FILENAME}",
+        )
+    except Exception as error:  # noqa: BLE001
+        flags.append(f"rmsd-by-depth skipped: {error}")
+        rmsd_by_depth_path = None
+
     return ViewerArtifactsResult(
         matchup_parquet_path=matchup_parquet_path,
         eddy_census_path=eddy_census_path,
         pyramid_zarr_path=pyramid_zarr_path,
         pyramid_manifest_path=pyramid_manifest_path,
+        column_store_zarr_path=column_store_zarr_path,
         year_error_geography_path=year_error_geography_path,
         year_rmsd_by_start_path=year_rmsd_by_start_path,
+        rmsd_by_depth_path=rmsd_by_depth_path,
         class4_bias_records=class4_bias_records,
         flags=flags,
     )

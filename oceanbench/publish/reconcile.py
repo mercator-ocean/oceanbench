@@ -33,6 +33,11 @@ report can be trusted without re-running the whole evaluation:
   compared to ``year-error-geography.json`` for a random sample of cells per variable. Also a
   materialization-consistency check (parquet <-> derived JSON), with no independent official
   counterpart (the official scores carry no per-cell geography).
+- **RMSD-by-depth (independent recompute)** — a sample of ``(variable, depth_bin, lead)`` cells of
+  the published ``rmsd-by-depth.json`` recomputed straight from the match-up parquet as the
+  year-pooled ``sqrt(mean(err ** 2))`` and compared on RMSD (relative tolerance) and obs count
+  ``n`` (exact), the same tolerance pattern as the Class-4 checks; a thinned ``n`` fails the count
+  guard even when the RMSD still agrees.
 - **Eddy census** structurally validated (schema of every detection, provenance/parameter block
   presence); no recompute, only integrity.
 
@@ -70,6 +75,7 @@ DEFAULT_CLASS4_RELATIVE_TOLERANCE = 1e-6
 DEFAULT_YEAR_RMSD_RELATIVE_TOLERANCE = 1e-4
 DEFAULT_YEAR_STARTS_PER_VARIABLE = 4
 DEFAULT_GEOGRAPHY_CELLS_PER_VARIABLE = 20
+DEFAULT_RMSD_BY_DEPTH_CELLS_PER_VARIABLE = 12
 DEFAULT_SEED = 20260707
 
 # The pooled obs count and the parquet finite-obs count are both integer counts of the same
@@ -523,6 +529,85 @@ def _geography_checks(
     return checks
 
 
+def _rmsd_by_depth_checks(
+    accumulators: _Accumulators,
+    rmsd_by_depth: dict,
+    relative_tolerance: float,
+    obs_count_tolerance: float,
+    cells_per_variable: int,
+    generator: numpy.random.Generator,
+) -> list[dict]:
+    """Independent recompute of published ``rmsd-by-depth.json`` cells straight from the parquet.
+
+    For a sample of ``(variable, depth_bin, lead)`` cells per variable, the pooled RMSD is
+    recomputed from the parquet as ``sqrt(class4_square_sum / count)`` (the same year-pooled
+    reduction the writer uses) and compared to the published value at ``relative_tolerance``, while
+    the pooled obs count ``n`` is asserted exactly (``obs_count_tolerance``). A cell published with
+    a thinned ``n`` therefore fails the count guard even when its RMSD still agrees.
+    """
+    checks = []
+    for variable, block in rmsd_by_depth.get("variables", {}).items():
+        depth_bins = block["depth_bins"]
+        leads = block["leads"]
+        candidates = [
+            (depth_index, lead_index)
+            for depth_index in range(len(depth_bins))
+            for lead_index in range(len(leads))
+            if block["rmsd"][depth_index][lead_index] is not None
+        ]
+        if not candidates:
+            continue
+        chosen = generator.choice(len(candidates), size=min(cells_per_variable, len(candidates)), replace=False)
+        for pick in chosen:
+            depth_index, lead_index = candidates[int(pick)]
+            depth_bin = depth_bins[depth_index]
+            lead_day = int(leads[lead_index])
+            key = (variable, depth_bin, lead_day)
+            published_rmsd = block["rmsd"][depth_index][lead_index]
+            published_n = block["n"][depth_index][lead_index]
+            count = accumulators.class4_count.get(key, 0)
+            if count == 0:
+                checks.append(
+                    {
+                        "check": "rmsd_by_depth",
+                        "key": {"variable": variable, "depth_bin": depth_bin, "lead_day": lead_day},
+                        "passed": False,
+                        "message": "no match-up rows for a published rmsd-by-depth cell",
+                    }
+                )
+                continue
+            recomputed_rmsd = float(numpy.sqrt(accumulators.class4_square_sum[key] / count))
+            rmsd_difference = _relative_difference(recomputed_rmsd, published_rmsd)
+            obs_count_difference = abs(count - float(published_n))
+            rmsd_passed = rmsd_difference <= relative_tolerance
+            obs_count_passed = obs_count_difference <= obs_count_tolerance
+            passed = rmsd_passed and obs_count_passed
+            if not rmsd_passed:
+                message = "rmsd-by-depth pooled RMSD exceeds relative tolerance"
+            elif not obs_count_passed:
+                message = "rmsd-by-depth pooled obs count disagrees with published n"
+            else:
+                message = None
+            checks.append(
+                {
+                    "check": "rmsd_by_depth",
+                    "verifies": "independent recompute of rmsd-by-depth cell (rmsd + n) from the parquet",
+                    "key": {"variable": variable, "depth_bin": depth_bin, "lead_day": lead_day},
+                    "recomputed": recomputed_rmsd,
+                    "official": published_rmsd,
+                    "relative_difference": rmsd_difference,
+                    "tolerance": relative_tolerance,
+                    "recomputed_n": count,
+                    "official_n": published_n,
+                    "obs_count_difference": obs_count_difference,
+                    "obs_count_tolerance": obs_count_tolerance,
+                    "passed": passed,
+                    "message": message,
+                }
+            )
+    return checks
+
+
 def _eddy_census_checks(census: dict, root: str) -> list[dict]:
     eddy_schema = load_schema("eddies")["$defs"]["eddy"]
     checks = []
@@ -588,6 +673,7 @@ def reconcile_viewer_artifacts(
     year_rmsd_relative_tolerance: float = DEFAULT_YEAR_RMSD_RELATIVE_TOLERANCE,
     starts_per_variable: int = DEFAULT_YEAR_STARTS_PER_VARIABLE,
     cells_per_variable: int = DEFAULT_GEOGRAPHY_CELLS_PER_VARIABLE,
+    rmsd_by_depth_cells_per_variable: int = DEFAULT_RMSD_BY_DEPTH_CELLS_PER_VARIABLE,
     seed: int = DEFAULT_SEED,
 ) -> dict:
     """Recompute and verify every headline number under a published viewer-artifact tree.
@@ -633,6 +719,16 @@ def reconcile_viewer_artifacts(
             if artifacts.get("year_error_geography"):
                 year_geography = _read_json(_join(root, artifacts["year_error_geography"]))
                 checks += _geography_checks(accumulators, year_geography, cells_per_variable, generator)
+            if artifacts.get("rmsd_by_depth"):
+                rmsd_by_depth = _read_json(_join(root, artifacts["rmsd_by_depth"]))
+                checks += _rmsd_by_depth_checks(
+                    accumulators,
+                    rmsd_by_depth,
+                    class4_relative_tolerance,
+                    class4_obs_count_tolerance,
+                    rmsd_by_depth_cells_per_variable,
+                    generator,
+                )
             if artifacts.get("eddies"):
                 census = _read_json(_join(root, artifacts["eddies"]))
                 checks += _eddy_census_checks(census, root)
@@ -665,6 +761,7 @@ def reconcile_viewer_artifacts(
         "sampling": {
             "year_starts_per_variable": starts_per_variable,
             "geography_cells_per_variable": cells_per_variable,
+            "rmsd_by_depth_cells_per_variable": rmsd_by_depth_cells_per_variable,
             "seed": seed,
         },
         "datasets": dataset_reports,
