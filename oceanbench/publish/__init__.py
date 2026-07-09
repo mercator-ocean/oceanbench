@@ -10,6 +10,7 @@ from oceanbench.publish.benchmark import (
     publish_challengers_registry,
 )
 from oceanbench.publish.catalog import CatalogEntry, build_catalog, write_catalog
+from oceanbench.publish.column_store import ColumnStoreResult, build_column_store
 from oceanbench.publish.content_address import PublishedBlob, content_addressed_name, publish_blob, sha256_hex
 from oceanbench.publish.insights_manifest import InsightArtifact, write_insights_manifest
 from oceanbench.publish.viewer_artifacts import (
@@ -36,12 +37,14 @@ from oceanbench.publish.s3 import (
 __all__ = [
     "AwsCredentials",
     "CatalogEntry",
+    "ColumnStoreResult",
     "InsightArtifact",
     "PublishedBlob",
     "UploadPlanItem",
     "UploadSummary",
     "ViewerArtifactsResult",
     "build_catalog",
+    "build_column_store",
     "build_upload_plan",
     "class4_bias_per_start_records",
     "content_addressed_name",
