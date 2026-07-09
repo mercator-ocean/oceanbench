@@ -306,10 +306,7 @@ def test_reconcile_flags_corrupted_class4_aggregate(tmp_path) -> None:
 
 def _class4_checks_in(report: dict) -> list[dict]:
     return [
-        check
-        for entry in report["datasets"]
-        for check in entry["checks"]
-        if check["check"] == "class4_pooled_rmsd"
+        check for entry in report["datasets"] for check in entry["checks"] if check["check"] == "class4_pooled_rmsd"
     ]
 
 

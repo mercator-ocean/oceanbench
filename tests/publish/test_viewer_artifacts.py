@@ -363,9 +363,7 @@ def test_rmsd_by_depth_returns_none_when_no_multi_depth_variable(tmp_path) -> No
     matchup_path = str(tmp_path / "class4-matchups.parquet")
     viewer_artifacts.write_matchup_parquet(_matchup_frame(), matchup_path)  # SSH surface + T single 0-5m bin
     output_path = str(tmp_path / "rmsd-by-depth.json")
-    assert viewer_artifacts.write_rmsd_by_depth(
-        matchup_path, output_path, challenger="m", region="global"
-    ) is None
+    assert viewer_artifacts.write_rmsd_by_depth(matchup_path, output_path, challenger="m", region="global") is None
     assert not (tmp_path / "rmsd-by-depth.json").exists()
 
 

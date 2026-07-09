@@ -383,9 +383,7 @@ def _year_by_start_recombination_checks(
                     "relative_difference": difference,
                     "tolerance": relative_tolerance,
                     "passed": passed,
-                    "message": (
-                        None if passed else "pooled year-rmsd-by-start disagrees with official class4_rmsd"
-                    ),
+                    "message": (None if passed else "pooled year-rmsd-by-start disagrees with official class4_rmsd"),
                 }
             )
     return checks
