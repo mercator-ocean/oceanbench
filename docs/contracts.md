@@ -172,6 +172,17 @@ Gridded (vs `glorys` and `glo12`, area-weighted cos-lat, native grid):
 Observation track (vs `observations`): `class4_rmsd` (T/S bins, SLA surface,
 currents 15 m).
 
+**Class-4 depth bins.** Match-up rows are binned by observation depth into
+half-open intervals `[low, high)` (lower edge inclusive, upper edge exclusive).
+The default bins are `0-5m` `[0, 5)`, `5-100m` `[5, 100)`, `100-300m`
+`[100, 300)`, and `300-600m` `[300, 600)`. Temperature additionally carries a
+`surface` bin for depths in `[-1, 1)`. The `15m` bin applies to drifter currents
+only. Observations below 600 m are excluded from scoring by design: at 1–10 day
+lead times the deep ocean carries little forecast-dependent signal, so OceanBench
+scores the 0–600 m range where forecast skill is measurable. Deeper model
+structure remains inspectable in the viewer's water-column tools but feeds no
+score.
+
 Realism battery (native grid, per region incl. WBC boxes):
 `psd_band_energy_fraction` (band column set), `effective_resolution_km`
 (wavelength where challenger PSD falls to half of reference),
