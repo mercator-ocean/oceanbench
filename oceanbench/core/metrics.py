@@ -37,6 +37,7 @@ def _lagrangian_particle_count(
 def rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
+    challenger_name: str | None = None,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     try:
@@ -46,6 +47,7 @@ def rmsd_of_variables_compared_to_observations(
     return rmsd_class4_validation(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
+        challenger_name=challenger_name,
         variables=[
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
