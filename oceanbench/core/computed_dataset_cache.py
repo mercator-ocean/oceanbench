@@ -24,7 +24,7 @@ import xarray
 
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
-_BUILD_LOCK_TIMEOUT_SECONDS = 24 * 60 * 60
+_BUILD_LOCK_TIMEOUT_SECONDS = 60 * 60
 _BUILD_LOCK_POLL_SECONDS = 5.0
 
 
@@ -74,9 +74,40 @@ def _write_cache_lock_metadata(lock_path: Path) -> None:
     )
 
 
+def _process_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # The process exists but is owned by another user.
+        return True
+    return True
+
+
+def _lock_owner_is_dead_local_process(lock_path: Path) -> bool:
+    """Return ``True`` when the lock records a pid on this host that is no longer running.
+
+    A dead owner on the local host means the build that took the lock has crashed or been
+    killed, so the lock can be reclaimed immediately without waiting for the timeout. The
+    hostname guard keeps us from misreading a pid that belongs to a different machine."""
+    try:
+        owner = json.loads((lock_path / "owner.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if owner.get("hostname") != socket.gethostname():
+        return False
+    pid = owner.get("pid")
+    if not isinstance(pid, int):
+        return False
+    return not _process_is_alive(pid)
+
+
 def _is_stale_cache_lock(lock_path: Path) -> bool:
     if not lock_path.exists():
         return False
+    if _lock_owner_is_dead_local_process(lock_path):
+        return True
     lock_age_seconds = datetime.now(timezone.utc).timestamp() - lock_path.stat().st_mtime
     return lock_age_seconds > _BUILD_LOCK_TIMEOUT_SECONDS
 
