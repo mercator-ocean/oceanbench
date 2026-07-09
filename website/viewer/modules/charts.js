@@ -423,6 +423,87 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
   return svgOpen(title) + axes(area, "start date", unit || "RMSD") + body + legend + interactionLayer() + "</svg>";
 }
 
+/**
+ * RMSD vertical profile: RMSD on the x-axis, DEPTH on the y-axis increasing DOWNWARD
+ * (surface at the top), one line per forecast. `series` is an array of
+ * { label, color, bins: [{ label, rmsd, n }] } where every bin's `label` is a depth-bin
+ * label ordered surface→deep. Bins are placed as evenly spaced ordinal rows (the labels
+ * are opaque strings, not numeric depths), so both forecasts share the depth ordering of
+ * the longest series. Points carry `data-line`/`data-x-label`/`data-y-label` so the shared
+ * cursor tooltip reports the depth bin, the RMSD, and the observation count on hover.
+ */
+export function rmsdByDepthSVG(series, { title = "RMSD vs depth", unit = "", emptyMessage = "no depth profile for this variable" } = {}) {
+  // Depth-bin labels ("1500-3000 m") are wider than the numeric ticks the other charts use,
+  // so this profile gets a roomier left gutter than the shared plotArea() default.
+  const base = plotArea();
+  const DEPTH_PAD_LEFT = 62;
+  const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
+  const usable = (series || []).filter((line) => line && Array.isArray(line.bins) && line.bins.some((bin) => Number.isFinite(bin.rmsd)));
+  if (!usable.length) return emptyChart(title, emptyMessage);
+
+  // Depth ordering (surface→deep) from the series with the most bins, so a shorter
+  // profile still aligns onto the shared axis by label.
+  const depthLabels = usable.reduce((best, line) => (line.bins.length > best.length ? line.bins : best), usable[0].bins).map((bin) => bin.label);
+  const rowOfLabel = new Map(depthLabels.map((label, index) => [label, index]));
+  const lastRow = Math.max(1, depthLabels.length - 1);
+  const yOf = (index) => area.y0 + (index / lastRow) * area.height;
+
+  let maxValue = 0;
+  for (const line of usable) {
+    for (const bin of line.bins) if (Number.isFinite(bin.rmsd) && bin.rmsd > maxValue) maxValue = bin.rmsd;
+  }
+  const xMax = niceMax(maxValue);
+  const xOf = (value) => area.x0 + (value / xMax) * area.width;
+
+  let body = "";
+  // Vertical gridlines + x ticks (RMSD).
+  for (let t = 0; t <= 4; t += 1) {
+    const value = (xMax * t) / 4;
+    const x = xOf(value);
+    body += `<line x1="${x.toFixed(1)}" y1="${area.y0}" x2="${x.toFixed(1)}" y2="${area.y1}" class="grid"/>`;
+    body += `<text x="${x.toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="middle">${formatTick(value)}</text>`;
+  }
+  // Horizontal gridlines + depth-bin labels (thinned when many bins).
+  const labelStep = Math.max(1, Math.round(depthLabels.length / 8));
+  depthLabels.forEach((label, index) => {
+    const y = yOf(index);
+    body += `<line x1="${area.x0}" y1="${y.toFixed(1)}" x2="${area.x1}" y2="${y.toFixed(1)}" class="grid"/>`;
+    if (index % labelStep === 0 || index === depthLabels.length - 1) {
+      body += `<text x="${area.x0 - 4}" y="${(y + 3).toFixed(1)}" class="tick" text-anchor="end">${escapeText(label)}</text>`;
+    }
+  });
+
+  for (const line of usable) {
+    const points = line.bins
+      .filter((bin) => Number.isFinite(bin.rmsd) && rowOfLabel.has(bin.label))
+      .map((bin) => ({ ...bin, row: rowOfLabel.get(bin.label) }))
+      .sort((a, b) => a.row - b.row);
+    const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${xOf(point.rmsd).toFixed(1)} ${yOf(point.row).toFixed(1)}`);
+    body += `<path d="${path.join(" ")}" fill="none" stroke="${line.color}" stroke-width="1.8"/>`;
+    for (const point of points) {
+      const x = xOf(point.rmsd).toFixed(1);
+      const y = yOf(point.row).toFixed(1);
+      const count = Number.isFinite(point.n) ? ` · n=${Number(point.n).toLocaleString("en-US")}` : "";
+      body += `<circle cx="${x}" cy="${y}" r="1.8" fill="${line.color}"/>`;
+      body +=
+        `<circle class="chart-point" data-line="${escapeText(line.label)}" ` +
+        `data-x-label="${escapeText(point.label)}${count}" data-y-label="${formatValue(point.rmsd, unit)}" ` +
+        `cx="${x}" cy="${y}" r="8"/>`;
+    }
+  }
+
+  const legend = usable
+    .map((line, index) => {
+      const x = area.x0 + index * 118;
+      return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="10" class="legend">${escapeText(line.label)}</text>`;
+    })
+    .join("");
+
+  // Depth axis reads downward; the tooltip's crosshair (a vertical line) is not meaningful
+  // for a profile, so only the point readout is used (interactionLayer supplies the tooltip).
+  return svgOpen(title) + axes(area, unit || "RMSD", "depth") + body + legend + interactionLayer() + "</svg>";
+}
+
 // 95% CI band polygon for a start-date line, in the same visual idiom as the lead-curve band.
 // `line.ciLow`/`line.ciHigh` are parallel to `line.dates` (the caller selects the RMSD or bias
 // pair for the active metric). Returns null when the arrays are absent (old artifacts) or too

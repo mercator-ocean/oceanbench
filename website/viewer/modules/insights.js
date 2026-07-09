@@ -50,6 +50,45 @@ export async function loadSpectra(url) {
   return fetchJSON(url).catch(() => null);
 }
 
+export async function loadRmsdByDepth(url) {
+  if (!url) return null;
+  return fetchJSON(url).catch(() => null);
+}
+
+/**
+ * Vertical RMSD profile for one variable at the lead day nearest `leadDay`, read from a
+ * rmsd-by-depth artifact (schema_version 1). Returns { bins: [{ label, rmsd, bias, n }],
+ * lead } ordered surface→deep, or null when the variable/lead carries no finite value.
+ * `variableName` is the observation standard name (e.g. sea_water_potential_temperature).
+ */
+export function rmsdDepthProfile(data, variableName, leadDay) {
+  const entry = data && data.variables && data.variables[variableName];
+  if (!entry || !Array.isArray(entry.depth_bins) || !Array.isArray(entry.leads) || !entry.leads.length) return null;
+  const leadIndex = nearestIndex(entry.leads, leadDay);
+  if (leadIndex < 0) return null;
+  const valueAt = (matrix, row) => {
+    const cell = Array.isArray(matrix) && Array.isArray(matrix[row]) ? matrix[row][leadIndex] : null;
+    return cell == null || !Number.isFinite(Number(cell)) ? null : Number(cell);
+  };
+  const bins = entry.depth_bins.map((label, row) => ({
+    label,
+    rmsd: valueAt(entry.rmsd, row),
+    bias: valueAt(entry.bias, row),
+    n: valueAt(entry.n, row),
+  }));
+  if (!bins.some((bin) => Number.isFinite(bin.rmsd))) return null;
+  return { bins, lead: entry.leads[leadIndex] };
+}
+
+function nearestIndex(leads, leadDay) {
+  if (!Array.isArray(leads) || !leads.length) return -1;
+  let bestIndex = 0;
+  for (let index = 1; index < leads.length; index += 1) {
+    if (Math.abs(leads[index] - leadDay) < Math.abs(leads[bestIndex] - leadDay)) bestIndex = index;
+  }
+  return bestIndex;
+}
+
 export async function loadScoresSummary(index) {
   if (!index || !index.scores_summary) return [];
   return fetchJSON(index.scores_summary).catch(() => []);

@@ -31,6 +31,8 @@ import {
   loadInsightIndex,
   loadEddies,
   loadScoresSummary,
+  loadRmsdByDepth,
+  rmsdDepthProfile,
   loadClass4,
   insightsFor,
   eddyCensus,
@@ -49,7 +51,7 @@ import {
   EDDY_MATCHED_COLOR,
   CLASS4_COLORMAP,
 } from "./modules/overlays.js";
-import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, SERIES_COLORS } from "./modules/charts.js";
+import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, rmsdByDepthSVG, SERIES_COLORS } from "./modules/charts.js";
 import {
   loadYearGeography,
   loadYearRmsd,
@@ -2311,6 +2313,7 @@ async function updateContextRail() {
 
   updateCurrentDepthGateNote(shown);
   renderRailSkill(shown, comparison);
+  await renderRailDepthProfile(shown, comparison);
   const yearSection = elements["rail-year-rmsd-section"];
   if (shared.scope === "year") {
     if (yearSection) yearSection.hidden = false;
@@ -2320,6 +2323,52 @@ async function updateContextRail() {
   if (yearSection) yearSection.hidden = true;
   renderRailPsd(shown, comparison);
   renderTrajectoryRail();
+}
+
+// RMSD vertical profile (RMSD vs depth) for the shown forecast(s) at the selected lead
+// day, so the rail answers "where in the water column is the model wrong at this lead".
+// Only 3D variables (temperature, salinity) carry a depth profile: the artifact keys its
+// `variables` by the observation standard name, so surface-only channels (SSH, currents)
+// simply find no entry and the section stays hidden. The artifact may be absent while the
+// backfill is in flight — a missing file resolves to null and hides the section too.
+async function renderRailDepthProfile(shown, comparison) {
+  const section = elements["rail-depth-profile-section"];
+  const slot = elements["rail-depth-profile"];
+  const note = elements["rail-depth-profile-note"];
+  if (!section || !slot) return;
+  const lines = [];
+  let unit = "";
+  let lead = null;
+  for (const panel of shown) {
+    const entry = variableEntry(manifestFor(panel.state.dataset), panel.state.variable);
+    if (!entry || isVelocityFamilyVariable(panel.state.variable)) continue;
+    const url = insightsFor(insightIndex, panel.state.dataset, shared.region).rmsd_by_depth;
+    const data = url ? await loadRmsdByDepth(url) : null;
+    const profile = data ? rmsdDepthProfile(data, entry.standard_name, shared.leadDay) : null;
+    if (!profile) continue;
+    lead = lead == null ? profile.lead : lead;
+    unit = unit || entry.units || "";
+    lines.push({
+      label: comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}` : "RMSD vs depth",
+      color: forecastColor(panel.index),
+      bins: profile.bins,
+    });
+  }
+  if (!lines.length) {
+    section.hidden = true;
+    slot.innerHTML = "";
+    if (note) note.textContent = "";
+    return;
+  }
+  section.hidden = false;
+  slot.innerHTML = rmsdByDepthSVG(lines, {
+    title: comparison ? "RMSD vs depth (both forecasts)" : "RMSD vs depth",
+    unit,
+  });
+  if (note) {
+    note.textContent = `Class-4 RMSD per depth bin at lead day ${lead ?? shared.leadDay}, pooled over all match-ups of the year (same method as the official scores).`;
+  }
+  wireCursorTooltip(slot);
 }
 
 // RMSD by start date, one line per visible forecast at the selected lead day. Clicking
@@ -3357,6 +3406,8 @@ function markMetricButtons() {
 function wireStaticMethodNotes() {
   const skillHeading = elements["rail-lead-curve"] && elements["rail-lead-curve"].closest(".rail-section")?.querySelector("h3");
   if (skillHeading) attachMethodNote(skillHeading, "lead-curve");
+  const depthHeading = elements["rail-depth-profile-section"] && elements["rail-depth-profile-section"].querySelector("h3");
+  if (depthHeading) attachMethodNote(depthHeading, "depth-profile");
   const yearHeading = elements["rail-year-rmsd-section"] && elements["rail-year-rmsd-section"].querySelector("h3");
   if (yearHeading) attachMethodNote(yearHeading, "year-rmsd");
   const psdHeading = document.getElementById("rail-spectra-section")?.querySelector("h3");
@@ -3812,6 +3863,9 @@ function selectElements() {
     "rail-forecast-toggle",
     "rail-lead-curve",
     "rail-skill-note",
+    "rail-depth-profile-section",
+    "rail-depth-profile",
+    "rail-depth-profile-note",
     "psd-toggle",
     "rail-spectra",
     "rail-psd-note",

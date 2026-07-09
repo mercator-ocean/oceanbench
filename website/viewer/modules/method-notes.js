@@ -50,6 +50,15 @@ export const METHOD_NOTES = {
       "Computed offline by the oceanbench library.",
   },
 
+  // RMSD vs depth vertical profile chart (rail-depth-profile).
+  "depth-profile": {
+    title: "RMSD vs depth",
+    body:
+      "Class-4 RMSD against observations per depth bin, pooled over all match-ups of the " +
+      "year at the selected lead day. Same observation set and method as the official " +
+      "scores. Hover a point for the observation count.",
+  },
+
   // RMSD / bias by start date chart (rail-year-rmsd).
   "year-rmsd": {
     title: "RMSD / bias by start date",
