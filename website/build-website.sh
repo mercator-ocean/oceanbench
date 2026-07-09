@@ -20,6 +20,7 @@ pip install -r requirements.txt
 quarto render --to html
 
 mkdir -p /app/repository
+rm -rf /app/repository/reports
 cp -r _site/* /app/repository
 
 popd > /dev/null

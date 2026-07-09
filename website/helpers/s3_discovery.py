@@ -4,6 +4,7 @@
 
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -13,6 +14,11 @@ S3_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench"
 REPORTS_ROOT_PREFIX = "public/evaluation-reports"
 REPORT_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
 REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")
+
+# The report discovery and download steps each issue one HTTP request per challenger and region.
+# Running them concurrently keeps the website rebuild well under the gateway timeout as the number
+# of published versions grows.
+MAXIMUM_PARALLEL_REQUESTS = 16
 
 # index.json stored next to the reports is the single source of truth: editing it
 # (or uploading a new report) publishes a version or challenger without a library release.
@@ -67,11 +73,21 @@ def _report_exists(version: str, challenger_name: str, region_id: str) -> bool:
 
 
 def discover_official_reports(version: str) -> dict[str, list[str]]:
+    challenger_names = challengers_for_version(version)
+    probes = [
+        (challenger_name, region_id) for region_id in published_region_ids() for challenger_name in challenger_names
+    ]
+
+    def report_exists(probe: tuple[str, str]) -> bool:
+        challenger_name, region_id = probe
+        return _report_exists(version, challenger_name, region_id)
+
+    with ThreadPoolExecutor(max_workers=MAXIMUM_PARALLEL_REQUESTS) as pool:
+        available_probes = {probe for probe, exists in zip(probes, pool.map(report_exists, probes)) if exists}
+
     return {
         region_id: [
-            challenger_name
-            for challenger_name in challengers_for_version(version)
-            if _report_exists(version, challenger_name, region_id)
+            challenger_name for challenger_name in challenger_names if (challenger_name, region_id) in available_probes
         ]
         for region_id in published_region_ids()
     }

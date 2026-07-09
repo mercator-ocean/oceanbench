@@ -18,6 +18,41 @@ forecasts refreshed — do **not** bump the version. They are recorded as dated 
 **Challengers** heading in the current version's section, and the affected reports are
 re-published (never silently overwritten).
 
+## 0.4.0 - 2026-07-07
+
+**Scores:** every score computed against the gridded GLORYS/GLO12 reference changes for every
+challenger vs 0.3.0 — grid-averaged RMSD (variables, mixed-layer depth, geostrophic currents)
+now uses cos(latitude) area weighting, and Lagrangian trajectory seeds are drawn with the same
+cos-latitude weighting, so scores reflect skill per unit ocean area rather than per grid cell.
+The observation-based Class IV scores (temperature, salinity, sea level anomaly and currents vs
+observations) are unchanged. See the
+[evaluation methods documentation](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
+
+### Changed
+
+- Grid-averaged RMSD — variables, mixed-layer depth and geostrophic currents against both GLORYS and GLO12 — now uses cos-latitude area weighting instead of an unweighted lat/lon mean.
+- Lagrangian trajectory seed points are drawn with cos-latitude area probabilities.
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.4.0/`
+
+## 0.3.0 - 2026-07-07
+
+**Scores:** global sea-level-anomaly scores change for every challenger vs 0.2.1 — global SSH
+is now converted to SLA using the GLO12 mean dynamic topography instead of the GLORYS MDT,
+matching the GLO12 datum the global challengers are initialised on and correcting the
+overestimated SLA reported in [#293](https://github.com/mercator-ocean/oceanbench/issues/293).
+IBI SLA and all other scores are unchanged.
+
+### Changed
+
+- Global SSH→SLA conversion now uses the GLO12 mean dynamic topography (GLO-MFC_001_024) paired with the GLO12 datum shift, replacing the GLORYS MDT ([#295](https://github.com/mercator-ocean/oceanbench/issues/295)).
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.3.0/`
+
 ## 0.2.1 - 2026-06-16
 
 **Scores:** GLO12, GLONET, XiHe and WenHai change vs 0.2.0. The GLONET, XiHe and WenHai
@@ -28,6 +63,8 @@ is unchanged from 0.2.0.
 
 ### Challengers
 
+- 2026-06-30 — WenHai forecasts recomputed to mask initial-condition land as NaN, fixing the spurious minimum-value points from the land-sea mask mismatch ([#294](https://github.com/mercator-ocean/oceanbench/issues/294)).
+- 2026-06-23 — LangYa added: a machine-learning model from IOCAS producing 7-day global ocean forecasts initialized from GLO12 nowcasts and IFS atmospheric forcings.
 - 2026-06-16 — GLONET, XiHe and WenHai forecasts recomputed with updated GLO12 nowcasts and IFS atmospheric forcings. For WenHai this resolves the surface-forcing issue reported in [#269](https://github.com/mercator-ocean/oceanbench/issues/269): the model is now forced with net shortwave radiation, replacing the previously corrupted shortwave input that had inflated its error.
 - 2026-06-16 — GLO12 now reads the full GLO12 operational forecast (50 depth levels), replacing the previous reduced-depth product.
 

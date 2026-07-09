@@ -3,44 +3,74 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 
-from helpers.s3_discovery import available_versions, discover_official_reports, download_notebook
+from helpers.s3_discovery import (
+    MAXIMUM_PARALLEL_REQUESTS,
+    available_versions,
+    default_version,
+    discover_downloaded_reports,
+    discover_official_reports,
+    download_notebook,
+)
 
 SCRIPT_DIRECTORY = os.path.dirname(__file__)
 REPORTS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "reports")
 QUARTO_METADATA_FILE_PATH = os.path.join(REPORTS_DIRECTORY, "_metadata.yml")
 
 
-def _clear_report_notebooks() -> None:
-    if not os.path.isdir(REPORTS_DIRECTORY):
+def _version_already_downloaded(version: str) -> bool:
+    return any(discover_downloaded_reports(REPORTS_DIRECTORY, version).values())
+
+
+def _clear_version_report_notebooks(version_directory: str) -> None:
+    if not os.path.isdir(version_directory):
         return
-    for directory, _subdirectories, file_names in os.walk(REPORTS_DIRECTORY):
-        for file_name in file_names:
-            if file_name.endswith(".report.ipynb"):
-                os.remove(os.path.join(directory, file_name))
+    for file_name in os.listdir(version_directory):
+        if file_name.endswith(".report.ipynb"):
+            os.remove(os.path.join(version_directory, file_name))
+
+
+def _download_version_reports(version: str) -> bool:
+    version_directory = os.path.join(REPORTS_DIRECTORY, version)
+    published_reports = discover_official_reports(version)
+    print(f"[{version}] discovered reports: {published_reports}")
+    pending_reports = [
+        (challenger_name, region_id)
+        for region_id, challenger_names in published_reports.items()
+        for challenger_name in challenger_names
+    ]
+
+    def download(report: tuple[str, str]) -> str | None:
+        challenger_name, region_id = report
+        return download_notebook(version, challenger_name, region_id, version_directory)
+
+    with ThreadPoolExecutor(max_workers=MAXIMUM_PARALLEL_REQUESTS) as pool:
+        downloaded_paths = list(pool.map(download, pending_reports))
+
+    for (challenger_name, region_id), downloaded_path in zip(pending_reports, downloaded_paths):
+        if not downloaded_path:
+            raise RuntimeError(f"Failed to download notebook for {version}/{challenger_name}.{region_id}.")
+        print(f"Downloaded {version}/{challenger_name}.{region_id} -> {downloaded_path}")
+    return bool(pending_reports)
 
 
 def main() -> None:
     os.makedirs(REPORTS_DIRECTORY, exist_ok=True)
-    _clear_report_notebooks()
+    active_version = default_version()
 
-    downloaded_any_report = False
+    has_reports = False
     for version in available_versions():
-        published_reports = discover_official_reports(version)
-        print(f"[{version}] discovered reports: {published_reports}")
-        version_directory = os.path.join(REPORTS_DIRECTORY, version)
-        for region_id, challengers in published_reports.items():
-            for challenger_name in challengers:
-                print(f"Downloading {version}/{challenger_name}.{region_id}...", end=" ")
-                result = download_notebook(version, challenger_name, region_id, version_directory)
-                if result:
-                    downloaded_any_report = True
-                    print(f"OK -> {result}")
-                    continue
-                print("FAILED")
-                raise RuntimeError(f"Failed to download notebook for {version}/{challenger_name}.{region_id}.")
+        if version != active_version and _version_already_downloaded(version):
+            print(f"[{version}] already downloaded, keeping")
+            has_reports = True
+            continue
+        if version == active_version:
+            _clear_version_report_notebooks(os.path.join(REPORTS_DIRECTORY, version))
+        if _download_version_reports(version):
+            has_reports = True
 
-    if not downloaded_any_report:
+    if not has_reports:
         raise RuntimeError("No evaluation reports were discovered in the official bucket.")
 
     with open(QUARTO_METADATA_FILE_PATH, "w") as file:

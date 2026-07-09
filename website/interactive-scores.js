@@ -54,6 +54,11 @@ let activeRegion = null;
 let activeVersion = null;
 let isScrollRefreshScheduled = false;
 
+let selectedBaseline = null;
+let defaultVersionValue = null;
+let defaultRegionValue = null;
+let defaultBaselineValue = null;
+
 const SECTION_ORDER = ["observations", "reanalysis", "analysis"];
 
 const SECTION_ID_MAP = {
@@ -128,7 +133,7 @@ function formatPercentDiffForCell(referenceValue, comparedValue) {
 
 function getValue(scoreData, depth, variable, leadDay) {
   try {
-    return scoreData.depths[depth].variables[variable].data[leadDay];
+    return scoreData.depths[depth].variables[variable].data[leadDay] ?? null;
   } catch {
     return null;
   }
@@ -1107,9 +1112,7 @@ function ensureParsedData() {
     parsedData = JSON.parse(dataElement.textContent);
     const versions = getVersions(parsedData);
     if (!activeVersion || !versions.includes(activeVersion)) {
-      activeVersion = versions.includes(parsedData.default_version)
-        ? parsedData.default_version
-        : versions[0] || null;
+      activeVersion = resolveDefaultVersion(parsedData);
     }
     applyActiveVersion();
   }
@@ -1118,6 +1121,11 @@ function ensureParsedData() {
 
 function getVersions(data) {
   return data.version_order || Object.keys(data.versions || {});
+}
+
+function resolveDefaultVersion(data) {
+  const versions = getVersions(data);
+  return versions.includes(data.default_version) ? data.default_version : versions[0] || null;
 }
 
 function getActiveVersionData(data) {
@@ -1197,7 +1205,7 @@ function renderTablesOnly() {
   if (visibleChallengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value);
+  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value ?? selectedBaseline);
   if (!baseline) return;
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
@@ -1217,6 +1225,9 @@ function renderTablesOnly() {
 
   updateColorLegend();
   setupCellHighlight();
+
+  selectedBaseline = baseline;
+  writeUrlState();
 }
 
 function renderAllTables() {
@@ -1232,7 +1243,7 @@ function renderAllTables() {
   if (visibleChallengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value);
+  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value ?? selectedBaseline);
   if (!baseline) return;
   const availableDepths = getAvailableDepths(challengers, baseline, sections);
 
@@ -1271,6 +1282,84 @@ function renderAllTables() {
   setActiveSection(activeSection);
   refreshScrollSpy();
   setupCellHighlight();
+
+  defaultVersionValue = resolveDefaultVersion(data);
+  defaultRegionValue = regionIds[0] || null;
+  defaultBaselineValue = resolveBaselineSelectionForTrack(visibleChallengerNames, null);
+  selectedBaseline = baseline;
+  writeUrlState();
+}
+
+function applyUrlStateFromLocation() {
+  const parameters = new URLSearchParams(window.location.search);
+
+  const versionParameter = parameters.get("version");
+  if (versionParameter) activeVersion = versionParameter;
+
+  const regionParameter = parameters.get("region");
+  if (regionParameter) activeRegion = regionParameter;
+
+  const trackParameter = parameters.get("track");
+  if (trackParameter) activeTrack = trackParameter;
+
+  const baselineParameter = parameters.get("baseline");
+  if (baselineParameter) selectedBaseline = baselineParameter;
+
+  const displayParameter = parameters.get("display");
+  if (displayParameter) showPercentDiff = displayParameter === "percent";
+
+  const depthsParameter = parameters.get("depths");
+  if (depthsParameter) {
+    if (depthsParameter === "all") {
+      showAllMode = true;
+      selectedDepths = new Set();
+    } else {
+      showAllMode = false;
+      selectedDepths = new Set(depthsParameter.split(",").filter((depth) => depth !== ""));
+    }
+  }
+
+  const scaleParameter = parameters.get("scale");
+  if (scaleParameter) {
+    const parsedScale = Number(scaleParameter);
+    if (isFinite(parsedScale) && parsedScale > 0) {
+      maxScale = parsedScale;
+      colorScaleEdges = buildBinEdges(maxScale);
+    }
+  }
+}
+
+function writeUrlState() {
+  if (!parsedData) return;
+  const parameters = new URLSearchParams();
+
+  if (activeVersion && activeVersion !== defaultVersionValue) {
+    parameters.set("version", activeVersion);
+  }
+  if (activeRegion && activeRegion !== defaultRegionValue) {
+    parameters.set("region", activeRegion);
+  }
+  if (activeTrack && activeTrack !== "high_resolution") {
+    parameters.set("track", activeTrack);
+  }
+  if (selectedBaseline && selectedBaseline !== defaultBaselineValue) {
+    parameters.set("baseline", selectedBaseline);
+  }
+  if (showPercentDiff) {
+    parameters.set("display", "percent");
+  }
+  if (!showAllMode && selectedDepths.size > 0) {
+    const orderedDepths = [...selectedDepths].sort((first, second) => Number(first) - Number(second));
+    parameters.set("depths", orderedDepths.join(","));
+  }
+  if (maxScale !== 80) {
+    parameters.set("scale", `${maxScale}`);
+  }
+
+  const queryString = parameters.toString();
+  const newRelativeUrl =
+    window.location.pathname + (queryString ? `?${queryString}` : "") + window.location.hash;
+  window.history.replaceState(null, "", newRelativeUrl);
 }
 
 function init() {
@@ -1279,6 +1368,7 @@ function init() {
   if (initialSection) {
     activeSection = initialSection;
   }
+  applyUrlStateFromLocation();
   renderAllTables();
 
   if (initialSection) {

@@ -320,3 +320,72 @@ def wenhai_1_degree() -> xarray.Dataset:
     """
 
     return challenger_datasets.wenhai_1_degree()
+
+
+def langya() -> xarray.Dataset:
+    """
+    Open the LangYa challenger dataset.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing LangYa forecasts.
+
+    >>> langya() # doctest: +ELLIPSIS
+    <xarray.Dataset> Size: 2TB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 7, depth: 32,
+                             latitude: 2040, longitude: 4320)
+    Coordinates:
+      * depth               (depth) float32 128B 0.494 1.541 2.646 ... 453.9 541.1
+      * latitude            (latitude) float64 16kB -80.0 -79.92 ... 89.83 89.92
+      * longitude           (longitude) float64 35kB -180.0 -179.9 ... 179.8 179.9
+      * lead_day_index      (lead_day_index) int64 56B 0 1 2 3 4 5 6
+      * first_day_datetime  (first_day_datetime) datetime64[...] 416B 2024-01-03 ....
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 411GB dask.array<chunksize=(1, 1, 1, 256, 512), meta=np.ndarray>
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 411GB dask.array<chunksize=(1, 1, 1, 256, 512), meta=np.ndarray>
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 411GB dask.array<chunksize=(1, 1, 1, 256, 512), meta=np.ndarray>
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 411GB dask.array<chunksize=(1, 1, 1, 256, 512), meta=np.ndarray>
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 13GB dask.array<chunksize=(1, 1, 256, 512), meta=np.ndarray>
+    Attributes:
+        Conventions:              CF-1.8
+        challenger:               langya
+        forecast_reference_time:  2024-01-02
+    """
+
+    return challenger_datasets.langya()
+
+
+def langya_1_degree() -> xarray.Dataset:
+    """
+    Open the LangYa challenger dataset interpolated to the 1 degree resolution.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing LangYa forecasts interpolated to 1 degree resolution.
+
+    >>> langya_1_degree() # doctest: +ELLIPSIS
+    <xarray.Dataset> Size: 11GB
+    Dimensions:                          (first_day_datetime: 52,
+                                          lead_day_index: 7, depth: 32,
+                                          latitude: 170, longitude: 360)
+    Coordinates:
+      * depth                            (depth) float32 128B 0.494 1.541 ... 541.1
+      * lead_day_index                   (lead_day_index) int64 56B 0 1 2 3 4 5 6
+      * first_day_datetime               (first_day_datetime) datetime64[...] 416B ...
+      * latitude                         (latitude) float64 1kB -79.5 -78.5 ... 89.5
+      * longitude                        (longitude) float64 3kB -179.5 ... 179.5
+    Data variables:
+        sea_water_salinity               (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        sea_water_potential_temperature  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        eastward_sea_water_velocity      (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        northward_sea_water_velocity     (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 3GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float32 89MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
+    Attributes:
+        Conventions:              CF-1.8
+        challenger:               langya
+        forecast_reference_time:  2024-01-02
+    """
+
+    return challenger_datasets.langya_1_degree()
