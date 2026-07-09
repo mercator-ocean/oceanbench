@@ -17,38 +17,36 @@ export const METHOD_NOTES = {
   "field-map": {
     title: "Forecast field",
     body:
-      "Forecast fields from {dataset}, streamed from OceanBench viewer pyramids " +
-      "(uint16 scale/offset per tile, DEFLATE). Display only — all metrics are computed " +
-      "offline from the raw model outputs.",
+      "Forecast fields from {dataset}, streamed as compressed image tiles. Display only. " +
+      "All metrics are computed offline from the raw model outputs.",
   },
 
   // Difference display mode (Forecast 1 − Forecast 2).
   "diff-view": {
     title: "Difference view",
     body:
-      "Forecast 1 − Forecast 2, computed per pixel in the browser at display resolution. " +
-      "Diverging scale centered at 0.",
+      "Forecast 1 minus Forecast 2, computed per pixel in the browser at display " +
+      "resolution. The color scale is centered at zero.",
   },
 
   // Class-4 obs error overlay legend.
   "class4-legend": {
     title: "Class-4 match-ups",
     body:
-      "Match-ups: model values at real observation locations (altimetry SSH, Argo T/S " +
-      "profiles, drifter u/v at 15 m). Points show |obs − model| for the selected " +
-      "start/lead. Full observation set for the selected pair (display thinning at low " +
-      "zoom; statistics always use all points). Observations are the pre-QC'd 2024 set " +
-      "(project-oceanbench/public/observations2024/*.zarr); the model is interpolated to " +
-      "each obs by bilinear horizontal plus vertical interpolation. SSH is scored as SLA " +
-      "(GLO12 MDT + datum shift −0.1148). No outlier rejection is applied anywhere.",
+      "Each point is a real observation (altimetry SSH, Argo T/S profiles, drifter " +
+      "currents at 15 m) colored by |obs − model| for the selected start and lead. At " +
+      "low zoom only a sample of points is drawn; statistics always use all of them. The " +
+      "model is interpolated to each observation location. SSH is compared as sea level " +
+      "anomaly (GLO12 mean dynamic topography, datum shift −0.1148 m). Quality control " +
+      "comes from the upstream data products; OceanBench rejects no outliers.",
   },
 
   // Skill vs lead day chart (rail-lead-curve).
   "lead-curve": {
     title: "RMSD vs lead day",
     body:
-      "Official Class-4 RMSD vs observations per lead day, aggregated over 52 start dates " +
-      "(2024). Shaded band: 95% CI from 1000-iteration bootstrap over start dates. " +
+      "Official Class-4 RMSD against observations for each lead day, pooled over the 52 " +
+      "start dates of 2024. The shaded band is a 95% bootstrap confidence interval. " +
       "Computed offline by the oceanbench library.",
   },
 
@@ -56,23 +54,21 @@ export const METHOD_NOTES = {
   "year-rmsd": {
     title: "RMSD / bias by start date",
     body:
-      "Class-4 RMSD per start date, same method as the official scores (pooled over all " +
-      "match-ups for that start). In bias mode: pooled mean(model − obs) per start date. " +
-      "Shaded band: 95% CI, bootstrap per start date. " +
-      "Click a point to open that start date.",
+      "Class-4 RMSD for each start date, pooled over all match-ups of that start, same " +
+      "method as the official scores. Bias mode shows the pooled mean of model minus obs. " +
+      "The shaded band is a 95% bootstrap confidence interval. Click a point to open that " +
+      "start date.",
   },
 
   // Year error geography map / its colorbar.
   "year-geography": {
     title: "Year error geography",
     body:
-      "Time-mean |obs − model| (or signed model − obs in bias mode) per grid cell over " +
-      "all 52 start dates, from the full Class-4 match-up set. Global grid 2°, IBI 0.25°. " +
-      "In bias mode the hover shows ±1 SE. " +
-      "Observations are the pre-QC'd 2024 set " +
-      "(project-oceanbench/public/observations2024/*.zarr); the model is interpolated to " +
-      "each obs by bilinear horizontal plus vertical interpolation. SSH is scored as SLA " +
-      "(GLO12 MDT + datum shift −0.1148). No outlier rejection is applied anywhere.",
+      "Mean |obs − model| per grid cell over all 52 start dates (signed model − obs in " +
+      "bias mode), computed from the full match-up set on a 2° global grid (0.25° for " +
+      "IBI). Same observation set and interpolation as the Class-4 scores. SSH is " +
+      "compared as sea level anomaly (GLO12 mean dynamic topography, datum shift −0.1148 " +
+      "m). No outlier rejection.",
   },
 
   // Eddies overlay legend. {params} is rendered as a live parameter list from the census
@@ -80,47 +76,43 @@ export const METHOD_NOTES = {
   "eddies-legend": {
     title: "Eddy detection",
     body:
-      "{params}Detection: closed SSH-anomaly contours (Chelton et al. 2011-family method). " +
-      "Two forecasts: greedy nearest-neighbour matching by eddy centres, same polarity, " +
-      "≤200 km — agreement between forecasts, not ground truth.",
+      "{params}Eddies are detected as closed sea surface height anomaly contours (Chelton " +
+      "et al. 2011 family). With two forecasts, eddy centres of the same polarity are " +
+      "matched within 200 km. This measures agreement between the forecasts, not accuracy " +
+      "against observations.",
   },
 
   // Live power spectrum (rail-psd, live FFT over the map rectangle).
   psd: {
     title: "Live power spectrum",
     body:
-      "In-browser FFT power spectrum of the boxed region, computed at the model's native " +
-      "(finest published) grid — exploratory; the official spectra are on the scores page. " +
-      "Method: Hann window, land mean-filled, radially averaged, shown as a grid-independent " +
-      "power density so different-resolution models are comparable. " +
-      "The box is draggable/resizable but size-capped to stay at native resolution with " +
-      "enough samples; in compare mode one shared box drives both forecasts, and very " +
-      "different resolutions (e.g. 1° vs 1/12°) can't share a fair box. " +
-      "Caveat: near each model's grid scale the spectrum is damped by the model's own " +
-      "dissipation, so compare where both resolve.",
+      "Power spectrum of the boxed region, computed in the browser on the model's finest " +
+      "published grid. Exploratory; the official spectra are on the scores page. Hann " +
+      "window, land filled with the region mean, radially averaged, normalized so models " +
+      "of different resolution are comparable. The box size is capped so the estimate " +
+      "stays reliable. In compare mode both forecasts share one box; models with very " +
+      "different resolution cannot share a fair one. Near its grid scale every model is " +
+      "damped by its own dissipation, so compare models only at scales both resolve.",
   },
 
   // Trajectories overlay.
   trajectories: {
     title: "Illustrative trajectories",
     body:
-      "Illustrative RK2 advection (6-hour steps) of 20 click-seeded particles through each " +
-      "forecast's current fields at the displayed depth (surface or 15 m), always on the " +
-      "model's native (finest published) grid regardless of zoom. The official " +
-      "Lagrangian score is different: OceanParcels RK4 (hourly), 10,000 area-weighted seeds, " +
-      "advected in surface currents of the forecast and of the GLORYS/GLO12 reference from " +
-      "identical seeds — a model-vs-model transport-agreement metric (mean separation in km " +
-      "per lead day). No observation-based Lagrangian metric exists yet; real drifter " +
-      "observations appear only in the Class-4 currents diagnostic (15 m). Nothing computed " +
-      "here feeds any score.",
+      "Particles seeded by clicking are advected in each forecast's displayed current " +
+      "field (RK2, 6-hour steps, on the model's finest published grid). Illustrative only; " +
+      "nothing here feeds a score. The official Lagrangian metric is computed offline: " +
+      "10,000 seeds advected hourly (OceanParcels RK4) in the forecast and in the GLO12 " +
+      "reference, scored as their mean separation per lead day. It measures agreement " +
+      "between models; drifter observations only enter the Class-4 currents diagnostic.",
   },
 
   // Currents particle animation overlay.
   currents: {
     title: "Current animation",
     body:
-      "Illustrative particle animation of the displayed current field. Decorative " +
-      "visualization; no metric is derived from it.",
+      "Animated particles following the displayed current field. Decorative; no metric " +
+      "is derived from it.",
   },
 };
 
