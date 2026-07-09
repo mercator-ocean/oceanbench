@@ -30,7 +30,7 @@ def reference_depth_grid_hash(target_depths: numpy.ndarray) -> str:
     return hashlib.sha256(payload.encode("ascii")).hexdigest()[:12]
 
 
-def reference_depth_grid_stage_variant(target_depths: numpy.ndarray) -> str:
+def reference_depth_grid_variant(target_depths: numpy.ndarray) -> str:
     rounded_depths = normalised_reference_depths(target_depths)
     return f"depths-{len(rounded_depths)}-{reference_depth_grid_hash(rounded_depths)}"
 

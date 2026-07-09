@@ -17,6 +17,7 @@ from oceanbench.regions import RegionLike
 def rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = "global",
+    challenger_name: str | None = None,
 ) -> DataFrame:
     """
     Compute the Root Mean Square Deviation (RMSD) of variables compared to observations.
@@ -27,6 +28,10 @@ def rmsd_of_variables_compared_to_observations(
         The challenger dataset.
     region : str, optional
         The OceanBench region to evaluate on.
+    challenger_name : str, optional
+        The challenger's canonical name (e.g. ``"climatology"``). It selects the
+        SSH-to-SLA mean sea surface height shift; every challenger uses the default
+        shift except those with a dedicated calibration.
 
     Returns
     -------
@@ -37,6 +42,7 @@ def rmsd_of_variables_compared_to_observations(
     return metrics.rmsd_of_variables_compared_to_observations(
         challenger_dataset=challenger_dataset,
         region=region,
+        challenger_name=challenger_name,
     )
 
 
