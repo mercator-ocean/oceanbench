@@ -1,0 +1,129 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Evaluate samples
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Nightly at 02:00 UTC
+    - cron: '0 2 * * *'
+concurrency:
+  group: evaluate-samples-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  evaluate-sample:
+    name: evaluate ${{ matrix.sample }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        sample:
+          - glo36v1
+          - glonet_1_degree
+          - glonet
+          - langya
+          - wenhai
+          - xihe
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Record host resources
+        run: nproc && free -h
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.5.6-0'
+          micromamba-binary-path: ${{ runner.temp }}/bin/micromamba
+          environment-file: conda_environment_test.yaml
+          environment-name: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
+          condarc-file: .condarc
+          cache-environment: true
+          post-cleanup: 'all'
+      - name: Install package
+        run: pip install --editable .
+        shell: micromamba-shell {0}
+      - name: Evaluate sample
+        env:
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
+        run: make evaluate-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
+        shell: micromamba-shell {0}
+      - name: Compare generated notebook against reference
+        env:
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
+        run: make compare-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
+        shell: micromamba-shell {0}
+      - name: Archive generated notebooks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-notebook-${{ matrix.sample }}
+          path: |
+            ${{ matrix.sample }}_sample.*.report.ipynb
+  evaluate-extras:
+    name: evaluate ibi region, notebooks and doctests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Record host resources
+        run: nproc && free -h
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.5.6-0'
+          micromamba-binary-path: ${{ runner.temp }}/bin/micromamba
+          environment-file: conda_environment_test.yaml
+          environment-name: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
+          condarc-file: .condarc
+          cache-environment: true
+          post-cleanup: 'all'
+      - name: Install package
+        run: pip install --editable .
+        shell: micromamba-shell {0}
+      - name: Evaluate IBI region sample
+        env:
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
+        run: make evaluate-ibi-region
+        shell: micromamba-shell {0}
+      - name: Compare IBI notebook against reference
+        env:
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
+        run: make compare-ibi
+        shell: micromamba-shell {0}
+      - name: Run dataset doctests
+        env:
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
+        run: make doctest
+        shell: micromamba-shell {0}
+      - name: Archive generated notebooks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-notebook-ibi
+          path: |
+            *.ibi.report.ipynb

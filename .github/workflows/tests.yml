@@ -4,10 +4,13 @@
 
 name: Run tests
 on: [push]
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   tests:
-    runs-on: self-hosted
-    timeout-minutes: 150
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -22,21 +25,11 @@ jobs:
           condarc-file: .condarc
           cache-environment: true
           post-cleanup: 'all'
-      - name: Run tests
-        env:
-          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
-          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
-        run: make run-tests
+      - name: Install package
+        run: pip install --editable .
         shell: micromamba-shell {0}
-      - name: Archive generated notebooks
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-notebooks
-          path: |
-            *_sample.*.report.ipynb
+      - name: Run unit tests
+        env:
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
+        run: poetry run pytest tests -n 8
+        shell: micromamba-shell {0}
