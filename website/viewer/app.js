@@ -44,6 +44,7 @@ import {
   drawEddyDetections,
   matchCensuses,
   drawClass4Points,
+  drawClass4Screen,
   class4AbsoluteError,
   class4ErrorScale,
   numericOrNaN,
@@ -1235,24 +1236,21 @@ function drawOverlays(panel) {
         points: preparedPoints,
         matchedTotal: countClass4Matches(rows, selector),
         scale: class4ErrorScale(preparedPoints),
+        // Parallel typed arrays + coarse lon/lat bucket grid, built once per point set so
+        // pan/zoom frames only project the buckets overlapping the viewport (perf).
+        ...buildClass4Index(preparedPoints),
       };
       panel.class4Prepared = prepared;
     }
-    const points = prepared.points;
     const matchedTotal = prepared.matchedTotal;
-    const display = class4DisplayPoints(points, projection, copyOffsets, canvas);
     const scale = prepared.scale;
     // Larger points at high zoom so individual obs are distinguishable from a line.
     const radius = 2.2 + 2.6 * Math.min(1, (view.zoom - 1) / 20);
-    for (const offset of copyOffsets) {
-      drawClass4Points(context, projectOnCopy(offset), display.points, {
-        devicePixelRatio: ratio,
-        errorScale: scale,
-        radius,
-        canvasWidth: canvas.width,
-        canvasHeight: canvas.height,
-      });
-    }
+    const display = drawClass4Frame(context, projection, prepared, copyOffsets, canvas, {
+      devicePixelRatio: ratio,
+      errorScale: scale,
+      radius,
+    });
     panel.class4Scale = scale;
     panel.class4Count = display.drawnVisible;
     panel.class4VisibleTotal = display.visibleTotal;
@@ -1260,10 +1258,12 @@ function drawOverlays(panel) {
     panel.class4Thinned = display.thinned;
     panel.class4Matched = matchedTotal;
     panel.class4Targeted = targeted;
-    panel.class4HitPoints = display.points;
+    panel.class4HitPoints = prepared.points;
+    panel.class4HitSelected = display.selectedMask;
     panel.class4PointRadius = radius;
   } else {
     panel.class4HitPoints = null;
+    panel.class4HitSelected = null;
     panel.class4Thinned = false;
     panel.class4Count = 0;
     panel.class4VisibleTotal = 0;
@@ -1458,39 +1458,165 @@ function renderTrajectoryRail() {
   wireCursorTooltip(elements["rail-trajectory-chart"]);
 }
 
-function class4DisplayPoints(points, projection, copyOffsets, canvas) {
-  if (!points.length) return { points: [], visibleTotal: 0, drawnVisible: 0, stride: 1, thinned: false };
-  const visibleIndexes = [];
-  for (let index = 0; index < points.length; index += 1) {
-    const point = points[index];
+const CLASS4_INDEX_COLS = 360;
+const CLASS4_INDEX_ROWS = 180;
+
+// Build parallel typed arrays (normalized lon/lat + abs error) and a coarse lon/lat
+// bucket grid (CSR layout: `start` offsets + `order` point ids) once per point set.
+// The grid lets pan/zoom frames project only the buckets overlapping the viewport and
+// lets the hover hit-test scan the cursor's bucket neighbourhood instead of every point.
+function buildClass4Index(points) {
+  const count = points.length;
+  const normalizedLongitude = new Float32Array(count);
+  const normalizedLatitude = new Float32Array(count);
+  const absoluteError = new Float32Array(count);
+  const cols = CLASS4_INDEX_COLS;
+  const rows = CLASS4_INDEX_ROWS;
+  const bucketCounts = new Int32Array(cols * rows);
+  const bucketOfPoint = new Int32Array(count);
+  for (let i = 0; i < count; i += 1) {
+    const point = points[i];
     const nx = (point.longitude + 180) / 360;
     const ny = (90 - point.latitude) / 180;
-    for (const offset of copyOffsets) {
-      const screen = projection.project(nx + offset, ny);
-      if (screen.x >= 0 && screen.y >= 0 && screen.x <= canvas.width && screen.y <= canvas.height) {
-        visibleIndexes.push(index);
-        break;
+    normalizedLongitude[i] = nx;
+    normalizedLatitude[i] = ny;
+    absoluteError[i] = class4AbsoluteError(point);
+    let column = Math.floor(nx * cols);
+    if (column < 0) column = 0;
+    else if (column >= cols) column = cols - 1;
+    let row = Math.floor(ny * rows);
+    if (row < 0) row = 0;
+    else if (row >= rows) row = rows - 1;
+    const bucket = row * cols + column;
+    bucketOfPoint[i] = bucket;
+    bucketCounts[bucket] += 1;
+  }
+  const start = new Int32Array(cols * rows + 1);
+  for (let bucket = 0; bucket < cols * rows; bucket += 1) start[bucket + 1] = start[bucket] + bucketCounts[bucket];
+  const order = new Int32Array(count);
+  const cursor = Int32Array.from(start.subarray(0, cols * rows));
+  for (let i = 0; i < count; i += 1) {
+    const bucket = bucketOfPoint[i];
+    order[cursor[bucket]] = i;
+    cursor[bucket] += 1;
+  }
+  return {
+    normalizedLongitude,
+    normalizedLatitude,
+    absoluteError,
+    spatialIndex: { cols, rows, start, order },
+    // Frame-stamp visibility marker: avoids clearing an N-length mask every frame.
+    visibilityStamp: new Int32Array(count),
+    frameStamp: 0,
+    candidateScratch: new Int32Array(count),
+    columnScratch: new Uint8Array(cols),
+  };
+}
+
+// Project the viewport-overlapping buckets once, decide stride-thinning, and draw — no
+// second projection pass. Returns the exact same `visibleTotal` / `drawnVisible` / `stride`
+// / `thinned` semantics as the previous per-point scan, plus the display selection mask the
+// hover hit-test reuses. `selectedMask` is null when nothing is thinned (whole set drawn).
+function drawClass4Frame(context, projection, prepared, copyOffsets, canvas, options) {
+  const normalizedLongitude = prepared.normalizedLongitude;
+  const normalizedLatitude = prepared.normalizedLatitude;
+  const absoluteError = prepared.absoluteError;
+  const count = normalizedLongitude.length;
+  if (!count) return { visibleTotal: 0, drawnVisible: 0, stride: 1, thinned: false, selectedMask: null };
+  const { cols, rows, start, order } = prepared.spatialIndex;
+  const { originX, originY, displayWidth, displayHeight } = projection;
+  const width = canvas.width;
+  const height = canvas.height;
+  // Viewport bounds in base normalized coordinates (before world-copy offset).
+  const nyTop = (0 - originY) / displayHeight;
+  const nyBottom = (height - originY) / displayHeight;
+  const nxLeft = (0 - originX) / displayWidth;
+  const nxRight = (width - originX) / displayWidth;
+  let rowLow = Math.floor(Math.min(nyTop, nyBottom) * rows) - 1;
+  let rowHigh = Math.floor(Math.max(nyTop, nyBottom) * rows) + 1;
+  rowLow = Math.max(0, rowLow);
+  rowHigh = Math.min(rows - 1, rowHigh);
+  const columnMask = prepared.columnScratch;
+  columnMask.fill(0);
+  for (const offset of copyOffsets) {
+    let low = Math.min(nxLeft - offset, nxRight - offset);
+    let high = Math.max(nxLeft - offset, nxRight - offset);
+    low = Math.max(0, low);
+    high = Math.min(0.9999999, high);
+    if (low > high) continue;
+    let columnLow = Math.floor(low * cols) - 1;
+    let columnHigh = Math.floor(high * cols) + 1;
+    columnLow = Math.max(0, columnLow);
+    columnHigh = Math.min(cols - 1, columnHigh);
+    for (let column = columnLow; column <= columnHigh; column += 1) columnMask[column] = 1;
+  }
+  // Gather candidate point ids from the overlapping buckets.
+  const candidates = prepared.candidateScratch;
+  let candidateCount = 0;
+  if (rowLow <= rowHigh) {
+    for (let row = rowLow; row <= rowHigh; row += 1) {
+      const rowBase = row * cols;
+      for (let column = 0; column < cols; column += 1) {
+        if (!columnMask[column]) continue;
+        const bucket = rowBase + column;
+        for (let s = start[bucket]; s < start[bucket + 1]; s += 1) candidates[candidateCount++] = order[s];
       }
     }
   }
-  const visibleTotal = visibleIndexes.length;
-  if (view.zoom >= CLASS4_FULL_DENSITY_ZOOM || visibleTotal <= CLASS4_DISPLAY_POINT_BUDGET) {
-    return { points, visibleTotal, drawnVisible: visibleTotal, stride: 1, thinned: false };
+  const stamp = prepared.visibilityStamp;
+  const frameStamp = (prepared.frameStamp += 1);
+  let visibleTotal = 0;
+  // Per world-copy: project each candidate once, cull off-canvas, keep the device-pixel
+  // coordinates for the draw pass (single projection). Mark visibility across copies.
+  const perCopy = [];
+  for (const offset of copyOffsets) {
+    const screenX = new Float32Array(candidateCount);
+    const screenY = new Float32Array(candidateCount);
+    const pointIds = new Int32Array(candidateCount);
+    let onCanvas = 0;
+    for (let t = 0; t < candidateCount; t += 1) {
+      const id = candidates[t];
+      const x = originX + (normalizedLongitude[id] + offset) * displayWidth;
+      if (x < 0 || x > width) continue;
+      const y = originY + normalizedLatitude[id] * displayHeight;
+      if (y < 0 || y > height) continue;
+      screenX[onCanvas] = x;
+      screenY[onCanvas] = y;
+      pointIds[onCanvas] = id;
+      onCanvas += 1;
+      if (stamp[id] !== frameStamp) {
+        stamp[id] = frameStamp;
+        visibleTotal += 1;
+      }
+    }
+    perCopy.push({ screenX, screenY, pointIds, onCanvas });
   }
-  const stride = Math.ceil(visibleTotal / CLASS4_DISPLAY_POINT_BUDGET);
-  const selectedIndexes = new Set();
-  for (let i = 0; i < visibleIndexes.length; i += stride) selectedIndexes.add(visibleIndexes[i]);
-  const drawn = [];
-  for (let index = 0; index < points.length; index += 1) {
-    if (selectedIndexes.has(index)) drawn.push(points[index]);
+  let thinned = false;
+  let stride = 1;
+  let drawnVisible = visibleTotal;
+  let selectedMask = null;
+  if (!(view.zoom >= CLASS4_FULL_DENSITY_ZOOM) && visibleTotal > CLASS4_DISPLAY_POINT_BUDGET) {
+    thinned = true;
+    stride = Math.ceil(visibleTotal / CLASS4_DISPLAY_POINT_BUDGET);
+    selectedMask = new Uint8Array(count);
+    // Walk point ids in ascending order (identical to the old point-order scan) so the
+    // stride selection picks exactly the same points, then count the drawn subset.
+    let visiblePosition = 0;
+    let selectedCount = 0;
+    for (let id = 0; id < count; id += 1) {
+      if (stamp[id] !== frameStamp) continue;
+      if (visiblePosition % stride === 0) {
+        selectedMask[id] = 1;
+        selectedCount += 1;
+      }
+      visiblePosition += 1;
+    }
+    drawnVisible = selectedCount;
   }
-  return {
-    points: drawn,
-    visibleTotal,
-    drawnVisible: selectedIndexes.size,
-    stride,
-    thinned: true,
-  };
+  for (const copy of perCopy) {
+    drawClass4Screen(context, copy.screenX, copy.screenY, copy.pointIds, copy.onCanvas, absoluteError, selectedMask, options);
+  }
+  return { visibleTotal, drawnVisible, stride, thinned, selectedMask };
 }
 
 // Integer world-copy offsets whose earth copy is currently visible (periodic wrap).
@@ -1931,23 +2057,51 @@ function fieldReadoutValue(panel, value, count, standardError) {
 // floats with the cursor.
 function nearestClass4Record(panel, event, rectangle) {
   if (shared.overlayMode !== "class4" || !panel.class4HitPoints || !panel.class4HitPoints.length) return null;
+  const prepared = panel.class4Prepared;
+  if (!prepared || !prepared.spatialIndex) return null;
+  const selectedMask = panel.class4HitSelected; // null → whole display set is hittable
   const ratio = window.devicePixelRatio || 1;
   const cursorX = (event.clientX - rectangle.left) * ratio;
   const cursorY = (event.clientY - rectangle.top) * ratio;
   const projection = projectionFor(panel);
   const copyOffsets = visibleCopyOffsets(projection, panel.els.overlay);
   const threshold = Math.max((panel.class4PointRadius || 2.2) * ratio + 6 * ratio, 11 * ratio);
+  const { cols, rows, start, order } = prepared.spatialIndex;
+  const normalizedLongitude = prepared.normalizedLongitude;
+  const normalizedLatitude = prepared.normalizedLatitude;
+  const { originX, originY, displayWidth, displayHeight } = projection;
+  // Threshold radius expressed in normalized coordinates → cursor bucket neighbourhood.
+  const deltaColumns = threshold / displayWidth;
+  const deltaRows = threshold / displayHeight;
   let nearest = null;
   let nearestDistance = threshold;
-  for (const record of panel.class4HitPoints) {
-    const nx = (record.longitude + 180) / 360;
-    const ny = (90 - record.latitude) / 180;
-    for (const offset of copyOffsets) {
-      const screen = projection.project(nx + offset, ny);
-      const distance = Math.hypot(screen.x - cursorX, screen.y - cursorY);
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearest = record;
+  const cursorNy = (cursorY - originY) / displayHeight;
+  for (const offset of copyOffsets) {
+    const cursorNx = (cursorX - originX) / displayWidth - offset;
+    let columnLow = Math.floor((cursorNx - deltaColumns) * cols) - 1;
+    let columnHigh = Math.floor((cursorNx + deltaColumns) * cols) + 1;
+    let rowLow = Math.floor((cursorNy - deltaRows) * rows) - 1;
+    let rowHigh = Math.floor((cursorNy + deltaRows) * rows) + 1;
+    columnLow = Math.max(0, columnLow);
+    columnHigh = Math.min(cols - 1, columnHigh);
+    rowLow = Math.max(0, rowLow);
+    rowHigh = Math.min(rows - 1, rowHigh);
+    if (columnLow > columnHigh || rowLow > rowHigh) continue;
+    for (let row = rowLow; row <= rowHigh; row += 1) {
+      const rowBase = row * cols;
+      for (let column = columnLow; column <= columnHigh; column += 1) {
+        const bucket = rowBase + column;
+        for (let s = start[bucket]; s < start[bucket + 1]; s += 1) {
+          const id = order[s];
+          if (selectedMask && !selectedMask[id]) continue;
+          const x = originX + (normalizedLongitude[id] + offset) * displayWidth;
+          const y = originY + normalizedLatitude[id] * displayHeight;
+          const distance = Math.hypot(x - cursorX, y - cursorY);
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearest = prepared.points[id];
+          }
+        }
       }
     }
   }

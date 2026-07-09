@@ -116,8 +116,14 @@ async function targetedPair(url, info, startDate, leadDay, variables) {
     const rowStart = info.offsets[indices[0]];
     const lastIndex = indices[indices.length - 1];
     const rowEnd = info.offsets[lastIndex] + Number(info.rowGroups[lastIndex].num_rows || 0);
+    // hyparquet fetches each row group's column chunks with a separate serial range read.
+    // For a targeted (start, lead) pair the selected groups occupy one contiguous byte span,
+    // so coalesce them into a single range request served from memory — halving the network
+    // phase of a lead change. Falls back to the range-backed file if the span is unknown or
+    // exceeds the budget (keeps large legacy files streaming).
+    const file = (await coalescedRangeFile(info, indices)) || info.file;
     const rows = await parquetReadObjects({
-      file: info.file,
+      file,
       metadata: info.metadata,
       rowStart,
       rowEnd,
@@ -129,6 +135,47 @@ async function targetedPair(url, info, startDate, leadDay, variables) {
   })();
   targetedCache.set(key, promise);
   return promise;
+}
+
+// Byte span [lowest column-chunk offset, highest chunk end) covering the selected row
+// groups. Returns null if any offset/size is missing (fall back to per-range reads).
+function rowGroupsByteSpan(rowGroups, indices) {
+  let low = Infinity;
+  let high = 0;
+  for (const index of indices) {
+    for (const column of rowGroups[index].columns || []) {
+      const meta = column.meta_data;
+      if (!meta) return null;
+      const dataOffset = meta.data_page_offset != null ? Number(meta.data_page_offset) : null;
+      const dictionaryOffset = meta.dictionary_page_offset != null ? Number(meta.dictionary_page_offset) : null;
+      const chunkStart = dictionaryOffset != null ? Math.min(dictionaryOffset, dataOffset ?? dictionaryOffset) : dataOffset;
+      const chunkSize = Number(meta.total_compressed_size) || 0;
+      if (chunkStart == null || !Number.isFinite(chunkStart)) return null;
+      low = Math.min(low, chunkStart);
+      high = Math.max(high, chunkStart + chunkSize);
+    }
+  }
+  if (!Number.isFinite(low) || high <= low) return null;
+  return { low, high };
+}
+
+// Prefetch the selected row groups' contiguous byte span in one request and hand back a
+// buffer-backed file so hyparquet's subsequent slices resolve from memory (no network).
+async function coalescedRangeFile(info, indices) {
+  const span = rowGroupsByteSpan(info.rowGroups, indices);
+  if (!span) return null;
+  if (span.high - span.low > RANGE_BYTE_BUDGET) return null;
+  const buffer = await info.file.slice(span.low, span.high);
+  return {
+    byteLength: info.size,
+    async slice(start, end) {
+      const stop = end ?? info.size;
+      if (start >= span.low && stop <= span.high) return buffer.slice(start - span.low, stop - span.low);
+      // Any read outside the prefetched window (should not happen for a targeted read)
+      // falls back to a direct range request against the source.
+      return info.file.slice(start, end);
+    },
+  };
 }
 
 function matchingRowGroups(rowGroups, startDate, leadDay, variables) {

@@ -217,6 +217,44 @@ export function drawClass4Points(drawing, project, points, options = {}) {
   }
 }
 
+/**
+ * Draw Class-4 points from precomputed device-pixel coordinates — the projection has
+ * already happened once for the frame (viewport-culled) so nothing is re-projected here.
+ * `screenX`/`screenY` hold the coordinates of `count` candidate points at one world-copy;
+ * `pointIds[t]` is the index into the frame's parallel `error` array. `selectedMask`, when
+ * present, restricts drawing to the stride-thinned display subset (mask indexed by point id).
+ * Colour bucketing, alpha and fillRect geometry are identical to `drawClass4Points`.
+ */
+export function drawClass4Screen(drawing, screenX, screenY, pointIds, count, error, selectedMask, options = {}) {
+  const ratio = options.devicePixelRatio || 1;
+  const radius = (options.radius || 2.2) * ratio;
+  const diameter = radius * 2;
+  const scale = options.errorScale || 1;
+  const bucketCount = 18;
+  const buckets = Array.from({ length: bucketCount }, () => []);
+  for (let t = 0; t < count; t += 1) {
+    const id = pointIds[t];
+    if (selectedMask && !selectedMask[id]) continue;
+    const value = error[id];
+    // Prepared points already dropped masked (non-finite error) rows; keep the guard so the
+    // colour bucketing stays identical to drawClass4Points even if a NaN ever slips through.
+    if (!Number.isFinite(value)) continue;
+    const normalized = Math.min(1, value / scale);
+    const bucketIndex = Math.min(bucketCount - 1, Math.max(0, Math.floor(normalized * (bucketCount - 1))));
+    buckets[bucketIndex].push(screenX[t], screenY[t]);
+  }
+  for (let bucketIndex = 0; bucketIndex < buckets.length; bucketIndex += 1) {
+    const coordinates = buckets[bucketIndex];
+    if (!coordinates.length) continue;
+    const normalized = bucketCount <= 1 ? 0 : bucketIndex / (bucketCount - 1);
+    const [r, g, b] = sampleColormap(CLASS4_COLORMAP, 0.12 + normalized * 0.88);
+    drawing.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+    for (let i = 0; i < coordinates.length; i += 2) {
+      drawing.fillRect(coordinates[i] - radius, coordinates[i + 1] - radius, diameter, diameter);
+    }
+  }
+}
+
 // Absolute obs−model error for a match-up row. Prefers a precomputed `abs_error`
 // column, otherwise derives it from `observation_value`/`model_value`.
 export function class4AbsoluteError(point) {
