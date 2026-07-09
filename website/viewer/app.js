@@ -1860,9 +1860,9 @@ function updateHover(event) {
   updateGhostCursor(hoverPanel, wrappedNX, point.ny);
 }
 
-// Ghost cursor: in side-by-side 2-forecast mode, mark the mirrored geographic position
-// on the panel the user is NOT hovering — a small basic accent-colored crosshair,
-// clearly distinct from the OS pointer, so the same spot is visible on both forecasts.
+// Companion cursor: in side-by-side 2-forecast mode, mark the mirrored geographic
+// position on the panel the user is NOT hovering with the exact same custom crosshair
+// as the real cursor (at reduced opacity), so the same spot is visible on both forecasts.
 function updateGhostCursor(hoverPanel, wrappedNX, ny) {
   if (shared.layout !== 2 || shared.displayMode !== "side") return;
   const other = panels[1 - hoverPanel.index];

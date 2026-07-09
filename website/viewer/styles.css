@@ -25,6 +25,11 @@ SPDX-License-Identifier: EUPL-1.2
   --radius-sm: var(--ob-radius-sm, 0.35rem);
   --radius-md: var(--ob-radius-md, 0.55rem);
   --shadow: var(--ob-viewer-shadow, 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06));
+  /* Single custom crosshair shared by the real CSS cursor and the mirrored
+     companion marker so both are pixel-identical across OSes/machines: a plus
+     with a center gap, a 3px white halo under a 1.4px dark core, so it stays
+     legible on any field colormap in both light and dark themes. */
+  --field-cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2221%22%20height%3D%2221%22%20viewBox%3D%220%200%2021%2021%22%3E%3Cg%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M10.5%201.5V8M10.5%2013V19.5M1.5%2010.5H8M13%2010.5H19.5%22%20stroke%3D%22%23fff%22%20stroke-width%3D%223%22%2F%3E%3Cpath%20d%3D%22M10.5%201.5V8M10.5%2013V19.5M1.5%2010.5H8M13%2010.5H19.5%22%20stroke%3D%22%23111%22%20stroke-width%3D%221.4%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
 }
 
 /* Nudge muted text a touch darker in the light theme so small muted text
@@ -290,9 +295,9 @@ body.resizing-layout.row { cursor: row-resize; }
   height: 100%;
   display: block;
 }
-.panel-field { cursor: crosshair; }
+.panel-field { cursor: var(--field-cursor) 10 10, crosshair; }
 .panel-particles, .panel-overlay { pointer-events: none; }
-.panel-canvas-wrap.trajectory-ready .panel-field { cursor: crosshair; }
+.panel-canvas-wrap.trajectory-ready .panel-field { cursor: var(--field-cursor) 10 10, crosshair; }
 
 .panel-readout {
   position: absolute;
@@ -309,32 +314,24 @@ body.resizing-layout.row { cursor: row-resize; }
   max-width: 90%;
   backdrop-filter: blur(4px);
 }
-/* Ghost cursor: the mirrored pointer position on the panel NOT being hovered —
-   a small basic crosshair in a distinct accent (orange) color with a subtle
-   outline, visually distinct from the OS pointer (which stays a plain crosshair
-   on the hovered panel). */
+/* Companion cursor: the mirrored pointer position on the panel NOT being
+   hovered. It renders the EXACT same custom crosshair SVG as the real CSS
+   cursor (--field-cursor), centered on the mirrored point, but at reduced
+   opacity so the user can still tell which panel their own pointer is on. */
 .panel-ghost-cursor {
   position: absolute;
   left: 0;
   top: 0;
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
+  width: 21px;
+  height: 21px;
+  margin: -10px 0 0 -10px;
+  background-image: var(--field-cursor);
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.6;
   pointer-events: none;
   z-index: 6;
-  --ghost-cursor-color: #ff8c1a;
 }
-.panel-ghost-cursor::before,
-.panel-ghost-cursor::after {
-  content: "";
-  position: absolute;
-  background: var(--ghost-cursor-color);
-  /* Subtle dark outline so the accent cross stays legible on any field colormap
-     in both light and dark themes. */
-  box-shadow: 0 0 0 0.75px rgba(0, 0, 0, 0.55);
-}
-.panel-ghost-cursor::before { left: 50%; top: 0; width: 1.5px; height: 100%; margin-left: -0.75px; }
-.panel-ghost-cursor::after { top: 50%; left: 0; height: 1.5px; width: 100%; margin-top: -0.75px; }
 .panel-ghost-cursor[hidden] { display: none; }
 
 .panel-loading {
