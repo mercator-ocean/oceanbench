@@ -3,52 +3,38 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Class-4 match-up reader (runs in a Web Worker so parquet decoding never blocks
-// the map). Two loading strategies, chosen from the footer metadata:
-//
-//   TARGETED — the served parquet follows the match-up contract: rows sorted by
-//   (start_date, lead_day) with every row group holding exactly one such pair
-//   (min == max in the group's start_date/lead_day statistics). We fetch only the
-//   row group(s) for the selected forecast start + lead — complete rows, no cap.
-//
-//   SAMPLED (legacy) — files whose stats are absent or mixed keep the old
-//   behaviour: small files read whole, multi-GB files streamed and sampled across
-//   scattered row groups so an altimeter month never OOMs the worker.
+// the map). The served parquet follows the match-up contract: rows sorted by
+// (start_date, lead_day) with every row group holding exactly one such pair
+// (min == max in the group's start_date/lead_day statistics), as enforced at
+// publish time by oceanbench.publish.viewer_artifacts.verify_matchup_parquet. We
+// fetch only the row group(s) for the selected forecast start + lead — complete
+// rows, no cap.
 
 import { parquetReadObjects, parquetMetadataAsync } from "../vendor/hyparquet/hyparquet.min.js";
 
-const WHOLE_FILE_MAX_BYTES = 50 * 1024 * 1024;
 const RANGE_BYTE_BUDGET = 48 * 1024 * 1024;
-const MIN_SCATTERED_GROUPS = 8;
-// Row groups in a global match-up parquet hold ~1M rows each; reading whole groups
-// would pull millions of objects into the worker (OOM) and choke the postMessage.
-// A few thousand rows per sampled group is plenty for a scattered overlay preview.
-const ROWS_PER_SAMPLED_GROUP = 4000;
 
 // Per-file footer + open handle (shared by mode detection and targeted reads).
 const fileInfoCache = new Map();
-// Legacy whole/sampled row arrays, keyed by url.
-const legacyRowsCache = new Map();
 // Targeted pair reads, keyed by `${url}|${startDate}|${leadDay}`.
 const targetedCache = new Map();
 
 self.addEventListener("message", (event) => {
-  const { id, op, url, byteLength, rowGroupIndex, sampleVariables, startDate, leadDay, variables } = event.data;
-  handle(op, url, { byteLength, rowGroupIndex, sampleVariables, startDate, leadDay, variables })
+  const { id, op, url, byteLength, startDate, leadDay, variables } = event.data;
+  handle(op, url, { byteLength, startDate, leadDay, variables })
     .then((payload) => self.postMessage({ id, ...payload }))
     .catch((error) => self.postMessage({ id, error: String(error.message || error) }));
 });
 
 async function handle(op, url, options) {
   const info = await ensureFileInfo(url, options.byteLength);
-  if (op === "probe") return { targeted: info.targeted };
-  if (op === "targeted" && info.targeted) {
-    const rows = await targetedPair(url, info, options.startDate, options.leadDay, options.variables);
-    // `sampled`/`total` are sent as explicit fields: array-attached properties do
-    // not survive the structured clone across postMessage.
-    return { targeted: true, rows, total: rows.length, sampled: false };
+  if (!info.targeted) {
+    throw new Error(`${url} is not in targeted layout (one (start_date, lead_day) pair per row group)`);
   }
-  const rows = await legacyRows(url, info, options);
-  return { targeted: false, rows, total: rows.length, sampled: Boolean(rows.sampled) };
+  const rows = await targetedPair(url, info, options.startDate, options.leadDay, options.variables);
+  // `total` is sent as an explicit field: array-attached properties do not survive
+  // the structured clone across postMessage.
+  return { targeted: true, rows, total: rows.length };
 }
 
 function ensureFileInfo(url, byteLengthHint) {
@@ -208,84 +194,6 @@ function rowGroupHasVariable(rowGroup, variables) {
   const low = String(min);
   const high = String(max);
   return variables.some((variable) => String(variable) >= low && String(variable) <= high);
-}
-
-// ---- legacy (whole / sampled) mode ------------------------------------------
-
-function legacyRows(url, info, options) {
-  if (legacyRowsCache.has(url)) return legacyRowsCache.get(url);
-  const promise = (async () => {
-    if (info.size <= WHOLE_FILE_MAX_BYTES) return readWhole(url);
-    return readSampled(info, options);
-  })();
-  legacyRowsCache.set(url, promise);
-  return promise;
-}
-
-async function readWhole(url) {
-  const response = await fetch(url, { cache: "no-cache" });
-  if (!response.ok) throw new Error(`${url} -> HTTP ${response.status}`);
-  const buffer = await response.arrayBuffer();
-  const file = {
-    byteLength: buffer.byteLength,
-    async slice(start, end) {
-      return buffer.slice(start, end ?? buffer.byteLength);
-    },
-  };
-  return parquetReadObjects({ file, rowFormat: "object" });
-}
-
-async function readSampled(info, { rowGroupIndex, sampleVariables }) {
-  const { file, metadata, rowGroups, offsets } = info;
-  const indices = selectRowGroups(rowGroups, { rowGroupIndex, sampleVariables });
-  const chunks = [];
-  for (const index of indices) {
-    const rowStart = offsets[index];
-    const groupRows = Number(rowGroups[index].num_rows || 0);
-    const rowEnd = rowStart + Math.min(groupRows, ROWS_PER_SAMPLED_GROUP);
-    if (rowEnd <= rowStart) continue;
-    const rows = await parquetReadObjects({ file, metadata, rowStart, rowEnd, rowFormat: "object" });
-    chunks.push(...rows);
-  }
-  chunks.sampled = indices.length < rowGroups.length;
-  chunks.rowGroupSample = indices;
-  return chunks;
-}
-
-function selectRowGroups(rowGroups, { rowGroupIndex, sampleVariables }) {
-  const indexed = indexedRowGroups(rowGroupIndex, sampleVariables).filter((index) => index >= 0 && index < rowGroups.length);
-  const candidates = indexed.length ? indexed : rowGroups.map((_, index) => index);
-  const targetCount = Math.min(candidates.length, Math.max(MIN_SCATTERED_GROUPS, budgetedGroupCount(rowGroups, candidates)));
-  if (targetCount >= candidates.length) return candidates;
-  const selected = new Set();
-  for (let i = 0; i < targetCount; i += 1) {
-    const position = Math.round((i * (candidates.length - 1)) / Math.max(1, targetCount - 1));
-    selected.add(candidates[position]);
-  }
-  return [...selected].sort((a, b) => a - b);
-}
-
-function budgetedGroupCount(rowGroups, candidates) {
-  let used = 0;
-  let count = 0;
-  for (const index of candidates) {
-    const size = Number(rowGroups[index].total_byte_size) || 1;
-    if (count > 0 && used + size > RANGE_BYTE_BUDGET) break;
-    used += size;
-    count += 1;
-  }
-  return Math.max(1, count);
-}
-
-function indexedRowGroups(rowGroupIndex, sampleVariables) {
-  const byVariable = rowGroupIndex && (rowGroupIndex.by_variable || rowGroupIndex.variables);
-  if (!byVariable) return [];
-  const selected = new Set();
-  const variables = sampleVariables && sampleVariables.length ? sampleVariables : Object.keys(byVariable);
-  for (const variable of variables) {
-    for (const index of byVariable[variable] || []) selected.add(Number(index));
-  }
-  return [...selected].sort((a, b) => a - b);
 }
 
 function rowGroupRowOffsets(rowGroups) {

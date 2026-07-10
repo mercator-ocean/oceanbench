@@ -48,7 +48,6 @@ import {
   class4AbsoluteError,
   class4ErrorScale,
   numericOrNaN,
-  EDDY_COLORS,
   EDDY_MATCHED_COLOR,
   CLASS4_COLORMAP,
 } from "./modules/overlays.js";
@@ -1136,7 +1135,6 @@ async function loadOverlayData() {
     try {
       overlayData.class4 = await loadClass4(class4Url, {
         byteLength: class4ByteLengthHint(class4Url, class4Manifest),
-        rowGroupIndex: class4Manifest && class4Manifest.row_group_index,
         startDate: currentStartDate(slug),
         leadDay: shared.leadDay,
         variables: class4RequestVariables(),
@@ -2597,8 +2595,6 @@ function renderClass4Legend(legend, panel, scale) {
   const shown = hostPanel ? hostPanel.class4Count || 0 : 0;
   const visibleTotal = hostPanel ? hostPanel.class4VisibleTotal || shown : shown;
   const matched = hostPanel ? hostPanel.class4Matched || 0 : 0;
-  const targeted = overlayData.class4 && overlayData.class4.targeted;
-  const sampled = overlayData.class4 && overlayData.class4.sampled;
   const thinned = Boolean(hostPanel && hostPanel.class4Thinned);
   const noData = overlayData.class4Unpublished
     ? " · match-ups not published for this dataset"
@@ -2609,12 +2605,10 @@ function renderClass4Legend(legend, panel, scale) {
   const fullDensityNote = thinned ? " · zoom in for full density" : "";
   const countText = thinned
     ? `<strong>showing ${formatCount(shown)} of ${formatCount(visibleTotal)} obs</strong>${fullDensityNote}`
-    : targeted
-      ? `<strong>${formatCount(matched)} obs</strong>`
-      : `<strong>${formatCount(shown)} obs</strong>`;
+    : `<strong>${formatCount(matched)} obs</strong>`;
   legend.hidden = false;
   legend.innerHTML =
-    `<span class="legend-note">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${escapeHtml(panel.units)} · region ${escapeHtml(shared.region)}${!targeted && sampled ? " · sampled subset" : ""}${weak}${noData}</span>` +
+    `<span class="legend-note">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${escapeHtml(panel.units)} · region ${escapeHtml(shared.region)}${weak}${noData}</span>` +
     mutedBackgroundNote(panel) +
     legendHelpAnchor();
   attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
@@ -3698,9 +3692,7 @@ async function applyOverlayMode() {
     } else if ((overlayData.class4.rows || []).length === 0) {
       note.textContent = class4SelectionNote();
     } else {
-      note.textContent = overlayData.class4.targeted
-        ? "Class-4 match-ups for the selected start and lead — hover a point for details."
-        : `Class-4 match-ups loaded${overlayData.class4.sampled ? " (sampled subset)" : ""} — hover a point for details.`;
+      note.textContent = "Class-4 match-ups for the selected start and lead — hover a point for details.";
     }
   }
   for (let i = 0; i < shared.layout; i += 1) {

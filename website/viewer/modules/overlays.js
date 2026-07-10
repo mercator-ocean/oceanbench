@@ -12,11 +12,6 @@
 import { sample as sampleColormap } from "../vendor/cmocean/colormaps.js";
 
 // Category palette (luminous on the dark canvas; still legible on light).
-export const EDDY_COLORS = {
-  matched: "#3ddc97", // model eddy that pairs with a reference eddy
-  spurious: "#ff9f45", // model eddy with no reference counterpart
-  missed: "#c77dff", // reference eddy the model failed to produce
-};
 export const CLASS4_COLORMAP = "thermal";
 
 function toNorm(longitude, latitude) {
@@ -50,63 +45,9 @@ function centerDot(drawing, project, eddy, color, radius) {
   drawing.fill();
 }
 
-/**
- * Draw one eddy frame. Matched pairs show the model contour (solid) and its
- * reference contour (dashed) joined by a displacement connector; spurious and
- * missed show a single contour each. Returns a legend summary for the rail.
- */
-export function drawEddyFrame(drawing, project, frame, options = {}) {
-  const ratio = options.devicePixelRatio || 1;
-  const dotRadius = 2.5 * ratio;
-  drawing.lineWidth = 1.5 * ratio;
-  drawing.lineJoin = "round";
-
-  for (const eddy of frame.missed || []) {
-    drawing.setLineDash([]);
-    drawing.strokeStyle = EDDY_COLORS.missed;
-    tracePolygon(drawing, project, eddy.contour_longitude, eddy.contour_latitude);
-    drawing.stroke();
-    centerDot(drawing, project, eddy, EDDY_COLORS.missed, dotRadius);
-  }
-  for (const eddy of frame.spurious || []) {
-    drawing.setLineDash([]);
-    drawing.strokeStyle = EDDY_COLORS.spurious;
-    tracePolygon(drawing, project, eddy.contour_longitude, eddy.contour_latitude);
-    drawing.stroke();
-    centerDot(drawing, project, eddy, EDDY_COLORS.spurious, dotRadius);
-  }
-  for (const match of frame.matches || []) {
-    const model = match.challenger;
-    const reference = match.reference;
-    drawing.strokeStyle = EDDY_COLORS.matched;
-    drawing.setLineDash([]);
-    tracePolygon(drawing, project, model.contour_longitude, model.contour_latitude);
-    drawing.stroke();
-    drawing.setLineDash([4 * ratio, 3 * ratio]);
-    tracePolygon(drawing, project, reference.contour_longitude, reference.contour_latitude);
-    drawing.stroke();
-    drawing.setLineDash([]);
-    const a = project(...normPair(model.longitude, model.latitude));
-    const b = project(...normPair(reference.longitude, reference.latitude));
-    drawing.strokeStyle = "rgba(61, 220, 151, 0.5)";
-    drawing.beginPath();
-    drawing.moveTo(a.x, a.y);
-    drawing.lineTo(b.x, b.y);
-    drawing.stroke();
-    centerDot(drawing, project, model, EDDY_COLORS.matched, dotRadius);
-  }
-  drawing.setLineDash([]);
-  return {
-    matched: (frame.matches || []).length,
-    spurious: (frame.spurious || []).length,
-    missed: (frame.missed || []).length,
-    lead_day: frame.lead_day,
-  };
-}
-
 // Neutral colour for eddies both forecasts agree on. Only-in-F1 / only-in-F2 use the
 // canonical forecast colours supplied by the caller — no category implies truth.
-export const EDDY_MATCHED_COLOR = EDDY_COLORS.matched;
+export const EDDY_MATCHED_COLOR = "#3ddc97";
 
 const EARTH_RADIUS_KM = 6371.0088;
 
@@ -171,11 +112,6 @@ export function drawEddyDetections(drawing, project, detections, color, options 
     drawing.stroke();
     centerDot(drawing, project, eddy, color, dotRadius);
   }
-}
-
-function normPair(longitude, latitude) {
-  const { nx, ny } = toNorm(longitude, latitude);
-  return [nx, ny];
 }
 
 /**

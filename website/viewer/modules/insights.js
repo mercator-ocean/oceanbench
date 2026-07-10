@@ -19,8 +19,6 @@ const CLASS4_WORKER_URL = new URL("./class4-worker.js", import.meta.url);
 let class4Worker = null;
 let class4RequestId = 0;
 const class4Pending = new Map();
-const class4ModeCache = new Map(); // resolvedUrl -> Promise<boolean targeted>
-const class4LegacyCache = new Map(); // resolvedUrl -> Promise<result>
 const class4TargetedCache = new Map(); // `${resolvedUrl}|${start}|${lead}` -> Promise<result>
 
 export function loadInsightIndex() {
@@ -95,31 +93,18 @@ export async function loadScoresSummary(index) {
 }
 
 /**
- * Load the Class-4 match-up overlay data. When the parquet follows the match-up
- * contract (one (start_date, lead_day) pair per row group, with statistics), only
+ * Load the Class-4 match-up overlay data. The served parquet follows the match-up
+ * contract (one (start_date, lead_day) pair per row group, with statistics), so only
  * the row group(s) for the requested `startDate`/`leadDay` are fetched — complete
- * rows, no sampling. Legacy files fall back to whole-file or scattered sampling.
+ * rows, no sampling.
  *
- * Returns `{ targeted, rows, total, sampled }`. In targeted
- * mode `rows` is exactly the selected pair; in legacy mode it is the (possibly
- * sampled) whole set as before. `byteLength` may come from the sibling manifest's
- * `bytes` field to skip a HEAD request, but callers should omit stale hints.
+ * Returns `{ targeted: true, rows, total }` where `rows` is exactly the selected
+ * pair. `byteLength` may come from the sibling manifest's `bytes` field to skip a
+ * HEAD request, but callers should omit stale hints.
  */
-export async function loadClass4(url, { byteLength, rowGroupIndex, sampleVariables, startDate, leadDay, variables } = {}) {
+export async function loadClass4(url, { byteLength, startDate, leadDay, variables } = {}) {
   if (!url) throw new Error("Class-4 URL is missing");
   const resolvedUrl = resolveViewerDataUrl(url);
-  const targeted = await probeClass4Mode(resolvedUrl, byteLength);
-  if (!targeted) {
-    if (!class4LegacyCache.has(resolvedUrl)) {
-      class4LegacyCache.set(
-        resolvedUrl,
-        requestClass4Worker({ op: "legacy", url: resolvedUrl, byteLength, rowGroupIndex, sampleVariables }).then(
-          (payload) => normalizeClass4Payload(payload),
-        ),
-      );
-    }
-    return await class4LegacyCache.get(resolvedUrl);
-  }
   // Row groups are variable-partitioned within a (start, lead) block, so the requested
   // variables refine which groups are fetched — they belong in the targeted cache key.
   const variableKey = Array.isArray(variables) && variables.length ? [...variables].sort().join(",") : "";
@@ -141,18 +126,7 @@ function normalizeClass4Payload(payload) {
     targeted: Boolean(payload && payload.targeted),
     rows,
     total: payload && Number.isFinite(payload.total) ? payload.total : rows.length,
-    sampled: Boolean(payload && payload.sampled),
   };
-}
-
-function probeClass4Mode(resolvedUrl, byteLength) {
-  if (!class4ModeCache.has(resolvedUrl)) {
-    class4ModeCache.set(
-      resolvedUrl,
-      requestClass4Worker({ op: "probe", url: resolvedUrl, byteLength }).then((payload) => Boolean(payload.targeted)),
-    );
-  }
-  return class4ModeCache.get(resolvedUrl);
 }
 
 function ensureClass4Worker() {
@@ -196,47 +170,26 @@ function nearestLeadFrame(frames, leadDay) {
 }
 
 /**
- * Per-lead census of a dataset's OWN eddy detections, read from EITHER artifact
- * schema, at the available lead nearest `leadDay`:
- *   - "eddy-census": frame.detections directly.
- *   - legacy "eddies": the dataset's own detections are the challenger side of every
- *     match plus its spurious eddies (matches[].challenger ∪ spurious); the truth-side
- *     detections are never treated as this dataset's own.
- * Returns { detections, leadDay, parameters } or null. Nothing here privileges any
- * dataset as ground truth — a census is symmetric across forecasts and references.
+ * Per-lead census of a dataset's OWN eddy detections ("eddy-census" artifact:
+ * frame.detections directly), at the available lead nearest `leadDay`. Returns
+ * { detections, leadDay, parameters } or null. Nothing here privileges any dataset
+ * as ground truth — a census is symmetric across forecasts and references.
  */
 export function eddyCensus(eddies, leadDay) {
-  if (!eddies) return null;
-  if (Array.isArray(eddies.frames)) {
-    const frame = nearestLeadFrame(eddies.frames, leadDay);
-    if (!frame) return null;
-    return {
-      detections: Array.isArray(frame.detections) ? frame.detections : [],
-      leadDay: frame.lead_day,
-      parameters: eddies.parameters || null,
-    };
-  }
-  if (Array.isArray(eddies.references)) {
-    const entry = eddies.references[0];
-    const frame = entry ? nearestLeadFrame(entry.frames, leadDay) : null;
-    if (!frame) return null;
-    const detections = [
-      ...(frame.matches || []).map((match) => match.challenger).filter(Boolean),
-      ...(frame.spurious || []),
-    ];
-    return { detections, leadDay: frame.lead_day, parameters: eddies.parameters || null };
-  }
-  return null;
+  if (!eddies || !Array.isArray(eddies.frames)) return null;
+  const frame = nearestLeadFrame(eddies.frames, leadDay);
+  if (!frame) return null;
+  return {
+    detections: Array.isArray(frame.detections) ? frame.detections : [],
+    leadDay: frame.lead_day,
+    parameters: eddies.parameters || null,
+  };
 }
 
-/** Sorted, de-duplicated lead days present in an eddy artifact (either schema). */
+/** Sorted, de-duplicated lead days present in an eddy-census artifact. */
 export function eddyLeads(eddies) {
-  if (!eddies) return [];
-  const frames = Array.isArray(eddies.frames)
-    ? eddies.frames
-    : Array.isArray(eddies.references) && eddies.references[0]
-      ? eddies.references[0].frames || []
-      : [];
+  if (!eddies || !Array.isArray(eddies.frames)) return [];
+  const frames = eddies.frames;
   const leads = new Set();
   for (const frame of frames) if (Number.isFinite(frame.lead_day)) leads.add(frame.lead_day);
   return [...leads].sort((a, b) => a - b);
@@ -265,18 +218,6 @@ export function alignedEddyCensuses(eddiesA, eddiesB, leadDay) {
     return { censuses: [eddyCensus(eddiesA, lead), eddyCensus(eddiesB, lead)], lead, mismatch: false };
   }
   return { censuses: [eddyCensus(eddiesA, leadDay), eddyCensus(eddiesB, leadDay)], lead: null, mismatch: true };
-}
-
-/** Eddy frame for the requested reference and the available lead nearest `leadDay`. */
-export function eddyFrame(eddies, reference, leadDay) {
-  if (!eddies || !Array.isArray(eddies.references)) return null;
-  const entry = eddies.references.find((candidate) => candidate.reference === reference) || eddies.references[0];
-  if (!entry || !entry.frames.length) return null;
-  let best = entry.frames[0];
-  for (const frame of entry.frames) {
-    if (Math.abs(frame.lead_day - leadDay) < Math.abs(best.lead_day - leadDay)) best = frame;
-  }
-  return { frame: best, reference: entry.reference, variable: eddies.variable };
 }
 
 /** Spectra entry for the requested variable/reference and available lead nearest leadDay. */
