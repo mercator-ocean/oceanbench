@@ -29,7 +29,9 @@ viewer reader (``website/viewer/modules/zarr.js``) is driven by each array's own
 """
 
 from dataclasses import dataclass
+import datetime
 import json
+import os
 from pathlib import Path
 
 import dask
@@ -41,6 +43,7 @@ import zarr
 from oceanbench.core.attribution import copernicus_marine_attribution_attrs
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.schema_validation import validate_against_schema
+from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 from oceanbench.pyramids import levels as level_planning
 from oceanbench.pyramids.quantization import Quantization, quantization_for_range, zarr_encoding
 
@@ -150,6 +153,23 @@ def _bounds(layers: xarray.Dataset) -> dict:
     }
 
 
+def _manifest_provenance() -> dict:
+    """Data-provenance stamp embedded in the viewer manifest.
+
+    Records the oceanbench pipeline version that produced the dataset's artifacts and the UTC
+    generation instant. The originating source commit is included when the build exposes it through
+    the ``OCEANBENCH_BUILD_COMMIT`` environment variable, and omitted otherwise.
+    """
+    provenance = {
+        "oceanbench_version": OCEANBENCH_VERSION,
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    source_commit = os.environ.get("OCEANBENCH_BUILD_COMMIT")
+    if source_commit:
+        provenance["source_commit"] = source_commit
+    return provenance
+
+
 def _manifest(
     layers: xarray.Dataset,
     specs: dict[str, VariableSpec],
@@ -181,6 +201,7 @@ def _manifest(
         },
         "start_dates": start_dates,
         "lead_days": lead_days,
+        "provenance": _manifest_provenance(),
     }
     if dataset_slug is not None:
         manifest["dataset"] = dataset_slug

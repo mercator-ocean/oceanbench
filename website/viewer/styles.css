@@ -475,6 +475,8 @@ body.resizing-layout.row { cursor: row-resize; }
 .rail-forecast-toggle[hidden] { display: none; }
 .rail-forecast-toggle .ghost-button { padding: 0.3rem 0.6rem; font-size: 0.72rem; }
 .rail-caption { font-size: 0.68rem; color: var(--muted); margin: 0.35rem 0 0; line-height: 1.35; }
+.rail-provenance { font-size: 0.66rem; color: var(--muted); margin: 1rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--border); line-height: 1.4; font-family: var(--mono); }
+.rail-provenance .method-note-btn { vertical-align: baseline; margin-left: 0.3rem; }
 .rail-chart-slot { width: 100%; }
 .rail-chart { width: 100%; height: auto; display: block; }
 .rail-chart .axis { stroke: var(--border); stroke-width: 1; }

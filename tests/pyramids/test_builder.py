@@ -83,6 +83,36 @@ def test_manifest_is_schema_valid(tmp_path):
 
 
 @pytest.mark.skipif(zarr is None, reason="zarr required")
+def test_manifest_carries_data_provenance(tmp_path, monkeypatch):
+    from oceanbench.core.version import __version__ as oceanbench_version
+
+    monkeypatch.setenv("OCEANBENCH_BUILD_COMMIT", "abc123def")
+    result = build_pyramid(
+        _synthetic_layers(),
+        _specs(),
+        output_path=str(tmp_path / "synthetic.zarr"),
+        tile_size=16,
+    )
+    provenance = result.manifest["provenance"]
+    assert provenance["oceanbench_version"] == oceanbench_version
+    assert provenance["source_commit"] == "abc123def"
+    assert provenance["generated_at"].endswith("Z")
+    validate_against_schema(result.manifest, "viewer-manifest")
+
+
+@pytest.mark.skipif(zarr is None, reason="zarr required")
+def test_manifest_provenance_omits_source_commit_without_build_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("OCEANBENCH_BUILD_COMMIT", raising=False)
+    result = build_pyramid(
+        _synthetic_layers(),
+        _specs(),
+        output_path=str(tmp_path / "synthetic.zarr"),
+        tile_size=16,
+    )
+    assert "source_commit" not in result.manifest["provenance"]
+
+
+@pytest.mark.skipif(zarr is None, reason="zarr required")
 def test_round_trip_error_within_quantization_step_and_land_preserved(tmp_path):
     layers = _synthetic_layers()
     result = build_pyramid(layers, _specs(), output_path=str(tmp_path / "synthetic.zarr"), tile_size=16)

@@ -2720,6 +2720,45 @@ async function updateContextRail() {
   if (yearSection) yearSection.hidden = true;
   renderRailPsd(shown, comparison);
   renderTrajectoryRail();
+  renderRailProvenance(shown);
+}
+
+// Data-provenance line(s) at the foot of the rail: which oceanbench pipeline version
+// produced the shown forecast(s)' artifacts and when. Manifests published before this
+// block existed carry no `provenance`, so nothing is shown for them (the line stays
+// hidden). In 2-forecast mode a shared stamp collapses to one line; distinct stamps
+// show one line each.
+function formatProvenanceLine(provenance) {
+  const version = provenance.oceanbench_version || "?";
+  const generatedDate = String(provenance.generated_at || "").slice(0, 10);
+  const suffix = generatedDate ? ` · generated ${generatedDate}` : "";
+  return `data: oceanbench ${version}${suffix}`;
+}
+
+function renderRailProvenance(shown) {
+  const element = elements["rail-provenance"];
+  if (!element) return;
+  const lines = [];
+  for (const panel of shown) {
+    const manifest = manifestFor(panel.state.dataset);
+    const provenance = manifest && manifest.provenance;
+    if (!provenance) continue;
+    const line = formatProvenanceLine(provenance);
+    if (!lines.includes(line)) lines.push(line);
+  }
+  element.textContent = "";
+  if (!lines.length) {
+    element.hidden = true;
+    return;
+  }
+  lines.forEach((line, index) => {
+    if (index > 0) element.appendChild(document.createElement("br"));
+    const span = document.createElement("span");
+    span.textContent = line;
+    element.appendChild(span);
+  });
+  element.hidden = false;
+  attachMethodNote(element, "data-provenance");
 }
 
 // RMSD vertical profile (RMSD vs depth) for the shown forecast(s) at the selected lead
@@ -4316,6 +4355,7 @@ function selectElements() {
     "rail-column-point",
     "rail-column-note",
     "column-clear",
+    "rail-provenance",
   ]) {
     elements[id] = document.getElementById(id);
   }

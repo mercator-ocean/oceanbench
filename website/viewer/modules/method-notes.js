@@ -133,6 +133,15 @@ export const METHOD_NOTES = {
       "Animated particles following the displayed current field. Decorative; no metric " +
       "is derived from it.",
   },
+
+  // Data-provenance line at the bottom of the context rail.
+  "data-provenance": {
+    title: "Data provenance",
+    body:
+      "Version of the oceanbench pipeline that produced this dataset's artifacts and when. " +
+      "All artifacts for a challenger are generated together and verified by an automated " +
+      "reconciliation against the raw match-up data.",
+  },
 };
 
 // Order in which the eddy-census parameters render, with human labels and a formatter.

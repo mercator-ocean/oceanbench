@@ -22,6 +22,29 @@
       "description": "Optional evaluation year of the dataset.",
       "type": "integer"
     },
+    "provenance": {
+      "description": "Optional data-provenance stamp: the oceanbench pipeline version that produced this dataset's artifacts, when they were generated, and the originating source commit when known.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "oceanbench_version",
+        "generated_at"
+      ],
+      "properties": {
+        "oceanbench_version": {
+          "description": "Version of the oceanbench pipeline that produced the artifacts.",
+          "type": "string"
+        },
+        "generated_at": {
+          "description": "UTC instant the artifacts were generated (ISO-8601, seconds precision).",
+          "type": "string"
+        },
+        "source_commit": {
+          "description": "Git commit of the oceanbench source tree that produced the artifacts, when the build exposes it.",
+          "type": "string"
+        }
+      }
+    },
     "levels": {
       "description": "Pyramid levels from native (level 0) up to ~1 degree, each backed by zarr group level/<k>.",
       "type": "array",
