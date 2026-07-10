@@ -1058,7 +1058,7 @@ require(['chartjs'], function(ChartModule) {
     // GLO12: purely linear (no training phase) — cumulative energy = n runs × per-run energy
     { name:'GLO12',   training:0,      trainingCi:0,    mu:18.4, ci:1.92, color:'#D9583E', fill:'217,88,62',  dash:[] },
     // Glonet2: affine — fixed training cost (± its own CI) + n inferences × per-inference energy (placeholder: 0 Wh, ±0 CI, until measured)
-    { name:'Glonet2', training:509, trainingCi:13.8,    mu:0.00742,     ci:0.000190,    color:'#4A3E8C', fill:'74,62,140',  dash:[6,3] }
+    { name:'Glonet2', training:509, trainingCi:13.8,    mu:1.84742,     ci:0.000190,    color:'#4A3E8C', fill:'74,62,140',  dash:[6,3] }
   ];
 
   function buildComparisonDatasets() {
