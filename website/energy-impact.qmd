@@ -601,9 +601,9 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">509 (± 13.8)</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">28.6 (± 0.791)</span></td></tr>
-        <tr><td>Duration (days)</td><td><span class="ei-result">14</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">698 (± 140)</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">39.1 (± 8.03)</span></td></tr>
+        <tr><td>Duration (days)</td><td><span class="ei-result">17,5 (± 3,5)</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -867,7 +867,7 @@ HTML("""
         <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA H100 80GB (x4)</span></td></tr>
         <tr><td>RAM (GB)</td><td><span class="ei-param_infos">866</span></td></tr>
         <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
-        <tr><td>PUE</td><td><span class="ei-pending">pending</span></td></tr>
+        <tr><td>PUE</td><td><span class="ei-params_infos">1,45</span></td></tr>
       </tbody>
     </table>
   </div> 
@@ -1052,13 +1052,13 @@ require(['chartjs'], function(ChartModule) {
   });
 
   // ── Chart 1bis (AI vs Numeric — GLO12 runs vs Glonet2 training+inference) ─
-  const runsAI = Array.from({length:51}, function(_,i){ return i; });
+  const runsAI = Array.from({length:101}, function(_,i){ return i; });
 
   const COMPARISON_MODELS = [
     // GLO12: purely linear (no training phase) — cumulative energy = n runs × per-run energy
     { name:'GLO12',   training:0,      trainingCi:0,    mu:18.4, ci:1.92, color:'#D9583E', fill:'217,88,62',  dash:[] },
     // Glonet2: affine — fixed training cost (± its own CI) + n inferences × per-inference energy (placeholder: 0 Wh, ±0 CI, until measured)
-    { name:'Glonet2', training:509, trainingCi:13.8,    mu:1.84742,     ci:0.000190,    color:'#4A3E8C', fill:'74,62,140',  dash:[6,3] }
+    { name:'Glonet2', training:698, trainingCi:140,    mu:1.84742,     ci:0.000190,    color:'#4A3E8C', fill:'74,62,140',  dash:[6,3] }
   ];
 
   function buildComparisonDatasets() {
