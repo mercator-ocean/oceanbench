@@ -570,9 +570,9 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (Wh)</td><td><span class="ei-result">135 (± 2.03)</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00754 (± 0.000114)</span></td></tr>
-        <tr><td>Duration (seconds)</td><td><span class="ei-result">2061</span></td></tr>
+        <tr><td>Energy (Wh)</td><td><span class="ei-result">134 (± 2.01)</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00748 (± 0.000114)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">2047</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -944,13 +944,13 @@ require(['chartjs'], function(ChartModule) {
   // ── All model data ──────────────────────────────────────────────────────
   const ALL_MODELS = {
     A: [
-      { name:'Glonet', mu:135,  ci:2.03, color:'#378ADD', fill:'55,138,221',  dash:[] },
+      { name:'Glonet', mu:134,  ci:2.01, color:'#378ADD', fill:'55,138,221',  dash:[] },
       { name:'Wenhai', mu:49.7, ci:3.49, color:'#1D9E75', fill:'29,158,117',  dash:[6,3] },
       { name:'Xihe',   mu:41.2, ci:4.23, color:'#D4537E', fill:'212,83,126',  dash:[2,4] },
       { name:'LangYa', mu:20.9, ci:2.73, color:'#D4C853', fill:'212,200,83',  dash:[2,4] }
     ],
     B: [
-      { name:'Glonet', mu:14.3,  ci:0.487, color:'#378ADD', fill:'55,138,221',  dash:[] },
+      { name:'Glonet', mu:14.1,  ci:0.480, color:'#378ADD', fill:'55,138,221',  dash:[] },
       { name:'Wenhai', mu:24.5,  ci:3.64,  color:'#1D9E75', fill:'29,158,117',  dash:[6,3] },
       { name:'Xihe',   mu:17.3,  ci:0.690, color:'#D4537E', fill:'212,83,126',  dash:[2,4] },
       { name:'LangYa', mu:4.35,  ci:1.64,  color:'#D4C853', fill:'212,200,83',  dash:[2,4] }
@@ -962,20 +962,20 @@ require(['chartjs'], function(ChartModule) {
 
   const ALL_BREAKDOWN = {
     A: [
-      { name:'Glonet', values:[0.1,1.2,84.6,5.5,8.6] },
+      { name:'Glonet', values:[0.1,1.2,85.0,3.0,8.6] },
       { name:'Wenhai', values:[0.24,1.44,30.12,39.0,29.2] },
       { name:'Xihe',   values:[0.1,14.1,23.5,22.1,40.2] },
       { name:'LangYa', values:[0.3,16.0,3.8,3.3,76.6] }
     ],
     B: [
-      { name:'Glonet', values:[0.14,0.14,39.4,38.6,21.72] },
+      { name:'Glonet', values:[0.15,0.15,40.5,37.2,21.95] },
       { name:'Wenhai', values:[0.09,0.19,20.4,66.1,13.2] },
       { name:'Xihe',   values:[0.115,0.485,23.4,56.0,20.0] },
       { name:'LangYa', values:[0.41,32.1,6.88,19.2,36.7] }
     ]
   };
 
-  const ALL_INFERENCE  = { A:[7.42,19.4,9.10,0.521], B:[5.13,15.54,8.98,0.836] };
+  const ALL_INFERENCE  = { A:[6.20,19.4,9.10,0.521], B:[4.96,15.54,8.98,0.836] };
   const ALL_NB_PARAMS  = { A:[2085,1250,1170,85.7],  B:[2085,1250,1170,85.7] };
   const ALL_NB_OPE     = { A:[76.5,469,173,6.21],    B:[76.5,469,173,6.21] };
   const MODEL_NAMES    = ['Glonet','Wenhai','Xihe','LangYa'];
@@ -1224,6 +1224,12 @@ require(['chartjs'], function(ChartModule) {
     var intercept=(sumY-slope*sumX)/n;
     return { slope:slope, intercept:intercept };
   }
+  function linearRegressionThroughOrigin(pts) {
+    var sumXY=0, sumX2=0;
+    pts.forEach(function(p){ sumXY+=p.x*p.y; sumX2+=p.x*p.x; });
+    var slope = sumX2===0 ? 0 : sumXY/sumX2;
+    return { slope:slope, intercept:0 };
+  }
 
   function pearson(pts) {
     var n=pts.length;
@@ -1244,11 +1250,10 @@ require(['chartjs'], function(ChartModule) {
     });
     if (idx.length < 2) return { datasets:scatterDatasets, r:NaN };
     var pts = idx.map(function(i,j){ return { x:inferenceVals[j], y:opeVals[j] }; });
-    var reg = linearRegression(pts);
+    var reg = linearRegressionThroughOrigin(pts);
     var r   = pearson(pts);
-    var xMin = Math.min.apply(null,inferenceVals);
     var xMax = Math.max.apply(null,inferenceVals);
-    var lineDataset = { type:'line', label:'Linear fit (r='+r.toFixed(2)+')', data:[{ x:xMin*0.85, y:reg.slope*xMin*0.85+reg.intercept },{ x:xMax*1.10, y:reg.slope*xMax*1.10+reg.intercept }], borderColor:'rgba(120,120,120,0.55)', borderWidth:1.5, borderDash:[5,4], pointRadius:0, fill:false, order:2 };
+    var lineDataset = { type:'line', label:'Linear fit (r='+r.toFixed(2)+')', data:[{ x:0, y:0 },{ x:xMax*1.10, y:reg.slope*xMax*1.10 }], borderColor:'rgba(120,120,120,0.55)', borderWidth:1.5, borderDash:[5,4], pointRadius:0, fill:false, order:2 };
     return { datasets:scatterDatasets.concat([lineDataset]), r:r };
   }
 
@@ -1353,8 +1358,8 @@ require(['chartjs'], function(ChartModule) {
   var STAGE_LABELS = ["WORKSPACE_INIT","DOWNLOAD_MODEL","Create/recup INIT files","INFERENCE","POST TREATMENT"];
 
   function initStackedBars() {
-    makeStackedBar('stacked-bar-glonet',       'bar-legend-glonet',       { labels:STAGE_LABELS, values:[0.1,1.2,84.6,5.5,8.6],          colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-glonet_part2', 'bar-legend-glonet_part2', { labels:STAGE_LABELS, values:[1.55,10,1820,75,131],            colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet',       'bar-legend-glonet',       { labels:STAGE_LABELS, values:[0.1,1.2,85.0,3.0,8.6],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet_part2', 'bar-legend-glonet_part2', { labels:STAGE_LABELS, values:[1.55,10,1820,61,131],            colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-wenhai',       'bar-legend-wenhai',       { labels:STAGE_LABELS, values:[0.24,1.44,30.12,39.0,29.2],      colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-wenhai_part2', 'bar-legend-wenhai_part2', { labels:STAGE_LABELS, values:[1.53,7.0,280,253,220],           colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-xihe',         'bar-legend-xihe',         { labels:STAGE_LABELS, values:[0.1,14.1,23.5,22.1,40.2],        colors:STAGE_COLORS });
