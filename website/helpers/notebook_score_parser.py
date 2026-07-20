@@ -29,13 +29,22 @@ def _parse_variable_label(label: str) -> tuple[str, str, str, str]:
     return label, "", "unknown", ""
 
 
+def _has_structured_variable_label(unit: str, standard_name: str) -> bool:
+    return bool(unit or standard_name != "unknown")
+
+
 def _normalise_display_name(display_name: str) -> str:
     normalised_display_name = display_name.lower()
     return _DISPLAY_NAME_RENAMES.get(normalised_display_name, normalised_display_name)
 
 
 _METRICS = [
-    {"key": "rmsd_variables", "title": "Forecasted variables", "function": "rmsd_of_variables", "has_depths": True},
+    {
+        "key": "rmsd_variables",
+        "title": "Forecasted variables",
+        "function": "rmsd_of_variables",
+        "has_depths": True,
+    },
     {
         "key": "rmsd_mld",
         "title": "RMSD of Mixed Layer Depth",
@@ -57,8 +66,21 @@ _METRICS = [
 ]
 
 _REFERENCES = [
-    {"key": "reanalysis", "suffix": "glorys", "function_suffix": "compared_to_glorys_reanalysis"},
-    {"key": "analysis", "suffix": "glo12", "function_suffix": "compared_to_glo12_analysis"},
+    {
+        "key": "reanalysis",
+        "suffix": "glorys",
+        "function_suffix": "compared_to_glorys_reanalysis",
+    },
+    {
+        "key": "analysis",
+        "suffix": "glo12",
+        "function_suffix": "compared_to_glo12_analysis",
+    },
+    {
+        "key": "glo36",
+        "suffix": "glo36",
+        "function_suffix": "compared_to_glo36v1_reference",
+    },
 ]
 
 _OBSERVATIONS_METRIC_KEY = "rmsd_variables_observations"
@@ -88,9 +110,20 @@ SECTIONS = {
         "depth_metric": _OBSERVATIONS_METRIC_KEY,
         "flat_metrics": [],
         "depth_groups": [
-            {"depths": ["0-5m", "5-100m", "100-300m", "300-600m"], "variables": ["temperature", "salinity"]},
-            {"depths": ["Surface"], "variables": ["temperature", "sea level anomaly"], "show_depth_label": True},
-            {"depths": ["15m"], "variables": ["zonal current", "meridional current"], "show_depth_label": True},
+            {
+                "depths": ["0-5m", "5-100m", "100-300m", "300-600m"],
+                "variables": ["temperature", "salinity"],
+            },
+            {
+                "depths": ["Surface"],
+                "variables": ["temperature", "sea level anomaly"],
+                "show_depth_label": True,
+            },
+            {
+                "depths": ["15m"],
+                "variables": ["zonal current", "meridional current"],
+                "show_depth_label": True,
+            },
         ],
     }
 }
@@ -161,7 +194,11 @@ def _convert_depth_variable_table_to_model_score(raw_table: str, challenger_name
     depths = {
         depth: {
             "variables": {
-                variable_name: {"standard_name": standard_name, "unit": unit, "data": data}
+                variable_name: {
+                    "standard_name": standard_name,
+                    "unit": unit,
+                    "data": data,
+                }
                 for row_depth, variable_name, standard_name, unit, data in parsed_rows
                 if row_depth == depth
             }
@@ -174,9 +211,14 @@ def _convert_depth_variable_table_to_model_score(raw_table: str, challenger_name
 def _convert_flat_table_to_model_score(raw_table: str, challenger_name: str) -> ModelScore:
     rows = _parse_html_table_rows(raw_table)
     variables = {
-        _normalise_display_name(display_name): {"standard_name": standard_name, "unit": unit, "data": row["data"]}
+        _normalise_display_name(display_name): {
+            "standard_name": standard_name,
+            "unit": unit,
+            "data": row["data"],
+        }
         for row in rows
         for display_name, unit, standard_name, _depth_label in [_parse_variable_label(row["label"])]
+        if _has_structured_variable_label(unit, standard_name)
     }
     return ModelScore.model_validate({"name": challenger_name, "depths": {"flat": {"variables": variables}}})
 

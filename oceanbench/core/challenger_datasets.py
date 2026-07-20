@@ -10,10 +10,19 @@ import xarray
 from datetime import datetime, timedelta
 from collections.abc import Callable
 
-from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
-from oceanbench.core.remote_http import require_remote_dataset_dimensions, with_remote_http_retries
+from oceanbench.core.glo36v1 import (
+    GLO36V1_FIRST_DAY_DATETIMES,
+    GLO36V1_LEAD_DAYS_COUNT,
+    glo36v1_dataset_path,
+    glonet_high_resolution_dataset_path,
+    prepare_glo36v1_week_dataset,
+)
+from oceanbench.core.remote_http import (
+    require_remote_dataset_dimensions,
+    with_remote_http_retries,
+)
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
 from oceanbench.core.interpolate import interpolate_1_degree
@@ -74,28 +83,78 @@ def _remote_glo12_dataset(first_day_datetimes: list[datetime]) -> xarray.Dataset
 
 
 def glo36v1() -> xarray.Dataset:
-    first_day_datetimes = generate_dates("2023-01-04", "2023-12-27", 7)
-    challenger_dataset = (
-        xarray.open_mfdataset(
-            [
-                f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/{dt.strftime('%Y%m%d')}.zarr"
-                for dt in first_day_datetimes
-            ],
-            engine="zarr",
-            combine="nested",
-            concat_dim="first_day_datetime",
-            parallel=True,
+    first_day_datetimes = GLO36V1_FIRST_DAY_DATETIMES
+
+    def open_dataset() -> xarray.Dataset:
+        return maybe_stage_weekly_dataset(
+            stage_key="challenger",
+            dataset_kind="challenger",
+            dataset_name="glo36v1",
+            first_day_datetimes=first_day_datetimes,
+            lead_days_count=GLO36V1_LEAD_DAYS_COUNT,
+            open_week_dataset=lambda first_day_datetime: prepare_glo36v1_week_dataset(
+                xarray.open_dataset(glo36v1_dataset_path(first_day_datetime), engine="zarr"),
+                lead_days_count=GLO36V1_LEAD_DAYS_COUNT,
+                operation_name="GLO36V1 challenger dataset open",
+            ),
+            open_remote_dataset=lambda: xarray.open_mfdataset(
+                list(map(glo36v1_dataset_path, first_day_datetimes)),
+                engine="zarr",
+                preprocess=lambda dataset: prepare_glo36v1_week_dataset(
+                    dataset,
+                    lead_days_count=GLO36V1_LEAD_DAYS_COUNT,
+                    operation_name="GLO36V1 challenger dataset open",
+                ),
+                combine="nested",
+                concat_dim="first_day_datetime",
+                parallel=False,
+            ).assign({"first_day_datetime": first_day_datetimes}),
+            resolution="super_resolution",
+            attach_source_metadata_when_not_staged=True,
         )
-        .rename({"lat": "latitude", "lon": "longitude"})
-        .assign({"first_day_datetime": first_day_datetimes})
-    )
-    if not current_runtime_configuration().has_local_stage():
-        return challenger_dataset
-    return with_dataset_source(challenger_dataset, kind="challenger", name="glo36v1")
+
+    return with_remote_http_retries("glo36v1 challenger dataset open", open_dataset)
 
 
 def _glo36v1_dataset_path(start_datetime: datetime) -> str:
-    return f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/{start_datetime.strftime('%Y%m%d')}.zarr"
+    return glo36v1_dataset_path(start_datetime)
+
+
+def glonet_high_resolution() -> xarray.Dataset:
+    first_day_datetimes = GLO36V1_FIRST_DAY_DATETIMES
+
+    def open_week_dataset(first_day_datetime: datetime) -> xarray.Dataset:
+        return prepare_glo36v1_week_dataset(
+            xarray.open_dataset(glonet_high_resolution_dataset_path(first_day_datetime), engine="zarr"),
+            lead_days_count=GLO36V1_LEAD_DAYS_COUNT,
+            operation_name="GLONET high-resolution challenger dataset open",
+            first_day_datetime=first_day_datetime,
+        )
+
+    def open_remote_dataset() -> xarray.Dataset:
+        return xarray.concat(
+            [open_week_dataset(first_day_datetime) for first_day_datetime in first_day_datetimes],
+            dim="first_day_datetime",
+        ).assign({"first_day_datetime": first_day_datetimes})
+
+    def open_dataset() -> xarray.Dataset:
+        return maybe_stage_weekly_dataset(
+            stage_key="challenger",
+            dataset_kind="challenger",
+            dataset_name="glonet_high_resolution",
+            first_day_datetimes=first_day_datetimes,
+            lead_days_count=GLO36V1_LEAD_DAYS_COUNT,
+            open_week_dataset=open_week_dataset,
+            open_remote_dataset=open_remote_dataset,
+            resolution="super_resolution",
+            attach_source_metadata_when_not_staged=True,
+        )
+
+    return with_remote_http_retries("glonet high-resolution challenger dataset open", open_dataset)
+
+
+def _glonet_high_resolution_dataset_path(start_datetime: datetime) -> str:
+    return glonet_high_resolution_dataset_path(start_datetime)
 
 
 def glonet() -> xarray.Dataset:
@@ -156,7 +215,9 @@ def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[d
     return forecast_zarr_path_from_start_datetime.__name__.removeprefix("_").replace("_dataset_path", "")
 
 
-def _resolved_first_day_datetimes(first_day_datetimes: list[datetime] | None) -> list[datetime]:
+def _resolved_first_day_datetimes(
+    first_day_datetimes: list[datetime] | None,
+) -> list[datetime]:
     return first_day_datetimes if first_day_datetimes is not None else _default_first_day_datetimes()
 
 

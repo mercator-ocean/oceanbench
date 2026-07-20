@@ -33,6 +33,8 @@ class ObservationDataUnavailableError(ValueError):
 
 
 def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
+    if resolution == "thirty_sixth_degree":
+        resolution = "twelfth_degree"
     if resolution == "twelfth_degree":
         return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt.zarr"
     if resolution == "quarter_degree":
@@ -43,6 +45,8 @@ def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
 
 
 def _mean_dynamic_topography_stage_path(resolution: str) -> Path:
+    if resolution == "thirty_sixth_degree":
+        resolution = "twelfth_degree"
     return local_stage_directory() / f"class4-mean-dynamic-topography-2024-glo12-{resolution}.zarr"
 
 
@@ -237,17 +241,19 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     lead_days_count = challenger_dataset.sizes[lead_day_index_key]
     first_day_dates = first_day_datetimes.astype("datetime64[D]")
     first_challenger_day = first_day_dates.min()
-    if first_challenger_day < OBSERVATIONS_FIRST_AVAILABLE_DATE:
-        first_challenger_day_string = pandas.Timestamp(first_challenger_day).strftime("%Y-%m-%d")
+    last_challenger_day = first_day_dates.max() + numpy.timedelta64(lead_days_count - 1, "D")
+    if last_challenger_day < OBSERVATIONS_FIRST_AVAILABLE_DATE:
+        last_challenger_day_string = pandas.Timestamp(last_challenger_day).strftime("%Y-%m-%d")
         first_available_day_string = pandas.Timestamp(OBSERVATIONS_FIRST_AVAILABLE_DATE).strftime("%Y-%m-%d")
         raise ObservationDataUnavailableError(
             "Observation-based Class IV scores were not computed for this challenger. "
             f"Observation data is available from {first_available_day_string}, "
-            f"while challenger first_day_datetime starts on {first_challenger_day_string}."
+            f"while challenger forecast windows end on {last_challenger_day_string}."
         )
 
     first_day_timestamps = pandas.to_datetime(first_day_datetimes)
-    first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
+    observation_start_day = max(first_challenger_day, OBSERVATIONS_FIRST_AVAILABLE_DATE)
+    first_day_start = pandas.Timestamp(observation_start_day).strftime("%Y-%m-%d")
     last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count - 1)).strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
     local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)

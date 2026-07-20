@@ -84,14 +84,14 @@ def glo36v1() -> xarray.Dataset:
 
     >>> glo36v1() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 3TB
-    Dimensions:             (first_day_datetime: 52, lead_day_index: 7, depth: 50,
+    Dimensions:             (first_day_datetime: 53, lead_day_index: 7, depth: 50,
                              latitude: 2041, longitude: 4320)
     Coordinates:
       * depth               (depth) float32 200B 0.494 1.541 ... 5.275e+03 5.728e+03
       * latitude            (latitude) float32 8kB -80.0 -79.92 ... 89.92 90.0
       * lead_day_index      (lead_day_index) int64 56B 0 1 2 3 4 5 6
       * longitude           (longitude) float32 17kB -180.0 -179.9 ... 179.8 179.9
-      * first_day_datetime  (first_day_datetime) datetime64[...] 416B 2023-01-04 ....
+      * first_day_datetime  (first_day_datetime) datetime64[...] 424B 2023-01-04 ....
     Data variables:
         so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 642GB dask.array<chunksize=(1, 1, 7, 256, 540), meta=np.ndarray>
         thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 642GB dask.array<chunksize=(1, 1, 7, 256, 540), meta=np.ndarray>
@@ -182,6 +182,23 @@ def glonet_1_degree() -> xarray.Dataset:
     """
 
     return challenger_datasets.glonet_1_degree()
+
+
+def glonet_high_resolution() -> xarray.Dataset:
+    """
+    Open the GLONET high-resolution challenger dataset.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing GLONET high-resolution forecasts.
+
+    >>> glonet_high_resolution() # doctest: +SKIP
+    <xarray.Dataset> Size: ...
+    Dimensions:             (first_day_datetime: 53, lead_day_index: 7, ...)
+    """
+
+    return challenger_datasets.glonet_high_resolution()
 
 
 def xihe() -> xarray.Dataset:

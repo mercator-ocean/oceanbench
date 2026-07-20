@@ -20,4 +20,5 @@ This documentation contains the definitions of the evaluation methods as well as
    evaluation-methods
    input-datasets-for-oceanbench-challenger-evaluation
    one-degree-track
+   super-resolution-track
    source/oceanbench

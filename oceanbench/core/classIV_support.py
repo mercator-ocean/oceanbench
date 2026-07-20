@@ -242,6 +242,23 @@ def _convert_forecast_ssh_to_sla(
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
     mean_dynamic_topography = load_mean_dynamic_topography(resolution)
+    if not (
+        numpy.array_equal(
+            mean_dynamic_topography[Dimension.LATITUDE.key()].values,
+            model_variable[Dimension.LATITUDE.key()].values,
+        )
+        and numpy.array_equal(
+            mean_dynamic_topography[Dimension.LONGITUDE.key()].values,
+            model_variable[Dimension.LONGITUDE.key()].values,
+        )
+    ):
+        mean_dynamic_topography = mean_dynamic_topography.interp(
+            {
+                Dimension.LATITUDE.key(): model_variable[Dimension.LATITUDE.key()],
+                Dimension.LONGITUDE.key(): model_variable[Dimension.LONGITUDE.key()],
+            },
+            method="linear",
+        )
     return model_variable - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
 
 

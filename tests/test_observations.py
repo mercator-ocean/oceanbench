@@ -86,3 +86,48 @@ def test_observations_stage_path_uses_overlap_safe_version() -> None:
         observations._observations_stage_path("2024-01-03", "2025-01-03", 10).name
         == "observations-v3-20240103-20250103-10d.zarr"
     )
+
+
+def _challenger_dataset(first_day_datetimes: list[str], lead_days_count: int) -> xarray.Dataset:
+    return xarray.Dataset(
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(first_day_datetimes, dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count),
+        }
+    )
+
+
+def test_observations_use_overlap_when_challenger_starts_before_observations(monkeypatch) -> None:
+    captured = {}
+
+    def fake_selected_observations_dataset(**kwargs):
+        captured.update(kwargs)
+        return xarray.Dataset()
+
+    monkeypatch.setattr(observations, "_should_stage_observations_locally", lambda: False)
+    monkeypatch.setattr(observations, "_selected_observations_dataset", fake_selected_observations_dataset)
+
+    observations.observations(
+        _challenger_dataset(
+            ["2023-12-27", "2024-01-03"],
+            lead_days_count=10,
+        )
+    )
+
+    assert captured["observation_days"][0] == numpy.datetime64("2024-01-01")
+    assert captured["observation_days"][-1] == numpy.datetime64("2024-01-12")
+    assert captured["first_day_timestamps"].min() == pandas.Timestamp("2023-12-27")
+
+
+def test_observations_still_fail_when_no_forecast_window_overlaps_available_observations() -> None:
+    try:
+        observations.observations(
+            _challenger_dataset(
+                ["2023-12-01"],
+                lead_days_count=7,
+            )
+        )
+    except observations.ObservationDataUnavailableError as error:
+        assert "forecast windows end on 2023-12-07" in str(error)
+    else:
+        raise AssertionError("Expected observation data without overlap to fail.")

@@ -165,5 +165,19 @@ def test_generate_evaluation_notebook_keeps_official_region_string(tmp_path) -> 
     notebook = nbformat.read(output_path, as_version=4)
 
     assert notebook.cells[4].source == "region = 'ibi'"
+    assert any(
+        "is_super_resolution_track = is_super_resolution_dataset(challenger_dataset)" in cell.source
+        for cell in notebook.cells
+    )
+    assert any(
+        "if not is_super_resolution_track:" in cell.source
+        and "rmsd_of_variables_compared_to_glo12_analysis" in cell.source
+        for cell in notebook.cells
+    )
+    assert any(
+        "if is_super_resolution_track:" in cell.source
+        and "rmsd_of_variables_compared_to_glo36v1_reference" in cell.source
+        for cell in notebook.cells
+    )
     assert notebook.metadata["oceanbench"]["region"]["id"] == "ibi"
     assert notebook.metadata["oceanbench"]["region"]["official"] is True

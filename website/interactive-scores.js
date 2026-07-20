@@ -50,6 +50,7 @@ let regionLabels = {};
 let regionMetadata = {};
 let activeTrack = "high_resolution";
 let activeSection = "observations";
+let renderedSections = null;
 let activeRegion = null;
 let activeVersion = null;
 let isScrollRefreshScheduled = false;
@@ -59,21 +60,32 @@ let defaultVersionValue = null;
 let defaultRegionValue = null;
 let defaultBaselineValue = null;
 
-const SECTION_ORDER = ["observations", "reanalysis", "analysis"];
+const SECTION_ORDER = ["observations", "glo36", "reanalysis", "analysis"];
 
 const SECTION_ID_MAP = {
   observations: "comparison-to-observations",
+  glo36: "comparison-to-glo36-reference",
   reanalysis: "comparison-to-reanalysis",
   analysis: "comparison-to-analysis",
 };
 
+const SECTION_LABELS = {
+  observations: "Observations",
+  glo36: "GLO36",
+  reanalysis: "Reanalysis",
+  analysis: "Analysis",
+};
+
 const TRACK_LABELS = {
   high_resolution: "High resolution",
+  super_resolution: "Super resolution",
   one_degree: "1 degree",
 };
 
 const TRACK_NOTES = {
   high_resolution: "Models evaluated at their native high resolution.",
+  super_resolution:
+    "Models evaluated on the super-resolution track against observations and the GLO36V1 reference.",
   one_degree:
     "Non-one-degree base models whose forecasts are interpolated to the one degree resolution.",
 };
@@ -174,6 +186,13 @@ function displayName(name) {
 }
 
 function trackKeyForChallenger(name) {
+  if (
+    name === "glo36v1" ||
+    name.endsWith("_high_resolution") ||
+    name.endsWith("_super_resolution")
+  ) {
+    return "super_resolution";
+  }
   return name.endsWith("_1_degree") ? "one_degree" : "high_resolution";
 }
 
@@ -185,6 +204,9 @@ function getAvailableTracks(challengerNames) {
   const tracks = [];
   if (getTrackChallengerNames(challengerNames, "high_resolution").length > 0) {
     tracks.push("high_resolution");
+  }
+  if (getTrackChallengerNames(challengerNames, "super_resolution").length > 0) {
+    tracks.push("super_resolution");
   }
   if (getTrackChallengerNames(challengerNames, "one_degree").length > 0) {
     tracks.push("one_degree");
@@ -391,7 +413,11 @@ function scrollToSection(sectionKey) {
 }
 
 function orderedSectionKeys(sections) {
-  const availableSections = sections ? new Set(Object.keys(sections)) : null;
+  const availableSections = sections
+    ? new Set(Object.keys(sections))
+    : renderedSections
+      ? new Set(Object.keys(renderedSections))
+      : null;
   return SECTION_ORDER.filter(
     (sectionKey) => SECTION_ID_MAP[sectionKey] && (!availableSections || availableSections.has(sectionKey)),
   );
@@ -442,7 +468,7 @@ function buildTabsInnerHtml(sections) {
   let markup = "";
   for (const sectionKey of orderedSectionKeys(sections)) {
     const isActive = sectionKey === activeSection;
-    markup += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${titleCase(sectionKey)}</a>`;
+    markup += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${SECTION_LABELS[sectionKey] || titleCase(sectionKey)}</a>`;
   }
   return markup;
 }
@@ -650,6 +676,48 @@ function getAvailableDepths(challengers, baseline, sections) {
     }
   }
   return [];
+}
+
+function scoreHasData(score) {
+  if (!score || !score.depths) return false;
+  return Object.values(score.depths).some((depthScore) => {
+    return Object.keys(depthScore.variables || {}).length > 0;
+  });
+}
+
+function sectionHasScores(challengers, baseline, sectionKey, sectionConfig) {
+  if (sectionKey === "glo36" && activeTrack !== "super_resolution") {
+    return false;
+  }
+  const baselineScores = challengers[baseline] || {};
+  if (scoreHasData(baselineScores[sectionConfig.depth_metric])) {
+    return true;
+  }
+  return (sectionConfig.flat_metrics || []).some((metricKey) => scoreHasData(baselineScores[metricKey]));
+}
+
+function visibleSectionsForTrack(sections, challengers, baseline) {
+  return Object.fromEntries(
+    SECTION_ORDER
+      .filter((sectionKey) => sections[sectionKey])
+      .filter((sectionKey) => sectionHasScores(challengers, baseline, sectionKey, sections[sectionKey]))
+      .map((sectionKey) => [sectionKey, sections[sectionKey]]),
+  );
+}
+
+function setScoreSectionVisibility(sections) {
+  const visibleSectionKeys = new Set(Object.keys(sections));
+  for (const sectionKey of SECTION_ORDER) {
+    const sectionElement = document.querySelector(`[data-score-section="${sectionKey}"]`);
+    if (sectionElement) {
+      sectionElement.hidden = !visibleSectionKeys.has(sectionKey);
+    }
+  }
+}
+
+function ensureActiveSectionVisible(sections) {
+  if (sections[activeSection]) return;
+  activeSection = Object.keys(sections)[0] || "observations";
 }
 
 function groupDepthsByVariables(baselineScore, depths) {
@@ -1163,7 +1231,11 @@ function resolveBaselineSelection(challengerNames, selectedBaseline, trackKey) {
   if (selectedBaseline && trackChallengerNames.includes(selectedBaseline)) {
     return selectedBaseline;
   }
-  const preferredBaseline = trackKey === "one_degree" ? "glo12_1_degree" : "glo12";
+  const preferredBaseline = trackKey === "one_degree"
+    ? "glo12_1_degree"
+    : trackKey === "super_resolution"
+      ? "glo36v1"
+      : "glo12";
   if (trackChallengerNames.includes(preferredBaseline)) {
     return preferredBaseline;
   }
@@ -1208,7 +1280,12 @@ function renderTablesOnly() {
   const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value ?? selectedBaseline);
   if (!baseline) return;
 
-  for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
+  const visibleSections = visibleSectionsForTrack(sections, challengers, baseline);
+  renderedSections = visibleSections;
+  ensureActiveSectionVisible(visibleSections);
+  setScoreSectionVisibility(visibleSections);
+
+  for (const [sectionKey, sectionConfig] of Object.entries(visibleSections)) {
     renderMetricSection(
       `${sectionKey}-scores`,
       sectionConfig.depth_metric,
@@ -1245,9 +1322,13 @@ function renderAllTables() {
   const existingSelect = document.getElementById("baseline-select");
   const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value ?? selectedBaseline);
   if (!baseline) return;
-  const availableDepths = getAvailableDepths(challengers, baseline, sections);
+  const visibleSections = visibleSectionsForTrack(sections, challengers, baseline);
+  renderedSections = visibleSections;
+  ensureActiveSectionVisible(visibleSections);
+  setScoreSectionVisibility(visibleSections);
+  const availableDepths = getAvailableDepths(challengers, baseline, visibleSections);
 
-  for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
+  for (const [sectionKey, sectionConfig] of Object.entries(visibleSections)) {
     renderMetricSection(
       `${sectionKey}-scores`,
       sectionConfig.depth_metric,
@@ -1271,7 +1352,7 @@ function renderAllTables() {
 
   const tabNavigation = document.getElementById("score-tabs");
   if (tabNavigation) {
-    tabNavigation.innerHTML = buildTabsInnerHtml(sections);
+    tabNavigation.innerHTML = buildTabsInnerHtml(visibleSections);
   }
 
   updateColorLegend();

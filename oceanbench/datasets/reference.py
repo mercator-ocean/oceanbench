@@ -12,6 +12,7 @@ import pandas
 import xarray
 from oceanbench.core.references import glorys
 from oceanbench.core.references import glo12
+from oceanbench.core.references import glo36
 
 
 def glorys_reanalysis() -> xarray.Dataset:
@@ -136,3 +137,36 @@ def glo12_analysis() -> xarray.Dataset:
         institution:  Mercator Ocean International
     """
     return glo12.glo12_analysis()
+
+
+def glo36v1_reference() -> xarray.Dataset:
+    """
+    Open the GLO36V1 reference dataset as an `xarray.Dataset`.
+
+    The dataset is published on EDITO as weekly GLO36V1 chunks available from
+    2023-01-04 to 2024-01-03, with 7 lead days per first day.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing GLO36V1 reference fields.
+
+    >>> glo36v1_reference() # doctest: +SKIP
+    <xarray.Dataset> Size: 3TB
+    Dimensions:             (first_day_datetime: 53, lead_day_index: 7, depth: 50,
+                             latitude: 2041, longitude: 4320)
+    Coordinates:
+      * depth               (depth) float32 200B 0.494 1.541 ... 5.275e+03 5.728e+03
+      * latitude            (latitude) float32 8kB -80.0 -79.92 ... 89.92 90.0
+      * lead_day_index      (lead_day_index) int64 56B 0 1 2 3 4 5 6
+      * longitude           (longitude) float32 17kB -180.0 -179.9 ... 179.8 179.9
+      * first_day_datetime  (first_day_datetime) datetime64[...] 424B 2023-01-04 ....
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 ...
+    """
+
+    return glo36.glo36v1_reference()

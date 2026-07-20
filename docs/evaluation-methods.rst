@@ -9,7 +9,8 @@ Definitions of evaluation methods
 ===================================================
 
 Several methods are used to evaluate forecasting systems in OceanBench.
-Each of them is applied to a dataset grouping 52 forecasts in the year 2024.
+For the 2024 tracks, each of them is applied to a dataset grouping 52 forecasts in the year 2024.
+The super-resolution track additionally uses the GLO36V1 reference period documented in :ref:`super-resolution-track-page`.
 
 The following figure provides an overview of the evaluation methodology, illustrating the multifaceted evaluation strategy that captures different aspects of model performance.
 This includes (i) observation-based intercomparison, (ii) reference-model benchmarking, and (iii) process-oriented diagnostics derived from physically meaningful variables.
@@ -22,8 +23,8 @@ Reference datasets
 
 OceanBench evaluates challengers against the following reference datasets:
 
-- `2024 GLORYS reanalysis <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_
-- `2024 GLO12 analysis <https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024>`_
+- Standard 2024 tracks use `2024 GLORYS reanalysis <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_ and `2024 GLO12 analysis <https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024>`_.
+- The super-resolution track uses GLO36V1 numerical model data and Class IV observations only.
 
 You can open and explore these datasets by using the :mod:`oceanbench.datasets.reference` module.
 
@@ -104,3 +105,8 @@ Deviation of Lagrangian trajectories compared to GLO12 analysis
 The deviation in kilometers between the two sets of drifting particles computed over the challenger datasets and the GLO12 analysis dataset.
 
 The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)``-weighted probabilities, then simulated over the area.
+
+GLO36V1 reference metrics
+**********************************************************************************************
+
+For the super-resolution track, OceanBench computes the same variable RMSD, mixed-layer-depth RMSD, geostrophic-current RMSD, and Lagrangian trajectory deviation metrics against the GLO36V1 reference dataset.
