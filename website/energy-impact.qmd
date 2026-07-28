@@ -618,11 +618,21 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (Wh)</td><td><span class="ei-pending">pending</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-pending">pending</span></td></tr>
-        <tr><td>Duration (seconds)</td><td><span class="ei-pending">pending</span></td></tr>
+        <tr><td>Energy (Wh)</td><td><span class="ei-result">15.0 (± 1.07)</span></td></tr>
+        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.000840 (± 0.0000599)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">228</span></td></tr>
       </tbody>
     </table>
+  </div>
+    <div style="padding: 1rem 0;">
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consume the most — Inference Process</div>
+    <div id="stacked-bar-glonet2" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
+    <div id="bar-legend-glonet2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+  </div>
+  <div style="padding: 1rem 0;">
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Duration — Inference Process</div>
+    <div id="stacked-bar-glonet2_part2" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
+    <div id="bar-legend-glonet2_part2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
   </div>
 
   <!-- Wenhai -->
@@ -1089,10 +1099,9 @@ require(['chartjs'], function(ChartModule) {
   const runsAI = Array.from({length:101}, function(_,i){ return i; });
 
   const COMPARISON_MODELS = [
-    // GLO12: purely linear (no training phase) — cumulative energy = n runs × per-run energy
     { name:'GLO12',   training:0,      trainingCi:0,    mu:18.4, ci:1.92, color:'#D9583E', fill:'217,88,62',  dash:[] },
-    // Glonet2: affine — fixed training cost (± its own CI) + n inferences × per-inference energy (placeholder: 0 Wh, ±0 CI, until measured)
-    { name:'Glonet2', training:698, trainingCi:140,    mu:1.84742,     ci:0.000190,    color:'#4A3E8C', fill:'74,62,140',  dash:[6,3] }
+    // Glonet2 use 10 percent of GLO12 included in the data below
+    { name:'Glonet2', training:698, trainingCi:140,    mu:1.84116,     ci:0.1920068,    color:'#4A3E8C', fill:'74,62,140',  dash:[6,3] }
   ];
 
   function buildComparisonDatasets() {
@@ -1401,6 +1410,8 @@ require(['chartjs'], function(ChartModule) {
     makeStackedBar('stacked-bar-xihe_part2',   'bar-legend-xihe_part2',   { labels:STAGE_LABELS, values:[1.51,108,180,117,240],           colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-langya',       'bar-legend-langya',       { labels:STAGE_LABELS, values:[0.3,16.0,3.8,3.3,76.6],          colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-langya_part2', 'bar-legend-langya_part2', { labels:STAGE_LABELS, values:[0.4,18.8,5.0,3.0,72.8],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet2',       'bar-legend-glonet2',       { labels:STAGE_LABELS, values:[0.0,0.0,13.6,1.16,0.290],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet2_part2', 'bar-legend-glonet2_part2', { labels:STAGE_LABELS, values:[0.0,0.0,92.1,4.82,3.07],          colors:STAGE_COLORS });
   }
 
   window._stackedBarsReady = initStackedBars;
