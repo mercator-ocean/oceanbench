@@ -42,7 +42,7 @@ def test_glonet_1_degree_local_evaluation_matches_published(tmp_path):
     from oceanbench.core.dataset_utils import Dimension
     from oceanbench.core.runtime_configuration import RuntimeConfiguration, set_runtime_configuration
     from oceanbench.packs.builder import PackSources, build_pack
-    from oceanbench.packs.evaluate import evaluate_local, per_start_agreement
+    from oceanbench.packs.evaluate import evaluate, per_start_agreement
 
     stage_directory = os.environ["OCEANBENCH_STAGE_DIR"]
     set_runtime_configuration(RuntimeConfiguration(staged_components=("all",), stage_directory=stage_directory))
@@ -59,9 +59,9 @@ def test_glonet_1_degree_local_evaluation_matches_published(tmp_path):
     forecast = challenger_datasets.glonet_1_degree().isel({Dimension.FIRST_DAY_DATETIME.key(): slice(0, _START_LIMIT)})
     _materialise_forecast(forecast, forecast_path)
 
-    result = evaluate_local(
+    result = evaluate(
         str(forecast_path),
-        pack_directory=str(pack_directory),
+        offline_references_directory=str(pack_directory),
         output_directory=str(tmp_path / "out"),
         published_scores_path=_PUBLISHED_SCORES,
         published_challengers_path=_PUBLISHED_CHALLENGERS,

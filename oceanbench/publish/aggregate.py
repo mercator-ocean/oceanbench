@@ -34,6 +34,7 @@ import numpy
 import pandas
 
 from oceanbench.runner.parity import recombine_class4_over_starts
+from oceanbench.runner.records import DIAGNOSTIC_METRICS
 
 CLASS4_METRIC = "class4_rmsd"
 
@@ -219,7 +220,12 @@ def aggregate_scores(
     One row per (challenger, year, region, metric key, lead_day). ``baseline_challenger``,
     when given, adds paired skill-vs-baseline columns for every challenger that shares a
     metric key with the baseline (including the baseline against itself, which is exactly 0).
+
+    Diagnostic rows (``grid_coverage``) describe how a run was computed rather than how the
+    model performed, so they are dropped here: a mean and a confidence interval over them
+    would be meaningless, and they must never reach a scorecard.
     """
+    scores = scores[~scores["metric"].isin(DIAGNOSTIC_METRICS)] if not scores.empty else scores
     if scores.empty:
         return pandas.DataFrame(columns=IDENTITY_COLUMNS + _CARRIED_COLUMNS + ["mean", "ci_low", "ci_high", "n_starts"])
 

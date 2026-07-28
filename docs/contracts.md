@@ -240,6 +240,16 @@ Each eddy census reference entry includes a `parameters` object containing the
 complete parameter set, the resolved contour-filter switch and the OceanBench code
 version, so filtered and raw-peak artifacts remain distinguishable.
 
+**Diagnostics.** `grid_coverage` (one row per reference, `value` = fraction of the
+challenger's cells the reference grid could supply, `n` = count of those cells,
+`unit` = `1`, no `variable` / `depth` / `lead_day` / `start_date`). References are
+reindexed onto the challenger's native grid before any metric is computed; this row
+records how much of that grid the reference actually covered, so a run scored on a
+snapped or degraded grid stays visible after the console output is gone (issue #305).
+Below `MINIMUM_GRID_COVERAGE` (0.999) the run raises instead of emitting a row.
+Diagnostic metrics describe how a run was computed rather than how a model performed:
+aggregation drops them, and they never reach a scorecard.
+
 Reserved for later (schema needs no change): `crps`, `spread`, `spread_skill_ratio`.
 
 ### 3.3 Per-run increment
@@ -433,9 +443,31 @@ artifacts.
   ingest source only. CDN deferred (origin is not the bottleneck); the data
   contract is unchanged if one is added later.
 
-## 7. Evaluation packs (local `oceanbench evaluate`)
+## 7. `oceanbench evaluate`
 
-Downloadable, versioned bundles produced by `ingest`:
+The single production entrypoint. `oceanbench evaluate <target>` scores a
+forecast and writes `scores.parquet` + `scores-summary.json`, the files the
+website reads. `<target>` is either a path to the user's own forecast or the
+slug of a challenger already in the benchmark; a user forecast also gets a local
+HTML scorecard overlaying it on the published `scores.parquet` (a published
+challenger has nothing to overlay, so it gets none).
+
+**Live by default.** References and observations are read from the public EDITO
+objects through the resilient chunk-fetch engine and its persistent cache (§1).
+No download step precedes a first run. `--region` and `--year` select the
+evaluation context, defaulting to `global` and 2024.
+
+**Scores are the only default output.** `--viewer-artifacts` opts into the map: the viewer
+serving artifacts (§5) plus a local viewer pyramid and static viewer directory.
+Its `datasets.json` combines the local challenger (relative store/manifest URLs)
+with official products (absolute public MinIO URLs), so official pyramids do not
+need to be downloaded. The serving artifacts and the local site write the same
+pyramid path, so it is built once and adopted, not twice.
+
+**Offline reference bundles** are an optimisation for offline or repeated runs,
+never a prerequisite. `--offline-references ./pack-quick-2024` resolves every
+reference, the observation store and the MDT from a downloadable, versioned
+bundle produced by `ingest`:
 
 - `pack-quick-<year>`: obs match-up inputs + 1/4° surface reference fields +
   climatology/persistence baselines. Target: evaluate a model locally in
@@ -443,17 +475,9 @@ Downloadable, versioned bundles produced by `ingest`:
 - `pack-full-<year>`: adds multi-depth gridded references for the official
   gridded track.
 
-`oceanbench evaluate ./forecasts/ --pack ./pack-quick-2024`
-produces the same
-artifacts as the hosted run plus a local HTML scorecard overlaying the user's
-model on the published `scores.parquet`. The required `year` and `region` fields
-in `pack-manifest.json` define the evaluation context; the command never accepts
-independent overrides for them.
-
-With `--artifacts all`, it also produces a local viewer
-pyramid and static viewer directory. Its `datasets.json` combines the local
-challenger (relative store/manifest URLs) with official products (absolute public
-MinIO URLs), so official pyramids do not need to be downloaded.
+The required `year` and `region` fields in `pack-manifest.json` define the
+evaluation context for a bundle run; a `--region` or `--year` that contradicts
+the manifest is rejected rather than silently ignored.
 
 ## 8. S3 layout
 

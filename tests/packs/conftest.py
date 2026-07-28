@@ -7,6 +7,8 @@
 Builds a tiny 1-degree forecast, a surface reference pack and a "published" scores parquet on
 disk so the local-evaluation path (pack manifest resolution, runner reuse, aggregation and the
 overlay scorecard) can be exercised end to end without the staged reference data or the network.
+The full-depth reference the pack was cut down from is exposed too, as the stand-in the tests of
+the live-EDITO source path substitute for the real openers.
 """
 
 from dataclasses import dataclass
@@ -73,7 +75,8 @@ def _write_zarr(dataset: xarray.Dataset, path: Path) -> None:
 @dataclass(frozen=True)
 class LocalEvaluationFixture:
     forecast_path: str
-    pack_directory: str
+    offline_references_directory: str
+    full_depth_reference_dataset: xarray.Dataset
     published_scores_path: str
     published_challengers_path: str
     published_challenger_slug: str
@@ -156,7 +159,8 @@ def local_evaluation_fixture(tmp_path: Path) -> LocalEvaluationFixture:
 
     return LocalEvaluationFixture(
         forecast_path=str(forecast_path),
-        pack_directory=str(pack_directory),
+        offline_references_directory=str(pack_directory),
+        full_depth_reference_dataset=reference,
         published_scores_path=str(published_scores_path),
         published_challengers_path=str(published_challengers_path),
         published_challenger_slug=published_slug,

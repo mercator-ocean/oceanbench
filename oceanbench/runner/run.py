@@ -19,6 +19,7 @@ class4 branch of ``oceanbench.runner.parity.aggregate_runner_scores``).
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+import inspect
 import os
 
 import pandas
@@ -27,6 +28,7 @@ import xarray
 import oceanbench.datasets.challenger as challenger_datasets
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
+from oceanbench.core.grid_alignment import GridAlignment, align_reference_to_challenger_grid
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.regions import GLOBAL_REGION_NAME, subset_dataset_to_region
@@ -48,7 +50,10 @@ _GEOSTROPHIC_VARIABLES = [
 ]
 _CLASS4_VARIABLES = _GRIDDED_VARIABLES
 
-_REFERENCE_OPENERS = {
+# The default sources: read straight from the public EDITO objects through the resilient
+# chunk-fetch engine and its persistent cache. An offline reference bundle substitutes its
+# own openers for these; nothing else changes.
+LIVE_REFERENCE_OPENERS = {
     "glorys": glorys_reanalysis_dataset,
     "glo12": glo12_analysis_dataset,
 }
@@ -72,21 +77,35 @@ ReferenceOpener = Callable[[xarray.Dataset], xarray.Dataset]
 ObservationOpener = Callable[[xarray.Dataset], xarray.Dataset]
 
 
-def _gridded_records(
+def _aligned_reference(
     regional_challenger: xarray.Dataset,
     *,
     reference_name: str,
     reference_openers: dict[str, ReferenceOpener],
-    variables: list[Variable],
     region: str,
+) -> tuple[xarray.Dataset, GridAlignment]:
+    """Open a reference onto the challenger's own grid, once for every gridded metric family.
+
+    Aligning here rather than inside each metric keeps the coverage reportable instead of
+    absorbed (issue #305). A genuine mismatch raises and aborts the run.
+    """
+    reference = subset_dataset_to_region(reference_openers[reference_name](regional_challenger), region)
+    return align_reference_to_challenger_grid(regional_challenger, reference)
+
+
+def _gridded_records(
+    regional_challenger: xarray.Dataset,
+    *,
+    reference_name: str,
+    aligned_reference: xarray.Dataset,
+    variables: list[Variable],
     context: records.RunContext,
     area_weighted: bool,
     depth_applicable: bool,
     transform: Callable[[xarray.Dataset], xarray.Dataset] | None = None,
 ) -> list[dict]:
-    reference = subset_dataset_to_region(reference_openers[reference_name](regional_challenger), region)
     challenger_input = transform(regional_challenger) if transform is not None else regional_challenger
-    reference_input = transform(reference) if transform is not None else reference
+    reference_input = transform(aligned_reference) if transform is not None else aligned_reference
     per_start_frames = rmsd_per_start_date(challenger_input, reference_input, variables, area_weighted=area_weighted)
     return [
         record
@@ -175,10 +194,39 @@ def _lagrangian_records(
     return emitted
 
 
-def _default_observation_opener(regional_challenger: xarray.Dataset) -> xarray.Dataset:
+def live_observation_opener(regional_challenger: xarray.Dataset) -> xarray.Dataset:
+    """Open the Class-4 observation store from its public EDITO objects."""
     from oceanbench.core.references.observations import observations
 
     return observations(regional_challenger)
+
+
+def registered_challengers() -> tuple[str, ...]:
+    """Every challenger slug this installation can open by itself, in alphabetical order.
+
+    Read off the public openers of :mod:`oceanbench.datasets.challenger` rather than restated
+    here, so adding a challenger there is enough to make it evaluable by slug. Restricted to
+    functions that module defines so its imports (``xarray`` and friends) never look like slugs.
+    """
+    return tuple(
+        sorted(
+            name
+            for name, member in vars(challenger_datasets).items()
+            if not name.startswith("_")
+            and inspect.isfunction(member)
+            and member.__module__ == challenger_datasets.__name__
+        )
+    )
+
+
+def is_registered_challenger(name: str) -> bool:
+    """Whether ``name`` is a challenger slug this installation can open by itself."""
+    return name in registered_challengers()
+
+
+def open_registered_challenger(challenger: str) -> xarray.Dataset:
+    """Open a registered challenger's forecast dataset by slug."""
+    return _open_challenger(challenger)
 
 
 def run_challenger_scores(
@@ -213,8 +261,8 @@ def run_challenger_scores(
     opened_dataset = dataset if dataset is not None else _open_challenger(challenger)
     if start_limit is not None:
         opened_dataset = opened_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): slice(0, start_limit)})
-    resolved_reference_openers = reference_openers if reference_openers is not None else _REFERENCE_OPENERS
-    resolved_observation_opener = observation_opener if observation_opener is not None else _default_observation_opener
+    resolved_reference_openers = reference_openers if reference_openers is not None else LIVE_REFERENCE_OPENERS
+    resolved_observation_opener = observation_opener if observation_opener is not None else live_observation_opener
     regional_challenger = subset_dataset_to_region(opened_dataset, region)
     context = records.RunContext(
         challenger=challenger,
@@ -228,14 +276,31 @@ def run_challenger_scores(
     flags: list[str] = []
 
     for reference_name in references:
+        if not (include_gridded or include_mixed_layer_depth or include_geostrophic):
+            continue
+        aligned_reference, alignment = _aligned_reference(
+            regional_challenger,
+            reference_name=reference_name,
+            reference_openers=resolved_reference_openers,
+            region=region,
+        )
+        all_records.append(
+            records.grid_coverage_record(
+                context=context,
+                reference=reference_name,
+                coverage=alignment.coverage,
+                matched_cell_count=alignment.matched_cell_count,
+            )
+        )
+        if alignment.snapped:
+            flags.append(f"grid alignment vs {reference_name}: {alignment.describe()}")
         if include_gridded:
             all_records.extend(
                 _gridded_records(
                     regional_challenger,
                     reference_name=reference_name,
-                    reference_openers=resolved_reference_openers,
+                    aligned_reference=aligned_reference,
                     variables=_GRIDDED_VARIABLES,
-                    region=region,
                     context=context,
                     area_weighted=area_weighted,
                     depth_applicable=True,
@@ -246,9 +311,8 @@ def run_challenger_scores(
                 _gridded_records(
                     regional_challenger,
                     reference_name=reference_name,
-                    reference_openers=resolved_reference_openers,
+                    aligned_reference=aligned_reference,
                     variables=_MIXED_LAYER_DEPTH_VARIABLES,
-                    region=region,
                     context=context,
                     area_weighted=area_weighted,
                     depth_applicable=False,
@@ -260,9 +324,8 @@ def run_challenger_scores(
                 _gridded_records(
                     regional_challenger,
                     reference_name=reference_name,
-                    reference_openers=resolved_reference_openers,
+                    aligned_reference=aligned_reference,
                     variables=_GEOSTROPHIC_VARIABLES,
-                    region=region,
                     context=context,
                     area_weighted=area_weighted,
                     depth_applicable=False,
@@ -298,7 +361,7 @@ def run_challenger_scores(
     parquet_path = os.path.join(output_root, challenger, str(year), region, "scores.parquet")
     os.makedirs(os.path.dirname(parquet_path), exist_ok=True)
     scores.to_parquet(parquet_path, index=False)
-    return RunResult(parquet_path=parquet_path, scores=scores, flags=flags)
+    return RunResult(parquet_path=parquet_path, scores=scores, flags=list(dict.fromkeys(flags)))
 
 
 def run_challenger(

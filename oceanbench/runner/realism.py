@@ -36,6 +36,7 @@ from oceanbench.core import eddies as eddies_core
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 from oceanbench.core import psd as psd_core
 from oceanbench.core.dataset_utils import VARIABLE_METADATA, Dimension, Variable
+from oceanbench.core.grid_alignment import align_reference_to_challenger_grid
 from oceanbench.runner import records
 
 SEA_SURFACE_HEIGHT_KEY = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
@@ -300,9 +301,20 @@ def _aligned_surface_fields(
     reference_dataset: xarray.Dataset,
     variable_key: str,
 ) -> tuple[xarray.DataArray, xarray.DataArray]:
+    """Return the challenger and reference surface fields on the challenger's own grid.
+
+    An inner join here would keep only the cells whose coordinate labels match bit-for-bit,
+    which on two datasets describing the same grid silently shrinks the error spectrum and
+    the activity ratio to a skewed subsample (issue #305). The reference is snapped onto the
+    challenger grid instead, and a genuine grid mismatch raises.
+    """
     challenger_field = _surface_field(challenger_dataset, variable_key)
     reference_field = _surface_field(reference_dataset, variable_key)
-    return xarray.align(challenger_field, reference_field, join="inner")
+    aligned_reference_field, _ = align_reference_to_challenger_grid(
+        challenger_field.to_dataset(name=variable_key),
+        reference_field.to_dataset(name=variable_key),
+    )
+    return xarray.align(challenger_field, aligned_reference_field[variable_key], join="inner")
 
 
 def _surface_field(dataset: xarray.Dataset, variable_key: str) -> xarray.DataArray:

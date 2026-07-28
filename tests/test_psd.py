@@ -9,11 +9,15 @@ import oceanbench
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 
-def _sinusoidal_dataset(offset: float = 0.0) -> xarray.Dataset:
+def _sinusoidal_dataset(
+    offset: float = 0.0,
+    latitudes: numpy.ndarray | None = None,
+    longitudes: numpy.ndarray | None = None,
+) -> xarray.Dataset:
     first_days = numpy.array(["2024-01-03"], dtype="datetime64[D]")
     lead_days = numpy.arange(3)
-    latitudes = numpy.array([-2.0, 0.0, 2.0])
-    longitudes = numpy.linspace(0.0, 330.0, 12)
+    latitudes = numpy.array([-2.0, 0.0, 2.0]) if latitudes is None else latitudes
+    longitudes = numpy.linspace(0.0, 330.0, 12) if longitudes is None else longitudes
     phase = numpy.deg2rad(longitudes)
     values = numpy.empty((len(first_days), len(lead_days), len(latitudes), len(longitudes)), dtype=float)
     for lead_day_index in range(len(lead_days)):
@@ -56,6 +60,40 @@ def test_zonal_longitude_psd_pair_returns_positive_metric_frequency_spectrum() -
     assert numpy.all(challenger_spectrum["freq_lon"].values > 0)
     assert numpy.isfinite(challenger_spectrum.values).any()
     assert reference_spectrum.sizes == challenger_spectrum.sizes
+
+
+def test_zonal_longitude_psd_pair_is_unchanged_by_a_float32_encoding_difference() -> None:
+    """A reference stored in float32 must yield the same spectrum, not a resampled one (issue #305).
+
+    Before the grids were snapped, each side was regularized against its own coordinates and
+    the inner join then intersected the two results, silently changing the sampling and with
+    it the wavenumber axis. A 1/12-degree grid is not exactly representable in float32, so
+    the round-trip below reproduces the encoding difference seen between CMEMS products.
+    """
+    twelfth_degree_longitudes = -180.0 + numpy.arange(48) / 12.0
+    twelfth_degree_latitudes = -2.0 + numpy.arange(6) / 12.0
+    challenger = _sinusoidal_dataset(latitudes=twelfth_degree_latitudes, longitudes=twelfth_degree_longitudes)
+    reference = _sinusoidal_dataset(
+        offset=0.1, latitudes=twelfth_degree_latitudes, longitudes=twelfth_degree_longitudes
+    )
+    float32_reference = reference.assign_coords(
+        {
+            Dimension.LONGITUDE.key(): twelfth_degree_longitudes.astype("float32").astype("float64"),
+            Dimension.LATITUDE.key(): twelfth_degree_latitudes.astype("float32").astype("float64"),
+        }
+    )
+
+    exact_spectra = oceanbench.psd.zonal_longitude_psd_pair(
+        challenger, reference, Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID
+    )
+    float32_spectra = oceanbench.psd.zonal_longitude_psd_pair(
+        challenger, float32_reference, Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID
+    )
+
+    for exact_spectrum, float32_spectrum in zip(exact_spectra, float32_spectra):
+        assert float32_spectrum.sizes == exact_spectrum.sizes
+        numpy.testing.assert_allclose(float32_spectrum["freq_lon"].values, exact_spectrum["freq_lon"].values, rtol=1e-6)
+        numpy.testing.assert_allclose(float32_spectrum.values, exact_spectrum.values, rtol=1e-4)
 
 
 def test_zonal_longitude_psd_metrics_exposes_wavelength_band_scores() -> None:

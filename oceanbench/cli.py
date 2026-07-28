@@ -10,19 +10,20 @@ from oceanbench.core.version import __version__
 
 
 def _run_evaluate(args: argparse.Namespace) -> int:
-    from oceanbench.packs.evaluate import evaluate_local
+    from oceanbench.packs.evaluate import evaluate
     from oceanbench.packs.local_viewer import published_base_url
 
-    output_directory = args.output if args.output is not None else "oceanbench-local-evaluation"
+    output_directory = args.output if args.output is not None else "oceanbench-evaluation"
     try:
-        result = evaluate_local(
-            args.forecasts,
-            pack_directory=args.pack,
+        result = evaluate(
+            args.target,
             output_directory=output_directory,
+            offline_references_directory=args.offline_references,
+            region=args.region,
+            year=args.year,
             published_scores_path=published_base_url() + "scores.parquet",
             published_challengers_path=published_base_url() + "challengers.json",
             metrics=args.metrics,
-            artifacts=args.artifacts,
             viewer_artifacts=args.viewer_artifacts,
             s3_bucket=args.s3_bucket,
             s3_prefix=args.s3_prefix,
@@ -37,6 +38,7 @@ def _run_evaluate(args: argparse.Namespace) -> int:
     if result.scores_path:
         print(f"scores:    {result.scores_path}")
         print(f"summary:   {result.summary_path}")
+    if result.scorecard_path:
         print(f"scorecard: {result.scorecard_path}")
         print(f"\nOpen the scorecard locally (no server needed): file://{Path(result.scorecard_path).resolve()}")
     if result.viewer_directory:
@@ -60,23 +62,25 @@ def _run_evaluate(args: argparse.Namespace) -> int:
 def _add_evaluate_parser(
     subparsers: "argparse._SubParsersAction", name: str = "evaluate", *, hidden: bool = False
 ) -> None:
-    from oceanbench.packs.evaluate import METRIC_NAMES
+    from oceanbench.core.regions import GLOBAL_REGION_NAME, official_region_ids
+    from oceanbench.packs.evaluate import DEFAULT_EVALUATION_YEAR, METRIC_NAMES
+    from oceanbench.runner.run import registered_challengers
 
     parser = subparsers.add_parser(
         name,
-        help=(
-            argparse.SUPPRESS
-            if hidden
-            else "Score a local forecast against an evaluation pack and build an overlay scorecard"
-        ),
+        help=(argparse.SUPPRESS if hidden else "Score a forecast and write the scores the benchmark website reads"),
         description=(
-            "Score your own forecast zarr(s) against a downloaded evaluation pack (contracts.md §7) "
-            "and emit the standard long-format records parquet, the aggregated summary, and a "
-            "self-contained overlay scorecard laying your model over the published challengers.\n\n"
+            "Score a forecast and emit the long-format records parquet plus the aggregated summary.\n\n"
+            "TARGET is either your own forecast (a path or URL) or the slug of a challenger already in "
+            "the benchmark. Your own forecast also gets a self-contained overlay scorecard laying it "
+            "over the published challengers, so you can see where you stand before publishing.\n\n"
             "Forecast layout (weekly-store conventions, same as challengers): either a single combined "
             "zarr with dims (first_day_datetime, lead_day_index, depth, latitude, longitude) and the "
             "CF-named forecast variables, or a directory of weekly zarr stores named YYYYMMDD.zarr (one "
-            "per forecast start, each with a 'time' lead-day dimension). See docs/local-evaluation.md."
+            "per forecast start, each with a 'time' lead-day dimension). See docs/local-evaluation.md.\n\n"
+            "References and observations are read live from the public EDITO objects, so no download "
+            "step is needed. Point --offline-references at a downloaded bundle to run without network.\n\n"
+            "Known challenger slugs: " + ", ".join(registered_challengers())
         ),
         epilog=(
             "Published scores, challenger metadata, and viewer datasets default to the official "
@@ -84,20 +88,27 @@ def _add_evaluate_parser(
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("forecasts", help="Path or URL to the forecast zarr (combined store or weekly-store directory)")
     parser.add_argument(
-        "--pack", required=True, help="Path to the evaluation pack directory (contains pack-manifest.json)"
+        "target",
+        metavar="TARGET",
+        help="Your forecast zarr (combined store or weekly-store directory), or a known challenger slug",
     )
     parser.add_argument(
         "--output",
         default=None,
-        help="Output directory (default: ./oceanbench-local-evaluation)",
+        help="Output directory (default: ./oceanbench-evaluation)",
     )
     parser.add_argument(
-        "--artifacts",
-        choices=("scores", "all"),
-        default="scores",
-        help="Artifacts to build: scores (default), or all (scores and viewer)",
+        "--region",
+        default=None,
+        metavar="REGION",
+        help=f"Region to score over (default: {GLOBAL_REGION_NAME}): " + ", ".join(official_region_ids()),
+    )
+    parser.add_argument(
+        "--year",
+        type=int,
+        default=None,
+        help=f"Evaluation year (default: {DEFAULT_EVALUATION_YEAR})",
     )
     parser.add_argument(
         "--metrics",
@@ -111,8 +122,17 @@ def _add_evaluate_parser(
         "--viewer-artifacts",
         action="store_true",
         help=(
-            "Also produce the viewer serving artifacts (Class-4 match-up parquet, eddy census, "
-            "field pyramid and year-mode JSON) under the output directory"
+            "Also build the map viewer: its serving artifacts (Class-4 match-up parquet, eddy census, "
+            "field pyramid, year-mode JSON) and a local viewer site you can open. Off by default"
+        ),
+    )
+    parser.add_argument(
+        "--offline-references",
+        default=None,
+        metavar="DIRECTORY",
+        help=(
+            "Read references and observations from a downloaded bundle instead of live EDITO. "
+            "The bundle's manifest fixes the region and year"
         ),
     )
     parser.add_argument(

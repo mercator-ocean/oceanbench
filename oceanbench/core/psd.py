@@ -11,6 +11,7 @@ import xrft
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.grid_alignment import align_reference_to_challenger_grid
 from oceanbench.core.lead_day_utils import lead_day_labels
 
 DEFAULT_FILL_VALUE = 0.0
@@ -352,6 +353,15 @@ def zonal_longitude_psd_pair(
     depth_selector: int | float | None = None,
     fill_value: float | None = DEFAULT_FILL_VALUE,
 ) -> tuple[xarray.DataArray, xarray.DataArray]:
+    # Snap the reference onto the challenger's own labels before either side is prepared.
+    # Each side is regularized against its own coordinates, so a float32 encoding difference
+    # would survive into two different regular targets and the join below would intersect
+    # them away without a word (issue #305). Dropping cells is worse for a spectrum than for
+    # a mean: it changes the sampling, and with it the wavenumber axis.
+    aligned_reference_dataset, _ = align_reference_to_challenger_grid(
+        rename_dataset_with_standard_names(challenger_dataset),
+        rename_dataset_with_standard_names(reference_dataset),
+    )
     challenger_data_array = _prepare_coordinate_psd_dataarray(
         dataset=challenger_dataset,
         variable=variable,
@@ -359,11 +369,12 @@ def zonal_longitude_psd_pair(
         depth_selector=depth_selector,
     )
     reference_data_array = _prepare_coordinate_psd_dataarray(
-        dataset=reference_dataset,
+        dataset=aligned_reference_dataset,
         variable=variable,
         first_day_index=first_day_index,
         depth_selector=depth_selector,
     )
+    # The grids now agree cell for cell; this join only reconciles the lead-day axis.
     challenger_data_array, reference_data_array = xarray.align(
         challenger_data_array,
         reference_data_array,

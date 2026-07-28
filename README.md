@@ -136,31 +136,34 @@ You can open and manually execute the example notebook in EDITO datalab by click
 
 ### Programmatic evaluation
 
-Once [installed](#installation), evaluate your forecasts locally against an evaluation pack.
+Once [installed](#installation), score your forecasts. References and observations are read
+live from the public EDITO objects, so there is no download step first.
 
 #### CLI
 
 
 ```bash
-oceanbench evaluate ./my-forecasts.zarr --pack ./pack-quick-2024
+oceanbench evaluate ./my-forecasts.zarr
 ```
 
-To build the score artifacts and a local viewer:
+That writes the scores the benchmark website reads, plus a scorecard laying your model over
+the published challengers. Pass a challenger slug instead of a path to re-score a published
+model. Scores are the only default output; `--viewer-artifacts` adds the map:
 
 ```bash
 oceanbench evaluate ./my-forecasts.zarr \
-  --pack ./pack-quick-2024 \
-  --artifacts all \
+  --viewer-artifacts \
   --output ./my-evaluation
 ```
 
-The evaluation year and region come from the pack manifest. Publishing remains a separate step:
+Add `--offline-references ./pack-quick-2024` to run with no network at all. Publishing remains
+a separate step:
 
 ```bash
 oceanbench publish-s3 ./catalog --bucket my-bucket --prefix results/
 ```
 
-See [Local evaluation](docs/local-evaluation.md) for forecast layouts, metrics, and outputs.
+See [Evaluation](docs/local-evaluation.md) for forecast layouts, metrics, and outputs.
 
 #### Python
 

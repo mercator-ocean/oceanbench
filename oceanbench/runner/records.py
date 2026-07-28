@@ -54,6 +54,10 @@ METRIC_EDDY_HIT_RATE = "eddy_hit_rate"
 METRIC_EDDY_MISS_RATE = "eddy_miss_rate"
 METRIC_EDDY_MEAN_DISPLACEMENT_KILOMETRES = "eddy_mean_displacement_km"
 
+METRIC_GRID_COVERAGE = "grid_coverage"
+
+DIAGNOSTIC_METRICS = frozenset({METRIC_GRID_COVERAGE})
+
 _LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]*)\) \[([^\]]*)\](?:\{([^}]+)\})?$")
 _LEAD_DAY_PATTERN = re.compile(r"(\d+)\s*$")
 
@@ -239,6 +243,41 @@ def lagrangian_records(
     )
 
 
+def _score_record(
+    *,
+    context: RunContext,
+    metric: str,
+    value: object,
+    unit: str,
+    reference: str | None = None,
+    variable: str | None = None,
+    depth: str | None = None,
+    lead_day: int | None = None,
+    band: str | None = None,
+    polarity: str | None = None,
+    start_date: object = None,
+    sample_count: int | None = None,
+) -> dict:
+    return {
+        "challenger": context.challenger,
+        "challenger_version": context.challenger_version,
+        "year": context.year,
+        "region": context.region,
+        "metric": metric,
+        "reference": reference,
+        "variable": variable,
+        "depth": depth,
+        "lead_day": lead_day,
+        "start_date": _normalise_start_date(start_date),
+        "band": band,
+        "polarity": polarity,
+        "value": _clean_value(value),
+        "unit": unit,
+        "n": sample_count,
+        "oceanbench_version": context.oceanbench_version,
+    }
+
+
 def realism_record(
     *,
     context: RunContext,
@@ -263,24 +302,44 @@ def realism_record(
     Spectra and eddy metrics are aggregate over the forecast starts by nature, so
     ``start_date`` is ``None`` unless a per-start value is emitted.
     """
-    return {
-        "challenger": context.challenger,
-        "challenger_version": context.challenger_version,
-        "year": context.year,
-        "region": context.region,
-        "metric": metric,
-        "reference": reference,
-        "variable": variable,
-        "depth": depth,
-        "lead_day": lead_day,
-        "start_date": _normalise_start_date(start_date),
-        "band": band,
-        "polarity": polarity,
-        "value": _clean_value(value),
-        "unit": unit,
-        "n": sample_count,
-        "oceanbench_version": context.oceanbench_version,
-    }
+    return _score_record(
+        context=context,
+        metric=metric,
+        value=value,
+        unit=unit,
+        reference=reference,
+        variable=variable,
+        depth=depth,
+        lead_day=lead_day,
+        band=band,
+        polarity=polarity,
+        start_date=start_date,
+        sample_count=sample_count,
+    )
+
+
+def grid_coverage_record(
+    *,
+    context: RunContext,
+    reference: str,
+    coverage: float,
+    matched_cell_count: int,
+) -> dict:
+    """Build the ``grid_coverage`` diagnostic record for one reference (contracts.md §3.2).
+
+    ``coverage`` is the fraction of the challenger's cells the reference grid could supply,
+    and ``n`` the count of those cells. A run that scores a snapped grid says so in its own
+    scores file rather than only in the console, so a degraded run stays visible downstream
+    (issue #305). Diagnostics carry no forecast start or lead day, and aggregation drops them.
+    """
+    return _score_record(
+        context=context,
+        metric=METRIC_GRID_COVERAGE,
+        value=coverage,
+        unit="1",
+        reference=reference,
+        sample_count=matched_cell_count,
+    )
 
 
 def records_to_dataframe(records: list[dict]) -> pandas.DataFrame:

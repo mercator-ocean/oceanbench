@@ -2,17 +2,21 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-"""Local evaluation against an evaluation pack (contracts.md §7).
+"""Evaluation entry point: score a forecast and emit the standard artifacts.
 
-``evaluate_local`` scores a user's forecast zarr(s) against the bundled references of an
-evaluation pack and emits the same artifacts as the hosted run — the long-format per-start
-records parquet and the aggregated summary — plus a self-contained overlay scorecard that
-lays the user's model over the published challengers. It reuses the scoring runner
+``evaluate`` scores either a **registered challenger** (by slug) or a **user's own forecast
+zarr(s)**, and emits the long-format per-start records parquet plus the aggregated summary.
+For a user forecast it also writes a self-contained overlay scorecard laying that model over
+the published challengers. It reuses the scoring runner
 (:func:`oceanbench.runner.run.run_challenger_scores`) and the aggregation library
 (:mod:`oceanbench.publish.aggregate`); no new score code lives here.
 
-The pack is self-describing: every reference, the observation store and the
-mean-dynamic-topography are resolved from ``pack-manifest.json`` alone.
+References and observations are read **live from the public EDITO objects by default**,
+through the resilient chunk-fetch engine and its persistent cache (contracts.md §1). An
+**offline reference bundle** may be supplied instead: a self-describing directory whose
+``pack-manifest.json`` resolves every reference, the observation store and the
+mean-dynamic-topography without touching the network. The bundle is an optimisation for
+offline or repeated runs, never a prerequisite.
 """
 
 from contextlib import contextmanager
@@ -28,7 +32,7 @@ import xarray
 
 from oceanbench.core import runtime_configuration as runtime_configuration_module
 from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.regions import subset_dataset_to_region
+from oceanbench.core.regions import GLOBAL_REGION_NAME, normalize_region_name, subset_dataset_to_region
 from oceanbench.core.runtime_configuration import (
     RuntimeConfiguration,
     current_runtime_configuration,
@@ -40,7 +44,13 @@ from oceanbench.packs.manifest import PACK_MANIFEST_FILENAME
 from oceanbench.packs.scorecard import write_overlay_scorecard
 from oceanbench.publish.aggregate import aggregate_scores, summary_to_json_records
 from oceanbench.runner import records
-from oceanbench.runner.run import run_challenger_scores
+from oceanbench.runner.run import (
+    LIVE_REFERENCE_OPENERS,
+    is_registered_challenger,
+    live_observation_opener,
+    open_registered_challenger,
+    run_challenger_scores,
+)
 
 YOUR_MODEL_SLUG = "your_model"
 YOUR_MODEL_DISPLAY_NAME = "Your model"
@@ -48,6 +58,8 @@ YOUR_MODEL_DISPLAY_NAME = "Your model"
 SCORES_FILENAME = "scores.parquet"
 SCORES_SUMMARY_FILENAME = "scores-summary.json"
 SCORECARD_DIRECTORY = "scorecard"
+
+DEFAULT_EVALUATION_YEAR = 2024
 
 _PER_START_KEY_COLUMNS = ["metric", "reference", "variable", "depth", "lead_day", "start_date"]
 METRIC_NAMES = ("rmsd", "mld", "geostrophic", "class4", "lagrangian", "realism")
@@ -174,6 +186,99 @@ def _pack_runtime_configuration(pack_directory: Path):
         runtime_configuration_module._runtime_configuration = previous
 
 
+@dataclass(frozen=True)
+class EvaluationSources:
+    """Where the references, the observations and the evaluation context come from.
+
+    ``kind`` is ``"quick"`` when the sources only carry surface fields, which restricts the
+    emitted scores to the surface. ``start_dates`` limits scoring to the starts the sources
+    can serve; ``None`` means every start the forecast carries.
+    """
+
+    reference_openers: dict
+    observation_opener: object
+    year: int
+    region: str
+    kind: str
+    start_dates: numpy.ndarray | None
+    offline_directory: Path | None
+
+
+def _live_sources(region: str | None, year: int | None) -> EvaluationSources:
+    return EvaluationSources(
+        reference_openers=dict(LIVE_REFERENCE_OPENERS),
+        observation_opener=live_observation_opener,
+        year=DEFAULT_EVALUATION_YEAR if year is None else year,
+        region=GLOBAL_REGION_NAME if region is None else normalize_region_name(region),
+        kind="full",
+        start_dates=None,
+        offline_directory=None,
+    )
+
+
+def _offline_sources(directory: str, region: str | None, year: int | None) -> EvaluationSources:
+    """Resolve every source from an offline reference bundle's ``pack-manifest.json``.
+
+    The bundle's manifest defines the evaluation context, so an explicit region or year that
+    contradicts it is rejected rather than silently ignored (contracts.md §7).
+    """
+    bundle_path = Path(directory)
+    manifest = load_pack_manifest(directory)
+    if region is not None and normalize_region_name(region) != manifest["region"]:
+        raise ValueError(
+            f"the offline reference bundle covers region {manifest['region']!r}, not {region!r}; "
+            "drop the region argument or point at a bundle for that region"
+        )
+    if year is not None and year != manifest["year"]:
+        raise ValueError(
+            f"the offline reference bundle covers year {manifest['year']}, not {year}; "
+            "drop the year argument or point at a bundle for that year"
+        )
+    return EvaluationSources(
+        reference_openers={
+            name: _pack_reference_opener(bundle_path, entry["path"])
+            for name, entry in manifest["contents"]["references"].items()
+        },
+        observation_opener=_pack_observation_opener(bundle_path, manifest["contents"]["observations"]["path"]),
+        year=manifest["year"],
+        region=manifest["region"],
+        kind=manifest["kind"],
+        start_dates=numpy.asarray(manifest["start_dates"], dtype="datetime64[D]"),
+        offline_directory=bundle_path,
+    )
+
+
+def _resolve_sources(
+    offline_references_directory: str | None,
+    region: str | None,
+    year: int | None,
+) -> EvaluationSources:
+    if offline_references_directory is None:
+        return _live_sources(region, year)
+    return _offline_sources(offline_references_directory, region, year)
+
+
+@contextmanager
+def _sources_runtime_configuration(sources: EvaluationSources):
+    """Point the stage at an offline bundle for the duration of the scoring, if there is one."""
+    if sources.offline_directory is None:
+        yield
+        return
+    with _pack_runtime_configuration(sources.offline_directory):
+        yield
+
+
+def _open_evaluation_target(target: str) -> tuple[xarray.Dataset, str, str]:
+    """Open what is being scored, and return it with its slug and version.
+
+    ``target`` is either a registered challenger slug (opened from its published objects) or
+    a path to the user's own forecast in the weekly-store conventions.
+    """
+    if is_registered_challenger(target):
+        return open_registered_challenger(target), target, "published"
+    return open_forecast_dataset(target), YOUR_MODEL_SLUG, "local"
+
+
 def _realism_records(
     regional_challenger: xarray.Dataset,
     reference_openers: dict,
@@ -224,35 +329,40 @@ def per_start_agreement(local_scores: pandas.DataFrame, published_scores: pandas
     return merged
 
 
-def evaluate_local(
-    forecasts_path: str,
+def evaluate(
+    target: str,
     *,
-    pack_directory: str,
     output_directory: str,
+    offline_references_directory: str | None = None,
+    region: str | None = None,
+    year: int | None = None,
     published_scores_path: str | None = None,
     published_challengers_path: str | None = None,
     metrics: tuple[str, ...] | list[str] | None = None,
-    artifacts: str = "scores",
     viewer_artifacts: bool = False,
     s3_bucket: str | None = None,
     s3_prefix: str | None = None,
     s3_endpoint: str | None = None,
     s3_env_file: str | None = None,
 ) -> EvaluateLocalResult:
-    """Score ``forecasts_path`` against ``pack_directory`` and emit records, summary and overlay scorecard.
+    """Score ``target`` and emit the long-format records and the aggregated summary.
 
-    When ``viewer_artifacts`` is set the viewer serving artifacts (Class-4 match-up parquet, eddy
-    census, field pyramid and year-mode JSON) are produced under ``output_directory`` too. When
-    ``s3_bucket`` is set the whole ``output_directory`` tree is uploaded to
-    ``s3://<s3_bucket>/<s3_prefix>/`` using the existing publish machinery.
+    ``target`` is either a registered challenger slug or a path to the user's own forecast;
+    a user forecast additionally gets the overlay scorecard laying it over the published
+    challengers. References and observations are read live from the public EDITO objects
+    unless ``offline_references_directory`` points at an offline reference bundle, in which
+    case the bundle's manifest also fixes the year and region.
+
+    Scores are the only default output. ``viewer_artifacts`` additionally builds everything the map
+    needs (Class-4 match-up parquet, eddy census, field pyramid, year-mode JSON) plus a local
+    viewer site that opens over a plain file server. When ``s3_bucket`` is set the whole
+    ``output_directory`` tree is uploaded to ``s3://<s3_bucket>/<s3_prefix>/`` using the existing
+    publish machinery.
     """
-    if artifacts not in {"scores", "all"}:
-        raise ValueError("artifacts must be one of: scores, all")
-    pack_path = Path(pack_directory)
-    manifest = load_pack_manifest(pack_directory)
-    kind = manifest["kind"]
-    year = manifest["year"]
-    region = manifest["region"]
+    sources = _resolve_sources(offline_references_directory, region, year)
+    kind = sources.kind
+    year = sources.year
+    region = sources.region
     selected_metrics = set(METRIC_NAMES if metrics is None else metrics)
     unknown_metrics = selected_metrics.difference(METRIC_NAMES)
     if unknown_metrics:
@@ -261,32 +371,23 @@ def evaluate_local(
     output_path = Path(output_directory)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    forecast_dataset = open_forecast_dataset(forecasts_path)
-    forecast_start_values = forecast_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
-    pack_start_values = numpy.asarray(manifest["start_dates"], dtype="datetime64[D]")
-    selected_start_indices = numpy.flatnonzero(
-        numpy.isin(forecast_start_values.astype("datetime64[D]"), pack_start_values)
-    )
-    if not len(selected_start_indices):
-        raise ValueError("forecast and pack manifest have no start dates in common")
-    forecast_dataset = forecast_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): selected_start_indices})
+    forecast_dataset, challenger_slug, challenger_version = _open_evaluation_target(target)
+    if sources.start_dates is not None:
+        forecast_start_values = forecast_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+        selected_start_indices = numpy.flatnonzero(
+            numpy.isin(forecast_start_values.astype("datetime64[D]"), sources.start_dates)
+        )
+        if not len(selected_start_indices):
+            raise ValueError("the forecast and the offline reference bundle have no start dates in common")
+        forecast_dataset = forecast_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): selected_start_indices})
 
-    viewer_result = None
-    if artifacts == "all":
-        from oceanbench.packs.local_viewer import build_local_viewer
-
-        viewer_result = build_local_viewer(forecast_dataset, output_directory=output_directory, year=year)
-
-    reference_openers = {
-        name: _pack_reference_opener(pack_path, entry["path"])
-        for name, entry in manifest["contents"]["references"].items()
-    }
-    observation_opener = _pack_observation_opener(pack_path, manifest["contents"]["observations"]["path"])
+    reference_openers = sources.reference_openers
+    observation_opener = sources.observation_opener
     references = tuple(reference_openers.keys())
 
-    with _pack_runtime_configuration(pack_path):
+    with _sources_runtime_configuration(sources):
         run_result = run_challenger_scores(
-            YOUR_MODEL_SLUG,
+            challenger_slug,
             region,
             year,
             references=references,
@@ -296,7 +397,7 @@ def evaluate_local(
             include_class4="class4" in selected_metrics,
             include_lagrangian="lagrangian" in selected_metrics,
             area_weighted=True,
-            challenger_version="local",
+            challenger_version=challenger_version,
             output_root=str(output_path / "_run"),
             dataset=forecast_dataset,
             reference_openers=reference_openers,
@@ -314,8 +415,8 @@ def evaluate_local(
                 region,
             )
             context = records.RunContext(
-                challenger=YOUR_MODEL_SLUG,
-                challenger_version="local",
+                challenger=challenger_slug,
+                challenger_version=challenger_version,
                 year=year,
                 region=region,
                 oceanbench_version=OCEANBENCH_VERSION,
@@ -343,45 +444,67 @@ def evaluate_local(
         encoding="utf-8",
     )
 
-    published_scores = pandas.read_parquet(published_scores_path) if published_scores_path is not None else None
-    published_challengers = _load_json(published_challengers_path) if published_challengers_path is not None else None
-    scorecard_directory = output_path / SCORECARD_DIRECTORY
-    write_overlay_scorecard(
-        scorecard_directory,
-        your_model_scores=scores,
-        published_scores=published_scores,
-        published_challengers=published_challengers,
-        region=region,
-        year=year,
-        generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-    )
+    # The scorecard lays *your* model over the published ones. Scoring a challenger that is
+    # already published has nothing to overlay, so only a user forecast gets one.
+    scorecard_directory = output_path / SCORECARD_DIRECTORY if challenger_slug == YOUR_MODEL_SLUG else None
+    if scorecard_directory is not None:
+        published_scores = pandas.read_parquet(published_scores_path) if published_scores_path is not None else None
+        published_challengers = (
+            _load_json(published_challengers_path) if published_challengers_path is not None else None
+        )
+        write_overlay_scorecard(
+            scorecard_directory,
+            your_model_scores=scores,
+            published_scores=published_scores,
+            published_challengers=published_challengers,
+            region=region,
+            year=year,
+            generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        )
 
+    viewer_result = None
     viewer_artifacts_result = None
     if viewer_artifacts:
+        from oceanbench.packs.local_viewer import build_local_viewer
         from oceanbench.publish.viewer_artifacts import write_viewer_artifacts
 
         matchups_context = records.RunContext(
-            challenger=YOUR_MODEL_SLUG,
-            challenger_version="local",
+            challenger=challenger_slug,
+            challenger_version=challenger_version,
             year=year,
             region=region,
             oceanbench_version=OCEANBENCH_VERSION,
         )
         regional_forecast = subset_dataset_to_region(forecast_dataset, region)
-        with _pack_runtime_configuration(pack_path):
-            observation_dataset = subset_dataset_to_region(observation_opener(regional_forecast), region)
-            viewer_artifacts_result = write_viewer_artifacts(
-                forecast_dataset=regional_forecast,
-                observation_dataset=observation_dataset,
-                region=region,
-                dataset_slug=YOUR_MODEL_SLUG,
-                output_directory=output_directory,
-                year=year,
-                matchups_context=matchups_context,
-            )
-        flags.extend(viewer_artifacts_result.flags)
+        try:
+            with _sources_runtime_configuration(sources):
+                observation_dataset = subset_dataset_to_region(observation_opener(regional_forecast), region)
+                viewer_artifacts_result = write_viewer_artifacts(
+                    forecast_dataset=regional_forecast,
+                    observation_dataset=observation_dataset,
+                    region=region,
+                    dataset_slug=challenger_slug,
+                    output_directory=output_directory,
+                    year=year,
+                    matchups_context=matchups_context,
+                )
+            flags.extend(viewer_artifacts_result.flags)
+        except Exception as error:  # noqa: BLE001 - the map itself must still be buildable
+            flags.append(f"viewer serving artifacts skipped: {error}")
 
-        if viewer_artifacts_result.class4_bias_records:
+        # The serving artifacts already wrote the field pyramid under viewer/data/; the local site
+        # adopts it rather than rebuilding the same tiles, and builds its own if they were skipped.
+        viewer_result = build_local_viewer(
+            forecast_dataset,
+            output_directory=output_directory,
+            year=year,
+            dataset_slug=challenger_slug,
+            label=YOUR_MODEL_DISPLAY_NAME + " (local)" if challenger_slug == YOUR_MODEL_SLUG else challenger_slug,
+            pyramid_zarr_path=viewer_artifacts_result.pyramid_zarr_path if viewer_artifacts_result else None,
+            pyramid_manifest_path=viewer_artifacts_result.pyramid_manifest_path if viewer_artifacts_result else None,
+        )
+
+        if viewer_artifacts_result and viewer_artifacts_result.class4_bias_records:
             bias_frame = records.records_to_dataframe(viewer_artifacts_result.class4_bias_records)
             scores = pandas.concat([scores, bias_frame], ignore_index=True)
             scores.to_parquet(str(scores_path), index=False)
@@ -395,7 +518,7 @@ def evaluate_local(
         # Per-challenger scores file: the viewer loads one challenger at a time, so a per-challenger
         # file avoids the monolithic-summary cold-load cost. The merged scores-summary.json above
         # stays for the scores site's compatibility.
-        per_challenger_path = output_path / f"scores-{YOUR_MODEL_SLUG}.json"
+        per_challenger_path = output_path / f"scores-{challenger_slug}.json"
         per_challenger_path.write_text(
             json.dumps(summary_to_json_records(summary), sort_keys=True, indent=2, default=str),
             encoding="utf-8",
@@ -420,7 +543,7 @@ def evaluate_local(
     return EvaluateLocalResult(
         scores_path=str(scores_path),
         summary_path=str(summary_path),
-        scorecard_path=str(scorecard_directory / "index.html"),
+        scorecard_path=str(scorecard_directory / "index.html") if scorecard_directory is not None else None,
         scores=scores,
         flags=flags,
         matchup_parquet_path=viewer_artifacts_result.matchup_parquet_path if viewer_artifacts_result else None,

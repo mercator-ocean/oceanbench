@@ -4,43 +4,76 @@ SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-
 SPDX-License-Identifier: EUPL-1.2
 -->
 
-# Local evaluation (`oceanbench evaluate`)
+# Evaluation (`oceanbench evaluate`)
 
-Score your own ocean-forecast model locally against an OceanBench **evaluation pack**
-(contracts.md §7) and get the same artifacts as the hosted run plus a self-contained
-overlay scorecard that lays your model over the published challengers.
+Score a forecast and get the scores file the benchmark website reads. The target is either
+**your own model** or the slug of a **challenger already in the benchmark**. Your own model
+also gets a self-contained overlay scorecard laying it over the published challengers, so you
+can see where you stand before publishing.
 
-## Evaluate your own forecast
+References and observations are read **live from the public EDITO objects**, so there is no
+download step to run first.
 
-From scores to a browser comparison with the official products:
+## Score your own forecast
 
 ```sh
-oceanbench evaluate ./my-forecasts.zarr --pack ./pack-quick-2024 --artifacts all --output ./my-evaluation
+oceanbench evaluate ./my-forecasts.zarr
+```
+
+That writes `scores.parquet`, `scores-summary.json` and `scorecard/index.html` under
+`./oceanbench-evaluation`. Open the scorecard by double-clicking it; no server needed.
+
+Narrow the run to what you care about:
+
+```sh
+oceanbench evaluate ./my-forecasts.zarr \
+  --output ./my-evaluation \
+  --region gulfstream \
+  --metrics rmsd class4
+```
+
+## Score a challenger already in the benchmark
+
+Pass its slug instead of a path; the library opens its published forecasts itself:
+
+```sh
+oceanbench evaluate glonet_1_degree
+```
+
+Published challengers are aggregated over the **same forecast starts** as your model, so
+re-scoring a published challenger this way reproduces its published row exactly.
+
+## Add the map viewer
+
+Scores are the only default output. `--viewer-artifacts` additionally builds everything the map needs
+(Class-4 match-up parquet, eddy census, field pyramid, year-mode JSON) plus a local viewer site:
+
+```sh
+oceanbench evaluate ./my-forecasts.zarr --viewer-artifacts --output ./my-evaluation
 python -m http.server --directory ./my-evaluation/viewer 8799
 # open http://127.0.0.1:8799/?data_base=local
 ```
 
-The first command needs network access to read the current official viewer catalog; obtaining
-the evaluation pack also needs network access unless it is already downloaded. The generated
-challenger pyramid, scores, scorecard, and viewer application are fully local. Browsing the
-challenger remains local, while displaying official comparison layers needs network access to
-the public EDITO MinIO objects named by `datasets.json`.
+Building it reads the current official viewer catalog, so `--viewer-artifacts` needs network access.
+Your own pyramid, scores and scorecard are then fully local; the official comparison layers
+are fetched from the public EDITO MinIO objects named by `datasets.json` as you browse them.
+
+## Running without network: `--offline-references`
+
+An **offline reference bundle** is a downloadable, versioned directory built by `ingest` from
+the staged reference data, holding everything `evaluate` would otherwise read live. Point at
+one to run with no network at all:
 
 ```sh
-oceanbench evaluate ./my-forecasts.zarr \
-  --pack ./pack-quick-2024 \
-  --output ./my-evaluation \
-  --metrics rmsd class4
+oceanbench evaluate ./my-forecasts.zarr --offline-references ./pack-quick-2024
 ```
 
-## What a pack is
+It is an optimisation for offline or repeated runs, never a prerequisite. A bundle is
+**self-describing**: `evaluate` reads `pack-manifest.json` alone to locate every source. It
+carries:
 
-An evaluation pack is a downloadable, versioned directory built by `ingest` from the staged
-reference data. It is **self-describing**: `evaluate` reads `pack-manifest.json` alone to
-locate every reference. A pack carries:
-
-- `references/<name>.zarr` — the gridded references (GLORYS, GLO12). A `quick` pack carries
-  **surface fields only**; a `full` pack carries all depths.
+- `references/<name>.zarr` — the gridded references (GLORYS, GLO12). A `quick` bundle carries
+  **surface fields only**; a `full` bundle carries all depths.
 - `observations/observations.zarr` — the Class-4 observation match-up store.
 - `class4-mean-dynamic-topography-…​.zarr` — the GLO12 mean dynamic topography used for the
   SSH → SLA Class-4 conversion (stored under its stage-canonical name so the ported Class-4
@@ -50,9 +83,13 @@ locate every reference. A pack carries:
   disclaimer (contracts.md §11).
 - `README.md` — the Copernicus Marine attribution, verbatim.
 
-Baselines (climatology / persistence) are not available yet: the manifest supports optional
-baseline entries and flags their absence (`baselines_available: false`), so skill-vs-baseline
-is not computed locally until a pack ships baselines.
+The bundle's manifest **fixes the year and region**, so `--region` or `--year` that contradict
+it are rejected rather than silently ignored. Your model is scored on the intersection of its
+own forecast starts with the bundle's starts.
+
+Baselines (climatology / persistence) are not available in a bundle yet: the manifest supports
+optional baseline entries and flags their absence (`baselines_available: false`), so
+skill-vs-baseline is not computed offline until a bundle ships baselines.
 
 ## Required forecast layout
 
@@ -69,21 +106,21 @@ layouts are accepted:
    with a `time` lead-day dimension — the same shape a challenger publishes. The stores are
    concatenated on the forecast-start axis.
 
-Your model is scored on the intersection of its own forecast starts with the pack's starts.
-
 ## What it produces
 
 Under `--output`:
 
 - `scores.parquet` — the standard long-format per-start records (contracts.md §3.1): gridded
-  RMSD (surface for a quick pack) + geostrophic currents, Class-4 RMSD, and the realism battery
-  (spectra / activity / eddies).
+  RMSD + geostrophic currents, Class-4 RMSD, and the realism battery (spectra / activity /
+  eddies).
 - `scores-summary.json` — the aggregated means and 95% bootstrap CIs (contracts.md §3.4),
   produced by the same aggregation library as the hosted page.
-- `scorecard/index.html` — a self-contained overlay scorecard.
-- With `--artifacts all`, `viewer/` — the static viewer application,
-  `data/your_model.zarr`, its viewer manifest, and a mixed `data/datasets.json`. The local
-  descriptor uses relative URLs; official descriptors use absolute public MinIO URLs.
+- `scorecard/index.html` — a self-contained overlay scorecard. Written for your own forecast
+  only: a challenger that is already published has nothing to overlay.
+- With `--viewer-artifacts`, `insights/<slug>/<region>/` — the match-up parquet, eddy census and
+  year-mode JSON, and `viewer/` — the static viewer application, `data/<slug>.zarr`, its viewer
+  manifest, and a mixed `data/datasets.json`. The local descriptor uses relative URLs; official
+  descriptors use absolute public MinIO URLs.
 
 ## The overlay scorecard
 
@@ -99,19 +136,16 @@ sibling files nor load an ES module — both are blocked by the browser same-ori
 `index.html` with a plain double-click, no server required**. The aggregation itself is the same
 `oceanbench.publish.aggregate` code the hosted page uses, so the numbers match.
 
-Published challengers are aggregated over the **same forecast starts** as your model, so if you
-re-score a published challenger with `evaluate` its row coincides with your model's row
-exactly.
-
 ## Flags
 
 | flag | meaning |
 |---|---|
-| `--pack` | pack directory (required) |
-| `--artifacts scores\|all` | build scores (default), or scores plus viewer artifacts |
-| `--output DIR` | output directory (default: `./oceanbench-local-evaluation`) |
+| `--output DIR` | output directory (default: `./oceanbench-evaluation`) |
+| `--region REGION` | region to score over (default: `global`) |
+| `--year YEAR` | evaluation year (default: `2024`) |
 | `--metrics M [M ...]` | select metric families: `rmsd`, `mld`, `geostrophic`, `class4`, `lagrangian`, `realism` (default: all) |
+| `--viewer-artifacts` | also build the map viewer and its serving artifacts (off by default) |
+| `--offline-references DIR` | read references and observations from a downloaded bundle instead of live EDITO |
 
-The evaluation year and region are inferred from `pack-manifest.json`. Published
-scores, challenger metadata, and viewer datasets use the official MinIO release.
+Published scores, challenger metadata, and viewer datasets use the official MinIO release.
 Set `OCEANBENCH_PUBLISHED_BASE` to override that base URL.
