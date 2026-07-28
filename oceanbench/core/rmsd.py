@@ -15,6 +15,7 @@ from oceanbench.core.dataset_utils import (
     DepthLevel,
     VARIABLE_METADATA,
 )
+from oceanbench.core.grid_alignment import align_reference_to_challenger_grid
 from oceanbench.core.lead_day_utils import lead_day_labels
 
 DEPTH_LABELS: dict[DepthLevel, str] = {
@@ -39,7 +40,11 @@ def _rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
 ) -> xarray.Dataset:
-    squared_error = (challenger_dataset - reference_dataset) ** 2
+    # Align before subtracting: xarray would otherwise intersect the coordinate labels and
+    # silently score only the cells the two grids happen to share (issue #305). Already
+    # aligned datasets take the identity path and pay nothing.
+    aligned_reference_dataset, _ = align_reference_to_challenger_grid(challenger_dataset, reference_dataset)
+    squared_error = (challenger_dataset - aligned_reference_dataset) ** 2
     area_weighted_mean_squared_error = squared_error.weighted(_spatial_area_weights(squared_error)).mean(
         dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
     )
