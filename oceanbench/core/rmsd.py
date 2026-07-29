@@ -26,6 +26,9 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.MINUS_500_METERS: "500m",
 }
 
+SPATIAL_COORDINATE_ALIGNMENT_ATOL = 1e-4
+SPATIAL_COORDINATE_NAMES = (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key())
+
 
 def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
     return dataset.assign({Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]})
@@ -35,10 +38,54 @@ def _spatial_area_weights(dataset: xarray.Dataset) -> xarray.DataArray:
     return numpy.cos(numpy.deg2rad(dataset[Dimension.LATITUDE.key()]))
 
 
+def _has_compatible_spatial_coordinates(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+) -> bool:
+    for coordinate_name in SPATIAL_COORDINATE_NAMES:
+        if coordinate_name not in challenger_dataset.sizes or coordinate_name not in reference_dataset.sizes:
+            return False
+
+        if challenger_dataset.sizes.get(coordinate_name) != reference_dataset.sizes.get(coordinate_name):
+            return False
+
+        challenger_coordinate = challenger_dataset[coordinate_name]
+        reference_coordinate = reference_dataset[coordinate_name]
+
+        if challenger_coordinate.ndim != 1 or reference_coordinate.ndim != 1:
+            return False
+
+        challenger_coordinate_values = challenger_coordinate.values
+        reference_coordinate_values = reference_coordinate.values
+
+        if not numpy.allclose(
+            challenger_coordinate_values,
+            reference_coordinate_values,
+            rtol=0.0,
+            atol=SPATIAL_COORDINATE_ALIGNMENT_ATOL,
+        ):
+            return False
+
+    return True
+
+
+def _snap_spatial_coordinates_to_reference(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    if not _has_compatible_spatial_coordinates(challenger_dataset, reference_dataset):
+        return challenger_dataset
+
+    return challenger_dataset.assign_coords(
+        {coordinate_name: reference_dataset[coordinate_name] for coordinate_name in SPATIAL_COORDINATE_NAMES}
+    )
+
+
 def _rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
 ) -> xarray.Dataset:
+    challenger_dataset = _snap_spatial_coordinates_to_reference(challenger_dataset, reference_dataset)
     squared_error = (challenger_dataset - reference_dataset) ** 2
     area_weighted_mean_squared_error = squared_error.weighted(_spatial_area_weights(squared_error)).mean(
         dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
