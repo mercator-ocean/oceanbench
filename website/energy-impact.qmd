@@ -817,6 +817,28 @@ HTML("""
     <div class="ei-chart-explain">This scatter plot positions each model according to its inference energy use and its number of operations, with a fitted trend line showing the general relationship between the two quantities across models.</div>
   </div>
 
+  <!-- Chart 7 -->
+  <div style="padding:1rem 0; margin-top:1.5rem;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:10px;">
+      <p style="font-size:13px; color:#888; margin:0;">Infrastructure comparison — total process vs. inference energy (% vs reference)</p>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label for="infraCompModelSelect" style="font-size:12px; color:#888;">Model</label>
+        <select id="infraCompModelSelect" onchange="window.updateInfraComparisonModel(this.value)" style="font-size:13px; padding:4px 10px; border-radius:6px; border:1px solid #e5e7eb; background:#fff; color:#111;"></select>
+      </div>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:16px; font-size:12px; color:#888; margin-bottom:12px;" id="infraCompLegend"></div>
+    <div style="position:relative; width:100%; height:360px;">
+      <canvas id="infraComparisonChart"></canvas>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:1.25rem;">
+      <span style="font-size:12px; color:#888; margin-right:4px;">Reference:</span>
+      <button class="machine-btn" id="btn-ref-lir" onclick="window.setInfraComparisonRef('A')">Lir</button>
+      <button class="machine-btn active" id="btn-ref-edito" onclick="window.setInfraComparisonRef('B')">Datalab EDITO</button>
+      <button class="machine-btn" id="btn-ref-eumetsat" onclick="window.setInfraComparisonRef('C')">Eumetsat</button>
+    </div>
+    <div class="ei-chart-explain">For the selected model, this chart compares total process energy and inference-only energy across the three infrastructures, expressed as a percentage difference relative to the chosen reference infrastructure (marked "ref").</div>
+  </div>
+
 </div><!-- /tab-comparison -->
 
 <!-- ══════════════════════════════════════════════
@@ -1340,6 +1362,125 @@ require(['chartjs'], function(ChartModule) {
       }
     }]
   });
+
+  // ── Chart 7 (Option B — paired bars with % gap vs. reference) ────────────
+  const INFRA_LABELS = { A:'Lir', B:'Datalab EDITO', C:'Eumetsat' };
+  const INFRA_ORDER  = ['A','B','C'];
+  let infraCompModelIndex = 0; // default: GLONET
+  let infraCompRef        = 'B'; // default reference: Datalab EDITO
+
+  function getInfraCompData() {
+    var totals = INFRA_ORDER.map(function(m) {
+      var model = ALL_MODELS[m].find(function(x){ return x.name === MODEL_NAMES[infraCompModelIndex]; });
+      return model ? model.mu : 0;
+    });
+    var infs = INFRA_ORDER.map(function(m) { return ALL_INFERENCE[m][infraCompModelIndex]; });
+    return { totals:totals, infs:infs };
+  }
+
+  function pctVsRef(values) {
+    var refIdx = INFRA_ORDER.indexOf(infraCompRef);
+    var refVal = values[refIdx];
+    return values.map(function(v, i) {
+      if (i === refIdx) return null;
+      if (!refVal) return null;
+      return ((v - refVal) / refVal) * 100;
+    });
+  }
+
+  var infraComparisonChart = new Chart(document.getElementById('infraComparisonChart'), {
+    type:'bar',
+    data:{
+      labels: INFRA_ORDER.map(function(m){ return INFRA_LABELS[m]; }),
+      datasets:[
+        { label:'Total process (Wh)', data:[], backgroundColor:'#036aa1', borderRadius:4, barPercentage:0.7, categoryPercentage:0.6 },
+        { label:'Inference (Wh)',     data:[], backgroundColor:'#A0DCE8', borderRadius:4, barPercentage:0.7, categoryPercentage:0.6 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{ duration:500, easing:'easeInOutQuart' },
+      layout:{ padding:{ top:24 } },
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label:function(ctx){ return ' '+ctx.dataset.label+': '+ctx.parsed.y.toFixed(1)+' Wh'; } } }
+      },
+      scales:{
+        x:{ grid:{color:'rgba(128,128,128,0.08)'}, ticks:{color:'#888'} },
+        y:{ beginAtZero:true, title:{display:true,text:'Energy (Wh)',color:'#888',font:{size:12}}, grid:{color:'rgba(128,128,128,0.08)'}, ticks:{color:'#888',callback:function(v){ return v+' Wh'; }} }
+      }
+    },
+    plugins:[{
+      id:'pctLabels',
+      afterDatasetsDraw:function(chart) {
+        var ctx = chart.ctx;
+        var refIdx = INFRA_ORDER.indexOf(infraCompRef);
+        chart.data.datasets.forEach(function(dataset, di) {
+          var meta = chart.getDatasetMeta(di);
+          var pcts = pctVsRef(dataset.data);
+          meta.data.forEach(function(bar, i) {
+            ctx.save();
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'center';
+            if (i === refIdx) {
+              ctx.fillStyle = '#888';
+              ctx.fillText('ref', bar.x, bar.y - 8);
+            } else if (pcts[i] !== null && !isNaN(pcts[i])) {
+              ctx.fillStyle = pcts[i] >= 0 ? '#c7370b' : '#166534';
+              var sign = pcts[i] >= 0 ? '+' : '';
+              ctx.fillText(sign+pcts[i].toFixed(0)+'%', bar.x, bar.y - 8);
+            }
+            ctx.restore();
+          });
+        });
+      }
+    }]
+  });
+
+  function buildInfraCompLegend() {
+    var legend = document.getElementById('infraCompLegend');
+    if (!legend) return;
+    legend.innerHTML =
+      '<span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:3px;background:#036aa1;display:inline-block;"></span>Total process</span>'
+      + '<span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;border-radius:3px;background:#A0DCE8;display:inline-block;"></span>Inference only</span>';
+  }
+
+  function refreshInfraComparisonChart() {
+    var d = getInfraCompData();
+    infraComparisonChart.data.datasets[0].data = d.totals;
+    infraComparisonChart.data.datasets[1].data = d.infs;
+    infraComparisonChart.update();
+  }
+
+  function populateInfraCompModelSelect() {
+    var sel = document.getElementById('infraCompModelSelect');
+    if (!sel) return;
+    sel.innerHTML = '';
+    MODEL_NAMES.forEach(function(name, i) {
+      var opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = name;
+      if (i === infraCompModelIndex) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  window.updateInfraComparisonModel = function(idx) {
+    infraCompModelIndex = parseInt(idx, 10);
+    refreshInfraComparisonChart();
+  };
+
+  window.setInfraComparisonRef = function(m) {
+    infraCompRef = m;
+    document.getElementById('btn-ref-lir').classList.toggle('active', m==='A');
+    document.getElementById('btn-ref-edito').classList.toggle('active', m==='B');
+    document.getElementById('btn-ref-eumetsat').classList.toggle('active', m==='C');
+    refreshInfraComparisonChart();
+  };
+
+  populateInfraCompModelSelect();
+  buildInfraCompLegend();
+  refreshInfraComparisonChart();
 
   // ── Refresh all charts ───────────────────────────────────────────────────
   function refreshCharts() {
