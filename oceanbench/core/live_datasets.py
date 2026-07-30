@@ -14,7 +14,7 @@ from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.remote_http import require_remote_dataset_dimensions, with_remote_http_retries
 
 LIVE_CLASS4_OBSERVATION_ZARR_TEMPLATE = (
-    "https://minio.dive.edito.eu/project-oceanbench/public/live_observations/{compact_date}.zarr"
+    "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/live_observations/{compact_date}.zarr"
 )
 LIVE_CLASS4_OBSERVATION_LAST_DAY = "2026-05-30"
 LIVE_GLONET_FORECAST_ZARR_TEMPLATE = (

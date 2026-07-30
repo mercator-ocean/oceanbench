@@ -25,12 +25,10 @@ def _clear_refresh_environment(monkeypatch) -> None:
     for name in [
         "EDITO_ACCESS_TOKEN",
         "EDITO_OFFLINE_TOKEN",
-        "EDITO_MINIO_OFFLINE_TOKEN",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-        "AWS_S3_ENDPOINT",
-        "AWS_DEFAULT_REGION",
+        "OBS_AWS_ACCESS_KEY_ID",
+        "OBS_AWS_SECRET_ACCESS_KEY",
+        "OBS_TARGET_S3_ENDPOINT",
+        "OBS_AWS_DEFAULT_REGION",
         "COPERNICUSMARINE_SERVICE_USERNAME",
         "COPERNICUSMARINE_SERVICE_PASSWORD",
     ]:
@@ -39,9 +37,8 @@ def _clear_refresh_environment(monkeypatch) -> None:
 
 def _set_direct_credentials(monkeypatch) -> None:
     monkeypatch.setenv("EDITO_ACCESS_TOKEN", "edito-access-token")
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "aws-access-key")
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-secret-key")
-    monkeypatch.setenv("AWS_SESSION_TOKEN", "aws-session-token")
+    monkeypatch.setenv("OBS_AWS_ACCESS_KEY_ID", "obs-access-key")
+    monkeypatch.setenv("OBS_AWS_SECRET_ACCESS_KEY", "obs-secret-key")
 
 
 def test_refresh_skips_without_credentials(monkeypatch, capsys) -> None:
@@ -63,9 +60,8 @@ def test_refresh_skips_without_credentials(monkeypatch, capsys) -> None:
 def test_refresh_does_not_fail_build_when_token_refresh_fails(monkeypatch, capsys) -> None:
     _clear_refresh_environment(monkeypatch)
     monkeypatch.setenv("EDITO_OFFLINE_TOKEN", "invalid-edito-offline-token")
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "aws-access-key")
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-secret-key")
-    monkeypatch.setenv("AWS_SESSION_TOKEN", "aws-session-token")
+    monkeypatch.setenv("OBS_AWS_ACCESS_KEY_ID", "obs-access-key")
+    monkeypatch.setenv("OBS_AWS_SECRET_ACCESS_KEY", "obs-secret-key")
 
     def fake_post(*_, **__) -> FakeResponse:
         return FakeResponse(400)
@@ -181,11 +177,18 @@ def test_refresh_relaunches_terminal_process(monkeypatch, capsys) -> None:
     assert payload["catalogId"] == "process-playground"
     assert payload["packageName"] == "daily-observation-data"
     assert payload["packageVersion"] == observation_refresh.DAILY_OBSERVATION_PROCESS_VERSION
+    assert payload["packageVersion"] == "0.1.8"
     assert payload["name"] == observation_refresh.DAILY_OBSERVATION_PROCESS_NAME
-    assert payload["options"]["s3"]["endpoint"] == "minio.dive.edito.eu"
-    assert payload["options"]["inputs"]["S3_OUTPUT_FOLDER"] == (
-        "project-oceanbench/public/live_observations/{compact_date}.zarr"
+    assert "s3" not in payload["options"]
+    inputs = payload["options"]["inputs"]
+    assert inputs["S3_OUTPUT_FOLDER"] == ("oceanbench-bucket/public/live_observations/{compact_date}.zarr")
+    assert inputs["OBS_AVAILABILITY_MANIFEST_URL"] == ("oceanbench-bucket/public/live_observations/availability.json")
+    assert inputs["OBS_PUBLIC_OBSERVATION_TEMPLATE"] == (
+        "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/live_observations/{compact_date}.zarr"
     )
+    assert inputs["OBS_TARGET_S3_ENDPOINT"] == "https://s3.waw3-1.cloudferro.com"
+    assert inputs["AWS_ACCESS_KEY_ID"] == "obs-access-key"
+    assert inputs["AWS_SECRET_ACCESS_KEY"] == "obs-secret-key"
     assert "Launched daily observation data refresh process" in capsys.readouterr().out
 
 
