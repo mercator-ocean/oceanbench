@@ -11,7 +11,6 @@ from . import datasets
 from . import eddies
 from . import psd
 from . import regions
-from .core.evaluate import evaluate_challenger
 from .core.version import __version__
 
 __all__ = [
@@ -20,6 +19,5 @@ __all__ = [
     "eddies",
     "psd",
     "regions",
-    "evaluate_challenger",
     "__version__",
 ]

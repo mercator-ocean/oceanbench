@@ -8,29 +8,156 @@ from pathlib import Path
 
 from oceanbench.core.version import __version__
 
+NEW_PIPELINE_NOTICE = "note: OceanBench 0.5 produces viewer artifacts and parquet scores instead of notebook reports."
+DEFAULT_OUTPUT_DIRECTORY = "oceanbench-evaluation"
+# Errors a user can fix from the message alone. Anything else keeps its traceback.
+_USER_FACING_ERRORS = (ValueError, FileNotFoundError, NotADirectoryError, IsADirectoryError, PermissionError)
+
+
+def _apply_runtime_configuration(args: argparse.Namespace) -> None:
+    from oceanbench.core.runtime_configuration import (
+        RuntimeConfiguration,
+        runtime_configuration_from_environment,
+        set_runtime_configuration,
+    )
+
+    environment_configuration = runtime_configuration_from_environment()
+    set_runtime_configuration(
+        RuntimeConfiguration(
+            staged_components=(tuple(args.stage) if args.stage else environment_configuration.staged_components),
+            stage_directory=(
+                args.stage_dir if args.stage_dir is not None else environment_configuration.stage_directory
+            ),
+            stage_max_workers=(
+                args.stage_max_workers
+                if args.stage_max_workers is not None
+                else environment_configuration.stage_max_workers
+            ),
+            remote_retries=(
+                args.remote_retries if args.remote_retries is not None else environment_configuration.remote_retries
+            ),
+            class4_fast_interpolation=environment_configuration.class4_fast_interpolation,
+            local_cache_directory_path=(
+                args.cache_dir if args.cache_dir is not None else environment_configuration.local_cache_directory_path
+            ),
+        )
+    )
+
+
+def _resolve_region_argument(args: argparse.Namespace) -> str | None:
+    if args.region_file is None:
+        return args.region
+    if args.region is not None:
+        raise ValueError("use either --region or --region-file, not both")
+    from oceanbench.core.regions import load_region_file
+
+    return load_region_file(args.region_file).id
+
+
+def _target_name(target: str) -> str:
+    name = Path(target.split("?", 1)[0].rstrip("/")).name
+    return name.removesuffix(".py").removesuffix(".zarr") or target
+
+
+def _resolve_targets(args: argparse.Namespace) -> list[str]:
+    from oceanbench.runner.run import registered_challengers
+
+    if args.all_challengers:
+        return list(registered_challengers())
+    return list(args.target)
+
 
 def _run_evaluate(args: argparse.Namespace) -> int:
+    from oceanbench.packs.evaluate import is_python_challenger_file
+
+    if args.all_challengers and args.target:
+        print("Error: --all-challengers cannot be combined with explicit targets", file=sys.stderr)
+        return 1
+
+    targets = _resolve_targets(args)
+    if not targets:
+        print("Error: provide an evaluation target or use --all-challengers", file=sys.stderr)
+        return 1
+
+    if args.all_challengers or any(is_python_challenger_file(target) for target in targets):
+        print(NEW_PIPELINE_NOTICE, file=sys.stderr)
+
+    from oceanbench.packs.fetch import resolve_offline_references
+
+    try:
+        _apply_runtime_configuration(args)
+        region = _resolve_region_argument(args)
+        # An https:// bundle is fetched into the pack cache once, before any target is scored.
+        offline_references = resolve_offline_references(args.offline_references)
+    except _USER_FACING_ERRORS as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+    output_directory = args.output if args.output is not None else DEFAULT_OUTPUT_DIRECTORY
+    s3_bucket = args.s3_bucket if args.s3_bucket is not None else args.output_bucket
+    s3_prefix = args.s3_prefix if args.s3_prefix is not None else args.output_prefix
+
+    exit_code = 0
+    for target in targets:
+        if len(targets) > 1:
+            print(f"\n== {target} ==")
+        target_directory = output_directory if len(targets) == 1 else str(Path(output_directory) / _target_name(target))
+        target_prefix = (
+            s3_prefix if s3_prefix is None or len(targets) == 1 else f"{s3_prefix.rstrip('/')}/{_target_name(target)}"
+        )
+        exit_code |= _evaluate_one_target(
+            args,
+            target,
+            region=region,
+            offline_references=offline_references,
+            output_directory=target_directory,
+            s3_bucket=s3_bucket,
+            s3_prefix=target_prefix,
+        )
+
+    _cleanup_stage(args, succeeded=exit_code == 0)
+    return exit_code
+
+
+def _cleanup_stage(args: argparse.Namespace, *, succeeded: bool) -> None:
+    from oceanbench.core.local_stage import cleanup_local_stage_directory
+    from oceanbench.core.runtime_configuration import current_runtime_configuration
+
+    runtime_configuration = current_runtime_configuration()
+    if runtime_configuration.has_local_stage() and not args.keep_stage and succeeded:
+        cleanup_local_stage_directory(runtime_configuration.resolved_stage_directory())
+
+
+def _evaluate_one_target(
+    args: argparse.Namespace,
+    target: str,
+    *,
+    region: str | None,
+    offline_references: str | None,
+    output_directory: str,
+    s3_bucket: str | None,
+    s3_prefix: str | None,
+) -> int:
     from oceanbench.packs.evaluate import evaluate
     from oceanbench.packs.local_viewer import published_base_url
 
-    output_directory = args.output if args.output is not None else "oceanbench-evaluation"
     try:
         result = evaluate(
-            args.target,
+            target,
             output_directory=output_directory,
-            offline_references_directory=args.offline_references,
-            region=args.region,
+            offline_references_directory=offline_references,
+            region=region,
             year=args.year,
             published_scores_path=published_base_url() + "scores.parquet",
             published_challengers_path=published_base_url() + "challengers.json",
             metrics=args.metrics,
             viewer_artifacts=args.viewer_artifacts,
-            s3_bucket=args.s3_bucket,
-            s3_prefix=args.s3_prefix,
+            s3_bucket=s3_bucket,
+            s3_prefix=s3_prefix,
             s3_endpoint=args.s3_endpoint,
             s3_env_file=args.s3_env_file,
         )
-    except Exception as error:  # noqa: BLE001 - surface a clean message to the CLI user
+    except _USER_FACING_ERRORS as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
     for flag in result.flags:
@@ -38,6 +165,8 @@ def _run_evaluate(args: argparse.Namespace) -> int:
     if result.scores_path:
         print(f"scores:    {result.scores_path}")
         print(f"summary:   {result.summary_path}")
+    if result.skill_baseline:
+        print(f"skill vs:  {result.skill_baseline}")
     if result.scorecard_path:
         print(f"scorecard: {result.scorecard_path}")
         print(f"\nOpen the scorecard locally (no server needed): file://{Path(result.scorecard_path).resolve()}")
@@ -59,20 +188,18 @@ def _run_evaluate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _add_evaluate_parser(
-    subparsers: "argparse._SubParsersAction", name: str = "evaluate", *, hidden: bool = False
-) -> None:
+def _add_evaluate_parser(subparsers: "argparse._SubParsersAction") -> None:
     from oceanbench.core.regions import GLOBAL_REGION_NAME, official_region_ids
     from oceanbench.packs.evaluate import DEFAULT_EVALUATION_YEAR, METRIC_NAMES
     from oceanbench.runner.run import registered_challengers
 
     parser = subparsers.add_parser(
-        name,
-        help=(argparse.SUPPRESS if hidden else "Score a forecast and write the scores the benchmark website reads"),
+        "evaluate",
+        help="Score a forecast and write the scores the benchmark website reads",
         description=(
             "Score a forecast and emit the long-format records parquet plus the aggregated summary.\n\n"
             "TARGET is either your own forecast (a path or URL) or the slug of a challenger already in "
-            "the benchmark. Your own forecast also gets a self-contained overlay scorecard laying it "
+            "the benchmark. Your own forecast also gets a self-contained comparison scorecard laying it "
             "over the published challengers, so you can see where you stand before publishing.\n\n"
             "Forecast layout (weekly-store conventions, same as challengers): either a single combined "
             "zarr with dims (first_day_datetime, lead_day_index, depth, latitude, longitude) and the "
@@ -91,7 +218,16 @@ def _add_evaluate_parser(
     parser.add_argument(
         "target",
         metavar="TARGET",
-        help="Your forecast zarr (combined store or weekly-store directory), or a known challenger slug",
+        nargs="*",
+        help=(
+            "Your forecast zarr (combined store or weekly-store directory), a known challenger slug, "
+            "or a challenger .py file assigning challenger_dataset. Repeat to score several"
+        ),
+    )
+    parser.add_argument(
+        "--all-challengers",
+        action="store_true",
+        help="Score every registered challenger slug, each into its own output subdirectory",
     )
     parser.add_argument(
         "--output",
@@ -129,10 +265,12 @@ def _add_evaluate_parser(
     parser.add_argument(
         "--offline-references",
         default=None,
-        metavar="DIRECTORY",
+        metavar="DIRECTORY_OR_URL",
         help=(
-            "Read references and observations from a downloaded bundle instead of live EDITO. "
-            "The bundle's manifest fixes the region and year"
+            "Read references and observations from an evaluation pack instead of live EDITO. "
+            "Either a local pack directory, or the https:// prefix of a published pack, which is "
+            "fetched into the pack cache first (same as 'oceanbench fetch-pack'). "
+            "The pack's manifest fixes the region and year"
         ),
     )
     parser.add_argument(
@@ -154,6 +292,317 @@ def _add_evaluate_parser(
         "--s3-env-file",
         default=None,
         help="Optional .env file to source the EDITO offline token from (AWS_* env vars still win)",
+    )
+    parser.add_argument(
+        "--region-file",
+        default=None,
+        metavar="PATH",
+        help="JSON file describing the evaluation region, used instead of --region",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Directory for the persistent chunk cache, so repeated runs re-read fetched chunks from "
+            "disk (default: no cache; equivalent to OCEANBENCH_LOCAL_CACHE)"
+        ),
+    )
+    parser.add_argument(
+        "--stage",
+        action="append",
+        choices=["challenger", "references", "observations", "all"],
+        help="Stage selected datasets locally before scoring. Repeat the flag for several targets",
+    )
+    parser.add_argument(
+        "--stage-dir",
+        default=None,
+        metavar="DIRECTORY",
+        help="Directory used for local staging when --stage is enabled",
+    )
+    parser.add_argument(
+        "--stage-max-workers",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Maximum number of worker threads used to build local stage data",
+    )
+    parser.add_argument(
+        "--remote-retries",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Number of retries for transient remote data read failures",
+    )
+    parser.add_argument(
+        "--keep-stage",
+        action="store_true",
+        help="Keep staged data after a successful evaluate command",
+    )
+    # Accepted for 0.4.0 command lines. --output-bucket / --output-prefix are the old names of
+    # --s3-bucket / --s3-prefix; --max-workers drove the notebook process pool and has no
+    # equivalent on this route, which scores targets one after another.
+    parser.add_argument("--output-bucket", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--output-prefix", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--max-workers", type=int, default=None, help=argparse.SUPPRESS)
+
+
+def _run_build_pack(args: argparse.Namespace) -> int:
+    from oceanbench.packs.builder import PackSources, build_pack
+    from oceanbench.packs.fetch import PACK_FILE_INDEX_FILENAME
+
+    try:
+        _apply_runtime_configuration(args)
+        result = build_pack(
+            args.kind,
+            args.year,
+            PackSources(
+                template_challenger=args.template_challenger,
+                references=tuple(args.references),
+                region=args.region,
+                start_limit=args.start_limit,
+                baselines=tuple(args.baselines),
+            ),
+            args.output,
+            resolution=args.resolution,
+        )
+    except _USER_FACING_ERRORS as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+    for flag in result.flags:
+        print(f"note: {flag}", file=sys.stderr)
+    manifest = result.manifest
+    print(f"pack:      {result.pack_directory}")
+    print(f"manifest:  {result.manifest_path}")
+    print(f"index:     {Path(result.pack_directory) / PACK_FILE_INDEX_FILENAME}")
+    print(f"kind:      {manifest['kind']} ({manifest['resolution']}, region {manifest['region']}, {manifest['year']})")
+    print(f"starts:    {len(manifest['start_dates'])}")
+    print(f"refs:      {', '.join(sorted(manifest['contents']['references']))}")
+    print(f"baselines: {', '.join(sorted(manifest['contents']['baselines'])) or '(none)'}")
+    return 0
+
+
+def _add_build_pack_parser(subparsers: "argparse._SubParsersAction") -> None:
+    from oceanbench.core.regions import GLOBAL_REGION_NAME, official_region_ids
+    from oceanbench.packs.builder import DEFAULT_BASELINES
+    from oceanbench.packs.evaluate import DEFAULT_EVALUATION_YEAR
+    from oceanbench.runner.run import registered_challengers
+
+    parser = subparsers.add_parser(
+        "build-pack",
+        help="Build a publishable evaluation pack (maintainer command)",
+        description=(
+            "Build an evaluation pack: a self-describing directory carrying the gridded references, "
+            "the baseline forecasts, the Class-4 observation match-up store and the mean-dynamic-"
+            "topography for one region and year, so a model can be scored with no network at all.\n\n"
+            "This is the maintainer side of packs. Users are not expected to run it: the official "
+            "packs are published per region and year, and are consumed with 'oceanbench fetch-pack' "
+            "or straight from 'oceanbench evaluate --offline-references <url>'.\n\n"
+            "Defaults build the full pack: every depth, the template challenger's own native grid, "
+            "and the climatology and persistence baselines bundled so skill-vs-baseline works "
+            "offline. '--kind quick --resolution one_degree --baselines' (with no values) reproduces "
+            "the old surface-only 1-degree demo pack that carried no baselines.\n\n"
+            "Reading the upstream data is a live read unless the run is staged; --stage and its "
+            "companions behave exactly as they do on 'oceanbench evaluate'."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("output", metavar="OUTPUT_DIR", help="Directory the pack is written to")
+    parser.add_argument(
+        "--kind",
+        choices=["full", "quick"],
+        default="full",
+        help="'full' bundles every depth (default), 'quick' only the surface fields",
+    )
+    parser.add_argument(
+        "--year",
+        type=int,
+        default=DEFAULT_EVALUATION_YEAR,
+        help=f"Evaluation year the pack covers (default: {DEFAULT_EVALUATION_YEAR})",
+    )
+    parser.add_argument(
+        "--region",
+        default=GLOBAL_REGION_NAME,
+        metavar="REGION",
+        help=f"Region the pack covers (default: {GLOBAL_REGION_NAME}): " + ", ".join(official_region_ids()),
+    )
+    parser.add_argument(
+        "--template-challenger",
+        default="glonet",
+        metavar="SLUG",
+        help=(
+            "Challenger whose native grid and forecast starts define the pack; it is a template, "
+            "not a scored model (default: glonet). Known slugs: " + ", ".join(registered_challengers())
+        ),
+    )
+    parser.add_argument(
+        "--references",
+        nargs="+",
+        choices=["glorys", "glo12"],
+        default=["glorys", "glo12"],
+        metavar="NAME",
+        help="Gridded references to bundle (default: glorys glo12)",
+    )
+    parser.add_argument(
+        "--baselines",
+        nargs="*",
+        default=list(DEFAULT_BASELINES),
+        metavar="SLUG",
+        help=(
+            "Baseline forecast slugs to bundle (default: "
+            + " ".join(DEFAULT_BASELINES)
+            + "). Pass the flag with no values to bundle none. Use the _1_degree variants "
+            "alongside a 1-degree template challenger"
+        ),
+    )
+    parser.add_argument(
+        "--resolution",
+        choices=["one_degree", "quarter_degree", "twelfth_degree"],
+        default=None,
+        help=(
+            "Grid resolution stamped in the manifest and used to pick the mean-dynamic-topography "
+            "variant (default: the template challenger's own grid)"
+        ),
+    )
+    parser.add_argument(
+        "--start-limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Bundle only the first N forecast starts (default: every start of the year)",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        default=None,
+        metavar="PATH",
+        help="Directory for the persistent chunk cache (equivalent to OCEANBENCH_LOCAL_CACHE)",
+    )
+    parser.add_argument(
+        "--stage",
+        action="append",
+        choices=["challenger", "references", "observations", "all"],
+        help="Stage selected datasets locally before building. Repeat the flag for several targets",
+    )
+    parser.add_argument(
+        "--stage-dir",
+        default=None,
+        metavar="DIRECTORY",
+        help="Directory used for local staging when --stage is enabled",
+    )
+    parser.add_argument(
+        "--stage-max-workers",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Maximum number of worker threads used to build local stage data",
+    )
+    parser.add_argument(
+        "--remote-retries",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Number of retries for transient remote data read failures",
+    )
+
+
+def _run_fetch_pack(args: argparse.Namespace) -> int:
+    from oceanbench.packs.fetch import fetch_pack
+
+    try:
+        summary = fetch_pack(args.source, args.dest)
+    except _USER_FACING_ERRORS as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"pack {summary.pack_name}: {summary.total_count} files, {summary.total_bytes:,} bytes "
+        f"({summary.downloaded_count} downloaded, {summary.skipped_count} already present) -> {summary.destination}"
+    )
+    return 0
+
+
+def _add_fetch_pack_parser(subparsers: "argparse._SubParsersAction") -> None:
+    from oceanbench.packs.fetch import (
+        DEFAULT_PACK_CACHE_ENVIRONMENT_VARIABLE,
+        PACK_FILE_INDEX_FILENAME,
+        default_pack_cache_root,
+    )
+
+    parser = subparsers.add_parser(
+        "fetch-pack",
+        help="Download a published evaluation pack into the local pack cache",
+        description=(
+            "Download the evaluation pack published at an anonymous https:// prefix. A pack is a "
+            f"directory tree of zarr stores, enumerated through the '{PACK_FILE_INDEX_FILENAME}' index "
+            "at its root; every listed file is fetched, and a file already present at the size the "
+            "index states is skipped, so re-running an interrupted fetch only pulls what is missing.\n\n"
+            f"The default destination is {default_pack_cache_root()}/<pack-name>, overridable with "
+            f"--dest or the {DEFAULT_PACK_CACHE_ENVIRONMENT_VARIABLE} environment variable.\n\n"
+            "The downloaded directory is exactly what 'oceanbench evaluate --offline-references' "
+            "takes; passing that https:// prefix to --offline-references directly does this fetch first."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("source", metavar="URL", help="https:// prefix of the published pack directory")
+    parser.add_argument(
+        "--dest",
+        default=None,
+        metavar="DIRECTORY",
+        help=f"Directory to download into (default: {default_pack_cache_root()}/<pack-name>)",
+    )
+
+
+def _run_view(args: argparse.Namespace) -> int:
+    from oceanbench.publish.serve import build_viewer_server
+
+    try:
+        viewer = build_viewer_server(args.artifacts_directory, port=args.port)
+    except _USER_FACING_ERRORS as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    except OSError as error:
+        print(f"Error: cannot serve on port {args.port}: {error}", file=sys.stderr)
+        return 1
+
+    # serve_forever never returns, so the banner is flushed rather than left in the pipe buffer.
+    print(f"viewer:    {viewer.viewer_directory}")
+    print(f"artifacts: {viewer.artifacts_directory}")
+    print(f"open:      {viewer.url}")
+    print("Press Ctrl-C to stop.", flush=True)
+    try:
+        viewer.server.serve_forever()
+    except KeyboardInterrupt:
+        print()
+    finally:
+        viewer.server.server_close()
+    return 0
+
+
+def _add_view_parser(subparsers: "argparse._SubParsersAction") -> None:
+    from oceanbench.publish.serve import DEFAULT_VIEWER_PORT
+
+    parser = subparsers.add_parser(
+        "view",
+        help="Serve the map viewer over a local artifacts directory",
+        description=(
+            "Serve the OceanBench map viewer offline. The viewer single-page application "
+            "(website/viewer, located relative to the installed package at the repository root) is "
+            "served at '/', and ARTIFACTS_DIR is mounted at '/data/', so a locally produced viewer "
+            "artifact tree is browsable without copying the application next to it.\n\n"
+            "ARTIFACTS_DIR is the './data/' prefix of a viewer site: the directory holding "
+            "datasets.json, insights.json and the per-dataset pyramid stores. "
+            "'oceanbench evaluate --viewer-artifacts' writes one under its viewer/data directory.\n\n"
+            "The server binds 127.0.0.1 only and no browser is opened; the URL to open is printed."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("artifacts_directory", metavar="ARTIFACTS_DIR", help="Viewer artifacts directory to mount")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_VIEWER_PORT,
+        help=f"Port to listen on (default: {DEFAULT_VIEWER_PORT}; 0 picks a free port)",
     )
 
 
@@ -299,11 +748,12 @@ def _build_parser() -> argparse.ArgumentParser:
         description="OceanBench CLI",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    subparsers = parser.add_subparsers(dest="command", metavar="{evaluate,publish-s3,reconcile-viewer-artifacts}")
+    subparsers = parser.add_subparsers(dest="command")
 
     _add_evaluate_parser(subparsers)
-    _add_evaluate_parser(subparsers, "evaluate-local", hidden=True)
-    subparsers._choices_actions = [choice for choice in subparsers._choices_actions if choice.dest != "evaluate-local"]
+    _add_fetch_pack_parser(subparsers)
+    _add_build_pack_parser(subparsers)
+    _add_view_parser(subparsers)
     _add_publish_s3_parser(subparsers)
     _add_reconcile_viewer_artifacts_parser(subparsers)
     return parser
@@ -320,9 +770,14 @@ def main():
     if args.command == "evaluate":
         sys.exit(_run_evaluate(args))
 
-    if args.command == "evaluate-local":
-        print("note: 'oceanbench evaluate-local' is deprecated; use 'oceanbench evaluate'", file=sys.stderr)
-        sys.exit(_run_evaluate(args))
+    if args.command == "fetch-pack":
+        sys.exit(_run_fetch_pack(args))
+
+    if args.command == "build-pack":
+        sys.exit(_run_build_pack(args))
+
+    if args.command == "view":
+        sys.exit(_run_view(args))
 
     if args.command == "publish-s3":
         sys.exit(_run_publish_s3(args))

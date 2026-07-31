@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://oceanbench.mercator-ocean.fr/schemas/pack-manifest.schema.json",
   "title": "OceanBench evaluation pack manifest",
-  "description": "pack-manifest.json at the root of an evaluation pack (contracts.md \u00a77). An evaluation pack is a downloadable, versioned bundle produced by ingest from staged reference/observation data, so a model can be scored locally with `oceanbench evaluate-local`. The manifest is self-describing: the local-evaluate CLI reads it alone to locate every reference, observation store and baseline the pack carries. It also stamps (contracts.md \u00a71) the upstream product identifiers and retrieval dates the pack derives from, and carries the Copernicus Marine attribution and disclaimer (contracts.md \u00a711).",
+  "description": "pack-manifest.json at the root of an evaluation pack (contracts.md \u00a77). An evaluation pack is a downloadable, versioned bundle produced by ingest from staged reference/observation data, so a model can be scored locally with `oceanbench evaluate`. The manifest is self-describing: the evaluate CLI reads it alone to locate every reference, observation store and baseline the pack carries. It also stamps (contracts.md \u00a71) the upstream product identifiers and retrieval dates the pack derives from, and carries the Copernicus Marine attribution and disclaimer (contracts.md \u00a711).",
   "type": "object",
   "additionalProperties": false,
   "required": [

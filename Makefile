@@ -44,25 +44,10 @@ reuse-annotate:
 	reuse annotate --year 2025 --copyright "Mercator Ocean International <https://www.mercator-ocean.eu/>" --license EUPL-1.2 --recursive . --skip-unrecognised
 	reuse download --all
 
-SAMPLE_FILES := $(wildcard assets/*_sample.py)
-IBI_SAMPLE_FILE := assets/glonet_sample.py
-IBI_NOTEBOOK := glonet_sample.ibi.report.ipynb
-
-compare-notebooks: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
-compare-notebooks:
-	${ACTIVATE_ENVIRONMENT}
-	@for f in $(SAMPLE_FILES); do \
-		name=$$(basename $$f .py); \
-		python tests/compare_notebook.py assets/$$name.global.report.ipynb $$name.global.report.ipynb; \
-	done
-	python tests/compare_notebook.py assets/$(IBI_NOTEBOOK) $(IBI_NOTEBOOK)
-
 run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
-	$(MAKE) evaluate-samples
-	$(MAKE) compare-notebooks
 	poetry run pytest tests -n 8
 	poetry run pytest --doctest-modules oceanbench/datasets/*
 

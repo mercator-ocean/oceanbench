@@ -82,17 +82,17 @@ oceanbench.datasets.reference.glorys_reanalysis_1_degree()
 
 ## Evaluate your system with OceanBench
 
-The evaluation of a system consists of the sequential execution of a Python notebook that runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).
+The evaluation of a system runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html). It writes the parquet scores the benchmark website reads, a scorecard laying the system over the published challengers, and, on request, the viewer artifacts behind the map. `oceanbench view` serves those artifacts locally for inspection.
 
 The OceanBench documentation describes [the shape a challenger dataset](https://oceanbench.readthedocs.io/en/latest/shape-of-the-challenger-dataset.html) must have, as well as [the definitions of the methods used to evaluate systems](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
 
 ### Official evaluation
 
-All official challenger notebooks are maintained and remain executable in order to update the scores with new OceanBench versions (all official challengers are re-evaluated with each new version).
+All official challengers are re-scored with each new OceanBench version, straight from the files that open their datasets, so the published scores always come from the current evaluation code.
 
 To officially submit your system to OceanBench, please open an issue on this repository attaching one of the following:
 
-1. The executed notebook resulting from an [interactive](#interactive-evaluation) or [programmatic](#programmatic-evaluation) evaluation.
+1. The parquet scores and scorecard resulting from an [interactive](#interactive-evaluation) or [programmatic](#programmatic-evaluation) evaluation.
 2. A way to access the system output data in a standard format (e.g. Zarr or NetCDF).
 3. A way to execute the system code or container along with clear instructions for how to run it (e.g., input/output format, required dependencies, etc.).
 
@@ -106,10 +106,10 @@ In addition, please provide the following metadata:
 
 ### Interactive evaluation
 
-Checkout [this notebook](https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.global.report.ipynb) that evaluates a sample (two forecasts) of the GLONET system on OceanBench.
-The resulting executed notebook is used as the evaluation report of the system, and its content is used to fulfill the OceanBench score table.
+Checkout [this sample](https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.py) that opens a sample (two forecasts) of the GLONET system, and score it with `oceanbench evaluate assets/glonet_sample.py`.
+The run writes the parquet scores and the viewer artifacts that fulfill the OceanBench score table.
 
-You can replace the cell that opens the challenger datasets with your code and execute the notebook.
+You can replace the code that opens the challenger datasets with your own, as long as the file assigns `challenger_dataset`.
 
 #### Execute on your own resources
 
@@ -169,12 +169,12 @@ See [Evaluation](docs/local-evaluation.md) for forecast layouts, metrics, and ou
 
 
 ```python
-import oceanbench
+from oceanbench.packs.evaluate import evaluate
 
-oceanbench.evaluate_challenger("path/to/file/opening/the/challenger/datasets.py")
+evaluate("path/to/file/opening/the/challenger/datasets.py", output_directory="oceanbench-evaluation")
 ```
 
-More details in the [documentation](https://oceanbench.readthedocs.io/en/latest/source/oceanbench.html#oceanbench.evaluate_challenger).
+More details in the [documentation](https://oceanbench.readthedocs.io/en/latest/source/oceanbench.html).
 
 ### Dependency on the Copernicus Marine Service
 
