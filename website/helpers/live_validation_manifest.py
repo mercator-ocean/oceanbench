@@ -14,15 +14,9 @@ from helpers.live_validation_report import (
 
 DEFAULT_MANIFEST_PATH = "reports/nrt-validation-manifest.json"
 DEFAULT_REGION = "global"
-REPORT_PAGE_NAMES = {
-    ("octo-glonet-p1d", "global"): "glonet-forecast-validation.html",
-    ("octo-glonet2-p1d", "global"): "glonet2-forecast-validation.html",
-    ("octo-langya-p1d", "global"): "langya-forecast-validation.html",
-    ("octo-wenhai-p1d", "global"): "wenhai-forecast-validation.html",
-    ("octo-xihe-p1d", "global"): "xihe-forecast-validation.html",
-    ("octo-glonet2-ibi-p1d", "ibi"): "glonet2-ibi-forecast-validation.html",
-    ("octo-glonet-hr-p1d", "global"): "glonet-hr-forecast-validation.html",
-}
+SYSTEM_ID_PREFIX = "octo-"
+SYSTEM_ID_SUFFIX = "-p1d"
+WEBSITE_DIRECTORY = Path(__file__).resolve().parent.parent
 
 
 def read_live_validation_manifest(
@@ -40,8 +34,11 @@ def live_validation_evaluations(
 
 
 def _report_page_name(evaluation: dict) -> str | None:
-    key = (str(evaluation["system_id"]), str(evaluation.get("region", DEFAULT_REGION)))
-    return REPORT_PAGE_NAMES.get(key)
+    system_slug = str(evaluation["system_id"]).removeprefix(SYSTEM_ID_PREFIX).removesuffix(SYSTEM_ID_SUFFIX)
+    page_stem = f"{system_slug}-forecast-validation"
+    if not (WEBSITE_DIRECTORY / f"{page_stem}.qmd").exists():
+        return None
+    return f"{page_stem}.html"
 
 
 def _report_cell(evaluation: dict) -> str:
