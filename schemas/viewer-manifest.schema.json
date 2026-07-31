@@ -22,6 +22,10 @@
       "description": "Optional evaluation year of the dataset.",
       "type": "integer"
     },
+    "has_columns": {
+      "description": "Whether this dataset publishes a water-column store (<slug>.columns.zarr) beside its pyramid. The viewer offers the water-column mode from this key; when it is absent (manifests written before it existed) the viewer falls back to probing the store.",
+      "type": "boolean"
+    },
     "provenance": {
       "description": "Optional data-provenance stamp: the oceanbench pipeline version that produced this dataset's artifacts, when they were generated, and the originating source commit when known.",
       "type": "object",

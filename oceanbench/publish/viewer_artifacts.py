@@ -108,6 +108,7 @@ PROVENANCE_KEY = "provenance"
 _MATCHUP_PROVENANCE_METADATA_KEY = b"oceanbench_provenance"
 
 FINGERPRINT_KEY = "fingerprint"
+HAS_COLUMNS_KEY = "has_columns"
 PYRAMID_MANIFEST_SUFFIX = ".viewer-manifest.json"
 
 # Keys dropped from every JSON document before it is hashed. They move on every run without the
@@ -236,6 +237,22 @@ def dataset_fingerprint(root: str | os.PathLike, dataset_slug: str) -> str | Non
             digest.update(str(path.stat().st_size).encode("ascii"))
         digest.update(b"\n")
     return digest.hexdigest()
+
+
+def stamp_manifest_has_columns(manifest_path: str | os.PathLike | None, has_columns: bool) -> bool:
+    """Record in a pyramid manifest whether this dataset publishes a water-column store.
+
+    The viewer reads ``has_columns`` to decide whether to offer the water-column mode. Returns
+    whether the manifest was stamped; a missing manifest is a no-op.
+    """
+    if manifest_path is None:
+        return False
+    path = Path(manifest_path)
+    if not path.is_file():
+        return False
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps({**manifest, HAS_COLUMNS_KEY: has_columns}, sort_keys=True, indent=2), encoding="utf-8")
+    return True
 
 
 def read_manifest_fingerprint(manifest_path: str | os.PathLike) -> str | None:
@@ -1018,7 +1035,7 @@ def write_viewer_artifacts(
     matchups_context,
     matchup_variables=None,
     matchup_max_workers: int | None = None,
-    enable_column_store: bool = False,
+    enable_column_store: bool = True,
 ) -> ViewerArtifactsResult:
     """Produce every viewer serving artifact for one evaluated dataset into ``output_directory``.
 
@@ -1091,6 +1108,10 @@ def write_viewer_artifacts(
             column_store_zarr_path = column_store.zarr_path
         except Exception as error:  # noqa: BLE001
             flags.append(f"column store skipped: {error}")
+
+    # The viewer offers the water-column mode straight from the manifest instead of probing the
+    # store with a request that 404s when there is none.
+    stamp_manifest_has_columns(pyramid_manifest_path, column_store_zarr_path is not None)
 
     year_error_geography_path = str(insights_directory / YEAR_ERROR_GEOGRAPHY_FILENAME)
     year_rmsd_by_start_path = str(insights_directory / YEAR_RMSD_BY_START_FILENAME)

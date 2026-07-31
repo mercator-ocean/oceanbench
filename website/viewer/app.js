@@ -1579,11 +1579,17 @@ function columnModeActive() {
   return shared.overlayMode === "column" && !isDiffView();
 }
 
-// Resolve (once, cached) whether a challenger publishes a water-column store. A missing
-// store 404s on its .zmetadata; loadStore then rejects and we remember `false` so the
-// feature is simply not offered for that challenger — no retries, no console noise.
+// Resolve (once, cached) whether a challenger publishes a water-column store. The manifest
+// says so outright with `has_columns`; manifests written before that key existed do not, and
+// for those a missing store 404s on its .zmetadata, loadStore rejects and we remember `false`
+// so the feature is simply not offered for that challenger — no retries, no console noise.
 async function ensureColumnStore(slug) {
   if (columnStores.has(slug)) return columnStores.get(slug);
+  const manifest = manifestFor(slug);
+  if (manifest && manifest.has_columns === false) {
+    columnStores.set(slug, false);
+    return false;
+  }
   let store = false;
   try {
     store = await loadStore(resolveColumnStoreUrl(slug));

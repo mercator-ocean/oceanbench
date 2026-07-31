@@ -2,30 +2,37 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-"""Native-resolution water-column store for the viewer (contracts.md §6).
+"""One-degree water-column store for the viewer (contracts.md §6).
 
 The field pyramid (``oceanbench.pyramids``) serves *maps*: one surface (or 15 m)
 layer per fetch, coarsened for pan/zoom. It deliberately drops the depth axis. The
 column store is its complement — it serves *profiles and sections*: the full water
-column of temperature and salinity at the native horizontal grid, so a click on the
-map reads a whole vertical profile (all depths at one point) or a section without any
-server-side compute. Only ``sea_water_potential_temperature`` and
-``sea_water_salinity`` are stored; every other variable is skipped.
+column of temperature and salinity, so a click on the map reads a whole vertical
+profile (all depths at one point) or a section without any server-side compute. Only
+``sea_water_potential_temperature`` and ``sea_water_salinity`` are stored; every other
+variable is skipped.
+
+Horizontal grid: every dataset is written on the 1-degree grid, whatever its native
+resolution. A profile is a vertical read, not a map: the extra horizontal detail of a
+native grid buys the profile view nothing while multiplying the object count and the
+per-click download by two orders of magnitude. The regrid reuses the same
+``oceanbench.core.interpolate`` target grid and interpolation the ``*_1_degree``
+challengers are built from, so a native store and its 1-degree variant land on the
+identical grid; a dataset already on that grid is written through untouched. The full
+native depth axis is kept.
 
 Layout: ``<slug>.columns.zarr`` sits beside the ``<slug>.zarr`` pyramid, is zarr v2
 with consolidated metadata (the flavour the viewer's ``zarr.js`` already reads), and
 holds one array per variable with dims ``(start_date, lead_day, depth, latitude,
-longitude)`` at the native horizontal grid — no regridding. Each variable is the same
-quantized ``uint16`` (per-variable ``scale_factor`` / ``add_offset``, land/missing =
-``_FillValue`` 65535, DEFLATE) as the pyramid, so round-trip error stays at or below
-half a quantization step and the browser decodes tiles with the platform
-``DecompressionStream('deflate')`` — no wasm codec.
+longitude)``. Each variable is the same quantized ``uint16`` (per-variable
+``scale_factor`` / ``add_offset``, land/missing = ``_FillValue`` 65535, DEFLATE) as the
+pyramid, so round-trip error stays at or below half a quantization step and the browser
+decodes tiles with the platform ``DecompressionStream('deflate')`` — no wasm codec.
 
-Chunking arithmetic (the whole point of this artifact)
-------------------------------------------------------
-The reference native grid is GLO12: ``start_date=52, lead_day=10, depth=50,
-latitude=2041, longitude=4320`` (``oceanbench.datasets.challenger``). Two hard
-targets pull against each other:
+Chunking arithmetic
+-------------------
+The 1-degree global grid is ``start_date=52, lead_day=10, depth=50, latitude=170,
+longitude=360``. Two hard targets pull against each other:
 
 * a single profile click (1 start, 1 lead, all depths, 1 point, 1 variable) must
   download at most ~1.5 MB compressed — the client fetches whole chunks, so the
@@ -34,21 +41,22 @@ targets pull against each other:
   because an object store charges per object and the browser lists them.
 
 Depth must be contiguous (a profile is one axis read), so the depth chunk is the full
-50 levels — never split. That fixes ``depth`` in every chunk. The two remaining levers
+depth axis — never split. That fixes ``depth`` in every chunk. The two remaining levers
 are the horizontal tile ``(latitude, longitude)`` and whether the 10 lead days are
 packed into one chunk:
 
 * NOT packing leads (lead chunk = 1) keeps a click small but multiplies the object
-  count by 10; with a click-sized tile it overshoots 300k badly.
+  count by 10.
 * Packing all 10 leads (lead chunk = 10) cuts the object count 10x. A click then
   downloads all leads of the point — which is exactly what a lead-scrubbing profile
-  view wants — and stays within budget once the tile is small enough.
+  view wants.
 
-So leads are packed and the chunk is ``[start=1, lead=10, depth=50, lat=64, lon=64]``:
+So leads are packed and the chunk is ``[start=1, lead=10, depth=50, lat=64, lon=64]``,
+the layout the already-published 1-degree stores use:
 
-* Object count = ``ceil(2041/64) x ceil(4320/64)`` tiles ``= 32 x 68 = 2176`` per
-  ``(start, variable)``; ``x 52 starts x 2 variables = 226,304`` chunk objects, under
-  the 300k budget (metadata objects are a negligible handful).
+* Object count = ``ceil(170/64) x ceil(360/64)`` tiles ``= 3 x 6 = 18`` per
+  ``(start, variable)``; ``x 52 starts x 2 variables = 1,872`` chunk objects, far under
+  the 300k budget.
 * Click chunk raw size = ``1 x 10 x 50 x 64 x 64 x 2 bytes = 4,096,000 B ~= 3.9 MiB``.
   Temperature and salinity are smooth, and every chunk carries land/missing
   ``_FillValue`` runs, so DEFLATE on the quantized ``uint16`` reaches well past 2.6x on
@@ -58,8 +66,7 @@ So leads are packed and the chunk is ``[start=1, lead=10, depth=50, lat=64, lon=
   assumed ratio.
 
 Both levers are parameters (``latitude_tile_size``, ``longitude_tile_size``,
-``pack_leads``) so a coarser or finer native grid can be retuned without touching the
-call site; the defaults above are for the GLO12-scale native grid.
+``pack_leads``) so a different grid can be retuned without touching the call site.
 
 Streaming: the year is never materialised. The per-variable quantization range comes
 from a single lazy ``dask`` min/max pass (no data pulled into memory), then the store
@@ -73,11 +80,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import dask
+import numpy
 import xarray
 
 from oceanbench.core.attribution import copernicus_marine_attribution_attrs
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.interpolate import apply_one_degree_interpolation, one_degree_target_grid
 from oceanbench.pyramids.builder import LEAD_DAY_DIMENSION, START_DATE_DIMENSION
 from oceanbench.pyramids.quantization import Quantization, quantization_for_range, zarr_encoding
 
@@ -103,13 +112,29 @@ class ColumnStoreResult:
     object_count: int
 
 
+def _on_one_degree_grid(selected: xarray.Dataset) -> xarray.Dataset:
+    """The two column variables on the 1-degree grid, interpolated only when they are not already.
+
+    Uses the same target grid and interpolation as the ``*_1_degree`` challengers
+    (``oceanbench.core.interpolate``), so a native dataset and its 1-degree variant produce the
+    same column-store grid. A dataset already on that grid is returned untouched.
+    """
+    latitude, longitude = one_degree_target_grid(selected)
+    already_one_degree = numpy.array_equal(selected[Dimension.LATITUDE.key()].values, latitude) and numpy.array_equal(
+        selected[Dimension.LONGITUDE.key()].values, longitude
+    )
+    if already_one_degree:
+        return selected
+    return apply_one_degree_interpolation(selected, latitude, longitude)
+
+
 def _column_variables(dataset: xarray.Dataset) -> xarray.Dataset:
-    """Temperature and salinity at the native grid, renamed to viewer coordinates.
+    """Temperature and salinity on the 1-degree grid, renamed to viewer coordinates.
 
     The forecast dataset carries dims ``(first_day_datetime, lead_day_index, depth,
-    latitude, longitude)``; this keeps the full depth axis and renames the two forecast
-    dimensions to the viewer's ``start_date`` and 1-based ``lead_day`` (matching the
-    pyramid layer coordinates) without touching the native horizontal grid.
+    latitude, longitude)``; this keeps the full depth axis, coarsens the horizontal grid to
+    1 degree and renames the two forecast dimensions to the viewer's ``start_date`` and 1-based
+    ``lead_day`` (matching the pyramid layer coordinates).
     """
     standardised = rename_dataset_with_standard_names(dataset)
     present = [name for name in COLUMN_VARIABLES if name in standardised.data_vars]
@@ -121,7 +146,7 @@ def _column_variables(dataset: xarray.Dataset) -> xarray.Dataset:
     for name in present:
         if DEPTH_DIMENSION not in standardised[name].dims:
             raise ValueError(f"column-store variable {name!r} has no depth axis; got dims {standardised[name].dims}")
-    selected = standardised[present]
+    selected = _on_one_degree_grid(standardised[present])
     lead_days = selected[Dimension.LEAD_DAY_INDEX.key()].values + 1
     return (
         selected.rename(
@@ -214,10 +239,10 @@ def build_column_store(
     longitude_tile_size: int = DEFAULT_LONGITUDE_TILE_SIZE,
     pack_leads: bool = True,
 ) -> ColumnStoreResult:
-    """Write the native-resolution temperature/salinity column store and return its handle.
+    """Write the 1-degree temperature/salinity column store and return its handle.
 
     ``dataset`` is a forecast dataset (dims ``first_day_datetime, lead_day_index, depth,
-    latitude, longitude``); only temperature and salinity are stored, at the native
+    latitude, longitude``); only temperature and salinity are stored, on the 1-degree
     horizontal grid, quantized to ``uint16`` with depth contiguous in every chunk. The
     store is written one forecast start at a time (never materialising the year) as a
     consolidated zarr v2 store at ``output_path`` (conventionally ``<slug>.columns.zarr``).

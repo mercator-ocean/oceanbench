@@ -8,6 +8,7 @@ import numpy
 import pytest
 import xarray
 
+from oceanbench.core.interpolate import apply_one_degree_interpolation, one_degree_target_grid
 from oceanbench.publish.column_store import (
     COLUMN_STORE_SUFFIX,
     DEFAULT_LATITUDE_TILE_SIZE,
@@ -16,7 +17,7 @@ from oceanbench.publish.column_store import (
     object_count,
 )
 from oceanbench.pyramids.builder import _compressor
-from oceanbench.pyramids.quantization import quantization_for_range, zarr_encoding
+from oceanbench.pyramids.quantization import quantization_for_range
 
 try:
     import numcodecs
@@ -77,17 +78,25 @@ def _synthetic_challenger(
     depth = numpy.linspace(0.5, 5700.0, depths).astype("float32")
     dims = (_START, _LEAD, "depth", "latitude", "longitude")
     temperature = _realistic_column_field(
-        starts=starts, leads=leads, depths=depths, latitudes=latitudes, longitudes=longitudes,
-        generator=generator, floor=2.0,
+        starts=starts,
+        leads=leads,
+        depths=depths,
+        latitudes=latitudes,
+        longitudes=longitudes,
+        generator=generator,
+        floor=2.0,
     )
     salinity = _realistic_column_field(
-        starts=starts, leads=leads, depths=depths, latitudes=latitudes, longitudes=longitudes,
-        generator=generator, floor=34.0,
+        starts=starts,
+        leads=leads,
+        depths=depths,
+        latitudes=latitudes,
+        longitudes=longitudes,
+        generator=generator,
+        floor=34.0,
     )
     coordinates = {
-        _START: numpy.array(
-            ["2024-01-03", "2024-01-10", "2024-01-17", "2024-01-24"][:starts], dtype="datetime64[ns]"
-        ),
+        _START: numpy.array(["2024-01-03", "2024-01-10", "2024-01-17", "2024-01-24"][:starts], dtype="datetime64[ns]"),
         _LEAD: numpy.arange(leads),
         "depth": depth,
         "latitude": latitudes,
@@ -115,17 +124,38 @@ def test_quantization_round_trip_within_half_step():
 
 
 @pytest.mark.skipif(zarr is None, reason="zarr required")
-def test_writes_only_temperature_and_salinity_at_native_grid(tmp_path):
+def test_writes_only_temperature_and_salinity_on_the_one_degree_grid(tmp_path):
     dataset = _synthetic_challenger()
     result = build_column_store(dataset, output_path=str(tmp_path / f"synthetic{COLUMN_STORE_SUFFIX}"))
     assert set(result.variables) == {_TEMPERATURE, _SALINITY}
     store = xarray.open_zarr(result.zarr_path, consolidated=True)
     assert set(store.data_vars) == {_TEMPERATURE, _SALINITY}
-    assert store.sizes["latitude"] == dataset.sizes["latitude"]
-    assert store.sizes["longitude"] == dataset.sizes["longitude"]
+    expected_latitude, expected_longitude = one_degree_target_grid(dataset)
+    assert numpy.array_equal(store["latitude"].values, expected_latitude)
+    assert numpy.array_equal(store["longitude"].values, expected_longitude)
+    # The native depth axis is kept whole; only the horizontal grid is coarsened.
     assert store.sizes["depth"] == dataset.sizes["depth"]
+    assert numpy.array_equal(store["depth"].values, dataset["depth"].values)
     assert store.sizes["start_date"] == dataset.sizes[_START]
     assert list(store["lead_day"].values) == list(range(1, dataset.sizes[_LEAD] + 1))
+
+
+@pytest.mark.skipif(zarr is None, reason="zarr required")
+def test_dataset_already_at_one_degree_is_written_through_unchanged(tmp_path):
+    dataset = _synthetic_challenger(starts=1, leads=2, depths=4, latitude_size=8, longitude_size=8)
+    latitude = numpy.arange(-3.5, 4.5, 1.0)
+    longitude = numpy.arange(-3.5, 4.5, 1.0)
+    dataset = dataset.assign_coords(latitude=latitude, longitude=longitude)
+    result = build_column_store(dataset, output_path=str(tmp_path / f"onedeg{COLUMN_STORE_SUFFIX}"))
+    store = xarray.open_zarr(result.zarr_path, consolidated=True)
+    assert numpy.array_equal(store["latitude"].values, latitude)
+    assert numpy.array_equal(store["longitude"].values, longitude)
+    # No interpolation ran, so the values are the source values to within the quantization step.
+    original = dataset[_TEMPERATURE].isel({_START: 0, _LEAD: 0}).values
+    decoded = store[_TEMPERATURE].isel(start_date=0, lead_day=0).values
+    step = float(store[_TEMPERATURE].encoding["scale_factor"])
+    finite = numpy.isfinite(original)
+    assert numpy.all(numpy.abs(decoded[finite] - original[finite]) <= step)
 
 
 @pytest.mark.skipif(zarr is None, reason="zarr required")
@@ -146,8 +176,12 @@ def test_round_trip_through_store_within_half_step(tmp_path):
     dataset = _synthetic_challenger(starts=2, depths=20, latitude_size=80, longitude_size=100)
     result = build_column_store(dataset, output_path=str(tmp_path / f"synthetic{COLUMN_STORE_SUFFIX}"))
     store = xarray.open_zarr(result.zarr_path, consolidated=True)
+    latitude, longitude = one_degree_target_grid(dataset)
+    interpolated = apply_one_degree_interpolation(dataset[[_TEMPERATURE, _SALINITY]], latitude, longitude)
     for name in (_TEMPERATURE, _SALINITY):
-        original = dataset[name].rename({_START: "start_date", _LEAD: "lead_day"}).values
+        # The store is written on the 1-degree grid, so the round-trip bound is measured against
+        # the interpolated field, not the native one.
+        original = interpolated[name].rename({_START: "start_date", _LEAD: "lead_day"}).values
         decoded = store[name].values
         finite = numpy.isfinite(original)
         step = float(store[name].encoding["scale_factor"])
@@ -163,16 +197,14 @@ def test_round_trip_through_store_within_half_step(tmp_path):
 
 
 def test_object_count_and_click_cost_arithmetic_meets_targets():
-    """The GLO12-scale native grid stays within both hard targets by construction."""
-    sizes = {"start_date": 52, "lead_day": 10, "depth": 50, "latitude": 2041, "longitude": 4320}
+    """The global 1-degree grid stays within both hard targets by construction."""
+    sizes = {"start_date": 52, "lead_day": 10, "depth": 50, "latitude": 170, "longitude": 360}
     chunk_sizes = {"start_date": 1, "lead_day": 10, "depth": 50, "latitude": 64, "longitude": 64}
     latitude_tiles = -(-sizes["latitude"] // chunk_sizes["latitude"])
     longitude_tiles = -(-sizes["longitude"] // chunk_sizes["longitude"])
-    count = (
-        sizes["start_date"] * 1 * 1 * latitude_tiles * longitude_tiles * 2
-    )
-    assert (latitude_tiles, longitude_tiles) == (32, 68)
-    assert count == 226_304
+    count = sizes["start_date"] * 1 * 1 * latitude_tiles * longitude_tiles * 2
+    assert (latitude_tiles, longitude_tiles) == (3, 6)
+    assert count == 1_872
     assert count <= 300_000
     # Uncompressed click chunk (pre-DEFLATE) — the compressed number is measured in the next test.
     raw_bytes = chunk_sizes["lead_day"] * chunk_sizes["depth"] * chunk_sizes["latitude"] * chunk_sizes["longitude"] * 2
@@ -185,8 +217,9 @@ def test_object_count_matches_written_store(tmp_path):
     result = build_column_store(dataset, output_path=str(tmp_path / f"synthetic{COLUMN_STORE_SUFFIX}"))
     store = xarray.open_zarr(result.zarr_path, consolidated=True)
     assert result.object_count == object_count(store, result.chunk_shape)
-    # 4 starts x (ceil(160/64)=3 x ceil(200/64)=4) tiles x 2 vars = 96.
-    assert result.object_count == 4 * 3 * 4 * 2
+    # The 160x200 native grid becomes 170x360 at 1 degree:
+    # 4 starts x (ceil(170/64)=3 x ceil(360/64)=6) tiles x 2 vars = 144.
+    assert result.object_count == 4 * 3 * 6 * 2
 
 
 @pytest.mark.skipif(zarr is None, reason="zarr required")
