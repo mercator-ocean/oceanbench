@@ -104,7 +104,19 @@ def test_readme_embeds_attribution_and_disclaimer_verbatim():
     readme = _pack_readme(_valid_manifest())
     assert COPERNICUS_MARINE_CREDIT in readme
     assert COPERNICUS_MARINE_DISCLAIMER in readme
-    assert "No climatology / persistence baselines are bundled" in readme
+    assert "No baselines are bundled in this pack" in readme
+
+
+def test_readme_lists_the_bundled_baselines():
+    manifest = _valid_manifest()
+    manifest["baselines_available"] = True
+    manifest["contents"]["baselines"] = {
+        "climatology": {"path": "baselines/climatology.zarr", "variables": ["x"], "depths": ["surface"]},
+        "persistence": {"path": "baselines/persistence.zarr", "variables": ["x"], "depths": ["surface"]},
+    }
+    readme = _pack_readme(manifest)
+    assert "baselines/climatology.zarr" in readme
+    assert "baselines/persistence.zarr" in readme
 
 
 def test_pack_build_result_shape():

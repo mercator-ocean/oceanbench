@@ -17,7 +17,7 @@ import pandas
 import pytest
 import xarray
 
-from oceanbench.cli import _build_parser, main
+from oceanbench.cli import _build_parser
 from oceanbench.packs.evaluate import (
     load_pack_manifest,
     open_forecast_dataset,
@@ -28,6 +28,16 @@ from oceanbench.packs.evaluate import (
 )
 
 _AGREEMENT_TOLERANCE = 1e-9
+
+
+@pytest.fixture
+def restored_runtime_configuration():
+    """Keep a test that installs a global runtime configuration from leaking it into the next one."""
+    from oceanbench.core import runtime_configuration as runtime_configuration_module
+
+    previous = runtime_configuration_module._runtime_configuration
+    yield
+    runtime_configuration_module._runtime_configuration = previous
 
 
 def test_evaluate_cli_has_only_the_approved_surface():
@@ -53,6 +63,18 @@ def test_evaluate_cli_has_only_the_approved_surface():
         "--s3-prefix",
         "--s3-endpoint",
         "--s3-env-file",
+        # Restored from the 0.4.0 CLI so an old command line still runs, on the new route.
+        "--all-challengers",
+        "--region-file",
+        "--cache-dir",
+        "--stage",
+        "--stage-dir",
+        "--stage-max-workers",
+        "--remote-retries",
+        "--keep-stage",
+        "--output-bucket",
+        "--output-prefix",
+        "--max-workers",
     }
 
 
@@ -67,23 +89,122 @@ def test_scores_are_the_only_default_output():
 
 def test_a_registered_challenger_slug_is_accepted_as_the_target():
     arguments = _build_parser().parse_args(["evaluate", "glonet_1_degree"])
-    assert arguments.target == "glonet_1_degree"
+    assert arguments.target == ["glonet_1_degree"]
 
 
-def test_evaluate_local_is_a_hidden_deprecated_alias(monkeypatch, capsys):
-    parser = _build_parser()
-    assert "evaluate-local" not in parser.format_help()
-    monkeypatch.setattr("sys.argv", ["oceanbench", "evaluate-local", "forecast.zarr"])
-    monkeypatch.setattr("oceanbench.cli._run_evaluate", lambda _args: 0)
+def test_a_zero_four_command_line_still_parses():
+    arguments = _build_parser().parse_args(
+        [
+            "evaluate",
+            "challenger_datasets/glonet.py",
+            "--output-bucket",
+            "project-oceanbench",
+            "--output-prefix",
+            "dev/reports",
+            "--max-workers",
+            "4",
+            "--stage",
+            "all",
+            "--stage-dir",
+            "/scratch/stage",
+            "--stage-max-workers",
+            "8",
+            "--region",
+            "ibi",
+        ]
+    )
+    assert arguments.target == ["challenger_datasets/glonet.py"]
+    assert arguments.output_bucket == "project-oceanbench"
+    assert arguments.output_prefix == "dev/reports"
+    assert arguments.stage == ["all"]
 
-    try:
-        main()
-    except SystemExit as exit:
-        assert exit.code == 0
-    else:
-        raise AssertionError("Expected CLI entry point to exit")
 
-    assert capsys.readouterr().err == ("note: 'oceanbench evaluate-local' is deprecated; use 'oceanbench evaluate'\n")
+def test_stage_and_cache_flags_reach_the_runtime_configuration(restored_runtime_configuration):
+    from oceanbench.cli import _apply_runtime_configuration
+    from oceanbench.core.runtime_configuration import current_runtime_configuration
+
+    arguments = _build_parser().parse_args(
+        ["evaluate", "forecast.zarr", "--stage", "observations", "--stage-dir", "/scratch/stage", "--cache-dir", "/c"]
+    )
+    _apply_runtime_configuration(arguments)
+    configuration = current_runtime_configuration()
+
+    assert configuration.staged_components == ("observations",)
+    assert configuration.stage_directory == "/scratch/stage"
+    assert str(configuration.local_cache_directory()) == "/c"
+
+
+def test_the_chunk_cache_stays_off_when_no_cache_directory_is_given(monkeypatch, restored_runtime_configuration):
+    from oceanbench.cli import _apply_runtime_configuration
+    from oceanbench.core.runtime_configuration import current_runtime_configuration
+
+    monkeypatch.delenv("OCEANBENCH_LOCAL_CACHE", raising=False)
+    arguments = _build_parser().parse_args(["evaluate", "forecast.zarr"])
+    _apply_runtime_configuration(arguments)
+
+    assert current_runtime_configuration().local_cache_directory() is None
+
+
+def test_a_python_challenger_file_is_opened_by_its_challenger_dataset_variable(tmp_path):
+    from oceanbench.packs.evaluate import open_python_challenger_file
+
+    challenger_path = tmp_path / "challenger.py"
+    challenger_path.write_text(
+        'import xarray\n\nchallenger_dataset = xarray.Dataset({"thetao": ("x", [1.0, 2.0])})\n',
+        encoding="utf-8",
+    )
+
+    dataset = open_python_challenger_file(str(challenger_path))
+
+    assert list(dataset.data_vars) == ["thetao"]
+
+
+def test_a_python_challenger_file_without_the_variable_is_rejected(tmp_path):
+    from oceanbench.packs.evaluate import open_python_challenger_file
+
+    challenger_path = tmp_path / "challenger.py"
+    challenger_path.write_text("value = 1\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="challenger_dataset"):
+        open_python_challenger_file(str(challenger_path))
+
+
+def test_a_python_challenger_target_prints_the_new_pipeline_notice(monkeypatch, capsys, restored_runtime_configuration):
+    from oceanbench.cli import NEW_PIPELINE_NOTICE, _run_evaluate
+
+    arguments = _build_parser().parse_args(["evaluate", "/missing/challenger.py"])
+    monkeypatch.setattr("oceanbench.cli._evaluate_one_target", lambda *args, **kwargs: 0)
+
+    assert _run_evaluate(arguments) == 0
+    assert capsys.readouterr().err.splitlines() == [NEW_PIPELINE_NOTICE]
+
+
+def test_all_challengers_expands_to_the_registered_slugs(monkeypatch, capsys, restored_runtime_configuration):
+    from oceanbench.cli import NEW_PIPELINE_NOTICE, _run_evaluate
+    from oceanbench.runner.run import registered_challengers
+
+    scored = []
+    arguments = _build_parser().parse_args(["evaluate", "--all-challengers"])
+    monkeypatch.setattr(
+        "oceanbench.cli._evaluate_one_target", lambda _arguments, target, **kwargs: scored.append(target) or 0
+    )
+
+    assert _run_evaluate(arguments) == 0
+    assert scored == list(registered_challengers())
+    assert capsys.readouterr().err.splitlines() == [NEW_PIPELINE_NOTICE]
+
+
+def test_an_unknown_target_lists_the_accepted_forms_and_the_nearest_slug():
+    from oceanbench.packs.evaluate import _open_evaluation_target
+
+    with pytest.raises(ValueError) as error:
+        _open_evaluation_target("glonett")
+
+    message = str(error.value)
+    assert "a registered challenger slug" in message
+    assert "forecast zarr" in message
+    assert ".py file" in message
+    assert "Did you mean 'glonet'?" in message
 
 
 def _run(fixture, tmp_path, **overrides):

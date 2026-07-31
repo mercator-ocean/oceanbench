@@ -9,11 +9,15 @@ the gridded references (surface subset for a ``quick`` pack, all depths for ``fu
 Class-4 observation match-up store, the mean-dynamic-topography for the SSH->SLA conversion,
 a validated ``pack-manifest.json`` (stamping the upstream products and retrieval dates,
 contracts.md §1) and a ``README.md`` carrying the Copernicus Marine credit and disclaimer
-(contracts.md §11) verbatim. Baselines (climatology / persistence) are not available yet;
-the manifest supports optional baseline entries and flags their absence.
+(contracts.md §11) verbatim. Baseline forecasts (climatology / persistence) are bundled when
+``PackSources.baselines`` names them, and the manifest flags their absence otherwise.
 
-Only 1-degree data is cached locally, so the demo ``quick`` pack is built from the
-glonet-compatible 1-degree GLORYS + GLO12 surface subsets plus the observation store.
+The pack resolution follows the template challenger's own grid unless ``resolution`` overrides
+it; ``resolution="one_degree"`` reproduces the 1-degree demo pack that was the only shape
+available while only 1-degree data was cached locally.
+
+``pack-files.json`` is written last (:mod:`oceanbench.packs.fetch`): the flat index of every
+file in the tree that ``oceanbench fetch-pack`` enumerates to download a published pack.
 """
 
 from dataclasses import dataclass, field
@@ -42,7 +46,9 @@ from oceanbench.core.references.observations import (
     observations,
 )
 from oceanbench.core.regions import GLOBAL_REGION_NAME, subset_dataset_to_region
+from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
+from oceanbench.packs.fetch import write_pack_file_index
 from oceanbench.packs.manifest import PACK_MANIFEST_SCHEMA_VERSION, PackManifestResult, write_pack_manifest
 
 _CORE_REFERENCE_VARIABLES = [
@@ -67,7 +73,9 @@ _OBSERVATION_PRODUCT_ID = "OceanBench-observations-2024-v3 (INSITU/SLA/SST Coper
 
 _ALL_DEPTH_LABELS = ["surface", "50m", "100m", "200m", "300m", "500m"]
 
-_MEAN_DYNAMIC_TOPOGRAPHY_RESOLUTION = "one_degree"
+_BASELINE_PRODUCT_ID = "OceanBench baseline forecast (derived from Copernicus Marine GLORYS12)"
+
+DEFAULT_BASELINES = ("climatology", "persistence")
 
 
 @dataclass(frozen=True)
@@ -77,14 +85,15 @@ class PackSources:
     ``template_challenger`` is the challenger slug whose native grid and forecast starts
     define the pack (references are aligned to it); it is a template, not a scored model.
     ``start_limit`` bounds the number of forecast starts bundled (a demo pack keeps a handful).
-    ``baselines`` names any climatology / persistence baseline slugs to bundle (none yet).
+    ``baselines`` names the climatology / persistence challenger slugs to bundle as baseline
+    forecasts; pass the ``_1_degree`` variants alongside a 1-degree template challenger.
     """
 
     template_challenger: str
     references: tuple[str, ...] = ("glorys", "glo12")
     region: str = GLOBAL_REGION_NAME
     start_limit: int | None = None
-    baselines: tuple[str, ...] = ()
+    baselines: tuple[str, ...] = DEFAULT_BASELINES
 
 
 @dataclass(frozen=True)
@@ -142,6 +151,30 @@ def _build_reference_store(
     }
 
 
+def _build_baseline_store(
+    baseline_name: str,
+    start_date_values: numpy.ndarray,
+    region: str,
+    kind: str,
+    baselines_directory: Path,
+) -> dict:
+    baseline = challenger_datasets.__dict__[baseline_name]()
+    standard = rename_dataset_with_standard_names(baseline)
+    regional = subset_dataset_to_region(standard, region)
+    first_day_key = Dimension.FIRST_DAY_DATETIME.key()
+    selected_starts = numpy.flatnonzero(numpy.isin(regional[first_day_key].values, start_date_values))
+    limited = regional.isel({first_day_key: selected_starts})
+    present_variables = [variable.key() for variable in _CORE_REFERENCE_VARIABLES if variable.key() in limited]
+    selected = limited[present_variables]
+    subset = _surface_reference(selected) if kind == "quick" else selected
+    _write_zarr(subset, baselines_directory / f"{baseline_name}.zarr")
+    return {
+        "path": f"baselines/{baseline_name}.zarr",
+        "variables": sorted(str(name) for name in subset.data_vars),
+        "depths": ["surface"] if kind == "quick" else _ALL_DEPTH_LABELS,
+    }
+
+
 def _build_observation_store(
     full_template: xarray.Dataset,
     start_dates: numpy.ndarray,
@@ -157,14 +190,14 @@ def _build_observation_store(
     return {"path": "observations/observations.zarr"}
 
 
-def _bundle_mean_dynamic_topography(pack_directory: Path) -> dict:
-    load_mean_dynamic_topography(_MEAN_DYNAMIC_TOPOGRAPHY_RESOLUTION)
-    staged_path = _mean_dynamic_topography_stage_path(_MEAN_DYNAMIC_TOPOGRAPHY_RESOLUTION)
+def _bundle_mean_dynamic_topography(pack_directory: Path, resolution: str) -> dict:
+    load_mean_dynamic_topography(resolution)
+    staged_path = _mean_dynamic_topography_stage_path(resolution)
     destination = pack_directory / staged_path.name
     if destination.exists():
         shutil.rmtree(destination)
     shutil.copytree(staged_path, destination)
-    return {"path": staged_path.name, "resolution": _MEAN_DYNAMIC_TOPOGRAPHY_RESOLUTION}
+    return {"path": staged_path.name, "resolution": resolution}
 
 
 def _pack_readme(manifest: dict) -> str:
@@ -173,11 +206,11 @@ def _pack_readme(manifest: dict) -> str:
         f"depths: {', '.join(entry['depths'])})"
         for name, entry in sorted(manifest["contents"]["references"].items())
     )
+    bundled_baselines = manifest["contents"].get("baselines", {})
     baseline_note = (
-        "Climatology / persistence baselines are bundled (skill-vs-baseline available)."
-        if manifest["baselines_available"]
-        else "No climatology / persistence baselines are bundled yet, so skill-vs-baseline "
-        "cannot be computed locally from this pack."
+        "\n".join(f"- `{name}` — {entry['path']}" for name, entry in sorted(bundled_baselines.items()))
+        if bundled_baselines
+        else "No baselines are bundled in this pack, so skill-vs-baseline cannot be computed locally from it."
     )
     notes = "\n".join(f"- {note}" for note in manifest.get("notes", []))
     return f"""<!--
@@ -222,13 +255,23 @@ every reference, the observation match-up store and the mean-dynamic-topography.
 """
 
 
-def build_pack(kind: str, year: int, sources: PackSources, output_dir: str) -> PackBuildResult:
+def build_pack(
+    kind: str,
+    year: int,
+    sources: PackSources,
+    output_dir: str,
+    resolution: str | None = None,
+) -> PackBuildResult:
     """Build an evaluation pack directory (contracts.md §7) and return its manifest.
 
     ``kind`` is ``quick`` (surface reference fields, minutes to score) or ``full`` (all
-    depths). ``sources`` selects the template challenger, references, region and start count.
-    The produced directory carries the reference / observation / MDT stores, a validated
-    ``pack-manifest.json`` and a ``README.md`` with the Copernicus Marine attribution.
+    depths). ``sources`` selects the template challenger, references, region, start count and
+    the baseline forecasts to bundle. ``resolution`` overrides the grid resolution stamped in
+    the manifest and used to pick the mean-dynamic-topography variant; it defaults to the
+    template challenger's own grid, and ``"one_degree"`` reproduces the old demo pack.
+    The produced directory carries the reference / baseline / observation / MDT stores, a
+    validated ``pack-manifest.json``, a ``README.md`` with the Copernicus Marine attribution
+    and the ``pack-files.json`` download index.
     """
     if kind not in ("quick", "full"):
         raise ValueError(f"Unsupported pack kind: {kind!r} (expected 'quick' or 'full').")
@@ -245,7 +288,7 @@ def build_pack(kind: str, year: int, sources: PackSources, output_dir: str) -> P
     )
     start_date_values = template[Dimension.FIRST_DAY_DATETIME.key()].values
     start_dates = [_iso_date(value) for value in start_date_values]
-    resolution = "one_degree"
+    pack_resolution = resolution if resolution is not None else get_dataset_resolution(template)
 
     references = {
         reference_name: _build_reference_store(
@@ -253,22 +296,35 @@ def build_pack(kind: str, year: int, sources: PackSources, output_dir: str) -> P
         )
         for reference_name in sources.references
     }
+    baselines = {
+        baseline_name: _build_baseline_store(
+            baseline_name, start_date_values, sources.region, kind, pack_directory / "baselines"
+        )
+        for baseline_name in sources.baselines
+    }
     observation_entry = _build_observation_store(
         regional_full_template, start_date_values, sources.region, pack_directory / "observations"
     )
-    mean_dynamic_topography_entry = _bundle_mean_dynamic_topography(pack_directory)
+    mean_dynamic_topography_entry = _bundle_mean_dynamic_topography(pack_directory, pack_resolution)
 
     retrieved = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    upstream = [
-        {"name": reference_name, "product_id": _REFERENCE_PRODUCT_IDS[reference_name], "retrieved": retrieved}
-        for reference_name in sources.references
-    ] + [{"name": "observations", "product_id": _OBSERVATION_PRODUCT_ID, "retrieved": retrieved}]
+    upstream = (
+        [
+            {"name": reference_name, "product_id": _REFERENCE_PRODUCT_IDS[reference_name], "retrieved": retrieved}
+            for reference_name in sources.references
+        ]
+        + [{"name": "observations", "product_id": _OBSERVATION_PRODUCT_ID, "retrieved": retrieved}]
+        + [
+            {"name": baseline_name, "product_id": _BASELINE_PRODUCT_ID, "retrieved": retrieved}
+            for baseline_name in sources.baselines
+        ]
+    )
 
     flags: list[str] = []
-    baselines_available = bool(sources.baselines)
+    baselines_available = bool(baselines)
     notes: list[str] = []
     if not baselines_available:
-        note = "Baselines (climatology / persistence) are not available yet; skill-vs-baseline is unavailable locally."
+        note = "No baselines are bundled in this pack; skill-vs-baseline is unavailable locally."
         notes.append(note)
         flags.append(note)
     if kind == "quick":
@@ -282,7 +338,7 @@ def build_pack(kind: str, year: int, sources: PackSources, output_dir: str) -> P
         "kind": kind,
         "year": year,
         "region": sources.region,
-        "resolution": resolution,
+        "resolution": pack_resolution,
         "oceanbench_version": OCEANBENCH_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "start_dates": start_dates,
@@ -294,7 +350,7 @@ def build_pack(kind: str, year: int, sources: PackSources, output_dir: str) -> P
             "references": references,
             "observations": observation_entry,
             "mean_dynamic_topography": mean_dynamic_topography_entry,
-            "baselines": {},
+            "baselines": baselines,
         },
         "baselines_available": baselines_available,
         "notes": notes,
@@ -302,6 +358,7 @@ def build_pack(kind: str, year: int, sources: PackSources, output_dir: str) -> P
 
     result: PackManifestResult = write_pack_manifest(manifest, str(pack_directory))
     (pack_directory / "README.md").write_text(_pack_readme(manifest), encoding="utf-8")
+    write_pack_file_index(str(pack_directory))
 
     return PackBuildResult(
         pack_directory=str(pack_directory),
