@@ -9,6 +9,8 @@
 // Styling references the page CSS variables so both themes stay consistent; no
 // chart library is vendored.
 
+import { formatFixed } from "./render.js";
+
 const VIEW_WIDTH = 360;
 const VIEW_HEIGHT = 220;
 const PAD_LEFT = 40;
@@ -605,17 +607,25 @@ function ciBandPolygon(line, xOf, yOf) {
   return top.concat(bottom.reverse()).join(" ");
 }
 
+// An empty section is worth one line of explanation, not a full-height blank chart
+// area: the placeholder svg is only as tall as the sentence it carries.
+const EMPTY_VIEW_HEIGHT = 24;
+
 function emptyChart(title, message) {
   return (
-    svgOpen(title) +
-    `<text x="${VIEW_WIDTH / 2}" y="${VIEW_HEIGHT / 2}" class="empty" text-anchor="middle">${escapeText(message)}</text></svg>`
+    `<svg viewBox="0 0 ${VIEW_WIDTH} ${EMPTY_VIEW_HEIGHT}" class="rail-chart" role="img" aria-label="${escapeText(title)}" ` +
+    `preserveAspectRatio="xMidYMid meet">` +
+    `<text x="0" y="${EMPTY_VIEW_HEIGHT / 2 + 3}" class="empty">${escapeText(message)}</text></svg>`
   );
 }
 
 function formatTick(value) {
   if (value === 0) return "0";
-  if (value < 0.01 || value >= 1000) return value.toExponential(0);
-  return value < 1 ? value.toFixed(2) : value.toFixed(1);
+  // Magnitude, not signed value: a signed comparison sent every negative tick to
+  // exponential notation.
+  const magnitude = Math.abs(value);
+  if (magnitude < 0.01 || magnitude >= 1000) return value.toExponential(0);
+  return magnitude < 1 ? value.toFixed(2) : value.toFixed(1);
 }
 
 function formatKm(metres) {
@@ -625,7 +635,7 @@ function formatKm(metres) {
 }
 
 function formatValue(value, unit) {
-  const formatted = Math.abs(value) < 0.01 || Math.abs(value) >= 1000 ? value.toExponential(3) : value.toFixed(4);
+  const formatted = Math.abs(value) < 0.01 || Math.abs(value) >= 1000 ? value.toExponential(3) : formatFixed(value, 4);
   return unit ? `${formatted} ${unit}` : formatted;
 }
 

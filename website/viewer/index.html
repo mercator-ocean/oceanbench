@@ -30,6 +30,7 @@ SPDX-License-Identifier: EUPL-1.2
           <button type="button" data-layout="1" class="ghost-button">1 forecast</button>
           <button type="button" data-layout="2" class="ghost-button">2 forecasts</button>
         </div>
+        <div class="header-group-divider" aria-hidden="true"></div>
         <div class="display-switch" role="group" aria-label="Two-forecast display" hidden>
           <button type="button" data-display="side" class="ghost-button">Side by side</button>
           <button type="button" data-display="swipe" class="ghost-button">Swipe</button>
@@ -83,13 +84,13 @@ SPDX-License-Identifier: EUPL-1.2
           </select>
         </label>
 
-        <label>Overlay
+        <label>Insight
           <select id="overlay-mode">
             <option value="none">None</option>
-            <option value="eddies">Eddy census</option>
-            <option value="class4">Observation errors (Class-4)</option>
-            <option value="trajectories">Trajectories (Lagrangian)</option>
-            <option value="column" hidden disabled>Water column (click)</option>
+            <option value="eddies">Eddies</option>
+            <option value="class4">Observation errors</option>
+            <option value="trajectories">Trajectories</option>
+            <option value="column" hidden disabled>Water column</option>
           </select>
         </label>
         <label id="eddy-reference-field" hidden>Eddy reference
@@ -111,7 +112,7 @@ SPDX-License-Identifier: EUPL-1.2
         <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>
         <details class="hint-details">
           <summary>Navigation tips</summary>
-          <p class="hint">Scroll to zoom, drag to pan — all panels move together. Hover for the value in real units. With two forecasts, switch between side-by-side and swipe; in swipe, drag the divider.</p>
+          <p class="hint">Scroll to zoom, drag to pan. All panels move together. Hover for the value in real units. With two forecasts, switch between side by side and swipe; in swipe, drag the divider.</p>
         </details>
       </aside>
 

@@ -51,6 +51,7 @@ export function startParticleField(canvas, context) {
   let particles = [];
   let animationHandle = null;
   let seededForArea = -1;
+  let stopped = false;
 
   const random = Math.random;
 
@@ -90,8 +91,10 @@ export function startParticleField(canvas, context) {
   }
 
   function frame() {
-    if (!context.playing) {
-      animationHandle = requestAnimationFrame(frame);
+    // Park the loop instead of burning a frame on nothing: a paused layer or a
+    // backgrounded tab lets go of the rAF entirely, and resume() picks it back up.
+    if (!context.playing || document.hidden) {
+      animationHandle = null;
       return;
     }
     const desired = targetCount();
@@ -151,7 +154,18 @@ export function startParticleField(canvas, context) {
     animationHandle = requestAnimationFrame(frame);
   }
 
+  function resume() {
+    if (stopped || animationHandle !== null) return;
+    animationHandle = requestAnimationFrame(frame);
+  }
+
+  function onVisibilityChange() {
+    if (!document.hidden) resume();
+  }
+
   function stop() {
+    stopped = true;
+    document.removeEventListener("visibilitychange", onVisibilityChange);
     if (animationHandle !== null) cancelAnimationFrame(animationHandle);
     animationHandle = null;
     drawing.clearRect(0, 0, canvas.width, canvas.height);
@@ -160,11 +174,13 @@ export function startParticleField(canvas, context) {
   function resize() {
     drawing.clearRect(0, 0, canvas.width, canvas.height);
     reseed();
+    resume();
   }
 
   reseed();
+  document.addEventListener("visibilitychange", onVisibilityChange);
   animationHandle = requestAnimationFrame(frame);
-  return { stop, resize, reseed };
+  return { stop, resize, reseed, resume };
 }
 
 /**

@@ -34,7 +34,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 /* Nudge muted text a touch darker in the light theme so small muted text
    (e.g. .layer-info, rail captions) clears WCAG AA 4.5:1 on the light surfaces;
-   the shared #6c757d sat at ~4.33–4.48 against them. Dark theme is unaffected. */
+   the shared #6c757d sat at ~4.33 to 4.48 against them. Dark theme is unaffected. */
 :root[data-theme="light"] { --muted: #676d75; }
 
 * { box-sizing: border-box; }
@@ -90,6 +90,15 @@ body {
   padding-bottom: 0.4rem;
 }
 .layout-switch { display: inline-flex; gap: 0.25rem; }
+/* The layout switch and the display switch are two different questions. Without a
+   rule between them the six buttons read as one six-way segmented control. */
+.header-group-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.1rem 0.25rem;
+  background: var(--border);
+}
+.header-actions:has(.display-switch[hidden]) .header-group-divider { display: none; }
 .layout-switch .ghost-button { padding: 0.4rem 0.7rem; font-variant-numeric: tabular-nums; }
 .layout-switch .ghost-button.active,
 .ghost-button.active { border-color: var(--accent); color: var(--accent); }
@@ -132,8 +141,9 @@ body {
 .scope-switch { display: inline-flex; gap: 0.25rem; }
 .scope-switch .ghost-button { flex: 1; padding: 0.4rem 0.5rem; font-size: 0.74rem; }
 
-/* The overlay note only occupies sidebar space when it carries a message. */
-#overlay-note:empty { display: none; }
+/* The insight note always reserves two lines, empty or not, so switching insight
+   modes cannot shift every control below it up and down. */
+#overlay-note { min-height: 2.1rem; }
 
 /* Entire-year scope hides single-forecast-only controls; the lead slider and the
    Region view control stay. The standalone Overlay field and its dependent
@@ -160,21 +170,20 @@ body {
   font: inherit;
   padding: 0.35rem 0.45rem;
   color: var(--text);
-  background: var(--background);
+  background: var(--surface-strong);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
 .controls input[type="range"] { accent-color: var(--accent); width: 100%; }
 .control-group {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 0.6rem 0.7rem 0.75rem;
+  border: 0;
+  padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
 }
-.control-group legend { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 0.3rem; }
+.control-group legend { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0; }
 .lead-value { color: var(--accent); font-family: var(--mono); font-size: 0.8rem; }
 .hint { color: var(--muted); font-size: 0.72rem; margin: 0.15rem 0 0; }
 kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-strong); border: 1px solid var(--border); border-radius: 4px; padding: 0 0.25rem; }
@@ -218,7 +227,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 body.resizing-layout { cursor: col-resize; user-select: none; }
 body.resizing-layout.row { cursor: row-resize; }
 
-/* Panel grid — 1 / 2 / 4 synchronized panels. */
+/* Panel grid: 1 / 2 / 4 synchronized panels. */
 .panel-grid {
   flex: 1;
   min-height: 0;
@@ -250,6 +259,8 @@ body.resizing-layout.row { cursor: row-resize; }
   box-shadow: var(--shadow);
 }
 .panel.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow); }
+.panel-grid .panel { align-self: center; max-height: 100%; }
+.panel-grid .panel.head-only { align-self: stretch; }
 
 .panel-head {
   display: flex;
@@ -270,20 +281,27 @@ body.resizing-layout.row { cursor: row-resize; }
   white-space: nowrap;
 }
 /* The Okabe-Ito forecast blue (#0072B2) fails WCAG AA on the near-black dark
-   panel head (~3.5:1). Lighten the label toward white in dark theme only — hue is
-   preserved so Forecast 1 / Forecast 2 stay distinct — to clear 4.5:1 for the
+   panel head (~3.5:1). Lighten the label toward white in dark theme only, keeping
+   the hue so Forecast 1 / Forecast 2 stay distinct, to clear 4.5:1 for the
    small bold text. */
 :root[data-theme="dark"] .panel-forecast-label {
   color: color-mix(in srgb, var(--forecast-color, var(--accent, #1f6feb)) 78%, #ffffff);
 }
-.panel-head select { font-size: 0.72rem; max-width: min(9rem, 100%); min-width: 5.5rem; }
+.panel-head select { font-size: 0.72rem; max-width: min(15rem, 100%); min-width: 5.5rem; }
 .panel-head .panel-compare { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; color: var(--muted); }
 .panel-head .spacer { flex: 1; }
 .panel-badge { font-size: 0.68rem; font-family: var(--mono); color: var(--muted); }
 
+/* The field is a 2:1 world raster. Letting the panel grow taller than that only
+   paints grey above and below the map, so the canvas box takes the map's own aspect
+   and the panel is sized (and centred) to it. When the row is shorter than that, the
+   max-height wins and the box falls back to filling what it is given, so swipe and
+   difference layouts keep working unchanged. */
 .panel-canvas-wrap {
   position: relative;
-  flex: 1;
+  flex: 0 1 auto;
+  width: 100%;
+  aspect-ratio: 2 / 1;
   min-height: 0;
   background: var(--canvas-void);
   box-shadow: 0 0 60px -20px var(--accent-glow) inset;
@@ -341,7 +359,6 @@ body.resizing-layout.row { cursor: row-resize; }
   place-items: center;
   color: var(--text);
   background: color-mix(in srgb, var(--canvas-void) 72%, transparent);
-  font-family: var(--mono);
   font-size: 0.78rem;
   pointer-events: none;
 }
@@ -352,7 +369,6 @@ body.resizing-layout.row { cursor: row-resize; }
   top: 0.5rem;
   right: 0.5rem;
   font-size: 0.68rem;
-  font-family: var(--mono);
   color: var(--muted);
   background: var(--readout-bg);
   padding: 0.15rem 0.4rem;
@@ -406,10 +422,12 @@ body.resizing-layout.row { cursor: row-resize; }
   overflow: hidden;
 }
 .context-rail.collapsed > *:not(.rail-collapse) { display: none; }
+/* Anchored on the right so the rail title, subtitle and every section heading share
+   one left edge with the rail padding instead of three different ones. */
 .rail-collapse {
   position: absolute;
   top: 0.6rem;
-  left: 0.4rem;
+  right: 0.6rem;
   width: 1.4rem;
   height: 1.4rem;
   display: inline-flex;
@@ -426,9 +444,9 @@ body.resizing-layout.row { cursor: row-resize; }
 .rail-collapse:hover { border-color: var(--accent); color: var(--accent); }
 .rail-collapse::before { content: "\2039"; font-size: 1rem; line-height: 1; } /* ‹ expand left */
 .rail-collapse[aria-expanded="true"]::before { content: "\203A"; } /* › collapse right */
-.context-rail:not(.collapsed) .rail-title { padding-left: 1.6rem; }
+.context-rail:not(.collapsed) .rail-title { padding-right: 1.9rem; }
 .rail-title { font-size: 0.95rem; margin: 0 0 0.15rem; }
-.rail-subtitle { font-size: 0.74rem; color: var(--muted); margin: 0 0 1rem; font-family: var(--mono); }
+.rail-subtitle { font-size: 0.74rem; color: var(--muted); margin: 0 0 1rem; }
 .rail-current-depth-note {
   margin: 0 0 1rem;
   padding: 0.7rem 0.8rem;
@@ -466,7 +484,7 @@ body.resizing-layout.row { cursor: row-resize; }
   font: inherit;
   padding: 0.35rem 0.45rem;
   color: var(--text);
-  background: var(--background);
+  background: var(--surface-strong);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
@@ -475,7 +493,7 @@ body.resizing-layout.row { cursor: row-resize; }
 .rail-forecast-toggle[hidden] { display: none; }
 .rail-forecast-toggle .ghost-button { padding: 0.3rem 0.6rem; font-size: 0.72rem; }
 .rail-caption { font-size: 0.68rem; color: var(--muted); margin: 0.35rem 0 0; line-height: 1.35; }
-.rail-provenance { font-size: 0.66rem; color: var(--muted); margin: 1rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--border); line-height: 1.4; font-family: var(--mono); }
+.rail-provenance { font-size: 0.66rem; color: var(--muted); margin: 1rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--border); line-height: 1.4; }
 .rail-provenance .method-note-btn { vertical-align: baseline; margin-left: 0.3rem; }
 .rail-chart-slot { width: 100%; }
 .rail-chart { width: 100%; height: auto; display: block; }
@@ -539,13 +557,16 @@ body.resizing-layout.row { cursor: row-resize; }
   .context-rail { width: min(var(--rail-width, 20rem), 24rem); }
   .panel-grid { gap: 0.45rem; }
   .panel-head { gap: 0.25rem; padding: 0.3rem 0.35rem; }
-  .panel-head select { min-width: 4.8rem; max-width: 7.6rem; }
-  .panel-badge { display: none; }
+  .panel-head select { min-width: 4.8rem; max-width: 10.5rem; }
+  /* The badge and the method-note "?" that sits beside it are one unit: hiding the
+     badge alone leaves the "?" orphaned under a heading it no longer belongs to. */
+  .panel-badge,
+  .panel-head .method-note-btn { display: none; }
 }
 
 /* Stacked/column layout for narrow viewports. This block MUST come after the
    ≤1320px block above: at ≤980px both queries match, and same-specificity rules
-   resolve by source order — so the full-width .controls/.context-rail here have
+   resolve by source order, so the full-width .controls/.context-rail here have
    to win over the fixed sidebar widths the ≤1320px block sets. .map-area keeps a
    floor height so the field canvas can never collapse to 0px when stacked. */
 @media (max-width: 980px) {

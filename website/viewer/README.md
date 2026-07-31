@@ -88,6 +88,30 @@ python -m http.server -d website/viewer 8799
 # open http://127.0.0.1:8799/?data_base=local
 ```
 
+#### Overriding the data root without editing `config.js`
+
+The data root is resolved at startup in this priority order:
+
+1. `window.OCEANBENCH_VIEWER_CONFIG.dataBaseUrl`, set by an inline script before the
+   module (unchanged escape hatch for the Quarto integration).
+2. the `?data=` query parameter (`?data_base=` and `?dataBaseUrl=` remain accepted,
+   and the value `local` still means `./data/`).
+3. an optional `viewer-config.json` fetched from beside `index.html`; a 404 is the
+   normal case and is ignored silently.
+4. the built-in EDITO MinIO rebuild-preview prefix.
+
+`viewer-config.example.json` shows the file's shape (`dataBaseUrl`, and optionally
+`columnsBaseUrl` for the separately published `<slug>.columns.zarr` stores). Copy it
+to `viewer-config.json` (git-ignored) to pin a root for a local checkout; an offline
+`oceanbench view <dir>` mode would write the same file next to the copied viewer.
+
+```sh
+# both data roots exercised against the live, anonymously readable bucket
+python -m http.server -d website/viewer 8765
+# default (bucket): http://127.0.0.1:8765/index.html
+# override:         http://127.0.0.1:8765/index.html?data=https://minio.dive.edito.eu/project-oceanbench/dev/benchmark/rebuild-preview/viewer/data/
+```
+
 In the Quarto website, `store`/`manifest`/insight URLs resolve against the EDITO
 MinIO rebuild-preview viewer data prefix by default (CORS-enabled, §6).
 

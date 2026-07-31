@@ -11,7 +11,9 @@
 import { resolveViewerDataUrl } from "../config.js";
 import { class4AbsoluteError } from "./overlays.js";
 
-const INDEX_URL = resolveViewerDataUrl("./data/insights.json");
+// Resolved lazily, not at import time: the data root can still be rewritten by the
+// optional viewer-config.json that boot awaits before the first fetch.
+const INDEX_PATH = "./data/insights.json";
 const jsonCache = new Map();
 let indexPromise = null;
 
@@ -22,7 +24,7 @@ const class4Pending = new Map();
 const class4TargetedCache = new Map(); // `${resolvedUrl}|${start}|${lead}` -> Promise<result>
 
 export function loadInsightIndex() {
-  if (!indexPromise) indexPromise = fetchJSON(INDEX_URL).catch(() => null);
+  if (!indexPromise) indexPromise = fetchJSON(resolveViewerDataUrl(INDEX_PATH)).catch(() => null);
   return indexPromise;
 }
 

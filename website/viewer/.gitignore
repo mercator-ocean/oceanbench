@@ -1,3 +1,6 @@
 # Local viewer pyramids + generated dataset list (served, not source). See README.md.
 data/
 node_modules/
+# Optional local data-root override (see README.md); the committed file is
+# viewer-config.example.json.
+/viewer-config.json

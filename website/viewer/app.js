@@ -14,7 +14,7 @@
 // the quantitative curves (skill vs lead, PSD spectrum) for the active view. Every bit
 // of view state lives in the URL hash.
 
-import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, readRootCoordinate, readColumn, prefetchLayer } from "./modules/zarr.js";
+import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, readRootCoordinate, readColumn, prefetchLayer, isLayerCached } from "./modules/zarr.js";
 import { COLORMAP_NAMES, DIVERGING } from "./vendor/cmocean/colormaps.js";
 import {
   fieldToImageData,
@@ -25,6 +25,7 @@ import {
   drawColorbar,
   landColor,
   noObsColor,
+  formatFixed,
 } from "./modules/render.js";
 import { startParticleField, makeVelocitySampler, speedMagnitudeField } from "./modules/particles.js";
 import {
@@ -69,9 +70,11 @@ import { attachMethodNote, attachEddyMethodNote } from "./modules/method-popover
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
 import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
 import { forecastColor } from "./modules/forecast-colors.js";
-import { resolveViewerDataUrl, resolveColumnStoreUrl } from "./config.js";
+import { resolveViewerDataUrl, resolveColumnStoreUrl, initializeViewerConfig } from "./config.js";
 
-const DATASETS_URL = resolveViewerDataUrl("./data/datasets.json");
+// Resolved lazily: the data root is only final after initializeViewerConfig() has had a
+// chance to apply an optional viewer-config.json.
+const DATASETS_PATH = "./data/datasets.json";
 const DIFFERENCE_COLORMAP = "balance";
 const SPEED_COLORMAP = "speed";
 const YEAR_ERROR_COLORMAP = "dense"; // sequential map for time-mean |obs − model|
@@ -201,6 +204,19 @@ const coordinatesByLevel = new Map();
 let datasetCatalog = [];
 let insightIndex = null;
 let scoresSummary = [];
+// scores-summary.json is a multi-megabyte aggregate that only the context rail reads,
+// so it stays off the boot path: the map paints first and the rail pulls it in on its
+// first update. Memoised, so later rail updates cost nothing.
+let scoresSummaryPromise = null;
+function ensureScoresSummary() {
+  if (!scoresSummaryPromise) {
+    scoresSummaryPromise = loadScoresSummary(insightIndex).then((rows) => {
+      scoresSummary = rows;
+      return rows;
+    });
+  }
+  return scoresSummaryPromise;
+}
 const panels = [];
 let activePanelIndex = 0;
 const elements = {};
@@ -354,6 +370,8 @@ function buildPanel(index) {
     particleContext: null,
     swipeX: 0.5,
     renderToken: 0,
+    renderAbort: null,
+    loadingTimer: null,
     dragging: null,
     draggingSwipe: false,
   };
@@ -406,7 +424,7 @@ function wirePanel(panel) {
         const fallback = Object.keys(manifest.variables)[0];
         panel.state.variable = fallback;
         const fallbackLabel = manifest.variables[fallback] ? prettyName(manifest.variables[fallback].standard_name) : fallback;
-        fallbackNote = `${prettyName(previousVariable)} not available for ${labelFor(panel.state.dataset)} — showing ${fallbackLabel}`;
+        fallbackNote = `${prettyName(previousVariable)} is not available for ${labelFor(panel.state.dataset)}, showing ${fallbackLabel} instead`;
       }
       updateSharedTimeControls(manifest);
       refreshPanelControls(panel);
@@ -482,8 +500,48 @@ function renderLevelForSlug(slug) {
   return selectRenderLevel(manifest);
 }
 
+// Whether a panel could draw this lead day without waiting on the network: every tile
+// the render would read is already decoded in the store's chunk cache, either from an
+// earlier render or from the neighbour prefetch. The lead slider asks this to decide
+// between painting inside the frame and waiting for the fetch debounce.
+function panelLeadCached(panel, leadDay) {
+  // Year scope reads the memoised insight artifacts, never a lead tile.
+  if (shared.scope === "year") return true;
+  const manifest = manifestFor(panel.state.dataset);
+  const store = stores.get(panel.state.dataset);
+  if (!manifest || !store) return false;
+  const level = selectRenderLevel(manifest);
+  const startIndex = Math.min(shared.startIndex, manifest.start_dates.length - 1);
+  const leadIndex = leadDay - 1;
+  const currents = isCurrentsVariable(panel.state.variable);
+  const variables = currents
+    ? [currentDepthVariables(panel).u, currentDepthVariables(panel).v]
+    : [panel.state.variable];
+  for (const variable of variables) {
+    if (!isLayerCached(store, { variable, level, startIndex, leadIndex })) return false;
+  }
+  // The difference view reads the partner forecast's field on the same slice.
+  if (isDiffHost(panel) && !currents) {
+    const partner = stores.get(panels[1].state.dataset);
+    if (!partner) return false;
+    if (!isLayerCached(partner, { variable: panel.state.variable, level, startIndex, leadIndex })) return false;
+  }
+  return true;
+}
+
+function leadFramesCached(leadDay) {
+  for (let i = 0; i < shared.layout; i += 1) {
+    if (!panelLeadCached(panels[i], leadDay)) return false;
+  }
+  return true;
+}
+
 async function renderPanel(panel) {
   const token = ++panel.renderToken;
+  // A superseded render must stop paying for tiles it will never draw: abort the
+  // previous render's in-flight chunk fetches before starting this one.
+  if (panel.renderAbort) panel.renderAbort.abort();
+  panel.renderAbort = new AbortController();
   setPanelLoading(panel, true);
   try {
     await ensureStore(panel.state.dataset);
@@ -525,6 +583,7 @@ async function renderPanel(panel) {
     updateSharedColorbar();
     setStatus("");
   } catch (error) {
+    if (error && error.name === "AbortError") return;
     if (token === panel.renderToken) setStatus(String(error.message || error), true);
     console.error(error);
   } finally {
@@ -534,7 +593,8 @@ async function renderPanel(panel) {
 
 async function readAlignedField(panel, sourceSlug, variable, level, start, leadIndex, targetLat, targetLon) {
   await ensureStore(sourceSlug);
-  const layer = await readLayer(stores.get(sourceSlug), { variable, level, startIndex: start, leadIndex });
+  const signal = panel.renderAbort ? panel.renderAbort.signal : undefined;
+  const layer = await readLayer(stores.get(sourceSlug), { variable, level, startIndex: start, leadIndex, signal });
   const coordinates = await loadCoordinates(sourceSlug, level);
   if (!targetLat) return { field: layer, latitudes: coordinates.latitudes, longitudes: coordinates.longitudes };
   const aligned = resampleOntoGrid(layer, coordinates.latitudes, coordinates.longitudes, targetLat, targetLon);
@@ -757,7 +817,7 @@ async function renderYearPanel(panel, token, manifest) {
   // The velocity error geography and RMSD-by-start are built from 15 m drifter obs.
   // A surface current selection cannot be honestly mapped onto them.
   if (isSurfaceCurrentVariable(panel.state.variable)) {
-    clearYearPanel(panel, "Current observations (drifters) are measured at 15 m depth — switch to 15 m currents to compare against them.");
+    clearYearPanel(panel, "Current observations (drifters) are measured at 15 m depth. Switch to 15 m currents to compare against them.");
     return;
   }
   const urls = insightsFor(insightIndex, panel.state.dataset, shared.region);
@@ -784,7 +844,7 @@ async function renderYearPanel(panel, token, manifest) {
       !geography
         ? "Year diagnostics not available for this dataset/region."
         : biasAbsent
-          ? "Bias not available for this dataset — republish pending."
+          ? "Bias is not available for this dataset. A republish is pending."
           : biasMode
             ? "Bias not available for this variable at this lead."
             : "Year diagnostics not available for this variable at this lead.",
@@ -911,10 +971,19 @@ function drawImageWorld(context, offscreen, edges, projection) {
   const visibleRight = projection.unproject(projection.width, 0).nx;
   const firstCopy = shared.region === "global" ? Math.floor(visibleLeft - edges.nx1) : 0;
   const lastCopy = shared.region === "global" ? Math.ceil(visibleRight - edges.nx0) : 0;
+  // Snap every copy to whole device pixels. Copy k's right edge and copy k+1's left
+  // edge are the same world coordinate, so rounding hands them the same integer and
+  // the copies abut exactly. Drawn at fractional coordinates instead, each copy gets
+  // an antialiased edge, and where the two meet the backdrop shows through as a
+  // one-pixel column: the black line at the dateline in the default Pacific-centred
+  // view. The blit alone is snapped; projection, hit-testing and overlays are
+  // untouched, so nothing moves by more than the sub-pixel the rounding absorbs.
+  const top = Math.round(projection.project(edges.nx0, edges.nyTop).y);
+  const bottom = Math.round(projection.project(edges.nx0, edges.nyBottom).y);
   for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
-    const topLeft = projection.project(edges.nx0 + copy, edges.nyTop);
-    const bottomRight = projection.project(edges.nx1 + copy, edges.nyBottom);
-    context.drawImage(offscreen, topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+    const left = Math.round(projection.project(edges.nx0 + copy, edges.nyTop).x);
+    const right = Math.round(projection.project(edges.nx1 + copy, edges.nyTop).x);
+    context.drawImage(offscreen, left, top, right - left, bottom - top);
   }
 }
 
@@ -951,7 +1020,7 @@ function themeToken(name, fallback) {
 
 function drawPanel(panel) {
   const canvas = panel.els.field;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const context = canvas.getContext("2d");
   context.fillStyle = themeToken("--ob-viewer-canvas-bg", shared.theme === "light" ? "#eef2f6" : "#080b11");
   context.fillRect(0, 0, canvas.width, canvas.height);
   if (!panel.offscreenA) {
@@ -1062,8 +1131,7 @@ function drawRasterBorder(context, edges, projection) {
 
 function updatePanelBadge(panel) {
   const mean = panel.field ? areaWeightedMean(panel.field, panel.latitudes) : NaN;
-  const meanText = Number.isFinite(mean) ? mean.toFixed(3) : "—";
-  panel.els.badge.textContent = `${panel.units} · field mean ${meanText}`;
+  panel.els.badge.textContent = `area-weighted mean ${formatFixed(mean, 3)} ${panel.units}`;
 }
 
 // ---- overlays ---------------------------------------------------------------
@@ -1188,7 +1256,7 @@ function currentStartDate(slug) {
 
 function drawOverlays(panel) {
   const canvas = panel.els.overlay;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const context = canvas.getContext("2d");
   context.clearRect(0, 0, canvas.width, canvas.height);
   if (shared.scope === "year") return;
   const projection = projectionFor(panel);
@@ -2065,8 +2133,30 @@ function pointerLonLat(panel, event) {
   return [longitude, 90 - world.ny * 180];
 }
 
+// A trackpad emits wheel events far faster than the display refreshes, and each one
+// used to drive a full projection + redraw pass. Accumulate the deltas instead and
+// apply them once per frame, so a fast pinch costs one render per frame, not ten.
+let wheelFrame = 0;
+let pendingWheel = null;
+
 function onPanelWheel(panel, event) {
   event.preventDefault();
+  if (pendingWheel && pendingWheel.panel === panel) {
+    pendingWheel.deltaY += event.deltaY;
+    pendingWheel.event = event;
+  } else {
+    pendingWheel = { panel, deltaY: event.deltaY, event };
+  }
+  if (wheelFrame) return;
+  wheelFrame = requestAnimationFrame(() => {
+    wheelFrame = 0;
+    const pending = pendingWheel;
+    pendingWheel = null;
+    if (pending) applyWheelZoom(pending.panel, pending.event, pending.deltaY);
+  });
+}
+
+function applyWheelZoom(panel, event, deltaY) {
   const projection = projectionFor(panel);
   const previousLevels = panels.slice(0, shared.layout).map((candidate) => {
     const manifest = manifests.get(candidate.state.dataset);
@@ -2077,7 +2167,7 @@ function onPanelWheel(panel, event) {
   const cursorX = (event.clientX - rectangle.left) * ratio;
   const cursorY = (event.clientY - rectangle.top) * ratio;
   const before = projection.unproject(cursorX, cursorY);
-  const factor = Math.exp(-event.deltaY * 0.0015);
+  const factor = Math.exp(-deltaY * 0.0015);
   const previousZoom = view.zoom;
   view.zoom = Math.min(60, Math.max(minimumZoomFor(panel), view.zoom * factor));
   if (view.zoom === previousZoom) return;
@@ -2269,7 +2359,7 @@ function updatePanelReadout(panel, lat, lon, suffix = "") {
     const column = nearestIndex(panel.longitudes, lon);
     const row = nearestIndex(panel.latitudes, lat);
     if (column < 0 || row < 0) {
-      panel.els.readout.textContent = suffix ? `${lat.toFixed(2)}°, ${lon.toFixed(2)}°${suffix}` : "";
+      panel.els.readout.textContent = suffix ? `${formatFixed(lat, 2)}°, ${formatFixed(lon, 2)}°${suffix}` : "";
       return;
     }
     const value = panel.field.data[row * panel.field.width + column];
@@ -2279,7 +2369,7 @@ function updatePanelReadout(panel, lat, lon, suffix = "") {
         ? panel.yearBiasSE.data[row * panel.yearBiasSE.width + column]
         : null;
     const valueText = fieldReadoutValue(panel, value, count, standardError);
-    panel.els.readout.textContent = `${lat.toFixed(2)}°, ${lon.toFixed(2)}° — ${valueText}${suffix}`;
+    panel.els.readout.textContent = `${formatFixed(lat, 2)}°, ${formatFixed(lon, 2)}° · ${valueText}${suffix}`;
 }
 
 function fieldReadoutValue(panel, value, count, standardError) {
@@ -2291,11 +2381,11 @@ function fieldReadoutValue(panel, value, count, standardError) {
     const metric = biasMode ? "bias" : "|error|";
     const sign = biasMode && value > 0 ? "+" : "";
     // Bias cells carry a ±1 standard error (std(model − obs)/sqrt(n)); absent on old artifacts.
-    const errorText = biasMode && Number.isFinite(standardError) ? ` ± ${standardError.toFixed(3)}` : "";
+    const errorText = biasMode && Number.isFinite(standardError) ? ` ± ${formatFixed(standardError, 3)}` : "";
     const countText = Number.isFinite(count) && count > 0 ? ` · n = ${count.toLocaleString("en-US")}` : "";
-    return `${metric} ${sign}${value.toFixed(3)}${errorText} ${panel.units}${countText}`;
+    return `${metric} ${sign}${formatFixed(value, 3)}${errorText} ${panel.units}${countText}`;
   }
-  return Number.isNaN(value) ? "land / no data" : `${value.toFixed(3)} ${panel.units}`;
+  return Number.isNaN(value) ? "land / no data" : `${formatFixed(value, 3)} ${panel.units}`;
 }
 
 // Nearest-point hit-test over the Class-4 obs drawn on this panel (canvas points
@@ -2370,9 +2460,9 @@ function class4ReadoutSuffix(record, units) {
       ? Math.abs(model - obs)
       : NaN;
   const parts = [
-    `obs ${hasObs ? obs.toFixed(3) : "—"}`,
-    `fcst ${hasModel ? model.toFixed(3) : "—"}`,
-    `err ${Number.isFinite(error) ? error.toFixed(3) : "—"}${units ? ` ${units}` : ""}`,
+    `obs ${formatFixed(obs, 3)}`,
+    `fcst ${formatFixed(model, 3)}`,
+    `err ${formatFixed(error, 3)}${units ? ` ${units}` : ""}`,
   ];
   const platformKey = CLASS4_PLATFORM_KEYS.find((key) => record[key] != null && record[key] !== "");
   if (platformKey) parts.push(String(record[platformKey]));
@@ -2430,12 +2520,28 @@ function setActivePanel(index) {
   updateSharedColorbar();
 }
 
+// A cached render completes in tens of milliseconds, so showing the scrim straight
+// away only produces a flash. Arm a short timer instead and let a fast render cancel
+// it, so the scrim appears solely when the wait is long enough to read as a freeze.
+// The dataset/variable selects are never disabled: the user must always be able to
+// change their mind mid-load.
+const LOADING_SCRIM_DELAY_MILLISECONDS = 180;
+
 function setPanelLoading(panel, loading) {
-  panel.container.classList.toggle("loading", loading);
-  panel.els.loading.hidden = !loading;
-  for (const select of [panel.els.dataset, panel.els.variable]) {
-    select.disabled = loading;
+  if (panel.loadingTimer) {
+    clearTimeout(panel.loadingTimer);
+    panel.loadingTimer = null;
   }
+  if (!loading) {
+    panel.container.classList.remove("loading");
+    panel.els.loading.hidden = true;
+    return;
+  }
+  panel.loadingTimer = setTimeout(() => {
+    panel.loadingTimer = null;
+    panel.container.classList.add("loading");
+    panel.els.loading.hidden = false;
+  }, LOADING_SCRIM_DELAY_MILLISECONDS);
 }
 
 function resizePanelCanvases(panel) {
@@ -2521,13 +2627,22 @@ function updateSharedColorbar() {
       label: `${biasMode ? "mean (model − obs)" : "mean |obs − model|"} over ${nStarts || "?"} start dates · ${panel.label} (${panel.units})`,
       textColor,
     });
-    elements["layer-info"].textContent = `entire year (${nStarts || "?"} start dates) · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
+    // The start-date count is already on the colorbar caption above; do not repeat it.
+    elements["layer-info"].textContent = `entire year · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
     return;
   }
   if (!panel || !panel.colormap || !panel.range) return;
 
   const mode = isDiffView() ? "none" : shared.overlayMode;
   if (mode === "class4") {
+    // Nothing drawn means an obs-error ramp would be a scale over no data: drop the
+    // colorbar and the legend strip and let the overlay note carry the one sentence.
+    if (class4EmptyMessage()) {
+      colorbar.hidden = true;
+      hideMapLegend(legend);
+      setLayerInfo(panel);
+      return;
+    }
     const scale = Math.max(...panels.slice(0, shared.layout).map((candidate) => candidate.class4Scale || 0), 0);
     colorbar.hidden = false;
     drawColorbar(colorbar, CLASS4_COLORMAP, [0, scale || 1], {
@@ -2579,7 +2694,7 @@ function legendHelpAnchor() {
 }
 
 function legendSwatch(color, label, count) {
-  const countText = count == null ? "" : ` — <strong>${formatCount(count)}</strong>`;
+  const countText = count == null ? "" : ` · <strong>${formatCount(count)}</strong>`;
   return `<span class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escapeHtml(label)}${countText}</span>`;
 }
 
@@ -2596,19 +2711,14 @@ function renderClass4Legend(legend, panel, scale) {
   const visibleTotal = hostPanel ? hostPanel.class4VisibleTotal || shown : shown;
   const matched = hostPanel ? hostPanel.class4Matched || 0 : 0;
   const thinned = Boolean(hostPanel && hostPanel.class4Thinned);
-  const noData = overlayData.class4Unpublished
-    ? " · match-ups not published for this dataset"
-    : !overlayData.class4 && !overlayData.class4Error
-      ? " · no match-ups for this dataset/region"
-      : "";
-  const weak = matched > 0 && matched < 30 ? " · low count — statistic is weak" : "";
+  const weak = matched > 0 && matched < 30 ? " · low count, statistic is weak" : "";
   const fullDensityNote = thinned ? " · zoom in for full density" : "";
   const countText = thinned
     ? `<strong>showing ${formatCount(shown)} of ${formatCount(visibleTotal)} obs</strong>${fullDensityNote}`
     : `<strong>${formatCount(matched)} obs</strong>`;
   legend.hidden = false;
   legend.innerHTML =
-    `<span class="legend-note">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "—"} ${escapeHtml(panel.units)} · region ${escapeHtml(shared.region)}${weak}${noData}</span>` +
+    `<span class="legend-note">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(panel.units)} · region ${escapeHtml(shared.region)}${weak}</span>` +
     mutedBackgroundNote(panel) +
     legendHelpAnchor();
   attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
@@ -2626,24 +2736,24 @@ function renderEddyLegend(legend, panel) {
     const forecast1 = labelFor(panels[0].state.dataset);
     const forecast2 = labelFor(panels[1].state.dataset);
     const lead = (censuses.find(Boolean) || {}).leadDay;
-    const meanText = Number.isFinite(match.meanDisplacementKm) ? `${match.meanDisplacementKm.toFixed(0)} km` : "—";
+    const meanText = Number.isFinite(match.meanDisplacementKm) ? `${formatFixed(match.meanDisplacementKm, 0)} km` : "n/a";
     swatches =
       legendSwatch(EDDY_MATCHED_COLOR, "Matched pairs", match.matched.length) +
       legendSwatch(forecastColor(0), `Only in ${forecast1}`, match.onlyA.length) +
       legendSwatch(forecastColor(1), `Only in ${forecast2}`, match.onlyB.length);
-    caption = `mean centre displacement of matched pairs ${meanText} · lead ${lead ?? "—"} (nearest shared)`;
+    caption = `mean centre displacement of matched pairs ${meanText} · lead ${lead ?? "n/a"} (nearest shared)`;
   } else if (shared.layout === 2 && mismatch && censuses[0] && censuses[1]) {
     // No lead day in common between the two forecasts: never cross-match different leads —
     // show each forecast's own census at its own nearest lead, and say so.
     const forecast1 = labelFor(panels[0].state.dataset);
     const forecast2 = labelFor(panels[1].state.dataset);
     swatches =
-      legendSwatch(forecastColor(0), `${forecast1} eddies · lead ${censuses[0].leadDay ?? "—"}`, censuses[0].detections.length) +
-      legendSwatch(forecastColor(1), `${forecast2} eddies · lead ${censuses[1].leadDay ?? "—"}`, censuses[1].detections.length);
-    caption = "no lead day in common — shown at each forecast's nearest lead, not cross-matched";
+      legendSwatch(forecastColor(0), `${forecast1} eddies · lead ${censuses[0].leadDay ?? "n/a"}`, censuses[0].detections.length) +
+      legendSwatch(forecastColor(1), `${forecast2} eddies · lead ${censuses[1].leadDay ?? "n/a"}`, censuses[1].detections.length);
+    caption = "no lead day in common, so each forecast is shown at its own nearest lead and never cross-matched";
   } else if (censuses[0]) {
     swatches = legendSwatch(forecastColor(0), `${labelFor(panels[0].state.dataset)} eddies`, censuses[0].detections.length);
-    caption = `single forecast census · lead ${censuses[0].leadDay ?? "—"} (nearest available)`;
+    caption = `single forecast census · lead ${censuses[0].leadDay ?? "n/a"} (nearest available)`;
   } else {
     swatches = `<span class="legend-note">No eddy detections for this selection.</span>`;
     caption = "";
@@ -2686,6 +2796,7 @@ function renderTrajectoryLegend(legend, panel) {
 async function updateContextRail() {
   const forecasts = railForecasts();
   if (!forecasts.length) return;
+  await ensureScoresSummary();
   const comparison = forecasts.length === 2 && sameForecastVariable(forecasts[0], forecasts[1]);
   const toggleForecasts = forecasts.length === 2 && !comparison;
 
@@ -2919,7 +3030,7 @@ function updateCurrentDepthGateNote(shown) {
   }
   note.hidden = false;
   note.innerHTML =
-    `<p>Current observations (drifters) are measured at 15&nbsp;m depth — switch to 15&nbsp;m currents to compare against them.</p>` +
+    `<p>Current observations (drifters) are measured at 15&nbsp;m depth. Switch to 15&nbsp;m currents to compare against them.</p>` +
     `<button type="button" class="ghost-button" id="rail-switch-15m-currents">Switch to 15&nbsp;m currents</button>`;
   const button = note.querySelector("#rail-switch-15m-currents");
   if (button) button.addEventListener("click", () => switchShownPanelsTo15mCurrents(gated));
@@ -3029,7 +3140,7 @@ function renderRailSkill(shown, comparison) {
       // behind the aggregate (item 5). TODO(pipeline): expose per-lead matchup counts too.
       notes.push(
         `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}: n = ${skill.n} start dates${
-          skill.n < 10 ? " (low — weak statistic)" : ""
+          skill.n < 10 ? " (low, weak statistic)" : ""
         }`,
       );
       if (isCurrentsVariable(panel.state.variable)) notes.push("Current speed map points are paired u/v speeds; curves show u/v component RMSD.");
@@ -3448,7 +3559,7 @@ async function renderRailPsd(shown, comparison) {
   }
   const kmRange =
     Number.isFinite(wavelengthMin) && wavelengthMax > 0
-      ? `resolves ≈ ${Math.round(wavelengthMin / 1000)}–${Math.round(wavelengthMax / 1000)} km`
+      ? `resolves ≈ ${Math.round(wavelengthMin / 1000)} to ${Math.round(wavelengthMax / 1000)} km`
       : "";
   const oceanFractions = sources
     .filter((entry) => entry.spectrum && Number.isFinite(entry.spectrum.oceanFraction))
@@ -3458,10 +3569,10 @@ async function renderRailPsd(shown, comparison) {
   const landFraction = Number.isFinite(oceanFraction) ? 1 - oceanFraction : 0;
   const landWarning =
     landFraction > 0.25
-      ? `⚠ ${Math.round(landFraction * 100)}% land — spectrum damped by mean-fill; prefer an open-ocean box. `
+      ? `⚠ ${Math.round(landFraction * 100)}% land, so the spectrum is damped by mean-fill. Prefer an open-ocean box. `
       : "";
   elements["rail-psd-note"].textContent = curves.length
-    ? `${landWarning}box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}° · ${oceanLabel}native ${gridLabels.join(" & ")} grid${kmRange ? " · " + kmRange : ""} — drag the box on the map, resize by its handles`
+    ? `${landWarning}box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}° · ${oceanLabel}native ${gridLabels.join(" & ")} grid${kmRange ? " · " + kmRange : ""} · drag the box on the map, resize by its handles`
     : "Move the box over ocean to compute a spectrum (boxed area is mostly land).";
   wireCursorTooltip(elements["rail-spectra"]);
 }
@@ -3623,6 +3734,17 @@ function scoreDepthKeys(entry) {
   return keys;
 }
 
+// The single sentence for every "nothing to draw" Class-4 state. One source, so the
+// sidebar note, the legend strip and the colorbar never state the same absence three
+// different ways. Empty string means there are match-ups to show.
+function class4EmptyMessage() {
+  if (overlayData.class4Unpublished) return "No Class-4 match-ups are published for this dataset.";
+  if (overlayData.class4Error) return `Class-4 match-ups failed to load (${overlayData.class4Error}).`;
+  if (!overlayData.class4) return "No Class-4 match-ups are available for this dataset and region.";
+  if ((overlayData.class4.rows || []).length === 0) return class4SelectionNote();
+  return "";
+}
+
 function class4SelectionNote() {
   const panel = panels[0];
   if (!panel) return "No Class-4 match-ups for this selection.";
@@ -3716,23 +3838,13 @@ async function applyOverlayMode() {
       note.textContent = "No eddy detections are available for this selection.";
     } else if (shared.layout === 2 && overlayData.eddiesMatch) {
       note.textContent =
-        "Eddy intercomparison between the two selected forecasts — agreement, not ground truth.";
+        "Eddy intercomparison between the two selected forecasts. This shows agreement, not ground truth.";
     } else {
       note.textContent = "Showing this forecast's own eddy census.";
     }
   }
   if (shared.overlayMode === "class4") {
-    if (overlayData.class4Unpublished) {
-      note.textContent = "No Class-4 match-ups are published for this dataset.";
-    } else if (overlayData.class4Error) {
-      note.textContent = `Class-4 data failed to load (${overlayData.class4Error}).`;
-    } else if (!overlayData.class4) {
-      note.textContent = "No Class-4 match-ups are available for this dataset and region.";
-    } else if ((overlayData.class4.rows || []).length === 0) {
-      note.textContent = class4SelectionNote();
-    } else {
-      note.textContent = "Class-4 match-ups for the selected start and lead — hover a point for details.";
-    }
+    note.textContent = class4EmptyMessage() || "Class-4 match-ups for the selected start and lead. Hover a point for details.";
   }
   for (let i = 0; i < shared.layout; i += 1) {
     drawPanel(panels[i]);
@@ -3758,17 +3870,11 @@ function scheduleClass4Reload() {
     class4ReloadTimer = null;
     await loadOverlayData();
     if (note) {
-      note.textContent = overlayData.class4Unpublished
-        ? "No class-4 match-ups are published for this dataset."
-        : overlayData.class4Error
-        ? `Class-4 data failed to load (${overlayData.class4Error}).`
-        : !overlayData.class4
-          ? "No Class-4 match-ups are available for this dataset and region."
-          : (overlayData.class4.rows || []).length === 0
-            ? class4SelectionNote()
-            : overlayData.class4.targeted
-        ? "Class-4 match-ups for the selected start and lead — hover a point for details."
-        : "Class-4 match-ups loaded — hover a point for details.";
+      note.textContent =
+        class4EmptyMessage() ||
+        (overlayData.class4.targeted
+          ? "Class-4 match-ups for the selected start and lead. Hover a point for details."
+          : "Class-4 match-ups loaded. Hover a point for details.");
     }
     redrawOverlaysAll();
     updateContextRail();
@@ -3881,6 +3987,48 @@ function setYearMetric(metric) {
   writeHash();
 }
 
+// Scrubbing the lead slider is how the sequence is watched, so paint must track the
+// handle: a lead every shown panel has already drawn is redrawn on the next animation
+// frame, which plays the leads the slider crosses one frame at a time. Only a lead
+// that still needs tiles off the network waits, so a fast drag over cold leads issues
+// one set of fetches instead of one per step.
+const LEAD_FETCH_DEBOUNCE_MILLISECONDS = 150;
+let leadFetchTimer = null;
+let leadRenderFrame = 0;
+
+function scheduleLeadRender() {
+  if (leadRenderFrame) return;
+  leadRenderFrame = requestAnimationFrame(() => {
+    leadRenderFrame = 0;
+    if (leadFramesCached(shared.leadDay)) {
+      cancelLeadFetchTimer();
+      runLeadRender();
+      return;
+    }
+    cancelLeadFetchTimer();
+    leadFetchTimer = setTimeout(() => {
+      leadFetchTimer = null;
+      runLeadRender();
+    }, LEAD_FETCH_DEBOUNCE_MILLISECONDS);
+  });
+}
+
+function cancelLeadFetchTimer() {
+  if (!leadFetchTimer) return;
+  clearTimeout(leadFetchTimer);
+  leadFetchTimer = null;
+}
+
+function runLeadRender() {
+  renderAllPanels().then(() => {
+    redrawOverlaysAll();
+    updateContextRail();
+  });
+  // Re-render the water-column profile from the in-memory column. No refetch: the
+  // clicked chunk already holds every lead day (this is the design win).
+  renderColumnProfileRail();
+}
+
 function wireGlobalControls() {
   for (const button of document.querySelectorAll(".scope-switch [data-scope]")) {
     button.addEventListener("click", () => setScope(button.dataset.scope));
@@ -3919,13 +4067,7 @@ function wireGlobalControls() {
   elements["lead-day"].addEventListener("input", (event) => {
     shared.leadDay = Number(event.target.value);
     elements["lead-value"].textContent = `day ${shared.leadDay}`;
-    renderAllPanels().then(() => {
-      redrawOverlaysAll();
-      updateContextRail();
-    });
-    // Re-render the water-column profile from the in-memory column — no refetch: the
-    // clicked chunk already holds every lead day (this is the design win).
-    renderColumnProfileRail();
+    scheduleLeadRender();
     scheduleClass4Reload();
     scheduleHashWrite();
   });
@@ -4365,13 +4507,22 @@ function selectElements() {
 
 async function main() {
   selectElements();
+  // Optional viewer-config.json (404 tolerated) can repoint the data root before the
+  // first fetch; a ?data= query parameter still wins over it.
+  await initializeViewerConfig();
   setStatus("Loading catalog…");
+  const datasetsUrl = resolveViewerDataUrl(DATASETS_PATH);
   try {
-    const response = await fetch(DATASETS_URL, { cache: "no-cache" });
-    if (!response.ok) throw new Error(`Cannot load ${DATASETS_URL} (${response.status})`);
+    const response = await fetch(datasetsUrl, { cache: "no-cache" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     datasetCatalog = (await response.json()).datasets;
   } catch (error) {
-    setStatus(`${error.message}. Populate ./data/ with viewer pyramids and datasets.json (see README).`, true);
+    // Name the resource that failed and what it means, rather than surfacing a raw
+    // exception string the reader cannot act on.
+    setStatus(
+      `The viewer could not read its dataset catalog at ${datasetsUrl} (${error.message}), so there is nothing to show yet.`,
+      true,
+    );
     return;
   }
   if (!datasetCatalog.length) {
@@ -4404,9 +4555,9 @@ async function main() {
   clampView();
   writeHash();
 
-  // Insight index + score summary load in the background; overlays/rail wait on them.
+  // Insight index loads before the overlays that key off it. The score summary is not
+  // awaited here: ensureScoresSummary fetches it when the rail first needs it.
   insightIndex = await loadInsightIndex();
-  scoresSummary = await loadScoresSummary(insightIndex);
 
   // Ensure the primary dataset store so start-date / lead options are known.
   // Warm every visible panel's store so variable/start selectors populate on first paint.

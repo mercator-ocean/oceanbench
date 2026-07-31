@@ -5,28 +5,39 @@
 const DEFAULT_REMOTE_DATA_BASE_URL =
   "https://minio.dive.edito.eu/project-oceanbench/dev/benchmark/rebuild-preview/viewer/data/";
 
+// Optional side-car file, fetched once at startup and 404-tolerated, so a static deployment
+// can pin a data root without editing this file: drop it beside index.html. `oceanbench view`
+// writes no such file, it mounts the artifacts directory and points the viewer at it with
+// `?data=/data/`. Query parameters still win over the side-car, and with neither present the
+// default stays the published bucket prefix above.
+const VIEWER_CONFIG_FILE = "./viewer-config.json";
+
+let fileConfig = null;
+
 function normalizeBaseUrl(url) {
   return url.endsWith("/") ? url : `${url}/`;
 }
 
-function configuredDataBaseUrl() {
-  const parameters = new URLSearchParams(window.location.search);
-  const queryValue = parameters.get("data_base") || parameters.get("dataBaseUrl");
-  if (queryValue === "local") return "./data/";
-  return window.OCEANBENCH_VIEWER_CONFIG?.dataBaseUrl || queryValue || DEFAULT_REMOTE_DATA_BASE_URL;
+function absoluteBaseUrl(url) {
+  return new URL(normalizeBaseUrl(url), window.location.href).href;
 }
 
-export const DATA_BASE_URL = new URL(
-  normalizeBaseUrl(configuredDataBaseUrl()),
-  window.location.href,
-).href;
+// `?data=` is the documented spelling; `data_base` / `dataBaseUrl` are the older names
+// and stay accepted so existing deep links keep working.
+function queryDataBaseUrl() {
+  const parameters = new URLSearchParams(window.location.search);
+  return parameters.get("data") || parameters.get("data_base") || parameters.get("dataBaseUrl");
+}
 
-window.__oceanbenchViewerDataBaseUrl = DATA_BASE_URL;
-
-export function resolveViewerDataUrl(url) {
-  if (!url || /^(?:[a-z]+:)?\/\//i.test(url) || url.startsWith("data:")) return url;
-  const withoutDataPrefix = url.replace(/^\.?\/*data\//, "");
-  return new URL(withoutDataPrefix, DATA_BASE_URL).href;
+function configuredDataBaseUrl() {
+  const queryValue = queryDataBaseUrl();
+  if (queryValue === "local") return "./data/";
+  return (
+    window.OCEANBENCH_VIEWER_CONFIG?.dataBaseUrl ||
+    queryValue ||
+    fileConfig?.dataBaseUrl ||
+    DEFAULT_REMOTE_DATA_BASE_URL
+  );
 }
 
 // Water-column stores (<slug>.columns.zarr) may live beside the pyramids or at a
@@ -38,15 +49,60 @@ function configuredColumnsBaseUrl() {
   const parameters = new URLSearchParams(window.location.search);
   const queryValue = parameters.get("columns_base");
   if (queryValue === "local") return "./data/";
-  return window.OCEANBENCH_VIEWER_CONFIG?.columnsBaseUrl || queryValue || DATA_BASE_URL;
+  return (
+    window.OCEANBENCH_VIEWER_CONFIG?.columnsBaseUrl ||
+    queryValue ||
+    fileConfig?.columnsBaseUrl ||
+    dataBaseUrl
+  );
 }
 
-export const COLUMNS_BASE_URL = new URL(
-  normalizeBaseUrl(configuredColumnsBaseUrl()),
-  window.location.href,
-).href;
+let dataBaseUrl = absoluteBaseUrl(configuredDataBaseUrl());
+let columnsBaseUrl = absoluteBaseUrl(configuredColumnsBaseUrl());
+
+function publishResolvedBase() {
+  window.__oceanbenchViewerDataBaseUrl = dataBaseUrl;
+}
+
+publishResolvedBase();
+
+export function viewerDataBaseUrl() {
+  return dataBaseUrl;
+}
+
+export function viewerColumnsBaseUrl() {
+  return columnsBaseUrl;
+}
+
+/**
+ * Load the optional viewer-config.json and recompute the data roots from it.
+ * A missing file, a non-JSON body or a network failure all leave the roots exactly as
+ * the query parameters and the built-in default resolved them. Await this before the
+ * first data fetch; the resolvers below read the live values, so nothing is captured
+ * at import time.
+ */
+export async function initializeViewerConfig() {
+  try {
+    const response = await fetch(new URL(VIEWER_CONFIG_FILE, window.location.href).href, { cache: "no-cache" });
+    if (!response.ok) return;
+    const parsed = await response.json();
+    if (!parsed || typeof parsed !== "object") return;
+    fileConfig = parsed;
+  } catch (error) {
+    return;
+  }
+  dataBaseUrl = absoluteBaseUrl(configuredDataBaseUrl());
+  columnsBaseUrl = absoluteBaseUrl(configuredColumnsBaseUrl());
+  publishResolvedBase();
+}
+
+export function resolveViewerDataUrl(url) {
+  if (!url || /^(?:[a-z]+:)?\/\//i.test(url) || url.startsWith("data:")) return url;
+  const withoutDataPrefix = url.replace(/^\.?\/*data\//, "");
+  return new URL(withoutDataPrefix, dataBaseUrl).href;
+}
 
 // The column store conventionally sits beside the pyramid as `<slug>.columns.zarr`.
 export function resolveColumnStoreUrl(slug) {
-  return new URL(`${slug}.columns.zarr`, COLUMNS_BASE_URL).href;
+  return new URL(`${slug}.columns.zarr`, columnsBaseUrl).href;
 }

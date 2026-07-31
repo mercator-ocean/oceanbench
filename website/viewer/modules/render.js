@@ -215,9 +215,23 @@ function fitLabel(context, label, maxWidth) {
   return truncated + ellipsis;
 }
 
+/** The one minus sign the viewer prints, matching the "model − obs" captions. */
+export const MINUS_SIGN = "−";
+
+/**
+ * The one numeric convention every readout uses: a fixed number of decimals, no
+ * signed zero ("−0.000" is just "0.000"), one minus sign character, and "n/a" for
+ * anything that is not a finite number.
+ */
+export function formatFixed(value, decimals) {
+  if (!Number.isFinite(value)) return "n/a";
+  const rounded = Number(value.toFixed(decimals));
+  return (rounded === 0 ? 0 : rounded).toFixed(decimals).replace("-", MINUS_SIGN);
+}
+
 function formatTick(value) {
-  if (!Number.isFinite(value)) return "—";
+  if (!Number.isFinite(value)) return "n/a";
   const absolute = Math.abs(value);
-  if (absolute !== 0 && (absolute < 0.01 || absolute >= 10000)) return value.toExponential(1);
-  return value.toFixed(absolute < 1 ? 3 : 2);
+  if (absolute !== 0 && (absolute < 0.01 || absolute >= 10000)) return value.toExponential(1).replace("-", MINUS_SIGN);
+  return formatFixed(value, absolute < 1 ? 3 : 2);
 }

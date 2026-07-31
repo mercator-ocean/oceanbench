@@ -25,7 +25,7 @@ function tracePolygon(drawing, project, longitudes, latitudes) {
     const { nx, ny } = toNorm(longitudes[i], latitudes[i]);
     const point = project(nx, ny);
     if (previousNx !== null && Math.abs(nx - previousNx) > 0.5) {
-      drawing.moveTo(point.x, point.y); // antimeridian wrap — break the stroke
+      drawing.moveTo(point.x, point.y); // antimeridian wrap, break the stroke
     } else if (i === 0) {
       drawing.moveTo(point.x, point.y);
     } else {

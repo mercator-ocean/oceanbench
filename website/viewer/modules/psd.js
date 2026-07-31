@@ -137,7 +137,7 @@ function resampleBox(field, rows, columns, side) {
     }
   }
   const oceanFraction = finiteCount / (side * side);
-  if (oceanFraction < 0.25) return null; // mostly land — no meaningful spectrum
+  if (oceanFraction < 0.25) return null; // mostly land, no meaningful spectrum
   const mean = sum / finiteCount;
   const hann = new Float64Array(side);
   for (let i = 0; i < side; i += 1) hann[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (side - 1));

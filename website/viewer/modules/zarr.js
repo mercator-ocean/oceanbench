@@ -28,7 +28,7 @@ async function inflate(compressed, codecId) {
 
 export async function loadStore(storeUrl) {
   const base = storeUrl.replace(/\/$/, "");
-  const response = await fetch(`${base}/.zmetadata`, { cache: "no-cache" });
+  const response = await fetch(`${base}/.zmetadata`);
   if (!response.ok) throw new Error(`Cannot load ${base}/.zmetadata (${response.status})`);
   const consolidated = await response.json();
   return {
@@ -40,7 +40,7 @@ export async function loadStore(storeUrl) {
 }
 
 export async function loadManifest(manifestUrl) {
-  const response = await fetch(manifestUrl, { cache: "no-cache" });
+  const response = await fetch(manifestUrl);
   if (!response.ok) throw new Error(`Cannot load manifest ${manifestUrl} (${response.status})`);
   return response.json();
 }
@@ -56,10 +56,97 @@ function compressorId(zarray) {
   return zarray.compressor ? zarray.compressor.id : null;
 }
 
-async function fetchChunk(store, path, chunkKey, codecId) {
+function abortError() {
+  return new DOMException("Aborted", "AbortError");
+}
+
+// The cache holds the in-flight PROMISE, not the settled record: two panels asking
+// for the same tile in the same frame then share one download instead of racing two.
+// A rejected request drops out of the cache so a later read can retry.
+function fetchChunk(store, path, chunkKey, codecId, signal) {
   const cacheKey = `${path}/${chunkKey}`;
-  const cached = store.chunkCache.get(cacheKey);
-  if (cached) return cached;
+  let entry = store.chunkCache.get(cacheKey);
+  if (!entry) {
+    const controller = new AbortController();
+    entry = { controller, waiters: 0, promise: null, decoded: false };
+    entry.promise = requestChunk(store, path, chunkKey, codecId, controller.signal);
+    entry.promise.then(
+      () => {
+        entry.decoded = true;
+      },
+      () => {
+        if (store.chunkCache.get(cacheKey) === entry) store.chunkCache.delete(cacheKey);
+      },
+    );
+    store.chunkCache.set(cacheKey, entry);
+  }
+  if (!signal) return entry.promise;
+  return joinChunkRequest(store, cacheKey, entry, signal);
+}
+
+// Wait on a shared request under a caller's own abort signal. The underlying fetch is
+// only really aborted once every waiter has walked away, so one panel changing its mind
+// can never cancel the tile a sibling panel is still drawing.
+function joinChunkRequest(store, cacheKey, entry, signal) {
+  entry.waiters += 1;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const release = () => {
+      if (settled) return false;
+      settled = true;
+      entry.waiters -= 1;
+      return true;
+    };
+    const onAbort = () => {
+      if (!release()) return;
+      if (entry.waiters <= 0) {
+        entry.controller.abort();
+        if (store.chunkCache.get(cacheKey) === entry) store.chunkCache.delete(cacheKey);
+      }
+      reject(abortError());
+    };
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+    entry.promise.then(
+      (record) => {
+        signal.removeEventListener("abort", onAbort);
+        if (release()) resolve(record);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        if (release()) reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * True when every tile of one (start_date, lead_day) slice is already decoded in this
+ * store's cache, so `readLayer` for that slice resolves without touching the network.
+ * A still-pending request does not count: the caller uses this to decide whether it
+ * can paint inside the current frame.
+ */
+export function isLayerCached(store, { variable, level, startIndex, leadIndex }) {
+  const path = `level/${level}/${variable}`;
+  const zarray = store.metadata[`${path}/.zarray`];
+  if (!zarray) return false;
+  const [, , latitudeSize, longitudeSize] = zarray.shape;
+  const [, , latitudeChunk, longitudeChunk] = zarray.chunks;
+  const latitudeTiles = Math.ceil(latitudeSize / latitudeChunk);
+  const longitudeTiles = Math.ceil(longitudeSize / longitudeChunk);
+  for (let ty = 0; ty < latitudeTiles; ty += 1) {
+    for (let tx = 0; tx < longitudeTiles; tx += 1) {
+      const entry = store.chunkCache.get(`${path}/${startIndex}.${leadIndex}.${ty}.${tx}`);
+      if (!entry || !entry.decoded) return false;
+    }
+  }
+  return true;
+}
+
+async function requestChunk(store, path, chunkKey, codecId, signal) {
   const url = `${store.baseUrl}/${path}/${chunkKey}`;
   const started = performance.now();
   // Name the resource (the variable/level path) rather than echoing the raw tile
@@ -67,16 +154,15 @@ async function fetchChunk(store, path, chunkKey, codecId) {
   // friendly, resource-named message.
   let response;
   try {
-    response = await fetch(url);
-  } catch {
-    throw new Error(`Could not load a map tile for ${path} (network error — check your connection).`);
+    response = await fetch(url, { signal });
+  } catch (error) {
+    if (error && error.name === "AbortError") throw error;
+    throw new Error(`Could not load a map tile for ${path} (network error, check your connection).`);
   }
   if (!response.ok) throw new Error(`Could not load a map tile for ${path} (HTTP ${response.status}).`);
   const compressed = await response.arrayBuffer();
   const bytes = await inflate(compressed, codecId);
-  const record = { bytes, compressedBytes: compressed.byteLength, milliseconds: performance.now() - started };
-  store.chunkCache.set(cacheKey, record);
-  return record;
+  return { bytes, compressedBytes: compressed.byteLength, milliseconds: performance.now() - started };
 }
 
 /**
@@ -84,7 +170,7 @@ async function fetchChunk(store, path, chunkKey, codecId) {
  * one pyramid level — into a Float32Array in real units (NaN over land).
  * Returns { data, width, height, compressedBytes, fetchMilliseconds }.
  */
-export async function readLayer(store, { variable, level, startIndex, leadIndex }) {
+export async function readLayer(store, { variable, level, startIndex, leadIndex, signal }) {
   const path = `level/${level}/${variable}`;
   const { zarray, zattrs } = arrayMetadata(store, path);
   if (zarray.dtype !== "<u2" && zarray.dtype !== "|u2") {
@@ -106,7 +192,7 @@ export async function readLayer(store, { variable, level, startIndex, leadIndex 
   const tileReads = [];
   for (let ty = 0; ty < latitudeTiles; ty += 1) {
     for (let tx = 0; tx < longitudeTiles; tx += 1) {
-      tileReads.push({ ty, tx, record: fetchChunk(store, path, `${startIndex}.${leadIndex}.${ty}.${tx}`, codecId) });
+      tileReads.push({ ty, tx, record: fetchChunk(store, path, `${startIndex}.${leadIndex}.${ty}.${tx}`, codecId, signal) });
     }
   }
   // The tiles are fetched concurrently but consumed sequentially below. If an early
