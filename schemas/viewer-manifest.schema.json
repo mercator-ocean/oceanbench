@@ -42,6 +42,10 @@
         "source_commit": {
           "description": "Git commit of the oceanbench source tree that produced the artifacts, when the build exposes it.",
           "type": "string"
+        },
+        "fingerprint": {
+          "description": "Deterministic content fingerprint of this dataset's viewer artifacts, stamped at generation time so the publish stage can skip republishing an unchanged dataset.",
+          "type": "string"
         }
       }
     },

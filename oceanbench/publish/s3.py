@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 import os
+import re
 import time
 import xml.etree.ElementTree as ElementTree
 
@@ -48,6 +49,12 @@ _CONTENT_TYPE_BY_SUFFIX = {
 }
 _DEFAULT_CONTENT_TYPE = "application/octet-stream"
 
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+MUTABLE_INDEX_CACHE_CONTROL = "public, max-age=60"
+_MUTABLE_INDEX_NAMES = frozenset({"datasets.json", "scores-summary.json"})
+_MUTABLE_INDEX_SUFFIX = ".viewer-manifest.json"
+_ZARR_CHUNK_NAME = re.compile(r"^\d+(\.\d+)*$")
+
 
 def content_type_for_path(path: str | os.PathLike) -> str:
     """Return the Content-Type to store an object under, keyed on file extension.
@@ -56,6 +63,22 @@ def content_type_for_path(path: str | os.PathLike) -> str:
     MIME types. Extensionless zarr pyramid chunks stay ``application/octet-stream``.
     """
     return _CONTENT_TYPE_BY_SUFFIX.get(Path(path).suffix, _DEFAULT_CONTENT_TYPE)
+
+
+def cache_control_for_path(path: str | os.PathLike) -> str | None:
+    """Return the Cache-Control to store an object under, or ``None`` to omit the header.
+
+    Content-addressed artifacts the viewer never re-reads after a republish (zarr
+    pyramid chunks, parquet match-ups) are cached for a year and marked immutable.
+    The few fixed-name indexes the viewer polls to discover everything else get a
+    short max-age instead. Anything not in either class keeps the storage default.
+    """
+    name = Path(path).name
+    if name in _MUTABLE_INDEX_NAMES or name.endswith(_MUTABLE_INDEX_SUFFIX):
+        return MUTABLE_INDEX_CACHE_CONTROL
+    if Path(path).suffix == ".parquet" or _ZARR_CHUNK_NAME.match(name):
+        return IMMUTABLE_CACHE_CONTROL
+    return None
 
 
 @dataclass(frozen=True)
@@ -293,6 +316,73 @@ def should_skip_upload(s3_client, bucket: str, item: UploadPlanItem, *, force: b
     return _remote_size(s3_client, bucket, item.key) == item.size
 
 
+def _remote_manifest_fingerprint(s3_client, bucket: str, key: str) -> str | None:
+    """Fingerprint stamped in the pyramid manifest already published at ``key``, if any."""
+    import gzip
+    import json
+
+    from botocore.exceptions import ClientError
+
+    from oceanbench.publish import viewer_artifacts
+
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            return None
+        raise
+    body = response["Body"].read()
+    if body[:2] == b"\x1f\x8b":
+        body = gzip.decompress(body)
+    try:
+        manifest = json.loads(body)
+    except ValueError:
+        return None
+    provenance = manifest.get(viewer_artifacts.PROVENANCE_KEY)
+    if not isinstance(provenance, dict):
+        return None
+    fingerprint = provenance.get(viewer_artifacts.FINGERPRINT_KEY)
+    return fingerprint if isinstance(fingerprint, str) else None
+
+
+def unchanged_dataset_slugs(s3_client, bucket: str, local_root: str | os.PathLike, prefix: str) -> dict[str, str]:
+    """Datasets whose published fingerprint already matches the local one, as ``{slug: fingerprint}``.
+
+    A dataset is identified by its ``<slug>.viewer-manifest.json`` in ``local_root``; the comparison
+    reads the fingerprint stamped in the local manifest and in the manifest already published under
+    ``prefix``. Datasets with no local fingerprint (older artifacts) never match.
+    """
+    from oceanbench.publish import viewer_artifacts
+
+    root = Path(local_root)
+    normalized_prefix = prefix.strip("/")
+    unchanged = {}
+    for manifest_path in sorted(root.rglob(f"*{viewer_artifacts.PYRAMID_MANIFEST_SUFFIX}")):
+        slug = manifest_path.name[: -len(viewer_artifacts.PYRAMID_MANIFEST_SUFFIX)]
+        local_fingerprint = viewer_artifacts.read_manifest_fingerprint(manifest_path)
+        if local_fingerprint is None:
+            continue
+        relative = manifest_path.relative_to(root).as_posix()
+        key = f"{normalized_prefix}/{relative}" if normalized_prefix else relative
+        if _remote_manifest_fingerprint(s3_client, bucket, key) == local_fingerprint:
+            unchanged[slug] = local_fingerprint
+    return unchanged
+
+
+def _plan_without_datasets(plan: list[UploadPlanItem], local_root: str | os.PathLike, slugs) -> list[UploadPlanItem]:
+    from oceanbench.publish import viewer_artifacts
+
+    root = Path(local_root)
+    return [
+        item
+        for item in plan
+        if not any(
+            viewer_artifacts.relative_path_belongs_to_dataset(item.local_path.relative_to(root).as_posix(), slug)
+            for slug in slugs
+        )
+    ]
+
+
 def _build_s3_client(endpoint: str, credentials: AwsCredentials, max_workers: int):
     import boto3
     from botocore.config import Config
@@ -320,6 +410,7 @@ def _upload_one(
     s3_client, bucket: str, item: UploadPlanItem, *, force: bool, compress_json: bool
 ) -> tuple[UploadPlanItem, bool]:
     is_json = str(item.local_path).endswith(".json")
+    cache_control = cache_control_for_path(item.local_path)
     if compress_json and is_json:
         body = _gzip_bytes(Path(item.local_path).read_bytes())
         stored_item = UploadPlanItem(local_path=item.local_path, key=item.key, size=len(body))
@@ -331,16 +422,15 @@ def _upload_one(
             Body=body,
             ContentType="application/json",
             ContentEncoding="gzip",
+            **({"CacheControl": cache_control} if cache_control else {}),
         )
         return stored_item, True
     if should_skip_upload(s3_client, bucket, item, force=force):
         return item, False
-    s3_client.upload_file(
-        str(item.local_path),
-        bucket,
-        item.key,
-        ExtraArgs={"ContentType": content_type_for_path(item.local_path)},
-    )
+    extra_arguments = {"ContentType": content_type_for_path(item.local_path)}
+    if cache_control:
+        extra_arguments["CacheControl"] = cache_control
+    s3_client.upload_file(str(item.local_path), bucket, item.key, ExtraArgs=extra_arguments)
     return item, True
 
 
@@ -363,14 +453,25 @@ def upload_tree(
     ``should_skip_upload``). Resolves credentials via ``resolve_credentials`` when
     ``credentials`` is not supplied. Returns an ``UploadSummary`` (no secrets).
 
+    A whole dataset is skipped before any of its objects is considered when the fingerprint in its
+    local ``<slug>.viewer-manifest.json`` matches the one already published (see
+    ``unchanged_dataset_slugs``); ``force`` bypasses that too.
+
     When ``compress_json`` is set, every ``.json`` object is stored gzip-compressed with
     ``Content-Encoding: gzip`` and ``Content-Type: application/json`` so the browser decompresses
     it transparently (large viewer JSON compresses roughly 7-15x); other objects are unchanged.
     """
     plan = build_upload_plan(local_root, prefix)
-    total_bytes = sum(item.size for item in plan)
     resolved_credentials = credentials or resolve_credentials(endpoint=endpoint, env_file=env_file)
     s3_client = _build_s3_client(endpoint, resolved_credentials, max_workers)
+
+    if not force:
+        unchanged = unchanged_dataset_slugs(s3_client, bucket, local_root, prefix)
+        for slug, fingerprint in unchanged.items():
+            print(f"skip {slug}: unchanged ({fingerprint[:8]})")
+        if unchanged:
+            plan = _plan_without_datasets(plan, local_root, unchanged)
+    total_bytes = sum(item.size for item in plan)
 
     start = time.monotonic()
     uploaded_count = 0

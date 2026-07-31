@@ -17,6 +17,8 @@ from oceanbench.publish.viewer_artifacts import (
     ViewerArtifactsResult,
     class4_bias_per_start_records,
     dataset_eddy_census,
+    dataset_fingerprint,
+    stamp_dataset_fingerprint,
     verify_matchup_parquet,
     write_eddy_census,
     write_matchup_parquet,
@@ -31,6 +33,7 @@ from oceanbench.publish.s3 import (
     mint_sts_credentials,
     resolve_credentials,
     should_skip_upload,
+    unchanged_dataset_slugs,
     upload_tree,
 )
 
@@ -50,6 +53,7 @@ __all__ = [
     "content_addressed_name",
     "content_type_for_path",
     "dataset_eddy_census",
+    "dataset_fingerprint",
     "mint_sts_credentials",
     "publish_benchmark_catalog",
     "publish_blob",
@@ -58,6 +62,8 @@ __all__ = [
     "resolve_credentials",
     "sha256_hex",
     "should_skip_upload",
+    "stamp_dataset_fingerprint",
+    "unchanged_dataset_slugs",
     "upload_tree",
     "verify_matchup_parquet",
     "write_catalog",

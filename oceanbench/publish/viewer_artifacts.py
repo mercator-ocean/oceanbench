@@ -15,6 +15,7 @@ artifacts from the objects a local ``evaluate`` already has in hand, reusing the
 
 from dataclasses import dataclass, field
 import datetime
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -106,6 +107,19 @@ _BIAS_CI_Z = 1.96
 PROVENANCE_KEY = "provenance"
 _MATCHUP_PROVENANCE_METADATA_KEY = b"oceanbench_provenance"
 
+FINGERPRINT_KEY = "fingerprint"
+PYRAMID_MANIFEST_SUFFIX = ".viewer-manifest.json"
+
+# Keys dropped from every JSON document before it is hashed. They move on every run without the
+# artifact content changing (timestamps), or move independently of it (the version string is read
+# from the installed dist-info and is routinely stale, the commit changes with any unrelated code
+# edit and would defeat the skip entirely), or are the fingerprint itself.
+_FINGERPRINT_VOLATILE_KEYS = frozenset(
+    {"generated_at", "oceanbench_version", "git_commit", "source_commit", FINGERPRINT_KEY}
+)
+# Zarr metadata files carry JSON without a .json suffix.
+_FINGERPRINT_JSON_FILENAMES = frozenset({".zattrs", ".zarray", ".zgroup", ".zmetadata", "zarr.json"})
+
 
 def _git_commit() -> str | None:
     try:
@@ -122,12 +136,13 @@ def _git_commit() -> str | None:
     return commit or None
 
 
-def provenance_block(*, source: str, parameters: dict | None = None) -> dict:
+def provenance_block(*, source: str, parameters: dict | None = None, fingerprint: str | None = None) -> dict:
     """Provenance stamp carried by every viewer artifact.
 
     Records the emitting library version, the git commit when the source tree is a checkout, the
     UTC generation timestamp and the source dataset identifier the artifact derives from. Any
-    relevant generating parameters are carried verbatim under ``parameters``.
+    relevant generating parameters are carried verbatim under ``parameters``. ``fingerprint`` is the
+    dataset content fingerprint used to skip republishing an unchanged dataset.
     """
     block = {
         "oceanbench_version": OCEANBENCH_VERSION,
@@ -137,7 +152,129 @@ def provenance_block(*, source: str, parameters: dict | None = None) -> dict:
     }
     if parameters is not None:
         block["parameters"] = parameters
+    if fingerprint is not None:
+        block[FINGERPRINT_KEY] = fingerprint
     return block
+
+
+def _without_volatile_keys(document):
+    if isinstance(document, dict):
+        return {
+            key: _without_volatile_keys(value)
+            for key, value in document.items()
+            if key not in _FINGERPRINT_VOLATILE_KEYS
+        }
+    if isinstance(document, list):
+        return [_without_volatile_keys(item) for item in document]
+    return document
+
+
+def _is_json_artifact(path: Path) -> bool:
+    return path.suffix == ".json" or path.name in _FINGERPRINT_JSON_FILENAMES
+
+
+def _json_artifact_digest(path: Path) -> str:
+    raw = path.read_bytes()
+    try:
+        document = json.loads(raw)
+    except ValueError:
+        return hashlib.sha256(raw).hexdigest()
+    canonical = json.dumps(_without_volatile_keys(document), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def dataset_artifact_relative_paths(root: str | os.PathLike, dataset_slug: str) -> list[str]:
+    """Every file under ``root`` that belongs to ``dataset_slug``, as sorted relative posix paths.
+
+    A file belongs to the dataset when it sits under an ``insights/<dataset_slug>/`` directory, in
+    the dataset's pyramid or column store (``<dataset_slug>.zarr`` / ``<dataset_slug>.columns.zarr``)
+    or is the dataset's pyramid manifest.
+    """
+    root_path = Path(root)
+    if not root_path.is_dir():
+        return []
+    return sorted(
+        relative
+        for relative in (path.relative_to(root_path).as_posix() for path in root_path.rglob("*") if path.is_file())
+        if relative_path_belongs_to_dataset(relative, dataset_slug)
+    )
+
+
+def relative_path_belongs_to_dataset(relative: str, dataset_slug: str) -> bool:
+    parts = relative.split("/")
+    directories = parts[:-1]
+    for index, part in enumerate(directories):
+        if part in (f"{dataset_slug}.zarr", f"{dataset_slug}.columns.zarr"):
+            return True
+        if part == "insights" and index + 1 < len(directories) and directories[index + 1] == dataset_slug:
+            return True
+    return parts[-1] == f"{dataset_slug}{PYRAMID_MANIFEST_SUFFIX}"
+
+
+def dataset_fingerprint(root: str | os.PathLike, dataset_slug: str) -> str | None:
+    """Deterministic content fingerprint of one dataset's viewer artifacts under ``root``.
+
+    Hashes, in sorted relative-path order, every artifact file of the dataset: JSON artifacts and
+    zarr metadata contribute their canonicalised content with the volatile provenance keys removed
+    (timestamp, version, commit, fingerprint), every other file (match-up parquet, zarr chunks)
+    contributes its byte size. Returns ``None`` when the dataset has no artifacts under ``root``.
+    """
+    root_path = Path(root)
+    relatives = dataset_artifact_relative_paths(root_path, dataset_slug)
+    if not relatives:
+        return None
+    digest = hashlib.sha256()
+    for relative in relatives:
+        path = root_path / relative
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        if _is_json_artifact(path):
+            digest.update(b"json:")
+            digest.update(_json_artifact_digest(path).encode("ascii"))
+        else:
+            digest.update(b"size:")
+            digest.update(str(path.stat().st_size).encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def read_manifest_fingerprint(manifest_path: str | os.PathLike) -> str | None:
+    """The fingerprint stamped in a pyramid manifest's provenance block, when present."""
+    path = Path(manifest_path)
+    if not path.is_file():
+        return None
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    provenance = manifest.get(PROVENANCE_KEY)
+    if not isinstance(provenance, dict):
+        return None
+    fingerprint = provenance.get(FINGERPRINT_KEY)
+    return fingerprint if isinstance(fingerprint, str) else None
+
+
+def stamp_dataset_fingerprint(root: str | os.PathLike, dataset_slug: str, *, manifest_path: str | None = None):
+    """Compute the dataset fingerprint and write it into its pyramid manifest provenance block.
+
+    Returns the fingerprint, or ``None`` when the dataset has no artifacts or no manifest to stamp.
+    """
+    fingerprint = dataset_fingerprint(root, dataset_slug)
+    if fingerprint is None:
+        return None
+    path = (
+        Path(manifest_path)
+        if manifest_path is not None
+        else Path(root) / "viewer" / "data" / f"{dataset_slug}{PYRAMID_MANIFEST_SUFFIX}"
+    )
+    if not path.is_file():
+        return None
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    existing = manifest.get(PROVENANCE_KEY)
+    provenance = dict(existing) if isinstance(existing, dict) else {}
+    stamped = {**manifest, PROVENANCE_KEY: {**provenance, FINGERPRINT_KEY: fingerprint}}
+    path.write_text(json.dumps(stamped, sort_keys=True, indent=2), encoding="utf-8")
+    return fingerprint
 
 
 @dataclass(frozen=True)
@@ -150,6 +287,7 @@ class ViewerArtifactsResult:
     year_error_geography_path: str | None = None
     year_rmsd_by_start_path: str | None = None
     rmsd_by_depth_path: str | None = None
+    fingerprint: str | None = None
     class4_bias_records: list[dict] = field(default_factory=list)
     flags: list[str] = field(default_factory=list)
 
@@ -982,6 +1120,10 @@ def write_viewer_artifacts(
         flags.append(f"rmsd-by-depth skipped: {error}")
         rmsd_by_depth_path = None
 
+    # Stamped last, once every artifact of this dataset is on disk: the publish path compares this
+    # fingerprint with the one already in the bucket and skips the dataset when they match.
+    fingerprint = stamp_dataset_fingerprint(output_path, dataset_slug, manifest_path=pyramid_manifest_path)
+
     return ViewerArtifactsResult(
         matchup_parquet_path=matchup_parquet_path,
         eddy_census_path=eddy_census_path,
@@ -991,6 +1133,7 @@ def write_viewer_artifacts(
         year_error_geography_path=year_error_geography_path,
         year_rmsd_by_start_path=year_rmsd_by_start_path,
         rmsd_by_depth_path=rmsd_by_depth_path,
+        fingerprint=fingerprint,
         class4_bias_records=class4_bias_records,
         flags=flags,
     )
