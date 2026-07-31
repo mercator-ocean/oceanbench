@@ -68,13 +68,10 @@ def test_matchup_parquet_layout_and_verification(tmp_path) -> None:
         key = tuple(column.min for column in statistics)
         assert previous_key is None or key > previous_key
         previous_key = key
-    # abs_error is |model - observation|.
-    table = parquet_file.read().to_pandas()
-    numpy.testing.assert_allclose(
-        table["abs_error"].to_numpy(),
-        numpy.abs(table["model_value"].to_numpy() - table["observation_value"].to_numpy()),
-        rtol=1e-6,
-    )
+    # The derived absolute error is not stored: only the two value columns it comes from are.
+    assert "abs_error" not in parquet_file.schema_arrow.names
+    # ZSTD, so the viewer needs its zstd codec; snappy files stay readable but are no longer written.
+    assert {metadata.row_group(0).column(index).compression for index in range(metadata.num_columns)} == {"ZSTD"}
 
 
 def test_matchup_parquet_splits_a_large_pair_across_row_groups(tmp_path, monkeypatch) -> None:
@@ -459,3 +456,62 @@ def test_provenance_block_shape() -> None:
     block = viewer_artifacts.provenance_block(source="thing", parameters={"a": 1})
     assert set(block) == {"oceanbench_version", "git_commit", "generated_at", "source", "parameters"}
     assert block["parameters"] == {"a": 1}
+
+
+def test_has_columns_is_stamped_into_the_manifest_and_stays_schema_valid(tmp_path) -> None:
+    from oceanbench.core.schema_validation import validate_against_schema
+
+    manifest = {
+        "levels": [{"level": 0, "cell_size_deg": 1.0, "latitude_size": 4, "longitude_size": 8}],
+        "tile_size": 16,
+        "bounds": {
+            "minimum_latitude": -1.0,
+            "maximum_latitude": 1.0,
+            "minimum_longitude": -2.0,
+            "maximum_longitude": 2.0,
+        },
+        "variables": {
+            "sea_surface_height_above_geoid": {
+                "units": "m",
+                "scale_factor": 0.001,
+                "add_offset": -2.0,
+                "default_colormap": "balance",
+                "default_range": [-2.0, 2.0],
+            }
+        },
+        "start_dates": ["2024-01-03"],
+        "lead_days": [1],
+    }
+    manifest_path = tmp_path / "synthetic.viewer-manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert viewer_artifacts.stamp_manifest_has_columns(manifest_path, True) is True
+    stamped = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert stamped["has_columns"] is True
+    validate_against_schema(stamped, "viewer-manifest")
+
+    assert viewer_artifacts.stamp_manifest_has_columns(manifest_path, False) is True
+    assert json.loads(manifest_path.read_text(encoding="utf-8"))["has_columns"] is False
+    # A dataset whose pyramid was skipped has no manifest to stamp.
+    assert viewer_artifacts.stamp_manifest_has_columns(None, True) is False
+    assert viewer_artifacts.stamp_manifest_has_columns(tmp_path / "absent.json", True) is False
+
+
+def test_matchup_parquet_is_zstd_without_abs_error_and_readable(tmp_path) -> None:
+    output_path = str(tmp_path / "class4-matchups.parquet")
+    viewer_artifacts.write_matchup_parquet(_matchup_frame(), output_path)
+
+    parquet_file = pyarrow.parquet.ParquetFile(output_path)
+    assert "abs_error" not in parquet_file.schema_arrow.names
+    metadata = parquet_file.metadata
+    for group_index in range(metadata.num_row_groups):
+        row_group = metadata.row_group(group_index)
+        for column_index in range(metadata.num_columns):
+            assert row_group.column(column_index).compression == "ZSTD"
+
+    table = parquet_file.read()
+    derived = numpy.abs(
+        table["model_value"].to_numpy().astype("float64") - table["observation_value"].to_numpy().astype("float64")
+    )
+    assert numpy.all(numpy.isfinite(derived))
+    assert table.num_rows > 0

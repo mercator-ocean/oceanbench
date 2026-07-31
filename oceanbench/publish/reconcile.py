@@ -11,7 +11,7 @@ those numbers straight from the parquet and checks them against the published ag
 report can be trusted without re-running the whole evaluation:
 
 - **Class-4 pooled RMSD** per ``(variable, depth_bin, lead)`` recomputed as the observation-pooled
-  ``sqrt(mean(abs_error ** 2))`` (algebraically the n-weighted recombination the official
+  ``sqrt(mean((model_value - observation_value) ** 2))`` (algebraically the n-weighted recombination the official
   ``class4_rmsd`` aggregate uses) and compared to ``scores-summary.json`` at ``class4_rtol``. When
   the official record carries the pooled observation count ``n`` (emitted by the aggregation
   library), the parquet's finite-obs count is additionally asserted against it — an independent
@@ -164,7 +164,6 @@ def _accumulate_parquet(parquet_path: str, grid: dict) -> _Accumulators:
         "longitude",
         "observation_value",
         "model_value",
-        "abs_error",
     ]
     for group_index in range(parquet_file.num_row_groups):
         batch = parquet_file.read_row_group(group_index, columns=columns)
@@ -187,7 +186,7 @@ def _accumulate_batch(batch, accumulators: _Accumulators, grid: dict, cell_count
     latitude = batch["latitude"].to_numpy().astype("float64")
     longitude = batch["longitude"].to_numpy().astype("float64")
     signed = batch["model_value"].to_numpy().astype("float64") - batch["observation_value"].to_numpy().astype("float64")
-    absolute = batch["abs_error"].to_numpy().astype("float64")
+    absolute = numpy.abs(signed)
     finite = numpy.isfinite(absolute) & numpy.isfinite(latitude) & numpy.isfinite(longitude)
 
     variable, depth_bin = variable[finite], depth_bin[finite]

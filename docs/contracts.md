@@ -294,10 +294,11 @@ large global parquet overlays sample evenly spaced row groups across the file.
 evaluation by `oceanbench/publish/viewer_artifacts.py` (opt-in via
 `oceanbench evaluate --viewer-artifacts`):
 
-- `class4-matchups` parquet — `write_matchup_parquet`: the nine served columns
+- `class4-matchups` parquet — `write_matchup_parquet`: the eight served columns
   (`variable, depth_bin, lead_day int16, start_date YYYY-MM-DD, latitude,
-  longitude, observation_value, model_value, abs_error` — floats `float32`),
-  SNAPPY, sorted by `(start_date, lead_day, variable, depth_bin)` with one such
+  longitude, observation_value, model_value` — floats `float32`; the absolute
+  error is derived from the two value columns by every reader, not stored),
+  ZSTD level 3, sorted by `(start_date, lead_day, variable, depth_bin)` with one such
   group per row group so a single-variable view never fetches a row group
   straddling a variable boundary (≤ 200 000 rows/group, a larger group split
   across consecutive groups), statistics on all four grouping columns.

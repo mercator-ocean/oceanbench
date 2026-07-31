@@ -65,7 +65,6 @@ _MATCHUP_TARGET_SCHEMA = pyarrow.schema(
         ("longitude", pyarrow.float32()),
         ("observation_value", pyarrow.float32()),
         ("model_value", pyarrow.float32()),
-        ("abs_error", pyarrow.float32()),
     ]
 )
 
@@ -359,9 +358,6 @@ def _project_matchups(table: pyarrow.Table) -> pyarrow.Table:
         start_date = pyarrow.compute.cast(start_date, pyarrow.string())
     model_value = pyarrow.compute.cast(table.column("model_value"), pyarrow.float32())
     observation_value = pyarrow.compute.cast(table.column("observation_value"), pyarrow.float32())
-    absolute_error = pyarrow.compute.cast(
-        pyarrow.compute.abs(pyarrow.compute.subtract(model_value, observation_value)), pyarrow.float32()
-    )
     return pyarrow.table(
         {
             "variable": pyarrow.compute.cast(table.column("variable"), pyarrow.string()),
@@ -372,7 +368,6 @@ def _project_matchups(table: pyarrow.Table) -> pyarrow.Table:
             "longitude": pyarrow.compute.cast(table.column("longitude"), pyarrow.float32()),
             "observation_value": observation_value,
             "model_value": model_value,
-            "abs_error": absolute_error,
         },
         schema=_MATCHUP_TARGET_SCHEMA,
     )
@@ -424,8 +419,8 @@ def write_matchup_parquet(matchups, output_path: str, *, source: str | None = No
     """Write the Class-4 match-ups to the viewer serving parquet and validate the layout.
 
     The match-up dataframe (``oceanbench.runner.matchups.class4_matchups``) is projected to the
-    nine served columns, sorted by ``(start_date, lead_day, variable, depth_bin)`` and written
-    SNAPPY-compressed with one ``(start_date, lead_day, variable, depth_bin)`` group per row group
+    eight served columns, sorted by ``(start_date, lead_day, variable, depth_bin)`` and written
+    ZSTD-compressed with one ``(start_date, lead_day, variable, depth_bin)`` group per row group
     so a single-variable view never fetches a row group straddling a variable boundary (a group
     spanning more than ``MAXIMUM_ROW_GROUP_ROWS`` rows is split across consecutive groups). The
     written file is then re-opened and validated by :func:`verify_matchup_parquet`.
@@ -433,7 +428,7 @@ def write_matchup_parquet(matchups, output_path: str, *, source: str | None = No
     provenance_metadata = _matchup_provenance_metadata(output_path, source)
     projected = _projected_sorted_partition(matchups).replace_schema_metadata(provenance_metadata)
     Path(os.path.dirname(output_path) or ".").mkdir(parents=True, exist_ok=True)
-    writer = pyarrow.parquet.ParquetWriter(output_path, projected.schema, compression="snappy")
+    writer = pyarrow.parquet.ParquetWriter(output_path, projected.schema, compression="zstd", compression_level=3)
     _write_matchup_row_groups(writer, projected)
     writer.close()
     verify_matchup_parquet(output_path)
@@ -466,11 +461,16 @@ def write_matchup_parquet_streamed(
                 continue
             projected = _projected_sorted_partition(partition).replace_schema_metadata(provenance_metadata)
             if writer is None:
-                writer = pyarrow.parquet.ParquetWriter(output_path, projected.schema, compression="snappy")
+                writer = pyarrow.parquet.ParquetWriter(
+                    output_path, projected.schema, compression="zstd", compression_level=3
+                )
             _write_matchup_row_groups(writer, projected)
         if writer is None:
             writer = pyarrow.parquet.ParquetWriter(
-                output_path, _MATCHUP_TARGET_SCHEMA.with_metadata(provenance_metadata), compression="snappy"
+                output_path,
+                _MATCHUP_TARGET_SCHEMA.with_metadata(provenance_metadata),
+                compression="zstd",
+                compression_level=3,
             )
         writer.close()
     except BaseException:
@@ -732,7 +732,6 @@ def _write_year_artifacts(
         "lead_day",
         "latitude",
         "longitude",
-        "abs_error",
         "observation_value",
         "model_value",
         "start_date",
@@ -754,9 +753,9 @@ def _write_year_artifacts(
         depth_names = numpy.asarray(batch["depth_bin"].to_pylist())
         all_latitude = batch["latitude"].to_numpy()
         all_longitude = batch["longitude"].to_numpy()
-        all_absolute_error = batch["abs_error"].to_numpy()
         all_observation = batch["observation_value"].to_numpy()
         all_model = batch["model_value"].to_numpy()
+        all_absolute_error = numpy.abs(all_model - all_observation)
 
         # A row group is pure in (start_date, lead_day) but mixes variables: select each target
         # variable/depth_bin explicitly rather than assuming a homogeneous group.
@@ -923,7 +922,7 @@ def rmsd_by_depth(matchup_parquet_path: str) -> dict:
     leads_by_variable: dict[str, set] = {}
 
     parquet_file = pyarrow.parquet.ParquetFile(matchup_parquet_path)
-    columns = ["variable", "depth_bin", "lead_day", "observation_value", "model_value", "abs_error"]
+    columns = ["variable", "depth_bin", "lead_day", "observation_value", "model_value"]
     for group_index in range(parquet_file.num_row_groups):
         batch = parquet_file.read_row_group(group_index, columns=columns)
         variable_names = numpy.asarray(batch["variable"].to_pylist())
@@ -931,8 +930,8 @@ def rmsd_by_depth(matchup_parquet_path: str) -> dict:
         lead_days = batch["lead_day"].to_numpy().astype("int64")
         observation = batch["observation_value"].to_numpy().astype("float64")
         model = batch["model_value"].to_numpy().astype("float64")
-        absolute_error = batch["abs_error"].to_numpy().astype("float64")
-        finite = numpy.isfinite(absolute_error) & numpy.isfinite(observation) & numpy.isfinite(model)
+        absolute_error = numpy.abs(model - observation)
+        finite = numpy.isfinite(observation) & numpy.isfinite(model)
         if not finite.any():
             continue
         variable_names = variable_names[finite]

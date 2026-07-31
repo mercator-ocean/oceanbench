@@ -11,8 +11,27 @@
 // rows, no cap.
 
 import { parquetReadObjects, parquetMetadataAsync } from "../vendor/hyparquet/hyparquet.min.js";
+import { decompress as zstdDecompress } from "../vendor/fzstd/fzstd.mjs";
 
 const RANGE_BYTE_BUDGET = 48 * 1024 * 1024;
+
+// hyparquet decodes UNCOMPRESSED and SNAPPY itself; the published parquet is ZSTD, so supply
+// that codec from the vendored fzstd. Files of either vintage decode through the same path.
+const PARQUET_COMPRESSORS = {
+  ZSTD: (input, outputLength) => zstdDecompress(input, new Uint8Array(outputLength)),
+};
+
+// The published parquet drops `abs_error`: it is |model_value - observation_value| and every
+// consumer can derive it. Files written before the change still carry the column, so derive it
+// only when it is missing and both encodings behave identically downstream.
+function withAbsoluteError(rows) {
+  for (const row of rows) {
+    if (row.abs_error == null) {
+      row.abs_error = Math.abs(Number(row.model_value) - Number(row.observation_value));
+    }
+  }
+  return rows;
+}
 
 // Per-file footer + open handle (shared by mode detection and targeted reads).
 const fileInfoCache = new Map();
@@ -108,13 +127,16 @@ async function targetedPair(url, info, startDate, leadDay, variables) {
     // phase of a lead change. Falls back to the range-backed file if the span is unknown or
     // exceeds the budget (keeps large legacy files streaming).
     const file = (await coalescedRangeFile(info, indices)) || info.file;
-    const rows = await parquetReadObjects({
-      file,
-      metadata: info.metadata,
-      rowStart,
-      rowEnd,
-      rowFormat: "object",
-    });
+    const rows = withAbsoluteError(
+      await parquetReadObjects({
+        file,
+        metadata: info.metadata,
+        rowStart,
+        rowEnd,
+        rowFormat: "object",
+        compressors: PARQUET_COMPRESSORS,
+      })
+    );
     rows.targeted = true;
     rows.total = rows.length;
     return rows;
