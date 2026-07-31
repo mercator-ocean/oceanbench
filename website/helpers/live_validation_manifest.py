@@ -41,6 +41,10 @@ def _report_page_name(evaluation: dict) -> str | None:
     return f"{page_stem}.html"
 
 
+def _region_id(evaluation: dict) -> str:
+    return str(evaluation.get("region", DEFAULT_REGION))
+
+
 def _report_cell(evaluation: dict) -> str:
     if evaluation.get("status") != "Complete":
         return "<td>Pending</td>"
@@ -142,6 +146,7 @@ def render_live_validation_table(
             + _live_validation_table_row_attributes(evaluation, selected_panel_id)
             + ">"
             f"<td>{_live_validation_system_cell(evaluation, selected_panel_id)}</td>"
+            f"<td>{escape(_region_id(evaluation))}</td>"
             f"<td>{escape(_forecast_horizon(evaluation))}</td>"
             f"<td>{escape(evaluation['validated_lead_days'])}</td>"
             f"<td>{escape(evaluation['status'])}</td>"
@@ -154,7 +159,7 @@ def render_live_validation_table(
         '<section class="live-evaluations-table-wrap">'
         '<table class="live-evaluations-table">'
         "<thead><tr>"
-        "<th>System</th><th>Forecast horizon</th><th>Evaluated leads</th><th>Status</th><th>Report</th>"
+        "<th>System</th><th>Region</th><th>Forecast horizon</th><th>Evaluated leads</th><th>Status</th><th>Report</th>"
         "</tr></thead>"
         f"<tbody>{rows}</tbody>"
         "</table>"

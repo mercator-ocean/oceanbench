@@ -114,6 +114,8 @@ def test_live_validation_table_and_report_metadata_are_manifest_driven(tmp_path:
     assert "1-10 days" in html
     assert "Forecast horizon" in html
     assert "Evaluated leads" in html
+    assert "<th>Region</th>" in html
+    assert "<td>global</td>" in html
     assert "10 days" in html
     assert "Score preview" not in html
     assert "data-live-preview-target" in html
@@ -197,6 +199,7 @@ def test_live_validation_table_links_ibi_region_to_its_report_page(tmp_path: Pat
     html = render_live_validation_table(manifest_path)
 
     assert "GLONET2 IBI (experimental)" in html
+    assert "<td>ibi</td>" in html
     assert '<a href="glonet2-ibi-forecast-validation.html">Report</a>' in html
     assert (
         report_notebook_path(manifest_path, "octo-glonet2-ibi-p1d")
