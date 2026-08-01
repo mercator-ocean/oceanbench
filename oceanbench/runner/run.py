@@ -26,6 +26,7 @@ import pandas
 import xarray
 
 import oceanbench.datasets.challenger as challenger_datasets
+from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.grid_alignment import GridAlignment, align_reference_to_challenger_grid
@@ -88,9 +89,16 @@ def _aligned_reference(
 
     Aligning here rather than inside each metric keeps the coverage reportable instead of
     absorbed (issue #305). A genuine mismatch raises and aborts the run.
+
+    Both sides go through the CF standard-name rename first, exactly as every metric does
+    before it computes: the quarter-degree GLORYS store names its axes ``lat``/``lon``, and
+    the alignment reads ``latitude``/``longitude``.
     """
     reference = subset_dataset_to_region(reference_openers[reference_name](regional_challenger), region)
-    return align_reference_to_challenger_grid(regional_challenger, reference)
+    return align_reference_to_challenger_grid(
+        rename_dataset_with_standard_names(regional_challenger),
+        rename_dataset_with_standard_names(reference),
+    )
 
 
 def _gridded_records(

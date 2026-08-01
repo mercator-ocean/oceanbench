@@ -166,3 +166,31 @@ def test_rmsd_refuses_a_genuinely_different_grid():
 
     with pytest.raises(GridAlignmentError):
         rmsd_per_start_date(challenger, reference, [Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID])
+
+
+def _dataset_with_short_axis_names(dataset: xarray.Dataset) -> xarray.Dataset:
+    """The quarter-degree GLORYS layout: ``lat``/``lon`` axes carrying CF standard names."""
+    renamed = dataset.rename({LATITUDE_KEY: "lat", LONGITUDE_KEY: "lon"})
+    renamed["lat"].attrs["standard_name"] = LATITUDE_KEY
+    renamed["lon"].attrs["standard_name"] = LONGITUDE_KEY
+    return renamed
+
+
+def test_runner_aligns_a_reference_whose_axes_are_named_lat_and_lon():
+    """The quarter-degree GLORYS store the glonet run scores against names its axes lat/lon."""
+    from oceanbench.runner.run import _aligned_reference
+
+    latitudes, longitudes = _global_grid(spacing=2.0)
+    challenger = _scoreable_dataset(latitudes, longitudes)
+    reference = _dataset_with_short_axis_names(_scoreable_dataset(latitudes, longitudes, offset=0.1))
+
+    aligned_reference, alignment = _aligned_reference(
+        challenger,
+        reference_name="glorys",
+        reference_openers={"glorys": lambda _challenger: reference},
+        region="global",
+    )
+
+    assert LATITUDE_KEY in aligned_reference.coords
+    assert LONGITUDE_KEY in aligned_reference.coords
+    assert alignment.coverage == 1.0
