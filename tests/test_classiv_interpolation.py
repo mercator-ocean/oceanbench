@@ -66,40 +66,56 @@ def _observations_dataframe() -> pandas.DataFrame:
     )
 
 
-def _record_first_day_block_compute_calls(monkeypatch) -> list[tuple[int, ...]]:
+def _record_model_compute_calls(monkeypatch) -> tuple[list[tuple[int, ...]], list[int]]:
     original_compute = xarray.DataArray.compute
     first_day_block_compute_calls = []
+    single_lead_day_compute_calls = []
 
     def record_compute(data_array: xarray.DataArray, *args, **kwargs):
-        if (
-            Dimension.LEAD_DAY_INDEX.key() in data_array.dims
-            and Dimension.FIRST_DAY_DATETIME.key() not in data_array.dims
-        ):
-            first_day_block_compute_calls.append(tuple(data_array[Dimension.LEAD_DAY_INDEX.key()].values.tolist()))
+        if Dimension.LATITUDE.key() in data_array.dims and Dimension.FIRST_DAY_DATETIME.key() not in data_array.dims:
+            if Dimension.LEAD_DAY_INDEX.key() in data_array.dims:
+                first_day_block_compute_calls.append(tuple(data_array[Dimension.LEAD_DAY_INDEX.key()].values.tolist()))
+            else:
+                single_lead_day_compute_calls.append(int(data_array[Dimension.LEAD_DAY_INDEX.key()].values))
         return original_compute(data_array, *args, **kwargs)
 
     monkeypatch.setattr(xarray.DataArray, "compute", record_compute)
-    return first_day_block_compute_calls
+    return first_day_block_compute_calls, single_lead_day_compute_calls
 
 
-def test_class4_model_interpolation_uses_memory_safe_materialization_by_default(monkeypatch) -> None:
-    first_day_block_compute_calls = _record_first_day_block_compute_calls(monkeypatch)
-
-    model_values = interpolate_class4_model_to_observations(_model_data(), _observations_dataframe())
-
-    numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0, 100.75, 122.25])
-    assert first_day_block_compute_calls == []
-
-
-def test_class4_fast_interpolation_materializes_each_first_day_block_once(monkeypatch) -> None:
+def _enable_fast_interpolation(monkeypatch) -> None:
     monkeypatch.setattr(
         runtime_configuration,
         "_runtime_configuration",
         RuntimeConfiguration(class4_fast_interpolation=True),
     )
-    first_day_block_compute_calls = _record_first_day_block_compute_calls(monkeypatch)
+
+
+def test_class4_model_interpolation_uses_memory_safe_materialization_by_default(monkeypatch) -> None:
+    first_day_block_compute_calls, single_lead_day_compute_calls = _record_model_compute_calls(monkeypatch)
 
     model_values = interpolate_class4_model_to_observations(_model_data(), _observations_dataframe())
 
     numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0, 100.75, 122.25])
-    assert first_day_block_compute_calls == [(0, 1, 2), (0, 1, 2)]
+    assert first_day_block_compute_calls == []
+    assert single_lead_day_compute_calls == [0, 1, 2, 0, 2]
+
+
+def test_class4_fast_interpolation_materializes_one_lead_day_at_a_time(monkeypatch) -> None:
+    _enable_fast_interpolation(monkeypatch)
+    first_day_block_compute_calls, single_lead_day_compute_calls = _record_model_compute_calls(monkeypatch)
+
+    model_values = interpolate_class4_model_to_observations(_model_data(), _observations_dataframe())
+
+    numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0, 100.75, 122.25])
+    assert first_day_block_compute_calls == []
+    assert single_lead_day_compute_calls == [0, 1, 2, 0, 2]
+
+
+def test_class4_fast_interpolation_matches_the_default_path(monkeypatch) -> None:
+    default_model_values = interpolate_class4_model_to_observations(_model_data(), _observations_dataframe())
+
+    _enable_fast_interpolation(monkeypatch)
+    fast_model_values = interpolate_class4_model_to_observations(_model_data(), _observations_dataframe())
+
+    numpy.testing.assert_array_equal(fast_model_values, default_model_values)

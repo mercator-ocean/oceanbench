@@ -440,13 +440,13 @@ def _assign_model_values_for_first_day(
     variable_key: str,
 ) -> None:
     first_day_block = (
-        model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index}).compute()
+        model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index})
         if current_runtime_configuration().class4_fast_interpolation
         else None
     )
     for lead_day, observation_group in first_day_group.groupby("lead_day", sort=False):
         time_slice = (
-            first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
+            first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]}).compute()
             if first_day_block is not None
             else _compute_with_remote_retries(
                 f"Class IV model {variable_key} read for lead day {lead_day}",
