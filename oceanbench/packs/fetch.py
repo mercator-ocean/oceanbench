@@ -15,6 +15,7 @@ skipped, which makes a re-run of an interrupted fetch cheap without any resume p
 """
 
 from dataclasses import dataclass
+import gzip
 import json
 import os
 from pathlib import Path
@@ -90,11 +91,24 @@ def write_pack_file_index(pack_directory: str) -> str:
     return str(index_path)
 
 
+def read_json_url(url: str, *, timeout: int = 30) -> dict:
+    """Read a JSON document over HTTPS, inflating a gzip-encoded body.
+
+    Published JSON objects are stored gzip-compressed and served with
+    ``Content-Encoding: gzip``. urllib does not act on that header, so the body
+    arrives as gzip bytes and has to be inflated before it can be parsed.
+    """
+    with urlopen(url, timeout=timeout) as response:  # noqa: S310
+        body = response.read()
+    if body[:2] == b"\x1f\x8b":
+        body = gzip.decompress(body)
+    return json.loads(body)
+
+
 def _read_pack_file_index(base_url: str) -> dict:
     index_url = urljoin(base_url, PACK_FILE_INDEX_FILENAME)
     try:
-        with urlopen(index_url, timeout=_DOWNLOAD_TIMEOUT_SECONDS) as response:  # noqa: S310
-            return json.load(response)
+        return read_json_url(index_url, timeout=_DOWNLOAD_TIMEOUT_SECONDS)
     except OSError as error:
         raise ValueError(
             f"no downloadable pack at {base_url}: unable to read {PACK_FILE_INDEX_FILENAME} ({error}). "

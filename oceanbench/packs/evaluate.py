@@ -48,6 +48,7 @@ from oceanbench.core.runtime_configuration import (
 )
 from oceanbench.core.schema_validation import validate_against_schema
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
+from oceanbench.packs.fetch import read_json_url
 from oceanbench.packs.manifest import PACK_MANIFEST_FILENAME
 from oceanbench.packs.scorecard import write_overlay_scorecard
 from oceanbench.publish.aggregate import aggregate_scores, summary_to_json_records
@@ -125,8 +126,7 @@ def load_pack_manifest(pack_directory: str) -> dict:
 
 def _load_json(path_or_url: str) -> dict:
     if "://" in path_or_url:
-        with urlopen(path_or_url, timeout=30) as response:  # noqa: S310
-            return json.load(response)
+        return read_json_url(path_or_url)
     return json.loads(Path(path_or_url).read_text(encoding="utf-8"))
 
 

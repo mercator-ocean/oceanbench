@@ -10,11 +10,11 @@ import os
 from pathlib import Path
 import shutil
 from urllib.parse import urljoin
-from urllib.request import urlopen
 
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension
+from oceanbench.packs.fetch import read_json_url
 from oceanbench.pyramids import build_pyramid, viewer_layers
 
 # Keep aligned with website/viewer/config.js. Update both rebuild-preview values at release.
@@ -40,8 +40,7 @@ class LocalViewerResult:
 
 def _official_datasets() -> list[dict]:
     data_base_url = official_data_base_url()
-    with urlopen(urljoin(data_base_url, "datasets.json"), timeout=30) as response:  # noqa: S310
-        catalog = json.load(response)
+    catalog = read_json_url(urljoin(data_base_url, "datasets.json"))
     return [
         {
             **entry,

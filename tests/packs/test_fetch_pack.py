@@ -4,8 +4,11 @@
 
 """Pack download tests, served from a throwaway local http.server (never a real bucket)."""
 
+from contextlib import contextmanager
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import gzip
+import io
 import json
 from pathlib import Path
 import threading
@@ -17,6 +20,7 @@ from oceanbench.packs.fetch import (
     default_pack_cache_directory,
     fetch_pack,
     pack_name_from_source,
+    read_json_url,
     resolve_offline_references,
     write_pack_file_index,
 )
@@ -126,6 +130,37 @@ def test_fetch_pack_without_an_index_explains_itself(tmp_path: Path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def _stub_urlopen(monkeypatch, body: bytes):
+    @contextmanager
+    def fake_urlopen(url, timeout=None):  # noqa: ARG001 - signature mirrors urllib
+        yield io.BytesIO(body)
+
+    monkeypatch.setattr("oceanbench.packs.fetch.urlopen", fake_urlopen)
+
+
+def test_read_json_url_inflates_a_gzip_encoded_body(monkeypatch):
+    payload = {"datasets": [{"name": "glorys"}]}
+    _stub_urlopen(monkeypatch, gzip.compress(json.dumps(payload).encode("utf-8")))
+
+    assert read_json_url("https://example.test/data/datasets.json") == payload
+
+
+def test_read_json_url_reads_a_plain_body(monkeypatch):
+    payload = {"datasets": []}
+    _stub_urlopen(monkeypatch, json.dumps(payload).encode("utf-8"))
+
+    assert read_json_url("https://example.test/data/datasets.json") == payload
+
+
+def test_read_pack_file_index_inflates_a_gzip_encoded_index(monkeypatch):
+    index = {"schema_version": "1.0", "files": [{"path": "README.md", "size": 7}]}
+    _stub_urlopen(monkeypatch, gzip.compress(json.dumps(index).encode("utf-8")))
+
+    from oceanbench.packs.fetch import _read_pack_file_index
+
+    assert _read_pack_file_index("https://example.test/packs/pack-a/") == index
 
 
 def test_fetch_pack_rejects_a_bare_name():
