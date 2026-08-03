@@ -252,25 +252,37 @@ def _link_hourly_drifter_trajectories(
         gap_hours = (next_timestamp - active_tracks[LAST_MATCHED_TIME_COLUMN]) / pandas.Timedelta(hours=1)
         matched_indices = _matched_track_indices(active_tracks, next_frame, time_step_hours=gap_hours.to_numpy())
 
-        for active_track_index, next_index in matched_indices:
-            next_row = next_frame.iloc[next_index]
-            active_row_label = active_tracks.index[active_track_index]
-            active_tracks.loc[active_row_label, Dimension.LATITUDE.key()] = next_row[Dimension.LATITUDE.key()]
-            active_tracks.loc[active_row_label, Dimension.LONGITUDE.key()] = next_row[Dimension.LONGITUDE.key()]
-            active_tracks.loc[active_row_label, Variable.EASTWARD_SEA_WATER_VELOCITY.key()] = next_row[
+        if matched_indices:
+            # Matched positions are unique on both sides, so the per-match writes can be applied
+            # as one array assignment per column instead of one scalar assignment per match.
+            match_pairs = numpy.asarray(matched_indices, dtype=int)
+            active_row_labels = active_tracks.index.to_numpy()[match_pairs[:, 0]]
+            next_row_positions = match_pairs[:, 1]
+            matched_latitudes = next_frame[Dimension.LATITUDE.key()].to_numpy()[next_row_positions]
+            matched_longitudes = next_frame[Dimension.LONGITUDE.key()].to_numpy()[next_row_positions]
+            active_tracks.loc[active_row_labels, Dimension.LATITUDE.key()] = matched_latitudes
+            active_tracks.loc[active_row_labels, Dimension.LONGITUDE.key()] = matched_longitudes
+            active_tracks.loc[active_row_labels, Variable.EASTWARD_SEA_WATER_VELOCITY.key()] = next_frame[
                 Variable.EASTWARD_SEA_WATER_VELOCITY.key()
-            ]
-            active_tracks.loc[active_row_label, Variable.NORTHWARD_SEA_WATER_VELOCITY.key()] = next_row[
+            ].to_numpy()[next_row_positions]
+            active_tracks.loc[active_row_labels, Variable.NORTHWARD_SEA_WATER_VELOCITY.key()] = next_frame[
                 Variable.NORTHWARD_SEA_WATER_VELOCITY.key()
-            ]
-            active_tracks.loc[active_row_label, LAST_MATCHED_TIME_COLUMN] = next_timestamp
-            trajectory_records.append(
+            ].to_numpy()[next_row_positions]
+            active_tracks.loc[active_row_labels, LAST_MATCHED_TIME_COLUMN] = next_timestamp
+            matched_track_ids = active_tracks.loc[active_row_labels, "track_id"].to_numpy()
+            trajectory_records.extend(
                 {
-                    "track_id": int(active_tracks.loc[active_row_label, "track_id"]),
+                    "track_id": int(track_id),
                     Dimension.TIME.key(): next_timestamp,
-                    Dimension.LATITUDE.key(): next_row[Dimension.LATITUDE.key()],
-                    Dimension.LONGITUDE.key(): next_row[Dimension.LONGITUDE.key()],
+                    Dimension.LATITUDE.key(): latitude,
+                    Dimension.LONGITUDE.key(): longitude,
                 }
+                for track_id, latitude, longitude in zip(
+                    matched_track_ids,
+                    matched_latitudes,
+                    matched_longitudes,
+                    strict=False,
+                )
             )
 
         # Unmatched tracks stay alive, dead reckoned from their last observed position and velocity,
