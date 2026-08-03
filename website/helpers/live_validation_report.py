@@ -476,7 +476,10 @@ def render_forecast_validation_page(
 {rmsd_detail_section}
 <section class="validation-section">
   <h2>Drifter trajectory scores</h2>
-  <p>Observed Class IV 15 m drifter tracks are compared with challenger-advected trajectories.</p>
+  <p>
+    Observed Class IV drifter tracks at 15 m drogue depth are compared with trajectories advected by the
+    challenger currents interpolated to 15 m, or by its surface currents when the system has no depth axis.
+  </p>
   {_drifter_score_table(drifter_score)}
 </section>
 {observation_maps_section}

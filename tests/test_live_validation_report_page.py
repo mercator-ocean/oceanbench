@@ -69,7 +69,7 @@ def _full_score_preview() -> dict:
                 "lead_values": {"1": 0.05, "10": 0.07},
             },
             {
-                "label": "Surface drifter deviation",
+                "label": "Drifter deviation",
                 "unit": "km",
                 "lead_values": {"1": 12.3, "10": 45.6},
             },
@@ -81,7 +81,7 @@ def _drifter_only_score_preview() -> dict:
     return {
         "metrics": [
             {
-                "label": "Surface drifter deviation",
+                "label": "Drifter deviation",
                 "unit": "km",
                 "lead_values": {"1": 12.3, "10": 45.6},
             },
@@ -150,7 +150,7 @@ def test_render_forecast_validation_page_uses_notebook_outputs_without_notebook_
     # The representative-scores widget is the manifest preview (same renderer as the listing page).
     assert "Temperature, surface" in html
     assert "Sea level anomaly" in html
-    assert "Surface drifter deviation" in html
+    assert "Drifter deviation" in html
     assert "Lead 10" in html
     assert 'data-tooltip="Lead 1: 1.200 C"' in html
     assert 'data-tooltip="Lead 10: 1.400 C"' in html
@@ -254,7 +254,7 @@ def test_render_forecast_validation_page_self_suppresses_class4_rmsd_for_surface
     # One self-suppressing path: the unified intro + the manifest preview (drifter only).
     assert "Class IV evaluation is complete" in html
     assert "Representative lead-time scores" in html
-    assert "Surface drifter deviation" in html
+    assert "Drifter deviation" in html
     assert "Drifter trajectory scores" in html
     assert "Drifter trajectory divergence" in html
     assert "class-4 drifter trajectory deviation mean" in html

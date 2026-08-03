@@ -97,7 +97,7 @@ CURRENTS_PREVIEW_COMPONENTS = (("zonal current", "15m"), ("meridional current", 
 CURRENTS_PREVIEW_LABEL = "Currents, 15 m"
 CLASS4_OBSERVATION_RMSD_SOURCE = "evaluation_report.class4_observation.rmsd"
 CLASS4_DRIFTER_DEVIATION_SOURCE = "evaluation_report.class4_drifter_trajectory_deviation"
-DRIFTER_DEVIATION_PREVIEW_LABEL = "Surface drifter deviation"
+DRIFTER_DEVIATION_PREVIEW_LABEL = "Drifter deviation"
 
 
 def _day_string(day: str | datetime | numpy.datetime64 | pandas.Timestamp) -> str:
