@@ -9,20 +9,48 @@
 
 import { lookupTable } from "../vendor/cmocean/colormaps.js";
 
-const LAND_LIGHT = [214, 219, 226];
-const LAND_DARK = [22, 27, 35];
-// "Sea but unobserved" in the entire-year error raster: a faint blue-grey that is
-// clearly lighter/bluer than land, so land, no-obs ocean and scored ocean each read
-// distinctly (year scope only; single-forecast fields keep land ↔ ocean as before).
+// Land is a flat unsaturated grey, the oceanographic convention: it sits far from both
+// ends of every field palette in both themes, so a continent never reads as an extreme
+// value. "Sea but unobserved" in the entire-year error raster keeps a faint blue tint,
+// clearly bluer than land, so land, no-obs ocean and scored ocean each read distinctly
+// (year scope only; single-forecast fields keep land ↔ ocean as before).
+// The live values come from the shared design tokens (tokens.css, --ob-viewer-land and
+// --ob-viewer-no-obs, themed by data-theme on <html>); the per-theme literals below are
+// the fallback kept in sync with that file.
+const LAND_LIGHT = [190, 184, 174];
+const LAND_DARK = [132, 130, 126];
 export const NO_OBS_LIGHT = [222, 231, 243];
 export const NO_OBS_DARK = [42, 54, 72];
 
+// getComputedStyle flushes style, so resolve each token once per theme rather than on
+// every colorize call (the lead scrub recolorizes a field per frame).
+const tokenCache = new Map();
+
+function themeColor(name, fallback) {
+  // Key on the theme the document is actually wearing, since that is what
+  // getComputedStyle resolves against.
+  const key = `${name}|${document.documentElement.dataset.theme}`;
+  const cached = tokenCache.get(key);
+  if (cached) return cached;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const parsed = parseHexColor(value) || fallback;
+  tokenCache.set(key, parsed);
+  return parsed;
+}
+
+function parseHexColor(text) {
+  const match = /^#([0-9a-f]{6})$/i.exec(text);
+  if (!match) return null;
+  const value = parseInt(match[1], 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
 export function landColor(theme) {
-  return theme === "light" ? LAND_LIGHT : LAND_DARK;
+  return themeColor("--ob-viewer-land", theme === "light" ? LAND_LIGHT : LAND_DARK);
 }
 
 export function noObsColor(theme) {
-  return theme === "light" ? NO_OBS_LIGHT : NO_OBS_DARK;
+  return themeColor("--ob-viewer-no-obs", theme === "light" ? NO_OBS_LIGHT : NO_OBS_DARK);
 }
 
 /**
@@ -35,8 +63,8 @@ export function fieldToImageData({ data, width, height }, colormapName, range, o
   const lut = lookupTable(colormapName);
   const [minimum, maximum] = range;
   const span = maximum - minimum || 1;
-  const land = theme === "light" ? LAND_LIGHT : LAND_DARK;
-  const noObs = theme === "light" ? NO_OBS_LIGHT : NO_OBS_DARK;
+  const land = landColor(theme);
+  const noObs = noObsColor(theme);
   const image = new ImageData(width, height);
   const pixels = image.data;
   for (let row = 0; row < height; row += 1) {

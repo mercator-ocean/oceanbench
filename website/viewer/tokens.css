@@ -81,6 +81,11 @@ body.quarto-dark {
   --ob-viewer-swipe-divider: #1f6feb;
   --ob-viewer-raster-border: rgba(40, 52, 72, 0.5);
   --ob-viewer-colorbar-text: #14181d;
+  /* Land and unobserved ocean in the map rasters. Land is a flat unsaturated warm
+     grey, deliberately far from both ends of every field palette so a continent can
+     never be mistaken for a value; no-obs ocean keeps its faint blue tint. */
+  --ob-viewer-land: #beb8ae;
+  --ob-viewer-no-obs: #dee7f3;
 }
 
 /* ---- viewer palette: dark (near-black field-inspection theme) --------------- */
@@ -103,4 +108,9 @@ body.quarto-dark {
   --ob-viewer-swipe-divider: #38bdf8;
   --ob-viewer-raster-border: rgba(184, 200, 224, 0.5);
   --ob-viewer-colorbar-text: #e6edf3;
+  /* Mid warm grey: clearly lighter than the darkest palette end (thermal, balance,
+     delta, speed and dense all bottom out near luminance 30) and clearly darker than
+     the lightest end, so land reads as land at either extreme of the colorbar. */
+  --ob-viewer-land: #84827e;
+  --ob-viewer-no-obs: #2a3648;
 }
