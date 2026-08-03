@@ -55,6 +55,17 @@
   --ob-font-mono: var(--bs-font-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
   --ob-body-size: 1.0625rem;
   --ob-body-line: 1.5;
+  /* Four sizes, and only four, for every piece of interface text. Prose reads at
+     body size; anything that labels or drives a control reads at control size;
+     supporting notes read at caption size; numbers read at readout size in the
+     mono face so digits line up. Ten ad-hoc sizes were what made the viewer look
+     unsettled, so a new size here needs a reason, not a preference. */
+  --ob-text-control: 0.8125rem;
+  --ob-text-caption: 0.6875rem;
+  --ob-text-readout: 0.75rem;
+  /* One height and one corner for every control, so a select, a button and a
+     segment of a switch are the same object seen from different angles. */
+  --ob-control-height: 2rem;
 }
 
 /* ---- site primitives: dark -------------------------------------------------- */

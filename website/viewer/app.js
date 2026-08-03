@@ -2655,7 +2655,7 @@ function updateSharedColorbar() {
     colorbar.hidden = false;
     hideMapLegend(legend);
     if (!panel || !panel.colormap || !panel.range) {
-      elements["layer-info"].textContent = `entire year · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
+      elements["layer-info"].textContent = `entire year · zoom ${view.zoom.toFixed(1)}×`;
       return;
     }
     const nStarts = panel.yearMeta && panel.yearMeta.nStarts;
@@ -2665,7 +2665,7 @@ function updateSharedColorbar() {
       textColor,
     });
     // The start-date count is already on the colorbar caption above; do not repeat it.
-    elements["layer-info"].textContent = `entire year · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
+    elements["layer-info"].textContent = `entire year · zoom ${view.zoom.toFixed(1)}×`;
     return;
   }
   if (!panel || !panel.colormap || !panel.range) return;
@@ -2711,10 +2711,12 @@ function updateSharedColorbar() {
 function setLayerInfo(panel) {
   const manifest = manifestFor(panel.state.dataset);
   if (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length) {
-    elements["layer-info"].textContent = `lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}× · loading metadata`;
+    elements["layer-info"].textContent = `zoom ${view.zoom.toFixed(1)}× · loading metadata`;
     return;
   }
-  elements["layer-info"].textContent = `start ${manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)]} · lead day ${shared.leadDay} · zoom ${view.zoom.toFixed(1)}×`;
+  // The start date is the drawer's own field and the lead day is spelled out beside
+  // the scrubber a few centimetres to the left, so the readout carries neither.
+  elements["layer-info"].textContent = `zoom ${view.zoom.toFixed(1)}×`;
 }
 
 function hideMapLegend(legend) {
@@ -3187,13 +3189,18 @@ function renderRailSkill(shown, comparison) {
     notes.length = 0;
     notes.push("No scored observations for this variable/product");
   }
-  elements["rail-lead-curve"].innerHTML = leadCurveSVG(series, {
-    unit,
-    labels,
-    colors,
-    title: comparison ? "RMSD vs lead day (both forecasts)" : "RMSD vs lead day",
-    emptyMessage: "no scored observations for this variable/product",
-  });
+  // With nothing to plot the caption below already says so, and it says which
+  // product it is saying it about. Drawing an empty chart whose only content is a
+  // shorter version of that same sentence stated the fact twice.
+  elements["rail-lead-curve"].innerHTML = series.size || !notes.length
+    ? leadCurveSVG(series, {
+        unit,
+        labels,
+        colors,
+        title: comparison ? "RMSD vs lead day (both forecasts)" : "RMSD vs lead day",
+        emptyMessage: "no scored observations for this variable/product",
+      })
+    : "";
   elements["rail-skill-note"].textContent = notes.join(" · ");
   wireCursorTooltip(elements["rail-lead-curve"]);
 }
@@ -4279,6 +4286,14 @@ function applyLayout() {
   workspace.style.setProperty("--rail-width", `${shared.railCollapsed ? DRAWER_TAB_WIDTH : shared.railWidth}px`);
   workspace.style.setProperty("--controls-open-width", `${shared.controlsWidth}px`);
   workspace.style.setProperty("--rail-open-width", `${shared.railWidth}px`);
+  // How far the map column is held off each side of the shell. The dock spans the
+  // whole width but its colour scale belongs to the map, so the stylesheet needs
+  // these two to centre it there. While the drawers float over the map they take a
+  // tab's width on either side instead of a track of their own.
+  const mapInsetLeft = overlaying || shared.controlsCollapsed ? DRAWER_TAB_WIDTH : shared.controlsWidth;
+  const mapInsetRight = overlaying || shared.railCollapsed ? DRAWER_TAB_WIDTH : shared.railWidth;
+  document.body.style.setProperty("--dock-inset-left", `${mapInsetLeft}px`);
+  document.body.style.setProperty("--dock-inset-right", `${mapInsetRight}px`);
 }
 
 // Design width of every rail chart's viewBox. The SVG is stretched to the slot, so

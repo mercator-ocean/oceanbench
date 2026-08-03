@@ -22,8 +22,20 @@ SPDX-License-Identifier: EUPL-1.2
   --readout-bg: var(--ob-viewer-readout-bg, rgba(255, 255, 255, 0.88));
   --grid-line: var(--ob-viewer-grid-line, rgba(108, 117, 125, 0.18));
   --mono: var(--ob-font-mono, ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace);
+  /* The whole interface is written in four type sizes and one control size. Every
+     rule below picks from these; none of them invents its own value. See the
+     rationale on the tokens themselves in tokens.css. */
+  --text-control: var(--ob-text-control, 0.8125rem);
+  --text-caption: var(--ob-text-caption, 0.6875rem);
+  --text-readout: var(--ob-text-readout, 0.75rem);
+  --control-height: var(--ob-control-height, 2rem);
+  /* One corner radius for every rectangular surface, from a select to the About
+     dialog. Circles (the "?" affordance, legend dots) keep 50%. */
   --radius-sm: var(--ob-radius-sm, 0.35rem);
-  --radius-md: var(--ob-radius-md, 0.55rem);
+  --radius-md: var(--ob-radius-sm, 0.35rem);
+  /* How far every region holds its content off the shell's edges: the app bar, both
+     drawers, the panel head and the dock all measure from the same rule. */
+  --inset: 1rem;
   --shadow: var(--ob-viewer-shadow, 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06));
   /* Single custom crosshair shared by the real CSS cursor and the mirrored
      companion marker so both are pixel-identical across OSes/machines: a plus
@@ -66,8 +78,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.35rem clamp(0.6rem, 1.5vw, 1rem);
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  padding: 0.35rem var(--inset);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
@@ -84,8 +97,24 @@ body {
 .site-brand:hover { color: var(--accent); text-decoration: none; }
 .site-brand img { width: 1.45rem; height: 1.45rem; }
 .title { min-width: 0; }
-.title h1 { font-size: 1rem; margin: 0; font-weight: 500; }
-.header-actions { display: flex; align-items: center; gap: 0.4rem; }
+.title h1 { font-size: inherit; margin: 0; font-weight: 500; }
+/* The bar reads left to right as: what you are looking at, then how you are
+   comparing it, then, pushed away to the far end, the things you touch once a
+   session. The actions block takes the whole free width so the utilities land on
+   the right edge in both the embedded and the standalone bar. */
+/* Below roughly 700px the three groups no longer fit on one line, so the bar drops
+   the utilities to a second row rather than pushing them past its own right edge. */
+.header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 0.75rem; flex: 1 1 auto; min-width: 0; }
+.header-utility { display: flex; align-items: center; gap: 0.15rem; margin-left: auto; }
+/* Quiet by construction: no border, no fill, no competition with the two control
+   groups on the left. They come forward on hover, which is when they matter. */
+.header-utility .ghost-button {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.header-utility .ghost-button:hover { color: var(--accent); border-color: transparent; }
+.site-link { text-decoration: none; display: inline-flex; align-items: center; }
 
 /* Embedded in the Quarto site: the parent navbar already carries the OceanBench
    logo, the page title and the Scores link, so the app's own brand block and its
@@ -96,24 +125,14 @@ body {
 /* With the brand block gone the actions are the only child left, so the bar packs
    them flush left against its own padding instead of leaving a dead band there. */
 .viewer-embedded .app-bar { justify-content: flex-start; }
-.layout-switch { display: inline-flex; gap: 0.25rem; }
-/* The layout switch and the display switch are two different questions. Without a
-   rule between them the six buttons read as one six-way segmented control. */
-.header-group-divider {
-  width: 1px;
-  align-self: stretch;
-  margin: 0.1rem 0.25rem;
-  background: var(--border);
-}
-.header-actions:has(.display-switch[hidden]) .header-group-divider { display: none; }
-.layout-switch .ghost-button { padding: 0.4rem 0.7rem; font-variant-numeric: tabular-nums; }
-.layout-switch .ghost-button.active,
+.layout-switch .ghost-button { font-variant-numeric: tabular-nums; }
 .ghost-button.active { border-color: var(--accent); color: var(--accent); }
 
 .ghost-button {
   font: inherit;
-  font-size: 0.82rem;
-  padding: 0.4rem 0.8rem;
+  font-size: var(--text-control);
+  height: var(--control-height);
+  padding: 0 0.75rem;
   color: var(--text);
   background: var(--surface-strong);
   border: 1px solid var(--border);
@@ -122,6 +141,18 @@ body {
   white-space: nowrap;
 }
 .ghost-button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Segmented control: one object made of parts, not several buttons that happen to
+   sit together. Shared edges, rounded ends only, and the active segment lifted
+   above its neighbours so its accent border is not clipped by theirs. Every mutually
+   exclusive choice in the app uses it, which is why the layout switch, the display
+   switch, the scope switch and the forecast picker all read the same way. */
+.segmented { display: inline-flex; }
+.segmented .ghost-button { border-radius: 0; margin-left: -1px; position: relative; }
+.segmented .ghost-button:first-of-type { border-radius: var(--radius-sm) 0 0 var(--radius-sm); margin-left: 0; }
+.segmented .ghost-button:last-of-type { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.segmented .ghost-button:hover,
+.segmented .ghost-button.active { z-index: 1; }
 
 .workspace {
   --controls-width: 16rem;
@@ -193,7 +224,7 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
   display: grid;
   place-items: center;
   padding: 0;
-  font-size: 0.8rem;
+  font-size: var(--text-control);
   line-height: 1;
   color: var(--muted);
   background: var(--surface);
@@ -216,18 +247,20 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 .drawer-left.collapsed .drawer-tab::before { content: "\203A"; }
 .drawer-right.collapsed .drawer-tab::before { content: "\2039"; }
 
+/* The drawer carries a 1px border on its map-facing edge, which lives inside its
+   own width. Padding that edge by a pixel less puts the content the same 16px from
+   both visible edges instead of 16 and 17. */
 .controls {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
-  padding: 0.9rem 0.9rem 1.5rem;
+  padding: var(--inset) calc(var(--inset) - 1px) 1.5rem var(--inset);
 }
-.scope-switch { display: inline-flex; gap: 0.25rem; }
-.scope-switch .ghost-button { flex: 1; padding: 0.4rem 0.5rem; font-size: 0.74rem; }
+.scope-switch { display: inline-flex; }
+.scope-switch .ghost-button { flex: 1; padding: 0 0.5rem; }
 
-/* The insight note always reserves two lines, empty or not, so switching insight
-   modes cannot shift every control below it up and down. */
-#overlay-note { min-height: 2.1rem; }
+/* Nothing is worth reserving space for. An empty note is not a short note. */
+#overlay-note:empty { display: none; }
 
 /* Entire-year scope hides single-forecast-only controls; the lead slider and the
    Region view control stay. The standalone Overlay field and its dependent
@@ -241,22 +274,37 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 :root[data-scope="year"] #rail-trajectory-section,
 :root[data-scope="year"] #rail-legend-section { display: none !important; }
 
-.controls label {
+.controls label,
+.controls .field {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  font-size: 0.78rem;
+  font-size: var(--text-control);
   color: var(--muted);
 }
-.controls label.toggle { flex-direction: row; align-items: center; gap: 0.5rem; color: var(--text); font-size: 0.82rem; }
+.controls label.toggle { flex-direction: row; align-items: center; gap: 0.5rem; color: var(--text); }
 .controls select,
 .panel-head select {
   font: inherit;
-  padding: 0.35rem 0.45rem;
+  font-size: var(--text-control);
+  height: var(--control-height);
+  padding: 0 0.4rem;
   color: var(--text);
   background: var(--surface-strong);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+}
+/* Tertiary by definition: reset and the tips are things you reach for after
+   something went wrong, so they sit at the foot of the drawer behind a rule
+   instead of in the middle of the fields that change what you see. */
+.controls-footer {
+  margin-top: auto;
+  padding-top: var(--inset);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 .controls input[type="range"] { accent-color: var(--accent); width: 100%; }
 .control-group {
@@ -267,10 +315,10 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
   flex-direction: column;
   gap: 0.55rem;
 }
-.control-group legend { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0; }
-.lead-value { color: var(--accent); font-family: var(--mono); font-size: 0.8rem; }
-.hint { color: var(--muted); font-size: 0.72rem; margin: 0.15rem 0 0; }
-kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-strong); border: 1px solid var(--border); border-radius: 4px; padding: 0 0.25rem; }
+.control-group legend { font-size: var(--text-control); color: var(--muted); padding: 0; }
+.lead-value { color: var(--accent); font-family: var(--mono); font-size: var(--text-readout); }
+.hint { color: var(--muted); font-size: var(--text-caption); margin: 0.15rem 0 0; }
+kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 0.25rem; }
 
 /* The map is the page: no padding, no gutters, no card. It fills the middle track
    of the shell edge to edge and every other surface abuts it on a hairline. */
@@ -309,9 +357,8 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .panel.head-only .panel-canvas-wrap,
 .panel.head-only .panel-badge { display: none; }
 
-.display-switch { display: inline-flex; gap: 0.25rem; }
+.display-switch { display: inline-flex; }
 .display-switch[hidden] { display: none; }
-.display-switch .ghost-button { padding: 0.4rem 0.7rem; }
 
 .panel {
   position: relative;
@@ -325,7 +372,10 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .panel.active { outline: 1px solid var(--accent); outline-offset: -1px; }
 
 /* The panel head floats on the map as a slim translucent strip rather than a
-   titlebar over a boxed card, so the raster runs the full height of the panel. */
+   titlebar over a boxed card, so the raster runs the full height of the panel. It
+   holds its content on the same 16px rule as the app bar and the dock, and it has
+   no rule of its own: the blur already separates it from the raster, and a border
+   there was one horizontal line too many in a shell that already has three. */
 .panel-head {
   position: absolute;
   top: 0;
@@ -335,16 +385,22 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.3rem 0.45rem;
+  padding: 0.3rem var(--inset);
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
   min-height: 2.1rem;
 }
-.panel.head-only .panel-head { position: static; background: var(--surface); backdrop-filter: none; }
+/* In swipe and difference display the head is a real strip under the map rather
+   than an overlay on it, so there it does need an edge. */
+.panel.head-only .panel-head {
+  position: static;
+  background: var(--surface);
+  backdrop-filter: none;
+  border-top: 1px solid var(--border);
+}
 .panel-forecast-label {
-  font-size: 0.7rem;
+  font-size: var(--text-control);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--forecast-color, var(--accent, #1f6feb));
@@ -358,10 +414,10 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 :root[data-theme="dark"] .panel-forecast-label {
   color: color-mix(in srgb, var(--forecast-color, var(--accent, #1f6feb)) 78%, #ffffff);
 }
-.panel-head select { font-size: 0.72rem; max-width: min(15rem, 100%); min-width: 5.5rem; }
-.panel-head .panel-compare { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; color: var(--muted); }
+.panel-head select { max-width: min(15rem, 100%); min-width: 5.5rem; }
+.panel-head .panel-compare { display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--text-control); color: var(--muted); }
 .panel-head .spacer { flex: 1; }
-.panel-badge { font-size: 0.68rem; font-family: var(--mono); color: var(--muted); }
+.panel-badge { font-size: var(--text-readout); font-family: var(--mono); color: var(--muted); }
 
 /* The canvas box fills the panel. The renderer already fits the 2:1 world raster
    inside whatever box it is given (fit = min(height, width / 2)) and paints the
@@ -391,7 +447,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   bottom: 0.5rem;
   padding: 0.3rem 0.5rem;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: var(--text-caption);
   color: var(--text);
   background: var(--readout-bg);
   border: 1px solid var(--border);
@@ -430,7 +486,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   place-items: center;
   color: var(--text);
   background: color-mix(in srgb, var(--canvas-void) 72%, transparent);
-  font-size: 0.78rem;
+  font-size: var(--text-control);
   pointer-events: none;
 }
 .panel-loading[hidden] { display: none; }
@@ -439,11 +495,11 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   position: absolute;
   top: 2.6rem;
   right: 0.5rem;
-  font-size: 0.68rem;
+  font-size: var(--text-caption);
   color: var(--muted);
   background: var(--readout-bg);
   padding: 0.15rem 0.4rem;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   pointer-events: none;
 }
 
@@ -455,20 +511,23 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   display: flex;
   align-items: center;
   gap: 0.9rem;
-  padding: 0.2rem clamp(0.6rem, 1.5vw, 1rem);
+  padding: 0.2rem var(--inset);
   min-height: 3.4rem;
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
+/* The scrubber and the readout each take an equal share of what the colour scale
+   leaves, so the scale sits exactly halfway between them. Neither may declare a
+   width of its own: the moment one is capped the halves stop matching and the scale
+   drifts off centre. The scrubber's own length is capped on .lead-track instead. */
 .dock-lead {
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  flex: 1 1 12rem;
+  flex: 1 1 0;
   min-width: 9rem;
-  max-width: 26rem;
 }
-.dock-label { font-size: 0.74rem; color: var(--muted); white-space: nowrap; }
+.dock-label { font-size: var(--text-control); color: var(--muted); white-space: nowrap; }
 /* Neutral scrubber. The accent colour used to fill the track behind the thumb, which
    read as a coloured lead-day band competing with the map's own colour scale. The
    track is now a plain hairline rail with one tick per lead day, and colour in this
@@ -479,6 +538,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   align-items: center;
   flex: 1 1 auto;
   min-width: 4rem;
+  max-width: 20rem;
   --lead-thumb: 0.78rem;
 }
 .dock-lead input[type="range"] {
@@ -538,22 +598,36 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 }
 .dock-lead input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dock-lead .lead-value { white-space: nowrap; min-width: 4rem; color: var(--muted); }
-.dock-scale { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; }
+/* The colour scale belongs to the map, so it is centred on the map column and not
+   on the window. The dock spans the whole shell, and the two drawers flanking the
+   map are rarely the same width, so the scale is nudged by exactly that difference:
+   with equal shares either side, shifting the scale's own margins by (left - right)
+   moves its centre by half of it, which is the offset between the two centres. The
+   margins are kept non-negative so the shift is always made of space, never of
+   overlap, whichever drawer happens to be the wider one. */
+.dock-scale {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: max(0px, calc(var(--dock-inset-left, 0px) - var(--dock-inset-right, 0px)));
+  margin-right: max(0px, calc(var(--dock-inset-right, 0px) - var(--dock-inset-left, 0px)));
+}
 .dock-meta {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   align-items: flex-end;
   text-align: right;
 }
 .dock-meta > p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .colorbar { width: min(26rem, 34vw); height: 3rem; }
-.layer-info { color: var(--muted); font-family: var(--mono); font-size: 0.74rem; margin: 0; }
-.year-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.72rem; color: var(--muted); margin: 0.15rem 0 0; }
+.layer-info { color: var(--muted); font-family: var(--mono); font-size: var(--text-readout); margin: 0; }
+.year-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: var(--text-control); color: var(--muted); margin: 0.15rem 0 0; }
 .year-legend .item { display: inline-flex; align-items: center; gap: 0.3rem; }
-.year-legend .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 3px; border: 1px solid rgba(128, 128, 128, 0.35); }
+.year-legend .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: var(--radius-sm); border: 1px solid rgba(128, 128, 128, 0.35); }
 
 /* Adaptive bottom legend strip. Sized like the colorbar so switching purpose modes
    (colorbar <-> swatch row) does not jump the footer height. */
@@ -564,75 +638,83 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   gap: 0.3rem;
   width: min(26rem, 34vw);
   min-height: 3rem;
-  font-size: 0.74rem;
+  font-size: var(--text-control);
 }
 .map-legend .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
 .map-legend .legend-item { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text); }
 .map-legend .legend-dot { display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 50%; }
-.map-legend .legend-line { display: inline-block; width: 1.1rem; height: 0.28rem; border-radius: 2px; }
-.map-legend .legend-seed { color: var(--muted); font-size: 0.95rem; line-height: 1; }
+.map-legend .legend-line { display: inline-block; width: 1.1rem; height: 0.28rem; border-radius: var(--radius-sm); }
+.map-legend .legend-seed { color: var(--muted); font-size: inherit; line-height: 1; }
 .map-legend .legend-note { color: var(--text); }
-.map-legend .legend-note.dim, .map-legend .legend-bg { color: var(--muted); font-size: 0.7rem; }
+.map-legend .legend-note.dim, .map-legend .legend-bg { color: var(--muted); font-size: var(--text-caption); }
 .map-legend .legend-help { display: inline-flex; }
 
-.status { color: var(--muted); font-size: 0.82rem; margin: 0; min-height: 1rem; }
+.status { color: var(--muted); font-size: var(--text-control); margin: 0; min-height: 1rem; }
 .status.error { color: #ff6b6b; }
 
 /* Context rail: the right drawer's body. Layout comes from .drawer / .drawer-body;
    only the inner typography and spacing live here. */
 .context-rail[hidden] { display: none; }
-.drawer-right .drawer-body { padding: 0.9rem 0.9rem 1.5rem; }
-/* Heading weight 600, the same as the site's h1 and its table headers; the browser
-   default of 700 was the one place the viewer looked heavier than the scores page. */
-.rail-title { font-size: 0.9rem; margin: 0 0 0.15rem; font-weight: 600; }
-.rail-subtitle { font-size: 0.74rem; color: var(--muted); margin: 0 0 1rem; }
+/* The rail's border is on its map-facing edge, inside its own width, so that side
+   is padded a pixel less and the content sits 16px from both visible edges. */
+.drawer-right .drawer-body { padding: var(--inset) var(--inset) 1.5rem calc(var(--inset) - 1px); }
+/* One heading, used at both levels. The rail used to run a sentence-case h2 next to
+   uppercase letter-spaced h3s, which made the subordinate headings shout over their
+   own parent. Weight 600 matches the site's h1 and its table headers. */
+.rail-title,
+.rail-section h3 {
+  font-size: var(--text-control);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+  margin: 0 0 0.4rem;
+}
+.rail-title { margin-bottom: 0.15rem; }
+.rail-subtitle { font-size: var(--text-caption); color: var(--muted); margin: 0 0 1rem; }
 .rail-current-depth-note {
   margin: 0 0 1rem;
   padding: 0.7rem 0.8rem;
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
-.rail-current-depth-note p { margin: 0 0 0.6rem; font-size: 0.74rem; line-height: 1.4; color: var(--text); }
-.rail-current-depth-note .ghost-button { padding: 0.35rem 0.65rem; font-size: 0.72rem; }
+.rail-current-depth-note p { margin: 0 0 0.6rem; font-size: var(--text-control); line-height: 1.4; color: var(--text); }
+
 .rail-section { margin-bottom: 1.25rem; }
-.rail-section h3 { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.4rem; }
 .rail-card-heading { display: flex; align-items: center; justify-content: space-between; }
 .rail-card-heading h3 { margin-bottom: 0; }
 .rail-section.psd-disabled .rail-chart-slot,
 .rail-section.psd-disabled .rail-caption { display: none; }
 .psd-card-heading { justify-content: flex-start; gap: 0.5rem; }
-.psd-toggle {
-  min-width: 3.6rem;
-  padding: 0.3rem 0.6rem;
-  font-size: 0.72rem;
-  text-align: center;
-}
+.psd-toggle { min-width: 3.6rem; text-align: center; }
 .psd-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-glow); }
 .psd-toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .trajectory-card { border-left: 3px solid #0072B2; padding-left: 0.65rem; }
-.trajectory-label { margin: 0.35rem 0 0.45rem; color: var(--text); font-size: 0.8rem; font-weight: 600; }
-.trajectory-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 0.9rem; padding: 0.15rem 0.3rem; }
+.trajectory-label { margin: 0.35rem 0 0.45rem; color: var(--text); font-size: var(--text-control); font-weight: 600; }
+.trajectory-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: var(--text-control); padding: 0.15rem 0.3rem; }
 .trajectory-clear:hover { color: var(--accent); }
 .rail-products { display: flex; flex-direction: column; gap: 0.45rem; }
-.rail-products label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.74rem; color: var(--muted); }
+.rail-products label { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--text-control); color: var(--muted); }
 .rail-products input,
 .rail-products select {
   width: 100%;
   font: inherit;
-  padding: 0.35rem 0.45rem;
+  font-size: var(--text-control);
+  height: var(--control-height);
+  padding: 0 0.4rem;
   color: var(--text);
   background: var(--surface-strong);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
 .rail-products input[readonly] { color: var(--muted); }
-.rail-forecast-toggle { display: inline-flex; gap: 0.25rem; margin: 0 0 0.9rem; }
+.rail-forecast-toggle { display: inline-flex; margin: 0 0 0.9rem; }
 .rail-forecast-toggle[hidden] { display: none; }
-.rail-forecast-toggle .ghost-button { padding: 0.3rem 0.6rem; font-size: 0.72rem; }
-.rail-caption { font-size: 0.68rem; color: var(--muted); margin: 0.35rem 0 0; line-height: 1.35; }
-.rail-provenance { font-size: 0.66rem; color: var(--muted); margin: 1rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--border); line-height: 1.4; }
+
+.rail-caption { font-size: var(--text-caption); color: var(--muted); margin: 0.35rem 0 0; line-height: 1.35; }
+.rail-provenance { font-size: var(--text-caption); color: var(--muted); margin: 1rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--border); line-height: 1.4; }
 .rail-provenance .method-note-btn { vertical-align: baseline; margin-left: 0.3rem; }
 /* Rail charts are viewBox-scaled SVG: the browser maps 360 user units onto whatever
    the slot measures, which scaled the labels along with the drawing. Type in the rail
@@ -651,14 +733,13 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   display: block;
   --chart-type-scale: calc(var(--chart-view-width) / var(--chart-slot-width));
   --chart-text: 0.5rem;
-  --chart-text-empty: 0.5625rem;
 }
 .rail-chart .axis { stroke: var(--border); stroke-width: 1; }
 .rail-chart .grid { stroke: var(--grid-line); stroke-width: 1; }
 .rail-chart .tick { fill: var(--muted); font-size: calc(var(--chart-text) * var(--chart-type-scale)); font-family: var(--mono); }
 .rail-chart .axis-label { fill: var(--muted); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
 .rail-chart .legend { fill: var(--text); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
-.rail-chart .empty { fill: var(--muted); font-size: calc(var(--chart-text-empty) * var(--chart-type-scale)); }
+.rail-chart .empty { fill: var(--muted); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
 .rail-chart .chart-point { fill: transparent; stroke: none; pointer-events: all; cursor: crosshair; }
 .rail-chart .chart-crosshair { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
 .rail-chart .chart-tooltip { pointer-events: none; }
@@ -669,16 +750,16 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .rail-chart .chart-lead-readout { pointer-events: none; }
 .rail-chart .chart-lead-readout rect { fill: var(--readout-bg); stroke: var(--accent); stroke-width: 1; }
 .rail-chart .chart-lead-readout text { fill: var(--accent); font-size: calc(var(--chart-text) * var(--chart-type-scale)); font-family: var(--mono); }
-.rail-legend { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.74rem; }
-.rail-legend .swatch { display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 3px; margin-right: 0.4rem; vertical-align: -1px; }
+.rail-legend { display: flex; flex-direction: column; gap: 0.35rem; font-size: var(--text-control); }
+.rail-legend .swatch { display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: var(--radius-sm); margin-right: 0.4rem; vertical-align: -1px; }
 .rail-legend .row { color: var(--text); }
-.rail-legend .dim { color: var(--muted); font-size: 0.7rem; }
+.rail-legend .dim { color: var(--muted); font-size: var(--text-caption); }
 
 .hint-details { margin: 0.15rem 0 0; }
 .hint-details > summary {
   cursor: pointer;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: var(--text-control);
   list-style: none;
 }
 .hint-details > summary::-webkit-details-marker { display: none; }
@@ -689,15 +770,15 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   max-width: 40rem;
   width: calc(100% - 2rem);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text);
   padding: 1.1rem 1.3rem 1.3rem;
 }
 .about-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 .about-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.4rem; }
-.about-dialog-head h2 { margin: 0; font-size: 1rem; }
-.about-dialog p { color: var(--muted); font-size: 0.78rem; line-height: 1.5; margin: 0; }
+.about-dialog-head h2 { margin: 0; font-size: inherit; }
+.about-dialog p { color: var(--muted); font-size: var(--text-control); line-height: 1.5; margin: 0; }
 .about-dialog a { color: var(--accent); }
 
 @media (max-height: 760px) {
@@ -707,12 +788,13 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 }
 
 @media (max-width: 1320px) {
-  .panel-head { gap: 0.25rem; padding: 0.3rem 0.35rem; }
+  .panel-head { gap: 0.25rem; }
   .panel-head select { min-width: 4.8rem; max-width: 10.5rem; }
-  /* The badge and the method-note "?" that sits beside it are one unit: hiding the
-     badge alone leaves the "?" orphaned under a heading it no longer belongs to. */
-  .panel-badge,
-  .panel-head .method-note-btn { display: none; }
+  /* The mean is the one number the head reports, so it wraps onto a second line
+     rather than being dropped: a value that disappears as the window narrows is
+     worse than a head one line taller. The spacer only fills the line it is on, so
+     the badge and its method note travel together to the next one. */
+  .panel-head .spacer { flex: 1 0 0; }
   .colorbar, .map-legend { width: min(20rem, 30vw); }
 }
 
@@ -741,6 +823,9 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   .drawer-left { width: min(var(--controls-open-width), 78vw); }
   .drawer-right { width: min(var(--rail-open-width), 78vw); }
   .map-dock { gap: 0.6rem; }
+  /* With the readout gone there is no second half to balance against, so the
+     scrubber stops growing and the scale simply follows it. */
+  .dock-lead { flex: 0 1 auto; }
   .dock-meta { display: none; }
   .colorbar, .map-legend { width: min(16rem, 45vw); }
 }
@@ -749,9 +834,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .metric-switch { display: none; align-items: center; }
 :root[data-scope="year"] .metric-switch { display: inline-flex; }
 .metric-switch-label {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: var(--text-control);
   color: var(--muted);
   margin-right: 0.35rem;
   align-self: center;
@@ -766,7 +849,7 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
   height: 1rem;
   margin-left: 0.3rem;
   padding: 0;
-  font-size: 0.66rem;
+  font-size: var(--text-caption);
   font-weight: 600;
   line-height: 1;
   color: var(--muted);
@@ -792,7 +875,7 @@ h3 .method-note-btn { margin-left: 0.35rem; }
   z-index: 60;
   max-width: 320px;
   padding: 0.6rem 0.7rem;
-  font-size: 0.72rem;
+  font-size: var(--text-control);
   line-height: 1.4;
   color: var(--text);
   background: var(--surface);
@@ -802,7 +885,7 @@ h3 .method-note-btn { margin-left: 0.35rem; }
 }
 .method-popover-title {
   font-weight: 600;
-  font-size: 0.74rem;
+  font-size: var(--text-control);
   margin-bottom: 0.3rem;
   color: var(--text);
 }
@@ -815,7 +898,7 @@ h3 .method-note-btn { margin-left: 0.35rem; }
   padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--border);
   font-family: var(--mono);
-  font-size: 0.68rem;
+  font-size: var(--text-readout);
 }
 .method-param { display: contents; }
 .method-param span { color: var(--muted); }

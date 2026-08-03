@@ -25,19 +25,20 @@ SPDX-License-Identifier: EUPL-1.2
         </div>
       </div>
       <div class="header-actions">
-        <div class="layout-switch" role="group" aria-label="Panel layout">
+        <div class="layout-switch segmented" role="group" aria-label="Panel layout">
           <button type="button" data-layout="1" class="ghost-button">1 forecast</button>
           <button type="button" data-layout="2" class="ghost-button">2 forecasts</button>
         </div>
-        <div class="header-group-divider" aria-hidden="true"></div>
-        <div class="display-switch" role="group" aria-label="Two-forecast display" hidden>
+        <div class="display-switch segmented" role="group" aria-label="Two-forecast display" hidden>
           <button type="button" data-display="side" class="ghost-button">Side by side</button>
           <button type="button" data-display="swipe" class="ghost-button">Swipe</button>
           <button type="button" data-display="diff" class="ghost-button">Difference</button>
         </div>
-        <a class="ghost-button site-link" href="../index.html" target="_top">Scores</a>
-        <button id="theme-toggle" type="button" class="ghost-button">Light theme</button>
-        <button id="about-toggle" type="button" class="ghost-button" aria-label="About and credits" title="About and credits">ⓘ About</button>
+        <div class="header-utility">
+          <a class="ghost-button site-link" href="../index.html" target="_top">Scores</a>
+          <button id="theme-toggle" type="button" class="ghost-button">Light theme</button>
+          <button id="about-toggle" type="button" class="ghost-button" aria-label="About and credits" title="About and credits">ⓘ About</button>
+        </div>
       </div>
     </header>
 
@@ -59,12 +60,15 @@ SPDX-License-Identifier: EUPL-1.2
     <div class="workspace">
       <aside id="left-drawer" class="drawer drawer-left" aria-label="Shared view controls">
         <div class="controls drawer-body">
-          <div class="scope-switch" role="group" aria-label="View scope">
-            <button type="button" data-scope="single" class="ghost-button">Single forecast</button>
-            <button type="button" data-scope="year" class="ghost-button">Entire year</button>
+          <div class="field">
+            <span class="field-label">Compare</span>
+            <div class="scope-switch segmented" role="group" aria-label="View scope">
+              <button type="button" data-scope="single" class="ghost-button">One date</button>
+              <button type="button" data-scope="year" class="ghost-button">Whole year</button>
+            </div>
           </div>
 
-          <div class="metric-switch scope-switch" id="metric-switch" role="group" aria-label="Year metric">
+          <div class="metric-switch scope-switch segmented" id="metric-switch" role="group" aria-label="Year metric">
             <span class="metric-switch-label">Metric</span>
             <button type="button" data-metric="error" class="ghost-button">|error|</button>
             <button type="button" data-metric="bias" class="ghost-button">bias</button>
@@ -81,7 +85,7 @@ SPDX-License-Identifier: EUPL-1.2
             </select>
           </label>
 
-          <label>Insight
+          <label>Map overlay
             <select id="overlay-mode">
               <option value="none">None</option>
               <option value="eddies">Eddies</option>
@@ -106,11 +110,13 @@ SPDX-License-Identifier: EUPL-1.2
             </label>
           </fieldset>
 
-          <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>
-          <details class="hint-details">
-            <summary>Navigation tips</summary>
-            <p class="hint">Scroll to zoom, drag to pan. All panels move together. Hover for the value in real units. With two forecasts, switch between side by side and swipe; in swipe, drag the divider.</p>
-          </details>
+          <div class="controls-footer">
+            <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>
+            <details class="hint-details">
+              <summary>Navigation tips</summary>
+              <p class="hint">Scroll to zoom, drag to pan. All panels move together. Hover for the value in real units. With two forecasts, switch between side by side and swipe; in swipe, drag the divider.</p>
+            </details>
+          </div>
         </div>
         <div id="controls-map-splitter" class="drawer-resizer" role="separator" aria-orientation="vertical" aria-label="Resize controls"></div>
         <button id="left-collapse" type="button" class="drawer-tab" aria-expanded="true" aria-label="Collapse controls" title="Collapse / expand controls"></button>
@@ -127,7 +133,7 @@ SPDX-License-Identifier: EUPL-1.2
           <h2 class="rail-title">Context</h2>
           <p id="rail-subtitle" class="rail-subtitle"></p>
           <div id="rail-current-depth-note" class="rail-current-depth-note" hidden></div>
-          <div id="rail-forecast-toggle" class="rail-forecast-toggle" role="group" aria-label="Forecast to inspect" hidden>
+          <div id="rail-forecast-toggle" class="rail-forecast-toggle segmented" role="group" aria-label="Forecast to inspect" hidden>
             <button type="button" data-forecast="0" class="ghost-button">F1</button>
             <button type="button" data-forecast="1" class="ghost-button">F2</button>
           </div>
