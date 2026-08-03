@@ -190,6 +190,11 @@ function variableRank(variable) {
   return index === -1 ? VARIABLE_ORDER.length : index;
 }
 
+// The two display orders above are also what a consumer building its own table has to
+// sort by, so they are exported rather than copied.
+export const depthDisplayRank = depthRank;
+export const variableDisplayRank = variableRank;
+
 export function sortDepths(depths) {
   return [...depths].sort((first, second) => depthRank(first) - depthRank(second));
 }

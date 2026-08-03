@@ -1077,3 +1077,115 @@ body.quarto-dark .version-select {
 .version-changelog-link:hover {
   text-decoration: underline;
 }
+
+/* Status line for the published score summary the tables are fed from: visible while the
+   summary loads and after a failed load, hidden once the tables are drawn. */
+.scores-status {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--ob-border);
+  border-left: 3px solid var(--ob-accent);
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-surface);
+  color: var(--ob-muted);
+  font-size: 0.85rem;
+}
+
+.scores-status-error {
+  border-left-color: #b2182b;
+  color: var(--ob-text);
+}
+
+/* Error growth panel: the tables column five lead days, the published rows carry every
+   one. The panel stays collapsed so the tables keep the first glance. */
+.score-growth {
+  margin: 0.5rem 0 2rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-surface);
+  padding: 0.5rem 0.85rem;
+}
+
+.score-growth > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ob-accent);
+}
+
+.score-growth-controls {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--ob-muted);
+}
+
+.score-growth-controls select {
+  font: inherit;
+  color: var(--ob-text);
+  background: var(--ob-surface-raised);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  padding: 0.2rem 0.4rem;
+}
+
+.score-growth-note {
+  margin: 0.5rem 0;
+  font-size: 0.78rem;
+  color: var(--ob-muted);
+  max-width: 62rem;
+}
+
+.score-growth-chart {
+  width: 100%;
+  max-width: 46rem;
+}
+
+.score-growth-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1.1rem;
+  max-width: 46rem;
+  font-size: 0.78rem;
+}
+
+.score-growth-legend .series-swatch {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  margin-right: 0.4rem;
+}
+
+/* The chart is the viewer's own lead-curve SVG; these are its style hooks expressed in
+   the site tokens rather than the viewer palette. */
+.score-growth .rail-chart { width: 100%; height: auto; display: block; cursor: crosshair; }
+.score-growth .rail-chart .axis { stroke: var(--ob-border); stroke-width: 1; }
+.score-growth .rail-chart .grid { stroke: var(--ob-border); stroke-width: 1; opacity: 0.6; }
+.score-growth .rail-chart .tick { fill: var(--ob-muted); font-size: 8px; font-family: var(--ob-font-mono); }
+.score-growth .rail-chart .axis-label { fill: var(--ob-muted); font-size: 8px; }
+.score-growth .rail-chart .empty { fill: var(--ob-muted); font-size: 9px; }
+.score-growth .rail-chart .chart-point { fill: transparent; stroke: none; pointer-events: all; }
+.score-growth .rail-chart .chart-crosshair { stroke: var(--ob-accent); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.score-growth .rail-chart .chart-tooltip { pointer-events: none; }
+.score-growth .rail-chart .chart-tooltip rect { fill: var(--ob-surface-raised); stroke: var(--ob-border); }
+.score-growth .rail-chart .chart-tooltip text { fill: var(--ob-text); font-size: 8px; font-family: var(--ob-font-mono); }
+
+/* Challenger series colours, one fixed slot per challenger family so a re-sort never
+   repaints a line. Both sets are the validated ones the viewer scores page uses. */
+:root {
+  --scores-series-1: #2a78d6;
+  --scores-series-2: #eb6834;
+  --scores-series-3: #1baf7a;
+  --scores-series-4: #eda100;
+  --scores-series-5: #e87ba4;
+  --scores-series-6: #008300;
+}
+
+:root:has(body.quarto-dark) {
+  --scores-series-1: #3987e5;
+  --scores-series-2: #d95926;
+  --scores-series-3: #199e70;
+  --scores-series-4: #c98500;
+  --scores-series-5: #d55181;
+  --scores-series-6: #008300;
+}

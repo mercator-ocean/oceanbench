@@ -54,6 +54,14 @@ let activeRegion = null;
 let activeVersion = null;
 let isScrollRefreshScheduled = false;
 
+// The score bundle normally arrives in the page as a `#scores-data` script element baked
+// at build time. It can also be handed over at runtime through `window.OceanBenchScores`,
+// which is how the published scores-summary.json feeds the same tables. A runtime bundle
+// carries no notebook reports, so the model names then render as plain text.
+let injectedData = null;
+let reportLinksEnabled = true;
+let renderListener = null;
+
 let selectedBaseline = null;
 let defaultVersionValue = null;
 let defaultRegionValue = null;
@@ -173,6 +181,13 @@ function displayName(name) {
   return challengerLabels[name] || name;
 }
 
+function modelCellHtml(name, regionId) {
+  if (!reportLinksEnabled) {
+    return `<th class="model-col">${displayName(name)}</th>`;
+  }
+  return `<th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+}
+
 function trackKeyForChallenger(name) {
   return name.endsWith("_1_degree") ? "one_degree" : "high_resolution";
 }
@@ -206,13 +221,26 @@ function formatVariableHeader(variable, unit, standardName, metricKey) {
   return header;
 }
 
-function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName) {
+function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName, annotation) {
   const unitSuffix = unit ? ` ${unit}` : "";
   let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${value.toFixed(2)}${unitSuffix}`;
+  if (annotation) {
+    tooltip += `\n${annotation}`;
+  }
   if (!isBaseline && referenceValue !== null) {
     tooltip += `\nvs ${displayName(baselineName)}: ${formatPercentDiff(referenceValue, value)}`;
   }
   return tooltip;
+}
+
+// Optional per-cell note carried beside the value (confidence interval, skill against the
+// persistence baseline). Bundles that have none leave every tooltip exactly as it was.
+function getAnnotation(scoreData, depth, variable, leadDay) {
+  try {
+    return scoreData.depths[depth].variables[variable].annotations[leadDay] || "";
+  } catch {
+    return "";
+  }
 }
 
 function buildDataRows(
@@ -233,7 +261,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}>${modelCellHtml(name, regionId)}`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -262,7 +290,7 @@ function buildDataRows(
           }
         }
         const title = value !== null
-          ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
+          ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline, getAnnotation(score, depth, variable, day))
           : "";
         rows += `<td class="score-value-cell" style="${style}" title="${title}">${display}</td>`;
       }
@@ -283,7 +311,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}>${modelCellHtml(name, regionId)}`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -307,7 +335,7 @@ function buildCombinedDataRows(
             }
           }
           const title = value !== null
-            ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
+            ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline, score ? getAnnotation(score, "flat", variable, day) : "")
             : "";
           rows += `<td class="score-value-cell" style="${style}" title="${title}">${display}</td>`;
         }
@@ -1108,8 +1136,8 @@ function attachControlListeners() {
 function ensureParsedData() {
   if (!parsedData) {
     const dataElement = document.getElementById("scores-data");
-    if (!dataElement) return null;
-    parsedData = JSON.parse(dataElement.textContent);
+    if (!dataElement && !injectedData) return null;
+    parsedData = injectedData || JSON.parse(dataElement.textContent);
     const versions = getVersions(parsedData);
     if (!activeVersion || !versions.includes(activeVersion)) {
       activeVersion = resolveDefaultVersion(parsedData);
@@ -1163,9 +1191,13 @@ function resolveBaselineSelection(challengerNames, selectedBaseline, trackKey) {
   if (selectedBaseline && trackChallengerNames.includes(selectedBaseline)) {
     return selectedBaseline;
   }
-  const preferredBaseline = trackKey === "one_degree" ? "glo12_1_degree" : "glo12";
-  if (trackChallengerNames.includes(preferredBaseline)) {
-    return preferredBaseline;
+  // GLO12 is the reference every challenger is read against when it is evaluated; a
+  // bundle without it falls back to a published baseline before the first name.
+  const suffix = trackKey === "one_degree" ? "_1_degree" : "";
+  for (const preferred of ["glo12", "climatology", "persistence"]) {
+    if (trackChallengerNames.includes(`${preferred}${suffix}`)) {
+      return `${preferred}${suffix}`;
+    }
   }
   return trackChallengerNames[0];
 }
@@ -1191,6 +1223,19 @@ function resolveBaselineSelectionForTrack(challengerNames, selectedBaseline) {
     return selectedBaseline;
   }
   return resolveBaselineSelection(challengerNames, selectedBaseline, activeTrack);
+}
+
+// Announce the state the tables were just drawn with, so a companion view (the error
+// growth panels) can follow the same region, track and depth selection.
+function notifyRender() {
+  if (!renderListener) return;
+  renderListener({
+    region: activeRegion,
+    track: activeTrack,
+    baseline: selectedBaseline,
+    depths: showAllMode ? null : [...selectedDepths],
+    isDark: isDarkMode(),
+  });
 }
 
 function renderTablesOnly() {
@@ -1228,6 +1273,7 @@ function renderTablesOnly() {
 
   selectedBaseline = baseline;
   writeUrlState();
+  notifyRender();
 }
 
 function renderAllTables() {
@@ -1288,6 +1334,7 @@ function renderAllTables() {
   defaultBaselineValue = resolveBaselineSelectionForTrack(visibleChallengerNames, null);
   selectedBaseline = baseline;
   writeUrlState();
+  notifyRender();
 }
 
 function applyUrlStateFromLocation() {
@@ -1363,7 +1410,7 @@ function writeUrlState() {
 }
 
 function init() {
-  if (!document.getElementById("scores-data")) return;
+  if (!document.getElementById("scores-data") && !injectedData) return;
   const initialSection = readSectionFromHash();
   if (initialSection) {
     activeSection = initialSection;
@@ -1430,3 +1477,18 @@ if (document.readyState === "loading") {
 } else {
   init();
 }
+
+// Runtime entry point for a bundle that is fetched rather than baked into the page.
+// `init` above is a no-op until one of the two data sources is present, so a page that
+// carries no `#scores-data` element simply waits for this call.
+window.OceanBenchScores = {
+  render(bundle, { reportLinks = true } = {}) {
+    injectedData = bundle;
+    parsedData = null;
+    reportLinksEnabled = reportLinks;
+    init();
+  },
+  onRender(listener) {
+    renderListener = listener;
+  },
+};
