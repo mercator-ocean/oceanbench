@@ -5,7 +5,7 @@
  */
 
 /* Design primitives (--ob-*) live in theme/tokens.css, loaded site-wide via
-   _quarto.yml `css:` — shared with the viewer app (website/viewer/tokens.css). */
+   _quarto.yml `css:`, shared with the viewer app (website/viewer/tokens.css). */
 
 /* --- Shared surfaces and markdown content --- */
 

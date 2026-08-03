@@ -1335,7 +1335,7 @@ function setupChallengerActionDelegation() {
     } else if (action === "show") {
       challengerVisibility[name] = true;
     } else if (action === "pin") {
-      selectedBaselineName = name;
+      selectedBaseline = name;
     } else {
       return;
     }
