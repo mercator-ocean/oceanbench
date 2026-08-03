@@ -126,6 +126,32 @@ SPDX-License-Identifier: EUPL-1.2
         <div class="map-content">
           <div id="panel-grid" class="panel-grid" data-layout="1"></div>
         </div>
+        <!-- The controls that belong to the map live on it. The raster is 2:1 and the
+             map column rarely is, so there is always a band of empty canvas along the
+             bottom; putting the scrubber and the colour scale there costs no height at
+             all, where a strip below the map cost 55 pixels of it. -->
+        <div class="map-floats">
+          <!-- The readout names the control, so a separate label beside it would be the
+               same two words twice in a pane that has no width to spare. -->
+          <div class="float-lead">
+            <div class="lead-pane">
+              <span class="lead-track">
+                <input type="range" id="lead-day" min="1" max="10" step="1" value="1" aria-label="Lead day" />
+                <span id="lead-ticks" class="lead-ticks" aria-hidden="true"></span>
+              </span>
+              <span id="lead-value" class="lead-value">Lead day 1</span>
+            </div>
+          </div>
+          <div class="float-scale">
+            <canvas id="colorbar" width="512" height="52" class="colorbar"></canvas>
+            <div id="map-legend" class="map-legend" hidden></div>
+            <div id="year-legend" class="year-legend" hidden></div>
+          </div>
+          <div class="float-meta">
+            <p id="layer-info" class="layer-info"></p>
+            <p id="status" class="status" role="status">Loading…</p>
+          </div>
+        </div>
       </main>
 
       <aside id="context-rail" class="drawer drawer-right" aria-label="Context">
@@ -183,26 +209,6 @@ SPDX-License-Identifier: EUPL-1.2
         <div id="map-rail-splitter" class="drawer-resizer" role="separator" aria-orientation="vertical" aria-label="Resize context rail"></div>
         <button id="rail-collapse" type="button" class="drawer-tab" aria-expanded="true" aria-label="Collapse context rail" title="Collapse / expand rail"></button>
       </aside>
-    </div>
-
-    <div class="map-dock">
-      <div class="dock-lead">
-        <label for="lead-day" class="dock-label">Lead day</label>
-        <span class="lead-track">
-          <input type="range" id="lead-day" min="1" max="10" step="1" value="1" />
-          <span id="lead-ticks" class="lead-ticks" aria-hidden="true"></span>
-        </span>
-        <span id="lead-value" class="lead-value">day 1</span>
-      </div>
-      <div class="dock-scale">
-        <canvas id="colorbar" width="512" height="52" class="colorbar"></canvas>
-        <div id="map-legend" class="map-legend" hidden></div>
-        <div id="year-legend" class="year-legend" hidden></div>
-      </div>
-      <div class="dock-meta">
-        <p id="layer-info" class="layer-info"></p>
-        <p id="status" class="status" role="status">Loading…</p>
-      </div>
     </div>
 
     <script type="module" src="./app.js"></script>

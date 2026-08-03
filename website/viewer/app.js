@@ -2543,6 +2543,35 @@ function syncPanelGrid() {
   for (let i = shared.layout; i < panels.length; i += 1) stopParticles(panels[i]);
   if (activePanelIndex >= shared.layout) activePanelIndex = 0;
   markActivePanel();
+  watchMapOverlays();
+}
+
+// The floating map controls and, in swipe or difference display, Forecast 2's picker
+// strip both sit along the bottom of the map column. Their heights change with the
+// display mode and with wrapping at narrow widths, so whatever has to clear them is
+// told the measured value instead of a guess: the controls sit above the strip, and
+// the hover readout sits above the controls.
+let mapOverlayObserver = null;
+
+function syncMapOverlayMetrics() {
+  const area = document.querySelector(".map-area");
+  if (!area) return;
+  const strip = area.querySelector(".panel.head-only");
+  const floats = area.querySelector(".map-floats");
+  area.style.setProperty("--map-strip-height", `${strip ? strip.offsetHeight : 0}px`);
+  area.style.setProperty("--map-floats-height", `${floats ? floats.offsetHeight : 0}px`);
+}
+
+function watchMapOverlays() {
+  const area = document.querySelector(".map-area");
+  if (!area) return;
+  if (!mapOverlayObserver) mapOverlayObserver = new ResizeObserver(syncMapOverlayMetrics);
+  mapOverlayObserver.disconnect();
+  const strip = area.querySelector(".panel.head-only");
+  const floats = area.querySelector(".map-floats");
+  if (strip) mapOverlayObserver.observe(strip);
+  if (floats) mapOverlayObserver.observe(floats);
+  syncMapOverlayMetrics();
 }
 
 function markActivePanel() {
@@ -3833,7 +3862,7 @@ function updateSharedTimeControls(manifest) {
   elements["lead-day"].min = String(minimumLead);
   elements["lead-day"].max = String(maximumLead);
   elements["lead-day"].value = String(shared.leadDay);
-  elements["lead-value"].textContent = `day ${shared.leadDay}`;
+  elements["lead-value"].textContent = `Lead day ${shared.leadDay}`;
   fillLeadTicks(minimumLead, maximumLead);
 }
 
@@ -4123,7 +4152,7 @@ function wireGlobalControls() {
   });
   elements["lead-day"].addEventListener("input", (event) => {
     shared.leadDay = Number(event.target.value);
-    elements["lead-value"].textContent = `day ${shared.leadDay}`;
+    elements["lead-value"].textContent = `Lead day ${shared.leadDay}`;
     scheduleLeadRender();
     scheduleClass4Reload();
     scheduleHashWrite();
@@ -4286,14 +4315,6 @@ function applyLayout() {
   workspace.style.setProperty("--rail-width", `${shared.railCollapsed ? DRAWER_TAB_WIDTH : shared.railWidth}px`);
   workspace.style.setProperty("--controls-open-width", `${shared.controlsWidth}px`);
   workspace.style.setProperty("--rail-open-width", `${shared.railWidth}px`);
-  // How far the map column is held off each side of the shell. The dock spans the
-  // whole width but its colour scale belongs to the map, so the stylesheet needs
-  // these two to centre it there. While the drawers float over the map they take a
-  // tab's width on either side instead of a track of their own.
-  const mapInsetLeft = overlaying || shared.controlsCollapsed ? DRAWER_TAB_WIDTH : shared.controlsWidth;
-  const mapInsetRight = overlaying || shared.railCollapsed ? DRAWER_TAB_WIDTH : shared.railWidth;
-  document.body.style.setProperty("--dock-inset-left", `${mapInsetLeft}px`);
-  document.body.style.setProperty("--dock-inset-right", `${mapInsetRight}px`);
 }
 
 // Design width of every rail chart's viewBox. The SVG is stretched to the slot, so
@@ -4684,7 +4705,7 @@ async function main() {
   applyRailCollapsed();
   applyLayout();
   watchChartSlots();
-  elements["lead-value"].textContent = `day ${shared.leadDay}`;
+  elements["lead-value"].textContent = `Lead day ${shared.leadDay}`;
   elements["speed-value"].textContent = `${shared.particleSpeed.toFixed(1)}×`;
   elements["particles-play"].checked = shared.showParticles;
   elements["particle-speed"].value = String(shared.particleSpeed);
