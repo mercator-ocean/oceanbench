@@ -634,24 +634,41 @@ kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-st
 .rail-caption { font-size: 0.68rem; color: var(--muted); margin: 0.35rem 0 0; line-height: 1.35; }
 .rail-provenance { font-size: 0.66rem; color: var(--muted); margin: 1rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--border); line-height: 1.4; }
 .rail-provenance .method-note-btn { vertical-align: baseline; margin-left: 0.3rem; }
-.rail-chart-slot { width: 100%; }
-.rail-chart { width: 100%; height: auto; display: block; }
+/* Rail charts are viewBox-scaled SVG: the browser maps 360 user units onto whatever
+   the slot measures, which scaled the labels along with the drawing. Type in the rail
+   therefore grew and shrank as the window or the drawer was resized. The slot
+   publishes its measured width and every label divides the design width back out, so
+   a label declared at 0.5rem renders at 8px whatever the slot measures. Chart
+   geometry still flexes with the slot; only the type is pinned. */
+.rail-chart-slot {
+  width: 100%;
+  --chart-view-width: 360;
+  --chart-slot-width: 360;
+}
+.rail-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  --chart-type-scale: calc(var(--chart-view-width) / var(--chart-slot-width));
+  --chart-text: 0.5rem;
+  --chart-text-empty: 0.5625rem;
+}
 .rail-chart .axis { stroke: var(--border); stroke-width: 1; }
 .rail-chart .grid { stroke: var(--grid-line); stroke-width: 1; }
-.rail-chart .tick { fill: var(--muted); font-size: 8px; font-family: var(--mono); }
-.rail-chart .axis-label { fill: var(--muted); font-size: 8px; }
-.rail-chart .legend { fill: var(--text); font-size: 8px; }
-.rail-chart .empty { fill: var(--muted); font-size: 9px; }
+.rail-chart .tick { fill: var(--muted); font-size: calc(var(--chart-text) * var(--chart-type-scale)); font-family: var(--mono); }
+.rail-chart .axis-label { fill: var(--muted); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
+.rail-chart .legend { fill: var(--text); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
+.rail-chart .empty { fill: var(--muted); font-size: calc(var(--chart-text-empty) * var(--chart-type-scale)); }
 .rail-chart .chart-point { fill: transparent; stroke: none; pointer-events: all; cursor: crosshair; }
 .rail-chart .chart-crosshair { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
 .rail-chart .chart-tooltip { pointer-events: none; }
 .rail-chart .chart-tooltip rect { fill: var(--readout-bg); stroke: var(--border); }
-.rail-chart .chart-tooltip text { fill: var(--text); font-size: 8px; font-family: var(--mono); }
+.rail-chart .chart-tooltip text { fill: var(--text); font-size: calc(var(--chart-text) * var(--chart-type-scale)); font-family: var(--mono); }
 .rail-chart .chart-lead-line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.5; pointer-events: none; }
 .rail-chart .chart-lead-marker { fill: var(--accent); stroke: var(--readout-bg); stroke-width: 1.5; pointer-events: none; }
 .rail-chart .chart-lead-readout { pointer-events: none; }
 .rail-chart .chart-lead-readout rect { fill: var(--readout-bg); stroke: var(--accent); stroke-width: 1; }
-.rail-chart .chart-lead-readout text { fill: var(--accent); font-size: 8px; font-family: var(--mono); }
+.rail-chart .chart-lead-readout text { fill: var(--accent); font-size: calc(var(--chart-text) * var(--chart-type-scale)); font-family: var(--mono); }
 .rail-legend { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.74rem; }
 .rail-legend .swatch { display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 3px; margin-right: 0.4rem; vertical-align: -1px; }
 .rail-legend .row { color: var(--text); }

@@ -6,7 +6,10 @@ import { FORECAST_COLORS } from "./forecast-colors.js";
 
 export const TRAJECTORY_COLORS = FORECAST_COLORS;
 
-export function trajectorySeparationSVG(rows, currentLead) {
+// typeScale: how much the caller's stylesheet inflates label sizes so they render at
+// a fixed size whatever the slot measures. The lead readout is a box drawn around a
+// label, so it has to be measured in the same inflated units or the text outgrows it.
+export function trajectorySeparationSVG(rows, currentLead, typeScale = 1) {
   if (!rows || rows.length < 2) return "";
   const width = 360;
   const height = 190;
@@ -42,14 +45,15 @@ export function trajectorySeparationSVG(rows, currentLead) {
     const mx = x(markerRow.lead_day);
     const my = y(markerRow.mean);
     const label = `day ${markerRow.lead_day} · ${markerRow.mean.toFixed(markerRow.mean < 10 ? 1 : 0)} km`;
-    const labelWidth = 8 + label.length * 4.6;
+    const labelWidth = (8 + label.length * 4.6) * typeScale;
+    const labelHeight = 14 * typeScale;
     const labelRight = mx + 8 + labelWidth <= width - right;
     const labelX = labelRight ? mx + 8 : mx - 8 - labelWidth;
-    const labelY = Math.max(top + 2, my - 20);
+    const labelY = Math.max(top + 2, my - 6 - labelHeight);
     marker = `<line class="chart-lead-line" x1="${mx.toFixed(1)}" y1="${top}" x2="${mx.toFixed(1)}" y2="${(height - bottom).toFixed(1)}"/>`
       + `<circle class="chart-lead-marker" cx="${mx.toFixed(1)}" cy="${my.toFixed(1)}" r="3.5"/>`
-      + `<g class="chart-lead-readout"><rect x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" width="${labelWidth.toFixed(1)}" height="14" rx="3"/>`
-      + `<text x="${(labelX + labelWidth / 2).toFixed(1)}" y="${(labelY + 9.5).toFixed(1)}" text-anchor="middle">${label}</text></g>`;
+      + `<g class="chart-lead-readout"><rect x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" width="${labelWidth.toFixed(1)}" height="${labelHeight.toFixed(1)}" rx="3"/>`
+      + `<text x="${(labelX + labelWidth / 2).toFixed(1)}" y="${(labelY + labelHeight * 0.68).toFixed(1)}" text-anchor="middle">${label}</text></g>`;
   }
   return `<svg viewBox="0 0 ${width} ${height}" class="rail-chart trajectory-separation-chart" role="img" aria-label="Trajectory separation">`
     + `<line x1="${left}" y1="${height - bottom}" x2="${width - right}" y2="${height - bottom}" class="axis"/>`

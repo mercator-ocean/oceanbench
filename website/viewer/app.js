@@ -1572,7 +1572,7 @@ function renderTrajectoryRail() {
   section.hidden = !trajectoryState;
   if (!trajectoryState) return;
   elements["rail-trajectory-chart"].innerHTML = trajectoryState.separation
-    ? trajectorySeparationSVG(trajectoryState.separation, shared.leadDay)
+    ? trajectorySeparationSVG(trajectoryState.separation, shared.leadDay, chartTypeScale(elements["rail-trajectory-chart"]))
     : "";
   elements["rail-trajectory-note"].textContent = trajectoryState.loading
     ? "Loading current fields and advecting 20 shared seeds…"
@@ -3661,15 +3661,19 @@ function wireCursorTooltip(container) {
   }
   const setText = (lines) => {
     for (const old of [...tooltip.querySelectorAll("text")]) old.remove();
+    // The label text no longer scales with the slot, so the box around it cannot be
+    // laid out in bare user units either: every measurement here is in units of the
+    // text's own size, inflated by the same factor the stylesheet applies.
+    const scale = chartTypeScale(svg);
     lines.forEach((text, index) => {
       const node = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      node.setAttribute("x", "6");
-      node.setAttribute("y", String(13 + index * 12));
+      node.setAttribute("x", String(6 * scale));
+      node.setAttribute("y", String((13 + index * 12) * scale));
       node.textContent = text;
       tooltip.appendChild(node);
     });
-    rect.setAttribute("height", String(8 + lines.length * 12));
-    rect.setAttribute("width", String(Math.max(96, 7 * Math.max(...lines.map((line) => line.length)))));
+    rect.setAttribute("height", String((8 + lines.length * 12) * scale));
+    rect.setAttribute("width", String(Math.max(96, 7 * Math.max(...lines.map((line) => line.length))) * scale));
   };
   const move = (event) => {
     const svgPoint = svg.createSVGPoint();
@@ -4277,6 +4281,38 @@ function applyLayout() {
   workspace.style.setProperty("--rail-open-width", `${shared.railWidth}px`);
 }
 
+// Design width of every rail chart's viewBox. The SVG is stretched to the slot, so
+// this over the slot's measured width is the factor the browser applies to user
+// units, and the factor label sizes have to divide back out to stay put.
+const CHART_VIEW_WIDTH = 360;
+
+// How much a length declared in user units has to be inflated to render at its
+// declared size in the slot as it is measured right now.
+function chartTypeScale(node) {
+  const slot = node && node.closest ? node.closest(".rail-chart-slot") : null;
+  const width = slot ? slot.getBoundingClientRect().width : 0;
+  return width > 0 ? CHART_VIEW_WIDTH / width : 1;
+}
+
+// Publish each slot's measured width so the stylesheet can pin label sizes. Charts
+// are re-rendered into these slots constantly; observing the slots rather than the
+// SVGs means the value survives every re-render.
+function watchChartSlots() {
+  const slots = [...document.querySelectorAll(".rail-chart-slot")];
+  if (!slots.length || typeof ResizeObserver === "undefined") return;
+  const publish = (slot) => {
+    const width = slot.getBoundingClientRect().width;
+    slot.style.setProperty("--chart-slot-width", String(Math.max(1, width)));
+  };
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) publish(entry.target);
+  });
+  for (const slot of slots) {
+    publish(slot);
+    observer.observe(slot);
+  }
+}
+
 function persistLayout() {
   localStorage.setItem("oceanbench.viewer.layout", JSON.stringify({
     controlsWidth: shared.controlsWidth,
@@ -4632,6 +4668,7 @@ async function main() {
   syncDrawerOverlayMode();
   applyRailCollapsed();
   applyLayout();
+  watchChartSlots();
   elements["lead-value"].textContent = `day ${shared.leadDay}`;
   elements["speed-value"].textContent = `${shared.particleSpeed.toFixed(1)}×`;
   elements["particles-play"].checked = shared.showParticles;
