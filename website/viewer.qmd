@@ -20,19 +20,17 @@ format:
 ```{=html}
 <style>
 /* Full-bleed app page: the viewer fills the viewport exactly, minus the site
-   navbar. No title block, no content margins, no page footer, no page scrollbar.
+   navbar. No title block, no content margins, no letterbox. The site footer with
+   the EDITO credit stays in normal flow directly below the app, so it costs no
+   viewport height and is reached by scrolling past the bottom of the map.
    Every rule is scoped to this page's body class so other pages are untouched. */
-html:has(body.viewer-page),
-body.viewer-page {
-  height: 100%;
-  overflow: hidden;
-  overscroll-behavior: none;
-}
 body.viewer-page {
   display: flex;
   flex-direction: column;
   margin: 0;
   padding: 0;
+  /* The app owns the viewport width; only the footer may extend the page height. */
+  overflow-x: hidden;
 }
 body.viewer-page #quarto-header { flex: 0 0 auto; }
 body.viewer-page #quarto-content,
@@ -49,17 +47,15 @@ body.viewer-page #quarto-document-content {
   grid-template-columns: 1fr !important;
 }
 body.viewer-page #quarto-content > * { grid-column: 1 / -1 !important; }
-/* The article header (title block) and the site footer both belong to a document
-   page, not to an app shell; neither has anything to say here and both would eat
-   viewport height or create a scrollbar. */
+/* The article header (title block) belongs to a document page, not to an app shell:
+   it says nothing here and it would push the map down into a letterbox. The site
+   footer is kept, just moved below the fold. */
 body.viewer-page #title-block-header,
 body.viewer-page header#title-block-header,
 body.viewer-page .quarto-title-block,
 body.viewer-page #quarto-margin-sidebar,
-body.viewer-page .nav-footer,
-body.viewer-page footer.footer,
-body.viewer-page #quarto-footer,
 body.viewer-page .quarto-title-banner { display: none !important; }
+body.viewer-page .nav-footer { flex: 0 0 auto; }
 #viewer-embed {
   height: calc(100dvh - var(--viewer-chrome, 0px));
   width: 100%;

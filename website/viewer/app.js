@@ -3823,6 +3823,15 @@ function updateSharedTimeControls(manifest) {
   elements["lead-day"].max = String(maximumLead);
   elements["lead-day"].value = String(shared.leadDay);
   elements["lead-value"].textContent = `day ${shared.leadDay}`;
+  fillLeadTicks(minimumLead, maximumLead);
+}
+
+// One tick per available lead day. The marks are drawn in CSS across the thumb's
+// travel, so all the stylesheet needs is how many gaps to divide that travel into.
+function fillLeadTicks(minimumLead, maximumLead) {
+  const ticks = elements["lead-ticks"];
+  if (!ticks) return;
+  ticks.style.setProperty("--lead-steps", String(Math.max(1, maximumLead - minimumLead)));
 }
 
 async function applyOverlayMode() {
@@ -4526,6 +4535,7 @@ function selectElements() {
   for (const id of [
     "start-date",
     "lead-day",
+    "lead-ticks",
     "lead-value",
     "overlay-mode",
     "overlay-region",

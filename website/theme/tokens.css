@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: EUPL-1.2
  */
 
+/* Lato is the site's typeface: the flatly and darkly bundles pull it from Google
+   Fonts, so site pages already have it. The viewer loads no Bootstrap, which is
+   why it used to fall back to system-ui and read as a different product. Same
+   URL and same axes as the theme bundle, so pages that load both reuse one fetch. */
+@import url("https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;1,400&display=swap");
+
 /*
  * OceanBench design tokens: the single source of truth for design primitives
  * shared by the Quarto site and the viewer app.
@@ -43,8 +49,12 @@
   --ob-surface: var(--bs-tertiary-bg, #f4f6f7);
   --ob-surface-raised: var(--bs-body-bg, #fafaf7);
   --ob-soft-shadow: 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06);
-  --ob-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --ob-font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+  /* Defer to the live Bootstrap stacks on site pages; the fallbacks repeat what
+     flatly and darkly resolve to, so the viewer matches them without Bootstrap. */
+  --ob-font-sans: var(--bs-body-font-family, Lato, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+  --ob-font-mono: var(--bs-font-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+  --ob-body-size: 1.0625rem;
+  --ob-body-line: 1.5;
 }
 
 /* ---- site primitives: dark -------------------------------------------------- */

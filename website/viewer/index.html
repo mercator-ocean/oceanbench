@@ -182,7 +182,10 @@ SPDX-License-Identifier: EUPL-1.2
     <div class="map-dock">
       <div class="dock-lead">
         <label for="lead-day" class="dock-label">Lead day</label>
-        <input type="range" id="lead-day" min="1" max="10" step="1" value="1" />
+        <span class="lead-track">
+          <input type="range" id="lead-day" min="1" max="10" step="1" value="1" />
+          <span id="lead-ticks" class="lead-ticks" aria-hidden="true"></span>
+        </span>
         <span id="lead-value" class="lead-value">day 1</span>
       </div>
       <div class="dock-scale">
