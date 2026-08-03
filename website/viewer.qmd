@@ -5,11 +5,12 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 
 ---
-pagetitle: "Viewer — OceanBench"
-description: "Interactive explorer of OceanBench forecast fields — synchronized panels, currents and insight overlays."
+pagetitle: "Viewer - OceanBench"
+description: "Interactive explorer of OceanBench forecast fields: synchronized panels, currents and insight overlays."
 format:
   html:
     page-layout: custom
+    toc: false
 ---
 
 ::: {#viewer-embed}
@@ -18,14 +19,53 @@ format:
 
 ```{=html}
 <style>
-/* Full-bleed: the app fills the viewport below the site navbar.
-   These overrides are scoped to this page's body id so other pages are untouched. */
-#viewer-embed {
-  width: 100%;
-  height: calc(100dvh - var(--viewer-chrome, 0px));
-  min-height: 420px;
+/* Full-bleed app page: the viewer fills the viewport exactly, minus the site
+   navbar. No title block, no content margins, no page footer, no page scrollbar.
+   Every rule is scoped to this page's body class so other pages are untouched. */
+html:has(body.viewer-page),
+body.viewer-page {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+body.viewer-page {
+  display: flex;
+  flex-direction: column;
   margin: 0;
   padding: 0;
+}
+body.viewer-page #quarto-header { flex: 0 0 auto; }
+body.viewer-page #quarto-content,
+body.viewer-page main.content,
+body.viewer-page .page-columns,
+body.viewer-page #quarto-document-content {
+  flex: 1 1 auto;
+  display: block;
+  min-height: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+  width: 100% !important;
+  grid-template-columns: 1fr !important;
+}
+body.viewer-page #quarto-content > * { grid-column: 1 / -1 !important; }
+/* The article header (title block) and the site footer both belong to a document
+   page, not to an app shell; neither has anything to say here and both would eat
+   viewport height or create a scrollbar. */
+body.viewer-page #title-block-header,
+body.viewer-page header#title-block-header,
+body.viewer-page .quarto-title-block,
+body.viewer-page #quarto-margin-sidebar,
+body.viewer-page .nav-footer,
+body.viewer-page footer.footer,
+body.viewer-page #quarto-footer,
+body.viewer-page .quarto-title-banner { display: none !important; }
+#viewer-embed {
+  height: calc(100dvh - var(--viewer-chrome, 0px));
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 #viewer-frame {
   display: block;
@@ -34,23 +74,14 @@ format:
   border: 0;
   resize: none;
 }
-/* Drop Quarto's article grid margins for this page only so the map is edge to edge. */
-body.viewer-page #quarto-content,
-body.viewer-page main.content,
-body.viewer-page .page-columns {
-  margin: 0 !important;
-  padding: 0 !important;
-  max-width: none !important;
-  grid-template-columns: 1fr !important;
-}
-body.viewer-page #quarto-content > * { grid-column: 1 / -1 !important; }
 </style>
 <script>
 (function () {
   document.body.classList.add("viewer-page");
   var frame = document.getElementById("viewer-frame");
 
-  // Size the app to the space left under the fixed navbar; keep the footer below the fold.
+  // Size the app to the space left under the navbar. Measuring instead of assuming
+  // keeps the fit exact when the navbar wraps or the theme changes its height.
   function chromeHeight() {
     var header = document.getElementById("quarto-header");
     return header ? header.getBoundingClientRect().height : 0;
@@ -59,6 +90,10 @@ body.viewer-page #quarto-content > * { grid-column: 1 / -1 !important; }
     document.documentElement.style.setProperty("--viewer-chrome", chromeHeight() + "px");
   }
   window.addEventListener("resize", sizeApp);
+  if (window.ResizeObserver) {
+    var header = document.getElementById("quarto-header");
+    if (header) new ResizeObserver(sizeApp).observe(header);
+  }
   sizeApp();
 
   // Theme: the site's toggle stamps quarto-dark / quarto-light on <body>; forward it.

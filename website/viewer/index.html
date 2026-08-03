@@ -14,7 +14,7 @@ SPDX-License-Identifier: EUPL-1.2
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="app-header">
+    <header class="app-bar">
       <div class="brand-title">
         <a class="site-brand" href="../index.html" target="_top" aria-label="Back to OceanBench scores">
           <img src="./favicon-light.png" alt="OceanBench logo" />
@@ -22,7 +22,6 @@ SPDX-License-Identifier: EUPL-1.2
         </a>
         <div class="title">
           <h1>Viewer</h1>
-          <p class="tagline">Compare ocean forecast fields with synchronized panels, current flows, and insight overlays.</p>
         </div>
       </div>
       <div class="header-actions">
@@ -36,7 +35,7 @@ SPDX-License-Identifier: EUPL-1.2
           <button type="button" data-display="swipe" class="ghost-button">Swipe</button>
           <button type="button" data-display="diff" class="ghost-button">Difference</button>
         </div>
-        <a class="ghost-button" href="../index.html" target="_top">Scores</a>
+        <a class="ghost-button site-link" href="../index.html" target="_top">Scores</a>
         <button id="theme-toggle" type="button" class="ghost-button">Light theme</button>
         <button id="about-toggle" type="button" class="ghost-button" aria-label="About and credits" title="About and credits">ⓘ About</button>
       </div>
@@ -58,138 +57,144 @@ SPDX-License-Identifier: EUPL-1.2
     </dialog>
 
     <div class="workspace">
-      <aside class="controls" aria-label="Shared view controls">
-        <div class="scope-switch" role="group" aria-label="View scope">
-          <button type="button" data-scope="single" class="ghost-button">Single forecast</button>
-          <button type="button" data-scope="year" class="ghost-button">Entire year</button>
-        </div>
+      <aside id="left-drawer" class="drawer drawer-left" aria-label="Shared view controls">
+        <div class="controls drawer-body">
+          <div class="scope-switch" role="group" aria-label="View scope">
+            <button type="button" data-scope="single" class="ghost-button">Single forecast</button>
+            <button type="button" data-scope="year" class="ghost-button">Entire year</button>
+          </div>
 
-        <div class="metric-switch scope-switch" id="metric-switch" role="group" aria-label="Year metric">
-          <span class="metric-switch-label">Metric</span>
-          <button type="button" data-metric="error" class="ghost-button">|error|</button>
-          <button type="button" data-metric="bias" class="ghost-button">bias</button>
-        </div>
+          <div class="metric-switch scope-switch" id="metric-switch" role="group" aria-label="Year metric">
+            <span class="metric-switch-label">Metric</span>
+            <button type="button" data-metric="error" class="ghost-button">|error|</button>
+            <button type="button" data-metric="bias" class="ghost-button">bias</button>
+          </div>
 
-        <label class="start-date-field">Start date
-          <select id="start-date"></select>
-        </label>
-
-        <label>Lead day <span id="lead-value" class="lead-value">day 1</span>
-          <input type="range" id="lead-day" min="1" max="10" step="1" value="1" />
-        </label>
-
-        <label>Region
-          <select id="overlay-region">
-            <option value="global">Global</option>
-            <option value="ibi">IBI</option>
-          </select>
-        </label>
-
-        <label>Insight
-          <select id="overlay-mode">
-            <option value="none">None</option>
-            <option value="eddies">Eddies</option>
-            <option value="class4">Observation errors</option>
-            <option value="trajectories">Trajectories</option>
-            <option value="column" hidden disabled>Water column</option>
-          </select>
-        </label>
-        <label id="eddy-reference-field" hidden>Eddy reference
-          <select id="eddy-reference">
-            <option value="glorys">GLORYS</option>
-            <option value="glo12">GLO12</option>
-          </select>
-        </label>
-        <p id="overlay-note" class="hint"></p>
-
-        <fieldset class="control-group" id="currents-group" hidden>
-          <legend>Currents</legend>
-          <label class="toggle"><input type="checkbox" id="particles-play" checked /> Show particles</label>
-          <label>Particle speed <span id="speed-value" class="lead-value">1.0×</span>
-            <input type="range" id="particle-speed" min="0.2" max="3" step="0.1" value="1" />
+          <label class="start-date-field">Start date
+            <select id="start-date"></select>
           </label>
-        </fieldset>
 
-        <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>
-        <details class="hint-details">
-          <summary>Navigation tips</summary>
-          <p class="hint">Scroll to zoom, drag to pan. All panels move together. Hover for the value in real units. With two forecasts, switch between side by side and swipe; in swipe, drag the divider.</p>
-        </details>
+          <label>Region
+            <select id="overlay-region">
+              <option value="global">Global</option>
+              <option value="ibi">IBI</option>
+            </select>
+          </label>
+
+          <label>Insight
+            <select id="overlay-mode">
+              <option value="none">None</option>
+              <option value="eddies">Eddies</option>
+              <option value="class4">Observation errors</option>
+              <option value="trajectories">Trajectories</option>
+              <option value="column" hidden disabled>Water column</option>
+            </select>
+          </label>
+          <label id="eddy-reference-field" hidden>Eddy reference
+            <select id="eddy-reference">
+              <option value="glorys">GLORYS</option>
+              <option value="glo12">GLO12</option>
+            </select>
+          </label>
+          <p id="overlay-note" class="hint"></p>
+
+          <fieldset class="control-group" id="currents-group" hidden>
+            <legend>Currents</legend>
+            <label class="toggle"><input type="checkbox" id="particles-play" checked /> Show particles</label>
+            <label>Particle speed <span id="speed-value" class="lead-value">1.0×</span>
+              <input type="range" id="particle-speed" min="0.2" max="3" step="0.1" value="1" />
+            </label>
+          </fieldset>
+
+          <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>
+          <details class="hint-details">
+            <summary>Navigation tips</summary>
+            <p class="hint">Scroll to zoom, drag to pan. All panels move together. Hover for the value in real units. With two forecasts, switch between side by side and swipe; in swipe, drag the divider.</p>
+          </details>
+        </div>
+        <div id="controls-map-splitter" class="drawer-resizer" role="separator" aria-orientation="vertical" aria-label="Resize controls"></div>
+        <button id="left-collapse" type="button" class="drawer-tab" aria-expanded="true" aria-label="Collapse controls" title="Collapse / expand controls"></button>
       </aside>
-
-      <div id="controls-map-splitter" class="splitter splitter-column" role="separator" aria-orientation="vertical" aria-label="Resize controls"></div>
 
       <main class="map-area">
         <div class="map-content">
           <div id="panel-grid" class="panel-grid" data-layout="1"></div>
-
-          <div class="map-footer">
-            <canvas id="colorbar" width="512" height="52" class="colorbar"></canvas>
-            <div id="map-legend" class="map-legend" hidden></div>
-            <div id="year-legend" class="year-legend" hidden></div>
-            <p id="layer-info" class="layer-info"></p>
-          </div>
-          <p id="status" class="status" role="status">Loading…</p>
         </div>
-        <div id="map-height-splitter" class="splitter splitter-row" role="separator" aria-orientation="horizontal" aria-label="Resize map height"></div>
       </main>
 
-      <div id="map-rail-splitter" class="splitter splitter-column" role="separator" aria-orientation="vertical" aria-label="Resize context rail"></div>
-
-      <aside id="context-rail" class="context-rail" aria-label="Context rail">
-        <button id="rail-collapse" type="button" class="rail-collapse" aria-label="Collapse context rail" title="Collapse / expand rail"></button>
-        <h2 class="rail-title">Context</h2>
-        <p id="rail-subtitle" class="rail-subtitle"></p>
-        <div id="rail-current-depth-note" class="rail-current-depth-note" hidden></div>
-        <div id="rail-forecast-toggle" class="rail-forecast-toggle" role="group" aria-label="Forecast to inspect" hidden>
-          <button type="button" data-forecast="0" class="ghost-button">F1</button>
-          <button type="button" data-forecast="1" class="ghost-button">F2</button>
+      <aside id="context-rail" class="drawer drawer-right" aria-label="Context">
+        <div class="drawer-body">
+          <h2 class="rail-title">Context</h2>
+          <p id="rail-subtitle" class="rail-subtitle"></p>
+          <div id="rail-current-depth-note" class="rail-current-depth-note" hidden></div>
+          <div id="rail-forecast-toggle" class="rail-forecast-toggle" role="group" aria-label="Forecast to inspect" hidden>
+            <button type="button" data-forecast="0" class="ghost-button">F1</button>
+            <button type="button" data-forecast="1" class="ghost-button">F2</button>
+          </div>
+          <section class="rail-section">
+            <h3>RMSD vs lead day</h3>
+            <div id="rail-lead-curve" class="rail-chart-slot"></div>
+            <p id="rail-skill-note" class="rail-caption"></p>
+          </section>
+          <section class="rail-section" id="rail-depth-profile-section" hidden>
+            <h3>RMSD vs depth</h3>
+            <div id="rail-depth-profile" class="rail-chart-slot"></div>
+            <p id="rail-depth-profile-note" class="rail-caption"></p>
+          </section>
+          <section class="rail-section trajectory-card" id="rail-column-section" hidden>
+            <div class="rail-card-heading">
+              <h3>Water column</h3>
+              <button id="column-clear" type="button" class="trajectory-clear" aria-label="Close water-column profile" title="Close water-column profile">✕</button>
+            </div>
+            <p id="rail-column-point" class="trajectory-label"></p>
+            <div id="rail-column-chart" class="rail-chart-slot"></div>
+            <p id="rail-column-note" class="rail-caption"></p>
+          </section>
+          <section class="rail-section" id="rail-year-rmsd-section" hidden>
+            <h3>RMSD by start date</h3>
+            <div id="rail-year-rmsd" class="rail-chart-slot"></div>
+            <p id="rail-year-rmsd-note" class="rail-caption"></p>
+          </section>
+          <section class="rail-section" id="rail-spectra-section">
+            <div class="rail-card-heading psd-card-heading">
+              <h3>Live power spectrum</h3>
+              <button id="psd-toggle" type="button" class="ghost-button psd-toggle" aria-label="Show live power spectrum" title="Show live power spectrum" aria-pressed="false">Show</button>
+            </div>
+            <div id="rail-spectra" class="rail-chart-slot"></div>
+            <p id="rail-psd-note" class="rail-caption"></p>
+          </section>
+          <section class="rail-section trajectory-card" id="rail-trajectory-section" hidden>
+            <div class="rail-card-heading">
+              <h3>Trajectory separation</h3>
+              <button id="trajectory-clear" type="button" class="trajectory-clear" aria-label="Clear trajectories" title="Clear trajectories">✕</button>
+            </div>
+            <p class="trajectory-label">Illustrative advection through forecast currents</p>
+            <div id="rail-trajectory-chart" class="rail-chart-slot"></div>
+            <p id="rail-trajectory-note" class="rail-caption"></p>
+          </section>
+          <p id="rail-provenance" class="rail-provenance" hidden></p>
         </div>
-        <section class="rail-section">
-          <h3>RMSD vs lead day</h3>
-          <div id="rail-lead-curve" class="rail-chart-slot"></div>
-          <p id="rail-skill-note" class="rail-caption"></p>
-        </section>
-        <section class="rail-section" id="rail-depth-profile-section" hidden>
-          <h3>RMSD vs depth</h3>
-          <div id="rail-depth-profile" class="rail-chart-slot"></div>
-          <p id="rail-depth-profile-note" class="rail-caption"></p>
-        </section>
-        <section class="rail-section trajectory-card" id="rail-column-section" hidden>
-          <div class="rail-card-heading">
-            <h3>Water column</h3>
-            <button id="column-clear" type="button" class="trajectory-clear" aria-label="Close water-column profile" title="Close water-column profile">✕</button>
-          </div>
-          <p id="rail-column-point" class="trajectory-label"></p>
-          <div id="rail-column-chart" class="rail-chart-slot"></div>
-          <p id="rail-column-note" class="rail-caption"></p>
-        </section>
-        <section class="rail-section" id="rail-year-rmsd-section" hidden>
-          <h3>RMSD by start date</h3>
-          <div id="rail-year-rmsd" class="rail-chart-slot"></div>
-          <p id="rail-year-rmsd-note" class="rail-caption"></p>
-        </section>
-        <section class="rail-section" id="rail-spectra-section">
-          <div class="rail-card-heading psd-card-heading">
-            <h3>Live power spectrum</h3>
-            <button id="psd-toggle" type="button" class="ghost-button psd-toggle" aria-label="Show live power spectrum" title="Show live power spectrum" aria-pressed="false">Show</button>
-          </div>
-          <div id="rail-spectra" class="rail-chart-slot"></div>
-          <p id="rail-psd-note" class="rail-caption"></p>
-        </section>
-        <section class="rail-section trajectory-card" id="rail-trajectory-section" hidden>
-          <div class="rail-card-heading">
-            <h3>Trajectory separation</h3>
-            <button id="trajectory-clear" type="button" class="trajectory-clear" aria-label="Clear trajectories" title="Clear trajectories">✕</button>
-          </div>
-          <p class="trajectory-label">Illustrative advection through forecast currents</p>
-          <div id="rail-trajectory-chart" class="rail-chart-slot"></div>
-          <p id="rail-trajectory-note" class="rail-caption"></p>
-        </section>
-        <p id="rail-provenance" class="rail-provenance" hidden></p>
+        <div id="map-rail-splitter" class="drawer-resizer" role="separator" aria-orientation="vertical" aria-label="Resize context rail"></div>
+        <button id="rail-collapse" type="button" class="drawer-tab" aria-expanded="true" aria-label="Collapse context rail" title="Collapse / expand rail"></button>
       </aside>
     </div>
 
+    <div class="map-dock">
+      <div class="dock-lead">
+        <label for="lead-day" class="dock-label">Lead day</label>
+        <input type="range" id="lead-day" min="1" max="10" step="1" value="1" />
+        <span id="lead-value" class="lead-value">day 1</span>
+      </div>
+      <div class="dock-scale">
+        <canvas id="colorbar" width="512" height="52" class="colorbar"></canvas>
+        <div id="map-legend" class="map-legend" hidden></div>
+        <div id="year-legend" class="year-legend" hidden></div>
+      </div>
+      <div class="dock-meta">
+        <p id="layer-info" class="layer-info"></p>
+        <p id="status" class="status" role="status">Loading…</p>
+      </div>
+    </div>
 
     <script type="module" src="./app.js"></script>
   </body>

@@ -42,23 +42,28 @@ SPDX-License-Identifier: EUPL-1.2
 
 html, body { height: 100%; }
 
+/* App shell: a full-viewport column of [slim app bar] [workspace] [map dock].
+   The workspace is the only flexible row, so the app never scrolls as a page and
+   the map owns every pixel the chrome does not need. */
 body {
   margin: 0;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
   font-family: var(--ob-font-sans, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
   color: var(--text);
   background: var(--background);
   line-height: 1.45;
 }
 
-.app-header {
+.app-bar {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.75rem clamp(1rem, 3vw, 2rem);
+  padding: 0.35rem clamp(0.6rem, 1.5vw, 1rem);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
@@ -75,20 +80,16 @@ body {
 .site-brand:hover { color: var(--accent); text-decoration: none; }
 .site-brand img { width: 1.45rem; height: 1.45rem; }
 .title { min-width: 0; }
-.title h1 { font-size: 1.1rem; margin: 0; font-weight: 500; }
-.tagline { color: var(--muted); margin: 0.12rem 0 0; font-size: 0.82rem; max-width: 44rem; }
-.header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.title h1 { font-size: 1rem; margin: 0; font-weight: 500; }
+.header-actions { display: flex; align-items: center; gap: 0.4rem; }
 
 /* Embedded in the Quarto site: the parent navbar already carries the OceanBench
-   logo and page title, so the app's own brand block (logo + "Viewer" + tagline)
-   is redundant. Hide it and keep the header as a slim strip holding only the
-   functional controls (layout switch, theme, About). Standalone mode is untouched. */
-.viewer-embedded .brand-title { display: none; }
-.viewer-embedded .app-header {
-  justify-content: flex-end;
-  padding-top: 0.4rem;
-  padding-bottom: 0.4rem;
-}
+   logo, the page title and the Scores link, so the app's own brand block and its
+   Scores button are duplicate navigation. Hide both and keep the bar as a slim
+   strip of functional controls only. Standalone mode keeps them. */
+.viewer-embedded .brand-title,
+.viewer-embedded .site-link { display: none; }
+.viewer-embedded .app-bar { justify-content: flex-end; }
 .layout-switch { display: inline-flex; gap: 0.25rem; }
 /* The layout switch and the display switch are two different questions. Without a
    rule between them the six buttons read as one six-way segmented control. */
@@ -119,24 +120,101 @@ body {
 .workspace {
   --controls-width: 16rem;
   --rail-width: 22rem;
-  --map-height: calc(100% - 1px);
+  --controls-open-width: 16rem;
+  --rail-open-width: 22rem;
+  --drawer-tab-width: 26px;
+  position: relative;
   display: grid;
-  grid-template-columns: var(--controls-width) 1px minmax(20rem, 1fr) 1px var(--rail-width);
-  flex: 1;
+  grid-template-columns: var(--controls-width) minmax(0, 1fr) var(--rail-width);
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
 }
 
-.controls {
+/* Retractable drawers. One surface with the map: no card, no radius, no shadow,
+   just a hairline against the map and an edge tab to fold them away. */
+.drawer {
+  position: relative;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  background: var(--surface);
+}
+/* Explicit tracks: below 1100px the drawers leave the grid flow (position: absolute),
+   and without this the map would auto-place itself into the vacated first column. */
+.drawer-left { grid-column: 1; border-right: 1px solid var(--border); }
+.map-area { grid-column: 2; }
+.drawer-right { grid-column: 3; border-left: 1px solid var(--border); }
+.drawer-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.drawer.collapsed > .drawer-body,
+.drawer.collapsed > .drawer-resizer { display: none; }
+
+/* Drag handle on the drawer's inner edge: a hairline that lights up on hover and
+   widens its hit area with a transparent pseudo-element. */
+.drawer-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  z-index: 8;
+  touch-action: none;
+  cursor: col-resize;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+.drawer-left .drawer-resizer { right: -1px; }
+.drawer-right .drawer-resizer { left: -1px; }
+.drawer-resizer::before { content: ""; position: absolute; inset: 0 -5px; }
+.drawer-resizer:hover,
+.drawer-resizer.active { background: var(--accent); }
+body.resizing-layout { cursor: col-resize; user-select: none; }
+
+/* Edge tab: a small pill on the inner edge while the drawer is open; the whole
+   thin strip once it is collapsed, so the closed drawer is one big click target. */
+.drawer-tab {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 13px;
+  height: 46px;
+  z-index: 9;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.drawer-tab:hover { color: var(--accent); border-color: var(--accent); }
+.drawer-left .drawer-tab { right: -1px; border-right: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.drawer-right .drawer-tab { left: -1px; border-left: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.drawer.collapsed > .drawer-tab {
+  inset: 0;
+  width: auto;
+  height: auto;
+  transform: none;
+  border: 0;
+  border-radius: 0;
+}
+.drawer-left .drawer-tab::before { content: "\2039"; }
+.drawer-right .drawer-tab::before { content: "\203A"; }
+.drawer-left.collapsed .drawer-tab::before { content: "\203A"; }
+.drawer-right.collapsed .drawer-tab::before { content: "\2039"; }
+
+.controls {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  padding: 1.1rem;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  overflow-y: auto;
-  min-height: 0;
+  gap: 0.8rem;
+  padding: 0.9rem 0.9rem 1.5rem;
 }
 .scope-switch { display: inline-flex; gap: 0.25rem; }
 .scope-switch .ghost-button { flex: 1; padding: 0.4rem 0.5rem; font-size: 0.74rem; }
@@ -188,58 +266,40 @@ body {
 .hint { color: var(--muted); font-size: 0.72rem; margin: 0.15rem 0 0; }
 kbd { font-family: var(--mono); font-size: 0.72rem; background: var(--surface-strong); border: 1px solid var(--border); border-radius: 4px; padding: 0 0.25rem; }
 
+/* The map is the page: no padding, no gutters, no card. It fills the middle track
+   of the shell edge to edge and every other surface abuts it on a hairline. */
 .map-area {
+  position: relative;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  display: grid;
-  grid-template-rows: var(--map-height) 1px minmax(0, 1fr);
+  background: var(--canvas-void);
 }
 
 .map-content {
+  position: absolute;
+  inset: 0;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 1rem clamp(0.75rem, 1.5vw, 1.25rem);
-  gap: 0.7rem;
   overflow: hidden;
 }
 
-.splitter {
-  position: relative;
-  z-index: 8;
-  touch-action: none;
-  background: var(--border);
-  transition: background-color 120ms ease;
-}
-.splitter::before {
-  content: "";
-  position: absolute;
-  z-index: 1;
-}
-.splitter-column { cursor: col-resize; }
-.splitter-column::before { inset: 0 -5px; }
-.splitter-row { cursor: row-resize; }
-.splitter-row::before { inset: -5px 0; }
-.splitter:hover,
-.splitter.active { background: var(--accent); }
-body.resizing-layout { cursor: col-resize; user-select: none; }
-body.resizing-layout.row { cursor: row-resize; }
-
-/* Panel grid: 1 / 2 / 4 synchronized panels. */
+/* Panel grid: 1 or 2 synchronized panels. Two panels are separated by a single
+   hairline (the grid background showing through a 1px gap), not by a gutter. */
 .panel-grid {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  gap: 0.6rem;
+  gap: 0;
+  background: var(--border);
 }
 .panel-grid[data-layout="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-.panel-grid[data-layout="2"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+.panel-grid[data-layout="2"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; column-gap: 1px; }
 /* Swipe display: one shared map (Forecast 1) plus a compact Forecast 2 picker strip. */
 .panel-grid[data-display="swipe"],
 .panel-grid[data-display="diff"] { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
-.panel.head-only { box-shadow: none; }
 .panel.head-only .panel-canvas-wrap,
 .panel.head-only .panel-badge { display: none; }
 
@@ -248,30 +308,35 @@ body.resizing-layout.row { cursor: row-resize; }
 .display-switch .ghost-button { padding: 0.4rem 0.7rem; }
 
 .panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--canvas-void);
-  box-shadow: var(--shadow);
 }
-.panel.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow); }
-.panel-grid .panel { align-self: center; max-height: 100%; }
-.panel-grid .panel.head-only { align-self: stretch; }
+.panel.active { outline: 1px solid var(--accent); outline-offset: -1px; }
 
+/* The panel head floats on the map as a slim translucent strip rather than a
+   titlebar over a boxed card, so the raster runs the full height of the panel. */
 .panel-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.4rem 0.5rem;
-  background: var(--surface);
+  padding: 0.3rem 0.45rem;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
-  min-height: 2.35rem;
+  min-height: 2.1rem;
 }
+.panel.head-only .panel-head { position: static; background: var(--surface); backdrop-filter: none; }
 .panel-forecast-label {
   font-size: 0.7rem;
   font-weight: 600;
@@ -292,19 +357,16 @@ body.resizing-layout.row { cursor: row-resize; }
 .panel-head .spacer { flex: 1; }
 .panel-badge { font-size: 0.68rem; font-family: var(--mono); color: var(--muted); }
 
-/* The field is a 2:1 world raster. Letting the panel grow taller than that only
-   paints grey above and below the map, so the canvas box takes the map's own aspect
-   and the panel is sized (and centred) to it. When the row is shorter than that, the
-   max-height wins and the box falls back to filling what it is given, so swipe and
-   difference layouts keep working unchanged. */
+/* The canvas box fills the panel. The renderer already fits the 2:1 world raster
+   inside whatever box it is given (fit = min(height, width / 2)) and paints the
+   canvas background around it, so a taller box costs nothing and the map reads as
+   one continuous surface instead of a letterboxed card floating on the page. */
 .panel-canvas-wrap {
   position: relative;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   width: 100%;
-  aspect-ratio: 2 / 1;
   min-height: 0;
   background: var(--canvas-void);
-  box-shadow: 0 0 60px -20px var(--accent-glow) inset;
 }
 .panel-canvas-wrap canvas {
   position: absolute;
@@ -332,6 +394,9 @@ body.resizing-layout.row { cursor: row-resize; }
   max-width: 90%;
   backdrop-filter: blur(4px);
 }
+/* Empty is empty: without this the readout keeps painting a small bordered box in
+   the corner of the map whenever the pointer is not over a panel. */
+.panel-readout:empty { display: none; }
 /* Companion cursor: the mirrored pointer position on the panel NOT being
    hovered. It renders the EXACT same custom crosshair SVG as the real CSS
    cursor (--field-cursor), centered on the mirrored point, but at reduced
@@ -366,7 +431,7 @@ body.resizing-layout.row { cursor: row-resize; }
 .panel.loading .panel-canvas-wrap { opacity: 0.78; }
 .panel-swipe-hint {
   position: absolute;
-  top: 0.5rem;
+  top: 2.6rem;
   right: 0.5rem;
   font-size: 0.68rem;
   color: var(--muted);
@@ -376,9 +441,43 @@ body.resizing-layout.row { cursor: row-resize; }
   pointer-events: none;
 }
 
-.map-footer { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
-.colorbar { width: min(32rem, 100%); height: 3.25rem; border-radius: 4px; }
-.layer-info { color: var(--muted); font-family: var(--mono); font-size: 0.76rem; margin: 0; }
+/* Map dock: the slim strip anchored under the map holding the lead scrubber, the
+   colour scale and the layer readout. It is a sibling of the whole workspace, so no
+   drawer can ever cover it, at any width, open or collapsed. */
+.map-dock {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.2rem clamp(0.6rem, 1.5vw, 1rem);
+  min-height: 3.4rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.dock-lead {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 1 1 12rem;
+  min-width: 9rem;
+  max-width: 26rem;
+}
+.dock-label { font-size: 0.74rem; color: var(--muted); white-space: nowrap; }
+.dock-lead input[type="range"] { flex: 1 1 auto; min-width: 4rem; accent-color: var(--accent); }
+.dock-lead .lead-value { white-space: nowrap; min-width: 4rem; }
+.dock-scale { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; }
+.dock-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: flex-end;
+  text-align: right;
+}
+.dock-meta > p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.colorbar { width: min(26rem, 34vw); height: 3rem; }
+.layer-info { color: var(--muted); font-family: var(--mono); font-size: 0.74rem; margin: 0; }
 .year-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.72rem; color: var(--muted); margin: 0.15rem 0 0; }
 .year-legend .item { display: inline-flex; align-items: center; gap: 0.3rem; }
 .year-legend .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 3px; border: 1px solid rgba(128, 128, 128, 0.35); }
@@ -390,8 +489,8 @@ body.resizing-layout.row { cursor: row-resize; }
   flex-direction: column;
   justify-content: center;
   gap: 0.3rem;
-  width: min(32rem, 100%);
-  min-height: 3.25rem;
+  width: min(26rem, 34vw);
+  min-height: 3rem;
   font-size: 0.74rem;
 }
 .map-legend .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
@@ -406,46 +505,11 @@ body.resizing-layout.row { cursor: row-resize; }
 .status { color: var(--muted); font-size: 0.82rem; margin: 0; min-height: 1rem; }
 .status.error { color: #ff6b6b; }
 
-/* Context rail */
-.context-rail {
-  position: relative;
-  min-width: 0;
-  padding: 1rem 1rem 1.5rem;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  overflow-y: auto;
-  min-height: 0;
-}
+/* Context rail: the right drawer's body. Layout comes from .drawer / .drawer-body;
+   only the inner typography and spacing live here. */
 .context-rail[hidden] { display: none; }
-.context-rail.collapsed {
-  padding: 0.5rem 0;
-  overflow: hidden;
-}
-.context-rail.collapsed > *:not(.rail-collapse) { display: none; }
-/* Anchored on the right so the rail title, subtitle and every section heading share
-   one left edge with the rail padding instead of three different ones. */
-.rail-collapse {
-  position: absolute;
-  top: 0.6rem;
-  right: 0.6rem;
-  width: 1.4rem;
-  height: 1.4rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--background);
-  color: var(--muted);
-  cursor: pointer;
-  z-index: 2;
-}
-.rail-collapse:hover { border-color: var(--accent); color: var(--accent); }
-.rail-collapse::before { content: "\2039"; font-size: 1rem; line-height: 1; } /* ‹ expand left */
-.rail-collapse[aria-expanded="true"]::before { content: "\203A"; } /* › collapse right */
-.context-rail:not(.collapsed) .rail-title { padding-right: 1.9rem; }
-.rail-title { font-size: 0.95rem; margin: 0 0 0.15rem; }
+.drawer-right .drawer-body { padding: 0.9rem 0.9rem 1.5rem; }
+.rail-title { font-size: 0.9rem; margin: 0 0 0.15rem; }
 .rail-subtitle { font-size: 0.74rem; color: var(--muted); margin: 0 0 1rem; }
 .rail-current-depth-note {
   margin: 0 0 1rem;
@@ -545,37 +609,48 @@ body.resizing-layout.row { cursor: row-resize; }
 .about-dialog a { color: var(--accent); }
 
 @media (max-height: 760px) {
-  .app-header { padding-top: 0.45rem; padding-bottom: 0.45rem; }
-  .controls { padding: 0.75rem; gap: 0.6rem; }
-  .control-group { padding: 0.45rem 0.55rem 0.55rem; gap: 0.4rem; }
-  .map-area { padding-top: 0.65rem; padding-bottom: 0.65rem; gap: 0.45rem; }
-  .context-rail { padding: 0.75rem; }
+  .controls { padding: 0.7rem 0.7rem 1.2rem; gap: 0.6rem; }
+  .control-group { gap: 0.4rem; }
+  .drawer-right .drawer-body { padding: 0.7rem 0.7rem 1.2rem; }
 }
 
 @media (max-width: 1320px) {
-  .controls { width: 14.5rem; }
-  .context-rail { width: min(var(--rail-width, 20rem), 24rem); }
-  .panel-grid { gap: 0.45rem; }
   .panel-head { gap: 0.25rem; padding: 0.3rem 0.35rem; }
   .panel-head select { min-width: 4.8rem; max-width: 10.5rem; }
   /* The badge and the method-note "?" that sits beside it are one unit: hiding the
      badge alone leaves the "?" orphaned under a heading it no longer belongs to. */
   .panel-badge,
   .panel-head .method-note-btn { display: none; }
+  .colorbar, .map-legend { width: min(20rem, 30vw); }
 }
 
-/* Stacked/column layout for narrow viewports. This block MUST come after the
-   ≤1320px block above: at ≤980px both queries match, and same-specificity rules
-   resolve by source order, so the full-width .controls/.context-rail here have
-   to win over the fixed sidebar widths the ≤1320px block sets. .map-area keeps a
-   floor height so the field canvas can never collapse to 0px when stacked. */
-@media (max-width: 980px) {
-  .workspace { display: flex; flex-direction: column; overflow: auto; }
-  .controls { width: auto; max-height: 14rem; border-right: none; border-bottom: 1px solid var(--border); }
-  .context-rail { width: auto; border-left: none; border-top: 1px solid var(--border); }
-  .splitter { display: none; }
-  .map-area { display: flex; flex-direction: column; overflow: visible; min-height: 60vh; }
-  .map-content { flex: 1; min-height: 0; }
+/* Narrow viewports: the drawers stop taking grid tracks and float over the map, so
+   the map keeps a usable width instead of being squeezed between two sidebars. They
+   are inset from the bottom by the dock's own row, which sits outside the workspace,
+   so the lead scrubber and the colour scale stay reachable with either drawer open.
+   This block MUST come after the ≤1320px block above so its source order wins where
+   both queries match. */
+@media (max-width: 1100px) {
+  .workspace { grid-template-columns: var(--drawer-tab-width) minmax(0, 1fr) var(--drawer-tab-width); }
+  .drawer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 12;
+    box-shadow: 0 0 1.5rem rgba(15, 23, 42, 0.18);
+  }
+  .drawer-left { left: 0; width: var(--controls-open-width); }
+  .drawer-right { right: 0; width: var(--rail-open-width); }
+  .drawer.collapsed { width: var(--drawer-tab-width); box-shadow: none; }
+  .drawer-resizer { display: none; }
+}
+
+@media (max-width: 780px) {
+  .drawer-left { width: min(var(--controls-open-width), 78vw); }
+  .drawer-right { width: min(var(--rail-open-width), 78vw); }
+  .map-dock { gap: 0.6rem; }
+  .dock-meta { display: none; }
+  .colorbar, .map-legend { width: min(16rem, 45vw); }
 }
 
 /* ---- year metric switch (|error| / bias), year scope only ------------------ */

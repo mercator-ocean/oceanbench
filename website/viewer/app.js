@@ -18,6 +18,7 @@ import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, re
 import { COLORMAP_NAMES, DIVERGING } from "./vendor/cmocean/colormaps.js";
 import {
   fieldToImageData,
+  landStencilImageData,
   areaWeightedMean,
   symmetricRange,
   differenceField,
@@ -163,7 +164,7 @@ function currentsVariableOptions(manifest) {
 
 // Shared state — linked across every panel (contracts.md §6).
 const view = { zoom: 1, centerNX: GLOBAL_DEFAULT_CENTER_NX, centerNY: 0.5 };
-const DEFAULT_LAYOUT = { controlsWidth: 256, railWidth: 352, mapHeight: null };
+const DEFAULT_LAYOUT = { controlsWidth: 256, railWidth: 352 };
 const savedLayout = JSON.parse(localStorage.getItem("oceanbench.viewer.layout") || "null") || {};
 const shared = {
   startIndex: 0,
@@ -189,9 +190,9 @@ const shared = {
   showParticles: true,
   particleSpeed: 1,
   railCollapsed: localStorage.getItem("oceanbench.viewer.railCollapsed") === "1",
+  controlsCollapsed: localStorage.getItem("oceanbench.viewer.controlsCollapsed") === "1",
   controlsWidth: Number(savedLayout.controlsWidth) || DEFAULT_LAYOUT.controlsWidth,
   railWidth: Number(savedLayout.railWidth) || Number(localStorage.getItem("oceanbench.viewer.railWidth")) || DEFAULT_LAYOUT.railWidth,
-  mapHeight: Number(savedLayout.mapHeight) || null,
   // 2-forecast display: "side" (two panels) or "swipe" (one map, F1 left / F2 right).
   displayMode: "side",
   // Which forecast the rail shows when 2 forecasts carry different variables.
@@ -357,6 +358,7 @@ function buildPanel(index) {
     },
     offscreenA: null,
     offscreenB: null,
+    landStencil: null,
     edgesA: null,
     edgesB: null,
     field: null,
@@ -727,6 +729,7 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   panel.edgesA = worldEdges(uPrimary.latitudes, uPrimary.longitudes);
   panel.offscreenA = colorize(speed, uPrimary.latitudes, SPEED_COLORMAP, range);
   panel.offscreenB = null;
+  panel.landStencil = landStencil(speed, uPrimary.latitudes);
   panel.range = range;
   panel.colormap = SPEED_COLORMAP;
   panel.units = "m/s";
@@ -749,6 +752,14 @@ function colorize(field, latitudes, colormap, range, transparentNaN = false, lan
   });
   const canvas = new OffscreenCanvas(field.width, field.height);
   canvas.getContext("2d", { willReadFrequently: true }).putImageData(image, 0, 0);
+  return canvas;
+}
+
+function landStencil(field, latitudes) {
+  const flip = latitudes[0] < latitudes[latitudes.length - 1];
+  const image = landStencilImageData(field, { flipVertical: flip });
+  const canvas = new OffscreenCanvas(field.width, field.height);
+  canvas.getContext("2d").putImageData(image, 0, 0);
   return canvas;
 }
 
@@ -1987,6 +1998,7 @@ function startPanelParticles(panel) {
     speed: shared.particleSpeed,
     devicePixelRatio: window.devicePixelRatio || 1,
     playing: true,
+    punchLand: makeLandPunch(panel, projection),
   };
   panel.particleHandle = startParticleField(panel.els.particles, panel.particleContext);
 }
@@ -2016,6 +2028,25 @@ function updateParticleProjection(panel, projection) {
   panel.particleContext.muted = fieldMutedUnderOverlay();
   panel.particleContext.speed = shared.particleSpeed;
   panel.particleContext.devicePixelRatio = window.devicePixelRatio || 1;
+  panel.particleContext.punchLand = makeLandPunch(panel, projection);
+}
+
+// Erasing the particle layer wherever the field blit drew land. The velocity sampler
+// already refuses to advect into a land cell, but it works on a 1 degree grid whose
+// cells are many screen pixels wide, so a legal segment can still overhang the coastline
+// it is drawn beside. The stencil is the same raster, blitted through the same snapped
+// world path with the same nearest-neighbour scaling, so the particle layer cannot
+// disagree with the map about where the coast is.
+function makeLandPunch(panel, projection) {
+  const stencil = panel.landStencil;
+  if (!stencil) return null;
+  return (target) => {
+    target.save();
+    target.imageSmoothingEnabled = false;
+    target.globalCompositeOperation = "destination-out";
+    drawImageWorld(target, stencil, panel.edgesA, projection);
+    target.restore();
+  };
 }
 
 function visibleViewport(projection, canvas) {
@@ -4128,10 +4159,17 @@ function wireGlobalControls() {
   });
   elements["rail-collapse"].addEventListener("click", () => {
     shared.railCollapsed = !shared.railCollapsed;
-    localStorage.setItem("oceanbench.viewer.railCollapsed", shared.railCollapsed ? "1" : "0");
+    if (!drawersOverlaying()) localStorage.setItem("oceanbench.viewer.railCollapsed", shared.railCollapsed ? "1" : "0");
     applyRailCollapsed();
     redrawAllPanels();
     if (!shared.railCollapsed) updateContextRail();
+    writeHash();
+  });
+  elements["left-collapse"].addEventListener("click", () => {
+    shared.controlsCollapsed = !shared.controlsCollapsed;
+    if (!drawersOverlaying()) localStorage.setItem("oceanbench.viewer.controlsCollapsed", shared.controlsCollapsed ? "1" : "0");
+    applyRailCollapsed();
+    redrawAllPanels();
     writeHash();
   });
   wireLayoutSplitters();
@@ -4182,6 +4220,7 @@ function wireGlobalControls() {
     if (!panels.some((panel) => panel.dragging || panel.draggingSwipe)) updateHover(event);
   });
   window.addEventListener("resize", () => {
+    syncDrawerOverlayMode();
     applyLayout();
     clampView();
     scheduleLayoutRender();
@@ -4195,7 +4234,6 @@ function layoutLimits() {
   return {
     controlsWidth: [208, Math.min(380, workspace.width * 0.32)],
     railWidth: [280, Math.min(620, workspace.width * 0.42)],
-    mapHeight: [320, Math.max(320, workspace.height - 24)],
   };
 }
 
@@ -4207,25 +4245,33 @@ function clampLayoutValue(name, value) {
   return Math.round(Math.min(maximum, Math.max(minimum, safe)));
 }
 
+// Width of a drawer collapsed down to its edge tab. Mirrors --drawer-tab-width in
+// styles.css; the grid track is written from JS so the two must agree.
+const DRAWER_TAB_WIDTH = 26;
+
+// Below this width the drawers stop taking a grid track and float over the map, so
+// the map keeps a usable width instead of being squeezed to nothing.
+const DRAWER_OVERLAY_QUERY = "(max-width: 1100px)";
+
 function applyLayout() {
   const workspace = document.querySelector(".workspace");
-  if (!workspace || window.matchMedia("(max-width: 980px)").matches) return;
+  if (!workspace) return;
+  const overlaying = window.matchMedia(DRAWER_OVERLAY_QUERY).matches;
   shared.controlsWidth = clampLayoutValue("controlsWidth", shared.controlsWidth);
   shared.railWidth = clampLayoutValue("railWidth", shared.railWidth);
-  if (shared.controlsWidth + shared.railWidth > workspace.clientWidth - 420) {
+  if (!overlaying && shared.controlsWidth + shared.railWidth > workspace.clientWidth - 420) {
     shared.railWidth = Math.max(280, workspace.clientWidth - 420 - shared.controlsWidth);
   }
-  if (Number.isFinite(shared.mapHeight)) shared.mapHeight = clampLayoutValue("mapHeight", shared.mapHeight);
-  workspace.style.setProperty("--controls-width", `${shared.controlsWidth}px`);
-  workspace.style.setProperty("--rail-width", `${shared.railCollapsed ? 32 : shared.railWidth}px`);
-  workspace.style.setProperty("--map-height", Number.isFinite(shared.mapHeight) ? `${shared.mapHeight}px` : "calc(100% - 1px)");
+  workspace.style.setProperty("--controls-width", `${shared.controlsCollapsed ? DRAWER_TAB_WIDTH : shared.controlsWidth}px`);
+  workspace.style.setProperty("--rail-width", `${shared.railCollapsed ? DRAWER_TAB_WIDTH : shared.railWidth}px`);
+  workspace.style.setProperty("--controls-open-width", `${shared.controlsWidth}px`);
+  workspace.style.setProperty("--rail-open-width", `${shared.railWidth}px`);
 }
 
 function persistLayout() {
   localStorage.setItem("oceanbench.viewer.layout", JSON.stringify({
     controlsWidth: shared.controlsWidth,
     railWidth: shared.railWidth,
-    mapHeight: shared.mapHeight,
   }));
 }
 
@@ -4247,9 +4293,7 @@ function wireSplitter(element, name, axis, direction) {
     document.body.classList.add("resizing-layout");
     document.body.classList.toggle("row", axis === "y");
     const start = axis === "x" ? event.clientX : event.clientY;
-    const startValue = name === "mapHeight" && !Number.isFinite(shared.mapHeight)
-      ? document.querySelector(".map-content").getBoundingClientRect().height
-      : shared[name];
+    const startValue = shared[name];
     const move = (moveEvent) => {
       const coordinate = axis === "x" ? moveEvent.clientX : moveEvent.clientY;
       shared[name] = clampLayoutValue(name, startValue + direction * (coordinate - start));
@@ -4279,18 +4323,46 @@ function wireSplitter(element, name, axis, direction) {
 function wireLayoutSplitters() {
   wireSplitter(elements["controls-map-splitter"], "controlsWidth", "x", 1);
   wireSplitter(elements["map-rail-splitter"], "railWidth", "x", -1);
-  wireSplitter(elements["map-height-splitter"], "mapHeight", "y", 1);
 }
 
-// Collapse the rail to a thin strip (just the expand chevron), restoring the previous
-// width on expand. Collapsed state persists like the width (item: rail collapse control).
+// Collapse a drawer to its edge tab, restoring the previous width on expand. The
+// collapsed state persists like the width.
+function applyDrawerCollapsed(drawer, toggle, collapsed, label) {
+  if (!drawer || !toggle) return;
+  drawer.classList.toggle("collapsed", collapsed);
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${label}`);
+}
+
 function applyRailCollapsed() {
-  const rail = elements["context-rail"];
-  if (!rail) return;
-  rail.classList.toggle("collapsed", shared.railCollapsed);
-  elements["rail-collapse"].setAttribute("aria-expanded", String(!shared.railCollapsed));
-  elements["rail-collapse"].setAttribute("aria-label", shared.railCollapsed ? "Expand context rail" : "Collapse context rail");
+  applyDrawerCollapsed(elements["context-rail"], elements["rail-collapse"], shared.railCollapsed, "context rail");
+  applyDrawerCollapsed(elements["left-drawer"], elements["left-collapse"], shared.controlsCollapsed, "controls");
   applyLayout();
+}
+
+// Below the overlay breakpoint an open drawer floats over the map instead of taking a
+// track beside it, so leaving both open would bury the field. Fold them on the way in
+// and hand back the wide-viewport state on the way out; the user can still open either
+// one by hand while narrow.
+let preOverlayCollapse = null;
+
+function drawersOverlaying() {
+  return window.matchMedia(DRAWER_OVERLAY_QUERY).matches;
+}
+
+function syncDrawerOverlayMode() {
+  const overlaying = drawersOverlaying();
+  if (overlaying === (preOverlayCollapse !== null)) return;
+  if (overlaying) {
+    preOverlayCollapse = { controls: shared.controlsCollapsed, rail: shared.railCollapsed };
+    shared.controlsCollapsed = true;
+    shared.railCollapsed = true;
+  } else {
+    shared.controlsCollapsed = preOverlayCollapse.controls;
+    shared.railCollapsed = preOverlayCollapse.rail;
+    preOverlayCollapse = null;
+  }
+  applyRailCollapsed();
 }
 
 function redrawOverlaysAll() {
@@ -4368,9 +4440,9 @@ function writeHash() {
   parameters.set("region", shared.region);
   if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
   if (shared.railCollapsed) parameters.set("rail", "collapsed");
+  if (shared.controlsCollapsed) parameters.set("ctrl", "collapsed");
   parameters.set("rw", String(shared.railWidth));
   parameters.set("cw", String(shared.controlsWidth));
-  if (Number.isFinite(shared.mapHeight)) parameters.set("mh", String(shared.mapHeight));
   if (shared.layout === 2) parameters.set("dm", shared.displayMode);
   parameters.set("play", shared.showParticles ? "1" : "0");
   parameters.set("spd", shared.particleSpeed.toFixed(1));
@@ -4415,10 +4487,10 @@ function readHash() {
   if (parameters.has("region")) shared.region = parameters.get("region");
   if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
   if (parameters.get("rail") === "0" || parameters.get("rail") === "collapsed") shared.railCollapsed = true;
+  if (parameters.get("ctrl") === "0" || parameters.get("ctrl") === "collapsed") shared.controlsCollapsed = true;
   const railWidth = number("rw", null);
   if (railWidth !== null) shared.railWidth = Math.min(620, Math.max(280, railWidth));
   shared.controlsWidth = number("cw", shared.controlsWidth);
-  shared.mapHeight = number("mh", shared.mapHeight);
   if (["side", "swipe", "diff"].includes(parameters.get("dm"))) shared.displayMode = parameters.get("dm");
   if (parameters.has("play")) shared.showParticles = parameters.get("play") === "1";
   shared.particleSpeed = number("spd", shared.particleSpeed);
@@ -4470,6 +4542,8 @@ function selectElements() {
     "about-dialog",
     "about-close",
     "rail-collapse",
+    "left-drawer",
+    "left-collapse",
     "panel-grid",
     "colorbar",
     "map-legend",
@@ -4479,7 +4553,6 @@ function selectElements() {
     "context-rail",
     "controls-map-splitter",
     "map-rail-splitter",
-    "map-height-splitter",
     "rail-subtitle",
     "rail-current-depth-note",
     "rail-forecast-toggle",
@@ -4546,6 +4619,7 @@ async function main() {
   applyTheme();
   applyScope();
   markMetricButtons();
+  syncDrawerOverlayMode();
   applyRailCollapsed();
   applyLayout();
   elements["lead-value"].textContent = `day ${shared.leadDay}`;
