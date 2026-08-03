@@ -17,6 +17,8 @@ from oceanbench.core.lead_day_utils import lead_day_labels
 DRIFTER_DEPTH_METERS = 15.0
 MATCH_CANDIDATE_COUNT = 5
 MATCH_DISTANCE_PER_HOUR_KM = 25.0
+MAX_TRACK_GAP_HOURS = 6.0
+LAST_MATCHED_TIME_COLUMN = "last_matched_time"
 MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT = 50
 MINIMUM_RELIABLE_MATCHED_DRIFTER_FRACTION = 0.05
 DRIFTER_TRAJECTORY_DEVIATION_ROW_LABEL = "Class-4 drifter trajectory deviation mean (km)"
@@ -74,7 +76,7 @@ def _haversine_distance_km(
 
 def _predict_next_positions(
     active_tracks: pandas.DataFrame,
-    time_step_hours: float,
+    time_step_hours: numpy.ndarray,
 ) -> tuple[numpy.ndarray, numpy.ndarray]:
     time_step_seconds = time_step_hours * 3600.0
     latitudes = active_tracks[Dimension.LATITUDE.key()].to_numpy()
@@ -166,7 +168,7 @@ def _hourly_drifter_frames(
 def _matched_track_indices(
     active_tracks: pandas.DataFrame,
     next_frame: pandas.DataFrame,
-    time_step_hours: float,
+    time_step_hours: numpy.ndarray,
 ) -> list[tuple[int, int]]:
     predicted_latitudes, predicted_longitudes = _predict_next_positions(active_tracks, time_step_hours=time_step_hours)
     next_track_tree = cKDTree(
@@ -184,8 +186,9 @@ def _matched_track_indices(
         nearest_indices = nearest_indices[:, numpy.newaxis]
 
     candidate_matches: list[tuple[float, int, int]] = []
-    match_distance_limit_km = MATCH_DISTANCE_PER_HOUR_KM * time_step_hours
+    match_distance_limits_km = MATCH_DISTANCE_PER_HOUR_KM * numpy.asarray(time_step_hours, dtype=float)
     for active_track_index, candidate_indices in enumerate(nearest_indices):
+        match_distance_limit_km = float(match_distance_limits_km[active_track_index])
         for candidate_index in numpy.atleast_1d(candidate_indices):
             next_row = next_frame.iloc[int(candidate_index)]
             distance = float(
@@ -241,37 +244,39 @@ def _link_hourly_drifter_trajectories(
         )
     ]
 
-    previous_timestamp = first_timestamp
+    active_tracks[LAST_MATCHED_TIME_COLUMN] = first_timestamp
     for next_timestamp in timestamps[1:]:
-        next_frame = grouped_frames[next_timestamp]
-        time_step_hours = (next_timestamp - previous_timestamp) / pandas.Timedelta(hours=1)
-        matched_indices = _matched_track_indices(active_tracks, next_frame, time_step_hours=float(time_step_hours))
-        if not matched_indices:
+        if active_tracks.empty:
             break
+        next_frame = grouped_frames[next_timestamp]
+        gap_hours = (next_timestamp - active_tracks[LAST_MATCHED_TIME_COLUMN]) / pandas.Timedelta(hours=1)
+        matched_indices = _matched_track_indices(active_tracks, next_frame, time_step_hours=gap_hours.to_numpy())
 
-        matched_rows = []
         for active_track_index, next_index in matched_indices:
             next_row = next_frame.iloc[next_index]
-            track_id = int(active_tracks.iloc[active_track_index]["track_id"])
-            matched_rows.append(
-                {
-                    "track_id": track_id,
-                    Dimension.LATITUDE.key(): next_row[Dimension.LATITUDE.key()],
-                    Dimension.LONGITUDE.key(): next_row[Dimension.LONGITUDE.key()],
-                    Variable.EASTWARD_SEA_WATER_VELOCITY.key(): next_row[Variable.EASTWARD_SEA_WATER_VELOCITY.key()],
-                    Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): next_row[Variable.NORTHWARD_SEA_WATER_VELOCITY.key()],
-                }
-            )
+            active_row_label = active_tracks.index[active_track_index]
+            active_tracks.loc[active_row_label, Dimension.LATITUDE.key()] = next_row[Dimension.LATITUDE.key()]
+            active_tracks.loc[active_row_label, Dimension.LONGITUDE.key()] = next_row[Dimension.LONGITUDE.key()]
+            active_tracks.loc[active_row_label, Variable.EASTWARD_SEA_WATER_VELOCITY.key()] = next_row[
+                Variable.EASTWARD_SEA_WATER_VELOCITY.key()
+            ]
+            active_tracks.loc[active_row_label, Variable.NORTHWARD_SEA_WATER_VELOCITY.key()] = next_row[
+                Variable.NORTHWARD_SEA_WATER_VELOCITY.key()
+            ]
+            active_tracks.loc[active_row_label, LAST_MATCHED_TIME_COLUMN] = next_timestamp
             trajectory_records.append(
                 {
-                    "track_id": track_id,
+                    "track_id": int(active_tracks.loc[active_row_label, "track_id"]),
                     Dimension.TIME.key(): next_timestamp,
                     Dimension.LATITUDE.key(): next_row[Dimension.LATITUDE.key()],
                     Dimension.LONGITUDE.key(): next_row[Dimension.LONGITUDE.key()],
                 }
             )
-        active_tracks = pandas.DataFrame(matched_rows)
-        previous_timestamp = next_timestamp
+
+        # Unmatched tracks stay alive, dead reckoned from their last observed position and velocity,
+        # until their gap grows past the bounded tolerance.
+        elapsed_hours = (next_timestamp - active_tracks[LAST_MATCHED_TIME_COLUMN]) / pandas.Timedelta(hours=1)
+        active_tracks = active_tracks[elapsed_hours <= MAX_TRACK_GAP_HOURS].copy()
 
     return pandas.DataFrame(trajectory_records)
 
@@ -389,8 +394,6 @@ def _minimum_reliable_matched_drifter_count(matched_count_row: numpy.ndarray) ->
     if matched_count_row.size == 0:
         return 1
     initial_matched_count = int(matched_count_row[0])
-    if initial_matched_count < MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT:
-        return 1
     return max(
         MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT,
         int(numpy.ceil(initial_matched_count * MINIMUM_RELIABLE_MATCHED_DRIFTER_FRACTION)),

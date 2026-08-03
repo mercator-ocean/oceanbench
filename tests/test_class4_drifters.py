@@ -200,9 +200,10 @@ def test_class4_drifter_score_reports_deviation_and_matched_counts(monkeypatch) 
         "Class-4 matched drifter count",
     ]
     assert score.columns.tolist() == ["Lead day 1 (init)", "Lead day 2"]
-    assert score.loc["Class-4 drifter trajectory deviation mean (km)", "Lead day 1 (init)"] == 0.0
     assert score.loc["Class-4 matched drifter count", "Lead day 1 (init)"] == 2.0
     assert score.loc["Class-4 matched drifter count", "Lead day 2"] == 1.0
+    assert numpy.isnan(score.loc["Class-4 drifter trajectory deviation mean (km)", "Lead day 1 (init)"])
+    assert numpy.isnan(score.loc["Class-4 drifter trajectory deviation mean (km)", "Lead day 2"])
 
 
 def test_class4_drifter_score_masks_low_matched_count(monkeypatch) -> None:
@@ -292,3 +293,102 @@ def test_class4_drifter_advection_keeps_depthless_currents(monkeypatch) -> None:
 
     assert Dimension.DEPTH.key() not in advection_dataset.dims
     assert numpy.allclose(advection_dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()].values, 0.1)
+
+
+def _hourly_observation_dataset(rows: list[tuple[str, float, float]]) -> xarray.Dataset:
+    observation_dimension = "observation"
+    first_day = numpy.datetime64("2024-01-01T00:00:00")
+    return xarray.Dataset(
+        {
+            Dimension.TIME.key(): (
+                observation_dimension,
+                numpy.array([timestamp for timestamp, _, _ in rows], dtype="datetime64[ns]"),
+            ),
+            Dimension.FIRST_DAY_DATETIME.key(): (observation_dimension, numpy.repeat(first_day, len(rows))),
+            Dimension.DEPTH.key(): (observation_dimension, numpy.full(len(rows), 15.0)),
+            Dimension.LATITUDE.key(): (observation_dimension, [latitude for _, latitude, _ in rows]),
+            Dimension.LONGITUDE.key(): (observation_dimension, [longitude for _, _, longitude in rows]),
+            Variable.EASTWARD_SEA_WATER_VELOCITY.key(): (observation_dimension, numpy.zeros(len(rows))),
+            Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): (observation_dimension, numpy.zeros(len(rows))),
+        }
+    )
+
+
+HOUR_00 = "2024-01-01T00:00:00.000000000"
+HOUR_02 = "2024-01-01T02:00:00.000000000"
+
+
+def _linked_timestamps(linked_trajectories, track_id: int) -> list[str]:
+    track_rows = linked_trajectories[linked_trajectories["track_id"] == track_id]
+    return [str(timestamp) for timestamp in track_rows[Dimension.TIME.key()].to_numpy()]
+
+
+def test_class4_drifter_reliability_threshold_never_drops_below_minimum() -> None:
+    assert class4_drifters._minimum_reliable_matched_drifter_count(numpy.array([2.0, 1.0])) == 50
+    assert class4_drifters._minimum_reliable_matched_drifter_count(numpy.array([2000.0, 1500.0])) == 100
+
+
+def test_class4_drifter_linking_survives_a_frame_without_matches() -> None:
+    linked_trajectories = class4_drifters._link_hourly_drifter_trajectories(
+        _hourly_observation_dataset(
+            [
+                ("2024-01-01T00:00:00", 0.0, 10.0),
+                ("2024-01-01T00:00:00", 1.0, 11.0),
+                ("2024-01-01T01:00:00", 5.0, 20.0),
+                ("2024-01-01T01:00:00", 6.0, 21.0),
+                ("2024-01-01T02:00:00", 0.0, 10.0),
+                ("2024-01-01T02:00:00", 1.0, 11.0),
+            ]
+        ),
+        numpy.datetime64("2024-01-01T00:00:00"),
+    )
+
+    assert _linked_timestamps(linked_trajectories, 0) == [HOUR_00, HOUR_02]
+    assert _linked_timestamps(linked_trajectories, 1) == [HOUR_00, HOUR_02]
+
+
+def test_class4_drifter_linking_re_matches_a_track_after_a_missing_hour() -> None:
+    linked_trajectories = class4_drifters._link_hourly_drifter_trajectories(
+        _hourly_observation_dataset(
+            [
+                ("2024-01-01T00:00:00", 0.0, 10.0),
+                ("2024-01-01T00:00:00", 1.0, 11.0),
+                ("2024-01-01T01:00:00", 0.0, 10.0),
+                ("2024-01-01T02:00:00", 0.0, 10.0),
+                ("2024-01-01T02:00:00", 1.0, 11.0),
+            ]
+        ),
+        numpy.datetime64("2024-01-01T00:00:00"),
+    )
+
+    assert _linked_timestamps(linked_trajectories, 1) == [HOUR_00, HOUR_02]
+
+
+def test_class4_drifter_linking_drops_a_track_past_the_maximum_gap() -> None:
+    present_track_rows = [(f"2024-01-01T{hour:02d}:00:00", 0.0, 10.0) for hour in range(9)]
+    gapped_track_rows = [("2024-01-01T00:00:00", 1.0, 11.0), ("2024-01-01T08:00:00", 1.0, 11.0)]
+
+    linked_trajectories = class4_drifters._link_hourly_drifter_trajectories(
+        _hourly_observation_dataset(present_track_rows + gapped_track_rows),
+        numpy.datetime64("2024-01-01T00:00:00"),
+    )
+
+    assert len(_linked_timestamps(linked_trajectories, 0)) == 9
+    assert _linked_timestamps(linked_trajectories, 1) == [HOUR_00]
+
+
+def test_class4_drifter_linking_excludes_late_arriving_drifters() -> None:
+    linked_trajectories = class4_drifters._link_hourly_drifter_trajectories(
+        _hourly_observation_dataset(
+            [
+                ("2024-01-01T00:00:00", 0.0, 10.0),
+                ("2024-01-01T01:00:00", 0.0, 10.0),
+                ("2024-01-01T01:00:00", 40.0, 40.0),
+                ("2024-01-01T02:00:00", 0.0, 10.0),
+                ("2024-01-01T02:00:00", 40.0, 40.0),
+            ]
+        ),
+        numpy.datetime64("2024-01-01T00:00:00"),
+    )
+
+    assert linked_trajectories["track_id"].unique().tolist() == [0]
