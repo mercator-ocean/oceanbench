@@ -58,6 +58,26 @@ export function noObsColor(theme) {
  * `range` is [minimum, maximum] in real units; values are clamped.
  * `flipVertical` flips rows so ascending-latitude data renders north-up.
  */
+/**
+ * Opaque where the field has no data, transparent everywhere else: the same cells
+ * fieldToImageData paints with the land colour, in the same layout, so blitting this
+ * through the field's own world path lands exactly on the drawn coastline. Used to erase
+ * the particle layer over land.
+ */
+export function landStencilImageData({ data, width, height }, options = {}) {
+  const { flipVertical = false } = options;
+  const image = new ImageData(width, height);
+  const pixels = image.data;
+  for (let row = 0; row < height; row += 1) {
+    const sourceRow = flipVertical ? height - 1 - row : row;
+    for (let column = 0; column < width; column += 1) {
+      if (!Number.isNaN(data[sourceRow * width + column])) continue;
+      pixels[(row * width + column) * 4 + 3] = 255;
+    }
+  }
+  return image;
+}
+
 export function fieldToImageData({ data, width, height }, colormapName, range, options = {}) {
   const { flipVertical = false, theme = "dark", transparentNaN = false, landMask = null } = options;
   const lut = lookupTable(colormapName);

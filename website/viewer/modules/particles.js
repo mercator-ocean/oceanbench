@@ -30,6 +30,21 @@ const MIN_PARTICLES = 500;
 const MAX_PARTICLES = 6000;
 const MAX_AGE_FRAMES = 170;
 const TRAIL_FADE_ALPHA = 0.055;
+// A trail is drawn at alpha 0.65 to 0.70 and dimmed by TRAIL_FADE_ALPHA every frame, so
+// it is below one 8-bit level after about 92 frames. Nothing older than that contributes
+// anything a viewer can see.
+const TRAIL_VISIBLE_FRAMES = 92;
+// The canvas keeps premultiplied 8-bit alpha and "destination-out" rounds a*(1-alpha)
+// back up to a once a*alpha drops below 0.5, so the fade stalls: at TRAIL_FADE_ALPHA the
+// alpha channel sticks at 9/255 and never reaches zero (measured identically on the
+// software rasterizer and on ANGLE Metal). Stalled pixels unpremultiply to white, so
+// every pixel a trail ever crossed kept a permanent pale veil, which is what made land
+// read as two greys. Multiplying can never reach zero, so two buffers take turns
+// instead: both receive every segment, one is on screen while the other warms up, and
+// every TRAIL_RESET_FRAMES they swap and the one leaving the screen is hard-cleared.
+// The period is comfortably longer than a trail's visible life, so the buffer coming on
+// screen already holds a complete set of trails and the swap cannot be seen.
+const TRAIL_RESET_FRAMES = Math.ceil(TRAIL_VISIBLE_FRAMES * 1.4);
 const SPEED_COLORMAP = "speed";
 
 function createParticle(random) {
@@ -52,8 +67,44 @@ export function startParticleField(canvas, context) {
   let animationHandle = null;
   let seededForArea = -1;
   let stopped = false;
+  // Trail accumulation happens off screen in two buffers; the visible canvas only ever
+  // receives a blit of whichever one is currently on duty.
+  let trailBuffers = [];
+  let displayedBuffer = 0;
+  let framesSinceSwap = 0;
+  let projectionKey = "";
+  // Segments of the current frame, replayed into both buffers so their histories match.
+  const segmentPoints = new Float32Array(MAX_PARTICLES * 4);
+  const segmentStyles = new Array(MAX_PARTICLES);
 
   const random = Math.random;
+
+  function makeTrailBuffers() {
+    trailBuffers = [0, 1].map(() => {
+      const buffer = document.createElement("canvas");
+      buffer.width = canvas.width;
+      buffer.height = canvas.height;
+      return buffer.getContext("2d");
+    });
+    displayedBuffer = 0;
+    framesSinceSwap = 0;
+  }
+
+  function clearTrails() {
+    for (const buffer of trailBuffers) buffer.clearRect(0, 0, canvas.width, canvas.height);
+    drawing.clearRect(0, 0, canvas.width, canvas.height);
+    framesSinceSwap = 0;
+  }
+
+  // The projection is the panel's, so read it rather than the viewport: the viewport is
+  // clamped to the poles and does not move on every pan, while two projected corners
+  // pin down origin and scale exactly. A pan or a zoom therefore drops the trails on the
+  // frame it happens, instead of dragging a screen-space smear across the new land.
+  function currentProjectionKey() {
+    const topLeft = context.project(0, 0);
+    const bottomRight = context.project(1, 1);
+    return `${topLeft.x},${topLeft.y},${bottomRight.x},${bottomRight.y},${canvas.width},${canvas.height}`;
+  }
 
   function targetCount() {
     const view = context.viewport;
@@ -81,13 +132,25 @@ export function startParticleField(canvas, context) {
     };
   }
 
-  function fadeTrails() {
+  function fadeTrails(buffer) {
     // Translucent fill dims previous frame — the trail memory. Composite mode
     // "destination-out" erases toward transparent so the field colour shows through.
-    drawing.globalCompositeOperation = "destination-out";
-    drawing.fillStyle = `rgba(0, 0, 0, ${TRAIL_FADE_ALPHA})`;
-    drawing.fillRect(0, 0, canvas.width, canvas.height);
-    drawing.globalCompositeOperation = "source-over";
+    buffer.globalCompositeOperation = "destination-out";
+    buffer.fillStyle = `rgba(0, 0, 0, ${TRAIL_FADE_ALPHA})`;
+    buffer.fillRect(0, 0, canvas.width, canvas.height);
+    buffer.globalCompositeOperation = "source-over";
+  }
+
+  function paintSegments(buffer, count, lineWidth) {
+    buffer.lineWidth = lineWidth;
+    buffer.lineCap = "round";
+    for (let i = 0; i < count; i += 1) {
+      buffer.strokeStyle = segmentStyles[i];
+      buffer.beginPath();
+      buffer.moveTo(segmentPoints[i * 4], segmentPoints[i * 4 + 1]);
+      buffer.lineTo(segmentPoints[i * 4 + 2], segmentPoints[i * 4 + 3]);
+      buffer.stroke();
+    }
   }
 
   function frame() {
@@ -100,7 +163,16 @@ export function startParticleField(canvas, context) {
     const desired = targetCount();
     if (Math.abs(desired - seededForArea) > seededForArea * 0.25) reseed();
 
-    fadeTrails();
+    if (trailBuffers.length === 0 || trailBuffers[0].canvas.width !== canvas.width
+      || trailBuffers[0].canvas.height !== canvas.height) {
+      makeTrailBuffers();
+    }
+    const key = currentProjectionKey();
+    if (key !== projectionKey) {
+      projectionKey = key;
+      clearTrails();
+    }
+    for (const buffer of trailBuffers) fadeTrails(buffer);
     const view = context.viewport;
     // Scale the world step by the visible width so a particle crosses the viewport in
     // a similar wall-clock time at every zoom (screen speed stays comprehensible).
@@ -108,8 +180,8 @@ export function startParticleField(canvas, context) {
     const stepGain = ADVECTION_GAIN * context.speed * visibleWidth;
     const ratio = context.devicePixelRatio;
     const glow = context.theme === "light" ? 0.9 : 1;
-    drawing.lineWidth = Math.max(1, 1.1 * ratio);
-    drawing.lineCap = "round";
+    const lineWidth = Math.max(1, 1.1 * ratio);
+    let segmentCount = 0;
 
     for (const particle of particles) {
       particle.age += 1;
@@ -129,6 +201,13 @@ export function startParticleField(canvas, context) {
       // North-positive vo decreases normalized y (north is up).
       particle.x += velocity.u * stepGain;
       particle.y -= velocity.v * stepGain;
+      // Where the step lands decides whether it may be drawn at all. Checking only the
+      // origin let the last segment of a life reach into a land cell and leave ink on
+      // the coast, so a particle whose next position has no velocity respawns silently.
+      if (!context.sampleVelocity(particle.x, particle.y)) {
+        Object.assign(particle, spawnInView());
+        continue;
+      }
 
       const from = context.project(previousX, previousY);
       const to = context.project(particle.x, particle.y);
@@ -141,16 +220,32 @@ export function startParticleField(canvas, context) {
         // only coloured marks. Speed still modulates brightness for legibility.
         const level = context.theme === "light" ? 90 - normalized * 60 : 165 + normalized * 90;
         const shade = Math.max(0, Math.min(255, Math.round(level)));
-        drawing.strokeStyle = `rgba(${shade}, ${shade}, ${shade}, ${0.7 * glow})`;
+        segmentStyles[segmentCount] = `rgba(${shade}, ${shade}, ${shade}, ${0.7 * glow})`;
       } else {
         const [r, g, b] = sampleColormap(SPEED_COLORMAP, 0.15 + normalized * 0.85);
-        drawing.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.65 * glow})`;
+        segmentStyles[segmentCount] = `rgba(${r}, ${g}, ${b}, ${0.65 * glow})`;
       }
-      drawing.beginPath();
-      drawing.moveTo(from.x, from.y);
-      drawing.lineTo(to.x, to.y);
-      drawing.stroke();
+      segmentPoints[segmentCount * 4] = from.x;
+      segmentPoints[segmentCount * 4 + 1] = from.y;
+      segmentPoints[segmentCount * 4 + 2] = to.x;
+      segmentPoints[segmentCount * 4 + 3] = to.y;
+      segmentCount += 1;
     }
+
+    for (const buffer of trailBuffers) paintSegments(buffer, segmentCount, lineWidth);
+
+    framesSinceSwap += 1;
+    if (framesSinceSwap >= TRAIL_RESET_FRAMES) {
+      const retiring = displayedBuffer;
+      displayedBuffer = 1 - displayedBuffer;
+      trailBuffers[retiring].clearRect(0, 0, canvas.width, canvas.height);
+      framesSinceSwap = 0;
+    }
+
+    drawing.clearRect(0, 0, canvas.width, canvas.height);
+    drawing.drawImage(trailBuffers[displayedBuffer].canvas, 0, 0);
+    // The panel knows where it drew land; let it erase anything the flow put there.
+    if (context.punchLand) context.punchLand(drawing);
     animationHandle = requestAnimationFrame(frame);
   }
 
@@ -169,9 +264,11 @@ export function startParticleField(canvas, context) {
     if (animationHandle !== null) cancelAnimationFrame(animationHandle);
     animationHandle = null;
     drawing.clearRect(0, 0, canvas.width, canvas.height);
+    trailBuffers = [];
   }
 
   function resize() {
+    makeTrailBuffers();
     drawing.clearRect(0, 0, canvas.width, canvas.height);
     reseed();
     resume();
