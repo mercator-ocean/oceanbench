@@ -343,12 +343,29 @@ def class4_drifter_reference_trajectories(
     )
 
 
+def _bracketing_depth_indices(depth_values: numpy.ndarray, target_depth: float) -> list[int]:
+    """Positions of the two depth levels that linear interpolation to the target depth reads.
+
+    They are the levels bracketing the target depth, or the two closest levels of the axis when
+    the target depth falls outside the axis range, so that interpolating on that pair keeps the
+    out-of-range result of the full axis.
+    """
+    ascending_order = numpy.argsort(depth_values)
+    ascending_values = depth_values[ascending_order]
+    insertion_position = int(numpy.searchsorted(ascending_values, target_depth, side="right"))
+    lower_position = min(max(insertion_position - 1, 0), ascending_values.size - 2)
+    return sorted(int(position) for position in ascending_order[lower_position : lower_position + 2])
+
+
 def _drifter_depth_current_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
     """Currents used to advect the model particles, taken at the drifter drogue depth.
 
     Class-4 drifters drift at 15 m, so the model must be sampled there rather than at its first
     depth level. Models published without a depth axis, or with a single surface level, are
     surface only by design and are used as they are.
+
+    Only the two levels that linear interpolation reads are kept before interpolating, because
+    interpolating over the full depth axis copies every level of both current components.
     """
     depth_key = Dimension.DEPTH.key()
     current_dataset = rename_dataset_with_standard_names(dataset)[
@@ -359,7 +376,12 @@ def _drifter_depth_current_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
     ]
     if current_dataset.sizes.get(depth_key, 0) < 2:
         return lagrangian_trajectory.surface_current_dataset(dataset)
-    return current_dataset.interp({depth_key: DRIFTER_DEPTH_METERS}).drop_vars(depth_key)
+    bracketing_indices = _bracketing_depth_indices(
+        current_dataset[depth_key].values,
+        DRIFTER_DEPTH_METERS,
+    )
+    bracketing_dataset = current_dataset.isel({depth_key: bracketing_indices})
+    return bracketing_dataset.interp({depth_key: DRIFTER_DEPTH_METERS}).drop_vars(depth_key)
 
 
 def class4_drifter_challenger_trajectories(

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import numpy
+import pytest
 import xarray
 
 from oceanbench.core import class4_drifters
@@ -284,6 +285,73 @@ def test_class4_drifter_advection_keeps_single_level_currents(monkeypatch) -> No
 
     assert Dimension.DEPTH.key() not in advection_dataset.dims
     assert numpy.allclose(advection_dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()].values, 0.1)
+
+
+def _full_depth_axis_interpolation(dataset: xarray.Dataset) -> xarray.Dataset:
+    depth_key = Dimension.DEPTH.key()
+    current_keys = [
+        Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+    ]
+    return dataset[current_keys].interp({depth_key: class4_drifters.DRIFTER_DEPTH_METERS}).drop_vars(depth_key)
+
+
+@pytest.mark.parametrize(
+    "depths",
+    [
+        [0.5, 5.0, 15.0, 25.0, 50.0],
+        [0.5, 5.0, 12.0, 20.0, 50.0],
+        [50.0, 100.0, 200.0],
+        [0.5, 2.0, 5.0],
+    ],
+    ids=["exact_level", "bracketed", "below_axis_range", "above_axis_range"],
+)
+def test_class4_drifter_depth_currents_match_full_axis_interpolation(depths: list[float]) -> None:
+    dataset = _multi_depth_challenger_dataset(depths)
+
+    bracketed = class4_drifters._drifter_depth_current_dataset(dataset)
+    full_axis = _full_depth_axis_interpolation(dataset)
+
+    for current_key in (
+        Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+    ):
+        bracketed_values = bracketed[current_key].values
+        full_axis_values = full_axis[current_key].values
+        assert bracketed_values.shape == full_axis_values.shape
+        assert numpy.array_equal(bracketed_values, full_axis_values, equal_nan=True)
+
+
+def test_class4_drifter_depth_currents_read_two_levels_only(monkeypatch) -> None:
+    interpolated_depth_counts: list[int] = []
+    original_interp = xarray.Dataset.interp
+
+    def counting_interp(self, *arguments, **keyword_arguments):
+        interpolated_depth_counts.append(self.sizes[Dimension.DEPTH.key()])
+        return original_interp(self, *arguments, **keyword_arguments)
+
+    monkeypatch.setattr(xarray.Dataset, "interp", counting_interp)
+
+    class4_drifters._drifter_depth_current_dataset(_multi_depth_challenger_dataset([0.5, 5.0, 12.0, 20.0, 50.0, 100.0]))
+
+    assert interpolated_depth_counts == [2]
+
+
+@pytest.mark.parametrize(
+    ("depths", "expected_indices"),
+    [
+        ([0.5, 5.0, 12.0, 20.0, 50.0], [2, 3]),
+        ([0.5, 5.0, 15.0, 25.0], [2, 3]),
+        ([50.0, 100.0, 200.0], [0, 1]),
+        ([0.5, 2.0, 5.0], [1, 2]),
+        ([50.0, 20.0, 12.0, 5.0, 0.5], [1, 2]),
+    ],
+    ids=["bracketed", "exact_level", "below_axis_range", "above_axis_range", "descending"],
+)
+def test_bracketing_depth_indices(depths: list[float], expected_indices: list[int]) -> None:
+    indices = class4_drifters._bracketing_depth_indices(numpy.array(depths), class4_drifters.DRIFTER_DEPTH_METERS)
+
+    assert indices == expected_indices
 
 
 def test_class4_drifter_advection_keeps_depthless_currents(monkeypatch) -> None:
