@@ -18,25 +18,17 @@
 
 import { initializeViewerConfig, viewerDataBaseUrl } from "./viewer/config.js";
 import {
-  buildCatalog,
   challengerFamily,
   challengerLabel,
-  columnKey,
-  columnLabeller,
   depthDisplayRank,
-  depthsForReference,
   formatMean,
   formatSkill,
-  indexRows,
+  isBaselineChallenger,
   loadScores,
-  metricForReference,
-  metricLabel,
   regionLabel,
-  tableColumns,
   variableDisplayRank,
   variableLabel,
 } from "./viewer/modules/scores-data.js";
-import { renderErrorGrowth, wireChartCursor } from "./viewer/modules/scores-view.js";
 
 // One published reference per site section, in the order the tables are built. The two
 // gridded references come first so the depth pills are offered the shared level set rather
@@ -51,7 +43,7 @@ const MIXED_LAYER_VARIABLE = "ocean_mixed_layer_thickness";
 const VERSION_KEY = "published";
 const FLAT_DEPTH = "flat";
 
-const state = { rows: [], catalog: null, panels: new Map() };
+const state = { rows: [] };
 
 function sectionFor(reference) {
   return REFERENCE_SECTIONS.find((entry) => entry.reference === reference) ?? null;
@@ -161,9 +153,16 @@ function buildBundle(rows) {
   }
 
   const regionOrder = Object.keys(regions).sort((first, second) => (first === "global" ? -1 : second === "global" ? 1 : first.localeCompare(second)));
+  // Persistence and climatology are skill floors rather than competitors. Marking them as
+  // baselines is what keeps them out of the default table and out of the default
+  // comparison reference, exactly as the site treats them.
   const challengerLabels = {};
+  const challengerCategories = {};
   for (const region of Object.values(regions)) {
-    for (const challenger of region.challenger_names) challengerLabels[challenger] = modelLabel(challenger);
+    for (const challenger of region.challenger_names) {
+      challengerLabels[challenger] = modelLabel(challenger);
+      challengerCategories[challenger] = isBaselineChallenger(challenger) ? "baseline" : "model";
+    }
   }
 
   return {
@@ -174,6 +173,7 @@ function buildBundle(rows) {
         region_labels: Object.fromEntries(regionOrder.map((region) => [region, regionLabel(region)])),
         region_metadata: window.OCEANBENCH_REGION_METADATA ?? {},
         challenger_labels: challengerLabels,
+        challenger_categories: challengerCategories,
       },
     },
     version_order: [VERSION_KEY],
@@ -181,122 +181,6 @@ function buildBundle(rows) {
     metric_titles: metricTitles(),
     sections: sectionConfigurations(),
   };
-}
-
-/* -- error growth panels ---------------------------------------------------------------
-   The published rows carry every lead day, not only the five the tables column. One
-   collapsed panel per section exposes that without competing with the tables: it stays
-   closed until it is asked for, and follows the region, track and depth the tables show. */
-
-function buildPanel(section) {
-  const anchor = document.getElementById(`${section}-scores`);
-  if (!anchor) return null;
-
-  const panel = document.createElement("details");
-  panel.className = "score-growth";
-
-  const summary = document.createElement("summary");
-  summary.textContent = "Error growth with lead time";
-  panel.appendChild(summary);
-
-  const controls = document.createElement("div");
-  controls.className = "score-growth-controls";
-  const label = document.createElement("label");
-  label.textContent = "Variable ";
-  const select = document.createElement("select");
-  label.appendChild(select);
-  controls.appendChild(label);
-  panel.appendChild(controls);
-
-  const note = document.createElement("p");
-  note.className = "score-growth-note";
-  panel.appendChild(note);
-
-  const host = document.createElement("div");
-  host.className = "score-growth-chart";
-  panel.appendChild(host);
-  const legend = document.createElement("div");
-  legend.className = "score-growth-legend";
-  panel.appendChild(legend);
-
-  anchor.after(panel);
-  const entry = { panel, select, note, host, legend, selection: null };
-  select.addEventListener("change", () => drawPanel(entry));
-  panel.addEventListener("toggle", () => {
-    if (panel.open) drawPanel(entry);
-  });
-  return entry;
-}
-
-function panelSelection(reference, tableState) {
-  const region = tableState.region;
-  const track = tableState.track === "one_degree" ? "one_degree" : "native";
-  const depths = depthsForReference(state.rows, reference, region);
-  const selected = tableState.depths?.find((depth) => depths.includes(depth));
-  return {
-    region,
-    reference,
-    track,
-    depth: selected ?? depths[0] ?? null,
-    leadDay: state.catalog.leadDays[0],
-  };
-}
-
-function drawPanel(entry) {
-  if (!entry.panel.open || !entry.selection) return;
-  const { selection, reference } = entry.selection;
-  const columns = tableColumns(state.rows, selection);
-  const labelOf = columnLabeller(columns);
-  const column = columns.find((candidate) => columnKey(candidate) === entry.select.value) ?? columns[0] ?? null;
-  const index = indexRows(state.rows, selection);
-  const challengers = [
-    ...new Set(
-      state.rows
-        .filter((row) => row.region === selection.region && row.reference === reference)
-        .map((row) => row.challenger),
-    ),
-  ].filter((challenger) => (challenger.endsWith("_1_degree") ? selection.track === "one_degree" : selection.track === "native"));
-  const metric = metricLabel(metricForReference(reference));
-
-  renderErrorGrowth(entry.host, entry.legend, {
-    challengers,
-    column,
-    index,
-    leadDays: state.catalog.leadDays,
-    metric,
-    labelOf,
-  });
-  wireChartCursor(entry.host);
-  entry.note.textContent = column
-    ? `${metric} for ${labelOf(column)}, ${regionLabel(selection.region)}, every published lead day. ` +
-      "Shaded bands are the bootstrap 95% confidence interval. Lower is better."
-    : "Nothing is published for this selection.";
-}
-
-function refreshPanels(tableState) {
-  for (const { reference, section } of REFERENCE_SECTIONS) {
-    let entry = state.panels.get(section);
-    if (!entry) {
-      entry = buildPanel(section);
-      if (!entry) continue;
-      state.panels.set(section, entry);
-    }
-    const selection = panelSelection(reference, tableState);
-    entry.selection = { selection, reference };
-
-    const columns = tableColumns(state.rows, selection);
-    const labelOf = columnLabeller(columns);
-    const previous = entry.select.value;
-    entry.select.replaceChildren();
-    for (const column of columns) {
-      const option = document.createElement("option");
-      option.value = columnKey(column);
-      option.textContent = labelOf(column);
-      entry.select.appendChild(option);
-    }
-    if (columns.some((column) => columnKey(column) === previous)) entry.select.value = previous;
-    drawPanel(entry);
-  }
 }
 
 /* -- boot ------------------------------------------------------------------------------ */
@@ -314,9 +198,6 @@ async function boot() {
     await initializeViewerConfig();
     state.rows = await loadScores();
     if (!state.rows.length) throw new Error(`no score rows were read from ${viewerDataBaseUrl()}`);
-    state.catalog = buildCatalog(state.rows);
-
-    window.OceanBenchScores.onRender(refreshPanels);
     window.OceanBenchScores.render(buildBundle(state.rows), { reportLinks: false });
 
     const status = document.getElementById("scores-status");

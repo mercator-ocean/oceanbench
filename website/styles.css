@@ -274,7 +274,7 @@ body.quarto-dark .score-table .standard-name {
   border-radius: var(--ob-radius-md);
   box-shadow: var(--ob-soft-shadow);
   min-width: max-content;
-  overflow: hidden;
+  overflow: visible;
 }
 
 body.quarto-dark #score-header {
@@ -610,6 +610,7 @@ body.quarto-dark .score-tab.active {
   padding: 0.4rem 0.6rem;
   background: var(--ob-surface-raised);
   border-top: 1px solid var(--ob-border);
+  border-radius: 0 0 var(--ob-radius-md) var(--ob-radius-md);
   margin-bottom: 0;
   align-items: center;
   font-size: 0.75rem;
@@ -712,7 +713,6 @@ body.quarto-dark .display-toggle-btn.active {
 
 .display-toggle {
   display: flex;
-  margin-left: auto;
 }
 
 .display-toggle-btn {
@@ -733,6 +733,191 @@ body.quarto-dark .display-toggle-btn.active {
 .display-toggle-btn:last-child {
   border-radius: 0 var(--ob-radius-sm) var(--ob-radius-sm) 0;
   border-left: none;
+}
+
+/* --- Per-row actions: pin as reference / hide --- */
+
+.score-table .model-col {
+  padding-right: 2.6rem;
+}
+
+.score-table .model-col .row-actions {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem;
+  border: none;
+  background: none;
+  color: var(--ob-muted, #6c757d);
+  cursor: pointer;
+  opacity: 0;
+  line-height: 1;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+.row-action svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+.score-table tr:hover .row-action {
+  opacity: 0.55;
+}
+
+.row-action:hover,
+.row-action:focus-visible {
+  opacity: 1 !important;
+  color: var(--ob-accent);
+}
+
+.pin-action.active {
+  opacity: 1 !important;
+  color: var(--ob-accent);
+}
+
+@media (hover: none) {
+  .row-action {
+    opacity: 0.55;
+  }
+}
+
+/* --- Collapse controls (Depths / Models) --- */
+
+.control-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.control-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-surface);
+  color: var(--bs-body-color, #333940);
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.control-trigger:hover:not(:disabled),
+.control-dropdown.open .control-trigger {
+  border-color: var(--ob-accent);
+  color: var(--ob-accent);
+}
+
+.control-trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+body.quarto-dark .control-trigger {
+  background: var(--ob-surface);
+  color: var(--ob-muted);
+  border-color: var(--ob-border);
+}
+
+.control-caret {
+  display: inline-flex;
+  transition: transform 0.12s ease;
+}
+
+.control-caret svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.control-dropdown.open .control-caret {
+  transform: rotate(180deg);
+}
+
+.control-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: max-content;
+  padding: 0.4rem;
+  background: var(--ob-surface-raised);
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  box-shadow: var(--ob-soft-shadow);
+}
+
+.model-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0.3rem;
+  white-space: nowrap;
+}
+
+.model-option-name {
+  flex: 1 1 auto;
+  font-weight: 500;
+}
+
+.model-option.is-hidden .model-option-name {
+  color: var(--ob-muted, #6c757d);
+  font-style: italic;
+}
+
+.model-option-vis,
+.model-option-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem;
+  border: none;
+  background: none;
+  color: var(--ob-muted, #6c757d);
+  cursor: pointer;
+}
+
+.model-option-vis svg,
+.model-option-pin svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.model-option-vis:hover,
+.model-option-pin:hover {
+  color: var(--ob-accent);
+}
+
+.model-option-pin.active {
+  color: var(--ob-accent);
+}
+
+.model-option-vis--locked {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Display cluster stays right-pinned so the colorbar keeps a fixed position */
+
+.controls-display {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin-left: auto;
 }
 
 /* --- Scale input --- */
@@ -936,6 +1121,19 @@ body.quarto-dark .score-table tr.baseline-row td {
   background: #2a2a2a;
 }
 
+/* --- Reference baseline rows --- */
+
+.score-table tr.reference-row th.model-col {
+  font-style: italic;
+}
+
+/* The name is a report link on the notebook-fed page and plain text on the published
+   summary page, so both carry the muted reference colour. */
+.score-table tr.reference-row th.model-col,
+.score-table tr.reference-row th.model-col a {
+  color: var(--ob-muted, #6c757d);
+}
+
 /* --- Section headings --- */
 
 #comparison-to-reanalysis > h2,
@@ -1094,98 +1292,4 @@ body.quarto-dark .version-select {
 .scores-status-error {
   border-left-color: #b2182b;
   color: var(--ob-text);
-}
-
-/* Error growth panel: the tables column five lead days, the published rows carry every
-   one. The panel stays collapsed so the tables keep the first glance. */
-.score-growth {
-  margin: 0.5rem 0 2rem;
-  border: 1px solid var(--ob-border);
-  border-radius: var(--ob-radius-sm);
-  background: var(--ob-surface);
-  padding: 0.5rem 0.85rem;
-}
-
-.score-growth > summary {
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--ob-accent);
-}
-
-.score-growth-controls {
-  margin-top: 0.75rem;
-  font-size: 0.8rem;
-  color: var(--ob-muted);
-}
-
-.score-growth-controls select {
-  font: inherit;
-  color: var(--ob-text);
-  background: var(--ob-surface-raised);
-  border: 1px solid var(--ob-border);
-  border-radius: var(--ob-radius-sm);
-  padding: 0.2rem 0.4rem;
-}
-
-.score-growth-note {
-  margin: 0.5rem 0;
-  font-size: 0.78rem;
-  color: var(--ob-muted);
-  max-width: 62rem;
-}
-
-.score-growth-chart {
-  width: 100%;
-  max-width: 46rem;
-}
-
-.score-growth-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem 1.1rem;
-  max-width: 46rem;
-  font-size: 0.78rem;
-}
-
-.score-growth-legend .series-swatch {
-  display: inline-block;
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 2px;
-  margin-right: 0.4rem;
-}
-
-/* The chart is the viewer's own lead-curve SVG; these are its style hooks expressed in
-   the site tokens rather than the viewer palette. */
-.score-growth .rail-chart { width: 100%; height: auto; display: block; cursor: crosshair; }
-.score-growth .rail-chart .axis { stroke: var(--ob-border); stroke-width: 1; }
-.score-growth .rail-chart .grid { stroke: var(--ob-border); stroke-width: 1; opacity: 0.6; }
-.score-growth .rail-chart .tick { fill: var(--ob-muted); font-size: 8px; font-family: var(--ob-font-mono); }
-.score-growth .rail-chart .axis-label { fill: var(--ob-muted); font-size: 8px; }
-.score-growth .rail-chart .empty { fill: var(--ob-muted); font-size: 9px; }
-.score-growth .rail-chart .chart-point { fill: transparent; stroke: none; pointer-events: all; }
-.score-growth .rail-chart .chart-crosshair { stroke: var(--ob-accent); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
-.score-growth .rail-chart .chart-tooltip { pointer-events: none; }
-.score-growth .rail-chart .chart-tooltip rect { fill: var(--ob-surface-raised); stroke: var(--ob-border); }
-.score-growth .rail-chart .chart-tooltip text { fill: var(--ob-text); font-size: 8px; font-family: var(--ob-font-mono); }
-
-/* Challenger series colours, one fixed slot per challenger family so a re-sort never
-   repaints a line. Both sets are the validated ones the viewer scores page uses. */
-:root {
-  --scores-series-1: #2a78d6;
-  --scores-series-2: #eb6834;
-  --scores-series-3: #1baf7a;
-  --scores-series-4: #eda100;
-  --scores-series-5: #e87ba4;
-  --scores-series-6: #008300;
-}
-
-:root:has(body.quarto-dark) {
-  --scores-series-1: #3987e5;
-  --scores-series-2: #d95926;
-  --scores-series-3: #199e70;
-  --scores-series-4: #c98500;
-  --scores-series-5: #d55181;
-  --scores-series-6: #008300;
 }
