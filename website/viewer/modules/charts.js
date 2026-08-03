@@ -80,6 +80,10 @@ function niceMax(value) {
 /**
  * RMSE / Class-4 RMSD vs lead day, one series per reference present, each with its
  * bootstrap-CI band. `series` is a Map(reference -> [{lead_day, mean, ci_low, ci_high}]).
+ *
+ * The in-SVG legend lays entries out on a single row sized for the rail's two or three
+ * series. Pass `legend: false` when more series than that share one chart and the caller
+ * renders its own legend in HTML, as the scores page does.
  */
 export function leadCurveSVG(
   series,
@@ -88,6 +92,7 @@ export function leadCurveSVG(
     unit = "",
     labels = new Map(),
     colors = new Map(),
+    legend = true,
     emptyMessage = "no score rows for this variable/depth",
   } = {},
 ) {
@@ -144,19 +149,21 @@ export function leadCurveSVG(
     }
   }
 
-  const legend = references
-    .map((reference, index) => {
-      const color = seriesColor(reference);
-      const label = labels.get(reference) || reference;
-      const x = area.x0 + index * 92;
-      return (
-        `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${color}"/>` +
-        `<text x="${x + 12}" y="10" class="legend">${escapeText(label)}</text>`
-      );
-    })
-    .join("");
+  const legendMarkup = legend
+    ? references
+        .map((reference, index) => {
+          const color = seriesColor(reference);
+          const label = labels.get(reference) || reference;
+          const x = area.x0 + index * 92;
+          return (
+            `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${color}"/>` +
+            `<text x="${x + 12}" y="10" class="legend">${escapeText(label)}</text>`
+          );
+        })
+        .join("")
+    : "";
 
-  return svgOpen(title) + axes(area, "lead day", unit || "RMSD") + body + legend + interactionLayer() + "</svg>";
+  return svgOpen(title) + axes(area, "lead day", unit || "RMSD") + body + legendMarkup + interactionLayer() + "</svg>";
 }
 
 /** PSD spectrum (log-log): challenger vs reference power, plus error power. */
