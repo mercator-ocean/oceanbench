@@ -70,7 +70,11 @@ from oceanbench.runner.records import RunContext
 # start-up, before numpy/BLAS initialise their pools, so the pools are actually sized to one thread
 # (setting them inside the child after numpy is imported would be a no-op). The pool initializer sets
 # them again as a defensive measure for libraries that read the variables lazily at first use.
-_DEFAULT_MATCHUP_WORKER_CAP = 32
+#
+# Each worker holds its own open copy of the challenger and observation datasets, so the cap is a
+# memory budget rather than a core count: on a big shared machine an uncapped cpu_count exhausts the
+# node long before it saturates it.
+_DEFAULT_MATCHUP_WORKER_CAP = 12
 _THREAD_POOL_ENVIRONMENT_VARIABLES = (
     "OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS",
@@ -186,7 +190,7 @@ def class4_matchups(
 
 
 def default_matchup_worker_count() -> int:
-    """Resolve the match-up worker count from the environment (default ``min(32, cpu_count)``)."""
+    """Resolve the match-up worker count from the environment (default ``min(12, cpu_count)``)."""
     override = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_MATCHUP_WORKERS.value)
     if override:
         return max(1, int(override))

@@ -24,8 +24,12 @@ def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
 
 
 def _compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
+    # The gradients below are divided by float64 grid spacings, so every intermediate is float64.
+    # One start and one lead day per block keeps those the size of a single forecast day. The
+    # gradients run along latitude and longitude, whose chunking is left untouched, so the maths
+    # is unchanged.
     sea_surface_height = dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()].chunk(
-        {Dimension.FIRST_DAY_DATETIME.key(): 2}
+        {Dimension.FIRST_DAY_DATETIME.key(): 1, Dimension.LEAD_DAY_INDEX.key(): 1}
     )
     latitude = dataset[Dimension.LATITUDE.key()].values
     longitude = dataset[Dimension.LONGITUDE.key()].values

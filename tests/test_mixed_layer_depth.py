@@ -150,3 +150,67 @@ def test_mixed_layer_depth_masks_land_points(monkeypatch) -> None:
     )
 
     assert numpy.isnan(_mld_value(dataset, monkeypatch))
+
+
+def _realistic_dataset() -> xarray.Dataset:
+    depths = [0.5, 47.0, 92.0, 222.0, 318.0, 541.0]
+    latitudes = [-20.0, -0.25, 0.25, 20.0]
+    longitudes = [10.0, 11.0, 12.0]
+    shape = (2, 3, len(depths), len(latitudes), len(longitudes))
+    generator = numpy.random.default_rng(20260801)
+    temperature = (20.0 - 0.02 * numpy.array(depths)[:, None, None] + generator.normal(0, 0.1, shape)).astype("float32")
+    salinity = (35.0 + 0.001 * numpy.array(depths)[:, None, None] + generator.normal(0, 0.01, shape)).astype("float32")
+    temperature[:, :, :, 0, 0] = numpy.nan
+    salinity[:, :, :, 0, 0] = numpy.nan
+    return xarray.Dataset(
+        data_vars={
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): (
+                [
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.DEPTH.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ],
+                temperature,
+            ),
+            Variable.SEA_WATER_SALINITY.key(): (
+                [
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.DEPTH.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ],
+                salinity,
+            ),
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0, 1, 2],
+            Dimension.DEPTH.key(): depths,
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+
+def test_bounded_density_blocks_do_not_change_the_mixed_layer_depth(monkeypatch) -> None:
+    dataset = _realistic_dataset()
+
+    bounded = mixed_layer_depth.compute_mixed_layer_depth(dataset)[Variable.MIXED_LAYER_DEPTH.key()].values
+
+    monkeypatch.setattr(mixed_layer_depth, "_as_density_blocks", lambda data_array: data_array)
+    unbounded = mixed_layer_depth.compute_mixed_layer_depth(dataset)[Variable.MIXED_LAYER_DEPTH.key()].values
+
+    numpy.testing.assert_array_equal(bounded, unbounded)
+
+
+def test_density_blocks_are_bounded_per_start_and_lead_day() -> None:
+    temperature = _realistic_dataset()[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()]
+
+    blocks = mixed_layer_depth._as_density_blocks(temperature)
+
+    assert blocks.chunksizes[Dimension.FIRST_DAY_DATETIME.key()] == (1, 1)
+    assert blocks.chunksizes[Dimension.LEAD_DAY_INDEX.key()] == (1, 1, 1)
+    assert blocks.chunksizes[Dimension.DEPTH.key()] == (6,)

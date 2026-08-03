@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +11,9 @@ from oceanbench.core.version import __version__
 
 NEW_PIPELINE_NOTICE = "note: OceanBench 0.5 produces viewer artifacts and parquet scores instead of notebook reports."
 DEFAULT_OUTPUT_DIRECTORY = "oceanbench-evaluation"
+# Dask defaults to one thread per core. Several derived quantities hold float64 blocks per thread,
+# so on a big shared node that default is a memory budget rather than a speed-up.
+_DEFAULT_DASK_WORKER_CAP = 8
 # Errors a user can fix from the message alone. Anything else keeps its traceback.
 _USER_FACING_ERRORS = (ValueError, FileNotFoundError, NotADirectoryError, IsADirectoryError, PermissionError)
 
@@ -42,6 +46,18 @@ def _apply_runtime_configuration(args: argparse.Namespace) -> None:
             ),
         )
     )
+
+
+def _apply_default_dask_concurrency() -> None:
+    import dask
+
+    from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
+
+    override = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_DASK_WORKERS.value)
+    if not override and dask.config.get("num_workers", default=None) is not None:
+        return
+    worker_count = int(override) if override else min(_DEFAULT_DASK_WORKER_CAP, os.cpu_count() or 1)
+    dask.config.set(num_workers=max(1, worker_count))
 
 
 def _resolve_region_argument(args: argparse.Namespace) -> str | None:
@@ -766,6 +782,8 @@ def main():
     if args.command is None:
         parser.print_help()
         sys.exit(1)
+
+    _apply_default_dask_concurrency()
 
     if args.command == "evaluate":
         sys.exit(_run_evaluate(args))

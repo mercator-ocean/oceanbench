@@ -17,6 +17,16 @@ from oceanbench.core.dataset_utils import (
 
 MAXIMUM_MIXED_LAYER_DEPTH = 600.0
 
+# The gsw calls upcast their inputs to float64. Bounding the start and lead extent of a block,
+# while keeping the whole depth column inside it, keeps those intermediates the size of one
+# forecast day instead of the size of the whole run. The maths is unchanged: every gsw call is
+# element-wise and every reduction below runs along the depth axis, which stays in a single chunk.
+_DENSITY_BLOCK_CHUNKS = (
+    (Dimension.FIRST_DAY_DATETIME.key(), 1),
+    (Dimension.LEAD_DAY_INDEX.key(), 1),
+    (Dimension.DEPTH.key(), -1),
+)
+
 
 def compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     return _compute_mixed_layer_depth(_cap_depth(_harmonise_dataset(dataset)))
@@ -51,10 +61,15 @@ def _compute_potential_density(
     return gsw.pot_rho_t_exact(absolute_salinity, temperature, depth, 0)
 
 
+def _as_density_blocks(data_array: xarray.DataArray) -> xarray.DataArray:
+    chunk_sizes = {dimension: size for dimension, size in _DENSITY_BLOCK_CHUNKS if dimension in data_array.dims}
+    return data_array.chunk(chunk_sizes) if chunk_sizes else data_array
+
+
 def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     density_threshold = 0.03  # kg/m^3 threshold for MLD definition
-    temperature = dataset[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()]
-    salinity = dataset[Variable.SEA_WATER_SALINITY.key()]
+    temperature = _as_density_blocks(dataset[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()])
+    salinity = _as_density_blocks(dataset[Variable.SEA_WATER_SALINITY.key()])
     depth = dataset[Dimension.DEPTH.key()]
     latitude = dataset[Dimension.LATITUDE.key()]
     longitude = dataset[Dimension.LONGITUDE.key()]

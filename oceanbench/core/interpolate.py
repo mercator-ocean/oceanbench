@@ -6,6 +6,7 @@ import xarray
 import numpy
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names, StandardDimension
 from oceanbench.core.dataset_source import get_dataset_source, with_dataset_source
+from oceanbench.core.dataset_utils import Dimension
 
 
 def one_degree_target_grid(data: xarray.Dataset) -> tuple[numpy.ndarray, numpy.ndarray]:
@@ -44,6 +45,9 @@ def apply_one_degree_interpolation(
         chunk_dimensions[time_dimension] = 1
     if depth_dimension in data.dims:
         chunk_dimensions[depth_dimension] = 1
+    for forecast_dimension in (Dimension.FIRST_DAY_DATETIME.key(), Dimension.LEAD_DAY_INDEX.key()):
+        if forecast_dimension in data.dims:
+            chunk_dimensions[forecast_dimension] = 1
 
     data = data.chunk(chunk_dimensions)
     return data.interp(**{latitude_dimension: new_latitude, longitude_dimension: new_longitude})
