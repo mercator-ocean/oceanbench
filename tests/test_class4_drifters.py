@@ -41,6 +41,68 @@ def _challenger_dataset(first_day_count: int = 1, lead_day_count: int = 3) -> xa
     )
 
 
+def _multi_depth_challenger_dataset(depths: list[float]) -> xarray.Dataset:
+    first_day_key = Dimension.FIRST_DAY_DATETIME.key()
+    lead_day_key = Dimension.LEAD_DAY_INDEX.key()
+    depth_key = Dimension.DEPTH.key()
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
+    dimensions = (first_day_key, lead_day_key, depth_key, latitude_key, longitude_key)
+    depth_count = len(depths)
+    eastward_velocities = numpy.broadcast_to(
+        numpy.array([0.1 * (depth_index + 1) for depth_index in range(depth_count)]).reshape(1, 1, depth_count, 1, 1),
+        (1, 3, depth_count, 2, 2),
+    ).copy()
+    northward_velocities = eastward_velocities * 2.0
+    return xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                (first_day_key, lead_day_key, latitude_key, longitude_key),
+                numpy.zeros((1, 3, 2, 2)),
+            ),
+            Variable.EASTWARD_SEA_WATER_VELOCITY.key(): (dimensions, eastward_velocities),
+            Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): (dimensions, northward_velocities),
+        },
+        coords={
+            first_day_key: numpy.array(["2024-01-01"], dtype="datetime64[ns]"),
+            lead_day_key: numpy.arange(3),
+            depth_key: depths,
+            latitude_key: [0.0, 1.0],
+            longitude_key: [10.0, 11.0],
+        },
+    )
+
+
+def _reference_trajectories() -> xarray.Dataset:
+    return xarray.Dataset(
+        {
+            "lat": (("particle", "time"), numpy.array([[0.0, 0.0, 0.0]])),
+            "lon": (("particle", "time"), numpy.array([[10.0, 10.0, 10.0]])),
+        },
+        coords={
+            "particle": [0],
+            "time": numpy.array(["2024-01-01", "2024-01-02", "2024-01-03"], dtype="datetime64[ns]"),
+            "lat0": ("particle", [0.0]),
+            "lon0": ("particle", [10.0]),
+        },
+    )
+
+
+def _advection_dataset_used(monkeypatch, challenger_dataset: xarray.Dataset) -> xarray.Dataset:
+    captured_datasets = []
+
+    def _capture(dataset, latitudes, longitudes):
+        captured_datasets.append(dataset)
+        return _reference_trajectories()
+
+    monkeypatch.setattr(class4_drifters.lagrangian_trajectory, "_get_particle_dataset", _capture)
+    class4_drifters.class4_drifter_challenger_trajectories(
+        challenger_dataset=challenger_dataset,
+        reference_trajectories=_reference_trajectories(),
+    )
+    return captured_datasets[0]
+
+
 def _observation_dataset() -> xarray.Dataset:
     observation_dimension = "observation"
     first_day = numpy.datetime64("2024-01-01T00:00:00")
@@ -205,3 +267,28 @@ def test_class4_drifter_score_uses_available_trajectory_lead_days(monkeypatch) -
     )
 
     assert score.columns.tolist() == ["Lead day 1 (init)", "Lead day 2"]
+
+
+def test_class4_drifter_advection_interpolates_currents_to_drifter_depth(monkeypatch) -> None:
+    advection_dataset = _advection_dataset_used(monkeypatch, _multi_depth_challenger_dataset([5.0, 25.0]))
+
+    assert Dimension.DEPTH.key() not in advection_dataset.dims
+    assert Dimension.DEPTH.key() not in advection_dataset.coords
+    assert numpy.allclose(advection_dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()].values, 0.15)
+    assert numpy.allclose(advection_dataset[Variable.NORTHWARD_SEA_WATER_VELOCITY.key()].values, 0.30)
+
+
+def test_class4_drifter_advection_keeps_single_level_currents(monkeypatch) -> None:
+    advection_dataset = _advection_dataset_used(monkeypatch, _multi_depth_challenger_dataset([0.5]))
+
+    assert Dimension.DEPTH.key() not in advection_dataset.dims
+    assert numpy.allclose(advection_dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()].values, 0.1)
+
+
+def test_class4_drifter_advection_keeps_depthless_currents(monkeypatch) -> None:
+    depthless_dataset = _multi_depth_challenger_dataset([0.5]).isel({Dimension.DEPTH.key(): 0}, drop=True)
+
+    advection_dataset = _advection_dataset_used(monkeypatch, depthless_dataset)
+
+    assert Dimension.DEPTH.key() not in advection_dataset.dims
+    assert numpy.allclose(advection_dataset[Variable.EASTWARD_SEA_WATER_VELOCITY.key()].values, 0.1)

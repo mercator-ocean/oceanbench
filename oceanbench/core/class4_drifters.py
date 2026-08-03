@@ -326,6 +326,25 @@ def class4_drifter_reference_trajectories(
     )
 
 
+def _drifter_depth_current_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
+    """Currents used to advect the model particles, taken at the drifter drogue depth.
+
+    Class-4 drifters drift at 15 m, so the model must be sampled there rather than at its first
+    depth level. Models published without a depth axis, or with a single surface level, are
+    surface only by design and are used as they are.
+    """
+    depth_key = Dimension.DEPTH.key()
+    current_dataset = rename_dataset_with_standard_names(dataset)[
+        [
+            Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+            Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+        ]
+    ]
+    if current_dataset.sizes.get(depth_key, 0) < 2:
+        return lagrangian_trajectory.surface_current_dataset(dataset)
+    return current_dataset.interp({depth_key: DRIFTER_DEPTH_METERS}).drop_vars(depth_key)
+
+
 def class4_drifter_challenger_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_trajectories: xarray.Dataset,
@@ -334,7 +353,7 @@ def class4_drifter_challenger_trajectories(
     challenger_standard_dataset = lagrangian_trajectory._harmonise_dataset(challenger_dataset)
     challenger_run_dataset = lagrangian_trajectory._split_dataset(challenger_standard_dataset)[first_day_index]
     challenger_particles = lagrangian_trajectory._get_particle_dataset(
-        dataset=lagrangian_trajectory.surface_current_dataset(challenger_run_dataset),
+        dataset=_drifter_depth_current_dataset(challenger_run_dataset),
         latitudes=reference_trajectories["lat0"].values,
         longitudes=reference_trajectories["lon0"].values,
     )
