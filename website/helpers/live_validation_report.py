@@ -17,6 +17,14 @@ DRIFTER_SCORE_KEY = "drifter_trajectory_observations"
 DRIFTER_EXPLORER_SOURCE = "evaluation_report.class4_drifter_trajectory_explorer"
 CLASS4_EXPLORER_SOURCE = "evaluation_report.class4_observation_error_explorer"
 DEPTH_ORDER = ["Surface", "0-5m", "5-100m", "100-300m", "300-600m", "15m"]
+# Mirrors the reliability rule of oceanbench.core.class4_drifters, which masks a lead day to
+# NaN when too few drifters are still matched. The website must not import the library, so the
+# thresholds and the drifter row labels are restated here.
+DRIFTER_DEVIATION_VARIABLE = "class-4 drifter trajectory deviation mean"
+DRIFTER_DEVIATION_PREVIEW_LABEL = "Drifter deviation"
+MATCHED_DRIFTER_COUNT_VARIABLE = "class-4 matched drifter count"
+MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT = 50
+MINIMUM_RELIABLE_MATCHED_DRIFTER_FRACTION = 0.05
 VARIABLE_ORDER = [
     "temperature",
     "salinity",
@@ -216,6 +224,40 @@ def _score_table(score: ModelScore) -> str:
     )
 
 
+def _required_matched_drifter_count(initial_matched_count: float | None) -> int:
+    if initial_matched_count is None:
+        return MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT
+    return max(
+        MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT,
+        math.ceil(initial_matched_count * MINIMUM_RELIABLE_MATCHED_DRIFTER_FRACTION),
+    )
+
+
+def _masked_value_html(reason: str) -> str:
+    # The reason is a hover tooltip so the tables and cards stay compact.
+    return f'<span class="validation-masked-value" title="{escape(reason)}">NA*</span>'
+
+
+def _drifter_value_cell(
+    variable_name: str,
+    value: float | None,
+    matched_count: float | None,
+    required_count: int,
+) -> str:
+    formatted_value = _format_number(value)
+    if (
+        formatted_value != "NA"
+        or variable_name != DRIFTER_DEVIATION_VARIABLE
+        or matched_count is None
+    ):
+        return escape(formatted_value)
+    count = int(matched_count)
+    drifter_word = "drifter" if count == 1 else "drifters"
+    return _masked_value_html(
+        f"{count} {drifter_word} matched, {required_count} needed for a reliable statistic"
+    )
+
+
 def _drifter_score_table(score: ModelScore | None) -> str:
     if score is None:
         return '<p class="validation-empty">Class IV drifter trajectory scores are not available in this report.</p>'
@@ -231,12 +273,24 @@ def _drifter_score_table(score: ModelScore | None) -> str:
         )
         + "</tr></thead>"
     )
+    matched_counts = variables.variables.get(MATCHED_DRIFTER_COUNT_VARIABLE)
+    matched_count_data = matched_counts.data if matched_counts is not None else {}
+    required_count = _required_matched_drifter_count(
+        matched_count_data.get(lead_days[0]) if lead_days else None
+    )
     body = "".join(
         "<tr>"
         f"<th>{escape(variable_name)}</th>"
         f"<td>{escape(variable.unit)}</td>"
         + "".join(
-            f"<td>{_format_number(variable.data.get(lead_day))}</td>"
+            "<td>"
+            + _drifter_value_cell(
+                variable_name,
+                variable.data.get(lead_day),
+                matched_count_data.get(lead_day),
+                required_count,
+            )
+            + "</td>"
             for lead_day in lead_days
         )
         + "</tr>"
@@ -287,6 +341,23 @@ def _sparkline(lead_days: list[str], values: list[float | None], unit: str) -> s
     )
 
 
+def _is_drifter_deviation_metric(label: str) -> bool:
+    # The manifest label is stable, but fall back on the same "deviation" match the
+    # preview builder uses so a relabelled metric still explains its masked values.
+    return label == DRIFTER_DEVIATION_PREVIEW_LABEL or "deviation" in label.lower()
+
+
+def _score_card_value(label: str, unit: str, value: float | None) -> str:
+    # The manifest carries no matched drifter count, so masked cards state the rule
+    # rather than the count the report table shows.
+    formatted_value = _format_number(value)
+    if formatted_value != "NA" or not _is_drifter_deviation_metric(label):
+        return f"{formatted_value} {escape(unit)}"
+    return _masked_value_html(
+        f"Masked: below the {MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT}-drifter reliability floor"
+    )
+
+
 def _score_card(
     label: str, unit: str, lead_days: list[str], values: list[float | None]
 ) -> str:
@@ -295,10 +366,10 @@ def _score_card(
     return (
         '<div class="validation-score-card">'
         f"<h3>{escape(label)}</h3>"
-        f"<p><span>Lead {escape(lead_days[0])}</span><strong>{_format_number(values[0])} {escape(unit)}</strong></p>"
+        f"<p><span>Lead {escape(lead_days[0])}</span><strong>{_score_card_value(label, unit, values[0])}</strong></p>"
         "<p>"
         f"<span>Lead {escape(lead_days[-1])}</span>"
-        f"<strong>{_format_number(values[-1])} {escape(unit)}</strong>"
+        f"<strong>{_score_card_value(label, unit, values[-1])}</strong>"
         "</p>"
         f"{_sparkline(lead_days, values, unit)}"
         "</div>"
@@ -479,6 +550,9 @@ def render_forecast_validation_page(
   <p>
     Observed Class IV drifter tracks at 15 m drogue depth are compared with trajectories advected by the
     challenger currents interpolated to 15 m, or by its surface currents when the system has no depth axis.
+    A lead day is reported as NA when fewer than {MINIMUM_RELIABLE_MATCHED_DRIFTER_COUNT} drifters are still
+    matched at that lead day, or fewer than {MINIMUM_RELIABLE_MATCHED_DRIFTER_FRACTION:.0%} of the drifters
+    matched on the first lead day, because such small samples are not statistically reliable.
   </p>
   {_drifter_score_table(drifter_score)}
 </section>

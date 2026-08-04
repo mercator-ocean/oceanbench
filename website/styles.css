@@ -313,8 +313,9 @@ body.live-evaluations-page footer.footer .nav-footer {
   padding: 0.72rem 0.78rem;
 }
 
+/* Only the lead-day label span, never a span nested inside a card value. */
 .validation-card-label,
-.validation-score-card span {
+.validation-score-card p > span {
   display: block;
   color: var(--ob-muted);
   font-size: 0.78rem;
@@ -456,6 +457,17 @@ body.live-evaluations-page footer.footer .nav-footer {
 
 .validation-score-table td {
   text-align: right;
+}
+
+/* A masked value reads as a value: it only adds the tooltip affordance. */
+.validation-masked-value {
+  display: inline;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: inherit;
+  text-transform: none;
+  cursor: help;
+  border-bottom: 1px dotted var(--ob-border);
 }
 
 .validation-map-section iframe {

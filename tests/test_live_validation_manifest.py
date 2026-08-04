@@ -155,6 +155,54 @@ def test_live_validation_preview_panel_shows_unavailable_without_manifest_scores
     assert "validation-score-grid" not in preview_html
 
 
+def _write_manifest_with_masked_drifter_preview(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-06-08T13:24:19Z",
+                "evaluations": [
+                    {
+                        "system_id": "octo-glonet2-ibi-p1d",
+                        "system_label": "GLONET2 IBI (experimental)",
+                        "forecast_lead_days": 8,
+                        "forecast_init": "2026-05-13",
+                        "validated_lead_days": "1-8 days",
+                        "observation_cutoff": "2026-05-23",
+                        "status": "Complete",
+                        "report_notebook": "glonet2-ibi.latest.ibi.report.ipynb",
+                        "score_preview": {
+                            "metrics": [
+                                {"label": "Temperature, surface", "unit": "C", "lead_values": {"1": None, "8": None}},
+                                {"label": "Drifter deviation", "unit": "km", "lead_values": {"1": None, "8": None}},
+                            ]
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_live_validation_preview_panel_explains_masked_drifter_deviation(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "nrt-validation-manifest.json"
+    _write_manifest_with_masked_drifter_preview(manifest_path)
+
+    preview_html = render_live_validation_preview_panel(manifest_path)
+
+    # The masked drifter card shows a compact NA* whose tooltip carries the reliability rule.
+    masked_card_value = (
+        '<span class="validation-masked-value" title="Masked: below the 50-drifter reliability floor">NA*</span>'
+    )
+    assert masked_card_value in preview_html
+    assert "NA km" not in preview_html
+    assert ">Masked: below" not in preview_html
+    # Masked non-drifter metrics keep the plain NA.
+    assert "NA C" in preview_html
+    assert preview_html.count("NA*") == 2
+
+
 def _completed_evaluation(system_id: str, system_label: str, region: str, report_notebook: str) -> dict:
     return {
         "system_id": system_id,

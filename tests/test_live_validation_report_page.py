@@ -43,6 +43,19 @@ def _drifter_score_table() -> str:
     )
 
 
+def _masked_drifter_score_table() -> str:
+    # Too few matched drifters, so the metric masks every lead day to NaN.
+    return (
+        "<table>"
+        "<thead><tr><th></th><th>Lead day 1 (init)</th><th>Lead day 10</th></tr></thead>"
+        "<tbody>"
+        "<tr><th>Class-4 drifter trajectory deviation mean (km)</th><td>NaN</td><td>NaN</td></tr>"
+        "<tr><th>Class-4 matched drifter count</th><td>14</td><td>11</td></tr>"
+        "</tbody>"
+        "</table>"
+    )
+
+
 def _full_score_preview() -> dict:
     # The variable-driven manifest preview the listing page renders; the report page reuses it
     # verbatim so the two stay consistent. Temperature values match the notebook table below.
@@ -84,6 +97,24 @@ def _drifter_only_score_preview() -> dict:
                 "label": "Drifter deviation",
                 "unit": "km",
                 "lead_values": {"1": 12.3, "10": 45.6},
+            },
+        ]
+    }
+
+
+def _masked_score_preview() -> dict:
+    # The manifest carries no matched drifter count, so the masked cards fall back on the rule.
+    return {
+        "metrics": [
+            {
+                "label": "Temperature, surface",
+                "unit": "C",
+                "lead_values": {"1": None, "10": None},
+            },
+            {
+                "label": "Drifter deviation",
+                "unit": "km",
+                "lead_values": {"1": None, "10": None},
             },
         ]
     }
@@ -212,13 +243,21 @@ def test_render_forecast_validation_page_supports_glonet2_ibi_system(
     assert "Drifter trajectory scores" in html
 
 
-def _write_surface_only_notebook(notebook_path: Path) -> None:
+def _write_surface_only_notebook(
+    notebook_path: Path, drifter_score_table: str | None = None
+) -> None:
     notebook = {
         "cells": [
             {
                 "cell_type": "code",
                 "source": "evaluation_report.class4_drifter_trajectory_deviation",
-                "outputs": [{"data": {"text/html": _drifter_score_table()}}],
+                "outputs": [
+                    {
+                        "data": {
+                            "text/html": drifter_score_table or _drifter_score_table()
+                        }
+                    }
+                ],
             },
             {
                 "cell_type": "code",
@@ -264,6 +303,80 @@ def test_render_forecast_validation_page_self_suppresses_class4_rmsd_for_surface
     assert "Observation error maps" not in html
     assert "Temperature, surface" not in html
     assert "evaluation_report" not in html
+
+
+def test_render_forecast_validation_page_explains_masked_drifter_deviation(
+    tmp_path: Path,
+) -> None:
+    notebook_path = tmp_path / "glonet2-ibi.latest.ibi.report.ipynb"
+    _write_surface_only_notebook(notebook_path, _masked_drifter_score_table())
+
+    html = render_forecast_validation_page(
+        notebook_path,
+        ForecastValidationMetadata(
+            system_label="GLONET2 IBI (experimental)",
+            forecast_init="2026-05-13",
+            validated_lead_days="1-10 days",
+            observation_cutoff="2026-05-23",
+            status="Complete",
+            system_id="octo-glonet2-ibi-p1d",
+            score_preview=_masked_score_preview(),
+        ),
+    )
+
+    # The masked representative-score card states the rule, since the manifest has no count.
+    assert (
+        '<span class="validation-masked-value" '
+        'title="Masked: below the 50-drifter reliability floor">NA*</span>'
+    ) in html
+    assert "NA km" not in html
+    assert ">Masked: below" not in html
+    # Masked non-drifter metrics keep the plain NA.
+    assert "NA C" in html
+    # The masked deviation cells carry the reason instead of a bare NA.
+    assert (
+        '<td><span class="validation-masked-value" '
+        'title="14 drifters matched, 50 needed for a reliable statistic">NA*</span></td>'
+    ) in html
+    assert (
+        '<td><span class="validation-masked-value" '
+        'title="11 drifters matched, 50 needed for a reliable statistic">NA*</span></td>'
+    ) in html
+    # The long reason is tooltip text only, never inline visible text.
+    assert ">14 drifters matched" not in html
+    # The method description states the masking rule.
+    assert "fewer than 50 drifters are still" in html
+    assert "fewer than 5% of the drifters" in html
+    assert "not statistically reliable" in html
+    # The matched count row itself is left untouched.
+    assert "<td>14.000</td>" in html
+
+
+def test_render_forecast_validation_page_keeps_plain_values_when_drifters_are_matched(
+    tmp_path: Path,
+) -> None:
+    notebook_path = tmp_path / "glonet.latest.global.report.ipynb"
+    _write_surface_only_notebook(notebook_path)
+
+    html = render_forecast_validation_page(
+        notebook_path,
+        ForecastValidationMetadata(
+            system_label="GLONET HR",
+            forecast_init="2026-05-13",
+            validated_lead_days="1-10 days",
+            observation_cutoff="2026-05-23",
+            status="Complete",
+            system_id="octo-glonet-p1d",
+            score_preview=_drifter_only_score_preview(),
+        ),
+    )
+
+    assert "<td>12.300</td>" in html
+    assert "drifters matched," not in html
+    # The unmasked drifter card is unchanged.
+    assert "12.300 km" in html
+    assert "reliability floor" not in html
+    assert "NA*" not in html
 
 
 def test_render_forecast_validation_page_rejects_unmapped_system(
