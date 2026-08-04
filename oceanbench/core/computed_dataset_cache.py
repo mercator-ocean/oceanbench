@@ -26,14 +26,20 @@ import xarray
 
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
-_BUILD_LOCK_TIMEOUT_SECONDS = 24 * 60 * 60
+_BUILD_LOCK_TIMEOUT_SECONDS = 60 * 60
 _BUILD_LOCK_POLL_SECONDS = 5.0
 
 
 def cached_computed_dataset(content_key: str, build_dataset: Callable[[], xarray.Dataset]) -> xarray.Dataset:
     """Return ``build_dataset()``, persisting the computed result under the local cache
     directory keyed by ``content_key`` and reusing it on later runs. The dataset is
-    recomputed every call when no local cache directory is configured."""
+    recomputed every call when no local cache directory is configured.
+
+    No invalidation contract: once a ``content_key`` is cached the stored dataset is
+    returned verbatim forever. Nothing is revalidated against the source, so if the
+    upstream data is republished under the same identity the stale copy keeps being
+    served. Point at a fresh cache directory (or delete the entry) when data is
+    republished at the same URL."""
     cache_directory = current_runtime_configuration().local_cache_directory()
     if cache_directory is None:
         return build_dataset()
@@ -76,9 +82,40 @@ def _write_cache_lock_metadata(lock_path: Path) -> None:
     )
 
 
+def _process_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # The process exists but is owned by another user.
+        return True
+    return True
+
+
+def _lock_owner_is_dead_local_process(lock_path: Path) -> bool:
+    """Return ``True`` when the lock records a pid on this host that is no longer running.
+
+    A dead owner on the local host means the build that took the lock has crashed or been
+    killed, so the lock can be reclaimed immediately without waiting for the timeout. The
+    hostname guard keeps us from misreading a pid that belongs to a different machine."""
+    try:
+        owner = json.loads((lock_path / "owner.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if owner.get("hostname") != socket.gethostname():
+        return False
+    pid = owner.get("pid")
+    if not isinstance(pid, int):
+        return False
+    return not _process_is_alive(pid)
+
+
 def _is_stale_cache_lock(lock_path: Path) -> bool:
     if not lock_path.exists():
         return False
+    if _lock_owner_is_dead_local_process(lock_path):
+        return True
     lock_age_seconds = datetime.now(timezone.utc).timestamp() - lock_path.stat().st_mtime
     return lock_age_seconds > _BUILD_LOCK_TIMEOUT_SECONDS
 
