@@ -34,8 +34,7 @@ SPDX-License-Identifier: EUPL-1.2
   --radius-sm: var(--ob-radius-sm, 0.35rem);
   --radius-md: var(--ob-radius-sm, 0.35rem);
   /* How far every region holds its content off the shell's edges: the app bar, both
-     drawers, the panel head and the floating map controls all measure from the same
-     rule. */
+     drawers, the panel head and the map strip all measure from the same rule. */
   --inset: 1rem;
   --shadow: var(--ob-viewer-shadow, 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06));
   /* Single custom crosshair shared by the real CSS cursor and the mirrored
@@ -325,10 +324,12 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
    of the shell edge to edge and every other surface abuts it on a hairline. */
 .map-area {
   position: relative;
-  /* The floating controls answer to the width of the map column, not of the window:
-     two open drawers can leave 670px of map inside a 1280px window. Making the column
-     a query container lets them adapt to the space they are actually in. */
+  /* The strip answers to the width of the map column, not of the window: two open
+     drawers can leave 670px of map inside a 1280px window. Making the column a query
+     container lets it adapt to the space it is actually in. */
   container-type: inline-size;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -336,8 +337,7 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
 }
 
 .map-content {
-  position: absolute;
-  inset: 0;
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -378,7 +378,7 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
 
 /* The panel head floats on the map as a slim translucent strip rather than a
    titlebar over a boxed card, so the raster runs the full height of the panel. It
-   holds its content on the same 16px rule as the app bar and the floats, and it has
+   holds its content on the same 16px rule as the app bar and the strip, and it has
    no rule of its own: the blur already separates it from the raster, and a border
    there was one horizontal line too many in a shell that already has three. */
 .panel-head {
@@ -446,12 +446,11 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
 .panel-particles, .panel-overlay { pointer-events: none; }
 .panel-canvas-wrap.trajectory-ready .panel-field { cursor: var(--field-cursor) 10 10, crosshair; }
 
-/* The hover readout keeps its corner, lifted clear of the floating controls that now
-   occupy the bottom of the map column. app.js publishes their measured height. */
+/* The hover readout keeps its corner. The zoom reading takes the opposite one. */
 .panel-readout {
   position: absolute;
   left: 0.5rem;
-  bottom: calc(var(--map-floats-height, 0px) + 0.5rem);
+  bottom: 0.5rem;
   padding: 0.3rem 0.5rem;
   font-family: var(--mono);
   font-size: var(--text-caption);
@@ -510,60 +509,29 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   pointer-events: none;
 }
 
-/* Floating map controls: the lead scrubber, the colour scale and the readout, laid
-   over the bottom of the map column instead of in a strip below it. The container
-   spans the column but is transparent to the pointer, so panning and zooming work
-   everywhere except on the three groups themselves. In swipe and difference display
-   Forecast 2 keeps a picker strip along the bottom of the column, and the groups sit
-   above it rather than on it; app.js measures that strip. */
-.map-floats {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: var(--map-strip-height, 0px);
-  z-index: 5;
-  display: flex;
-  align-items: flex-end;
-  gap: 0.75rem;
+/* The map strip: the lead scrubber, the colour scale and the status line, below the
+   map and inside the shell's grid rather than laid over the imagery. Equal side
+   tracks put the scale on the centre of the map column, so nothing has to know how
+   wide the drawers are. */
+.map-dock {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
   padding: var(--inset);
-  pointer-events: none;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
 }
-/* Only what carries something is a pane, and only a pane reacts to the pointer, so
-   the map stays draggable between and around them. The readout column is a case in
-   point: it holds an equal share of the row so the scale lands on the column's centre,
-   but it paints only as wide as its own text. */
-.lead-pane,
-.float-scale,
-.float-meta > p {
-  pointer-events: auto;
-  background: var(--readout-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  backdrop-filter: blur(8px);
-  padding: 0.3rem 0.6rem;
-}
-.float-meta > p:empty { display: none; }
-/* The scrubber and the readout each take an equal share of what the colour scale
-   leaves, so the scale sits exactly halfway between them, which is the centre of the
-   map column. Neither may declare a width of its own: the moment one is capped the
-   halves stop matching and the scale drifts off centre. The scrubber's own length is
-   capped on .lead-track instead. */
-.float-lead {
-  display: flex;
-  flex: 1 1 0;
-  min-width: 0;
-}
-/* The two flanking columns are bare boxes of the same geometry, so an equal share of
-   the row really is equal: a pane's own border and padding on one side alone would
-   shift the scale off centre by half of them, since a flex basis of zero cannot go
-   below what a border-box item's frame already costs. Each column's pane then hugs
-   its content against the column's outer edge. */
-.lead-pane {
+/* The scrubber and the status line each take an equal share of what the scale leaves.
+   Neither may declare a width of its own: the moment one is capped the halves stop
+   matching and the scale drifts off centre. The scrubber's length is capped on
+   .lead-track instead. */
+.dock-lead {
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  flex: 1 1 auto;
   min-width: 0;
+  height: var(--control-height);
 }
 /* Neutral scrubber. The accent colour used to fill the track behind the thumb, which
    read as a coloured lead-day band competing with the map's own colour scale. The
@@ -578,7 +546,7 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   max-width: 20rem;
   --lead-thumb: 0.78rem;
 }
-.float-lead input[type="range"] {
+.dock-lead input[type="range"] {
   width: 100%;
   appearance: none;
   -webkit-appearance: none;
@@ -606,17 +574,17 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
       transparent 1px calc(100% / var(--lead-steps, 9))
     );
 }
-.float-lead input[type="range"]::-webkit-slider-runnable-track {
+.dock-lead input[type="range"]::-webkit-slider-runnable-track {
   height: 3px;
   border-radius: 2px;
   background: var(--border);
 }
-.float-lead input[type="range"]::-moz-range-track {
+.dock-lead input[type="range"]::-moz-range-track {
   height: 3px;
   border-radius: 2px;
   background: var(--border);
 }
-.float-lead input[type="range"]::-webkit-slider-thumb {
+.dock-lead input[type="range"]::-webkit-slider-thumb {
   appearance: none;
   -webkit-appearance: none;
   width: 0.78rem;
@@ -626,42 +594,47 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   background: var(--text);
   border: 2px solid var(--surface);
 }
-.float-lead input[type="range"]::-moz-range-thumb {
+.dock-lead input[type="range"]::-moz-range-thumb {
   width: 0.78rem;
   height: 0.78rem;
   border-radius: 50%;
   background: var(--text);
   border: 2px solid var(--surface);
 }
-.float-lead input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dock-lead input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Wide enough for the longest reading ("Lead day 10") so the track does not shorten
    by a character's width as the scrubber crosses day 9. */
-.float-lead .lead-value { white-space: nowrap; min-width: 5.2rem; text-align: right; color: var(--muted); }
-/* The colour scale belongs to the map, and now that the controls live on the map it
-   is centred there by the layout itself: the container is exactly the map column and
-   the two flanking groups take equal shares of what the scale leaves. The drawer
-   arithmetic the strip needed is gone with the strip. */
-.float-scale {
+.dock-lead .lead-value { white-space: nowrap; min-width: 5.2rem; text-align: right; color: var(--muted); }
+/* The scale is centred by the grid's equal side tracks, so it is centred on the map
+   column whatever the drawers are doing. The arithmetic the old strip needed is gone. */
+.dock-scale {
   display: flex;
   align-items: center;
-  flex: 0 1 auto;
+  justify-content: center;
   min-width: 0;
 }
-.float-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  flex: 1 1 0;
-  min-width: 0;
-  align-items: flex-end;
-  text-align: right;
-}
-.float-meta > p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 /* The scale is a legend, not a control, and it shares a narrow map column with the
    scrubber, which is a control. It takes the smaller half of that bargain, and gives
    way further if the column is narrower still. */
-.colorbar { width: 18rem; max-width: 100%; height: 3rem; }
-.layer-info { color: var(--muted); font-family: var(--mono); font-size: var(--text-readout); margin: 0; }
+.colorbar { width: 18rem; max-width: 100%; height: 2.75rem; display: block; }
+/* The one reading that stays on the map: what the view is doing, in its corner. */
+.layer-info {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 5;
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--text-readout);
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+.layer-info:empty { display: none; }
 .year-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: var(--text-control); color: var(--muted); margin: 0.15rem 0 0; }
 .year-legend .item { display: inline-flex; align-items: center; gap: 0.3rem; }
 .year-legend .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: var(--radius-sm); border: 1px solid rgba(128, 128, 128, 0.35); }
@@ -675,7 +648,7 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   gap: 0.3rem;
   width: 18rem;
   max-width: 100%;
-  min-height: 3rem;
+  min-height: 2.75rem;
   font-size: var(--text-control);
 }
 .map-legend .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
@@ -687,7 +660,19 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
 .map-legend .legend-note.dim, .map-legend .legend-bg { color: var(--muted); font-size: var(--text-caption); }
 .map-legend .legend-help { display: inline-flex; }
 
-.status { color: var(--muted); font-size: var(--text-control); margin: 0; min-height: 1rem; }
+/* Right-hand track of the strip: it ends where the map column ends, and a long line
+   is trimmed rather than allowed to push the scale off centre. */
+.status {
+  color: var(--muted);
+  font-size: var(--text-control);
+  margin: 0;
+  min-height: 1rem;
+  min-width: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .status.error { color: #ff6b6b; }
 
 /* Context rail: the right drawer's body. Layout comes from .drawer / .drawer-body;
@@ -861,30 +846,18 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   .drawer-right { width: min(var(--rail-open-width), 78vw); }
 }
 
-/* The map column, not the window, decides how much the floating controls can ask
-   for. Under about 900px the colour scale gives up width first, since it is a legend
-   and the scrubber beside it is a control. Under about 760px the three no longer fit
-   at all: the readout, which is the only tertiary thing there, steps out, and with it
-   the second half the scale was centred against, so scrubber and scale simply pack
-   from the left. */
-@container (max-width: 900px) {
+/* The map column, not the window, decides how much the strip can ask for. As it
+   narrows the colour scale gives up width first, since it is a legend and the scrubber
+   beside it is a control. Narrower still, the status line stops painting, being the
+   only tertiary thing there; its track stays, since it is the half the scale is
+   centred against. */
+@container (max-width: 700px) {
   .colorbar, .map-legend { width: 15rem; }
 }
 
-/* In swipe display the divider is grabbed on the canvas itself and can be dragged to
-   any x, so a floating pane would eat the bottom of it wherever it lands. In that one
-   display the panes stop taking the pointer and only the slider, which needs it, keeps
-   it: the divider is then grabbable everywhere except over the slider track. */
-.map-area:has(.panel-grid[data-display="swipe"]) .map-floats > * > *,
-.map-area:has(.panel-grid[data-display="swipe"]) .map-floats > * { pointer-events: none; }
-.map-area:has(.panel-grid[data-display="swipe"]) .float-lead input { pointer-events: auto; }
-
-/* The meta column keeps its width when its text goes: it is the right-hand flank
-   that holds the colour scale centred on the map, so hiding the column itself
-   would slide the scale sideways. */
-@container (max-width: 760px) {
-  .map-floats { gap: 0.5rem; }
-  .float-meta > p { display: none; }
+@container (max-width: 560px) {
+  .map-dock { gap: 0.6rem; }
+  .status { visibility: hidden; }
   .colorbar, .map-legend { width: 12rem; }
 }
 

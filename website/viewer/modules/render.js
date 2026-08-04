@@ -215,28 +215,51 @@ export function differenceField(fieldA, fieldB) {
   return { data, width: fieldA.width, height: fieldA.height };
 }
 
-/** Draw a horizontal colorbar with min/max labels into a canvas. */
+/**
+ * Draw a horizontal colorbar with min/max labels into a canvas.
+ *
+ * CSS lays the canvas out; only its backing store is ours to size. It is sized here
+ * to the displayed box times the device pixel ratio, and everything is drawn in CSS
+ * pixels through a scale transform. A fixed backing store would be rendered at one
+ * size and stretched to another by the browser, which is what made the bar and its
+ * tick labels look like a resized image rather than something drawn.
+ */
 export function drawColorbar(canvas, colormapName, range, { label = "", textColor = "#e6edf3" } = {}) {
   const context = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
-  context.clearRect(0, 0, width, height);
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.max(1, Math.round(canvas.clientWidth || canvas.width));
+  const height = Math.max(1, Math.round(canvas.clientHeight || canvas.height));
+  const backingWidth = Math.round(width * ratio);
+  const backingHeight = Math.round(height * ratio);
+  if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+    canvas.width = backingWidth;
+    canvas.height = backingHeight;
+  }
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, backingWidth, backingHeight);
   const lut = lookupTable(colormapName);
-  const labelHeight = label ? 18 : 0;
+  // The caption and the tick row are 11px text: 15 above and 14 below is what they
+  // need, and every pixel not reserved here is a pixel of actual colour ramp.
+  const labelHeight = label ? 15 : 0;
   const barTop = labelHeight;
-  const barHeight = Math.min(14, height - labelHeight - 18);
-  const gradient = context.createImageData(width, barHeight);
-  for (let column = 0; column < width; column += 1) {
-    const lutIndex = Math.round((column / (width - 1)) * 255) * 3;
-    for (let row = 0; row < barHeight; row += 1) {
-      const destination = (row * width + column) * 4;
+  const barHeight = Math.min(14, height - labelHeight - 14);
+  // The gradient is written straight into the backing store, since image data ignores
+  // the transform: one device pixel per column, so the ramp is as smooth as the screen.
+  const barTopDevice = Math.round(barTop * ratio);
+  const barHeightDevice = Math.max(1, Math.round(barHeight * ratio));
+  const gradient = context.createImageData(backingWidth, barHeightDevice);
+  for (let column = 0; column < backingWidth; column += 1) {
+    const lutIndex = Math.round((column / Math.max(1, backingWidth - 1)) * 255) * 3;
+    for (let row = 0; row < barHeightDevice; row += 1) {
+      const destination = (row * backingWidth + column) * 4;
       gradient.data[destination] = lut[lutIndex];
       gradient.data[destination + 1] = lut[lutIndex + 1];
       gradient.data[destination + 2] = lut[lutIndex + 2];
       gradient.data[destination + 3] = 255;
     }
   }
-  context.putImageData(gradient, 0, barTop);
+  context.putImageData(gradient, 0, barTopDevice);
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.fillStyle = textColor;
   context.font = "11px system-ui, sans-serif";
   context.textBaseline = "top";
@@ -248,9 +271,9 @@ export function drawColorbar(canvas, colormapName, range, { label = "", textColo
     context.fillText(fitLabel(context, label, width), 0, 1);
   }
   context.textAlign = "left";
-  context.fillText(formatTick(range[0]), 0, barTop + barHeight + 3);
+  context.fillText(formatTick(range[0]), 0, barTop + barHeight + 2);
   context.textAlign = "right";
-  context.fillText(formatTick(range[1]), width, barTop + barHeight + 3);
+  context.fillText(formatTick(range[1]), width, barTop + barHeight + 2);
 }
 
 function fitLabel(context, label, maxWidth) {

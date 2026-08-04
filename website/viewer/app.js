@@ -2543,35 +2543,6 @@ function syncPanelGrid() {
   for (let i = shared.layout; i < panels.length; i += 1) stopParticles(panels[i]);
   if (activePanelIndex >= shared.layout) activePanelIndex = 0;
   markActivePanel();
-  watchMapOverlays();
-}
-
-// The floating map controls and, in swipe or difference display, Forecast 2's picker
-// strip both sit along the bottom of the map column. Their heights change with the
-// display mode and with wrapping at narrow widths, so whatever has to clear them is
-// told the measured value instead of a guess: the controls sit above the strip, and
-// the hover readout sits above the controls.
-let mapOverlayObserver = null;
-
-function syncMapOverlayMetrics() {
-  const area = document.querySelector(".map-area");
-  if (!area) return;
-  const strip = area.querySelector(".panel.head-only");
-  const floats = area.querySelector(".map-floats");
-  area.style.setProperty("--map-strip-height", `${strip ? strip.offsetHeight : 0}px`);
-  area.style.setProperty("--map-floats-height", `${floats ? floats.offsetHeight : 0}px`);
-}
-
-function watchMapOverlays() {
-  const area = document.querySelector(".map-area");
-  if (!area) return;
-  if (!mapOverlayObserver) mapOverlayObserver = new ResizeObserver(syncMapOverlayMetrics);
-  mapOverlayObserver.disconnect();
-  const strip = area.querySelector(".panel.head-only");
-  const floats = area.querySelector(".map-floats");
-  if (strip) mapOverlayObserver.observe(strip);
-  if (floats) mapOverlayObserver.observe(floats);
-  syncMapOverlayMetrics();
 }
 
 function markActivePanel() {
@@ -2728,9 +2699,12 @@ function updateSharedColorbar() {
     const sameVariable = panels
       .slice(0, shared.layout)
       .every((candidate) => candidate.state.variable === panel.state.variable);
-    const suffix = isDiffView() ? "" : shared.layout > 1 ? (sameVariable ? " (shared)" : ` (panel ${activePanelIndex + 1})`) : "";
+    // Which panel the scale describes leads the caption rather than trailing it: a
+    // long variable name is ellipsized on the right, and that qualifier is the part a
+    // reader with two panels in front of them cannot do without.
+    const prefix = isDiffView() ? "" : shared.layout > 1 ? (sameVariable ? "shared · " : `panel ${activePanelIndex + 1} · `) : "";
     drawColorbar(colorbar, panel.colormap, panel.range, {
-      label: `${panel.label} (${panel.units})${suffix}`,
+      label: `${prefix}${panel.label} (${panel.units})`,
       textColor,
     });
   }
@@ -4274,6 +4248,13 @@ function wireGlobalControls() {
     clampView();
     scheduleLayoutRender();
   });
+
+  // The colour scale is drawn to the pixels it is displayed at, so every change of
+  // that box (window, drawer drag, the strip's own container queries) has to redraw
+  // it. Nothing inside the redraw changes the box, so this cannot loop.
+  if (elements.colorbar && window.ResizeObserver) {
+    new ResizeObserver(() => updateSharedColorbar()).observe(elements.colorbar);
+  }
 }
 
 let layoutRenderTimer = null;
