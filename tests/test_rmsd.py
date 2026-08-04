@@ -117,7 +117,7 @@ def test_rmsd_snaps_nearly_matching_spatial_coordinates_before_xarray_alignment(
 
     rmsd_dataset = _rmsd(challenger_dataset, reference_dataset)
 
-    latitude_weights = numpy.cos(numpy.deg2rad(reference_latitudes))[:, numpy.newaxis]
+    latitude_weights = numpy.cos(numpy.deg2rad(challenger_latitudes))[:, numpy.newaxis]
     expected_rmsd = numpy.sqrt(
         numpy.sum(challenger_values[0, 0] ** 2 * latitude_weights)
         / numpy.sum(numpy.ones_like(challenger_values[0, 0]) * latitude_weights)
@@ -133,3 +133,81 @@ def test_rmsd_snaps_nearly_matching_spatial_coordinates_before_xarray_alignment(
 
     assert numpy.isclose(actual_rmsd, expected_rmsd)
     assert not numpy.isclose(actual_rmsd, legacy_inner_join_rmsd)
+
+
+def test_rmsd_snaps_reference_to_challenger_when_challenger_has_one_extra_coordinate() -> None:
+    variable_key = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
+    matched_challenger_latitudes = numpy.linspace(-50.0, 50.0, 1000, dtype=numpy.float32)
+    challenger_latitudes = numpy.concatenate(
+        [
+            matched_challenger_latitudes,
+            numpy.array([51.0], dtype=numpy.float32),
+        ]
+    )
+    challenger_longitudes = numpy.array([10.0, 20.0], dtype=numpy.float32)
+    reference_latitudes = matched_challenger_latitudes + numpy.float32(1e-5)
+    reference_longitudes = challenger_longitudes + numpy.float32(1e-5)
+    challenger_values = numpy.arange(challenger_latitudes.size * challenger_longitudes.size, dtype=float).reshape(
+        1,
+        1,
+        challenger_latitudes.size,
+        challenger_longitudes.size,
+    )
+    dimension_names = [
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
+    ]
+    base_coordinates = {
+        Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+        Dimension.LEAD_DAY_INDEX.key(): [0],
+    }
+    challenger_dataset = xarray.Dataset(
+        {
+            variable_key: (
+                dimension_names,
+                challenger_values,
+            )
+        },
+        coords={
+            **base_coordinates,
+            Dimension.LATITUDE.key(): challenger_latitudes,
+            Dimension.LONGITUDE.key(): challenger_longitudes,
+        },
+    )
+    reference_dataset = xarray.Dataset(
+        {
+            variable_key: (
+                dimension_names,
+                numpy.zeros(
+                    (
+                        1,
+                        1,
+                        reference_latitudes.size,
+                        reference_longitudes.size,
+                    )
+                ),
+            )
+        },
+        coords={
+            **base_coordinates,
+            Dimension.LATITUDE.key(): reference_latitudes,
+            Dimension.LONGITUDE.key(): reference_longitudes,
+        },
+    )
+
+    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset)
+
+    latitude_weights = numpy.cos(numpy.deg2rad(matched_challenger_latitudes))[:, numpy.newaxis]
+    matched_challenger_values = challenger_values[0, 0, : matched_challenger_latitudes.size]
+    expected_rmsd = numpy.sqrt(
+        numpy.sum(matched_challenger_values**2 * latitude_weights)
+        / numpy.sum(numpy.ones_like(matched_challenger_values) * latitude_weights)
+    )
+    legacy_inner_join_squared_error = (challenger_dataset - reference_dataset) ** 2
+    actual_rmsd = float(rmsd_dataset[variable_key].sel({Dimension.LEAD_DAY_INDEX.key(): 0}))
+
+    assert legacy_inner_join_squared_error.sizes[Dimension.LATITUDE.key()] == 0
+    assert legacy_inner_join_squared_error.sizes[Dimension.LONGITUDE.key()] == 0
+    assert numpy.isclose(actual_rmsd, expected_rmsd)
