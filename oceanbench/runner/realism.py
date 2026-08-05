@@ -33,6 +33,7 @@ import pandas
 import xarray
 
 from oceanbench.core import eddies as eddies_core
+from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 from oceanbench.core import psd as psd_core
 from oceanbench.core.dataset_utils import VARIABLE_METADATA, Dimension, Variable
@@ -786,7 +787,15 @@ def compute_realism_battery(
     already-published ``glonet_1_degree`` artifact. The census ``parameters`` object stamps
     the filtering mode and OceanBench version so artifacts stay distinguishable.
     ``variable`` selects the spectral/activity field (eddy detection is always on SSH).
+
+    The challenger and the references are renamed to their CF standard names once here, the
+    same normalisation every other metric path applies, so a store carrying CMEMS short names
+    (``zos``, ``thetao``, ...) is read by the same variable keys as an already-renamed store.
     """
+    challenger_dataset = rename_dataset_with_standard_names(challenger_dataset)
+    reference_datasets = {
+        name: rename_dataset_with_standard_names(dataset) for name, dataset in reference_datasets.items()
+    }
     resolved_start_indices = _resolved_start_indices(challenger_dataset, start_indices)
     resolved_eddy_start_indices = _resolved_start_indices(
         challenger_dataset, eddy_start_indices if eddy_start_indices is not None else [0]

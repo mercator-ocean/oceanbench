@@ -758,6 +758,43 @@ def _add_reconcile_viewer_artifacts_parser(subparsers: "argparse._SubParsersActi
     parser.add_argument("--cells-per-variable", type=int, default=20, help="Sampled geography cells per variable")
 
 
+def _run_merge_realism(args: argparse.Namespace) -> int:
+    from oceanbench.publish.merge_realism import merge_realism_scores
+
+    try:
+        result = merge_realism_scores(
+            args.unit_directory,
+            args.realism_directory,
+            skill_baseline=args.skill_baseline,
+        )
+    except Exception as error:  # noqa: BLE001 - surface a clean message to the CLI user
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    print(f"{result.scores_path}: {result.realism_row_count} realism rows, {result.total_row_count} rows total")
+    return 0
+
+
+def _add_merge_realism_parser(subparsers: "argparse._SubParsersAction") -> None:
+    parser = subparsers.add_parser(
+        "merge-realism",
+        help="Merge a realism-only evaluation output into an already-scored unit output",
+        description=(
+            "Append the realism rows of a realism-only rerun (evaluate --metrics realism) to the "
+            "scores.parquet of an already-scored unit, dropping any realism row already there so the "
+            "merge is idempotent, and regenerate scores-summary.json and scores-<slug>.json through the "
+            "same code path evaluate uses."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("unit_directory", help="Evaluation output directory to merge into")
+    parser.add_argument("realism_directory", help="Output directory of the realism-only rerun")
+    parser.add_argument(
+        "--skill-baseline",
+        default=None,
+        help="Baseline slug skill is quoted against (default: read back from the unit's summary)",
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="oceanbench",
@@ -772,6 +809,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_view_parser(subparsers)
     _add_publish_s3_parser(subparsers)
     _add_reconcile_viewer_artifacts_parser(subparsers)
+    _add_merge_realism_parser(subparsers)
     return parser
 
 
@@ -802,6 +840,9 @@ def main():
 
     if args.command == "reconcile-viewer-artifacts":
         sys.exit(_run_reconcile_viewer_artifacts(args))
+
+    if args.command == "merge-realism":
+        sys.exit(_run_merge_realism(args))
 
 
 if __name__ == "__main__":

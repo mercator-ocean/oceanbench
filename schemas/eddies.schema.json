@@ -53,6 +53,10 @@
           "description": "Optional human-readable reference label.",
           "type": "string"
         },
+        "parameters": {
+          "description": "Optional detection/matching parameters the census was produced with (km-based thresholds, contour filtering mode, emitting OceanBench version).",
+          "type": "object"
+        },
         "frames": {
           "description": "One frame per lead day.",
           "type": "array",

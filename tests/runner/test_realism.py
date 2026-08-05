@@ -225,3 +225,34 @@ def test_contour_filtering_yields_a_consistent_and_no_larger_census() -> None:
     for match in census_frame["matches"]:
         assert match["challenger"]["contour_latitude"]
         assert match["reference"]["contour_latitude"]
+
+
+def _cmems_short_name_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
+    """The same field under its CMEMS short name, standard name kept in the attributes."""
+    return dataset.rename({SEA_SURFACE_HEIGHT_KEY: "zos"})
+
+
+def test_cmems_short_names_give_the_same_battery_as_standard_names() -> None:
+    latitudes = numpy.linspace(-5.0, 5.0, 11)
+    longitudes = numpy.arange(0.0, 360.0, 1.0)
+    start_dates = numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]")
+    lead_days = numpy.arange(1)
+    generator = numpy.random.default_rng(3)
+    reference_values = generator.standard_normal((2, 1, len(latitudes), len(longitudes)))
+    challenger_values = gaussian_filter1d(reference_values, sigma=4.0, axis=-1, mode="wrap")
+
+    reference = _sea_surface_height_dataset(reference_values, latitudes, longitudes, start_dates, lead_days)
+    challenger = _sea_surface_height_dataset(challenger_values, latitudes, longitudes, start_dates, lead_days)
+    common_arguments = dict(region="global", context=_context(), lead_days=(1,))
+
+    standard_result = realism.compute_realism_battery(challenger, {"glorys": reference}, **common_arguments)
+    short_name_result = realism.compute_realism_battery(
+        _cmems_short_name_dataset(challenger),
+        {"glorys": _cmems_short_name_dataset(reference)},
+        **common_arguments,
+    )
+
+    assert short_name_result.records
+    assert not short_name_result.flags
+    assert _metric_frame(short_name_result).equals(_metric_frame(standard_result))
+    assert short_name_result.spectra_entries == standard_result.spectra_entries

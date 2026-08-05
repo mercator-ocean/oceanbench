@@ -52,6 +52,7 @@ from oceanbench.packs.fetch import read_json_url
 from oceanbench.packs.manifest import PACK_MANIFEST_FILENAME
 from oceanbench.packs.scorecard import write_overlay_scorecard
 from oceanbench.publish.aggregate import aggregate_scores, summary_to_json_records
+from oceanbench.publish.insights import write_realism_insights
 from oceanbench.runner import records
 from oceanbench.runner.run import (
     LIVE_REFERENCE_OPENERS,
@@ -463,13 +464,13 @@ def _open_evaluation_target(target: str) -> tuple[xarray.Dataset, str, str]:
     return open_forecast_dataset(target), YOUR_MODEL_SLUG, "local"
 
 
-def _realism_records(
+def _realism_result(
     regional_challenger: xarray.Dataset,
     reference_openers: dict,
     region: str,
     context: records.RunContext,
     start_limit: int | None,
-) -> tuple[list[dict], list[str]]:
+):
     from oceanbench.runner.realism import compute_realism_battery
 
     reference_datasets = {
@@ -487,7 +488,7 @@ def _realism_records(
         start_indices=start_indices,
         eddy_start_indices=[start_indices[0]] if start_indices else [0],
     )
-    return result.records, result.flags
+    return result
 
 
 def per_start_agreement(local_scores: pandas.DataFrame, published_scores: pandas.DataFrame) -> pandas.DataFrame:
@@ -629,13 +630,27 @@ def evaluate(
                 oceanbench_version=OCEANBENCH_VERSION,
             )
             try:
-                realism_records, realism_flags = _realism_records(
-                    regional_challenger, reference_openers, region, context, None
+                realism_result = _realism_result(regional_challenger, reference_openers, region, context, None)
+                scores = pandas.concat(
+                    [scores, records.records_to_dataframe(realism_result.records)], ignore_index=True
                 )
-                scores = pandas.concat([scores, records.records_to_dataframe(realism_records)], ignore_index=True)
-                flags.extend(realism_flags)
+                flags.extend(realism_result.flags)
             except Exception as error:  # noqa: BLE001 - realism must not abort the local run
                 flags.append(f"realism battery skipped: {error}")
+                realism_result = None
+
+            # The spectra and eddies payloads live next to the other per-(challenger, region)
+            # insights the viewer reads (viewer README: insights/<slug>/<region>/spectra.json).
+            if realism_result is not None:
+                try:
+                    write_realism_insights(
+                        realism_result.spectra_entries,
+                        realism_result.eddy_census,
+                        str(output_path / "insights" / challenger_slug / region),
+                        variable=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+                    )
+                except Exception as error:  # noqa: BLE001 - one artifact must not abort the others
+                    flags.append(f"realism insights skipped: {error}")
 
     scores_path = output_path / SCORES_FILENAME
     summary_path = output_path / SCORES_SUMMARY_FILENAME
