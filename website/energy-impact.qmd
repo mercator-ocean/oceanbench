@@ -138,6 +138,12 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   gap: 12px;
   margin-bottom: 1rem;
 }
+.ei-ref-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 1rem;
+}
 .ei-ref-card {
   background: #f9fafb;
   border-radius: 12px;
@@ -753,24 +759,47 @@ HTML("""
   <h2 class="ei-title">
     Infrastructure impact
   </h2>
-    Even without cross-infrastructure comparisons, some lessons still hold within each one. A more economical GPU, like the one used on Datalab EDITO, tends to consume less energy overall than a stronger GPU such as those on Lir or Eumetsat. For most of a run, GPU usage sits near 0%, but the card stays on and keeps drawing power regardless, so a less powerful GPU can end up being the more energy-efficient choice precisely because it isn't idling at as high a baseline draw.
+    <p>Even without cross-infrastructure comparisons, some lessons still hold within each one. A more economical GPU, like the one used on Datalab EDITO, tends to consume less energy overall than a stronger GPU such as those on Lir or Eumetsat. For most of a run, GPU usage sits near 0%, but the card stays on and keeps drawing power regardless, so a less powerful GPU can end up being the more energy-efficient choice precisely because it isn't idling at as high a baseline draw.
+    
+    <p class="ei-sublabel">GPU idle</p>
+    <div class="ei-ref-grid2">
+      <div class="ei-ref-card">
+        <div class="ei-ref-card-label">Eumetsat</div>
+        <div class="ei-ref-card-item">NVIDIA H100 (80 GB HBM2e)</div>
+        <div class="ei-ref-card-value">50 W</div>
+      </div>
+      <div class="ei-ref-card">
+        <div class="ei-ref-card-label">Lir</div>
+        <div class="ei-ref-card-item">NVIDIA H100 (80 GB HBM3)</div>
+        <div class="ei-ref-card-value">68 W</div>
+      </div>
+      <div class="ei-ref-card2">
+        <div class="ei-ref-card-label">Datalab EDITO</div>
+        <div class="ei-ref-card-item">NVIDIA RTX A6000 (48 GB)</div>
+        <div class="ei-ref-card-value">35 W</div>
+      </div>
+    </div>
+
     The same logic applies to CPUs: Eumetsat uses more CPU than Lir for the same GPU, and consumes more energy per inference as a result, since the extra CPU capacity sits mostly idle during inference without saving any time. That said, more CPU isn't always wasted, GLONET and GLONET2 both have a pre-inference phase that runs faster with more CPU available, so the right amount of CPU depends on which phase of the pipeline is being optimized, not on a blanket rule.
   </p> 
+
 
   <h2 class="ei-title">
     Number of operations and energy consumption
   </h2>
   <p class="ei-report">
     There is a clear linear correlation between the number of operations and energy consumption, with a Pearson coefficient of 0.95 on Lir, 0.95 on Datalab EDITO, and 0.87 on Eumetsat. These operations are computed by the GPU during inference, so the relationship is naturally bounded by GPU efficiency.
-    Some models still deviate from this trend, GLONET2 in particular consumes more than its operation count alone would predict. This is likely explained by a higher average GPU usage during inference with no low peaks, which can make the run take longer overall despite the workload itself being similar, since the relationship between GPU energy draw and % usage is not linear. Measurement uncertainty can also play a role: two models with a similar operation count may show slightly different consumption even across repeated runs, and these small gaps shouldn't be over-interpreted as meaningful differences unless they clearly exceed run-to-run variability.
-  </p>
-  
-  <div style="padding:1rem 0; margin-top:1.5rem;">
+    <div style="padding:1rem 0; margin-top:1.5rem;">
     <p style="font-size:13px; color:#888; margin:0 0 1rem;">Correlation — inference energy vs. number of operations during inference</p>
     <div style="position:relative; width:100%; height:320px;">
       <canvas id="correlationChart2"></canvas>
     </div>
   </div>
+
+    Some models still deviate from this trend, GLONET2 in particular consumes more than its operation count alone would predict. This is likely explained by a higher average GPU usage during inference with no low peaks, which can make the run take longer overall despite the workload itself being similar, since the relationship between GPU energy draw and % usage is not linear. Measurement uncertainty can also play a role: two models with a similar operation count may show slightly different consumption even across repeated runs, and these small gaps shouldn't be over-interpreted as meaningful differences unless they clearly exceed run-to-run variability.
+  </p>
+  
+
 
   <h2 class="ei-title">
     Duration and consumption
@@ -791,7 +820,6 @@ HTML("""
     <div style="position:relative; width:100%; height:320px;">
       <canvas id="correlationDurationEnergyChart2"></canvas>
     </div>
-    <div class="ei-chart-explain">This scatter plot positions each model according to its inference duration and its energy consumption, with a fitted trend line showing the general relationship between the two quantities across models.</div>
   </div>
 
 
@@ -820,7 +848,7 @@ HTML("""
   <h2 class="ei-title">
     GLONET vs. GLONET2
   </h2>
-    Coming
+    Although their names are similar, GLONET and GLONET2 differ in several key aspects. First, GLONET is based on three models that make predictions at different levels. Therefore, generating a single prediction requires running all three models and merging their outputs into the final prediction, whereas GLONET2 relies on a single model. Second, GLONET2 uses significantly fewer parameters than GLONET (80M vs. 417M). Third, although GLONET2 performs slightly more operations during inference than GLONET, but all these operations are executed within a single model rather than across three separate models. As result, GLONET2 is faster and consumes less energy than GLONET, which is consistent with the observed correlation between inference time and energy consumption.
   </p>  
 
   <h2 class="ei-title">
@@ -1032,7 +1060,7 @@ HTML("""
         <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
         <tr><td>Number of processes per node</td><td><span class="ei-param_infos"">16</span></td></tr>
         <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9454</span></td></tr>
-        <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA H100 80GB (x4)</span></td></tr>
+        <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA H100 80GB HBM2e (x4)</span></td></tr>
         <tr><td>RAM (GB)</td><td><span class="ei-param_infos">866</span></td></tr>
         <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
         <tr><td>PUE</td><td><span class="ei-param_infos">1.45</span></td></tr>
@@ -1052,7 +1080,7 @@ HTML("""
         <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
         <tr><td>Number of processes per node</td><td><span class="ei-param_infos">8</span></td></tr>
         <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9534</span></td></tr>
-        <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA H100 80GB</span></td></tr>
+        <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA H100 80GB HBM3</span></td></tr>
         <tr><td>RAM (GB)</td><td><span class="ei-param_infos">755</span></td></tr>
         <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
         <tr><td>PUE</td><td><span class="ei-param_infos">1.45</span></td></tr>
@@ -1093,7 +1121,7 @@ HTML("""
         <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
         <tr><td>Number of processes per node</td><td><span class="ei-param_infos"">128</span></td></tr>
         <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9454</span></td></tr>
-        <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA H100 80GB</span></td></tr>
+        <tr><td>GPU</td><td><span class="ei-param_infos">NVIDIA H100 80GB HBM2e</span></td></tr>
         <tr><td>RAM (GB)</td><td><span class="ei-param_infos">866</span></td></tr>
         <tr><td>Python version</td><td><span class="ei-param_infos">3.10.20</span></td></tr>
         <tr><td>PUE</td><td><span class="ei-param_infos">1.45</span></td></tr>
@@ -1823,6 +1851,7 @@ require(['chartjs'], function(ChartModule) {
     }]
   });
 
+
   function buildInfraCompLegend() {
     var legend = document.getElementById('infraCompLegend');
     if (!legend) return;
@@ -1867,6 +1896,10 @@ require(['chartjs'], function(ChartModule) {
   populateInfraCompModelSelect();
   buildInfraCompLegend();
   refreshInfraComparisonChart();
+
+  
+
+
 
   // ── Refresh all charts ───────────────────────────────────────────────────
   function refreshCharts() {
