@@ -44,19 +44,11 @@ def _nearest_reference_coordinate_indexes(
     reference_dataset: xarray.Dataset,
     coordinate_name: str,
 ) -> tuple[numpy.ndarray, numpy.ndarray] | None:
-    if coordinate_name not in challenger_dataset.sizes or coordinate_name not in reference_dataset.sizes:
-        return None
-
     challenger_coordinate = challenger_dataset[coordinate_name]
     reference_coordinate = reference_dataset[coordinate_name]
 
-    if challenger_coordinate.ndim != 1 or reference_coordinate.ndim != 1:
-        return None
-
     challenger_coordinate_values = challenger_coordinate.values
     reference_coordinate_values = reference_coordinate.values
-    if challenger_coordinate_values.size == 0:
-        return None
 
     reference_index = pandas.Index(reference_coordinate_values)
     try:
