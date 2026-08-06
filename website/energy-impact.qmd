@@ -849,10 +849,38 @@ HTML("""
     GLONET vs. GLONET2
   </h2>
     Although their names are similar, GLONET and GLONET2 differ in several key aspects. First, GLONET is based on three models that make predictions at different levels. Therefore, generating a single prediction requires running all three models and merging their outputs into the final prediction, whereas GLONET2 relies on a single model. Second, GLONET2 uses significantly fewer parameters than GLONET (80M vs. 417M). Third, although GLONET2 performs slightly more operations during inference than GLONET, but all these operations are executed within a single model rather than across three separate models. As result, GLONET2 is faster and consumes less energy than GLONET, which is consistent with the observed correlation between inference time and energy consumption.
-  </p>  
+  </p>
 
   <h2 class="ei-title">
-    Conclusion
+    Inference vs. Inference process
+  </h2>
+
+  <p class="ei-report">
+    On this Energy Impact page, we discuss two different things: first, the Inference, which refers to the prediction/forecast of our model over 10 or 7 days. Second, there is the Inference process, which refers to three phases: the first is the pre-inference phase, where we download the model we are going to use and fetch the data needed to run the inference. The second is the inference phase presented above. The third phase is the post-inference phase, which relates to saving and uploading the inference results. Each phase consumes a different amount of energy.
+  </p>
+    <div style="padding: 1rem 0;">
+      <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Energy consumed part — GLONET2 Inference Process</div>
+      <div id="stacked-bar-glonet22" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
+      <div id="bar-legend-glonet22" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+    </div>
+
+  <p class="ei-report">
+    The energy consumed during each phase is highly correlated with the duration of the phase, but not only that, in fact the inference phase represents a higher percentage of energy consumption than of time, which is explained by the fact that it is the phase that uses the GPU intensively, whereas the GPU is idle during the other two phases.
+  </p>
+
+    <div style="padding: 1rem 0;">
+      <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Duration part — GLONET2 Inference Process</div>
+      <div id="stacked-bar-glonet2_part22" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
+      <div id="bar-legend-glonet2_part22" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+    </div>
+
+  <p class="ei-report">
+    Finally, both approaches (Inference and Inference Process) to evaluating our model's consumption are relevant, since they represent two different things: one focuses on the model itself, the other on the entire workflow required to obtain our prediction using the model.
+  </p>
+
+
+  <h2 class="ei-title">
+    Conclusions
   </h2>
 
 
@@ -1994,6 +2022,8 @@ require(['chartjs'], function(ChartModule) {
     makeStackedBar('stacked-bar-langya_part2', 'bar-legend-langya_part2', { labels:STAGE_LABELS, values:[24.2,3.0,72.8],          colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-glonet2',       'bar-legend-glonet2',       { labels:STAGE_LABELS, values:[72.0,6.0,22.0],          colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-glonet2_part2', 'bar-legend-glonet2_part2', { labels:STAGE_LABELS, values:[76.8,4.0,19.2],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet22',       'bar-legend-glonet22',       { labels:STAGE_LABELS, values:[72.0,6.0,22.0],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet2_part22', 'bar-legend-glonet2_part22', { labels:STAGE_LABELS, values:[76.8,4.0,19.2],          colors:STAGE_COLORS });
   }
 
   window._stackedBarsReady = initStackedBars;
