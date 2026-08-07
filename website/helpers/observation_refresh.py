@@ -202,6 +202,18 @@ def _launch_payload(context: ProcessLaunchContext) -> dict[str, object]:
                 "secret": "",
             },
             "copernicusMarine": _enabled_copernicus_marine_config(),
+            # The chart runs an aws-cli copy-output sidecar that reads its
+            # endpoint from this block. Without it the endpoint renders empty
+            # and the sidecar fails the pod. CloudFerro keys only: the session
+            # token of this block is also mounted into the producer container.
+            "s3": {
+                "enabled": True,
+                "endpoint": context.obs_s3_endpoint.split("://", 1)[-1].rstrip("/"),
+                "defaultRegion": context.obs_default_region,
+                "accessKeyId": context.obs_access_key_id,
+                "secretAccessKey": context.obs_secret_access_key,
+                "sessionToken": "",
+            },
             "inputs": {
                 "S3_OUTPUT_FOLDER": DAILY_OBSERVATION_OUTPUT_FOLDER,
                 "OBS_AVAILABILITY_MANIFEST_URL": DAILY_OBSERVATION_AVAILABILITY_MANIFEST,
