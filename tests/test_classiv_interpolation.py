@@ -7,7 +7,10 @@ import numpy
 import pandas
 import xarray
 
-from oceanbench.core.classIV_support import interpolate_class4_model_to_observations
+from oceanbench.core.classIV_support import (
+    _interpolate_vertically,
+    interpolate_class4_model_to_observations,
+)
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.runtime_configuration import RuntimeConfiguration
 import oceanbench.core.runtime_configuration as runtime_configuration
@@ -103,3 +106,16 @@ def test_class4_fast_interpolation_materializes_each_first_day_block_once(monkey
 
     numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0, 100.75, 122.25])
     assert first_day_block_compute_calls == [(0, 1, 2), (0, 1, 2)]
+
+
+def test_class4_vertical_interpolation_supports_128_depth_levels() -> None:
+    model_depths = numpy.arange(128, dtype=float)
+    target_depths = numpy.array([10.5, 70.25, 64.5])
+    offsets = numpy.array([0.0, 100.0, -20.0])
+    profiles = model_depths[:, numpy.newaxis] + offsets[numpy.newaxis, :]
+    profiles[0, 1] = numpy.nan
+    profiles[-1, 2] = numpy.nan
+
+    model_values = _interpolate_vertically(profiles, model_depths, target_depths)
+
+    numpy.testing.assert_allclose(model_values, target_depths + offsets)
