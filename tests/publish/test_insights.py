@@ -101,6 +101,34 @@ def test_write_realism_insights_round_trips_and_registers_in_manifest(tmp_path: 
     assert insights.read_insight_payload(str(output_directory / manifest["spectra"]["url"])) == result.spectra_payload
 
 
+def test_dateline_contour_longitudes_are_written(tmp_path: Path) -> None:
+    # Contours straddling the grid edge are traced in an unwrapped frame anchored on the
+    # eddy centre, so they overhang the native window on either side. A schema bound of
+    # -180/360 rejected the whole payload and skipped the insight write for every unit.
+    census = _eddy_census("glorys")
+    frame = census["frames"][0]
+    frame["spurious"][0]["longitude"] = -179.9583
+    frame["spurious"][0]["contour_longitude"] = [-180.0833, -179.9583, -179.875]
+    frame["missed"][0]["longitude"] = 359.9583
+    frame["missed"][0]["contour_longitude"] = [359.875, 359.9583, 360.0833]
+
+    output_directory = tmp_path / "insights"
+    result = insights.write_realism_insights(
+        [_spectrum_entry("glorys")],
+        [census],
+        str(output_directory),
+        variable="sea_surface_height_above_geoid",
+    )
+
+    manifest = result.manifest_result.manifest
+    assert set(manifest) == {"spectra", "eddies"}
+    written_payload = insights.read_insight_payload(str(output_directory / manifest["eddies"]["url"]))
+    validate_against_schema(written_payload, "eddies")
+    written_frame = written_payload["references"][0]["frames"][0]
+    assert written_frame["spurious"][0]["contour_longitude"][0] == -180.0833
+    assert written_frame["missed"][0]["contour_longitude"][-1] == 360.0833
+
+
 def test_invalid_spectrum_entry_is_rejected() -> None:
     broken_entry = _spectrum_entry("glorys")
     broken_entry["lead_day"] = 0  # violates minimum 1 in the schema

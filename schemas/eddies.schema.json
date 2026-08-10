@@ -175,12 +175,12 @@
           }
         },
         "contour_longitude": {
-          "description": "Longitudes of the point-limited closed contour polygon (4 decimals), same length as contour_latitude.",
+          "description": "Longitudes of the point-limited closed contour polygon (4 decimals), same length as contour_latitude. Not wrapped into the native grid window: on a periodic domain the polygon is traced in an unwrapped frame anchored on the eddy centre, so a contour straddling the grid edge legitimately overhangs it (e.g. 360.5 on a 0..360 grid, -180.0833 on a -180..180 grid). The anchoring keeps every point within one full period of the centre longitude, which bounds the values to the native window widened by 360 on each side.",
           "type": "array",
           "items": {
             "type": "number",
-            "minimum": -180,
-            "maximum": 360
+            "minimum": -540,
+            "maximum": 720
           }
         }
       }
