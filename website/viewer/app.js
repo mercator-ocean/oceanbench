@@ -1186,7 +1186,7 @@ async function loadOverlayData() {
     // wave challenger with a different lead set can never silently match different leads.
     // No shared lead → suppress the match and report both leads (see renderEddyLegend).
     if (shared.layout === 2 && eddiesByPanel[0] && eddiesByPanel[1]) {
-      const aligned = alignedEddyCensuses(eddiesByPanel[0], eddiesByPanel[1], shared.leadDay);
+      const aligned = await alignedEddyCensuses(eddiesByPanel[0], eddiesByPanel[1], shared.leadDay);
       overlayData.eddiesCensuses = aligned.censuses;
       overlayData.eddiesLeadMismatch = aligned.mismatch;
       overlayData.eddiesMatch =
@@ -1194,7 +1194,7 @@ async function loadOverlayData() {
           ? matchCensuses(aligned.censuses[0].detections, aligned.censuses[1].detections)
           : null;
     } else {
-      overlayData.eddiesCensuses = eddiesByPanel.map((eddies) => eddyCensus(eddies, shared.leadDay));
+      overlayData.eddiesCensuses = await Promise.all(eddiesByPanel.map((eddies) => eddyCensus(eddies, shared.leadDay)));
       overlayData.eddiesMatch = null;
     }
   } else if (shared.overlayMode === "class4") {
@@ -1586,6 +1586,23 @@ function renderTrajectoryRail() {
 
 const COLUMN_STORE_VARIABLES = ["sea_water_potential_temperature", "sea_water_salinity"];
 
+// The one sentence for "this dataset has no column store", mirroring class4EmptyMessage:
+// the carried datasets publish no <slug>.columns.zarr, and a click that reads nothing must
+// say so rather than look like a dead map.
+const COLUMN_UNPUBLISHED_MESSAGE = "No water-column data is published for this dataset.";
+// True while column mode is on and no visible forecast has a store to read.
+let columnUnpublished = false;
+
+// Whether any visible forecast publishes a column store; also refreshes `columnUnpublished`
+// so the rail and the overlay note state the same thing.
+async function anyVisibleColumnStore() {
+  const visible = panels.slice(0, shared.layout).filter(Boolean);
+  const stores = await Promise.all(visible.map((panel) => ensureColumnStore(panel.state.dataset)));
+  const available = stores.some(Boolean);
+  columnUnpublished = !available;
+  return available;
+}
+
 function columnModeActive() {
   return shared.overlayMode === "column" && !isDiffView();
 }
@@ -1612,20 +1629,21 @@ async function ensureColumnStore(slug) {
 }
 
 // Show/enable the "Water column (click)" overlay option only when at least one visible
-// challenger has a column store. When none do (e.g. nothing published yet), the option
-// stays hidden and, if it was somehow active, the mode reverts to none.
+// challenger has a column store, so a mode with nothing behind it is not offered. The one
+// exception is a mode already active: switching to a challenger without a store must not
+// silently drop the user out of the mode, it must keep the option and say why the map
+// reads nothing (COLUMN_UNPUBLISHED_MESSAGE, rendered by applyOverlayMode and the rail).
 async function updateColumnModeAvailability() {
   const option = elements["overlay-mode"] && elements["overlay-mode"].querySelector('option[value="column"]');
   if (!option) return;
-  const visible = panels.slice(0, shared.layout).filter(Boolean);
-  const stores = await Promise.all(visible.map((panel) => ensureColumnStore(panel.state.dataset)));
-  const available = stores.some(Boolean);
-  option.hidden = !available;
-  option.disabled = !available;
-  if (!available && shared.overlayMode === "column") {
-    shared.overlayMode = "none";
-    elements["overlay-mode"].value = "none";
+  const available = await anyVisibleColumnStore();
+  const active = shared.overlayMode === "column";
+  option.hidden = !available && !active;
+  option.disabled = option.hidden;
+  if (!available && active) {
     clearColumnProfile();
+    const note = elements["overlay-note"];
+    if (note) note.textContent = COLUMN_UNPUBLISHED_MESSAGE;
   }
 }
 
@@ -1670,7 +1688,15 @@ async function readColumnProfileAt(longitude, latitude) {
     const store = await ensureColumnStore(panel.state.dataset);
     if (store) eligiblePanels.push({ panel, store });
   }
-  if (!eligiblePanels.length) return;
+  // No store to read: say so once, in the note and the rail, instead of swallowing the click.
+  if (!eligiblePanels.length) {
+    columnUnpublished = true;
+    const emptyNote = elements["overlay-note"];
+    if (emptyNote) emptyNote.textContent = COLUMN_UNPUBLISHED_MESSAGE;
+    renderColumnProfileRail();
+    return;
+  }
+  columnUnpublished = false;
   shared.columnPoint = { lon: longitude, lat: latitude };
   const requestId = ++columnRequestId;
   const forecasts = [];
@@ -1732,10 +1758,13 @@ function renderColumnProfileRail() {
   const section = elements["rail-column-section"];
   if (!section) return;
   if (!columnProfile || !columnModeActive()) {
-    section.hidden = true;
+    // Nothing published for the visible forecasts is a fact worth showing: keep the section
+    // up with the empty-state sentence instead of hiding the feature and looking broken.
+    const unpublished = columnModeActive() && columnUnpublished;
+    section.hidden = !unpublished;
     elements["rail-column-chart"].innerHTML = "";
     elements["rail-column-point"].textContent = "";
-    elements["rail-column-note"].textContent = "";
+    elements["rail-column-note"].textContent = unpublished ? COLUMN_UNPUBLISHED_MESSAGE : "";
     return;
   }
   section.hidden = false;
@@ -3870,9 +3899,13 @@ async function applyOverlayMode() {
   if (shared.overlayMode !== "trajectories") clearTrajectories();
   if (shared.overlayMode !== "column") clearColumnProfile();
   if (shared.overlayMode === "column") {
-    note.textContent = columnProfile
-      ? "Click the map to read the model water column at another point."
-      : "Click the map to read the model temperature/salinity water column at that point.";
+    // Probe up front so the note promises a click only when there is a store behind it.
+    const columnAvailable = await anyVisibleColumnStore();
+    if (!columnAvailable) note.textContent = COLUMN_UNPUBLISHED_MESSAGE;
+    else
+      note.textContent = columnProfile
+        ? "Click the map to read the model water column at another point."
+        : "Click the map to read the model temperature/salinity water column at that point.";
     for (let i = 0; i < shared.layout; i += 1) {
       drawPanel(panels[i]);
       drawOverlays(panels[i]);

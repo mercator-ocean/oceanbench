@@ -11,7 +11,7 @@
 // rows, no cap.
 
 import { parquetReadObjects, parquetMetadataAsync } from "../vendor/hyparquet/hyparquet.min.js";
-import { decompress as zstdDecompress } from "../vendor/fzstd/fzstd.mjs";
+import { decompress as zstdDecompress } from "../vendor/fzstd/fzstd.js";
 
 const RANGE_BYTE_BUDGET = 48 * 1024 * 1024;
 

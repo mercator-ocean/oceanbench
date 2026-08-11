@@ -19,6 +19,9 @@ let indexPromise = null;
 
 const CLASS4_WORKER_URL = new URL("./class4-worker.js", import.meta.url);
 let class4Worker = null;
+// Set once the worker has died; every later request rejects with it rather than posting
+// into the void (see the error listener in ensureClass4Worker).
+let class4WorkerFailure = null;
 let class4RequestId = 0;
 const class4Pending = new Map();
 const class4TargetedCache = new Map(); // `${resolvedUrl}|${start}|${lead}` -> Promise<result>
@@ -40,9 +43,53 @@ async function fetchJSON(url) {
   return promise;
 }
 
+// Where an eddy artifact was fetched from, so the per-lead sidecars of the index format can
+// be resolved against the same directory. Symbol-keyed so it never lands in JSON consumers.
+const EDDY_SOURCE_URL = Symbol("eddySourceUrl");
+// `${indexUrl}|${lead}` -> Promise<frame|null>, so scrubbing back to an already-read lead
+// (or the second panel showing the same dataset) never refetches a sidecar.
+const eddyLeadFrameCache = new Map();
+
+/**
+ * Load a dataset's eddy-census artifact. Two published shapes are supported and the
+ * difference is invisible to callers:
+ *   - index (current): `{ ...metadata, leads: [{ lead_day, file }] }`, each `file` a sidecar
+ *     next to the index holding that one lead's `frame`.
+ *   - inline (legacy, still served by the carried datasets): `{ ...metadata, frames: [...] }`.
+ */
 export async function loadEddies(url) {
   if (!url) return null;
-  return fetchJSON(url).catch(() => null);
+  const resolvedUrl = resolveViewerDataUrl(url);
+  const data = await fetchJSON(resolvedUrl).catch(() => null);
+  if (data && typeof data === "object" && !data[EDDY_SOURCE_URL]) data[EDDY_SOURCE_URL] = resolvedUrl;
+  return data;
+}
+
+/** The index format's lead entries, or null when the artifact carries inline frames. */
+function eddyLeadEntries(eddies) {
+  if (!eddies || !Array.isArray(eddies.leads)) return null;
+  return eddies.leads.filter((entry) => entry && entry.file && Number.isFinite(Number(entry.lead_day)));
+}
+
+/** Fetch (once per index + lead) the sidecar frame for the available lead nearest `leadDay`. */
+function eddyLeadFrame(eddies, entries, leadDay) {
+  let best = null;
+  for (const entry of entries) {
+    if (!best || Math.abs(Number(entry.lead_day) - leadDay) < Math.abs(Number(best.lead_day) - leadDay)) best = entry;
+  }
+  if (!best) return Promise.resolve(null);
+  const indexUrl = eddies[EDDY_SOURCE_URL] || "";
+  const key = `${indexUrl}|${best.lead_day}`;
+  if (!eddyLeadFrameCache.has(key)) {
+    const sidecarUrl = `${indexUrl.slice(0, indexUrl.lastIndexOf("/") + 1)}${best.file}`;
+    eddyLeadFrameCache.set(
+      key,
+      fetchJSON(sidecarUrl)
+        .then((payload) => (payload && payload.frame ? payload.frame : null))
+        .catch(() => null),
+    );
+  }
+  return eddyLeadFrameCache.get(key);
 }
 
 export async function loadSpectra(url) {
@@ -143,13 +190,22 @@ function ensureClass4Worker() {
     else pending.resolve(event.data);
   });
   class4Worker.addEventListener("error", (event) => {
-    for (const pending of class4Pending.values()) pending.reject(new Error(event.message || "Class-4 worker failed"));
+    // A worker that fails to start (bad MIME on its module import, syntax error) never
+    // answers a postMessage, so every later request would hang on a promise that can
+    // never settle and the panel would spin forever. Reject what is pending, drop the
+    // dead worker and remember why, so subsequent requests fail fast with that reason
+    // and the caller can render an error state instead of a spinner.
+    const reason = event.message || "Class-4 worker failed to start";
+    class4WorkerFailure = reason;
+    class4Worker = null;
+    for (const pending of class4Pending.values()) pending.reject(new Error(reason));
     class4Pending.clear();
   });
   return class4Worker;
 }
 
 function requestClass4Worker(message) {
+  if (class4WorkerFailure) return Promise.reject(new Error(class4WorkerFailure));
   const worker = ensureClass4Worker();
   const id = ++class4RequestId;
   const promise = new Promise((resolve, reject) => class4Pending.set(id, { resolve, reject }));
@@ -176,10 +232,14 @@ function nearestLeadFrame(frames, leadDay) {
  * frame.detections directly), at the available lead nearest `leadDay`. Returns
  * { detections, leadDay, parameters } or null. Nothing here privileges any dataset
  * as ground truth — a census is symmetric across forecasts and references.
+ *
+ * Async because the index format holds each lead in its own sidecar file; the legacy
+ * inline-frames format resolves without a fetch.
  */
-export function eddyCensus(eddies, leadDay) {
-  if (!eddies || !Array.isArray(eddies.frames)) return null;
-  const frame = nearestLeadFrame(eddies.frames, leadDay);
+export async function eddyCensus(eddies, leadDay) {
+  if (!eddies) return null;
+  const entries = eddyLeadEntries(eddies);
+  const frame = entries ? await eddyLeadFrame(eddies, entries, leadDay) : nearestLeadFrame(eddies.frames, leadDay);
   if (!frame) return null;
   return {
     detections: Array.isArray(frame.detections) ? frame.detections : [],
@@ -188,12 +248,13 @@ export function eddyCensus(eddies, leadDay) {
   };
 }
 
-/** Sorted, de-duplicated lead days present in an eddy-census artifact. */
+/** Sorted, de-duplicated lead days present in an eddy-census artifact (either format). */
 export function eddyLeads(eddies) {
-  if (!eddies || !Array.isArray(eddies.frames)) return [];
-  const frames = eddies.frames;
+  const entries = eddyLeadEntries(eddies);
+  const source = entries || (eddies && Array.isArray(eddies.frames) ? eddies.frames : null);
+  if (!source) return [];
   const leads = new Set();
-  for (const frame of frames) if (Number.isFinite(frame.lead_day)) leads.add(frame.lead_day);
+  for (const item of source) if (Number.isFinite(Number(item.lead_day))) leads.add(Number(item.lead_day));
   return [...leads].sort((a, b) => a - b);
 }
 
@@ -213,13 +274,17 @@ function nearestLead(leads, leadDay) {
  * census is read at its own nearest lead and `mismatch` is set so the caller suppresses the
  * cross-match and reports both leads. Returns `{ censuses: [censusA, censusB], lead, mismatch }`.
  */
-export function alignedEddyCensuses(eddiesA, eddiesB, leadDay) {
+export async function alignedEddyCensuses(eddiesA, eddiesB, leadDay) {
   const common = eddyLeads(eddiesA).filter((lead) => eddyLeads(eddiesB).includes(lead));
   if (common.length) {
     const lead = nearestLead(common, leadDay);
-    return { censuses: [eddyCensus(eddiesA, lead), eddyCensus(eddiesB, lead)], lead, mismatch: false };
+    return { censuses: await Promise.all([eddyCensus(eddiesA, lead), eddyCensus(eddiesB, lead)]), lead, mismatch: false };
   }
-  return { censuses: [eddyCensus(eddiesA, leadDay), eddyCensus(eddiesB, leadDay)], lead: null, mismatch: true };
+  return {
+    censuses: await Promise.all([eddyCensus(eddiesA, leadDay), eddyCensus(eddiesB, leadDay)]),
+    lead: null,
+    mismatch: true,
+  };
 }
 
 /** Spectra entry for the requested variable/reference and available lead nearest leadDay. */
