@@ -43,7 +43,7 @@ def _nearest_reference_coordinate_indexes(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     coordinate_name: str,
-) -> tuple[numpy.ndarray, numpy.ndarray] | None:
+) -> tuple[numpy.ndarray, numpy.ndarray]:
     challenger_coordinate = challenger_dataset[coordinate_name]
     reference_coordinate = reference_dataset[coordinate_name]
 
@@ -57,14 +57,19 @@ def _nearest_reference_coordinate_indexes(
             method="nearest",
             tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL,
         )
-    except ValueError:
-        return None
+    except (ValueError, pandas.errors.InvalidIndexError) as error:
+        raise ValueError(
+            f"Could not align {coordinate_name} coordinates: nearest-neighbor lookup failed: {error}"
+        ) from error
 
     challenger_indexes = numpy.flatnonzero(reference_indexes >= 0)
     reference_indexes = reference_indexes[challenger_indexes]
 
     if numpy.unique(reference_indexes).size != reference_indexes.size:
-        return None
+        raise ValueError(
+            f"Could not align {coordinate_name} coordinates: multiple challenger coordinates match the same "
+            f"reference coordinate within tolerance {SPATIAL_COORDINATE_ALIGNMENT_ATOL}"
+        )
 
     return challenger_indexes, reference_indexes
 
@@ -75,6 +80,7 @@ def _snap_reference_spatial_coordinates_to_challenger(
 ) -> xarray.Dataset:
     reference_indexes_by_coordinate = {}
     challenger_coordinates = {}
+    coordinate_match_ratios_by_name = {}
     matched_grid_ratio = 1.0
 
     for coordinate_name in SPATIAL_COORDINATE_NAMES:
@@ -83,18 +89,28 @@ def _snap_reference_spatial_coordinates_to_challenger(
             reference_dataset,
             coordinate_name,
         )
-        if coordinate_indexes is None:
-            return reference_dataset
 
         challenger_indexes, reference_indexes = coordinate_indexes
         reference_indexes_by_coordinate[coordinate_name] = reference_indexes
-        matched_grid_ratio *= challenger_indexes.size / challenger_dataset.sizes[coordinate_name]
+        coordinate_match_ratio = challenger_indexes.size / challenger_dataset.sizes[coordinate_name]
+        coordinate_match_ratios_by_name[coordinate_name] = coordinate_match_ratio
+        matched_grid_ratio *= coordinate_match_ratio
         challenger_coordinates[coordinate_name] = challenger_dataset[coordinate_name].isel(
             {coordinate_name: challenger_indexes}
         )
 
     if matched_grid_ratio < SPATIAL_GRID_MINIMUM_MATCH_RATIO:
-        return reference_dataset
+        coordinate_match_ratios = ", ".join(
+            f"{coordinate_name}={coordinate_match_ratios_by_name[coordinate_name]:.4%}"
+            for coordinate_name in SPATIAL_COORDINATE_NAMES
+        )
+        raise ValueError(
+            "Could not align reference spatial grid to challenger spatial grid: "
+            f"matched {matched_grid_ratio:.4%} of challenger grid points, "
+            f"required at least {SPATIAL_GRID_MINIMUM_MATCH_RATIO:.4%}; "
+            f"coordinate match ratios: {coordinate_match_ratios}; "
+            f"tolerance={SPATIAL_COORDINATE_ALIGNMENT_ATOL}"
+        )
 
     return reference_dataset.isel(reference_indexes_by_coordinate).assign_coords(challenger_coordinates)
 

@@ -3,10 +3,38 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import numpy
+import pytest
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.rmsd import _rmsd
+
+
+def _dataset_with_spatial_coordinates(
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+    values: numpy.ndarray,
+) -> xarray.Dataset:
+    variable_key = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
+    return xarray.Dataset(
+        {
+            variable_key: (
+                [
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ],
+                values,
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
 
 
 def test_rmsd_uses_area_weights_without_land_in_denominator() -> None:
@@ -211,3 +239,41 @@ def test_rmsd_snaps_reference_to_challenger_when_challenger_has_one_extra_coordi
     assert legacy_inner_join_squared_error.sizes[Dimension.LATITUDE.key()] == 0
     assert legacy_inner_join_squared_error.sizes[Dimension.LONGITUDE.key()] == 0
     assert numpy.isclose(actual_rmsd, expected_rmsd)
+
+
+def test_rmsd_raises_when_spatial_coordinate_alignment_is_ambiguous() -> None:
+    challenger_dataset = _dataset_with_spatial_coordinates(
+        latitudes=numpy.array([0.0, 0.00001], dtype=numpy.float32),
+        longitudes=numpy.array([10.0], dtype=numpy.float32),
+        values=numpy.zeros((1, 1, 2, 1), dtype=float),
+    )
+    reference_dataset = _dataset_with_spatial_coordinates(
+        latitudes=numpy.array([0.0], dtype=numpy.float32),
+        longitudes=numpy.array([10.0], dtype=numpy.float32),
+        values=numpy.zeros((1, 1, 1, 1), dtype=float),
+    )
+
+    with pytest.raises(ValueError, match="latitude coordinates: multiple challenger coordinates match"):
+        _rmsd(challenger_dataset, reference_dataset)
+
+
+def test_rmsd_raises_when_too_much_spatial_grid_is_unmatched() -> None:
+    challenger_latitudes = numpy.linspace(-50.0, 50.0, 1000, dtype=numpy.float32)
+    challenger_longitudes = numpy.array([10.0, 20.0], dtype=numpy.float32)
+    reference_latitudes = challenger_latitudes[:998] + numpy.float32(1e-5)
+    challenger_dataset = _dataset_with_spatial_coordinates(
+        latitudes=challenger_latitudes,
+        longitudes=challenger_longitudes,
+        values=numpy.zeros((1, 1, challenger_latitudes.size, challenger_longitudes.size), dtype=float),
+    )
+    reference_dataset = _dataset_with_spatial_coordinates(
+        latitudes=reference_latitudes,
+        longitudes=challenger_longitudes,
+        values=numpy.zeros((1, 1, reference_latitudes.size, challenger_longitudes.size), dtype=float),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="matched 99.8000%.*required at least 99.9000%.*latitude=99.8000%.*longitude=100.0000%",
+    ):
+        _rmsd(challenger_dataset, reference_dataset)
