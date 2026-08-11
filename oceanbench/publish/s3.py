@@ -43,6 +43,7 @@ _CONTENT_TYPE_BY_SUFFIX = {
     ".js": "text/javascript",
     ".json": "application/json",
     ".md": "text/markdown",
+    ".mjs": "text/javascript",
     ".parquet": "application/vnd.apache.parquet",
     ".png": "image/png",
     ".svg": "image/svg+xml",

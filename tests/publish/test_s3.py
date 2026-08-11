@@ -22,6 +22,7 @@ from oceanbench.publish import s3
         ("viewer/preview.png", "image/png"),
         ("favicon.ico", "image/x-icon"),
         ("README.md", "text/markdown"),
+        ("viewer/verify_viewer.mjs", "text/javascript"),
         ("scores.parquet", "application/vnd.apache.parquet"),
     ],
 )
