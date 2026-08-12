@@ -1217,12 +1217,40 @@ async function loadOverlayData() {
         startDate: currentStartDate(slug),
         leadDay: shared.leadDay,
         variables: class4RequestVariables(),
+        onProgress: showClass4Progress,
       });
     } catch (error) {
       overlayData.class4 = null;
       overlayData.class4Error = error instanceof Error ? error.message : String(error);
     }
   }
+}
+
+// Bucket latency on the match-up parquet ranges from a second to well over a minute, so the
+// wait carries its own byte counter and bar. Both ride inside the note box the layout already
+// reserves (the bar is positioned out of flow), so a load moves nothing on screen. The label
+// is whatever the caller last announced, since a first load and a lead change say different
+// things. Any later `note.textContent =` clears the bar with the text it replaces.
+let class4ProgressLabel = "Loading Class-4 match-ups…";
+
+function showClass4Progress(progress) {
+  const note = elements["overlay-note"];
+  if (!note) return;
+  const done = megabytes(progress.bytesDone);
+  const total = progress.bytesTotal > 0 ? megabytes(progress.bytesTotal) : null;
+  note.textContent = total ? `${class4ProgressLabel} ${done} of ${total} MB` : `${class4ProgressLabel} ${done} MB`;
+  const bar = document.createElement("span");
+  bar.className = "note-progress";
+  const fill = document.createElement("span");
+  fill.className = "note-progress-fill";
+  if (total) fill.style.width = `${Math.min(100, (progress.bytesDone / progress.bytesTotal) * 100).toFixed(1)}%`;
+  else bar.classList.add("indeterminate");
+  bar.appendChild(fill);
+  note.appendChild(bar);
+}
+
+function megabytes(bytes) {
+  return (Number(bytes) / (1024 * 1024)).toFixed(1);
 }
 
 // The parquet variable name(s) needed to draw the class-4 overlay for every visible
@@ -3908,7 +3936,8 @@ async function applyOverlayMode() {
   if (shared.overlayMode === "trajectories") {
     note.textContent = "Click the map to seed trajectories advected through both forecasts' currents.";
   } else if (shared.overlayMode === "class4") {
-    note.textContent = "Loading Class-4 match-ups…";
+    class4ProgressLabel = "Loading Class-4 match-ups…";
+    note.textContent = class4ProgressLabel;
   } else if (shared.overlayMode === "eddies") {
     note.textContent = "Loading eddy census…";
   } else {
@@ -3947,7 +3976,8 @@ function scheduleClass4Reload() {
   if (shared.overlayMode !== "class4") return;
   if (!overlayData.class4 || !overlayData.class4.targeted) return;
   const note = elements["overlay-note"];
-  if (note) note.textContent = `Loading obs for lead ${shared.leadDay}…`;
+  class4ProgressLabel = `Loading obs for lead ${shared.leadDay}…`;
+  if (note) note.textContent = class4ProgressLabel;
   if (class4ReloadTimer) clearTimeout(class4ReloadTimer);
   class4ReloadTimer = setTimeout(async () => {
     class4ReloadTimer = null;

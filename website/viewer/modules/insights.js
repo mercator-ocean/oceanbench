@@ -151,7 +151,7 @@ export async function loadScoresSummary(index) {
  * pair. `byteLength` may come from the sibling manifest's `bytes` field to skip a
  * HEAD request, but callers should omit stale hints.
  */
-export async function loadClass4(url, { byteLength, startDate, leadDay, variables } = {}) {
+export async function loadClass4(url, { byteLength, startDate, leadDay, variables, onProgress } = {}) {
   if (!url) throw new Error("Class-4 URL is missing");
   const resolvedUrl = resolveViewerDataUrl(url);
   // Row groups are variable-partitioned within a (start, lead) block, so the requested
@@ -161,8 +161,8 @@ export async function loadClass4(url, { byteLength, startDate, leadDay, variable
   if (!class4TargetedCache.has(key)) {
     class4TargetedCache.set(
       key,
-      requestClass4Worker({ op: "targeted", url: resolvedUrl, byteLength, startDate, leadDay, variables }).then((payload) =>
-        normalizeClass4Payload(payload),
+      requestClass4Worker({ op: "targeted", url: resolvedUrl, byteLength, startDate, leadDay, variables }, onProgress).then(
+        (payload) => normalizeClass4Payload(payload),
       ),
     );
   }
@@ -182,9 +182,14 @@ function ensureClass4Worker() {
   if (class4Worker) return class4Worker;
   class4Worker = new Worker(CLASS4_WORKER_URL, { type: "module" });
   class4Worker.addEventListener("message", (event) => {
-    const { id, error } = event.data;
+    const { id, error, progress } = event.data;
     const pending = class4Pending.get(id);
     if (!pending) return;
+    // Byte counters for the loading bar: the request is still running, so keep it pending.
+    if (progress) {
+      if (pending.onProgress) pending.onProgress(progress);
+      return;
+    }
     class4Pending.delete(id);
     if (error) pending.reject(new Error(error));
     else pending.resolve(event.data);
@@ -204,11 +209,11 @@ function ensureClass4Worker() {
   return class4Worker;
 }
 
-function requestClass4Worker(message) {
+function requestClass4Worker(message, onProgress) {
   if (class4WorkerFailure) return Promise.reject(new Error(class4WorkerFailure));
   const worker = ensureClass4Worker();
   const id = ++class4RequestId;
-  const promise = new Promise((resolve, reject) => class4Pending.set(id, { resolve, reject }));
+  const promise = new Promise((resolve, reject) => class4Pending.set(id, { resolve, reject, onProgress }));
   worker.postMessage({ id, ...message });
   return promise;
 }

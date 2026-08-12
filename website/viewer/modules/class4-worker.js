@@ -40,12 +40,65 @@ const targetedCache = new Map();
 
 self.addEventListener("message", (event) => {
   const { id, op, url, byteLength, startDate, leadDay, variables } = event.data;
-  handle(op, url, { byteLength, startDate, leadDay, variables })
+  handle(op, url, { byteLength, startDate, leadDay, variables }, id)
     .then((payload) => self.postMessage({ id, ...payload }))
     .catch((error) => self.postMessage({ id, error: String(error.message || error) }));
 });
 
-async function handle(op, url, options) {
+// The range reader is built once per file and cached, so it cannot hold the reporter of
+// the request that created it: it reads whichever request is in flight instead.
+let activeProgress = null;
+
+// Byte counter behind the loading bar. `bytesTotal` is 0 while the size of the phase is
+// unknown (the caller shows an indeterminate bar); the footer phase learns it from the
+// content-length its requests announce, the row-group phase from its byte span.
+function progressReporter(id) {
+  let phase = "footer";
+  let bytesDone = 0;
+  let bytesTotal = 0;
+  let bytesAnnounced = 0;
+  let phaseDeclaredTotal = false;
+  let lastPostedAt = 0;
+  const post = () => {
+    lastPostedAt = Date.now();
+    self.postMessage({ id, progress: { phase, bytesDone, bytesTotal } });
+  };
+  return {
+    beginPhase(name, total) {
+      phase = name;
+      bytesDone = 0;
+      bytesAnnounced = 0;
+      bytesTotal = Number(total) > 0 ? Number(total) : 0;
+      phaseDeclaredTotal = bytesTotal > 0;
+      post();
+    },
+    // A phase with no declared size sizes itself from what its requests announce. Summing
+    // the content-lengths (rather than extending from the request in flight) keeps the
+    // total right when hyparquet has several range reads open at once.
+    expectRequest(bytes) {
+      if (phaseDeclaredTotal || !(Number(bytes) > 0)) return;
+      bytesAnnounced += Number(bytes);
+      bytesTotal = bytesAnnounced;
+      post();
+    },
+    addBytes(bytes) {
+      bytesDone += bytes;
+      if (Date.now() - lastPostedAt >= 250) post();
+    },
+  };
+}
+
+async function handle(op, url, options, id) {
+  activeProgress = progressReporter(id);
+  activeProgress.beginPhase("footer", 0);
+  try {
+    return await read(op, url, options);
+  } finally {
+    activeProgress = null;
+  }
+}
+
+async function read(op, url, options) {
   const info = await ensureFileInfo(url, options.byteLength);
   if (!info.targeted) {
     throw new Error(`${url} is not in targeted layout (one (start_date, lead_day) pair per row group)`);
@@ -126,7 +179,11 @@ async function targetedPair(url, info, startDate, leadDay, variables) {
     // so coalesce them into a single range request served from memory — halving the network
     // phase of a lead change. Falls back to the range-backed file if the span is unknown or
     // exceeds the budget (keeps large legacy files streaming).
-    const file = (await coalescedRangeFile(info, indices)) || info.file;
+    const coalesced = await coalescedRangeFile(info, indices);
+    // The coalesced path announces its own byte span; the fallback reads row group by row
+    // group with no span to announce, so its phase stays indeterminate.
+    if (!coalesced && activeProgress) activeProgress.beginPhase("rows", 0);
+    const file = coalesced || info.file;
     const rows = withAbsoluteError(
       await parquetReadObjects({
         file,
@@ -173,6 +230,7 @@ async function coalescedRangeFile(info, indices) {
   const span = rowGroupsByteSpan(info.rowGroups, indices);
   if (!span) return null;
   if (span.high - span.low > RANGE_BYTE_BUDGET) return null;
+  if (activeProgress) activeProgress.beginPhase("rows", span.high - span.low);
   const buffer = await info.file.slice(span.low, span.high);
   return {
     byteLength: info.size,
@@ -237,9 +295,50 @@ function httpRangeAsyncBuffer(url, byteLength) {
       if (response.status !== 206 && response.status !== 200) {
         throw new Error(`${url} range ${start}-${last} -> HTTP ${response.status}`);
       }
-      return response.arrayBuffer();
+      return readCountingBytes(response);
     },
   };
+}
+
+// Drain the range response through its stream so the bar advances during the download
+// rather than at the end of it. Only one read streams at a time: legacy files are read as
+// dozens of concurrent range requests, and holding all of their bodies as JS chunks runs
+// the browser out of resources (measured: net::ERR_INSUFFICIENT_RESOURCES on wenhai, where
+// the buffered read completes). The rest are counted when they land, which still advances
+// the bar, and the long serial reads (the footer, the coalesced row-group span) stream.
+let streamingRead = false;
+
+async function readCountingBytes(response) {
+  const progress = activeProgress;
+  if (!progress) return response.arrayBuffer();
+  progress.expectRequest(Number(response.headers.get("content-length")));
+  if (!response.body || streamingRead) {
+    const buffer = await response.arrayBuffer();
+    progress.addBytes(buffer.byteLength);
+    return buffer;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  streamingRead = true;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.byteLength;
+      progress.addBytes(value.byteLength);
+    }
+  } finally {
+    streamingRead = false;
+  }
+  const buffer = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return buffer.buffer;
 }
 
 async function resolveByteLength(url, hint) {

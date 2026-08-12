@@ -262,7 +262,36 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 /* The note is one or two lines depending on the overlay, and it sits above the rest of
    the drawer: reserve both lines always so switching overlay does not shunt every
    control below it up and down. */
-#overlay-note { min-height: 2lh; }
+#overlay-note { min-height: 2lh; position: relative; }
+
+/* Class-4 loading bar. It sits out of flow at the foot of the note box, whose height is
+   already reserved, so a load never resizes anything. Phases whose size is unknown until
+   the footer is parsed slide instead of filling. */
+.note-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+.note-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+.note-progress.indeterminate .note-progress-fill {
+  width: 35%;
+  animation: note-progress-slide 1.1s linear infinite;
+}
+@keyframes note-progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
 
 /* Entire-year scope hides single-forecast-only controls; the lead slider and the
    Region view control stay. The standalone Overlay field and its dependent
