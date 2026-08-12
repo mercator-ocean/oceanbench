@@ -2718,10 +2718,10 @@ function updateSharedColorbar() {
     renderClass4Legend(legend, panel, scale);
   } else if (mode === "eddies") {
     colorbar.hidden = true;
-    renderEddyLegend(legend, panel);
+    renderEddyLegend(legend);
   } else if (mode === "trajectories") {
     colorbar.hidden = true;
-    renderTrajectoryLegend(legend, panel);
+    renderTrajectoryLegend(legend);
   } else {
     colorbar.hidden = false;
     hideMapLegend(legend);
@@ -2756,10 +2756,6 @@ function hideMapLegend(legend) {
   legend.innerHTML = "";
 }
 
-function mutedBackgroundNote(panel) {
-  return `<span class="legend-bg">background: ${escapeHtml(prettyVariable(panel))} (muted)</span>`;
-}
-
 function legendHelpAnchor() {
   return `<span class="legend-help"></span>`;
 }
@@ -2789,15 +2785,13 @@ function renderClass4Legend(legend, panel, scale) {
     : `<strong>${formatCount(matched)} obs</strong>`;
   legend.hidden = false;
   legend.innerHTML =
-    `<span class="legend-note">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(panel.units)} · region ${escapeHtml(shared.region)}${weak}</span>` +
-    mutedBackgroundNote(panel) +
-    legendHelpAnchor();
+    `<span class="legend-note">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(panel.units)} · region ${escapeHtml(shared.region)}${weak}${legendHelpAnchor()}</span>`;
   attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
 }
 
 // Eddies mode: categorical swatch row faithful to what is drawn — matched pairs (the
 // intercomparison neutral colour) and each forecast's only-eddies, or a single census.
-function renderEddyLegend(legend, panel) {
+function renderEddyLegend(legend) {
   const censuses = overlayData.eddiesCensuses || [];
   const match = overlayData.eddiesMatch;
   const mismatch = Boolean(overlayData.eddiesLeadMismatch);
@@ -2832,15 +2826,13 @@ function renderEddyLegend(legend, panel) {
   legend.hidden = false;
   legend.innerHTML =
     `<span class="legend-row">${swatches}</span>` +
-    (caption ? `<span class="legend-note dim">${escapeHtml(caption)}</span>` : "") +
-    mutedBackgroundNote(panel) +
-    legendHelpAnchor();
+    `<span class="legend-note dim">${escapeHtml(caption)}${legendHelpAnchor()}</span>`;
   const census = censuses.find(Boolean);
   attachEddyMethodNote(legend.querySelector(".legend-help"), census && census.parameters);
 }
 
 // Trajectories mode: the two forecast colours the fans are drawn in, plus the seed note.
-function renderTrajectoryLegend(legend, panel) {
+function renderTrajectoryLegend(legend) {
   const forecast1 = labelFor(panels[0].state.dataset);
   let swatches = legendLine(TRAJECTORY_COLORS[0], `${forecast1} drift`);
   if (shared.layout === 2) swatches += legendLine(TRAJECTORY_COLORS[1], `${labelFor(panels[1].state.dataset)} drift`);
@@ -2852,9 +2844,7 @@ function renderTrajectoryLegend(legend, panel) {
   legend.hidden = false;
   legend.innerHTML =
     `<span class="legend-row">${swatches}</span>` +
-    `<span class="legend-note dim">${escapeHtml(caption)}</span>` +
-    mutedBackgroundNote(panel) +
-    legendHelpAnchor();
+    `<span class="legend-note dim">${escapeHtml(caption)}${legendHelpAnchor()}</span>`;
   attachMethodNote(legend.querySelector(".legend-help"), "trajectories");
 }
 

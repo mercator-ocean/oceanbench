@@ -259,8 +259,10 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 .scope-switch { display: inline-flex; }
 .scope-switch .ghost-button { flex: 1; padding: 0 0.5rem; }
 
-/* Nothing is worth reserving space for. An empty note is not a short note. */
-#overlay-note:empty { display: none; }
+/* The note is one or two lines depending on the overlay, and it sits above the rest of
+   the drawer: reserve both lines always so switching overlay does not shunt every
+   control below it up and down. */
+#overlay-note { min-height: 2lh; }
 
 /* Entire-year scope hides single-forecast-only controls; the lead slider and the
    Region view control stay. The standalone Overlay field and its dependent
@@ -459,12 +461,19 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   pointer-events: none;
+  min-width: 16rem;
   max-width: 90%;
   backdrop-filter: blur(4px);
+  font-variant-numeric: tabular-nums;
 }
-/* Empty is empty: without this the readout keeps painting a small bordered box in
-   the corner of the map whenever the pointer is not over a panel. */
-.panel-readout:empty { display: none; }
+/* Empty is empty: without this the readout paints a small bordered box in the corner of
+   the map whenever the pointer is not over a panel. It is hidden rather than dropped so
+   the box is already the right size when the pointer arrives, instead of popping in from
+   nothing; the readout is positioned, so neither spelling costs the map a reflow. */
+.panel-readout:empty { visibility: hidden; }
+/* A zero-width space gives the hidden box the same single line of text the real reading
+   has, so it is already full height when the pointer arrives. */
+.panel-readout:empty::before { content: "\200B"; }
 /* Companion cursor: the mirrored pointer position on the panel NOT being
    hovered. It renders the EXACT same custom crosshair SVG as the real CSS
    cursor (--field-cursor), centered on the mirrored point, but at reduced
@@ -606,12 +615,24 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
    by a character's width as the scrubber crosses day 9. */
 .dock-lead .lead-value { white-space: nowrap; min-width: 5.2rem; text-align: right; color: var(--muted); }
 /* The scale is centred by the grid's equal side tracks, so it is centred on the map
-   column whatever the drawers are doing. The arithmetic the old strip needed is gone. */
+   column whatever the drawers are doing. The arithmetic the old strip needed is gone.
+   Its box is the same size in every state the map can be in: the colour bar and the
+   legend are stacked in this one cell rather than laid side by side, so a legend appearing
+   cannot widen the centre track and shorten the scrubber, and cannot deepen the strip
+   and shorten the map. The height is the colour bar (2.75rem), the gap and the legend
+   the cell reserves; with no legend the bar simply centres in the same box. The legend
+   allowance is a variable because a narrower cell wraps the same wording onto more
+   lines: see the container queries at the foot of this file. */
 .dock-scale {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
+  --legend-height: 2.75rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: min-content;
+  align-content: center;
+  justify-items: center;
+  gap: 0.3rem;
+  width: 18rem;
+  height: calc(2.75rem + 0.3rem + var(--legend-height));
 }
 /* The scale is a legend, not a control, and it shares a narrow map column with the
    scrubber, which is a control. It takes the smaller half of that bargain, and gives
@@ -639,16 +660,19 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
 .year-legend .item { display: inline-flex; align-items: center; gap: 0.3rem; }
 .year-legend .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: var(--radius-sm); border: 1px solid rgba(128, 128, 128, 0.35); }
 
-/* Adaptive bottom legend strip. Sized like the colorbar so switching purpose modes
-   (colorbar <-> swatch row) does not jump the footer height. */
+/* Adaptive bottom legend strip. It occupies the row the scale cell reserves for it and
+   is clamped to that row: the strip used to grow with its own wording, which took the
+   height back out of the map and re-wrapped on every lead step. Counts are tabular so a
+   changing figure cannot re-wrap the line either. */
 .map-legend {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.3rem;
-  width: 18rem;
-  max-width: 100%;
-  min-height: 2.75rem;
+  width: 100%;
+  height: var(--legend-height);
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-control);
 }
 .map-legend .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
@@ -657,8 +681,10 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
 .map-legend .legend-line { display: inline-block; width: 1.1rem; height: 0.28rem; border-radius: var(--radius-sm); }
 .map-legend .legend-seed { color: var(--muted); font-size: inherit; line-height: 1; }
 .map-legend .legend-note { color: var(--text); }
-.map-legend .legend-note.dim, .map-legend .legend-bg { color: var(--muted); font-size: var(--text-caption); }
-.map-legend .legend-help { display: inline-flex; }
+.map-legend .legend-note.dim { color: var(--muted); font-size: var(--text-caption); }
+/* The help anchor rides at the end of the caption line rather than claiming a line of
+   its own, which the clamped strip has no room for. */
+.map-legend .legend-help { display: inline-flex; vertical-align: middle; margin-left: 0.35rem; }
 
 /* Right-hand track of the strip: it ends where the map column ends, and a long line
    is trimmed rather than allowed to push the scale off centre. */
@@ -695,6 +721,11 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
 }
 .rail-title { margin-bottom: 0.15rem; }
 .rail-subtitle { font-size: var(--text-caption); color: var(--muted); margin: 0 0 1rem; }
+/* These three captions all gain a second line when a second forecast is named, and each
+   of them sits above a chart: without the second line reserved, adding a forecast walks
+   the lead curve and the spectra card down the rail. */
+#rail-subtitle, #rail-skill-note { min-height: 2lh; }
+#rail-provenance { min-height: calc(2lh + 0.75rem); }
 .rail-current-depth-note {
   margin: 0 0 1rem;
   padding: 0.7rem 0.8rem;
@@ -851,14 +882,19 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
    beside it is a control. Narrower still, the status line stops painting, being the
    only tertiary thing there; its track stays, since it is the half the scale is
    centred against. */
+/* The whole scale cell narrows, not just the bar inside it: the cell is what the
+   scrubber's track is measured against, so if only its contents gave way the strip
+   would keep asking for the full 18rem. The legend follows the cell on its own. */
 @container (max-width: 700px) {
-  .colorbar, .map-legend { width: 15rem; }
+  .dock-scale, .colorbar { width: 15rem; }
+  .dock-scale { --legend-height: 3.9rem; }
 }
 
 @container (max-width: 560px) {
   .map-dock { gap: 0.6rem; }
   .status { visibility: hidden; }
-  .colorbar, .map-legend { width: 12rem; }
+  .dock-scale, .colorbar { width: 12rem; }
+  .dock-scale { --legend-height: 5.2rem; }
 }
 
 /* ---- year metric switch (|error| / bias), year scope only ------------------ */
