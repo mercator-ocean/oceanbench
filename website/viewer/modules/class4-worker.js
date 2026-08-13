@@ -15,6 +15,20 @@ import { decompress as zstdDecompress } from "../vendor/fzstd/fzstd.js";
 
 const RANGE_BYTE_BUDGET = 48 * 1024 * 1024;
 
+// The origins serving the match-up parquet throttle per connection, so a single large
+// range read runs at one connection's share of the bandwidth however much the link has
+// spare. Reading a large range as several concurrent sub-ranges multiplies the share.
+// The ceiling is the browser's own per-host connection limit (6 for HTTP/1.1): asking
+// for more only queues them, and every extra stream is one the rest of the viewer
+// cannot use. Ranges below the minimum part size are left whole: under it the split buys
+// less than the extra round trip costs.
+const MAXIMUM_CONCURRENT_RANGE_REQUESTS = 6;
+const PARALLEL_RANGE_PARTS = 5;
+// A prefetch runs while nothing is waiting on it, and the connection pool it draws from is
+// the whole page's: it takes a couple of streams and leaves the rest to the map tiles.
+const PREFETCH_RANGE_PARTS = 2;
+const PARALLEL_RANGE_MINIMUM_PART_BYTES = 1024 * 1024;
+
 // hyparquet decodes UNCOMPRESSED and SNAPPY itself; the published parquet is ZSTD, so supply
 // that codec from the vendored fzstd. Files of either vintage decode through the same path.
 const PARQUET_COMPRESSORS = {
@@ -38,16 +52,34 @@ const fileInfoCache = new Map();
 // Targeted pair reads, keyed by `${url}|${startDate}|${leadDay}`.
 const targetedCache = new Map();
 
-self.addEventListener("message", (event) => {
-  const { id, op, url, byteLength, startDate, leadDay, variables } = event.data;
-  handle(op, url, { byteLength, startDate, leadDay, variables }, id)
-    .then((payload) => self.postMessage({ id, ...payload }))
-    .catch((error) => self.postMessage({ id, error: String(error.message || error) }));
-});
+// Requests still running, so a prefetch can be called off the moment the user asks for
+// something else and stops competing for the shared connections.
+const abortControllers = new Map();
 
-// The range reader is built once per file and cached, so it cannot hold the reporter of
-// the request that created it: it reads whichever request is in flight instead.
-let activeProgress = null;
+self.addEventListener("message", (event) => {
+  const { id, op, url, byteLength, startDate, leadDay, variables, quiet, cancel } = event.data;
+  if (op === "cancel") {
+    for (const cancelledId of cancel || []) {
+      const controller = abortControllers.get(cancelledId);
+      if (controller) controller.abort();
+    }
+    return;
+  }
+  const controller = new AbortController();
+  abortControllers.set(id, controller);
+  // A quiet (prefetch) request reports no progress: only the load the user is waiting on
+  // may drive the bar.
+  const context = {
+    progress: quiet ? null : progressReporter(id),
+    signal: controller.signal,
+    maximumParts: quiet ? PREFETCH_RANGE_PARTS : PARALLEL_RANGE_PARTS,
+  };
+  if (context.progress) context.progress.beginPhase("footer", 0);
+  handle(op, url, { byteLength, startDate, leadDay, variables }, context)
+    .then((payload) => self.postMessage({ id, ...payload }))
+    .catch((error) => self.postMessage({ id, error: String(error.message || error) }))
+    .finally(() => abortControllers.delete(id));
+});
 
 // Byte counter behind the loading bar. `bytesTotal` is 0 while the size of the phase is
 // unknown (the caller shows an indeterminate bar); the footer phase learns it from the
@@ -88,38 +120,33 @@ function progressReporter(id) {
   };
 }
 
-async function handle(op, url, options, id) {
-  activeProgress = progressReporter(id);
-  activeProgress.beginPhase("footer", 0);
-  try {
-    return await read(op, url, options);
-  } finally {
-    activeProgress = null;
-  }
-}
-
-async function read(op, url, options) {
-  const info = await ensureFileInfo(url, options.byteLength);
+async function handle(op, url, options, context) {
+  const info = await ensureFileInfo(url, options.byteLength, context);
   if (!info.targeted) {
     throw new Error(`${url} is not in targeted layout (one (start_date, lead_day) pair per row group)`);
   }
-  const rows = await targetedPair(url, info, options.startDate, options.leadDay, options.variables);
+  const rows = await targetedPair(url, info, options.startDate, options.leadDay, options.variables, context);
   // `total` is sent as an explicit field: array-attached properties do not survive
   // the structured clone across postMessage.
   return { targeted: true, rows, total: rows.length };
 }
 
-function ensureFileInfo(url, byteLengthHint) {
+// Only the footer is cached per file: the range reader is built per request, so it carries
+// that request's progress reporter and abort signal rather than whichever request happened
+// to create it.
+function ensureFileInfo(url, byteLengthHint, context) {
   if (fileInfoCache.has(url)) return fileInfoCache.get(url);
   const promise = (async () => {
-    const size = await resolveByteLength(url, byteLengthHint);
-    const file = httpRangeAsyncBuffer(url, size);
-    const metadata = await parquetMetadataAsync(file);
+    const size = await resolveByteLength(url, byteLengthHint, context);
+    const metadata = await parquetMetadataAsync(httpRangeAsyncBuffer(url, size, context));
     const rowGroups = metadata.row_groups || [];
     const targeted = rowGroups.length > 0 && allRowGroupsSinglePair(rowGroups);
-    return { size, file, metadata, rowGroups, offsets: rowGroupRowOffsets(rowGroups), targeted };
+    return { size, metadata, rowGroups, offsets: rowGroupRowOffsets(rowGroups), targeted };
   })();
   fileInfoCache.set(url, promise);
+  promise.catch(() => {
+    if (fileInfoCache.get(url) === promise) fileInfoCache.delete(url);
+  });
   return promise;
 }
 
@@ -159,10 +186,11 @@ function statMax(statistics) {
   return statistics.max_value != null ? statistics.max_value : statistics.max;
 }
 
-async function targetedPair(url, info, startDate, leadDay, variables) {
+async function targetedPair(url, info, startDate, leadDay, variables, context) {
   const requestedVariables = Array.isArray(variables) && variables.length ? [...variables].sort() : null;
   const key = `${url}|${startDate}|${leadDay}|${requestedVariables ? requestedVariables.join(",") : ""}`;
   if (targetedCache.has(key)) return targetedCache.get(key);
+  const rangeFile = httpRangeAsyncBuffer(url, info.size, context);
   const promise = (async () => {
     const indices = matchingRowGroups(info.rowGroups, startDate, leadDay, requestedVariables);
     if (!indices.length) {
@@ -179,11 +207,11 @@ async function targetedPair(url, info, startDate, leadDay, variables) {
     // so coalesce them into a single range request served from memory — halving the network
     // phase of a lead change. Falls back to the range-backed file if the span is unknown or
     // exceeds the budget (keeps large legacy files streaming).
-    const coalesced = await coalescedRangeFile(info, indices);
+    const coalesced = await coalescedRangeFile(info, rangeFile, indices, context);
     // The coalesced path announces its own byte span; the fallback reads row group by row
     // group with no span to announce, so its phase stays indeterminate.
-    if (!coalesced && activeProgress) activeProgress.beginPhase("rows", 0);
-    const file = coalesced || info.file;
+    if (!coalesced && context.progress) context.progress.beginPhase("rows", 0);
+    const file = coalesced || rangeFile;
     const rows = withAbsoluteError(
       await parquetReadObjects({
         file,
@@ -199,6 +227,11 @@ async function targetedPair(url, info, startDate, leadDay, variables) {
     return rows;
   })();
   targetedCache.set(key, promise);
+  // A cancelled prefetch (or any failure) must not leave a rejected promise behind: the
+  // next request for that pair has to be able to fetch it for real.
+  promise.catch(() => {
+    if (targetedCache.get(key) === promise) targetedCache.delete(key);
+  });
   return promise;
 }
 
@@ -226,12 +259,12 @@ function rowGroupsByteSpan(rowGroups, indices) {
 
 // Prefetch the selected row groups' contiguous byte span in one request and hand back a
 // buffer-backed file so hyparquet's subsequent slices resolve from memory (no network).
-async function coalescedRangeFile(info, indices) {
+async function coalescedRangeFile(info, rangeFile, indices, context) {
   const span = rowGroupsByteSpan(info.rowGroups, indices);
   if (!span) return null;
   if (span.high - span.low > RANGE_BYTE_BUDGET) return null;
-  if (activeProgress) activeProgress.beginPhase("rows", span.high - span.low);
-  const buffer = await info.file.slice(span.low, span.high);
+  if (context.progress) context.progress.beginPhase("rows", span.high - span.low);
+  const buffer = await rangeFile.slice(span.low, span.high);
   return {
     byteLength: info.size,
     async slice(start, end) {
@@ -239,7 +272,7 @@ async function coalescedRangeFile(info, indices) {
       if (start >= span.low && stop <= span.high) return buffer.slice(start - span.low, stop - span.low);
       // Any read outside the prefetched window (should not happen for a targeted read)
       // falls back to a direct range request against the source.
-      return info.file.slice(start, end);
+      return rangeFile.slice(start, end);
     },
   };
 }
@@ -286,33 +319,78 @@ function rowGroupRowOffsets(rowGroups) {
   return offsets;
 }
 
-function httpRangeAsyncBuffer(url, byteLength) {
+// Every range request in the worker passes through this gate, so the number of open
+// connections is bounded whatever the caller asks for. Legacy (snappy) files are read as
+// dozens of column-chunk ranges at once, and letting all of those stream at once ran the
+// browser out of resources (measured: net::ERR_INSUFFICIENT_RESOURCES on wenhai). Capping
+// the fetches themselves fixes that at the source, and leaves every read free to stream.
+let openRangeRequests = 0;
+const waitingRangeRequests = [];
+
+async function withRangeSlot(run) {
+  if (openRangeRequests >= MAXIMUM_CONCURRENT_RANGE_REQUESTS) {
+    await new Promise((resolve) => waitingRangeRequests.push(resolve));
+  }
+  openRangeRequests += 1;
+  try {
+    return await run();
+  } finally {
+    openRangeRequests -= 1;
+    const next = waitingRangeRequests.shift();
+    if (next) next();
+  }
+}
+
+// How many sub-ranges to read a range of `bytes` as. One part below the minimum part size,
+// then one part per minimum-size slice up to the caller's ceiling.
+function parallelPartCount(bytes, maximumParts) {
+  return Math.max(1, Math.min(maximumParts, Math.floor(bytes / PARALLEL_RANGE_MINIMUM_PART_BYTES)));
+}
+
+function httpRangeAsyncBuffer(url, byteLength, context) {
   return {
     byteLength,
     async slice(start, end) {
-      const last = (end ?? byteLength) - 1;
-      const response = await fetch(url, { headers: { Range: `bytes=${start}-${last}` } });
-      if (response.status !== 206 && response.status !== 200) {
-        throw new Error(`${url} range ${start}-${last} -> HTTP ${response.status}`);
+      const stop = end ?? byteLength;
+      const parts = parallelPartCount(stop - start, context.maximumParts);
+      if (parts < 2) return rangeRequest(url, start, stop, context);
+      // Split the range into equal parts read concurrently, then reassemble in order. The
+      // origins throttle each connection separately, so N parts arrive in about the time
+      // one connection needs for a single part.
+      const partBytes = Math.ceil((stop - start) / parts);
+      const bounds = [];
+      for (let offset = start; offset < stop; offset += partBytes) {
+        bounds.push([offset, Math.min(offset + partBytes, stop)]);
       }
-      return readCountingBytes(response);
+      const buffers = await Promise.all(bounds.map(([from, to]) => rangeRequest(url, from, to, context)));
+      const joined = new Uint8Array(stop - start);
+      let offset = 0;
+      for (const buffer of buffers) {
+        joined.set(new Uint8Array(buffer), offset);
+        offset += buffer.byteLength;
+      }
+      return joined.buffer;
     },
   };
 }
 
-// Drain the range response through its stream so the bar advances during the download
-// rather than at the end of it. Only one read streams at a time: legacy files are read as
-// dozens of concurrent range requests, and holding all of their bodies as JS chunks runs
-// the browser out of resources (measured: net::ERR_INSUFFICIENT_RESOURCES on wenhai, where
-// the buffered read completes). The rest are counted when they land, which still advances
-// the bar, and the long serial reads (the footer, the coalesced row-group span) stream.
-let streamingRead = false;
+function rangeRequest(url, start, stop, context) {
+  return withRangeSlot(async () => {
+    const last = stop - 1;
+    const response = await fetch(url, { headers: { Range: `bytes=${start}-${last}` }, signal: context.signal });
+    if (response.status !== 206 && response.status !== 200) {
+      throw new Error(`${url} range ${start}-${last} -> HTTP ${response.status}`);
+    }
+    return readCountingBytes(response, context.progress);
+  });
+}
 
-async function readCountingBytes(response) {
-  const progress = activeProgress;
+// Drain the range response through its stream so the bar advances during the download
+// rather than at the end of it.
+async function readCountingBytes(response, progress) {
   if (!progress) return response.arrayBuffer();
   progress.expectRequest(Number(response.headers.get("content-length")));
-  if (!response.body || streamingRead) {
+  if (!response.body) {
     const buffer = await response.arrayBuffer();
     progress.addBytes(buffer.byteLength);
     return buffer;
@@ -320,17 +398,12 @@ async function readCountingBytes(response) {
   const reader = response.body.getReader();
   const chunks = [];
   let received = 0;
-  streamingRead = true;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      received += value.byteLength;
-      progress.addBytes(value.byteLength);
-    }
-  } finally {
-    streamingRead = false;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.byteLength;
+    progress.addBytes(value.byteLength);
   }
   const buffer = new Uint8Array(received);
   let offset = 0;
@@ -341,9 +414,9 @@ async function readCountingBytes(response) {
   return buffer.buffer;
 }
 
-async function resolveByteLength(url, hint) {
+async function resolveByteLength(url, hint, context) {
   if (Number.isFinite(hint) && hint > 0) return hint;
-  const response = await fetch(url, { method: "HEAD" });
+  const response = await fetch(url, { method: "HEAD", signal: context.signal });
   if (!response.ok) throw new Error(`${url} HEAD -> HTTP ${response.status}`);
   const length = Number(response.headers.get("content-length"));
   if (!Number.isFinite(length) || length <= 0) throw new Error(`${url} HEAD returned no content-length`);

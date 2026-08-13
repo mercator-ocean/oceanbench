@@ -36,6 +36,8 @@ import {
   loadRmsdByDepth,
   rmsdDepthProfile,
   loadClass4,
+  prefetchClass4,
+  cancelClass4Prefetches,
   insightsFor,
   eddyCensus,
   alignedEddyCensuses,
@@ -1206,6 +1208,8 @@ async function loadOverlayData() {
   overlayData.class4 = null;
   overlayData.class4Error = null;
   overlayData.class4Unpublished = false;
+  // Nothing may prefetch match-ups for an overlay that is no longer showing them.
+  if (shared.overlayMode !== "class4") stopClass4Prefetch(null);
   if (shared.overlayMode === "eddies") {
     // Load each visible forecast's own eddy artifact and reduce it to a census. The
     // two forecasts come from the panel pickers; no dataset is a hardcoded truth.
@@ -1245,19 +1249,63 @@ async function loadOverlayData() {
     }
     const manifest = await loadInsightManifest(urls.manifest);
     const class4Manifest = manifest && manifest["class4-matchups"];
+    const request = {
+      url: class4Url,
+      byteLength: class4ByteLengthHint(class4Url, class4Manifest),
+      startDate: currentStartDate(slug),
+      leadDay: shared.leadDay,
+      variables: class4RequestVariables(),
+    };
+    // The user is waiting now: stop any prefetch of another lead from holding connections
+    // this read needs. A prefetch of this very pair is kept, it is the read we want.
+    stopClass4Prefetch(request);
     try {
-      overlayData.class4 = await loadClass4(class4Url, {
-        byteLength: class4ByteLengthHint(class4Url, class4Manifest),
-        startDate: currentStartDate(slug),
-        leadDay: shared.leadDay,
-        variables: class4RequestVariables(),
-        onProgress: showClass4Progress,
-      });
+      overlayData.class4 = await loadClass4(request.url, { ...request, onProgress: showClass4Progress });
     } catch (error) {
       overlayData.class4 = null;
       overlayData.class4Error = error instanceof Error ? error.message : String(error);
     }
+    if (overlayData.class4) scheduleClass4Prefetch(request, slug);
   }
+}
+
+// Scrubbing the lead slider is the common move, and each lead is its own download. Once the
+// lead the user asked for has landed, read the neighbouring leads into the same worker cache
+// while the connection is idle, so the next step of the scrub is already there. Two leads
+// only: the pipe is shared with the map tiles and the origins throttle per connection.
+const CLASS4_PREFETCH_LEADS = 2;
+let class4PrefetchGeneration = 0;
+
+function stopClass4Prefetch(keep) {
+  class4PrefetchGeneration += 1;
+  cancelClass4Prefetches(keep || null);
+}
+
+function scheduleClass4Prefetch(request, slug) {
+  const leads = neighbouringLeads(request.leadDay, slug).slice(0, CLASS4_PREFETCH_LEADS);
+  if (!leads.length) return;
+  const generation = class4PrefetchGeneration;
+  const stale = () => generation !== class4PrefetchGeneration || shared.overlayMode !== "class4";
+  whenIdle(async () => {
+    for (const leadDay of leads) {
+      if (stale()) return;
+      await prefetchClass4(request.url, { ...request, leadDay });
+    }
+  });
+}
+
+// Next lead first: a scrub goes forward far more often than back.
+function neighbouringLeads(leadDay, slug) {
+  const manifest = manifestFor(slug);
+  if (!manifest || !Array.isArray(manifest.lead_days) || !manifest.lead_days.length) return [];
+  const minimum = Math.min(...manifest.lead_days);
+  const maximum = Math.max(...manifest.lead_days);
+  return [leadDay + 1, leadDay - 1].filter((lead) => lead >= minimum && lead <= maximum);
+}
+
+function whenIdle(run) {
+  if (typeof self.requestIdleCallback === "function") self.requestIdleCallback(() => run(), { timeout: 2000 });
+  else setTimeout(run, 400);
 }
 
 // Bucket latency on the match-up parquet ranges from a second to well over a minute, so the

@@ -25,6 +25,8 @@ let class4WorkerFailure = null;
 let class4RequestId = 0;
 const class4Pending = new Map();
 const class4TargetedCache = new Map(); // `${resolvedUrl}|${start}|${lead}` -> Promise<result>
+// Prefetches still in flight, `cache key -> worker request id`, so they can be called off.
+const class4PrefetchRequests = new Map();
 
 export function loadInsightIndex() {
   if (!indexPromise) indexPromise = fetchJSON(resolveViewerDataUrl(INDEX_PATH)).catch(() => null);
@@ -151,22 +153,60 @@ export async function loadScoresSummary(index) {
  * pair. `byteLength` may come from the sibling manifest's `bytes` field to skip a
  * HEAD request, but callers should omit stale hints.
  */
-export async function loadClass4(url, { byteLength, startDate, leadDay, variables, onProgress } = {}) {
+export async function loadClass4(url, { byteLength, startDate, leadDay, variables, onProgress, quiet } = {}) {
   if (!url) throw new Error("Class-4 URL is missing");
-  const resolvedUrl = resolveViewerDataUrl(url);
-  // Row groups are variable-partitioned within a (start, lead) block, so the requested
-  // variables refine which groups are fetched — they belong in the targeted cache key.
-  const variableKey = Array.isArray(variables) && variables.length ? [...variables].sort().join(",") : "";
-  const key = `${resolvedUrl}|${startDate ?? ""}|${leadDay ?? ""}|${variableKey}`;
+  const key = class4CacheKey(url, { startDate, leadDay, variables });
   if (!class4TargetedCache.has(key)) {
-    class4TargetedCache.set(
-      key,
-      requestClass4Worker({ op: "targeted", url: resolvedUrl, byteLength, startDate, leadDay, variables }, onProgress).then(
-        (payload) => normalizeClass4Payload(payload),
-      ),
+    const resolvedUrl = resolveViewerDataUrl(url);
+    const request = requestClass4Worker(
+      { op: "targeted", url: resolvedUrl, byteLength, startDate, leadDay, variables, quiet: Boolean(quiet) },
+      onProgress,
     );
+    if (quiet) class4PrefetchRequests.set(key, request.id);
+    const promise = request.promise.then((payload) => normalizeClass4Payload(payload));
+    class4TargetedCache.set(key, promise);
+    // A cancelled prefetch, or any failure, must leave no rejected promise behind for the
+    // next request for that pair to inherit.
+    promise
+      .catch(() => {
+        if (class4TargetedCache.get(key) === promise) class4TargetedCache.delete(key);
+      })
+      .finally(() => class4PrefetchRequests.delete(key));
   }
   return await class4TargetedCache.get(key);
+}
+
+// Row groups are variable-partitioned within a (start, lead) block, so the requested
+// variables refine which groups are fetched, so they belong in the targeted cache key.
+function class4CacheKey(url, { startDate, leadDay, variables }) {
+  const variableKey = Array.isArray(variables) && variables.length ? [...variables].sort().join(",") : "";
+  return `${resolveViewerDataUrl(url)}|${startDate ?? ""}|${leadDay ?? ""}|${variableKey}`;
+}
+
+/**
+ * Read a (start, lead) pair into the same cache `loadClass4` reads from, without touching
+ * the progress bar: the bar belongs to the load the user is waiting on. Failures (including
+ * cancellation) resolve to null, since nothing is waiting on the result.
+ */
+export function prefetchClass4(url, options = {}) {
+  return loadClass4(url, { ...options, quiet: true, onProgress: undefined }).catch(() => null);
+}
+
+/**
+ * Call off every prefetch still in flight except the pair described by `keep` (the load the
+ * user just asked for, if that is what was being prefetched), so prefetching never competes
+ * with a user-initiated read for the origin's connections.
+ */
+export function cancelClass4Prefetches(keep) {
+  const keepKey = keep && keep.url ? class4CacheKey(keep.url, keep) : null;
+  const cancelled = [];
+  for (const [key, id] of class4PrefetchRequests) {
+    if (key === keepKey) continue;
+    cancelled.push(id);
+    class4PrefetchRequests.delete(key);
+    class4TargetedCache.delete(key);
+  }
+  if (cancelled.length && class4Worker) class4Worker.postMessage({ op: "cancel", cancel: cancelled });
 }
 
 function normalizeClass4Payload(payload) {
@@ -209,13 +249,14 @@ function ensureClass4Worker() {
   return class4Worker;
 }
 
+// Returns the worker request id alongside its promise, so a prefetch can be cancelled by id.
 function requestClass4Worker(message, onProgress) {
-  if (class4WorkerFailure) return Promise.reject(new Error(class4WorkerFailure));
+  if (class4WorkerFailure) return { id: 0, promise: Promise.reject(new Error(class4WorkerFailure)) };
   const worker = ensureClass4Worker();
   const id = ++class4RequestId;
   const promise = new Promise((resolve, reject) => class4Pending.set(id, { resolve, reject, onProgress }));
   worker.postMessage({ id, ...message });
-  return promise;
+  return { id, promise };
 }
 
 /** Insight URLs for a (dataset slug, region) pair, or empty object. */
