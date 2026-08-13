@@ -18,6 +18,27 @@ forecasts refreshed — do **not** bump the version. They are recorded as dated 
 **Challengers** heading in the current version's section, and the affected reports are
 re-published (never silently overwritten).
 
+## 0.5.0 - 2026-08-13
+
+**Scores:** grid-averaged scores change for the challengers whose grids do not land exactly on
+the reference grid (GLO36v1, LangYa, WenHai, XiHe) vs 0.4.0 — the reference grid is now snapped
+onto the challenger grid before the difference is taken, so points that were previously
+misaligned by a fraction of a grid cell are compared like for like. Challengers already on the
+reference grid (GLONET, GLONET 1 degree) are unchanged, and the observation-based Class IV
+scores (temperature, salinity, sea level anomaly and currents vs observations) are unchanged for
+every challenger. See the
+[evaluation methods documentation](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
+
+### Changed
+
+- Reference latitude and longitude coordinates are snapped to the challenger grid with a 1e-4 degree nearest-neighbour tolerance before grid-averaged RMSD is computed, instead of relying on exact coordinate equality ([#308](https://github.com/mercator-ocean/oceanbench/issues/308), [#305](https://github.com/mercator-ocean/oceanbench/issues/305)).
+- Spatial alignment now raises an explicit error when it is ambiguous, or when fewer than 99.9% of the challenger grid points can be matched, instead of silently producing a misaligned comparison.
+- Class IV vertical interpolation supports up to 128 depth levels instead of 64; the depth level count is no longer encoded in a fixed-width integer ([#307](https://github.com/mercator-ocean/oceanbench/issues/307)).
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.5.0/`
+
 ## 0.4.0 - 2026-07-07
 
 **Scores:** every score computed against the gridded GLORYS/GLO12 reference changes for every
