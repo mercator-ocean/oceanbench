@@ -4151,7 +4151,16 @@ function wireGlobalControls() {
   }
   for (const button of document.querySelectorAll(".layout-switch [data-layout]")) {
     button.addEventListener("click", () => {
+      const previousLayout = shared.layout;
       shared.layout = Number(button.dataset.layout);
+      // Opening Forecast 2 starts it on the variable Forecast 1 is showing (the key
+      // carries the depth variant, so 15m currents carry over too), so the comparison
+      // begins like with like. A default only: the picker changes it right afterwards,
+      // and renderPanel falls back if the second dataset lacks that variable.
+      if (shared.layout === 2 && previousLayout === 1) {
+        if (!panels[1]) panels[1] = buildPanel(1);
+        panels[1].state.variable = panels[0].state.variable;
+      }
       markLayoutButtons();
       syncPanelGrid();
       renderAllPanels().then(() => {
