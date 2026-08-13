@@ -31,6 +31,7 @@ import xarray
 from oceanbench.core import eddies as eddies_core
 from oceanbench.core.schema_validation import load_schema
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
+from oceanbench.publish import class4_overlays
 from oceanbench.publish.aggregate import DEFAULT_SEED as _LEAD_CURVE_BOOTSTRAP_SEED, _confidence_interval
 from oceanbench.pyramids import build_pyramid, viewer_layers
 from oceanbench.runner import realism
@@ -43,7 +44,15 @@ RMSD_BY_DEPTH_FILENAME = "rmsd-by-depth.json"
 
 _RMSD_BY_DEPTH_SCHEMA_VERSION = 1
 
-MAXIMUM_ROW_GROUP_ROWS = 200_000
+# Row-group sizing. The parquet footer costs roughly 90 bytes per column chunk, so a file's
+# footer is about (row groups x columns x 90) bytes and every reader pays it before it can read
+# anything at all. One row group per (start_date, lead_day, variable, depth_bin) meant 6 760
+# groups and a 6 MB footer on a global year; packing consecutive (variable, depth_bin) blocks of
+# the same (start_date, lead_day) up to TARGET_ROW_GROUP_ROWS brings that to ~1 040 groups and a
+# footer under 1 MB. A group never straddles a (start_date, lead_day) boundary, which is the
+# invariant the viewer's targeted reader detects on.
+TARGET_ROW_GROUP_ROWS = 400_000
+MAXIMUM_ROW_GROUP_ROWS = 1_000_000
 
 _MATCHUP_SOURCE_COLUMNS = [
     "variable",
@@ -303,6 +312,8 @@ class ViewerArtifactsResult:
     year_error_geography_path: str | None = None
     year_rmsd_by_start_path: str | None = None
     rmsd_by_depth_path: str | None = None
+    class4_overlay_manifest_path: str | None = None
+    class4_overlay_index_entry: dict | None = None
     fingerprint: str | None = None
     class4_bias_records: list[dict] = field(default_factory=list)
     flags: list[str] = field(default_factory=list)
@@ -374,6 +385,11 @@ def _project_matchups(table: pyarrow.Table) -> pyarrow.Table:
 
 
 _MATCHUP_GROUP_COLUMNS = ("start_date", "lead_day", "variable", "depth_bin")
+# The columns a row group is pure in, and the only ones a reader selects row groups by. Keeping
+# statistics off the four value columns removes about a quarter of the remaining footer and costs
+# nothing: no reader has ever filtered on a latitude or a model value.
+_MATCHUP_PAIR_COLUMNS = ("start_date", "lead_day")
+_MATCHUP_STATISTICS_COLUMNS = list(_MATCHUP_GROUP_COLUMNS)
 
 
 def _group_boundaries(columns: list[numpy.ndarray]) -> numpy.ndarray:
@@ -397,17 +413,47 @@ def _projected_sorted_partition(matchups) -> pyarrow.Table:
     return projected.take(order)
 
 
-def _write_matchup_row_groups(writer: "pyarrow.parquet.ParquetWriter", projected: pyarrow.Table) -> None:
+def _packed_row_group_spans(projected: pyarrow.Table) -> list[tuple[int, int]]:
+    """``(offset, length)`` of each row group: whole (variable, depth_bin) blocks, packed by pair.
+
+    Blocks of the same ``(start_date, lead_day)`` accumulate into one row group until it reaches
+    ``TARGET_ROW_GROUP_ROWS``; a pair boundary always closes the group, and a single block above
+    ``MAXIMUM_ROW_GROUP_ROWS`` is split across consecutive groups.
+    """
     row_count = projected.num_rows
     if not row_count:
-        return
-    group_columns = [projected.column(column).to_numpy(zero_copy_only=False) for column in _MATCHUP_GROUP_COLUMNS]
-    boundaries = _group_boundaries(group_columns)
-    ends = numpy.append(boundaries[1:], row_count)
-    for group_start, group_end in zip(boundaries, ends):
-        for chunk_start in range(int(group_start), int(group_end), MAXIMUM_ROW_GROUP_ROWS):
-            chunk_end = min(chunk_start + MAXIMUM_ROW_GROUP_ROWS, int(group_end))
-            writer.write_table(projected.slice(chunk_start, chunk_end - chunk_start))
+        return []
+    block_starts = _group_boundaries(
+        [projected.column(column).to_numpy(zero_copy_only=False) for column in _MATCHUP_GROUP_COLUMNS]
+    )
+    pair_starts = set(
+        _group_boundaries(
+            [projected.column(column).to_numpy(zero_copy_only=False) for column in _MATCHUP_PAIR_COLUMNS]
+        ).tolist()
+    )
+    block_ends = numpy.append(block_starts[1:], row_count)
+    spans: list[tuple[int, int]] = []
+    open_start = None
+    for block_start, block_end in zip(block_starts.tolist(), block_ends.tolist()):
+        if open_start is not None and block_start in pair_starts:
+            spans.append((open_start, block_start - open_start))
+            open_start = None
+        if open_start is None:
+            open_start = block_start
+        while block_end - open_start > MAXIMUM_ROW_GROUP_ROWS:
+            spans.append((open_start, MAXIMUM_ROW_GROUP_ROWS))
+            open_start += MAXIMUM_ROW_GROUP_ROWS
+        if block_end - open_start >= TARGET_ROW_GROUP_ROWS:
+            spans.append((open_start, block_end - open_start))
+            open_start = None
+    if open_start is not None:
+        spans.append((open_start, row_count - open_start))
+    return spans
+
+
+def _write_matchup_row_groups(writer: "pyarrow.parquet.ParquetWriter", projected: pyarrow.Table) -> None:
+    for offset, length in _packed_row_group_spans(projected):
+        writer.write_table(projected.slice(offset, length))
 
 
 def _matchup_provenance_metadata(output_path: str, source: str | None) -> dict:
@@ -420,15 +466,22 @@ def write_matchup_parquet(matchups, output_path: str, *, source: str | None = No
 
     The match-up dataframe (``oceanbench.runner.matchups.class4_matchups``) is projected to the
     eight served columns, sorted by ``(start_date, lead_day, variable, depth_bin)`` and written
-    ZSTD-compressed with one ``(start_date, lead_day, variable, depth_bin)`` group per row group
-    so a single-variable view never fetches a row group straddling a variable boundary (a group
-    spanning more than ``MAXIMUM_ROW_GROUP_ROWS`` rows is split across consecutive groups). The
-    written file is then re-opened and validated by :func:`verify_matchup_parquet`.
+    ZSTD-compressed. Row groups pack whole ``(variable, depth_bin)`` blocks of one
+    ``(start_date, lead_day)`` pair up to ``TARGET_ROW_GROUP_ROWS`` and never straddle a pair
+    boundary, so a selection is one contiguous byte span and the footer stays small; statistics
+    are written only on the four grouping columns. The written file is then re-opened and
+    validated by :func:`verify_matchup_parquet`.
     """
     provenance_metadata = _matchup_provenance_metadata(output_path, source)
     projected = _projected_sorted_partition(matchups).replace_schema_metadata(provenance_metadata)
     Path(os.path.dirname(output_path) or ".").mkdir(parents=True, exist_ok=True)
-    writer = pyarrow.parquet.ParquetWriter(output_path, projected.schema, compression="zstd", compression_level=3)
+    writer = pyarrow.parquet.ParquetWriter(
+        output_path,
+        projected.schema,
+        compression="zstd",
+        compression_level=3,
+        write_statistics=_MATCHUP_STATISTICS_COLUMNS,
+    )
     _write_matchup_row_groups(writer, projected)
     writer.close()
     verify_matchup_parquet(output_path)
@@ -462,7 +515,11 @@ def write_matchup_parquet_streamed(
             projected = _projected_sorted_partition(partition).replace_schema_metadata(provenance_metadata)
             if writer is None:
                 writer = pyarrow.parquet.ParquetWriter(
-                    output_path, projected.schema, compression="zstd", compression_level=3
+                    output_path,
+                    projected.schema,
+                    compression="zstd",
+                    compression_level=3,
+                    write_statistics=_MATCHUP_STATISTICS_COLUMNS,
                 )
             _write_matchup_row_groups(writer, projected)
         if writer is None:
@@ -471,6 +528,7 @@ def write_matchup_parquet_streamed(
                 _MATCHUP_TARGET_SCHEMA.with_metadata(provenance_metadata),
                 compression="zstd",
                 compression_level=3,
+                write_statistics=_MATCHUP_STATISTICS_COLUMNS,
             )
         writer.close()
     except BaseException:
@@ -490,10 +548,12 @@ def write_matchup_parquet_streamed(
 def verify_matchup_parquet(output_path: str) -> dict:
     """Validate a match-up parquet's serving layout, raising ``ValueError`` on any violation.
 
-    Every row group must hold exactly one ``(start_date, lead_day, variable, depth_bin)`` group
-    (column statistics ``min == max`` on all four), carry statistics, stay within
-    ``MAXIMUM_ROW_GROUP_ROWS`` rows, and the groups must appear in ascending
-    ``(start_date, lead_day, variable, depth_bin)`` order.
+    Every row group must carry statistics on the four grouping columns, hold exactly one
+    ``(start_date, lead_day)`` pair (statistics ``min == max`` on both, the invariant the viewer's
+    targeted reader detects on), stay within ``MAXIMUM_ROW_GROUP_ROWS`` rows, and the groups must
+    appear in ascending ``(start_date, lead_day, variable, depth_bin)`` order. A group may span
+    several ``(variable, depth_bin)`` blocks of its pair: readers select rows inside the group by
+    those two columns, and packing whole blocks together is what keeps the footer small.
     """
     parquet_file = pyarrow.parquet.ParquetFile(output_path)
     metadata = parquet_file.metadata
@@ -501,16 +561,15 @@ def verify_matchup_parquet(output_path: str) -> dict:
     if names != _MATCHUP_TARGET_SCHEMA.names:
         raise ValueError(f"match-up parquet schema {names} does not match the contract {_MATCHUP_TARGET_SCHEMA.names}")
     group_indices = [names.index(column) for column in _MATCHUP_GROUP_COLUMNS]
+    pair_count = len(_MATCHUP_PAIR_COLUMNS)
     previous_key = None
     for group_index in range(metadata.num_row_groups):
         row_group = metadata.row_group(group_index)
         statistics = [row_group.column(column_index).statistics for column_index in group_indices]
         if any(column_statistics is None for column_statistics in statistics):
             raise ValueError(f"row group {group_index} is missing column statistics")
-        if any(column_statistics.min != column_statistics.max for column_statistics in statistics):
-            raise ValueError(
-                f"row group {group_index} mixes more than one (start_date, lead_day, variable, depth_bin) group"
-            )
+        if any(column_statistics.min != column_statistics.max for column_statistics in statistics[:pair_count]):
+            raise ValueError(f"row group {group_index} mixes more than one (start_date, lead_day) pair")
         if row_group.num_rows > MAXIMUM_ROW_GROUP_ROWS:
             raise ValueError(f"row group {group_index} has {row_group.num_rows} rows above the cap")
         key = tuple(column_statistics.min for column_statistics in statistics)
@@ -1035,6 +1094,7 @@ def write_viewer_artifacts(
     matchup_variables=None,
     matchup_max_workers: int | None = None,
     enable_column_store: bool = True,
+    enable_class4_overlays: bool = True,
 ) -> ViewerArtifactsResult:
     """Produce every viewer serving artifact for one evaluated dataset into ``output_directory``.
 
@@ -1058,6 +1118,18 @@ def write_viewer_artifacts(
     # parquet, accumulating the per-start bias records from the same frames, so the whole year is
     # never held in memory at once.
     class4_bias_records: list[dict] = []
+    overlay_entries: list = []
+    overlay_directory = class4_overlays.overlay_directory_for(str(insights_directory))
+
+    def on_partition(partition) -> None:
+        class4_bias_records.extend(class4_bias_per_start_records(partition, context=matchups_context))
+        if enable_class4_overlays and partition is not None and len(partition):
+            overlay_entries.extend(
+                class4_overlays.write_class4_overlays(
+                    partition, overlay_directory, dataset_slug=dataset_slug, region=region
+                )
+            )
+
     start_partitions = matchups_module.iter_class4_matchups_by_start(
         forecast_dataset, observation_dataset, variables, context=matchups_context, max_workers=matchup_max_workers
     )
@@ -1065,10 +1137,16 @@ def write_viewer_artifacts(
         start_partitions,
         matchup_parquet_path,
         source=f"insights/{dataset_slug}/{region}/{MATCHUP_PARQUET_FILENAME}",
-        on_partition=lambda partition: class4_bias_records.extend(
-            class4_bias_per_start_records(partition, context=matchups_context)
-        ),
+        on_partition=on_partition,
     )
+
+    class4_overlay_manifest_path = None
+    class4_overlay_index_entry = None
+    if enable_class4_overlays:
+        class4_overlay_manifest_path = class4_overlays.write_class4_overlay_manifest(
+            overlay_entries, overlay_directory, dataset_slug=dataset_slug, region=region
+        )
+        class4_overlay_index_entry = class4_overlays.overlay_index_entry(dataset_slug, region)
 
     eddy_census_path = str(insights_directory / EDDY_CENSUS_FILENAME)
     try:
@@ -1153,6 +1231,8 @@ def write_viewer_artifacts(
         year_error_geography_path=year_error_geography_path,
         year_rmsd_by_start_path=year_rmsd_by_start_path,
         rmsd_by_depth_path=rmsd_by_depth_path,
+        class4_overlay_manifest_path=class4_overlay_manifest_path,
+        class4_overlay_index_entry=class4_overlay_index_entry,
         fingerprint=fingerprint,
         class4_bias_records=class4_bias_records,
         flags=flags,

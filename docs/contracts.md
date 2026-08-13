@@ -298,11 +298,26 @@ evaluation by `oceanbench/publish/viewer_artifacts.py` (opt-in via
   (`variable, depth_bin, lead_day int16, start_date YYYY-MM-DD, latitude,
   longitude, observation_value, model_value`, floats `float32`; the absolute
   error is derived from the two value columns by every reader, not stored),
-  ZSTD level 3, sorted by `(start_date, lead_day, variable, depth_bin)` with one such
-  group per row group so a single-variable view never fetches a row group
-  straddling a variable boundary (≤ 200 000 rows/group, a larger group split
-  across consecutive groups), statistics on all four grouping columns.
-  `verify_matchup_parquet` re-validates the layout after writing.
+  ZSTD level 3, sorted by `(start_date, lead_day, variable, depth_bin)`. Row
+  groups pack whole `(variable, depth_bin)` blocks of one `(start_date,
+  lead_day)` pair up to `TARGET_ROW_GROUP_ROWS` (400 000) and never straddle a
+  pair boundary (a single block above `MAXIMUM_ROW_GROUP_ROWS` = 1 000 000 is
+  split across consecutive groups); statistics on the four grouping columns
+  only. Packing is what keeps the footer small: it is linear in the column-chunk
+  count, and one row group per block cost 6 760 groups and a 6 MB footer on a
+  global year. `verify_matchup_parquet` re-validates the layout after writing.
+  See `class4-serving-layout.md` for the measurements and the design.
+- `class4-overlays` `.obx` extracts — `oceanbench/publish/class4_overlays.py`,
+  `write_class4_overlays` / `write_class4_overlay_manifest`: one packed-binary
+  file per `(variable, depth_bin, start_date, lead_day)` under
+  `insights/<dataset>/<region>/class4-overlays/`, holding the four overlay
+  arrays as uint16 (the pyramid's `scale_factor`/`add_offset` convention) behind
+  a JSON header. Capped at `DISPLAY_POINT_CAP` = 50 000 displayed points by a
+  seeded uniform sample, with `observation_count`, `matched_count` and
+  `displayed_count` all recorded so a decimated overlay can say so. 11 to 400 KB
+  per selection against the 15 to 22 MB a first parquet load costs. Indexed in
+  `insights.json` under `class4_overlays` (format, URL template, cap, manifest).
+  Scores never derive from an extract.
 - `eddy-census` JSON — `write_eddy_census` / `dataset_eddy_census`: a
   dataset's *own* detections only (no matching/reference side),
   `{kind: "eddy-census", schema_version: "1", variable, dataset, parameters

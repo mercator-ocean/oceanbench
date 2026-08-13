@@ -55,16 +55,17 @@ def test_matchup_parquet_layout_and_verification(tmp_path) -> None:
     parquet_file = pyarrow.parquet.ParquetFile(output_path)
     metadata = parquet_file.metadata
     assert parquet_file.schema_arrow.names == viewer_artifacts._MATCHUP_TARGET_SCHEMA.names
-    # One (start_date, lead_day, variable, depth_bin) group per row group: 2 starts x 2 leads x 2
-    # variables = 8 groups, each pure and never straddling a variable boundary, ascending.
-    assert metadata.num_row_groups == 8
+    # One (start_date, lead_day) pair per row group: 2 starts x 2 leads = 4 groups. Both variables
+    # of a pair are packed into its group, which keeps the footer proportional to the pair count.
+    assert metadata.num_row_groups == 4
     names = parquet_file.schema_arrow.names
     group_indices = [names.index(column) for column in viewer_artifacts._MATCHUP_GROUP_COLUMNS]
+    pair_count = len(viewer_artifacts._MATCHUP_PAIR_COLUMNS)
     previous_key = None
     for group_index in range(metadata.num_row_groups):
         row_group = metadata.row_group(group_index)
         statistics = [row_group.column(column_index).statistics for column_index in group_indices]
-        assert all(column.min == column.max for column in statistics)
+        assert all(column.min == column.max for column in statistics[:pair_count])
         key = tuple(column.min for column in statistics)
         assert previous_key is None or key > previous_key
         previous_key = key
