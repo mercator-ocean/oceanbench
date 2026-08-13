@@ -181,6 +181,10 @@ const shared = {
   // default so the initial map stays clean; enabling creates a centred default box.
   psdEnabled: false,
   psdBox: null,
+  // The size the user asked for, kept apart from the clamped size actually drawn: a
+  // second forecast can raise the minimum box size, and the box must shrink back to the
+  // requested size once that constraint goes away. { w, h } in degrees; null when unset.
+  psdBoxRequest: null,
   overlayMode: "none",
   // Water-column click point { lon, lat } (profile-on-click mode); null when unset. Kept
   // in the hash so a link reproduces the clicked profile.
@@ -302,12 +306,37 @@ function worldEdges(latitudes, longitudes) {
 
 // ---- panel construction -----------------------------------------------------
 
+// Model + resolution of a catalog entry. The catalog carries no explicit resolution
+// field, but every label is "MODEL (resolution)" (e.g. "GLO12 (1/12°)"), so read the
+// pair from there and fall back to the slug when a label does not follow that shape.
+function datasetIdentity(entry) {
+  const match = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(entry.label || "");
+  if (match) return { model: match[1].trim().toLowerCase(), resolution: match[2].trim() };
+  const model = entry.slug.replace(/_(one|1)_degree$/, "");
+  return { model, resolution: model === entry.slug ? "native" : "1°" };
+}
+
+// Default partner for a forecast panel. Prefer a DIFFERENT model at the SAME resolution:
+// the same model's 1-degree twin compares a model with itself, and the mixed resolutions
+// make the shared PSD box degenerate ("Resolutions too different"). Fall back to any
+// different model, then to the first different slug.
 function otherSlug(slug) {
-  return datasetCatalog.find((entry) => entry.slug !== slug)?.slug || slug;
+  const self = datasetCatalog.find((entry) => entry.slug === slug);
+  const candidates = self
+    ? datasetCatalog.filter((entry) => entry.slug !== slug && datasetIdentity(entry).model !== datasetIdentity(self).model)
+    : [];
+  const sameResolution = candidates.find(
+    (entry) => datasetIdentity(entry).resolution === datasetIdentity(self).resolution,
+  );
+  return (
+    sameResolution?.slug || candidates[0]?.slug || datasetCatalog.find((entry) => entry.slug !== slug)?.slug || slug
+  );
 }
 
 function defaultPanelState(index) {
-  const first = datasetCatalog[0].slug;
+  // Forecast 1's dataset when it already exists, so a 1 -> 2 switch pairs against what
+  // is actually on screen rather than against the first catalog entry.
+  const first = panels[0]?.state?.dataset || datasetCatalog[0].slug;
   const second = otherSlug(first);
   const dataset = index === 1 ? second : first;
   return {
@@ -452,7 +481,7 @@ function wirePanel(panel) {
     }
   });
   panel.els.variable.addEventListener("change", async (event) => {
-    clearTrajectories();
+    // Trajectories are advected from u/v, not from the displayed variable, so they stay.
     panel.state.variable = event.target.value;
     setActivePanel(panel.index);
     refreshPanelControls(panel);
@@ -476,6 +505,11 @@ function wirePanel(panel) {
   });
   // Tap/click also populates the consolidated readout pill (touch has no hover).
   field.addEventListener("click", (event) => updateHover(event));
+  // Double-click resets zoom/pan, like the drawer splitters reset their width. The
+  // browser fires the click gestures first, so a double-click in trajectories or column
+  // mode re-seeds or re-reads the same point before the reset: the same work twice at
+  // the same coordinates, which is idempotent, so it is left undebounced.
+  field.addEventListener("dblclick", () => resetZoomPan());
 }
 
 // ---- rendering a single panel ----------------------------------------------
@@ -1590,6 +1624,9 @@ trajectoryWorker.addEventListener("message", ({ data }) => {
 function clearTrajectories() {
   trajectoryRequestId += 1;
   trajectoryState = null;
+  // renderTrajectoryRail only rewrites the caption while a fan exists, so blank it here
+  // rather than leave the previous fan's sentence under a hidden section.
+  if (elements["rail-trajectory-note"]) elements["rail-trajectory-note"].textContent = "";
   if (elements["rail-trajectory-section"]) renderTrajectoryRail();
   if (panels.length) redrawOverlaysAll();
 }
@@ -2356,6 +2393,20 @@ function fitRegionView() {
   if (!panel) return;
   view.zoom = minimumZoomFor(panel);
   clampView();
+}
+
+// Back to the region's default zoom/pan, redrawing (or re-rendering, when the pyramid
+// level changes with the zoom). Shared by the "Reset zoom / pan" button and the
+// double-click on a map.
+function resetZoomPan() {
+  const previousLevels = panels.slice(0, shared.layout).map((panel) => selectRenderLevel(manifestFor(panel.state.dataset)));
+  fitRegionView();
+  const needsRerender = panels
+    .slice(0, shared.layout)
+    .some((panel, index) => previousLevels[index] !== selectRenderLevel(manifestFor(panel.state.dataset)));
+  if (needsRerender) renderAllPanels().then(() => redrawOverlaysAll());
+  else redrawAllPanels();
+  writeHash();
 }
 
 function updateHover(event) {
@@ -3313,6 +3364,7 @@ function ensurePsdBox(shown) {
     const lat = 90 - ((viewport.minY + viewport.maxY) / 2) * 180;
     const width = Math.min(PSD_DEFAULT_WIDTH_DEG, psdBoxLimits.capDeg);
     shared.psdBox = { lon, lat, w: width, h: width };
+    shared.psdBoxRequest = { w: PSD_DEFAULT_WIDTH_DEG, h: PSD_DEFAULT_WIDTH_DEG };
   }
   clampPsdBox(false);
   return shared.psdBox;
@@ -3323,6 +3375,13 @@ function ensurePsdBox(shown) {
 function clampPsdBox(fromResize) {
   const box = shared.psdBox;
   if (!box) return false;
+  // A resize IS the request; anything else re-applies the last request first, so a box
+  // pushed up by a stricter minimum returns to its requested size when that minimum drops.
+  if (fromResize || !shared.psdBoxRequest) shared.psdBoxRequest = { w: box.w, h: box.h };
+  else {
+    box.w = shared.psdBoxRequest.w;
+    box.h = shared.psdBoxRequest.h;
+  }
   const capped = box.w > psdBoxLimits.capDeg + 1e-9 || box.h > psdBoxLimits.capDeg + 1e-9;
   box.w = Math.min(psdBoxLimits.capDeg, Math.max(psdBoxLimits.minDeg, box.w));
   box.h = Math.min(psdBoxLimits.capDeg, Math.max(psdBoxLimits.minDeg, box.h));
@@ -4279,14 +4338,7 @@ function wireGlobalControls() {
       writeHash();
     });
   }
-  elements["reset-view"].addEventListener("click", () => {
-    const previousLevels = panels.slice(0, shared.layout).map((panel) => selectRenderLevel(manifestFor(panel.state.dataset)));
-    fitRegionView();
-    const needsRerender = panels.slice(0, shared.layout).some((panel, index) => previousLevels[index] !== selectRenderLevel(manifestFor(panel.state.dataset)));
-    if (needsRerender) renderAllPanels().then(() => redrawOverlaysAll());
-    else redrawAllPanels();
-    writeHash();
-  });
+  elements["reset-view"].addEventListener("click", resetZoomPan);
   elements["trajectory-clear"].addEventListener("click", clearTrajectories);
   elements["column-clear"].addEventListener("click", () => {
     clearColumnProfile();
@@ -4298,6 +4350,14 @@ function wireGlobalControls() {
     if (event.key === "Escape") {
       clearTrajectories();
       clearColumnProfile();
+      // The overlay picker must not keep reading "trajectories"/"column" once the thing
+      // it names is gone, so drop it back to none along with its note.
+      if (shared.overlayMode === "trajectories" || shared.overlayMode === "column") {
+        shared.overlayMode = "none";
+        elements["overlay-mode"].value = "none";
+        applyOverlayMode();
+        writeHash();
+      }
     }
   });
 
@@ -4555,7 +4615,10 @@ function writeHash() {
     parameters.set("psdOn", "1");
   }
   if (shared.psdEnabled && shared.psdBox) {
-    parameters.set("psd", [shared.psdBox.lon, shared.psdBox.lat, shared.psdBox.w, shared.psdBox.h].map((v) => v.toFixed(2)).join(","));
+    // The requested size travels in the link, so a shared URL reopens at the size the
+    // user chose rather than at whatever a transient constraint clamped it to.
+    const size = shared.psdBoxRequest || shared.psdBox;
+    parameters.set("psd", [shared.psdBox.lon, shared.psdBox.lat, size.w, size.h].map((v) => v.toFixed(2)).join(","));
   }
   if (shared.overlayMode !== "none") parameters.set("ov", shared.overlayMode);
   if (shared.overlayMode === "column" && shared.columnPoint) {
@@ -4600,6 +4663,7 @@ function readHash() {
     const [lon, lat, w, h] = parameters.get("psd").split(",").map(Number);
     if ([lon, lat, w, h].every(Number.isFinite) && w > 0 && h > 0) {
       shared.psdBox = { lon, lat, w, h };
+      shared.psdBoxRequest = { w, h };
       if (!parameters.has("psdOn")) shared.psdEnabled = true;
     }
   }
