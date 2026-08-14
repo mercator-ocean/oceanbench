@@ -8,6 +8,8 @@ import pytest
 import xarray
 
 from oceanbench.core.classIV_support import interpolate_class4_model_to_observations
+from oceanbench.core.curvilinear_staging import CurvilinearChallenger
+from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.ensemble_class4 import (
     ENSEMBLE_DIMENSION,
@@ -513,6 +515,102 @@ def test_ensemble_matchup_runs_mains_pipeline_once_per_member():
     assert set(matchup.observations["depth_bin"]) == {"surface"}
     expected = numpy.array(DETERMINISTIC_MODEL_VALUES)[:, None] + MEMBER_OFFSETS[None, :]
     numpy.testing.assert_allclose(matchup.member_values, expected)
+
+
+# ---------------------------------------------------------------------------
+# Matchup of a challenger left on its native curvilinear grid
+# ---------------------------------------------------------------------------
+
+NATIVE_FIRST_DAY = numpy.datetime64("2024-01-04")
+NATIVE_OBSERVATION_LATITUDES = numpy.array([40.1, 41.1, 42.1])
+NATIVE_OBSERVATION_LONGITUDES = numpy.array([10.1, 11.1, 12.1])
+
+
+def _native_tracer_grid() -> tuple[numpy.ndarray, numpy.ndarray]:
+    row = numpy.arange(4, dtype="float64")
+    column = numpy.arange(4, dtype="float64")
+    return (
+        numpy.broadcast_to(40.0 + row[:, numpy.newaxis], (4, 4)).copy(),
+        numpy.broadcast_to(10.0 + column[numpy.newaxis, :], (4, 4)).copy(),
+    )
+
+
+def _native_challenger_dataset() -> xarray.Dataset:
+    """A three-dimensional NEMO store, describing its cells twice as the real ones do."""
+    latitude, longitude = _native_tracer_grid()
+    dimensions = (
+        ENSEMBLE_DIMENSION,
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        "y",
+        "x",
+    )
+    field = numpy.arange(16.0).reshape(1, 1, 1, 4, 4)
+    return xarray.Dataset(
+        {
+            "thetao": (dimensions, field, {"standard_name": "sea_water_potential_temperature"}),
+            "zos": (dimensions, numpy.zeros((1, 1, 1, 4, 4)), {"standard_name": "sea_surface_height_above_geoid"}),
+            "uo": (dimensions, numpy.ones((1, 1, 1, 4, 4)), {"standard_name": "sea_water_x_velocity"}),
+            "vo": (dimensions, numpy.zeros((1, 1, 1, 4, 4)), {"standard_name": "sea_water_y_velocity"}),
+        },
+        coords={
+            ENSEMBLE_DIMENSION: [0],
+            Dimension.FIRST_DAY_DATETIME.key(): [NATIVE_FIRST_DAY],
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            "nav_lat": (("y", "x"), latitude, {"standard_name": "latitude"}),
+            "nav_lon": (("y", "x"), longitude, {"standard_name": "longitude"}),
+            Dimension.LATITUDE.key(): (("y", "x"), latitude, {"standard_name": "latitude"}),
+            Dimension.LONGITUDE.key(): (("y", "x"), longitude, {"standard_name": "longitude"}),
+        },
+    )
+
+
+def _native_observations_dataset() -> xarray.Dataset:
+    observation_count = len(NATIVE_OBSERVATION_LATITUDES)
+    observation_values = numpy.zeros(observation_count)
+    return xarray.Dataset(
+        {
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): (("observation",), observation_values),
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (("observation",), observation_values),
+            Variable.EASTWARD_SEA_WATER_VELOCITY.key(): (("observation",), observation_values),
+            Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): (("observation",), observation_values),
+            Dimension.TIME.key(): (
+                ("observation",),
+                numpy.full(observation_count, NATIVE_FIRST_DAY),
+            ),
+            Dimension.LATITUDE.key(): (("observation",), NATIVE_OBSERVATION_LATITUDES),
+            Dimension.LONGITUDE.key(): (("observation",), NATIVE_OBSERVATION_LONGITUDES),
+            Dimension.FIRST_DAY_DATETIME.key(): (("observation",), numpy.full(observation_count, NATIVE_FIRST_DAY)),
+            Dimension.DEPTH.key(): (("observation",), numpy.zeros(observation_count)),
+        }
+    )
+
+
+def _declare_native_challenger(monkeypatch) -> xarray.Dataset:
+    latitude, longitude = _native_tracer_grid()
+    monkeypatch.setattr(
+        "oceanbench.core.curvilinear_staging.CURVILINEAR_CHALLENGERS",
+        {
+            "curvy": CurvilinearChallenger(
+                tracer_grid=lambda dataset: (latitude, longitude),
+                tracer_ocean_mask=lambda dataset: numpy.ones(latitude.shape, dtype=bool),
+            )
+        },
+    )
+    return with_dataset_source(_native_challenger_dataset(), kind="challenger", name="curvy")
+
+
+def test_a_store_that_describes_its_cells_twice_reaches_the_native_matchup(monkeypatch):
+    challenger = _declare_native_challenger(monkeypatch)
+
+    matchups = ensemble_class4_matchup(
+        challenger,
+        _native_observations_dataset(),
+        [Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+    )
+
+    assert [matchup.variable for matchup in matchups] == [Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()]
+    numpy.testing.assert_array_equal(matchups[0].member_values[:, 0], [0.0, 5.0, 10.0])
 
 
 # ---------------------------------------------------------------------------

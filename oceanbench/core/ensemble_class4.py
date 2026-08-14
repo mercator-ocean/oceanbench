@@ -79,9 +79,11 @@ from oceanbench.core.classIV_support import (
 )
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.curvilinear_class4 import (
+    NativeGrid,
     interpolate_class4_native_ensemble_to_observations,
     native_grid_of_dataset,
 )
+from oceanbench.core.curvilinear_staging import without_native_grid_description
 from oceanbench.core.dataset_utils import VARIABLE_METADATA, Dimension, Variable
 from oceanbench.core.ensemble_gridded import (
     ENSEMBLE_DIMENSION,
@@ -637,6 +639,23 @@ class Class4EnsembleMatchup:
         return int(self.member_values.shape[1])
 
 
+def _without_native_grid_description(
+    challenger_dataset: xarray.Dataset,
+    native_grid: NativeGrid | None,
+) -> xarray.Dataset:
+    """The dataset the standard-name rename reads, on either path.
+
+    A three-dimensional NEMO store describes its cells twice, as ``nav_lat`` and ``nav_lon``
+    and again as two-dimensional ``latitude`` and ``longitude``, and both pairs declare
+    themselves the latitude and the longitude. The regridded path drops them as it samples;
+    the native path has no regrid, so it drops them here, before the rename is asked to give
+    two variables the same name. The grid itself is already read, from the declaration.
+    """
+    if native_grid is None:
+        return challenger_dataset
+    return without_native_grid_description(challenger_dataset, native_grid.source_dimensions)
+
+
 def ensemble_class4_matchup(
     challenger_dataset: xarray.Dataset,
     observations_dataset: xarray.Dataset,
@@ -656,8 +675,8 @@ def ensemble_class4_matchup(
     observation rather than interpolating along axes the grid does not have. Everything else,
     the observation dataframe and the vertical descent included, is the same code.
     """
-    challenger = rename_dataset_with_standard_names(challenger_dataset)
     native_grid = native_grid_of_dataset(challenger_dataset)
+    challenger = rename_dataset_with_standard_names(_without_native_grid_description(challenger_dataset, native_grid))
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
 
     matchups = []
