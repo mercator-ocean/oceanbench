@@ -185,3 +185,25 @@ def test_reference_mixed_layer_depth_carries_no_member_dimension():
     derived = reference_mixed_layer_depth(dataset)
 
     assert ENSEMBLE_DIMENSION not in derived.dims
+
+
+def test_deriving_per_member_refuses_a_dataset_without_the_field_it_derives_from():
+    dataset = _profile_dataset(member_count=2)
+
+    with pytest.raises(ValueError, match=SEA_SURFACE_HEIGHT_KEY):
+        per_member_geostrophic_currents(dataset)
+
+
+def test_deriving_the_mixed_layer_depth_refuses_a_dataset_without_salinity():
+    dataset = _profile_dataset(member_count=2).drop_vars(Variable.SEA_WATER_SALINITY.key())
+
+    with pytest.raises(ValueError, match=Variable.SEA_WATER_SALINITY.key()):
+        per_member_mixed_layer_depth(dataset)
+
+
+def test_derived_quantity_statistics_refuse_datasets_that_share_no_derived_quantity():
+    dataset = _sea_surface_height_dataset(member_count=3)
+    reference_dataset = _sea_surface_height_dataset(member_count=1).isel({ENSEMBLE_DIMENSION: 0}, drop=True)
+
+    with pytest.raises(ValueError, match="no derived quantity"):
+        derived_quantity_statistics(dataset, reference_dataset)
