@@ -264,7 +264,9 @@ def _without_inverse_barometer(
             "but is missing from its dataset, so its sea surface height cannot be put on the "
             "altimeter convention"
         )
-    return sea_surface_height - challenger_dataset[variable_name]
+    # xarray drops the name when the two operands are named differently, and the Class IV
+    # interpolator dispatches on the name of the array it receives.
+    return (sea_surface_height - challenger_dataset[variable_name]).rename(sea_surface_height.name)
 
 
 def _convert_forecast_ssh_to_sla(
