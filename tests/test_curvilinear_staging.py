@@ -13,11 +13,13 @@ from oceanbench.core.curvilinear_staging import (
     STANDARD_QUARTER_DEGREE_LONGITUDE,
     CurvilinearChallenger,
     curvilinear_mapping,
+    curvilinear_stage_variant,
     maybe_regridded_curvilinear_dataset,
     ocean_mask_from_land_sentinel,
     regridded_curvilinear_dataset,
     with_common_depth_axis,
 )
+from oceanbench.core.weekly_stage import staged_weekly_dataset
 
 TARGET_LATITUDE = numpy.arange(40.0, 41.01, 0.25)
 TARGET_LONGITUDE = numpy.arange(10.0, 11.01, 0.25)
@@ -404,3 +406,63 @@ def test_the_standard_target_grid_is_the_quarter_degree_scoring_grid():
     assert STANDARD_QUARTER_DEGREE_LATITUDE[-1] == 89.75
     assert STANDARD_QUARTER_DEGREE_LONGITUDE[0] == -180.0
     assert STANDARD_QUARTER_DEGREE_LONGITUDE[-1] == 179.75
+
+
+# ---------------------------------------------------------------------------
+# The stage path of a regridded week
+# ---------------------------------------------------------------------------
+
+
+def _staged_directory_names(tmp_path, monkeypatch, dataset_name: str, dataset: xarray.Dataset, **keywords) -> list[str]:
+    monkeypatch.setattr("oceanbench.core.weekly_stage.local_stage_directory", lambda: tmp_path)
+    staged_weekly_dataset(
+        dataset_kind="challenger",
+        dataset_name=dataset_name,
+        first_day_datetimes=numpy.array([numpy.datetime64("2024-01-04")]),
+        lead_days_count=10,
+        open_week_dataset=lambda first_day_datetime: dataset,
+        **keywords,
+    )
+    return sorted(path.name for path in tmp_path.iterdir())
+
+
+def test_a_regridded_week_is_staged_under_a_path_of_its_own(tmp_path, monkeypatch):
+    _declare(monkeypatch, CLASS4_ROUTE_NATIVE)
+
+    names = _staged_directory_names(
+        tmp_path, monkeypatch, "a-curvilinear-challenger", _tracer_dataset(numpy.zeros((9, 9)))
+    )
+
+    assert len(names) == 1
+    assert names[0].startswith("challenger-a-curvilinear-challenger-regridded-")
+    assert names[0].endswith("-10d")
+
+
+def test_a_challenger_left_on_its_native_grid_for_class4_stages_under_yet_another_path(tmp_path, monkeypatch):
+    _declare(monkeypatch, CLASS4_ROUTE_NATIVE)
+    dataset = _tracer_dataset(numpy.zeros((9, 9)))
+
+    for_the_grid = _staged_directory_names(tmp_path / "gridded", monkeypatch, "a-curvilinear-challenger", dataset)
+    for_class4 = _staged_directory_names(
+        tmp_path / "class4", monkeypatch, "a-curvilinear-challenger", dataset, for_class4=True
+    )
+
+    assert for_class4 == ["challenger-a-curvilinear-challenger-10d"]
+    assert for_the_grid != for_class4
+
+
+def test_an_existing_stage_variant_keeps_its_place_in_front_of_the_regrid_marker(monkeypatch):
+    _declare(monkeypatch, CLASS4_ROUTE_REGRIDDED)
+
+    variant = curvilinear_stage_variant("a-curvilinear-challenger", "surface")
+
+    assert variant.startswith("surface-regridded-")
+    assert curvilinear_stage_variant("a-regular-challenger", "surface") == "surface"
+
+
+def test_the_stage_path_of_a_challenger_that_is_not_curvilinear_does_not_move(tmp_path, monkeypatch):
+    dataset = xarray.Dataset({"thetao": (("latitude", "longitude"), numpy.zeros((3, 4)))})
+
+    names = _staged_directory_names(tmp_path, monkeypatch, "a-regular-challenger", dataset, resolution="quarter")
+
+    assert names == ["challenger-a-regular-challenger-quarter-10d"]
