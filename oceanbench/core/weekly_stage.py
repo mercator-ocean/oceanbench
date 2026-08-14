@@ -61,6 +61,7 @@ def staged_weekly_dataset(
     open_week_dataset: Callable[[numpy.datetime64], xarray.Dataset],
     resolution: str | None = None,
     stage_variant: str | None = None,
+    for_class4: bool = False,
 ) -> xarray.Dataset:
     def stage_week(first_day_datetime: numpy.datetime64) -> Path:
         stage_path = _weekly_stage_path(
@@ -76,7 +77,7 @@ def staged_weekly_dataset(
             week_dataset = open_week_dataset(first_day_datetime)
             try:
                 write_dataset_to_local_stage(
-                    maybe_regridded_curvilinear_dataset(week_dataset, dataset_name),
+                    maybe_regridded_curvilinear_dataset(week_dataset, dataset_name, for_class4=for_class4),
                     path,
                 )
             finally:
@@ -116,6 +117,7 @@ def maybe_stage_weekly_dataset(
     resolution: str | None = None,
     stage_variant: str | None = None,
     attach_source_metadata_when_not_staged: bool = True,
+    for_class4: bool = False,
 ) -> xarray.Dataset:
     if should_stage_locally(stage_key):
         return staged_weekly_dataset(
@@ -126,8 +128,9 @@ def maybe_stage_weekly_dataset(
             open_week_dataset=open_week_dataset,
             resolution=resolution,
             stage_variant=stage_variant,
+            for_class4=for_class4,
         )
-    remote_dataset = maybe_regridded_curvilinear_dataset(open_remote_dataset(), dataset_name)
+    remote_dataset = maybe_regridded_curvilinear_dataset(open_remote_dataset(), dataset_name, for_class4=for_class4)
     if not attach_source_metadata_when_not_staged:
         return remote_dataset
     return with_dataset_source(

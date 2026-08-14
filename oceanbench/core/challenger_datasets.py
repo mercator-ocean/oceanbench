@@ -209,6 +209,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
     first_day_datetimes: list[datetime] | None = None,
     preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None = None,
     lead_days_count: int = LEAD_DAYS_COUNT,
+    for_class4: bool = False,
 ) -> xarray.Dataset:
     resolved_first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes)
     dataset_name = _challenger_dataset_name(forecast_zarr_path_from_start_datetime)
@@ -235,6 +236,7 @@ def _open_multizarr_forecasts_as_challenger_dataset(
                 preprocess_dataset,
             ),
             attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
+            for_class4=for_class4,
         )
 
     return with_remote_http_retries("challenger dataset open", open_dataset)

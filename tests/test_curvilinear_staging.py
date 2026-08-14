@@ -7,6 +7,8 @@ import pytest
 import xarray
 
 from oceanbench.core.curvilinear_staging import (
+    CLASS4_ROUTE_NATIVE,
+    CLASS4_ROUTE_REGRIDDED,
     STANDARD_QUARTER_DEGREE_LATITUDE,
     STANDARD_QUARTER_DEGREE_LONGITUDE,
     CurvilinearChallenger,
@@ -329,6 +331,64 @@ def test_a_declared_challenger_goes_through_the_regrid(monkeypatch):
     regridded = maybe_regridded_curvilinear_dataset(_tracer_dataset(numpy.zeros((9, 9))), "a-curvilinear-challenger")
 
     assert regridded["thetao"].dims == ("latitude", "longitude")
+
+
+def _declare(monkeypatch, class4_route: str) -> None:
+    latitude, longitude = _tracer_grid()
+    declaration = CurvilinearChallenger(
+        tracer_grid=lambda dataset: (latitude, longitude),
+        tracer_ocean_mask=lambda dataset: numpy.ones(latitude.shape, dtype=bool),
+        target_latitude=TARGET_LATITUDE,
+        target_longitude=TARGET_LONGITUDE,
+        class4_route=class4_route,
+    )
+    monkeypatch.setattr(
+        "oceanbench.core.curvilinear_staging.CURVILINEAR_CHALLENGERS",
+        {"a-curvilinear-challenger": declaration},
+    )
+
+
+def test_the_class4_track_of_a_native_route_challenger_reads_the_native_grid(monkeypatch):
+    _declare(monkeypatch, CLASS4_ROUTE_NATIVE)
+    dataset = _tracer_dataset(numpy.zeros((9, 9)))
+
+    for_class4 = maybe_regridded_curvilinear_dataset(dataset, "a-curvilinear-challenger", for_class4=True)
+    for_the_grid = maybe_regridded_curvilinear_dataset(dataset, "a-curvilinear-challenger")
+
+    assert for_class4 is dataset
+    assert for_the_grid["thetao"].dims == ("latitude", "longitude")
+
+
+def test_the_class4_track_of_a_regridded_route_challenger_reads_the_regular_grid(monkeypatch):
+    _declare(monkeypatch, CLASS4_ROUTE_REGRIDDED)
+    dataset = _tracer_dataset(numpy.zeros((9, 9)))
+
+    for_class4 = maybe_regridded_curvilinear_dataset(dataset, "a-curvilinear-challenger", for_class4=True)
+    for_the_grid = maybe_regridded_curvilinear_dataset(dataset, "a-curvilinear-challenger")
+
+    assert for_class4["thetao"].dims == ("latitude", "longitude")
+    assert for_the_grid["thetao"].dims == ("latitude", "longitude")
+
+
+def test_the_native_route_is_what_a_challenger_gets_unless_it_says_otherwise():
+    latitude, longitude = _tracer_grid()
+    declaration = CurvilinearChallenger(
+        tracer_grid=lambda dataset: (latitude, longitude),
+        tracer_ocean_mask=lambda dataset: numpy.ones(latitude.shape, dtype=bool),
+    )
+
+    assert declaration.class4_route == CLASS4_ROUTE_NATIVE
+
+
+def test_an_unknown_class4_route_is_refused():
+    latitude, longitude = _tracer_grid()
+
+    with pytest.raises(ValueError, match="unknown Class IV route"):
+        CurvilinearChallenger(
+            tracer_grid=lambda dataset: (latitude, longitude),
+            tracer_ocean_mask=lambda dataset: numpy.ones(latitude.shape, dtype=bool),
+            class4_route="whatever",
+        )
 
 
 def test_no_challenger_is_declared_curvilinear_by_default():

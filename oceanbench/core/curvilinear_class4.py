@@ -25,8 +25,13 @@ bilinear stencil needs four cells whose positions bracket the point along two ax
 a tripolar grid means solving for the curvilinear index of the point first; the native cell
 is about a quarter degree, the observation error is not much smaller than the field variation
 across one, and the campaign scored its gridded metrics on the same nearest-neighbour basis.
-Whether the two treatments agree is a property of the challenger and not of the code, which
-is why the two entry points are siblings and a run can be scored through either.
+
+Which of the two a challenger takes is declared, not discovered: ``class4_route`` of its
+:class:`oceanbench.core.curvilinear_staging.CurvilinearChallenger` is
+``CLASS4_ROUTE_NATIVE``, the campaign-faithful default that opens the dataset for the
+Class IV track without the staging regrid and brings it here, or ``CLASS4_ROUTE_REGRIDDED``,
+which regrids it first and hands it to the ordinary regular-grid matchup. The gridded track
+regrids either way, so the declaration moves the Class IV track alone.
 
 Three things are handled here that the regular-grid path never sees:
 
