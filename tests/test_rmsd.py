@@ -3,11 +3,12 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import numpy
+import pandas
 import pytest
 import xarray
 
-from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.rmsd import _rmsd
+from oceanbench.core.dataset_utils import DepthLevel, Dimension, Variable
+from oceanbench.core.rmsd import _rmsd, rmsd, rmsd_per_start_date
 
 
 def _dataset_with_spatial_coordinates(
@@ -277,3 +278,44 @@ def test_rmsd_raises_when_too_much_spatial_grid_is_unmatched() -> None:
         match="matched 99.8000%.*required at least 99.9000%.*latitude=99.8000%.*longitude=100.0000%",
     ):
         _rmsd(challenger_dataset, reference_dataset)
+
+
+def _depth_resolved_dataset(values: numpy.ndarray, first_days: numpy.ndarray) -> xarray.Dataset:
+    variable_key = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
+    return xarray.Dataset(
+        {
+            variable_key: (
+                [
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.DEPTH.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ],
+                values,
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): first_days,
+            Dimension.LEAD_DAY_INDEX.key(): list(range(values.shape[1])),
+            Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel],
+            Dimension.LATITUDE.key(): numpy.array([0.0, 30.0, 60.0], dtype=numpy.float32),
+            Dimension.LONGITUDE.key(): numpy.array([10.0, 11.0], dtype=numpy.float32),
+        },
+    )
+
+
+def test_rmsd_per_start_date_frames_average_back_to_the_published_rmsd() -> None:
+    first_days = numpy.array(["2024-01-03", "2024-01-10", "2024-01-17"], dtype="datetime64[ns]")
+    generator = numpy.random.default_rng(19)
+    shape = (first_days.size, 2, len(DepthLevel), 3, 2)
+    challenger_dataset = _depth_resolved_dataset(generator.normal(size=shape), first_days)
+    reference_dataset = _depth_resolved_dataset(generator.normal(size=shape), first_days)
+    variables = [Variable.SEA_WATER_POTENTIAL_TEMPERATURE]
+
+    per_start_frames = rmsd_per_start_date(challenger_dataset, reference_dataset, variables)
+    published_frame = rmsd(challenger_dataset, reference_dataset, variables)
+
+    assert list(per_start_frames) == list(first_days)
+    averaged_frame = sum(per_start_frames.values()) / len(per_start_frames)
+    pandas.testing.assert_frame_equal(averaged_frame, published_frame)

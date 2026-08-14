@@ -35,7 +35,8 @@ def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
     return dataset.assign({Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]})
 
 
-def _spatial_area_weights(dataset: xarray.Dataset) -> xarray.DataArray:
+def spatial_area_weights(dataset: xarray.Dataset) -> xarray.DataArray:
+    """Cosine-of-latitude weights, the area weighting every gridded metric shares."""
     return numpy.cos(numpy.deg2rad(dataset[Dimension.LATITUDE.key()]))
 
 
@@ -115,16 +116,25 @@ def _snap_reference_spatial_coordinates_to_challenger(
     return reference_dataset.isel(reference_indexes_by_coordinate).assign_coords(challenger_coordinates)
 
 
-def _rmsd(
+def _root_mean_squared_error_per_start(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
 ) -> xarray.Dataset:
     reference_dataset = _snap_reference_spatial_coordinates_to_challenger(challenger_dataset, reference_dataset)
     squared_error = (challenger_dataset - reference_dataset) ** 2
-    area_weighted_mean_squared_error = squared_error.weighted(_spatial_area_weights(squared_error)).mean(
+    area_weighted_mean_squared_error = squared_error.weighted(spatial_area_weights(squared_error)).mean(
         dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
     )
-    return numpy.sqrt(area_weighted_mean_squared_error).mean(dim=Dimension.FIRST_DAY_DATETIME.key())
+    return numpy.sqrt(area_weighted_mean_squared_error)
+
+
+def _rmsd(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    return _root_mean_squared_error_per_start(challenger_dataset, reference_dataset).mean(
+        dim=Dimension.FIRST_DAY_DATETIME.key()
+    )
 
 
 def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
@@ -187,3 +197,27 @@ def rmsd(
     rmsd_dataset = _rmsd(prepared_challenger_dataset, prepared_reference_dataset)
     computed_rmsd_dataset = rmsd_dataset.compute()
     return _to_pretty_dataframe(computed_rmsd_dataset, variables)
+
+
+def rmsd_per_start_date(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    variables: list[Variable],
+) -> dict[numpy.datetime64, pandas.DataFrame]:
+    """Return one pretty RMSD dataframe per forecast start date.
+
+    The mean over the returned start-date frames reproduces ``rmsd`` exactly: the only
+    difference is that the average over ``first_day_datetime`` is not yet applied. The
+    reference grid is snapped to the challenger grid first, exactly as ``rmsd`` does, so a
+    per-start score and the published score are computed over the same cells.
+    """
+    prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
+    prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
+    per_start_dataset = _root_mean_squared_error_per_start(
+        prepared_challenger_dataset, prepared_reference_dataset
+    ).compute()
+    first_day_key = Dimension.FIRST_DAY_DATETIME.key()
+    return {
+        first_day_value: _to_pretty_dataframe(per_start_dataset.sel({first_day_key: first_day_value}), variables)
+        for first_day_value in per_start_dataset[first_day_key].values
+    }
