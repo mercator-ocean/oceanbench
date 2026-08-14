@@ -27,6 +27,7 @@ OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
 OBSERVATIONS_STAGE_VERSION = "v4"
 OBSERVATIONS_BASIS_VERSION_ATTRIBUTE = "obs_basis_version"
+OBSERVATIONS_DAY_ATTRIBUTE = "date"
 EXPECTED_OBSERVATIONS_BASIS_VERSION = "2024-v2.1.0"
 
 
@@ -35,6 +36,10 @@ class ObservationDataUnavailableError(ValueError):
 
 
 class ObservationBasisVersionError(ValueError):
+    pass
+
+
+class ObservationVariablesMissingError(ValueError):
     pass
 
 
@@ -135,9 +140,10 @@ def _select_consumed_observation_variables(day_observations_dataset: Dataset) ->
         if variable_key not in day_observations_dataset.variables
     ]
     if missing_variable_keys:
-        raise RetriableRemoteDataError(
-            f"Remote dataset opened without expected variables {missing_variable_keys} "
-            "during observation dataset open. "
+        store_day = day_observations_dataset.attrs.get(OBSERVATIONS_DAY_ATTRIBUTE, "unknown")
+        raise ObservationVariablesMissingError(
+            f"Observation day store for {store_day} does not hold the expected variables "
+            f"{missing_variable_keys}. "
             f"Available variables: {sorted(day_observations_dataset.variables)}"
         )
     return day_observations_dataset[consumed_variable_keys]

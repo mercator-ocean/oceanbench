@@ -9,7 +9,9 @@ import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.classIV import _create_observations_dataframe
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.references import observations
+from oceanbench.core.remote_http import with_remote_http_retries
 
 
 def _observation_source() -> xarray.Dataset:
@@ -137,3 +139,24 @@ def test_unexpected_observation_basis_version_raises_with_found_version(tmp_path
 
     assert "2024-v2.0.1" in str(raised_error.value)
     assert observations.EXPECTED_OBSERVATIONS_BASIS_VERSION in str(raised_error.value)
+
+
+def test_a_day_store_missing_a_consumed_variable_is_not_retried(monkeypatch) -> None:
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value, "3")
+    monkeypatch.setattr("oceanbench.core.remote_http.sleep", lambda _seconds: None)
+    missing_variable_key = Variable.SEA_WATER_SALINITY.key()
+    day_store = _observation_source().drop_vars(missing_variable_key)
+    day_store.attrs[observations.OBSERVATIONS_DAY_ATTRIBUTE] = "2024-01-03"
+    attempts = 0
+
+    def open_day_store() -> xarray.Dataset:
+        nonlocal attempts
+        attempts += 1
+        return observations._select_consumed_observation_variables(day_store)
+
+    with pytest.raises(observations.ObservationVariablesMissingError) as raised_error:
+        with_remote_http_retries("observation dataset open", open_day_store)
+
+    assert attempts == 1
+    assert missing_variable_key in str(raised_error.value)
+    assert "2024-01-03" in str(raised_error.value)
