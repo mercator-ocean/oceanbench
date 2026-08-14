@@ -206,8 +206,10 @@ def rmsd_per_start_date(
 ) -> dict[numpy.datetime64, pandas.DataFrame]:
     """Return one pretty RMSD dataframe per forecast start date.
 
-    The mean over the returned start-date frames reproduces ``rmsd`` exactly: the only
-    difference is that the average over ``first_day_datetime`` is not yet applied. The
+    The mean over the returned frames that are finite reproduces ``rmsd`` exactly. ``rmsd``
+    averages over ``first_day_datetime`` skipping missing values, so a start whose score is
+    entirely missing is dropped from that average rather than propagated: reproducing the
+    published number means averaging over the finite frames only, not over all of them. The
     reference grid is snapped to the challenger grid first, exactly as ``rmsd`` does, so a
     per-start score and the published score are computed over the same cells.
     """
