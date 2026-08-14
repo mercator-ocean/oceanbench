@@ -304,3 +304,16 @@ def _declare(
         "oceanbench.core.curvilinear_staging.CURVILINEAR_CHALLENGERS",
         {"curvy": declaration},
     )
+
+
+def test_a_store_on_a_depth_axis_it_does_not_describe_is_refused():
+    values = numpy.arange(32.0).reshape(1, 1, 2, 4, 4)
+    dataset = _model_dataset(values, depths=numpy.array([0.5, 100.0])).drop_vars("deptht")
+
+    with pytest.raises(ValueError, match="holds no coordinate saying at which depths"):
+        interpolate_class4_native_model_to_observations(
+            dataset,
+            TEMPERATURE_KEY,
+            _observations([40.1], [10.1], depths=[10.0]),
+            _native_grid(),
+        )

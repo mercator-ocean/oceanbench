@@ -199,9 +199,19 @@ def _with_common_depth_dimension(model_data: xarray.DataArray, depth_values: num
 
 
 def _tracer_depth_values(dataset: xarray.Dataset) -> numpy.ndarray:
-    for name in (*NEMO_DEPTH_DIMENSIONS, Dimension.DEPTH.key()):
+    depth_names = (*NEMO_DEPTH_DIMENSIONS, Dimension.DEPTH.key())
+    for name in depth_names:
         if name in dataset.coords:
             return numpy.asarray(dataset[name].values, dtype="float64")
+    on_depth = sorted(
+        {str(dimension) for variable in dataset.data_vars.values() for dimension in variable.dims} & set(depth_names)
+    )
+    if on_depth:
+        raise ValueError(
+            f"the challenger is given on {on_depth} and holds no coordinate saying at which depths, so its "
+            "profiles cannot be read: the store has to publish that axis, or the values would be taken as if "
+            "they were all at the surface"
+        )
     return numpy.array([0.0])
 
 

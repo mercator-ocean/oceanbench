@@ -466,3 +466,17 @@ def test_the_stage_path_of_a_challenger_that_is_not_curvilinear_does_not_move(tm
     names = _staged_directory_names(tmp_path, monkeypatch, "a-regular-challenger", dataset, resolution="quarter")
 
     assert names == ["challenger-a-regular-challenger-quarter-10d"]
+
+
+def test_a_mapping_that_reaches_nothing_describes_itself_without_percentiles():
+    latitude, longitude = _tracer_grid()
+    mapping = curvilinear_mapping(
+        latitude,
+        longitude,
+        numpy.zeros(latitude.shape, dtype=bool),
+        TARGET_LATITUDE,
+        TARGET_LONGITUDE,
+    )
+
+    assert mapping.usable.sum() == 0
+    assert mapping.describe() == "nearest neighbour on the sphere: no target cell is usable"
