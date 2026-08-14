@@ -279,12 +279,14 @@ def _with_depth_values(dataset: xarray.Dataset, depth_values: numpy.ndarray) -> 
     return dataset.assign_coords({depth_key: numpy.asarray(depth_values)})
 
 
-def _without_native_grid_description(dataset: xarray.Dataset, source_dimensions: tuple[str, str]) -> xarray.Dataset:
-    """Drop what describes the native grid, so nothing of it survives the regrid.
+def without_native_grid_description(dataset: xarray.Dataset, source_dimensions: tuple[str, str]) -> xarray.Dataset:
+    """Drop what describes the native grid, so nothing of it survives.
 
     The two-dimensional latitude and longitude the store carries name the same things as the
     axes of the regular grid, and keeping them would leave a dataset holding two answers to
-    where its cells are.
+    where its cells are. A three-dimensional GloEns store carries both pairs at once, ``nav_lat``
+    and ``latitude``, each declaring itself the latitude, so they also have to go before the
+    standard-name rename on the native Class IV path, where there is no regrid to drop them.
     """
     described = [
         name
@@ -404,7 +406,7 @@ def regridded_curvilinear_dataset(
     native cell is land, and cells further from the native grid than the neighbour cutoff,
     come back as missing values.
     """
-    prepared = _without_native_grid_description(with_common_depth_axis(dataset, depth_values), source_dimensions)
+    prepared = without_native_grid_description(with_common_depth_axis(dataset, depth_values), source_dimensions)
     native = [str(name) for name in prepared.data_vars if set(source_dimensions).issubset(set(prepared[name].dims))]
     zonal_name, meridional_name = _velocity_component_names(prepared[native])
 
