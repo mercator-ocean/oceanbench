@@ -93,11 +93,15 @@ def test_observations_stage_path_uses_overlap_safe_version() -> None:
 
 def _write_observation_day_store(store_path, basis_version: str) -> None:
     source = _observation_source()
+    # The published day stores hold time as fixed-width ISO strings, and the pipeline opens
+    # them with decode_cf=False, so that is the form the reader actually meets.
     day_store = source.assign(
         {
             Dimension.TIME.key(): (
                 "obs",
-                source[Dimension.TIME.key()].values.astype("datetime64[ns]").astype("int64"),
+                pandas.to_datetime(source[Dimension.TIME.key()].values)
+                .strftime("%Y-%m-%dT%H:%M:%S")
+                .to_numpy(dtype="<U19"),
             ),
             "obs_id": ("obs", numpy.array(["a", "b", "c", "d"], dtype="<U96")),
         }
@@ -121,6 +125,11 @@ def test_expected_observation_basis_version_opens_and_drops_extra_columns(tmp_pa
 
     assert "obs_id" not in selected.variables
     assert set(observations._consumed_observation_variable_keys()) <= set(selected.variables)
+    assert list(pandas.to_datetime(selected[Dimension.TIME.key()].values).strftime("%Y-%m-%d")) == [
+        "2024-01-03",
+        "2024-01-10",
+        "2024-01-12",
+    ]
 
 
 def test_unexpected_observation_basis_version_raises_with_found_version(tmp_path, monkeypatch) -> None:
