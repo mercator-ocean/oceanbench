@@ -29,9 +29,16 @@ from collections.abc import Callable
 
 import xarray
 
+from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.ensemble_gridded import ENSEMBLE_DIMENSION, EnsembleFieldStatistics, ensemble_field_statistics
+
+MIXED_LAYER_DEPTH_INPUT_VARIABLE_KEYS = (
+    Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+    Variable.SEA_WATER_SALINITY.key(),
+)
+GEOSTROPHIC_CURRENTS_INPUT_VARIABLE_KEYS = (Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),)
 
 DERIVED_VARIABLE_KEYS = (
     Variable.MIXED_LAYER_DEPTH.key(),
@@ -44,7 +51,15 @@ def _derive_per_member(
     dataset: xarray.Dataset,
     derive: Callable[[xarray.Dataset], xarray.Dataset],
     ensemble_dimension: str,
+    required_variable_keys: tuple[str, ...],
 ) -> xarray.Dataset:
+    held_variable_keys = set(rename_dataset_with_standard_names(dataset).data_vars)
+    missing_variable_keys = [key for key in required_variable_keys if key not in held_variable_keys]
+    if missing_variable_keys:
+        raise ValueError(
+            f"the dataset to derive per member does not hold {missing_variable_keys}, "
+            f"it holds {sorted(held_variable_keys)}"
+        )
     member_count = dataset.sizes[ensemble_dimension]
     derived = xarray.concat(
         [derive(dataset.isel({ensemble_dimension: member_index})) for member_index in range(member_count)],
@@ -66,7 +81,12 @@ def per_member_mixed_layer_depth(
     :mod:`oceanbench.core.mixed_layer_depth`, so the density threshold and the depth cap are
     the ones the deterministic axis publishes.
     """
-    return _derive_per_member(dataset, compute_mixed_layer_depth, ensemble_dimension)
+    return _derive_per_member(
+        dataset,
+        compute_mixed_layer_depth,
+        ensemble_dimension,
+        MIXED_LAYER_DEPTH_INPUT_VARIABLE_KEYS,
+    )
 
 
 def per_member_geostrophic_currents(
@@ -80,7 +100,12 @@ def per_member_geostrophic_currents(
     :mod:`oceanbench.core.geostrophic_currents`, so the sea surface height derivation and the
     equator exclusion are the ones the deterministic axis publishes.
     """
-    return _derive_per_member(dataset, compute_geostrophic_currents, ensemble_dimension)
+    return _derive_per_member(
+        dataset,
+        compute_geostrophic_currents,
+        ensemble_dimension,
+        GEOSTROPHIC_CURRENTS_INPUT_VARIABLE_KEYS,
+    )
 
 
 def reference_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
@@ -105,12 +130,22 @@ def derived_quantity_statistics(
     the raw variables are reduced to, so a derived quantity is published through
     :func:`~oceanbench.core.ensemble_gridded.ensemble_gridded_records` unchanged.
     """
+    common_variable_keys = [
+        variable_key
+        for variable_key in DERIVED_VARIABLE_KEYS
+        if variable_key in per_member_derived and variable_key in reference_derived
+    ]
+    if not common_variable_keys:
+        raise ValueError(
+            "no derived quantity is held by both datasets: the members hold "
+            f"{sorted(per_member_derived.data_vars)} and the reference holds "
+            f"{sorted(reference_derived.data_vars)}"
+        )
     return {
         variable_key: ensemble_field_statistics(
             per_member_derived[variable_key],
             reference_derived[variable_key],
             ensemble_dimension=ensemble_dimension,
         )
-        for variable_key in DERIVED_VARIABLE_KEYS
-        if variable_key in per_member_derived and variable_key in reference_derived
+        for variable_key in common_variable_keys
     }
