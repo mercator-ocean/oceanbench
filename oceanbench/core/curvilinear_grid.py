@@ -31,6 +31,13 @@ from oceanbench.core.dataset_utils import Dimension
 
 EARTH_RADIUS_KILOMETRES = 6371.0
 
+#: How far a target point may reach for its source cell before it is dropped instead.
+#:
+#: The source and target grids are both about a quarter degree, so this is a little over two
+#: cells at the equator. A target point further than that from every source cell sits outside
+#: the source grid, and sampling it would carry a value across a gap the model never resolved.
+MAXIMUM_NEIGHBOUR_KILOMETRES = 55.0
+
 
 def _unit_sphere_coordinates(latitudes: numpy.ndarray, longitudes: numpy.ndarray) -> numpy.ndarray:
     latitude_radians = numpy.radians(numpy.asarray(latitudes, dtype="float64").ravel())
