@@ -124,6 +124,9 @@ CLASS4_ROUTE_REGRIDDED = "regridded"
 
 CLASS4_ROUTES = (CLASS4_ROUTE_NATIVE, CLASS4_ROUTE_REGRIDDED)
 
+#: Stage variant marker of a week staged after the regrid rather than as published.
+STAGE_VARIANT_REGRIDDED = "regridded"
+
 
 @dataclass(frozen=True)
 class CurvilinearChallenger:
@@ -465,6 +468,29 @@ def curvilinear_regrid_applies(dataset_name: str, *, for_class4: bool = False) -
     if challenger is None:
         return False
     return not (for_class4 and challenger.class4_route == CLASS4_ROUTE_NATIVE)
+
+
+def curvilinear_stage_variant(
+    dataset_name: str,
+    stage_variant: str | None,
+    *,
+    for_class4: bool = False,
+) -> str | None:
+    """The stage variant to key staged weeks on, marked when what is staged is regridded.
+
+    A staged week holds the dataset the track reads, so a challenger declared curvilinear
+    stages regridded data under the same name as the data it published before the
+    declaration. The marker carries the target grid, so declaring a challenger, changing its
+    target grid or routing the Class IV track differently all land on their own stage
+    entries instead of reading the previous ones. A challenger that is not declared keeps its
+    variant untouched, and its stage paths do not move.
+    """
+    challenger = curvilinear_challenger(dataset_name)
+    if challenger is None or not curvilinear_regrid_applies(dataset_name, for_class4=for_class4):
+        return stage_variant
+    fingerprint = _grid_fingerprint(challenger.target_latitude, challenger.target_longitude)
+    marker = f"{STAGE_VARIANT_REGRIDDED}-{fingerprint[:8]}"
+    return marker if stage_variant is None else f"{stage_variant}-{marker}"
 
 
 def maybe_regridded_curvilinear_dataset(

@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy
 import xarray
 
-from oceanbench.core.curvilinear_staging import maybe_regridded_curvilinear_dataset
+from oceanbench.core.curvilinear_staging import curvilinear_stage_variant, maybe_regridded_curvilinear_dataset
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.local_stage import (
@@ -63,6 +63,8 @@ def staged_weekly_dataset(
     stage_variant: str | None = None,
     for_class4: bool = False,
 ) -> xarray.Dataset:
+    staged_variant = curvilinear_stage_variant(dataset_name, stage_variant, for_class4=for_class4)
+
     def stage_week(first_day_datetime: numpy.datetime64) -> Path:
         stage_path = _weekly_stage_path(
             dataset_kind=dataset_kind,
@@ -70,7 +72,7 @@ def staged_weekly_dataset(
             lead_days_count=lead_days_count,
             first_day_datetime=first_day_datetime,
             resolution=resolution,
-            stage_variant=stage_variant,
+            stage_variant=staged_variant,
         )
 
         def build_stage(path: Path) -> None:
