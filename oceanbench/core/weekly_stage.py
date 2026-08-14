@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy
 import xarray
 
+from oceanbench.core.curvilinear_staging import maybe_regridded_curvilinear_dataset
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.local_stage import (
@@ -74,7 +75,10 @@ def staged_weekly_dataset(
         def build_stage(path: Path) -> None:
             week_dataset = open_week_dataset(first_day_datetime)
             try:
-                write_dataset_to_local_stage(week_dataset, path)
+                write_dataset_to_local_stage(
+                    maybe_regridded_curvilinear_dataset(week_dataset, dataset_name),
+                    path,
+                )
             finally:
                 week_dataset.close()
 
@@ -123,7 +127,7 @@ def maybe_stage_weekly_dataset(
             resolution=resolution,
             stage_variant=stage_variant,
         )
-    remote_dataset = open_remote_dataset()
+    remote_dataset = maybe_regridded_curvilinear_dataset(open_remote_dataset(), dataset_name)
     if not attach_source_metadata_when_not_staged:
         return remote_dataset
     return with_dataset_source(
