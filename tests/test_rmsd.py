@@ -319,3 +319,23 @@ def test_rmsd_per_start_date_frames_average_back_to_the_published_rmsd() -> None
     assert list(per_start_frames) == list(first_days)
     averaged_frame = sum(per_start_frames.values()) / len(per_start_frames)
     pandas.testing.assert_frame_equal(averaged_frame, published_frame)
+
+
+def test_a_fully_missing_start_leaves_the_published_rmsd_on_the_finite_starts() -> None:
+    first_days = numpy.array(["2024-01-03", "2024-01-10", "2024-01-17"], dtype="datetime64[ns]")
+    generator = numpy.random.default_rng(19)
+    shape = (first_days.size, 2, len(DepthLevel), 3, 2)
+    challenger_values = generator.normal(size=shape)
+    challenger_values[1] = numpy.nan
+    challenger_dataset = _depth_resolved_dataset(challenger_values, first_days)
+    reference_dataset = _depth_resolved_dataset(generator.normal(size=shape), first_days)
+    variables = [Variable.SEA_WATER_POTENTIAL_TEMPERATURE]
+
+    per_start_frames = rmsd_per_start_date(challenger_dataset, reference_dataset, variables)
+    published_frame = rmsd(challenger_dataset, reference_dataset, variables)
+
+    assert per_start_frames[first_days[1]].isna().all().all()
+    finite_frames = [frame for frame in per_start_frames.values() if not frame.isna().all().all()]
+    assert len(finite_frames) == 2
+    averaged_over_finite_frames = sum(finite_frames) / len(finite_frames)
+    pandas.testing.assert_frame_equal(averaged_over_finite_frames, published_frame)
