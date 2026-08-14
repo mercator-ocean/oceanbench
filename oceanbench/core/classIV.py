@@ -47,8 +47,9 @@ def _compute_rmsd_table(
 def _convert_forecast_ssh_to_sla(
     model_variable: xarray.DataArray,
     variable_key: str,
+    challenger_dataset: xarray.Dataset,
 ) -> xarray.DataArray:
-    return prepare_class4_model_variable(model_variable, variable_key)
+    return prepare_class4_model_variable(model_variable, variable_key, challenger_dataset)
 
 
 def rmsd_class4_validation(
@@ -77,6 +78,7 @@ def rmsd_class4_validation(
         model_variable = _convert_forecast_ssh_to_sla(
             challenger[challenger_variable_key],
             standard_variable_key,
+            challenger,
         )
         observations_dataframe["model_value"] = _interpolate_model_to_observations(
             model_variable,
