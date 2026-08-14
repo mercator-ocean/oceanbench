@@ -16,7 +16,24 @@ from oceanbench.core.dataset_utils import (
 
 
 def compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
-    return _compute_geostrophic_currents(_harmonise_dataset(dataset))
+    return _compute_geostrophic_currents(_require_one_dimensional_axes(_harmonise_dataset(dataset)))
+
+
+def _require_one_dimensional_axes(dataset: xarray.Dataset) -> xarray.Dataset:
+    two_dimensional = [
+        key
+        for key in (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key())
+        if key in dataset.variables and dataset[key].ndim != 1
+    ]
+    if two_dimensional:
+        raise ValueError(
+            f"the geostrophic derivation needs one-dimensional axes and {two_dimensional} "
+            "is two-dimensional, which is a curvilinear grid: the grid spacing and the Coriolis "
+            "parameter here are taken along the axes, so they would be wrong rather than refused. "
+            "Regrid the dataset onto the regular scoring grid first, which "
+            "oceanbench.core.curvilinear_staging does at staging for a declared curvilinear challenger."
+        )
+    return dataset
 
 
 def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:

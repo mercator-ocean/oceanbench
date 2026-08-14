@@ -89,6 +89,29 @@ def _sea_surface_height_dataset(member_count: int, seed: int = 1) -> xarray.Data
     )
 
 
+def _on_a_curvilinear_grid(dataset: xarray.Dataset) -> xarray.Dataset:
+    """The same fields with the axes replaced by two-dimensional native coordinates."""
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
+    latitude, longitude = numpy.meshgrid(LATITUDES, LONGITUDES, indexing="ij")
+    renamed = dataset.drop_vars([latitude_key, longitude_key]).rename({latitude_key: "y", longitude_key: "x"})
+    return renamed.assign_coords({latitude_key: (("y", "x"), latitude), longitude_key: (("y", "x"), longitude)})
+
+
+def test_the_geostrophic_kernel_refuses_two_dimensional_coordinates():
+    curvilinear = _on_a_curvilinear_grid(_sea_surface_height_dataset(member_count=1)).isel({ENSEMBLE_DIMENSION: 0})
+
+    with pytest.raises(ValueError, match="one-dimensional axes"):
+        compute_geostrophic_currents(curvilinear)
+
+
+def test_the_per_member_geostrophic_path_refuses_two_dimensional_coordinates():
+    curvilinear = _on_a_curvilinear_grid(_sea_surface_height_dataset(member_count=3))
+
+    with pytest.raises(ValueError, match="one-dimensional axes"):
+        per_member_geostrophic_currents(curvilinear)
+
+
 def test_geostrophic_kernel_does_not_accept_a_member_dimension():
     with pytest.raises(ValueError):
         compute_geostrophic_currents(_sea_surface_height_dataset(member_count=3))
