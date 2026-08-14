@@ -9,9 +9,26 @@ from oceanbench.core.curvilinear_c_grid import (
     GRID_TYPE_MERIDIONAL_VELOCITY,
     GRID_TYPE_TRACER,
     GRID_TYPE_ZONAL_VELOCITY,
+    c_grid_ocean_mask,
     c_grid_positions,
     grid_type_of_variable,
+    i_axis_angle_to_east,
+    rotated_to_east_north,
 )
+
+
+def _rotated_grid(rotation_degrees: float, latitude_centre: float = 0.0) -> tuple[numpy.ndarray, numpy.ndarray]:
+    """A small grid whose i-axis runs ``rotation_degrees`` anticlockwise from true east."""
+    rotation = numpy.radians(rotation_degrees)
+    row = numpy.arange(5, dtype="float64")
+    column = numpy.arange(4, dtype="float64")
+    step = 0.1
+    latitude = latitude_centre + step * (
+        row[numpy.newaxis, :] * numpy.sin(rotation) + column[:, numpy.newaxis] * numpy.cos(rotation)
+    )
+    eastward = step * (row[numpy.newaxis, :] * numpy.cos(rotation) - column[:, numpy.newaxis] * numpy.sin(rotation))
+    longitude = eastward / numpy.cos(numpy.radians(latitude))
+    return latitude, longitude
 
 
 def _tracer_grid() -> tuple[numpy.ndarray, numpy.ndarray]:
@@ -93,6 +110,76 @@ def test_an_unknown_grid_point_is_refused():
 def test_a_one_dimensional_grid_is_refused():
     with pytest.raises(ValueError, match="two-dimensional"):
         c_grid_positions(numpy.arange(3.0), numpy.arange(3.0), GRID_TYPE_ZONAL_VELOCITY)
+
+
+def test_a_grid_running_east_has_no_angle_to_east():
+    latitude, longitude = _rotated_grid(0.0)
+
+    numpy.testing.assert_allclose(i_axis_angle_to_east(latitude, longitude), 0.0, atol=1e-9)
+
+
+def test_the_angle_to_east_is_the_angle_the_grid_was_turned_by():
+    for rotation_degrees in (30.0, -45.0, 150.0):
+        latitude, longitude = _rotated_grid(rotation_degrees)
+
+        angle = i_axis_angle_to_east(latitude, longitude)
+
+        numpy.testing.assert_allclose(numpy.degrees(angle), rotation_degrees, atol=1e-3)
+
+
+def test_a_current_along_the_i_axis_rotates_into_east_and_north():
+    latitude, longitude = _rotated_grid(30.0)
+    angle = i_axis_angle_to_east(latitude, longitude)
+    along_i_axis = numpy.ones(latitude.shape)
+    along_j_axis = numpy.zeros(latitude.shape)
+
+    eastward, northward = rotated_to_east_north(along_i_axis, along_j_axis, angle)
+
+    numpy.testing.assert_allclose(eastward, numpy.cos(numpy.radians(30.0)), atol=1e-5)
+    numpy.testing.assert_allclose(northward, numpy.sin(numpy.radians(30.0)), atol=1e-5)
+
+
+def test_a_grid_whose_i_axis_points_west_flips_the_sign_of_an_eastward_current():
+    latitude, longitude = _rotated_grid(180.0)
+    angle = i_axis_angle_to_east(latitude, longitude)
+
+    eastward, northward = rotated_to_east_north(numpy.ones(latitude.shape), numpy.zeros(latitude.shape), angle)
+
+    numpy.testing.assert_allclose(eastward, -1.0, atol=1e-5)
+    numpy.testing.assert_allclose(northward, 0.0, atol=1e-5)
+
+
+def test_the_rotation_keeps_the_speed_it_was_given():
+    latitude, longitude = _rotated_grid(37.0, latitude_centre=70.0)
+    angle = i_axis_angle_to_east(latitude, longitude)
+    generator = numpy.random.default_rng(7)
+    along_i_axis = generator.normal(size=latitude.shape)
+    along_j_axis = generator.normal(size=latitude.shape)
+
+    eastward, northward = rotated_to_east_north(along_i_axis, along_j_axis, angle)
+
+    numpy.testing.assert_allclose(
+        eastward**2 + northward**2,
+        along_i_axis**2 + along_j_axis**2,
+        rtol=1e-12,
+    )
+
+
+def test_a_velocity_face_is_ocean_only_between_two_ocean_cells():
+    tracer_mask = numpy.array([[True, True, False], [True, True, True], [False, True, True]])
+
+    zonal_mask = c_grid_ocean_mask(tracer_mask, GRID_TYPE_ZONAL_VELOCITY)
+    meridional_mask = c_grid_ocean_mask(tracer_mask, GRID_TYPE_MERIDIONAL_VELOCITY)
+
+    numpy.testing.assert_array_equal(
+        zonal_mask,
+        numpy.array([[True, False, False], [True, True, True], [False, True, True]]),
+    )
+    numpy.testing.assert_array_equal(
+        meridional_mask,
+        numpy.array([[True, True, False], [False, True, True], [False, True, True]]),
+    )
+    numpy.testing.assert_array_equal(c_grid_ocean_mask(tracer_mask, GRID_TYPE_TRACER), tracer_mask)
 
 
 def test_only_the_velocity_components_are_staggered():

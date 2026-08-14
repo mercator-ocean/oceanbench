@@ -28,6 +28,11 @@ fold where the two halves of the northern boundary meet and the local step stops
 the geometry. Those rows are ocean only in the Arctic and the displacement they carry is a
 fraction of a cell, so a target point that would take a badly placed cell is past the
 neighbour distance cutoff of the sampling and is dropped rather than sampled.
+
+The same staggering decides two more things about a velocity field, and both are here: which
+faces are ocean, since a face between a wet cell and a dry one carries no flux and the stores
+hold an exact zero on it, and which direction the components point, since a NEMO model
+integrates them along its own axes rather than along east and north.
 """
 
 import numpy
@@ -107,3 +112,70 @@ def c_grid_positions(
         latitude + 0.5 * _steps_along(latitude, axis),
         _wrapped_longitude(longitude + 0.5 * _longitude_steps_along(longitude, axis)),
     )
+
+
+def c_grid_ocean_mask(tracer_ocean_mask: numpy.ndarray, grid_type: str) -> numpy.ndarray:
+    """The ocean mask of a C-grid point, from the tracer mask.
+
+    A velocity point sits on the face between two tracer cells and carries a flux through
+    that face, so it is ocean only where both cells are. A face against the coast is dry by
+    construction and the stores hold an exact zero there, which is a number and not a missing
+    value, so it has to be masked rather than left to arrive as data. The last row and the
+    last column have no cell beyond them and keep the mask of the cell they sit on.
+    """
+    mask = numpy.asarray(tracer_ocean_mask, dtype=bool)
+    if grid_type == GRID_TYPE_TRACER:
+        return mask
+    if grid_type == GRID_TYPE_ZONAL_VELOCITY:
+        return mask & numpy.concatenate([mask[:, 1:], mask[:, -1:]], axis=1)
+    if grid_type == GRID_TYPE_MERIDIONAL_VELOCITY:
+        return mask & numpy.concatenate([mask[1:], mask[-1:]], axis=0)
+    raise ValueError(
+        f"unknown C-grid point '{grid_type}', expected one of "
+        f"{GRID_TYPE_TRACER}, {GRID_TYPE_ZONAL_VELOCITY}, {GRID_TYPE_MERIDIONAL_VELOCITY}"
+    )
+
+
+def i_axis_angle_to_east(tracer_latitude: numpy.ndarray, tracer_longitude: numpy.ndarray) -> numpy.ndarray:
+    """The angle, in radians, from true east to the i-axis of the grid, cell by cell.
+
+    A NEMO model integrates its velocities along its own axes and publishes them that way:
+    the GloEns stores name their components ``sea_water_x_velocity`` and
+    ``sea_water_y_velocity`` and describe them as the current along the i-axis and along the
+    j-axis. Below about 60 N the i-axis of the GloEns grid runs east and the distinction does
+    not show; towards the fold it turns, up to pointing west, and a component read as eastward
+    there is wrong by that much, sign included.
+
+    The angle is measured from the step to the next cell along the row, the same step the
+    zonal velocity point sits half of, with the eastward part of that step scaled by the
+    cosine of its latitude so that a degree of longitude and a degree of latitude are the same
+    distance before the angle is taken.
+    """
+    latitude = numpy.asarray(tracer_latitude, dtype="float64")
+    longitude = numpy.asarray(tracer_longitude, dtype="float64")
+    if latitude.ndim != 2 or longitude.ndim != 2 or latitude.shape != longitude.shape:
+        raise ValueError(
+            "the tracer grid must be two two-dimensional arrays of the same shape, "
+            f"got latitude {latitude.shape} and longitude {longitude.shape}"
+        )
+    latitude_step = _steps_along(latitude, axis=1)
+    longitude_step = _longitude_steps_along(longitude, axis=1)
+    eastward = longitude_step * numpy.cos(numpy.radians(latitude + 0.5 * latitude_step))
+    return numpy.arctan2(latitude_step, eastward)
+
+
+def rotated_to_east_north(zonal, meridional, angle):
+    """Turn a grid-relative velocity pair into an eastward and a northward one.
+
+    ``angle`` is the angle from true east to the i-axis, as
+    :func:`i_axis_angle_to_east` measures it, on the same grid as the two components. The
+    j-axis is taken to be a quarter turn from the i-axis, which the GloEns grid is to within
+    half a degree everywhere.
+
+    The two components and the angle can be arrays or data arrays; the operation is pointwise
+    either way, so it can be applied on the native grid or after both components have been
+    sampled onto a common one.
+    """
+    cosine = numpy.cos(angle)
+    sine = numpy.sin(angle)
+    return zonal * cosine - meridional * sine, zonal * sine + meridional * cosine
