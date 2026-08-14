@@ -170,6 +170,26 @@ def test_records_carry_every_metric_per_lead_day_and_an_aggregate():
     assert set(dataframe[dataframe["metric"] == METRIC_SPREAD_ERROR_RATIO]["unit"]) == {"1"}
 
 
+def test_records_are_ordered_by_lead_day_as_a_number():
+    members, truth = _random_ensemble(member_count=6, seed=23)
+    variable = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
+    lead_days = (1, 2, 10)
+    statistics = {
+        ("2024-01-04", lead_day, variable): ensemble_field_statistics(members, truth) for lead_day in lead_days
+    }
+    records = ensemble_gridded_records(
+        statistics,
+        context=RunContext(
+            challenger="gloens", challenger_version="test", year=2024, region="global", oceanbench_version="0.0.0"
+        ),
+        reference="glorys",
+    )
+    dataframe = records_to_dataframe(records)
+    per_start = dataframe[dataframe["start_date"].notna()]
+
+    assert list(dict.fromkeys(per_start["lead_day"])) == list(lead_days)
+
+
 def test_nearest_neighbour_mapping_drops_land_and_out_of_range_cells():
     source_latitude, source_longitude = numpy.meshgrid(
         numpy.arange(-10.0, 10.5, 0.5), numpy.arange(-10.0, 10.5, 0.5), indexing="ij"
