@@ -23,7 +23,21 @@ from oceanbench.core.references.observations import load_mean_dynamic_topography
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
+#: Sea surface height shift of a challenger that declares no shift of its own.
+#:
+#: It was measured against the GLO12 reanalysis, so it only describes a sea surface height on
+#: that basis.
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
+
+#: Challenger source name to the sea surface height shift its own basis needs.
+#:
+#: A challenger whose sea surface height does not sit on the GLO12 reanalysis basis needs its
+#: own measured shift, and an inverse barometer corrected basis is exactly such a case. Keyed
+#: on the challenger source name, the same key the inverse barometer variable is chosen on, so
+#: a challenger declares the convention of its own store and no other challenger is touched.
+#: Empty until a challenger is registered, which leaves every challenger on the reanalysis
+#: shift.
+CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS: dict[str, float] = {}
 
 #: Challenger source name to the inverse barometer variable its store provides.
 #:
@@ -31,9 +45,9 @@ REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 #: surface, so a challenger whose sea surface height still carries that loading is not in the
 #: product convention and its residual against the observations holds the loading as an error.
 #: The systems that publish their own inverse barometer field have it removed here, before the
-#: sea surface height is converted to a sea level anomaly. Keyed on the challenger source name,
-#: the same key the sea surface height shift is chosen on, so a challenger declares the
-#: convention of its own store and no other challenger is touched.
+#: sea surface height is converted to a sea level anomaly. Removing it moves the sea surface
+#: height off the reanalysis basis, so a challenger registered here must also be registered in
+#: ``CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS``; the conversion refuses to run otherwise.
 CHALLENGER_INVERSE_BAROMETER_VARIABLES: dict[str, str] = {}
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
@@ -251,6 +265,22 @@ def challenger_inverse_barometer_variable(challenger_dataset: xarray.Dataset) ->
     return CHALLENGER_INVERSE_BAROMETER_VARIABLES.get(source.name)
 
 
+def challenger_mean_sea_surface_height_shift(challenger_dataset: xarray.Dataset) -> float:
+    source = get_dataset_source(challenger_dataset)
+    if source is None:
+        return REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    if source.name in CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS:
+        return CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS[source.name]
+    if source.name in CHALLENGER_INVERSE_BAROMETER_VARIABLES:
+        raise ValueError(
+            f"challenger '{source.name}' declares an inverse barometer variable but no entry in "
+            "CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS: removing the inverse barometer puts its "
+            "sea surface height on its own basis, which the GLO12 reanalysis shift does not "
+            "describe, so the two must be declared together"
+        )
+    return REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+
+
 def _without_inverse_barometer(
     sea_surface_height: xarray.DataArray,
     challenger_dataset: xarray.Dataset,
@@ -276,12 +306,13 @@ def _convert_forecast_ssh_to_sla(
 ) -> xarray.DataArray:
     if variable_key != Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
         return model_variable
+    shift = challenger_mean_sea_surface_height_shift(challenger_dataset)
     model_dataset = rename_dataset_with_standard_names(model_variable.to_dataset(name=variable_key))
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
     mean_dynamic_topography = load_mean_dynamic_topography(resolution)
     sea_surface_height = _without_inverse_barometer(model_variable, challenger_dataset)
-    return sea_surface_height - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    return sea_surface_height - mean_dynamic_topography - shift
 
 
 def prepare_class4_model_variable(
