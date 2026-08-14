@@ -450,6 +450,12 @@ class SigmaLookup:
         adjusted_longitude = numpy.where(longitude > 180.0, longitude - 360.0, longitude)
         row = numpy.floor((latitude + 90.0) / self.CELL_DEGREES).astype("int64") - self.ROW_OFFSET
         column = numpy.floor((adjusted_longitude + 180.0) / self.CELL_DEGREES).astype("int64")
+        # The floor lands one cell past the end of the grid at its closing edge, latitude 90
+        # and longitude 180, which are values observations carry. Those belong to the last
+        # cell, so they are folded back into it before the grid membership test rather than
+        # being reported outside the grid and sent to the regional fallback.
+        row = numpy.where(row == self.latitude.size, self.latitude.size - 1, row)
+        column = numpy.where(column == self.longitude.size, self.longitude.size - 1, column)
         inside = (row >= 0) & (row < self.latitude.size) & (column >= 0) & (column < self.longitude.size)
         row = numpy.clip(row, 0, self.latitude.size - 1)
         column = numpy.clip(column, 0, self.longitude.size - 1)
