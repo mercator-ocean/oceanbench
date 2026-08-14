@@ -4,6 +4,7 @@
 
 import numpy
 import pandas
+import pytest
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
@@ -84,5 +85,55 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(mo
 def test_observations_stage_path_uses_overlap_safe_version() -> None:
     assert (
         observations._observations_stage_path("2024-01-03", "2025-01-03", 10).name
-        == "observations-v3-20240103-20250103-10d.zarr"
+        == "observations-v4-20240103-20250103-10d.zarr"
     )
+
+
+def _write_observation_day_store(store_path, basis_version: str) -> None:
+    source = _observation_source()
+    day_store = source.assign(
+        {
+            Dimension.TIME.key(): (
+                "obs",
+                source[Dimension.TIME.key()].values.astype("datetime64[ns]").astype("int64"),
+            ),
+            "obs_id": ("obs", numpy.array(["a", "b", "c", "d"], dtype="<U96")),
+        }
+    )
+    day_store.attrs[observations.OBSERVATIONS_BASIS_VERSION_ATTRIBUTE] = basis_version
+    day_store.to_zarr(store_path, mode="w")
+
+
+def test_expected_observation_basis_version_opens_and_drops_extra_columns(tmp_path, monkeypatch) -> None:
+    store_path = tmp_path / "20240103.zarr"
+    _write_observation_day_store(store_path, observations.EXPECTED_OBSERVATIONS_BASIS_VERSION)
+    monkeypatch.setattr(observations, "observation_path", lambda _day: str(store_path))
+    first_day_datetimes = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
+
+    selected = observations._selected_observations_dataset(
+        observation_days=numpy.array(["2024-01-03"], dtype="datetime64[D]"),
+        first_day_timestamps=pandas.to_datetime(first_day_datetimes),
+        first_day_datetimes=first_day_datetimes,
+        lead_days_count=10,
+    )
+
+    assert "obs_id" not in selected.variables
+    assert set(observations._consumed_observation_variable_keys()) <= set(selected.variables)
+
+
+def test_unexpected_observation_basis_version_raises_with_found_version(tmp_path, monkeypatch) -> None:
+    store_path = tmp_path / "20240103.zarr"
+    _write_observation_day_store(store_path, "2024-v2.0.1")
+    monkeypatch.setattr(observations, "observation_path", lambda _day: str(store_path))
+    first_day_datetimes = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
+
+    with pytest.raises(observations.ObservationBasisVersionError) as raised_error:
+        observations._selected_observations_dataset(
+            observation_days=numpy.array(["2024-01-03"], dtype="datetime64[D]"),
+            first_day_timestamps=pandas.to_datetime(first_day_datetimes),
+            first_day_datetimes=first_day_datetimes,
+            lead_days_count=10,
+        )
+
+    assert "2024-v2.0.1" in str(raised_error.value)
+    assert observations.EXPECTED_OBSERVATIONS_BASIS_VERSION in str(raised_error.value)

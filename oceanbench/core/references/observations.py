@@ -25,10 +25,16 @@ from oceanbench.core.remote_http import (
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
-OBSERVATIONS_STAGE_VERSION = "v3"
+OBSERVATIONS_STAGE_VERSION = "v4"
+OBSERVATIONS_BASIS_VERSION_ATTRIBUTE = "obs_basis_version"
+EXPECTED_OBSERVATIONS_BASIS_VERSION = "2024-v2.1.0"
 
 
 class ObservationDataUnavailableError(ValueError):
+    pass
+
+
+class ObservationBasisVersionError(ValueError):
     pass
 
 
@@ -93,7 +99,54 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
 
 def observation_path(day_datetime: numpy.datetime64) -> str:
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
-    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/observations2024/{day_string}.zarr"
+    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/observations2024-v2/{day_string}.zarr"
+
+
+def _require_observation_basis_version(day_observations_dataset: Dataset) -> Dataset:
+    found_basis_version = day_observations_dataset.attrs.get(OBSERVATIONS_BASIS_VERSION_ATTRIBUTE)
+    if found_basis_version != EXPECTED_OBSERVATIONS_BASIS_VERSION:
+        raise ObservationBasisVersionError(
+            "Observation day store was built on an unexpected basis version. "
+            f"Expected {OBSERVATIONS_BASIS_VERSION_ATTRIBUTE}={EXPECTED_OBSERVATIONS_BASIS_VERSION!r}, "
+            f"found {found_basis_version!r}."
+        )
+    return day_observations_dataset
+
+
+def _consumed_observation_variable_keys() -> list[str]:
+    return [
+        Dimension.TIME.key(),
+        Dimension.DEPTH.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
+        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+        Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+        Variable.SEA_WATER_SALINITY.key(),
+        Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+    ]
+
+
+def _select_consumed_observation_variables(day_observations_dataset: Dataset) -> Dataset:
+    consumed_variable_keys = _consumed_observation_variable_keys()
+    missing_variable_keys = [
+        variable_key
+        for variable_key in consumed_variable_keys
+        if variable_key not in day_observations_dataset.variables
+    ]
+    if missing_variable_keys:
+        raise RetriableRemoteDataError(
+            f"Remote dataset opened without expected variables {missing_variable_keys} "
+            "during observation dataset open. "
+            f"Available variables: {sorted(day_observations_dataset.variables)}"
+        )
+    return day_observations_dataset[consumed_variable_keys]
+
+
+def _prepare_day_observations_dataset(day_observations_dataset: Dataset) -> Dataset:
+    return _select_consumed_observation_variables(
+        _require_observation_basis_version(day_observations_dataset),
+    )
 
 
 def _assign_standard_names(observations_dataset: Dataset) -> Dataset:
@@ -194,6 +247,7 @@ def _selected_observations_dataset(
         parallel=False,
         concat_dim=source_observation_dimension_key,
         combine="nested",
+        preprocess=_prepare_day_observations_dataset,
     )
     observations_dataset = require_remote_dataset_dimensions(
         observations_dataset,
