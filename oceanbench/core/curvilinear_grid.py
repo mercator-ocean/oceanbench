@@ -60,11 +60,11 @@ def _great_circle_kilometres(chord_lengths: numpy.ndarray) -> numpy.ndarray:
 class NearestNeighbourMapping:
     """Which source cell each target cell samples, and whether that sample is usable.
 
-    ``source_flat_indices`` indexes the flattened source grid and ``distance_kilometres`` is
-    the great-circle distance actually travelled. ``usable`` is false where the nearest source
-    cell is land or lies further than the requested cutoff, which happens wherever the target
-    grid extends past the source grid: those cells are dropped from the scoring rather than
-    filled with a distant value.
+    ``source_flat_indices`` indexes the flattened source grid, whose shape is
+    ``source_shape``, and ``distance_kilometres`` is the great-circle distance actually
+    travelled. ``usable`` is false where the nearest source cell is land or lies further than
+    the requested cutoff, which happens wherever the target grid extends past the source grid:
+    those cells are dropped from the scoring rather than filled with a distant value.
     """
 
     source_flat_indices: numpy.ndarray
@@ -72,6 +72,7 @@ class NearestNeighbourMapping:
     usable: numpy.ndarray
     target_latitude: numpy.ndarray
     target_longitude: numpy.ndarray
+    source_shape: tuple[int, int]
 
     @property
     def usable_fraction(self) -> float:
@@ -115,6 +116,7 @@ def nearest_neighbour_mapping(
         usable=usable,
         target_latitude=numpy.asarray(target_latitude),
         target_longitude=numpy.asarray(target_longitude),
+        source_shape=tuple(numpy.shape(source_latitude)),
     )
 
 
