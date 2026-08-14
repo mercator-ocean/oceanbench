@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import logging
+
 import numpy
 import pandas
 import pytest
@@ -565,7 +567,7 @@ def _native_challenger_dataset() -> xarray.Dataset:
     )
 
 
-def _native_observations_dataset() -> xarray.Dataset:
+def _native_observations_dataset(depth: float = 0.0) -> xarray.Dataset:
     observation_count = len(NATIVE_OBSERVATION_LATITUDES)
     observation_values = numpy.zeros(observation_count)
     return xarray.Dataset(
@@ -581,7 +583,7 @@ def _native_observations_dataset() -> xarray.Dataset:
             Dimension.LATITUDE.key(): (("observation",), NATIVE_OBSERVATION_LATITUDES),
             Dimension.LONGITUDE.key(): (("observation",), NATIVE_OBSERVATION_LONGITUDES),
             Dimension.FIRST_DAY_DATETIME.key(): (("observation",), numpy.full(observation_count, NATIVE_FIRST_DAY)),
-            Dimension.DEPTH.key(): (("observation",), numpy.zeros(observation_count)),
+            Dimension.DEPTH.key(): (("observation",), numpy.full(observation_count, depth)),
         }
     )
 
@@ -611,6 +613,31 @@ def test_a_store_that_describes_its_cells_twice_reaches_the_native_matchup(monke
 
     assert [matchup.variable for matchup in matchups] == [Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()]
     numpy.testing.assert_array_equal(matchups[0].member_values[:, 0], [0.0, 5.0, 10.0])
+
+
+def test_sea_level_is_left_out_of_a_native_run_instead_of_taking_the_other_variables_down(monkeypatch, caplog):
+    challenger = _declare_native_challenger(monkeypatch)
+
+    with caplog.at_level(logging.WARNING, logger="oceanbench.core.ensemble_class4"):
+        matchups = ensemble_class4_matchup(
+            challenger,
+            _native_observations_dataset(depth=15.0),
+            [
+                Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+                Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+                Variable.EASTWARD_SEA_WATER_VELOCITY,
+                Variable.NORTHWARD_SEA_WATER_VELOCITY,
+            ],
+        )
+
+    assert [matchup.variable for matchup in matchups] == [
+        Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+        Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+    ]
+    warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key() in warnings[0].getMessage()
 
 
 # ---------------------------------------------------------------------------
