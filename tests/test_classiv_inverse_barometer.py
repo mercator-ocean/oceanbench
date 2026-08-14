@@ -9,6 +9,7 @@ import xarray
 from oceanbench.core import classIV_support
 from oceanbench.core.classIV_support import (
     CHALLENGER_INVERSE_BAROMETER_VARIABLES,
+    CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS,
     REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
     _should_use_bracket_vertical_interpolation,
     prepare_class4_model_variable,
@@ -19,6 +20,7 @@ from oceanbench.core.dataset_utils import Dimension, Variable
 SEA_SURFACE_HEIGHT_KEY = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
 INVERSE_BAROMETER_NAME = "ssh_ib"
 CHALLENGER_NAME = "challenger_with_inverse_barometer"
+CHALLENGER_SHIFT = -0.1301
 
 LATITUDES = [-1.0, 0.0, 1.0]
 LONGITUDES = [10.0, 11.0]
@@ -57,6 +59,7 @@ def _without_mean_dynamic_topography(monkeypatch):
 
 def _registered(monkeypatch) -> None:
     monkeypatch.setitem(CHALLENGER_INVERSE_BAROMETER_VARIABLES, CHALLENGER_NAME, INVERSE_BAROMETER_NAME)
+    monkeypatch.setitem(CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS, CHALLENGER_NAME, CHALLENGER_SHIFT)
 
 
 def test_sea_level_anomaly_ignores_the_inverse_barometer_of_an_unregistered_challenger():
@@ -74,9 +77,7 @@ def test_sea_level_anomaly_removes_the_inverse_barometer_of_a_registered_challen
 
     converted = prepare_class4_model_variable(dataset[SEA_SURFACE_HEIGHT_KEY], SEA_SURFACE_HEIGHT_KEY, dataset)
 
-    expected = (
-        dataset[SEA_SURFACE_HEIGHT_KEY] - dataset[INVERSE_BAROMETER_NAME] - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
-    )
+    expected = dataset[SEA_SURFACE_HEIGHT_KEY] - dataset[INVERSE_BAROMETER_NAME] - CHALLENGER_SHIFT
     numpy.testing.assert_allclose(converted.values, expected.values)
 
 
@@ -118,5 +119,33 @@ def test_other_variables_are_not_converted(monkeypatch):
     numpy.testing.assert_array_equal(converted.values, dataset[SEA_SURFACE_HEIGHT_KEY].values)
 
 
-def test_no_challenger_declares_an_inverse_barometer_yet():
+def test_the_reanalysis_shift_is_used_when_no_challenger_shift_is_registered():
+    dataset = _challenger_dataset(with_inverse_barometer=False)
+
+    converted = prepare_class4_model_variable(dataset[SEA_SURFACE_HEIGHT_KEY], SEA_SURFACE_HEIGHT_KEY, dataset)
+
+    expected = dataset[SEA_SURFACE_HEIGHT_KEY] - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    numpy.testing.assert_allclose(converted.values, expected.values)
+
+
+def test_a_registered_challenger_shift_replaces_the_reanalysis_shift(monkeypatch):
+    monkeypatch.setitem(CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS, CHALLENGER_NAME, CHALLENGER_SHIFT)
+    dataset = _challenger_dataset(with_inverse_barometer=False)
+
+    converted = prepare_class4_model_variable(dataset[SEA_SURFACE_HEIGHT_KEY], SEA_SURFACE_HEIGHT_KEY, dataset)
+
+    expected = dataset[SEA_SURFACE_HEIGHT_KEY] - CHALLENGER_SHIFT
+    numpy.testing.assert_allclose(converted.values, expected.values)
+
+
+def test_declaring_an_inverse_barometer_without_a_shift_is_an_error(monkeypatch):
+    monkeypatch.setitem(CHALLENGER_INVERSE_BAROMETER_VARIABLES, CHALLENGER_NAME, INVERSE_BAROMETER_NAME)
+    dataset = _challenger_dataset(with_inverse_barometer=True)
+
+    with pytest.raises(ValueError, match="CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS"):
+        prepare_class4_model_variable(dataset[SEA_SURFACE_HEIGHT_KEY], SEA_SURFACE_HEIGHT_KEY, dataset)
+
+
+def test_no_challenger_declares_an_inverse_barometer_or_a_shift_yet():
     assert CHALLENGER_INVERSE_BAROMETER_VARIABLES == {}
+    assert CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS == {}
