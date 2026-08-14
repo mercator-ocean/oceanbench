@@ -388,6 +388,14 @@ def test_sigma_lookup_rejects_an_unknown_basis_or_region(tmp_path):
         SigmaLookup(str(store), fallback_region="atlantis")
 
 
+def test_sigma_lookup_refuses_a_transposed_array():
+    transposed = _synthetic_sigma_dataset()
+    transposed["sigma_r_z"] = transposed["sigma_r_z"].transpose("obs_type_z", "level", "month", "lat", "lon")
+
+    with pytest.raises(ValueError, match="sigma_r_z"):
+        SigmaLookup(transposed)
+
+
 def test_surface_temperature_is_scored_against_the_drifter_stream():
     temperature = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
 

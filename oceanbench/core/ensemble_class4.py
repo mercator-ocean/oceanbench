@@ -340,10 +340,25 @@ class SigmaLookup:
     ``store`` is a path or URL handed straight to :func:`xarray.open_zarr`, so a local
     directory, an ``s3://`` prefix or an ``https://`` store all work. An already opened
     dataset is accepted too, which is what the tests use.
+
+    The arrays are indexed positionally once loaded, so the dimension order of every array
+    read here is checked against the artifact schema at load time. A transposed array would
+    otherwise read a month as a level or a latitude as a stream and still return numbers.
     """
 
     CELL_DEGREES = 0.25
     ROW_OFFSET = 40
+    SURFACE_ARRAY_DIMENSIONS = {
+        "sigma_r": ("obs_type", "month", "lat", "lon"),
+        "n_days": ("obs_type", "month", "lat", "lon"),
+        "sigma_i": ("obs_type",),
+        "sigma_r_fallback": ("obs_type", "month", "region", "basis"),
+    }
+    DEPTH_ARRAY_DIMENSIONS = {
+        "sigma_r_z": ("obs_type_z", "month", "level", "lat", "lon"),
+        "n_days_z": ("obs_type_z", "month", "level", "lat", "lon"),
+        "sigma_r_fallback_z": ("obs_type_z", "month", "level", "region", "basis"),
+    }
 
     def __init__(
         self,
@@ -374,8 +389,23 @@ class SigmaLookup:
             [str(value) for value in self.store["obs_type_z"].values] if self.has_depth else []
         )
         self.depths = self.store["depth"].values.astype("float64") if self.has_depth else numpy.array([])
+        self._check_array_dimensions()
         self._surface_cache: dict[str, tuple[numpy.ndarray, numpy.ndarray, float]] = {}
         self._depth_cache: dict[tuple[str, int], tuple[numpy.ndarray, numpy.ndarray]] = {}
+
+    def _check_array_dimensions(self) -> None:
+        expected = dict(self.SURFACE_ARRAY_DIMENSIONS)
+        if self.has_depth:
+            expected.update(self.DEPTH_ARRAY_DIMENSIONS)
+        for array_name, expected_dimensions in expected.items():
+            if array_name not in self.store:
+                raise ValueError(f"sigma artifact has no {array_name} array, found {sorted(self.store.data_vars)}")
+            found_dimensions = tuple(str(name) for name in self.store[array_name].dims)
+            if found_dimensions != expected_dimensions:
+                raise ValueError(
+                    f"sigma artifact array {array_name} has dimensions {found_dimensions}, "
+                    f"expected {expected_dimensions}: this loader indexes it positionally"
+                )
 
     def _surface_fields(self, observation_type: str) -> tuple[numpy.ndarray, numpy.ndarray, float]:
         if observation_type not in self._surface_cache:
