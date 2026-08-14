@@ -630,7 +630,7 @@ def ensemble_class4_matchup(
         observations_dataframe = observations_dataframe.dropna(subset=["observation_value"]).reset_index(drop=True)
         if observations_dataframe.empty:
             continue
-        model_variable = prepare_class4_model_variable(challenger[variable_key], variable_key)
+        model_variable = prepare_class4_model_variable(challenger[variable_key], variable_key, challenger)
         member_values = interpolate_class4_ensemble_to_observations(
             model_variable,
             observations_dataframe,

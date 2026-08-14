@@ -8,6 +8,7 @@ import xarray
 from scipy.interpolate import CubicSpline
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
+from oceanbench.core.dataset_source import get_dataset_source
 from oceanbench.core.dataset_utils import (
     DEPTH_BINS_DEFAULT,
     DEPTH_BIN_DISPLAY_ORDER,
@@ -23,6 +24,17 @@ from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
+
+#: Challenger source name to the inverse barometer variable its store provides.
+#:
+#: An altimeter SLA product is corrected for the atmospheric pressure loading of the sea
+#: surface, so a challenger whose sea surface height still carries that loading is not in the
+#: product convention and its residual against the observations holds the loading as an error.
+#: The systems that publish their own inverse barometer field have it removed here, before the
+#: sea surface height is converted to a sea level anomaly. Keyed on the challenger source name,
+#: the same key the sea surface height shift is chosen on, so a challenger declares the
+#: convention of its own store and no other challenger is touched.
+CHALLENGER_INVERSE_BAROMETER_VARIABLES: dict[str, str] = {}
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 VELOCITY_TARGET_DEPTH_METERS = 15.0
@@ -232,9 +244,33 @@ def create_class4_observations_dataframe(
     )
 
 
+def challenger_inverse_barometer_variable(challenger_dataset: xarray.Dataset) -> str | None:
+    source = get_dataset_source(challenger_dataset)
+    if source is None:
+        return None
+    return CHALLENGER_INVERSE_BAROMETER_VARIABLES.get(source.name)
+
+
+def _without_inverse_barometer(
+    sea_surface_height: xarray.DataArray,
+    challenger_dataset: xarray.Dataset,
+) -> xarray.DataArray:
+    variable_name = challenger_inverse_barometer_variable(challenger_dataset)
+    if variable_name is None:
+        return sea_surface_height
+    if variable_name not in challenger_dataset:
+        raise ValueError(
+            f"inverse barometer variable '{variable_name}' is declared for this challenger "
+            "but is missing from its dataset, so its sea surface height cannot be put on the "
+            "altimeter convention"
+        )
+    return sea_surface_height - challenger_dataset[variable_name]
+
+
 def _convert_forecast_ssh_to_sla(
     model_variable: xarray.DataArray,
     variable_key: str,
+    challenger_dataset: xarray.Dataset,
 ) -> xarray.DataArray:
     if variable_key != Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
         return model_variable
@@ -242,14 +278,16 @@ def _convert_forecast_ssh_to_sla(
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
     mean_dynamic_topography = load_mean_dynamic_topography(resolution)
-    return model_variable - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    sea_surface_height = _without_inverse_barometer(model_variable, challenger_dataset)
+    return sea_surface_height - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
 
 
 def prepare_class4_model_variable(
     model_variable: xarray.DataArray,
     variable_key: str,
+    challenger_dataset: xarray.Dataset,
 ) -> xarray.DataArray:
-    return _convert_forecast_ssh_to_sla(model_variable, variable_key)
+    return _convert_forecast_ssh_to_sla(model_variable, variable_key, challenger_dataset)
 
 
 def _interpolate_vertically(
@@ -552,6 +590,7 @@ def class4_variable_results(
     model_variable = _convert_forecast_ssh_to_sla(
         challenger[challenger_variable_key],
         standard_variable_key,
+        challenger,
     )
     observations_dataframe = observations_dataframe.assign(
         model_value=_interpolate_model_to_observations(
