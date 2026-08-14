@@ -396,6 +396,27 @@ def test_sigma_lookup_refuses_a_transposed_array():
         SigmaLookup(transposed)
 
 
+def test_the_closing_edge_of_the_sigma_grid_resolves_to_the_last_cell(sigma_lookup):
+    # The fixture ships the south-west corner only, so the coordinates of the full artifact
+    # grid are put on the loader to reach the cells at latitude 90 and longitude 180.
+    sigma_lookup.latitude = -79.875 + 0.25 * numpy.arange(680)
+    sigma_lookup.longitude = -179.875 + 0.25 * numpy.arange(1440)
+
+    row, column, inside = sigma_lookup.cell_index(numpy.array([90.0, 0.0]), numpy.array([180.0, 0.0]))
+
+    assert row[0] == sigma_lookup.latitude.size - 1
+    assert column[0] == sigma_lookup.longitude.size - 1
+    assert inside.all()
+
+
+def test_an_observation_south_of_the_sigma_grid_stays_outside_it(sigma_lookup):
+    row, column, inside = sigma_lookup.cell_index(numpy.array([-85.0]), numpy.array([-179.9]))
+
+    assert not inside[0]
+    assert 0 <= row[0] < sigma_lookup.latitude.size
+    assert 0 <= column[0] < sigma_lookup.longitude.size
+
+
 def test_surface_temperature_is_scored_against_the_drifter_stream():
     temperature = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
 
