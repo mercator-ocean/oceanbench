@@ -344,8 +344,6 @@ class SigmaLookup:
 
     CELL_DEGREES = 0.25
     ROW_OFFSET = 40
-    FIRST_ROW_LATITUDE = -80.0
-    FIRST_COLUMN_LONGITUDE = -180.0
 
     def __init__(
         self,
