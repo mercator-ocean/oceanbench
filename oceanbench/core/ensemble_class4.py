@@ -78,6 +78,10 @@ from oceanbench.core.classIV_support import (
     prepare_class4_model_variable,
 )
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
+from oceanbench.core.curvilinear_class4 import (
+    interpolate_class4_native_ensemble_to_observations,
+    native_grid_of_dataset,
+)
 from oceanbench.core.dataset_utils import VARIABLE_METADATA, Dimension, Variable
 from oceanbench.core.ensemble_gridded import (
     ENSEMBLE_DIMENSION,
@@ -646,8 +650,14 @@ def ensemble_class4_matchup(
     point where it computes an RMSD: the same standard-name rename, the same observation
     dataframe, the same SSH to SLA conversion and the same interpolation. The only extension
     is the member loop.
+
+    A challenger still on its native curvilinear grid takes the horizontal step of
+    :mod:`oceanbench.core.curvilinear_class4` instead, which reads the native cell of each
+    observation rather than interpolating along axes the grid does not have. Everything else,
+    the observation dataframe and the vertical descent included, is the same code.
     """
     challenger = rename_dataset_with_standard_names(challenger_dataset)
+    native_grid = native_grid_of_dataset(challenger_dataset)
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
 
     matchups = []
@@ -664,12 +674,21 @@ def ensemble_class4_matchup(
         observations_dataframe = observations_dataframe.dropna(subset=["observation_value"]).reset_index(drop=True)
         if observations_dataframe.empty:
             continue
-        model_variable = prepare_class4_model_variable(challenger[variable_key], variable_key, challenger)
-        member_values = interpolate_class4_ensemble_to_observations(
-            model_variable,
-            observations_dataframe,
-            ensemble_dimension=ensemble_dimension,
-        )
+        if native_grid is None:
+            model_variable = prepare_class4_model_variable(challenger[variable_key], variable_key, challenger)
+            member_values = interpolate_class4_ensemble_to_observations(
+                model_variable,
+                observations_dataframe,
+                ensemble_dimension=ensemble_dimension,
+            )
+        else:
+            member_values = interpolate_class4_native_ensemble_to_observations(
+                challenger,
+                variable_key,
+                observations_dataframe,
+                native_grid,
+                ensemble_dimension=ensemble_dimension,
+            )
         matchups.append(Class4EnsembleMatchup(variable_key, observations_dataframe, member_values))
     return matchups
 
