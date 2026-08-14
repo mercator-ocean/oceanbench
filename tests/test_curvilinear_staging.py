@@ -211,14 +211,50 @@ def test_the_staggered_vertical_axis_takes_the_tracer_levels():
     numpy.testing.assert_array_equal(renamed["depth"].values, [0.494, 1.541])
 
 
-def test_a_dataset_with_two_staggered_vertical_axes_is_refused():
+def test_every_staggered_vertical_axis_lands_on_the_common_one():
     dataset = xarray.Dataset(
-        {"uo": (("depthu",), numpy.zeros(2)), "thetao": (("deptht",), numpy.zeros(2))},
-        coords={"depthu": [1.0, 2.0], "deptht": [1.0, 2.0]},
+        {
+            "uo": (("depthu",), numpy.zeros(2)),
+            "vo": (("depthv",), numpy.ones(2)),
+            "thetao": (("deptht",), numpy.full(2, 3.0)),
+        },
+        coords={"depthu": [1.0, 2.0], "depthv": [1.0, 2.0], "deptht": [1.0, 2.0]},
     )
 
-    with pytest.raises(ValueError, match="several staggered vertical axes"):
-        with_common_depth_axis(dataset)
+    renamed = with_common_depth_axis(dataset)
+
+    assert set(renamed.dims) == {"depth"}
+    numpy.testing.assert_array_equal(renamed["depth"].values, [1.0, 2.0])
+    for name in ("uo", "vo", "thetao"):
+        assert renamed[name].dims == ("depth",)
+
+
+def test_a_three_dimensional_store_on_three_staggered_axes_is_regridded():
+    latitude, longitude = _tracer_grid()
+    dimensions = ("depthu", "y", "x")
+    dataset = xarray.Dataset(
+        {
+            "uo": (dimensions, numpy.ones((2, 9, 9))),
+            "vo": (("depthv", "y", "x"), numpy.zeros((2, 9, 9))),
+            "thetao": (("deptht", "y", "x"), numpy.full((2, 9, 9), 12.0)),
+        },
+        coords={
+            "depthu": [0.5, 10.0],
+            "depthv": [0.5, 10.0],
+            "deptht": [0.5, 10.0],
+            "nav_lat": (("y", "x"), latitude),
+            "nav_lon": (("y", "x"), longitude),
+        },
+    )
+
+    regridded = _regridded(dataset, depth_values=numpy.array([0.494, 9.573]))
+
+    assert set(regridded.dims) == {"depth", "latitude", "longitude"}
+    numpy.testing.assert_array_equal(regridded["depth"].values, [0.494, 9.573])
+    assert regridded["uo"].attrs["standard_name"] == "eastward_sea_water_velocity"
+    assert (regridded["vo"].values > 0.0).all()
+    numpy.testing.assert_allclose(regridded["uo"].values ** 2 + regridded["vo"].values ** 2, 1.0)
+    numpy.testing.assert_allclose(regridded["thetao"].values, 12.0)
 
 
 def test_a_challenger_that_is_not_declared_curvilinear_is_left_alone():

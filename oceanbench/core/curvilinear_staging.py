@@ -187,27 +187,59 @@ def curvilinear_mapping(
     return _MAPPING_CACHE[key]
 
 
-def with_common_depth_axis(dataset: xarray.Dataset, depth_values: numpy.ndarray | None = None) -> xarray.Dataset:
-    """Rename the staggered vertical axis of a NEMO store to the common depth axis.
+def _variable_on_common_depth_axis(variable: xarray.DataArray, depth_key: str) -> xarray.DataArray:
+    staggered = [name for name in NEMO_DEPTH_DIMENSIONS if name in variable.dims]
+    if not staggered:
+        return variable
+    return variable.rename({staggered[0]: depth_key}).drop_vars(depth_key, errors="ignore")
 
-    The tracer, zonal velocity and meridional velocity stores name the same levels
-    ``deptht``, ``depthu`` and ``depthv``. Passing ``depth_values`` replaces the values with
-    the tracer ones, which is how a store that publishes its staggered axis on its own levels
-    is put back on the tracer levels the scoring depth labels mean.
+
+def _common_depth_values(
+    dataset: xarray.Dataset,
+    staggered: list[str],
+    depth_values: numpy.ndarray | None,
+) -> numpy.ndarray | None:
+    if depth_values is not None:
+        return numpy.asarray(depth_values)
+    with_values = [name for name in staggered if name in dataset.coords]
+    return numpy.asarray(dataset[with_values[0]].values) if with_values else None
+
+
+def with_common_depth_axis(dataset: xarray.Dataset, depth_values: numpy.ndarray | None = None) -> xarray.Dataset:
+    """Put every staggered vertical axis of a NEMO store on the common depth axis.
+
+    The tracer, zonal velocity and meridional velocity fields name the same levels ``deptht``,
+    ``depthu`` and ``depthv``, and a store that publishes the three of them carries all three
+    names at once: ``uo`` on ``depthu`` and ``vo`` on ``depthv`` in the same dataset. The
+    rename is therefore taken per data variable rather than over the dataset, so the three
+    names collapse onto the one scoring axis instead of colliding. Passing ``depth_values``
+    replaces the values with the tracer ones, which is how a store that publishes its staggered
+    axis on its own levels is put back on the tracer levels the scoring depth labels mean.
     """
     depth_key = Dimension.DEPTH.key()
     staggered = [name for name in NEMO_DEPTH_DIMENSIONS if name in dataset.dims]
-    if len(staggered) > 1:
-        raise ValueError(f"dataset carries several staggered vertical axes {staggered}, which is one axis too many")
-    renamed = dataset.rename({staggered[0]: depth_key}) if staggered else dataset
-    if depth_values is None or depth_key not in renamed.dims:
+    if not staggered:
+        if depth_values is None or depth_key not in dataset.dims:
+            return dataset
+        return _with_depth_values(dataset, depth_values)
+    on_staggered = [str(name) for name in dataset.data_vars if set(staggered) & set(dataset[name].dims)]
+    common_values = _common_depth_values(dataset, staggered, depth_values)
+    renamed = dataset.drop_dims(staggered).assign(
+        {name: _variable_on_common_depth_axis(dataset[name], depth_key) for name in on_staggered}
+    )
+    if common_values is None:
         return renamed
-    if renamed.sizes[depth_key] != len(depth_values):
+    return _with_depth_values(renamed, common_values)
+
+
+def _with_depth_values(dataset: xarray.Dataset, depth_values: numpy.ndarray) -> xarray.Dataset:
+    depth_key = Dimension.DEPTH.key()
+    if dataset.sizes[depth_key] != len(depth_values):
         raise ValueError(
-            f"the dataset holds {renamed.sizes[depth_key]} levels and the tracer axis holds "
+            f"the dataset holds {dataset.sizes[depth_key]} levels and the tracer axis holds "
             f"{len(depth_values)}, so they are not the same levels under two names"
         )
-    return renamed.assign_coords({depth_key: numpy.asarray(depth_values)})
+    return dataset.assign_coords({depth_key: numpy.asarray(depth_values)})
 
 
 def _without_native_grid_description(dataset: xarray.Dataset, source_dimensions: tuple[str, str]) -> xarray.Dataset:
