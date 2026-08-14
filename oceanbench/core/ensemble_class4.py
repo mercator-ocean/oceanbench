@@ -66,6 +66,7 @@ the sigma-v3 artifact; when it is not, ``sigma_total`` is zero throughout and on
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+import logging
 import math
 
 import numpy
@@ -95,6 +96,8 @@ from oceanbench.core.ensemble_gridded import (
     finite_ensemble_correction,
 )
 from oceanbench.core.score_records import RunContext, score_record
+
+NATIVE_CLASS4_LOGGER = logging.getLogger(__name__)
 
 METRIC_SSR_ADD = "ssr_add"
 METRIC_SSR_UNCORRECTED = "ssr_uncorrected"
@@ -656,6 +659,25 @@ def _without_native_grid_description(
     return without_native_grid_description(challenger_dataset, native_grid.source_dimensions)
 
 
+def _variables_the_native_grid_can_match(variables: Sequence[Variable]) -> list[Variable]:
+    """The requested variables minus the ones the native grid cannot answer.
+
+    Sea level is the only one: turning a model sea surface height into an altimeter anomaly
+    subtracts a mean dynamic topography given on a regular grid, so it needs the regridded
+    staging path. Dropping it here keeps the other variables of the same run scored, instead
+    of losing them all to the refusal raised further down.
+    """
+    sea_level_key = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
+    matchable = [variable for variable in variables if variable.key() != sea_level_key]
+    if len(matchable) != len(variables):
+        NATIVE_CLASS4_LOGGER.warning(
+            "skipping %s for a challenger scored on its native curvilinear grid: sea level needs the mean dynamic "
+            "topography of a regular grid, so score it through the regridded staging path",
+            sea_level_key,
+        )
+    return matchable
+
+
 def ensemble_class4_matchup(
     challenger_dataset: xarray.Dataset,
     observations_dataset: xarray.Dataset,
@@ -673,14 +695,16 @@ def ensemble_class4_matchup(
     A challenger still on its native curvilinear grid takes the horizontal step of
     :mod:`oceanbench.core.curvilinear_class4` instead, which reads the native cell of each
     observation rather than interpolating along axes the grid does not have. Everything else,
-    the observation dataframe and the vertical descent included, is the same code.
+    the observation dataframe and the vertical descent included, is the same code. Sea level
+    is left out of such a run, with a warning, because it needs the regridded path.
     """
     native_grid = native_grid_of_dataset(challenger_dataset)
     challenger = rename_dataset_with_standard_names(_without_native_grid_description(challenger_dataset, native_grid))
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
+    requested = variables if native_grid is None else _variables_the_native_grid_can_match(variables)
 
     matchups = []
-    for variable in variables:
+    for variable in requested:
         variable_key = variable.key()
         observations_dataframe = create_class4_observations_dataframe(
             observations_dataset,
