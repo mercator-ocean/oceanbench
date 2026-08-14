@@ -21,13 +21,17 @@ The reconstruction is one half step along the grid index the point is staggered 
     U(j, i) is halfway between T(j, i) and T(j, i + 1), the next cell along the row
     V(j, i) is halfway between T(j, i) and T(j + 1, i), the next cell along the column
 
-The last row and the last column have no next cell, so the last interior step is repeated
-there. That is exact wherever the grid spacing is locally constant, which is everywhere in
-the Mercator band, and approximate on the last row, which on a tripolar grid runs along the
-fold where the two halves of the northern boundary meet and the local step stops describing
-the geometry. Those rows are ocean only in the Arctic and the displacement they carry is a
-fraction of a cell, so a target point that would take a badly placed cell is past the
-neighbour distance cutoff of the sampling and is dropped rather than sampled.
+The last column of a global grid has no next cell in the array but it has one on the sphere:
+the rows run all the way round in longitude and the step from the last column to the first is
+an ordinary quarter degree, with no halo column repeated, so the step off the end of a row is
+taken to the first column and is exact. A grid whose rows do not close, and the last row of
+any grid, have no next cell at all and the last interior step is repeated there. That is exact
+wherever the grid spacing is locally constant, which is
+everywhere in the Mercator band, and approximate on the last row, which on a tripolar grid
+runs along the fold where the two halves of the northern boundary meet and the local step
+stops describing the geometry. Those rows are ocean only in the Arctic and the displacement
+they carry is a fraction of a cell, so a target point that would take a badly placed cell is
+past the neighbour distance cutoff of the sampling and is dropped rather than sampled.
 
 The same staggering decides two more things about a velocity field, and both are here: which
 faces are ocean, since a face between a wet cell and a dry one carries no flux and the stores
@@ -63,20 +67,50 @@ def grid_type_of_variable(variable_name: str) -> str:
     return GRID_TYPE_BY_VARIABLE_NAME.get(variable_name, GRID_TYPE_TRACER)
 
 
-def _steps_along(values: numpy.ndarray, axis: int) -> numpy.ndarray:
-    """First differences along ``axis``, with the last interior step repeated at the end."""
+_ROW_AXIS = 1
+
+#: How much wider than a cell the step from the last column to the first may be on a grid that
+#: is taken to close on itself. A global grid closes with an ordinary cell step, a regional one
+#: with the whole width of its domain, so anything in between never occurs.
+CLOSING_STEP_CELL_WIDTHS = 1.5
+
+
+def _steps_along(values: numpy.ndarray, axis: int, closes: bool = False) -> numpy.ndarray:
+    """First differences along ``axis``, with the last interior step repeated at the end.
+
+    ``closes`` says the axis runs all the way round, which the rows of a global grid do, and
+    then the step off the last column is taken to the first column rather than repeated. That
+    step is the true one and not an assumption of constant spacing.
+    """
+    if closes:
+        return numpy.roll(values, -1, axis=axis) - values
     steps = numpy.diff(values, axis=axis)
     return numpy.concatenate([steps, numpy.take(steps, [-1], axis=axis)], axis=axis)
 
 
-def _longitude_steps_along(longitude: numpy.ndarray, axis: int) -> numpy.ndarray:
+def _longitude_steps_along(longitude: numpy.ndarray, axis: int, closes: bool = False) -> numpy.ndarray:
     """First differences of a longitude, taken as angles rather than as numbers.
 
     A row that crosses the date line steps from 179.9 to -179.9, which is a tenth of a degree
     east and not 359.8 degrees west. Wrapping the difference into (-180, 180] before it is
     halved keeps the midpoint of the two cells between them.
     """
-    return (_steps_along(longitude, axis) + 180.0) % 360.0 - 180.0
+    return (_steps_along(longitude, axis, closes) + 180.0) % 360.0 - 180.0
+
+
+def _rows_close_on_themselves(longitude: numpy.ndarray) -> bool:
+    """Whether the columns of the grid run all the way round in longitude.
+
+    A global model grid closes on itself: the GloEns rows step from the last column to the
+    first by an ordinary quarter degree, with no halo column repeated, so the position and the
+    angle of the last column are known exactly rather than assumed. A regional grid does not
+    close, and its last column is a boundary whose step has to be taken from the interior.
+    """
+    if longitude.shape[_ROW_AXIS] < 2:
+        return False
+    closing_step = numpy.abs((longitude[:, 0] - longitude[:, -1] + 180.0) % 360.0 - 180.0)
+    interior_step = numpy.abs((longitude[:, -1] - longitude[:, -2] + 180.0) % 360.0 - 180.0)
+    return bool(numpy.all(closing_step <= CLOSING_STEP_CELL_WIDTHS * interior_step))
 
 
 def _wrapped_longitude(longitude: numpy.ndarray) -> numpy.ndarray:
@@ -103,7 +137,7 @@ def c_grid_positions(
     if grid_type == GRID_TYPE_TRACER:
         return latitude, longitude
     if grid_type == GRID_TYPE_ZONAL_VELOCITY:
-        axis = 1
+        axis = _ROW_AXIS
     elif grid_type == GRID_TYPE_MERIDIONAL_VELOCITY:
         axis = 0
     else:
@@ -111,9 +145,10 @@ def c_grid_positions(
             f"unknown C-grid point '{grid_type}', expected one of "
             f"{GRID_TYPE_TRACER}, {GRID_TYPE_ZONAL_VELOCITY}, {GRID_TYPE_MERIDIONAL_VELOCITY}"
         )
+    closes = axis == _ROW_AXIS and _rows_close_on_themselves(longitude)
     return (
-        latitude + 0.5 * _steps_along(latitude, axis),
-        _wrapped_longitude(longitude + 0.5 * _longitude_steps_along(longitude, axis)),
+        latitude + 0.5 * _steps_along(latitude, axis, closes),
+        _wrapped_longitude(longitude + 0.5 * _longitude_steps_along(longitude, axis, closes)),
     )
 
 
@@ -161,8 +196,9 @@ def i_axis_angle_to_east(tracer_latitude: numpy.ndarray, tracer_longitude: numpy
             "the tracer grid must be two two-dimensional arrays of the same shape, "
             f"got latitude {latitude.shape} and longitude {longitude.shape}"
         )
-    latitude_step = _steps_along(latitude, axis=1)
-    longitude_step = _longitude_steps_along(longitude, axis=1)
+    closes = _rows_close_on_themselves(longitude)
+    latitude_step = _steps_along(latitude, _ROW_AXIS, closes)
+    longitude_step = _longitude_steps_along(longitude, _ROW_AXIS, closes)
     eastward = longitude_step * numpy.cos(numpy.radians(latitude + 0.5 * latitude_step))
     return numpy.arctan2(latitude_step, eastward)
 

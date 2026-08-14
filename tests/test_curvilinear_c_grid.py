@@ -78,7 +78,35 @@ def test_the_velocity_points_are_not_the_tracer_points():
     assert numpy.abs(meridional_latitude - latitude).min() > 0.0
 
 
-def test_the_last_column_and_the_last_row_repeat_the_local_step():
+def _periodic_grid() -> tuple[numpy.ndarray, numpy.ndarray]:
+    """A grid whose rows run all the way round in longitude and turn as they go."""
+    column = numpy.arange(72, dtype="float64")
+    longitude = numpy.broadcast_to(-180.0 + 5.0 * column, (3, 72)).copy()
+    latitude = 30.0 + numpy.arange(3.0)[:, numpy.newaxis] + 5.0 * numpy.sin(numpy.radians(longitude))
+    return latitude, longitude
+
+
+def test_the_seam_column_of_a_grid_that_closes_steps_onto_the_first_column():
+    latitude, longitude = _periodic_grid()
+
+    angle = i_axis_angle_to_east(latitude, longitude)
+
+    latitude_step = latitude[:, 0] - latitude[:, -1]
+    longitude_step = (longitude[:, 0] - longitude[:, -1] + 180.0) % 360.0 - 180.0
+    eastward = longitude_step * numpy.cos(numpy.radians(latitude[:, -1] + 0.5 * latitude_step))
+    numpy.testing.assert_allclose(angle[:, -1], numpy.arctan2(latitude_step, eastward))
+
+
+def test_the_seam_column_of_a_grid_that_closes_is_no_different_from_an_interior_one():
+    latitude, longitude = _periodic_grid()
+
+    angle = i_axis_angle_to_east(latitude, longitude)
+    rolled = i_axis_angle_to_east(numpy.roll(latitude, 7, axis=1), numpy.roll(longitude, 7, axis=1))
+
+    numpy.testing.assert_allclose(rolled, numpy.roll(angle, 7, axis=1))
+
+
+def test_the_last_column_and_the_last_row_repeat_the_local_step_when_the_grid_does_not_close():
     latitude, longitude = _tracer_grid()
 
     zonal_latitude, zonal_longitude = c_grid_positions(latitude, longitude, GRID_TYPE_ZONAL_VELOCITY)
