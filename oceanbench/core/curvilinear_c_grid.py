@@ -44,13 +44,16 @@ GRID_TYPE_MERIDIONAL_VELOCITY = "V"
 #: Store variable name to the C-grid point its field is carried on.
 #:
 #: Only the velocity components are staggered, so every other field is a tracer point field
-#: and anything not named here is treated as one. Both the store names of the GloEns stores
-#: and the standard names the library renames them to are listed, so a field can be resolved
-#: before or after the rename.
+#: and anything not named here is treated as one. The store names of the GloEns stores, the
+#: grid-relative standard names those stores carry, and the standard names the library renames
+#: a turned component to are all listed, so a field can be resolved before or after either
+#: rename.
 GRID_TYPE_BY_VARIABLE_NAME: dict[str, str] = {
     "uo": GRID_TYPE_ZONAL_VELOCITY,
+    "sea_water_x_velocity": GRID_TYPE_ZONAL_VELOCITY,
     "eastward_sea_water_velocity": GRID_TYPE_ZONAL_VELOCITY,
     "vo": GRID_TYPE_MERIDIONAL_VELOCITY,
+    "sea_water_y_velocity": GRID_TYPE_MERIDIONAL_VELOCITY,
     "northward_sea_water_velocity": GRID_TYPE_MERIDIONAL_VELOCITY,
 }
 

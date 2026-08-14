@@ -118,6 +118,51 @@ def nearest_neighbour_mapping(
     )
 
 
+@dataclass(frozen=True)
+class ScatteredNearestNeighbourMapping:
+    """Which source cell each scattered point takes, and whether that cell is usable.
+
+    The observation counterpart of :class:`NearestNeighbourMapping`: the points are the
+    Class IV observation positions rather than the cells of a regular grid, so everything is
+    one-dimensional and there are no target axes to carry.
+    """
+
+    source_flat_indices: numpy.ndarray
+    distance_kilometres: numpy.ndarray
+    usable: numpy.ndarray
+
+    @property
+    def usable_fraction(self) -> float:
+        return float(self.usable.mean())
+
+
+def nearest_neighbour_at_points(
+    source_latitude: numpy.ndarray,
+    source_longitude: numpy.ndarray,
+    source_ocean_mask: numpy.ndarray,
+    point_latitude: numpy.ndarray,
+    point_longitude: numpy.ndarray,
+    *,
+    maximum_distance_kilometres: float,
+) -> ScatteredNearestNeighbourMapping:
+    """Map scattered points onto their nearest source cell, the same way a target grid is.
+
+    Land is kept in the tree and marked unusable afterwards, exactly as in
+    :func:`nearest_neighbour_mapping`: an observation whose nearest model cell is land is one
+    the model does not simulate, and giving it the nearest wet cell instead would score the
+    wrong side of the coast rather than report a gap.
+    """
+    tree = cKDTree(_unit_sphere_coordinates(source_latitude, source_longitude))
+    chord_lengths, flat_indices = tree.query(_unit_sphere_coordinates(point_latitude, point_longitude), k=1)
+    distance_kilometres = _great_circle_kilometres(chord_lengths)
+    return ScatteredNearestNeighbourMapping(
+        source_flat_indices=flat_indices,
+        distance_kilometres=distance_kilometres,
+        usable=numpy.asarray(source_ocean_mask, dtype=bool).ravel()[flat_indices]
+        & (distance_kilometres <= maximum_distance_kilometres),
+    )
+
+
 def sample_onto_target_grid(
     source_fields: numpy.ndarray,
     mapping: NearestNeighbourMapping,
