@@ -269,7 +269,9 @@ def ensemble_gridded_records(
     """
     per_start_records = [
         record
-        for (start_date, lead_day, variable), field_statistics in sorted(statistics.items(), key=str)
+        for (start_date, lead_day, variable), field_statistics in sorted(
+            statistics.items(), key=lambda item: (str(item[0][0]), item[0][1], item[0][2])
+        )
         for record in _metric_records(
             field_metric_values(field_statistics),
             context=context,
