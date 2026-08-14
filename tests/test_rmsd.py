@@ -321,12 +321,13 @@ def test_rmsd_per_start_date_frames_average_back_to_the_published_rmsd() -> None
     pandas.testing.assert_frame_equal(averaged_frame, published_frame)
 
 
-def test_a_fully_missing_start_leaves_the_published_rmsd_on_the_finite_starts() -> None:
+def test_missing_starts_average_back_to_the_published_rmsd_cell_by_cell() -> None:
     first_days = numpy.array(["2024-01-03", "2024-01-10", "2024-01-17"], dtype="datetime64[ns]")
     generator = numpy.random.default_rng(19)
     shape = (first_days.size, 2, len(DepthLevel), 3, 2)
     challenger_values = generator.normal(size=shape)
     challenger_values[1] = numpy.nan
+    challenger_values[0, 1] = numpy.nan
     challenger_dataset = _depth_resolved_dataset(challenger_values, first_days)
     reference_dataset = _depth_resolved_dataset(generator.normal(size=shape), first_days)
     variables = [Variable.SEA_WATER_POTENTIAL_TEMPERATURE]
@@ -335,7 +336,15 @@ def test_a_fully_missing_start_leaves_the_published_rmsd_on_the_finite_starts() 
     published_frame = rmsd(challenger_dataset, reference_dataset, variables)
 
     assert per_start_frames[first_days[1]].isna().all().all()
-    finite_frames = [frame for frame in per_start_frames.values() if not frame.isna().all().all()]
-    assert len(finite_frames) == 2
-    averaged_over_finite_frames = sum(finite_frames) / len(finite_frames)
-    pandas.testing.assert_frame_equal(averaged_over_finite_frames, published_frame)
+    assert per_start_frames[first_days[0]].iloc[:, 1].isna().all()
+    assert per_start_frames[first_days[0]].iloc[:, 0].notna().all()
+
+    element_wise_mean = pandas.concat(per_start_frames.values()).groupby(level=0).mean().loc[published_frame.index]
+    pandas.testing.assert_frame_equal(element_wise_mean, published_frame)
+
+    frames_that_are_not_entirely_missing = [
+        frame for frame in per_start_frames.values() if not frame.isna().all().all()
+    ]
+    assert len(frames_that_are_not_entirely_missing) == 2
+    averaged_over_whole_frames = sum(frames_that_are_not_entirely_missing) / len(frames_that_are_not_entirely_missing)
+    assert not averaged_over_whole_frames.equals(published_frame)

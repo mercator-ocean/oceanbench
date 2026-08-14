@@ -206,12 +206,17 @@ def rmsd_per_start_date(
 ) -> dict[numpy.datetime64, pandas.DataFrame]:
     """Return one pretty RMSD dataframe per forecast start date.
 
-    The mean over the returned frames that are finite reproduces ``rmsd`` exactly. ``rmsd``
-    averages over ``first_day_datetime`` skipping missing values, so a start whose score is
-    entirely missing is dropped from that average rather than propagated: reproducing the
-    published number means averaging over the finite frames only, not over all of them. The
-    reference grid is snapped to the challenger grid first, exactly as ``rmsd`` does, so a
-    per-start score and the published score are computed over the same cells.
+    ``rmsd`` averages over ``first_day_datetime`` skipping missing values, and it does so
+    cell by cell: a start missing one lead day at one depth is dropped from that cell alone,
+    while its other cells still count. Reproducing the published number therefore means an
+    element-wise mean across all the returned frames that skips the missing cells, that is
+    ``pandas.concat(frames).groupby(level=0).mean()`` reindexed on the published row order.
+    Dropping whole frames instead is only equivalent when every missing frame is missing in
+    full, and it is wrong by several percent as soon as one is partially missing. A start
+    that is missing in full contributes nothing to any cell, so it falls out of the
+    element-wise mean on its own. The reference grid is snapped to the challenger grid
+    first, exactly as ``rmsd`` does, so a per-start score and the published score are
+    computed over the same cells.
     """
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
     prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
