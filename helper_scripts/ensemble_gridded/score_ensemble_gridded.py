@@ -445,6 +445,7 @@ def _score_command(arguments: argparse.Namespace) -> None:
 def _aggregate_command(arguments: argparse.Namespace) -> None:
     output_root = Path(arguments.output_root)
     score_files = sorted(output_root.glob("scores-*.parquet"))
+    score_files = [path for path in score_files if path.name != "scores-per-start.parquet"]
     if not score_files:
         raise RuntimeError(f"no per-start score files under {output_root}")
 
