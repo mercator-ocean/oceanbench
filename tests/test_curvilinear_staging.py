@@ -168,6 +168,49 @@ def test_the_velocity_components_come_out_east_and_north_under_standard_names():
     numpy.testing.assert_allclose(regridded["uo"].values ** 2 + regridded["vo"].values ** 2, 1.0)
 
 
+def _folding_grid() -> tuple[numpy.ndarray, numpy.ndarray]:
+    """A grid whose i-axis runs east on the southern rows and west on the northern ones."""
+    row = numpy.arange(9, dtype="float64")
+    column = numpy.arange(9, dtype="float64")
+    latitude = numpy.broadcast_to(40.0 + 0.1 * row[:, numpy.newaxis], (9, 9)).copy()
+    longitude = numpy.where(
+        row[:, numpy.newaxis] < 4.5,
+        10.0 + 0.1 * column[numpy.newaxis, :],
+        10.0 + 0.1 * (8.0 - column[numpy.newaxis, :]),
+    )
+    return latitude, numpy.asarray(longitude, dtype="float64")
+
+
+def test_a_target_cell_whose_two_velocity_faces_disagree_loses_its_current():
+    latitude, longitude = _folding_grid()
+    dataset = xarray.Dataset(
+        {
+            "uo": (("y", "x"), numpy.ones((9, 9))),
+            "vo": (("y", "x"), numpy.zeros((9, 9))),
+            "thetao": (("y", "x"), numpy.full((9, 9), 12.0)),
+        }
+    )
+    target_latitude = numpy.arange(40.0, 40.81, 0.05)
+    target_longitude = numpy.arange(10.0, 10.81, 0.1)
+
+    regridded = regridded_curvilinear_dataset(
+        dataset,
+        latitude,
+        longitude,
+        numpy.ones((9, 9), dtype=bool),
+        target_latitude=target_latitude,
+        target_longitude=target_longitude,
+    )
+
+    fold_row = int(numpy.argmin(numpy.abs(target_latitude - 40.45)))
+    assert numpy.isnan(regridded["uo"].values[fold_row]).all()
+    assert numpy.isnan(regridded["vo"].values[fold_row]).all()
+    numpy.testing.assert_allclose(regridded["uo"].values[0], 1.0, atol=1e-12)
+    numpy.testing.assert_allclose(regridded["vo"].values[0], 0.0, atol=1e-12)
+    numpy.testing.assert_allclose(regridded["uo"].values[-1], -1.0, atol=1e-12)
+    numpy.testing.assert_allclose(regridded["thetao"].values, 12.0)
+
+
 def test_one_velocity_component_on_its_own_is_refused():
     latitude, longitude = _tracer_grid()
     dataset = xarray.Dataset(

@@ -41,7 +41,10 @@ The velocity components are grid relative
     the standard names that say they are eastward and northward. The rotation is a pointwise
     combination of the two components, so it is applied once both have been sampled onto the
     common target grid: on the native grid they sit on different faces and combining them
-    there would need an average across cells that this path deliberately never takes.
+    there would need an average across cells that this path deliberately never takes. Where
+    the two faces of a target cell come from native cells whose axes point in different
+    directions, which happens along the fold, the pair is not a vector at all and both
+    components are dropped, see :data:`FOLD_DISAGREEMENT_DEGREES`.
 
 The gather itself is the same fancy indexing
 :func:`oceanbench.core.curvilinear_grid.sample_onto_target_grid` performs, expressed through
@@ -99,6 +102,18 @@ NEMO_DEPTH_DIMENSIONS = ("deptht", "depthu", "depthv")
 NEMO_GRID_DESCRIPTION_VARIABLES = ("nav_lat", "nav_lon")
 
 STANDARD_NAME_ATTRIBUTE = "standard_name"
+
+#: How far the two velocity faces of a target cell may disagree on where the i-axis points.
+#:
+#: A target cell takes its zonal component from the nearest zonal face and its meridional one
+#: from the nearest meridional face, and those two faces do not always belong to the same
+#: native cell. Near the tripolar fold they belong to cells whose axes point in different
+#: directions, and the pair is then not a vector: no single angle turns it onto east and north,
+#: and sampling the angle through each component separately does not help either, because the
+#: defect is the pairing and not the angle. On the GloEns grid 937 wet target cells disagree by
+#: more than 60 degrees, all of them north of 69 N and the worst of them by 180 degrees, which
+#: is a turned component of the wrong sign. Both components of such a cell are dropped.
+FOLD_DISAGREEMENT_DEGREES = 20.0
 
 
 @dataclass(frozen=True)
@@ -296,15 +311,36 @@ def _velocity_component_names(dataset: xarray.Dataset) -> tuple[str | None, str 
     return (zonal[0] if zonal else None, meridional[0] if meridional else None)
 
 
+def _angle_disagreement(first: xarray.DataArray, second: xarray.DataArray) -> xarray.DataArray:
+    return numpy.abs((first - second + numpy.pi) % (2.0 * numpy.pi) - numpy.pi)
+
+
+def _folded_velocity_cells(
+    tracer_latitude: numpy.ndarray,
+    tracer_longitude: numpy.ndarray,
+    zonal_mapping: NearestNeighbourMapping,
+    meridional_mapping: NearestNeighbourMapping,
+    source_dimensions: tuple[str, str],
+) -> xarray.DataArray:
+    """Target cells whose two velocity faces come from differently oriented native cells."""
+    angle = xarray.DataArray(i_axis_angle_to_east(tracer_latitude, tracer_longitude), dims=source_dimensions)
+    zonal_angle = _sampled_variable(angle, zonal_mapping, source_dimensions)
+    meridional_angle = _sampled_variable(angle, meridional_mapping, source_dimensions)
+    return _angle_disagreement(zonal_angle, meridional_angle) > numpy.radians(FOLD_DISAGREEMENT_DEGREES)
+
+
 def _with_rotated_velocities(
     regridded: xarray.Dataset,
     zonal_name: str | None,
     meridional_name: str | None,
     angle: xarray.DataArray,
+    folded: xarray.DataArray,
 ) -> xarray.Dataset:
     if zonal_name is None or meridional_name is None:
         return regridded
     eastward, northward = rotated_to_east_north(regridded[zonal_name], regridded[meridional_name], angle)
+    eastward = eastward.where(~folded)
+    northward = northward.where(~folded)
     eastward_attributes = {
         **regridded[zonal_name].attrs,
         STANDARD_NAME_ATTRIBUTE: StandardVariable.EASTWARD_SEA_WATER_VELOCITY.value,
@@ -380,7 +416,14 @@ def regridded_curvilinear_dataset(
         geometry_mapping,
         source_dimensions,
     )
-    return _with_rotated_velocities(regridded, zonal_name, meridional_name, angle).assign_attrs(dataset.attrs)
+    folded = _folded_velocity_cells(
+        tracer_latitude,
+        tracer_longitude,
+        mappings[GRID_TYPE_ZONAL_VELOCITY],
+        mappings[GRID_TYPE_MERIDIONAL_VELOCITY],
+        source_dimensions,
+    )
+    return _with_rotated_velocities(regridded, zonal_name, meridional_name, angle, folded).assign_attrs(dataset.attrs)
 
 
 def maybe_regridded_curvilinear_dataset(dataset: xarray.Dataset, dataset_name: str) -> xarray.Dataset:
