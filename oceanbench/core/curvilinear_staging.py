@@ -280,10 +280,14 @@ def _sampled_variable(
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
     row_dimension, column_dimension = source_dimensions
-    rows, columns = numpy.unravel_index(
-        mapping.source_flat_indices,
-        (variable.sizes[row_dimension], variable.sizes[column_dimension]),
-    )
+    variable_shape = (variable.sizes[row_dimension], variable.sizes[column_dimension])
+    if variable_shape != tuple(mapping.source_shape):
+        raise ValueError(
+            f"the variable is {variable_shape} over ({row_dimension}, {column_dimension}) and the mapping was built "
+            f"on a {tuple(mapping.source_shape)} source grid, so its indices point at other cells than the "
+            "variable holds"
+        )
+    rows, columns = numpy.unravel_index(mapping.source_flat_indices, mapping.source_shape)
     sampled = variable.isel(
         {
             row_dimension: xarray.DataArray(rows, dims=(latitude_key, longitude_key)),

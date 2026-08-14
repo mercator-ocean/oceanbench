@@ -222,6 +222,13 @@ def test_one_velocity_component_on_its_own_is_refused():
         _regridded(dataset)
 
 
+def test_a_field_of_another_shape_than_the_declared_grid_is_refused():
+    dataset = xarray.Dataset({"thetao": (("y", "x"), numpy.zeros((9, 8)))})
+
+    with pytest.raises(ValueError, match="point at other cells"):
+        _regridded(dataset)
+
+
 def test_the_mapping_of_one_grid_pair_is_built_once():
     latitude, longitude = _tracer_grid()
     ocean_mask = numpy.ones(latitude.shape, dtype=bool)
