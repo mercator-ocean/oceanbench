@@ -80,6 +80,8 @@ class NearestNeighbourMapping:
 
     def describe(self) -> str:
         distances = self.distance_kilometres[self.usable]
+        if distances.size == 0:
+            return "nearest neighbour on the sphere: no target cell is usable"
         median, ninetieth = numpy.percentile(distances, [50, 90])
         return (
             f"nearest neighbour on the sphere: {self.usable_fraction:.2%} of target cells usable, "

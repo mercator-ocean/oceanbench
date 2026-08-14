@@ -48,8 +48,10 @@ The velocity components are grid relative
 
 The gather itself is the same fancy indexing
 :func:`oceanbench.core.curvilinear_grid.sample_onto_target_grid` performs, expressed through
-xarray so that it stays lazy, keeps the dtype of the store and accepts any number of leading
-dimensions rather than one. The mapping is the campaign kernel unchanged.
+xarray so that it stays lazy, reads the values of the store as they are and accepts any
+number of leading dimensions rather than one. The values are gathered, never averaged or
+interpolated, but the dtype can still be promoted to a floating one where a target cell has
+no source cell and the gather is masked. The mapping is the campaign kernel unchanged.
 
 Which challenger is curvilinear is declared in :data:`CURVILINEAR_CHALLENGERS`, keyed on the
 challenger source name, the same key the Class IV conventions of
