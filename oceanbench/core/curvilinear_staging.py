@@ -116,6 +116,15 @@ STANDARD_NAME_ATTRIBUTE = "standard_name"
 FOLD_DISAGREEMENT_DEGREES = 20.0
 
 
+#: The Class IV track reads the challenger on its native grid, as the campaign scores it.
+CLASS4_ROUTE_NATIVE = "native"
+
+#: The Class IV track reads the challenger after the staging regrid, as the gridded track does.
+CLASS4_ROUTE_REGRIDDED = "regridded"
+
+CLASS4_ROUTES = (CLASS4_ROUTE_NATIVE, CLASS4_ROUTE_REGRIDDED)
+
+
 @dataclass(frozen=True)
 class CurvilinearChallenger:
     """How to put one curvilinear challenger on the regular grid.
@@ -129,6 +138,14 @@ class CurvilinearChallenger:
     ``tracer_ocean_mask`` returns true on the ocean cells of the tracer grid. It is required:
     a store that holds land as a value rather than as a missing value would otherwise have
     that value sampled onto every coastal cell of the target grid, where it reads as ocean.
+
+    ``class4_route`` says which data the Class IV track of this challenger reads. On
+    :data:`CLASS4_ROUTE_NATIVE`, the default, it reads the dataset as the store publishes it
+    and takes the native cell of each observation, which is what the campaign scores and what
+    :mod:`oceanbench.core.curvilinear_class4` implements; sea level cannot be scored that way
+    and is left out of the Class IV variables. On :data:`CLASS4_ROUTE_REGRIDDED` it reads the
+    regridded dataset instead and is matched up as any regular-grid challenger. The gridded
+    track always reads the regridded dataset, whichever route is declared here.
     """
 
     tracer_grid: Callable[[xarray.Dataset], tuple[numpy.ndarray, numpy.ndarray]]
@@ -136,6 +153,11 @@ class CurvilinearChallenger:
     source_dimensions: tuple[str, str] = ("y", "x")
     target_latitude: numpy.ndarray = field(default_factory=lambda: STANDARD_QUARTER_DEGREE_LATITUDE)
     target_longitude: numpy.ndarray = field(default_factory=lambda: STANDARD_QUARTER_DEGREE_LONGITUDE)
+    class4_route: str = CLASS4_ROUTE_NATIVE
+
+    def __post_init__(self) -> None:
+        if self.class4_route not in CLASS4_ROUTES:
+            raise ValueError(f"unknown Class IV route '{self.class4_route}', expected one of {list(CLASS4_ROUTES)}")
 
 
 #: Challenger source name to its curvilinear grid declaration.
@@ -430,15 +452,34 @@ def regridded_curvilinear_dataset(
     return _with_rotated_velocities(regridded, zonal_name, meridional_name, angle, folded).assign_attrs(dataset.attrs)
 
 
-def maybe_regridded_curvilinear_dataset(dataset: xarray.Dataset, dataset_name: str) -> xarray.Dataset:
-    """Regrid ``dataset`` when its challenger is declared curvilinear, otherwise return it.
+def curvilinear_regrid_applies(dataset_name: str, *, for_class4: bool = False) -> bool:
+    """Whether the staging regrid is applied to ``dataset_name`` on this track.
 
-    This is the staging seam: it is called on the dataset a week is staged from and on the
-    dataset an unstaged run reads directly, so both routes hand the same regular-grid
-    challenger to the metrics.
+    The gridded track needs the regular grid and always takes it. The Class IV track takes it
+    only when the challenger declares :data:`CLASS4_ROUTE_REGRIDDED`, because on the native
+    route it reads the native cells itself.
     """
     challenger = curvilinear_challenger(dataset_name)
     if challenger is None:
+        return False
+    return not (for_class4 and challenger.class4_route == CLASS4_ROUTE_NATIVE)
+
+
+def maybe_regridded_curvilinear_dataset(
+    dataset: xarray.Dataset,
+    dataset_name: str,
+    *,
+    for_class4: bool = False,
+) -> xarray.Dataset:
+    """Regrid ``dataset`` when the track it is opened for reads it regridded, otherwise return it.
+
+    This is the staging seam: it is called on the dataset a week is staged from and on the
+    dataset an unstaged run reads directly, so both routes hand the same challenger to the
+    metrics. ``for_class4`` says the dataset is opened for the Class IV track, which a
+    challenger declaring :data:`CLASS4_ROUTE_NATIVE` gets on its native grid.
+    """
+    challenger = curvilinear_challenger(dataset_name)
+    if challenger is None or not curvilinear_regrid_applies(dataset_name, for_class4=for_class4):
         return dataset
     tracer_latitude, tracer_longitude = challenger.tracer_grid(dataset)
     return regridded_curvilinear_dataset(

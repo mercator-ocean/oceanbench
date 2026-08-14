@@ -14,7 +14,12 @@ from oceanbench.core.curvilinear_class4 import (
     native_grid_of_dataset,
     velocity_component_names,
 )
-from oceanbench.core.curvilinear_staging import CurvilinearChallenger
+from oceanbench.core.curvilinear_staging import (
+    CLASS4_ROUTE_NATIVE,
+    CLASS4_ROUTE_REGRIDDED,
+    CurvilinearChallenger,
+    maybe_regridded_curvilinear_dataset,
+)
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 
@@ -260,10 +265,40 @@ def test_a_declared_challenger_still_on_its_grid_has_a_native_grid(monkeypatch):
     assert native_grid.ocean_mask.all()
 
 
-def _declare(monkeypatch, latitude: numpy.ndarray, longitude: numpy.ndarray) -> None:
+def test_a_regridded_route_challenger_reaches_the_class4_track_on_the_regular_grid(monkeypatch):
+    latitude, longitude = _tracer_grid()
+    _declare(monkeypatch, latitude, longitude, class4_route=CLASS4_ROUTE_REGRIDDED)
+    dataset = _model_dataset(numpy.ones((1, 1, 4, 4)))
+
+    for_class4 = maybe_regridded_curvilinear_dataset(dataset, "curvy", for_class4=True)
+
+    assert for_class4[TEMPERATURE_KEY].dims[-2:] == (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key())
+    assert native_grid_of_dataset(with_dataset_source(for_class4, kind="challenger", name="curvy")) is None
+
+
+def test_a_native_route_challenger_reaches_the_class4_track_on_its_own_grid(monkeypatch):
+    latitude, longitude = _tracer_grid()
+    _declare(monkeypatch, latitude, longitude)
+    dataset = _model_dataset(numpy.ones((1, 1, 4, 4)))
+
+    for_class4 = maybe_regridded_curvilinear_dataset(dataset, "curvy", for_class4=True)
+
+    assert for_class4 is dataset
+    assert native_grid_of_dataset(with_dataset_source(for_class4, kind="challenger", name="curvy")) is not None
+
+
+def _declare(
+    monkeypatch,
+    latitude: numpy.ndarray,
+    longitude: numpy.ndarray,
+    class4_route: str = CLASS4_ROUTE_NATIVE,
+) -> None:
     declaration = CurvilinearChallenger(
         tracer_grid=lambda dataset: (latitude, longitude),
         tracer_ocean_mask=lambda dataset: numpy.ones(latitude.shape, dtype=bool),
+        target_latitude=numpy.arange(40.0, 43.01, 0.5),
+        target_longitude=numpy.arange(10.0, 13.01, 0.5),
+        class4_route=class4_route,
     )
     monkeypatch.setattr(
         "oceanbench.core.curvilinear_staging.CURVILINEAR_CHALLENGERS",
