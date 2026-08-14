@@ -389,17 +389,35 @@ def _horizontally_interpolated_profiles(
     return interpolated_profiles.compute().values
 
 
+def vertically_interpolate_class4_profiles(
+    horizontally_interpolated_profiles: numpy.ndarray,
+    model_depths: numpy.ndarray,
+    observation_depths: numpy.ndarray,
+) -> numpy.ndarray:
+    """Take ``(depth, observation)`` model profiles down to the depth of each observation.
+
+    The vertical treatment of a Class IV matchup, on its own, so that a matchup which places
+    the observations horizontally by some other means can still descend exactly as this
+    module does: the bracket interpolation lives here and nowhere else. The horizontal step
+    is what varies, in :mod:`oceanbench.core.curvilinear_class4` for a challenger on its
+    native grid, and the vertical step must not vary with it.
+    """
+    return _interpolate_vertically_bracket(
+        horizontally_interpolated_profiles,
+        model_depths,
+        observation_depths,
+    )
+
+
 def _interpolated_model_values_for_observation_group(
     time_slice: xarray.DataArray,
     observation_group: pandas.DataFrame,
     model_depths: numpy.ndarray,
 ) -> numpy.ndarray:
-    observation_depths = observation_group[Dimension.DEPTH.key()].values
-    horizontally_interpolated = _horizontally_interpolated_profiles(time_slice, observation_group)
-    return _interpolate_vertically_bracket(
-        horizontally_interpolated,
+    return vertically_interpolate_class4_profiles(
+        _horizontally_interpolated_profiles(time_slice, observation_group),
         model_depths,
-        observation_depths,
+        observation_group[Dimension.DEPTH.key()].values,
     )
 
 
