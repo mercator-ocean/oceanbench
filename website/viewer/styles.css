@@ -571,6 +571,45 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   min-width: 0;
   height: var(--control-height);
 }
+/* Playback lives UNDER the scrubber, never beside it. The side track is exactly as wide
+   as the scrubber plus its readout, so a control on that line could only be paid for out
+   of the track's own length; stacked, it costs the track nothing. The height it needs is
+   already reserved: the scale cell opposite is fixed at the colour bar plus the legend
+   row (see .dock-scale), which is taller than the two stacked lines, so the strip does
+   not deepen and the map does not shorten. */
+.dock-lead-stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.dock-playback {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+/* Compact controls: this is a second line in a strip whose first line is the control the
+   user came for, so it reads as a footnote to the scrubber rather than a rival to it. */
+.dock-playback .ghost-button {
+  height: 1.35rem;
+  min-height: 0;
+  padding: 0 0.4rem;
+  font-size: var(--text-readout);
+  line-height: 1;
+}
+/* Fixed width for the play/pause glyph: the button must not resize when the icon
+   flips, or starting playback would nudge the speed control sideways. */
+.dock-playback .playback-play {
+  width: 1.9rem;
+  padding: 0;
+  font-family: var(--mono);
+  text-align: center;
+}
+.dock-playback .playback-play[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.playback-speed { display: flex; align-items: center; }
+.playback-speed .ghost-button { font-family: var(--mono); }
 /* Neutral scrubber. The accent colour used to fill the track behind the thumb, which
    read as a coloured lead-day band competing with the map's own colour scale. The
    track is now a plain hairline rail with one tick per lead day, and colour in this

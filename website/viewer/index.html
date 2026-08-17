@@ -136,12 +136,26 @@ SPDX-License-Identifier: EUPL-1.2
         <div class="map-dock">
           <!-- The readout names the control, so a separate label beside it would be
                the same two words twice. -->
-          <div class="dock-lead">
-            <span class="lead-track">
-              <input type="range" id="lead-day" min="1" max="10" step="1" value="1" aria-label="Lead day" />
-              <span id="lead-ticks" class="lead-ticks" aria-hidden="true"></span>
-            </span>
-            <span id="lead-value" class="lead-value">Lead day 1</span>
+          <!-- The scrubber row keeps its exact width: playback sits on its own line
+               underneath, in the height the scale cell already reserves, so adding it
+               takes nothing from the track and nothing from the map. -->
+          <div class="dock-lead-stack">
+            <div class="dock-lead">
+              <span class="lead-track">
+                <input type="range" id="lead-day" min="1" max="10" step="1" value="1" aria-label="Lead day" />
+                <span id="lead-ticks" class="lead-ticks" aria-hidden="true"></span>
+              </span>
+              <span id="lead-value" class="lead-value">Lead day 1</span>
+            </div>
+            <div class="dock-playback">
+              <button id="lead-play" type="button" class="ghost-button playback-play" aria-pressed="false"
+                      aria-label="Play lead days" title="Play the lead days (loops); any slider move pauses">▶</button>
+              <div id="playback-speed" class="playback-speed segmented" role="group" aria-label="Playback speed">
+                <button type="button" data-speed="0.5" class="ghost-button" title="Half speed">0.5×</button>
+                <button type="button" data-speed="1" class="ghost-button active" title="Normal speed">1×</button>
+                <button type="button" data-speed="2" class="ghost-button" title="Double speed">2×</button>
+              </div>
+            </div>
           </div>
           <div class="dock-scale">
             <canvas id="colorbar" class="colorbar"></canvas>

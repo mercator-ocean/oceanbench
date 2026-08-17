@@ -129,6 +129,26 @@ export function rmsdDepthProfile(data, variableName, leadDay) {
   return { bins, lead: entry.leads[leadIndex] };
 }
 
+/**
+ * Lead-independent RMSD extent for the depth-profile chart: the largest finite RMSD over
+ * EVERY depth bin and EVERY lead of one variable. The profile axis is bounded by this, so
+ * scrubbing the lead moves the profile within a constant frame instead of rescaling it.
+ * Pure function of the loaded artifact, so it only changes with dataset/variable/region.
+ */
+export function rmsdDepthProfileMax(data, variableName) {
+  const entry = data && data.variables && data.variables[variableName];
+  if (!entry || !Array.isArray(entry.rmsd)) return 0;
+  let maximum = 0;
+  for (const row of entry.rmsd) {
+    if (!Array.isArray(row)) continue;
+    for (const cell of row) {
+      const value = Number(cell);
+      if (cell != null && Number.isFinite(value) && value > maximum) maximum = value;
+    }
+  }
+  return maximum;
+}
+
 function nearestIndex(leads, leadDay) {
   if (!Array.isArray(leads) || !leads.length) return -1;
   let bestIndex = 0;

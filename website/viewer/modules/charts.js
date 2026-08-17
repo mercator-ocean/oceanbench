@@ -238,7 +238,7 @@ export function spectraSVG(entry, { title = "Power spectrum", productA = "produc
  * Wavelength axis in km (large scales left). Points carry per-series data attributes
  * so the cursor tooltip can report wavelength + power for the curve under the cursor.
  */
-export function psdSpectraSVG(curves, { title = "Live power spectrum" } = {}) {
+export function psdSpectraSVG(curves, { title = "Live power spectrum", xBounds = null, yBounds = null } = {}) {
   const area = plotArea();
   const usable = (curves || []).filter((curve) => curve && curve.wavelength && curve.wavelength.length);
   if (!usable.length) return emptyChart(title, "no field in view for a spectrum");
@@ -255,10 +255,15 @@ export function psdSpectraSVG(curves, { title = "Live power spectrum" } = {}) {
   const xValues = usable.flatMap((curve) => positive(curve, (wavelength) => Math.log10(wavelength)));
   const yValues = usable.flatMap((curve) => positive(curve, (_, power) => Math.log10(power)));
   if (!xValues.length || !yValues.length) return emptyChart(title, "spectrum values non-positive");
-  const xMin = Math.min(...xValues);
-  const xMax = Math.max(...xValues);
-  const yMin = Math.min(...yValues);
-  const yMax = Math.max(...yValues);
+  // Both axes are log10. `xBounds`/`yBounds` are the caller's grow-only decade window for
+  // the current selection and box, in the same log10 units, so the spectrum slides inside
+  // a still frame as the lead changes. They only ever widen what this lead's data needs.
+  const widen = (low, high, bound) =>
+    Array.isArray(bound) && Number.isFinite(bound[0]) && Number.isFinite(bound[1])
+      ? [Math.min(low, bound[0]), Math.max(high, bound[1])]
+      : [low, high];
+  const [xMin, xMax] = widen(Math.min(...xValues), Math.max(...xValues), xBounds);
+  const [yMin, yMax] = widen(Math.min(...yValues), Math.max(...yValues), yBounds);
   const xOf = (wavelength) => area.x1 - ((Math.log10(wavelength) - xMin) / (xMax - xMin || 1)) * area.width;
   const yOf = (power) => area.y1 - ((Math.log10(power) - yMin) / (yMax - yMin || 1)) * area.height;
 
@@ -441,7 +446,10 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
  * the longest series. Points carry `data-line`/`data-x-label`/`data-y-label` so the shared
  * cursor tooltip reports the depth bin, the RMSD, and the observation count on hover.
  */
-export function rmsdByDepthSVG(series, { title = "RMSD vs depth", unit = "", emptyMessage = "no depth profile for this variable" } = {}) {
+export function rmsdByDepthSVG(
+  series,
+  { title = "RMSD vs depth", unit = "", emptyMessage = "no depth profile for this variable", xBound = 0 } = {},
+) {
   // Depth-bin labels ("1500-3000 m") are wider than the numeric ticks the other charts use,
   // so this profile gets a roomier left gutter than the shared plotArea() default.
   const base = plotArea();
@@ -461,7 +469,10 @@ export function rmsdByDepthSVG(series, { title = "RMSD vs depth", unit = "", emp
   for (const line of usable) {
     for (const bin of line.bins) if (Number.isFinite(bin.rmsd) && bin.rmsd > maxValue) maxValue = bin.rmsd;
   }
-  const xMax = niceMax(maxValue);
+  // `xBound` is the caller's lead-independent extent (the max over EVERY lead of this
+  // artifact), so the axis stays put while the lead slider scrubs. It can only widen the
+  // frame, never narrow it, so the drawn profile is always contained.
+  const xMax = niceMax(Math.max(maxValue, Number.isFinite(xBound) ? xBound : 0));
   const xOf = (value) => area.x0 + (value / xMax) * area.width;
 
   let body = "";
@@ -523,7 +534,10 @@ export function rmsdByDepthSVG(series, { title = "RMSD vs depth", unit = "", emp
  * value scale padded to the data. Points carry `data-line`/`data-x-label`/`data-y-label`
  * so the shared cursor tooltip reports the depth and the value on hover.
  */
-export function columnProfileSVG(series, { title = "Water column", unit = "", xLabel = "value", emptyMessage = "no water column at this point" } = {}) {
+export function columnProfileSVG(
+  series,
+  { title = "Water column", unit = "", xLabel = "value", emptyMessage = "no water column at this point", valueBound = null, depthBound = 0 } = {},
+) {
   const base = plotArea();
   const DEPTH_PAD_LEFT = 52;
   const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
@@ -543,6 +557,14 @@ export function columnProfileSVG(series, { title = "Water column", unit = "", xL
       valueMax = Math.max(valueMax, point.value);
     }
   }
+  // `valueBound`/`depthBound` are the caller's extent over EVERY lead of the column it
+  // already holds in memory, so scrubbing the lead moves the profile inside a fixed
+  // frame. They widen the bounds this lead's own data asks for and never narrow them.
+  if (Array.isArray(valueBound) && Number.isFinite(valueBound[0]) && Number.isFinite(valueBound[1])) {
+    valueMin = Math.min(valueMin, valueBound[0]);
+    valueMax = Math.max(valueMax, valueBound[1]);
+  }
+  if (Number.isFinite(depthBound)) depthMax = Math.max(depthMax, depthBound);
   if (!(valueMax > valueMin)) valueMax = valueMin + 1;
   const padding = (valueMax - valueMin) * 0.06 || 1;
   const xLo = valueMin - padding;

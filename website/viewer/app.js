@@ -35,6 +35,7 @@ import {
   loadScoresSummary,
   loadRmsdByDepth,
   rmsdDepthProfile,
+  rmsdDepthProfileMax,
   loadClass4,
   prefetchClass4,
   cancelClass4Prefetches,
@@ -56,6 +57,7 @@ import {
   CLASS4_COLORMAP,
 } from "./modules/overlays.js";
 import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, rmsdByDepthSVG, columnProfileSVG, SERIES_COLORS } from "./modules/charts.js";
+import { syncStableRanges, stableMax, stableInterval } from "./modules/stable-ranges.js";
 import {
   loadYearGeography,
   loadYearRmsd,
@@ -64,8 +66,8 @@ import {
   buildYearBiasField,
   buildYearObservationCounts,
   buildYearBiasStandardError,
-  yearGeographyMax,
-  yearBiasMax,
+  yearGeographyMaxAllLeads,
+  yearBiasMaxAllLeads,
   yearRmsdSeries,
   yearRmsdSeriesMax,
 } from "./modules/year.js";
@@ -730,7 +732,12 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   );
   if (token !== panel.renderToken) return;
   const difference = differenceField(primary.field, compare.field);
-  const range = symmetricRange(difference);
+  // The difference field only exists for the lead on screen, so its symmetric range is
+  // held grow-only for this selection: without that, a difference that doubles between
+  // two leads is drawn in the same colours at both and the growth is invisible.
+  const [, magnitude] = symmetricRange(difference);
+  const bound = stableMax(`diff|${panel.index}|${compareSlug}`, magnitude) || magnitude;
+  const range = [-bound, bound];
   panel.field = difference;
   clearYearReadoutMetadata(panel);
   panel.latitudes = primary.latitudes;
@@ -822,8 +829,10 @@ function clearYearReadoutMetadata(panel) {
 }
 
 // Shared [0, max] scale across the visible panels that show the same year variable,
-// so two-forecast rasters stay directly comparable.
-async function sharedYearRange(shortName, leadDay) {
+// so two-forecast rasters stay directly comparable. The maximum spans every lead of the
+// artifact, so the scale is the same at every lead and the slider shows the error growing
+// instead of the colour scale following it.
+async function sharedYearRange(shortName) {
   let maximum = 0;
   for (let i = 0; i < shared.layout; i += 1) {
     const candidate = panels[i];
@@ -834,15 +843,16 @@ async function sharedYearRange(shortName, leadDay) {
     if (!url) continue;
     const geography = await loadYearGeography(url);
     if (!geography) continue;
-    maximum = Math.max(maximum, yearGeographyMax(geography, shortName, leadDay));
+    maximum = Math.max(maximum, yearGeographyMaxAllLeads(geography, shortName));
   }
   return [0, maximum || 1];
 }
 
 // Symmetric [-M, +M] scale for the signed-bias raster, shared across the visible panels
 // showing the same year variable so the diverging (balance) colormap stays centred on 0
-// and directly comparable between two forecasts.
-async function sharedYearBiasRange(shortName, leadDay) {
+// and directly comparable between two forecasts. Like the |error| scale it spans every
+// lead, so scrubbing the lead never rescales the map.
+async function sharedYearBiasRange(shortName) {
   let maximum = 0;
   for (let i = 0; i < shared.layout; i += 1) {
     const candidate = panels[i];
@@ -853,7 +863,7 @@ async function sharedYearBiasRange(shortName, leadDay) {
     if (!url) continue;
     const geography = await loadYearGeography(url);
     if (!geography) continue;
-    maximum = Math.max(maximum, yearBiasMax(geography, shortName, leadDay));
+    maximum = Math.max(maximum, yearBiasMaxAllLeads(geography, shortName));
   }
   const bound = maximum || 1;
   return [-bound, bound];
@@ -899,8 +909,8 @@ async function renderYearPanel(panel, token, manifest) {
     return;
   }
   const range = biasMode
-    ? await sharedYearBiasRange(mapping.short, shared.leadDay)
-    : await sharedYearRange(mapping.short, shared.leadDay);
+    ? await sharedYearBiasRange(mapping.short)
+    : await sharedYearRange(mapping.short);
   if (token !== panel.renderToken) return;
   // Separate land from unobserved ocean: both are NaN in the error raster, so derive a
   // land mask from the dataset's own coarsest pyramid level (tiny) and resample it onto
@@ -1442,7 +1452,11 @@ function drawOverlays(panel) {
         key: cacheKey,
         points: preparedPoints,
         matchedTotal: countClass4Matches(rows, selector),
-        scale: class4ErrorScale(preparedPoints),
+        // Grow-only obs-error ramp: the |obs − model| scale is read off the obs of the
+        // lead on screen, so left alone it renormalises on every lead step and a growing
+        // error keeps rendering the same colours. Held to the widest ramp this selection
+        // has needed, the points visibly redden as the forecast ages.
+        scale: stableMax(`class4|${panel.index}`, class4ErrorScale(preparedPoints)),
         // Parallel typed arrays + coarse lon/lat bucket grid, built once per point set so
         // pan/zoom frames only project the buckets overlapping the viewport (perf).
         ...buildClass4Index(preparedPoints),
@@ -1864,6 +1878,29 @@ function formatLatLon(lon, lat) {
   return `${latText}, ${lonText}`;
 }
 
+// Value and depth extent of the clicked column over EVERY lead day it holds, not just the
+// one on screen. The clicked chunk already carries all leads (this is the design win), so
+// the profile axis can be fixed exactly: sliding the lead then swings the profile inside a
+// still frame, which is the whole point of scrubbing it. Returns [[low, high], depthMax].
+function columnProfileBounds() {
+  let valueMin = Infinity;
+  let valueMax = -Infinity;
+  let depthMax = 0;
+  if (!columnProfile) return [null, 0];
+  for (const forecast of columnProfile.forecasts) {
+    if (forecast.allNaN) continue;
+    for (let index = 0; index < forecast.values.length; index += 1) {
+      const value = forecast.values[index];
+      if (!Number.isFinite(value)) continue;
+      const depth = forecast.depths[index % forecast.depthSize];
+      if (Number.isFinite(depth) && depth > depthMax) depthMax = depth;
+      if (value < valueMin) valueMin = value;
+      if (value > valueMax) valueMax = value;
+    }
+  }
+  return [Number.isFinite(valueMin) && Number.isFinite(valueMax) ? [valueMin, valueMax] : null, depthMax];
+}
+
 // Render the profile chart for the CURRENT lead day from the in-memory column (no fetch).
 // Both forecasts are drawn in their panel accent colours; a point over land/missing (all
 // fill values) yields the honest "no water column" note.
@@ -1903,10 +1940,13 @@ function renderColumnProfileRail() {
     });
   }
   const variableLabel = columnProfile.forecasts.find((forecast) => !forecast.allNaN)?.variableLabel || "Value";
+  const [valueBound, depthBound] = columnProfileBounds();
   elements["rail-column-chart"].innerHTML = columnProfileSVG(lines, {
     title: comparison ? "Water column (both forecasts)" : "Water column",
     unit,
     xLabel: variableLabel,
+    valueBound,
+    depthBound,
   });
   if (!lines.length) {
     elements["rail-column-note"].textContent = "No water column at this point.";
@@ -2768,7 +2808,32 @@ function scheduleRedrawAllPanels() {
   redrawAllPanelsFrame = requestAnimationFrame(redrawAllPanels);
 }
 
+// Everything a diagnostic's frame is allowed to depend on EXCEPT the lead day. While this
+// string is unchanged the axes of the map-side diagnostics hold still, so moving the lead
+// slider shows the forecast changing rather than the axes changing; when it changes, every
+// remembered bound is dropped and the new selection is framed on its own data.
+function selectionSignature() {
+  const shownPanels = panels
+    .slice(0, shared.layout)
+    .map((panel) => (panel ? `${panel.state.dataset}:${panel.state.variable}:${panel.state.colormap || ""}` : ""));
+  return [
+    shared.scope,
+    shared.yearMetric,
+    shared.region,
+    shared.startIndex,
+    shared.layout,
+    shared.displayMode,
+    shared.overlayMode,
+    ...shownPanels,
+  ].join("|");
+}
+
+function syncSelectionRanges() {
+  syncStableRanges(selectionSignature());
+}
+
 async function renderAllPanels() {
+  syncSelectionRanges();
   const jobs = [];
   for (let i = 0; i < shared.layout; i += 1) jobs.push(renderPanel(panels[i]));
   await Promise.all(jobs);
@@ -2982,6 +3047,7 @@ function renderTrajectoryLegend(legend) {
 // SAME variable → an overlaid comparison (Forecast 2 is the reference for the error
 // spectrum). Two with DIFFERENT variables → a small F1/F2 toggle, one forecast at a time.
 async function updateContextRail() {
+  syncSelectionRanges();
   const forecasts = railForecasts();
   if (!forecasts.length) return;
   await ensureScoresSummary();
@@ -3074,6 +3140,10 @@ async function renderRailDepthProfile(shown, comparison) {
   const lines = [];
   let unit = "";
   let lead = null;
+  // Lead-independent RMSD bound (max over every lead and depth bin of the shown
+  // artifacts): the profile axis stays fixed while the lead slider scrubs, so the
+  // profile visibly grows within a constant frame instead of being renormalised.
+  let xBound = 0;
   for (const panel of shown) {
     const entry = variableEntry(manifestFor(panel.state.dataset), panel.state.variable);
     if (!entry || isVelocityFamilyVariable(panel.state.variable)) continue;
@@ -3081,6 +3151,7 @@ async function renderRailDepthProfile(shown, comparison) {
     const data = url ? await loadRmsdByDepth(url) : null;
     const profile = data ? rmsdDepthProfile(data, entry.standard_name, shared.leadDay) : null;
     if (!profile) continue;
+    xBound = Math.max(xBound, rmsdDepthProfileMax(data, entry.standard_name));
     lead = lead == null ? profile.lead : lead;
     unit = unit || entry.units || "";
     lines.push({
@@ -3099,6 +3170,7 @@ async function renderRailDepthProfile(shown, comparison) {
   slot.innerHTML = rmsdByDepthSVG(lines, {
     title: comparison ? "RMSD vs depth (both forecasts)" : "RMSD vs depth",
     unit,
+    xBound,
   });
   if (note) {
     note.textContent = `Class-4 RMSD per depth bin at lead day ${lead ?? shared.leadDay}, pooled over all match-ups of the year (same method as the official scores).`;
@@ -3745,8 +3817,33 @@ async function renderRailPsd(shown, comparison) {
     }
   }
   if (token !== psdRenderToken) return;
+  // The spectrum is recomputed from whichever lead is on screen, so its extent cannot be
+  // known ahead of time: the decade window is kept grow-only per box, widening to fit a
+  // new lead and never narrowing again while the selection and the box are unchanged.
+  const boxKey = `psd|${box.lat.toFixed(3)},${box.lon.toFixed(3)},${box.w.toFixed(3)},${box.h.toFixed(3)}`;
+  let xLow = Infinity;
+  let xHigh = -Infinity;
+  let yLow = Infinity;
+  let yHigh = -Infinity;
+  for (const curve of curves) {
+    for (let i = 0; i < curve.wavelength.length; i += 1) {
+      const wavelength = curve.wavelength[i];
+      const power = curve.power[i];
+      if (!(wavelength > 0) || !(power > 0)) continue;
+      const x = Math.log10(wavelength);
+      const y = Math.log10(power);
+      if (x < xLow) xLow = x;
+      if (x > xHigh) xHigh = x;
+      if (y < yLow) yLow = y;
+      if (y > yHigh) yHigh = y;
+    }
+  }
+  const xBounds = stableInterval(`${boxKey}|x`, xLow, xHigh);
+  const yBounds = stableInterval(`${boxKey}|y`, yLow, yHigh);
   elements["rail-spectra"].innerHTML = psdSpectraSVG(curves, {
     title: comparison ? "Live power spectrum (both forecasts)" : "Live power spectrum",
+    xBounds,
+    yBounds,
   });
   // Caption: box dimensions + native grid spacing + resolved wavelength range.
   const gridLabels = [...new Set(sources.filter((entry) => entry.spectrum).map((entry) => cellDegreesLabel(entry.source.cellDeg)))];
@@ -4079,25 +4176,41 @@ async function applyOverlayMode() {
 // (~1-2MB) row groups keep this sub-second; a short debounce avoids a fetch storm
 // while the lead slider is dragged. Legacy files hold all pairs, so this is a no-op.
 let class4ReloadTimer = null;
+
+// True when the obs overlay owes the current start/lead a fetch of its own.
+function class4ReloadPending() {
+  return shared.overlayMode === "class4" && Boolean(overlayData.class4) && Boolean(overlayData.class4.targeted);
+}
+
+function cancelClass4ReloadTimer() {
+  if (!class4ReloadTimer) return;
+  clearTimeout(class4ReloadTimer);
+  class4ReloadTimer = null;
+}
+
+async function reloadClass4Overlay() {
+  const note = elements["overlay-note"];
+  await loadOverlayData();
+  if (note) {
+    note.textContent =
+      class4EmptyMessage() ||
+      (overlayData.class4.targeted
+        ? "Class-4 match-ups for the selected start and lead. Hover a point for details."
+        : "Class-4 match-ups loaded. Hover a point for details.");
+  }
+  redrawOverlaysAll();
+  await updateContextRail();
+}
+
 function scheduleClass4Reload() {
-  if (shared.overlayMode !== "class4") return;
-  if (!overlayData.class4 || !overlayData.class4.targeted) return;
+  if (!class4ReloadPending()) return;
   const note = elements["overlay-note"];
   class4ProgressLabel = `Loading obs for lead ${shared.leadDay}…`;
   if (note) note.textContent = class4ProgressLabel;
-  if (class4ReloadTimer) clearTimeout(class4ReloadTimer);
-  class4ReloadTimer = setTimeout(async () => {
+  cancelClass4ReloadTimer();
+  class4ReloadTimer = setTimeout(() => {
     class4ReloadTimer = null;
-    await loadOverlayData();
-    if (note) {
-      note.textContent =
-        class4EmptyMessage() ||
-        (overlayData.class4.targeted
-          ? "Class-4 match-ups for the selected start and lead. Hover a point for details."
-          : "Class-4 match-ups loaded. Hover a point for details.");
-    }
-    redrawOverlaysAll();
-    updateContextRail();
+    reloadClass4Overlay();
   }, 120);
 }
 
@@ -4249,6 +4362,121 @@ function runLeadRender() {
   renderColumnProfileRail();
 }
 
+// ---- lead-day playback ------------------------------------------------------
+//
+// Playing the leads is the same act as dragging the slider, done by a timer, so it goes
+// through the same path: one lead at a time, each awaited before the next is asked for.
+// A lead whose frames are already cached repaints in a couple of milliseconds and the
+// step costs nothing but the interval; a lead that still needs tiles is WAITED for, not
+// skipped, so playback never has more than one lead's fetches in flight and never races
+// the class-4 prefetch. At the end it wraps to the first lead and keeps going.
+const PLAYBACK_STEP_MILLISECONDS = 700;
+const playback = { playing: false, speed: 1, timer: null, run: 0 };
+
+function playbackStepDelay() {
+  return Math.max(60, Math.round(PLAYBACK_STEP_MILLISECONDS / playback.speed));
+}
+
+function leadBounds() {
+  const minimum = Number(elements["lead-day"].min) || 1;
+  const maximum = Number(elements["lead-day"].max) || minimum;
+  return [minimum, maximum];
+}
+
+function applyLeadDay(leadDay) {
+  shared.leadDay = leadDay;
+  elements["lead-day"].value = String(leadDay);
+  elements["lead-value"].textContent = `Lead day ${leadDay}`;
+}
+
+// Paint the lead now and resolve when the whole strip agrees with it. Playback awaits
+// this, which is what keeps one step from overlapping the next.
+async function renderLeadNow() {
+  cancelLeadFetchTimer();
+  cancelClass4ReloadTimer();
+  await renderAllPanels();
+  renderColumnProfileRail();
+  if (class4ReloadPending()) {
+    await reloadClass4Overlay();
+    return;
+  }
+  redrawOverlaysAll();
+  await updateContextRail();
+}
+
+async function playbackStep() {
+  const run = playback.run;
+  const [minimum, maximum] = leadBounds();
+  applyLeadDay(shared.leadDay >= maximum ? minimum : shared.leadDay + 1);
+  scheduleHashWrite();
+  await renderLeadNow();
+  if (!playback.playing || run !== playback.run) return;
+  playback.timer = setTimeout(playbackStep, playbackStepDelay());
+}
+
+function startPlayback() {
+  if (playback.playing) return;
+  playback.playing = true;
+  playback.run += 1;
+  markPlaybackButton();
+  playback.timer = setTimeout(playbackStep, playbackStepDelay());
+}
+
+// Every manual lead interaction lands here: a slider the user is holding must not be
+// fighting a timer for the same value.
+function pausePlayback() {
+  if (!playback.playing) return;
+  playback.playing = false;
+  playback.run += 1;
+  if (playback.timer) clearTimeout(playback.timer);
+  playback.timer = null;
+  markPlaybackButton();
+}
+
+function togglePlayback() {
+  if (playback.playing) pausePlayback();
+  else startPlayback();
+}
+
+function markPlaybackButton() {
+  const button = elements["lead-play"];
+  if (!button) return;
+  button.textContent = playback.playing ? "❚❚" : "▶";
+  button.setAttribute("aria-pressed", playback.playing ? "true" : "false");
+  button.setAttribute("aria-label", playback.playing ? "Pause lead days" : "Play lead days");
+  button.title = playback.playing ? "Pause" : "Play the lead days (loops); any slider move pauses";
+}
+
+function setPlaybackSpeed(speed) {
+  playback.speed = speed;
+  for (const button of elements["playback-speed"].querySelectorAll("button")) {
+    button.classList.toggle("active", Number(button.dataset.speed) === speed);
+  }
+  // Live: a speed picked mid-play re-times the step already waiting rather than taking
+  // effect only after the current one has run out.
+  if (playback.playing && playback.timer) {
+    clearTimeout(playback.timer);
+    playback.timer = setTimeout(playbackStep, playbackStepDelay());
+  }
+}
+
+function wirePlaybackControls() {
+  elements["lead-play"].addEventListener("click", togglePlayback);
+  for (const button of elements["playback-speed"].querySelectorAll("button")) {
+    button.addEventListener("click", () => setPlaybackSpeed(Number(button.dataset.speed)));
+  }
+  // Space on the focused scrubber is the shortcut a scrubber earns; the key would
+  // otherwise scroll the page behind the viewer.
+  elements["lead-day"].addEventListener("keydown", (event) => {
+    if (event.key !== " " && event.code !== "Space") return;
+    event.preventDefault();
+    togglePlayback();
+  });
+  elements["lead-day"].addEventListener("pointerdown", pausePlayback);
+  markPlaybackButton();
+  setPlaybackSpeed(playback.speed);
+}
+
 function wireGlobalControls() {
   for (const button of document.querySelectorAll(".scope-switch [data-scope]")) {
     button.addEventListener("click", () => setScope(button.dataset.scope));
@@ -4294,6 +4522,9 @@ function wireGlobalControls() {
     writeHash();
   });
   elements["lead-day"].addEventListener("input", (event) => {
+    // A programmatic step sets `.value` without firing `input`, so reaching here means
+    // the user took the slider, and the timer gives it up.
+    pausePlayback();
     shared.leadDay = Number(event.target.value);
     elements["lead-value"].textContent = `Lead day ${shared.leadDay}`;
     scheduleLeadRender();
@@ -4782,6 +5013,8 @@ function selectElements() {
     "left-drawer",
     "left-collapse",
     "panel-grid",
+    "lead-play",
+    "playback-speed",
     "colorbar",
     "map-legend",
     "year-legend",
@@ -4886,6 +5119,7 @@ async function main() {
   markLayoutButtons();
   syncPanelGrid();
   wireGlobalControls();
+  wirePlaybackControls();
   wireStaticMethodNotes();
   wireEmbeddedTheme();
 

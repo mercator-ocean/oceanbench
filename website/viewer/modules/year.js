@@ -129,6 +129,40 @@ export function yearGeographyMax(geography, shortName, leadDay) {
   return finite[index];
 }
 
+// Whole-year raster scales, computed once over EVERY lead of an artifact rather than per
+// lead, so the map's colour scale holds still while the lead slider scrubs and a cell that
+// reddens between two leads really is a larger error, not a renormalised one. Memoised per
+// artifact object because the sweep touches every lead's grid.
+const allLeadMaxCache = new WeakMap();
+
+function allLeadMax(geography, shortName, kind, perLead) {
+  if (!geography || !geography.variables) return 0;
+  const variable = geography.variables[shortName];
+  const source = variable && (kind === "bias" ? variable.bias : variable.leads);
+  if (!source) return 0;
+  let byVariable = allLeadMaxCache.get(geography);
+  if (!byVariable) {
+    byVariable = new Map();
+    allLeadMaxCache.set(geography, byVariable);
+  }
+  const key = `${shortName}|${kind}`;
+  if (byVariable.has(key)) return byVariable.get(key);
+  let maximum = 0;
+  for (const lead of Object.keys(source)) maximum = Math.max(maximum, perLead(geography, shortName, Number(lead)));
+  byVariable.set(key, maximum);
+  return maximum;
+}
+
+/** Lead-independent |error| raster maximum (the 98th percentile of the worst lead). */
+export function yearGeographyMaxAllLeads(geography, shortName) {
+  return allLeadMax(geography, shortName, "error", yearGeographyMax);
+}
+
+/** Lead-independent bias raster magnitude, for the symmetric diverging scale. */
+export function yearBiasMaxAllLeads(geography, shortName) {
+  return allLeadMax(geography, shortName, "bias", yearBiasMax);
+}
+
 // Build a renderable signed-bias field (mean(model − obs) per cell) from the year
 // error-geography artifact, mirroring buildYearGeographyField but reading the parallel
 // `bias` structure the data agent appends. Returns null when the bias field is absent,
