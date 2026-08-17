@@ -403,6 +403,7 @@ function buildPanel(index) {
     label: "",
     particleHandle: null,
     particleContext: null,
+    particleSignature: "",
     swipeX: 0.5,
     renderToken: 0,
     renderAbort: null,
@@ -414,7 +415,24 @@ function buildPanel(index) {
   return panel;
 }
 
+function selectAlreadyHolds(select, options) {
+  if (select.options.length !== options.length) return false;
+  for (let i = 0; i < options.length; i += 1) {
+    if (select.options[i].value !== String(options[i].value)) return false;
+    if (select.options[i].textContent !== options[i].label) return false;
+  }
+  return true;
+}
+
+// Rewriting a select destroys and rebuilds its option nodes, which closes an open
+// dropdown under the user's pointer. renderPanel refreshes the panel controls on every
+// paint, so while the leads play this fired several times a second and a picker could
+// not be held open long enough to choose from. Write only what actually differs.
 function populateSelect(select, options, selectedValue) {
+  if (selectAlreadyHolds(select, options)) {
+    if (String(select.value) !== String(selectedValue)) select.value = String(selectedValue);
+    return;
+  }
   select.innerHTML = "";
   for (const option of options) {
     const element = document.createElement("option");
@@ -780,7 +798,7 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   panel.velocity = {
     sampler: makeVelocitySampler(uPrimary.field, vPrimary.field, uPrimary.latitudes, uPrimary.longitudes),
   };
-  if (shared.showParticles) startPanelParticles(panel);
+  if (shared.showParticles) ensurePanelParticles(panel);
   else stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
 }
@@ -2166,9 +2184,34 @@ function class4DepthLabel(entry, depthBin) {
 
 // ---- particles --------------------------------------------------------------
 
+// What a swarm belongs to. The lead day is deliberately absent: stepping the lead swaps
+// the velocity field under the same particles (the context samples through the panel, so
+// it is already the new field), and the flow keeps streaming instead of being reborn on
+// every step. Everything on this list changes what the flow is, so the swarm starts over.
+function particleSelectionSignature(panel) {
+  return [
+    panel.state.dataset,
+    panel.state.variable,
+    shared.region,
+    shared.startIndex,
+    shared.displayMode,
+    shared.layout,
+  ].join("|");
+}
+
+// Keep the running swarm when only the lead moved, restart it when the selection changed.
+function ensurePanelParticles(panel) {
+  if (panel.particleHandle && panel.particleSignature === particleSelectionSignature(panel)) {
+    updateParticleProjection(panel, projectionFor(panel));
+    return;
+  }
+  startPanelParticles(panel);
+}
+
 function startPanelParticles(panel) {
   stopParticles(panel);
   resizePanelCanvases(panel);
+  panel.particleSignature = particleSelectionSignature(panel);
   const projection = projectionFor(panel);
   panel.particleContext = {
     sampleVelocity: (nx, ny) => panel.velocity.sampler(nx, ny),
@@ -2190,6 +2233,7 @@ function stopParticles(panel) {
     panel.particleHandle.stop();
     panel.particleHandle = null;
     panel.particleContext = null;
+    panel.particleSignature = "";
   }
 }
 
@@ -4444,7 +4488,7 @@ function markPlaybackButton() {
   button.textContent = playback.playing ? "❚❚" : "▶";
   button.setAttribute("aria-pressed", playback.playing ? "true" : "false");
   button.setAttribute("aria-label", playback.playing ? "Pause lead days" : "Play lead days");
-  button.title = playback.playing ? "Pause" : "Play the lead days (loops); any slider move pauses";
+  button.title = playback.playing ? "Pause" : "Play the lead days (loops); touching any other control pauses";
 }
 
 function setPlaybackSpeed(speed) {
@@ -4460,6 +4504,38 @@ function setPlaybackSpeed(speed) {
   }
 }
 
+// Playing the leads is a background motion, so the instant the user reaches for anything
+// else the timer gives way and the interaction proceeds normally. One capture-phase
+// listener per event kind, on the document, is the whole policy: every control is covered
+// by construction, including ones added later, with no pause call in any handler.
+// The play button, the speed picker and the scrubber's own space shortcut are the only
+// exemptions, because they are the playback controls themselves.
+const PLAYBACK_CONTROLS_SELECTOR = ".dock-playback";
+const PAUSING_EVENTS = ["pointerdown", "keydown", "wheel", "change", "input"];
+
+function isPlaybackControl(target) {
+  return Boolean(target && target.closest && target.closest(PLAYBACK_CONTROLS_SELECTOR));
+}
+
+// Only the keys that work a playback control are exempt. Being focused on the play
+// button is not itself a reason to keep playing: pressing Escape there, or any other key,
+// is the user turning to something else.
+function isPlaybackKey(event) {
+  const space = event.key === " " || event.code === "Space";
+  if (space) return event.target === elements["lead-day"] || isPlaybackControl(event.target);
+  return event.key === "Enter" && isPlaybackControl(event.target);
+}
+
+function wirePauseOnInteraction() {
+  const pauseUnlessPlaybackControl = (event) => {
+    if (event.type === "keydown" ? isPlaybackKey(event) : isPlaybackControl(event.target)) return;
+    pausePlayback();
+  };
+  for (const type of PAUSING_EVENTS) {
+    document.addEventListener(type, pauseUnlessPlaybackControl, true);
+  }
+}
+
 function wirePlaybackControls() {
   elements["lead-play"].addEventListener("click", togglePlayback);
   for (const button of elements["playback-speed"].querySelectorAll("button")) {
@@ -4472,7 +4548,7 @@ function wirePlaybackControls() {
     event.preventDefault();
     togglePlayback();
   });
-  elements["lead-day"].addEventListener("pointerdown", pausePlayback);
+  wirePauseOnInteraction();
   markPlaybackButton();
   setPlaybackSpeed(playback.speed);
 }
@@ -4523,8 +4599,8 @@ function wireGlobalControls() {
   });
   elements["lead-day"].addEventListener("input", (event) => {
     // A programmatic step sets `.value` without firing `input`, so reaching here means
-    // the user took the slider, and the timer gives it up.
-    pausePlayback();
+    // the user took the slider; the pause-on-interaction listener has already stopped
+    // the timer fighting them for the same value.
     shared.leadDay = Number(event.target.value);
     elements["lead-value"].textContent = `Lead day ${shared.leadDay}`;
     scheduleLeadRender();
