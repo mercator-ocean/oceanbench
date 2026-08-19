@@ -14,6 +14,7 @@ from oceanbench.core.classIV_support import (
     _should_use_bracket_vertical_interpolation,
     prepare_class4_model_variable,
 )
+from oceanbench.core.curvilinear_staging import GLOENS_SOURCE_NAME
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 
@@ -146,6 +147,21 @@ def test_declaring_an_inverse_barometer_without_a_shift_is_an_error(monkeypatch)
         prepare_class4_model_variable(dataset[SEA_SURFACE_HEIGHT_KEY], SEA_SURFACE_HEIGHT_KEY, dataset)
 
 
-def test_no_challenger_declares_an_inverse_barometer_or_a_shift_yet():
-    assert CHALLENGER_INVERSE_BAROMETER_VARIABLES == {}
-    assert CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS == {}
+def test_gloens_is_the_challenger_that_declares_an_inverse_barometer_and_a_shift():
+    assert CHALLENGER_INVERSE_BAROMETER_VARIABLES == {GLOENS_SOURCE_NAME: "ssh_ib"}
+    assert CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS == {GLOENS_SOURCE_NAME: -0.160262}
+
+
+def test_the_gloens_sea_level_leaves_its_inverse_barometer_and_its_own_shift_behind():
+    dataset = _challenger_dataset(with_inverse_barometer=True, source_name=GLOENS_SOURCE_NAME)
+
+    converted = prepare_class4_model_variable(dataset[SEA_SURFACE_HEIGHT_KEY], SEA_SURFACE_HEIGHT_KEY, dataset)
+
+    corrected = dataset[SEA_SURFACE_HEIGHT_KEY] - dataset[INVERSE_BAROMETER_NAME]
+    numpy.testing.assert_allclose(converted.values, (corrected - (-0.160262)).values)
+    assert not numpy.allclose(converted.values, (corrected - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT).values)
+
+
+def test_every_challenger_that_declares_an_inverse_barometer_declares_its_own_shift():
+    for source_name in CHALLENGER_INVERSE_BAROMETER_VARIABLES:
+        assert source_name in CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS

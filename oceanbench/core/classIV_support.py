@@ -8,6 +8,7 @@ import xarray
 from scipy.interpolate import CubicSpline
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
+from oceanbench.core.curvilinear_staging import GLOENS_SOURCE_NAME
 from oceanbench.core.dataset_source import get_dataset_source
 from oceanbench.core.dataset_utils import (
     DEPTH_BINS_DEFAULT,
@@ -29,15 +30,26 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 #: that basis.
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 
+#: Sea surface height shift of the GloEns ensemble.
+#:
+#: It was measured on the ``zos - ssh_ib`` basis, which is the basis the ensemble is scored on
+#: once the inverse barometer is removed, so it replaces the reanalysis shift rather than
+#: correcting it.
+GLOENS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.160262
+
+#: The inverse barometer field of the GloEns stores.
+GLOENS_INVERSE_BAROMETER_VARIABLE = "ssh_ib"
+
 #: Challenger source name to the sea surface height shift its own basis needs.
 #:
 #: A challenger whose sea surface height does not sit on the GLO12 reanalysis basis needs its
 #: own measured shift, and an inverse barometer corrected basis is exactly such a case. Keyed
 #: on the challenger source name, the same key the inverse barometer variable is chosen on, so
 #: a challenger declares the convention of its own store and no other challenger is touched.
-#: Empty until a challenger is registered, which leaves every challenger on the reanalysis
-#: shift.
-CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS: dict[str, float] = {}
+#: Every challenger but the one registered here stays on the reanalysis shift.
+CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS: dict[str, float] = {
+    GLOENS_SOURCE_NAME: GLOENS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
+}
 
 #: Challenger source name to the inverse barometer variable its store provides.
 #:
@@ -48,7 +60,9 @@ CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS: dict[str, float] = {}
 #: sea surface height is converted to a sea level anomaly. Removing it moves the sea surface
 #: height off the reanalysis basis, so a challenger registered here must also be registered in
 #: ``CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS``; the conversion refuses to run otherwise.
-CHALLENGER_INVERSE_BAROMETER_VARIABLES: dict[str, str] = {}
+CHALLENGER_INVERSE_BAROMETER_VARIABLES: dict[str, str] = {
+    GLOENS_SOURCE_NAME: GLOENS_INVERSE_BAROMETER_VARIABLE,
+}
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 VELOCITY_TARGET_DEPTH_METERS = 15.0

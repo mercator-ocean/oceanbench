@@ -55,8 +55,8 @@ no source cell and the gather is masked. The mapping is the campaign kernel unch
 
 Which challenger is curvilinear is declared in :data:`CURVILINEAR_CHALLENGERS`, keyed on the
 challenger source name, the same key the Class IV conventions of
-:mod:`oceanbench.core.classIV_support` are declared on. It is empty until a challenger is
-registered, so no existing challenger changes path.
+:mod:`oceanbench.core.classIV_support` are declared on. GloEns is declared there and is the
+only challenger that is, so no other challenger changes path.
 """
 
 from collections.abc import Callable
@@ -165,19 +165,6 @@ class CurvilinearChallenger:
             raise ValueError(f"unknown Class IV route '{self.class4_route}', expected one of {list(CLASS4_ROUTES)}")
 
 
-#: Challenger source name to its curvilinear grid declaration.
-#:
-#: Empty until a challenger is registered, which leaves every challenger staged as it is
-#: published.
-CURVILINEAR_CHALLENGERS: dict[str, CurvilinearChallenger] = {}
-
-_MAPPING_CACHE: dict[str, NearestNeighbourMapping] = {}
-
-
-def curvilinear_challenger(dataset_name: str) -> CurvilinearChallenger | None:
-    return CURVILINEAR_CHALLENGERS.get(dataset_name)
-
-
 def ocean_mask_from_land_sentinel(values: numpy.ndarray, land_sentinel: float) -> numpy.ndarray:
     """Ocean cells of a field whose land cells hold one exact value rather than nothing.
 
@@ -187,6 +174,101 @@ def ocean_mask_from_land_sentinel(values: numpy.ndarray, land_sentinel: float) -
     neighbouring quantisation step.
     """
     return numpy.asarray(values) != land_sentinel
+
+
+#: The challenger source name the GloEns ensemble is registered under.
+GLOENS_SOURCE_NAME = "gloens"
+
+#: The two grid dimensions of a GloEns store, the row one first.
+GLOENS_SOURCE_DIMENSIONS = ("y", "x")
+
+#: Coordinate pairs a GloEns store describes its tracer cells with.
+#:
+#: A store carries both pairs at once and ships one of them entirely as missing values, so the
+#: grid is read from whichever pair holds positions rather than from a fixed name.
+GLOENS_GRID_VARIABLES = (
+    (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()),
+    NEMO_GRID_DESCRIPTION_VARIABLES,
+)
+
+#: What a GloEns store variable holds on land.
+#:
+#: Land is a raw zero the store decodes with the scale and offset of the field, which gives
+#: 17.5 degrees for the surface temperature and 0 metres for the sea surface height. Neither is
+#: a missing value, so the ocean mask is read from one of these fields.
+GLOENS_LAND_SENTINELS: dict[str, float] = {"tos": 17.5, "zos": 0.0}
+
+#: Where along the time and member axes the land mask is read, as fractions of each axis.
+#:
+#: A land cell holds the sentinel at every time and every member, so a cell is land only where
+#: the sentinel stands at all three positions. One position would call land the ocean cells
+#: that happen to sit at the sentinel there, and three make that coincidence impossible. The
+#: whole field is not read, since the mask describes the grid and not the forecast.
+GLOENS_LAND_MASK_SAMPLE_POSITIONS = (0.0, 0.5, 1.0)
+
+
+def gloens_tracer_grid(dataset: xarray.Dataset) -> tuple[numpy.ndarray, numpy.ndarray]:
+    """The tripolar tracer grid of a GloEns store, taken from the pair that holds positions.
+
+    The three-dimensional stores ship one of their two coordinate pairs as missing values from
+    end to end, so a fixed name is not enough to find the grid. A store that describes its
+    cells through neither pair is refused: its cycle is described by the two-dimensional store
+    of the same initialisation, which this seam is not given.
+    """
+    for latitude_name, longitude_name in GLOENS_GRID_VARIABLES:
+        if latitude_name not in dataset.variables or longitude_name not in dataset.variables:
+            continue
+        latitude = numpy.asarray(dataset[latitude_name].values, dtype="float64")
+        longitude = numpy.asarray(dataset[longitude_name].values, dtype="float64")
+        if numpy.isfinite(latitude).all() and numpy.isfinite(longitude).all():
+            return latitude, longitude
+    raise ValueError(
+        f"the GloEns store holds no usable tracer grid: none of {[list(pair) for pair in GLOENS_GRID_VARIABLES]} "
+        "carries positions on every cell, and a store whose coordinate arrays are missing values takes its grid "
+        "from the two-dimensional store of the same initialisation"
+    )
+
+
+def _ocean_mask_of_sentinel_field(field: xarray.DataArray, land_sentinel: float) -> numpy.ndarray:
+    other_dimensions = [str(name) for name in field.dims if name not in GLOENS_SOURCE_DIMENSIONS]
+    samples = [
+        field.isel({name: int(round(position * (field.sizes[name] - 1))) for name in other_dimensions})
+        for position in GLOENS_LAND_MASK_SAMPLE_POSITIONS
+    ]
+    return numpy.logical_or.reduce([ocean_mask_from_land_sentinel(sample.values, land_sentinel) for sample in samples])
+
+
+def gloens_tracer_ocean_mask(dataset: xarray.Dataset) -> numpy.ndarray:
+    """The ocean cells of a GloEns store, read from a field whose land holds the sentinel."""
+    for variable_name, land_sentinel in GLOENS_LAND_SENTINELS.items():
+        if variable_name in dataset.data_vars:
+            return _ocean_mask_of_sentinel_field(dataset[variable_name], land_sentinel)
+    raise ValueError(
+        f"the GloEns store holds none of {list(GLOENS_LAND_SENTINELS)}, so its land cells cannot be told from its "
+        "ocean ones: land is a value in these stores and not a missing value, and only these fields carry a known "
+        "land value"
+    )
+
+
+#: Challenger source name to its curvilinear grid declaration.
+#:
+#: GloEns is the only challenger published on a curvilinear grid, so every other challenger is
+#: staged as it is published. Its Class IV track reads the native cells, as the campaign scored
+#: them, and its gridded track reads the staging regrid onto the quarter-degree scoring grid.
+CURVILINEAR_CHALLENGERS: dict[str, CurvilinearChallenger] = {
+    GLOENS_SOURCE_NAME: CurvilinearChallenger(
+        tracer_grid=gloens_tracer_grid,
+        tracer_ocean_mask=gloens_tracer_ocean_mask,
+        source_dimensions=GLOENS_SOURCE_DIMENSIONS,
+        class4_route=CLASS4_ROUTE_NATIVE,
+    )
+}
+
+_MAPPING_CACHE: dict[str, NearestNeighbourMapping] = {}
+
+
+def curvilinear_challenger(dataset_name: str) -> CurvilinearChallenger | None:
+    return CURVILINEAR_CHALLENGERS.get(dataset_name)
 
 
 def _grid_fingerprint(*arrays: numpy.ndarray) -> str:

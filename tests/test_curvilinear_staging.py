@@ -6,12 +6,21 @@ import numpy
 import pytest
 import xarray
 
+from oceanbench.core.classIV_support import (
+    CHALLENGER_INVERSE_BAROMETER_VARIABLES,
+    CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS,
+)
 from oceanbench.core.curvilinear_staging import (
     CLASS4_ROUTE_NATIVE,
     CLASS4_ROUTE_REGRIDDED,
+    CURVILINEAR_CHALLENGERS,
+    GLOENS_LAND_SENTINELS,
+    GLOENS_SOURCE_NAME,
     STANDARD_QUARTER_DEGREE_LATITUDE,
     STANDARD_QUARTER_DEGREE_LONGITUDE,
     CurvilinearChallenger,
+    gloens_tracer_grid,
+    gloens_tracer_ocean_mask,
     curvilinear_mapping,
     curvilinear_stage_variant,
     maybe_regridded_curvilinear_dataset,
@@ -393,10 +402,117 @@ def test_an_unknown_class4_route_is_refused():
         )
 
 
-def test_no_challenger_is_declared_curvilinear_by_default():
-    from oceanbench.core.curvilinear_staging import CURVILINEAR_CHALLENGERS
+# ---------------------------------------------------------------------------
+# The GloEns registration
+# ---------------------------------------------------------------------------
 
-    assert CURVILINEAR_CHALLENGERS == {}
+
+def _gloens_dataset(
+    values: numpy.ndarray,
+    *,
+    variable_name: str = "tos",
+    described: str | None = "latitude",
+) -> xarray.Dataset:
+    latitude, longitude = _tracer_grid()
+    missing = numpy.full(latitude.shape, numpy.nan)
+    coordinates = {
+        "latitude": (("y", "x"), latitude if described == "latitude" else missing),
+        "longitude": (("y", "x"), longitude if described == "latitude" else missing),
+        "nav_lat": (("y", "x"), latitude if described == "nav_lat" else missing),
+        "nav_lon": (("y", "x"), longitude if described == "nav_lat" else missing),
+    }
+    dimensions = ("time", "ens", "y", "x")[-values.ndim :]
+    return xarray.Dataset({variable_name: (dimensions, values)}, coords=coordinates)
+
+
+def test_gloens_is_the_declared_curvilinear_challenger():
+    declaration = CURVILINEAR_CHALLENGERS[GLOENS_SOURCE_NAME]
+
+    assert list(CURVILINEAR_CHALLENGERS) == [GLOENS_SOURCE_NAME]
+    assert declaration.source_dimensions == ("y", "x")
+    assert declaration.class4_route == CLASS4_ROUTE_NATIVE
+    numpy.testing.assert_array_equal(declaration.target_latitude, STANDARD_QUARTER_DEGREE_LATITUDE)
+    numpy.testing.assert_array_equal(declaration.target_longitude, STANDARD_QUARTER_DEGREE_LONGITUDE)
+
+
+@pytest.mark.parametrize("described", ["latitude", "nav_lat"])
+def test_the_gloens_grid_comes_from_whichever_pair_holds_positions(described):
+    latitude, longitude = _tracer_grid()
+
+    read_latitude, read_longitude = gloens_tracer_grid(_gloens_dataset(numpy.zeros((9, 9)), described=described))
+
+    numpy.testing.assert_array_equal(read_latitude, latitude)
+    numpy.testing.assert_array_equal(read_longitude, longitude)
+
+
+def test_a_gloens_store_whose_coordinates_are_all_missing_is_refused():
+    dataset = _gloens_dataset(numpy.zeros((9, 9)), described=None)
+
+    with pytest.raises(ValueError, match="no usable tracer grid"):
+        gloens_tracer_grid(dataset)
+
+
+def test_the_gloens_land_sentinel_says_which_cells_are_ocean():
+    values = numpy.full((3, 2, 9, 9), 5.0)
+    values[:, :, 3:6, 3:6] = GLOENS_LAND_SENTINELS["tos"]
+
+    ocean = gloens_tracer_ocean_mask(_gloens_dataset(values))
+
+    assert ocean.shape == (9, 9)
+    assert not ocean[3:6, 3:6].any()
+    assert ocean.sum() == 81 - 9
+
+
+def test_an_ocean_cell_that_sits_at_the_sentinel_once_stays_ocean():
+    values = numpy.full((3, 2, 9, 9), 5.0)
+    values[0, 0, 2, 2] = GLOENS_LAND_SENTINELS["tos"]
+
+    ocean = gloens_tracer_ocean_mask(_gloens_dataset(values))
+
+    assert ocean[2, 2]
+
+
+def test_the_gloens_sea_level_sentinel_is_read_when_the_store_carries_no_temperature():
+    values = numpy.full((9, 9), 0.3)
+    values[0, 0] = GLOENS_LAND_SENTINELS["zos"]
+
+    ocean = gloens_tracer_ocean_mask(_gloens_dataset(values, variable_name="zos"))
+
+    assert not ocean[0, 0]
+    assert ocean.sum() == 80
+
+
+def test_a_gloens_store_with_no_field_of_a_known_land_value_is_refused():
+    dataset = _gloens_dataset(numpy.zeros((9, 9)), variable_name="thetao")
+
+    with pytest.raises(ValueError, match="land cells cannot be told"):
+        gloens_tracer_ocean_mask(dataset)
+
+
+def test_the_gloens_declaration_regrids_a_store_through_its_own_grid_and_mask():
+    values = numpy.full((9, 9), 5.0)
+    values[3:6, 3:6] = GLOENS_LAND_SENTINELS["tos"]
+    dataset = _gloens_dataset(values)
+    declaration = CURVILINEAR_CHALLENGERS[GLOENS_SOURCE_NAME]
+
+    regridded = regridded_curvilinear_dataset(
+        dataset,
+        *declaration.tracer_grid(dataset),
+        declaration.tracer_ocean_mask(dataset),
+        source_dimensions=declaration.source_dimensions,
+        target_latitude=TARGET_LATITUDE,
+        target_longitude=TARGET_LONGITUDE,
+    )
+
+    assert regridded["tos"].dims == ("latitude", "longitude")
+    assert not (regridded["tos"].values == GLOENS_LAND_SENTINELS["tos"]).any()
+    assert numpy.nanmin(regridded["tos"].values) == 5.0
+
+
+def test_every_curvilinear_challenger_with_an_inverse_barometer_declares_its_own_shift():
+    for source_name in CURVILINEAR_CHALLENGERS:
+        if source_name in CHALLENGER_INVERSE_BAROMETER_VARIABLES:
+            assert source_name in CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS
 
 
 def test_the_standard_target_grid_is_the_quarter_degree_scoring_grid():
