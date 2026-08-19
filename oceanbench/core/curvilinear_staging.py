@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-"""Put a curvilinear challenger on the regular scoring grid, once, as it is staged.
+"""Put a curvilinear challenger on the regular scoring grid as its weeks are opened.
 
 A challenger published on a tripolar grid cannot go through the gridded metrics as it is:
 the interpolator of :mod:`oceanbench.core.interpolate`, the coordinate snapping of
@@ -10,15 +10,17 @@ the interpolator of :mod:`oceanbench.core.interpolate`, the coordinate snapping 
 :mod:`oceanbench.core.geostrophic_currents` all read separable one-dimensional axes, which a
 tripolar grid does not have. :mod:`oceanbench.core.curvilinear_grid` answers that with a
 nearest-neighbour sampling on the sphere, and this module is where that answer is applied:
-at staging, so that everything downstream of the stage sees an ordinary regular-grid
+on the week a challenger opens, so that everything downstream sees an ordinary regular-grid
 challenger with one-dimensional latitude and longitude axes and standard variable names.
 
-Sampling once at staging rather than at every metric is what makes it affordable. The
-mapping from the regular grid to the native cells is a property of the two grids and the land
-mask alone, so it is built once per challenger and reused across every forecast start, lead
-day, member, depth and variable of a run; applying it is a gather, which xarray runs lazily
-on the dask array of the store and which never averages anything, so the ensemble dimension
-crosses the regrid untouched and every member is sampled on its own.
+Building the mapping once is what makes it affordable. The mapping from the regular grid to
+the native cells is a property of the two grids and the land mask alone, so it is built once
+per challenger and reused across every forecast start, lead day, member, depth and variable
+of a run; applying it is a gather, which xarray runs lazily on the dask array of the store
+and which never averages anything, so the ensemble dimension crosses the regrid untouched
+and every member is sampled on its own. Nothing of it is written down:
+:func:`oceanbench.core.weekly_stage.read_through_weekly_dataset` combines the lazily
+regridded weeks in place, because materialising a regridded GloEns week costs about 290 GB.
 
 Three things about a NEMO store have to be handled here or they arrive as wrong numbers
 rather than as a failure:
