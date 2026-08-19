@@ -37,6 +37,10 @@ def _weekly_stage_directory(
     )
 
 
+def _as_datetime(first_day_datetime: numpy.datetime64 | datetime) -> datetime:
+    return datetime.fromisoformat(str(first_day_datetime))
+
+
 def _weekly_stage_path(
     dataset_kind: str,
     dataset_name: str,
@@ -45,7 +49,7 @@ def _weekly_stage_path(
     resolution: str | None = None,
     stage_variant: str | None = None,
 ) -> Path:
-    first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
+    first_day = _as_datetime(first_day_datetime).strftime("%Y%m%d")
     return (
         _weekly_stage_directory(dataset_kind, dataset_name, lead_days_count, resolution, stage_variant)
         / f"{first_day}.zarr"
@@ -79,7 +83,12 @@ def staged_weekly_dataset(
             week_dataset = open_week_dataset(first_day_datetime)
             try:
                 write_dataset_to_local_stage(
-                    maybe_regridded_curvilinear_dataset(week_dataset, dataset_name, for_class4=for_class4),
+                    maybe_regridded_curvilinear_dataset(
+                        week_dataset,
+                        dataset_name,
+                        for_class4=for_class4,
+                        first_day_datetime=_as_datetime(first_day_datetime),
+                    ),
                     path,
                 )
             finally:

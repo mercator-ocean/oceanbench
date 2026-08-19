@@ -61,6 +61,7 @@ only challenger that is, so no other challenger changes path.
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 import hashlib
 
 import numpy
@@ -130,15 +131,27 @@ CLASS4_ROUTES = (CLASS4_ROUTE_NATIVE, CLASS4_ROUTE_REGRIDDED)
 STAGE_VARIANT_REGRIDDED = "regridded"
 
 
+def _dataset_describes_its_own_grid(dataset: xarray.Dataset, first_day_datetime: datetime | None) -> xarray.Dataset:
+    """The grid source of a challenger whose every store describes its own cells."""
+    return dataset
+
+
 @dataclass(frozen=True)
 class CurvilinearChallenger:
     """How to put one curvilinear challenger on the regular grid.
 
-    ``tracer_grid`` and ``tracer_ocean_mask`` are called with the dataset being staged. They
-    are functions rather than arrays because a store does not always describe its own grid:
-    the GloEns three-dimensional stores ship coordinate arrays that are entirely missing
-    values, and both the grid and the land mask of a cycle have to be read from the
-    two-dimensional store of the same initialisation.
+    ``tracer_grid`` and ``tracer_ocean_mask`` are called with the dataset the grid is read
+    from, which ``grid_source`` picks. They are functions rather than arrays because a store
+    does not always describe its own grid: the GloEns three-dimensional stores ship coordinate
+    arrays that are entirely missing values, and both the grid and the land mask of a cycle
+    have to be read from the two-dimensional store of the same initialisation.
+
+    ``grid_source`` is given the dataset being staged and the day its forecast starts, and
+    returns the dataset ``tracer_grid`` and ``tracer_ocean_mask`` are then read from. A
+    challenger whose stores all describe their own cells leaves it at the default, which hands
+    the dataset straight back; a challenger with silent stores returns the companion store that
+    describes them, which is why the start day is passed: the companion is one store per
+    initialisation and nothing in a silent store names it.
 
     ``tracer_ocean_mask`` returns true on the ocean cells of the tracer grid. It is required:
     a store that holds land as a value rather than as a missing value would otherwise have
@@ -155,6 +168,7 @@ class CurvilinearChallenger:
 
     tracer_grid: Callable[[xarray.Dataset], tuple[numpy.ndarray, numpy.ndarray]]
     tracer_ocean_mask: Callable[[xarray.Dataset], numpy.ndarray]
+    grid_source: Callable[[xarray.Dataset, datetime | None], xarray.Dataset] = _dataset_describes_its_own_grid
     source_dimensions: tuple[str, str] = ("y", "x")
     target_latitude: numpy.ndarray = field(default_factory=lambda: STANDARD_QUARTER_DEGREE_LATITUDE)
     target_longitude: numpy.ndarray = field(default_factory=lambda: STANDARD_QUARTER_DEGREE_LONGITUDE)
@@ -206,14 +220,50 @@ GLOENS_LAND_SENTINELS: dict[str, float] = {"tos": 17.5, "zos": 0.0}
 #: whole field is not read, since the mask describes the grid and not the forecast.
 GLOENS_LAND_MASK_SAMPLE_POSITIONS = (0.0, 0.5, 1.0)
 
+#: Where the GloEns stores are published, one store per initialisation and content.
+GLOENS_STORE_ENDPOINT = "https://s3.waw3-1.cloudferro.com"
+GLOENS_STORE_BUCKET = "MOISICEEF"
 
-def gloens_tracer_grid(dataset: xarray.Dataset) -> tuple[numpy.ndarray, numpy.ndarray]:
-    """The tripolar tracer grid of a GloEns store, taken from the pair that holds positions.
+#: The two-dimensional surface content of a GloEns initialisation.
+#:
+#: It is the store that describes the grid: it carries the tracer positions on every cell and
+#: the fields whose land value gives the mask, which the three-dimensional stores do not.
+GLOENS_SURFACE_CONTENT = "2DT-oce"
 
-    The three-dimensional stores ship one of their two coordinate pairs as missing values from
-    end to end, so a fixed name is not enough to find the grid. A store that describes its
-    cells through neither pair is refused: its cycle is described by the two-dimensional store
-    of the same initialisation, which this seam is not given.
+#: How many daily means one GloEns forecast covers.
+#:
+#: The store name carries the day range the forecast covers as well as the day it is issued on,
+#: so reaching a store by name means knowing that range. It is not free: it is the same 28 days
+#: for every initialisation. Listing the whole bucket anonymously on 2026-08-19 returned 1024
+#: stores, 1018 of them forecasts over 297 initialisations from 2020-12-10 to 2026-08-13, every
+#: one of them Thursday to Thursday seven days apart with no gap, and all 1018 name a range
+#: whose first day is the initialisation day and whose last day is 27 days after it, with no
+#: exception. The remaining 6 stores are analyses rather than forecasts, named ``ana`` instead
+#: of ``fcst`` over the week before their date, and no scoring path reads them.
+GLOENS_FORECAST_DAYS = 28
+
+
+def gloens_companion_grid_store(first_day_datetime: datetime) -> str:
+    """The two-dimensional GloEns store of one initialisation, which describes its grid."""
+    last_day = first_day_datetime + timedelta(days=GLOENS_FORECAST_DAYS - 1)
+    store_name = (
+        f"glo4-ens50_ng_1d-m_{first_day_datetime:%Y%m%d}-{last_day:%Y%m%d}"
+        f"_{GLOENS_SURFACE_CONTENT}_fcst_R{first_day_datetime:%Y%m%d}.zarr"
+    )
+    return f"{GLOENS_STORE_ENDPOINT}/{GLOENS_STORE_BUCKET}/{store_name}"
+
+
+def open_gloens_store(store_url: str) -> xarray.Dataset:
+    """Open one GloEns store, which is published anonymously readable."""
+    return xarray.open_zarr(store_url, consolidated=True)
+
+
+def _gloens_described_grid(dataset: xarray.Dataset) -> tuple[numpy.ndarray, numpy.ndarray] | None:
+    """The tracer positions of a GloEns store, or nothing when it carries none.
+
+    A store carries both coordinate pairs at once and the three-dimensional ones ship one of
+    them as missing values from end to end, so the grid is read from whichever pair holds
+    positions rather than from a fixed name.
     """
     for latitude_name, longitude_name in GLOENS_GRID_VARIABLES:
         if latitude_name not in dataset.variables or longitude_name not in dataset.variables:
@@ -222,11 +272,34 @@ def gloens_tracer_grid(dataset: xarray.Dataset) -> tuple[numpy.ndarray, numpy.nd
         longitude = numpy.asarray(dataset[longitude_name].values, dtype="float64")
         if numpy.isfinite(latitude).all() and numpy.isfinite(longitude).all():
             return latitude, longitude
+    return None
+
+
+def gloens_tracer_grid(dataset: xarray.Dataset) -> tuple[numpy.ndarray, numpy.ndarray]:
+    """The tripolar tracer grid of a GloEns store, taken from the pair that holds positions."""
+    described = _gloens_described_grid(dataset)
+    if described is not None:
+        return described
     raise ValueError(
         f"the GloEns store holds no usable tracer grid: none of {[list(pair) for pair in GLOENS_GRID_VARIABLES]} "
-        "carries positions on every cell, and a store whose coordinate arrays are missing values takes its grid "
-        "from the two-dimensional store of the same initialisation"
+        "carries positions on every cell, and reading the grid from the two-dimensional store of the same "
+        "initialisation needs the day that initialisation starts on, which this seam is not given"
     )
+
+
+def gloens_grid_source(dataset: xarray.Dataset, first_day_datetime: datetime | None) -> xarray.Dataset:
+    """The GloEns store the grid and the land mask are read from.
+
+    The three-dimensional stores describe neither: their coordinate arrays are missing values
+    from end to end and they carry no field of a known land value. Both live in the
+    two-dimensional store of the same initialisation, which is reached by name, so a
+    three-dimensional store is regridded only where the day it starts on is known.
+    """
+    if _gloens_described_grid(dataset) is not None:
+        return dataset
+    if first_day_datetime is None:
+        return dataset
+    return open_gloens_store(gloens_companion_grid_store(first_day_datetime))
 
 
 def _ocean_mask_of_sentinel_field(field: xarray.DataArray, land_sentinel: float) -> numpy.ndarray:
@@ -259,6 +332,7 @@ CURVILINEAR_CHALLENGERS: dict[str, CurvilinearChallenger] = {
     GLOENS_SOURCE_NAME: CurvilinearChallenger(
         tracer_grid=gloens_tracer_grid,
         tracer_ocean_mask=gloens_tracer_ocean_mask,
+        grid_source=gloens_grid_source,
         source_dimensions=GLOENS_SOURCE_DIMENSIONS,
         class4_route=CLASS4_ROUTE_NATIVE,
     )
@@ -582,6 +656,7 @@ def maybe_regridded_curvilinear_dataset(
     dataset_name: str,
     *,
     for_class4: bool = False,
+    first_day_datetime: datetime | None = None,
 ) -> xarray.Dataset:
     """Regrid ``dataset`` when the track it is opened for reads it regridded, otherwise return it.
 
@@ -589,16 +664,20 @@ def maybe_regridded_curvilinear_dataset(
     dataset an unstaged run reads directly, so both routes hand the same challenger to the
     metrics. ``for_class4`` says the dataset is opened for the Class IV track, which a
     challenger declaring :data:`CLASS4_ROUTE_NATIVE` gets on its native grid.
+    ``first_day_datetime`` is the day the forecast starts on, which a challenger whose stores
+    do not describe their own grid needs to reach the companion store that describes them; a
+    dataset spanning several forecast starts has no single one and passes none.
     """
     challenger = curvilinear_challenger(dataset_name)
     if challenger is None or not curvilinear_regrid_applies(dataset_name, for_class4=for_class4):
         return dataset
-    tracer_latitude, tracer_longitude = challenger.tracer_grid(dataset)
+    grid_source = challenger.grid_source(dataset, first_day_datetime)
+    tracer_latitude, tracer_longitude = challenger.tracer_grid(grid_source)
     return regridded_curvilinear_dataset(
         dataset,
         tracer_latitude,
         tracer_longitude,
-        challenger.tracer_ocean_mask(dataset),
+        challenger.tracer_ocean_mask(grid_source),
         source_dimensions=challenger.source_dimensions,
         target_latitude=challenger.target_latitude,
         target_longitude=challenger.target_longitude,
