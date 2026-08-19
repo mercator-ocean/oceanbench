@@ -10,9 +10,23 @@ import xarray
 from datetime import datetime, timedelta
 from collections.abc import Callable
 
+from oceanbench.core.curvilinear_staging import (
+    GLOENS_FORECAST_DAYS,
+    GLOENS_MEMBER_DIMENSION,
+    GLOENS_SOURCE_DIMENSIONS,
+    GLOENS_SOURCE_NAME,
+    GLOENS_SUBSURFACE_CONTENTS,
+    GLOENS_SURFACE_CONTENT,
+    NEMO_TIME_DESCRIPTION_VARIABLES,
+    gloens_store_url,
+    open_gloens_store,
+    with_common_depth_axis,
+    without_native_grid_description,
+)
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
+from oceanbench.core.ensemble_gridded import ENSEMBLE_DIMENSION
 from oceanbench.core.remote_http import require_remote_dataset_dimensions, with_remote_http_retries
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
@@ -22,6 +36,8 @@ _CLOUDFERRO_ML_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-buck
 _GLO12_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data/GLO12"
 _GLO12_FORECAST_VARIABLE_NAMES = ["so", "thetao", "uo", "vo", "zos"]
 _LANGYA_LEAD_DAYS_COUNT = 7
+_GLOENS_FIRST_INITIALISATION = "2024-01-04"
+_GLOENS_LAST_INITIALISATION = "2024-12-26"
 
 
 def _default_first_day_datetimes() -> list[datetime]:
@@ -150,6 +166,93 @@ def langya_1_degree() -> xarray.Dataset:
 def _langya_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/langya/{start_datetime_string}.zarr"
+
+
+def gloens() -> xarray.Dataset:
+    first_day_datetimes = _gloens_first_day_datetimes()
+
+    def open_dataset() -> xarray.Dataset:
+        return maybe_stage_weekly_dataset(
+            stage_key="challenger",
+            dataset_kind="challenger",
+            dataset_name=GLOENS_SOURCE_NAME,
+            first_day_datetimes=first_day_datetimes,
+            lead_days_count=GLOENS_FORECAST_DAYS,
+            open_week_dataset=_open_gloens_forecast_week,
+            open_remote_dataset=lambda: _remote_gloens_dataset(first_day_datetimes),
+            attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
+        )
+
+    return with_remote_http_retries("gloens challenger dataset open", open_dataset)
+
+
+def _gloens_first_day_datetimes() -> list[datetime]:
+    """The initialisations of the GloEns year, which are Thursdays rather than Wednesdays.
+
+    Every other challenger of the benchmark starts its weeks on the Wednesdays of 2024, and
+    GloEns is issued a day later, so it has its own list rather than the shared one.
+    """
+    return generate_dates(_GLOENS_FIRST_INITIALISATION, _GLOENS_LAST_INITIALISATION, 7)
+
+
+def _open_gloens_store_content(first_day_datetime: datetime, content: str) -> xarray.Dataset:
+    """One store of one GloEns initialisation, with its time axis read as the lead day index.
+
+    Field zero of the 28 daily means is valid on the initialisation day itself, so the index
+    that names it is the index the whole library reads as the first forecast day, and the day
+    the week is opened for is the day that field is valid on. The scalar time descriptions of
+    the store go first: they name the same axis and mean nothing once it is an index.
+    """
+    store_dataset = open_gloens_store(gloens_store_url(first_day_datetime, content))
+    return _prepared_challenger_week_dataset(
+        store_dataset.drop_vars(NEMO_TIME_DESCRIPTION_VARIABLES, errors="ignore"),
+        "gloens challenger dataset open",
+    )
+
+
+def _with_float32_data_variables(dataset: xarray.Dataset) -> xarray.Dataset:
+    """Read every field of a store as float32, which is the precision the benchmark scores in.
+
+    The GloEns stores hold their fields as scaled integers, which xarray decodes to float64
+    through the float64 scale factor of the store, so a week arrives at twice the precision
+    every other challenger is read at and twice the memory. The cast is taken here, once, on
+    the week as it is opened, so that nothing downstream sees the wider type.
+    """
+    return dataset.assign({name: dataset[name].astype("float32") for name in dataset.data_vars})
+
+
+def _open_gloens_forecast_week(first_day_datetime: datetime) -> xarray.Dataset:
+    """One GloEns initialisation, its five stores read as the one week the metrics score.
+
+    The two-dimensional store comes first and keeps its grid description: it is the only store
+    of the initialisation that carries the tracer positions, since the three-dimensional ones
+    ship theirs as missing values from end to end, so theirs are dropped rather than merged
+    against it. The three vertical axes the stores name the tracer levels under collapse onto
+    the one scoring axis, as the producer collapses them, and the ensemble axis takes the name
+    the ensemble metrics read it under.
+
+    The sea level of this challenger carries an inverse barometer, which stays in the week as
+    its own field: taking it off is the business of the Class IV sea level seam of
+    :mod:`oceanbench.core.classIV_support`, which is where the mean sea surface shift of this
+    challenger is declared as well.
+    """
+    surface_week = _open_gloens_store_content(first_day_datetime, GLOENS_SURFACE_CONTENT)
+    subsurface_weeks = [
+        without_native_grid_description(
+            _open_gloens_store_content(first_day_datetime, content),
+            GLOENS_SOURCE_DIMENSIONS,
+        )
+        for content in GLOENS_SUBSURFACE_CONTENTS
+    ]
+    week_dataset = with_common_depth_axis(xarray.merge([surface_week, *subsurface_weeks]))
+    return _with_float32_data_variables(week_dataset).rename({GLOENS_MEMBER_DIMENSION: ENSEMBLE_DIMENSION})
+
+
+def _remote_gloens_dataset(first_day_datetimes: list[datetime]) -> xarray.Dataset:
+    return xarray.concat(
+        [_open_gloens_forecast_week(first_day_datetime) for first_day_datetime in first_day_datetimes],
+        dim="first_day_datetime",
+    ).assign({"first_day_datetime": first_day_datetimes})
 
 
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:
