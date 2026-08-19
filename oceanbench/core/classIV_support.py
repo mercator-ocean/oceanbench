@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import weakref
+
 import numpy
 import pandas
 import xarray
@@ -66,7 +68,14 @@ CHALLENGER_INVERSE_BAROMETER_VARIABLES: dict[str, str] = {
 MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
 VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 VELOCITY_TARGET_DEPTH_METERS = 15.0
-_CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
+#: Cached Class IV observation context, keyed on the identity of the observation dataset.
+#:
+#: The identity number of a dataset is only unique while that dataset is alive, and Python
+#: hands the number of a freed dataset to the next one, so each entry also holds a weak
+#: reference to the dataset it was built from and is only served to that same dataset.
+_CLASS4_OBSERVATIONS_CACHE: dict[
+    tuple[int, int], tuple[weakref.ReferenceType[xarray.Dataset], tuple[pandas.DataFrame, numpy.ndarray, str]]
+] = {}
 
 
 def _compute_with_remote_retries(operation_name: str, data):
@@ -165,9 +174,11 @@ def _prepared_class4_observations(
     lead_days_count: int,
 ) -> tuple[pandas.DataFrame, numpy.ndarray, str]:
     cache_key = (id(observations_dataset), lead_days_count)
-    cached_context = _CLASS4_OBSERVATIONS_CACHE.get(cache_key)
-    if cached_context is not None:
-        return cached_context
+    cached_entry = _CLASS4_OBSERVATIONS_CACHE.get(cache_key)
+    if cached_entry is not None:
+        cached_dataset_reference, cached_context = cached_entry
+        if cached_dataset_reference() is observations_dataset:
+            return cached_context
     time_key = Dimension.TIME.key()
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
@@ -197,7 +208,7 @@ def _prepared_class4_observations(
     base_dataframe = base_dataframe.drop(columns=[observation_dimension_key], errors="ignore")
     base_dataframe = base_dataframe[[time_key, latitude_key, longitude_key, "first_day", depth_key, "lead_day"]]
     context = (base_dataframe, selected_observation_indices, observation_dimension_key)
-    _CLASS4_OBSERVATIONS_CACHE[cache_key] = context
+    _CLASS4_OBSERVATIONS_CACHE[cache_key] = (weakref.ref(observations_dataset), context)
     return context
 
 

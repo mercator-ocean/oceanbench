@@ -3,13 +3,18 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import logging
+import weakref
 
 import numpy
 import pandas
 import pytest
 import xarray
 
-from oceanbench.core.classIV_support import interpolate_class4_model_to_observations
+from oceanbench.core.classIV_support import (
+    _CLASS4_OBSERVATIONS_CACHE,
+    _prepared_class4_observations,
+    interpolate_class4_model_to_observations,
+)
 from oceanbench.core.curvilinear_staging import CurvilinearChallenger
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
@@ -741,3 +746,21 @@ def test_rank_histograms_are_keyed_on_the_group_and_hold_every_observation():
     for counts in histograms.values():
         assert counts.size == matchup.member_count + 1
         assert counts.sum() == pytest.approx(len(matchup.observations) / 2)
+
+
+def test_a_cached_observation_context_of_a_dead_dataset_is_not_served_to_a_new_one():
+    observations_dataset = _observations_dataset()
+    lead_days_count = 3
+    dead_dataset = _observations_dataset()
+    dead_reference = weakref.ref(dead_dataset)
+    del dead_dataset
+    empty_context = (pandas.DataFrame(), numpy.array([], dtype="int64"), "observation")
+    _CLASS4_OBSERVATIONS_CACHE[(id(observations_dataset), lead_days_count)] = (dead_reference, empty_context)
+
+    base_dataframe, selected_observation_indices, _ = _prepared_class4_observations(
+        observations_dataset, lead_days_count
+    )
+
+    assert not base_dataframe.empty
+    assert selected_observation_indices.size == len(base_dataframe)
+    assert _CLASS4_OBSERVATIONS_CACHE[(id(observations_dataset), lead_days_count)][0]() is observations_dataset
