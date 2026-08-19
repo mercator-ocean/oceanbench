@@ -232,6 +232,23 @@ GLOENS_STORE_BUCKET = "MOISICEEF"
 #: the fields whose land value gives the mask, which the three-dimensional stores do not.
 GLOENS_SURFACE_CONTENT = "2DT-oce"
 
+#: The three-dimensional contents of a GloEns initialisation, one store per variable.
+#:
+#: The name of each carries the C-grid point its variable lives on, which is also what its
+#: vertical axis is named after: the tracer store holds ``deptht``, the zonal one ``depthu`` and
+#: the meridional one ``depthv``.
+GLOENS_SUBSURFACE_CONTENTS = ("3DT-thetao", "3DT-so", "3DU-uo", "3DV-vo")
+
+#: The ensemble dimension of a GloEns store, and how many members it holds.
+GLOENS_MEMBER_DIMENSION = "ens"
+GLOENS_MEMBER_COUNT = 50
+
+#: Scalar time descriptions a NEMO store carries next to its time axis.
+#:
+#: They describe the model run rather than the fields and they name the same thing the time axis
+#: does, so they are dropped before the axis becomes the lead day index.
+NEMO_TIME_DESCRIPTION_VARIABLES = ("time_centered", "time_counter")
+
 #: How many daily means one GloEns forecast covers.
 #:
 #: The store name carries the day range the forecast covers as well as the day it is issued on,
@@ -245,14 +262,25 @@ GLOENS_SURFACE_CONTENT = "2DT-oce"
 GLOENS_FORECAST_DAYS = 28
 
 
-def gloens_companion_grid_store(first_day_datetime: datetime) -> str:
-    """The two-dimensional GloEns store of one initialisation, which describes its grid."""
+def gloens_store_url(first_day_datetime: datetime, content: str) -> str:
+    """One GloEns store, named after the initialisation it starts on and the content it holds.
+
+    The name is built rather than searched for: every one of the 1018 published forecast stores
+    names a range whose first day is the initialisation day and whose last day is
+    :data:`GLOENS_FORECAST_DAYS` minus one after it, so the name of a store is a function of its
+    initialisation and its content alone and no listing of the bucket is needed to reach it.
+    """
     last_day = first_day_datetime + timedelta(days=GLOENS_FORECAST_DAYS - 1)
     store_name = (
         f"glo4-ens50_ng_1d-m_{first_day_datetime:%Y%m%d}-{last_day:%Y%m%d}"
-        f"_{GLOENS_SURFACE_CONTENT}_fcst_R{first_day_datetime:%Y%m%d}.zarr"
+        f"_{content}_fcst_R{first_day_datetime:%Y%m%d}.zarr"
     )
     return f"{GLOENS_STORE_ENDPOINT}/{GLOENS_STORE_BUCKET}/{store_name}"
+
+
+def gloens_companion_grid_store(first_day_datetime: datetime) -> str:
+    """The two-dimensional GloEns store of one initialisation, which describes its grid."""
+    return gloens_store_url(first_day_datetime, GLOENS_SURFACE_CONTENT)
 
 
 def open_gloens_store(store_url: str) -> xarray.Dataset:

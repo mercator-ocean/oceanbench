@@ -103,6 +103,40 @@ def glo36v1() -> xarray.Dataset:
     return challenger_datasets.glo36v1()
 
 
+def gloens() -> xarray.Dataset:
+    """
+    Open the GloEns challenger dataset, the 50-member ensemble of the benchmark.
+
+    The 52 initialisations of 2024 are the Thursdays from 2024-01-04 to 2024-12-26, a day
+    later in the week than every other challenger, and each covers 28 daily means whose first
+    one is valid on the initialisation day itself, so ``lead_day_index`` 0 is the day
+    ``first_day_datetime`` names, as it is for every other challenger.
+
+    One initialisation is published as five stores, four three-dimensional ones holding one
+    variable each and one two-dimensional one holding the surface, and they are read as the
+    one dataset here. The fields arrive on the tripolar model grid and are sampled onto the
+    regular quarter-degree scoring grid as each week is opened, see
+    :mod:`oceanbench.core.curvilinear_staging`; nothing of that is written down, so the
+    returned dataset is lazy over the published stores.
+
+    The ensemble axis is named ``member``, which is the dimension the metrics of
+    :mod:`oceanbench.core.ensemble_gridded` read, and it crosses the regrid untouched, so
+    every member is sampled on its own. Fields are read as float32.
+
+    The sea level is published as it stands, with the inverse barometer ``ssh_ib`` beside it
+    rather than taken off it, and it is corrected where the correction belongs: the Class IV
+    sea level seam of :mod:`oceanbench.core.classIV_support`, which is also where the mean sea
+    surface shift of this challenger is declared.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing GloEns ensemble forecasts.
+    """
+
+    return challenger_datasets.gloens()
+
+
 def glonet() -> xarray.Dataset:
     """
     Open the GLONET challenger dataset.
