@@ -124,7 +124,7 @@ FOLD_DISAGREEMENT_DEGREES = 20.0
 #: The Class IV track reads the challenger on its native grid, as the campaign scores it.
 CLASS4_ROUTE_NATIVE = "native"
 
-#: The Class IV track reads the challenger after the staging regrid, as the gridded track does.
+#: The Class IV track reads the challenger after the regrid, as the gridded track does.
 CLASS4_ROUTE_REGRIDDED = "regridded"
 
 CLASS4_ROUTES = (CLASS4_ROUTE_NATIVE, CLASS4_ROUTE_REGRIDDED)
@@ -506,17 +506,24 @@ def _angle_disagreement(first: xarray.DataArray, second: xarray.DataArray) -> xa
     return numpy.abs((first - second + numpy.pi) % (2.0 * numpy.pi) - numpy.pi)
 
 
-def _folded_velocity_cells(
+def _native_i_axis_angle(
     tracer_latitude: numpy.ndarray,
     tracer_longitude: numpy.ndarray,
+    source_dimensions: tuple[str, str],
+) -> xarray.DataArray:
+    """Where the i-axis of each native cell points, on the native grid."""
+    return xarray.DataArray(i_axis_angle_to_east(tracer_latitude, tracer_longitude), dims=source_dimensions)
+
+
+def _folded_velocity_cells(
+    native_angle: xarray.DataArray,
     zonal_mapping: NearestNeighbourMapping,
     meridional_mapping: NearestNeighbourMapping,
     source_dimensions: tuple[str, str],
 ) -> xarray.DataArray:
     """Target cells whose two velocity faces come from differently oriented native cells."""
-    angle = xarray.DataArray(i_axis_angle_to_east(tracer_latitude, tracer_longitude), dims=source_dimensions)
-    zonal_angle = _sampled_variable(angle, zonal_mapping, source_dimensions)
-    meridional_angle = _sampled_variable(angle, meridional_mapping, source_dimensions)
+    zonal_angle = _sampled_variable(native_angle, zonal_mapping, source_dimensions)
+    meridional_angle = _sampled_variable(native_angle, meridional_mapping, source_dimensions)
     return _angle_disagreement(zonal_angle, meridional_angle) > numpy.radians(FOLD_DISAGREEMENT_DEGREES)
 
 
@@ -593,6 +600,7 @@ def regridded_curvilinear_dataset(
     )
     if zonal_name is None:
         return regridded.assign_attrs(dataset.attrs)
+    native_angle = _native_i_axis_angle(tracer_latitude, tracer_longitude, source_dimensions)
     # The angle describes the grid and not the ocean, so it is sampled through a mapping that
     # masks nothing: a coastal target cell whose velocity face is wet must still be turned.
     geometry_mapping = curvilinear_mapping(
@@ -602,14 +610,9 @@ def regridded_curvilinear_dataset(
         target_latitude,
         target_longitude,
     )
-    angle = _sampled_variable(
-        xarray.DataArray(i_axis_angle_to_east(tracer_latitude, tracer_longitude), dims=source_dimensions),
-        geometry_mapping,
-        source_dimensions,
-    )
+    angle = _sampled_variable(native_angle, geometry_mapping, source_dimensions)
     folded = _folded_velocity_cells(
-        tracer_latitude,
-        tracer_longitude,
+        native_angle,
         mappings[GRID_TYPE_ZONAL_VELOCITY],
         mappings[GRID_TYPE_MERIDIONAL_VELOCITY],
         source_dimensions,
@@ -618,7 +621,7 @@ def regridded_curvilinear_dataset(
 
 
 def curvilinear_regrid_applies(dataset_name: str, *, for_class4: bool = False) -> bool:
-    """Whether the staging regrid is applied to ``dataset_name`` on this track.
+    """Whether the regrid is applied to ``dataset_name`` on this track.
 
     The gridded track needs the regular grid and always takes it. The Class IV track takes it
     only when the challenger declares :data:`CLASS4_ROUTE_REGRIDDED`, because on the native
@@ -638,12 +641,17 @@ def curvilinear_stage_variant(
 ) -> str | None:
     """The stage variant to key staged weeks on, marked when what is staged is regridded.
 
-    A staged week holds the dataset the track reads, so a challenger declared curvilinear
-    stages regridded data under the same name as the data it published before the
-    declaration. The marker carries the target grid, so declaring a challenger, changing its
-    target grid or routing the Class IV track differently all land on their own stage
-    entries instead of reading the previous ones. A challenger that is not declared keeps its
-    variant untouched, and its stage paths do not move.
+    A staged week holds the dataset the track reads, so a week staged after the regrid must
+    not be read back as the data the same challenger published before its declaration. The
+    marker carries the target grid, so declaring a challenger, changing its target grid or
+    routing its Class IV track differently all land on their own stage entries instead of
+    reading the previous ones. A challenger that is not declared keeps its variant untouched,
+    and its stage paths do not move.
+
+    The gridded route of a declared challenger is read through rather than staged, see
+    :func:`oceanbench.core.weekly_stage.read_through_weekly_dataset`, so this marker is what
+    keys a week staged through :func:`oceanbench.core.weekly_stage.staged_weekly_dataset`
+    directly.
     """
     challenger = curvilinear_challenger(dataset_name)
     if challenger is None or not curvilinear_regrid_applies(dataset_name, for_class4=for_class4):
@@ -662,10 +670,10 @@ def maybe_regridded_curvilinear_dataset(
 ) -> xarray.Dataset:
     """Regrid ``dataset`` when the track it is opened for reads it regridded, otherwise return it.
 
-    This is the staging seam: it is called on the dataset a week is staged from and on the
-    dataset an unstaged run reads directly, so both routes hand the same challenger to the
-    metrics. ``for_class4`` says the dataset is opened for the Class IV track, which a
-    challenger declaring :data:`CLASS4_ROUTE_NATIVE` gets on its native grid.
+    This is the one seam: every route that opens a curvilinear challenger goes through it, so
+    they all hand the same challenger to the metrics. ``for_class4`` says the dataset is
+    opened for the Class IV track, which a challenger declaring :data:`CLASS4_ROUTE_NATIVE`
+    gets on its native grid.
     ``first_day_datetime`` is the day the forecast starts on, which a challenger whose stores
     do not describe their own grid needs to reach the companion store that describes them; a
     dataset spanning several forecast starts has no single one and passes none.
