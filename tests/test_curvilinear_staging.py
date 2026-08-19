@@ -2,10 +2,14 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from dataclasses import replace
+from datetime import datetime
+
 import numpy
 import pytest
 import xarray
 
+from oceanbench.core import curvilinear_staging
 from oceanbench.core.classIV_support import (
     CHALLENGER_INVERSE_BAROMETER_VARIABLES,
     CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS,
@@ -19,6 +23,8 @@ from oceanbench.core.curvilinear_staging import (
     STANDARD_QUARTER_DEGREE_LATITUDE,
     STANDARD_QUARTER_DEGREE_LONGITUDE,
     CurvilinearChallenger,
+    gloens_companion_grid_store,
+    gloens_grid_source,
     gloens_tracer_grid,
     gloens_tracer_ocean_mask,
     curvilinear_mapping,
@@ -507,6 +513,86 @@ def test_the_gloens_declaration_regrids_a_store_through_its_own_grid_and_mask():
     assert regridded["tos"].dims == ("latitude", "longitude")
     assert not (regridded["tos"].values == GLOENS_LAND_SENTINELS["tos"]).any()
     assert numpy.nanmin(regridded["tos"].values) == 5.0
+
+
+# ---------------------------------------------------------------------------
+# The companion store a silent GloEns store takes its grid from
+# ---------------------------------------------------------------------------
+
+
+def test_the_companion_store_of_an_initialisation_is_named_from_that_day_alone():
+    store_url = gloens_companion_grid_store(datetime(2024, 1, 4))
+
+    assert store_url == (
+        "https://s3.waw3-1.cloudferro.com/MOISICEEF/" "glo4-ens50_ng_1d-m_20240104-20240131_2DT-oce_fcst_R20240104.zarr"
+    )
+
+
+def test_a_store_that_describes_its_own_grid_is_its_own_grid_source(monkeypatch):
+    monkeypatch.setattr(curvilinear_staging, "open_gloens_store", _refuse_to_open)
+    dataset = _gloens_dataset(numpy.zeros((9, 9)))
+
+    assert gloens_grid_source(dataset, datetime(2024, 1, 4)) is dataset
+
+
+def test_a_silent_store_takes_its_grid_and_its_mask_from_the_companion_store(monkeypatch):
+    companion = _gloens_dataset(numpy.full((3, 2, 9, 9), 5.0))
+    opened: list[str] = []
+    monkeypatch.setattr(curvilinear_staging, "open_gloens_store", _record_and_return(opened, companion))
+    silent = _gloens_dataset(numpy.zeros((9, 9)), variable_name="thetao", described=None)
+
+    grid_source = gloens_grid_source(silent, datetime(2024, 1, 4))
+
+    assert opened == [gloens_companion_grid_store(datetime(2024, 1, 4))]
+    numpy.testing.assert_array_equal(gloens_tracer_grid(grid_source)[0], _tracer_grid()[0])
+    assert gloens_tracer_ocean_mask(grid_source).all()
+
+
+def test_a_silent_store_with_no_start_day_is_refused_rather_than_reached_for(monkeypatch):
+    monkeypatch.setattr(curvilinear_staging, "open_gloens_store", _refuse_to_open)
+    silent = _gloens_dataset(numpy.zeros((9, 9)), variable_name="thetao", described=None)
+
+    with pytest.raises(ValueError, match="no usable tracer grid"):
+        gloens_tracer_grid(gloens_grid_source(silent, None))
+
+
+def test_the_staging_seam_regrids_a_silent_store_through_its_companion(monkeypatch):
+    companion = _gloens_dataset(_ocean_with_a_land_block())
+    monkeypatch.setattr(curvilinear_staging, "open_gloens_store", _record_and_return([], companion))
+    monkeypatch.setitem(
+        CURVILINEAR_CHALLENGERS,
+        GLOENS_SOURCE_NAME,
+        _on_the_test_target_grid(CURVILINEAR_CHALLENGERS[GLOENS_SOURCE_NAME]),
+    )
+    silent = _gloens_dataset(numpy.full((9, 9), 5.0), variable_name="thetao", described=None)
+
+    regridded = maybe_regridded_curvilinear_dataset(silent, GLOENS_SOURCE_NAME, first_day_datetime=datetime(2024, 1, 4))
+
+    assert regridded["thetao"].dims == ("latitude", "longitude")
+    assert numpy.isnan(regridded["thetao"].values).any()
+    assert numpy.nanmin(regridded["thetao"].values) == 5.0
+
+
+def _ocean_with_a_land_block() -> numpy.ndarray:
+    values = numpy.full((9, 9), 12.0)
+    values[3:6, 3:6] = GLOENS_LAND_SENTINELS["tos"]
+    return values
+
+
+def _on_the_test_target_grid(declaration: CurvilinearChallenger) -> CurvilinearChallenger:
+    return replace(declaration, target_latitude=TARGET_LATITUDE, target_longitude=TARGET_LONGITUDE)
+
+
+def _refuse_to_open(store_url: str) -> xarray.Dataset:
+    raise AssertionError(f"no store should have been opened, but {store_url} was")
+
+
+def _record_and_return(opened: list[str], dataset: xarray.Dataset):
+    def open_store(store_url: str) -> xarray.Dataset:
+        opened.append(store_url)
+        return dataset
+
+    return open_store
 
 
 def test_every_curvilinear_challenger_with_an_inverse_barometer_declares_its_own_shift():
