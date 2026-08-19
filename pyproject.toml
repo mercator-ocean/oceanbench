@@ -21,6 +21,8 @@ dependencies = [
     "zarr==2.18.4",
     "dask (>=2022)",
     "numcodecs==0.15.1",
+    "scipy (>=1.11)",
+    "pyarrow (>=14)",
     "copernicusmarine==2.0.1",
     "requests (>=2.27.1)",
     "aiohttp (>=3.0.0)",
