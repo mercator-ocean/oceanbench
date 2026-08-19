@@ -9,7 +9,11 @@ from pathlib import Path
 import numpy
 import xarray
 
-from oceanbench.core.curvilinear_staging import curvilinear_stage_variant, maybe_regridded_curvilinear_dataset
+from oceanbench.core.curvilinear_staging import (
+    curvilinear_regrid_applies,
+    curvilinear_stage_variant,
+    maybe_regridded_curvilinear_dataset,
+)
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.local_stage import (
@@ -116,6 +120,47 @@ def staged_weekly_dataset(
     )
 
 
+def read_through_weekly_dataset(
+    *,
+    dataset_kind: str,
+    dataset_name: str,
+    first_day_datetimes: numpy.ndarray,
+    open_week_dataset: Callable[[numpy.datetime64], xarray.Dataset],
+    resolution: str | None = None,
+    stage_variant: str | None = None,
+    for_class4: bool = False,
+) -> xarray.Dataset:
+    """Combine the weeks of a challenger without writing any of them down.
+
+    Every week is opened on the grid it is published on and handed to the same regrid seam a
+    staged week goes through, which xarray keeps as a lazy gather over the store, so the
+    combined dataset is the regular-grid challenger the metrics read without a byte of it
+    being materialised. This is the route of a curvilinear challenger: staging one costs
+    about 290 GB a week, which no run affords, and the regrid of a store that does not
+    describe its own grid needs the day its forecast starts on, which only a per-week open
+    knows and a dataset spanning the whole year does not.
+    """
+    weeks = [
+        maybe_regridded_curvilinear_dataset(
+            open_week_dataset(first_day_datetime),
+            dataset_name,
+            for_class4=for_class4,
+            first_day_datetime=_as_datetime(first_day_datetime),
+        )
+        for first_day_datetime in first_day_datetimes
+    ]
+    combined = xarray.concat(weeks, dim=Dimension.FIRST_DAY_DATETIME.key()).assign_coords(
+        {Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes}
+    )
+    return with_dataset_source(
+        combined,
+        kind=dataset_kind,
+        name=dataset_name,
+        resolution=resolution,
+        variant=stage_variant,
+    )
+
+
 def maybe_stage_weekly_dataset(
     *,
     stage_key: str,
@@ -130,6 +175,16 @@ def maybe_stage_weekly_dataset(
     attach_source_metadata_when_not_staged: bool = True,
     for_class4: bool = False,
 ) -> xarray.Dataset:
+    if curvilinear_regrid_applies(dataset_name, for_class4=for_class4):
+        return read_through_weekly_dataset(
+            dataset_kind=dataset_kind,
+            dataset_name=dataset_name,
+            first_day_datetimes=first_day_datetimes,
+            open_week_dataset=open_week_dataset,
+            resolution=resolution,
+            stage_variant=stage_variant,
+            for_class4=for_class4,
+        )
     if should_stage_locally(stage_key):
         return staged_weekly_dataset(
             dataset_kind=dataset_kind,

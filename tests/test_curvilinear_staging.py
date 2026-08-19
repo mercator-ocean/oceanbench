@@ -34,7 +34,7 @@ from oceanbench.core.curvilinear_staging import (
     regridded_curvilinear_dataset,
     with_common_depth_axis,
 )
-from oceanbench.core.weekly_stage import staged_weekly_dataset
+from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, staged_weekly_dataset
 
 TARGET_LATITUDE = numpy.arange(40.0, 41.01, 0.25)
 TARGET_LONGITUDE = numpy.arange(10.0, 11.01, 0.25)
@@ -668,6 +668,73 @@ def test_the_stage_path_of_a_challenger_that_is_not_curvilinear_does_not_move(tm
     names = _staged_directory_names(tmp_path, monkeypatch, "a-regular-challenger", dataset, resolution="quarter")
 
     assert names == ["challenger-a-regular-challenger-quarter-10d"]
+
+
+# ---------------------------------------------------------------------------
+# The route a curvilinear challenger is scored through
+# ---------------------------------------------------------------------------
+
+
+FIRST_DAY_DATETIMES = numpy.array([numpy.datetime64("2024-01-04"), numpy.datetime64("2024-01-11")])
+
+
+def _maybe_staged(tmp_path, monkeypatch, dataset_name: str, open_week_dataset, **keywords) -> xarray.Dataset:
+    monkeypatch.setattr("oceanbench.core.weekly_stage.local_stage_directory", lambda: tmp_path)
+    monkeypatch.setattr("oceanbench.core.weekly_stage.should_stage_locally", lambda stage_key: True)
+    return maybe_stage_weekly_dataset(
+        stage_key="challenger",
+        dataset_kind="challenger",
+        dataset_name=dataset_name,
+        first_day_datetimes=FIRST_DAY_DATETIMES,
+        lead_days_count=10,
+        open_week_dataset=open_week_dataset,
+        open_remote_dataset=lambda: pytest.fail("the remote dataset should not have been opened"),
+        **keywords,
+    )
+
+
+def test_a_curvilinear_challenger_is_read_through_rather_than_staged(tmp_path, monkeypatch):
+    _declare(monkeypatch, CLASS4_ROUTE_NATIVE)
+
+    read_through = _maybe_staged(
+        tmp_path, monkeypatch, "a-curvilinear-challenger", lambda first_day: _tracer_dataset(numpy.zeros((9, 9)))
+    )
+
+    assert read_through["thetao"].dims == ("first_day_datetime", "latitude", "longitude")
+    numpy.testing.assert_array_equal(read_through["first_day_datetime"].values, FIRST_DAY_DATETIMES)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_the_read_through_regrid_stays_lazy_over_the_store(tmp_path, monkeypatch):
+    _declare(monkeypatch, CLASS4_ROUTE_NATIVE)
+
+    def open_week(first_day) -> xarray.Dataset:
+        return _tracer_dataset(numpy.zeros((9, 9))).chunk({"y": 3})
+
+    read_through = _maybe_staged(tmp_path, monkeypatch, "a-curvilinear-challenger", open_week)
+
+    assert read_through["thetao"].chunks is not None
+
+
+def test_each_week_is_regridded_through_the_day_its_forecast_starts_on(tmp_path, monkeypatch):
+    _declare(monkeypatch, CLASS4_ROUTE_NATIVE)
+    opened: list[object] = []
+
+    def open_week(first_day) -> xarray.Dataset:
+        opened.append(first_day)
+        return _tracer_dataset(numpy.zeros((9, 9)))
+
+    _maybe_staged(tmp_path, monkeypatch, "a-curvilinear-challenger", open_week)
+
+    numpy.testing.assert_array_equal(numpy.array(opened), FIRST_DAY_DATETIMES)
+
+
+def test_a_challenger_that_is_not_curvilinear_is_still_staged(tmp_path, monkeypatch):
+    dataset = xarray.Dataset({"thetao": (("latitude", "longitude"), numpy.zeros((3, 4)))})
+
+    _maybe_staged(tmp_path, monkeypatch, "a-regular-challenger", lambda first_day: dataset)
+
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["challenger-a-regular-challenger-10d"]
 
 
 def test_a_mapping_that_reaches_nothing_describes_itself_without_percentiles():
