@@ -36,6 +36,17 @@ export function syncStableRanges(nextSignature) {
   bounds.clear();
 }
 
+/**
+ * Forget every bound whose id starts with `prefix`. A diagnostic whose key carries part of
+ * its own state (the spectrum's key carries the box) mints a new id each time that state
+ * changes, and the bounds under the old ids are unreachable from then on.
+ */
+export function forgetStableRanges(prefix) {
+  for (const id of [...bounds.keys()]) {
+    if (id.startsWith(prefix)) bounds.delete(id);
+  }
+}
+
 /** Grow-only upper bound: the largest `value` seen for `id` under this selection. */
 export function stableMax(id, value) {
   const candidate = Number.isFinite(value) && value > 0 ? value : 0;

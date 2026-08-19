@@ -65,14 +65,20 @@ function abortError() {
 // A rejected request drops out of the cache so a later read can retry.
 function fetchChunk(store, path, chunkKey, codecId, signal) {
   const cacheKey = `${path}/${chunkKey}`;
+  // A caller arriving with an already-aborted signal wants nothing: it must not create a
+  // request, and above all it must not walk through the waiter bookkeeping of a request it
+  // never joined. Doing so used to abort a live download and drop a fully decoded tile.
+  if (signal && signal.aborted) return Promise.reject(abortError());
   let entry = store.chunkCache.get(cacheKey);
   if (!entry) {
     const controller = new AbortController();
-    entry = { controller, waiters: 0, promise: null, decoded: false };
+    entry = { controller, waiters: 0, promise: null, decoded: false, bytes: 0, used: 0 };
     entry.promise = requestChunk(store, path, chunkKey, codecId, controller.signal);
     entry.promise.then(
-      () => {
+      (record) => {
         entry.decoded = true;
+        entry.bytes = record.bytes.byteLength;
+        evictChunks(store);
       },
       () => {
         if (store.chunkCache.get(cacheKey) === entry) store.chunkCache.delete(cacheKey);
@@ -80,8 +86,54 @@ function fetchChunk(store, path, chunkKey, codecId, signal) {
     );
     store.chunkCache.set(cacheKey, entry);
   }
-  if (!signal) return entry.promise;
+  entry.used = (store.chunkClock = (store.chunkClock || 0) + 1);
+  // Every consumer counts, signalled or not. The signal-less readers (windows, columns,
+  // coordinates, prefetch) were invisible to the refcount, so a single signalled waiter
+  // changing its mind aborted the download they were still waiting on.
+  if (!signal) return joinUnsignalledRequest(entry);
   return joinChunkRequest(store, cacheKey, entry, signal);
+}
+
+function joinUnsignalledRequest(entry) {
+  entry.waiters += 1;
+  const release = () => {
+    entry.waiters -= 1;
+  };
+  return entry.promise.then(
+    (record) => {
+      release();
+      return record;
+    },
+    (error) => {
+      release();
+      throw error;
+    },
+  );
+}
+
+// A long session pans and scrubs through far more tiles than it can hold: at ~0.5 MB decoded
+// each, an unbounded cache is a slow leak. Keep the most recently used decoded tiles up to a
+// byte budget wide enough for every lead of two panels (the warm playback loop must still not
+// touch the network), and drop the coldest beyond it. In-flight tiles and tiles anyone is
+// still waiting on are never evicted.
+const CHUNK_CACHE_BYTES = 512 * 1024 * 1024;
+
+function evictChunks(store) {
+  let total = 0;
+  const evictable = [];
+  for (const [key, entry] of store.chunkCache) {
+    if (!entry.decoded) continue;
+    total += entry.bytes;
+    if (entry.waiters <= 0) evictable.push([key, entry]);
+  }
+  if (total <= CHUNK_CACHE_BYTES) return;
+  evictable.sort((a, b) => a[1].used - b[1].used);
+  for (const [key, entry] of evictable) {
+    if (total <= CHUNK_CACHE_BYTES) return;
+    if (store.chunkCache.get(key) !== entry) continue;
+    store.chunkCache.delete(key);
+    total -= entry.bytes;
+  }
 }
 
 // Wait on a shared request under a caller's own abort signal. The underlying fetch is
@@ -99,7 +151,10 @@ function joinChunkRequest(store, cacheKey, entry, signal) {
     };
     const onAbort = () => {
       if (!release()) return;
-      if (entry.waiters <= 0) {
+      // A tile that has already arrived is not cancellable and is worth keeping: evicting it
+      // here threw away decoded data and made the next read of the same tile go to the
+      // network again, which is exactly what the cache exists to prevent.
+      if (entry.waiters <= 0 && !entry.decoded) {
         entry.controller.abort();
         if (store.chunkCache.get(cacheKey) === entry) store.chunkCache.delete(cacheKey);
       }

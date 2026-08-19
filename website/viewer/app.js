@@ -60,7 +60,7 @@ import {
   CLASS4_RAMP_END,
 } from "./modules/overlays.js";
 import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, rmsdByDepthSVG, columnProfileSVG, SERIES_COLORS } from "./modules/charts.js";
-import { syncStableRanges, stableMax, stableInterval } from "./modules/stable-ranges.js";
+import { syncStableRanges, stableMax, stableInterval, forgetStableRanges } from "./modules/stable-ranges.js";
 import {
   loadYearGeography,
   loadYearRmsd,
@@ -260,6 +260,22 @@ async function ensureStore(slug) {
   stores.set(slug, store);
   manifests.set(slug, manifest);
   return store;
+}
+
+// Every open store holds its decoded chunks, so keeping a store for each dataset ever
+// selected keeps each of those caches alive for the whole session. Once a dataset is on
+// no panel, drop its store (and the coordinates read through it); the manifest stays, so
+// coming back reopens the store and refetches only the chunks that get drawn.
+function releaseUnusedStores() {
+  const inUse = new Set(panels.filter(Boolean).map((panel) => panel.state.dataset));
+  for (const slug of [...stores.keys()]) {
+    if (inUse.has(slug)) continue;
+    stores.delete(slug);
+    columnStores.delete(slug);
+    for (const key of [...coordinatesByLevel.keys()]) {
+      if (key.startsWith(`${slug}/`)) coordinatesByLevel.delete(key);
+    }
+  }
 }
 
 function manifestFor(slug) {
@@ -470,6 +486,7 @@ function wirePanel(panel) {
     clearTrajectories();
     panel.state.dataset = event.target.value;
     setPanelLoading(panel, true);
+    releaseUnusedStores();
     try {
       await ensureStore(panel.state.dataset);
       const manifest = manifestFor(panel.state.dataset);
@@ -3850,6 +3867,9 @@ function applyPsdBoxDrag(drag, deltaX, deltaY) {
 // trajectory regional fetch). Memoised with a small LRU keyed by dataset/variable/
 // lead/box; the underlying compressed tiles are cached by the zarr store anyway.
 const psdWindowCache = new Map();
+// The spectrum's grow-only bounds are keyed by the box, so the previous box's bounds are
+// unreachable the moment the box moves. Remember which key is live and drop the last one.
+let psdBoundsKey = null;
 const PSD_WINDOW_CACHE_LIMIT = 8;
 
 function psdWindowKey(slug, variable, level, start, leadIndex, boxRange) {
@@ -4024,6 +4044,8 @@ async function renderRailPsd(shown, comparison) {
       if (y > yHigh) yHigh = y;
     }
   }
+  if (psdBoundsKey && psdBoundsKey !== boxKey) forgetStableRanges(psdBoundsKey);
+  psdBoundsKey = boxKey;
   const xBounds = stableInterval(`${boxKey}|x`, xLow, xHigh);
   const yBounds = stableInterval(`${boxKey}|y`, yLow, yHigh);
   elements["rail-spectra"].innerHTML = psdSpectraSVG(curves, {

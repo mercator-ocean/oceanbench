@@ -23,6 +23,11 @@ function fetchYearJSON(url) {
     return response.json();
   })();
   jsonCache.set(resolvedUrl, promise);
+  // A failed fetch must not be memoised: a network blip would otherwise keep the artifact
+  // unavailable for the rest of the session.
+  promise.catch(() => {
+    if (jsonCache.get(resolvedUrl) === promise) jsonCache.delete(resolvedUrl);
+  });
   return promise;
 }
 

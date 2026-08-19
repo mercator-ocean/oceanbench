@@ -51,6 +51,14 @@ function withAbsoluteError(rows) {
 const fileInfoCache = new Map();
 // Targeted pair reads, keyed by `${url}|${startDate}|${leadDay}`.
 const targetedCache = new Map();
+// Rows for one pair are held decoded, so an unbounded cache grows with every lead the user
+// visits over a session. Keep the recently used pairs (a full lead sweep of both panels,
+// plus their prefetches) and drop the oldest beyond that.
+const TARGETED_CACHE_ENTRIES = 32;
+
+// Per-request read context, so a prefetch still in flight can be promoted to the read a
+// user is now waiting on.
+const requestContexts = new Map();
 
 // Requests still running, so a prefetch can be called off the moment the user asks for
 // something else and stops competing for the shared connections.
@@ -65,6 +73,20 @@ self.addEventListener("message", (event) => {
     }
     return;
   }
+  if (op === "promote") {
+    // A user is now waiting on what was started as a prefetch: give it the parallelism of
+    // a foreground read and let it drive the loading bar. Requests already in flight keep
+    // the reporter they were given, so the bar picks up from the next one.
+    const context = requestContexts.get(id);
+    if (context) {
+      context.maximumParts = PARALLEL_RANGE_PARTS;
+      if (!context.progress) {
+        context.progress = progressReporter(id);
+        context.progress.beginPhase("rows", 0);
+      }
+    }
+    return;
+  }
   const controller = new AbortController();
   abortControllers.set(id, controller);
   // A quiet (prefetch) request reports no progress: only the load the user is waiting on
@@ -74,11 +96,15 @@ self.addEventListener("message", (event) => {
     signal: controller.signal,
     maximumParts: quiet ? PREFETCH_RANGE_PARTS : PARALLEL_RANGE_PARTS,
   };
+  requestContexts.set(id, context);
   if (context.progress) context.progress.beginPhase("footer", 0);
   handle(op, url, { byteLength, startDate, leadDay, variables }, context)
     .then((payload) => self.postMessage({ id, ...payload }))
     .catch((error) => self.postMessage({ id, error: String(error.message || error) }))
-    .finally(() => abortControllers.delete(id));
+    .finally(() => {
+      abortControllers.delete(id);
+      requestContexts.delete(id);
+    });
 });
 
 // Byte counter behind the loading bar. `bytesTotal` is 0 while the size of the phase is
@@ -227,12 +253,23 @@ async function targetedPair(url, info, startDate, leadDay, variables, context) {
     return rows;
   })();
   targetedCache.set(key, promise);
+  evictTargetedEntries(key);
   // A cancelled prefetch (or any failure) must not leave a rejected promise behind: the
   // next request for that pair has to be able to fetch it for real.
   promise.catch(() => {
     if (targetedCache.get(key) === promise) targetedCache.delete(key);
   });
   return promise;
+}
+
+// Drop the least recently inserted pairs once the cache is over its entry budget. A pair
+// still being read stays reachable through the promise its caller already holds; dropping
+// it from the cache only means a later request for it reads it again.
+function evictTargetedEntries(keep) {
+  for (const key of targetedCache.keys()) {
+    if (targetedCache.size <= TARGETED_CACHE_ENTRIES) return;
+    if (key !== keep) targetedCache.delete(key);
+  }
 }
 
 // Byte span [lowest column-chunk offset, highest chunk end) covering the selected row
@@ -329,15 +366,19 @@ const waitingRangeRequests = [];
 
 async function withRangeSlot(run) {
   if (openRangeRequests >= MAXIMUM_CONCURRENT_RANGE_REQUESTS) {
+    // The slot is handed straight to the waiter, which inherits the count rather than
+    // taking it again: releasing the slot and then waking the waiter lets a caller
+    // arriving in between take the same seat, so more requests run than the cap allows.
     await new Promise((resolve) => waitingRangeRequests.push(resolve));
+  } else {
+    openRangeRequests += 1;
   }
-  openRangeRequests += 1;
   try {
     return await run();
   } finally {
-    openRangeRequests -= 1;
     const next = waitingRangeRequests.shift();
     if (next) next();
+    else openRangeRequests -= 1;
   }
 }
 

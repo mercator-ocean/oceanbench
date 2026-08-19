@@ -29,8 +29,21 @@ const class4TargetedCache = new Map(); // `${resolvedUrl}|${start}|${lead}` -> P
 const class4PrefetchRequests = new Map();
 
 export function loadInsightIndex() {
-  if (!indexPromise) indexPromise = fetchJSON(resolveViewerDataUrl(INDEX_PATH)).catch(() => null);
-  return indexPromise;
+  if (indexPromise) return indexPromise;
+  // The index is what every other artifact is resolved through, so a failed read must not
+  // be remembered as "there is no index" for the rest of the session.
+  const attempt = fetchJSON(resolveViewerDataUrl(INDEX_PATH)).then(
+    (index) => {
+      if (index == null && indexPromise === attempt) indexPromise = null;
+      return index;
+    },
+    () => {
+      if (indexPromise === attempt) indexPromise = null;
+      return null;
+    },
+  );
+  indexPromise = attempt;
+  return attempt;
 }
 
 async function fetchJSON(url) {
@@ -42,6 +55,11 @@ async function fetchJSON(url) {
     return response.json();
   })();
   jsonCache.set(resolvedUrl, promise);
+  // A failed fetch must not be memoised: a network blip would otherwise keep the artifact
+  // unavailable for the rest of the session.
+  promise.catch(() => {
+    if (jsonCache.get(resolvedUrl) === promise) jsonCache.delete(resolvedUrl);
+  });
   return promise;
 }
 
@@ -176,6 +194,7 @@ export async function loadScoresSummary(index) {
 export async function loadClass4(url, { byteLength, startDate, leadDay, variables, onProgress, quiet } = {}) {
   if (!url) throw new Error("Class-4 URL is missing");
   const key = class4CacheKey(url, { startDate, leadDay, variables });
+  if (class4TargetedCache.has(key) && !quiet) promoteClass4Prefetch(key, onProgress);
   if (!class4TargetedCache.has(key)) {
     const resolvedUrl = resolveViewerDataUrl(url);
     const request = requestClass4Worker(
@@ -194,6 +213,21 @@ export async function loadClass4(url, { byteLength, startDate, leadDay, variable
       .finally(() => class4PrefetchRequests.delete(key));
   }
   return await class4TargetedCache.get(key);
+}
+
+// A user request landing on a prefetch of the same pair inherits it instead of starting a
+// second read. Left as a prefetch it would run at prefetch parallelism, report nothing to
+// the loading bar, and stay in the set the next selection cancels, so the load the user is
+// waiting on could be aborted under them. Hand it over: the request stops being a prefetch,
+// takes the caller's progress reporter, and is told to read at foreground parallelism.
+function promoteClass4Prefetch(key, onProgress) {
+  const id = class4PrefetchRequests.get(key);
+  if (!id) return;
+  class4PrefetchRequests.delete(key);
+  const pending = class4Pending.get(id);
+  if (!pending) return;
+  pending.onProgress = onProgress;
+  if (class4Worker) class4Worker.postMessage({ id, op: "promote" });
 }
 
 // Row groups are variable-partitioned within a (start, lead) block, so the requested
