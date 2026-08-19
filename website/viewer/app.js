@@ -52,9 +52,12 @@ import {
   drawClass4Screen,
   class4AbsoluteError,
   class4ErrorScale,
+  drawClass4HoverRing,
   numericOrNaN,
   EDDY_MATCHED_COLOR,
   CLASS4_COLORMAP,
+  CLASS4_RAMP_START,
+  CLASS4_RAMP_END,
 } from "./modules/overlays.js";
 import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, rmsdByDepthSVG, columnProfileSVG, SERIES_COLORS } from "./modules/charts.js";
 import { syncStableRanges, stableMax, stableInterval } from "./modules/stable-ranges.js";
@@ -87,12 +90,16 @@ const CURRENTS_MAX_SPEED = 1.2; // m/s mapping to the top of the speed colormap
 const REGION_BOUNDS = {
   ibi: { west: -19.08, east: 5.08, south: 26.17, north: 56.08 },
 };
-// The global default view is Pacific-centred (central meridian 180°), matching the
-// OceanBench site globe (region-globe.js rotates the global view to [180, 0, 0]).
-// centerNX = (lon + 180) / 360, so lon 180° ≡ nx 1.0 ≡ nx 0.0 after the periodic
-// wrap the global map applies. Rendering already tiles wrapped longitude copies.
-const GLOBAL_DEFAULT_CENTER_NX = 0.0;
-const PARTICLE_MAGNITUDE_SCALE = 1.0;
+// The global default view is centred on the prime meridian (centerNX = (lon + 180) / 360,
+// so nx 0.5 ≡ lon 0°). A Pacific-centred default put the dateline down the middle of the
+// first frame, which splits the Atlantic across both edges of the map and opens the viewer
+// on a seam. Rendering already tiles wrapped longitude copies, so panning to the Pacific
+// costs nothing.
+const GLOBAL_DEFAULT_CENTER_NX = 0.5;
+// Particles saturate where the colour bar says they do: the bar is drawn over
+// [0, CURRENTS_MAX_SPEED], so a flow line reaching the top of the speed ramp has to mean
+// the same speed the bar's right-hand end is labelled with.
+const PARTICLE_MAGNITUDE_SCALE = CURRENTS_MAX_SPEED;
 const CLASS4_DISPLAY_POINT_BUDGET = 18000;
 const CLASS4_FULL_DENSITY_ZOOM = 12;
 
@@ -521,6 +528,7 @@ function wirePanel(panel) {
   field.addEventListener("mouseleave", () => {
     panel.els.readout.textContent = "";
     panel.els.field.style.cursor = "";
+    hideClass4Tooltip();
     for (const other of panels) {
       if (other && other.els.ghostCursor) other.els.ghostCursor.hidden = true;
     }
@@ -1213,6 +1221,11 @@ function updatePanelBadge(panel) {
 
 let overlayData = { eddiesCensuses: [], eddiesMatch: null, class4: null, class4Error: null, region: null };
 let redrawAllPanelsFrame = 0;
+// The lead day a shared link asked for, until the horizon of the loaded forecast is known,
+// and the one line that says so when the two differ. Panel renders clear the status line as
+// they finish, so the note is written once the first frame is up rather than before it.
+let requestedLeadDay = null;
+let leadClampNote = "";
 
 async function loadInsightManifest(url) {
   if (!url) return null;
@@ -1225,7 +1238,17 @@ async function loadInsightManifest(url) {
   }
 }
 
+// Overlay loads are long (a match-up read is seconds to a minute) and they all write to the
+// one shared `overlayData`. Region switches and lead scrubs start new ones freely, so without
+// a token the slowest reply wins whatever it happens to answer: the map showed one lead's obs
+// under another lead's note, or "0 obs" under a note that said the load had succeeded. Each
+// load takes the next token and writes nothing once a newer load has taken one.
+let overlayGeneration = 0;
+
+// False when a newer load superseded this one: the caller must not draw or narrate its result.
 async function loadOverlayData() {
+  const generation = (overlayGeneration += 1);
+  const superseded = () => generation !== overlayGeneration;
   const slug = panels[activePanelIndex] ? panels[activePanelIndex].state.dataset : datasetCatalog[0].slug;
   const region = shared.region;
   const urls = insightsFor(insightIndex, slug, region);
@@ -1247,12 +1270,14 @@ async function loadOverlayData() {
         return loadEddies(panelUrls.eddies || null);
       }),
     );
+    if (superseded()) return false;
     // Two forecasts are cross-matched only at a lead day BOTH publish: snap the requested
     // lead to the intersection of their available leads and read both censuses there, so a
     // wave challenger with a different lead set can never silently match different leads.
     // No shared lead → suppress the match and report both leads (see renderEddyLegend).
     if (shared.layout === 2 && eddiesByPanel[0] && eddiesByPanel[1]) {
       const aligned = await alignedEddyCensuses(eddiesByPanel[0], eddiesByPanel[1], shared.leadDay);
+      if (superseded()) return false;
       overlayData.eddiesCensuses = aligned.censuses;
       overlayData.eddiesLeadMismatch = aligned.mismatch;
       overlayData.eddiesMatch =
@@ -1260,7 +1285,9 @@ async function loadOverlayData() {
           ? matchCensuses(aligned.censuses[0].detections, aligned.censuses[1].detections)
           : null;
     } else {
-      overlayData.eddiesCensuses = await Promise.all(eddiesByPanel.map((eddies) => eddyCensus(eddies, shared.leadDay)));
+      const censuses = await Promise.all(eddiesByPanel.map((eddies) => eddyCensus(eddies, shared.leadDay)));
+      if (superseded()) return false;
+      overlayData.eddiesCensuses = censuses;
       overlayData.eddiesMatch = null;
     }
   } else if (shared.overlayMode === "class4") {
@@ -1273,9 +1300,10 @@ async function loadOverlayData() {
     // dataset's name while the rail truthfully says it has none.
     if (!class4Url) {
       overlayData.class4Unpublished = true;
-      return;
+      return true;
     }
     const manifest = await loadInsightManifest(urls.manifest);
+    if (superseded()) return false;
     const class4Manifest = manifest && manifest["class4-matchups"];
     const request = {
       url: class4Url,
@@ -1287,14 +1315,19 @@ async function loadOverlayData() {
     // The user is waiting now: stop any prefetch of another lead from holding connections
     // this read needs. A prefetch of this very pair is kept, it is the read we want.
     stopClass4Prefetch(request);
+    let loaded = null;
+    let failure = null;
     try {
-      overlayData.class4 = await loadClass4(request.url, { ...request, onProgress: showClass4Progress });
+      loaded = await loadClass4(request.url, { ...request, onProgress: showClass4Progress });
     } catch (error) {
-      overlayData.class4 = null;
-      overlayData.class4Error = error instanceof Error ? error.message : String(error);
+      failure = error instanceof Error ? error.message : String(error);
     }
+    if (superseded()) return false;
+    overlayData.class4 = loaded;
+    overlayData.class4Error = failure;
     if (overlayData.class4) scheduleClass4Prefetch(request, slug);
   }
+  return true;
 }
 
 // Scrubbing the lead slider is the common move, and each lead is its own download. Once the
@@ -1403,6 +1436,29 @@ function currentStartDate(slug) {
   return manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)];
 }
 
+// ONE obs-error ramp for the whole view, not one per panel: with two forecasts side by side
+// the single colour bar under the map can only be labelled with one scale, and two panels on
+// two different ramps make the same colour mean two different errors.
+const CLASS4_SCALE_ID = "class4";
+
+// The ramp as it stands, without offering a measurement (stableMax ignores a candidate of 0).
+function class4CurrentScale() {
+  return stableMax(CLASS4_SCALE_ID, 0);
+}
+
+// Widen the shared ramp with this lead's measurement. A non-finite measurement means the set
+// measured nothing (no points, or none with a finite error): it must not enter the grow-only
+// bound, because any placeholder is a plausible error in the units being plotted and would
+// pin the ramp there for the rest of the selection.
+function class4StableScale(measure) {
+  const previous = class4CurrentScale();
+  const scale = stableMax(CLASS4_SCALE_ID, measure);
+  // A panel that widens the bound after the other has already painted leaves the two on
+  // different ramps for that frame. The bound only grows, so one more frame settles them.
+  if (shared.layout > 1 && scale > previous) scheduleRedrawAllPanels();
+  return scale;
+}
+
 function drawOverlays(panel) {
   const canvas = panel.els.overlay;
   const context = canvas.getContext("2d");
@@ -1470,11 +1526,10 @@ function drawOverlays(panel) {
         key: cacheKey,
         points: preparedPoints,
         matchedTotal: countClass4Matches(rows, selector),
-        // Grow-only obs-error ramp: the |obs − model| scale is read off the obs of the
-        // lead on screen, so left alone it renormalises on every lead step and a growing
-        // error keeps rendering the same colours. Held to the widest ramp this selection
-        // has needed, the points visibly redden as the forecast ages.
-        scale: stableMax(`class4|${panel.index}`, class4ErrorScale(preparedPoints)),
+        // Raw p90 of this lead's errors, or NaN when the set measures nothing. The
+        // grow-only ramp is derived from it at draw time, not cached here, so a panel
+        // always paints with the bound as it stands in the frame being drawn.
+        measure: class4ErrorScale(preparedPoints),
         // Parallel typed arrays + coarse lon/lat bucket grid, built once per point set so
         // pan/zoom frames only project the buckets overlapping the viewport (perf).
         ...buildClass4Index(preparedPoints),
@@ -1482,7 +1537,11 @@ function drawOverlays(panel) {
       panel.class4Prepared = prepared;
     }
     const matchedTotal = prepared.matchedTotal;
-    const scale = prepared.scale;
+    // Grow-only obs-error ramp: the |obs − model| scale is read off the obs of the lead on
+    // screen, so left alone it renormalises on every lead step and a growing error keeps
+    // rendering the same colours. Held to the widest ramp this selection has needed, the
+    // points visibly redden as the forecast ages.
+    const scale = class4StableScale(prepared.measure);
     // Larger points at high zoom so individual obs are distinguishable from a line.
     const radius = 2.2 + 2.6 * Math.min(1, (view.zoom - 1) / 20);
     const display = drawClass4Frame(context, projection, prepared, copyOffsets, canvas, {
@@ -1490,6 +1549,18 @@ function drawOverlays(panel) {
       errorScale: scale,
       radius,
     });
+    // The hovered obs is named in the readout and in the cursor tooltip; ring it on the map so
+    // the reader can see WHICH dot those numbers belong to.
+    if (panel.class4HoverPoint) {
+      const ringColor = themeToken("--ob-viewer-canvas-note", shared.theme === "light" ? "#1f2937" : "#e5edf5");
+      for (const offset of copyOffsets) {
+        drawClass4HoverRing(context, projectOnCopy(offset), panel.class4HoverPoint, {
+          devicePixelRatio: ratio,
+          radius,
+          color: ringColor,
+        });
+      }
+    }
     panel.class4Scale = scale;
     panel.class4Count = display.drawnVisible;
     panel.class4VisibleTotal = display.visibleTotal;
@@ -1508,6 +1579,7 @@ function drawOverlays(panel) {
     panel.class4VisibleTotal = 0;
     panel.class4Matched = 0;
     panel.class4Scale = 0;
+    panel.class4HoverPoint = null;
   }
 }
 
@@ -2439,6 +2511,7 @@ function applyWheelZoom(panel, event, deltaY) {
   view.centerNX += before.nx - after.nx;
   view.centerNY += before.ny - after.ny;
   clampView();
+  refreshZoomBadge();
   const needsRerender = panels.slice(0, shared.layout).some((candidate, index) => {
     const manifest = manifests.get(candidate.state.dataset);
     return manifest && previousLevels[index] !== selectRenderLevel(manifest);
@@ -2531,11 +2604,18 @@ function fitRegionView() {
 // level changes with the zoom). Shared by the "Reset zoom / pan" button and the
 // double-click on a map.
 function resetZoomPan() {
-  const previousLevels = panels.slice(0, shared.layout).map((panel) => selectRenderLevel(manifestFor(panel.state.dataset)));
+  // A panel whose manifest has not arrived yet has no pyramid to pick a level from: reading
+  // one throws, and a reset (button or double-click) fired in the seconds after Forecast 2 is
+  // opened took the whole viewer down with it. No manifest simply means no level to compare.
+  const previousLevels = panels.slice(0, shared.layout).map((panel) => {
+    const manifest = manifestFor(panel.state.dataset);
+    return manifest ? selectRenderLevel(manifest) : null;
+  });
   fitRegionView();
-  const needsRerender = panels
-    .slice(0, shared.layout)
-    .some((panel, index) => previousLevels[index] !== selectRenderLevel(manifestFor(panel.state.dataset)));
+  const needsRerender = panels.slice(0, shared.layout).some((panel, index) => {
+    const manifest = manifestFor(panel.state.dataset);
+    return manifest && previousLevels[index] !== selectRenderLevel(manifest);
+  });
   if (needsRerender) renderAllPanels().then(() => redrawOverlaysAll());
   else redrawAllPanels();
   writeHash();
@@ -2563,7 +2643,10 @@ function updateHover(event) {
     hoverRectangle = rectangle;
     break;
   }
-  if (!hoverPanel || !hoverRectangle) return;
+  if (!hoverPanel || !hoverRectangle) {
+    hideClass4Tooltip();
+    return;
+  }
   const ratio = window.devicePixelRatio || 1;
   const projection = projectionFor(hoverPanel);
   // Cursor affordance for the PSD rectangle (move over the interior, resize on edges).
@@ -2588,9 +2671,9 @@ function updateHover(event) {
   for (const panel of panels.slice(0, shared.layout)) {
     if (!readoutPanels.includes(panel)) panel.els.readout.textContent = "";
   }
-  // All hover information consolidates into the fixed bottom-left pill: when the cursor
-  // is on a Class-4 obs point, its details are appended to the hovered panel's readout
-  // instead of floating a tooltip with the cursor.
+  // Hover information goes to the fixed bottom-left pill AND, for an obs point, to a small
+  // tooltip at the cursor: the pill sits in the far corner of the map, so on a dense scatter
+  // the reader had to look away from the dot to read it and could not tell which dot answered.
   const obsRecord = nearestClass4Record(hoverPanel, event, hoverRectangle);
   for (const panel of readoutPanels) {
     if (!panel.field) {
@@ -2599,7 +2682,49 @@ function updateHover(event) {
     }
     updatePanelReadout(panel, lat, lon, panel === hoverPanel && obsRecord ? class4ReadoutSuffix(obsRecord, panel.units) : "");
   }
+  showClass4Tooltip(hoverPanel, obsRecord, event);
   updateGhostCursor(hoverPanel, wrappedNX, point.ny);
+}
+
+// The obs under the cursor, ringed on the map and spelled out beside it. Redrawing the overlay
+// costs a frame, so it only happens when the hovered obs actually changes, not on every mouse
+// move over the map.
+function showClass4Tooltip(hoverPanel, record, event) {
+  const tooltip = elements["class4-tooltip"];
+  for (const panel of panels.slice(0, shared.layout)) {
+    const next = panel === hoverPanel ? record || null : null;
+    if (panel.class4HoverPoint === next) continue;
+    panel.class4HoverPoint = next;
+    drawOverlays(panel);
+  }
+  if (!tooltip) return;
+  if (!record) {
+    tooltip.hidden = true;
+    tooltip.textContent = "";
+    return;
+  }
+  tooltip.textContent = class4ReadoutSuffix(record, hoverPanel.units).replace(/^ · /, "");
+  tooltip.hidden = false;
+  // Anchored to the cursor, flipped away from the window edges so it is never clipped.
+  const box = tooltip.getBoundingClientRect();
+  const gap = 14;
+  const left = event.clientX + gap + box.width > window.innerWidth ? event.clientX - gap - box.width : event.clientX + gap;
+  const top = event.clientY + gap + box.height > window.innerHeight ? event.clientY - gap - box.height : event.clientY + gap;
+  tooltip.style.left = `${Math.max(4, left)}px`;
+  tooltip.style.top = `${Math.max(4, top)}px`;
+}
+
+function hideClass4Tooltip() {
+  const tooltip = elements["class4-tooltip"];
+  if (tooltip) {
+    tooltip.hidden = true;
+    tooltip.textContent = "";
+  }
+  for (const panel of panels.slice(0, shared.layout)) {
+    if (!panel.class4HoverPoint) continue;
+    panel.class4HoverPoint = null;
+    drawOverlays(panel);
+  }
 }
 
 // Companion cursor: in side-by-side 2-forecast mode, mark the mirrored geographic
@@ -2839,6 +2964,7 @@ function resizePanelCanvases(panel) {
 
 function redrawAllPanels() {
   redrawAllPanelsFrame = 0;
+  refreshZoomBadge();
   for (let i = 0; i < shared.layout; i += 1) {
     resizePanelCanvases(panels[i]);
     drawPanel(panels[i]);
@@ -2945,11 +3071,16 @@ function updateSharedColorbar() {
       setLayerInfo(panel);
       return;
     }
-    const scale = Math.max(...panels.slice(0, shared.layout).map((candidate) => candidate.class4Scale || 0), 0);
+    // The one bound both panels colour from, so the number under the bar is the number the
+    // dots were painted with, in one panel or in two.
+    const scale = class4CurrentScale();
     colorbar.hidden = false;
     drawColorbar(colorbar, CLASS4_COLORMAP, [0, scale || 1], {
       label: `|obs − model| (${panel.units})`,
       textColor,
+      // The dots skip the darkest sliver of the colormap; the bar has to skip it too, or the
+      // key names colours that are nowhere on the map.
+      ramp: [CLASS4_RAMP_START, CLASS4_RAMP_END],
     });
     renderClass4Legend(legend, panel, scale);
   } else if (mode === "eddies") {
@@ -2977,14 +3108,25 @@ function updateSharedColorbar() {
 }
 
 function setLayerInfo(panel) {
-  const manifest = manifestFor(panel.state.dataset);
-  if (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length) {
-    elements["layer-info"].textContent = `zoom ${view.zoom.toFixed(1)}× · loading metadata`;
-    return;
-  }
-  // The start date is the drawer's own field and the lead day is spelled out beside
-  // the scrubber a few centimetres to the left, so the readout carries neither.
-  elements["layer-info"].textContent = `zoom ${view.zoom.toFixed(1)}×`;
+  elements["layer-info"].textContent = zoomBadgeText(panel);
+}
+
+// The start date is the drawer's own field and the lead day is spelled out beside the
+// scrubber a few centimetres to the left, so the readout carries neither.
+function zoomBadgeText(panel) {
+  const yearPrefix = shared.scope === "year" ? "entire year · " : "";
+  const manifest = panel ? manifestFor(panel.state.dataset) : null;
+  const loading = shared.scope !== "year" && (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length);
+  return `${yearPrefix}zoom ${view.zoom.toFixed(1)}×${loading ? " · loading metadata" : ""}`;
+}
+
+// The badge describes the view, so the redraw of the view writes it. Hanging it off the
+// colorbar update alone left it frozen whenever a zoom stayed inside one pyramid level, which
+// is most wheel notches: the map moved under a number that no longer described it.
+function refreshZoomBadge() {
+  const panel = isDiffView() ? panels[0] : panels[activePanelIndex];
+  if (!elements["layer-info"]) return;
+  elements["layer-info"].textContent = zoomBadgeText(panel);
 }
 
 function hideMapLegend(legend) {
@@ -4127,7 +4269,13 @@ function updateSharedTimeControls(manifest) {
   if (!Array.isArray(manifest.lead_days) || !manifest.lead_days.length) return;
   const minimumLead = Math.min(...manifest.lead_days);
   const maximumLead = Math.max(...manifest.lead_days);
+  const requested = requestedLeadDay;
+  requestedLeadDay = null;
   shared.leadDay = Math.min(Math.max(shared.leadDay, minimumLead), maximumLead);
+  leadClampNote =
+    requested != null && requested !== shared.leadDay
+      ? `Lead ${requested} is outside this forecast's horizon (${minimumLead} to ${maximumLead}); showing lead ${shared.leadDay}.`
+      : "";
   elements["lead-day"].min = String(minimumLead);
   elements["lead-day"].max = String(maximumLead);
   elements["lead-day"].value = String(shared.leadDay);
@@ -4145,6 +4293,11 @@ function fillLeadTicks(minimumLead, maximumLead) {
 
 async function applyOverlayMode() {
   const region = shared.region;
+  const mode = shared.overlayMode;
+  // The selection this call is answering. Its awaits are long enough for the user to pick
+  // another region or another overlay in the meantime, and a reply that lands after that
+  // would narrate the old selection over the new map.
+  const superseded = () => shared.region !== region || shared.overlayMode !== mode;
   // The two forecasts are chosen from the panel pickers; there is no separate truth
   // selector any more, so the legacy eddy-reference control stays hidden.
   elements["eddy-reference-field"].hidden = true;
@@ -4167,6 +4320,7 @@ async function applyOverlayMode() {
   if (shared.overlayMode === "column") {
     // Probe up front so the note promises a click only when there is a store behind it.
     const columnAvailable = await anyVisibleColumnStore();
+    if (superseded()) return;
     if (!columnAvailable) note.textContent = COLUMN_UNPUBLISHED_MESSAGE;
     else
       note.textContent = columnProfile
@@ -4191,7 +4345,8 @@ async function applyOverlayMode() {
   } else {
     note.textContent = "";
   }
-  await loadOverlayData();
+  const current = await loadOverlayData();
+  if (!current || superseded()) return;
   if (shared.overlayMode === "eddies") {
     const censuses = overlayData.eddiesCensuses || [];
     if (!censuses.some(Boolean)) {
@@ -4234,11 +4389,14 @@ function cancelClass4ReloadTimer() {
 
 async function reloadClass4Overlay() {
   const note = elements["overlay-note"];
-  await loadOverlayData();
+  // A newer reload (the next step of a lead scrub, a region change) already owns the overlay:
+  // this one's note and redraw would describe obs that are no longer the ones loaded.
+  const current = await loadOverlayData();
+  if (!current) return;
   if (note) {
     note.textContent =
       class4EmptyMessage() ||
-      (overlayData.class4.targeted
+      (overlayData.class4 && overlayData.class4.targeted
         ? "Class-4 match-ups for the selected start and lead. Hover a point for details."
         : "Class-4 match-ups loaded. Hover a point for details.");
   }
@@ -4590,7 +4748,9 @@ function wireGlobalControls() {
     clearTrajectories();
     shared.startIndex = Number(event.target.value);
     await renderAllPanels();
-    await loadOverlayData();
+    // A newer start date (or region, or lead) already owns the overlay: leave the redraw and
+    // the rail to the load that answers the selection actually on screen.
+    if (!(await loadOverlayData())) return;
     redrawOverlaysAll();
     await updateContextRail();
     // The clicked column is start-specific; re-read it at the same point for the new start.
@@ -5007,6 +5167,10 @@ function readHash() {
   shared.layout = number("layout", shared.layout);
   shared.startIndex = number("s", shared.startIndex);
   shared.leadDay = number("l", shared.leadDay);
+  // A shared link can name a lead this forecast does not reach. The slider is clamped to the
+  // horizon either way; remember what was asked for so the clamp can be said out loud instead
+  // of silently showing a different lead than the link promised.
+  requestedLeadDay = parameters.has("l") ? shared.leadDay : null;
   view.zoom = number("z", view.zoom);
   view.centerNX = number("cx", view.centerNX);
   view.centerNY = number("cy", view.centerNY);
@@ -5123,6 +5287,7 @@ function selectElements() {
     "rail-column-note",
     "column-clear",
     "rail-provenance",
+    "class4-tooltip",
   ]) {
     elements[id] = document.getElementById(id);
   }
@@ -5202,6 +5367,12 @@ async function main() {
   clampView();
   writeHash();
   await renderAllPanels();
+  if (leadClampNote) setStatus(leadClampNote);
+  // A link that turns the spectrum on without carrying a box (psdOn=1 and no psd=) opened on
+  // an empty spectrum card and no rectangle on the map until something else nudged the rail.
+  // The box is part of what "on" means, so it exists from the first frame. The panels have
+  // been laid out by now, so the default box centres on the viewport actually on screen.
+  if (shared.psdEnabled && !shared.psdBox) ensurePsdBox(panels.slice(0, shared.layout));
   updateCurrentsControlVisibility();
   updateSharedColorbar();
   await applyOverlayMode();

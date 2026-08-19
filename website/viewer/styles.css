@@ -724,6 +724,24 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   pointer-events: none;
 }
 .layer-info:empty { display: none; }
+
+/* Hovered observation, beside the cursor. Same surface, border and mono type as the
+   readout pill and the chart tooltips; fixed positioning keeps it off the map's layout. */
+.class4-tooltip {
+  position: fixed;
+  z-index: 20;
+  max-width: 22rem;
+  padding: 0.3rem 0.5rem;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--text-readout);
+  white-space: nowrap;
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
 .year-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: var(--text-control); color: var(--muted); margin: 0.15rem 0 0; }
 .year-legend .item { display: inline-flex; align-items: center; gap: 0.3rem; }
 .year-legend .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: var(--radius-sm); border: 1px solid rgba(128, 128, 128, 0.35); }

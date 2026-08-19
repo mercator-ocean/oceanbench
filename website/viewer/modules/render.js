@@ -224,7 +224,11 @@ export function differenceField(fieldA, fieldB) {
  * size and stretched to another by the browser, which is what made the bar and its
  * tick labels look like a resized image rather than something drawn.
  */
-export function drawColorbar(canvas, colormapName, range, { label = "", textColor = "#e6edf3" } = {}) {
+// `ramp` is the segment of the colormap the bar draws, [start, end] in 0..1. It defaults
+// to the whole colormap; a caller whose marks only use part of it (the Class-4 obs points
+// skip the darkest sliver) passes that same segment so the key shows the colours actually
+// on the map.
+export function drawColorbar(canvas, colormapName, range, { label = "", textColor = "#e6edf3", ramp = [0, 1] } = {}) {
   const context = canvas.getContext("2d");
   const ratio = window.devicePixelRatio || 1;
   const width = Math.max(1, Math.round(canvas.clientWidth || canvas.width));
@@ -248,8 +252,11 @@ export function drawColorbar(canvas, colormapName, range, { label = "", textColo
   const barTopDevice = Math.round(barTop * ratio);
   const barHeightDevice = Math.max(1, Math.round(barHeight * ratio));
   const gradient = context.createImageData(backingWidth, barHeightDevice);
+  const rampStart = Number.isFinite(ramp[0]) ? ramp[0] : 0;
+  const rampEnd = Number.isFinite(ramp[1]) ? ramp[1] : 1;
   for (let column = 0; column < backingWidth; column += 1) {
-    const lutIndex = Math.round((column / Math.max(1, backingWidth - 1)) * 255) * 3;
+    const fraction = column / Math.max(1, backingWidth - 1);
+    const lutIndex = Math.round((rampStart + fraction * (rampEnd - rampStart)) * 255) * 3;
     for (let row = 0; row < barHeightDevice; row += 1) {
       const destination = (row * backingWidth + column) * 4;
       gradient.data[destination] = lut[lutIndex];

@@ -225,7 +225,7 @@ export function spectraSVG(entry, { title = "Power spectrum", productA = "produc
   const legend = lines
     .map((line, index) => {
       const x = area.x0 + index * 78;
-      return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="10" class="legend">${line.label}</text>`;
+      return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="10" class="legend">${escapeText(line.label)}</text>`;
     })
     .join("");
 
@@ -340,8 +340,12 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
   if (signed) {
     let magnitude = yBound > 0 ? yBound : 0;
     if (!magnitude) {
+      // The band is drawn, so the axis has to hold it: sizing on the line alone clipped the
+      // CI at the top of the plot and showed a confident interval where the data is wide.
       for (const line of usable) {
-        for (const value of line.rmsd) if (Number.isFinite(value) && Math.abs(value) > magnitude) magnitude = Math.abs(value);
+        for (const value of seriesExtentValues(line)) {
+          if (Number.isFinite(value) && Math.abs(value) > magnitude) magnitude = Math.abs(value);
+        }
       }
     }
     const bound = niceMax(magnitude);
@@ -388,8 +392,9 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
 
   let maxValue = yBound > 0 ? yBound : 0;
   if (!maxValue) {
+    // Same as the signed branch: the axis is sized on everything that gets drawn, band included.
     for (const line of usable) {
-      for (const value of line.rmsd) if (Number.isFinite(value) && value > maxValue) maxValue = value;
+      for (const value of seriesExtentValues(line)) if (Number.isFinite(value) && value > maxValue) maxValue = value;
     }
   }
   const yMax = niceMax(maxValue);
@@ -614,6 +619,15 @@ export function columnProfileSVG(
   return svgOpen(title) + axes(area, unit ? `${xLabel} (${unit})` : xLabel, "depth (m)") + body + legend + interactionLayer() + "</svg>";
 }
 
+// Everything of a start-date line that is drawn inside the plot area: the line itself and,
+// when the artifact carries them, the CI edges the band is shaded between.
+function seriesExtentValues(line) {
+  const values = Array.isArray(line.rmsd) ? line.rmsd.slice() : [];
+  if (Array.isArray(line.ciHigh)) values.push(...line.ciHigh);
+  if (Array.isArray(line.ciLow)) values.push(...line.ciLow);
+  return values;
+}
+
 // 95% CI band polygon for a start-date line, in the same visual idiom as the lead-curve band.
 // `line.ciLow`/`line.ciHigh` are parallel to `line.dates` (the caller selects the RMSD or bias
 // pair for the active metric). Returns null when the arrays are absent (old artifacts) or too
@@ -648,13 +662,26 @@ function emptyChart(title, message) {
   );
 }
 
+// A tick labels the gridline it sits on, so it has to be that line's value. Gridlines are
+// quarters of a "nice" maximum (1, 1.5, 2, 2.5, 3, 4, 5, 7.5 times a power of ten), and every
+// such quarter is exact in four significant digits. Rounding to two decimals printed 0.07 on
+// the line at 0.075 and 2e+3 on the line at 1875, which is a reader misreading the whole chart
+// by up to 7% off the axis alone.
 function formatTick(value) {
   if (value === 0) return "0";
   // Magnitude, not signed value: a signed comparison sent every negative tick to
   // exponential notation.
   const magnitude = Math.abs(value);
-  if (magnitude < 0.01 || magnitude >= 1000) return value.toExponential(0);
-  return magnitude < 1 ? value.toFixed(2) : value.toFixed(1);
+  if (Number.isInteger(value) && magnitude < 1e6) return String(value);
+  if (magnitude < 0.001) return trimTrailingZeros(value.toExponential(3));
+  return trimTrailingZeros(value.toPrecision(4));
+}
+
+function trimTrailingZeros(text) {
+  if (!text.includes(".")) return text;
+  const [mantissa, exponent] = text.split("e");
+  const trimmed = mantissa.replace(/0+$/, "").replace(/\.$/, "");
+  return exponent ? `${trimmed}e${exponent}` : trimmed;
 }
 
 function formatKm(metres) {

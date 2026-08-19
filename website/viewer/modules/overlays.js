@@ -14,6 +14,17 @@ import { sample as sampleColormap } from "../vendor/cmocean/colormaps.js";
 // Category palette (luminous on the dark canvas; still legible on light).
 export const CLASS4_COLORMAP = "thermal";
 
+// The obs points paint the upper part of the colormap only: the darkest sliver is not
+// distinguishable from the muted field underneath. The colorbar has to draw the SAME
+// segment, or the key names colours the points never use and a reader matches a dot to
+// the wrong error. One definition, used by the points and by the bar.
+export const CLASS4_RAMP_START = 0.12;
+export const CLASS4_RAMP_END = 1;
+
+function class4RampPosition(normalized) {
+  return CLASS4_RAMP_START + normalized * (CLASS4_RAMP_END - CLASS4_RAMP_START);
+}
+
 function toNorm(longitude, latitude) {
   return { nx: (longitude + 180) / 360, ny: (90 - latitude) / 180 };
 }
@@ -145,7 +156,7 @@ export function drawClass4Points(drawing, project, points, options = {}) {
     const coordinates = buckets[bucketIndex];
     if (!coordinates.length) continue;
     const normalized = bucketCount <= 1 ? 0 : bucketIndex / (bucketCount - 1);
-    const [r, g, b] = sampleColormap(CLASS4_COLORMAP, 0.12 + normalized * 0.88);
+    const [r, g, b] = sampleColormap(CLASS4_COLORMAP, class4RampPosition(normalized));
     drawing.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
     for (let i = 0; i < coordinates.length; i += 2) {
       drawing.fillRect(coordinates[i] - radius, coordinates[i + 1] - radius, diameter, diameter);
@@ -183,12 +194,32 @@ export function drawClass4Screen(drawing, screenX, screenY, pointIds, count, err
     const coordinates = buckets[bucketIndex];
     if (!coordinates.length) continue;
     const normalized = bucketCount <= 1 ? 0 : bucketIndex / (bucketCount - 1);
-    const [r, g, b] = sampleColormap(CLASS4_COLORMAP, 0.12 + normalized * 0.88);
+    const [r, g, b] = sampleColormap(CLASS4_COLORMAP, class4RampPosition(normalized));
     drawing.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
     for (let i = 0; i < coordinates.length; i += 2) {
       drawing.fillRect(coordinates[i] - radius, coordinates[i + 1] - radius, diameter, diameter);
     }
   }
+}
+
+/**
+ * Ring the obs point under the cursor so the hover readout is visibly attached to a dot.
+ * Drawn on every visible world copy, in the caller's note colour, as a stroked circle
+ * just outside the dot: nothing is filled, so the point keeps its own error colour.
+ */
+export function drawClass4HoverRing(drawing, project, point, options = {}) {
+  const ratio = options.devicePixelRatio || 1;
+  const radius = (options.radius || 2.2) * ratio + 3 * ratio;
+  const { nx, ny } = toNorm(point.longitude, point.latitude);
+  const screen = project(nx, ny);
+  drawing.save();
+  drawing.setLineDash([]);
+  drawing.lineWidth = 1.6 * ratio;
+  drawing.strokeStyle = options.color || "#e5edf5";
+  drawing.beginPath();
+  drawing.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
+  drawing.stroke();
+  drawing.restore();
 }
 
 // Absolute obs−model error for a match-up row. Prefers a precomputed `abs_error`
@@ -209,11 +240,18 @@ export function numericOrNaN(value) {
   return Number.isFinite(number) ? number : NaN;
 }
 
-/** Robust upper error bound (~p90) for the Class-4 colour scale. */
+/**
+ * Robust upper error bound (~p90) for the Class-4 colour scale, or NaN when the point
+ * set carries nothing to measure. A set with no points (or none with a finite error)
+ * used to answer 1, and that placeholder is a plausible error in every unit the viewer
+ * plots: fed into the grow-only ramp it pinned the scale at 1 for the rest of the
+ * selection and painted real SLA errors (p90 ≈ 0.09 m) as near-zero. NaN cannot be
+ * mistaken for a measurement, so the caller keeps the last real scale instead.
+ */
 export function class4ErrorScale(points) {
-  if (!points.length) return 1;
+  if (!points.length) return NaN;
   const errors = points.map((point) => class4AbsoluteError(point)).filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
-  if (!errors.length) return 1;
+  if (!errors.length) return NaN;
   const index = Math.min(errors.length - 1, Math.floor(errors.length * 0.9));
-  return errors[index] || errors[errors.length - 1] || 1;
+  return errors[index] || errors[errors.length - 1] || NaN;
 }

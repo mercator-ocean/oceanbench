@@ -47,9 +47,19 @@ export function boxPowerSpectrum(field, latitudes, longitudes, viewport) {
   const centreLatitude = (latLow + latHigh) / 2;
   const boxWidthKm = Math.abs(lonMax - lonMin) * EARTH_KM_PER_DEGREE * Math.cos((centreLatitude * Math.PI) / 180);
   const boxHeightKm = Math.abs(latHigh - latLow) * EARTH_KM_PER_DEGREE;
-  const cellKm = (boxWidthKm + boxHeightKm) / (2 * side);
+  // A box that is square in degrees is not square in kilometres away from the equator: at 60°N
+  // its cells are half as wide as they are tall. Averaging the two into one isotropic cell size
+  // and binning by integer mode number made a zonal ring and a meridional ring of the same
+  // number land in the same bin under one wavelength, and that wavelength was wrong by up to a
+  // factor of two at high latitude. Keep the two cell sizes apart, bin by the PHYSICAL
+  // wavenumber, and label the rings with the geometric-mean cell. At the equator dx equals dy,
+  // the binning collapses to the integer-radius one and every number is unchanged.
+  const dxKm = boxWidthKm / side;
+  const dyKm = boxHeightKm / side;
+  const cellKm = Math.sqrt(dxKm * dyKm);
+  if (!(cellKm > 0)) return null;
 
-  const radial = radialAveragedPower(box.data, side);
+  const radial = radialAveragedPower(box.data, side, dxKm, dyKm);
   const wavelength = [];
   const power = [];
   for (let r = 1; r < radial.length; r += 1) {
@@ -153,7 +163,7 @@ function resampleBox(field, rows, columns, side) {
 
 // 2D FFT (rows then columns) of a real box, radially averaging |F|² into bins by the
 // integer wavenumber magnitude. Uses a shared in-place radix-2 FFT over rows/columns.
-function radialAveragedPower(box, side) {
+function radialAveragedPower(box, side, dxKm, dyKm) {
   const real = Float64Array.from(box);
   const imaginary = new Float64Array(side * side);
   const rowReal = new Float64Array(side);
@@ -186,12 +196,18 @@ function radialAveragedPower(box, side) {
   }
 
   const maxRadius = Math.floor(side / 2);
+  // Ring number in units of the reference cell: a mode's physical wavenumber (cycles per km)
+  // times the reference box size, so a zonal and a meridional mode land in the same ring only
+  // when they carry the same physical wavelength. With dx = dy this is Math.hypot(kx, ky).
+  const referenceKm = Math.sqrt(dxKm * dyKm);
+  const zonalWeight = referenceKm / dxKm;
+  const meridionalWeight = referenceKm / dyKm;
   const bins = Array.from({ length: maxRadius + 1 }, () => ({ sum: 0, count: 0 }));
   for (let y = 0; y < side; y += 1) {
     const ky = y <= side / 2 ? y : y - side;
     for (let x = 0; x < side; x += 1) {
       const kx = x <= side / 2 ? x : x - side;
-      const radius = Math.round(Math.hypot(kx, ky));
+      const radius = Math.round(Math.hypot(kx * zonalWeight, ky * meridionalWeight));
       if (radius > maxRadius) continue;
       const index = y * side + x;
       const magnitude = real[index] * real[index] + imaginary[index] * imaginary[index];
