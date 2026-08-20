@@ -22,6 +22,11 @@ DEFAULT_DETERMINISTIC_GLO12_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/ag
 DEFAULT_OBSERVATIONS_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-gloens/aggregate.parquet"
 DEFAULT_OBSERVATIONS_ICP_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-icp/aggregate.parquet"
 
+# A campaign wave that scored a stream after the fact writes it next to the aggregate instead of into
+# it, so an observation aggregate is read together with whatever sidecar sits beside it.
+OBSERVATION_SIDECAR_NAME = "aggregate_currents.parquet"
+OBSERVATION_ROW_KEY = ["stream", "region", "depth_band", "lead_day"]
+
 SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_OUTPUT_PATH = os.path.join(os.path.dirname(SCRIPT_DIRECTORY), "data", "ensemble-scores.json")
 
@@ -384,6 +389,23 @@ def build_ensemble_scores(
     }
 
 
+def with_observation_sidecar(frame: pd.DataFrame, sidecar: pd.DataFrame) -> pd.DataFrame:
+    """Append the streams of a sidecar aggregate, refusing a sidecar that repeats rows of the main aggregate."""
+    repeated = frame.merge(sidecar[OBSERVATION_ROW_KEY].drop_duplicates(), on=OBSERVATION_ROW_KEY)
+    if not repeated.empty:
+        raise ValueError("the sidecar aggregate repeats rows of the main aggregate, so the two cannot be concatenated")
+    return pd.concat([frame, sidecar], ignore_index=True)
+
+
+def read_observation_aggregate(path: str) -> pd.DataFrame:
+    """Read one observation space aggregate, plus the sidecar a later campaign wave may have written next to it."""
+    frame = pd.read_parquet(path)
+    sidecar_path = os.path.join(os.path.dirname(path), OBSERVATION_SIDECAR_NAME)
+    if not os.path.exists(sidecar_path):
+        return frame
+    return with_observation_sidecar(frame, pd.read_parquet(sidecar_path))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gridded-gloens", default=DEFAULT_GRIDDED_GLOENS_PATH)
@@ -400,8 +422,8 @@ def main() -> None:
         pd.read_parquet(arguments.gridded_icp),
         pd.read_parquet(arguments.deterministic_glonet),
         pd.read_parquet(arguments.deterministic_glo12),
-        pd.read_parquet(arguments.observations_gloens),
-        pd.read_parquet(arguments.observations_icp),
+        read_observation_aggregate(arguments.observations_gloens),
+        read_observation_aggregate(arguments.observations_icp),
     )
 
     os.makedirs(os.path.dirname(arguments.output), exist_ok=True)
