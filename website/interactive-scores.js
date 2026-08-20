@@ -44,12 +44,16 @@ function getPaletteColors() {
 let selectedDepths = new Set();
 let showAllMode = true;
 let showPercentDiff = false;
+let heatmapEnabled = true;
 let parsedData = null;
+let parsedDataByView = {};
+let ensembleSections = [];
 let challengerLabels = {};
 let challengerNotes = {};
 let challengerCategories = {};
 let regionLabels = {};
 let regionMetadata = {};
+let activeView = "deterministic";
 let activeTrack = "high_resolution";
 let activeSection = "observations";
 let activeRegion = null;
@@ -78,6 +82,28 @@ const TRACK_NOTES = {
   high_resolution: "Models evaluated at their native high resolution.",
   one_degree:
     "Non-one-degree base models whose forecasts are interpolated to the one degree resolution.",
+};
+
+const VIEW_ORDER = ["deterministic", "ensemble"];
+
+const VIEW_LABELS = {
+  deterministic: "Deterministic",
+  ensemble: "Ensemble",
+};
+
+const VIEW_NOTES = {
+  deterministic: "One forecast per system, scored against observations, reanalysis and analysis.",
+  ensemble: "Ensemble means and probabilistic skill of the ensemble systems, global, year 2024.",
+};
+
+const VIEW_DATA_ELEMENT_IDS = {
+  deterministic: "scores-data",
+  ensemble: "ensemble-scores-data",
+};
+
+const viewState = {
+  deterministic: {},
+  ensemble: {},
 };
 
 function interpolateColor(startColor, endColor, ratio) {
@@ -144,6 +170,7 @@ function getValue(scoreData, depth, variable, leadDay) {
 function getLeadDays(scoreData, depth) {
   const firstVariable = Object.keys(scoreData.depths[depth].variables)[0];
   const allDays = Object.keys(scoreData.depths[depth].variables[firstVariable].data);
+  if (activeView === "ensemble") return allDays;
   const resolvedDays = [];
   for (const entry of DISPLAY_LEAD_DAYS) {
     if (allDays.includes(entry.preferred)) {
@@ -168,6 +195,14 @@ function getStandardName(scoreData, depth, variable) {
     return scoreData.depths[depth].variables[variable].standard_name || "";
   } catch {
     return "";
+  }
+}
+
+function getDecimals(scoreData, depth, variable) {
+  try {
+    return scoreData.depths[depth].variables[variable].decimals ?? 2;
+  } catch {
+    return 2;
   }
 }
 
@@ -254,9 +289,16 @@ function titleCase(text) {
   return text.replace(/(^|\s)\w/g, (character) => character.toUpperCase());
 }
 
+function metricHeaderLabel(metricKey, unit) {
+  if (metricKey.startsWith("rmsd")) return `RMSE (${unit})`;
+  if (metricKey.startsWith("crps")) return `Fair CRPS (${unit})`;
+  if (metricKey.startsWith("spread_error_ratio")) return "Spread error ratio";
+  return `(${unit})`;
+}
+
 function formatVariableHeader(variable, unit, standardName, metricKey) {
   const displayName = titleCase(variable);
-  const metricLabel = metricKey.startsWith("rmsd") ? `RMSE (${unit})` : `(${unit})`;
+  const metricLabel = metricHeaderLabel(metricKey, unit);
   let header = `${displayName}<br><span class="metric-label">${metricLabel}</span>`;
   if (standardName && standardName !== "unknown") {
     header += `<br><span class="standard-name">${standardName}</span>`;
@@ -264,9 +306,16 @@ function formatVariableHeader(variable, unit, standardName, metricKey) {
   return header;
 }
 
-function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName) {
+function modelHeaderCell(name, regionId) {
+  if (activeView === "ensemble") {
+    return `<th class="model-col">${displayNameHtml(name)}</th>`;
+  }
+  return `<th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
+}
+
+function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName, decimals = 2) {
   const unitSuffix = unit ? ` ${unit}` : "";
-  let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${value.toFixed(2)}${unitSuffix}`;
+  let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${value.toFixed(decimals)}${unitSuffix}`;
   if (!isBaseline && referenceValue !== null) {
     tooltip += `\nvs ${displayName(baselineName)}: ${formatPercentDiff(referenceValue, value)}`;
   }
@@ -291,7 +340,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
+    rows += `<tr${rowClass}>${modelHeaderCell(name, regionId)}`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -300,6 +349,7 @@ function buildDataRows(
         continue;
       }
       const unit = getUnit(baselineScore, depth, variable);
+      const decimals = getDecimals(score, depth, variable);
       const referenceValues = {};
       for (const day of leadDays) {
         referenceValues[day] = getValue(baselineScore, depth, variable, day);
@@ -308,7 +358,7 @@ function buildDataRows(
         const value = getValue(score, depth, variable, day);
         const referenceValue = referenceValues[day];
         let style = "";
-        if (!isBaseline && value !== null && referenceValue !== null) {
+        if (heatmapEnabled && !isBaseline && value !== null && referenceValue !== null) {
           style = getCellStyle(referenceValue, value);
         }
         let display = "";
@@ -316,11 +366,11 @@ function buildDataRows(
           if (showPercentDiff && !isBaseline && referenceValue !== null) {
             display = formatPercentDiffForCell(referenceValue, value);
           } else {
-            display = value.toFixed(2);
+            display = value.toFixed(decimals);
           }
         }
         const title = value !== null
-          ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
+          ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline, decimals)
           : "";
         rows += `<td class="score-value-cell" style="${style}" title="${title}">${display}</td>`;
       }
@@ -341,7 +391,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
+    rows += `<tr${rowClass}>${modelHeaderCell(name, regionId)}`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -376,23 +426,46 @@ function buildCombinedDataRows(
   return rows;
 }
 
+function currentSectionIds() {
+  if (activeView === "ensemble") {
+    return Object.fromEntries(ensembleSections.map((section) => [section.key, section.key]));
+  }
+  return SECTION_ID_MAP;
+}
+
+function currentSectionOrder() {
+  if (activeView === "ensemble") {
+    return ensembleSections.map((section) => section.key);
+  }
+  return SECTION_ORDER;
+}
+
+function currentSectionLabel(sectionKey) {
+  if (activeView === "ensemble") {
+    const section = ensembleSections.find((candidate) => candidate.key === sectionKey);
+    return section ? section.label : titleCase(sectionKey);
+  }
+  return titleCase(sectionKey);
+}
+
 function readSectionFromHash() {
   const hash = window.location.hash.slice(1);
-  if (SECTION_ID_MAP[hash]) return hash;
-  for (const [sectionKey, sectionId] of Object.entries(SECTION_ID_MAP)) {
+  const sectionIds = currentSectionIds();
+  if (sectionIds[hash]) return hash;
+  for (const [sectionKey, sectionId] of Object.entries(sectionIds)) {
     if (sectionId === hash) return sectionKey;
   }
   return null;
 }
 
 function getSectionElement(sectionKey) {
-  const sectionId = SECTION_ID_MAP[sectionKey];
+  const sectionId = currentSectionIds()[sectionKey];
   if (!sectionId) return null;
   return document.getElementById(sectionId);
 }
 
 function updateSectionHash(sectionKey, replaceHistory) {
-  const sectionId = SECTION_ID_MAP[sectionKey];
+  const sectionId = currentSectionIds()[sectionKey];
   if (!sectionId) return;
   const hash = `#${sectionId}`;
   if (window.location.hash === hash) return;
@@ -404,12 +477,12 @@ function updateSectionHash(sectionKey, replaceHistory) {
 }
 
 function setActiveSection(sectionKey, options = {}) {
-  if (!SECTION_ID_MAP[sectionKey]) return;
+  if (!currentSectionIds()[sectionKey]) return;
   const { updateHash = false, replaceHistory = true } = options;
   activeSection = sectionKey;
   const depthToggle = document.getElementById("depth-toggle");
   if (depthToggle) {
-    if (activeSection === "observations") {
+    if (activeView === "ensemble" || activeSection === "observations") {
       depthToggle.setAttribute("hidden", "");
       depthToggle.setAttribute("aria-hidden", "true");
     } else {
@@ -449,6 +522,7 @@ function scrollToSection(sectionKey) {
 }
 
 function orderedSectionKeys(sections) {
+  if (activeView === "ensemble") return currentSectionOrder();
   const availableSections = sections ? new Set(Object.keys(sections)) : null;
   return SECTION_ORDER.filter(
     (sectionKey) => SECTION_ID_MAP[sectionKey] && (!availableSections || availableSections.has(sectionKey)),
@@ -459,7 +533,7 @@ function navigateToSection(
   sectionKey,
   { replaceHistory = false, updateHash = true } = {},
 ) {
-  if (!SECTION_ID_MAP[sectionKey]) return;
+  if (!currentSectionIds()[sectionKey]) return;
   scrollToSection(sectionKey);
   setActiveSection(sectionKey, { updateHash, replaceHistory });
 }
@@ -497,10 +571,11 @@ function scheduleScrollSpyRefresh() {
 }
 
 function buildTabsInnerHtml(sections) {
+  const sectionIds = currentSectionIds();
   let markup = "";
   for (const sectionKey of orderedSectionKeys(sections)) {
     const isActive = sectionKey === activeSection;
-    markup += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${titleCase(sectionKey)}</a>`;
+    markup += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${sectionIds[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${currentSectionLabel(sectionKey)}</a>`;
   }
   return markup;
 }
@@ -571,8 +646,24 @@ function buildSelectorRow(labelText, chipsHtml, description, descriptionClass = 
   return markup;
 }
 
+function hasEnsembleBundle() {
+  return Boolean(document.getElementById(VIEW_DATA_ELEMENT_IDS.ensemble));
+}
+
 function buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks) {
   if (regionIds.length === 0) return "";
+
+  let controls = "";
+  if (hasEnsembleBundle()) {
+    const viewChips = buildSelectorChips(
+      (viewKey) => VIEW_LABELS[viewKey],
+      VIEW_ORDER,
+      activeView,
+      "data-view",
+      "Forecast type",
+    );
+    controls += buildSelectorRow("Forecast", viewChips, VIEW_NOTES[activeView]);
+  }
 
   const regionChips = buildSelectorChips(
     (regionId) => regionLabels[regionId] || titleCase(regionId),
@@ -581,9 +672,9 @@ function buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks) {
     "data-region",
     "Evaluation region",
   );
-  let controls = buildSelectorRow("Region", regionChips, regionMetadata[activeRegion]?.description);
+  controls += buildSelectorRow("Region", regionChips, regionMetadata[activeRegion]?.description);
 
-  if (versionTracks.length > 1) {
+  if (activeView !== "ensemble" && versionTracks.length > 1) {
     const trackChips = buildSelectorChips(
       (trackKey) => TRACK_LABELS[trackKey],
       versionTracks,
@@ -733,8 +824,9 @@ function renderDepthMetric(
   baseline,
   unifyVariables,
   depthGroupsConfig = null,
+  layoutScore = null,
 ) {
-  const baselineScore = challengers[baseline][metricKey];
+  const baselineScore = layoutScore || challengers[baseline][metricKey];
   if (!baselineScore) return "";
 
   const depths = Object.keys(baselineScore.depths);
@@ -956,6 +1048,70 @@ function renderChallengerNotes(challengerNames) {
   container.innerHTML = buildChallengerNotesHtml(challengerNames);
 }
 
+function resolveMetricBaseline(challengers, challengerNames, metricKey, baseline) {
+  if (challengers[baseline]?.[metricKey]) return baseline;
+  return challengerNames.find((name) => challengers[name]?.[metricKey]) || null;
+}
+
+function renderEnsembleMetric(challengers, challengerNames, regionId, metric, baseline) {
+  const metricBaseline = resolveMetricBaseline(challengers, challengerNames, metric.metric_key, baseline);
+  if (!metricBaseline) return "";
+
+  heatmapEnabled = metric.colorize;
+  const tables = renderDepthMetric(
+    challengers,
+    challengerNames,
+    regionId,
+    metric.metric_key,
+    metricBaseline,
+    false,
+    null,
+    metric.layout,
+  );
+  heatmapEnabled = true;
+  if (!tables) return "";
+
+  let markup = '<div class="depth-section">';
+  markup += `<h3>${metric.title}</h3>`;
+  markup += tables;
+  if (metric.note) {
+    markup += `<p class="ensemble-table-note">${metric.note}</p>`;
+  }
+  markup += "</div>";
+  return markup;
+}
+
+function renderEnsembleSections(challengers, challengerNames, regionId, baseline) {
+  for (const section of ensembleSections) {
+    const container = document.getElementById(section.container);
+    if (!container) continue;
+    container.innerHTML = section.metrics
+      .map((metric) => renderEnsembleMetric(challengers, challengerNames, regionId, metric, baseline))
+      .join("");
+  }
+}
+
+function renderActiveSections(data, challengers, challengerNames, baseline) {
+  if (activeView === "ensemble") {
+    renderEnsembleSections(challengers, challengerNames, activeRegion, baseline);
+    return;
+  }
+  for (const [sectionKey, sectionConfig] of Object.entries(data.sections)) {
+    renderMetricSection(
+      `${sectionKey}-scores`,
+      sectionConfig.depth_metric,
+      sectionConfig.flat_metrics,
+      challengers,
+      challengerNames,
+      activeRegion,
+      baseline,
+      data.metric_titles,
+      sectionKey !== "observations",
+      sectionConfig.depth_groups || null,
+    );
+  }
+}
+
 function formatRgb(color) {
   return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
@@ -1026,11 +1182,47 @@ function updateStickyOffsets() {
   }
 }
 
+function applyViewVisibility() {
+  for (const viewKey of VIEW_ORDER) {
+    const viewElement = document.getElementById(`${viewKey}-view`);
+    if (!viewElement) continue;
+    if (viewKey === activeView) {
+      viewElement.removeAttribute("hidden");
+    } else {
+      viewElement.setAttribute("hidden", "");
+    }
+  }
+}
+
+function switchView(viewKey) {
+  viewState[activeView] = {
+    version: activeVersion,
+    region: activeRegion,
+    track: activeTrack,
+    baseline: selectedBaseline,
+    section: activeSection,
+  };
+  activeView = viewKey;
+  const restored = viewState[activeView];
+  activeVersion = restored.version || null;
+  activeRegion = restored.region || null;
+  activeTrack = restored.track || "high_resolution";
+  selectedBaseline = restored.baseline || null;
+  activeSection = restored.section || "";
+  const staleBaselineSelect = document.getElementById("baseline-select");
+  if (staleBaselineSelect) staleBaselineSelect.remove();
+  applyViewVisibility();
+  renderAllTables();
+  updateSectionHash(activeSection, true);
+}
+
 function attachSelectorListeners() {
   document.querySelectorAll("#region-selector .selector-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
-      const { region, track } = chip.dataset;
-      if (region && region !== activeRegion) {
+      const { region, track, view } = chip.dataset;
+      if (view && view !== activeView) {
+        switchView(view);
+      } else if (region && region !== activeRegion) {
         activeRegion = region;
         renderAllTables();
       } else if (track && track !== activeTrack) {
@@ -1170,15 +1362,23 @@ function attachControlListeners() {
 }
 
 function ensureParsedData() {
-  if (!parsedData) {
-    const dataElement = document.getElementById("scores-data");
-    if (!dataElement) return null;
-    parsedData = JSON.parse(dataElement.textContent);
+  if (parsedDataByView[activeView] === undefined) {
+    const dataElement = document.getElementById(VIEW_DATA_ELEMENT_IDS[activeView]);
+    parsedDataByView[activeView] = dataElement ? JSON.parse(dataElement.textContent) : null;
+  }
+  const viewData = parsedDataByView[activeView];
+  if (!viewData) return null;
+  if (parsedData !== viewData) {
+    parsedData = viewData;
+    ensembleSections = viewData.ensemble_sections || [];
     const versions = getVersions(parsedData);
     if (!activeVersion || !versions.includes(activeVersion)) {
       activeVersion = resolveDefaultVersion(parsedData);
     }
     applyActiveVersion();
+    if (!currentSectionIds()[activeSection]) {
+      activeSection = currentSectionOrder()[0] || activeSection;
+    }
   }
   return parsedData;
 }
@@ -1266,7 +1466,6 @@ function renderTablesOnly() {
   if (!regionData) return;
   const { challengers, challenger_names: challengerNames } = regionData;
   if (!challengerNames || challengerNames.length === 0) return;
-  const { metric_titles: metricTitles, sections } = data;
   const { trackChallengerNames } = resolveTrackChallengerNames(challengerNames);
   if (trackChallengerNames.length === 0) return;
 
@@ -1275,20 +1474,7 @@ function renderTablesOnly() {
   if (!baseline) return;
   const visibleChallengerNames = visibleRowNames(trackChallengerNames, baseline);
 
-  for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
-    renderMetricSection(
-      `${sectionKey}-scores`,
-      sectionConfig.depth_metric,
-      sectionConfig.flat_metrics,
-      challengers,
-      visibleChallengerNames,
-      activeRegion,
-      baseline,
-      metricTitles,
-      sectionKey !== "observations",
-      sectionConfig.depth_groups || null,
-    );
-  }
+  renderActiveSections(data, challengers, visibleChallengerNames, baseline);
 
   renderChallengerNotes(visibleChallengerNames);
   updateColorLegend();
@@ -1304,7 +1490,7 @@ function renderAllTables() {
   const regionData = getCurrentRegionData(data);
   if (!regionData) return;
   const { challengers, challenger_names: challengerNames } = regionData;
-  const { metric_titles: metricTitles, sections } = data;
+  const { sections } = data;
   const regionIds = getRegionIds(data);
   if (!challengerNames || challengerNames.length === 0) return;
   const { availableTracks, trackChallengerNames } = resolveTrackChallengerNames(challengerNames);
@@ -1316,20 +1502,7 @@ function renderAllTables() {
   const visibleChallengerNames = visibleRowNames(trackChallengerNames, baseline);
   const availableDepths = getAvailableDepths(challengers, baseline, sections);
 
-  for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
-    renderMetricSection(
-      `${sectionKey}-scores`,
-      sectionConfig.depth_metric,
-      sectionConfig.flat_metrics,
-      challengers,
-      visibleChallengerNames,
-      activeRegion,
-      baseline,
-      metricTitles,
-      sectionKey !== "observations",
-      sectionConfig.depth_groups || null,
-    );
-  }
+  renderActiveSections(data, challengers, visibleChallengerNames, baseline);
 
   renderChallengerNotes(visibleChallengerNames);
 
@@ -1363,6 +1536,9 @@ function renderAllTables() {
 
 function applyUrlStateFromLocation() {
   const parameters = new URLSearchParams(window.location.search);
+
+  const viewParameter = parameters.get("view");
+  if (viewParameter && VIEW_ORDER.includes(viewParameter)) activeView = viewParameter;
 
   const versionParameter = parameters.get("version");
   if (versionParameter) activeVersion = versionParameter;
@@ -1404,6 +1580,9 @@ function writeUrlState() {
   if (!parsedData) return;
   const parameters = new URLSearchParams();
 
+  if (activeView !== "deterministic") {
+    parameters.set("view", activeView);
+  }
   if (activeVersion && activeVersion !== defaultVersionValue) {
     parameters.set("version", activeVersion);
   }
@@ -1435,11 +1614,13 @@ function writeUrlState() {
 
 function init() {
   if (!document.getElementById("scores-data")) return;
+  applyUrlStateFromLocation();
+  applyViewVisibility();
+  ensureParsedData();
   const initialSection = readSectionFromHash();
   if (initialSection) {
     activeSection = initialSection;
   }
-  applyUrlStateFromLocation();
   renderAllTables();
 
   if (initialSection) {

@@ -8,6 +8,7 @@ project:
   post-render: python generate_report_redirects.py
   resources:
     - assets/land-110m.json
+    - images/ensemble/*.png
 website:
   title: "OceanBench"
   favicon: favicon-light.png
@@ -19,8 +20,6 @@ website:
       - href: index.qmd
         text: Scores
       - challengers.qmd
-      - href: ensemble.qmd
-        text: Ensemble
       - about.qmd
   repo-url: https://github.com/mercator-ocean/oceanbench
   repo-actions: [edit, source, issue]
