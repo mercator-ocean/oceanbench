@@ -38,7 +38,7 @@ BLOCK_NOTES = {
         "The deterministic rows come from the class 4 matchup and keep its own depth bins, the ensemble rows come "
         "from the superob matchup, so the rows of a variable are not paired one to one. "
         "A row is shaded against the selected baseline, so the rows sitting at depths the baseline does not "
-        "cover carry no shading. GloEns has no current observations. "
+        "cover carry no shading. "
         f"{SHORT_HORIZON_NOTE}"
     ),
     "observations_crps": SHORT_HORIZON_NOTE,

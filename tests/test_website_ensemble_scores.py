@@ -6,11 +6,12 @@ from pathlib import Path
 import sys
 
 import pandas as pd
+import pytest
 
 WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
-from helpers.build_ensemble_scores_json import build_ensemble_scores  # noqa: E402
+from helpers.build_ensemble_scores_json import build_ensemble_scores, with_observation_sidecar  # noqa: E402
 from helpers.ensemble_scores import ensemble_score_bundle, ensemble_scores  # noqa: E402
 
 GRIDDED_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
@@ -163,6 +164,24 @@ def test_build_ensemble_scores_names_no_glonet2_deterministic_system() -> None:
     assert "glonet2" not in scores["system_order"]
     for block in scores["blocks"].values():
         assert all(row["system"] != "glonet2" for row in block["rows"])
+
+
+def test_with_observation_sidecar_adds_the_streams_of_a_later_campaign_wave() -> None:
+    frame = with_observation_sidecar(
+        _observation_frame([1, 3], ["drifter_sst"]),
+        _observation_frame([1, 3], ["currents_u"]),
+    )
+
+    assert sorted(frame["stream"].unique()) == ["currents_u", "drifter_sst"]
+    assert len(frame) == 8
+
+
+def test_with_observation_sidecar_refuses_a_sidecar_repeating_the_aggregate() -> None:
+    with pytest.raises(ValueError):
+        with_observation_sidecar(
+            _observation_frame([1, 3], ["drifter_sst", "currents_u"]),
+            _observation_frame([1, 3], ["currents_u"]),
+        )
 
 
 def test_build_ensemble_scores_reads_the_global_region_only() -> None:
