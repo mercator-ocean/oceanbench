@@ -22,6 +22,17 @@ DEFAULT_DETERMINISTIC_GLO12_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/ag
 DEFAULT_OBSERVATIONS_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-gloens/aggregate.parquet"
 DEFAULT_OBSERVATIONS_ICP_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-icp/aggregate.parquet"
 
+# The ensemble means are also scored through the class 4 route the deterministic systems go through,
+# so the error against observations reads on one matchup and one set of depth bins for every system.
+# The superob aggregates above stay the source of the probabilistic scores, which need the members.
+DEFAULT_CLASS4_GLOENS_MEAN_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-gloens-mean.parquet"
+DEFAULT_CLASS4_ICP_MEAN_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-icp-mean.parquet"
+
+# The GloEns year on the depth axis was run subsurface only, because its surface fields had already
+# been scored by the earlier campaign and were deliberately not scored again. That frozen record is
+# read here so the surface band of the table is filled from it rather than left empty.
+DEFAULT_GLOENS_SURFACE_PATH = f"{DEFAULT_AGGREGATE_ROOT}/02-gridded-glorys/scores-gloens-surface.csv"
+
 # A campaign wave that scored a stream after the fact writes it next to the aggregate instead of into
 # it, so an observation aggregate is read together with whatever sidecar sits beside it.
 OBSERVATION_SIDECAR_NAME = "aggregate_currents.parquet"
@@ -166,6 +177,30 @@ GRIDDED_VARIABLE_DECIMALS = {
 
 SPREAD_ERROR_RATIO_DECIMALS = 2
 
+# The frozen surface record holds both references and both sea level bases. Only the GLORYS rows
+# belong next to the depth aggregate, and of the two sea level bases only the datum aligned one is
+# comparable: GloEns carries a sea level datum of its own, while the other system and the reference
+# share theirs, so the raw basis would show a constant offset instead of a forecast error.
+GRIDDED_REFERENCE = "glorys"
+GLOENS_SURFACE_DEPTH = "surface"
+GLOENS_DATUM_ALIGNED_DEPTH = "surface-datum-aligned"
+FROZEN_METRIC_COLUMNS = [
+    "crps_biased",
+    "crps_fair",
+    "ensemble_mean_rmsd",
+    "ensemble_spread",
+    "member_rmsd",
+    "spread_error_ratio",
+]
+RATIO_METRIC = "spread_error_ratio"
+RATIO_UNIT = "1"
+# The frozen record carries no unit column, so the units of the two variables it does carry are
+# restated here, exactly as the depth aggregate spells them.
+GRIDDED_VARIABLE_UNITS = {
+    "sea_water_potential_temperature": "°C",
+    "sea_surface_height_above_geoid": "m",
+}
+
 
 def _depth_sort_key(depth: str) -> float:
     if depth == "surface":
@@ -234,6 +269,35 @@ def gridded_rows(frame: pd.DataFrame, system_key: str, metric: str, is_ratio: bo
     return rows
 
 
+def gloens_surface_frame(frozen: pd.DataFrame) -> pd.DataFrame:
+    """Shape the frozen GloEns surface record like a year mean slice of the depth aggregate."""
+    against_reference = frozen[frozen["reference"] == GRIDDED_REFERENCE]
+    sea_level = against_reference["variable"] == "sea_surface_height_above_geoid"
+    datum_aligned = against_reference["depth"] == GLOENS_DATUM_ALIGNED_DEPTH
+    kept = against_reference[(sea_level & datum_aligned) | (~sea_level & ~datum_aligned)].copy()
+    kept["depth"] = GLOENS_SURFACE_DEPTH
+
+    long = kept.melt(
+        id_vars=["variable", "depth", "lead_day", "start_count"],
+        value_vars=FROZEN_METRIC_COLUMNS,
+        var_name="metric",
+        value_name="value",
+    )
+    long["aggregation"] = "year_mean"
+    long["unit"] = [
+        RATIO_UNIT if metric == RATIO_METRIC else GRIDDED_VARIABLE_UNITS[variable]
+        for metric, variable in zip(long["metric"], long["variable"])
+    ]
+    return long
+
+
+def with_gloens_surface(depth_frame: pd.DataFrame, frozen: pd.DataFrame) -> pd.DataFrame:
+    """Add the frozen surface band to the subsurface only GloEns aggregate."""
+    if GLOENS_SURFACE_DEPTH in set(depth_frame["depth"]):
+        raise ValueError("the GloEns depth aggregate already carries a surface band, so the frozen record is stale")
+    return pd.concat([depth_frame, gloens_surface_frame(frozen)], ignore_index=True)
+
+
 def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio: bool) -> list[dict]:
     """Read the global rows of one observation space aggregate for one metric column."""
     selected = frame[frame["region"] == "global"]
@@ -271,8 +335,8 @@ def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio
     return rows
 
 
-def deterministic_rows(frame: pd.DataFrame, system_key: str) -> list[dict]:
-    """Read one deterministic class 4 aggregate, which keeps its own depth bins."""
+def class4_rows(frame: pd.DataFrame, system_key: str) -> list[dict]:
+    """Read one class 4 aggregate, of a deterministic system or of an ensemble mean, with its own depth bins."""
     rows = []
     for (variable, depth_bin), stream in DETERMINISTIC_STREAMS.items():
         bin_frame = frame[(frame["variable"] == variable) & (frame["depth_bin"] == depth_bin)]
@@ -322,13 +386,15 @@ def build_ensemble_scores(
     gridded_icp: pd.DataFrame,
     deterministic_glonet: pd.DataFrame,
     deterministic_glo12: pd.DataFrame,
+    class4_gloens_mean: pd.DataFrame,
+    class4_icp_mean: pd.DataFrame,
     observations_gloens: pd.DataFrame,
     observations_icp: pd.DataFrame,
 ) -> dict:
-    observation_rmsd = deterministic_rows(deterministic_glonet, GLONET)
-    observation_rmsd += deterministic_rows(deterministic_glo12, GLO12)
-    observation_rmsd += observation_rows(observations_gloens, GLOENS, "rmsd_ensemble_mean", is_ratio=False)
-    observation_rmsd += observation_rows(observations_icp, ICP, "rmsd_ensemble_mean", is_ratio=False)
+    observation_rmsd = class4_rows(deterministic_glonet, GLONET)
+    observation_rmsd += class4_rows(deterministic_glo12, GLO12)
+    observation_rmsd += class4_rows(class4_gloens_mean, GLOENS)
+    observation_rmsd += class4_rows(class4_icp_mean, ICP)
 
     observation_crps = observation_rows(observations_gloens, GLOENS, "crps_fair", is_ratio=False)
     observation_crps += observation_rows(observations_icp, ICP, "crps_fair", is_ratio=False)
@@ -340,7 +406,8 @@ def build_ensemble_scores(
         "observations_rmsd": {
             "title": "Root mean square error against observations",
             "note": (
-                "Ensemble mean error for the ensembles, single member error for the two " "deterministic references."
+                "Ensemble mean error for the ensembles, single member error for the two deterministic "
+                "references, every one of them scored through the same class 4 matchup."
             ),
             "lead_days": OBSERVATION_LEAD_DAYS,
             "rows": _sorted_observation_rows(observation_rmsd),
@@ -412,16 +479,21 @@ def main() -> None:
     parser.add_argument("--gridded-icp", default=DEFAULT_GRIDDED_ICP_PATH)
     parser.add_argument("--deterministic-glonet", default=DEFAULT_DETERMINISTIC_GLONET_PATH)
     parser.add_argument("--deterministic-glo12", default=DEFAULT_DETERMINISTIC_GLO12_PATH)
+    parser.add_argument("--class4-gloens-mean", default=DEFAULT_CLASS4_GLOENS_MEAN_PATH)
+    parser.add_argument("--class4-icp-mean", default=DEFAULT_CLASS4_ICP_MEAN_PATH)
+    parser.add_argument("--gloens-surface", default=DEFAULT_GLOENS_SURFACE_PATH)
     parser.add_argument("--observations-gloens", default=DEFAULT_OBSERVATIONS_GLOENS_PATH)
     parser.add_argument("--observations-icp", default=DEFAULT_OBSERVATIONS_ICP_PATH)
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
     arguments = parser.parse_args()
 
     scores = build_ensemble_scores(
-        pd.read_parquet(arguments.gridded_gloens),
+        with_gloens_surface(pd.read_parquet(arguments.gridded_gloens), pd.read_csv(arguments.gloens_surface)),
         pd.read_parquet(arguments.gridded_icp),
         pd.read_parquet(arguments.deterministic_glonet),
         pd.read_parquet(arguments.deterministic_glo12),
+        pd.read_parquet(arguments.class4_gloens_mean),
+        pd.read_parquet(arguments.class4_icp_mean),
         read_observation_aggregate(arguments.observations_gloens),
         read_observation_aggregate(arguments.observations_icp),
     )

@@ -27,26 +27,60 @@ METRIC_KEYS = {
 CLOSENESS_TO_ONE_BLOCKS = {"observations_spread_error_ratio", "gridded_spread_error_ratio"}
 
 REDUCED_START_NOTE = "Lead days 9 and 10 of GloEns average 51 starts instead of 52."
+DATUM_NOTE = "The sea surface height of GloEns is datum aligned to the reference before it is scored."
 SHORT_HORIZON_NOTE = "GloNet2-ens-icp stops at lead day 9."
 CLOSENESS_TO_ONE_NOTE = (
     "Cells are shaded by closeness to one, the target of the ratio: a cell reads better than the "
     "baseline when its ratio sits nearer to one, whichever side of one it falls."
 )
 
+# The error table reads one matchup for everybody, the probabilistic tables need the members and so
+# read the superob matchup, which is a different pairing of forecast and observation.
+SUPEROB_MATCHUP_NOTE = (
+    "These scores come from the superob matchup, where observations are averaged into model cells "
+    "first, because an ensemble predicts the average of a cell while a single observation also "
+    "carries the small scale noise no forecast can resolve."
+)
+
 BLOCK_NOTES = {
     "observations_rmsd": (
-        "The deterministic rows come from the class 4 matchup and keep its own depth bins, the ensemble rows come "
-        "from the superob matchup, so the rows of a variable are not paired one to one. "
-        "A row is shaded against the selected baseline, so the rows sitting at depths the baseline does not "
-        "cover carry no shading. "
+        "The ensemble mean of each ensemble is scored exactly as the deterministic systems are, through the "
+        "class 4 matchup and its depth bins, so every row of a variable is directly comparable. "
         f"{SHORT_HORIZON_NOTE}"
     ),
-    "observations_crps": SHORT_HORIZON_NOTE,
-    "observations_spread_error_ratio": SHORT_HORIZON_NOTE,
-    "gridded_rmsd": f"GloEns carries no surface fields. {SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
-    "gridded_crps": f"{SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
-    "gridded_spread_error_ratio": f"{SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
+    "observations_crps": f"{SHORT_HORIZON_NOTE} {SUPEROB_MATCHUP_NOTE}",
+    "observations_spread_error_ratio": f"{SHORT_HORIZON_NOTE} {SUPEROB_MATCHUP_NOTE}",
+    "gridded_rmsd": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
+    "gridded_crps": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
+    "gridded_spread_error_ratio": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
 }
+
+# The error table now carries the class 4 depth bins for every system, so it is laid out in the
+# three tables the deterministic view lays them out in rather than in whatever groups the depths
+# happen to fall into. The probabilistic tables keep the superob bands and are left to group
+# themselves.
+OBSERVATION_DEPTH_GROUPS = [
+    {
+        "depths": ["0-5 m", "5-100 m", "100-300 m", "300-600 m"],
+        "variables": ["Profile temperature", "Profile salinity"],
+    },
+    {
+        "depths": ["Surface"],
+        "variables": ["Drifter SST", "Sea level anomaly"],
+        "show_depth_label": True,
+    },
+    {
+        "depths": ["15 m"],
+        "variables": ["Eastward current", "Northward current"],
+        "show_depth_label": True,
+    },
+]
+
+# The gridded tables run over one depth axis with sea level living only at its surface, exactly as
+# the deterministic gridded tables do, so they unify their variables into a single table and leave
+# a blank where a depth does not carry a variable.
+UNIFIED_VARIABLE_BLOCKS = {"gridded_rmsd", "gridded_crps", "gridded_spread_error_ratio"}
+BLOCK_DEPTH_GROUPS = {"observations_rmsd": OBSERVATION_DEPTH_GROUPS}
 
 SECTIONS = [
     {
@@ -164,6 +198,8 @@ def _section_metrics(scores: dict, block_keys: list[str]) -> list[dict]:
             "note": _metric_note(block_key, scores["blocks"][block_key]),
             "colorize": True,
             "color_transform": "closeness_to_one" if block_key in CLOSENESS_TO_ONE_BLOCKS else None,
+            "unify_variables": block_key in UNIFIED_VARIABLE_BLOCKS,
+            "depth_groups": BLOCK_DEPTH_GROUPS.get(block_key),
             "layout": _layout_score(scores["blocks"][block_key]),
         }
         for block_key in block_keys
