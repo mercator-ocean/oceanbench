@@ -103,6 +103,30 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1°",
     },
+    "gloens": {
+        "label": "GloEns",
+        "url": "https://mercator-ocean.eu",
+        "organisation": "Mercator Ocean",
+        "organisation_url": "https://mercator-ocean.eu",
+        "method": "Physics-based",
+        "forecast_type": "Ensemble",
+        "initial_conditions": "GLO12",
+        "resolution": "1/4°",
+        "members": 50,
+        "note": "Physics ensemble on the native ORCA grid, regridded online to the quarter degree.",
+    },
+    "glonet2-ens-icp": {
+        "label": "GloNet2-ens-icp",
+        "url": "https://glonet.lab.dive.edito.eu",
+        "organisation": "Mercator Ocean",
+        "organisation_url": "https://mercator-ocean.eu",
+        "method": "ML-based",
+        "forecast_type": "Ensemble",
+        "initial_conditions": "GLO12",
+        "resolution": "1/4°",
+        "members": 8,
+        "note": "Machine learning ensemble built by perturbing the initial conditions.",
+    },
 }
 
 

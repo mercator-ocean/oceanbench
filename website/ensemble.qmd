@@ -1,0 +1,100 @@
+<!--
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+title: "Ensemble"
+description: "Ensemble forecast scores: ensemble means next to the deterministic baseline, fair CRPS and spread error ratio."
+author: "Mercator Ocean"
+jupyter: python3
+format:
+  html:
+    echo: false
+    page-layout: full
+---
+
+# Evaluating ensemble ocean forecasting systems
+
+An ensemble forecast is a set of members sampling the uncertainty of a single forecast.
+It is evaluated on two axes: how good the ensemble mean is, which is comparable to a deterministic forecast, and how well the spread of the members describes the actual forecast error.
+
+All scores on this page cover the year 2024 over 52 weekly starts.
+The observation scores use the version 2 observation basis of OceanBench, the same class 4 matchup as the deterministic scores.
+The gridded scores use the quarter degree GLORYS reanalysis as reference.
+
+Two ensembles are evaluated:
+
+- **GloEns**: the Mercator Ocean physics ensemble, 50 members, started on Thursdays. Its gridded evaluation covers subsurface temperature and salinity only, with no surface fields.
+- **GloNet2-ens-icp**: the GloNet2 machine learning ensemble, 8 members with perturbed initial conditions, started on Wednesdays. It runs to lead day 9.
+
+The deterministic GLONET2 forecast is shown next to the ensemble means as a baseline.
+
+```{python}
+#| output: false
+
+import json
+from helpers.ensemble_scores import ensemble_scores
+
+ensemble_scores_json = json.dumps(ensemble_scores())
+```
+
+```{python}
+#| output: asis
+
+print(f'<script type="application/json" id="ensemble-scores-data">{ensemble_scores_json}</script>')
+```
+
+::: {#ensemble-scores}
+
+## Classical view: ensemble means and the deterministic baseline
+
+### Against observations
+
+Root mean square error against the version 2 observation basis, global.
+The ensemble rows are the error of the ensemble mean, the GLONET2 rows are the error of the single deterministic member.
+The deterministic class 4 aggregate keeps its own depth bins, which do not match the ensemble depth bands, so the rows of a variable are not paired one to one.
+GloEns has no current observations in its ensemble evaluation.
+Temperature errors are differences, so kelvin and degrees Celsius carry the same number.
+
+<div id="ensemble-observations-rmsd"></div>
+
+### Against GLORYS
+
+Root mean square difference of the ensemble mean against the 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030), global, on the native model depth levels.
+GloEns carries no surface fields here, so sea surface height and surface temperature appear for GloNet2-ens-icp only.
+GloNet2-ens-icp stops at lead day 9, so its lead day 10 cells are empty.
+
+<div id="ensemble-gridded-rmsd"></div>
+
+## Probabilistic metrics
+
+The fair continuous ranked probability score (CRPS) rewards a sharp and reliable ensemble and is expressed in the unit of the variable, lower is better.
+The spread error ratio compares the ensemble spread with the error of the ensemble mean: one is a reliable ensemble, below one means the ensemble is under dispersive.
+
+### Against observations
+
+The observation space spread error ratio is additive: the observation error variance is added to the ensemble variance before the ratio is taken.
+
+<div id="ensemble-observations-crps"></div>
+
+<div id="ensemble-observations-ssr"></div>
+
+### Against GLORYS
+
+<div id="ensemble-gridded-crps"></div>
+
+<div id="ensemble-gridded-ssr"></div>
+
+:::
+
+\* GloEns lead days 9 and 10 average 51 starts instead of 52.
+
+Implemented by [Mercator Ocean](https://mercator-ocean.eu).
+
+<a href="https://mercator-ocean.eu"><img src="https://www.nemo-ocean.eu/wp-content/uploads/MOI.png" alt="Mercator Ocean logo" height="100"/></a>
+
+```{=html}
+<script src="ensemble-scores.js"></script>
+```

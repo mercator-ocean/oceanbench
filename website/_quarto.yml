@@ -19,6 +19,8 @@ website:
       - href: index.qmd
         text: Scores
       - challengers.qmd
+      - href: ensemble.qmd
+        text: Ensemble
       - about.qmd
   repo-url: https://github.com/mercator-ocean/oceanbench
   repo-actions: [edit, source, issue]

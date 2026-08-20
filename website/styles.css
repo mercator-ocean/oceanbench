@@ -1097,3 +1097,12 @@ body.quarto-dark .version-select {
 .version-changelog-link:hover {
   text-decoration: underline;
 }
+
+/* --- Ensemble page --- */
+
+.ensemble-table-note {
+  margin: 0 0 0.5rem 0;
+  color: var(--ob-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
