@@ -115,9 +115,11 @@ STANDARD_NAME_ATTRIBUTE = "standard_name"
 #: native cell. Near the tripolar fold they belong to cells whose axes point in different
 #: directions, and the pair is then not a vector: no single angle turns it onto east and north,
 #: and sampling the angle through each component separately does not help either, because the
-#: defect is the pairing and not the angle. On the GloEns grid 937 wet target cells disagree by
-#: more than 60 degrees, all of them north of 69 N and the worst of them by 180 degrees, which
-#: is a turned component of the wrong sign. Both components of such a cell are dropped.
+#: defect is the pairing and not the angle. On the GloEns grid 1146 wet target cells disagree by
+#: more than this threshold, none of them south of 69 N and the worst of them by 180 degrees,
+#: which is a turned component of the wrong sign. Both components of such a cell are dropped.
+#: Raising the threshold to 60 degrees would keep 938 of them, so the cells between the two are
+#: a small band of moderate disagreement rather than the bulk of the defect.
 FOLD_DISAGREEMENT_DEGREES = 20.0
 
 
