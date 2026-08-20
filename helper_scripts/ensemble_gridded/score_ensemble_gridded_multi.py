@@ -102,11 +102,22 @@ GLONET2_DATUM_SHIFT = -0.1148
 REFERENCE_DATUM_SHIFT = -0.1148
 
 # The staged quarter-degree reference has no level between 0.494 m and 47.374 m, so the 15 m
-# velocity field the observation-space campaign scores has no like-for-like partner here and
-# uo/vo are not scored. This is a stated omission, not a silent drop.
-VELOCITY_OMISSION_REASON = (
-    "uo/vo not scored: the staged quarter-degree reference has no level near 15 m "
+# velocity field the observation-space campaign scores has no like-for-like partner here. That
+# is a statement about 15 m only: the reference carries uo and vo on every level scored here, so
+# velocity is scored on the same depths as everything else and only the 15 m row is absent.
+VELOCITY_FIFTEEN_METRE_OMISSION_REASON = (
+    "no 15 m velocity row: the staged quarter-degree reference has no level near 15 m "
     "(nearest are 0.494 m and 47.374 m), so a 15 m challenger field has no like-for-like partner"
+)
+
+# The velocity of a tripolar challenger is published on the model axes, and turning it onto east
+# and north is a rotation the nearest-neighbour gather of this script does not perform. GloEns
+# velocity is therefore scored through the library route, which rotates as it regrids, and this
+# script covers the velocity of the regular-grid challengers only. The two routes were checked to
+# agree to 3.3e-08 on the fields both of them cover.
+CURVILINEAR_VELOCITY_ROUTE_REASON = (
+    "velocity of a curvilinear challenger is scored through the library route, which rotates the "
+    "components onto east and north; the nearest-neighbour gather here does not rotate"
 )
 
 
@@ -211,6 +222,50 @@ def _gloens_depth_variables() -> tuple[ScoredVariable, ...]:
     return tuple(variables)
 
 
+SURFACE_NOMINAL_DEPTH = 0.494
+
+
+def _fill_variables() -> tuple[ScoredVariable, ...]:
+    """The cells the first waves left empty: the two velocity components, and salinity at surface.
+
+    Temperature and subsurface salinity are already scored and are deliberately not repeated, so a
+    fill run costs what the missing cells cost rather than what a whole rerun would cost.
+    """
+    variables = [
+        ScoredVariable(
+            challenger_name="so",
+            standard_variable=Variable.SEA_WATER_SALINITY,
+            reference_name="so",
+            depth_label=SURFACE_DEPTH_LABEL,
+            nominal_depth=SURFACE_NOMINAL_DEPTH,
+        )
+    ]
+    for challenger_name, standard_variable in (
+        ("uo", Variable.EASTWARD_SEA_WATER_VELOCITY),
+        ("vo", Variable.NORTHWARD_SEA_WATER_VELOCITY),
+    ):
+        variables.append(
+            ScoredVariable(
+                challenger_name=challenger_name,
+                standard_variable=standard_variable,
+                reference_name=challenger_name,
+                depth_label=SURFACE_DEPTH_LABEL,
+                nominal_depth=SURFACE_NOMINAL_DEPTH,
+            )
+        )
+        for depth in NOMINAL_SUBSURFACE_DEPTHS:
+            variables.append(
+                ScoredVariable(
+                    challenger_name=challenger_name,
+                    standard_variable=standard_variable,
+                    reference_name=challenger_name,
+                    depth_label=_depth_label(depth),
+                    nominal_depth=depth,
+                )
+            )
+    return tuple(variables)
+
+
 CHALLENGERS = {
     "glonet2-ens": ChallengerSpec(
         name="glonet2-ens",
@@ -244,6 +299,34 @@ CHALLENGERS = {
         member_dimension="ens",
         member_count=50,
         variables=_gloens_depth_variables(),
+        first_lead_day=1,
+        last_lead_day=10,
+        lead_day_to_time_index=0,
+        curvilinear=True,
+        store_per_variable=True,
+        anonymous=True,
+    ),
+    "glonet2-ens-icp-fill": ChallengerSpec(
+        name="glonet2-ens-icp",
+        version="glonet2-ens-icp",
+        member_dimension="member",
+        member_count=8,
+        variables=_fill_variables(),
+        first_lead_day=1,
+        last_lead_day=9,
+        lead_day_to_time_index=1,
+        curvilinear=False,
+        store_per_variable=False,
+        anonymous=False,
+    ),
+    # Read by the library route, which rotates the velocity onto east and north. Running this
+    # entry through the nearest-neighbour gather of this script would score the model axes.
+    "gloens-depth-fill": ChallengerSpec(
+        name="gloens",
+        version="glo4-ens50_ng",
+        member_dimension="ens",
+        member_count=50,
+        variables=_fill_variables(),
         first_lead_day=1,
         last_lead_day=10,
         lead_day_to_time_index=0,
@@ -601,7 +684,8 @@ def _score_start_date(
         "depth_cap_reason": DEPTH_CAP_REASON,
         "nominal_subsurface_depths_m": list(NOMINAL_SUBSURFACE_DEPTHS),
         "depth_mapping": depth_mapping,
-        "velocity_note": VELOCITY_OMISSION_REASON,
+        "velocity_note": VELOCITY_FIFTEEN_METRE_OMISSION_REASON,
+        "curvilinear_velocity_note": CURVILINEAR_VELOCITY_ROUTE_REASON,
         "uncovered_lead_days": uncovered,
         "total_seconds": round(time.time() - started, 1),
     }
@@ -688,6 +772,10 @@ def _run_context(specification: ChallengerSpec) -> RunContext:
 
 def _score_command(arguments: argparse.Namespace) -> None:
     specification = CHALLENGERS[arguments.challenger]
+    if specification.curvilinear and any(
+        variable.challenger_name in ("uo", "vo") for variable in specification.variables
+    ):
+        raise RuntimeError(CURVILINEAR_VELOCITY_ROUTE_REASON)
     start_date = pandas.Timestamp(arguments.start_date)
     output_root = Path(arguments.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
