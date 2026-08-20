@@ -144,7 +144,7 @@ Absolute RMSE scores against 2024 [GLO12 analysis](https://data.marine.copernicu
 
 ::: {#ensemble-view hidden="true"}
 
-Two ensembles are evaluated over 2024 on 52 weekly starts, against the version 2 observation basis of OceanBench and the quarter degree [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030): GloEns, the Mercator Ocean physics ensemble with 50 members, and GloNet2-ens-icp, the GloNet2 machine learning ensemble with 8 perturbed initial conditions. The deterministic GLONET2 forecast is kept next to the ensemble means as a baseline.
+Two ensembles are evaluated over 2024 on 52 weekly starts, against the version 2 observation basis of OceanBench and the quarter degree [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030): GloEns, the Mercator Ocean physics ensemble with 50 members, and GloNet2-ens-icp, the GloNet2 machine learning ensemble with 8 perturbed initial conditions. Two deterministic forecasts are kept next to the ensemble means as references: GLONET, the machine learning system, and GLO12, the physics system both of them start from.
 
 ```{=html}
 <details class="ensemble-details">
@@ -154,11 +154,11 @@ Two ensembles are evaluated over 2024 on 52 weekly starts, against the version 2
 </details>
 ```
 
-## Ensemble means and deterministic baseline (vs observations) {#ensemble-observations}
+## Ensemble means and deterministic references (vs observations) {#ensemble-observations}
 
 <div id="ensemble-observations-scores"></div>
 
-## Ensemble means and deterministic baseline (vs GLORYS) {#ensemble-gridded}
+## Ensemble means (vs GLORYS) {#ensemble-gridded}
 
 <div id="ensemble-gridded-scores"></div>
 
@@ -166,7 +166,13 @@ Two ensembles are evaluated over 2024 on 52 weekly starts, against the version 2
 
 <div id="ensemble-probabilistic-scores"></div>
 
-![Rank histograms against observations, leads 1 to 3 pooled: a flat histogram is a calibrated ensemble, a U shape an under dispersive one.](images/ensemble/ens-cmp-06-rankhist.png){.ensemble-figure}
+```{=html}
+<div class="depth-section">
+<h3>Rank histograms against observations</h3>
+<img class="ensemble-figure" src="images/ensemble/ens-cmp-06-rankhist.png" alt="Rank histograms of the two ensembles against observations, per observation stream">
+<p class="ensemble-table-note">Leads 1 to 3 pooled. A flat histogram is a calibrated ensemble, a U shape an under dispersive one.</p>
+</div>
+```
 
 :::
 

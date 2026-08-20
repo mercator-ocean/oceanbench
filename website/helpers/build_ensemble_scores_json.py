@@ -17,7 +17,8 @@ import pandas as pd
 DEFAULT_AGGREGATE_ROOT = "/Users/jseillade/projects/probax-report"
 DEFAULT_GRIDDED_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gloens.parquet"
 DEFAULT_GRIDDED_ICP_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-icp.parquet"
-DEFAULT_DETERMINISTIC_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-glonet2.parquet"
+DEFAULT_DETERMINISTIC_GLONET_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-glonet.parquet"
+DEFAULT_DETERMINISTIC_GLO12_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-glo12.parquet"
 DEFAULT_OBSERVATIONS_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-gloens/aggregate.parquet"
 DEFAULT_OBSERVATIONS_ICP_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-icp/aggregate.parquet"
 
@@ -27,18 +28,29 @@ DEFAULT_OUTPUT_PATH = os.path.join(os.path.dirname(SCRIPT_DIRECTORY), "data", "e
 EVALUATION_YEAR = 2024
 FULL_START_COUNT = 52
 
-OBSERVATION_LEAD_DAYS = [1, 3, 5, 7, 9]
+# Every table of the page offers the same lead days, the ones the deterministic page shows plus the
+# lead day 9 the shorter of the two ensembles ends on. A system missing one of them leaves the cell
+# empty, and a lead day no system reaches at all is dropped when the table is drawn.
+OBSERVATION_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
 GRIDDED_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
 
 GLOENS = "gloens"
 ICP = "glonet2-ens-icp"
-DETERMINISTIC = "glonet2"
+GLONET = "glonet"
+GLO12 = "glo12"
+
+DETERMINISTIC_SYSTEMS = [GLONET, GLO12]
 
 SYSTEMS = {
-    DETERMINISTIC: {
-        "label": "GLONET2 (deterministic)",
+    GLONET: {
+        "label": "GLONET (deterministic)",
         "kind": "Deterministic",
-        "description": "Single member GLONET2 forecast, 52 weekly starts.",
+        "description": "Single member GLONET forecast, 52 weekly starts.",
+    },
+    GLO12: {
+        "label": "GLO12 (deterministic)",
+        "kind": "Deterministic",
+        "description": "Single member GLO12 forecast, 52 weekly starts.",
     },
     GLOENS: {
         "label": "GloEns",
@@ -52,7 +64,7 @@ SYSTEMS = {
     },
 }
 
-SYSTEM_ORDER = [DETERMINISTIC, GLOENS, ICP]
+SYSTEM_ORDER = [*DETERMINISTIC_SYSTEMS, GLOENS, ICP]
 
 STREAM_LABELS = {
     "drifter_sst": "Drifter SST",
@@ -65,6 +77,10 @@ STREAM_LABELS = {
 
 STREAM_ORDER = list(STREAM_LABELS)
 
+# These decimals are a storage choice, not a display choice: they keep the committed JSON short.
+# No row carries a display precision, because the page formats an ensemble cell with the same
+# function and the same default precision as a deterministic cell, so the two views of the scores
+# page can never drift apart.
 STREAM_DECIMALS = {
     "drifter_sst": 3,
     "profiles_t": 3,
@@ -79,7 +95,7 @@ STREAM_DECIMALS = {
 STREAM_UNITS = {
     "drifter_sst": "K",
     "profiles_t": "K",
-    "profiles_s": "psu",
+    "profiles_s": "PSU",
     "sla": "m",
     "currents_u": "m s-1",
     "currents_v": "m s-1",
@@ -163,7 +179,6 @@ def _row(
     variable_label: str,
     depth_label: str,
     unit: str,
-    decimals: int,
     values: list,
     reduced_leads: list,
 ) -> dict:
@@ -173,7 +188,6 @@ def _row(
         "variable": variable_label,
         "depth_band": depth_label,
         "unit": unit,
-        "decimals": decimals,
         "values": values,
         "reduced_start_leads": reduced_leads,
     }
@@ -208,7 +222,6 @@ def gridded_rows(frame: pd.DataFrame, system_key: str, metric: str, is_ratio: bo
                     GRIDDED_VARIABLE_LABELS[variable],
                     depth_label,
                     unit,
-                    decimals,
                     values,
                     reduced_leads,
                 )
@@ -246,7 +259,6 @@ def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio
                     STREAM_LABELS[stream],
                     depth_label,
                     unit,
-                    decimals,
                     values,
                     reduced_leads,
                 )
@@ -254,8 +266,8 @@ def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio
     return rows
 
 
-def deterministic_rows(frame: pd.DataFrame) -> list[dict]:
-    """Read the deterministic class 4 aggregate, which keeps its own depth bins."""
+def deterministic_rows(frame: pd.DataFrame, system_key: str) -> list[dict]:
+    """Read one deterministic class 4 aggregate, which keeps its own depth bins."""
     rows = []
     for (variable, depth_bin), stream in DETERMINISTIC_STREAMS.items():
         bin_frame = frame[(frame["variable"] == variable) & (frame["depth_bin"] == depth_bin)]
@@ -274,11 +286,10 @@ def deterministic_rows(frame: pd.DataFrame) -> list[dict]:
                 reduced_leads.append(lead_day)
         rows.append(
             _row(
-                DETERMINISTIC,
+                system_key,
                 STREAM_LABELS[stream],
                 DETERMINISTIC_DEPTH_BIN_LABELS[depth_bin],
                 STREAM_UNITS[stream],
-                STREAM_DECIMALS[stream],
                 values,
                 reduced_leads,
             )
@@ -304,11 +315,13 @@ def _sorted_observation_rows(rows: list[dict]) -> list[dict]:
 def build_ensemble_scores(
     gridded_gloens: pd.DataFrame,
     gridded_icp: pd.DataFrame,
-    deterministic: pd.DataFrame,
+    deterministic_glonet: pd.DataFrame,
+    deterministic_glo12: pd.DataFrame,
     observations_gloens: pd.DataFrame,
     observations_icp: pd.DataFrame,
 ) -> dict:
-    observation_rmsd = deterministic_rows(deterministic)
+    observation_rmsd = deterministic_rows(deterministic_glonet, GLONET)
+    observation_rmsd += deterministic_rows(deterministic_glo12, GLO12)
     observation_rmsd += observation_rows(observations_gloens, GLOENS, "rmsd_ensemble_mean", is_ratio=False)
     observation_rmsd += observation_rows(observations_icp, ICP, "rmsd_ensemble_mean", is_ratio=False)
 
@@ -321,7 +334,9 @@ def build_ensemble_scores(
     blocks = {
         "observations_rmsd": {
             "title": "Root mean square error against observations",
-            "note": "Ensemble mean error for the ensembles, single member error for GLONET2.",
+            "note": (
+                "Ensemble mean error for the ensembles, single member error for the two " "deterministic references."
+            ),
             "lead_days": OBSERVATION_LEAD_DAYS,
             "rows": _sorted_observation_rows(observation_rmsd),
         },
@@ -373,7 +388,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gridded-gloens", default=DEFAULT_GRIDDED_GLOENS_PATH)
     parser.add_argument("--gridded-icp", default=DEFAULT_GRIDDED_ICP_PATH)
-    parser.add_argument("--deterministic", default=DEFAULT_DETERMINISTIC_PATH)
+    parser.add_argument("--deterministic-glonet", default=DEFAULT_DETERMINISTIC_GLONET_PATH)
+    parser.add_argument("--deterministic-glo12", default=DEFAULT_DETERMINISTIC_GLO12_PATH)
     parser.add_argument("--observations-gloens", default=DEFAULT_OBSERVATIONS_GLOENS_PATH)
     parser.add_argument("--observations-icp", default=DEFAULT_OBSERVATIONS_ICP_PATH)
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
@@ -382,7 +398,8 @@ def main() -> None:
     scores = build_ensemble_scores(
         pd.read_parquet(arguments.gridded_gloens),
         pd.read_parquet(arguments.gridded_icp),
-        pd.read_parquet(arguments.deterministic),
+        pd.read_parquet(arguments.deterministic_glonet),
+        pd.read_parquet(arguments.deterministic_glo12),
         pd.read_parquet(arguments.observations_gloens),
         pd.read_parquet(arguments.observations_icp),
     )
