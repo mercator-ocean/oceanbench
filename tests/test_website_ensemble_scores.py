@@ -11,7 +11,11 @@ import pytest
 WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
-from helpers.build_ensemble_scores_json import build_ensemble_scores, with_observation_sidecar  # noqa: E402
+from helpers.build_ensemble_scores_json import (  # noqa: E402
+    build_ensemble_scores,
+    with_gloens_surface,
+    with_observation_sidecar,
+)
 from helpers.ensemble_scores import ensemble_score_bundle, ensemble_scores  # noqa: E402
 
 GRIDDED_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
@@ -64,7 +68,38 @@ def _observation_frame(lead_days: list[int], streams: list[str]) -> pd.DataFrame
     )
 
 
-def _deterministic_frame(lead_days: list[int], rmsd: float = 0.8221234) -> pd.DataFrame:
+def _frozen_surface_frame(lead_days: list[int]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "challenger": "gloens",
+                "challenger_version": "glo4-ens50_ng",
+                "region": "global",
+                "reference": reference,
+                "variable": variable,
+                "depth": depth,
+                "lead_day": lead_day,
+                "crps_biased": 0.1,
+                "crps_fair": value,
+                "ensemble_mean_rmsd": value,
+                "ensemble_spread": 0.02,
+                "member_rmsd": 0.16,
+                "spread_error_ratio": 0.13,
+                "start_count": 52,
+                "scored_cells": 673289,
+            }
+            for reference in ("glorys", "glo12")
+            for variable, depth, value in (
+                ("sea_water_potential_temperature", "surface", 0.4441234),
+                ("sea_surface_height_above_geoid", "surface", 0.1611234),
+                ("sea_surface_height_above_geoid", "surface-datum-aligned", 0.0741234),
+            )
+            for lead_day in lead_days
+        ]
+    )
+
+
+def _class4_frame(lead_days: list[int], rmsd: float = 0.8221234) -> pd.DataFrame:
     return pd.DataFrame(
         [
             {
@@ -85,8 +120,10 @@ def _built_scores() -> dict:
     return build_ensemble_scores(
         _gridded_frame("gloens", list(range(1, 11)), {9: 51, 10: 51}),
         _gridded_frame("glonet2-ens-icp", list(range(1, 10)), {}),
-        _deterministic_frame(list(range(1, 11))),
-        _deterministic_frame(list(range(1, 11)), rmsd=0.7331234),
+        _class4_frame(list(range(1, 11))),
+        _class4_frame(list(range(1, 11)), rmsd=0.7331234),
+        _class4_frame(list(range(1, 11)), rmsd=0.9441234),
+        _class4_frame(list(range(1, 10)), rmsd=0.9551234),
         _observation_frame(list(range(1, 11)), ["drifter_sst"]),
         _observation_frame(list(range(1, 10)), ["drifter_sst"]),
     )
@@ -154,7 +191,18 @@ def test_build_ensemble_scores_keeps_both_deterministic_references_next_to_the_e
     assert [row["system_label"] for row in rows[:2]] == ["GLONET (deterministic)", "GLO12 (deterministic)"]
     assert rows[0]["values"] == [0.822] * len(OBSERVATION_LEAD_DAYS)
     assert rows[1]["values"] == [0.733] * len(OBSERVATION_LEAD_DAYS)
-    assert rows[2]["values"] == [0.852] * len(OBSERVATION_LEAD_DAYS)
+    assert rows[2]["values"] == [0.944] * len(OBSERVATION_LEAD_DAYS)
+
+
+def test_build_ensemble_scores_takes_the_ensemble_mean_error_from_the_class4_route() -> None:
+    scores = _built_scores()
+
+    rows = scores["blocks"]["observations_rmsd"]["rows"]
+    icp_row = next(row for row in rows if row["system"] == "glonet2-ens-icp")
+
+    assert icp_row["depth_band"] == "Surface"
+    assert icp_row["values"] == [0.955, 0.955, 0.955, 0.955, 0.955, None]
+    assert all(row["depth_band"] in {"Surface", "15 m", "0-5 m", "5-100 m", "100-300 m", "300-600 m"} for row in rows)
 
 
 def test_build_ensemble_scores_names_no_glonet2_deterministic_system() -> None:
@@ -164,6 +212,53 @@ def test_build_ensemble_scores_names_no_glonet2_deterministic_system() -> None:
     assert "glonet2" not in scores["system_order"]
     for block in scores["blocks"].values():
         assert all(row["system"] != "glonet2" for row in block["rows"])
+
+
+def test_with_gloens_surface_keeps_only_the_reference_and_the_datum_aligned_sea_level() -> None:
+    frame = with_gloens_surface(
+        _gridded_frame("gloens", [1, 3], {}),
+        _frozen_surface_frame([1, 3]),
+    )
+    surface = frame[frame["depth"] == "surface"]
+
+    assert sorted(surface["variable"].unique()) == [
+        "sea_surface_height_above_geoid",
+        "sea_water_potential_temperature",
+    ]
+    assert set(surface["aggregation"]) == {"year_mean"}
+    sea_level = surface[(surface["variable"] == "sea_surface_height_above_geoid") & (surface["metric"] == "crps_fair")]
+    assert list(sea_level["value"].round(4).unique()) == [0.0741]
+    assert set(sea_level["unit"]) == {"m"}
+    ratio = surface[surface["metric"] == "spread_error_ratio"]
+    assert set(ratio["unit"]) == {"1"}
+
+
+def test_with_gloens_surface_refuses_an_aggregate_that_already_carries_a_surface_band() -> None:
+    already = with_gloens_surface(_gridded_frame("gloens", [1, 3], {}), _frozen_surface_frame([1, 3]))
+
+    with pytest.raises(ValueError):
+        with_gloens_surface(already, _frozen_surface_frame([1, 3]))
+
+
+def test_ensemble_metrics_lay_the_tables_out_like_the_deterministic_view() -> None:
+    bundle = ensemble_score_bundle(_built_scores())
+    sections = {section["key"]: section for section in bundle["ensemble_sections"]}
+
+    observations = sections["ensemble-observations"]["metrics"][0]
+    assert observations["unify_variables"] is False
+    assert [group["depths"] for group in observations["depth_groups"]] == [
+        ["0-5 m", "5-100 m", "100-300 m", "300-600 m"],
+        ["Surface"],
+        ["15 m"],
+    ]
+
+    gridded = sections["ensemble-gridded"]["metrics"][0]
+    assert gridded["unify_variables"] is True
+    assert gridded["depth_groups"] is None
+
+    probabilistic = sections["ensemble-probabilistic"]["metrics"]
+    assert [metric["unify_variables"] for metric in probabilistic] == [False, False, True, True]
+    assert all(metric["depth_groups"] is None for metric in probabilistic)
 
 
 def test_with_observation_sidecar_adds_the_streams_of_a_later_campaign_wave() -> None:

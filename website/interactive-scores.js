@@ -1032,8 +1032,8 @@ function renderEnsembleMetric(challengers, challengerNames, regionId, metric, ba
     regionId,
     metric.metric_key,
     metricBaseline,
-    false,
-    null,
+    metric.unify_variables || false,
+    metric.depth_groups || null,
     metric.layout,
   );
   heatmapEnabled = true;
