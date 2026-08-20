@@ -1168,3 +1168,12 @@ body.quarto-dark #baseline-select {
 body.quarto-dark .version-select {
   background-color: var(--ob-surface);
 }
+
+/* --- Ensemble page --- */
+
+.ensemble-table-note {
+  margin: 0 0 0.5rem 0;
+  color: var(--ob-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
