@@ -14,7 +14,7 @@ from helpers.build_ensemble_scores_json import build_ensemble_scores  # noqa: E4
 from helpers.ensemble_scores import ensemble_score_bundle, ensemble_scores  # noqa: E402
 
 GRIDDED_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
-OBSERVATION_LEAD_DAYS = [1, 3, 5, 7, 9]
+OBSERVATION_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
 
 
 def _gridded_frame(challenger: str, lead_days: list[int], start_counts: dict[int, int]) -> pd.DataFrame:
@@ -63,7 +63,7 @@ def _observation_frame(lead_days: list[int], streams: list[str]) -> pd.DataFrame
     )
 
 
-def _deterministic_frame(lead_days: list[int]) -> pd.DataFrame:
+def _deterministic_frame(lead_days: list[int], rmsd: float = 0.8221234) -> pd.DataFrame:
     return pd.DataFrame(
         [
             {
@@ -71,7 +71,7 @@ def _deterministic_frame(lead_days: list[int]) -> pd.DataFrame:
                 "depth_bin": "surface",
                 "lead_day": lead_day - 1,
                 "lead_day_number": lead_day,
-                "rmsd": 0.8221234,
+                "rmsd": rmsd,
                 "observation_count": 1000,
                 "start_count": 52,
             }
@@ -84,7 +84,8 @@ def _built_scores() -> dict:
     return build_ensemble_scores(
         _gridded_frame("gloens", list(range(1, 11)), {9: 51, 10: 51}),
         _gridded_frame("glonet2-ens-icp", list(range(1, 10)), {}),
-        _deterministic_frame(list(range(1, 10))),
+        _deterministic_frame(list(range(1, 11))),
+        _deterministic_frame(list(range(1, 11)), rmsd=0.7331234),
         _observation_frame(list(range(1, 11)), ["drifter_sst"]),
         _observation_frame(list(range(1, 10)), ["drifter_sst"]),
     )
@@ -116,13 +117,19 @@ def test_build_ensemble_scores_rounds_and_labels_each_row() -> None:
     assert temperature_row["variable"] == "Temperature"
     assert temperature_row["depth_band"] == "47.374 m"
     assert temperature_row["unit"] == "°C"
-    assert temperature_row["decimals"] == 3
     assert temperature_row["values"] == [0.881] * len(GRIDDED_LEAD_DAYS)
 
     ratio_row = scores["blocks"]["gridded_spread_error_ratio"]["rows"][0]
     assert ratio_row["unit"] == ""
-    assert ratio_row["decimals"] == 2
     assert ratio_row["values"] == [0.48] * len(GRIDDED_LEAD_DAYS)
+
+
+def test_build_ensemble_scores_carries_no_display_precision_of_its_own() -> None:
+    scores = _built_scores()
+
+    for block in scores["blocks"].values():
+        for row in block["rows"]:
+            assert "decimals" not in row
 
 
 def test_build_ensemble_scores_marks_the_reduced_start_lead_days_of_gloens() -> None:
@@ -136,15 +143,26 @@ def test_build_ensemble_scores_marks_the_reduced_start_lead_days_of_gloens() -> 
     assert all(row["values"][-1] is None for row in icp_rows)
 
 
-def test_build_ensemble_scores_keeps_the_deterministic_baseline_next_to_the_ensemble_means() -> None:
+def test_build_ensemble_scores_keeps_both_deterministic_references_next_to_the_ensemble_means() -> None:
     scores = _built_scores()
 
     rows = scores["blocks"]["observations_rmsd"]["rows"]
 
-    assert [row["system"] for row in rows] == ["glonet2", "gloens", "glonet2-ens-icp"]
-    assert [row["depth_band"] for row in rows] == ["Surface", "Surface", "Surface"]
+    assert [row["system"] for row in rows] == ["glonet", "glo12", "gloens", "glonet2-ens-icp"]
+    assert [row["depth_band"] for row in rows] == ["Surface"] * 4
+    assert [row["system_label"] for row in rows[:2]] == ["GLONET (deterministic)", "GLO12 (deterministic)"]
     assert rows[0]["values"] == [0.822] * len(OBSERVATION_LEAD_DAYS)
-    assert rows[1]["values"] == [0.852] * len(OBSERVATION_LEAD_DAYS)
+    assert rows[1]["values"] == [0.733] * len(OBSERVATION_LEAD_DAYS)
+    assert rows[2]["values"] == [0.852] * len(OBSERVATION_LEAD_DAYS)
+
+
+def test_build_ensemble_scores_names_no_glonet2_deterministic_system() -> None:
+    scores = _built_scores()
+
+    assert "glonet2" not in scores["systems"]
+    assert "glonet2" not in scores["system_order"]
+    for block in scores["blocks"].values():
+        assert all(row["system"] != "glonet2" for row in block["rows"])
 
 
 def test_build_ensemble_scores_reads_the_global_region_only() -> None:
@@ -172,12 +190,13 @@ def test_ensemble_score_bundle_reads_like_the_deterministic_score_bundle() -> No
     assert bundle["version_order"] == ["ensemble"]
     assert bundle["default_version"] == "ensemble"
     assert region["display_name"] == "Global"
-    assert region["challenger_names"] == ["glonet2", "gloens", "glonet2-ens-icp"]
+    assert region["challenger_names"] == ["glonet", "glo12", "gloens", "glonet2-ens-icp"]
     assert bundle["versions"]["ensemble"]["challenger_labels"]["gloens"] == "GloEns"
+    assert bundle["versions"]["ensemble"]["challenger_labels"]["glo12"] == "GLO12 (deterministic)"
 
     temperature = region["challengers"]["gloens"]["rmsd_gridded"]["depths"]["47.374 m"]["variables"]["Temperature"]
     assert temperature["unit"] == "°C"
-    assert temperature["decimals"] == 3
+    assert "decimals" not in temperature
     assert temperature["data"] == {str(lead_day): 0.881 for lead_day in GRIDDED_LEAD_DAYS}
 
 
@@ -196,7 +215,15 @@ def test_ensemble_score_bundle_exposes_a_metric_per_section_with_a_full_layout()
         "crps_gridded",
         "spread_error_ratio_gridded",
     ]
-    assert [metric["colorize"] for metric in sections[2]["metrics"]] == [True, False, True, False]
+    assert [metric["colorize"] for metric in sections[2]["metrics"]] == [True, True, True, True]
+    assert [metric["color_transform"] for metric in sections[2]["metrics"]] == [
+        None,
+        "closeness_to_one",
+        None,
+        "closeness_to_one",
+    ]
+    ratio_note = sections[2]["metrics"][1]["note"]
+    assert "shaded by closeness to one" in ratio_note
 
     observations = sections[0]["metrics"][0]
     layout_depths = list(observations["layout"]["depths"])

@@ -22,20 +22,30 @@ METRIC_KEYS = {
     "gridded_spread_error_ratio": "spread_error_ratio_gridded",
 }
 
-COLORED_BLOCKS = {"observations_rmsd", "gridded_rmsd", "observations_crps", "gridded_crps"}
+# A ratio has no "lower is better" direction, so its cells are shaded by how far they sit from
+# one instead of by their value. The shading then reads on the same ramp as every other table.
+CLOSENESS_TO_ONE_BLOCKS = {"observations_spread_error_ratio", "gridded_spread_error_ratio"}
 
 REDUCED_START_NOTE = "Lead days 9 and 10 of GloEns average 51 starts instead of 52."
-UNCOLORED_NOTE = "Cells are not colored, as one is the target of the ratio and not a best value."
+SHORT_HORIZON_NOTE = "GloNet2-ens-icp stops at lead day 9."
+CLOSENESS_TO_ONE_NOTE = (
+    "Cells are shaded by closeness to one, the target of the ratio: a cell reads better than the "
+    "baseline when its ratio sits nearer to one, whichever side of one it falls."
+)
 
 BLOCK_NOTES = {
     "observations_rmsd": (
         "The deterministic rows come from the class 4 matchup and keep its own depth bins, the ensemble rows come "
         "from the superob matchup, so the rows of a variable are not paired one to one. "
-        "GloEns has no current observations."
+        "A row is shaded against the selected baseline, so the rows sitting at depths the baseline does not "
+        "cover carry no shading. GloEns has no current observations. "
+        f"{SHORT_HORIZON_NOTE}"
     ),
-    "gridded_rmsd": f"GloEns carries no surface fields and GloNet2-ens-icp stops at lead day 9. {REDUCED_START_NOTE}",
-    "gridded_crps": REDUCED_START_NOTE,
-    "gridded_spread_error_ratio": REDUCED_START_NOTE,
+    "observations_crps": SHORT_HORIZON_NOTE,
+    "observations_spread_error_ratio": SHORT_HORIZON_NOTE,
+    "gridded_rmsd": f"GloEns carries no surface fields. {SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
+    "gridded_crps": f"{SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
+    "gridded_spread_error_ratio": f"{SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
 }
 
 SECTIONS = [
@@ -96,7 +106,6 @@ def _depth_score(rows: list[dict], variable_order: list[str], lead_days: list[in
             row["variable"]: {
                 "unit": row["unit"],
                 "standard_name": "",
-                "decimals": row["decimals"],
                 "data": {str(lead_day): value for lead_day, value in zip(lead_days, row["values"])},
             }
             for row in sorted(rows, key=lambda row: variable_order.index(row["variable"]))
@@ -142,8 +151,8 @@ def _challenger_scores(scores: dict) -> dict:
 
 def _metric_note(block_key: str, block: dict) -> str:
     notes = [block["note"], BLOCK_NOTES.get(block_key, "")]
-    if block_key not in COLORED_BLOCKS:
-        notes.append(UNCOLORED_NOTE)
+    if block_key in CLOSENESS_TO_ONE_BLOCKS:
+        notes.append(CLOSENESS_TO_ONE_NOTE)
     return " ".join(note for note in notes if note)
 
 
@@ -153,7 +162,8 @@ def _section_metrics(scores: dict, block_keys: list[str]) -> list[dict]:
             "metric_key": METRIC_KEYS[block_key],
             "title": scores["blocks"][block_key]["title"],
             "note": _metric_note(block_key, scores["blocks"][block_key]),
-            "colorize": block_key in COLORED_BLOCKS,
+            "colorize": True,
+            "color_transform": "closeness_to_one" if block_key in CLOSENESS_TO_ONE_BLOCKS else None,
             "layout": _layout_score(scores["blocks"][block_key]),
         }
         for block_key in block_keys

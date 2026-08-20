@@ -137,11 +137,27 @@ function getBinColor(binIndex) {
   return interpolateColor(palette[segment], palette[segment + 1], localRatio);
 }
 
+// A table whose metric has no "lower is better" direction sets a transform here, so that its
+// cells are shaded on the ramp below by whatever does read as better for that metric. The
+// default is no transform, which is what every deterministic table uses.
+let colorTransform = null;
+
+function colorScore(value) {
+  if (colorTransform === "closeness_to_one") return Math.abs(value - 1);
+  return value;
+}
+
 function getCellStyle(referenceValue, comparedValue) {
-  const percentDiff = referenceValue === 0 ? 0 : ((comparedValue - referenceValue) / Math.abs(referenceValue)) * 100;
+  const reference = colorScore(referenceValue);
+  const compared = colorScore(comparedValue);
+  const percentDiff = reference === 0 ? 0 : ((compared - reference) / Math.abs(reference)) * 100;
   const binIndex = getBinIndex(percentDiff);
   const color = getBinColor(binIndex);
   return `background-color:rgb(${color[0]}, ${color[1]}, ${color[2]}); color: ${textColorForBackground(color)}`;
+}
+
+function formatScoreValue(value, decimals) {
+  return value.toFixed(decimals);
 }
 
 function formatPercentDiff(referenceValue, comparedValue) {
@@ -315,7 +331,7 @@ function modelHeaderCell(name, regionId) {
 
 function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName, decimals = 2) {
   const unitSuffix = unit ? ` ${unit}` : "";
-  let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${value.toFixed(decimals)}${unitSuffix}`;
+  let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${formatScoreValue(value, decimals)}${unitSuffix}`;
   if (!isBaseline && referenceValue !== null) {
     tooltip += `\nvs ${displayName(baselineName)}: ${formatPercentDiff(referenceValue, value)}`;
   }
@@ -366,7 +382,7 @@ function buildDataRows(
           if (showPercentDiff && !isBaseline && referenceValue !== null) {
             display = formatPercentDiffForCell(referenceValue, value);
           } else {
-            display = value.toFixed(decimals);
+            display = formatScoreValue(value, decimals);
           }
         }
         const title = value !== null
@@ -411,7 +427,7 @@ function buildCombinedDataRows(
             if (showPercentDiff && !isBaseline && referenceValue !== null) {
               display = formatPercentDiffForCell(referenceValue, value);
             } else {
-              display = value.toFixed(2);
+              display = formatScoreValue(value, getDecimals(score, "flat", variable));
             }
           }
           const title = value !== null
@@ -889,13 +905,28 @@ function renderDepthMetric(
   )).join("");
 }
 
+// The ensemble systems stop at different lead days, so a table can end up with a lead column that
+// every one of its rows leaves empty. Such a column carries nothing and is dropped. The
+// deterministic view keeps whatever columns it asked for, so its markup never moves.
+function dropLeadDaysNoSystemReaches(leadDays, orderedNames, challengers, metricKey, depths, variables) {
+  if (activeView !== "ensemble") return leadDays;
+  return leadDays.filter((day) => orderedNames.some((name) => {
+    const score = challengers[name][metricKey];
+    if (!score) return false;
+    return depths.some((depth) => variables.some((variable) => getValue(score, depth, variable, day) !== null));
+  }));
+}
+
 function renderDepthGroup(
   baselineScore, orderedNames, challengers, regionId, metricKey, depths, variables, baseline, showDepthLabelForSingleDepth = false,
 ) {
   if (variables.length === 0 || depths.length === 0) return "";
 
   const referenceDepth = depths[0];
-  const leadDays = getLeadDays(baselineScore, referenceDepth);
+  const leadDays = dropLeadDaysNoSystemReaches(
+    getLeadDays(baselineScore, referenceDepth), orderedNames, challengers, metricKey, depths, variables,
+  );
+  if (leadDays.length === 0) return "";
   const totalColumns = 1 + variables.length * leadDays.length;
 
   let thead = "<thead>";
@@ -1058,6 +1089,7 @@ function renderEnsembleMetric(challengers, challengerNames, regionId, metric, ba
   if (!metricBaseline) return "";
 
   heatmapEnabled = metric.colorize;
+  colorTransform = metric.color_transform || null;
   const tables = renderDepthMetric(
     challengers,
     challengerNames,
@@ -1069,6 +1101,7 @@ function renderEnsembleMetric(challengers, challengerNames, regionId, metric, ba
     metric.layout,
   );
   heatmapEnabled = true;
+  colorTransform = null;
   if (!tables) return "";
 
   let markup = '<div class="depth-section">';
