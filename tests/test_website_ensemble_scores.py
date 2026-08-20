@@ -11,7 +11,7 @@ WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
 from helpers.build_ensemble_scores_json import build_ensemble_scores  # noqa: E402
-from helpers.ensemble_scores import ensemble_scores  # noqa: E402
+from helpers.ensemble_scores import ensemble_score_bundle, ensemble_scores  # noqa: E402
 
 GRIDDED_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
 OBSERVATION_LEAD_DAYS = [1, 3, 5, 7, 9]
@@ -163,3 +163,43 @@ def test_committed_ensemble_scores_match_the_converter_contract() -> None:
         for row in block["rows"]:
             assert len(row["values"]) == len(block["lead_days"])
             assert row["system"] in scores["systems"]
+
+
+def test_ensemble_score_bundle_reads_like_the_deterministic_score_bundle() -> None:
+    bundle = ensemble_score_bundle(_built_scores())
+    region = bundle["versions"]["ensemble"]["regions"]["global"]
+
+    assert bundle["version_order"] == ["ensemble"]
+    assert bundle["default_version"] == "ensemble"
+    assert region["display_name"] == "Global"
+    assert region["challenger_names"] == ["glonet2", "gloens", "glonet2-ens-icp"]
+    assert bundle["versions"]["ensemble"]["challenger_labels"]["gloens"] == "GloEns"
+
+    temperature = region["challengers"]["gloens"]["rmsd_gridded"]["depths"]["47.374 m"]["variables"]["Temperature"]
+    assert temperature["unit"] == "°C"
+    assert temperature["decimals"] == 3
+    assert temperature["data"] == {str(lead_day): 0.881 for lead_day in GRIDDED_LEAD_DAYS}
+
+
+def test_ensemble_score_bundle_exposes_a_metric_per_section_with_a_full_layout() -> None:
+    bundle = ensemble_score_bundle(_built_scores())
+
+    sections = bundle["ensemble_sections"]
+    assert [section["key"] for section in sections] == [
+        "ensemble-observations",
+        "ensemble-gridded",
+        "ensemble-probabilistic",
+    ]
+    assert [metric["metric_key"] for metric in sections[2]["metrics"]] == [
+        "crps_observations",
+        "spread_error_ratio_observations",
+        "crps_gridded",
+        "spread_error_ratio_gridded",
+    ]
+    assert [metric["colorize"] for metric in sections[2]["metrics"]] == [True, False, True, False]
+
+    observations = sections[0]["metrics"][0]
+    layout_depths = list(observations["layout"]["depths"])
+    challengers = bundle["versions"]["ensemble"]["regions"]["global"]["challengers"]
+    for system_scores in challengers.values():
+        assert set(system_scores["rmsd_observations"]["depths"]) <= set(layout_depths)

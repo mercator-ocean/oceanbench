@@ -1098,11 +1098,43 @@ body.quarto-dark .version-select {
   text-decoration: underline;
 }
 
-/* --- Ensemble page --- */
+/* --- Ensemble track --- */
+
+#deterministic-view[hidden],
+#ensemble-view[hidden] {
+  display: none;
+}
 
 .ensemble-table-note {
-  margin: 0 0 0.5rem 0;
+  margin: 0.25rem 0 1.5rem 0;
+  max-width: 60rem;
   color: var(--ob-muted);
   font-size: 0.82rem;
   line-height: 1.4;
+}
+
+.ensemble-details {
+  margin: 0.75rem 0 1.25rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface-raised);
+}
+
+.ensemble-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ensemble-details p {
+  margin: 0.75rem 0 0;
+  max-width: 60rem;
+  color: var(--ob-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+img.ensemble-figure {
+  max-width: 100%;
+  height: auto;
 }
