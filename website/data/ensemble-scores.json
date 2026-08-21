@@ -32,7 +32,7 @@
   "blocks": {
     "observations_rmsd": {
       "title": "Root mean square error against observations",
-      "note": "Ensemble mean error for the ensembles, single member error for the two deterministic references.",
+      "note": "Ensemble mean error for the ensembles, single member error for the two deterministic references, every one of them scored through the same class 4 matchup.",
       "lead_days": [
         1,
         3,
@@ -81,12 +81,12 @@
           "depth_band": "Surface",
           "unit": "K",
           "values": [
-            0.852,
-            0.894,
-            0.934,
-            0.951,
-            0.944,
-            0.972
+            0.742,
+            0.784,
+            0.825,
+            0.861,
+            0.845,
+            0.866
           ],
           "reduced_start_leads": [
             10
@@ -99,11 +99,11 @@
           "depth_band": "Surface",
           "unit": "K",
           "values": [
-            1.029,
-            1.05,
-            1.076,
-            1.101,
-            1.125,
+            0.918,
+            0.928,
+            0.959,
+            0.989,
+            1.028,
             null
           ],
           "reduced_start_leads": []
@@ -240,33 +240,15 @@
           "system": "gloens",
           "system_label": "GloEns",
           "variable": "Profile temperature",
-          "depth_band": "All depths",
-          "unit": "K",
-          "values": [
-            0.441,
-            0.453,
-            0.489,
-            0.495,
-            0.517,
-            0.517
-          ],
-          "reduced_start_leads": [
-            10
-          ]
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile temperature",
-          "depth_band": "0-100 m",
+          "depth_band": "0-5 m",
           "unit": "K",
           "values": [
             0.741,
-            0.761,
-            0.838,
-            0.86,
-            0.887,
-            0.877
+            0.753,
+            0.812,
+            0.785,
+            0.845,
+            0.854
           ],
           "reduced_start_leads": [
             10
@@ -276,15 +258,15 @@
           "system": "gloens",
           "system_label": "GloEns",
           "variable": "Profile temperature",
-          "depth_band": "100-500 m",
+          "depth_band": "5-100 m",
           "unit": "K",
           "values": [
-            0.599,
-            0.615,
-            0.662,
-            0.669,
-            0.706,
-            0.713
+            0.765,
+            0.783,
+            0.864,
+            0.89,
+            0.914,
+            0.901
           ],
           "reduced_start_leads": [
             10
@@ -294,15 +276,33 @@
           "system": "gloens",
           "system_label": "GloEns",
           "variable": "Profile temperature",
-          "depth_band": "500+ m",
+          "depth_band": "100-300 m",
           "unit": "K",
           "values": [
-            0.263,
-            0.266,
-            0.281,
-            0.284,
-            0.298,
-            0.289
+            0.69,
+            0.707,
+            0.755,
+            0.766,
+            0.798,
+            0.821
+          ],
+          "reduced_start_leads": [
+            10
+          ]
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile temperature",
+          "depth_band": "300-600 m",
+          "unit": "K",
+          "values": [
+            0.453,
+            0.465,
+            0.514,
+            0.514,
+            0.557,
+            0.536
           ],
           "reduced_start_leads": [
             10
@@ -312,14 +312,14 @@
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Profile temperature",
-          "depth_band": "All depths",
+          "depth_band": "0-5 m",
           "unit": "K",
           "values": [
-            0.769,
-            0.764,
-            0.789,
-            0.813,
-            0.846,
+            0.978,
+            1.012,
+            1.021,
+            1.05,
+            1.052,
             null
           ],
           "reduced_start_leads": []
@@ -328,14 +328,14 @@
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Profile temperature",
-          "depth_band": "0-100 m",
+          "depth_band": "5-100 m",
           "unit": "K",
           "values": [
-            1.085,
-            1.075,
-            1.091,
-            1.115,
-            1.156,
+            1.088,
+            1.079,
+            1.095,
+            1.117,
+            1.162,
             null
           ],
           "reduced_start_leads": []
@@ -344,14 +344,14 @@
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Profile temperature",
-          "depth_band": "100-500 m",
+          "depth_band": "100-300 m",
           "unit": "K",
           "values": [
-            0.77,
-            0.774,
-            0.804,
-            0.83,
-            0.871,
+            0.873,
+            0.883,
+            0.921,
+            0.945,
+            0.991,
             null
           ],
           "reduced_start_leads": []
@@ -360,14 +360,14 @@
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Profile temperature",
-          "depth_band": "500+ m",
+          "depth_band": "300-600 m",
           "unit": "K",
           "values": [
-            0.44,
-            0.442,
-            0.446,
-            0.473,
-            0.495,
+            0.558,
+            0.563,
+            0.582,
+            0.611,
+            0.643,
             null
           ],
           "reduced_start_leads": []
@@ -504,15 +504,15 @@
           "system": "gloens",
           "system_label": "GloEns",
           "variable": "Profile salinity",
-          "depth_band": "All depths",
+          "depth_band": "0-5 m",
           "unit": "PSU",
           "values": [
-            0.113,
-            0.116,
-            0.115,
-            0.118,
-            0.114,
-            0.122
+            0.318,
+            0.31,
+            0.302,
+            0.338,
+            0.345,
+            0.338
           ],
           "reduced_start_leads": [
             10
@@ -522,15 +522,15 @@
           "system": "gloens",
           "system_label": "GloEns",
           "variable": "Profile salinity",
-          "depth_band": "0-100 m",
+          "depth_band": "5-100 m",
           "unit": "PSU",
           "values": [
-            0.294,
-            0.3,
-            0.288,
-            0.304,
-            0.288,
-            0.312
+            0.298,
+            0.32,
+            0.301,
+            0.32,
+            0.298,
+            0.333
           ],
           "reduced_start_leads": [
             10
@@ -540,82 +540,50 @@
           "system": "gloens",
           "system_label": "GloEns",
           "variable": "Profile salinity",
-          "depth_band": "100-500 m",
+          "depth_band": "100-300 m",
           "unit": "PSU",
           "values": [
-            0.108,
-            0.109,
-            0.115,
-            0.114,
-            0.117,
-            0.119
-          ],
-          "reduced_start_leads": [
-            10
-          ]
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile salinity",
-          "depth_band": "500+ m",
-          "unit": "PSU",
-          "values": [
-            0.043,
-            0.043,
-            0.044,
-            0.044,
-            0.045,
-            0.045
-          ],
-          "reduced_start_leads": [
-            10
-          ]
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile salinity",
-          "depth_band": "All depths",
-          "unit": "PSU",
-          "values": [
-            0.169,
-            0.163,
-            0.162,
-            0.163,
-            0.169,
-            null
-          ],
-          "reduced_start_leads": []
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile salinity",
-          "depth_band": "0-100 m",
-          "unit": "PSU",
-          "values": [
-            0.308,
-            0.299,
-            0.283,
-            0.277,
-            0.294,
-            null
-          ],
-          "reduced_start_leads": []
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile salinity",
-          "depth_band": "100-500 m",
-          "unit": "PSU",
-          "values": [
-            0.129,
-            0.129,
-            0.134,
+            0.132,
+            0.133,
             0.139,
-            0.143,
+            0.137,
+            0.14,
+            0.144
+          ],
+          "reduced_start_leads": [
+            10
+          ]
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile salinity",
+          "depth_band": "300-600 m",
+          "unit": "PSU",
+          "values": [
+            0.071,
+            0.072,
+            0.078,
+            0.077,
+            0.082,
+            0.078
+          ],
+          "reduced_start_leads": [
+            10
+          ]
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile salinity",
+          "depth_band": "0-5 m",
+          "unit": "PSU",
+          "values": [
+            0.32,
+            0.33,
+            0.311,
+            0.316,
+            0.33,
             null
           ],
           "reduced_start_leads": []
@@ -624,14 +592,46 @@
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Profile salinity",
-          "depth_band": "500+ m",
+          "depth_band": "5-100 m",
           "unit": "PSU",
           "values": [
-            0.069,
-            0.069,
-            0.07,
-            0.073,
-            0.076,
+            0.281,
+            0.272,
+            0.256,
+            0.255,
+            0.262,
+            null
+          ],
+          "reduced_start_leads": []
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile salinity",
+          "depth_band": "100-300 m",
+          "unit": "PSU",
+          "values": [
+            0.141,
+            0.147,
+            0.149,
+            0.156,
+            0.16,
+            null
+          ],
+          "reduced_start_leads": []
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile salinity",
+          "depth_band": "300-600 m",
+          "unit": "PSU",
+          "values": [
+            0.09,
+            0.091,
+            0.092,
+            0.096,
+            0.1,
             null
           ],
           "reduced_start_leads": []
@@ -675,12 +675,12 @@
           "depth_band": "Surface",
           "unit": "m",
           "values": [
-            0.0496,
-            0.0523,
-            0.0543,
-            0.057,
-            0.0583,
-            0.0596
+            0.0493,
+            0.0522,
+            0.0546,
+            0.0572,
+            0.0587,
+            0.0601
           ],
           "reduced_start_leads": [
             10
@@ -693,11 +693,11 @@
           "depth_band": "Surface",
           "unit": "m",
           "values": [
-            0.0624,
-            0.0636,
-            0.0646,
-            0.0671,
-            0.0704,
+            0.0616,
+            0.0635,
+            0.0647,
+            0.0674,
+            0.071,
             null
           ],
           "reduced_start_leads": []
@@ -741,12 +741,12 @@
           "depth_band": "15 m",
           "unit": "m s-1",
           "values": [
-            0.11,
-            0.113,
-            0.117,
-            0.123,
-            0.127,
-            0.13
+            0.108,
+            0.111,
+            0.116,
+            0.122,
+            0.126,
+            0.128
           ],
           "reduced_start_leads": [
             10
@@ -759,11 +759,11 @@
           "depth_band": "15 m",
           "unit": "m s-1",
           "values": [
-            0.133,
-            0.136,
-            0.136,
-            0.139,
-            0.143,
+            0.125,
+            0.13,
+            0.131,
+            0.135,
+            0.14,
             null
           ],
           "reduced_start_leads": []
@@ -807,12 +807,12 @@
           "depth_band": "15 m",
           "unit": "m s-1",
           "values": [
-            0.103,
-            0.108,
-            0.112,
-            0.117,
-            0.122,
-            0.124
+            0.101,
+            0.106,
+            0.111,
+            0.115,
+            0.121,
+            0.123
           ],
           "reduced_start_leads": [
             10
@@ -825,11 +825,11 @@
           "depth_band": "15 m",
           "unit": "m s-1",
           "values": [
+            0.121,
+            0.123,
             0.128,
-            0.129,
-            0.133,
-            0.136,
-            0.139,
+            0.131,
+            0.135,
             null
           ],
           "reduced_start_leads": []
@@ -848,6 +848,25 @@
         10
       ],
       "rows": [
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Temperature",
+          "depth_band": "Surface",
+          "unit": "\u00b0C",
+          "values": [
+            0.525,
+            0.531,
+            0.546,
+            0.562,
+            0.578,
+            0.587
+          ],
+          "reduced_start_leads": [
+            9,
+            10
+          ]
+        },
         {
           "system": "gloens",
           "system_label": "GloEns",
@@ -1229,6 +1248,25 @@
           ]
         },
         {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Sea surface height",
+          "depth_band": "Surface",
+          "unit": "m",
+          "values": [
+            0.0744,
+            0.075,
+            0.0763,
+            0.078,
+            0.079,
+            0.08
+          ],
+          "reduced_start_leads": [
+            9,
+            10
+          ]
+        },
+        {
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Temperature",
@@ -1594,6 +1632,25 @@
         10
       ],
       "rows": [
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Temperature",
+          "depth_band": "Surface",
+          "unit": "\u00b0C",
+          "values": [
+            0.276,
+            0.276,
+            0.282,
+            0.288,
+            0.294,
+            0.298
+          ],
+          "reduced_start_leads": [
+            9,
+            10
+          ]
+        },
         {
           "system": "gloens",
           "system_label": "GloEns",
@@ -1975,6 +2032,25 @@
           ]
         },
         {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Sea surface height",
+          "depth_band": "Surface",
+          "unit": "m",
+          "values": [
+            0.0527,
+            0.0522,
+            0.0519,
+            0.0516,
+            0.0512,
+            0.0512
+          ],
+          "reduced_start_leads": [
+            9,
+            10
+          ]
+        },
+        {
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Temperature",
@@ -2340,6 +2416,25 @@
         10
       ],
       "rows": [
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Temperature",
+          "depth_band": "Surface",
+          "unit": "",
+          "values": [
+            0.4,
+            0.44,
+            0.48,
+            0.53,
+            0.57,
+            0.59
+          ],
+          "reduced_start_leads": [
+            9,
+            10
+          ]
+        },
         {
           "system": "gloens",
           "system_label": "GloEns",
@@ -2714,6 +2809,25 @@
             0.27,
             0.28,
             0.29
+          ],
+          "reduced_start_leads": [
+            9,
+            10
+          ]
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Sea surface height",
+          "depth_band": "Surface",
+          "unit": "",
+          "values": [
+            0.31,
+            0.35,
+            0.39,
+            0.44,
+            0.5,
+            0.51
           ],
           "reduced_start_leads": [
             9,
