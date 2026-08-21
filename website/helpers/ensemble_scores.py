@@ -37,9 +37,13 @@ CLOSENESS_TO_ONE_NOTE = (
 # The error table reads one matchup for everybody, the probabilistic tables need the members and so
 # read the superob matchup, which is a different pairing of forecast and observation.
 SUPEROB_MATCHUP_NOTE = (
-    "These scores come from the superob matchup, where observations are averaged into model cells "
-    "first, because an ensemble predicts the average of a cell while a single observation also "
-    "carries the small scale noise no forecast can resolve."
+    "These scores come from the superob matchup, where observations are placed on the quarter "
+    "degree cells of the model and averaged when several of them share a cell, because an ensemble "
+    "predicts the average of a cell while a single observation also carries the small scale noise "
+    "no forecast can resolve. In practice that averaging bites on the along track sea level, which "
+    "brings about seven observations to a cell; the drifter temperature and the currents arrive at "
+    "roughly one observation per cell, so for them the step is a change of position and not an "
+    "averaging away of noise."
 )
 
 BLOCK_NOTES = {
