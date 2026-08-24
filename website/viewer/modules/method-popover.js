@@ -7,7 +7,7 @@
 // circular "?" button to the anchor and wires a popover that opens on hover AND on
 // click/tap, closes on Escape, outside-click, or blur, and never shifts layout (the
 // popover is fixed-position, appended to <body>). Theme-aware styling lives in
-// styles.css; the copy lives in method-notes.js.
+// styles/shell.css; the copy lives in method-notes.js.
 
 import { METHOD_NOTES, renderEddyParameters } from "./method-notes.js";
 

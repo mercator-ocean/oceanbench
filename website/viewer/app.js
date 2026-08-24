@@ -24,7 +24,7 @@
 //   I3 The swipe geometry on a panel object has exactly one producer, drawPanel, and is
 //      read much later by the hover and drag handlers.
 //   I4 The <html> data-scope / data-theme attributes and the panel grid's
-//      data-layout / data-display are a contract with styles.css: the CSS hides and
+//      data-layout / data-display are a contract with styles/: the CSS hides and
 //      relays out on those values, so writing a new mode name means updating both.
 
 import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, readRootCoordinate, readColumn, prefetchLayer, isLayerCached } from "./modules/zarr.js";
@@ -3047,7 +3047,7 @@ function syncPanelGrid() {
   // Both swipe and difference collapse to a single shared map hosted by Forecast 1;
   // CSS lays it out as one column and reduces Forecast 2's panel to its picker strip.
   const single = shared.layout === 2 && (shared.displayMode === DISPLAY_SWIPE || shared.displayMode === DISPLAY_DIFFERENCE);
-  // INVARIANT I4: styles.css lays the grid out from data-layout and data-display.
+  // INVARIANT I4: styles/map.css lays the grid out from data-layout and data-display.
   grid.dataset.layout = String(single ? 1 : shared.layout);
   grid.dataset.display = shared.displayMode;
   while (panels.length < shared.layout) {
@@ -4658,7 +4658,7 @@ function markScopeButtons() {
 }
 
 function applyScope() {
-  // INVARIANT I4: styles.css keys a hide list off :root[data-scope="year"]. A new scope
+  // INVARIANT I4: styles/shell.css keys a hide list off :root[data-scope="year"]. A new scope
   // name is a CSS change as much as a JS one.
   document.documentElement.dataset.scope = shared.scope;
   markScopeButtons();
@@ -5116,7 +5116,7 @@ function clampLayoutValue(name, value) {
 }
 
 // Width of a drawer collapsed down to its edge tab. Mirrors --drawer-tab-width in
-// styles.css; the grid track is written from JS so the two must agree.
+// styles/shell.css; the grid track is written from JS so the two must agree.
 const DRAWER_TAB_WIDTH = 26;
 
 // Below this width the drawers stop taking a grid track and float over the map, so

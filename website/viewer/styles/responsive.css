@@ -1,0 +1,80 @@
+/*
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+
+/* Viewport and container queries, last in load order so they win over the base rules
+   in shell.css, map.css and rail.css wherever both match. */
+
+@media (max-height: 760px) {
+  .controls { padding: 0.7rem 0.7rem 1.2rem; gap: 0.6rem; }
+  .control-group { gap: 0.4rem; }
+  .drawer-right .drawer-body { padding: 0.7rem 0.7rem 1.2rem; }
+}
+
+@media (max-width: 1320px) {
+  .panel-head { gap: 0.25rem; }
+  .panel-head select { min-width: 4.8rem; max-width: 10.5rem; }
+  /* The mean is the one number the head reports, so it wraps onto a second line
+     rather than being dropped: a value that disappears as the window narrows is
+     worse than a head one line taller. The spacer only fills the line it is on, so
+     the badge and its method note travel together to the next one. */
+  .panel-head .spacer { flex: 1 0 0; }
+}
+
+/* Narrow viewports: the drawers stop taking grid tracks and float over the map, so
+   the map keeps a usable width instead of being squeezed between two sidebars. An
+   open drawer covers the map controls under it, which is what an overlay is for: it
+   is a transient sheet the user opens, sets and folds away again.
+   This block MUST come after the ≤1320px block above so its source order wins where
+   both queries match. */
+@media (max-width: 1100px) {
+  .workspace { grid-template-columns: var(--drawer-tab-width) minmax(0, 1fr) var(--drawer-tab-width); }
+  .drawer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 12;
+    box-shadow: 0 0 1.5rem rgba(15, 23, 42, 0.18);
+  }
+  .drawer-left { left: 0; width: var(--controls-open-width); }
+  .drawer-right { right: 0; width: var(--rail-open-width); }
+  .drawer.collapsed { width: var(--drawer-tab-width); box-shadow: none; }
+  .drawer-resizer { display: none; }
+}
+
+@media (max-width: 780px) {
+  .drawer-left { width: min(var(--controls-open-width), 78vw); }
+  .drawer-right { width: min(var(--rail-open-width), 78vw); }
+}
+
+/* The map column, not the window, decides how much the strip can ask for. As it
+   narrows the colour scale gives up width first, since it is a legend and the scrubber
+   beside it is a control. Narrower still, the status line stops painting, being the
+   only tertiary thing there; its track stays, since it is the half the scale is
+   centred against. */
+/* The whole scale cell narrows, not just the bar inside it: the cell is what the
+   scrubber's track is measured against, so if only its contents gave way the strip
+   would keep asking for the full 18rem. The legend follows the cell on its own. */
+@container (max-width: 700px) {
+  .dock-scale, .colorbar { width: 15rem; }
+  .dock-scale { --legend-height: 3.9rem; }
+}
+
+@container (max-width: 560px) {
+  .map-dock { gap: 0.6rem; }
+  .status { visibility: hidden; }
+  .dock-scale, .colorbar { width: 12rem; }
+  .dock-scale { --legend-height: 5.2rem; }
+}
+
+/* Below this the side tracks cannot pay for both a usable scrubber and the 12rem scale,
+   and the grid cells start painting over each other (390px phones). Stack the two lines
+   instead: the scrubber keeps its full width above the scale, and the hidden status
+   line stops reserving a row. */
+@container (max-width: 430px) {
+  .map-dock { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 0.45rem; }
+  .status { display: none; }
+  .lead-track { max-width: 14rem; }
+}

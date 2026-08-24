@@ -1,0 +1,473 @@
+/*
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+
+/* Part of the viewer stylesheet, loaded after shell.css and before responsive.css.
+   The data-attribute contract app.js writes is documented at the head of shell.css. */
+
+
+/* The map is the page: no padding, no gutters, no card. It fills the middle track
+   of the shell edge to edge and every other surface abuts it on a hairline. */
+.map-area {
+  position: relative;
+  /* The strip answers to the width of the map column, not of the window: two open
+     drawers can leave 670px of map inside a 1280px window. Making the column a query
+     container lets it adapt to the space it is actually in. */
+  container-type: inline-size;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--canvas-void);
+}
+
+.map-content {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Panel grid: 1 or 2 synchronized panels. Two panels are separated by a single
+   hairline (the grid background showing through a 1px gap), not by a gutter. */
+.panel-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: 0;
+  background: var(--border);
+}
+.panel-grid[data-layout="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.panel-grid[data-layout="2"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; column-gap: 1px; }
+/* Swipe display: one shared map (Forecast 1) plus a compact Forecast 2 picker strip. */
+.panel-grid[data-display="swipe"],
+.panel-grid[data-display="diff"] { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+.panel.head-only .panel-canvas-wrap,
+.panel.head-only .panel-badge { display: none; }
+
+.display-switch { display: inline-flex; }
+.display-switch[hidden] { display: none; }
+
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--canvas-void);
+}
+.panel.active { outline: 1px solid var(--accent); outline-offset: -1px; }
+
+/* The panel head floats on the map as a slim translucent strip rather than a
+   titlebar over a boxed card, so the raster runs the full height of the panel. It
+   holds its content on the same 16px rule as the app bar and the strip, and it has
+   no rule of its own: the blur already separates it from the raster, and a border
+   there was one horizontal line too many in a shell that already has three. */
+.panel-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem var(--inset);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(6px);
+  flex-wrap: wrap;
+  min-height: 2.1rem;
+}
+/* In swipe and difference display the head is a real strip under the map rather
+   than an overlay on it, so there it does need an edge. */
+.panel.head-only .panel-head {
+  position: static;
+  background: var(--surface);
+  backdrop-filter: none;
+  border-top: 1px solid var(--border);
+}
+.panel-forecast-label {
+  font-size: var(--text-control);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--forecast-color, var(--accent, #1f6feb));
+  padding-right: 0.15rem;
+  white-space: nowrap;
+}
+/* The Okabe-Ito forecast blue (#0072B2) fails WCAG AA on the near-black dark
+   panel head (~3.5:1). Lighten the label toward white in dark theme only, keeping
+   the hue so Forecast 1 / Forecast 2 stay distinct, to clear 4.5:1 for the
+   small bold text. */
+:root[data-theme="dark"] .panel-forecast-label {
+  color: color-mix(in srgb, var(--forecast-color, var(--accent, #1f6feb)) 78%, #ffffff);
+}
+.panel-head select { max-width: min(15rem, 100%); min-width: 5.5rem; }
+.panel-head .spacer { flex: 1; }
+.panel-badge { font-size: var(--text-readout); font-family: var(--mono); color: var(--muted); }
+
+/* The canvas box fills the panel. The renderer already fits the 2:1 world raster
+   inside whatever box it is given (fit = min(height, width / 2)) and paints the
+   canvas background around it, so a taller box costs nothing and the map reads as
+   one continuous surface instead of a letterboxed card floating on the page. */
+.panel-canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  background: var(--canvas-void);
+}
+.panel-canvas-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.panel-field { cursor: var(--field-cursor) 10 10, crosshair; }
+.panel-particles, .panel-overlay { pointer-events: none; }
+.panel-canvas-wrap.trajectory-ready .panel-field { cursor: var(--field-cursor) 10 10, crosshair; }
+
+/* The hover readout keeps its corner. The zoom reading takes the opposite one. */
+.panel-readout {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  font-family: var(--mono);
+  font-size: var(--text-caption);
+  color: var(--text);
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  min-width: 16rem;
+  max-width: 90%;
+  backdrop-filter: blur(4px);
+  font-variant-numeric: tabular-nums;
+}
+/* Empty is empty: without this the readout paints a small bordered box in the corner of
+   the map whenever the pointer is not over a panel. It is hidden rather than dropped so
+   the box is already the right size when the pointer arrives, instead of popping in from
+   nothing; the readout is positioned, so neither spelling costs the map a reflow. */
+.panel-readout:empty { visibility: hidden; }
+/* A zero-width space gives the hidden box the same single line of text the real reading
+   has, so it is already full height when the pointer arrives. */
+.panel-readout:empty::before { content: "\200B"; }
+/* Companion cursor: the mirrored pointer position on the panel NOT being
+   hovered. It renders the EXACT same custom crosshair SVG as the real CSS
+   cursor (--field-cursor), centered on the mirrored point, but at reduced
+   opacity so the user can still tell which panel their own pointer is on. */
+.panel-ghost-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 21px;
+  height: 21px;
+  margin: -10px 0 0 -10px;
+  background-image: var(--field-cursor);
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 6;
+}
+.panel-ghost-cursor[hidden] { display: none; }
+
+.panel-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  background: color-mix(in srgb, var(--canvas-void) 72%, transparent);
+  font-size: var(--text-control);
+  pointer-events: none;
+}
+.panel-loading[hidden] { display: none; }
+.panel.loading .panel-canvas-wrap { opacity: 0.78; }
+.panel-swipe-hint {
+  position: absolute;
+  top: 2.6rem;
+  right: 0.5rem;
+  font-size: var(--text-caption);
+  color: var(--muted);
+  background: var(--readout-bg);
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+/* The map strip: the lead scrubber, the colour scale and the status line, below the
+   map and inside the shell's grid rather than laid over the imagery. Equal side
+   tracks put the scale on the centre of the map column, so nothing has to know how
+   wide the drawers are. */
+.map-dock {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  padding: var(--inset);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+/* The scrubber and the status line each take an equal share of what the scale leaves.
+   Neither may declare a width of its own: the moment one is capped the halves stop
+   matching and the scale drifts off centre. The scrubber's length is capped on
+   .lead-track instead. */
+.dock-lead {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  height: var(--control-height);
+}
+/* Playback lives UNDER the scrubber, never beside it. The side track is exactly as wide
+   as the scrubber plus its readout, so a control on that line could only be paid for out
+   of the track's own length; stacked, it costs the track nothing. The height it needs is
+   already reserved: the scale cell opposite is fixed at the colour bar plus the legend
+   row (see .dock-scale), which is taller than the two stacked lines, so the strip does
+   not deepen and the map does not shorten. */
+.dock-lead-stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.dock-playback {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+/* Compact controls: this is a second line in a strip whose first line is the control the
+   user came for, so it reads as a footnote to the scrubber rather than a rival to it. */
+.dock-playback .ghost-button {
+  height: 1.35rem;
+  min-height: 0;
+  padding: 0 0.4rem;
+  font-size: var(--text-readout);
+  line-height: 1;
+}
+/* Fixed width for the play/pause glyph: the button must not resize when the icon
+   flips, or starting playback would nudge the speed control sideways. */
+.dock-playback .playback-play {
+  width: 1.9rem;
+  padding: 0;
+  font-family: var(--mono);
+  text-align: center;
+}
+.dock-playback .playback-play[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.playback-speed { display: flex; align-items: center; }
+.playback-speed .ghost-button { font-family: var(--mono); }
+/* Neutral scrubber. The accent colour used to fill the track behind the thumb, which
+   read as a coloured lead-day band competing with the map's own colour scale. The
+   track is now a plain hairline rail with one tick per lead day, and colour in this
+   strip belongs to the colour bar alone. */
+.lead-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 4rem;
+  max-width: 20rem;
+  --lead-thumb: 0.78rem;
+}
+.dock-lead input[type="range"] {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  height: 1.5rem;
+  margin: 0;
+  cursor: pointer;
+}
+/* Plain tick marks, one per lead day. Inset by half a thumb on each side so the
+   strip spans exactly the thumb's travel and every mark sits under a stop. The
+   repeating gradient draws every mark but the last, which the single-line layer
+   pinned to the right edge completes. */
+.lead-ticks {
+  position: absolute;
+  left: calc(var(--lead-thumb) / 2);
+  right: calc(var(--lead-thumb) / 2);
+  top: calc(50% + 7px);
+  height: 5px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--border), var(--border)) 100% 0 / 1px 100% no-repeat,
+    repeating-linear-gradient(
+      to right,
+      var(--border) 0 1px,
+      transparent 1px calc(100% / var(--lead-steps, 9))
+    );
+}
+.dock-lead input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.dock-lead input[type="range"]::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.dock-lead input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 0.78rem;
+  height: 0.78rem;
+  margin-top: calc((3px - 0.78rem) / 2);
+  border-radius: 50%;
+  background: var(--text);
+  border: 2px solid var(--surface);
+}
+.dock-lead input[type="range"]::-moz-range-thumb {
+  width: 0.78rem;
+  height: 0.78rem;
+  border-radius: 50%;
+  background: var(--text);
+  border: 2px solid var(--surface);
+}
+.dock-lead input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Wide enough for the longest reading ("Lead day 10") so the track does not shorten
+   by a character's width as the scrubber crosses day 9. */
+.dock-lead .lead-value { white-space: nowrap; min-width: 5.2rem; text-align: right; color: var(--muted); }
+/* The scale is centred by the grid's equal side tracks, so it is centred on the map
+   column whatever the drawers are doing. The arithmetic the old strip needed is gone.
+   Its box is the same size in every state the map can be in: the colour bar and the
+   legend are stacked in this one cell rather than laid side by side, so a legend appearing
+   cannot widen the centre track and shorten the scrubber, and cannot deepen the strip
+   and shorten the map. The height is the colour bar (2.75rem), the gap and the legend
+   the cell reserves; with no legend the bar simply centres in the same box. The legend
+   allowance is a variable because a narrower cell wraps the same wording onto more
+   lines: see the container queries at the foot of this file. The reserve is a floor,
+   not a ceiling: the strip inside may grow a line when the wording needs it, which
+   costs map rows only in that case instead of clipping the legend unreadable. */
+.dock-scale {
+  --legend-height: 2.75rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: min-content;
+  align-content: center;
+  justify-items: center;
+  gap: 0.3rem;
+  width: 18rem;
+  min-height: calc(2.75rem + 0.3rem + var(--legend-height));
+}
+/* The scale is a legend, not a control, and it shares a narrow map column with the
+   scrubber, which is a control. It takes the smaller half of that bargain, and gives
+   way further if the column is narrower still. The chip keeps the bar and its painted
+   tick labels readable whatever surface ends up behind them. No padding: the drawing
+   code measures clientWidth/clientHeight, which include padding, so padding would put
+   the painted labels partly outside the bitmap. */
+.colorbar {
+  width: 18rem;
+  max-width: 100%;
+  height: 2.75rem;
+  display: block;
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+/* The one reading that stays on the map: what the view is doing, in its corner. */
+.layer-info {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 5;
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--text-readout);
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+.layer-info:empty { display: none; }
+
+/* Hovered observation, beside the cursor. Same surface, border and mono type as the
+   readout pill and the chart tooltips; fixed positioning keeps it off the map's layout. */
+.class4-tooltip {
+  position: fixed;
+  z-index: 20;
+  max-width: 22rem;
+  padding: 0.3rem 0.5rem;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--text-readout);
+  white-space: nowrap;
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+/* Same chip as the strip: the year key must stay readable over any surface too. */
+.year-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: var(--text-control);
+  color: var(--muted);
+  margin: 0.15rem 0 0;
+  padding: 0.15rem 0.5rem;
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.year-legend .item { display: inline-flex; align-items: center; gap: 0.3rem; }
+.year-legend .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: var(--radius-sm); border: 1px solid rgba(128, 128, 128, 0.35); }
+
+/* Adaptive bottom legend strip. It occupies the row the scale cell reserves for it.
+   Counts are tabular so a changing figure cannot re-wrap the line, which is what lets
+   the strip keep a floor instead of a hard clamp: clipping a wrapped line to protect
+   the row height made the wording unreadable at in-between widths. The chip holds the
+   text on its own surface so no raster or label behind it can bleed through. */
+.map-legend {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0.3rem;
+  width: 100%;
+  min-height: var(--legend-height);
+  padding: 0.15rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-control);
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.map-legend .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
+.map-legend .legend-item { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text); }
+.map-legend .legend-dot { display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 50%; }
+.map-legend .legend-line { display: inline-block; width: 1.1rem; height: 0.28rem; border-radius: var(--radius-sm); }
+.map-legend .legend-seed { color: var(--muted); font-size: inherit; line-height: 1; }
+.map-legend .legend-note { color: var(--text); }
+.map-legend .legend-note.dim { color: var(--muted); font-size: var(--text-caption); }
+/* The help anchor rides at the end of the caption line rather than claiming a line of
+   its own, which the clamped strip has no room for. */
+.map-legend .legend-help { display: inline-flex; vertical-align: middle; margin-left: 0.35rem; }
+
+/* Right-hand track of the strip: it ends where the map column ends, and a long line
+   is trimmed rather than allowed to push the scale off centre. */
+.status {
+  color: var(--muted);
+  font-size: var(--text-control);
+  margin: 0;
+  min-height: 1rem;
+  min-width: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status.error { color: #ff6b6b; }

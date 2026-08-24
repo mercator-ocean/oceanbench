@@ -1,0 +1,126 @@
+/*
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+
+/* Part of the viewer stylesheet, loaded after shell.css and before responsive.css.
+   The data-attribute contract app.js writes is documented at the head of shell.css. */
+
+/* Context rail: the right drawer's body. Layout comes from .drawer / .drawer-body;
+   only the inner typography and spacing live here. */
+.context-rail[hidden] { display: none; }
+/* The rail's border is on its map-facing edge, inside its own width, so that side
+   is padded a pixel less and the content sits 16px from both visible edges. */
+.drawer-right .drawer-body { padding: var(--inset) var(--inset) 1.5rem calc(var(--inset) - 1px); }
+/* One heading, used at both levels. The rail used to run a sentence-case h2 next to
+   uppercase letter-spaced h3s, which made the subordinate headings shout over their
+   own parent. Weight 600 matches the site's h1 and its table headers. */
+.rail-title,
+.rail-section h3 {
+  font-size: var(--text-control);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+  margin: 0 0 0.4rem;
+}
+.rail-title { margin-bottom: 0.15rem; }
+.rail-subtitle { font-size: var(--text-caption); color: var(--muted); margin: 0 0 1rem; }
+/* These three captions all gain a second line when a second forecast is named, and each
+   of them sits above a chart: without the second line reserved, adding a forecast walks
+   the lead curve and the spectra card down the rail. */
+#rail-subtitle, #rail-skill-note { min-height: 2lh; }
+#rail-provenance { min-height: calc(2lh + 0.75rem); }
+.rail-current-depth-note {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.rail-current-depth-note p { margin: 0 0 0.6rem; font-size: var(--text-control); line-height: 1.4; color: var(--text); }
+
+.rail-section { margin-bottom: 1.25rem; }
+.rail-card-heading { display: flex; align-items: center; justify-content: space-between; }
+.rail-card-heading h3 { margin-bottom: 0; }
+.rail-section.psd-disabled .rail-chart-slot,
+.rail-section.psd-disabled .rail-caption { display: none; }
+.psd-card-heading { justify-content: flex-start; gap: 0.5rem; }
+.psd-toggle { min-width: 3.6rem; text-align: center; }
+.psd-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-glow); }
+.psd-toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.trajectory-card { border-left: 3px solid #0072B2; padding-left: 0.65rem; }
+.trajectory-label { margin: 0.35rem 0 0.45rem; color: var(--text); font-size: var(--text-control); font-weight: 600; }
+.trajectory-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: var(--text-control); padding: 0.15rem 0.3rem; }
+.trajectory-clear:hover { color: var(--accent); }
+.rail-forecast-toggle { display: inline-flex; margin: 0 0 0.9rem; }
+.rail-forecast-toggle[hidden] { display: none; }
+
+.rail-caption { font-size: var(--text-caption); color: var(--muted); margin: 0.35rem 0 0; line-height: 1.35; }
+.rail-provenance { font-size: var(--text-caption); color: var(--muted); margin: 1rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--border); line-height: 1.4; }
+.rail-provenance .method-note-btn { vertical-align: baseline; margin-left: 0.3rem; }
+/* Rail charts are viewBox-scaled SVG: the browser maps 360 user units onto whatever
+   the slot measures, which scaled the labels along with the drawing. Type in the rail
+   therefore grew and shrank as the window or the drawer was resized. The slot
+   publishes its measured width and every label divides the design width back out, so
+   a label declared at 0.5rem renders at 8px whatever the slot measures. Chart
+   geometry still flexes with the slot; only the type is pinned. */
+.rail-chart-slot {
+  width: 100%;
+  --chart-view-width: 360;
+  --chart-slot-width: 360;
+}
+.rail-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  --chart-type-scale: calc(var(--chart-view-width) / var(--chart-slot-width));
+  --chart-text: 0.5rem;
+}
+.rail-chart .axis { stroke: var(--border); stroke-width: 1; }
+.rail-chart .grid { stroke: var(--grid-line); stroke-width: 1; }
+.rail-chart .tick { fill: var(--muted); font-size: calc(var(--chart-text) * var(--chart-type-scale)); font-family: var(--mono); }
+.rail-chart .axis-label { fill: var(--muted); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
+.rail-chart .legend { fill: var(--text); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
+.rail-chart .empty { fill: var(--muted); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
+.rail-chart .chart-point { fill: transparent; stroke: none; pointer-events: all; cursor: crosshair; }
+.rail-chart .chart-crosshair { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.rail-chart .chart-tooltip { pointer-events: none; }
+.rail-chart .chart-tooltip rect { fill: var(--readout-bg); stroke: var(--border); }
+.rail-chart .chart-tooltip text { fill: var(--text); font-size: calc(var(--chart-text) * var(--chart-type-scale)); font-family: var(--mono); }
+.rail-chart .chart-lead-line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.5; pointer-events: none; }
+.rail-chart .chart-lead-marker { fill: var(--accent); stroke: var(--readout-bg); stroke-width: 1.5; pointer-events: none; }
+.rail-chart .chart-lead-readout { pointer-events: none; }
+.rail-chart .chart-lead-readout rect { fill: var(--readout-bg); stroke: var(--accent); stroke-width: 1; }
+.rail-chart .chart-lead-readout text { fill: var(--accent); font-size: calc(var(--chart-text) * var(--chart-type-scale)); font-family: var(--mono); }
+
+.hint-details { margin: 0.15rem 0 0; }
+.hint-details > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--text-control);
+  list-style: none;
+}
+.hint-details > summary::-webkit-details-marker { display: none; }
+.hint-details > summary::before { content: "? "; font-weight: 600; }
+.hint-details[open] > summary::before { content: "× "; }
+
+.about-dialog {
+  max-width: 40rem;
+  width: calc(100% - 2rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  padding: 1.1rem 1.3rem 1.3rem;
+}
+.about-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.about-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.4rem; }
+.about-dialog-head h2 { margin: 0; font-size: inherit; }
+.about-dialog p { color: var(--muted); font-size: var(--text-control); line-height: 1.5; margin: 0; }
+.about-dialog a { color: var(--accent); }
+.about-glossary { margin: 0.9rem 0 0; }
+.about-glossary dt { font-weight: 600; margin-top: 0.6rem; }
+.about-glossary dd { margin: 0.2rem 0 0; }

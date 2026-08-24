@@ -5,7 +5,7 @@
 // The closed sets of view-mode names, in one place.
 //
 // These strings are compared in dozens of places across the viewer, written into the URL
-// hash, and read a second time in a different language: styles.css selects on
+// hash, and read a second time in a different language: styles/ selects on
 // :root[data-scope="year"], .panel-grid[data-display="swipe"] and
 // .panel-grid[data-display="diff"], and index.html carries the same values in the
 // data-scope / data-display / data-metric attributes of the switch buttons. So adding a
