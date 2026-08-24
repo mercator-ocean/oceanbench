@@ -5448,6 +5448,17 @@ function selectElements() {
 
 // ---- boot -------------------------------------------------------------------
 
+// The QA harness needs two numbers that exist only in module scope: the bounds the colour
+// scale was actually drawn with, and the selection signature that decides when those
+// bounds are allowed to reset. Published only under ?qa=1, so the shipped page carries no
+// extra global and no probe can be mistaken for an API.
+if (new URLSearchParams(location.search).has("qa")) {
+  window.oceanbenchViewerQaProbe = {
+    colorRanges: () => panels.slice(0, shared.layout).map((panel) => (panel && panel.range ? [...panel.range] : null)),
+    selectionSignature,
+  };
+}
+
 async function main() {
   selectElements();
   // Optional viewer-config.json (404 tolerated) can repoint the data root before the

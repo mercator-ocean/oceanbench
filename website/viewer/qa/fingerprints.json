@@ -1,0 +1,30 @@
+{
+  "$note": [
+    "Frozen render fingerprints: FNV-1a over the RGBA bytes of every panel's field and",
+    "overlay canvas, per viewer state, measured at 1440x900 dpr 1 in headless Chromium.",
+    "A refactor must leave every value here byte-identical. Reseed with",
+    "`node qa/run.mjs --seed-fingerprints` ONLY when the drawing intentionally changed,",
+    "and say which states moved and why in the change description.",
+    "The values depend on the published viewer data at the configured data root, so they",
+    "also move when that data is republished."
+  ],
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "deviceScaleFactor": 1,
+  "states": {
+    "field-height-lead1": "p0[field=832x730:e15c007b,overlay=832x730:85ce45c5]",
+    "field-height-lead10": "p0[field=832x730:031c662b,overlay=832x730:85ce45c5]",
+    "field-temperature-lead5": "p0[field=832x730:4f53420d,overlay=832x730:85ce45c5]",
+    "field-currents-lead3": "p0[field=832x730:eb4421fa,overlay=832x730:85ce45c5]",
+    "two-panel-side-lead1": "p0[field=416x730:e9c4ee17,overlay=416x730:c64d71c5] p1[field=416x730:091c465c,overlay=416x730:c64d71c5]",
+    "two-panel-swipe-lead1": "p0[field=832x687:e3696d2f,overlay=832x687:8a11b9c5] p1[field=1x1:3e5151fa,overlay=1x1:4b95f515]",
+    "two-panel-difference-lead1": "p0[field=832x687:5a64d573,overlay=832x687:8a11b9c5] p1[field=1x1:3e5151fa,overlay=1x1:4b95f515]",
+    "overlay-class4-lead1": "p0[field=832x730:ce5870be,overlay=832x730:70901fb2]",
+    "overlay-eddies-lead1": "p0[field=832x730:ce5870be,overlay=832x730:51a12692]",
+    "year-scope-error": "p0[field=832x730:82482821,overlay=832x730:85ce45c5]",
+    "year-scope-bias": "p0[field=832x730:c8baa56c,overlay=832x730:85ce45c5]",
+    "region-ibi-zoomed": "p0[field=832x730:e9095317,overlay=832x730:85ce45c5]"
+  }
+}

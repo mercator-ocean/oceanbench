@@ -4,7 +4,8 @@
     "reference viewport (see viewport below).",
     "Re-baseline 2026-08-21: layout intentionally changed today (cover-fit map, legend chips);",
     "the previous 228px lead slider seed was stale. Reseed with: node qa/run.mjs --seed",
-    "Tolerances are absolute pixel deltas; do not widen them to force green runs."
+    "Tolerances are absolute pixel deltas; do not widen them to force green runs.",
+    "Render fingerprints live in fingerprints.json, seeded separately."
   ],
   "viewport": {
     "height": 900,
@@ -36,18 +37,18 @@
       "tolerancePx": 10
     }
   ],
-  "flipbook": {
-    "minPaintsPerLeadStepPerPanel": 1
-  },
-  "budgets": {
-    "warmLeadStepMs": 1200,
-    "coldLeadStepMs": 20000
-  },
-  "datelineSeam": {
-    "maxDarkRatio": 0.35,
-    "scanHalfWidthPx": 24
-  },
-  "exploration": {
-    "defaultSeconds": 12
+  "warmBackScrubBudget": {
+    "$note": [
+      "Per-class request budgets for the window between reaching lead 10 and scrubbing back",
+      "to lead 1. Field chunks and match-up parquet must be zero: those are the reads a warm",
+      "cache is supposed to have already served. Manifests, insight JSON and everything else",
+      "carry a small allowance because one-time lazy loads legitimately land in this window.",
+      "Budgets are measured ceilings, not aspirations; lower them when the app gets quieter."
+    ],
+    "fieldChunk": 0,
+    "matchupParquet": 0,
+    "manifest": 0,
+    "insightJson": 0,
+    "other": 0
   }
 }
