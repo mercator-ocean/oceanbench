@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: EUPL-1.2
  */
 
-/* Design primitives (--ob-*) live in theme/tokens.css, loaded site-wide via
-   _quarto.yml `css:`, shared with the viewer app (website/viewer/tokens.css). */
+/* Design primitives (--ob-*) live in website/viewer/tokens.css, loaded site-wide via
+   _quarto.yml `css:` and by the viewer's own index.html. One file, both pages: the
+   viewer keeps its copy inside its own directory so it stays publishable on its own. */
 
 /* --- Shared surfaces and markdown content --- */
 

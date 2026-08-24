@@ -2,10 +2,12 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// CROSS-PAGE CONTRACT: this module and ../config.js are the only two files under
-// website/viewer/ that another page imports. website/scores-summary.js depends on the
-// named exports below; changing or removing one breaks the scores page, which no viewer
-// probe loads. Everything else under modules/ is viewer-private.
+// CROSS-PAGE CONTRACT: website/scores-summary.js imports the named exports below, so this
+// is the one file under website/viewer/modules/ that another page depends on; changing or
+// removing an export breaks the scores page, which no viewer probe loads. The other half
+// of the contract is ../config.js. Both stay inside website/viewer/ because the directory
+// is published on its own as well as through the Quarto site, and a module that reaches
+// outside it would 404 in that deployment.
 //
 // Data layer for the scores page: it loads the published score summary through the
 // viewer's own insight index (so the data-root override precedence in config.js is the

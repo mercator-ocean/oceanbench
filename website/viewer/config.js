@@ -4,7 +4,8 @@
 
 // CROSS-PAGE CONTRACT: website/scores-summary.js imports initializeViewerConfig and
 // viewerDataBaseUrl from here, so the data-root precedence below is the scores page's as
-// much as the viewer's. Keep the two in one place; do not fork it.
+// much as the viewer's. Keep the two in one place; do not fork it. The file stays under
+// website/viewer/ because that directory is also published on its own.
 
 const DEFAULT_REMOTE_DATA_BASE_URL =
   "https://minio.dive.edito.eu/project-oceanbench/dev/benchmark/rebuild-preview/viewer/data/";

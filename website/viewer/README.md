@@ -164,11 +164,28 @@ viewer files freely.
 with real file copies for production, so the symlink is a dev-only convenience: just
 re-run the one-liner (it is idempotent) after any full render.
 
+## File layout
+
+- `app.js` is the application: panels, rendering, overlays, controls, rail and URL state.
+- `state/` holds what the panels agree on: `view-modes.js` names the closed vocabularies
+  (scope, display, overlay, year metric, region, eddy reference, theme), `shared-view.js`
+  owns the shared view state and the setters that validate those values.
+- `modules/` holds the pieces app.js reads rather than contains: the zarr reader, the
+  insight loaders, the charts, the overlay draws, the Class-4 point index, the colour and
+  raster helpers, grid arithmetic, readout formatting and the variable vocabulary.
+- `styles/` is the stylesheet in load order: `shell.css` (theme, app shell, bars, drawers,
+  controls), `map.css` (map, panels, strip, colour scale, legends), `rail.css` (the context
+  rail and its charts) and `responsive.css` (viewport and container queries, last so it
+  wins). `tokens.css` carries the design primitives and is loaded first.
+- `qa/` is the harness. `vendor/` is third-party code, vendored.
+
 ## Shared with the scores page
 
 `website/scores-summary.js` imports `config.js` and `modules/scores-data.js` from here.
 Those two files are a cross-page contract; everything else under `modules/` is
-viewer-private. Their module headers say so.
+viewer-private. Their module headers say so. `tokens.css` is shared the other way round:
+the Quarto site loads it site-wide through `_quarto.yml`, so the design primitives are one
+file rather than a viewer copy and a site copy.
 
 ## Verification
 
