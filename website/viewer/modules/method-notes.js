@@ -12,6 +12,8 @@
 // the real (offline) numbers come from, so nothing on the map is mistaken for an
 // official score.
 
+import { escapeHtml } from "./format.js";
+
 export const METHOD_NOTES = {
   // Main map when showing a forecast field. {dataset} = the panel's dataset label.
   "field-map": {
@@ -170,10 +172,4 @@ export function renderEddyParameters(parameters) {
   );
   if (!rows.length) return "";
   return `<div class="method-params">${rows.join("")}</div>`;
-}
-
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (character) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]),
-  );
 }

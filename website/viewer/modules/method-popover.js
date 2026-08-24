@@ -10,6 +10,7 @@
 // styles/shell.css; the copy lives in method-notes.js.
 
 import { METHOD_NOTES, renderEddyParameters } from "./method-notes.js";
+import { escapeHtml } from "./format.js";
 
 let sharedPopover = null;
 let openButton = null;
@@ -124,10 +125,4 @@ export function attachMethodNote(anchorEl, noteId, dynamicFields = {}) {
 // into the note's {params} token, or falls back to the fixed text alone.
 export function attachEddyMethodNote(anchorEl, parameters) {
   return attachMethodNote(anchorEl, "eddies-legend", { params: renderEddyParameters(parameters) });
-}
-
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (character) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]),
-  );
 }

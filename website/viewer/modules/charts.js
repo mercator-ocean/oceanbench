@@ -329,6 +329,9 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
   let body = "";
   // Signed (bias) mode: symmetric y-axis centred on 0, with negative values plotted
   // below a zero baseline. |error|/RMSE mode keeps the original [0, niceMax] scale.
+  // Only the y scale and its gridlines differ between the two; the start-date ticks, the
+  // lines and their CI bands are one piece of code reading whichever `yOf` was built.
+  let yOf;
   if (signed) {
     let magnitude = yBound > 0 ? yBound : 0;
     if (!magnitude) {
@@ -341,7 +344,7 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
       }
     }
     const bound = niceMax(magnitude);
-    const yOf = (value) => area.y1 - ((value + bound) / (2 * bound)) * area.height;
+    yOf = (value) => area.y1 - ((value + bound) / (2 * bound)) * area.height;
     for (let t = 0; t <= 4; t += 1) {
       const value = bound - (2 * bound * t) / 4;
       const y = yOf(value);
@@ -350,49 +353,24 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
       }"/>`;
       body += `<text x="${area.x0 - 4}" y="${(y + 3).toFixed(1)}" class="tick" text-anchor="end">${formatTick(value)}</text>`;
     }
-    const tickStep = Math.max(1, Math.round(allDates.length / 6));
-    for (let i = 0; i < allDates.length; i += tickStep) {
-      const date = allDates[i];
-      body += `<text x="${xOf(date).toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="middle">${date.slice(5)}</text>`;
-    }
-    for (const line of usable) {
-      const band = ciBandPolygon(line, xOf, yOf);
-      if (band) body += `<polygon points="${band}" fill="${line.color}" fill-opacity="0.16" stroke="none"/>`;
-      const points = line.dates
-        .map((date, index) => ({ date, value: line.rmsd[index] }))
-        .filter((point) => Number.isFinite(point.value));
-      const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${xOf(point.date).toFixed(1)} ${yOf(point.value).toFixed(1)}`);
-      body += `<path d="${path.join(" ")}" fill="none" stroke="${line.color}" stroke-width="1.6"/>`;
-      for (const point of points) {
-        const x = xOf(point.date).toFixed(1);
-        const y = yOf(point.value).toFixed(1);
-        body += `<circle cx="${x}" cy="${y}" r="1.8" fill="${line.color}"/>`;
-        body +=
-          `<circle class="chart-point year-point" data-date="${escapeText(point.date)}" ` +
-          `data-line="${escapeText(line.label)}" data-x-label="${escapeText(point.date)}" ` +
-          `data-y-label="${formatValue(point.value, unit)}" cx="${x}" cy="${y}" r="7"/>`;
+  } else {
+    let maxValue = yBound > 0 ? yBound : 0;
+    if (!maxValue) {
+      // Same as the signed branch: the axis is sized on everything that gets drawn, band included.
+      for (const line of usable) {
+        for (const value of seriesExtentValues(line)) if (Number.isFinite(value) && value > maxValue) maxValue = value;
       }
     }
-    const legend = renderLegend(area, usable);
-    return svgOpen(title) + axes(area, "start date", unit ? `bias (${unit})` : "bias") + body + legend + interactionLayer() + "</svg>";
-  }
-
-  let maxValue = yBound > 0 ? yBound : 0;
-  if (!maxValue) {
-    // Same as the signed branch: the axis is sized on everything that gets drawn, band included.
-    for (const line of usable) {
-      for (const value of seriesExtentValues(line)) if (Number.isFinite(value) && value > maxValue) maxValue = value;
+    const yMax = niceMax(maxValue);
+    yOf = (value) => area.y1 - (value / yMax) * area.height;
+    for (let t = 0; t <= 4; t += 1) {
+      const value = (yMax * t) / 4;
+      const y = yOf(value);
+      body += `<line x1="${area.x0}" y1="${y.toFixed(1)}" x2="${area.x1}" y2="${y.toFixed(1)}" class="grid"/>`;
+      body += `<text x="${area.x0 - 4}" y="${(y + 3).toFixed(1)}" class="tick" text-anchor="end">${formatTick(value)}</text>`;
     }
   }
-  const yMax = niceMax(maxValue);
-  const yOf = (value) => area.y1 - (value / yMax) * area.height;
 
-  for (let t = 0; t <= 4; t += 1) {
-    const value = (yMax * t) / 4;
-    const y = yOf(value);
-    body += `<line x1="${area.x0}" y1="${y.toFixed(1)}" x2="${area.x1}" y2="${y.toFixed(1)}" class="grid"/>`;
-    body += `<text x="${area.x0 - 4}" y="${(y + 3).toFixed(1)}" class="tick" text-anchor="end">${formatTick(value)}</text>`;
-  }
   // Month-ish ticks: a handful of evenly spaced start dates.
   const tickStep = Math.max(1, Math.round(allDates.length / 6));
   for (let i = 0; i < allDates.length; i += tickStep) {
@@ -420,8 +398,9 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
   }
 
   const legend = renderLegend(area, usable);
+  const yLabel = signed ? (unit ? `bias (${unit})` : "bias") : unit || "RMSE";
 
-  return svgOpen(title) + axes(area, "start date", unit || "RMSE") + body + legend + interactionLayer() + "</svg>";
+  return svgOpen(title) + axes(area, "start date", yLabel) + body + legend + interactionLayer() + "</svg>";
 }
 
 /**

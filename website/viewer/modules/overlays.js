@@ -130,6 +130,36 @@ export function drawEddyDetections(drawing, project, detections, color, options 
   }
 }
 
+// The two Class-4 draws below reach the canvas through this one painter. They differ only
+// in where the screen coordinates come from (projected here, or projected once per frame by
+// the caller); the colour bucketing, alpha and square geometry are the same picture, and a
+// change made to one of them but not the other silently draws the same observations two
+// different ways.
+const CLASS4_BUCKET_COUNT = 18;
+
+function makeClass4Buckets() {
+  return Array.from({ length: CLASS4_BUCKET_COUNT }, () => []);
+}
+
+function class4BucketIndex(error, scale) {
+  const normalized = Math.min(1, error / scale);
+  return Math.min(CLASS4_BUCKET_COUNT - 1, Math.max(0, Math.floor(normalized * (CLASS4_BUCKET_COUNT - 1))));
+}
+
+function paintClass4Buckets(drawing, buckets, radius) {
+  const diameter = radius * 2;
+  for (let bucketIndex = 0; bucketIndex < buckets.length; bucketIndex += 1) {
+    const coordinates = buckets[bucketIndex];
+    if (!coordinates.length) continue;
+    const normalized = CLASS4_BUCKET_COUNT <= 1 ? 0 : bucketIndex / (CLASS4_BUCKET_COUNT - 1);
+    const [r, g, b] = sampleColormap(CLASS4_COLORMAP, class4RampPosition(normalized));
+    drawing.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+    for (let i = 0; i < coordinates.length; i += 2) {
+      drawing.fillRect(coordinates[i] - radius, coordinates[i + 1] - radius, diameter, diameter);
+    }
+  }
+}
+
 /**
  * Scatter Class-4 obs points coloured by |obs − model|. `errorScale` is the error
  * that maps to the top of the colormap (robust p95 from the caller). Points outside
@@ -138,12 +168,10 @@ export function drawEddyDetections(drawing, project, detections, color, options 
 export function drawClass4Points(drawing, project, points, options = {}) {
   const ratio = options.devicePixelRatio || 1;
   const radius = (options.radius || 2.2) * ratio;
-  const diameter = radius * 2;
   const scale = options.errorScale || 1;
   const width = options.canvasWidth || Infinity;
   const height = options.canvasHeight || Infinity;
-  const bucketCount = 18;
-  const buckets = Array.from({ length: bucketCount }, () => []);
+  const buckets = makeClass4Buckets();
   for (const point of points) {
     const { nx, ny } = toNorm(point.longitude, point.latitude);
     const screen = project(nx, ny);
@@ -153,20 +181,9 @@ export function drawClass4Points(drawing, project, points, options = {}) {
     // there is no comparison to colour, so skip it rather than paint it as bucket 0 (the
     // darkest, lowest-error colour — a phantom "perfect match" near coastlines).
     if (!Number.isFinite(error)) continue;
-    const normalized = Math.min(1, error / scale);
-    const bucketIndex = Math.min(bucketCount - 1, Math.max(0, Math.floor(normalized * (bucketCount - 1))));
-    buckets[bucketIndex].push(screen.x, screen.y);
+    buckets[class4BucketIndex(error, scale)].push(screen.x, screen.y);
   }
-  for (let bucketIndex = 0; bucketIndex < buckets.length; bucketIndex += 1) {
-    const coordinates = buckets[bucketIndex];
-    if (!coordinates.length) continue;
-    const normalized = bucketCount <= 1 ? 0 : bucketIndex / (bucketCount - 1);
-    const [r, g, b] = sampleColormap(CLASS4_COLORMAP, class4RampPosition(normalized));
-    drawing.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
-    for (let i = 0; i < coordinates.length; i += 2) {
-      drawing.fillRect(coordinates[i] - radius, coordinates[i + 1] - radius, diameter, diameter);
-    }
-  }
+  paintClass4Buckets(drawing, buckets, radius);
 }
 
 /**
@@ -180,10 +197,8 @@ export function drawClass4Points(drawing, project, points, options = {}) {
 export function drawClass4Screen(drawing, screenX, screenY, pointIds, count, error, selectedMask, options = {}) {
   const ratio = options.devicePixelRatio || 1;
   const radius = (options.radius || 2.2) * ratio;
-  const diameter = radius * 2;
   const scale = options.errorScale || 1;
-  const bucketCount = 18;
-  const buckets = Array.from({ length: bucketCount }, () => []);
+  const buckets = makeClass4Buckets();
   for (let t = 0; t < count; t += 1) {
     const id = pointIds[t];
     if (selectedMask && !selectedMask[id]) continue;
@@ -191,20 +206,9 @@ export function drawClass4Screen(drawing, screenX, screenY, pointIds, count, err
     // Prepared points already dropped masked (non-finite error) rows; keep the guard so the
     // colour bucketing stays identical to drawClass4Points even if a NaN ever slips through.
     if (!Number.isFinite(value)) continue;
-    const normalized = Math.min(1, value / scale);
-    const bucketIndex = Math.min(bucketCount - 1, Math.max(0, Math.floor(normalized * (bucketCount - 1))));
-    buckets[bucketIndex].push(screenX[t], screenY[t]);
+    buckets[class4BucketIndex(value, scale)].push(screenX[t], screenY[t]);
   }
-  for (let bucketIndex = 0; bucketIndex < buckets.length; bucketIndex += 1) {
-    const coordinates = buckets[bucketIndex];
-    if (!coordinates.length) continue;
-    const normalized = bucketCount <= 1 ? 0 : bucketIndex / (bucketCount - 1);
-    const [r, g, b] = sampleColormap(CLASS4_COLORMAP, class4RampPosition(normalized));
-    drawing.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
-    for (let i = 0; i < coordinates.length; i += 2) {
-      drawing.fillRect(coordinates[i] - radius, coordinates[i + 1] - radius, diameter, diameter);
-    }
-  }
+  paintClass4Buckets(drawing, buckets, radius);
 }
 
 /**
