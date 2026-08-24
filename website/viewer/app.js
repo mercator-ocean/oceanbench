@@ -748,6 +748,20 @@ async function fieldColorRange(panel, colormap, defaultRange) {
   return combineFieldRange(ranges, diverging);
 }
 
+function applyPanelField(panel, { field, latitudes, longitudes, colormap, range, units, label }) {
+  panel.field = field;
+  clearYearReadoutMetadata(panel);
+  panel.latitudes = latitudes;
+  panel.longitudes = longitudes;
+  panel.edgesA = worldEdges(latitudes, longitudes);
+  panel.offscreenA = colorize(field, latitudes, colormap, range);
+  panel.offscreenB = null;
+  panel.range = range;
+  panel.colormap = colormap;
+  panel.units = units;
+  panel.label = label;
+}
+
 async function renderFieldPanel(panel, token, manifest, level, start, leadIndex) {
   const entry = manifest.variables[panel.state.variable];
   const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, leadIndex);
@@ -755,17 +769,8 @@ async function renderFieldPanel(panel, token, manifest, level, start, leadIndex)
   const colormap = panel.state.colormap || entry.default_colormap;
   const range = await fieldColorRange(panel, colormap, entry.default_range);
   if (token !== panel.renderToken) return;
-  panel.field = primary.field;
-  clearYearReadoutMetadata(panel);
-  panel.latitudes = primary.latitudes;
-  panel.longitudes = primary.longitudes;
-  panel.edgesA = worldEdges(primary.latitudes, primary.longitudes);
-  panel.offscreenA = colorize(primary.field, primary.latitudes, colormap, range);
-  panel.offscreenB = null;
-  panel.range = range;
-  panel.colormap = colormap;
-  panel.units = entry.units;
-  panel.label = `${labelFor(panel.state.dataset)} · ${prettyName(entry.standard_name)}`;
+  applyPanelField(panel, { field: primary.field, latitudes: primary.latitudes, longitudes: primary.longitudes, colormap, range,
+    units: entry.units, label: `${labelFor(panel.state.dataset)} · ${prettyName(entry.standard_name)}` });
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
 }
@@ -794,17 +799,9 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   const [, magnitude] = symmetricRange(difference);
   const bound = stableMax(`diff|${panel.index}|${compareSlug}`, magnitude) || magnitude;
   const range = [-bound, bound];
-  panel.field = difference;
-  clearYearReadoutMetadata(panel);
-  panel.latitudes = primary.latitudes;
-  panel.longitudes = primary.longitudes;
-  panel.edgesA = worldEdges(primary.latitudes, primary.longitudes);
-  panel.offscreenA = colorize(difference, primary.latitudes, DIFFERENCE_COLORMAP, range);
-  panel.offscreenB = null;
-  panel.range = range;
-  panel.colormap = DIFFERENCE_COLORMAP;
-  panel.units = entry.units;
-  panel.label = `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · ${prettyName(entry.standard_name)}`;
+  applyPanelField(panel, { field: difference, latitudes: primary.latitudes, longitudes: primary.longitudes,
+    colormap: DIFFERENCE_COLORMAP, range, units: entry.units,
+    label: `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · ${prettyName(entry.standard_name)}` });
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
 }
@@ -839,17 +836,11 @@ async function renderCurrentsDifferencePanel(panel, token, manifest, level, star
   const [, magnitude] = symmetricRange(difference);
   const bound = stableMax(`diff|${panel.index}|${compareSlug}|currents`, magnitude) || magnitude;
   const range = [-bound, bound];
-  panel.field = difference;
-  clearYearReadoutMetadata(panel);
-  panel.latitudes = uPrimary.latitudes;
-  panel.longitudes = uPrimary.longitudes;
-  panel.edgesA = worldEdges(uPrimary.latitudes, uPrimary.longitudes);
-  panel.offscreenA = colorize(difference, uPrimary.latitudes, DIFFERENCE_COLORMAP, range);
-  panel.offscreenB = null;
-  panel.range = range;
-  panel.colormap = DIFFERENCE_COLORMAP;
-  panel.units = "m/s";
-  panel.label = `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})`;
+  applyPanelField(panel, { field: difference, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
+    colormap: DIFFERENCE_COLORMAP, range,
+    units: "m/s",
+    label: `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})`,
+  });
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
 }
@@ -866,18 +857,10 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   if (token !== panel.renderToken) return;
   const speed = speedMagnitudeField(uPrimary.field, vPrimary.field);
   const range = [0, CURRENTS_MAX_SPEED];
-  panel.field = speed;
-  clearYearReadoutMetadata(panel);
-  panel.latitudes = uPrimary.latitudes;
-  panel.longitudes = uPrimary.longitudes;
-  panel.edgesA = worldEdges(uPrimary.latitudes, uPrimary.longitudes);
-  panel.offscreenA = colorize(speed, uPrimary.latitudes, SPEED_COLORMAP, range);
-  panel.offscreenB = null;
+  applyPanelField(panel, { field: speed, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
+    colormap: SPEED_COLORMAP, range, units: "m/s",
+    label: `${labelFor(panel.state.dataset)} · currents (${currentsDepthLabel(panel.state.variable)})` });
   panel.landStencil = landStencil(speed, uPrimary.latitudes);
-  panel.range = range;
-  panel.colormap = SPEED_COLORMAP;
-  panel.units = "m/s";
-  panel.label = `${labelFor(panel.state.dataset)} · currents (${currentsDepthLabel(panel.state.variable)})`;
   panel.velocity = {
     sampler: makeVelocitySampler(uPrimary.field, vPrimary.field, uPrimary.latitudes, uPrimary.longitudes),
   };
@@ -940,11 +923,12 @@ function clearYearReadoutMetadata(panel) {
   panel.yearMetric = null;
 }
 
-// Shared [0, max] scale across the visible panels that show the same year variable,
-// so two-forecast rasters stay directly comparable. The maximum spans every lead of the
-// artifact, so the scale is the same at every lead and the slider shows the error growing
-// instead of the colour scale following it.
-async function sharedYearRange(shortName) {
+// Shared scale across the visible panels that show the same year variable, so two-forecast
+// rasters stay directly comparable. The maximum spans every lead of the artifact, so the
+// scale is the same at every lead and the slider shows the error growing instead of the
+// colour scale following it. The signed-bias raster uses the symmetric [-M, +M] form so the
+// diverging (balance) colormap stays centred on 0.
+async function sharedYearMaximum(shortName, maximumOverLeads) {
   let maximum = 0;
   for (let i = 0; i < shared.layout; i += 1) {
     const candidate = panels[i];
@@ -955,29 +939,17 @@ async function sharedYearRange(shortName) {
     if (!url) continue;
     const geography = await loadYearGeography(url);
     if (!geography) continue;
-    maximum = Math.max(maximum, yearGeographyMaxAllLeads(geography, shortName));
+    maximum = Math.max(maximum, maximumOverLeads(geography, shortName));
   }
-  return [0, maximum || 1];
+  return maximum || 1;
 }
 
-// Symmetric [-M, +M] scale for the signed-bias raster, shared across the visible panels
-// showing the same year variable so the diverging (balance) colormap stays centred on 0
-// and directly comparable between two forecasts. Like the |error| scale it spans every
-// lead, so scrubbing the lead never rescales the map.
+async function sharedYearRange(shortName) {
+  return [0, await sharedYearMaximum(shortName, yearGeographyMaxAllLeads)];
+}
+
 async function sharedYearBiasRange(shortName) {
-  let maximum = 0;
-  for (let i = 0; i < shared.layout; i += 1) {
-    const candidate = panels[i];
-    if (!candidate) continue;
-    const mapping = yearVariableMapping(candidate.state.variable);
-    if (!mapping || mapping.short !== shortName) continue;
-    const url = insightsFor(insightIndex, candidate.state.dataset, shared.region).year_error_geography;
-    if (!url) continue;
-    const geography = await loadYearGeography(url);
-    if (!geography) continue;
-    maximum = Math.max(maximum, yearBiasMaxAllLeads(geography, shortName));
-  }
-  const bound = maximum || 1;
+  const bound = await sharedYearMaximum(shortName, yearBiasMaxAllLeads);
   return [-bound, bound];
 }
 
@@ -1830,12 +1802,7 @@ async function seedTrajectories(panel, event) {
   if (!trajectoryModeActive()) return;
   const eligible = trajectoryEligiblePanels();
   if (!eligible.length || (shared.layout === 2 && eligible.length !== 2)) return;
-  const rectangle = panel.els.field.getBoundingClientRect();
-  const ratio = window.devicePixelRatio || 1;
-  const world = projectionFor(panel).unproject((event.clientX - rectangle.left) * ratio, (event.clientY - rectangle.top) * ratio);
-  let longitude = world.nx * 360 - 180;
-  if (shared.region === "global") longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
-  const latitude = 90 - world.ny * 180;
+  const [longitude, latitude] = pointerLonLat(panel, event);
   // Seed-cluster radius from the model's FINEST grid (the grid the particles advect
   // on), not the zoom-dependent display grid — so the same click yields the same fan
   // at any zoom. Falls back to the display spacing if the manifest lacks levels.
@@ -2460,6 +2427,13 @@ function visibleViewport(projection, canvas) {
 
 // ---- pointer interaction (pan / zoom shared, hover per panel) ---------------
 
+function capturePanelDrag(panel, event) {
+  panel.els.field.setPointerCapture(event.pointerId);
+  panel.els.field.addEventListener("pointermove", onPanelPointerMove);
+  panel.els.field.addEventListener("pointerup", endPanelDrag, { once: true });
+  panel.els.field.addEventListener("pointercancel", endPanelDrag, { once: true });
+}
+
 function beginPanelDrag(panel, event) {
   if (event.button !== 0) return;
   const projection = projectionFor(panel);
@@ -2476,10 +2450,7 @@ function beginPanelDrag(panel, event) {
     );
     if (hit) {
       panel.draggingPsd = { hit, startBox: { ...shared.psdBox }, x: event.clientX, y: event.clientY, projection };
-      panel.els.field.setPointerCapture(event.pointerId);
-      panel.els.field.addEventListener("pointermove", onPanelPointerMove);
-      panel.els.field.addEventListener("pointerup", endPanelDrag, { once: true });
-      panel.els.field.addEventListener("pointercancel", endPanelDrag, { once: true });
+      capturePanelDrag(panel, event);
       event.preventDefault();
       return;
     }
@@ -2491,19 +2462,13 @@ function beginPanelDrag(panel, event) {
     if (Math.abs(localX - panel.swipeX * panel.els.field.width) < 12 * ratio) {
       panel.draggingSwipe = true;
       panel.els.field.style.cursor = "col-resize";
-      panel.els.field.setPointerCapture(event.pointerId);
-      panel.els.field.addEventListener("pointermove", onPanelPointerMove);
-      panel.els.field.addEventListener("pointerup", endPanelDrag, { once: true });
-      panel.els.field.addEventListener("pointercancel", endPanelDrag, { once: true });
+      capturePanelDrag(panel, event);
       return;
     }
   }
   panel.dragging = { x: event.clientX, y: event.clientY, centerNX: view.centerNX, centerNY: view.centerNY, projection };
   panel.els.field.style.cursor = "grabbing";
-  panel.els.field.setPointerCapture(event.pointerId);
-  panel.els.field.addEventListener("pointermove", onPanelPointerMove);
-  panel.els.field.addEventListener("pointerup", endPanelDrag, { once: true });
-  panel.els.field.addEventListener("pointercancel", endPanelDrag, { once: true });
+  capturePanelDrag(panel, event);
   event.preventDefault();
 }
 

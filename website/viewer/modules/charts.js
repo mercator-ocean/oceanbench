@@ -77,6 +77,19 @@ function niceMax(value) {
   return 10 * magnitude;
 }
 
+function renderLegend(area, entries, columnStride = 0) {
+  return entries
+    .map((entry, index) => {
+      const x = area.x0 + index * columnStride;
+      const y = 2 + index * (columnStride ? 0 : 14);
+      return (
+        `<rect x="${x}" y="${y}" width="9" height="9" rx="2" fill="${entry.color}"/>` +
+        `<text x="${x + 12}" y="${y + 8}" class="legend">${escapeText(entry.label)}</text>`
+      );
+    })
+    .join("");
+}
+
 /**
  * RMSE / Class-4 RMSE vs lead day, one series per reference present, each with its
  * bootstrap-CI band. `series` is a Map(reference -> [{lead_day, mean, ci_low, ci_high}]).
@@ -151,17 +164,7 @@ export function leadCurveSVG(
   }
 
   const legendMarkup = legend
-    ? references
-        .map((reference, index) => {
-          const color = seriesColor(reference);
-          const label = labels.get(reference) || reference;
-          const x = area.x0;
-          return (
-            `<rect x="${x}" y="${2 + index * 14}" width="9" height="9" rx="2" fill="${color}"/>` +
-            `<text x="${x + 12}" y="${10 + index * 14}" class="legend">${escapeText(label)}</text>`
-          );
-        })
-        .join("")
+    ? renderLegend(area, references.map((reference) => ({ color: seriesColor(reference), label: labels.get(reference) || reference })))
     : "";
 
   return svgOpen(title) + axes(area, "lead day", unit || "RMSE") + body + legendMarkup + interactionLayer() + "</svg>";
@@ -223,12 +226,7 @@ export function spectraSVG(entry, { title = "Power spectrum", productA = "produc
     }
   }
 
-  const legend = lines
-    .map((line, index) => {
-      const x = area.x0 + index * 78;
-      return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="10" class="legend">${escapeText(line.label)}</text>`;
-    })
-    .join("");
+  const legend = renderLegend(area, lines, 78);
 
   return svgOpen(title) + axes(area, "wavelength", "power") + body + legend + interactionLayer() + "</svg>";
 }
@@ -301,14 +299,7 @@ export function psdSpectraSVG(curves, { title = "Live power spectrum", xBounds =
     }
   }
 
-  const legend = usable
-    .map((curve, index) => {
-      const x = area.x0 + index * 96;
-      return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${curve.color}"/><text x="${
-        x + 12
-      }" y="10" class="legend">${escapeText(curve.label)}</text>`;
-    })
-    .join("");
+  const legend = renderLegend(area, usable, 96);
 
   return svgOpen(title) + axes(area, "wavelength (km)", "power") + body + legend + interactionLayer() + "</svg>";
 }
@@ -382,12 +373,7 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
           `data-y-label="${formatValue(point.value, unit)}" cx="${x}" cy="${y}" r="7"/>`;
       }
     }
-    const legend = usable
-      .map((line, index) => {
-        const x = area.x0;
-        return `<rect x="${x}" y="${2 + index * 14}" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="${10 + index * 14}" class="legend">${escapeText(line.label)}</text>`;
-      })
-      .join("");
+    const legend = renderLegend(area, usable);
     return svgOpen(title) + axes(area, "start date", unit ? `bias (${unit})` : "bias") + body + legend + interactionLayer() + "</svg>";
   }
 
@@ -433,12 +419,7 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
     }
   }
 
-  const legend = usable
-    .map((line, index) => {
-      const x = area.x0;
-      return `<rect x="${x}" y="${2 + index * 14}" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="${10 + index * 14}" class="legend">${escapeText(line.label)}</text>`;
-    })
-    .join("");
+  const legend = renderLegend(area, usable);
 
   return svgOpen(title) + axes(area, "start date", unit || "RMSE") + body + legend + interactionLayer() + "</svg>";
 }
@@ -518,12 +499,7 @@ export function rmsdByDepthSVG(
     }
   }
 
-  const legend = usable
-    .map((line, index) => {
-      const x = area.x0;
-      return `<rect x="${x}" y="${2 + index * 14}" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="${10 + index * 14}" class="legend">${escapeText(line.label)}</text>`;
-    })
-    .join("");
+  const legend = renderLegend(area, usable);
 
   // Depth axis reads downward; the tooltip's crosshair (a vertical line) is not meaningful
   // for a profile, so only the point readout is used (interactionLayer supplies the tooltip).
@@ -610,12 +586,7 @@ export function columnProfileSVG(
     }
   }
 
-  const legend = usable
-    .map((line, index) => {
-      const x = area.x0;
-      return `<rect x="${x}" y="${2 + index * 14}" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="${10 + index * 14}" class="legend">${escapeText(line.label)}</text>`;
-    })
-    .join("");
+  const legend = renderLegend(area, usable);
 
   return svgOpen(title) + axes(area, unit ? `${xLabel} (${unit})` : xLabel, "depth (m)") + body + legend + interactionLayer() + "</svg>";
 }

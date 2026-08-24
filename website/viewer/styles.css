@@ -302,8 +302,7 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 :root[data-scope="year"] #eddy-reference-field,
 :root[data-scope="year"] #overlay-note,
 :root[data-scope="year"] #rail-spectra-section,
-:root[data-scope="year"] #rail-trajectory-section,
-:root[data-scope="year"] #rail-legend-section { display: none !important; }
+:root[data-scope="year"] #rail-trajectory-section { display: none !important; }
 
 .controls label,
 .controls .field {
@@ -451,7 +450,6 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   color: color-mix(in srgb, var(--forecast-color, var(--accent, #1f6feb)) 78%, #ffffff);
 }
 .panel-head select { max-width: min(15rem, 100%); min-width: 5.5rem; }
-.panel-head .panel-compare { display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--text-control); color: var(--muted); }
 .panel-head .spacer { flex: 1; }
 .panel-badge { font-size: var(--text-readout); font-family: var(--mono); color: var(--muted); }
 
@@ -864,21 +862,6 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
 .trajectory-label { margin: 0.35rem 0 0.45rem; color: var(--text); font-size: var(--text-control); font-weight: 600; }
 .trajectory-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: var(--text-control); padding: 0.15rem 0.3rem; }
 .trajectory-clear:hover { color: var(--accent); }
-.rail-products { display: flex; flex-direction: column; gap: 0.45rem; }
-.rail-products label { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--text-control); color: var(--muted); }
-.rail-products input,
-.rail-products select {
-  width: 100%;
-  font: inherit;
-  font-size: var(--text-control);
-  height: var(--control-height);
-  padding: 0 0.4rem;
-  color: var(--text);
-  background: var(--surface-strong);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-.rail-products input[readonly] { color: var(--muted); }
 .rail-forecast-toggle { display: inline-flex; margin: 0 0 0.9rem; }
 .rail-forecast-toggle[hidden] { display: none; }
 
@@ -919,10 +902,6 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
 .rail-chart .chart-lead-readout { pointer-events: none; }
 .rail-chart .chart-lead-readout rect { fill: var(--readout-bg); stroke: var(--accent); stroke-width: 1; }
 .rail-chart .chart-lead-readout text { fill: var(--accent); font-size: calc(var(--chart-text) * var(--chart-type-scale)); font-family: var(--mono); }
-.rail-legend { display: flex; flex-direction: column; gap: 0.35rem; font-size: var(--text-control); }
-.rail-legend .swatch { display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: var(--radius-sm); margin-right: 0.4rem; vertical-align: -1px; }
-.rail-legend .row { color: var(--text); }
-.rail-legend .dim { color: var(--muted); font-size: var(--text-caption); }
 
 .hint-details { margin: 0.15rem 0 0; }
 .hint-details > summary {
