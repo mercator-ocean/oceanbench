@@ -113,14 +113,29 @@ import {
   YEAR_METRIC_BIAS,
 } from "./state/view-modes.js";
 import { resolveViewerDataUrl, resolveColumnStoreUrl, initializeViewerConfig } from "./config.js";
+import {
+  CURRENTS_MAX_SPEED,
+  CURRENTS_VARIABLE_15M,
+  CURRENTS_VARIABLE_SURFACE,
+  SPEED_COLORMAP,
+  currentsDepthLabel,
+  currentsVariableDepth,
+  currentsVariableOptions,
+  isCurrentsVariable,
+  isSurfaceCurrentVariable,
+  isVelocityFamilyVariable,
+  matching15mCurrentVariable,
+  prettyName,
+  variableEntry,
+  variableExists,
+  variableLabel,
+} from "./modules/variables.js";
 
 // Resolved lazily: the data root is only final after initializeViewerConfig() has had a
 // chance to apply an optional viewer-config.json.
 const DATASETS_PATH = "./data/datasets.json";
 const DIFFERENCE_COLORMAP = "balance";
-const SPEED_COLORMAP = "speed";
 const YEAR_ERROR_COLORMAP = "dense"; // sequential map for time-mean |obs − model|
-const CURRENTS_MAX_SPEED = 1.2; // m/s mapping to the top of the speed colormap
 const REGION_BOUNDS = {
   ibi: { west: -19.08, east: 5.08, south: 26.17, north: 56.08 },
 };
@@ -136,76 +151,6 @@ const GLOBAL_DEFAULT_CENTER_NX = 0.5;
 const PARTICLE_MAGNITUDE_SCALE = CURRENTS_MAX_SPEED;
 const CLASS4_DISPLAY_POINT_BUDGET = 18000;
 const CLASS4_FULL_DENSITY_ZOOM = 12;
-
-// Currents are a synthetic variable (speed magnitude √(u²+v²)) built from the u/v
-// velocity components, one per available depth, so they sit in the variable dropdown
-// like any other channel. The particle animation is an optional overlay on top.
-const CURRENTS_VARIABLE_SURFACE = "current_speed";
-const CURRENTS_VARIABLE_15M = "current_speed_15m";
-
-function isCurrentsVariable(key) {
-  return key === CURRENTS_VARIABLE_SURFACE || key === CURRENTS_VARIABLE_15M;
-}
-
-function currentsVariableDepth(key) {
-  return key === CURRENTS_VARIABLE_15M ? "15m" : "surface";
-}
-
-// Human-facing depth label ("15 m" with a thin space), separate from the "15m" token
-// used for depth-bin logic elsewhere.
-function currentsDepthLabel(key) {
-  return key === CURRENTS_VARIABLE_15M ? "15 m" : "surface";
-}
-
-// Class-4 current observations are surface drifters drogued at 15 m: obs and skill for
-// velocities exist ONLY at the "15m" depth. A surface current selection (surface u, v,
-// or derived surface current_speed) therefore has no honest obs to compare against.
-function isVelocityFamilyVariable(key) {
-  return isCurrentsVariable(key) || String(key).includes("sea_water_velocity");
-}
-
-function isSurfaceCurrentVariable(key) {
-  return isVelocityFamilyVariable(key) && !String(key).endsWith("_15m");
-}
-
-// Matching 15 m variable for a surface current selection (u→u_15m, current_speed→…_15m).
-function matching15mCurrentVariable(key) {
-  return isSurfaceCurrentVariable(key) ? `${key}_15m` : key;
-}
-
-function syntheticCurrentsEntry(key) {
-  return {
-    standard_name: "sea_water_speed",
-    units: "m/s",
-    depth: currentsVariableDepth(key),
-    default_colormap: SPEED_COLORMAP,
-    default_range: [0, CURRENTS_MAX_SPEED],
-  };
-}
-
-// Real manifest entry, or a synthetic descriptor for the currents variables.
-function variableEntry(manifest, key) {
-  if (isCurrentsVariable(key)) return syntheticCurrentsEntry(key);
-  return manifest && manifest.variables[key];
-}
-
-function variableExists(manifest, key) {
-  if (isCurrentsVariable(key)) return currentsVariableOptions(manifest).some((option) => option.value === key);
-  return Boolean(manifest && key in manifest.variables);
-}
-
-// Currents variable options available for this manifest, gated on the u/v components.
-function currentsVariableOptions(manifest) {
-  if (!manifest || !manifest.variables) return [];
-  const options = [];
-  if ("eastward_sea_water_velocity" in manifest.variables && "northward_sea_water_velocity" in manifest.variables) {
-    options.push({ value: CURRENTS_VARIABLE_SURFACE, label: "Currents · surface" });
-  }
-  if ("eastward_sea_water_velocity_15m" in manifest.variables && "northward_sea_water_velocity_15m" in manifest.variables) {
-    options.push({ value: CURRENTS_VARIABLE_15M, label: "Currents · 15 m" });
-  }
-  return options;
-}
 
 // Shared state — linked across every panel (contracts.md §6).
 const view = { zoom: 1, centerNX: GLOBAL_DEFAULT_CENTER_NX, centerNY: 0.5 };
@@ -338,15 +283,6 @@ function scoreProductKey(slug) {
   if (slug === "glorys_one_degree") return "glorys";
   if (slug === "glo12_one_degree") return "glo12";
   return slug;
-}
-
-function prettyName(standardName) {
-  return standardName.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function variableLabel(manifest, key) {
-  const entry = manifest.variables[key];
-  return `${prettyName(entry.standard_name)} · ${entry.depth}`;
 }
 
 // Geographic world coordinates: nx = (lon+180)/360, ny = (90-lat)/180 (north-up).
