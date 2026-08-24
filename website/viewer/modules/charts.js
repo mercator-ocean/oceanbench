@@ -95,8 +95,8 @@ function renderLegend(area, entries, columnStride = 0) {
  * bootstrap-CI band. `series` is a Map(reference -> [{lead_day, mean, ci_low, ci_high}]).
  *
  * The in-SVG legend lays entries out on a single row sized for the rail's two or three
- * series. Pass `legend: false` when more series than that share one chart and the caller
- * renders its own legend in HTML, as the scores page does.
+ * series. `legend: false` suppresses it for a caller that renders its own legend in HTML;
+ * no caller in this tree does today.
  */
 export function leadCurveSVG(
   series,

@@ -4,6 +4,13 @@ SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-
 SPDX-License-Identifier: EUPL-1.2
 */
 
+/* JS-CONTROLLED SELECTORS: app.js writes data-theme and data-scope on <html>, and
+   data-layout / data-display on .panel-grid; the rules below hide, show and lay out from
+   those values. A new scope, layout or display mode is a change here as well as in the
+   JS that names it. The classes app.js toggles are .active, .collapsed, .loading,
+   .head-only, .psd-disabled, .trajectory-ready and .resizing-layout: those carry
+   behaviour, not decoration, and are not safe to delete as unused. */
+
 /* Default theme follows the OceanBench Quarto site. Dark remains available from
    the in-viewer toggle for field inspection.
    Palette values are single-sourced from the shared design tokens in

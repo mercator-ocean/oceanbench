@@ -2,6 +2,10 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+// CROSS-PAGE CONTRACT: website/scores-summary.js imports initializeViewerConfig and
+// viewerDataBaseUrl from here, so the data-root precedence below is the scores page's as
+// much as the viewer's. Keep the two in one place; do not fork it.
+
 const DEFAULT_REMOTE_DATA_BASE_URL =
   "https://minio.dive.edito.eu/project-oceanbench/dev/benchmark/rebuild-preview/viewer/data/";
 

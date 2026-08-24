@@ -2,6 +2,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+// CROSS-PAGE CONTRACT: this module and ../config.js are the only two files under
+// website/viewer/ that another page imports. website/scores-summary.js depends on the
+// named exports below; changing or removing one breaks the scores page, which no viewer
+// probe loads. Everything else under modules/ is viewer-private.
+//
 // Data layer for the scores page: it loads the published score summary through the
 // viewer's own insight index (so the data-root override precedence in config.js is the
 // only one that exists) and turns the flat row list into the selections the page shows.

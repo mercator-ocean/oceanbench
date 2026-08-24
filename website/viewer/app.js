@@ -5,14 +5,27 @@
 // OceanBench viewer — comparison-first field explorer (contracts.md §6).
 //
 // Comparison is the primitive: 1 or 2 synchronized panels (Forecast 1 / Forecast 2)
-// sharing viewport, lead day and start date; each panel is {dataset, variable, mode}.
-// Modes are field and first-class difference (A − B in a diverging colormap centred on
+// sharing viewport, lead day and start date; each panel is {dataset, variable}.
+// With two forecasts the shared display mode is side by side, swipe (one map, a
+// draggable divider) or first-class difference (A − B in a diverging colormap centred on
 // 0). Currents are a variable (speed magnitude √(u²+v²)) with an optional particle
-// animation. In single-panel mode a field can A/B compare a second forecast by a swipe
-// divider or a blink key. Insight overlays (eddy census, Class-4 obs error)
-// attach as purpose-modes, never all at once. A context rail carries
+// animation. Insight overlays (eddy census, Class-4 obs error, trajectories, water
+// column) attach as purpose-modes, never all at once. A context rail carries
 // the quantitative curves (skill vs lead, PSD spectrum) for the active view. Every bit
 // of view state lives in the URL hash.
+//
+// Invariants this file owns, each also flagged at the call site that is easiest to get
+// wrong:
+//   I1 selectionSignature() deliberately excludes the lead day, and the particle field's
+//      own signature deliberately includes it. Changing either without the other either
+//      freezes the particles on a stale field or resets every stable axis on every step.
+//   I2 Stable ranges are grow-only within one selection signature (modules/stable-ranges.js).
+//      Clearing a bound to fix a flicker destroys the property the whole registry exists for.
+//   I3 The swipe geometry on a panel object has exactly one producer, drawPanel, and is
+//      read much later by the hover and drag handlers.
+//   I4 The <html> data-scope / data-theme attributes and the panel grid's
+//      data-layout / data-display are a contract with styles.css: the CSS hides and
+//      relays out on those values, so writing a new mode name means updating both.
 
 import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, readRootCoordinate, readColumn, prefetchLayer, isLayerCached } from "./modules/zarr.js";
 import { COLORMAP_NAMES, DIVERGING } from "./vendor/cmocean/colormaps.js";
@@ -1188,6 +1201,9 @@ function drawPanel(panel) {
 
   // In swipe display the single host panel (Forecast 1) overlays Forecast 2 on its
   // right side; take Forecast 2's coloured field straight from the second panel.
+  // INVARIANT I3: this is the single producer of panel.offscreenB / panel.edgesB. The
+  // hover readout and the divider drag both key off offscreenB being non-null to decide
+  // that a swipe composite is on screen, so nothing else may set or clear it here.
   if (isSwipeHost(panel)) {
     panel.offscreenB = panels[1] ? panels[1].offscreenA : null;
     panel.edgesB = panels[1] ? panels[1].edgesA : null;
@@ -1508,6 +1524,9 @@ function class4CurrentScale() {
 // measured nothing (no points, or none with a finite error): it must not enter the grow-only
 // bound, because any placeholder is a plausible error in the units being plotted and would
 // pin the ramp there for the rest of the selection.
+// INVARIANT I2: grow-only within the selection. A lead whose points happen to be calm
+// must keep the ramp the earlier leads established, or the colours mean a different
+// number at every step of the slider.
 function class4StableScale(measure) {
   const previous = class4CurrentScale();
   const scale = stableMax(CLASS4_SCALE_ID, measure);
@@ -2434,6 +2453,8 @@ function capturePanelDrag(panel, event) {
   panel.els.field.addEventListener("pointercancel", endPanelDrag, { once: true });
 }
 
+// INVARIANT I3: panel.offscreenB and panel.swipeX are written by drawPanel; this reads
+// them to place the divider grab zone.
 function beginPanelDrag(panel, event) {
   if (event.button !== 0) return;
   const projection = projectionFor(panel);
@@ -2703,6 +2724,8 @@ function resetZoomPan() {
   writeHash();
 }
 
+// INVARIANT I3: the swipe branches below read panel.offscreenB / panel.swipeX, both
+// produced by drawPanel, to decide which forecast the cursor is over.
 function updateHover(event) {
   let hoverPanel = null;
   let hoverRectangle = null;
@@ -3003,6 +3026,7 @@ function syncPanelGrid() {
   // Both swipe and difference collapse to a single shared map hosted by Forecast 1;
   // CSS lays it out as one column and reduces Forecast 2's panel to its picker strip.
   const single = shared.layout === 2 && (shared.displayMode === "swipe" || shared.displayMode === "diff");
+  // INVARIANT I4: styles.css lays the grid out from data-layout and data-display.
   grid.dataset.layout = String(single ? 1 : shared.layout);
   grid.dataset.display = shared.displayMode;
   while (panels.length < shared.layout) {
@@ -3099,6 +3123,8 @@ function scheduleRedrawAllPanels() {
 // string is unchanged the axes of the map-side diagnostics hold still, so moving the lead
 // slider shows the forecast changing rather than the axes changing; when it changes, every
 // remembered bound is dropped and the new selection is framed on its own data.
+// INVARIANT I1: the particle field's signature (particleSelectionSignature) is the
+// deliberate opposite of this one and DOES include the lead day. Change them together.
 function selectionSignature() {
   const shownPanels = panels
     .slice(0, shared.layout)
@@ -3116,6 +3142,7 @@ function selectionSignature() {
 }
 
 function syncSelectionRanges() {
+  // INVARIANT I2: this is the ONLY place the grow-only bounds are allowed to reset.
   syncStableRanges(selectionSignature());
 }
 
@@ -4610,6 +4637,8 @@ function markScopeButtons() {
 }
 
 function applyScope() {
+  // INVARIANT I4: styles.css keys a hide list off :root[data-scope="year"]. A new scope
+  // name is a CSS change as much as a JS one.
   document.documentElement.dataset.scope = shared.scope;
   markScopeButtons();
 }

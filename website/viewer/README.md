@@ -7,7 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 # OceanBench fields explorer (viewer)
 
 Static single-page app that reads the OceanBench viewer pyramids (contracts.md §6)
-directly in the browser — no server-side rendering, no build step, no framework.
+directly in the browser: no server-side rendering, no build step, no framework.
 It is the comparison-first "fields explorer" half of the viewer: snapshot maps,
 differences, animated currents and insight overlays of forecast fields. It carries
 no ranking or score content (the score page is separate; bad-score cells deep-link
@@ -15,52 +15,80 @@ into this viewer).
 
 ## What it does
 
-- **1 / 2 / 4 synchronized panels.** Each panel is `{dataset, variable, mode}`;
-  panels share one viewport (pan/zoom), lead day and start date. Same-variable
-  panels share a fixed colorbar (§6). All view state lives in the URL hash
-  (`layout`, view, lead, start, overlay, region, per-panel `p0…p3`).
-- **Three panel modes.**
-  - *Field* — the variable on its perceptually uniform cmocean colormap.
-  - *Difference* — first-class A − B on the diverging `balance` map centred at 0,
-    coordinate-registered so different grids (GLONET 168 rows vs references 170)
-    align.
-  - *Currents* — windy-style GPU-of-canvas advected particles over `uo/vo` with
-    fading trails and dark-theme glow, on a speed-magnitude background; play/pause
-    and current-scaled speed. Particle count adapts to the viewport; structured so
-    1/12° tiles drop in unchanged.
-- **Blink / swipe A/B compare within a field panel** — drag the divider, or hold
-  `B` to blink the whole panel between the two datasets.
-- **Insight overlays with purpose-modes** (never all at once): eddy census
-  (matched / spurious / missed contours vs GLORYS or GLO12), Class-4 obs points
-  coloured by `|obs − model|` (read from the decimated match-up parquet with the
-  vendored hyparquet, density-managed by zoom).
-- **Context rail** — for the active view: the skill-vs-lead curve with bootstrap CI
-  band (from `scores-summary.json`, one series per reference) and the realism PSD
-  spectrum (challenger vs reference vs error power, from `spectra.json`). Plain SVG,
-  no chart library.
-- **Small-multiples error strip** — lead 1/3/5/7/10 mini-maps of A − B at a shared
-  diverging scale, shown whenever the active panel has an A/B pair.
-- **Cinematic dark** default theme with a light "publication" theme toggle; hover
-  readout in real units.
+- **1 or 2 synchronized forecasts.** Each panel is `{dataset, variable}`; panels share
+  one viewport (pan/zoom), lead day and start date. Same-variable panels share a fixed
+  colorbar (§6). All view state lives in the URL hash (`layout`, `l`, `s`, `z`, `cx`,
+  `cy`, `ov`, `region`, `dm`, per-panel `p0`/`p1`, and the rest listed under
+  [URL state](#url-state)).
+- **Two map scopes.**
+  - *One date* is the default: the selected variable for one start date and lead day.
+  - *Whole year* swaps the map for a precomputed error-geography raster over every start
+    date, with `|error|` and signed `bias` metrics, plus an RMSE-by-start-date chart in
+    the rail whose points drill back down into the one-date scope.
+- **Three two-forecast displays.** *Side by side*, *Swipe* (one map, Forecast 1 left of a
+  draggable divider and Forecast 2 right of it), and *Difference* (first-class A minus B
+  on the diverging `balance` map centred at 0, coordinate-registered so different grids,
+  GLONET 168 rows against references 170, align).
+- **Currents as a variable.** Selecting *Currents* (surface or 15 m) draws a
+  speed-magnitude background under windy-style advected particles over `uo`/`vo`, with
+  fading trails and dark-theme glow. Play/pause and a speed multiplier live in the
+  controls drawer; particle count adapts to the viewport.
+- **Lead-day playback.** A play button and 0.5x/1x/2x speeds step the lead slider and
+  loop; touching any other control pauses.
+- **Insight overlays, one at a time**: eddy census (matched / spurious / missed contours
+  against GLORYS or GLO12), Class-4 observation errors (points coloured by
+  `|obs - model|`, read from the decimated match-up parquet with the vendored hyparquet
+  and density-managed by zoom), illustrative trajectory fans seeded by clicking the map,
+  and a water-column profile on click where a column store is published.
+- **Context rail** for the active view: RMSE vs lead day with bootstrap CI band (from
+  `scores-summary.json`, one series per reference), RMSE vs depth, RMSE by start date in
+  the year scope, the clicked water-column profile, trajectory separation, and a live
+  power spectrum computed in the browser from an explicit rectangle you drag on the map.
+  Plain SVG, no chart library.
+- **Light default theme** with a dark theme toggle, a hover readout in real units, and an
+  about/glossary dialog.
+
+## URL state
+
+`writeHash` serializes the whole view and `readHash` parses it back, so any view can be
+shared as a link:
+
+| Key | Meaning |
+| --- | --- |
+| `layout` | 1 or 2 forecasts (older 4-panel links degrade to 2) |
+| `s`, `l` | start-date index and lead day |
+| `z`, `cx`, `cy` | zoom and normalized viewport centre |
+| `p0`, `p1` | per-panel `dataset,variable,field` |
+| `dm` | two-forecast display: `side`, `swipe`, `diff` |
+| `scope`, `metric` | `year` scope and its `bias` metric (omitted at their defaults) |
+| `ov`, `eref`, `col` | overlay mode, eddy reference, clicked water-column point |
+| `region` | `global` or `ibi` |
+| `psdOn`, `psd` | live-spectrum toggle and rectangle |
+| `theme`, `play`, `spd` | theme, particle playback, particle speed |
+| `rail`, `ctrl`, `rw`, `cw` | drawer collapse state and widths |
 
 ## Data path
 
-The zarr reader (`modules/zarr.js`) is hand-rolled for our fixed layout — it reads
+The zarr reader (`modules/zarr.js`) is hand-rolled for our fixed layout: it reads
 the consolidated `.zmetadata`, fetches the spatial tiles for one
-`(start_date, lead_day)` slice, and decodes `uint16` → real units. Tiles are
-**DEFLATE**-compressed and inflated natively with `DecompressionStream('deflate')`.
-The fetch layer is driven by each array's `.zarray` chunk grid and the manifest
-`levels` array, so multi-level pyramids work without code change.
+`(start_date, lead_day)` slice, and decodes `uint16` to real units. Tiles are
+**DEFLATE**-compressed and inflated natively with `DecompressionStream('deflate')`, with
+a software inflater for browsers that lack it. Decoded chunks sit in an LRU cache bounded
+by decoded bytes, and in-flight chunk requests are shared and refcounted so a fast scrub
+never fetches the same tile twice. The fetch layer is driven by each array's `.zarray`
+chunk grid and the manifest `levels` array, so multi-level pyramids work without code
+change.
 
 Insight artifacts (`modules/insights.js`) are read lazily and memoised: eddy/spectra
 JSON by `fetch`, the Class-4 match-up parquet with the vendored **hyparquet** (MIT,
-snappy codec). Colormaps (`vendor/cmocean/`) are cmocean LUTs (MIT), byte-packed and
-base64-encoded so nothing is fetched from a CDN.
+snappy codec) in a worker, with a prefetch of neighbouring lead days that is promoted
+rather than refetched when the user arrives. Colormaps (`vendor/cmocean/`) are cmocean
+LUTs (MIT), byte-packed and base64-encoded so nothing is fetched from a CDN.
 
 ## Running locally
 
 The `data/` directory is generated (git-ignored). Populate it with viewer pyramids,
-a `datasets.json`, and — for overlays and the rail — the insight artifacts:
+a `datasets.json`, and, for overlays and the rail, the insight artifacts:
 
 ```
 data/
@@ -73,10 +101,11 @@ data/
   insights/<slug>/ibi/class4-matchups.parquet  # decimated Class-4 (snappy, for hyparquet)
 ```
 
-`insights.json` maps `datasets[slug][region] → {eddies, spectra, class4_matchups}`
-and carries `regions[id]` lat/lon bounds and the `scores_summary` URL. The Class-4
-parquet is a decimated copy of the published match-up artifact (deterministic
-stride + snappy so hyparquet can read it in-browser).
+`insights.json` maps `datasets[slug][region] → {eddies, spectra, class4_matchups,
+rmsd_by_depth, year_error_geography, year_rmsd_by_start}` and carries `regions[id]`
+lat/lon bounds and the `scores_summary` URL. The Class-4 parquet is a decimated copy of
+the published match-up artifact (deterministic stride + snappy so hyparquet can read it
+in-browser).
 
 The website-integrated viewer defaults to the EDITO MinIO rebuild-preview data
 base. To force local generated data while developing this static app, open it with
@@ -118,7 +147,7 @@ MinIO rebuild-preview viewer data prefix by default (CORS-enabled, §6).
 ### Developing the viewer inside the Quarto site (one command)
 
 Quarto ships the viewer via `resources:` in `website/_quarto.yml`, but it only copies
-resources into `_site/` on a full **render** — `quarto preview` never picks up viewer
+resources into `_site/` on a full **render**: `quarto preview` never picks up viewer
 edits on its own. Instead of manually copying changed files into `_site/viewer/`
 (the old, cache-confusing workflow), run once per checkout:
 
@@ -127,24 +156,33 @@ website/scripts/dev-viewer-sync.sh
 ```
 
 This replaces `website/_site/viewer/` with a symlink to `../viewer`, so every edit to
-a viewer file is served live — no re-copy, no stale-cache guesswork. Then serve the
+a viewer file is served live: no re-copy, no stale-cache guesswork. Then serve the
 site as usual (`quarto preview`, or `python -m http.server -d website/_site`) and edit
 viewer files freely.
 
 `_site/` is a build output (git-ignored). `quarto render` wipes and regenerates it
-with real file copies for production, so the symlink is a dev-only convenience — just
+with real file copies for production, so the symlink is a dev-only convenience: just
 re-run the one-liner (it is idempotent) after any full render.
+
+## Shared with the scores page
+
+`website/scores-summary.js` imports `config.js` and `modules/scores-data.js` from here.
+Those two files are a cross-page contract; everything else under `modules/` is
+viewer-private. Their module headers say so.
 
 ## Verification
 
-Two harnesses (in the pipeline scratchpad, not shipped):
+One harness, shipped, in `qa/`:
 
-- `verify_viewer.mjs` — jsdom data-path checks: chunk decode `uint16` round-trip
-  within the quantization step, coordinate-aligned difference, symmetric diverging
-  range, URL-hash round-trip.
-- `smoke_viewer.mjs` — real headless-Chromium smoke (Playwright): loads the page,
-  asserts panels paint, scrubs leads, toggles particles (canvas pixels change frame
-  to frame, ≈120 fps), switches 1→2→4 panels, renders a difference panel + error
-  strip, enables eddy and Class-4 overlays (overlay-canvas pixels drawn), checks the
-  rail SVGs, asserts the URL hash carries the full panel state, and requires **zero
-  console errors**. It also dumps PNGs of each major feature. See the Phase 5b report.
+```sh
+node qa/run.mjs
+```
+
+It boots a static server, drives the real page in headless Chromium under Playwright
+across eight configurations, and then runs a behavioural pass that compares the drawn
+pixels of twelve viewer states against frozen fingerprints. It checks page and console
+errors, keyboard lead scrubbing, layout box sizes against `qa/expectations.json`, a
+classified network budget for a warm back-scrub, em dashes in rendered text, the
+fast-scrub render-token race, colour-range grow-only stability, particle liveness and
+the software DEFLATE decode path. `qa/README.md` documents each probe, how to reseed the
+two baselines, and what is deliberately not covered.

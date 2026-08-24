@@ -2,6 +2,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+// INVARIANT: drawClass4Points and drawClass4Screen must bucket, colour and place points
+// identically. They differ only in where the device coordinates come from: the first
+// projects them, the second is handed a precomputed pair of arrays. Any change to one is
+// a change to both, and the render fingerprints in qa/ compare only the projecting path.
+//
 // Insight overlays drawn on a panel's overlay canvas (contracts.md §6: overlays
 // with purpose-modes, never all at once). Two live modes here — eddy census
 // (matched / spurious / missed contours vs a reference) and Class-4 obs points
