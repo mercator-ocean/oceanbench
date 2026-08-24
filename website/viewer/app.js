@@ -40,6 +40,9 @@ import {
   landColor,
   noObsColor,
   formatFixed,
+  landStencil,
+  rasterCanvas,
+  combineFieldRange,
 } from "./modules/render.js";
 import { startParticleField, makeVelocitySampler, speedMagnitudeField } from "./modules/particles.js";
 import {
@@ -139,6 +142,8 @@ import {
   countClass4Matches,
   drawClass4Frame,
 } from "./modules/class4-index.js";
+import { aggregateLeadSeries, scoreDepthKeys } from "./modules/score-lookup.js";
+import { populateSelect } from "./modules/select-options.js";
 
 // Resolved lazily: the data root is only final after initializeViewerConfig() has had a
 // chance to apply an optional viewer-config.json.
@@ -399,34 +404,6 @@ function buildPanel(index) {
   return panel;
 }
 
-function selectAlreadyHolds(select, options) {
-  if (select.options.length !== options.length) return false;
-  for (let i = 0; i < options.length; i += 1) {
-    if (select.options[i].value !== String(options[i].value)) return false;
-    if (select.options[i].textContent !== options[i].label) return false;
-  }
-  return true;
-}
-
-// Rewriting a select destroys and rebuilds its option nodes, which closes an open
-// dropdown under the user's pointer. renderPanel refreshes the panel controls on every
-// paint, so while the leads play this fired several times a second and a picker could
-// not be held open long enough to choose from. Write only what actually differs.
-function populateSelect(select, options, selectedValue) {
-  if (selectAlreadyHolds(select, options)) {
-    if (String(select.value) !== String(selectedValue)) select.value = String(selectedValue);
-    return;
-  }
-  select.innerHTML = "";
-  for (const option of options) {
-    const element = document.createElement("option");
-    element.value = option.value;
-    element.textContent = option.label;
-    if (String(option.value) === String(selectedValue)) element.selected = true;
-    select.appendChild(element);
-  }
-}
-
 function refreshPanelControls(panel) {
   populateSelect(
     panel.els.dataset,
@@ -669,26 +646,6 @@ function shownPanelsShareVariable(panel) {
   return true;
 }
 
-// Combine one or more [low, high] variable ranges into the range a field is colorized
-// with. A diverging colormap (balance/delta) is centred on physical zero — [-M, +M],
-// M = max|bound| — so its neutral colour reads as 0; a sequential map keeps the data
-// bounds ([min low, max high]).
-function combineFieldRange(ranges, diverging) {
-  if (diverging) {
-    let magnitude = 0;
-    for (const [low, high] of ranges) magnitude = Math.max(magnitude, Math.abs(low), Math.abs(high));
-    const bound = magnitude || 1;
-    return [-bound, bound];
-  }
-  let low = Infinity;
-  let high = -Infinity;
-  for (const [rangeLow, rangeHigh] of ranges) {
-    if (rangeLow < low) low = rangeLow;
-    if (rangeHigh > high) high = rangeHigh;
-  }
-  return [Number.isFinite(low) ? low : 0, Number.isFinite(high) ? high : 1];
-}
-
 // The value range a field panel is colorized with. Diverging maps are zero-centred (see
 // combineFieldRange). When several panels show the same variable, the range spans all of
 // them so identical physical values render as identical colours and the "(shared)" label
@@ -840,25 +797,6 @@ function colorize(field, latitudes, colormap, range, transparentNaN = false, lan
   });
   const canvas = rasterCanvas(field.width, field.height);
   canvas.getContext("2d", { willReadFrequently: true }).putImageData(image, 0, 0);
-  return canvas;
-}
-
-function landStencil(field, latitudes) {
-  const flip = latitudes[0] < latitudes[latitudes.length - 1];
-  const image = landStencilImageData(field, { flipVertical: flip });
-  const canvas = rasterCanvas(field.width, field.height);
-  canvas.getContext("2d").putImageData(image, 0, 0);
-  return canvas;
-}
-
-// These rasters are only ever blitted through drawImage, which takes a DOM canvas
-// exactly like an OffscreenCanvas, so browsers without OffscreenCanvas get a detached
-// HTMLCanvasElement instead.
-function rasterCanvas(width, height) {
-  if (typeof OffscreenCanvas === "function") return new OffscreenCanvas(width, height);
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
   return canvas;
 }
 
@@ -4017,62 +3955,6 @@ function wireCursorTooltip(container) {
     crosshair.setAttribute("hidden", "");
     tooltip.setAttribute("hidden", "");
   });
-}
-
-function aggregateLeadSeries(grouped) {
-  const series = new Map();
-  for (const [key, rows] of grouped) {
-    const byLead = new Map();
-    for (const row of rows) {
-      const leadDay = Number(row.lead_day);
-      const value = scoreValue(row);
-      if (!Number.isFinite(leadDay) || !Number.isFinite(value)) continue;
-      if (!byLead.has(leadDay)) byLead.set(leadDay, []);
-      byLead.get(leadDay).push({ row, value });
-    }
-    const aggregated = [];
-    for (const [leadDay, values] of byLead) {
-      const mean = values.reduce((total, item) => total + item.value, 0) / values.length;
-      let ciLow = mean;
-      let ciHigh = mean;
-      if (values.length === 1) {
-        const row = values[0].row;
-        ciLow = Number.isFinite(row.ci_low) ? row.ci_low : mean;
-        ciHigh = Number.isFinite(row.ci_high) ? row.ci_high : mean;
-      } else {
-        const variance = values.reduce((total, item) => total + (item.value - mean) ** 2, 0) / (values.length - 1);
-        const error = 1.96 * Math.sqrt(variance / values.length);
-        ciLow = mean - error;
-        ciHigh = mean + error;
-      }
-      aggregated.push({ lead_day: leadDay, mean, ci_low: ciLow, ci_high: ciHigh });
-    }
-    if (aggregated.length) series.set(key, aggregated.sort((a, b) => a.lead_day - b.lead_day));
-  }
-  return series;
-}
-
-function scoreValue(row) {
-  for (const key of ["mean", "value", "rmse", "rmsd", "score"]) {
-    const value = Number(row[key]);
-    if (Number.isFinite(value)) return value;
-  }
-  return NaN;
-}
-
-function mapDepthToScoreDepth(entry) {
-  if (entry.standard_name.includes("velocity") && entry.depth === "15m") return "15m";
-  if (entry.depth === "surface") return "surface";
-  return entry.depth;
-}
-
-function scoreDepthKeys(entry) {
-  const keys = [];
-  const class4Bin = class4DepthBin(entry);
-  if (class4Bin) keys.push(class4Bin);
-  const legacyDepth = mapDepthToScoreDepth(entry);
-  if (legacyDepth && !keys.includes(legacyDepth)) keys.push(legacyDepth);
-  return keys;
 }
 
 // The single sentence for every "nothing to draw" Class-4 state. One source, so the

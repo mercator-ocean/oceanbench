@@ -313,3 +313,42 @@ function formatTick(value) {
   if (absolute !== 0 && (absolute < 0.01 || absolute >= 10000)) return value.toExponential(1).replace("-", MINUS_SIGN);
   return formatFixed(value, absolute < 1 ? 3 : 2);
 }
+
+export function landStencil(field, latitudes) {
+  const flip = latitudes[0] < latitudes[latitudes.length - 1];
+  const image = landStencilImageData(field, { flipVertical: flip });
+  const canvas = rasterCanvas(field.width, field.height);
+  canvas.getContext("2d").putImageData(image, 0, 0);
+  return canvas;
+}
+
+// These rasters are only ever blitted through drawImage, which takes a DOM canvas
+// exactly like an OffscreenCanvas, so browsers without OffscreenCanvas get a detached
+// HTMLCanvasElement instead.
+export function rasterCanvas(width, height) {
+  if (typeof OffscreenCanvas === "function") return new OffscreenCanvas(width, height);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+// Combine one or more [low, high] variable ranges into the range a field is colorized
+// with. A diverging colormap (balance/delta) is centred on physical zero — [-M, +M],
+// M = max|bound| — so its neutral colour reads as 0; a sequential map keeps the data
+// bounds ([min low, max high]).
+export function combineFieldRange(ranges, diverging) {
+  if (diverging) {
+    let magnitude = 0;
+    for (const [low, high] of ranges) magnitude = Math.max(magnitude, Math.abs(low), Math.abs(high));
+    const bound = magnitude || 1;
+    return [-bound, bound];
+  }
+  let low = Infinity;
+  let high = -Infinity;
+  for (const [rangeLow, rangeHigh] of ranges) {
+    if (rangeLow < low) low = rangeLow;
+    if (rangeHigh > high) high = rangeHigh;
+  }
+  return [Number.isFinite(low) ? low : 0, Number.isFinite(high) ? high : 1];
+}
