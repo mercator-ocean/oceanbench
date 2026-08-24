@@ -130,6 +130,8 @@ import {
   variableExists,
   variableLabel,
 } from "./modules/variables.js";
+import { nearestCoordinateIndex, nearestIndex, visibleViewport, worldEdges } from "./modules/geometry.js";
+import { cellDegreesLabel, escapeHtml, formatCount, formatLatLon, megabytes, rgbCss } from "./modules/format.js";
 
 // Resolved lazily: the data root is only final after initializeViewerConfig() has had a
 // chance to apply an optional viewer-config.json.
@@ -283,22 +285,6 @@ function scoreProductKey(slug) {
   if (slug === "glorys_one_degree") return "glorys";
   if (slug === "glo12_one_degree") return "glo12";
   return slug;
-}
-
-// Geographic world coordinates: nx = (lon+180)/360, ny = (90-lat)/180 (north-up).
-function worldEdges(latitudes, longitudes) {
-  const lonStep = longitudes.length > 1 ? Math.abs(longitudes[1] - longitudes[0]) : 1;
-  const latStep = latitudes.length > 1 ? Math.abs(latitudes[1] - latitudes[0]) : 1;
-  const lonMin = Math.min(longitudes[0], longitudes[longitudes.length - 1]);
-  const lonMax = Math.max(longitudes[0], longitudes[longitudes.length - 1]);
-  const latMin = Math.min(latitudes[0], latitudes[latitudes.length - 1]);
-  const latMax = Math.max(latitudes[0], latitudes[latitudes.length - 1]);
-  return {
-    nx0: (lonMin - lonStep / 2 + 180) / 360,
-    nx1: (lonMax + lonStep / 2 + 180) / 360,
-    nyTop: (90 - (latMax + latStep / 2)) / 180,
-    nyBottom: (90 - (latMin - latStep / 2)) / 180,
-  };
 }
 
 // ---- panel construction -----------------------------------------------------
@@ -1423,10 +1409,6 @@ function showClass4Progress(progress) {
   note.appendChild(bar);
 }
 
-function megabytes(bytes) {
-  return (Number(bytes) / (1024 * 1024)).toFixed(1);
-}
-
 // The parquet variable name(s) needed to draw the class-4 overlay for every visible
 // panel. Derived current speed needs both velocity components. Used to skip row groups
 // that provably hold no requested variable (rows sorted start,lead,variable).
@@ -1907,19 +1889,6 @@ async function updateColumnModeAvailability() {
   }
 }
 
-function nearestCoordinateIndex(coordinates, target) {
-  let bestIndex = 0;
-  let bestDistance = Infinity;
-  for (let i = 0; i < coordinates.length; i += 1) {
-    const distance = Math.abs(coordinates[i] - target);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = i;
-    }
-  }
-  return bestIndex;
-}
-
 // Which column-store variable a panel maps to: its own variable when that is temperature
 // or salinity, otherwise temperature (the sensible default for a non-T/S panel).
 function columnVariableFor(panel) {
@@ -2003,12 +1972,6 @@ async function readColumnProfileAt(longitude, latitude) {
   renderColumnProfileRail();
   if (panels.length) redrawOverlaysAll();
   writeHash();
-}
-
-function formatLatLon(lon, lat) {
-  const latText = `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}`;
-  const lonText = `${Math.abs(lon).toFixed(2)}°${lon >= 0 ? "E" : "W"}`;
-  return `${latText}, ${lonText}`;
 }
 
 // Value and depth extent of the clicked column over EVERY lead day it holds, not just the
@@ -2387,17 +2350,6 @@ function makeLandPunch(panel, projection) {
     target.globalCompositeOperation = "destination-out";
     drawImageWorld(target, stencil, panel.edgesA, projection);
     target.restore();
-  };
-}
-
-function visibleViewport(projection, canvas) {
-  const topLeft = projection.unproject(0, 0);
-  const bottomRight = projection.unproject(canvas.width, canvas.height);
-  return {
-    minX: Math.min(topLeft.nx, bottomRight.nx),
-    maxX: Math.max(topLeft.nx, bottomRight.nx),
-    minY: Math.max(0, Math.min(topLeft.ny, bottomRight.ny)),
-    maxY: Math.min(1, Math.max(topLeft.ny, bottomRight.ny)),
   };
 }
 
@@ -2962,20 +2914,6 @@ function class4ReadoutSuffix(record, units) {
   return ` · ${parts.join(" · ")}`;
 }
 
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (character) => {
-    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character];
-  });
-}
-
-function nearestIndex(coordinates, value) {
-  const step = coordinates.length > 1 ? coordinates[1] - coordinates[0] : 1;
-  const index = Math.round((value - coordinates[0]) / step);
-  if (index < 0 || index >= coordinates.length) return -1;
-  if (Math.abs(coordinates[index] - value) > Math.abs(step)) return -1;
-  return index;
-}
-
 // ---- layout + redraw --------------------------------------------------------
 
 function syncPanelGrid() {
@@ -3114,10 +3052,6 @@ async function renderAllPanels() {
 }
 
 // ---- shared colorbar --------------------------------------------------------
-
-function rgbCss(rgb) {
-  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
-}
 
 function updateYearLegend(visible) {
   const legend = elements["year-legend"];
@@ -3753,13 +3687,6 @@ function finestCellDegFor(slug) {
   return Math.min(...manifest.levels.map((level) => level.cell_size_deg));
 }
 
-// Human label for a grid cell size: 1/12° for fractional-degree grids, 0.5° otherwise.
-function cellDegreesLabel(cellDeg) {
-  const inverse = 1 / cellDeg;
-  if (inverse > 1.01 && Math.abs(inverse - Math.round(inverse)) < 0.05) return `1/${Math.round(inverse)}°`;
-  return `${Number(cellDeg.toFixed(2))}°`;
-}
-
 // Create the box if absent (centred in the viewport) and clamp it to the current cap —
 // also handles switching to a coarser/finer model pair: the box persists, only its
 // limits move. Returns the box.
@@ -4355,10 +4282,6 @@ function class4SelectionNote() {
   const entry = manifest && variableEntry(manifest, panel.state.variable);
   const variable = entry ? prettyName(entry.standard_name) : panel.state.variable;
   return `No ${variable} match-ups at ${class4DepthLabel(entry, class4DepthBin(entry))} for this start/lead.`;
-}
-
-function formatCount(value) {
-  return Math.round(Number(value) || 0).toLocaleString("en-US");
 }
 
 // ---- global controls --------------------------------------------------------
