@@ -91,6 +91,27 @@ import { attachMethodNote, attachEddyMethodNote } from "./modules/method-popover
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
 import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
 import { forecastColor } from "./modules/forecast-colors.js";
+import {
+  DISPLAY_DIFFERENCE,
+  DISPLAY_MODES,
+  DISPLAY_SIDE_BY_SIDE,
+  DISPLAY_SWIPE,
+  EDDY_REFERENCE_GLORYS,
+  OVERLAY_CLASS4,
+  OVERLAY_EDDIES,
+  OVERLAY_NONE,
+  OVERLAY_TRAJECTORIES,
+  OVERLAY_WATER_COLUMN,
+  REGION_GLOBAL,
+  SCOPE_SINGLE_DATE,
+  SCOPE_WHOLE_YEAR,
+  THEME_DARK,
+  THEME_LIGHT,
+  THEMES,
+  YEAR_METRICS,
+  YEAR_METRIC_ABSOLUTE_ERROR,
+  YEAR_METRIC_BIAS,
+} from "./state/view-modes.js";
 import { resolveViewerDataUrl, resolveColumnStoreUrl, initializeViewerConfig } from "./config.js";
 
 // Resolved lazily: the data root is only final after initializeViewerConfig() has had a
@@ -193,14 +214,14 @@ const savedLayout = JSON.parse(localStorage.getItem("oceanbench.viewer.layout") 
 const shared = {
   startIndex: 0,
   leadDay: 1,
-  theme: "light",
+  theme: THEME_LIGHT,
   layout: 1,
   // "single" = per-start-date fields (the default view); "year" = precomputed
   // whole-year error-geography raster + RMSE-by-start diagnostics.
-  scope: "single",
+  scope: SCOPE_SINGLE_DATE,
   // Year-scope map metric: "error" = time-mean |obs − model| (sequential), "bias" =
   // time-mean signed model − obs (diverging, centred 0). Single-forecast scope ignores it.
-  yearMetric: "error",
+  yearMetric: YEAR_METRIC_ABSOLUTE_ERROR,
   // PSD rectangle tool: { lon, lat, w, h } in degrees (centre + size). Disabled by
   // default so the initial map stays clean; enabling creates a centred default box.
   psdEnabled: false,
@@ -209,12 +230,12 @@ const shared = {
   // second forecast can raise the minimum box size, and the box must shrink back to the
   // requested size once that constraint goes away. { w, h } in degrees; null when unset.
   psdBoxRequest: null,
-  overlayMode: "none",
+  overlayMode: OVERLAY_NONE,
   // Water-column click point { lon, lat } (profile-on-click mode); null when unset. Kept
   // in the hash so a link reproduces the clicked profile.
   columnPoint: null,
-  region: "global",
-  eddyReference: "glorys",
+  region: REGION_GLOBAL,
+  eddyReference: EDDY_REFERENCE_GLORYS,
   showParticles: true,
   particleSpeed: 1,
   railCollapsed: localStorage.getItem("oceanbench.viewer.railCollapsed") === "1",
@@ -222,7 +243,7 @@ const shared = {
   controlsWidth: Number(savedLayout.controlsWidth) || DEFAULT_LAYOUT.controlsWidth,
   railWidth: Number(savedLayout.railWidth) || Number(localStorage.getItem("oceanbench.viewer.railWidth")) || DEFAULT_LAYOUT.railWidth,
   // 2-forecast display: "side" (two panels) or "swipe" (one map, F1 left / F2 right).
-  displayMode: "side",
+  displayMode: DISPLAY_SIDE_BY_SIDE,
   // Which forecast the rail shows when 2 forecasts carry different variables.
   railForecast: 0,
 };
@@ -611,7 +632,7 @@ function renderLevelForSlug(slug) {
 // between painting inside the frame and waiting for the fetch debounce.
 function panelLeadCached(panel, leadDay) {
   // Year scope reads the memoised insight artifacts, never a lead tile.
-  if (shared.scope === "year") return true;
+  if (shared.scope === SCOPE_WHOLE_YEAR) return true;
   const manifest = manifestFor(panel.state.dataset);
   const store = stores.get(panel.state.dataset);
   if (!manifest || !store) return false;
@@ -660,7 +681,7 @@ async function renderPanel(panel) {
     // store is loaded — to populate the (otherwise empty) select. Idempotent and cheap.
     refreshPanelControls(panel);
 
-    if (shared.scope === "year") {
+    if (shared.scope === SCOPE_WHOLE_YEAR) {
       await renderYearPanel(panel, token, manifest);
       if (token !== panel.renderToken) return;
       resizePanelCanvases(panel);
@@ -982,7 +1003,7 @@ async function renderYearPanel(panel, token, manifest) {
   }
   const geography = await loadYearGeography(geoUrl);
   if (token !== panel.renderToken) return;
-  const biasMode = shared.yearMetric === "bias";
+  const biasMode = shared.yearMetric === YEAR_METRIC_BIAS;
   const mapping = geography ? yearVariableMapping(panel.state.variable) : null;
   const built = mapping
     ? biasMode
@@ -1123,8 +1144,8 @@ function projectionFor(panel) {
 function drawImageWorld(context, offscreen, edges, projection) {
   const visibleLeft = projection.unproject(0, 0).nx;
   const visibleRight = projection.unproject(projection.width, 0).nx;
-  const firstCopy = shared.region === "global" ? Math.floor(visibleLeft - edges.nx1) : 0;
-  const lastCopy = shared.region === "global" ? Math.ceil(visibleRight - edges.nx0) : 0;
+  const firstCopy = shared.region === REGION_GLOBAL ? Math.floor(visibleLeft - edges.nx1) : 0;
+  const lastCopy = shared.region === REGION_GLOBAL ? Math.ceil(visibleRight - edges.nx0) : 0;
   // Snap every copy to whole device pixels. Copy k's right edge and copy k+1's left
   // edge are the same world coordinate, so rounding hands them the same integer and
   // the copies abut exactly. Drawn at fractional coordinates instead, each copy gets
@@ -1142,13 +1163,13 @@ function drawImageWorld(context, offscreen, edges, projection) {
 }
 
 function isSwipeHost(panel) {
-  return shared.layout === 2 && shared.displayMode === "swipe" && panel.index === 0;
+  return shared.layout === 2 && shared.displayMode === DISPLAY_SWIPE && panel.index === 0;
 }
 
 // The Difference comparison view exists only with two forecasts; it collapses to a
 // single map (hosted by Forecast 1) showing Forecast 1 − Forecast 2.
 function isDiffView() {
-  return shared.layout === 2 && shared.displayMode === "diff";
+  return shared.layout === 2 && shared.displayMode === DISPLAY_DIFFERENCE;
 }
 
 function isDiffHost(panel) {
@@ -1159,9 +1180,9 @@ function isDiffHost(panel) {
 // (class-4 obs, eddy census, trajectories) so the overlay colors stay legible. Field mode,
 // the difference view, and the year raster keep their full-color scale.
 function fieldMutedUnderOverlay() {
-  if (shared.scope === "year") return false;
+  if (shared.scope === SCOPE_WHOLE_YEAR) return false;
   if (isDiffView()) return false;
-  return shared.overlayMode === "class4" || shared.overlayMode === "eddies" || shared.overlayMode === "trajectories";
+  return shared.overlayMode === OVERLAY_CLASS4 || shared.overlayMode === OVERLAY_EDDIES || shared.overlayMode === OVERLAY_TRAJECTORIES;
 }
 
 // Theme colors drawn on canvas come from the shared design tokens (tokens.css,
@@ -1175,11 +1196,11 @@ function themeToken(name, fallback) {
 function drawPanel(panel) {
   const canvas = panel.els.field;
   const context = canvas.getContext("2d");
-  context.fillStyle = themeToken("--ob-viewer-canvas-bg", shared.theme === "light" ? "#eef2f6" : "#080b11");
+  context.fillStyle = themeToken("--ob-viewer-canvas-bg", shared.theme === THEME_LIGHT ? "#eef2f6" : "#080b11");
   context.fillRect(0, 0, canvas.width, canvas.height);
   if (!panel.offscreenA) {
-    if (shared.scope === "year" && panel.yearMissing) {
-      context.fillStyle = themeToken("--ob-viewer-canvas-note", shared.theme === "light" ? "#5b6675" : "#8b97a6");
+    if (shared.scope === SCOPE_WHOLE_YEAR && panel.yearMissing) {
+      context.fillStyle = themeToken("--ob-viewer-canvas-note", shared.theme === THEME_LIGHT ? "#5b6675" : "#8b97a6");
       context.font = `${14 * (window.devicePixelRatio || 1)}px system-ui, sans-serif`;
       context.textAlign = "center";
       context.textBaseline = "middle";
@@ -1220,7 +1241,7 @@ function drawPanel(panel) {
     drawImageWorld(context, panel.offscreenB, panel.edgesB, projection);
     context.restore();
     context.filter = "none";
-    context.strokeStyle = themeToken("--ob-viewer-swipe-divider", shared.theme === "light" ? "#1f6feb" : "#38bdf8");
+    context.strokeStyle = themeToken("--ob-viewer-swipe-divider", shared.theme === THEME_LIGHT ? "#1f6feb" : "#38bdf8");
     context.lineWidth = 2 * (window.devicePixelRatio || 1);
     context.beginPath();
     context.moveTo(dividerX, 0);
@@ -1236,7 +1257,7 @@ function drawPanel(panel) {
   }
   // In year scope outline the raster extent so the map's data limits are legible at
   // zoom 1 — especially the regional (ibi) domain against the empty page outside it.
-  if (shared.scope === "year" && panel.edgesA) drawRasterBorder(context, panel.edgesA, projection);
+  if (shared.scope === SCOPE_WHOLE_YEAR && panel.edgesA) drawRasterBorder(context, panel.edgesA, projection);
   updateParticleProjection(panel, projection);
   updatePanelBadge(panel);
   updatePanelMethodNote(panel);
@@ -1249,7 +1270,7 @@ function updatePanelMethodNote(panel) {
   const head = panel.container.querySelector(".panel-head");
   if (!head) return;
   head.querySelectorAll(".method-note-btn").forEach((button) => button.remove());
-  if (shared.scope === "year") {
+  if (shared.scope === SCOPE_WHOLE_YEAR) {
     if (!panel.yearMissing) attachMethodNote(head, "year-geography");
   } else if (isDiffHost(panel)) {
     attachMethodNote(head, "diff-view");
@@ -1262,15 +1283,15 @@ function drawRasterBorder(context, edges, projection) {
   const ratio = window.devicePixelRatio || 1;
   const visibleLeft = projection.unproject(0, 0).nx;
   const visibleRight = projection.unproject(projection.width, 0).nx;
-  const firstCopy = shared.region === "global" ? Math.floor(visibleLeft - edges.nx1) : 0;
-  const lastCopy = shared.region === "global" ? Math.ceil(visibleRight - edges.nx0) : 0;
+  const firstCopy = shared.region === REGION_GLOBAL ? Math.floor(visibleLeft - edges.nx1) : 0;
+  const lastCopy = shared.region === REGION_GLOBAL ? Math.ceil(visibleRight - edges.nx0) : 0;
   context.save();
-  context.strokeStyle = themeToken("--ob-viewer-raster-border", shared.theme === "light" ? "rgba(40, 52, 72, 0.5)" : "rgba(184, 200, 224, 0.5)");
+  context.strokeStyle = themeToken("--ob-viewer-raster-border", shared.theme === THEME_LIGHT ? "rgba(40, 52, 72, 0.5)" : "rgba(184, 200, 224, 0.5)");
   context.lineWidth = 1.5 * ratio;
   for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
     const topLeft = projection.project(edges.nx0 + copy, edges.nyTop);
     const bottomRight = projection.project(edges.nx1 + copy, edges.nyBottom);
-    if (shared.region === "global") {
+    if (shared.region === REGION_GLOBAL) {
       // Longitude wraps, so vertical edges would draw a spurious seam mid-ocean; only
       // the top/bottom latitude limits are real boundaries of the raster.
       context.beginPath();
@@ -1334,8 +1355,8 @@ async function loadOverlayData() {
   overlayData.class4Error = null;
   overlayData.class4Unpublished = false;
   // Nothing may prefetch match-ups for an overlay that is no longer showing them.
-  if (shared.overlayMode !== "class4") stopClass4Prefetch(null);
-  if (shared.overlayMode === "eddies") {
+  if (shared.overlayMode !== OVERLAY_CLASS4) stopClass4Prefetch(null);
+  if (shared.overlayMode === OVERLAY_EDDIES) {
     // Load each visible forecast's own eddy artifact and reduce it to a census. The
     // two forecasts come from the panel pickers; no dataset is a hardcoded truth.
     const eddiesByPanel = await Promise.all(
@@ -1364,7 +1385,7 @@ async function loadOverlayData() {
       overlayData.eddiesCensuses = censuses;
       overlayData.eddiesMatch = null;
     }
-  } else if (shared.overlayMode === "class4") {
+  } else if (shared.overlayMode === OVERLAY_CLASS4) {
     const class4Url = urls.class4_matchups;
     // Reference datasets (and any dataset without published match-ups) carry an
     // explicit null class4_matchups in insights.json. That is a legitimate absence,
@@ -1420,7 +1441,7 @@ function scheduleClass4Prefetch(request, slug) {
   const leads = neighbouringLeads(request.leadDay, slug).slice(0, CLASS4_PREFETCH_LEADS);
   if (!leads.length) return;
   const generation = class4PrefetchGeneration;
-  const stale = () => generation !== class4PrefetchGeneration || shared.overlayMode !== "class4";
+  const stale = () => generation !== class4PrefetchGeneration || shared.overlayMode !== OVERLAY_CLASS4;
   whenIdle(async () => {
     for (const leadDay of leads) {
       if (stale()) return;
@@ -1546,7 +1567,7 @@ function drawOverlays(panel) {
   const canvas = panel.els.overlay;
   const context = canvas.getContext("2d");
   context.clearRect(0, 0, canvas.width, canvas.height);
-  if (shared.scope === "year") return;
+  if (shared.scope === SCOPE_WHOLE_YEAR) return;
   const projection = projectionFor(panel);
   // The PSD rectangle is a spectrum tool, not a purpose overlay: it draws in every
   // single-forecast display (incl. swipe and difference — one shared box, both spectra).
@@ -1554,18 +1575,18 @@ function drawOverlays(panel) {
   // Class-4 points and eddies are per-forecast; the difference view has no single
   // forecast to attach them to, so it stays overlay-free (see the quiet note).
   if (isDiffView()) return;
-  if (shared.overlayMode === "none") return;
+  if (shared.overlayMode === OVERLAY_NONE) return;
   const ratio = window.devicePixelRatio || 1;
   // Points/contours belong to the periodic world too: draw them on every visible
   // wrapped copy so they stay on the field when panning across the dateline.
   const copyOffsets = visibleCopyOffsets(projection, canvas);
   const projectOnCopy = (offset) => (nx, ny) => projection.project(nx + offset, ny);
 
-  if (shared.overlayMode === "column") {
+  if (shared.overlayMode === OVERLAY_WATER_COLUMN) {
     if (shared.columnPoint) drawColumnMarker(panel, context, projection, copyOffsets);
     return;
   }
-  if (shared.overlayMode === "eddies") {
+  if (shared.overlayMode === OVERLAY_EDDIES) {
     const index = panel.index;
     const match = overlayData.eddiesMatch;
     if (shared.layout === 2 && match) {
@@ -1586,7 +1607,7 @@ function drawOverlays(panel) {
       }
     }
   } else if (
-    shared.overlayMode === "class4" &&
+    shared.overlayMode === OVERLAY_CLASS4 &&
     overlayData.class4 &&
     // A redraw can fire between a region switch and the overlay reload nulling the slot;
     // painting the old region's rows would also widen the fresh ramp with their p90,
@@ -1643,7 +1664,7 @@ function drawOverlays(panel) {
     // The hovered obs is named in the readout and in the cursor tooltip; ring it on the map so
     // the reader can see WHICH dot those numbers belong to.
     if (panel.class4HoverPoint) {
-      const ringColor = themeToken("--ob-viewer-canvas-note", shared.theme === "light" ? "#1f2937" : "#e5edf5");
+      const ringColor = themeToken("--ob-viewer-canvas-note", shared.theme === THEME_LIGHT ? "#1f2937" : "#e5edf5");
       for (const offset of copyOffsets) {
         drawClass4HoverRing(context, projectOnCopy(offset), panel.class4HoverPoint, {
           devicePixelRatio: ratio,
@@ -1681,7 +1702,7 @@ function drawColumnMarker(panel, context, projection, copyOffsets) {
   const nx = (shared.columnPoint.lon + 180) / 360;
   const ny = (90 - shared.columnPoint.lat) / 180;
   context.save();
-  context.strokeStyle = themeToken("--ob-viewer-canvas-note", shared.theme === "light" ? "#1f2937" : "#e5edf5");
+  context.strokeStyle = themeToken("--ob-viewer-canvas-note", shared.theme === THEME_LIGHT ? "#1f2937" : "#e5edf5");
   context.lineWidth = 1.6 * ratio;
   const arm = 9 * ratio;
   for (const offset of copyOffsets) {
@@ -1734,7 +1755,7 @@ function drawTrajectoryFans(panel) {
 }
 
 function trajectoryModeActive() {
-  return shared.overlayMode === "trajectories";
+  return shared.overlayMode === OVERLAY_TRAJECTORIES;
 }
 
 // In trajectory purpose-mode, any visible panel is eligible whatever variable it
@@ -1907,7 +1928,7 @@ async function anyVisibleColumnStore() {
 }
 
 function columnModeActive() {
-  return shared.overlayMode === "column" && !isDiffView();
+  return shared.overlayMode === OVERLAY_WATER_COLUMN && !isDiffView();
 }
 
 // Resolve (once, cached) whether a challenger publishes a water-column store. The manifest
@@ -1940,7 +1961,7 @@ async function updateColumnModeAvailability() {
   const option = elements["overlay-mode"] && elements["overlay-mode"].querySelector('option[value="column"]');
   if (!option) return;
   const available = await anyVisibleColumnStore();
-  const active = shared.overlayMode === "column";
+  const active = shared.overlayMode === OVERLAY_WATER_COLUMN;
   option.hidden = !available && !active;
   option.disabled = option.hidden;
   if (!available && active) {
@@ -2297,7 +2318,7 @@ function drawClass4Frame(context, projection, prepared, copyOffsets, canvas, opt
 
 // Integer world-copy offsets whose earth copy is currently visible (periodic wrap).
 function visibleCopyOffsets(projection, canvas) {
-  if (shared.region !== "global") return [0];
+  if (shared.region !== REGION_GLOBAL) return [0];
   const left = projection.unproject(0, 0).nx;
   const right = projection.unproject(canvas.width, 0).nx;
   const offsets = [];
@@ -2534,7 +2555,7 @@ function endPanelDrag(event) {
   const panel = panels.find((candidate) => candidate.els.field === event.currentTarget);
   const shouldSeed = panel.dragging && !panel.dragging.moved;
   panel.els.field.removeEventListener("pointermove", onPanelPointerMove);
-  if (shared.region === "global") view.centerNX = ((view.centerNX % 1) + 1) % 1;
+  if (shared.region === REGION_GLOBAL) view.centerNX = ((view.centerNX % 1) + 1) % 1;
   panel.dragging = null;
   panel.draggingSwipe = false;
   panel.draggingPsd = null;
@@ -2551,7 +2572,7 @@ function pointerLonLat(panel, event) {
   const ratio = window.devicePixelRatio || 1;
   const world = projectionFor(panel).unproject((event.clientX - rectangle.left) * ratio, (event.clientY - rectangle.top) * ratio);
   let longitude = world.nx * 360 - 180;
-  if (shared.region === "global") longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  if (shared.region === REGION_GLOBAL) longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
   return [longitude, 90 - world.ny * 180];
 }
 
@@ -2864,7 +2885,7 @@ function hideClass4Tooltip() {
 // position on the panel the user is NOT hovering with the exact same custom crosshair
 // as the real cursor (at reduced opacity), so the same spot is visible on both forecasts.
 function updateGhostCursor(hoverPanel, wrappedNX, ny) {
-  if (shared.layout !== 2 || shared.displayMode !== "side") return;
+  if (shared.layout !== 2 || shared.displayMode !== DISPLAY_SIDE_BY_SIDE) return;
   const other = panels[1 - hoverPanel.index];
   const ghost = other && other.els.ghostCursor;
   if (!ghost || !other.field) return;
@@ -2908,9 +2929,9 @@ function updatePanelReadout(panel, lat, lon, suffix = "", source = panel, prefix
 }
 
 function fieldReadoutValue(panel, value, count, standardError) {
-  if (shared.scope === "year") {
+  if (shared.scope === SCOPE_WHOLE_YEAR) {
     if (!Number.isFinite(value) || count === 0) return "no observations";
-    const biasMode = panel.yearMetric === "bias";
+    const biasMode = panel.yearMetric === YEAR_METRIC_BIAS;
     // Non-bias year cells are the time-mean |obs − model| (MAE), matching the panel title
     // and method note — not RMSE. Label it "|error|" so the hover does not misname it.
     const metric = biasMode ? "bias" : "|error|";
@@ -2928,7 +2949,7 @@ function fieldReadoutValue(panel, value, count, standardError) {
 // the cursor). The details render inside the panel's fixed readout pill — nothing
 // floats with the cursor.
 function nearestClass4Record(panel, event, rectangle) {
-  if (shared.overlayMode !== "class4" || !panel.class4HitPoints || !panel.class4HitPoints.length) return null;
+  if (shared.overlayMode !== OVERLAY_CLASS4 || !panel.class4HitPoints || !panel.class4HitPoints.length) return null;
   const prepared = panel.class4Prepared;
   if (!prepared || !prepared.spatialIndex) return null;
   const selectedMask = panel.class4HitSelected; // null → whole display set is hittable
@@ -3025,7 +3046,7 @@ function syncPanelGrid() {
   const grid = elements["panel-grid"];
   // Both swipe and difference collapse to a single shared map hosted by Forecast 1;
   // CSS lays it out as one column and reduces Forecast 2's panel to its picker strip.
-  const single = shared.layout === 2 && (shared.displayMode === "swipe" || shared.displayMode === "diff");
+  const single = shared.layout === 2 && (shared.displayMode === DISPLAY_SWIPE || shared.displayMode === DISPLAY_DIFFERENCE);
   // INVARIANT I4: styles.css lays the grid out from data-layout and data-display.
   grid.dataset.layout = String(single ? 1 : shared.layout);
   grid.dataset.display = shared.displayMode;
@@ -3041,7 +3062,7 @@ function syncPanelGrid() {
     const headLabel = panels[i].container.querySelector(".panel-forecast-label");
     if (headLabel) {
       headLabel.textContent =
-        shared.displayMode === "diff" && shared.layout === 2 && i === 0 ? "Difference · Forecast 1" : `Forecast ${i + 1}`;
+        shared.displayMode === DISPLAY_DIFFERENCE && shared.layout === 2 && i === 0 ? "Difference · Forecast 1" : `Forecast ${i + 1}`;
     }
     grid.appendChild(panels[i].container);
     refreshPanelControls(panels[i]);
@@ -3180,13 +3201,13 @@ function updateYearLegend(visible) {
 // carries no legend block any more — all legend information lives here.
 function updateSharedColorbar() {
   const panel = isDiffView() ? panels[0] : panels[activePanelIndex];
-  updateYearLegend(shared.scope === "year");
+  updateYearLegend(shared.scope === SCOPE_WHOLE_YEAR);
   const colorbar = elements.colorbar;
   const legend = elements["map-legend"];
-  const textColor = themeToken("--ob-viewer-colorbar-text", shared.theme === "light" ? "#14181d" : "#e6edf3");
+  const textColor = themeToken("--ob-viewer-colorbar-text", shared.theme === THEME_LIGHT ? "#14181d" : "#e6edf3");
 
   // Year scope keeps its own colorbar untouched (design: don't touch year legend).
-  if (shared.scope === "year") {
+  if (shared.scope === SCOPE_WHOLE_YEAR) {
     colorbar.hidden = false;
     hideMapLegend(legend);
     if (!panel || !panel.colormap || !panel.range) {
@@ -3194,7 +3215,7 @@ function updateSharedColorbar() {
       return;
     }
     const nStarts = panel.yearMeta && panel.yearMeta.nStarts;
-    const biasMode = panel.yearMetric === "bias";
+    const biasMode = panel.yearMetric === YEAR_METRIC_BIAS;
     drawColorbar(colorbar, panel.colormap, panel.range, {
       label: `${biasMode ? "mean (model − obs)" : "mean |obs − model|"} over ${nStarts || "?"} start dates · ${panel.label} (${panel.units})`,
       textColor,
@@ -3205,8 +3226,8 @@ function updateSharedColorbar() {
   }
   if (!panel || !panel.colormap || !panel.range) return;
 
-  const mode = isDiffView() ? "none" : shared.overlayMode;
-  if (mode === "class4") {
+  const mode = isDiffView() ? OVERLAY_NONE : shared.overlayMode;
+  if (mode === OVERLAY_CLASS4) {
     // Nothing drawn means an obs-error ramp would be a scale over no data: drop the
     // colorbar and the legend strip and let the overlay note carry the one sentence.
     if (class4EmptyMessage()) {
@@ -3227,10 +3248,10 @@ function updateSharedColorbar() {
       ramp: [CLASS4_RAMP_START, CLASS4_RAMP_END],
     });
     renderClass4Legend(legend, panel, scale);
-  } else if (mode === "eddies") {
+  } else if (mode === OVERLAY_EDDIES) {
     colorbar.hidden = true;
     renderEddyLegend(legend);
-  } else if (mode === "trajectories") {
+  } else if (mode === OVERLAY_TRAJECTORIES) {
     colorbar.hidden = true;
     renderTrajectoryLegend(legend);
   } else {
@@ -3258,9 +3279,9 @@ function setLayerInfo(panel) {
 // The start date is the drawer's own field and the lead day is spelled out beside the
 // scrubber a few centimetres to the left, so the readout carries neither.
 function zoomBadgeText(panel) {
-  const yearPrefix = shared.scope === "year" ? "entire year · " : "";
+  const yearPrefix = shared.scope === SCOPE_WHOLE_YEAR ? "entire year · " : "";
   const manifest = panel ? manifestFor(panel.state.dataset) : null;
-  const loading = shared.scope !== "year" && (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length);
+  const loading = shared.scope !== SCOPE_WHOLE_YEAR && (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length);
   return `${yearPrefix}zoom ${view.zoom.toFixed(1)}×${loading ? " · loading metadata" : ""}`;
 }
 
@@ -3415,7 +3436,7 @@ async function updateContextRail() {
   renderRailSkill(shown, comparison);
   await renderRailDepthProfile(shown, comparison);
   const yearSection = elements["rail-year-rmsd-section"];
-  if (shared.scope === "year") {
+  if (shared.scope === SCOPE_WHOLE_YEAR) {
     if (yearSection) yearSection.hidden = false;
     renderRailYearRmsd(shown);
     return;
@@ -3522,7 +3543,7 @@ async function renderRailDepthProfile(shown, comparison) {
 async function renderRailYearRmsd(shown) {
   const slot = elements["rail-year-rmsd"];
   const note = elements["rail-year-rmsd-note"];
-  const biasMode = shared.yearMetric === "bias";
+  const biasMode = shared.yearMetric === YEAR_METRIC_BIAS;
   // Keep the section title in step with the metric (the "?" button is a later child,
   // so only the leading text node is retitled).
   const yearHeading = elements["rail-year-rmsd-section"].querySelector("h3");
@@ -3611,7 +3632,7 @@ function drillDownToStartDate(date) {
     index = best;
   }
   if (index >= 0) shared.startIndex = index;
-  setScope("single");
+  setScope(SCOPE_SINGLE_DATE);
 }
 
 // When a surface current variable is selected in an obs-based context (Class-4 overlay
@@ -3620,7 +3641,7 @@ function drillDownToStartDate(date) {
 function updateCurrentDepthGateNote(shown) {
   const note = elements["rail-current-depth-note"];
   if (!note) return;
-  const obsContext = shared.overlayMode === "class4" || shared.scope === "year";
+  const obsContext = shared.overlayMode === OVERLAY_CLASS4 || shared.scope === SCOPE_WHOLE_YEAR;
   const gated = obsContext && shown.filter((panel) => isSurfaceCurrentVariable(panel.state.variable));
   if (!obsContext || !gated.length) {
     note.hidden = true;
@@ -3864,14 +3885,14 @@ function psdBoxWorldRect() {
 // The rectangle is a spectrum tool, not an overlay mode: it shows on every panel in
 // single-forecast scope (incl. swipe/difference — one shared box drives both spectra).
 function psdBoxVisible() {
-  return shared.psdEnabled && shared.scope !== "year" && Boolean(shared.psdBox) && !psdBoxLimits.degenerate;
+  return shared.psdEnabled && shared.scope !== SCOPE_WHOLE_YEAR && Boolean(shared.psdBox) && !psdBoxLimits.degenerate;
 }
 
 function drawPsdBox(panel, context, projection) {
   const rect = psdBoxWorldRect();
   if (!rect) return;
   const ratio = window.devicePixelRatio || 1;
-  const accent = shared.theme === "light" ? "#046293" : "#38bdf8";
+  const accent = shared.theme === THEME_LIGHT ? "#046293" : "#38bdf8";
   const flashing = performance.now() < psdBoxFlashUntil;
   const border = flashing ? "#ff6b6b" : accent;
   const copyOffsets = visibleCopyOffsets(projection, panel.els.overlay);
@@ -3881,7 +3902,7 @@ function drawPsdBox(panel, context, projection) {
     const bottomRight = projection.project(rect.nx1 + offset, rect.nyBottom);
     const width = bottomRight.x - topLeft.x;
     const height = bottomRight.y - topLeft.y;
-    context.fillStyle = shared.theme === "light" ? "rgba(4, 98, 147, 0.07)" : "rgba(56, 189, 248, 0.08)";
+    context.fillStyle = shared.theme === THEME_LIGHT ? "rgba(4, 98, 147, 0.07)" : "rgba(56, 189, 248, 0.08)";
     context.fillRect(topLeft.x, topLeft.y, width, height);
     context.strokeStyle = border;
     context.lineWidth = (flashing ? 2.4 : 1.5) * ratio;
@@ -3890,7 +3911,7 @@ function drawPsdBox(panel, context, projection) {
     // Handles: corners + edge midpoints.
     context.setLineDash([]);
     const half = 3.5 * ratio;
-    context.fillStyle = shared.theme === "light" ? "#ffffff" : "#10151f";
+    context.fillStyle = shared.theme === THEME_LIGHT ? "#ffffff" : "#10151f";
     for (const [hx, hy] of psdHandlePoints(topLeft, bottomRight)) {
       context.fillRect(hx - half, hy - half, 2 * half, 2 * half);
       context.strokeRect(hx - half, hy - half, 2 * half, 2 * half);
@@ -4098,7 +4119,7 @@ let psdRenderToken = 0;
 async function renderRailPsd(shown, comparison) {
   const token = ++psdRenderToken;
   updatePsdToggle();
-  if (!shared.psdEnabled || shared.scope === "year") {
+  if (!shared.psdEnabled || shared.scope === SCOPE_WHOLE_YEAR) {
     elements["rail-spectra"].innerHTML = "";
     elements["rail-psd-note"].textContent = "";
     return;
@@ -4223,7 +4244,7 @@ function updatePsdToggle() {
   const section = document.getElementById("rail-spectra-section");
   const button = elements["psd-toggle"];
   if (!section || !button) return;
-  const enabled = shared.psdEnabled && shared.scope !== "year";
+  const enabled = shared.psdEnabled && shared.scope !== SCOPE_WHOLE_YEAR;
   section.classList.toggle("psd-disabled", !enabled);
   button.setAttribute("aria-pressed", enabled ? "true" : "false");
   button.setAttribute("aria-label", enabled ? "Hide live power spectrum" : "Show live power spectrum");
@@ -4468,7 +4489,7 @@ async function applyOverlayMode() {
   // leave the map clean and nudge the user back to a per-forecast view.
   if (isDiffView()) {
     clearTrajectories();
-    note.textContent = shared.overlayMode === "none" ? "" : "Switch to side-by-side to see overlays.";
+    note.textContent = shared.overlayMode === OVERLAY_NONE ? "" : "Switch to side-by-side to see overlays.";
     for (let i = 0; i < shared.layout; i += 1) {
       drawPanel(panels[i]);
       drawOverlays(panels[i]);
@@ -4477,9 +4498,9 @@ async function applyOverlayMode() {
     updateContextRail();
     return;
   }
-  if (shared.overlayMode !== "trajectories") clearTrajectories();
-  if (shared.overlayMode !== "column") clearColumnProfile();
-  if (shared.overlayMode === "column") {
+  if (shared.overlayMode !== OVERLAY_TRAJECTORIES) clearTrajectories();
+  if (shared.overlayMode !== OVERLAY_WATER_COLUMN) clearColumnProfile();
+  if (shared.overlayMode === OVERLAY_WATER_COLUMN) {
     // Probe up front so the note promises a click only when there is a store behind it.
     const columnAvailable = await anyVisibleColumnStore();
     if (superseded()) return;
@@ -4497,19 +4518,19 @@ async function applyOverlayMode() {
     updateContextRail();
     return;
   }
-  if (shared.overlayMode === "trajectories") {
+  if (shared.overlayMode === OVERLAY_TRAJECTORIES) {
     note.textContent = "Click the map to seed trajectories advected through both forecasts' currents.";
-  } else if (shared.overlayMode === "class4") {
+  } else if (shared.overlayMode === OVERLAY_CLASS4) {
     class4ProgressLabel = "Loading Class-4 match-ups…";
     note.textContent = class4ProgressLabel;
-  } else if (shared.overlayMode === "eddies") {
+  } else if (shared.overlayMode === OVERLAY_EDDIES) {
     note.textContent = "Loading eddy census…";
   } else {
     note.textContent = "";
   }
   const current = await loadOverlayData();
   if (!current || superseded()) return;
-  if (shared.overlayMode === "eddies") {
+  if (shared.overlayMode === OVERLAY_EDDIES) {
     const censuses = overlayData.eddiesCensuses || [];
     if (!censuses.some(Boolean)) {
       note.textContent = "No eddy detections are available for this selection.";
@@ -4520,7 +4541,7 @@ async function applyOverlayMode() {
       note.textContent = "Showing this forecast's own eddy census.";
     }
   }
-  if (shared.overlayMode === "class4") {
+  if (shared.overlayMode === OVERLAY_CLASS4) {
     note.textContent = class4EmptyMessage() || "Class-4 match-ups for the selected start and lead. Hover a point for details.";
   }
   for (let i = 0; i < shared.layout; i += 1) {
@@ -4548,7 +4569,7 @@ let class4ReloadLead = null;
 // True when the obs overlay owes the current start/lead a fetch of its own: the result
 // slot says the parquet is targeted, or a reload is already armed/in flight for some lead.
 function class4ReloadPending() {
-  if (shared.overlayMode !== "class4") return false;
+  if (shared.overlayMode !== OVERLAY_CLASS4) return false;
   return Boolean(overlayData.class4 && overlayData.class4.targeted) || class4ReloadLead !== null;
 }
 
@@ -4598,13 +4619,13 @@ function scheduleClass4Reload() {
 
 function applyTheme() {
   document.documentElement.dataset.theme = shared.theme;
-  elements["theme-toggle"].textContent = shared.theme === "light" ? "Dark theme" : "Light theme";
+  elements["theme-toggle"].textContent = shared.theme === THEME_LIGHT ? "Dark theme" : "Light theme";
 }
 
 // Single entry point for a theme change, shared by the in-app toggle and, when the
 // viewer is embedded in the Quarto site, the parent page's theme switch (postMessage).
 function setViewerTheme(theme) {
-  if (theme !== "light" && theme !== "dark") return;
+  if (!THEMES.includes(theme)) return;
   if (theme === shared.theme) return;
   shared.theme = theme;
   applyTheme();
@@ -4648,8 +4669,8 @@ function setScope(scope) {
   shared.scope = scope;
   // The year raster is a per-forecast view; the difference comparison has no meaning
   // there, so entering year scope while in difference falls back to side-by-side.
-  if (scope === "year" && isDiffView()) {
-    shared.displayMode = "side";
+  if (scope === SCOPE_WHOLE_YEAR && isDiffView()) {
+    shared.displayMode = DISPLAY_SIDE_BY_SIDE;
     markDisplayButtons();
     syncPanelGrid();
   }
@@ -4692,7 +4713,7 @@ function wireStaticMethodNotes() {
 // Switch the year-scope map + rail between |error| and signed bias. Re-renders the
 // panels (which pick the field/colormap/range per metric), the rail, and the colorbar.
 function setYearMetric(metric) {
-  if (metric !== "error" && metric !== "bias") return;
+  if (!YEAR_METRICS.includes(metric)) return;
   if (shared.yearMetric === metric) return;
   shared.yearMetric = metric;
   markMetricButtons();
@@ -4984,7 +5005,7 @@ function wireGlobalControls() {
     scheduleHashWrite();
   });
   elements["theme-toggle"].addEventListener("click", () => {
-    setViewerTheme(shared.theme === "light" ? "dark" : "light");
+    setViewerTheme(shared.theme === THEME_LIGHT ? THEME_DARK : THEME_LIGHT);
   });
   elements["psd-toggle"].addEventListener("click", () => {
     setPsdEnabled(!shared.psdEnabled);
@@ -5030,7 +5051,7 @@ function wireGlobalControls() {
         redrawOverlaysAll();
         updateSharedColorbar();
         updateContextRail();
-        if (shared.overlayMode !== "none") applyOverlayMode();
+        if (shared.overlayMode !== OVERLAY_NONE) applyOverlayMode();
       });
       writeHash();
     });
@@ -5049,9 +5070,9 @@ function wireGlobalControls() {
       clearColumnProfile();
       // The overlay picker must not keep reading "trajectories"/"column" once the thing
       // it names is gone, so drop it back to none along with its note.
-      if (shared.overlayMode === "trajectories" || shared.overlayMode === "column") {
-        shared.overlayMode = "none";
-        elements["overlay-mode"].value = "none";
+      if (shared.overlayMode === OVERLAY_TRAJECTORIES || shared.overlayMode === OVERLAY_WATER_COLUMN) {
+        shared.overlayMode = OVERLAY_NONE;
+        elements["overlay-mode"].value = OVERLAY_NONE;
         applyOverlayMode();
         writeHash();
       }
@@ -5306,8 +5327,8 @@ function writeHash() {
   parameters.set("cx", view.centerNX.toFixed(4));
   parameters.set("cy", view.centerNY.toFixed(4));
   parameters.set("theme", shared.theme);
-  if (shared.scope !== "single") parameters.set("scope", shared.scope);
-  if (shared.yearMetric !== "error") parameters.set("metric", shared.yearMetric);
+  if (shared.scope !== SCOPE_SINGLE_DATE) parameters.set("scope", shared.scope);
+  if (shared.yearMetric !== YEAR_METRIC_ABSOLUTE_ERROR) parameters.set("metric", shared.yearMetric);
   if (shared.psdEnabled) {
     parameters.set("psdOn", "1");
   }
@@ -5317,12 +5338,12 @@ function writeHash() {
     const size = shared.psdBoxRequest || shared.psdBox;
     parameters.set("psd", [shared.psdBox.lon, shared.psdBox.lat, size.w, size.h].map((v) => v.toFixed(2)).join(","));
   }
-  if (shared.overlayMode !== "none") parameters.set("ov", shared.overlayMode);
-  if (shared.overlayMode === "column" && shared.columnPoint) {
+  if (shared.overlayMode !== OVERLAY_NONE) parameters.set("ov", shared.overlayMode);
+  if (shared.overlayMode === OVERLAY_WATER_COLUMN && shared.columnPoint) {
     parameters.set("col", `${shared.columnPoint.lon.toFixed(3)},${shared.columnPoint.lat.toFixed(3)}`);
   }
   parameters.set("region", shared.region);
-  if (shared.overlayMode === "eddies") parameters.set("eref", shared.eddyReference);
+  if (shared.overlayMode === OVERLAY_EDDIES) parameters.set("eref", shared.eddyReference);
   if (shared.railCollapsed) parameters.set("rail", "collapsed");
   if (shared.controlsCollapsed) parameters.set("ctrl", "collapsed");
   parameters.set("rw", String(shared.railWidth));
@@ -5357,8 +5378,8 @@ function readHash() {
   view.centerNX = number("cx", view.centerNX);
   view.centerNY = number("cy", view.centerNY);
   if (parameters.has("theme")) shared.theme = parameters.get("theme");
-  if (parameters.get("scope") === "year") shared.scope = "year";
-  if (parameters.get("metric") === "bias") shared.yearMetric = "bias";
+  if (parameters.get("scope") === SCOPE_WHOLE_YEAR) shared.scope = SCOPE_WHOLE_YEAR;
+  if (parameters.get("metric") === YEAR_METRIC_BIAS) shared.yearMetric = YEAR_METRIC_BIAS;
   shared.psdEnabled = parameters.get("psdOn") === "1";
   if (parameters.has("psd")) {
     const [lon, lat, w, h] = parameters.get("psd").split(",").map(Number);
@@ -5380,7 +5401,7 @@ function readHash() {
   const railWidth = number("rw", null);
   if (railWidth !== null) shared.railWidth = Math.min(620, Math.max(280, railWidth));
   shared.controlsWidth = number("cw", shared.controlsWidth);
-  if (["side", "swipe", "diff"].includes(parameters.get("dm"))) shared.displayMode = parameters.get("dm");
+  if (DISPLAY_MODES.includes(parameters.get("dm"))) shared.displayMode = parameters.get("dm");
   if (parameters.has("play")) shared.showParticles = parameters.get("play") === "1";
   shared.particleSpeed = number("spd", shared.particleSpeed);
   return parameters;
@@ -5519,7 +5540,7 @@ async function main() {
   else if (shared.layout > 2) shared.layout = 2;
   // The difference view has no meaning in the year raster scope; a deep link that
   // asks for both falls back to side-by-side (mirrors the runtime scope switch).
-  if (shared.scope === "year" && shared.displayMode === "diff") shared.displayMode = "side";
+  if (shared.scope === SCOPE_WHOLE_YEAR && shared.displayMode === DISPLAY_DIFFERENCE) shared.displayMode = DISPLAY_SIDE_BY_SIDE;
   applyTheme();
   applyScope();
   markMetricButtons();
