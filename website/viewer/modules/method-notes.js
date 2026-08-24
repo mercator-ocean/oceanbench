@@ -43,27 +43,27 @@ export const METHOD_NOTES = {
 
   // Skill vs lead day chart (rail-lead-curve).
   "lead-curve": {
-    title: "RMSD vs lead day",
+    title: "RMSE vs lead day",
     body:
-      "Official Class-4 RMSD against observations for each lead day, pooled over the 52 " +
+      "Official Class-4 RMSE against observations for each lead day, pooled over the 52 " +
       "start dates of 2024. The shaded band is a 95% bootstrap confidence interval. " +
       "Computed offline by the oceanbench library.",
   },
 
-  // RMSD vs depth vertical profile chart (rail-depth-profile).
+  // RMSE vs depth vertical profile chart (rail-depth-profile).
   "depth-profile": {
-    title: "RMSD vs depth",
+    title: "RMSE vs depth",
     body:
-      "Class-4 RMSD against observations per depth bin, pooled over all match-ups of the " +
+      "Class-4 RMSE against observations per depth bin, pooled over all match-ups of the " +
       "year at the selected lead day. Same observation set and method as the official " +
       "scores. Hover a point for the observation count.",
   },
 
-  // RMSD / bias by start date chart (rail-year-rmsd).
+  // RMSE / bias by start date chart (rail-year-rmsd).
   "year-rmsd": {
-    title: "RMSD / bias by start date",
+    title: "RMSE / bias by start date",
     body:
-      "Class-4 RMSD for each start date, pooled over all match-ups of that start, same " +
+      "Class-4 RMSE for each start date, pooled over all match-ups of that start, same " +
       "method as the official scores. Bias mode shows the pooled mean of model minus obs. " +
       "The shaded band is a 95% bootstrap confidence interval. Click a point to open that " +
       "start date.",

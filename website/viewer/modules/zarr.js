@@ -8,8 +8,9 @@
 // data arrays of shape (start_date, lead_day, latitude, longitude) chunked as
 // 256x256 spatial tiles with one (start_date, lead_day) per chunk, stored as
 // uint16 with per-variable scale_factor/add_offset and an explicit _FillValue,
-// DEFLATE-compressed. Decompression is the platform-native DecompressionStream —
-// no wasm codec — which is exactly why the builder writes zlib rather than blosc.
+// DEFLATE-compressed. Decoding prefers the platform-native DecompressionStream (no
+// wasm codec, which is why the builder writes zlib rather than blosc) and falls back
+// to the small built-in inflater below on browsers without it.
 //
 // This is deliberately a few hundred lines for our own layout, not a general
 // zarr client. It scales to multi-level pyramids because every read is driven by
@@ -20,10 +21,217 @@ async function inflate(compressed, codecId) {
   if (codecId !== "zlib" && codecId !== "gzip") {
     throw new Error(`Unsupported compressor '${codecId}'. Pyramids must be zlib/gzip for browser decode.`);
   }
-  const format = codecId === "gzip" ? "gzip" : "deflate";
-  const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream(format));
-  const buffer = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buffer);
+  // DecompressionStream is absent on older Safari and Firefox; those decode through
+  // the software inflater below instead of failing every tile fetch.
+  if (typeof DecompressionStream === "function") {
+    const format = codecId === "gzip" ? "gzip" : "deflate";
+    const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream(format));
+    const buffer = await new Response(stream).arrayBuffer();
+    return new Uint8Array(buffer);
+  }
+  return softwareInflate(new Uint8Array(compressed), codecId);
+}
+
+// ---- software DEFLATE decoder (RFC 1951), used only when DecompressionStream is missing ----
+
+const LENGTH_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+const LENGTH_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+const DISTANCE_BASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+const DISTANCE_EXTRA = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+// Order in which the dynamic header stores its code-length alphabet (RFC 1951 §3.2.7).
+const CODE_LENGTH_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+
+function softwareInflate(wrapped, codecId) {
+  const payloadStart = codecId === "gzip" ? gzipHeaderBytes(wrapped) : zlibHeaderBytes(wrapped);
+  return inflateRaw(wrapped.subarray(payloadStart));
+}
+
+function zlibHeaderBytes(bytes) {
+  if (bytes.length < 2 || (bytes[0] & 0x0f) !== 8) throw new Error("Data is not a zlib stream");
+  // FDICT set (FLG bit 5): a four-byte dictionary id sits between the two-byte
+  // header and the data.
+  const start = bytes[1] & 0x20 ? 6 : 2;
+  if (start > bytes.length) throw new Error("Truncated zlib stream");
+  return start;
+}
+
+function gzipHeaderBytes(bytes) {
+  if (bytes.length < 18 || bytes[0] !== 0x1f || bytes[1] !== 0x8b || bytes[2] !== 8) {
+    throw new Error("Data is not a gzip stream");
+  }
+  const flags = bytes[3];
+  let offset = 10;
+  if (flags & 4) {
+    if (offset + 2 > bytes.length) throw new Error("Truncated gzip stream");
+    offset += 2 + bytes[offset] + (bytes[offset + 1] << 8);
+  }
+  for (const flag of [8, 16]) {
+    if (!(flags & flag)) continue;
+    while (offset < bytes.length && bytes[offset]) offset += 1;
+    offset += 1;
+  }
+  if (flags & 2) offset += 2;
+  if (offset > bytes.length) throw new Error("Truncated gzip stream");
+  return offset;
+}
+
+function bitReader(bytes) {
+  let position = 0;
+  let bitBuffer = 0;
+  let bitCount = 0;
+  return {
+    bits(count) {
+      while (bitCount < count) {
+        if (position >= bytes.length) throw new Error("Truncated DEFLATE data");
+        bitBuffer |= bytes[position] << bitCount;
+        position += 1;
+        bitCount += 8;
+      }
+      const value = bitBuffer & ((1 << count) - 1);
+      bitBuffer >>>= count;
+      bitCount -= count;
+      return value;
+    },
+    alignToByte() {
+      const drop = bitCount & 7;
+      bitBuffer >>>= drop;
+      bitCount -= drop;
+    },
+  };
+}
+
+function huffmanTable(lengths) {
+  const counts = new Uint16Array(16);
+  for (let symbol = 0; symbol < lengths.length; symbol += 1) counts[lengths[symbol]] += 1;
+  counts[0] = 0;
+  // offsets holds one slot past the longest code (index 16 doubles as the total).
+  const offsets = new Uint16Array(17);
+  for (let length = 1; length < 16; length += 1) offsets[length + 1] = offsets[length] + counts[length];
+  const symbols = new Uint16Array(offsets[16]);
+  for (let symbol = 0; symbol < lengths.length; symbol += 1) {
+    if (!lengths[symbol]) continue;
+    symbols[offsets[lengths[symbol]]] = symbol;
+    offsets[lengths[symbol]] += 1;
+  }
+  return { counts, symbols };
+}
+
+// Canonical Huffman lookup by walking one bit at a time: symbols are sorted per code
+// length, so a code's rank within its length indexes straight into `symbols`.
+function decodeSymbol(reader, table) {
+  let code = 0;
+  let first = 0;
+  let index = 0;
+  for (let length = 1; length <= 15; length += 1) {
+    code |= reader.bits(1);
+    const count = table.counts[length];
+    if (code - first < count) return table.symbols[index + code - first];
+    index += count;
+    first = (first + count) << 1;
+    code <<= 1;
+  }
+  throw new Error("Invalid DEFLATE data");
+}
+
+function inflateRaw(bytes) {
+  const reader = bitReader(bytes);
+  let output = new Uint8Array(Math.max(65536, bytes.length * 3));
+  let outputLength = 0;
+  const push = (byte) => {
+    if (outputLength === output.length) {
+      const grown = new Uint8Array(output.length * 2);
+      grown.set(output);
+      output = grown;
+    }
+    output[outputLength] = byte;
+    outputLength += 1;
+  };
+  let isFinal;
+  do {
+    isFinal = reader.bits(1);
+    const blockType = reader.bits(2);
+    if (blockType === 0) {
+      reader.alignToByte();
+      const storedLength = reader.bits(16);
+      const storedInverse = reader.bits(16);
+      if ((storedLength ^ 0xffff) !== storedInverse) throw new Error("Corrupt stored DEFLATE block");
+      for (let i = 0; i < storedLength; i += 1) push(reader.bits(8));
+    } else if (blockType === 1 || blockType === 2) {
+      let literals;
+      let distances;
+      if (blockType === 1) {
+        const fixedLiterals = new Uint8Array(288);
+        fixedLiterals.fill(8, 0, 144);
+        fixedLiterals.fill(9, 144, 256);
+        fixedLiterals.fill(7, 256, 280);
+        fixedLiterals.fill(8, 280, 288);
+        literals = huffmanTable(fixedLiterals);
+        distances = huffmanTable(new Uint8Array(30).fill(5));
+      } else {
+        const tables = readDynamicTables(reader);
+        literals = huffmanTable(tables.literals);
+        distances = huffmanTable(tables.distances);
+      }
+      for (;;) {
+        const symbol = decodeSymbol(reader, literals);
+        if (symbol < 256) {
+          push(symbol);
+          continue;
+        }
+        if (symbol === 256) break;
+        const lengthIndex = symbol - 257;
+        if (lengthIndex >= LENGTH_BASE.length) throw new Error("Invalid DEFLATE length symbol");
+        const matchLength = LENGTH_BASE[lengthIndex] + reader.bits(LENGTH_EXTRA[lengthIndex]);
+        const distanceSymbol = decodeSymbol(reader, distances);
+        if (distanceSymbol >= DISTANCE_BASE.length) throw new Error("Invalid DEFLATE distance symbol");
+        const matchDistance = DISTANCE_BASE[distanceSymbol] + reader.bits(DISTANCE_EXTRA[distanceSymbol]);
+        if (matchDistance > outputLength) throw new Error("DEFLATE match reaches before the stream start");
+        // Byte-at-a-time copy: the source run may overlap the write position, and the
+        // overlap must repeat the bytes being produced, not the original ones.
+        let source = outputLength - matchDistance;
+        for (let i = 0; i < matchLength; i += 1) push(output[source + i]);
+      }
+    } else {
+      throw new Error("Invalid DEFLATE block type");
+    }
+  } while (!isFinal);
+  return output.slice(0, outputLength);
+}
+
+function readDynamicTables(reader) {
+  const literalCount = reader.bits(5) + 257;
+  const distanceCount = reader.bits(5) + 1;
+  const codeLengthCount = reader.bits(4) + 4;
+  const codeLengths = new Uint8Array(19);
+  for (let i = 0; i < codeLengthCount; i += 1) codeLengths[CODE_LENGTH_ORDER[i]] = reader.bits(3);
+  const codeTable = huffmanTable(codeLengths);
+  const lengths = new Uint8Array(literalCount + distanceCount);
+  let index = 0;
+  while (index < lengths.length) {
+    const symbol = decodeSymbol(reader, codeTable);
+    if (symbol < 16) {
+      lengths[index] = symbol;
+      index += 1;
+      continue;
+    }
+    let repeats;
+    let value = 0;
+    if (symbol === 16) {
+      if (index === 0) throw new Error("Invalid DEFLATE run with no previous length");
+      value = lengths[index - 1];
+      repeats = 3 + reader.bits(2);
+    } else if (symbol === 17) {
+      repeats = 3 + reader.bits(3);
+    } else {
+      repeats = 11 + reader.bits(7);
+    }
+    if (index + repeats > lengths.length) throw new Error("Invalid DEFLATE run past the table end");
+    for (let r = 0; r < repeats; r += 1) {
+      lengths[index] = value;
+      index += 1;
+    }
+  }
+  return { literals: lengths.slice(0, literalCount), distances: lengths.slice(literalCount) };
 }
 
 export async function loadStore(storeUrl) {

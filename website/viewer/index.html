@@ -55,6 +55,25 @@ SPDX-License-Identifier: EUPL-1.2
         https://doi.org/10.48670/moi-00016. Derived product, OceanBench-generated; not the authoritative Copernicus
         product. Provided "as is", without warranty of any kind.
       </p>
+      <h3>Glossary</h3>
+      <dl class="about-glossary">
+        <dt>Lead day</dt>
+        <dd>How far ahead the forecast is looking. Lead day 1 is the first day
+        after the forecast start date, lead day 10 is ten days out. Forecasts
+        usually get less accurate as the lead day grows.</dd>
+        <dt>Class-4</dt>
+        <dd>A comparison made against real observations rather than against
+        another model. The forecast is interpolated to each observation's time and
+        place, so model and observation are compared at the same point.</dd>
+        <dt>RMSE</dt>
+        <dd>Root mean square error: the typical size of the gap between forecast
+        and observation, in the variable's own units. Lower is better, and large
+        errors weigh more heavily than small ones.</dd>
+        <dt>Bias</dt>
+        <dd>The average of forecast minus observation. It shows which way a
+        forecast leans overall: positive means it reads too high, negative too
+        low, and near zero means the errors cancel out.</dd>
+      </dl>
     </dialog>
 
     <div class="workspace">
@@ -176,12 +195,12 @@ SPDX-License-Identifier: EUPL-1.2
             <button type="button" data-forecast="1" class="ghost-button">F2</button>
           </div>
           <section class="rail-section">
-            <h3>RMSD vs lead day</h3>
+            <h3>RMSE vs lead day</h3>
             <div id="rail-lead-curve" class="rail-chart-slot"></div>
             <p id="rail-skill-note" class="rail-caption"></p>
           </section>
           <section class="rail-section" id="rail-depth-profile-section" hidden>
-            <h3>RMSD vs depth</h3>
+            <h3>RMSE vs depth</h3>
             <div id="rail-depth-profile" class="rail-chart-slot"></div>
             <p id="rail-depth-profile-note" class="rail-caption"></p>
           </section>
@@ -195,7 +214,7 @@ SPDX-License-Identifier: EUPL-1.2
             <p id="rail-column-note" class="rail-caption"></p>
           </section>
           <section class="rail-section" id="rail-year-rmsd-section" hidden>
-            <h3>RMSD by start date</h3>
+            <h3>RMSE by start date</h3>
             <div id="rail-year-rmsd" class="rail-chart-slot"></div>
             <p id="rail-year-rmsd-note" class="rail-caption"></p>
           </section>

@@ -1,0 +1,12 @@
+{
+  "name": "oceanbench-viewer-qa",
+  "private": true,
+  "type": "module",
+  "description": "Fake-user QA harness for the OceanBench viewer (Playwright).",
+  "scripts": {
+    "start": "node run.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}

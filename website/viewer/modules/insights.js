@@ -123,7 +123,7 @@ export async function loadRmsdByDepth(url) {
 }
 
 /**
- * Vertical RMSD profile for one variable at the lead day nearest `leadDay`, read from a
+ * Vertical RMSE profile for one variable at the lead day nearest `leadDay`, read from a
  * rmsd-by-depth artifact (schema_version 1). Returns { bins: [{ label, rmsd, bias, n }],
  * lead } ordered surface→deep, or null when the variable/lead carries no finite value.
  * `variableName` is the observation standard name (e.g. sea_water_potential_temperature).
@@ -148,7 +148,7 @@ export function rmsdDepthProfile(data, variableName, leadDay) {
 }
 
 /**
- * Lead-independent RMSD extent for the depth-profile chart: the largest finite RMSD over
+ * Lead-independent RMSE extent for the depth-profile chart: the largest finite RMSE over
  * EVERY depth bin and EVERY lead of one variable. The profile axis is bounded by this, so
  * scrubbing the lead moves the profile within a constant frame instead of rescaling it.
  * Pure function of the loaded artifact, so it only changes with dataset/variable/region.

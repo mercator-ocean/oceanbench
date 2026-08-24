@@ -46,7 +46,7 @@ const REFERENCE_LABELS = {
 
 const REGION_LABELS = { global: "Global", ibi: "IBI" };
 
-const METRIC_LABELS = { rmsd: "RMSD", class4_rmsd: "Class 4 RMSD" };
+const METRIC_LABELS = { rmsd: "RMSE", class4_rmsd: "Class 4 RMSE" };
 
 const DEPTH_ORDER = [
   "surface",

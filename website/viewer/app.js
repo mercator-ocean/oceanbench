@@ -183,7 +183,7 @@ const shared = {
   theme: "light",
   layout: 1,
   // "single" = per-start-date fields (the default view); "year" = precomputed
-  // whole-year error-geography raster + RMSD-by-start diagnostics.
+  // whole-year error-geography raster + RMSE-by-start diagnostics.
   scope: "single",
   // Year-scope map metric: "error" = time-mean |obs − model| (sequential), "bias" =
   // time-mean signed model − obs (diverging, centred 0). Single-forecast scope ignores it.
@@ -473,11 +473,18 @@ function refreshPanelControls(panel) {
     panel.state.dataset,
   );
   const manifest = manifestFor(panel.state.dataset);
+  // The difference map is Forecast 1 − Forecast 2 on Forecast 1's variable; panel 2's
+  // own picker is mirrored and locked so it can never suggest a cross-variable
+  // difference that is not what is computed (p1 read "temperature − salinity" off it).
+  const diffLocked = isDiffView() && panel.index === 1;
+  if (diffLocked && panels[0]) panel.state.variable = panels[0].state.variable;
   if (manifest) {
-    if (!variableExists(manifest, panel.state.variable)) panel.state.variable = Object.keys(manifest.variables)[0];
+    if (!diffLocked && !variableExists(manifest, panel.state.variable)) panel.state.variable = Object.keys(manifest.variables)[0];
     const options = Object.keys(manifest.variables).map((key) => ({ value: key, label: variableLabel(manifest, key) }));
     populateSelect(panel.els.variable, options.concat(currentsVariableOptions(manifest)), panel.state.variable);
   }
+  panel.els.variable.disabled = diffLocked;
+  panel.els.variable.title = diffLocked ? "In difference mode both forecasts show Forecast 1's variable" : "";
 }
 
 function wirePanel(panel) {
@@ -531,6 +538,8 @@ function wirePanel(panel) {
     panel.state.variable = event.target.value;
     setActivePanel(panel.index);
     refreshPanelControls(panel);
+    // Panel 2's locked picker mirrors this panel's variable in difference mode.
+    if (isDiffView() && panel.index === 0 && panels[1]) refreshPanelControls(panels[1]);
     await renderPanel(panel);
     if (isDiffView() && panel.index === 1) await renderPanel(panels[0]);
     await updateContextRail();
@@ -603,11 +612,13 @@ function panelLeadCached(panel, leadDay) {
   for (const variable of variables) {
     if (!isLayerCached(store, { variable, level, startIndex, leadIndex })) return false;
   }
-  // The difference view reads the partner forecast's field on the same slice.
-  if (isDiffHost(panel) && !currents) {
+  // The difference view reads the partner forecast's field(s) on the same slice.
+  if (isDiffHost(panel)) {
     const partner = stores.get(panels[1].state.dataset);
     if (!partner) return false;
-    if (!isLayerCached(partner, { variable: panel.state.variable, level, startIndex, leadIndex })) return false;
+    for (const variable of variables) {
+      if (!isLayerCached(partner, { variable, level, startIndex, leadIndex })) return false;
+    }
   }
   return true;
 }
@@ -651,7 +662,9 @@ async function renderPanel(panel) {
     const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
     const leadIndex = shared.leadDay - 1;
 
-    if (isDiffHost(panel) && !isCurrentsVariable(panel.state.variable)) {
+    if (isDiffHost(panel) && isCurrentsVariable(panel.state.variable)) {
+      await renderCurrentsDifferencePanel(panel, token, manifest, level, start, leadIndex, panels[1].state.dataset);
+    } else if (isDiffHost(panel)) {
       await renderDifferencePanel(panel, token, manifest, level, start, leadIndex, panels[1].state.dataset);
     } else if (isCurrentsVariable(panel.state.variable)) {
       await renderCurrentsPanel(panel, token, manifest, level, start, leadIndex);
@@ -796,6 +809,51 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   prefetchNeighbours(panel, level, start, leadIndex);
 }
 
+// Difference for the derived currents variable: speed magnitude is computed for both
+// forecasts on the primary grid, then differenced, so the panel shows faster/slower
+// rather than silently falling back to forecast 1's plain field.
+async function renderCurrentsDifferencePanel(panel, token, manifest, level, start, leadIndex, compareSlug) {
+  const variables = currentDepthVariables(panel);
+  if (!(variables.u in manifest.variables)) {
+    setStatus(`${labelFor(panel.state.dataset)} has no velocity fields for currents`, true);
+    return;
+  }
+  await ensureStore(compareSlug);
+  if (!(variables.u in manifestFor(compareSlug).variables)) {
+    setStatus(`${labelFor(compareSlug)} has no velocity fields, so a currents difference is unavailable`, true);
+    return;
+  }
+  const uPrimary = await readAlignedField(panel, panel.state.dataset, variables.u, level, start, leadIndex);
+  if (token !== panel.renderToken) return;
+  const vPrimary = await readAlignedField(panel, panel.state.dataset, variables.v, level, start, leadIndex);
+  if (token !== panel.renderToken) return;
+  const compareLevel = renderLevelForSlug(compareSlug);
+  const uCompare = await readAlignedField(panel, compareSlug, variables.u, compareLevel, start, leadIndex, uPrimary.latitudes, uPrimary.longitudes);
+  if (token !== panel.renderToken) return;
+  const vCompare = await readAlignedField(panel, compareSlug, variables.v, compareLevel, start, leadIndex, uPrimary.latitudes, uPrimary.longitudes);
+  if (token !== panel.renderToken) return;
+  const difference = differenceField(
+    speedMagnitudeField(uPrimary.field, vPrimary.field),
+    speedMagnitudeField(uCompare.field, vCompare.field),
+  );
+  const [, magnitude] = symmetricRange(difference);
+  const bound = stableMax(`diff|${panel.index}|${compareSlug}|currents`, magnitude) || magnitude;
+  const range = [-bound, bound];
+  panel.field = difference;
+  clearYearReadoutMetadata(panel);
+  panel.latitudes = uPrimary.latitudes;
+  panel.longitudes = uPrimary.longitudes;
+  panel.edgesA = worldEdges(uPrimary.latitudes, uPrimary.longitudes);
+  panel.offscreenA = colorize(difference, uPrimary.latitudes, DIFFERENCE_COLORMAP, range);
+  panel.offscreenB = null;
+  panel.range = range;
+  panel.colormap = DIFFERENCE_COLORMAP;
+  panel.units = "m/s";
+  panel.label = `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})`;
+  stopParticles(panel);
+  prefetchNeighbours(panel, level, start, leadIndex);
+}
+
 async function renderCurrentsPanel(panel, token, manifest, level, start, leadIndex) {
   const variables = currentDepthVariables(panel);
   if (!(variables.u in manifest.variables)) {
@@ -836,7 +894,7 @@ function colorize(field, latitudes, colormap, range, transparentNaN = false, lan
     transparentNaN,
     landMask,
   });
-  const canvas = new OffscreenCanvas(field.width, field.height);
+  const canvas = rasterCanvas(field.width, field.height);
   canvas.getContext("2d", { willReadFrequently: true }).putImageData(image, 0, 0);
   return canvas;
 }
@@ -844,8 +902,19 @@ function colorize(field, latitudes, colormap, range, transparentNaN = false, lan
 function landStencil(field, latitudes) {
   const flip = latitudes[0] < latitudes[latitudes.length - 1];
   const image = landStencilImageData(field, { flipVertical: flip });
-  const canvas = new OffscreenCanvas(field.width, field.height);
+  const canvas = rasterCanvas(field.width, field.height);
   canvas.getContext("2d").putImageData(image, 0, 0);
+  return canvas;
+}
+
+// These rasters are only ever blitted through drawImage, which takes a DOM canvas
+// exactly like an OffscreenCanvas, so browsers without OffscreenCanvas get a detached
+// HTMLCanvasElement instead.
+function rasterCanvas(width, height) {
+  if (typeof OffscreenCanvas === "function") return new OffscreenCanvas(width, height);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
   return canvas;
 }
 
@@ -914,7 +983,7 @@ async function sharedYearBiasRange(shortName) {
 
 async function renderYearPanel(panel, token, manifest) {
   stopParticles(panel);
-  // The velocity error geography and RMSD-by-start are built from 15 m drifter obs.
+  // The velocity error geography and RMSE-by-start are built from 15 m drifter obs.
   // A surface current selection cannot be honestly mapped onto them.
   if (isSurfaceCurrentVariable(panel.state.variable)) {
     clearYearPanel(panel, "Current observations (drifters) are measured at 15 m depth. Switch to 15 m currents to compare against them.");
@@ -1470,9 +1539,15 @@ function class4CurrentScale() {
 function class4StableScale(measure) {
   const previous = class4CurrentScale();
   const scale = stableMax(CLASS4_SCALE_ID, measure);
-  // A panel that widens the bound after the other has already painted leaves the two on
-  // different ramps for that frame. The bound only grows, so one more frame settles them.
-  if (shared.layout > 1 && scale > previous) scheduleRedrawAllPanels();
+  if (scale > previous) {
+    // The colorbar and legend read the ramp at render time, which can run before the
+    // first widening draw; refresh them so "scale ≈ n/a" never outlives the first
+    // painted point (p8).
+    updateSharedColorbar();
+    // A panel that widens the bound after the other has already painted leaves the two on
+    // different ramps for that frame. The bound only grows, so one more frame settles them.
+    if (shared.layout > 1) scheduleRedrawAllPanels();
+  }
   return scale;
 }
 
@@ -1519,7 +1594,15 @@ function drawOverlays(panel) {
         }
       }
     }
-  } else if (shared.overlayMode === "class4" && overlayData.class4 && !isSurfaceCurrentVariable(panel.state.variable)) {
+  } else if (
+    shared.overlayMode === "class4" &&
+    overlayData.class4 &&
+    // A redraw can fire between a region switch and the overlay reload nulling the slot;
+    // painting the old region's rows would also widen the fresh ramp with their p90,
+    // silently carrying one region's scale into another (p8).
+    overlayData.region === shared.region &&
+    !isSurfaceCurrentVariable(panel.state.variable)
+  ) {
     const manifest = manifestFor(panel.state.dataset);
     const entry = manifest && manifest.variables[panel.state.variable];
     const depthBin = class4DepthBin(entry);
@@ -2407,6 +2490,7 @@ function beginPanelDrag(panel, event) {
     const localX = (event.clientX - rectangle.left) * ratio;
     if (Math.abs(localX - panel.swipeX * panel.els.field.width) < 12 * ratio) {
       panel.draggingSwipe = true;
+      panel.els.field.style.cursor = "col-resize";
       panel.els.field.setPointerCapture(event.pointerId);
       panel.els.field.addEventListener("pointermove", onPanelPointerMove);
       panel.els.field.addEventListener("pointerup", endPanelDrag, { once: true });
@@ -2561,6 +2645,20 @@ function minimumZoomFor(panel) {
   return Math.min(60, Math.max(1, Math.min(horizontalZoom, verticalZoom)));
 }
 
+// Smallest zoom whose raster covers the panel box instead of fitting inside it.
+// The world is a fixed 2:1 strip and common window shapes leave the box wider than
+// that, so contain-fit (zoom 1) letterboxes it with dead bands above and below;
+// cover-fit spends that space on map. Longitude crops symmetrically, the zoom-out
+// floor stays 1 so the whole globe remains one wheel away, and global rendering
+// already wraps copies, so the flanks fill themselves. Measured on the wrap's CSS
+// box, not the canvas backing store, which can still be at its 300x150 default
+// before the first resize pass.
+function coverZoomFor(panel) {
+  const rectangle = panel && panel.els.wrap ? panel.els.wrap.getBoundingClientRect() : null;
+  if (!rectangle || !rectangle.width || !rectangle.height) return 1;
+  return Math.max(1, rectangle.height / (rectangle.width / 2));
+}
+
 function clampView() {
   // Backstop for any non-finite view value that slipped past readHash (a stale
   // localStorage entry, a manual assignment, arithmetic underflow): a NaN zoom or
@@ -2603,13 +2701,15 @@ function clampView() {
 
 function fitRegionView() {
   const bounds = REGION_BOUNDS[shared.region];
+  const panel = panels.find((candidate) => candidate && candidate.els && candidate.els.field.width > 0);
   if (!bounds) {
-    view.zoom = 1;
+    // Reset on the global region re-arms the cover fit, so the map keeps using the
+    // whole box after a user zoomed or the window changed shape underneath it.
+    view.zoom = coverZoomFor(panel);
     view.centerNX = GLOBAL_DEFAULT_CENTER_NX;
     view.centerNY = 0.5;
     return;
   }
-  const panel = panels.find((candidate) => candidate && candidate.els && candidate.els.field.width > 0);
   view.centerNX = ((bounds.west + bounds.east) / 2 + 180) / 360;
   view.centerNY = (90 - (bounds.south + bounds.north) / 2) / 180;
   if (!panel) return;
@@ -2666,6 +2766,9 @@ function updateHover(event) {
   }
   const ratio = window.devicePixelRatio || 1;
   const projection = projectionFor(hoverPanel);
+  // Hoisted above the cursor chain so the obs hit-test can drive both the readout
+  // and the pointer affordance from a single nearest-point lookup.
+  const obsRecord = nearestClass4Record(hoverPanel, event, hoverRectangle);
   // Cursor affordance for the PSD rectangle (move over the interior, resize on edges).
   if (psdBoxVisible()) {
     const hit = psdBoxHitTest(
@@ -2677,6 +2780,15 @@ function updateHover(event) {
     hoverPanel.els.field.style.cursor = psdCursorFor(hit);
   } else if (columnModeActive()) {
     hoverPanel.els.field.style.cursor = "crosshair";
+  } else if (obsRecord) {
+    hoverPanel.els.field.style.cursor = "pointer";
+  } else if (
+    isSwipeHost(hoverPanel) &&
+    hoverPanel.offscreenB &&
+    Math.abs((event.clientX - hoverRectangle.left) * ratio - hoverPanel.swipeX * hoverPanel.els.field.width) < 12 * ratio
+  ) {
+    // Same grab zone as beginPanelDrag, same cursor as the drawer resizer.
+    hoverPanel.els.field.style.cursor = "col-resize";
   } else if (hoverPanel.els.field.style.cursor) {
     hoverPanel.els.field.style.cursor = "";
   }
@@ -2691,13 +2803,29 @@ function updateHover(event) {
   // Hover information goes to the fixed bottom-left pill AND, for an obs point, to a small
   // tooltip at the cursor: the pill sits in the far corner of the map, so on a dense scatter
   // the reader had to look away from the dot to read it and could not tell which dot answered.
-  const obsRecord = nearestClass4Record(hoverPanel, event, hoverRectangle);
+  // The swipe host paints panel 2's field right of the divider on its own canvas, so the
+  // pill must sample whichever field is visible under the cursor and say which one it is.
+  const swipeSecondVisible =
+    isSwipeHost(hoverPanel) &&
+    hoverPanel.offscreenB &&
+    panels[1] &&
+    panels[1].field &&
+    (event.clientX - hoverRectangle.left) * ratio > hoverPanel.swipeX * hoverPanel.els.field.width;
   for (const panel of readoutPanels) {
     if (!panel.field) {
       panel.els.readout.textContent = "";
       continue;
     }
-    updatePanelReadout(panel, lat, lon, panel === hoverPanel && obsRecord ? class4ReadoutSuffix(obsRecord, panel.units) : "");
+    const source = panel === hoverPanel && swipeSecondVisible ? panels[1] : panel;
+    // In difference mode the host pill shows the subtracted value while panel 2's pill
+    // echoes its raw field; unlabeled, the echo reads as a second data sample (p8).
+    let prefix = "";
+    if (panel === hoverPanel && isSwipeHost(panel) && panel.offscreenB) {
+      prefix = source === panels[1] ? "Forecast 2 · " : "Forecast 1 · ";
+    } else if (isDiffView() && shared.layout === 2) {
+      prefix = panel.index === 0 ? "Difference · " : "Forecast 2 · ";
+    }
+    updatePanelReadout(panel, lat, lon, panel === hoverPanel && obsRecord ? class4ReadoutSuffix(obsRecord, source.units) : "", source, prefix);
   }
   showClass4Tooltip(hoverPanel, obsRecord, event);
   updateGhostCursor(hoverPanel, wrappedNX, point.ny);
@@ -2774,21 +2902,21 @@ function updateGhostCursor(hoverPanel, wrappedNX, ny) {
   ghost.hidden = false;
 }
 
-function updatePanelReadout(panel, lat, lon, suffix = "") {
-    const column = nearestIndex(panel.longitudes, lon);
-    const row = nearestIndex(panel.latitudes, lat);
+function updatePanelReadout(panel, lat, lon, suffix = "", source = panel, prefix = "") {
+    const column = nearestIndex(source.longitudes, lon);
+    const row = nearestIndex(source.latitudes, lat);
     if (column < 0 || row < 0) {
-      panel.els.readout.textContent = suffix ? `${formatFixed(lat, 2)}°, ${formatFixed(lon, 2)}°${suffix}` : "";
+      panel.els.readout.textContent = suffix ? `${prefix}${formatFixed(lat, 2)}°, ${formatFixed(lon, 2)}°${suffix}` : "";
       return;
     }
-    const value = panel.field.data[row * panel.field.width + column];
-    const count = panel.yearCounts && panel.yearCounts.width === panel.field.width ? panel.yearCounts.data[row * panel.yearCounts.width + column] : null;
+    const value = source.field.data[row * source.field.width + column];
+    const count = source.yearCounts && source.yearCounts.width === source.field.width ? source.yearCounts.data[row * source.yearCounts.width + column] : null;
     const standardError =
-      panel.yearBiasSE && panel.yearBiasSE.width === panel.field.width
-        ? panel.yearBiasSE.data[row * panel.yearBiasSE.width + column]
+      source.yearBiasSE && source.yearBiasSE.width === source.field.width
+        ? source.yearBiasSE.data[row * source.yearBiasSE.width + column]
         : null;
-    const valueText = fieldReadoutValue(panel, value, count, standardError);
-    panel.els.readout.textContent = `${formatFixed(lat, 2)}°, ${formatFixed(lon, 2)}° · ${valueText}${suffix}`;
+    const valueText = fieldReadoutValue(source, value, count, standardError);
+    panel.els.readout.textContent = `${prefix}${formatFixed(lat, 2)}°, ${formatFixed(lon, 2)}° · ${valueText}${suffix}`;
 }
 
 function fieldReadoutValue(panel, value, count, standardError) {
@@ -2796,7 +2924,7 @@ function fieldReadoutValue(panel, value, count, standardError) {
     if (!Number.isFinite(value) || count === 0) return "no observations";
     const biasMode = panel.yearMetric === "bias";
     // Non-bias year cells are the time-mean |obs − model| (MAE), matching the panel title
-    // and method note — not RMSD. Label it "|error|" so the hover does not misname it.
+    // and method note — not RMSE. Label it "|error|" so the hover does not misname it.
     const metric = biasMode ? "bias" : "|error|";
     const sign = biasMode && value > 0 ? "+" : "";
     // Bias cells carry a ±1 standard error (std(model − obs)/sqrt(n)); absent on old artifacts.
@@ -2919,6 +3047,13 @@ function syncPanelGrid() {
   grid.innerHTML = "";
   for (let i = 0; i < shared.layout; i += 1) {
     panels[i].container.classList.toggle("head-only", single && i === 1);
+    // The shared map paints Forecast 1 − Forecast 2 in difference mode, so keeping the
+    // "Forecast 1" head label over it misreads as a plain field (p8).
+    const headLabel = panels[i].container.querySelector(".panel-forecast-label");
+    if (headLabel) {
+      headLabel.textContent =
+        shared.displayMode === "diff" && shared.layout === 2 && i === 0 ? "Difference · Forecast 1" : `Forecast ${i + 1}`;
+    }
     grid.appendChild(panels[i].container);
     refreshPanelControls(panels[i]);
   }
@@ -3155,6 +3290,14 @@ function legendHelpAnchor() {
   return `<span class="legend-help"></span>`;
 }
 
+// The legend names the region with the picker's own label ("Global", "IBI"), never the
+// lowercase internal value (p8 read "region ibi" as sloppy output).
+function regionDisplayName() {
+  const select = elements["overlay-region"];
+  const option = select && select.selectedOptions && select.selectedOptions[0];
+  return option ? option.textContent : shared.region;
+}
+
 function legendSwatch(color, label, count) {
   const countText = count == null ? "" : ` · <strong>${formatCount(count)}</strong>`;
   return `<span class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escapeHtml(label)}${countText}</span>`;
@@ -3180,7 +3323,7 @@ function renderClass4Legend(legend, panel, scale) {
     : `<strong>${formatCount(matched)} obs</strong>`;
   legend.hidden = false;
   legend.innerHTML =
-    `<span class="legend-note">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(panel.units)} · region ${escapeHtml(shared.region)}${weak}${legendHelpAnchor()}</span>`;
+    `<span class="legend-note">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(panel.units)} · region ${escapeHtml(regionDisplayName())}${weak}${legendHelpAnchor()}</span>`;
   attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
 }
 
@@ -3295,7 +3438,7 @@ async function updateContextRail() {
 // produced the shown forecast(s)' artifacts and when. Manifests published before this
 // block existed carry no `provenance`, so nothing is shown for them (the line stays
 // hidden). In 2-forecast mode a shared stamp collapses to one line; distinct stamps
-// show one line each.
+// show one line each, prefixed with their forecast label.
 function formatProvenanceLine(provenance) {
   const version = provenance.oceanbench_version || "?";
   const generatedDate = String(provenance.generated_at || "").slice(0, 10);
@@ -3306,30 +3449,31 @@ function formatProvenanceLine(provenance) {
 function renderRailProvenance(shown) {
   const element = elements["rail-provenance"];
   if (!element) return;
-  const lines = [];
+  const entries = [];
   for (const panel of shown) {
     const manifest = manifestFor(panel.state.dataset);
     const provenance = manifest && manifest.provenance;
     if (!provenance) continue;
     const line = formatProvenanceLine(provenance);
-    if (!lines.includes(line)) lines.push(line);
+    if (!entries.some((entry) => entry.line === line)) entries.push({ line, index: panel.index });
   }
   element.textContent = "";
-  if (!lines.length) {
+  if (!entries.length) {
     element.hidden = true;
     return;
   }
-  lines.forEach((line, index) => {
+  const labelled = entries.length > 1;
+  entries.forEach((entry, index) => {
     if (index > 0) element.appendChild(document.createElement("br"));
     const span = document.createElement("span");
-    span.textContent = line;
+    span.textContent = labelled ? `Forecast ${entry.index + 1} · ${entry.line}` : entry.line;
     element.appendChild(span);
   });
   element.hidden = false;
   attachMethodNote(element, "data-provenance");
 }
 
-// RMSD vertical profile (RMSD vs depth) for the shown forecast(s) at the selected lead
+// RMSE vertical profile (RMSE vs depth) for the shown forecast(s) at the selected lead
 // day, so the rail answers "where in the water column is the model wrong at this lead".
 // Only 3D variables (temperature, salinity) carry a depth profile: the artifact keys its
 // `variables` by the observation standard name, so surface-only channels (SSH, currents)
@@ -3343,7 +3487,7 @@ async function renderRailDepthProfile(shown, comparison) {
   const lines = [];
   let unit = "";
   let lead = null;
-  // Lead-independent RMSD bound (max over every lead and depth bin of the shown
+  // Lead-independent RMSE bound (max over every lead and depth bin of the shown
   // artifacts): the profile axis stays fixed while the lead slider scrubs, so the
   // profile visibly grows within a constant frame instead of being renormalised.
   let xBound = 0;
@@ -3358,7 +3502,7 @@ async function renderRailDepthProfile(shown, comparison) {
     lead = lead == null ? profile.lead : lead;
     unit = unit || entry.units || "";
     lines.push({
-      label: comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}` : "RMSD vs depth",
+      label: comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}` : "RMSE vs depth",
       color: forecastColor(panel.index),
       bins: profile.bins,
     });
@@ -3371,17 +3515,17 @@ async function renderRailDepthProfile(shown, comparison) {
   }
   section.hidden = false;
   slot.innerHTML = rmsdByDepthSVG(lines, {
-    title: comparison ? "RMSD vs depth (both forecasts)" : "RMSD vs depth",
+    title: comparison ? "RMSE vs depth (both forecasts)" : "RMSE vs depth",
     unit,
     xBound,
   });
   if (note) {
-    note.textContent = `Class-4 RMSD per depth bin at lead day ${lead ?? shared.leadDay}, pooled over all match-ups of the year (same method as the official scores).`;
+    note.textContent = `Class-4 RMSE per depth bin at lead day ${lead ?? shared.leadDay}, pooled over all match-ups of the year (same method as the official scores).`;
   }
   wireCursorTooltip(slot);
 }
 
-// RMSD by start date, one line per visible forecast at the selected lead day. Clicking
+// RMSE by start date, one line per visible forecast at the selected lead day. Clicking
 // a point drills down into single-forecast scope with that start date selected.
 async function renderRailYearRmsd(shown) {
   const slot = elements["rail-year-rmsd"];
@@ -3391,7 +3535,7 @@ async function renderRailYearRmsd(shown) {
   // so only the leading text node is retitled).
   const yearHeading = elements["rail-year-rmsd-section"].querySelector("h3");
   if (yearHeading && yearHeading.firstChild) {
-    yearHeading.firstChild.textContent = biasMode ? "Bias by start date" : "RMSD by start date";
+    yearHeading.firstChild.textContent = biasMode ? "Bias by start date" : "RMSE by start date";
   }
   const lines = [];
   let unit = "";
@@ -3427,7 +3571,7 @@ async function renderRailYearRmsd(shown) {
     });
   }
   slot.innerHTML = rmsdByStartSVG(lines, {
-    title: biasMode ? "Bias by start date" : "RMSD by start date",
+    title: biasMode ? "Bias by start date" : "RMSE by start date",
     unit,
     signed: biasMode,
     yBound,
@@ -3435,10 +3579,10 @@ async function renderRailYearRmsd(shown) {
   note.textContent = lines.length
     ? biasMode
       ? "Pooled mean(model − obs) per start date, same method as the official scores. Click a point to open that start date."
-      : "Class-4 RMSD per start date, same method as the official scores (pooled over all match-ups for that start). Click a point to open that start date."
+      : "Class-4 RMSE per start date, same method as the official scores (pooled over all match-ups for that start). Click a point to open that start date."
     : biasMode
       ? "Bias by start not available for this dataset/region."
-      : "Year RMSD-by-start not available for this dataset/region.";
+      : "Year RMSE-by-start not available for this dataset/region.";
   wireCursorTooltip(slot);
   wireYearRmsdDrilldown(slot, lines);
 }
@@ -3528,7 +3672,7 @@ function prettyVariable(panel) {
   return entry ? `${prettyName(entry.standard_name)} · ${entry.depth}` : panel.state.variable;
 }
 
-// Obs-based skill (Class-4 RMSD vs observations) for a forecast's selected variable.
+// Obs-based skill (Class-4 RMSE vs observations) for a forecast's selected variable.
 // Returns { rows, unit, n } or null when no observation-based metric exists (item 4).
 function obsSkillSeries(panel) {
   // Surface currents have no 15 m drifter obs to compare against — the switch note
@@ -3596,7 +3740,7 @@ function renderRailSkill(shown, comparison) {
               }`
             : comparison
               ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}`
-              : "RMSD vs observations",
+              : "RMSE vs observations",
         );
       }
       // n_starts is available from the summary, so report the real number of start dates
@@ -3606,7 +3750,7 @@ function renderRailSkill(shown, comparison) {
           skill.n < 10 ? " (low, weak statistic)" : ""
         }`,
       );
-      if (isCurrentsVariable(panel.state.variable)) notes.push("Current speed map points are paired u/v speeds; curves show u/v component RMSD.");
+      if (isCurrentsVariable(panel.state.variable)) notes.push("Current speed map points are paired u/v speeds; curves show u/v component RMSE.");
     }
   } catch (error) {
     console.error("Cannot render observation-based skill", error);
@@ -3621,7 +3765,7 @@ function renderRailSkill(shown, comparison) {
         unit,
         labels,
         colors,
-        title: comparison ? "RMSD vs lead day (both forecasts)" : "RMSD vs lead day",
+        title: comparison ? "RMSE vs lead day (both forecasts)" : "RMSE vs lead day",
         emptyMessage: "no scored observations for this variable/product",
       })
     : "";
@@ -4316,6 +4460,10 @@ function fillLeadTicks(minimumLead, maximumLead) {
 async function applyOverlayMode() {
   const region = shared.region;
   const mode = shared.overlayMode;
+  // The overlay mode is part of the stable-range signature. Sync before any draw, or the
+  // obs-error ramp widened by the first class-4 paint is cleared moments later by the
+  // updateContextRail sync and the legend reads "scale ≈ n/a" until the next redraw (p8).
+  syncSelectionRanges();
   // The selection this call is answering. Its awaits are long enough for the user to pick
   // another region or another overlay in the meantime, and a reply that lands after that
   // would narrate the old selection over the new map.
@@ -4398,9 +4546,18 @@ async function applyOverlayMode() {
 // while the lead slider is dragged. Legacy files hold all pairs, so this is a no-op.
 let class4ReloadTimer = null;
 
-// True when the obs overlay owes the current start/lead a fetch of its own.
+// Lead the armed or in-flight reload will answer. Scheduling may not infer this from
+// overlayData.class4: an in-flight reload nulls that slot first, so a lead input landing
+// inside that window would see "nothing pending" and never schedule the reload the user
+// landed on. Writes stay arbitrated by the generation tokens; this only decides when a
+// request is created.
+let class4ReloadLead = null;
+
+// True when the obs overlay owes the current start/lead a fetch of its own: the result
+// slot says the parquet is targeted, or a reload is already armed/in flight for some lead.
 function class4ReloadPending() {
-  return shared.overlayMode === "class4" && Boolean(overlayData.class4) && Boolean(overlayData.class4.targeted);
+  if (shared.overlayMode !== "class4") return false;
+  return Boolean(overlayData.class4 && overlayData.class4.targeted) || class4ReloadLead !== null;
 }
 
 function cancelClass4ReloadTimer() {
@@ -4428,13 +4585,22 @@ async function reloadClass4Overlay() {
 
 function scheduleClass4Reload() {
   if (!class4ReloadPending()) return;
+  // Same lead with its debounce timer still armed: re-arming would only restart the
+  // wait, not change what will be fetched. A changed lead always re-arms.
+  if (class4ReloadTimer && class4ReloadLead === shared.leadDay) return;
   const note = elements["overlay-note"];
   class4ProgressLabel = `Loading obs for lead ${shared.leadDay}…`;
   if (note) note.textContent = class4ProgressLabel;
   cancelClass4ReloadTimer();
+  class4ReloadLead = shared.leadDay;
   class4ReloadTimer = setTimeout(() => {
     class4ReloadTimer = null;
-    reloadClass4Overlay();
+    const requestedLead = class4ReloadLead;
+    reloadClass4Overlay().finally(() => {
+      // Retire the claim only if this is still the newest reload; a newer step has
+      // either re-armed the timer or already taken over the lead while this ran.
+      if (class4ReloadLead === requestedLead) class4ReloadLead = null;
+    });
   }, 120);
 }
 
@@ -5387,6 +5553,14 @@ async function main() {
   wireEmbeddedTheme();
 
   clampView();
+  // A link that names no zoom opens covered: contain-fit leaves vertical dead bands
+  // around the 2:1 raster in every common window shape. Deep links keep their zoom,
+  // so a shared view still reproduces exactly what was shared. The panels are laid
+  // out by now, which is what makes the cover zoom computable.
+  if (!parameters.has("z")) {
+    view.zoom = coverZoomFor(panels.find((candidate) => candidate.els.field.width > 0));
+    clampView();
+  }
   writeHash();
   await renderAllPanels();
   if (leadClampNote) setStatus(leadClampNote);

@@ -1,0 +1,53 @@
+{
+  "$note": [
+    "Single editable place for QA expectations. Values are CSS pixels measured at the",
+    "reference viewport (see viewport below).",
+    "Re-baseline 2026-08-21: layout intentionally changed today (cover-fit map, legend chips);",
+    "the previous 228px lead slider seed was stale. Reseed with: node qa/run.mjs --seed",
+    "Tolerances are absolute pixel deltas; do not widen them to force green runs."
+  ],
+  "viewport": {
+    "height": 900,
+    "widths": {
+      "even": 1440,
+      "odd": 1439
+    }
+  },
+  "layoutProbes": [
+    {
+      "name": "leadSliderWidth",
+      "selector": "#lead-day",
+      "property": "width",
+      "expected": 148.02,
+      "tolerancePx": 8
+    },
+    {
+      "name": "playbackDockHeight",
+      "selector": ".dock-playback",
+      "property": "height",
+      "expected": 21.59,
+      "tolerancePx": 8
+    },
+    {
+      "name": "panelCanvasWidth",
+      "selector": ".panel-field",
+      "property": "width",
+      "expected": 832,
+      "tolerancePx": 10
+    }
+  ],
+  "flipbook": {
+    "minPaintsPerLeadStepPerPanel": 1
+  },
+  "budgets": {
+    "warmLeadStepMs": 1200,
+    "coldLeadStepMs": 20000
+  },
+  "datelineSeam": {
+    "maxDarkRatio": 0.35,
+    "scanHalfWidthPx": 24
+  },
+  "exploration": {
+    "defaultSeconds": 12
+  }
+}

@@ -6,7 +6,7 @@
 // one per dataset/region, referenced from insights.json:
 //   year_error_geography → a precomputed raster of the time-mean |obs − model|
 //     over every start date, per raw variable and lead day; rendered as a map layer.
-//   year_rmsd_by_start → a per-start-date RMSD series per raw variable/lead, drawn
+//   year_rmsd_by_start → a per-start-date RMSE series per raw variable/lead, drawn
 //     as a line chart whose points drill down into the single-forecast scope.
 // Both are fetched lazily and memoised by URL.
 
@@ -204,7 +204,7 @@ export function yearBiasMax(geography, shortName, leadDay) {
   return finite[index];
 }
 
-// Lead-independent y-bound for the RMSD/bias-by-start rail chart: the max finite value
+// Lead-independent y-bound for the RMSE/bias-by-start rail chart: the max finite value
 // (max |value| when signed) across EVERY lead's series of a variable. Scrubbing the
 // lead slider then moves the curve within a constant frame instead of rescaling the
 // axis on each lead. Pure function of the loaded artifact — it only changes when the
@@ -235,7 +235,7 @@ export function yearRmsdSeriesMax(rmsd, shortName, { signed = false } = {}) {
   return maximum;
 }
 
-// Per-start-date RMSD series for a short variable at the requested lead day, or null.
+// Per-start-date RMSE series for a short variable at the requested lead day, or null.
 // When the artifact carries a parallel `bias` array (pooled mean(model − obs) per start,
 // same method as the official scores), it is returned too; otherwise `bias` is null and
 // the caller stays in |error|.

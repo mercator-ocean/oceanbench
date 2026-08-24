@@ -690,7 +690,9 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
    and shorten the map. The height is the colour bar (2.75rem), the gap and the legend
    the cell reserves; with no legend the bar simply centres in the same box. The legend
    allowance is a variable because a narrower cell wraps the same wording onto more
-   lines: see the container queries at the foot of this file. */
+   lines: see the container queries at the foot of this file. The reserve is a floor,
+   not a ceiling: the strip inside may grow a line when the wording needs it, which
+   costs map rows only in that case instead of clipping the legend unreadable. */
 .dock-scale {
   --legend-height: 2.75rem;
   display: grid;
@@ -700,12 +702,23 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   justify-items: center;
   gap: 0.3rem;
   width: 18rem;
-  height: calc(2.75rem + 0.3rem + var(--legend-height));
+  min-height: calc(2.75rem + 0.3rem + var(--legend-height));
 }
 /* The scale is a legend, not a control, and it shares a narrow map column with the
    scrubber, which is a control. It takes the smaller half of that bargain, and gives
-   way further if the column is narrower still. */
-.colorbar { width: 18rem; max-width: 100%; height: 2.75rem; display: block; }
+   way further if the column is narrower still. The chip keeps the bar and its painted
+   tick labels readable whatever surface ends up behind them. No padding: the drawing
+   code measures clientWidth/clientHeight, which include padding, so padding would put
+   the painted labels partly outside the bitmap. */
+.colorbar {
+  width: 18rem;
+  max-width: 100%;
+  height: 2.75rem;
+  display: block;
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
 /* The one reading that stays on the map: what the view is doing, in its corner. */
 .layer-info {
   position: absolute;
@@ -742,24 +755,40 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   backdrop-filter: blur(4px);
   pointer-events: none;
 }
-.year-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: var(--text-control); color: var(--muted); margin: 0.15rem 0 0; }
+/* Same chip as the strip: the year key must stay readable over any surface too. */
+.year-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: var(--text-control);
+  color: var(--muted);
+  margin: 0.15rem 0 0;
+  padding: 0.15rem 0.5rem;
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
 .year-legend .item { display: inline-flex; align-items: center; gap: 0.3rem; }
 .year-legend .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: var(--radius-sm); border: 1px solid rgba(128, 128, 128, 0.35); }
 
-/* Adaptive bottom legend strip. It occupies the row the scale cell reserves for it and
-   is clamped to that row: the strip used to grow with its own wording, which took the
-   height back out of the map and re-wrapped on every lead step. Counts are tabular so a
-   changing figure cannot re-wrap the line either. */
+/* Adaptive bottom legend strip. It occupies the row the scale cell reserves for it.
+   Counts are tabular so a changing figure cannot re-wrap the line, which is what lets
+   the strip keep a floor instead of a hard clamp: clipping a wrapped line to protect
+   the row height made the wording unreadable at in-between widths. The chip holds the
+   text on its own surface so no raster or label behind it can bleed through. */
 .map-legend {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   gap: 0.3rem;
   width: 100%;
-  height: var(--legend-height);
-  overflow: hidden;
+  min-height: var(--legend-height);
+  padding: 0.15rem 0.5rem;
   font-variant-numeric: tabular-nums;
   font-size: var(--text-control);
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 .map-legend .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
 .map-legend .legend-item { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text); }
@@ -920,6 +949,9 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
 .about-dialog-head h2 { margin: 0; font-size: inherit; }
 .about-dialog p { color: var(--muted); font-size: var(--text-control); line-height: 1.5; margin: 0; }
 .about-dialog a { color: var(--accent); }
+.about-glossary { margin: 0.9rem 0 0; }
+.about-glossary dt { font-weight: 600; margin-top: 0.6rem; }
+.about-glossary dd { margin: 0.2rem 0 0; }
 
 @media (max-height: 760px) {
   .controls { padding: 0.7rem 0.7rem 1.2rem; gap: 0.6rem; }
@@ -981,6 +1013,16 @@ kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(
   .status { visibility: hidden; }
   .dock-scale, .colorbar { width: 12rem; }
   .dock-scale { --legend-height: 5.2rem; }
+}
+
+/* Below this the side tracks cannot pay for both a usable scrubber and the 12rem scale,
+   and the grid cells start painting over each other (390px phones). Stack the two lines
+   instead: the scrubber keeps its full width above the scale, and the hidden status
+   line stops reserving a row. */
+@container (max-width: 430px) {
+  .map-dock { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 0.45rem; }
+  .status { display: none; }
+  .lead-track { max-width: 14rem; }
 }
 
 /* ---- year metric switch (|error| / bias), year scope only ------------------ */

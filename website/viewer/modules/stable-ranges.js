@@ -12,7 +12,7 @@
  * selection changes.
  *
  * Two kinds of diagnostic feed this:
- *   - those whose artifact already holds every lead (RMSD by depth, RMSD by start,
+ *   - those whose artifact already holds every lead (RMSE by depth, RMSE by start,
  *     the lead curve, the water column) compute their exact all-lead extent directly
  *     and never need this registry;
  *   - those computed from the lead currently on screen (the live spectrum, the obs-error

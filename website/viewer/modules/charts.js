@@ -34,14 +34,14 @@ function escapeText(value) {
   return String(value).replace(/[<>&]/g, (character) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[character]));
 }
 
-function plotArea() {
+function plotArea(extraTop = 0) {
   return {
     x0: PAD_LEFT,
-    y0: PAD_TOP,
+    y0: PAD_TOP + extraTop,
     x1: VIEW_WIDTH - PAD_RIGHT,
     y1: VIEW_HEIGHT - PAD_BOTTOM,
     width: VIEW_WIDTH - PAD_RIGHT - PAD_LEFT,
-    height: VIEW_HEIGHT - PAD_BOTTOM - PAD_TOP,
+    height: VIEW_HEIGHT - PAD_BOTTOM - PAD_TOP - extraTop,
   };
 }
 
@@ -78,7 +78,7 @@ function niceMax(value) {
 }
 
 /**
- * RMSE / Class-4 RMSD vs lead day, one series per reference present, each with its
+ * RMSE / Class-4 RMSE vs lead day, one series per reference present, each with its
  * bootstrap-CI band. `series` is a Map(reference -> [{lead_day, mean, ci_low, ci_high}]).
  *
  * The in-SVG legend lays entries out on a single row sized for the rail's two or three
@@ -88,7 +88,7 @@ function niceMax(value) {
 export function leadCurveSVG(
   series,
   {
-    title = "RMSD vs lead day",
+    title = "RMSE vs lead day",
     unit = "",
     labels = new Map(),
     colors = new Map(),
@@ -96,9 +96,10 @@ export function leadCurveSVG(
     emptyMessage = "no score rows for this variable/depth",
   } = {},
 ) {
-  const area = plotArea();
   const references = [...series.keys()];
   if (!references.length) return emptyChart(title, emptyMessage);
+  const extraTop = legend && references.length > 1 ? (references.length - 1) * 14 : 0;
+  const area = plotArea(extraTop);
 
   let maxLead = 1;
   let maxValue = 0;
@@ -154,16 +155,16 @@ export function leadCurveSVG(
         .map((reference, index) => {
           const color = seriesColor(reference);
           const label = labels.get(reference) || reference;
-          const x = area.x0 + index * 92;
+          const x = area.x0;
           return (
-            `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${color}"/>` +
-            `<text x="${x + 12}" y="10" class="legend">${escapeText(label)}</text>`
+            `<rect x="${x}" y="${2 + index * 14}" width="9" height="9" rx="2" fill="${color}"/>` +
+            `<text x="${x + 12}" y="${10 + index * 14}" class="legend">${escapeText(label)}</text>`
           );
         })
         .join("")
     : "";
 
-  return svgOpen(title) + axes(area, "lead day", unit || "RMSD") + body + legendMarkup + interactionLayer() + "</svg>";
+  return svgOpen(title) + axes(area, "lead day", unit || "RMSE") + body + legendMarkup + interactionLayer() + "</svg>";
 }
 
 /** PSD spectrum (log-log): challenger vs reference power, plus error power. */
@@ -313,21 +314,21 @@ export function psdSpectraSVG(curves, { title = "Live power spectrum", xBounds =
 }
 
 /**
- * RMSD by start date, one line per forecast. `series` is an array of
+ * RMSE by start date, one line per forecast. `series` is an array of
  * { label, color, dates: string[], rmsd: number[] }. Points carry a `data-date`
  * and `data-series-index` so the host can drill down into single-forecast scope.
- * The x-axis is the union of start dates (chronological); y is RMSD at the
- * selected lead. Values are the Class-4 RMSD pooled over all match-ups for each
+ * The x-axis is the union of start dates (chronological); y is RMSE at the
+ * selected lead. Values are the Class-4 RMSE pooled over all match-ups for each
  * start — the same method as the official scores — so this never shares an axis
- * with the skill-vs-lead chart (which plots RMSD against lead, not start date).
- * `yBound` (optional): a fixed y-extent — [0, niceMax(yBound)] for RMSD, ±niceMax(yBound)
+ * with the skill-vs-lead chart (which plots RMSE against lead, not start date).
+ * `yBound` (optional): a fixed y-extent — [0, niceMax(yBound)] for RMSE, ±niceMax(yBound)
  * when signed — so the axis stays STABLE across lead-day scrubs (the caller passes the
  * max across ALL leads). Without it the axis fits the plotted series, as before.
  */
-export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = "", signed = false, yBound = 0 } = {}) {
-  const area = plotArea();
+export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = "", signed = false, yBound = 0 } = {}) {
   const usable = (series || []).filter((line) => line && line.dates && line.dates.length);
-  if (!usable.length) return emptyChart(title, "no year RMSD for this variable");
+  if (!usable.length) return emptyChart(title, "no year RMSE for this variable");
+  const area = plotArea(usable.length > 1 ? (usable.length - 1) * 14 : 0);
 
   const allDates = [...new Set(usable.flatMap((line) => line.dates))].sort();
   const indexOfDate = new Map(allDates.map((date, index) => [date, index]));
@@ -336,7 +337,7 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
 
   let body = "";
   // Signed (bias) mode: symmetric y-axis centred on 0, with negative values plotted
-  // below a zero baseline. |error|/RMSD mode keeps the original [0, niceMax] scale.
+  // below a zero baseline. |error|/RMSE mode keeps the original [0, niceMax] scale.
   if (signed) {
     let magnitude = yBound > 0 ? yBound : 0;
     if (!magnitude) {
@@ -383,8 +384,8 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
     }
     const legend = usable
       .map((line, index) => {
-        const x = area.x0 + index * 118;
-        return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="10" class="legend">${escapeText(line.label)}</text>`;
+        const x = area.x0;
+        return `<rect x="${x}" y="${2 + index * 14}" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="${10 + index * 14}" class="legend">${escapeText(line.label)}</text>`;
       })
       .join("");
     return svgOpen(title) + axes(area, "start date", unit ? `bias (${unit})` : "bias") + body + legend + interactionLayer() + "</svg>";
@@ -434,34 +435,34 @@ export function rmsdByStartSVG(series, { title = "RMSD by start date", unit = ""
 
   const legend = usable
     .map((line, index) => {
-      const x = area.x0 + index * 118;
-      return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="10" class="legend">${escapeText(line.label)}</text>`;
+      const x = area.x0;
+      return `<rect x="${x}" y="${2 + index * 14}" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="${10 + index * 14}" class="legend">${escapeText(line.label)}</text>`;
     })
     .join("");
 
-  return svgOpen(title) + axes(area, "start date", unit || "RMSD") + body + legend + interactionLayer() + "</svg>";
+  return svgOpen(title) + axes(area, "start date", unit || "RMSE") + body + legend + interactionLayer() + "</svg>";
 }
 
 /**
- * RMSD vertical profile: RMSD on the x-axis, DEPTH on the y-axis increasing DOWNWARD
+ * RMSE vertical profile: RMSE on the x-axis, DEPTH on the y-axis increasing DOWNWARD
  * (surface at the top), one line per forecast. `series` is an array of
  * { label, color, bins: [{ label, rmsd, n }] } where every bin's `label` is a depth-bin
  * label ordered surface→deep. Bins are placed as evenly spaced ordinal rows (the labels
  * are opaque strings, not numeric depths), so both forecasts share the depth ordering of
  * the longest series. Points carry `data-line`/`data-x-label`/`data-y-label` so the shared
- * cursor tooltip reports the depth bin, the RMSD, and the observation count on hover.
+ * cursor tooltip reports the depth bin, the RMSE, and the observation count on hover.
  */
 export function rmsdByDepthSVG(
   series,
-  { title = "RMSD vs depth", unit = "", emptyMessage = "no depth profile for this variable", xBound = 0 } = {},
+  { title = "RMSE vs depth", unit = "", emptyMessage = "no depth profile for this variable", xBound = 0 } = {},
 ) {
   // Depth-bin labels ("1500-3000 m") are wider than the numeric ticks the other charts use,
   // so this profile gets a roomier left gutter than the shared plotArea() default.
-  const base = plotArea();
-  const DEPTH_PAD_LEFT = 62;
-  const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
   const usable = (series || []).filter((line) => line && Array.isArray(line.bins) && line.bins.some((bin) => Number.isFinite(bin.rmsd)));
   if (!usable.length) return emptyChart(title, emptyMessage);
+  const base = plotArea(usable.length > 1 ? (usable.length - 1) * 14 : 0);
+  const DEPTH_PAD_LEFT = 62;
+  const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
 
   // Depth ordering (surface→deep) from the series with the most bins, so a shorter
   // profile still aligns onto the shared axis by label.
@@ -481,7 +482,7 @@ export function rmsdByDepthSVG(
   const xOf = (value) => area.x0 + (value / xMax) * area.width;
 
   let body = "";
-  // Vertical gridlines + x ticks (RMSD).
+  // Vertical gridlines + x ticks (RMSE).
   for (let t = 0; t <= 4; t += 1) {
     const value = (xMax * t) / 4;
     const x = xOf(value);
@@ -519,21 +520,21 @@ export function rmsdByDepthSVG(
 
   const legend = usable
     .map((line, index) => {
-      const x = area.x0 + index * 118;
-      return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="10" class="legend">${escapeText(line.label)}</text>`;
+      const x = area.x0;
+      return `<rect x="${x}" y="${2 + index * 14}" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="${10 + index * 14}" class="legend">${escapeText(line.label)}</text>`;
     })
     .join("");
 
   // Depth axis reads downward; the tooltip's crosshair (a vertical line) is not meaningful
   // for a profile, so only the point readout is used (interactionLayer supplies the tooltip).
-  return svgOpen(title) + axes(area, unit || "RMSD", "depth") + body + legend + interactionLayer() + "</svg>";
+  return svgOpen(title) + axes(area, unit || "RMSE", "depth") + body + legend + interactionLayer() + "</svg>";
 }
 
 /**
  * Water-column profile: a model variable's value on the x-axis against DEPTH on the
  * y-axis increasing DOWNWARD (surface at the top), one line per forecast. `series` is
  * an array of { label, color, points: [{ depth, value }] } where `depth` is in metres
- * and `value` is the model's temperature/salinity at that depth. Unlike the RMSD-vs-depth
+ * and `value` is the model's temperature/salinity at that depth. Unlike the RMSE-vs-depth
  * chart, the y-axis carries REAL numeric depths (each forecast may have its own depth
  * levels; both are plotted faithfully on a shared metric axis) and the x-axis is a plain
  * value scale padded to the data. Points carry `data-line`/`data-x-label`/`data-y-label`
@@ -543,13 +544,13 @@ export function columnProfileSVG(
   series,
   { title = "Water column", unit = "", xLabel = "value", emptyMessage = "no water column at this point", valueBound = null, depthBound = 0 } = {},
 ) {
-  const base = plotArea();
-  const DEPTH_PAD_LEFT = 52;
-  const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
   const usable = (series || []).filter(
     (line) => line && Array.isArray(line.points) && line.points.some((point) => Number.isFinite(point.value) && Number.isFinite(point.depth)),
   );
   if (!usable.length) return emptyChart(title, emptyMessage);
+  const base = plotArea(usable.length > 1 ? (usable.length - 1) * 14 : 0);
+  const DEPTH_PAD_LEFT = 52;
+  const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
 
   let depthMax = 0;
   let valueMin = Infinity;
@@ -611,8 +612,8 @@ export function columnProfileSVG(
 
   const legend = usable
     .map((line, index) => {
-      const x = area.x0 + index * 118;
-      return `<rect x="${x}" y="2" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="10" class="legend">${escapeText(line.label)}</text>`;
+      const x = area.x0;
+      return `<rect x="${x}" y="${2 + index * 14}" width="9" height="9" rx="2" fill="${line.color}"/><text x="${x + 12}" y="${10 + index * 14}" class="legend">${escapeText(line.label)}</text>`;
     })
     .join("");
 
@@ -629,7 +630,7 @@ function seriesExtentValues(line) {
 }
 
 // 95% CI band polygon for a start-date line, in the same visual idiom as the lead-curve band.
-// `line.ciLow`/`line.ciHigh` are parallel to `line.dates` (the caller selects the RMSD or bias
+// `line.ciLow`/`line.ciHigh` are parallel to `line.dates` (the caller selects the RMSE or bias
 // pair for the active metric). Returns null when the arrays are absent (old artifacts) or too
 // sparse to shade, so the chart degrades to a plain line.
 function ciBandPolygon(line, xOf, yOf) {

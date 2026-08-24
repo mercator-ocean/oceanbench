@@ -30,10 +30,10 @@ const MIN_PARTICLES = 500;
 const MAX_PARTICLES = 6000;
 const MAX_AGE_FRAMES = 170;
 const TRAIL_FADE_ALPHA = 0.055;
-// A trail is drawn at alpha 0.65 to 0.70 and dimmed by TRAIL_FADE_ALPHA every frame, so
-// it is below one 8-bit level after about 92 frames. Nothing older than that contributes
+// A trail is drawn at alpha 0.72 to 0.80 and dimmed by TRAIL_FADE_ALPHA every frame, so
+// it is below one 8-bit level after about 102 frames. Nothing older than that contributes
 // anything a viewer can see.
-const TRAIL_VISIBLE_FRAMES = 92;
+const TRAIL_VISIBLE_FRAMES = 102;
 // The canvas keeps premultiplied 8-bit alpha and "destination-out" rounds a*(1-alpha)
 // back up to a once a*alpha drops below 0.5, so the fade stalls: at TRAIL_FADE_ALPHA the
 // alpha channel sticks at 9/255 and never reaches zero (measured identically on the
@@ -46,6 +46,23 @@ const TRAIL_VISIBLE_FRAMES = 92;
 // screen already holds a complete set of trails and the swap cannot be seen.
 const TRAIL_RESET_FRAMES = Math.ceil(TRAIL_VISIBLE_FRAMES * 1.4);
 const SPEED_COLORMAP = "speed";
+// Streak ink contrast. The background field is colourized with the same speed ramp over
+// [0, magnitudeScale], so tinting a streak straight from its own speed paints it onto its
+// own colour and it vanishes (violet on violet through most of the ramp). Instead the ink
+// reads the exact background colour under the segment and mixes hard toward white over the
+// pale slow end and toward black over the deep fast blues, keeping a trace of hue while
+// guaranteeing luminance separation from the field underneath without covering it.
+const STREAK_INK_MIX = 0.8;
+const STREAK_LUMINANCE_SPLIT = 128;
+const STREAK_ALPHA = 0.8;
+
+function streakInk(background) {
+  const [r, g, b] = background;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const target = luminance >= STREAK_LUMINANCE_SPLIT ? 0 : 255;
+  const mix = (channel) => Math.round(channel + (target - channel) * STREAK_INK_MIX);
+  return `${mix(r)}, ${mix(g)}, ${mix(b)}`;
+}
 
 function createParticle(random) {
   return { x: random(), y: random(), age: Math.floor(random() * MAX_AGE_FRAMES) };
@@ -222,8 +239,10 @@ export function startParticleField(canvas, context) {
         const shade = Math.max(0, Math.min(255, Math.round(level)));
         segmentStyles[segmentCount] = `rgba(${shade}, ${shade}, ${shade}, ${0.7 * glow})`;
       } else {
-        const [r, g, b] = sampleColormap(SPEED_COLORMAP, 0.15 + normalized * 0.85);
-        segmentStyles[segmentCount] = `rgba(${r}, ${g}, ${b}, ${0.65 * glow})`;
+        // The field pixel under this segment is this same ramp position: the background
+        // range tops out at magnitudeScale, so normalized is the background coordinate.
+        const ink = streakInk(sampleColormap(SPEED_COLORMAP, normalized));
+        segmentStyles[segmentCount] = `rgba(${ink}, ${STREAK_ALPHA * glow})`;
       }
       segmentPoints[segmentCount * 4] = from.x;
       segmentPoints[segmentCount * 4 + 1] = from.y;
