@@ -8,7 +8,7 @@
 // a change to both, and the render fingerprints in qa/ compare only the projecting path.
 //
 // Insight overlays drawn on a panel's overlay canvas (contracts.md §6: overlays
-// with purpose-modes, never all at once). Two live modes here — eddy census
+// with purpose-modes, never all at once). Two live modes here, eddy census
 // (matched / spurious / missed contours vs a reference) and Class-4 obs points
 // coloured by |obs − model|. All drawing is in
 // normalized-world → device-pixel space via the panel's `project`, so overlays
@@ -62,7 +62,7 @@ function centerDot(drawing, project, eddy, color, radius) {
 }
 
 // Neutral colour for eddies both forecasts agree on. Only-in-F1 / only-in-F2 use the
-// canonical forecast colours supplied by the caller — no category implies truth.
+// canonical forecast colours supplied by the caller, no category implies truth.
 export const EDDY_MATCHED_COLOR = "#3ddc97";
 
 const EARTH_RADIUS_KM = 6371.0088;
@@ -86,7 +86,7 @@ function haversineDistanceKm(a, b) {
  * DEFAULT_MATCH_DISTANCE_KM). The offline matcher solves an optimal assignment; here a
  * greedy nearest-first pass (shortest candidate pairs consumed first) approximates it,
  * which is what the design calls for. Returns matched pairs plus the eddies only one
- * forecast produced — neither side is a reference.
+ * forecast produced, neither side is a reference.
  */
 export function matchCensuses(detectionsA, detectionsB, maxDistanceKm = 200) {
   const candidates = [];
@@ -179,7 +179,7 @@ export function drawClass4Points(drawing, project, points, options = {}) {
     const error = class4AbsoluteError(point);
     // A masked model gives model_value = NaN and a non-finite error. The obs is real, but
     // there is no comparison to colour, so skip it rather than paint it as bucket 0 (the
-    // darkest, lowest-error colour — a phantom "perfect match" near coastlines).
+    // darkest, lowest-error colour, a phantom "perfect match" near coastlines).
     if (!Number.isFinite(error)) continue;
     buckets[class4BucketIndex(error, scale)].push(screen.x, screen.y);
   }
@@ -187,7 +187,7 @@ export function drawClass4Points(drawing, project, points, options = {}) {
 }
 
 /**
- * Draw Class-4 points from precomputed device-pixel coordinates — the projection has
+ * Draw Class-4 points from precomputed device-pixel coordinates, the projection has
  * already happened once for the frame (viewport-culled) so nothing is re-projected here.
  * `screenX`/`screenY` hold the coordinates of `count` candidate points at one world-copy;
  * `pointIds[t]` is the index into the frame's parallel `error` array. `selectedMask`, when

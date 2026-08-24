@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// OceanBench viewer — comparison-first field explorer (contracts.md §6).
+// OceanBench viewer, comparison-first field explorer (contracts.md §6).
 //
 // Comparison is the primitive: 1 or 2 synchronized panels (Forecast 1 / Forecast 2)
 // sharing viewport, lead day and start date; each panel is {dataset, variable}.
@@ -400,7 +400,7 @@ function wirePanel(panel) {
       const manifest = manifestFor(panel.state.dataset);
       // Preserve the current selection across a dataset switch: variables are keyed by
       // standard name + depth, so the same channel (incl. derived currents) carries over
-      // when the new dataset has it. Only fall back — with a brief note — when it does not.
+      // when the new dataset has it. Only fall back, with a brief note, when it does not.
       // Lead day, zoom/pan, purpose mode, region and scope live in shared/view state and
       // are untouched here, so they are preserved automatically.
       let fallbackNote = "";
@@ -544,8 +544,8 @@ async function renderPanel(panel) {
     if (!variableExists(manifest, panel.state.variable)) panel.state.variable = Object.keys(manifest.variables)[0];
     // A panel can be shown before its manifest is cached (e.g. switching to 2 forecasts
     // warms only the initially visible panels). refreshPanelControls only fills the
-    // variable select when the manifest is present, so re-run it here — now that the
-    // store is loaded — to populate the (otherwise empty) select. Idempotent and cheap.
+    // variable select when the manifest is present, so re-run it here, now that the
+    // store is loaded, to populate the (otherwise empty) select. Idempotent and cheap.
     refreshPanelControls(panel);
 
     if (shared.scope === SCOPE_WHOLE_YEAR) {
@@ -599,7 +599,7 @@ async function readAlignedField(panel, sourceSlug, variable, level, start, leadI
 }
 
 // True when more than one panel is shown and every shown panel holds this panel's
-// variable — the condition under which same-variable panels share one colour scale (and
+// variable, the condition under which same-variable panels share one colour scale (and
 // the field colorbar is labelled "(shared)"). Mirrors the colorbar's `sameVariable` test.
 function shownPanelsShareVariable(panel) {
   if (shared.layout <= 1) return false;
@@ -861,7 +861,7 @@ async function renderYearPanel(panel, token, manifest) {
   // Separate land from unobserved ocean: both are NaN in the error raster, so derive a
   // land mask from the dataset's own coarsest pyramid level (tiny) and resample it onto
   // the raster grid. Land then renders in the field land colour, ocean-without-obs in a
-  // faint tint — consistent with single-forecast rendering. A failed fetch degrades to
+  // faint tint, consistent with single-forecast rendering. A failed fetch degrades to
   // the previous transparent-NaN behaviour.
   const landMask = await yearLandMask(panel, built.latitudes, built.longitudes);
   if (token !== panel.renderToken) return;
@@ -1044,7 +1044,7 @@ function drawPanel(panel) {
   // Under a colored purpose overlay (class-4 obs, eddies, trajectories) desaturate the
   // background field so the overlay owns the color channel and its points/contours read
   // clearly. Field mode and the difference view keep full color. Applied as a cheap
-  // canvas filter on the field blit only — no re-colorize, no tile refetch; the hover
+  // canvas filter on the field blit only, no re-colorize, no tile refetch; the hover
   // readout still reads the raw field values.
   const fieldFilter = fieldMutedUnderOverlay() ? "grayscale(1) contrast(0.9)" : "none";
 
@@ -1084,7 +1084,7 @@ function drawPanel(panel) {
     panel.els.swipeHint.hidden = true;
   }
   // In year scope outline the raster extent so the map's data limits are legible at
-  // zoom 1 — especially the regional (ibi) domain against the empty page outside it.
+  // zoom 1, especially the regional (ibi) domain against the empty page outside it.
   if (shared.scope === SCOPE_WHOLE_YEAR && panel.edgesA) drawRasterBorder(context, panel.edgesA, projection);
   updateParticleProjection(panel, projection);
   updatePanelBadge(panel);
@@ -1217,7 +1217,7 @@ async function loadOverlayData() {
     const class4Url = urls.class4_matchups;
     // Reference datasets (and any dataset without published match-ups) carry an
     // explicit null class4_matchups in insights.json. That is a legitimate absence,
-    // not a failure — show the honest "not published" empty state and paint no
+    // not a failure, show the honest "not published" empty state and paint no
     // points. We never substitute another model's obs: a fallback to some other
     // dataset's match-ups would paint provenance-mismatched points under this
     // dataset's name while the rail truthfully says it has none.
@@ -1394,7 +1394,7 @@ function drawOverlays(panel) {
   if (shared.scope === SCOPE_WHOLE_YEAR) return;
   const projection = projectionFor(panel);
   // The PSD rectangle is a spectrum tool, not a purpose overlay: it draws in every
-  // single-forecast display (incl. swipe and difference — one shared box, both spectra).
+  // single-forecast display (incl. swipe and difference, one shared box, both spectra).
   if (psdBoxVisible()) drawPsdBox(panel, context, projection);
   // Class-4 points and eddies are per-forecast; the difference view has no single
   // forecast to attach them to, so it stays overlay-free (see the quiet note).
@@ -1452,7 +1452,7 @@ function drawOverlays(panel) {
       startDate,
     };
     // Row-scan (filtering + error scale + match count) depends only on the selector and
-    // the loaded rows, not the viewport — cache it so pan/zoom rAF redraws only reproject
+    // the loaded rows, not the viewport, cache it so pan/zoom rAF redraws only reproject
     // the already-filtered points instead of rescanning every row again (perf).
     const cacheKey = `${panel.state.variable}|${depthBin || ""}|${shared.leadDay}|${startDate || ""}|${rows.length}|${overlayData.class4.targeted}`;
     let prepared = panel.class4Prepared;
@@ -1612,7 +1612,7 @@ function makeSeedCluster(longitude, latitude, radiusDegrees) {
 }
 
 // Trajectory advection always runs on the model's FINEST published pyramid level,
-// whatever the display zoom — coarse levels smooth the currents and change the physics
+// whatever the display zoom, coarse levels smooth the currents and change the physics
 // of the fan. A whole-domain finest read (10 leads × u,v at 1/12°) would be far too
 // heavy, so only the tiles covering the seed cluster plus a generous drift margin are
 // fetched (readLayerWindow). Particles that outrun the margin stop, exactly as they
@@ -1669,7 +1669,7 @@ async function seedTrajectories(panel, event) {
   if (!eligible.length || (shared.layout === 2 && eligible.length !== 2)) return;
   const [longitude, latitude] = pointerLonLat(panel, event);
   // Seed-cluster radius from the model's FINEST grid (the grid the particles advect
-  // on), not the zoom-dependent display grid — so the same click yields the same fan
+  // on), not the zoom-dependent display grid, so the same click yields the same fan
   // at any zoom. Falls back to the display spacing if the manifest lacks levels.
   const finestCellDeg =
     finestCellDegFor(panel.state.dataset) ??
@@ -1816,7 +1816,7 @@ function clearColumnProfile() {
 }
 
 // Read the full water column (all leads + all depths) at a clicked lon/lat for every
-// visible challenger that has a store. One chunk per challenger — held in memory so the
+// visible challenger that has a store. One chunk per challenger, held in memory so the
 // lead slider re-renders with no refetch (renderColumnProfileRail slices in-memory).
 async function readColumnProfileAt(longitude, latitude) {
   const eligiblePanels = [];
@@ -2142,7 +2142,7 @@ function onPanelPointerMove(event) {
     scheduleRailUpdate();
     // The world point under the pointer changes as the view pans, so the mirrored
     // companion cursor and both bottom-left readouts must keep tracking during the
-    // drag — not only on plain mouse moves. updateHover would clear the "grabbing"
+    // drag, not only on plain mouse moves. updateHover would clear the "grabbing"
     // pointer style, so restore it afterwards.
     updateHover(event);
     panel.els.field.style.cursor = "grabbing";
@@ -2533,7 +2533,7 @@ function fieldReadoutValue(panel, value, count, standardError) {
     if (!Number.isFinite(value) || count === 0) return "no observations";
     const biasMode = panel.yearMetric === YEAR_METRIC_BIAS;
     // Non-bias year cells are the time-mean |obs − model| (MAE), matching the panel title
-    // and method note — not RMSE. Label it "|error|" so the hover does not misname it.
+    // and method note, not RMSE. Label it "|error|" so the hover does not misname it.
     const metric = biasMode ? "bias" : "|error|";
     const sign = biasMode && value > 0 ? "+" : "";
     // Bias cells carry a ±1 standard error (std(model − obs)/sqrt(n)); absent on old artifacts.
@@ -2546,7 +2546,7 @@ function fieldReadoutValue(panel, value, count, standardError) {
 
 // Nearest-point hit-test over the Class-4 obs drawn on this panel (canvas points
 // have no DOM nodes, so we project the small filtered set and pick the closest to
-// the cursor). The details render inside the panel's fixed readout pill — nothing
+// the cursor). The details render inside the panel's fixed readout pill, nothing
 // floats with the cursor.
 function nearestClass4Record(panel, event, rectangle) {
   if (shared.overlayMode !== OVERLAY_CLASS4 || !panel.class4HitPoints || !panel.class4HitPoints.length) return null;
@@ -2780,7 +2780,7 @@ function updateYearLegend(visible) {
 // The single bottom legend strip always describes the PRIMARY layer actually drawn:
 // the field colorbar with no overlay, or the overlay's own key (obs-error ramp,
 // eddy/trajectory swatches) while a purpose overlay mutes the field. The right rail
-// carries no legend block any more — all legend information lives here.
+// carries no legend block any more, all legend information lives here.
 function updateSharedColorbar() {
   const panel = isDiffView() ? panels[0] : panels[activePanelIndex];
   updateYearLegend(shared.scope === SCOPE_WHOLE_YEAR);
@@ -2922,7 +2922,7 @@ function renderClass4Legend(legend, panel, scale) {
   attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
 }
 
-// Eddies mode: categorical swatch row faithful to what is drawn — matched pairs (the
+// Eddies mode: categorical swatch row faithful to what is drawn, matched pairs (the
 // intercomparison neutral colour) and each forecast's only-eddies, or a single census.
 function renderEddyLegend(legend) {
   const censuses = overlayData.eddiesCensuses || [];
@@ -2941,7 +2941,7 @@ function renderEddyLegend(legend) {
       legendSwatch(forecastColor(1), `Only in ${forecast2}`, match.onlyB.length);
     caption = `mean centre displacement of matched pairs ${meanText} · lead ${lead ?? "n/a"} (nearest shared)`;
   } else if (shared.layout === 2 && mismatch && censuses[0] && censuses[1]) {
-    // No lead day in common between the two forecasts: never cross-match different leads —
+    // No lead day in common between the two forecasts: never cross-match different leads -
     // show each forecast's own census at its own nearest lead, and say so.
     const forecast1 = labelFor(panels[0].state.dataset);
     const forecast2 = labelFor(panels[1].state.dataset);
@@ -3073,7 +3073,7 @@ function renderRailProvenance(shown) {
 // Only 3D variables (temperature, salinity) carry a depth profile: the artifact keys its
 // `variables` by the observation standard name, so surface-only channels (SSH, currents)
 // simply find no entry and the section stays hidden. The artifact may be absent while the
-// backfill is in flight — a missing file resolves to null and hides the section too.
+// backfill is in flight, a missing file resolves to null and hides the section too.
 async function renderRailDepthProfile(shown, comparison) {
   const section = elements["rail-depth-profile-section"];
   const slot = elements["rail-depth-profile"];
@@ -3147,7 +3147,7 @@ async function renderRailYearRmsd(shown) {
     const rmsd = url ? await loadYearRmsd(url) : null;
     const entry = rmsd && mapping ? yearRmsdSeries(rmsd, mapping.short, shared.leadDay) : null;
     // In bias mode a series without a parallel bias array degrades gracefully (skipped,
-    // counted as missing) — the |error| path is unaffected.
+    // counted as missing), the |error| path is unaffected.
     if (!entry || (biasMode && !entry.bias)) {
       missing += 1;
       continue;
@@ -3270,7 +3270,7 @@ function prettyVariable(panel) {
 // Obs-based skill (Class-4 RMSE vs observations) for a forecast's selected variable.
 // Returns { rows, unit, n } or null when no observation-based metric exists (item 4).
 function obsSkillSeries(panel) {
-  // Surface currents have no 15 m drifter obs to compare against — the switch note
+  // Surface currents have no 15 m drifter obs to compare against, the switch note
   // handles this case, so emit no skill curve for them.
   if (isSurfaceCurrentVariable(panel.state.variable)) return null;
   const manifest = manifestFor(panel.state.dataset);
@@ -3370,11 +3370,11 @@ function renderRailSkill(shown, comparison) {
 
 // ---- live PSD: explicit size-capped rectangle at the model's native grid -----
 //
-// The spectrum is computed over an explicit rectangle drawn on the map — draggable,
+// The spectrum is computed over an explicit rectangle drawn on the map, draggable,
 // resizable, shared between both forecasts in compare mode. Its size is HARD-CAPPED at
 // what the finest (native) pyramid grid honestly resolves with the 256-cell FFT budget
 // (≈ 256 × finest cell size per axis), so the PSD is ALWAYS computed at native
-// resolution from a windowed tile-cropped read — downsampled spectra never exist.
+// resolution from a windowed tile-cropped read, downsampled spectra never exist.
 
 const PSD_FFT_CELLS = 256; // matches psd.js MAX_SIDE
 const PSD_MIN_CELLS = 32; // minimum native cells across for a meaningful FFT
@@ -3384,9 +3384,9 @@ const PSD_FLASH_MILLISECONDS = 700;
 // Current cap/min (degrees) for the visible forecasts; refreshed by ensurePsdBox so
 // resize gestures clamp against the latest model pair. A shared box must be valid for
 // BOTH models at their native grids, so:
-//   sharedMax = min over models of (256 × native cell size)  — the FINER model's max,
+//   sharedMax = min over models of (256 × native cell size) , the FINER model's max,
 //               so the fine model is never decimated;
-//   sharedMin = max over models of (32 × native cell size)   — the COARSER model's min,
+//   sharedMin = max over models of (32 × native cell size)  , the COARSER model's min,
 //               so the coarse model still has ≥32 of its own native cells.
 // For very disparate pairs sharedMin > sharedMax: no box is fair to both. Then the box
 // is degenerate (psdBoxLimits.degenerate) and PSD-compare is disabled with a note.
@@ -3399,7 +3399,7 @@ function finestCellDegFor(slug) {
   return Math.min(...manifest.levels.map((level) => level.cell_size_deg));
 }
 
-// Create the box if absent (centred in the viewport) and clamp it to the current cap —
+// Create the box if absent (centred in the viewport) and clamp it to the current cap -
 // also handles switching to a coarser/finer model pair: the box persists, only its
 // limits move. Returns the box.
 function ensurePsdBox(shown) {
@@ -3458,7 +3458,7 @@ function psdBoxWorldRect() {
 }
 
 // The rectangle is a spectrum tool, not an overlay mode: it shows on every panel in
-// single-forecast scope (incl. swipe/difference — one shared box drives both spectra).
+// single-forecast scope (incl. swipe/difference, one shared box drives both spectra).
 function psdBoxVisible() {
   return shared.psdEnabled && shared.scope !== SCOPE_WHOLE_YEAR && Boolean(shared.psdBox) && !psdBoxLimits.degenerate;
 }
@@ -3670,7 +3670,7 @@ async function psdSourceFor(panel, boxRange) {
 
 // Drop the error-spectrum points below the coarser model's resolution limit:
 // wavelengths shorter than 2× the coarser native cell size (km at the box centre
-// latitude, zonal/meridional mean — the same convention as the spectrum's cellKm).
+// latitude, zonal/meridional mean, the same convention as the spectrum's cellKm).
 function truncateToCommonScales(spectrum, cellDegrees, centreLatitudeDegrees) {
   if (!spectrum) return null;
   const coarsest = Math.max(...cellDegrees.filter(Number.isFinite));
@@ -3844,7 +3844,7 @@ function currentViewport() {
 }
 
 // Cursor-following tooltip: snap the crosshair to the nearest data x, list the value
-// for each series under the cursor, and place the tooltip right next to the pointer —
+// for each series under the cursor, and place the tooltip right next to the pointer -
 // no delay, no fixed corner (rail chart interaction requirement).
 function wireCursorTooltip(container) {
   const svg = container.querySelector("svg");
@@ -4069,7 +4069,7 @@ async function applyOverlayMode() {
 }
 
 // When the parquet is targeted (one pair per row group), a start/lead change means
-// a different set of obs must be fetched — reload just the overlay and redraw. Small
+// a different set of obs must be fetched, reload just the overlay and redraw. Small
 // (~1-2MB) row groups keep this sub-second; a short debounce avoids a fetch storm
 // while the lead slider is dragged. Legacy files hold all pairs, so this is a no-op.
 let class4ReloadTimer = null;
@@ -4813,7 +4813,7 @@ function scheduleRailUpdate() {
   railUpdateTimer = setTimeout(() => updateContextRail(), 220);
 }
 
-// ---- URL hash (every view state is a URL — §6) ------------------------------
+// ---- URL hash (every view state is a URL, §6) ------------------------------
 
 let hashWriteTimer = null;
 function scheduleHashWrite() {
@@ -4821,8 +4821,8 @@ function scheduleHashWrite() {
   hashWriteTimer = setTimeout(writeHash, 250);
 }
 
-// The third token is the legacy per-panel display mode. It no longer exists — the
-// comparison view is a shared dm choice now — but we keep writing a stable "field"
+// The third token is the legacy per-panel display mode. It no longer exists, the
+// comparison view is a shared dm choice now, but we keep writing a stable "field"
 // so old parsers and roundtrips stay happy; readers tolerate any value (see below).
 function encodePanel(panel) {
   return [panel.state.dataset, panel.state.variable, "field"].join(",");
@@ -4870,7 +4870,7 @@ function readHash() {
   const parameters = new URLSearchParams(location.hash.slice(1));
   // Only accept FINITE numbers from the hash; a malformed value (e.g. #z=abc)
   // must fall back to the current default rather than poisoning view/layout math
-  // with NaN — which otherwise blanks the map ("zoom NaN×"), issues a 0.NaN.0.0
+  // with NaN, which otherwise blanks the map ("zoom NaN×"), issues a 0.NaN.0.0
   // chunk fetch (404 + uncaught rejection), or sets grid tracks to NaNpx.
   const number = (key, fallback) => {
     if (!parameters.has(key)) return fallback;

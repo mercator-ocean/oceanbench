@@ -310,10 +310,10 @@ export function psdSpectraSVG(curves, { title = "Live power spectrum", xBounds =
  * and `data-series-index` so the host can drill down into single-forecast scope.
  * The x-axis is the union of start dates (chronological); y is RMSE at the
  * selected lead. Values are the Class-4 RMSE pooled over all match-ups for each
- * start — the same method as the official scores — so this never shares an axis
+ * start, the same method as the official scores, so this never shares an axis
  * with the skill-vs-lead chart (which plots RMSE against lead, not start date).
- * `yBound` (optional): a fixed y-extent — [0, niceMax(yBound)] for RMSE, ±niceMax(yBound)
- * when signed — so the axis stays STABLE across lead-day scrubs (the caller passes the
+ * `yBound` (optional): a fixed y-extent, [0, niceMax(yBound)] for RMSE, ±niceMax(yBound)
+ * when signed, so the axis stays STABLE across lead-day scrubs (the caller passes the
  * max across ALL leads). Without it the axis fits the plotted series, as before.
  */
 export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = "", signed = false, yBound = 0 } = {}) {

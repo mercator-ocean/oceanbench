@@ -7,7 +7,7 @@
 // (start_date, lead_day) with every row group holding exactly one such pair
 // (min == max in the group's start_date/lead_day statistics), as enforced at
 // publish time by oceanbench.publish.viewer_artifacts.verify_matchup_parquet. We
-// fetch only the row group(s) for the selected forecast start + lead — complete
+// fetch only the row group(s) for the selected forecast start + lead, complete
 // rows, no cap.
 
 import { parquetReadObjects, parquetMetadataAsync } from "../vendor/hyparquet/hyparquet.min.js";
@@ -230,7 +230,7 @@ async function targetedPair(url, info, startDate, leadDay, variables, context) {
     const rowEnd = info.offsets[lastIndex] + Number(info.rowGroups[lastIndex].num_rows || 0);
     // hyparquet fetches each row group's column chunks with a separate serial range read.
     // For a targeted (start, lead) pair the selected groups occupy one contiguous byte span,
-    // so coalesce them into a single range request served from memory — halving the network
+    // so coalesce them into a single range request served from memory, halving the network
     // phase of a lead change. Falls back to the range-backed file if the span is unknown or
     // exceeds the budget (keeps large legacy files streaming).
     const coalesced = await coalescedRangeFile(info, rangeFile, indices, context);

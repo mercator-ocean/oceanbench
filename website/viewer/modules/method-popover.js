@@ -91,7 +91,7 @@ function hidePopover() {
 }
 
 /**
- * Attach a "?" method-note button to `anchorEl` for the note `noteId`. Idempotent —
+ * Attach a "?" method-note button to `anchorEl` for the note `noteId`. Idempotent -
  * an existing button previously attached for the same note is replaced, so re-renders
  * do not accumulate buttons. `dynamicFields` fills `{token}` placeholders in the note
  * body (values are HTML-escaped, except a `params` field which is treated as raw HTML).

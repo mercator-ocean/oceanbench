@@ -5,7 +5,7 @@
 // Field colorization and colorbar drawing for the viewer. Rendering stays on the
 // 2D canvas: a decoded Float32 field becomes an ImageData at native grid
 // resolution (pixel = grid cell), which the map view blits with a pan/zoom
-// transform (nearest-neighbour, so the native zoom is pixel-faithful — §6).
+// transform (nearest-neighbour, so the native zoom is pixel-faithful, §6).
 
 import { lookupTable } from "../vendor/cmocean/colormaps.js";
 
@@ -146,7 +146,7 @@ export function fieldStatistics({ data }) {
 }
 
 /**
- * cos(latitude)-weighted mean over the finite cells of a field — a true area-weighted
+ * cos(latitude)-weighted mean over the finite cells of a field, a true area-weighted
  * spatial mean, since equal-area on a lat/lon grid shrinks with cos(latitude) toward the
  * poles. `latitudes` are the field's row coordinates (length === height). Falls back to
  * the unweighted mean when no latitudes are supplied.
@@ -334,8 +334,8 @@ export function rasterCanvas(width, height) {
 }
 
 // Combine one or more [low, high] variable ranges into the range a field is colorized
-// with. A diverging colormap (balance/delta) is centred on physical zero — [-M, +M],
-// M = max|bound| — so its neutral colour reads as 0; a sequential map keeps the data
+// with. A diverging colormap (balance/delta) is centred on physical zero, [-M, +M],
+// M = max|bound|, so its neutral colour reads as 0; a sequential map keeps the data
 // bounds ([min low, max high]).
 export function combineFieldRange(ranges, diverging) {
   if (diverging) {

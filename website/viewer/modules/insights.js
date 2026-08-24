@@ -6,7 +6,7 @@
 // (contracts.md §4): eddy census (JSON, snake_case schema), realism spectra
 // (JSON), the aggregated score summary (mean ± CI per lead), and Class-4 obs
 // match-ups (parquet, read with the vendored hyparquet). Everything is fetched
-// lazily and memoised by URL — a panel only pays for the overlay it turns on.
+// lazily and memoised by URL, a panel only pays for the overlay it turns on.
 
 import { resolveViewerDataUrl } from "../config.js";
 import { class4AbsoluteError } from "./overlays.js";
@@ -184,7 +184,7 @@ export async function loadScoresSummary(index) {
 /**
  * Load the Class-4 match-up overlay data. The served parquet follows the match-up
  * contract (one (start_date, lead_day) pair per row group, with statistics), so only
- * the row group(s) for the requested `startDate`/`leadDay` are fetched — complete
+ * the row group(s) for the requested `startDate`/`leadDay` are fetched, complete
  * rows, no sampling.
  *
  * Returns `{ targeted: true, rows, total }` where `rows` is exactly the selected
@@ -331,7 +331,7 @@ function nearestLeadFrame(frames, leadDay) {
  * Per-lead census of a dataset's OWN eddy detections ("eddy-census" artifact:
  * frame.detections directly), at the available lead nearest `leadDay`. Returns
  * { detections, leadDay, parameters } or null. Nothing here privileges any dataset
- * as ground truth — a census is symmetric across forecasts and references.
+ * as ground truth, a census is symmetric across forecasts and references.
  *
  * Async because the index format holds each lead in its own sidecar file; the legacy
  * inline-frames format resolves without a fetch.

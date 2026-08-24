@@ -4,7 +4,7 @@
 
 // "Transparent science" content map: every panel, chart and overlay legend that
 // COMPUTES something carries a small "?" affordance whose popover text lives here.
-// This is the single place scientists edit that copy — the popover engine
+// This is the single place scientists edit that copy, the popover engine
 // (method-popover.js) only renders it. Bodies may contain `{placeholder}` tokens
 // filled from the `dynamicFields` passed to attachMethodNote (see method-popover.js).
 //

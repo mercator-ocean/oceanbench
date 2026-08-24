@@ -37,7 +37,7 @@ import {
 // costs nothing.
 export const GLOBAL_DEFAULT_CENTER_NX = 0.5;
 
-// Shared state — linked across every panel (contracts.md §6).
+// Shared state, linked across every panel (contracts.md §6).
 export const view = { zoom: 1, centerNX: GLOBAL_DEFAULT_CENTER_NX, centerNY: 0.5 };
 export const DEFAULT_LAYOUT = { controlsWidth: 256, railWidth: 352 };
 const savedLayout = JSON.parse(localStorage.getItem("oceanbench.viewer.layout") || "null") || {};

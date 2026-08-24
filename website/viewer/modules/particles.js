@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Windy-style advected-particle current animation over a (uo, vo) velocity field
-// (contracts.md §6: "animation only for motion — GPU current particles"). Runs on
+// (contracts.md §6: "animation only for motion, GPU current particles"). Runs on
 // the 2D canvas with the classic fading-trail technique: every frame the whole
 // overlay is dimmed by a translucent fill, then each live particle is advected by a
 // bilinear sample of the vector field and drawn as a short glowing segment. Trails
@@ -13,14 +13,14 @@
 // object it reads afresh every frame (sampler, projection, viewport, theme, speed),
 // so pan/zoom/lead-scrub/dataset-switch need no particle rebuild. Particle state is
 // held in normalized world coordinates (x = (lon+180)/360, y = (90-lat)/180), so
-// screen speed scales naturally with zoom — physically faithful — and 1/12° tiles
+// screen speed scales naturally with zoom, physically faithful, and 1/12° tiles
 // drop in unchanged (finer sampler, identical advection).
 
 import { sample as sampleColormap } from "../vendor/cmocean/colormaps.js";
 
 // Advection gain: normalized-world units travelled per (m/s) per frame at speed 1,
 // before the per-frame zoom scaling. Tuned low so flow reads: a strong ~0.5 m/s
-// current takes several seconds to cross a visible eddy at 1× — comprehensible, not a
+// current takes several seconds to cross a visible eddy at 1×, comprehensible, not a
 // blur. Multiplied by the user speed factor and by the visible world width each frame,
 // so screen speed stays roughly constant as the user zooms (physically slower world
 // step when zoomed in). Longer fade keeps trails on-screen so direction reads.
@@ -150,7 +150,7 @@ export function startParticleField(canvas, context) {
   }
 
   function fadeTrails(buffer) {
-    // Translucent fill dims previous frame — the trail memory. Composite mode
+    // Translucent fill dims previous frame, the trail memory. Composite mode
     // "destination-out" erases toward transparent so the field colour shows through.
     buffer.globalCompositeOperation = "destination-out";
     buffer.fillStyle = `rgba(0, 0, 0, ${TRAIL_FADE_ALPHA})`;

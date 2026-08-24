@@ -9,7 +9,7 @@
 // radix-2 2D FFT, and radially averages |F|² into a power-vs-wavenumber curve. The
 // wavenumber axis is converted to physical wavelength in kilometres using a
 // latitude-aware cell size at the box centre, so the same routine works for every
-// variable, model and region — spectra from a 1° model simply stop at a coarser
+// variable, model and region, spectra from a 1° model simply stop at a coarser
 // wavelength than a 1/12° one, which is honest and expected.
 //
 // Method (surfaced in the chart caption/tooltip): Hann window + mean-fill of land,

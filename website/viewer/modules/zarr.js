@@ -429,8 +429,8 @@ async function requestChunk(store, path, chunkKey, codecId, signal) {
 }
 
 /**
- * Read one 2D layer — a single (start_date, lead_day) slice of one variable at
- * one pyramid level — into a Float32Array in real units (NaN over land).
+ * Read one 2D layer, a single (start_date, lead_day) slice of one variable at
+ * one pyramid level, into a Float32Array in real units (NaN over land).
  * Returns { data, width, height, compressedBytes, fetchMilliseconds }.
  */
 export async function readLayer(store, { variable, level, startIndex, leadIndex, signal }) {
@@ -485,7 +485,7 @@ export async function readLayer(store, { variable, level, startIndex, leadIndex,
 }
 
 /**
- * Read a geographic WINDOW of one 2D layer — only the 256×256 tiles intersecting the
+ * Read a geographic WINDOW of one 2D layer, only the 256×256 tiles intersecting the
  * requested lat/lon box are fetched, so a finest-level regional read (e.g. the seed
  * neighbourhood for trajectory advection) stays a handful of tiles instead of the
  * whole global grid. `latitudes`/`longitudes` are the level's coordinate axes (from
@@ -512,7 +512,7 @@ export async function readLayerWindow(store, { variable, level, startIndex, lead
   const lonStep = longitudes.length > 1 ? longitudes[1] - longitudes[0] : 1;
   const periodic = Math.abs(lonStep) * longitudeSize >= 359;
 
-  // Row (latitude) range — clamped to the grid.
+  // Row (latitude) range, clamped to the grid.
   const rowOf = (lat) => (lat - latitudes[0]) / latStep;
   let rowMin = Math.floor(Math.min(rowOf(box.latMin), rowOf(box.latMax)));
   let rowMax = Math.ceil(Math.max(rowOf(box.latMin), rowOf(box.latMax)));
@@ -520,7 +520,7 @@ export async function readLayerWindow(store, { variable, level, startIndex, lead
   rowMax = Math.min(latitudeSize - 1, rowMax);
   if (rowMax < rowMin) return null;
 
-  // Column (longitude) range — continuous/unwrapped; wrapped onto source columns when
+  // Column (longitude) range, continuous/unwrapped; wrapped onto source columns when
   // periodic, clamped otherwise. Capped at one full revolution.
   const colOf = (lon) => (lon - longitudes[0]) / lonStep;
   let colMin = Math.floor(Math.min(colOf(box.lonMin), colOf(box.lonMax)));
@@ -604,7 +604,7 @@ export async function readCoordinate(store, level, name) {
 
 /**
  * Read a 1-D coordinate array stored at the ROOT of a store (name is the array path
- * itself, not under `level/<k>/`) — used by the water-column store whose `depth`,
+ * itself, not under `level/<k>/`), used by the water-column store whose `depth`,
  * `latitude` and `longitude` axes live at the root. Handles f4/f8 (the coordinate
  * dtypes the column store writes). Cached like readCoordinate.
  */
@@ -637,7 +637,7 @@ export async function readRootCoordinate(store, name) {
  * ALL depths of a single (start, latitude, longitude) point of one variable, decoded to
  * real units (NaN over land/missing). The store packs every lead and every depth of a
  * point into ONE chunk (dims start_date, lead_day, depth, latitude, longitude; chunk
- * [1, all-leads, all-depths, latTile, lonTile]), so a click is a single chunk fetch — and
+ * [1, all-leads, all-depths, latTile, lonTile]), so a click is a single chunk fetch, and
  * because that chunk is cached, scrubbing the lead slider re-reads it with no new request.
  * Returns { values: Float32Array indexed [leadIndex * depths + depthIndex], leads, depths,
  * compressedBytes }.
@@ -671,7 +671,7 @@ export async function readColumn(store, { variable, startIndex, latIndex, lonInd
   return { values, leads: leadSize, depths: depthSize, compressedBytes: record.compressedBytes };
 }
 
-/** Warm the chunk cache for a layer without decoding — used for lead-day prefetch. */
+/** Warm the chunk cache for a layer without decoding, used for lead-day prefetch. */
 export function prefetchLayer(store, { variable, level, startIndex, leadIndex }) {
   const path = `level/${level}/${variable}`;
   const { zarray } = arrayMetadata(store, path);

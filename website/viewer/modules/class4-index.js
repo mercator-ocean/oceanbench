@@ -71,7 +71,7 @@ export function buildClass4Index(points) {
   };
 }
 
-// Project the viewport-overlapping buckets once, decide stride-thinning, and draw — no
+// Project the viewport-overlapping buckets once, decide stride-thinning, and draw, no
 // second projection pass. Returns the exact same `visibleTotal` / `drawnVisible` / `stride`
 // / `thinned` semantics as the previous per-point scan, plus the display selection mask the
 // hover hit-test reuses. `selectedMask` is null when nothing is thinned (whole set drawn).
@@ -177,7 +177,7 @@ export function drawClass4Frame(context, projection, prepared, copyOffsets, canv
   return { visibleTotal, drawnVisible, stride, thinned, selectedMask };
 }
 
-// Number of Class-4 rows matching the active selector before spatial thinning — the
+// Number of Class-4 rows matching the active selector before spatial thinning, the
 // "of M sampled" denominator the legend reports so low counts read as weak (item 5).
 export function countClass4Matches(rows, { variable, depthBin, leadDay, startDate }) {
   if (isCurrentsVariable(variable)) return class4Points(rows, { variable, depthBin, leadDay, startDate }).length;
