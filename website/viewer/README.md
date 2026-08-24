@@ -107,7 +107,7 @@ lat/lon bounds and the `scores_summary` URL. The Class-4 parquet is a decimated 
 the published match-up artifact (deterministic stride + snappy so hyparquet can read it
 in-browser).
 
-The website-integrated viewer defaults to the EDITO MinIO rebuild-preview data
+The website-integrated viewer defaults to the CloudFerro rebuild-preview data
 base. To force local generated data while developing this static app, open it with
 `?data_base=local` or set `window.OCEANBENCH_VIEWER_CONFIG.dataBaseUrl` before the
 module script. Then serve and open:
@@ -127,7 +127,7 @@ The data root is resolved at startup in this priority order:
    and the value `local` still means `./data/`).
 3. an optional `viewer-config.json` fetched from beside `index.html`; a 404 is the
    normal case and is ignored silently.
-4. the built-in EDITO MinIO rebuild-preview prefix.
+4. the built-in CloudFerro rebuild-preview prefix.
 
 `viewer-config.example.json` shows the file's shape (`dataBaseUrl`, and optionally
 `columnsBaseUrl` for the separately published `<slug>.columns.zarr` stores). Copy it
@@ -138,11 +138,11 @@ to `viewer-config.json` (git-ignored) to pin a root for a local checkout; an off
 # both data roots exercised against the live, anonymously readable bucket
 python -m http.server -d website/viewer 8765
 # default (bucket): http://127.0.0.1:8765/index.html
-# override:         http://127.0.0.1:8765/index.html?data=https://minio.dive.edito.eu/project-oceanbench/dev/benchmark/rebuild-preview/viewer/data/
+# override:         http://127.0.0.1:8765/index.html?data=https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/benchmark/rebuild-preview/viewer/data/
 ```
 
-In the Quarto website, `store`/`manifest`/insight URLs resolve against the EDITO
-MinIO rebuild-preview viewer data prefix by default (CORS-enabled, §6).
+In the Quarto website, `store`/`manifest`/insight URLs resolve against the
+CloudFerro rebuild-preview viewer data prefix by default (CORS-enabled, §6).
 
 ### Developing the viewer inside the Quarto site (one command)
 

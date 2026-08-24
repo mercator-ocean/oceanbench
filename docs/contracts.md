@@ -449,15 +449,24 @@ artifacts.
 
 ### Infra prerequisites (Phase 0 checks, blocking for viewer work)
 
-- **RESOLVED (2026-07-03).** Benchmark ran against both candidates, EDITO
-  MinIO and CloudFerro S3. They tie on throughput (50-way concurrent 256 KB
-  range reads clean on both, no throttling), but EDITO MinIO already serves
-  `Access-Control-Allow-Origin: *` with a working OPTIONS preflight, exposes
-  `Accept-Ranges`/`Content-Range`/`ETag`, and speaks HTTP/2; CloudFerro
-  returns no CORS headers and 403 on preflight. **Decision: EDITO MinIO
-  serves all browser-facing artifacts.** CloudFerro remains a server-side
-  ingest source only. CDN deferred (origin is not the bottleneck); the data
-  contract is unchanged if one is added later.
+- **RESOLVED (2026-07-03), SUPERSEDED (2026-08-24).** The original benchmark ran
+  against both candidates, EDITO MinIO and CloudFerro S3. They tie on throughput
+  (50-way concurrent 256 KB range reads clean on both, no throttling), but at the
+  time only EDITO MinIO served `Access-Control-Allow-Origin: *` with a working
+  OPTIONS preflight, so the decision was that EDITO MinIO serves all
+  browser-facing artifacts and CloudFerro stays a server-side ingest source.
+
+- **CURRENT (2026-08-24). Decision: CloudFerro serves all browser-facing
+  artifacts.** The 2026-08 migration copied the full artifact to
+  `oceanbench-bucket` and the CORS blocker is gone: the bucket carries a CORS
+  configuration whose first rule allow-lists the EDITO datalab origins for
+  `GET`/`PUT`/`DELETE`/`HEAD`, and whose second rule permits any-origin
+  `GET`/`HEAD` with the `range` request header, exposing
+  `Content-Range`/`Accept-Ranges`/`ETag`/`Content-Length`. Anonymous preflight
+  now returns 200 with `Access-Control-Allow-Origin` for an arbitrary origin, so
+  cross-origin browser range reads work. EDITO MinIO is being retired; it is no
+  longer a data origin for the viewer. CDN deferred (origin is not the
+  bottleneck); the data contract is unchanged if one is added later.
 
 ## 7. `oceanbench evaluate`
 
