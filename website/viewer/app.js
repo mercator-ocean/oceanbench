@@ -96,7 +96,6 @@ import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectori
 import { forecastColor } from "./modules/forecast-colors.js";
 import {
   DISPLAY_DIFFERENCE,
-  DISPLAY_MODES,
   DISPLAY_SIDE_BY_SIDE,
   DISPLAY_SWIPE,
   EDDY_REFERENCE_GLORYS,
@@ -110,8 +109,6 @@ import {
   SCOPE_WHOLE_YEAR,
   THEME_DARK,
   THEME_LIGHT,
-  THEMES,
-  YEAR_METRICS,
   YEAR_METRIC_ABSOLUTE_ERROR,
   YEAR_METRIC_BIAS,
 } from "./state/view-modes.js";
@@ -144,6 +141,19 @@ import {
 } from "./modules/class4-index.js";
 import { aggregateLeadSeries, scoreDepthKeys } from "./modules/score-lookup.js";
 import { populateSelect } from "./modules/select-options.js";
+import {
+  DEFAULT_LAYOUT,
+  GLOBAL_DEFAULT_CENTER_NX,
+  setSharedDisplayMode,
+  setSharedEddyReference,
+  setSharedOverlayMode,
+  setSharedRegion,
+  setSharedScope,
+  setSharedTheme,
+  setSharedYearMetric,
+  shared,
+  view,
+} from "./state/shared-view.js";
 
 // Resolved lazily: the data root is only final after initializeViewerConfig() has had a
 // chance to apply an optional viewer-config.json.
@@ -153,57 +163,10 @@ const YEAR_ERROR_COLORMAP = "dense"; // sequential map for time-mean |obs − mo
 const REGION_BOUNDS = {
   ibi: { west: -19.08, east: 5.08, south: 26.17, north: 56.08 },
 };
-// The global default view is centred on the prime meridian (centerNX = (lon + 180) / 360,
-// so nx 0.5 ≡ lon 0°). A Pacific-centred default put the dateline down the middle of the
-// first frame, which splits the Atlantic across both edges of the map and opens the viewer
-// on a seam. Rendering already tiles wrapped longitude copies, so panning to the Pacific
-// costs nothing.
-const GLOBAL_DEFAULT_CENTER_NX = 0.5;
 // Particles saturate where the colour bar says they do: the bar is drawn over
 // [0, CURRENTS_MAX_SPEED], so a flow line reaching the top of the speed ramp has to mean
 // the same speed the bar's right-hand end is labelled with.
 const PARTICLE_MAGNITUDE_SCALE = CURRENTS_MAX_SPEED;
-
-// Shared state — linked across every panel (contracts.md §6).
-const view = { zoom: 1, centerNX: GLOBAL_DEFAULT_CENTER_NX, centerNY: 0.5 };
-const DEFAULT_LAYOUT = { controlsWidth: 256, railWidth: 352 };
-const savedLayout = JSON.parse(localStorage.getItem("oceanbench.viewer.layout") || "null") || {};
-const shared = {
-  startIndex: 0,
-  leadDay: 1,
-  theme: THEME_LIGHT,
-  layout: 1,
-  // "single" = per-start-date fields (the default view); "year" = precomputed
-  // whole-year error-geography raster + RMSE-by-start diagnostics.
-  scope: SCOPE_SINGLE_DATE,
-  // Year-scope map metric: "error" = time-mean |obs − model| (sequential), "bias" =
-  // time-mean signed model − obs (diverging, centred 0). Single-forecast scope ignores it.
-  yearMetric: YEAR_METRIC_ABSOLUTE_ERROR,
-  // PSD rectangle tool: { lon, lat, w, h } in degrees (centre + size). Disabled by
-  // default so the initial map stays clean; enabling creates a centred default box.
-  psdEnabled: false,
-  psdBox: null,
-  // The size the user asked for, kept apart from the clamped size actually drawn: a
-  // second forecast can raise the minimum box size, and the box must shrink back to the
-  // requested size once that constraint goes away. { w, h } in degrees; null when unset.
-  psdBoxRequest: null,
-  overlayMode: OVERLAY_NONE,
-  // Water-column click point { lon, lat } (profile-on-click mode); null when unset. Kept
-  // in the hash so a link reproduces the clicked profile.
-  columnPoint: null,
-  region: REGION_GLOBAL,
-  eddyReference: EDDY_REFERENCE_GLORYS,
-  showParticles: true,
-  particleSpeed: 1,
-  railCollapsed: localStorage.getItem("oceanbench.viewer.railCollapsed") === "1",
-  controlsCollapsed: localStorage.getItem("oceanbench.viewer.controlsCollapsed") === "1",
-  controlsWidth: Number(savedLayout.controlsWidth) || DEFAULT_LAYOUT.controlsWidth,
-  railWidth: Number(savedLayout.railWidth) || Number(localStorage.getItem("oceanbench.viewer.railWidth")) || DEFAULT_LAYOUT.railWidth,
-  // 2-forecast display: "side" (two panels) or "swipe" (one map, F1 left / F2 right).
-  displayMode: DISPLAY_SIDE_BY_SIDE,
-  // Which forecast the rail shows when 2 forecasts carry different variables.
-  railForecast: 0,
-};
 
 const stores = new Map();
 const manifests = new Map();
@@ -4177,9 +4140,7 @@ function applyTheme() {
 // Single entry point for a theme change, shared by the in-app toggle and, when the
 // viewer is embedded in the Quarto site, the parent page's theme switch (postMessage).
 function setViewerTheme(theme) {
-  if (!THEMES.includes(theme)) return;
-  if (theme === shared.theme) return;
-  shared.theme = theme;
+  if (!setSharedTheme(theme)) return;
   applyTheme();
   renderAllPanels().then(() => redrawOverlaysAll());
   writeHash();
@@ -4217,12 +4178,11 @@ function applyScope() {
 }
 
 function setScope(scope) {
-  if (shared.scope === scope) return;
-  shared.scope = scope;
+  if (!setSharedScope(scope)) return;
   // The year raster is a per-forecast view; the difference comparison has no meaning
   // there, so entering year scope while in difference falls back to side-by-side.
   if (scope === SCOPE_WHOLE_YEAR && isDiffView()) {
-    shared.displayMode = DISPLAY_SIDE_BY_SIDE;
+    setSharedDisplayMode(DISPLAY_SIDE_BY_SIDE);
     markDisplayButtons();
     syncPanelGrid();
   }
@@ -4265,9 +4225,7 @@ function wireStaticMethodNotes() {
 // Switch the year-scope map + rail between |error| and signed bias. Re-renders the
 // panels (which pick the field/colormap/range per metric), the rail, and the colorbar.
 function setYearMetric(metric) {
-  if (!YEAR_METRICS.includes(metric)) return;
-  if (shared.yearMetric === metric) return;
-  shared.yearMetric = metric;
+  if (!setSharedYearMetric(metric)) return;
   markMetricButtons();
   renderAllPanels().then(() => {
     redrawOverlaysAll();
@@ -4523,14 +4481,14 @@ function wireGlobalControls() {
     scheduleHashWrite();
   });
   elements["overlay-mode"].addEventListener("change", (event) => {
-    shared.overlayMode = event.target.value;
+    setSharedOverlayMode(event.target.value);
     applyOverlayMode();
     writeHash();
   });
   elements["overlay-region"].addEventListener("change", (event) => {
     clearTrajectories();
     clearColumnProfile();
-    shared.region = event.target.value;
+    setSharedRegion(event.target.value);
     fitRegionView();
     renderAllPanels().then(() => {
       redrawOverlaysAll();
@@ -4540,7 +4498,7 @@ function wireGlobalControls() {
     writeHash();
   });
   elements["eddy-reference"].addEventListener("change", (event) => {
-    shared.eddyReference = event.target.value;
+    setSharedEddyReference(event.target.value);
     redrawOverlaysAll();
     updateContextRail();
     writeHash();
@@ -4596,7 +4554,7 @@ function wireGlobalControls() {
   }
   for (const button of document.querySelectorAll(".display-switch [data-display]")) {
     button.addEventListener("click", () => {
-      shared.displayMode = button.dataset.display;
+      setSharedDisplayMode(button.dataset.display);
       markDisplayButtons();
       syncPanelGrid();
       renderAllPanels().then(() => {
@@ -4623,7 +4581,7 @@ function wireGlobalControls() {
       // The overlay picker must not keep reading "trajectories"/"column" once the thing
       // it names is gone, so drop it back to none along with its note.
       if (shared.overlayMode === OVERLAY_TRAJECTORIES || shared.overlayMode === OVERLAY_WATER_COLUMN) {
-        shared.overlayMode = OVERLAY_NONE;
+        setSharedOverlayMode(OVERLAY_NONE);
         elements["overlay-mode"].value = OVERLAY_NONE;
         applyOverlayMode();
         writeHash();
@@ -4929,9 +4887,9 @@ function readHash() {
   view.zoom = number("z", view.zoom);
   view.centerNX = number("cx", view.centerNX);
   view.centerNY = number("cy", view.centerNY);
-  if (parameters.has("theme")) shared.theme = parameters.get("theme");
-  if (parameters.get("scope") === SCOPE_WHOLE_YEAR) shared.scope = SCOPE_WHOLE_YEAR;
-  if (parameters.get("metric") === YEAR_METRIC_BIAS) shared.yearMetric = YEAR_METRIC_BIAS;
+  if (parameters.has("theme")) setSharedTheme(parameters.get("theme"));
+  if (parameters.get("scope") === SCOPE_WHOLE_YEAR) setSharedScope(SCOPE_WHOLE_YEAR);
+  if (parameters.get("metric") === YEAR_METRIC_BIAS) setSharedYearMetric(YEAR_METRIC_BIAS);
   shared.psdEnabled = parameters.get("psdOn") === "1";
   if (parameters.has("psd")) {
     const [lon, lat, w, h] = parameters.get("psd").split(",").map(Number);
@@ -4941,19 +4899,19 @@ function readHash() {
       if (!parameters.has("psdOn")) shared.psdEnabled = true;
     }
   }
-  if (parameters.has("ov")) shared.overlayMode = parameters.get("ov");
+  if (parameters.has("ov")) setSharedOverlayMode(parameters.get("ov"));
   if (parameters.has("col")) {
     const [lon, lat] = parameters.get("col").split(",").map(Number);
     if (Number.isFinite(lon) && Number.isFinite(lat)) shared.columnPoint = { lon, lat };
   }
-  if (parameters.has("region")) shared.region = parameters.get("region");
-  if (parameters.has("eref")) shared.eddyReference = parameters.get("eref");
+  if (parameters.has("region")) setSharedRegion(parameters.get("region"));
+  if (parameters.has("eref")) setSharedEddyReference(parameters.get("eref"));
   if (parameters.get("rail") === "0" || parameters.get("rail") === "collapsed") shared.railCollapsed = true;
   if (parameters.get("ctrl") === "0" || parameters.get("ctrl") === "collapsed") shared.controlsCollapsed = true;
   const railWidth = number("rw", null);
   if (railWidth !== null) shared.railWidth = Math.min(620, Math.max(280, railWidth));
   shared.controlsWidth = number("cw", shared.controlsWidth);
-  if (DISPLAY_MODES.includes(parameters.get("dm"))) shared.displayMode = parameters.get("dm");
+  if (parameters.has("dm")) setSharedDisplayMode(parameters.get("dm"));
   if (parameters.has("play")) shared.showParticles = parameters.get("play") === "1";
   shared.particleSpeed = number("spd", shared.particleSpeed);
   return parameters;
@@ -5092,7 +5050,7 @@ async function main() {
   else if (shared.layout > 2) shared.layout = 2;
   // The difference view has no meaning in the year raster scope; a deep link that
   // asks for both falls back to side-by-side (mirrors the runtime scope switch).
-  if (shared.scope === SCOPE_WHOLE_YEAR && shared.displayMode === DISPLAY_DIFFERENCE) shared.displayMode = DISPLAY_SIDE_BY_SIDE;
+  if (shared.scope === SCOPE_WHOLE_YEAR && shared.displayMode === DISPLAY_DIFFERENCE) setSharedDisplayMode(DISPLAY_SIDE_BY_SIDE);
   applyTheme();
   applyScope();
   markMetricButtons();
