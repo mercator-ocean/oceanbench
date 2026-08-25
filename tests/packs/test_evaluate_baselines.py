@@ -26,7 +26,7 @@ from tests.packs.conftest import _synthetic_dataset, _write_zarr
 
 
 def _bundle_baseline(pack_directory: Path, slug: str, *, seed: int, starts: slice | None = None) -> None:
-    """Add a baseline store to a fake pack and register it in the manifest, as build_pack does."""
+    """Add a baseline store to a fake offline reference directory and register it in the manifest."""
     baseline = _synthetic_dataset(seed=seed, offset=0.6)
     if starts is not None:
         baseline = baseline.isel(first_day_datetime=starts)

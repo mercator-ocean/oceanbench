@@ -11,7 +11,6 @@ import pytest
 
 from oceanbench.core.attribution import COPERNICUS_MARINE_CREDIT, COPERNICUS_MARINE_DISCLAIMER
 from oceanbench.core.schema_validation import load_schema
-from oceanbench.packs.builder import PackBuildResult, _pack_readme
 from oceanbench.packs.manifest import PACK_MANIFEST_FILENAME, write_pack_manifest
 
 
@@ -98,29 +97,3 @@ def test_absent_baselines_are_flagged():
     assert manifest["baselines_available"] is False
     assert manifest["contents"]["baselines"] == {}
     assert any("baseline" in note.lower() for note in manifest["notes"])
-
-
-def test_readme_embeds_attribution_and_disclaimer_verbatim():
-    readme = _pack_readme(_valid_manifest())
-    assert COPERNICUS_MARINE_CREDIT in readme
-    assert COPERNICUS_MARINE_DISCLAIMER in readme
-    assert "No baselines are bundled in this pack" in readme
-
-
-def test_readme_lists_the_bundled_baselines():
-    manifest = _valid_manifest()
-    manifest["baselines_available"] = True
-    manifest["contents"]["baselines"] = {
-        "climatology": {"path": "baselines/climatology.zarr", "variables": ["x"], "depths": ["surface"]},
-        "persistence": {"path": "baselines/persistence.zarr", "variables": ["x"], "depths": ["surface"]},
-    }
-    readme = _pack_readme(manifest)
-    assert "baselines/climatology.zarr" in readme
-    assert "baselines/persistence.zarr" in readme
-
-
-def test_pack_build_result_shape():
-    # The build result reports the pack directory, manifest and flags to the caller.
-    result = PackBuildResult(pack_directory="p", manifest=_valid_manifest(), manifest_path="p/pack-manifest.json")
-    assert result.flags == []
-    assert result.manifest["kind"] == "quick"

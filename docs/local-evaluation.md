@@ -60,36 +60,36 @@ are fetched from the public EDITO MinIO objects named by `datasets.json` as you 
 
 ## Running without network: `--offline-references`
 
-An **offline reference bundle** is a downloadable, versioned directory built by `ingest` from
-the staged reference data, holding everything `evaluate` would otherwise read live. Point at
-one to run with no network at all:
+`evaluate` reads its references and observations live from the bucket by default, and that is
+the normal way to run it. If you already hold that data on disk, point `--offline-references`
+at the **local directory** holding it and the run needs no network at all:
 
 ```sh
-oceanbench evaluate ./my-forecasts.zarr --offline-references ./pack-quick-2024
+oceanbench evaluate ./my-forecasts.zarr --offline-references ./my-references
 ```
 
-It is an optimisation for offline or repeated runs, never a prerequisite. A bundle is
+It is an optimisation for offline or repeated runs, never a prerequisite. The directory is
 **self-describing**: `evaluate` reads `pack-manifest.json` alone to locate every source. It
-carries:
+holds:
 
-- `references/<name>.zarr` — the gridded references (GLORYS, GLO12). A `quick` bundle carries
-  **surface fields only**; a `full` bundle carries all depths.
-- `observations/observations.zarr` — the Class-4 observation match-up store.
-- `class4-mean-dynamic-topography-…​.zarr` — the GLO12 mean dynamic topography used for the
-  SSH → SLA Class-4 conversion (stored under its stage-canonical name so the ported Class-4
+- `references/<name>.zarr`, the gridded references (GLORYS, GLO12), surface fields only or all
+  depths depending on how it was cut.
+- `observations/observations.zarr`, the Class-4 observation match-up store.
+- `class4-mean-dynamic-topography-*.zarr`, the GLO12 mean dynamic topography used for the
+  SSH to SLA Class-4 conversion (stored under its stage-canonical name so the ported Class-4
   code resolves it offline).
-- `pack-manifest.json` — stamps the upstream products + retrieval dates (contracts.md §1) and
-  carries the evaluation year and region, plus the Copernicus Marine credit and
+- `pack-manifest.json`, stamping the upstream products and retrieval dates (contracts.md §1)
+  and carrying the evaluation year and region, plus the Copernicus Marine credit and
   disclaimer (contracts.md §11).
-- `README.md` — the Copernicus Marine attribution, verbatim.
+- `README.md`, the Copernicus Marine attribution, verbatim.
 
-The bundle's manifest **fixes the year and region**, so `--region` or `--year` that contradict
-it are rejected rather than silently ignored. Your model is scored on the intersection of its
-own forecast starts with the bundle's starts.
+The manifest **fixes the year and region**, so `--region` or `--year` that contradict it are
+rejected rather than silently ignored. Your model is scored on the intersection of its own
+forecast starts with the directory's starts.
 
-Baselines (climatology / persistence) are not available in a bundle yet: the manifest supports
-optional baseline entries and flags their absence (`baselines_available: false`), so
-skill-vs-baseline is not computed offline until a bundle ships baselines.
+Baselines (climatology / persistence) are optional: the manifest supports baseline entries and
+flags their absence (`baselines_available: false`), so skill-vs-baseline is not computed
+offline unless the directory carries baselines.
 
 ## Required forecast layout
 
@@ -145,7 +145,7 @@ sibling files nor load an ES module — both are blocked by the browser same-ori
 | `--year YEAR` | evaluation year (default: `2024`) |
 | `--metrics M [M ...]` | select metric families: `rmsd`, `mld`, `geostrophic`, `class4`, `lagrangian`, `realism` (default: all) |
 | `--viewer-artifacts` | also build the map viewer and its serving artifacts (off by default) |
-| `--offline-references DIR` | read references and observations from a downloaded bundle instead of live EDITO |
+| `--offline-references DIR` | read references and observations from a local directory instead of the live bucket |
 
 Published scores, challenger metadata, and viewer datasets use the official MinIO release.
 Set `OCEANBENCH_PUBLISHED_BASE` to override that base URL.

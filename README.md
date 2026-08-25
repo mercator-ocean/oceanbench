@@ -156,7 +156,8 @@ oceanbench evaluate ./my-forecasts.zarr \
   --output ./my-evaluation
 ```
 
-Add `--offline-references ./pack-quick-2024` to run with no network at all. Publishing remains
+Add `--offline-references ./my-references` to read references from a local directory and run
+with no network at all. Publishing remains
 a separate step:
 
 ```bash

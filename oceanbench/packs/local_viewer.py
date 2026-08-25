@@ -14,7 +14,7 @@ from urllib.parse import urljoin
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension
-from oceanbench.packs.fetch import read_json_url
+from oceanbench.core.remote_json import read_json_url
 from oceanbench.pyramids import build_pyramid, viewer_layers
 
 # Keep aligned with website/viewer/config.js. Update both rebuild-preview values at release.

@@ -41,6 +41,7 @@ import xarray
 from oceanbench.core import runtime_configuration as runtime_configuration_module
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.regions import GLOBAL_REGION_NAME, normalize_region_name, subset_dataset_to_region
+from oceanbench.core.remote_json import read_json_url
 from oceanbench.core.runtime_configuration import (
     RuntimeConfiguration,
     current_runtime_configuration,
@@ -48,7 +49,6 @@ from oceanbench.core.runtime_configuration import (
 )
 from oceanbench.core.schema_validation import validate_against_schema
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
-from oceanbench.packs.fetch import read_json_url
 from oceanbench.packs.manifest import PACK_MANIFEST_FILENAME
 from oceanbench.packs.scorecard import write_overlay_scorecard
 from oceanbench.publish.aggregate import aggregate_scores, summary_to_json_records
