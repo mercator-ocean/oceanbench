@@ -26,18 +26,105 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.MINUS_500_METERS: "500m",
 }
 
+SPATIAL_COORDINATE_ALIGNMENT_ATOL = 1e-4
+SPATIAL_GRID_MINIMUM_MATCH_RATIO = 0.999
+SPATIAL_COORDINATE_NAMES = (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key())
+
 
 def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
     return dataset.assign({Dimension.DEPTH.key(): [DEPTH_LABELS[depth_level] for depth_level in DepthLevel]})
+
+
+def _spatial_area_weights(dataset: xarray.Dataset) -> xarray.DataArray:
+    return numpy.cos(numpy.deg2rad(dataset[Dimension.LATITUDE.key()]))
+
+
+def _nearest_reference_coordinate_indexes(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    coordinate_name: str,
+) -> tuple[numpy.ndarray, numpy.ndarray]:
+    challenger_coordinate = challenger_dataset[coordinate_name]
+    reference_coordinate = reference_dataset[coordinate_name]
+
+    challenger_coordinate_values = challenger_coordinate.values
+    reference_coordinate_values = reference_coordinate.values
+
+    reference_index = pandas.Index(reference_coordinate_values)
+    try:
+        reference_indexes = reference_index.get_indexer(
+            challenger_coordinate_values,
+            method="nearest",
+            tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL,
+        )
+    except (ValueError, pandas.errors.InvalidIndexError) as error:
+        raise ValueError(
+            f"Could not align {coordinate_name} coordinates: nearest-neighbor lookup failed: {error}"
+        ) from error
+
+    challenger_indexes = numpy.flatnonzero(reference_indexes >= 0)
+    reference_indexes = reference_indexes[challenger_indexes]
+
+    if numpy.unique(reference_indexes).size != reference_indexes.size:
+        raise ValueError(
+            f"Could not align {coordinate_name} coordinates: multiple challenger coordinates match the same "
+            f"reference coordinate within tolerance {SPATIAL_COORDINATE_ALIGNMENT_ATOL}"
+        )
+
+    return challenger_indexes, reference_indexes
+
+
+def _snap_reference_spatial_coordinates_to_challenger(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    reference_indexes_by_coordinate = {}
+    challenger_coordinates = {}
+    coordinate_match_ratios_by_name = {}
+    matched_grid_ratio = 1.0
+
+    for coordinate_name in SPATIAL_COORDINATE_NAMES:
+        coordinate_indexes = _nearest_reference_coordinate_indexes(
+            challenger_dataset,
+            reference_dataset,
+            coordinate_name,
+        )
+
+        challenger_indexes, reference_indexes = coordinate_indexes
+        reference_indexes_by_coordinate[coordinate_name] = reference_indexes
+        coordinate_match_ratio = challenger_indexes.size / challenger_dataset.sizes[coordinate_name]
+        coordinate_match_ratios_by_name[coordinate_name] = coordinate_match_ratio
+        matched_grid_ratio *= coordinate_match_ratio
+        challenger_coordinates[coordinate_name] = challenger_dataset[coordinate_name].isel(
+            {coordinate_name: challenger_indexes}
+        )
+
+    if matched_grid_ratio < SPATIAL_GRID_MINIMUM_MATCH_RATIO:
+        coordinate_match_ratios = ", ".join(
+            f"{coordinate_name}={coordinate_match_ratios_by_name[coordinate_name]:.4%}"
+            for coordinate_name in SPATIAL_COORDINATE_NAMES
+        )
+        raise ValueError(
+            "Could not align reference spatial grid to challenger spatial grid: "
+            f"matched {matched_grid_ratio:.4%} of challenger grid points, "
+            f"required at least {SPATIAL_GRID_MINIMUM_MATCH_RATIO:.4%}; "
+            f"coordinate match ratios: {coordinate_match_ratios}; "
+            f"tolerance={SPATIAL_COORDINATE_ALIGNMENT_ATOL}"
+        )
+
+    return reference_dataset.isel(reference_indexes_by_coordinate).assign_coords(challenger_coordinates)
 
 
 def _rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
 ) -> xarray.Dataset:
-    return numpy.sqrt(
-        ((challenger_dataset - reference_dataset) ** 2).mean(dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()])
-    ).mean(dim=Dimension.FIRST_DAY_DATETIME.key())
+    reference_dataset = _snap_reference_spatial_coordinates_to_challenger(challenger_dataset, reference_dataset)
+    squared_error = (challenger_dataset - reference_dataset) ** 2
+    area_weighted_mean_squared_error = squared_error.weighted(_spatial_area_weights(squared_error)).mean(
+        dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
+    )
+    return numpy.sqrt(area_weighted_mean_squared_error).mean(dim=Dimension.FIRST_DAY_DATETIME.key())
 
 
 def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
@@ -79,7 +166,8 @@ def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
     )
 
     dataset_with_depth_selected = dataset_with_lead_day_labels.sel(
-        {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}, method="nearest"
+        {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]},
+        method="nearest",
     )
     dataset_with_depth_labels = _assign_depth_dimension(dataset_with_depth_selected)
     return dataset_with_depth_labels

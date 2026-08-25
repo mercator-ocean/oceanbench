@@ -11,9 +11,10 @@
   const MARGIN = 16;
   const GLOBE_CENTER_X_RATIO = 0.5;
   const DRAG_SENSITIVITY = 0.35;
-  const MINIMUM_ZOOM = 0.85;
-  const MAXIMUM_ZOOM = 8;
-  const ZOOM_SENSITIVITY = 0.0015;
+  const SPIN_FRICTION = 0.94;
+  const MINIMUM_SPIN_VELOCITY = 0.002;
+  const FINE_GRATICULE_DEGREES = 10;
+  const COARSE_GRATICULE_DEGREES = 30;
   const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 
   const state = {
@@ -25,6 +26,7 @@
     landPromise: null,
     options: null,
     rotation: null,
+    velocity: [0, 0],
     zoom: 1,
   };
 
@@ -227,17 +229,48 @@
     state.animationFrame = requestAnimationFrame(step);
   }
 
+  function spinWithInertia() {
+    if (Math.hypot(state.velocity[0], state.velocity[1]) < MINIMUM_SPIN_VELOCITY) return;
+    stopAnimation();
+    let previousTime = performance.now();
+
+    function step(now) {
+      const elapsed = now - previousTime;
+      previousTime = now;
+      state.rotation = [
+        state.rotation[0] + state.velocity[0] * elapsed,
+        clamp(state.rotation[1] + state.velocity[1] * elapsed, -82, 82),
+        0,
+      ];
+      const decay = Math.pow(SPIN_FRICTION, elapsed / 16.67);
+      state.velocity = [state.velocity[0] * decay, state.velocity[1] * decay];
+      updatePaths();
+      if (Math.hypot(state.velocity[0], state.velocity[1]) > MINIMUM_SPIN_VELOCITY) {
+        state.animationFrame = requestAnimationFrame(step);
+      } else {
+        state.animationFrame = null;
+      }
+    }
+
+    state.animationFrame = requestAnimationFrame(step);
+  }
+
   function attachDrag(svgNode) {
     let startX = 0;
     let startY = 0;
     let startRotation = null;
+    let previousRotation = null;
+    let previousMoveTime = 0;
 
     svgNode.addEventListener("pointerdown", (event) => {
       state.dragging = true;
       stopAnimation();
+      state.velocity = [0, 0];
       startX = event.clientX;
       startY = event.clientY;
       startRotation = state.rotation.slice();
+      previousRotation = state.rotation.slice();
+      previousMoveTime = performance.now();
       svgNode.classList.add("dragging");
       svgNode.setPointerCapture(event.pointerId);
     });
@@ -246,11 +279,25 @@
       if (!state.dragging || !startRotation) return;
       const deltaX = event.clientX - startX;
       const deltaY = event.clientY - startY;
-      state.rotation = [
+      const nextRotation = [
         startRotation[0] + deltaX * DRAG_SENSITIVITY,
         clamp(startRotation[1] - deltaY * DRAG_SENSITIVITY, -82, 82),
         0,
       ];
+      const elapsed = performance.now() - previousMoveTime;
+      if (elapsed > 0) {
+        const instantaneous = [
+          (nextRotation[0] - previousRotation[0]) / elapsed,
+          (nextRotation[1] - previousRotation[1]) / elapsed,
+        ];
+        state.velocity = [
+          state.velocity[0] * 0.4 + instantaneous[0] * 0.6,
+          state.velocity[1] * 0.4 + instantaneous[1] * 0.6,
+        ];
+      }
+      previousRotation = nextRotation;
+      previousMoveTime = performance.now();
+      state.rotation = nextRotation;
       updatePaths();
     });
 
@@ -262,21 +309,12 @@
       if (event.pointerId !== undefined && svgNode.hasPointerCapture(event.pointerId)) {
         svgNode.releasePointerCapture(event.pointerId);
       }
+      spinWithInertia();
     }
 
     svgNode.addEventListener("pointerup", stopDrag);
     svgNode.addEventListener("pointercancel", stopDrag);
     svgNode.addEventListener("lostpointercapture", stopDrag);
-  }
-
-  function attachZoom(svgNode) {
-    svgNode.addEventListener("wheel", (event) => {
-      event.preventDefault();
-      stopAnimation();
-      const zoomFactor = Math.exp(-event.deltaY * ZOOM_SENSITIVITY);
-      state.zoom = clamp(state.zoom * zoomFactor, MINIMUM_ZOOM, MAXIMUM_ZOOM);
-      updatePaths();
-    }, { passive: false });
   }
 
   function drawGlobe() {
@@ -288,7 +326,7 @@
     }
 
     try {
-      const { activeRegion, regionMetadata } = state.options;
+      const { activeRegion, activeTrack, regionMetadata } = state.options;
       const regionFillFeature = regionFillPolygon(activeRegion, regionMetadata);
       const regionOutlineFeature = regionOutline(activeRegion, regionMetadata);
       container.innerHTML = "";
@@ -301,7 +339,8 @@
         .rotate(state.rotation || targetRotation(activeRegion, regionMetadata));
       const baseScale = projection.scale();
       const path = window.d3.geoPath(projection);
-      const graticule = window.d3.geoGraticule10();
+      const graticuleDegrees = activeTrack === "one_degree" ? COARSE_GRATICULE_DEGREES : FINE_GRATICULE_DEGREES;
+      const graticule = window.d3.geoGraticule().step([graticuleDegrees, graticuleDegrees])();
 
       const svg = appendSvgElement(container, "svg", {
         viewBox: `0 0 ${WIDTH} ${HEIGHT}`,
@@ -344,7 +383,6 @@
 
       state.current = { baseScale, container, path, projection, svg };
       attachDrag(svg);
-      attachZoom(svg);
       updatePaths();
     } catch (error) {
       console.warn("OceanBench region globe failed to render", error);

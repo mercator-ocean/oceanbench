@@ -5,8 +5,8 @@ from oceanbench.core.interpolate import interpolate_1_degree
 
 challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
     [
-        "https://minio.dive.edito.eu/project-oceanbench/public/glonet_full_2024/20240103.zarr",
-        "https://minio.dive.edito.eu/project-oceanbench/public/glonet_full_2024/20240110.zarr",
+        "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/glonet/20240103.zarr",
+        "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/glonet/20240110.zarr",
     ],
     engine="zarr",
     preprocess=lambda dataset: dataset.rename({"time": "lead_day_index"}).assign({"lead_day_index": range(10)}),

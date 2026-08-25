@@ -34,20 +34,16 @@ class ObservationDataUnavailableError(ValueError):
 
 def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
     if resolution == "twelfth_degree":
-        return "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt.zarr"
+        return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt.zarr"
     if resolution == "quarter_degree":
-        return (
-            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt_025deg.zarr"
-        )
+        return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt_025deg.zarr"
     if resolution == "one_degree":
-        return (
-            "https://minio.dive.edito.eu/project-oceanbench/public/glorys12_mdt_2024/" "GLO-MFC_001_030_mdt_1_deg.zarr"
-        )
+        return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt_1_deg.zarr"
     raise ValueError(f"Unsupported resolution : {resolution}.")
 
 
 def _mean_dynamic_topography_stage_path(resolution: str) -> Path:
-    return local_stage_directory() / f"class4-mean-dynamic-topography-2024-{resolution}.zarr"
+    return local_stage_directory() / f"class4-mean-dynamic-topography-2024-glo12-{resolution}.zarr"
 
 
 def _open_staged_mean_dynamic_topography_dataset(stage_path: Path) -> Dataset:

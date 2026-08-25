@@ -263,8 +263,6 @@ def _interpolate_vertically(
     result = numpy.full(observation_count, numpy.nan)
     sort_order = numpy.argsort(model_depths)
     sorted_depths = model_depths[sort_order]
-    if len(sorted_depths) > 64:
-        raise ValueError("Too many depth levels for Class IV bitmask encoding: maximum supported is 64.")
     sorted_profiles = profiles[sort_order, :]
     valid_masks = ~numpy.isnan(sorted_profiles)
     valid_counts = valid_masks.sum(axis=0)
@@ -272,10 +270,10 @@ def _interpolate_vertically(
     if not numpy.any(enough_points):
         return result
     eligible_indices = numpy.where(enough_points)[0]
-    powers = 2 ** numpy.arange(len(sorted_depths), dtype=numpy.int64)
-    mask_ids = valid_masks[:, eligible_indices].astype(numpy.int64).T @ powers
-    unique_mask_ids, inverse = numpy.unique(mask_ids, return_inverse=True)
-    for group_idx in range(len(unique_mask_ids)):
+    # Group equal validity masks without encoding them in a fixed-width integer.
+    packed_valid_masks = numpy.packbits(valid_masks[:, eligible_indices].T, axis=1)
+    unique_valid_masks, inverse = numpy.unique(packed_valid_masks, axis=0, return_inverse=True)
+    for group_idx in range(len(unique_valid_masks)):
         group_local = numpy.where(inverse == group_idx)[0]
         indices = eligible_indices[group_local]
         valid_mask = valid_masks[:, indices[0]]
