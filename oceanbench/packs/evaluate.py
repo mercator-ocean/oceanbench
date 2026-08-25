@@ -81,8 +81,8 @@ METRIC_NAMES = ("rmsd", "mld", "geostrophic", "class4", "lagrangian", "realism")
 # baseline on a different grid.
 _PREFERRED_SKILL_BASELINES = ("climatology", "climatology_1_degree", "persistence", "persistence_1_degree")
 NO_BUNDLED_BASELINES_FLAG = (
-    "the offline pack bundles no baselines, so skill-vs-baseline was not computed; "
-    "rebuild the pack with 'oceanbench build-pack' to get it"
+    "the offline reference directory bundles no baselines, so skill-vs-baseline was not computed; "
+    "score live instead, or add a baseline store to the directory and its manifest"
 )
 
 

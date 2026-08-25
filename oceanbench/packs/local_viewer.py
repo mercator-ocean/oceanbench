@@ -18,7 +18,8 @@ from oceanbench.core.remote_json import read_json_url
 from oceanbench.pyramids import build_pyramid, viewer_layers
 
 # Keep aligned with website/viewer/config.js. Update both rebuild-preview values at release.
-OFFICIAL_PUBLISHED_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench/dev/benchmark/rebuild-preview/"
+# CloudFerro is the only data origin; EDITO MinIO is retired.
+OFFICIAL_PUBLISHED_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/benchmark/rebuild-preview/"
 LOCAL_VIEWER_DIRECTORY = "viewer"
 
 
@@ -54,7 +55,9 @@ def _official_datasets() -> list[dict]:
 def _write_viewer_application(viewer_directory: Path) -> None:
     """Copy the viewer single-page application next to its data so it opens over a plain file server."""
     source_viewer = Path(__file__).resolve().parents[2] / "website" / "viewer"
-    shutil.copytree(source_viewer, viewer_directory, dirs_exist_ok=True, ignore=shutil.ignore_patterns("data"))
+    # "qa" is the maintainers' Playwright harness and carries its own node_modules (tens of MB);
+    # it is not part of the application a user opens.
+    shutil.copytree(source_viewer, viewer_directory, dirs_exist_ok=True, ignore=shutil.ignore_patterns("data", "qa"))
     index_path = viewer_directory / "index.html"
     index_path.write_text(
         index_path.read_text(encoding="utf-8")

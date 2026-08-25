@@ -485,24 +485,12 @@ evaluation context, defaulting to `global` and 2024.
 **Scores are the only default output.** `--viewer-artifacts` opts into the map: the viewer
 serving artifacts (§5) plus a local viewer pyramid and static viewer directory.
 Its `datasets.json` combines the local challenger (relative store/manifest URLs)
-with official products (absolute public MinIO URLs), so official pyramids do not
-need to be downloaded. The serving artifacts and the local site write the same
-pyramid path, so it is built once and adopted, not twice.
-
-**Offline reference bundles** are an optimisation for offline or repeated runs,
-never a prerequisite. `--offline-references ./pack-quick-2024` resolves every
-reference, the observation store and the MDT from a downloadable, versioned
-bundle produced by `ingest`:
-
-- `pack-quick-<year>`: obs match-up inputs + 1/4° surface reference fields +
-  climatology/persistence baselines. Target: evaluate a model locally in
-  minutes–1 h; answers "is it good" + "is it blurry".
-- `pack-full-<year>`: adds multi-depth gridded references for the official
-  gridded track.
-
-The required `year` and `region` fields in `pack-manifest.json` define the
-evaluation context for a bundle run; a `--region` or `--year` that contradicts
-the manifest is rejected rather than silently ignored.
+with official products (absolute public CloudFerro URLs), so official pyramids do
+not need to be downloaded. The serving artifacts and the local site write the same
+pyramid path, so it is built once and adopted, not twice. The catalog is the local
+one, so the viewer must be opened against it (`?data_base=local`, which the command
+prints); an official entry's water-column store is resolved beside its own absolute
+pyramid, not under the local data root.
 
 ## 8. S3 layout
 
@@ -517,7 +505,6 @@ s3://project-oceanbench/dev/benchmark/<release>/
     insights/manifest.json
     insights/<content-hash blobs>
   viewer/<year>/<slug>.zarr            (challengers, references, baselines)
-  packs/pack-{quick,full}-<year>/
 ```
 
 Artifacts publish under the **dev prefix** `dev/benchmark/<release>/` on the

@@ -371,6 +371,48 @@ def test_viewer_builds_local_pyramid_and_mixed_catalog(local_evaluation_fixture,
     assert 'rel="icon" href="data:image/svg+xml' in Path(result.viewer_directory, "index.html").read_text()
 
 
+def test_official_datasets_are_absolute_cloudferro_urls(monkeypatch):
+    """The official half of the catalog must point at CloudFerro; EDITO MinIO is retired."""
+    from oceanbench.packs import local_viewer
+
+    monkeypatch.delenv("OCEANBENCH_PUBLISHED_BASE", raising=False)
+    published = local_viewer.published_base_url()
+    assert published.startswith("https://s3.waw3-1.cloudferro.com/oceanbench-bucket/")
+    assert "minio" not in local_viewer.official_data_base_url()
+
+    captured = {}
+
+    def fake_read_json_url(url):
+        captured["url"] = url
+        return {
+            "datasets": [
+                {
+                    "slug": "glonet",
+                    "label": "GLONET",
+                    "store": "./data/glonet.zarr",
+                    "manifest": "./data/glonet.viewer-manifest.json",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(local_viewer, "read_json_url", fake_read_json_url)
+    entry = local_viewer._official_datasets()[0]
+
+    assert captured["url"] == local_viewer.official_data_base_url() + "datasets.json"
+    assert entry["store"] == local_viewer.official_data_base_url() + "glonet.zarr"
+    assert entry["manifest"] == local_viewer.official_data_base_url() + "glonet.viewer-manifest.json"
+
+
+def test_the_local_viewer_does_not_ship_the_maintainers_qa_harness(local_evaluation_fixture, tmp_path, monkeypatch):
+    """website/viewer/qa carries its own node_modules and is not part of a user's viewer."""
+    monkeypatch.setattr("oceanbench.packs.local_viewer._official_datasets", lambda: [])
+
+    result = _run(local_evaluation_fixture, tmp_path, viewer_artifacts=True)
+
+    assert Path(result.viewer_directory, "app.js").exists()
+    assert not Path(result.viewer_directory, "qa").exists()
+
+
 def test_viewer_keeps_scores_and_adds_the_map(local_evaluation_fixture, tmp_path, monkeypatch):
     monkeypatch.setattr("oceanbench.packs.local_viewer._official_datasets", lambda: [])
 
