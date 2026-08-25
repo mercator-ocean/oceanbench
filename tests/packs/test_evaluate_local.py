@@ -403,6 +403,52 @@ def test_official_datasets_are_absolute_cloudferro_urls(monkeypatch):
     assert entry["manifest"] == local_viewer.official_data_base_url() + "glonet.viewer-manifest.json"
 
 
+def test_the_insights_index_merges_local_entries_into_absolutised_official_ones(monkeypatch, tmp_path):
+    """Officials keep their scores by absolute URL; the local dataset is referenced relatively."""
+    from oceanbench.packs import local_viewer
+
+    monkeypatch.delenv("OCEANBENCH_PUBLISHED_BASE", raising=False)
+    base = local_viewer.official_data_base_url()
+    monkeypatch.setattr(
+        local_viewer,
+        "read_json_url",
+        lambda url: {
+            "datasets": {
+                "glonet": {
+                    "global": {
+                        "class4_matchups": "./data/insights/glonet/global/class4-matchups.parquet",
+                        "spectra": None,
+                        "class4_overlays": {"manifest": "./data/insights/glonet/global/class4-overlays/manifest.json"},
+                    }
+                }
+            },
+            "regions": {"global": None},
+            "scores_summary": "./data/scores-summary.json",
+        },
+    )
+
+    data_directory = tmp_path / "data"
+    region_directory = data_directory / "insights" / "your_model" / "global"
+    region_directory.mkdir(parents=True)
+    (region_directory / "class4-matchups.parquet").write_bytes(b"")
+    (region_directory / "rmsd-by-depth.json").write_text("{}", encoding="utf-8")
+
+    local_viewer._write_insights_index(data_directory, "your_model")
+    index = json.loads((data_directory / local_viewer.INSIGHTS_FILENAME).read_text(encoding="utf-8"))
+
+    official = index["datasets"]["glonet"]["global"]
+    assert official["class4_matchups"] == base + "insights/glonet/global/class4-matchups.parquet"
+    assert official["class4_overlays"]["manifest"] == base + "insights/glonet/global/class4-overlays/manifest.json"
+    assert official["spectra"] is None
+    assert index["scores_summary"] == base + "scores-summary.json"
+    assert index["regions"] == {"global": None}
+
+    local = index["datasets"]["your_model"]["global"]
+    assert local["class4_matchups"] == "./data/insights/your_model/global/class4-matchups.parquet"
+    assert local["rmsd_by_depth"] == "./data/insights/your_model/global/rmsd-by-depth.json"
+    assert "eddies" not in local
+
+
 def test_the_local_viewer_does_not_ship_the_maintainers_qa_harness(local_evaluation_fixture, tmp_path, monkeypatch):
     """website/viewer/qa carries its own node_modules and is not part of a user's viewer."""
     monkeypatch.setattr("oceanbench.packs.local_viewer._official_datasets", lambda: [])
@@ -483,10 +529,12 @@ def test_scoring_a_published_challenger_needs_no_forecast_path(local_evaluation_
 
 
 def test_realism_writes_the_spectra_insight_next_to_the_other_insights(local_evaluation_fixture, tmp_path):
-    """The viewer reads insights/<slug>/<region>/spectra.json, so the realism run must write it."""
+    """The viewer reads viewer/data/insights/<slug>/<region>/spectra.json, so realism must write it."""
     result = _run(local_evaluation_fixture, tmp_path, metrics=("realism",))
 
-    spectra_path = Path(result.scores_path).parent / "insights" / "your_model" / "global" / "spectra.json"
+    spectra_path = (
+        Path(result.scores_path).parent / "viewer" / "data" / "insights" / "your_model" / "global" / "spectra.json"
+    )
     assert spectra_path.exists(), result.flags
     spectra_payload = json.loads(spectra_path.read_text())
     assert spectra_payload["kind"] == "spectra"

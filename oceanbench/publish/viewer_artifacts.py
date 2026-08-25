@@ -42,6 +42,11 @@ YEAR_ERROR_GEOGRAPHY_FILENAME = "year-error-geography.json"
 YEAR_RMSD_BY_START_FILENAME = "year-rmsd-by-start.json"
 RMSD_BY_DEPTH_FILENAME = "rmsd-by-depth.json"
 
+# Insights sit inside the viewer data prefix, the same place the published site serves them from
+# (``./data/insights/<dataset>/<region>/``), so a local artifact tree is a faithful mirror of the
+# published one and the viewer reaches them with the same relative URLs.
+INSIGHTS_RELATIVE_ROOT = "viewer/data/insights"
+
 _RMSD_BY_DEPTH_SCHEMA_VERSION = 1
 
 # Row-group sizing. The parquet footer costs roughly 90 bytes per column chunk, so a file's
@@ -1108,7 +1113,8 @@ def write_viewer_artifacts(
     from oceanbench.runner.run import _CLASS4_VARIABLES
 
     output_path = Path(output_directory)
-    insights_directory = output_path / "insights" / dataset_slug / region
+    insights_relative = f"{INSIGHTS_RELATIVE_ROOT}/{dataset_slug}/{region}"
+    insights_directory = output_path / insights_relative
     insights_directory.mkdir(parents=True, exist_ok=True)
     flags: list[str] = []
 
@@ -1136,7 +1142,7 @@ def write_viewer_artifacts(
     write_matchup_parquet_streamed(
         start_partitions,
         matchup_parquet_path,
-        source=f"insights/{dataset_slug}/{region}/{MATCHUP_PARQUET_FILENAME}",
+        source=f"{insights_relative}/{MATCHUP_PARQUET_FILENAME}",
         on_partition=on_partition,
     )
 
@@ -1198,7 +1204,7 @@ def write_viewer_artifacts(
             region,
             year_error_geography_path,
             year_rmsd_by_start_path,
-            source=f"insights/{dataset_slug}/{region}/{MATCHUP_PARQUET_FILENAME}",
+            source=f"{insights_relative}/{MATCHUP_PARQUET_FILENAME}",
         )
     except Exception as error:  # noqa: BLE001
         flags.append(f"year artifacts skipped: {error}")
@@ -1212,7 +1218,7 @@ def write_viewer_artifacts(
             rmsd_by_depth_path,
             challenger=dataset_slug,
             region=region,
-            source=f"insights/{dataset_slug}/{region}/{MATCHUP_PARQUET_FILENAME}",
+            source=f"{insights_relative}/{MATCHUP_PARQUET_FILENAME}",
         )
     except Exception as error:  # noqa: BLE001
         flags.append(f"rmsd-by-depth skipped: {error}")

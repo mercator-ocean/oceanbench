@@ -53,6 +53,7 @@ from oceanbench.packs.manifest import PACK_MANIFEST_FILENAME
 from oceanbench.packs.scorecard import write_overlay_scorecard
 from oceanbench.publish.aggregate import aggregate_scores, summary_to_json_records
 from oceanbench.publish.insights import write_realism_insights
+from oceanbench.publish.viewer_artifacts import INSIGHTS_RELATIVE_ROOT
 from oceanbench.runner import records
 from oceanbench.runner.run import (
     LIVE_REFERENCE_OPENERS,
@@ -640,13 +641,13 @@ def evaluate(
                 realism_result = None
 
             # The spectra and eddies payloads live next to the other per-(challenger, region)
-            # insights the viewer reads (viewer README: insights/<slug>/<region>/spectra.json).
+            # insights the viewer reads (viewer/data/insights/<slug>/<region>/spectra.json).
             if realism_result is not None:
                 try:
                     write_realism_insights(
                         realism_result.spectra_entries,
                         realism_result.eddy_census,
-                        str(output_path / "insights" / challenger_slug / region),
+                        str(output_path / INSIGHTS_RELATIVE_ROOT / challenger_slug / region),
                         variable=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
                     )
                 except Exception as error:  # noqa: BLE001 - one artifact must not abort the others

@@ -15,12 +15,31 @@ import xarray
 
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.remote_json import read_json_url
+from oceanbench.publish import class4_overlays
+from oceanbench.publish.viewer_artifacts import (
+    EDDY_CENSUS_FILENAME,
+    MATCHUP_PARQUET_FILENAME,
+    RMSD_BY_DEPTH_FILENAME,
+    YEAR_ERROR_GEOGRAPHY_FILENAME,
+    YEAR_RMSD_BY_START_FILENAME,
+)
 from oceanbench.pyramids import build_pyramid, viewer_layers
 
 # Keep aligned with website/viewer/config.js. Update both rebuild-preview values at release.
 # CloudFerro is the only data origin; EDITO MinIO is retired.
 OFFICIAL_PUBLISHED_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/benchmark/rebuild-preview/"
 LOCAL_VIEWER_DIRECTORY = "viewer"
+INSIGHTS_FILENAME = "insights.json"
+
+# The insights index key each artifact of a dataset is published under.
+_LOCAL_INSIGHT_FILENAMES = {
+    "class4_matchups": MATCHUP_PARQUET_FILENAME,
+    "eddies": EDDY_CENSUS_FILENAME,
+    "spectra": "spectra.json",
+    "rmsd_by_depth": RMSD_BY_DEPTH_FILENAME,
+    "year_error_geography": YEAR_ERROR_GEOGRAPHY_FILENAME,
+    "year_rmsd_by_start": YEAR_RMSD_BY_START_FILENAME,
+}
 
 
 def published_base_url() -> str:
@@ -50,6 +69,57 @@ def _official_datasets() -> list[dict]:
         }
         for entry in catalog["datasets"]
     ]
+
+
+def _absolutise(value, data_base_url: str):
+    """Rewrite every ``./data/...`` reference of a published insights index to an absolute URL."""
+    if isinstance(value, str) and value.startswith("./data/"):
+        return urljoin(data_base_url, value.removeprefix("./data/"))
+    if isinstance(value, dict):
+        return {key: _absolutise(item, data_base_url) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_absolutise(item, data_base_url) for item in value]
+    return value
+
+
+def _official_insights() -> dict:
+    """The published insights index with every artifact reference pointing at the public bucket."""
+    data_base_url = official_data_base_url()
+    return _absolutise(read_json_url(urljoin(data_base_url, INSIGHTS_FILENAME)), data_base_url)
+
+
+def _local_insights(data_directory: Path, dataset_slug: str) -> dict:
+    """The insights entries of the locally evaluated dataset, as URLs relative to the data prefix.
+
+    Reads whatever ``write_viewer_artifacts`` left under the viewer data prefix; an artifact that
+    was skipped is simply absent, exactly as it is for a published dataset.
+    """
+    dataset_directory = data_directory / "insights" / dataset_slug
+    if not dataset_directory.is_dir():
+        return {}
+    entries = {}
+    for region_directory in sorted(path for path in dataset_directory.iterdir() if path.is_dir()):
+        region = region_directory.name
+        artifacts = {
+            key: f"./data/insights/{dataset_slug}/{region}/{filename}"
+            for key, filename in _LOCAL_INSIGHT_FILENAMES.items()
+            if (region_directory / filename).is_file()
+        }
+        if (region_directory / class4_overlays.CLASS4_OVERLAY_DIRECTORY).is_dir():
+            artifacts["class4_overlays"] = class4_overlays.overlay_index_entry(dataset_slug, region)
+        if artifacts:
+            entries[region] = artifacts
+    return {dataset_slug: entries} if entries else {}
+
+
+def _write_insights_index(data_directory: Path, dataset_slug: str) -> None:
+    """Merge the local dataset's insights with the published ones into the viewer's index."""
+    official = _official_insights()
+    index = {
+        **official,
+        "datasets": {**official.get("datasets", {}), **_local_insights(data_directory, dataset_slug)},
+    }
+    (data_directory / INSIGHTS_FILENAME).write_text(json.dumps(index, sort_keys=True, indent=2), encoding="utf-8")
 
 
 def _write_viewer_application(viewer_directory: Path) -> None:
@@ -92,12 +162,7 @@ def build_local_viewer(
     _write_viewer_application(viewer_directory)
     data_directory = viewer_directory / "data"
     data_directory.mkdir(parents=True, exist_ok=True)
-    insights_path = data_directory / "insights.json"
-    if not insights_path.exists():
-        insights_path.write_text(
-            json.dumps({"datasets": {}, "regions": {}}, sort_keys=True, indent=2),
-            encoding="utf-8",
-        )
+    _write_insights_index(data_directory, dataset_slug)
 
     if pyramid_zarr_path is None or pyramid_manifest_path is None:
         selected = (
