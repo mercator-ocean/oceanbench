@@ -40,11 +40,11 @@ class ObservationDataUnavailableError(ValueError):
 
 def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
     if resolution == "twelfth_degree":
-        return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt.zarr"
+        return "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/GLO12_MDT/" "GLO-MFC_001_024_mdt.zarr"
     if resolution == "quarter_degree":
-        return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt_025deg.zarr"
+        return "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/GLO12_MDT/" "GLO-MFC_001_024_mdt_025deg.zarr"
     if resolution == "one_degree":
-        return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt_1_deg.zarr"
+        return "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/GLO12_MDT/" "GLO-MFC_001_024_mdt_1_deg.zarr"
     raise ValueError(f"Unsupported resolution : {resolution}.")
 
 
@@ -99,7 +99,7 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
 
 def observation_path(day_datetime: numpy.datetime64) -> str:
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/observations2024/{day_string}.zarr"
+    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/observations2024/{day_string}.zarr"
 
 
 def _assign_standard_names(observations_dataset: Dataset) -> Dataset:

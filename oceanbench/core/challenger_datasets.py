@@ -98,7 +98,7 @@ def glo36v1() -> xarray.Dataset:
 
 
 def _glo36v1_dataset_path(start_datetime: datetime) -> str:
-    return f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/{start_datetime.strftime('%Y%m%d')}.zarr"
+    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glo36v1/{start_datetime.strftime('%Y%m%d')}.zarr"
 
 
 def glonet() -> xarray.Dataset:
@@ -238,9 +238,7 @@ def _remote_multizarr_forecasts_as_challenger_dataset(
         challenger_dataset = attach_multistore_recipe(
             challenger_dataset,
             MultiStoreConcatRecipe(
-                member_stores=tuple(
-                    forecast_zarr_path_from_start_datetime(dt) for dt in first_day_datetimes
-                ),
+                member_stores=tuple(forecast_zarr_path_from_start_datetime(dt) for dt in first_day_datetimes),
                 member_opener="oceanbench.core.challenger_datasets:_open_prepared_remote_challenger_week",
                 concat_dimension="first_day_datetime",
                 concat_coordinate=tuple(first_day_datetimes),
