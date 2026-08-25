@@ -110,6 +110,14 @@ export function resolveViewerDataUrl(url) {
 }
 
 // The column store conventionally sits beside the pyramid as `<slug>.columns.zarr`.
-export function resolveColumnStoreUrl(slug) {
+// A catalog entry may carry an absolute pyramid store URL: that is how a locally built
+// viewer lists the official products, which stay on the published bucket while the local
+// challenger is served from disk. Such a dataset keeps its column store beside its own
+// pyramid, so the local data root (and any columns_base override of it, which exists to
+// repoint the LOCAL stores) must not be applied to it.
+export function resolveColumnStoreUrl(slug, storeUrl) {
+  if (storeUrl && /^(?:[a-z]+:)?\/\//i.test(storeUrl)) {
+    return storeUrl.replace(/\/+$/, "").replace(/\.zarr$/, ".columns.zarr");
+  }
   return new URL(`${slug}.columns.zarr`, columnsBaseUrl).href;
 }

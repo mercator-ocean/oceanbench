@@ -1769,7 +1769,8 @@ async function ensureColumnStore(slug) {
   }
   let store = false;
   try {
-    store = await loadStore(resolveColumnStoreUrl(slug));
+    const descriptor = datasetCatalog.find((entry) => entry.slug === slug);
+    store = await loadStore(resolveColumnStoreUrl(slug, descriptor && descriptor.store));
   } catch {
     store = false;
   }
