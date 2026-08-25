@@ -359,6 +359,7 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   font-size: 11.5px;
   color: #999;
   min-width: 130px;
+  max-width: 25%;
   flex-shrink: 0;
 }
 .ei-model-row-desc {
@@ -391,8 +392,8 @@ HTML("""
 ════════════════════════════════════════════════ -->
 <div class="ei-tabs">
   <button class="ei-tab-btn active" onclick="switchTab('overview', this)">Overview</button>
-  <button class="ei-tab-btn" onclick="switchTab('individual', this)">Individual Analysis</button>
   <button class="ei-tab-btn" onclick="switchTab('report', this)">Report Analysis</button>
+  <button class="ei-tab-btn" onclick="switchTab('individual', this)">Individual Analysis</button>
   <button class="ei-tab-btn" onclick="switchTab('comparison', this)">AI Models Comparison Charts</button>
   <button class="ei-tab-btn" onclick="switchTab('aivsnumeric', this)">AI vs Numeric model's efficiency</button>
   <button class="ei-tab-btn" onclick="switchTab('infrastructure', this)">Infrastructure</button>
@@ -404,9 +405,20 @@ HTML("""
 <div class="ei-tab-panel active" id="tab-overview">
 
   <p class="ei-intro">
-    This section presents energy consumption and CO₂ emissions for models available on Oceanbench,
-    covering both training and inference phases.
-    A comparative reference is provided below to help interpret the results.
+    An LED bulb left on for an hour uses about 0.002 kWh. A one-hour video call emits around
+    0.6 kg of CO₂e. A one-hour car journey at 60 km/h can emit more than ten kilograms.
+    These everyday activities all carry a measurable energy and carbon cost. Running a
+    forecasting model is no different, the difference is that this cost happens inside a
+    data center, out of sight, rather than in front of the user.
+  </p>
+
+  <p class="ei-intro">
+    This is the purpose of the <strong>Energy Impact</strong> page: to measure and report,
+    in a transparent way, the energy consumption and CO₂ emissions of the ocean forecasting
+    models available on Oceanbench, both during training and during inference (the phase
+    where a model is actually used to produce a forecast). A model's value should not be
+    assessed on accuracy alone. Its energy footprint is equally relevant when deciding which
+    model to use. Presenting both dimensions together is meant to support that decision.
   </p>
 
   <div class="ei-callout">
@@ -421,6 +433,12 @@ HTML("""
   </div>
 
   <div class="ei-section-title-overview ">Reference values</div>
+
+  <p>
+    Figures expressed in kWh or kg of CO₂e are not always intuitive on their own. The
+    reference values below provide a few familiar points of comparison, useful for putting
+    the model figures presented later on this page into perspective.
+  </p>
 
   <p class="ei-sublabel">Energy consumption in 1 hour</p>
   <div class="ei-ref-grid">
@@ -462,6 +480,14 @@ HTML("""
   </p>
 
   <div class="ei-section-title-overview ">Formulas</div>
+
+  <p>
+    These figures are derived from a consistent measurement method. While a model runs,
+    codecarbon records the power drawn by the CPU, GPU and RAM. This value is then adjusted
+    using the data center's efficiency (PUE) to obtain the total energy consumed. That energy
+    is finally converted into a CO₂ figure using the carbon intensity of the local electricity
+    mix. The two formulas below summarize this process.
+  </p>
   <div class="ei-formulas-section ">
     <div class="ei-formula-block">
       <div class="ei-formula-row">
@@ -482,55 +508,63 @@ HTML("""
   </div>
 
   <div class="ei-section-title-overview "> Models list presentation</div>
-  
+
+  <p>
+    The list below presents the ocean forecasting models covered by this page, including
+    both AI-based models and a physics-based numerical model. Each of them is measured using
+    the method described above, allowing their energy and carbon footprints to be compared
+    on a consistent basis.
+  </p>
+
 <div class="ei-models-list">
 
   <div class="ei-model-row-card">
     <div class="ei-model-row-accent" style="background:#D9583E;"></div>
     <div class="ei-model-row-name">GLO12</div>
     <div class="ei-model-row-provider">Provider · Mercator Ocean International</div>
-    <div class="ei-model-row-desc">Description coming soon.</div>
+    <div class="ei-model-row-desc">GLO12 is Mercator Ocean's operational physics-based global ocean forecasting system, combining governing physical equations with observational data assimilation at 1/12° high resolution to deliver dynamically consistent forecasts of temperature, salinity, currents, and sea surface height.</div>
   </div>
 
   <div class="ei-model-row-card">
     <div class="ei-model-row-accent" style="background:#378ADD;"></div>
     <div class="ei-model-row-name">GLONET</div>
     <div class="ei-model-row-provider">Provider · Mercator Ocean International</div>
-    <div class="ei-model-row-desc">Description coming soon.</div>
+    <div class="ei-model-row-desc">GLONET is a neural-operator-based global ocean forecasting model emphasizing physical consistency and mesoscale dynamics preservation rather than only minimizing statistical forecast errors.</div>
   </div>
 
   <div class="ei-model-row-card">
     <div class="ei-model-row-accent" style="background:#4A3E8C;"></div>
     <div class="ei-model-row-name">GLONET2</div>
     <div class="ei-model-row-provider">Provider · Mercator Ocean International</div>
-    <div class="ei-model-row-desc">Description coming soon.</div>
+    <div class="ei-model-row-desc">GLONET2 is a neural-operator-based global ocean forecasting model emphasizing physical consistency and mesoscale dynamics preservation rather than only minimizing statistical forecast errors.</div>
   </div>
 
   <div class="ei-model-row-card">
     <div class="ei-model-row-accent" style="background:#1D9E75;"></div>
     <div class="ei-model-row-name">WenHai</div>
-    <div class="ei-model-row-provider">Provider · National University of Defense Technology (NUDT)</div>
-    <div class="ei-model-row-desc">Description coming soon.</div>
+    <div class="ei-model-row-provider">Provider · Ocean Univ. China, Laoshan Lab., Univ. of Science and Technology of China, MOI</div>
+    <div class="ei-model-row-desc">WenHai is a transformer-based global ocean forecasting model designed to incorporate both ocean dynamics and atmospheric forcing.</div>
   </div>
 
   <div class="ei-model-row-card">
     <div class="ei-model-row-accent" style="background:#D4537E;"></div>
     <div class="ei-model-row-name">XiHe</div>
-    <div class="ei-model-row-provider">Provider · Ocean University of China</div>
-    <div class="ei-model-row-desc">Description coming soon.</div>
+    <div class="ei-model-row-provider">Provider · National Univ. of Defense Technology, Central South Univ., China Univ. of Petroleum (East China), Tianjin Univ. of Science and Technology, Fudan Univ., National Marine Environmental Forecasting Center, MOI</div>
+    <div class="ei-model-row-desc">XiHe is a hierarchical transformer ocean forecasting model optimized for very fast and stable predictions at global eddy-resolving scale. Instead of recursive forecasting, the model predicts each lead time independently to reduce error accumulation.</div>
   </div>
 
   <div class="ei-model-row-card">
     <div class="ei-model-row-accent" style="background:#D4C853;"></div>
     <div class="ei-model-row-name">LangYa</div>
-    <div class="ei-model-row-provider">Provider · Institute of Oceanology, Chinese Academy of Sciences</div>
-    <div class="ei-model-row-desc">Description coming soon.</div>
+    <div class="ei-model-row-provider">Provider · Inst. of Oceanology, Chinese Academy of Sciences, Key Laboratory of Ocean Observation and Forecasting, Key Laboratory of Ocean Circulation and Waves, MOI</div>
+    <div class="ei-model-row-desc">LangYa is a cross-spatiotemporal transformer model that explicitly incorporates atmosphere-ocean coupling and adaptive thermocline-aware learning.</div>
   </div>
 
 </div>
 
 
 </div><!-- /tab-overview -->
+
 
 
 <!-- ══════════════════════════════════════════════
@@ -577,7 +611,7 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (Wh)</td><td><span class="ei-result">134 (± 2.01)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.134 (± 0.00201)</span></td></tr>
         <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00748 (± 0.000114)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">2047</span></td></tr>
       </tbody>
@@ -625,7 +659,7 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (Wh)</td><td><span class="ei-result">18.2 (± 1.07)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0182 (± 0.00107)</span></td></tr>
         <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00107 (± 0.0000599)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">275</span></td></tr>
       </tbody>
@@ -655,7 +689,7 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (Wh)</td><td><span class="ei-result">49.7 (± 3.49)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0497 (± 0.00349)</span></td></tr>
         <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00278 (± 0.0000196)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">781</span></td></tr>
       </tbody>
@@ -685,7 +719,7 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (Wh)</td><td><span class="ei-result">41.2 (± 4.23)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0412 (± 0.00423)</span></td></tr>
         <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00231 (± 0.000237)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">648</span></td></tr>
       </tbody>
@@ -715,7 +749,7 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (Wh)</td><td><span class="ei-result">20.9 (± 2.73)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0209 (± 0.00273)</span></td></tr>
         <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00117 (± 0.000153)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">328</span></td></tr>
       </tbody>
@@ -750,7 +784,7 @@ HTML("""
     Measurement methodology across infrastructures
   </h2>
   <p class="ei-report">
-    Results are not captured the same way everywhere, which matters when comparing infrastructures. On Eumetsat and Lir, everything is measured with Codecarbon, which runs at full capability there: CPU energy uses the auto-detected TDP together with % usage and duration, GPU energy comes from pyNVML, which reports exact consumption at a given time that is then multiplied across each measured interval, and RAM energy is estimated by approximating the number of memory modules from total RAM size.
+    Results are not captured the same way everywhere, which matters when comparing infrastructures. On DestinE Data Bridge (Eumetsat) and Lir, everything is measured with Codecarbon, which runs at full capability there: CPU energy uses the auto-detected TDP together with % usage and duration, GPU energy comes from pyNVML, which reports exact consumption at a given time that is then multiplied across each measured interval, and RAM energy is estimated by approximating the number of memory modules from total RAM size.
     On Datalab EDITO, security and user restrictions prevent Codecarbon from running at full capability. CPU energy still goes through Codecarbon, but the CPU TDP has to be entered manually since it can't be auto-detected there. GPU energy can't rely on pyNVML at all, so it's estimated the same way as CPU: TDP is read from nvidia-smi, and energy is computed by sampling % GPU usage at fixed intervals and multiplying by TDP and elapsed time. RAM measurement is unaffected and still goes through Codecarbon normally.
     This sampling-based estimation is itself a coarser approximation than pyNVML's direct readings, and the same non-linearity between usage and power draw noted for GPUs likely affects CPU TDP-based estimates too, adding another layer of uncertainty on top of the interval sampling itself.
     Because of these differences, absolute energy values shouldn't be compared directly across infrastructures, one method is simply less accurate than the other. Comparisons remain meaningful within a single infrastructure, where all models are captured with the same method.
@@ -764,7 +798,7 @@ HTML("""
     <p class="ei-sublabel">GPU idle</p>
     <div class="ei-ref-grid2">
       <div class="ei-ref-card">
-        <div class="ei-ref-card-label">Eumetsat</div>
+        <div class="ei-ref-card-label">DestinE Data Bridge (Eumetsat)</div>
         <div class="ei-ref-card-item">NVIDIA H100 (80 GB HBM2e)</div>
         <div class="ei-ref-card-value">50 W</div>
       </div>
@@ -896,16 +930,16 @@ HTML("""
   <!-- Model filter checkboxes -->
   <div class="ei-model-filters">
     <span class="ei-model-filter-label">Models:</span>
-    <div class="ei-model-check checked" id="chk-Glonet" onclick="toggleModel('Glonet')" data-model="Glonet">
+    <div class="ei-model-check checked" id="chk-GLONET" onclick="toggleModel('GLONET')" data-model="GLONET">
       <span class="dot" style="background:#378ADD;"></span> GLONET
     </div>
-      <div class="ei-model-check checked" id="chk-Glonet2" onclick="toggleModel('Glonet2')" data-model="Glonet2">
+      <div class="ei-model-check checked" id="chk-GLONET2" onclick="toggleModel('GLONET2')" data-model="GLONET2">
       <span class="dot" style="background:#4A3E8C;"></span> GLONET2
     </div>
-    <div class="ei-model-check checked" id="chk-Wenhai" onclick="toggleModel('Wenhai')" data-model="Wenhai">
+    <div class="ei-model-check checked" id="chk-WenHai" onclick="toggleModel('WenHai')" data-model="WenHai">
       <span class="dot" style="background:#1D9E75;"></span> WenHai
     </div>
-    <div class="ei-model-check checked" id="chk-Xihe" onclick="toggleModel('Xihe')" data-model="Xihe">
+    <div class="ei-model-check checked" id="chk-XiHe" onclick="toggleModel('XiHe')" data-model="XiHe">
       <span class="dot" style="background:#D4537E;"></span> XiHe
     </div>
     <div class="ei-model-check checked" id="chk-LangYa" onclick="toggleModel('LangYa')" data-model="LangYa">
@@ -916,8 +950,8 @@ HTML("""
   <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; padding-bottom:0.75rem; border-bottom:1px solid #eee;">
     <span style="font-size:15px; font-weight:500;">SELECT INFRASTRUCTURE</span>
     <div style="display:flex; gap:6px;">
-      <button class="machine-btn active" id="btn-lir" onclick="switchAll('A')">On Lir</button>
-      <button class="machine-btn" id="btn-edito" onclick="switchAll('B')">On Datalab EDITO</button>
+      <button class="machine-btn" id="btn-lir" onclick="switchAll('A')">On Lir</button>
+      <button class="machine-btn active" id="btn-edito" onclick="switchAll('B')">On Datalab EDITO</button>
       <button class="machine-btn" id="btn-eumetsat" onclick="switchAll('C')">On Eumetsat</button>
     </div>
   </div>
@@ -1084,7 +1118,7 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Supercomputer</td><td><span class="ei-param_infos">Eumetsat - VM (Hesse, Germany)</span></td></tr>
+        <tr><td>Supercomputer</td><td><span class="ei-param_infos">DestinE Data Bridge (Eumetsat) - VM (Hesse, Germany)</span></td></tr>
         <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
         <tr><td>Number of processes per node</td><td><span class="ei-param_infos"">16</span></td></tr>
         <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9454</span></td></tr>
@@ -1197,7 +1231,7 @@ require(['chartjs'], function(ChartModule) {
     ],
     B: [
       { name:'GLONET', mu:14.1,  ci:0.480, color:'#378ADD', fill:'55,138,221',  dash:[] },
-      { name:'GLONET2', mu:12.1,  ci:0.161, color:'#4A3E8C', fill:'74,62,140',  dash:[] },
+      { name:'GLONET2', mu:3.6,  ci:0.161, color:'#4A3E8C', fill:'74,62,140',  dash:[] },
       { name:'WenHai', mu:24.5,  ci:3.64,  color:'#1D9E75', fill:'29,158,117',  dash:[6,3] },
       { name:'XiHe',   mu:17.3,  ci:0.690, color:'#D4537E', fill:'212,83,126',  dash:[2,4] },
       { name:'LangYa', mu:4.35,  ci:1.64,  color:'#D4C853', fill:'212,200,83',  dash:[2,4] }
@@ -1224,7 +1258,7 @@ require(['chartjs'], function(ChartModule) {
     ],
     B: [
       { name:'GLONET', values:[40.8,37.2,21.95] },
-      { name:'GLONET2', values:[82.6,13.2,4.2] },
+      { name:'GLONET2', values:[38.9,47.2,13.9] },
       { name:'WenHai', values:[20.68,66.1,13.2] },
       { name:'XiHe',   values:[24.0,56.0,20.0] },
       { name:'LangYa', values:[39.39,19.2,36.7] }
@@ -1238,7 +1272,7 @@ require(['chartjs'], function(ChartModule) {
     ]
   };
 
-  const ALL_INFERENCE  = { A:[6.20,1.16,19.4,9.10,0.521], B:[4.96,1.60,15.54,8.98,0.836], C:[7.50,1.31,27.3,21.2,1.77] };
+  const ALL_INFERENCE  = { A:[6.20,1.16,19.4,9.10,0.521], B:[4.96,1.70,15.54,8.98,0.836], C:[7.50,1.31,27.3,21.2,1.77] };
   const ALL_NB_PARAMS  = { A:[417,80.3,125,117,8.57],  B:[417,80.3,125,117,8.57],  C:[417,80.3,125,117,8.57] };
   const ALL_NB_OPE     = { A:[76.5,100,469,173,6.21],    B:[76.5,100,469,173,6.21],    C:[76.5,100,469,173,6.21] };
   const MODEL_NAMES    = ['GLONET','GLONET2','WenHai','XiHe','LangYa'];
@@ -1258,17 +1292,17 @@ require(['chartjs'], function(ChartModule) {
   // Plain energy array (Wh) mirroring ALL_MODELS.mu, reused for correlation charts.
   const ALL_ENERGY_TOTAL = {
     A: [134,  18.9, 49.7, 41.2, 20.9],
-    B: [14.1, 12.1, 24.5, 17.3, 4.35],
+    B: [14.1, 3.1, 24.5, 17.3, 4.35],
     C: [45.5, 12.8, 75.1, 68.6, 14.74]
   };
 
   const ALL_ENERGY_INFERENCE = {
     A: [6.20, 1.16, 19.4, 9.10, 0.52],
-    B: [4.96, 1.60, 15.54, 8.98, 0.84],
+    B: [4.96, 1.70, 15.54, 8.98, 0.84],
     C: [7.50, 1.31, 27.30, 21.20, 1.77]
   };
 
-  let currentMachine  = 'A';
+  let currentMachine  = 'B';
   let activeModels    = { GLONET:true, GLONET2:true, WenHai:true, XiHe:true, LangYa:true };
 
   // ── Helpers ─────────────────────────────────────────────────────────────
@@ -1309,7 +1343,7 @@ require(['chartjs'], function(ChartModule) {
 
   var lineChart = new Chart(document.getElementById('energyCompChart'), {
     type:'line',
-    data:{ labels:runs, datasets:buildLineDatasets('A') },
+    data:{ labels:runs, datasets:buildLineDatasets('B') },
     options:{
       responsive:true, maintainAspectRatio:false,
       animation:{ duration:500, easing:'easeInOutQuart' },
@@ -1460,7 +1494,7 @@ require(['chartjs'], function(ChartModule) {
   // ── Chart 3 (inference bar) ──────────────────────────────────────────────
   var inferenceChart = new Chart(document.getElementById('inferenceEnergyChart'), {
     type:'bar',
-    data:{ labels:filteredLabels(), datasets:[{ label:'Energy (Wh)', data:activeIndices().map(function(i){ return ALL_INFERENCE['A'][i]; }), backgroundColor:'#036aa1', borderColor:'#185FA5', borderWidth:1, borderRadius:4 }] },
+    data:{ labels:filteredLabels(), datasets:[{ label:'Energy (Wh)', data:activeIndices().map(function(i){ return ALL_INFERENCE['B'][i]; }), backgroundColor:'#036aa1', borderColor:'#185FA5', borderWidth:1, borderRadius:4 }] },
     options:{
       responsive:true, maintainAspectRatio:false,
       animation:{ duration:500, easing:'easeInOutQuart' },
@@ -1478,8 +1512,8 @@ require(['chartjs'], function(ChartModule) {
     data:{
       labels: filteredLabels(),
       datasets:[
-        { label:'Total process (s)',  data:activeIndices().map(function(i){ return ALL_DURATION_TOTAL['A'][i]; }),      backgroundColor:'#036aa1', borderRadius:4, barPercentage:0.7, categoryPercentage:0.6 },
-        { label:'Inference step (s)', data:activeIndices().map(function(i){ return ALL_DURATION_INFERENCE['A'][i]; }), backgroundColor:'#A0DCE8', borderRadius:4, barPercentage:0.7, categoryPercentage:0.6 }
+        { label:'Total process (s)',  data:activeIndices().map(function(i){ return ALL_DURATION_TOTAL['B'][i]; }),      backgroundColor:'#036aa1', borderRadius:4, barPercentage:0.7, categoryPercentage:0.6 },
+        { label:'Inference step (s)', data:activeIndices().map(function(i){ return ALL_DURATION_INFERENCE['B'][i]; }), backgroundColor:'#A0DCE8', borderRadius:4, barPercentage:0.7, categoryPercentage:0.6 }
       ]
     },
     options:{
@@ -1516,7 +1550,7 @@ require(['chartjs'], function(ChartModule) {
   // ── Chart 4 (nb params) ──────────────────────────────────────────────────
   var nbParamsChart = new Chart(document.getElementById('nbParamsChart'), {
     type:'bar',
-    data:{ labels:filteredLabels(), datasets:[{ label:'Parameters (M)', data:activeIndices().map(function(i){ return ALL_NB_PARAMS['A'][i]; }), backgroundColor:activeIndices().map(function(i){ return MODEL_COLORS[i]; }), borderWidth:1, borderRadius:4 }] },
+    data:{ labels:filteredLabels(), datasets:[{ label:'Parameters (M)', data:activeIndices().map(function(i){ return ALL_NB_PARAMS['B'][i]; }), backgroundColor:activeIndices().map(function(i){ return MODEL_COLORS[i]; }), borderWidth:1, borderRadius:4 }] },
     options:{
       responsive:true, maintainAspectRatio:false,
       animation:{ duration:500, easing:'easeInOutQuart' },
@@ -1530,7 +1564,7 @@ require(['chartjs'], function(ChartModule) {
 
     var nbParamsChart2 = new Chart(document.getElementById('nbParamsChart2'), {
     type:'bar',
-    data:{ labels:filteredLabels(), datasets:[{ label:'Parameters (M)', data:activeIndices().map(function(i){ return ALL_NB_PARAMS['A'][i]; }), backgroundColor:activeIndices().map(function(i){ return MODEL_COLORS[i]; }), borderWidth:1, borderRadius:4 }] },
+    data:{ labels:filteredLabels(), datasets:[{ label:'Parameters (M)', data:activeIndices().map(function(i){ return ALL_NB_PARAMS['B'][i]; }), backgroundColor:activeIndices().map(function(i){ return MODEL_COLORS[i]; }), borderWidth:1, borderRadius:4 }] },
     options:{
       responsive:true, maintainAspectRatio:false,
       animation:{ duration:500, easing:'easeInOutQuart' },
@@ -1545,7 +1579,7 @@ require(['chartjs'], function(ChartModule) {
   // ── Chart 5 (nb operations) ──────────────────────────────────────────────
   var nbOpeChart = new Chart(document.getElementById('nbOpeChart'), {
     type:'bar',
-    data:{ labels:filteredLabels(), datasets:[{ label:'TFLOPs', data:activeIndices().map(function(i){ return ALL_NB_OPE['A'][i]; }), backgroundColor:activeIndices().map(function(i){ return MODEL_COLORS[i]; }), borderWidth:1, borderRadius:4 }] },
+    data:{ labels:filteredLabels(), datasets:[{ label:'TFLOPs', data:activeIndices().map(function(i){ return ALL_NB_OPE['B'][i]; }), backgroundColor:activeIndices().map(function(i){ return MODEL_COLORS[i]; }), borderWidth:1, borderRadius:4 }] },
     options:{
       responsive:true, maintainAspectRatio:false,
       animation:{ duration:500, easing:'easeInOutQuart' },
@@ -1598,7 +1632,7 @@ require(['chartjs'], function(ChartModule) {
     return { datasets:scatterDatasets.concat([lineDataset]), r:r };
   }
 
-  var corrInit = buildCorrelationDatasets('A');
+  var corrInit = buildCorrelationDatasets('B');
   var correlationChart = new Chart(document.getElementById('correlationChart'), {
     type:'scatter',
     data:{ datasets:corrInit.datasets },
@@ -1686,7 +1720,7 @@ require(['chartjs'], function(ChartModule) {
   }
 
   // ── Chart 6bis (correlation duration vs energy consumed) ────────────
-  var corrDurationOpsInit = buildGenericCorrelationDatasets('A', ALL_DURATION_TOTAL, ALL_ENERGY_TOTAL);
+  var corrDurationOpsInit = buildGenericCorrelationDatasets('B', ALL_DURATION_TOTAL, ALL_ENERGY_TOTAL);
   var correlationDurationOpsChart = new Chart(document.getElementById('correlationDurationOpsChart'), {
     type:'scatter',
     data:{ datasets:corrDurationOpsInit.datasets },
@@ -1746,7 +1780,7 @@ require(['chartjs'], function(ChartModule) {
   });
 
   // ── Chart 6ter (correlation duration vs energy consumed) ─────────────────
-  var corrDurationEnergyInit = buildGenericCorrelationDatasets('A', ALL_DURATION_INFERENCE, ALL_ENERGY_INFERENCE);
+  var corrDurationEnergyInit = buildGenericCorrelationDatasets('B', ALL_DURATION_INFERENCE, ALL_ENERGY_INFERENCE);
   var correlationDurationEnergyChart = new Chart(document.getElementById('correlationDurationEnergyChart'), {
     type:'scatter',
     data:{ datasets:corrDurationEnergyInit.datasets },
@@ -2031,8 +2065,8 @@ require(['chartjs'], function(ChartModule) {
 
   // ── Init comparison tab charts ───────────────────────────────────────────
   buildBreakdownBars();
-  setTimeout(function(){ updateBreakdownBars('A'); }, 50);
-  buildLegend('A');
+  setTimeout(function(){ updateBreakdownBars('B'); }, 50);
+  buildLegend('B');
   buildDurationLegend();
 
 });
