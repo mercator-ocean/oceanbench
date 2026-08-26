@@ -48,7 +48,6 @@ let parsedData = null;
 let challengerLabels = {};
 let regionLabels = {};
 let regionMetadata = {};
-let activeYear = null;
 let activeTrack = "high_resolution";
 let activeSection = "observations";
 let activeRegion = null;
@@ -169,9 +168,19 @@ function displayName(name) {
   return challengerLabels[name] || name;
 }
 
+function isEvaluationYearVersion(version) {
+  return /^\d{4}$/.test(version || "");
+}
+
+function reportHtmlFileName(challengerName, regionId) {
+  if (isEvaluationYearVersion(activeVersion)) {
+    return `${challengerName}.${activeVersion}.${regionId}.report.html`;
+  }
+  return `${challengerName}.${regionId}.report.html`;
+}
+
 function reportHref(challengerName, regionId) {
-  const prefix = activeYear && activeYear !== "2024" ? `${activeYear}.` : "";
-  return `reports/${prefix}${challengerName}.${regionId}.report.html`;
+  return `reports/${activeVersion}/${reportHtmlFileName(challengerName, regionId)}`;
 }
 
 function trackKeyForChallenger(name) {
@@ -234,7 +243,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="${reportHref(name, regionId)}">${displayName(name)}</a></th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -284,7 +293,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="${reportHref(name, regionId)}">${displayName(name)}</a></th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -462,19 +471,6 @@ function buildTrackNoteInnerHtml() {
   return `<div class="track-keynote${hiddenClass}">${ONE_DEGREE_TRACK_NOTE}</div>`;
 }
 
-function buildYearSelectorInnerHtml(yearIds) {
-  if (yearIds.length === 0) return "";
-  let markup = '<div class="year-selector-row">';
-  markup += '<span class="region-selector-label">Year</span>';
-  markup += '<div class="year-chip-group" role="group" aria-label="Evaluation year">';
-  for (const yearId of yearIds) {
-    const active = yearId === activeYear ? " active" : "";
-    markup += `<button type="button" class="year-chip${active}" data-year="${yearId}" aria-pressed="${yearId === activeYear}">${yearId}</button>`;
-  }
-  markup += "</div></div>";
-  return markup;
-}
-
 function attachTabListeners() {
   document.querySelectorAll(".score-track-link").forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -492,18 +488,6 @@ function attachTrackListeners() {
       const trackKey = button.dataset.track;
       if (!trackKey || trackKey === activeTrack) return;
       activeTrack = trackKey;
-      selectedDepths = new Set();
-      showAllMode = true;
-      renderAllTables();
-    });
-  });
-}
-
-function attachYearListeners() {
-  document.querySelectorAll(".year-chip").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (button.dataset.year === activeYear) return;
-      activeYear = button.dataset.year;
       selectedDepths = new Set();
       showAllMode = true;
       renderAllTables();
@@ -602,8 +586,9 @@ function getVersionTracks(versionData) {
 }
 
 function buildVersionSelectorInnerHtml(versions) {
-  let markup = '<span class="version-selector-label">Evaluation version</span>';
-  markup += '<select id="version-select" class="version-select" aria-label="Evaluation report version">';
+  const label = versions.every(isEvaluationYearVersion) ? "Evaluation year" : "Evaluation version";
+  let markup = `<span class="version-selector-label">${label}</span>`;
+  markup += `<select id="version-select" class="version-select" aria-label="${label}">`;
   for (const version of versions) {
     const selected = version === activeVersion ? " selected" : "";
     markup += `<option value="${version}"${selected}>${version}</option>`;
@@ -616,7 +601,7 @@ function buildVersionSelectorInnerHtml(versions) {
 function renderVersionSelector(versions) {
   const wrapper = document.getElementById("all-scores");
   const existing = document.getElementById("version-selector");
-  if (!wrapper || !versions || versions.length <= 1) {
+  if (!wrapper || !versions || versions.length === 0) {
     if (existing) existing.remove();
     return;
   }
@@ -1284,10 +1269,6 @@ function renderTablesOnly() {
 function renderAllTables() {
   const data = ensureParsedData();
   if (!data) return;
-  const yearIds = getYearIds(data);
-  if (!activeYear || !yearIds.includes(activeYear)) {
-    activeYear = yearIds[0] || "2024";
-  }
   const regionIds = getRegionIds(data);
   if (!activeRegion || !regionIds.includes(activeRegion)) {
     activeRegion = regionIds[0] || null;

@@ -38,15 +38,14 @@ For the 1 degree track, the interpolation method used for challengers, the corre
 #| output: false
 
 import json
-import os
-from helpers.s3_discovery import available_versions, default_version, discover_downloaded_reports
+from helpers.s3_discovery import available_versions, default_version, discover_downloaded_reports, downloaded_report_path
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
 from helpers.challenger_metadata import challenger_label
 from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
 
 def _load_scores(version, challenger_name, region_id, strict):
-    local_path = os.path.join("reports", version, f"{challenger_name}.{region_id}.report.ipynb")
-    if not os.path.exists(local_path):
+    local_path = downloaded_report_path("reports", version, challenger_name, region_id)
+    if not local_path:
         return None
     try:
         scores = get_all_model_scores_from_notebook(local_path, challenger_name)
@@ -99,7 +98,6 @@ version_bundles = {
 if resolved_default_version not in version_bundles:
     resolved_default_version = next(iter(version_bundles), "")
 
-default_year_scores = all_scores_by_year.get(str(default_year), {"regions": {}, "region_order": []})
 
 scores_json = json.dumps({
     "versions": version_bundles,

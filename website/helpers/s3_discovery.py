@@ -13,7 +13,8 @@ from helpers.published_regions import published_region_ids
 S3_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench"
 REPORTS_ROOT_PREFIX = "public/evaluation-reports"
 REPORT_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
-REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")
+YEAR_VERSION_PATTERN = re.compile(r"^\d{4}$")
+REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+?)(?:\.(?P<year>\d{4}))?\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")
 
 # The report discovery and download steps each issue one HTTP request per challenger and region.
 # Running them concurrently keeps the website rebuild well under the gateway timeout as the number
@@ -60,16 +61,54 @@ def challengers_for_version(version: str) -> list[str]:
     return _report_index().get("versions", {}).get(version, {}).get("challengers", [])
 
 
+def is_year_version(version: str) -> bool:
+    return bool(YEAR_VERSION_PATTERN.match(str(version)))
+
+
+def report_notebook_file_name(version: str, challenger_name: str, region_id: str) -> str:
+    version = str(version)
+    if is_year_version(version):
+        return f"{challenger_name}.{version}.{region_id}.report.ipynb"
+    return f"{challenger_name}.{region_id}.report.ipynb"
+
+
+def report_html_file_name(version: str, challenger_name: str, region_id: str) -> str:
+    return report_notebook_file_name(version, challenger_name, region_id).removesuffix(".ipynb") + ".html"
+
+
+def _legacy_report_notebook_file_name(challenger_name: str, region_id: str) -> str:
+    return f"{challenger_name}.{region_id}.report.ipynb"
+
+
+def _report_notebook_file_name_candidates(version: str, challenger_name: str, region_id: str) -> list[str]:
+    canonical_file_name = report_notebook_file_name(version, challenger_name, region_id)
+    legacy_file_name = _legacy_report_notebook_file_name(challenger_name, region_id)
+    if canonical_file_name == legacy_file_name:
+        return [canonical_file_name]
+    return [canonical_file_name, legacy_file_name]
+
+
 def _notebook_url(version: str, challenger_name: str, region_id: str) -> str:
-    return f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{challenger_name}.{region_id}.report.ipynb"
+    file_name = report_notebook_file_name(version, challenger_name, region_id)
+    return f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{file_name}"
+
+
+def _notebook_url_candidates(version: str, challenger_name: str, region_id: str) -> list[str]:
+    return [
+        f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{file_name}"
+        for file_name in _report_notebook_file_name_candidates(version, challenger_name, region_id)
+    ]
 
 
 def _report_exists(version: str, challenger_name: str, region_id: str) -> bool:
-    try:
-        response = requests.head(_notebook_url(version, challenger_name, region_id), timeout=10)
-        return response.status_code == 200
-    except Exception:
-        return False
+    for url in _notebook_url_candidates(version, challenger_name, region_id):
+        try:
+            response = requests.head(url, timeout=10)
+            if response.status_code == 200:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def discover_official_reports(version: str) -> dict[str, list[str]]:
@@ -104,7 +143,9 @@ def discover_downloaded_reports(reports_directory: str, version: str) -> dict[st
         report_match = REPORT_FILE_PATTERN.match(file_name)
         if report_match is None:
             continue
-        year = _report_file_year(report_match)
+        report_year = report_match.group("year")
+        if report_year and report_year != str(version):
+            continue
         challenger_name = report_match.group("challenger")
         region_id = report_match.group("region")
         if region_id in discovered_reports and challenger_name in known_challengers:
@@ -118,18 +159,35 @@ def discover_downloaded_reports(reports_directory: str, version: str) -> dict[st
     }
 
 
+def downloaded_report_path(
+    reports_directory: str,
+    version: str,
+    challenger_name: str,
+    region_id: str,
+) -> str | None:
+    version_directory = os.path.join(reports_directory, str(version))
+    for file_name in _report_notebook_file_name_candidates(version, challenger_name, region_id):
+        report_path = os.path.join(version_directory, file_name)
+        if os.path.exists(report_path):
+            return report_path
+    return None
+
+
 def download_notebook(version: str, challenger_name: str, region_id: str, destination_directory: str) -> str | None:
     os.makedirs(destination_directory, exist_ok=True)
-    destination_path = os.path.join(destination_directory, f"{challenger_name}.{region_id}.report.ipynb")
-    url = _notebook_url(version, challenger_name, region_id)
+    destination_path = os.path.join(
+        destination_directory,
+        report_notebook_file_name(version, challenger_name, region_id),
+    )
 
-    try:
-        response = requests.get(url, timeout=30)
-        if response.status_code != 200:
-            return None
-        with open(destination_path, "wb") as file:
-            file.write(response.content)
-        return destination_path
-    except Exception as error:
-        print(f"Failed to download {challenger_name}.{region_id} ({version}) from {url}: {error}")
+    for url in _notebook_url_candidates(version, challenger_name, region_id):
+        try:
+            response = requests.get(url, timeout=30)
+            if response.status_code != 200:
+                continue
+            with open(destination_path, "wb") as file:
+                file.write(response.content)
+            return destination_path
+        except Exception as error:
+            print(f"Failed to download {challenger_name}.{region_id} ({version}) from {url}: {error}")
     return None
