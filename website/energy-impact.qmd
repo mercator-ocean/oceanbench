@@ -393,9 +393,9 @@ HTML("""
 <div class="ei-tabs">
   <button class="ei-tab-btn active" onclick="switchTab('overview', this)">Overview</button>
   <button class="ei-tab-btn" onclick="switchTab('report', this)">Report Analysis</button>
-  <button class="ei-tab-btn" onclick="switchTab('individual', this)">Individual Analysis</button>
-  <button class="ei-tab-btn" onclick="switchTab('comparison', this)">AI Models Comparison Charts</button>
-  <button class="ei-tab-btn" onclick="switchTab('aivsnumeric', this)">AI vs Numeric model's efficiency</button>
+  <button class="ei-tab-btn" onclick="switchTab('individual', this)">Individual Scores</button>
+  <button class="ei-tab-btn" onclick="switchTab('comparison', this)">AI Models Inter-Comparison</button>
+  <button class="ei-tab-btn" onclick="switchTab('aivsnumeric', this)">AI vs Numeric System</button>
   <button class="ei-tab-btn" onclick="switchTab('infrastructure', this)">Infrastructure</button>
 </div>
 
@@ -406,7 +406,7 @@ HTML("""
 
   <p class="ei-intro">
     An LED bulb left on for an hour uses about 0.002 kWh. A one-hour video call emits around
-    0.6 kg of CO₂e. A one-hour car journey at 60 km/h can emit more than ten kilograms.
+    600 g of CO₂e. A one-hour car journey at 60 km/h can emit more than ten kilograms.
     These everyday activities all carry a measurable energy and carbon cost. Running a
     forecasting model is no different, the difference is that this cost happens inside a
     data center, out of sight, rather than in front of the user.
@@ -435,7 +435,7 @@ HTML("""
   <div class="ei-section-title-overview ">Reference values</div>
 
   <p>
-    Figures expressed in kWh or kg of CO₂e are not always intuitive on their own. The
+    Figures expressed in kWh or g of CO₂e are not always intuitive on their own. The
     reference values below provide a few familiar points of comparison, useful for putting
     the model figures presented later on this page into perspective.
   </p>
@@ -461,14 +461,14 @@ HTML("""
     <div class="ei-ref-card">
       <div class="ei-ref-card-label">Usage</div>
       <div class="ei-ref-card-item">Video call streaming</div>
-      <div class="ei-ref-card-value">0.60</div>
-      <div class="ei-ref-card-unit">kg CO₂e</div>
+      <div class="ei-ref-card-value">600</div>
+      <div class="ei-ref-card-unit">gCO₂e</div>
     </div>
     <div class="ei-ref-card2">
       <div class="ei-ref-card-label">Usage</div>
       <div class="ei-ref-card-item">Petrol car (60 km/h)</div>
-      <div class="ei-ref-card-value">10.2</div>
-      <div class="ei-ref-card-unit">kg CO₂e</div>
+      <div class="ei-ref-card-value">10200</div>
+      <div class="ei-ref-card-unit">gCO₂e</div>
     </div>
   </div>
 
@@ -507,7 +507,7 @@ HTML("""
     <div><strong>PUE</strong> — Power Usage Effectiveness: ratio of total data center energy to IT equipment energy.</div>
   </div>
 
-  <div class="ei-section-title-overview "> Models list presentation</div>
+  <div class="ei-section-title-overview "> System list presentation</div>
 
   <p>
     The list below presents the ocean forecasting models covered by this page, including
@@ -592,7 +592,7 @@ HTML("""
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
         <tr><td>Energy (kWh)</td><td><span class="ei-result">18.4 (± 1.92)</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.883 (± 0.0919)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">883 (± 91.9)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">2843</span></td></tr>
       </tbody>
     </table>
@@ -601,7 +601,7 @@ HTML("""
   <!-- Glonet -->
   <div class="ei-section-title">GLONET</div>
   <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
-    Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+    Results are based on average 10 runs. Measurements taken on Datalab EDITO.
     The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
   </p>
   <div class="ei-model-card">
@@ -611,9 +611,9 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.134 (± 0.00201)</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00748 (± 0.000114)</span></td></tr>
-        <tr><td>Duration (seconds)</td><td><span class="ei-result">2047</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0141 (± 0.000480)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">9.33 (± 0.318)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">633</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -643,13 +643,13 @@ HTML("""
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
         <tr><td>Energy (kWh)</td><td><span class="ei-result">698 (± 140)</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">39.1 (± 8.03)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">39100 (± 8030)</span></td></tr>
         <tr><td>Duration (days)</td><td><span class="ei-result">17,5 (± 3,5)</span></td></tr>
       </tbody>
     </table>
   </div>
   <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
-    Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+    Results are based on average 10 runs. Measurements taken on Datalab EDITO.
     The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
   </p>
   <div class="ei-model-card">
@@ -659,9 +659,9 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0182 (± 0.00107)</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00107 (± 0.0000599)</span></td></tr>
-        <tr><td>Duration (seconds)</td><td><span class="ei-result">275</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.00310 (± 0.000161)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">2.05 (± 0.107)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">80</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -679,7 +679,7 @@ HTML("""
   <!-- Wenhai -->
   <div class="ei-section-title">WenHai</div>
   <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
-    Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+    Results are based on average 10 runs. Measurements taken on Datalab EDITO.
     The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
   </p>
   <div class="ei-model-card">
@@ -689,9 +689,9 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0497 (± 0.00349)</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00278 (± 0.0000196)</span></td></tr>
-        <tr><td>Duration (seconds)</td><td><span class="ei-result">781</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0245 (± 0.00364)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">16.2 (± 2.41)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">868</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -709,7 +709,7 @@ HTML("""
   <!-- Xihe -->
   <div class="ei-section-title">XiHe</div>
   <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
-    Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+    Results are based on average 10 runs. Measurements taken on Datalab EDITO.
     The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
   </p>
   <div class="ei-model-card">
@@ -719,9 +719,9 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0412 (± 0.00423)</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00231 (± 0.000237)</span></td></tr>
-        <tr><td>Duration (seconds)</td><td><span class="ei-result">648</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0173 (± 0.000690)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">11.5 (± 0.457)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">671</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -739,7 +739,7 @@ HTML("""
   <!-- LangYa -->
   <div class="ei-section-title">LangYa</div>
   <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
-    Results are based on average 10 runs. Measurements taken on the Lir HPC cluster in Toulouse.
+    Results are based on average 10 runs. Measurements taken on Datalab EDITO.
     The ± margin corresponds to a 95% confidence interval based on Student's t-distribution.
   </p>
   <div class="ei-model-card">
@@ -749,9 +749,9 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0209 (± 0.00273)</span></td></tr>
-        <tr><td>CO₂ emissions (kg CO₂e)</td><td><span class="ei-result">0.00117 (± 0.000153)</span></td></tr>
-        <tr><td>Duration (seconds)</td><td><span class="ei-result">328</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.00435 (± 0.00164)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">2.88 (± 1.09)</span></td></tr>
+        <tr><td>Duration (seconds)</td><td><span class="ei-result">181</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -784,7 +784,7 @@ HTML("""
     Measurement methodology across infrastructures
   </h2>
   <p class="ei-report">
-    Results are not captured the same way everywhere, which matters when comparing infrastructures. On DestinE Data Bridge (Eumetsat) and Lir, everything is measured with Codecarbon, which runs at full capability there: CPU energy uses the auto-detected TDP together with % usage and duration, GPU energy comes from pyNVML, which reports exact consumption at a given time that is then multiplied across each measured interval, and RAM energy is estimated by approximating the number of memory modules from total RAM size.
+    Results are not captured the same way everywhere, which matters when comparing infrastructures. On Destination Earth Data Lake (Eumetsat) and Lir, everything is measured with Codecarbon, which runs at full capability there: CPU energy uses the auto-detected TDP together with % usage and duration, GPU energy comes from pyNVML, which reports exact consumption at a given time that is then multiplied across each measured interval, and RAM energy is estimated by approximating the number of memory modules from total RAM size.
     On Datalab EDITO, security and user restrictions prevent Codecarbon from running at full capability. CPU energy still goes through Codecarbon, but the CPU TDP has to be entered manually since it can't be auto-detected there. GPU energy can't rely on pyNVML at all, so it's estimated the same way as CPU: TDP is read from nvidia-smi, and energy is computed by sampling % GPU usage at fixed intervals and multiplying by TDP and elapsed time. RAM measurement is unaffected and still goes through Codecarbon normally.
     This sampling-based estimation is itself a coarser approximation than pyNVML's direct readings, and the same non-linearity between usage and power draw noted for GPUs likely affects CPU TDP-based estimates too, adding another layer of uncertainty on top of the interval sampling itself.
     Because of these differences, absolute energy values shouldn't be compared directly across infrastructures, one method is simply less accurate than the other. Comparisons remain meaningful within a single infrastructure, where all models are captured with the same method.
@@ -798,7 +798,7 @@ HTML("""
     <p class="ei-sublabel">GPU idle</p>
     <div class="ei-ref-grid2">
       <div class="ei-ref-card">
-        <div class="ei-ref-card-label">DestinE Data Bridge (Eumetsat)</div>
+        <div class="ei-ref-card-label">Destination Earth Data Lake (Eumetsat)</div>
         <div class="ei-ref-card-item">NVIDIA H100 (80 GB HBM2e)</div>
         <div class="ei-ref-card-value">50 W</div>
       </div>
@@ -858,7 +858,7 @@ HTML("""
 
 
   <h2 class="ei-title">
-    Data fetching: local vs. S3
+    Data fetching: local vs. S3 !!TO BE CHANGE!!
   </h2>
   <p class="ei-report">
     The original pipeline (for GLONET only) fetched data from Copernicus Marine, wrote it to a temporary file, uploaded it to an S3 bucket, and then re-downloaded it from there during inference. The local variant fetches the same data directly into a local folder and passes local file paths at inference time, skipping the S3 round trip entirely for files that are only ever used within the same job.
@@ -913,12 +913,22 @@ HTML("""
   </p>
 
 
-  <h2 class="ei-title">
-    Conclusions
+ <h2 class="ei-title">
+    Conclusions and Guidelines
   </h2>
 
+  <p class="ei-report">
+    <strong>What can we learn from this study.</strong> Taken together, these results tell a fairly clear story. The first lesson is that AI models can have very different energy footprints even when they serve a similar purpose: WenHai, for instance, consumes 5-8 times more energy than GLONET2. This alone shows that energy consumption cannot be assumed from a model's role or reputation, it has to be measured.
+    Infrastructure adds another layer to this picture: hardware, available CPU capacity, and network conditions all shift the numbers, which is why the same model can score differently depending on where it runs, and why absolute values are only meaningful when compared within a single infrastructure (see "Measurement methodology").
+    Underneath these variations, some consistent patterns emerge: energy consumption is closely tied to factors like run duration and the number of operations performed, which makes them reliable signals for anticipating a model's impact.
+    And this isn't only about the model itself, how data is handled around it matters too: keeping files local and avoiding unnecessary round trips to remote storage reduces both time and energy at once (see "Data fetching: local vs. S3").
+  </p>
 
-
+  <p class="ei-report">
+    <strong>How can we improve our footprint.</strong> These lessons translate into a few concrete levers. The first, and probably the simplest, is choosing infrastructure carefully, especially the GPU: two cards with similar computational performance can draw very different amounts of power, particularly at idle. Comparing GPU benchmarks and technical specs before committing to a setup, whether for inference or training, helps avoid paying an energy cost for performance that ends up unused.
+    Beyond hardware, the models themselves can be optimized: reducing the number of operations (FLOPs) required for a prediction (see <a href="https://arxiv.org/pdf/2608.16070">OceanLight study</a>), for example through more efficient architectures, has a direct effect on consumption. .
+    A third lever sits at the data layer: avoiding or limiting dependencies on remote servers and buckets, whether for reading or writing, cuts down on both latency and the energy spent on transfers.
+  </p>
 
 </div>
 
@@ -971,7 +981,7 @@ HTML("""
     <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between model — energy breakdown</p>
     <div style="display:flex; flex-direction:column; gap:10px;" id="breakdown-container"></div>
     <div style="display:flex; flex-wrap:wrap; gap:14px; margin-top:1rem; font-size:12px; color:#888;" id="breakdown-legend"></div>
-    <div class="ei-chart-explain">These bars break down each model's energy use into its component sources, side by side, so the composition of the total consumption can be compared across models rather than just its overall size.</div>
+    <div class="ei-chart-explain">The difference between GLONET and GLONET2 and the other models can be explained by the regridding of the data during the PRE-INFERENCE phase, which is required for them but not for the other models.</div>
   </div>
 
   <!-- Chart 3 -->
@@ -1072,9 +1082,16 @@ HTML("""
       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
     <div>
-      <strong>Warning:</strong> This chart gives a rough order of magnitude for the energy consumption gap between an AI model (GLONET2) and a numerical model (GLO12). The two models differ significantly in nature and do not run on the same infrastructure, so this comparison should not be read as a precise or like-for-like measurement — it's meant to convey a general trend, not an exact reference value.
+      <strong>Warning:</strong> This chart gives a rough order of magnitude for the energy consumption gap between an AI model (GLONET2) and a numerical model (GLO12). The two models differ significantly in nature and do not run on the same infrastructure, so this comparison should not be read as a precise or like-for-like measurement, it's meant to convey a general trend, not an exact reference value.
     </div>
   </div>
+  <div class="ei-callout">
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <div><strong>Note: </strong>When we compare GLO12 sytem to GLONET2 we have to add 10% of energy consumed by GLO12  run to GLONET2 inference, that's why the GLONET2 inference energy consuption is evaluated at 1.8528 kWh , but "only" 12.8 Wh when we compare it to other AI models.</div>
+  </div>
+
 
   <!-- Chart  -->
   <div style="padding:1rem 0;">
@@ -1083,6 +1100,14 @@ HTML("""
       <canvas id="energyCompChart2"></canvas>
     </div>
   </div>
+
+  <h2 class="ei-title">
+    How have GLO12 been measured
+  </h2>
+  <p class="ei-report">
+    coming
+  </p>
+
 
 </div><!-- /tab-aivsnumeric -->
 
@@ -1118,7 +1143,7 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Supercomputer</td><td><span class="ei-param_infos">DestinE Data Bridge (Eumetsat) - VM (Hesse, Germany)</span></td></tr>
+        <tr><td>Supercomputer</td><td><span class="ei-param_infos">Destination Earth Data Lake (Eumetsat) - VM (Hesse, Germany)</span></td></tr>
         <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
         <tr><td>Number of processes per node</td><td><span class="ei-param_infos"">16</span></td></tr>
         <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9454</span></td></tr>
@@ -1179,7 +1204,7 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Supercomputer</td><td><span class="ei-param_infos">Eumetsat - VM (Hesse, Germany)</span></td></tr>
+        <tr><td>Supercomputer</td><td><span class="ei-param_infos">Destination Earth Data Lake (Eumetsat) - VM (Hesse, Germany)</span></td></tr>
         <tr><td>Number of Nodes</td><td><span class="ei-param_infos">1</span></td></tr>
         <tr><td>Number of processes per node</td><td><span class="ei-param_infos"">128</span></td></tr>
         <tr><td>CPU</td><td><span class="ei-param_infos">AMD EPYC 9454</span></td></tr>
@@ -1378,7 +1403,7 @@ require(['chartjs'], function(ChartModule) {
   const COMPARISON_MODELS = [
     { name:'GLO12',   training:0,      trainingCi:0,    mu:18.4, ci:1.92, color:'#D9583E', fill:'217,88,62',  dash:[] },
     // Glonet2 use 10 percent of GLO12 included in the data below
-    { name:'Glonet2', training:698, trainingCi:140,    mu:1.84116,     ci:0.1920068,    color:'#4A3E8C', fill:'74,62,140',  dash:[6,3] }
+    { name:'GLONET2', training:698, trainingCi:140,    mu:1.8528,     ci:0.192101,    color:'#4A3E8C', fill:'74,62,140',  dash:[6,3] }
   ];
 
   function buildComparisonDatasets() {
@@ -2046,18 +2071,18 @@ require(['chartjs'], function(ChartModule) {
   var STAGE_LABELS = ["PRE-INFERENCE","INFERENCE","POST-INFERENCE"];
 
   function initStackedBars() {
-    makeStackedBar('stacked-bar-glonet',       'bar-legend-glonet',       { labels:STAGE_LABELS, values:[86.3,3.0,8.6],          colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-glonet_part2', 'bar-legend-glonet_part2', { labels:STAGE_LABELS, values:[1831,61,131],            colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-wenhai',       'bar-legend-wenhai',       { labels:STAGE_LABELS, values:[31.8,39.0,29.2],      colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-wenhai_part2', 'bar-legend-wenhai_part2', { labels:STAGE_LABELS, values:[288,253,220],           colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-xihe',         'bar-legend-xihe',         { labels:STAGE_LABELS, values:[37.7,22.1,40.2],        colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-xihe_part2',   'bar-legend-xihe_part2',   { labels:STAGE_LABELS, values:[289,117,240],           colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-langya',       'bar-legend-langya',       { labels:STAGE_LABELS, values:[20.1,3.3,76.6],          colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-langya_part2', 'bar-legend-langya_part2', { labels:STAGE_LABELS, values:[24.2,3.0,72.8],          colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-glonet2',       'bar-legend-glonet2',       { labels:STAGE_LABELS, values:[72.0,6.0,22.0],          colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-glonet2_part2', 'bar-legend-glonet2_part2', { labels:STAGE_LABELS, values:[76.8,4.0,19.2],          colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-glonet22',       'bar-legend-glonet22',       { labels:STAGE_LABELS, values:[72.0,6.0,22.0],          colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-glonet2_part22', 'bar-legend-glonet2_part22', { labels:STAGE_LABELS, values:[76.8,4.0,19.2],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet',       'bar-legend-glonet',       { labels:STAGE_LABELS, values:[40.8,37.2,22.0],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet_part2', 'bar-legend-glonet_part2', { labels:STAGE_LABELS, values:[57.2,18.5,24.3],            colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-wenhai',       'bar-legend-wenhai',       { labels:STAGE_LABELS, values:[20.68,66.1,13.2],      colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-wenhai_part2', 'bar-legend-wenhai_part2', { labels:STAGE_LABELS, values:[31.8,49.1,19.1],           colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-xihe',         'bar-legend-xihe',         { labels:STAGE_LABELS, values:[24.0,56.0,20.0],        colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-xihe_part2',   'bar-legend-xihe_part2',   { labels:STAGE_LABELS, values:[33.6,30.8,36.6],           colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-langya',       'bar-legend-langya',       { labels:STAGE_LABELS, values:[39.39,19.2,36.7],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-langya_part2', 'bar-legend-langya_part2', { labels:STAGE_LABELS, values:[41,11.7,36.6],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet2',       'bar-legend-glonet2',       { labels:STAGE_LABELS, values:[38.9,47.2,13.9],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet2_part2', 'bar-legend-glonet2_part2', { labels:STAGE_LABELS, values:[71.7,22.0,6.3],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet22',       'bar-legend-glonet22',       { labels:STAGE_LABELS, values:[38.9,47.2,13.9],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet2_part22', 'bar-legend-glonet2_part22', { labels:STAGE_LABELS, values:[71.7,22.0,6.3],          colors:STAGE_COLORS });
   }
 
   window._stackedBarsReady = initStackedBars;
