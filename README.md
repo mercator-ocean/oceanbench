@@ -5,7 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 
 <div align="center">
-  <img src="https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-light.png" alt="OceanBench logo" height="200"/>
+  <img src="https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/oceanbench-logo-light.png" alt="OceanBench logo" height="200"/>
 </div>
 
 # OceanBench
@@ -228,5 +228,5 @@ As part of a fruitful collaboration with:
 Powered by:
 
 <a href="https://edito.eu">
-  <img class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_Full_Logo.png" alt="EDITO logo"  height=100  />
+  <img class="only-light" src="https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/EDITO_Full_Logo.png" alt="EDITO logo"  height=100  />
 </a>
