@@ -110,8 +110,8 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   background: #e5e7eb;
 }
 .ei-section-title-overview {
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 23px;
+  font-weight: 600;
   margin: 2.5rem 0 1rem;
   display: flex;
   align-items: center;
@@ -170,6 +170,118 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   transform-origin: right center;
   box-shadow: 0 2px 6px rgba(0,0,0,.06), 0 8px 20px rgba(0,0,0,.06);
 }
+/* ── Overview: key figures (KPI cards) ── */
+.ei-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 1.25rem 0 2rem;
+}
+.ei-kpi-card {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 1.1rem 1.3rem 1.1rem 1.5rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.03);
+  transition: transform .15s, box-shadow .15s;
+}
+.ei-kpi-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--kpi-accent, #046293);
+}
+.ei-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,.06), 0 10px 24px rgba(0,0,0,.06);
+}
+.ei-kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.ei-kpi-value {
+  font-size: 26px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  color: #111;
+  line-height: 1.1;
+}
+.ei-kpi-unit {
+  font-size: 12.5px;
+  color: #888;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  margin-left: 4px;
+}
+.ei-kpi-note {
+  font-size: 12.5px;
+  color: #666;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* ── Overview: page guide cards ── */
+.ei-guide-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 1.25rem 0 2rem;
+}
+.ei-guide-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+.ei-guide-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0,0,0,.05);
+  border-color: #c9ddf0;
+}
+.ei-guide-card-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #111;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ei-guide-card-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 20px;
+  height: 20px;
+
+  border-radius: 50%;
+  background: #e1f1fa;
+  color: #035581;
+
+  font-size: 10px;
+  font-weight: 600;
+
+  flex-shrink: 0;
+}
+.ei-guide-card-desc {
+  font-size: 13px;
+  color: #666;
+  line-height: 1.55;
+}
+@media (max-width: 760px) {
+  .ei-kpi-grid { grid-template-columns: 1fr 1fr; }
+  .ei-guide-grid { grid-template-columns: 1fr; }
+}
+
 .ei-ref-card-label { font-size: 11px; color: #aaa; margin-bottom: 3px; }
 .ei-ref-card-item  { font-size: 14px; font-weight: 500; color: #222; margin-bottom: 4px; }
 .ei-ref-card-value { font-size: 22px; font-weight: 500; font-family: 'DM Mono', monospace; color: #111; }
@@ -440,12 +552,181 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
 .ei-carousel-dot {
   width: 7px;
   height: 7px;
+  padding: 0;
+  border: none;
   border-radius: 50%;
   background: #e0e0e0;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
   transition: background .2s, transform .2s;
 }
 .ei-carousel-dot.active { background: #046293; transform: scale(1.3); }
+.ei-infrastructure-card {
+  min-height: 420px;
+}
+
+.ei-infrastructure-card .ei-carousel-body {
+  padding: 26px 28px 28px;
+}
+
+/* Infrastructure title */
+
+.ei-infrastructure-card .ei-carousel-name {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 7px;
+}
+
+/* Provider */
+
+.ei-infrastructure-card .ei-carousel-provider {
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.72;
+  margin-bottom: 14px;
+}
+
+
+/* =========================================================
+   BADGE
+   ========================================================= */
+
+.ei-infrastructure-badge {
+  display: inline-flex;
+  align-items: center;
+
+  padding: 5px 10px;
+
+  border-radius: 999px;
+
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+
+  background: rgba(0, 0, 0, 0.055);
+  color: inherit;
+
+  margin-bottom: 18px;
+}
+
+
+/* =========================================================
+   DESCRIPTION
+   ========================================================= */
+
+.ei-infrastructure-card .ei-carousel-desc {
+  font-size: 14px;
+  line-height: 1.65;
+
+  margin-bottom: 18px;
+}
+
+
+/* =========================================================
+   MODELS
+   ========================================================= */
+
+.ei-infrastructure-models {
+  font-size: 11px;
+  line-height: 1.5;
+
+  padding: 9px 11px;
+
+  border-radius: 7px;
+
+  background: rgba(0, 0, 0, 0.035);
+
+  margin-bottom: 18px;
+
+  opacity: 0.8;
+}
+
+
+/* =========================================================
+   SPECS
+   ========================================================= */
+
+.ei-infrastructure-specs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  gap: 9px;
+
+  margin-top: 12px;
+}
+
+.ei-infrastructure-spec {
+  display: flex;
+  flex-direction: column;
+
+  gap: 3px;
+
+  padding: 9px 11px;
+
+  border-radius: 8px;
+
+  background: rgba(0, 0, 0, 0.035);
+
+  min-width: 0;
+}
+
+.ei-infrastructure-spec span {
+  font-size: 10px;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.055em;
+
+  opacity: 0.58;
+}
+
+.ei-infrastructure-spec strong {
+  font-size: 12px;
+
+  line-height: 1.35;
+
+  font-weight: 600;
+
+  overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   ACCENT
+   ========================================================= */
+
+.ei-infrastructure-card .ei-carousel-accent {
+  width: 5px;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 700px) {
+
+  .ei-infrastructure-card {
+    min-height: auto;
+  }
+
+  .ei-infrastructure-card .ei-carousel-body {
+    padding: 22px;
+  }
+
+  .ei-infrastructure-card .ei-carousel-name {
+    font-size: 21px;
+  }
+
+  .ei-infrastructure-specs {
+    grid-template-columns: 1fr;
+  }
+
+}
 </style>
 """
 HTML(page_css)
@@ -464,7 +745,6 @@ HTML("""
   <button class="ei-tab-btn" onclick="switchTab('individual', this)">Individual Scores</button>
   <button class="ei-tab-btn" onclick="switchTab('comparison', this)">AI Models Inter-Comparison</button>
   <button class="ei-tab-btn" onclick="switchTab('aivsnumeric', this)">AI vs Numeric Systems</button>
-  <button class="ei-tab-btn" onclick="switchTab('infrastructure', this)">Infrastructure</button>
 </div>
 
 <!-- ══════════════════════════════════════════════
@@ -473,20 +753,11 @@ HTML("""
 <div class="ei-tab-panel active" id="tab-overview">
 
   <p class="ei-intro">
-    An LED bulb left on for an hour uses about 0.002 kWh. A one-hour video call emits around
-    600 g of CO₂e. A one-hour car journey at 60 km/h can emit more than ten kilograms.
-    These everyday activities all carry a measurable energy and carbon cost. Running a
-    forecasting model is no different, the difference is that this cost happens inside a
-    data center, out of sight, rather than in front of the user.
-  </p>
-
-  <p class="ei-intro">
-    This is the purpose of the <strong>Energy Impact</strong> page: to measure and report,
-    in a transparent way, the energy consumption and CO₂ emissions of the ocean forecasting
-    models available on Oceanbench, both during training and during inference (the phase
-    where a model is actually used to produce a forecast). A model's value should not be
-    assessed on accuracy alone. Its energy footprint is equally relevant when deciding which
-    model to use. Presenting both dimensions together is meant to support that decision.
+    How much does an ocean forecasting model cost to run ? Beyond its predictive accuracy, every model has an energy and carbon footprint-one that depends on how it is trained and how often it is used for inference.
+    <br>
+    The Energy Impact section quantifies this footprint for the forecasting models available on Oceanbench. It reports energy consumption and associated CO₂ emissions during both training and inference, making the computational cost of forecasting visible alongside model performance.
+    <br>
+    Accuracy is not the only measure that matters. Energy consumption and carbon emissions are also important when choosing which model to use. This page brings these dimensions together to make the trade-offs easier to understand.
   </p>
 
   <div class="ei-callout">
@@ -500,7 +771,72 @@ HTML("""
     </div>
   </div>
 
-  <div class="ei-section-title-overview ">Reference values</div>
+  <div class="ei-section-title-overview">Key figures</div>
+
+  <p>
+    Six forecasting systems are tracked on this page: one physics-based numerical model
+    (GLO12) and five AI models (GLONET, GLONET2, WenHai, XiHe, LangYa). The figures below summarise the key findings of the study, with each one explained in more detail across the different tabs.
+  </p>
+
+  <div class="ei-kpi-grid">
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Systems tracked</div>
+      <div class="ei-kpi-value">6</div>
+      <div class="ei-kpi-note">1 numerical model (GLO12) + 5 AI models, all measured with the same method</div>
+    </div>
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Numerical run · GLO12</div>
+      <div class="ei-kpi-value">18.4<span class="ei-kpi-unit">kWh / run</span></div>
+      <div class="ei-kpi-note">883 gCO₂e per forecast</div>
+    </div>
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Lightest AI inference · GLONET2</div>
+      <div class="ei-kpi-value">3.63<span class="ei-kpi-unit">Wh / run</span></div>
+      <div class="ei-kpi-note">2.40 gCO₂e per forecast</div>
+    </div>
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Training cost · GLONET2</div>
+      <div class="ei-kpi-value">698<span class="ei-kpi-unit">kWh</span></div>
+      <div class="ei-kpi-note">≈ 39.1 kg CO₂e</div>
+    </div>
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Spread between AI models</div>
+      <div class="ei-kpi-value">4-7×</div>
+      <div class="ei-kpi-note">WenHai's inference footprint vs. GLONET2's, despite a similar role</div>
+    </div>
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Infrastructures used</div>
+      <div class="ei-kpi-value">4</div>
+      <div class="ei-kpi-note">Belenos, Lir, Datalab EDITO, Destination Earth Data Lake</div>
+    </div>
+  </div>
+
+  <div class="ei-section-title-overview">What's on this page</div>
+
+  <p>
+    Each tab looks at a different angle of the same measurements. This is where to find what.
+  </p>
+
+  <div class="ei-guide-grid">
+    <div class="ei-guide-card">
+      <div class="ei-guide-card-title"><span class="ei-guide-card-num">1</span>Report Analysis</div>
+      <div class="ei-guide-card-desc">The synthesized findings: what drives consumption, methodology caveats across infrastructures, and guidelines for a lighter footprint.</div>
+    </div>
+    <div class="ei-guide-card">
+      <div class="ei-guide-card-title"><span class="ei-guide-card-num">2</span>Individual Scores</div>
+      <div class="ei-guide-card-desc">Detailed energy, CO₂ and duration figures for each system, model by model.</div>
+    </div>
+    <div class="ei-guide-card">
+      <div class="ei-guide-card-title"><span class="ei-guide-card-num">3</span>AI Models Inter-Comparison</div>
+      <div class="ei-guide-card-desc">Side-by-side comparison of the five AI models measured on the same infrastructure.</div>
+    </div>
+    <div class="ei-guide-card">
+      <div class="ei-guide-card-title"><span class="ei-guide-card-num">4</span>AI vs Numeric Systems</div>
+      <div class="ei-guide-card-desc">Cumulative footprint of an AI model against the numerical model it can stand in for, including the training break-even point.</div>
+    </div>
+  </div>
+
+  <div class="ei-section-title-overview">Reference values</div>
 
   <p>
     Figures expressed in kWh or g of CO₂e are not always intuitive on their own. The
@@ -663,8 +999,257 @@ HTML("""
 <div class="ei-carousel-dots" id="ei-carousel-dots"></div>
 
 
-</div>
 
+<div class="ei-section-title-overview">Infrastructure list presentation</div>
+<p>
+  The infrastructures below present the computing environments used for
+  training, inference, and operational execution of the models.
+</p>
+<div class="ei-carousel" id="ei-infrastructure-carousel">
+  <button
+    class="ei-carousel-arrow ei-carousel-arrow-left"
+    onclick="eiInfrastructureCarouselMove(-1)"
+    aria-label="Previous infrastructure">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2.2"
+      stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  </button>
+  <div class="ei-carousel-viewport">
+    <div class="ei-carousel-track" id="ei-infrastructure-carousel-track">
+      <!-- Belenos -->
+      <div class="ei-carousel-card ei-infrastructure-card">
+        <div class="ei-carousel-accent" style="background:#046293;"></div>
+        <div class="ei-carousel-body">
+          <div class="ei-carousel-name">
+            Belenos
+          </div>
+          <div class="ei-carousel-provider">
+            Météo-France · Toulouse, France
+          </div>
+          <div class="ei-infrastructure-badge">
+            RUN · GLO12
+          </div>
+          <div class="ei-carousel-desc">
+            Operational computing infrastructure used to run the GLO12
+            global ocean forecasting system.
+          </div>
+          <div class="ei-infrastructure-specs">
+            <div class="ei-infrastructure-spec">
+              <span>Nodes</span>
+              <strong>43</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>Processes / node</span>
+              <strong>128</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>CPU</span>
+              <strong>AMD EPYC 7742</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>RAM</span>
+              <strong>10,632 GB</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>PUE</span>
+              <strong>1.17</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Eumetsat Training -->
+      <div class="ei-carousel-card ei-infrastructure-card">
+        <div class="ei-carousel-accent" style="background:#046293;"></div>
+        <div class="ei-carousel-body">
+          <div class="ei-carousel-name">
+            Destination Earth Data Lake
+          </div>
+          <div class="ei-carousel-provider">
+            Eumetsat · Hesse, Germany
+          </div>
+          <div class="ei-infrastructure-badge">
+            TRAINING · GLONET2
+          </div>
+          <div class="ei-carousel-desc">
+            Virtual machine infrastructure hosted within the Destination
+            Earth Data Lake environment and used for GLONET2 training.
+          </div>
+          <div class="ei-infrastructure-specs">
+            <div class="ei-infrastructure-spec">
+              <span>Nodes</span>
+              <strong>1</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>Processes</span>
+              <strong>16</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>CPU</span>
+              <strong>AMD EPYC 9454</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>GPU</span>
+              <strong>4 × H100 80GB</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>RAM</span>
+              <strong>866 GB</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>PUE</span>
+              <strong>1.45</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Lir -->
+      <div class="ei-carousel-card ei-infrastructure-card">
+        <div class="ei-carousel-accent" style="background:#046293;"></div>
+        <div class="ei-carousel-body">
+          <div class="ei-carousel-name">
+            Lir
+          </div>
+          <div class="ei-carousel-provider">
+            Mercator Ocean International · Toulouse, France
+          </div>
+          <div class="ei-infrastructure-badge">
+            INFERENCE
+          </div>
+          <div class="ei-carousel-desc">
+            Computing infrastructure used for inference of GLONET, GLONET2,
+            WenHai, XiHe, and LangYa.
+          </div>
+          <div class="ei-infrastructure-specs">
+            <div class="ei-infrastructure-spec">
+              <span>Nodes</span>
+              <strong>1</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>Processes</span>
+              <strong>8</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>CPU</span>
+              <strong>AMD EPYC 9534</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>GPU</span>
+              <strong>H100 80GB HBM3</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>RAM</span>
+              <strong>755 GB</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>PUE</span>
+              <strong>1.45</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Datalab EDITO -->
+      <div class="ei-carousel-card ei-infrastructure-card">
+        <div class="ei-carousel-accent" style="background:#046293;"></div>
+        <div class="ei-carousel-body">
+          <div class="ei-carousel-name">
+            Datalab EDITO
+          </div>
+          <div class="ei-carousel-provider">
+            CloudFerro · Mazovia, Poland
+          </div>
+          <div class="ei-infrastructure-badge">
+            INFERENCE
+          </div>
+          <div class="ei-carousel-desc">
+            Cloud infrastructure provided through the EDITO Datalab
+            environment for inference of the ocean forecasting models.
+          </div>
+          <div class="ei-infrastructure-specs">
+            <div class="ei-infrastructure-spec">
+              <span>Nodes</span>
+              <strong>1</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>Processes</span>
+              <strong>16</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>CPU</span>
+              <strong>AMD EPYC</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>GPU</span>
+              <strong>RTX A6000 48GB</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>RAM</span>
+              <strong>110 GB</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>PUE</span>
+              <strong>1.43</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Eumetsat Inference -->
+      <div class="ei-carousel-card ei-infrastructure-card">
+        <div class="ei-carousel-accent" style="background:#046293;"></div>
+        <div class="ei-carousel-body">
+          <div class="ei-carousel-name">
+            Destination Earth Data Lake
+          </div>
+          <div class="ei-carousel-provider">
+            Eumetsat · Hesse, Germany
+          </div>
+          <div class="ei-infrastructure-badge">
+            INFERENCE
+          </div>
+          <div class="ei-carousel-desc">
+            Virtual machine infrastructure within the Destination Earth
+            Data Lake environment used to perform model inference.
+          </div>
+          <div class="ei-infrastructure-specs">
+            <div class="ei-infrastructure-spec">
+              <span>Nodes</span>
+              <strong>1</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>Processes</span>
+              <strong>128</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>CPU</span>
+              <strong>AMD EPYC 9454</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>GPU</span>
+              <strong>H100 80GB HBM2e</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>RAM</span>
+              <strong>866 GB</strong>
+            </div>
+            <div class="ei-infrastructure-spec">
+              <span>PUE</span>
+              <strong>1.45</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <button
+    class="ei-carousel-arrow ei-carousel-arrow-right"
+    onclick="eiInfrastructureCarouselMove(1)"
+    aria-label="Next infrastructure">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+  </button>
+
+</div>
+<div class="ei-carousel-dots" id="ei-infrastructure-carousel-dots"></div>
 
 </div><!-- /tab-overview -->
 
@@ -681,7 +1266,7 @@ HTML("""
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
-    <div><strong>Note:</strong> The result value depends a lot on the infrastructure and resources used by the code. To see the test specifications, go to the Infrastructure tab.</div>
+    <div><strong>Note:</strong> The result value depends a lot on the infrastructure and resources used by the code. To see the test specifications, go to the end of Overview tab.</div>
   </div>
   <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
     Results are based on average 9 runs. Measurements taken on the Météo-France (Belenos) supercomputer in Toulouse.
@@ -1022,7 +1607,7 @@ Results are not captured the same way everywhere, which matters when comparing i
 
 
   <h2 class="ei-title">
-    Data fetching: local vs. S3 !!TO BE CHANGE!!
+    Data fetching: local vs. S3 !!WILL BE CHANGE!!
   </h2>
   <p class="ei-report">
     The original pipeline (for GLONET only) fetched data from Copernicus Marine, wrote it to a temporary file, uploaded it to an S3 bucket, and then re-downloaded it from there during inference. The local variant fetches the same data directly into a local folder and passes local file paths at inference time, skipping the S3 round trip entirely for files that are only ever used within the same job.
@@ -1084,7 +1669,7 @@ Results are not captured the same way everywhere, which matters when comparing i
   <li>
     <strong>AI models vary widely in energy footprint</strong>, even when
     they serve a similar purpose, WenHai for instance, consumes
-    <strong>5–8 times more energy</strong> than GLONET2. This alone shows
+    <strong>4-7 times more energy</strong> than GLONET2. This alone shows
     that energy consumption cannot be assumed from a model's role or
     reputation: <strong>it has to be measured</strong>.
   </li>
@@ -1520,6 +2105,99 @@ function switchTab(id, btn) {
 
   render();
   startAutoplay();
+})();
+
+(function () {
+  let eiInfrastructureCarouselIndex = 0;
+  const track = document.getElementById(
+    "ei-infrastructure-carousel-track"
+  );
+  const dotsContainer = document.getElementById(
+    "ei-infrastructure-carousel-dots"
+  );
+  const carousel = document.getElementById(
+    "ei-infrastructure-carousel"
+  );
+  if (!track || !dotsContainer) return;
+  const cards = track.querySelectorAll(
+    ".ei-infrastructure-card"
+  );
+  if (!cards.length) return;
+  const autoplayMs = 5000;
+  let timer = null;
+  /* Create dots */
+  cards.forEach(function (card, index) {
+    const dot = document.createElement("button");
+    dot.className =
+      "ei-carousel-dot" + (index === 0 ? " active" : "");
+    dot.type = "button";
+    dot.setAttribute(
+      "aria-label",
+      "Show infrastructure " + (index + 1)
+    );
+    dot.addEventListener("click", function () {
+      goTo(index);
+      restartAutoplay();
+    });
+    dotsContainer.appendChild(dot);
+  });
+  /* Render */
+  function render() {
+    track.style.transform =
+      "translateX(-" +
+      (eiInfrastructureCarouselIndex * 100) +
+      "%)";
+    dotsContainer
+      .querySelectorAll(".ei-carousel-dot")
+      .forEach(function (dot, index) {
+        dot.classList.toggle(
+          "active",
+          index === eiInfrastructureCarouselIndex
+        );
+      });
+  }
+  /* Navigation */
+  function goTo(index) {
+    eiInfrastructureCarouselIndex =
+      (index + cards.length) % cards.length;
+    render();
+  }
+  function next() {
+    goTo(eiInfrastructureCarouselIndex + 1);
+  }
+  window.eiInfrastructureCarouselMove = function (direction) {
+    goTo(eiInfrastructureCarouselIndex + direction);
+    restartAutoplay();
+  };
+  /* Autoplay */
+  function startAutoplay() {
+    stopAutoplay();
+    timer = setInterval(next, autoplayMs);
+  }
+  function stopAutoplay() {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  }
+  function restartAutoplay() {
+    stopAutoplay();
+    startAutoplay();
+  }
+  if (carousel) {
+    carousel.addEventListener(
+      "mouseenter",
+      stopAutoplay
+    );
+    carousel.addEventListener(
+      "mouseleave",
+      startAutoplay
+    );
+  }
+  /* Init */
+  render();
+  startAutoplay();
+
 })();
 </script>
 """)
