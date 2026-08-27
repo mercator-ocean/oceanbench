@@ -463,7 +463,7 @@ HTML("""
   <button class="ei-tab-btn" onclick="switchTab('report', this)">Report Analysis</button>
   <button class="ei-tab-btn" onclick="switchTab('individual', this)">Individual Scores</button>
   <button class="ei-tab-btn" onclick="switchTab('comparison', this)">AI Models Inter-Comparison</button>
-  <button class="ei-tab-btn" onclick="switchTab('aivsnumeric', this)">AI vs Numeric System</button>
+  <button class="ei-tab-btn" onclick="switchTab('aivsnumeric', this)">AI vs Numeric Systems</button>
   <button class="ei-tab-btn" onclick="switchTab('infrastructure', this)">Infrastructure</button>
 </div>
 
@@ -714,8 +714,8 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0141 (± 0.000480)</span></td></tr>
-        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">9.33 (± 0.318)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0164 (± 0.000480)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">10.09 (± 0.318)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">633</span></td></tr>
       </tbody>
     </table>
@@ -762,8 +762,8 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.00310 (± 0.000161)</span></td></tr>
-        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">2.05 (± 0.107)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.00363 (± 0.000161)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">2.40 (± 0.107)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">80</span></td></tr>
       </tbody>
     </table>
@@ -792,8 +792,8 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0245 (± 0.00364)</span></td></tr>
-        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">16.2 (± 2.41)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0262 (± 0.00364)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">17.3 (± 2.41)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">868</span></td></tr>
       </tbody>
     </table>
@@ -822,8 +822,8 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0173 (± 0.000690)</span></td></tr>
-        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">11.5 (± 0.457)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.0191 (± 0.000690)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">12.7 (± 0.457)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">671</span></td></tr>
       </tbody>
     </table>
@@ -852,8 +852,8 @@ HTML("""
     <table class="ei-table">
       <thead><tr><th>Metric</th><th>Value</th></tr></thead>
       <tbody>
-        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.00435 (± 0.00164)</span></td></tr>
-        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">2.88 (± 1.09)</span></td></tr>
+        <tr><td>Energy (kWh)</td><td><span class="ei-result">0.00509 (± 0.00164)</span></td></tr>
+        <tr><td>CO₂ emissions (gCO₂e)</td><td><span class="ei-result">3.37 (± 1.09)</span></td></tr>
         <tr><td>Duration (seconds)</td><td><span class="ei-result">181</span></td></tr>
       </tbody>
     </table>
@@ -884,13 +884,97 @@ HTML("""
   </p>
 
   <h2 class="ei-title">
+    Inference vs. Inference process
+  </h2>
+
+  <p class="ei-report">
+    On this Energy Impact page, we discuss two different things: first, the Inference, which refers to the prediction/forecast of our model over 10 or 7 days. Second, there is the Inference process, which refers to three phases: the first is the pre-inference phase, where we download the model we are going to use and fetch the data needed to run the inference. The second is the inference phase presented above. The third phase is the post-inference phase, which relates to saving and uploading the inference results. Each phase consumes a different amount of energy.
+  </p>
+    <div style="padding: 1rem 0;">
+      <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Energy consumed part — GLONET2 Inference Process</div>
+      <div id="stacked-bar-glonet22" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
+      <div id="bar-legend-glonet22" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+    </div>
+
+  <p class="ei-report">
+    The energy consumed during each phase is highly correlated with the duration of the phase, but not only that, in fact the inference phase represents a higher percentage of energy consumption than of time, which is explained by the fact that it is the phase that uses the GPU intensively, whereas the GPU is idle during the other two phases.
+  </p>
+
+    <div style="padding: 1rem 0;">
+      <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Duration part — GLONET2 Inference Process</div>
+      <div id="stacked-bar-glonet2_part22" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
+      <div id="bar-legend-glonet2_part22" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+    </div>
+
+  <p class="ei-report">
+    Finally, both approaches (Inference and Inference Process) to evaluating our model's consumption are relevant, since they represent two different things: one focuses on the model itself, the other on the entire workflow required to obtain our prediction using the model.
+  </p>
+
+  <h2 class="ei-title">
+    CPU vs GPU vs RAM
+  </h2>
+  <p class="ei-report">
+    A frequent question is why a model consumes energy in the first place, and this breakdown answers it by showing the share of energy consumed by each of the three hardware components tracked in this study. Results shown here come from GLONET on Destination Earth Data Lake (Eumetsat), but the pattern is similar across the other models.
+  </p>
+
+  <div style="padding:1rem 0; margin-top:1rem;">
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Energy breakdown by hardware — full inference process</p>
+    <div style="max-width:340px; margin:0 auto; position:relative; height:300px;">
+      <canvas id="hwBreakdownFullChart"></canvas>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px; margin-top:2rem;">
+    <div>
+      <p style="font-size:13px; color:#888; text-align:center; margin:0 0 0.75rem;">Pre-inference</p>
+      <div style="position:relative; height:220px;">
+        <canvas id="hwBreakdownPreChart"></canvas>
+      </div>
+    </div>
+    <div>
+      <p style="font-size:13px; color:#888; text-align:center; margin:0 0 0.75rem;">Inference</p>
+      <div style="position:relative; height:220px;">
+        <canvas id="hwBreakdownInferChart"></canvas>
+      </div>
+    </div>
+    <div>
+      <p style="font-size:13px; color:#888; text-align:center; margin:0 0 0.75rem;">Post-inference</p>
+      <div style="position:relative; height:220px;">
+        <canvas id="hwBreakdownPostChart"></canvas>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex; flex-wrap:wrap; gap:14px; margin-top:1rem; justify-content:center; font-size:12px; color:#888;" id="hwBreakdownLegend"></div>
+  <p class="ei-report">
+    What we learn is that each component plays a real role in the total energy consumed: proportions are fairly balanced between CPU, GPU and RAM over the full process. As expected, though, the picture shifts during inference itself, where the GPU clearly dominates and accounts for close to half of the energy consumed.
+  </p>
+
+    <h2 class="ei-title">
+    Duration and consumption
+  </h2>
+    As expected, there is a clear correlation between the duration and the energy consumption with hight pearson coefficient. In fact more time a program use resource more energy he will consume regardless the intensity of the usage. During inference the GPU usage dominate, then it’s more how many time you use it that will define your energy consumed than the intensity of the usage, since the energy you consume is not evloving linearly with the usage intensity.
+
+  </p>
+  
+  <div style="padding:1rem 0; margin-top:1.5rem;">
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Correlation — full inference process duration vs. number of energy consumed during full process</p>
+    <div style="position:relative; width:100%; height:320px;">
+      <canvas id="correlationDurationOpsChart2"></canvas>
+    </div>
+  </div>
+
+    <div style="padding:1rem 0; margin-top:1.5rem;">
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Correlation — inference duration vs. energy consumed during inference</p>
+    <div style="position:relative; width:100%; height:320px;">
+      <canvas id="correlationDurationEnergyChart2"></canvas>
+    </div>
+  </div>
+
+  <h2 class="ei-title">
     Measurement methodology across infrastructures
   </h2>
   <p class="ei-report">
-    Results are not captured the same way everywhere, which matters when comparing infrastructures. On Destination Earth Data Lake (Eumetsat) and Lir, everything is measured with Codecarbon, which runs at full capability there: CPU energy uses the auto-detected TDP together with % usage and duration, GPU energy comes from pyNVML, which reports exact consumption at a given time that is then multiplied across each measured interval, and RAM energy is estimated by approximating the number of memory modules from total RAM size.
-    On Datalab EDITO, security and user restrictions prevent Codecarbon from running at full capability. CPU energy still goes through Codecarbon, but the CPU TDP has to be entered manually since it can't be auto-detected there. GPU energy can't rely on pyNVML at all, so it's estimated the same way as CPU: TDP is read from nvidia-smi, and energy is computed by sampling % GPU usage at fixed intervals and multiplying by TDP and elapsed time. RAM measurement is unaffected and still goes through Codecarbon normally.
-    This sampling-based estimation is itself a coarser approximation than pyNVML's direct readings, and the same non-linearity between usage and power draw noted for GPUs likely affects CPU TDP-based estimates too, adding another layer of uncertainty on top of the interval sampling itself.
-    Because of these differences, absolute energy values shouldn't be compared directly across infrastructures, one method is simply less accurate than the other. Comparisons remain meaningful within a single infrastructure, where all models are captured with the same method.
+Results are not captured the same way everywhere, which matters when comparing infrastructures. On Destination Earth Data Lake (Eumetsat) and Lir, everything is measured with Codecarbon, which runs at full capability there: CPU energy uses the auto-detected TDP together with % usage and duration, GPU energy comes from pyNVML, which reports exact consumption at a given time that is then multiplied across each measured interval, and RAM energy is estimated by approximating the number of memory modules from total RAM size. On Datalab EDITO, security and user restrictions prevent Codecarbon from running at full capability. CPU energy still goes through Codecarbon, but the CPU TDP has to be entered manually since it can't be auto-detected there. GPU energy can't rely on pyNVML at all, so it's estimated differently: TDP and idle power are both set manually (idle power can't be auto-detected either), and energy is computed by sampling % GPU usage at fixed intervals, converting each sample to an instantaneous power draw as idle power + % usage × (TDP - idle power), then multiplying by the elapsed time and summing across intervals. RAM measurement is unaffected and still goes through Codecarbon normally. This sampling-based estimation is itself a coarser approximation than pyNVML's direct readings, and the same non-linearity between usage and power draw noted for GPUs likely affects CPU TDP-based estimates too, adding another layer of uncertainty on top of the interval sampling itself. Because of these differences, absolute energy values shouldn't be compared directly across infrastructures, one method is simply less accurate than the other. Comparisons remain meaningful within a single infrastructure, where all models are captured with the same method.
   </p> 
 
   <h2 class="ei-title">
@@ -935,29 +1019,6 @@ HTML("""
 
     Some models still deviate from this trend, GLONET2 in particular consumes more than its operation count alone would predict. This is likely explained by a higher average GPU usage during inference with no low peaks, which can make the run take longer overall despite the workload itself being similar, since the relationship between GPU energy draw and % usage is not linear. Measurement uncertainty can also play a role: two models with a similar operation count may show slightly different consumption even across repeated runs, and these small gaps shouldn't be over-interpreted as meaningful differences unless they clearly exceed run-to-run variability.
   </p>
-  
-
-
-  <h2 class="ei-title">
-    Duration and consumption
-  </h2>
-    As expected, there is a clear correlation between the duration and the energy consumption with hight pearson coefficient. In fact more time a program use resource more energy he will consume regardless the intensity of the usage. During inference the GPU usage dominate, then it’s more how many time you use it that will define your energy consumed than the intensity of the usage, since the energy you consume is not evloving linearly with the usage intensity.
-
-  </p>
-  
-  <div style="padding:1rem 0; margin-top:1.5rem;">
-    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Correlation — full inference process duration vs. number of energy consumed during full process</p>
-    <div style="position:relative; width:100%; height:320px;">
-      <canvas id="correlationDurationOpsChart2"></canvas>
-    </div>
-  </div>
-
-    <div style="padding:1rem 0; margin-top:1.5rem;">
-    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Correlation — inference duration vs. energy consumed during inference</p>
-    <div style="position:relative; width:100%; height:320px;">
-      <canvas id="correlationDurationEnergyChart2"></canvas>
-    </div>
-  </div>
 
 
   <h2 class="ei-title">
@@ -987,34 +1048,26 @@ HTML("""
   </h2>
     Although their names are similar, GLONET and GLONET2 differ in several key aspects. First, GLONET is based on three models that make predictions at different levels. Therefore, generating a single prediction requires running all three models and merging their outputs into the final prediction, whereas GLONET2 relies on a single model. Second, GLONET2 uses significantly fewer parameters than GLONET (80M vs. 417M). Third, although GLONET2 performs slightly more operations during inference than GLONET, but all these operations are executed within a single model rather than across three separate models. As result, GLONET2 is faster and consumes less energy than GLONET, which is consistent with the observed correlation between inference time and energy consumption.
   </p>
+  
+
 
   <h2 class="ei-title">
-    Inference vs. Inference process
+    AI vs. Numeric systems
   </h2>
-
   <p class="ei-report">
-    On this Energy Impact page, we discuss two different things: first, the Inference, which refers to the prediction/forecast of our model over 10 or 7 days. Second, there is the Inference process, which refers to three phases: the first is the pre-inference phase, where we download the model we are going to use and fetch the data needed to run the inference. The second is the inference phase presented above. The third phase is the post-inference phase, which relates to saving and uploading the inference results. Each phase consumes a different amount of energy.
+    Beyond comparing AI models against each other, it is also worth putting an AI model side by side with the physics-based numerical model it can stand in for. The chart below tracks cumulative energy consumption for a numerical run (GLO12) against an AI run (GLONET2, training included) as the number of runs increases.
   </p>
-    <div style="padding: 1rem 0;">
-      <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Energy consumed part — GLONET2 Inference Process</div>
-      <div id="stacked-bar-glonet22" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
-      <div id="bar-legend-glonet22" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
+
+  <div style="padding:1rem 0;">
+    <div style="position:relative; width:100%; height:400px;">
+      <canvas id="energyCompChart3"></canvas>
     </div>
+    <div style="display:flex; flex-wrap:wrap; gap:16px; font-size:12px; color:#888; margin-bottom:12px;" id="legend-container3"></div>
+  </div>
 
   <p class="ei-report">
-    The energy consumed during each phase is highly correlated with the duration of the phase, but not only that, in fact the inference phase represents a higher percentage of energy consumption than of time, which is explained by the fact that it is the phase that uses the GPU intensively, whereas the GPU is idle during the other two phases.
+    The AI model starts with a heavy upfront cost, its training, but each additional run afterwards costs much less energy than a numerical run. The two curves therefore inevitably cross: past a finite number of uses, the AI system's cumulative footprint drops below the numerical system's and stays there. So the "greener" option isn't fixed, it depends mainly on how many times the system is expected to be used (see the "AI vs Numeric Systems" tab for the full picture and its limitations).
   </p>
-
-    <div style="padding: 1rem 0;">
-      <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Duration part — GLONET2 Inference Process</div>
-      <div id="stacked-bar-glonet2_part22" style="display: flex; width: 100%; height: 20px; border-radius: 8px; overflow: hidden;"></div>
-      <div id="bar-legend-glonet2_part22" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
-    </div>
-
-  <p class="ei-report">
-    Finally, both approaches (Inference and Inference Process) to evaluating our model's consumption are relevant, since they represent two different things: one focuses on the model itself, the other on the entire workflow required to obtain our prediction using the model.
-  </p>
-
 
   <h2 class="ei-title">
     Conclusions and Guidelines
@@ -1030,7 +1083,7 @@ HTML("""
 <ul>
   <li>
     <strong>AI models vary widely in energy footprint</strong>, even when
-    they serve a similar purpose — WenHai, for instance, consumes
+    they serve a similar purpose, WenHai for instance, consumes
     <strong>5–8 times more energy</strong> than GLONET2. This alone shows
     that energy consumption cannot be assumed from a model's role or
     reputation: <strong>it has to be measured</strong>.
@@ -1247,7 +1300,7 @@ HTML("""
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
-    <div><strong>Note: </strong>When we compare GLO12 sytem to GLONET2 we have to add 10% of energy consumed by GLO12  run to GLONET2 inference, that's why the GLONET2 inference energy comsuption is evaluated at 1.8528 kWh , but "only" 12.8 Wh when we compare it to other AI models.</div>
+    <div><strong>Note: </strong>When we compare GLO12 sytem to GLONET2 we have to add 10% of energy consumed by GLO12 to compute the initial ocean state to run to GLONET2 inference. This 10% is an acceptable approximation of the GLO12 consumption to forecast only one day, the relevant point being to add a constant load that offsets the daily energy consumption of AI models that relies on numerical model output. That's why the GLONET2 inference energy comsuption is evaluated at 1.8528 kWh , but "only" 12.8 Wh when we compare it to other AI models.</div>
   </div>
 
 
@@ -1492,11 +1545,11 @@ require(['chartjs'], function(ChartModule) {
       { name:'LangYa', mu:20.9, ci:2.73, color:'#D4C853', fill:'212,200,83',  dash:[2,4] }
     ],
     B: [
-      { name:'GLONET', mu:14.1,  ci:0.480, color:'#378ADD', fill:'55,138,221',  dash:[] },
-      { name:'GLONET2', mu:3.6,  ci:0.161, color:'#4A3E8C', fill:'74,62,140',  dash:[] },
-      { name:'WenHai', mu:24.5,  ci:3.64,  color:'#1D9E75', fill:'29,158,117',  dash:[6,3] },
-      { name:'XiHe',   mu:17.3,  ci:0.690, color:'#D4537E', fill:'212,83,126',  dash:[2,4] },
-      { name:'LangYa', mu:4.35,  ci:1.64,  color:'#D4C853', fill:'212,200,83',  dash:[2,4] }
+      { name:'GLONET', mu:16.4,  ci:0.480, color:'#378ADD', fill:'55,138,221',  dash:[] },
+      { name:'GLONET2', mu:3.63,  ci:0.161, color:'#4A3E8C', fill:'74,62,140',  dash:[] },
+      { name:'WenHai', mu:26.2,  ci:3.64,  color:'#1D9E75', fill:'29,158,117',  dash:[6,3] },
+      { name:'XiHe',   mu:19.8,  ci:0.690, color:'#D4537E', fill:'212,83,126',  dash:[2,4] },
+      { name:'LangYa', mu:5.09,  ci:1.64,  color:'#D4C853', fill:'212,200,83',  dash:[2,4] }
     ],
     C: [
       { name:'GLONET', mu:45.5, ci:0.425, color:'#378ADD', fill:'55,138,221',  dash:[] },
@@ -1519,11 +1572,11 @@ require(['chartjs'], function(ChartModule) {
       { name:'LangYa', values:[20.1,3.3,76.6] }
     ],
     B: [
-      { name:'GLONET', values:[40.8,37.2,21.95] },
-      { name:'GLONET2', values:[38.9,47.2,13.9] },
-      { name:'WenHai', values:[20.68,66.1,13.2] },
-      { name:'XiHe',   values:[24.0,56.0,20.0] },
-      { name:'LangYa', values:[39.39,19.2,36.7] }
+      { name:'GLONET', values:[44.5,33.6,22.9] },
+      { name:'GLONET2', values:[39.9,47.7,12.4] },
+      { name:'WenHai', values:[23.9,61.0,15.1] },
+      { name:'XiHe',   values:[26.5,50.7,22.8] },
+      { name:'LangYa', values:[41.7,18.0,40.3] }
     ],
     C: [
       { name:'GLONET', values:[73.6,16.5,9.90] },
@@ -1554,14 +1607,14 @@ require(['chartjs'], function(ChartModule) {
   // Plain energy array (Wh) mirroring ALL_MODELS.mu, reused for correlation charts.
   const ALL_ENERGY_TOTAL = {
     A: [134,  18.9, 49.7, 41.2, 20.9],
-    B: [14.1, 3.1, 24.5, 17.3, 4.35],
+    B: [16.4, 3.63, 26.2, 19.1, 5.09],
     C: [45.5, 12.8, 75.1, 68.6, 14.74]
   };
 
   const ALL_ENERGY_INFERENCE = {
     A: [6.20, 1.16, 19.4, 9.10, 0.52],
-    B: [4.96, 1.70, 15.54, 8.98, 0.84],
-    C: [7.50, 1.31, 27.30, 21.20, 1.77]
+    B: [5.36, 1.73, 16.0, 9.67, 0.918],
+    C: [7.50, 1.31, 27.3, 21.2, 1.77]
   };
 
   let currentMachine  = 'B';
@@ -1716,6 +1769,64 @@ require(['chartjs'], function(ChartModule) {
   });
 
   buildLegendAI();
+
+  // ── Chart 1ter (AI vs Numeric, reused in Report Analysis tab) ────────────
+  function buildLegendAI2() {
+    var legend = document.getElementById('legend-container3');
+    if (!legend) return;
+    legend.innerHTML = '';
+    COMPARISON_MODELS.forEach(function(m) {
+      var trainingPart = m.trainingCi>0
+        ? (m.training)+' kWh training (±'+(m.trainingCi)+')'
+        : (m.training)+' kWh training';
+      var desc = m.training>0
+        ? trainingPart+' + '+m.mu+' kWh/inference (±'+m.ci+')'
+        : m.mu+' kWh/run (±'+m.ci+')';
+      legend.innerHTML += '<span style="display:flex;align-items:center;gap:6px;">'
+        +'<span style="width:20px;height:3px;background:'+m.color+';display:inline-block;border-radius:2px;"></span>'
+        +'<span style="width:10px;height:10px;border-radius:2px;background:rgba('+m.fill+',0.30);display:inline-block;"></span>'
+        +m.name+' — '+desc
+        +'</span>';
+    });
+  }
+
+  var comparisonChartAIReport = new Chart(document.getElementById('energyCompChart3'), {
+    type:'line',
+    data:{ labels:runsAI, datasets:buildComparisonDatasets() },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{ duration:500, easing:'easeInOutQuart' },
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        title:{
+          display:true,
+          text:'AI vs Numeric - GLO12 run vs GLONET2 training + inference',
+          color:'#333',
+          font:{ size:16, weight:'600' },
+          padding:{ top:10, bottom:20 }
+        },
+        legend:{ display:false },
+        tooltip:{
+          filter:function(item){ return !item.dataset.label.includes('upper')&&!item.dataset.label.includes('lower'); },
+          callbacks:{
+            title:function(ctx){ return ctx[0].label+' run'+(ctx[0].label>1?'s':''); },
+            label:function(ctx){
+              var m = COMPARISON_MODELS[ctx.datasetIndex/3|0];
+              if (!m) return '';
+              var r = ctx.dataIndex;
+              return ' '+m.name+': '+ctx.parsed.y.toFixed(0)+' kWh ['+((m.training-m.trainingCi)+r*(m.mu-m.ci)).toFixed(0)+' – '+((m.training+m.trainingCi)+r*(m.mu+m.ci)).toFixed(0)+']';
+            }
+          }
+        }
+      },
+      scales:{
+        x:{ title:{display:true,text:'Number of runs / inferences',color:'#888',font:{size:12}}, ticks:{color:'#888'}, grid:{color:'rgba(128,128,128,0.08)'} },
+        y:{ title:{display:true,text:'Cumulative energy (kWh)',color:'#888',font:{size:12}}, beginAtZero:true, ticks:{color:'#888'}, grid:{color:'rgba(128,128,128,0.08)'} }
+      }
+    }
+  });
+
+  buildLegendAI2();
 
   // ── Chart 2 (breakdown stacked bars) ────────────────────────────────────
   function buildBreakdownBars() {
@@ -2322,17 +2433,17 @@ require(['chartjs'], function(ChartModule) {
   var STAGE_LABELS = ["PRE-INFERENCE","INFERENCE","POST-INFERENCE"];
 
   function initStackedBars() {
-    makeStackedBar('stacked-bar-glonet',       'bar-legend-glonet',       { labels:STAGE_LABELS, values:[40.8,37.2,22.0],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet',       'bar-legend-glonet',       { labels:STAGE_LABELS, values:[44.5,33.6,22.9],          colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-glonet_part2', 'bar-legend-glonet_part2', { labels:STAGE_LABELS, values:[57.2,18.5,24.3],            colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-wenhai',       'bar-legend-wenhai',       { labels:STAGE_LABELS, values:[20.68,66.1,13.2],      colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-wenhai',       'bar-legend-wenhai',       { labels:STAGE_LABELS, values:[23.9,61.0,15.1],      colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-wenhai_part2', 'bar-legend-wenhai_part2', { labels:STAGE_LABELS, values:[31.8,49.1,19.1],           colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-xihe',         'bar-legend-xihe',         { labels:STAGE_LABELS, values:[24.0,56.0,20.0],        colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-xihe',         'bar-legend-xihe',         { labels:STAGE_LABELS, values:[26.5,50.7,22.8],        colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-xihe_part2',   'bar-legend-xihe_part2',   { labels:STAGE_LABELS, values:[33.6,30.8,36.6],           colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-langya',       'bar-legend-langya',       { labels:STAGE_LABELS, values:[39.39,19.2,36.7],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-langya',       'bar-legend-langya',       { labels:STAGE_LABELS, values:[41.7,18.0,40.3],          colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-langya_part2', 'bar-legend-langya_part2', { labels:STAGE_LABELS, values:[41,11.7,36.6],          colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-glonet2',       'bar-legend-glonet2',       { labels:STAGE_LABELS, values:[38.9,47.2,13.9],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet2',       'bar-legend-glonet2',       { labels:STAGE_LABELS, values:[39.9,47.7,12.4],          colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-glonet2_part2', 'bar-legend-glonet2_part2', { labels:STAGE_LABELS, values:[71.7,22.0,6.3],          colors:STAGE_COLORS });
-    makeStackedBar('stacked-bar-glonet22',       'bar-legend-glonet22',       { labels:STAGE_LABELS, values:[38.9,47.2,13.9],          colors:STAGE_COLORS });
+    makeStackedBar('stacked-bar-glonet22',       'bar-legend-glonet22',       { labels:STAGE_LABELS, values:[39.9,47.7,12.4],          colors:STAGE_COLORS });
     makeStackedBar('stacked-bar-glonet2_part22', 'bar-legend-glonet2_part22', { labels:STAGE_LABELS, values:[71.7,22.0,6.3],          colors:STAGE_COLORS });
   }
 
@@ -2344,6 +2455,55 @@ require(['chartjs'], function(ChartModule) {
   setTimeout(function(){ updateBreakdownBars('B'); }, 50);
   buildLegend('B');
   buildDurationLegend();
+
+  // ── CPU vs GPU vs RAM breakdown pies ─────────────────────────────────────
+  // TODO: replace the placeholder [33.3, 33.3, 33.3] arrays below with real
+  // measured percentages (CPU / GPU / RAM) once available.
+  var HW_LABELS = ["CPU","GPU","RAM"];
+  var HW_COLORS = ["#036aa1","#A0DCE8","#1C3A6E"];
+  var HW_BREAKDOWN = {
+    full:  [32,35,33],
+    pre:   [34,30,36],
+    infer: [25,49,25],
+    post:  [28,42,30]
+  };
+
+  function makeHwPieChart(canvasId, data) {
+    var el = document.getElementById(canvasId);
+    if (!el) return null;
+    return new Chart(el, {
+      type:'pie',
+      data:{
+        labels: HW_LABELS,
+        datasets:[{ data:data, backgroundColor:HW_COLORS, borderColor:'#fff', borderWidth:2 }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        animation:{ duration:500, easing:'easeInOutQuart' },
+        plugins:{
+          legend:{ display:false },
+          tooltip:{ callbacks:{ label:function(ctx){ return ' '+ctx.label+': '+ctx.parsed.toFixed(1)+'%'; } } }
+        }
+      }
+    });
+  }
+
+  function buildHwBreakdownLegend() {
+    var legend = document.getElementById('hwBreakdownLegend');
+    if (!legend) return;
+    legend.innerHTML = '';
+    HW_LABELS.forEach(function(label, i) {
+      legend.innerHTML += '<span style="display:flex;align-items:center;gap:6px;">'
+        +'<span style="width:12px;height:12px;border-radius:3px;background:'+HW_COLORS[i]+';display:inline-block;"></span>'
+        +label+'</span>';
+    });
+  }
+
+  makeHwPieChart('hwBreakdownFullChart',  HW_BREAKDOWN.full);
+  makeHwPieChart('hwBreakdownPreChart',   HW_BREAKDOWN.pre);
+  makeHwPieChart('hwBreakdownInferChart', HW_BREAKDOWN.infer);
+  makeHwPieChart('hwBreakdownPostChart',  HW_BREAKDOWN.post);
+  buildHwBreakdownLegend();
 
 });
 """))
