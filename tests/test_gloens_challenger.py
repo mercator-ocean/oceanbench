@@ -26,7 +26,9 @@ from oceanbench.core.dataset_source import get_dataset_source
 from oceanbench.core.ensemble_gridded import ENSEMBLE_DIMENSION
 
 FIRST_INITIALISATION = datetime(2024, 1, 4)
-LEAD_DAYS = 4
+FIRST_DAY = FIRST_INITIALISATION + timedelta(days=1)
+PUBLISHED_DAYS = 4
+LEAD_DAYS = PUBLISHED_DAYS - 1
 MEMBERS = 3
 ROWS = 5
 COLUMNS = 6
@@ -54,24 +56,32 @@ def _tracer_grid() -> tuple[numpy.ndarray, numpy.ndarray]:
 
 
 def _surface_values(fill: float) -> numpy.ndarray:
-    return numpy.full((LEAD_DAYS, MEMBERS, ROWS, COLUMNS), fill, dtype="float64")
+    return numpy.full((PUBLISHED_DAYS, MEMBERS, ROWS, COLUMNS), fill, dtype="float64")
 
 
-def _times(first_day_datetime: datetime) -> numpy.ndarray:
-    return numpy.array([numpy.datetime64(first_day_datetime + timedelta(days=day), "ns") for day in range(LEAD_DAYS)])
+def _daily_ramp(fill: float) -> numpy.ndarray:
+    """A field whose value names the published day it holds, so a day the opener drops shows up."""
+    published_days = numpy.arange(PUBLISHED_DAYS, dtype="float64")
+    return _surface_values(fill) + published_days[:, numpy.newaxis, numpy.newaxis, numpy.newaxis]
 
 
-def _surface_store(first_day_datetime: datetime) -> xarray.Dataset:
+def _times(initialisation_datetime: datetime) -> numpy.ndarray:
+    return numpy.array(
+        [numpy.datetime64(initialisation_datetime + timedelta(days=day), "ns") for day in range(PUBLISHED_DAYS)]
+    )
+
+
+def _surface_store(initialisation_datetime: datetime) -> xarray.Dataset:
     latitude, longitude = _tracer_grid()
     surface_dimensions = ("time", "ens", "y", "x")
     return xarray.Dataset(
         {
-            "tos": (surface_dimensions, _surface_values(12.0)),
+            "tos": (surface_dimensions, _daily_ramp(12.0)),
             "zos": (surface_dimensions, _surface_values(0.3)),
             "ssh_ib": (surface_dimensions, _surface_values(0.02)),
         },
         coords={
-            "time": _times(first_day_datetime),
+            "time": _times(initialisation_datetime),
             "ens": numpy.arange(MEMBERS),
             "latitude": (("y", "x"), latitude.astype("float32")),
             "longitude": (("y", "x"), longitude.astype("float32")),
@@ -79,14 +89,14 @@ def _surface_store(first_day_datetime: datetime) -> xarray.Dataset:
     )
 
 
-def _subsurface_store(first_day_datetime: datetime, content: str) -> xarray.Dataset:
+def _subsurface_store(initialisation_datetime: datetime, content: str) -> xarray.Dataset:
     variable_name, depth_name = SUBSURFACE_VARIABLES[content]
     missing = numpy.full((ROWS, COLUMNS), numpy.nan)
-    values = numpy.full((LEAD_DAYS, MEMBERS, LEVELS, ROWS, COLUMNS), 7.0, dtype="float64")
+    values = numpy.full((PUBLISHED_DAYS, MEMBERS, LEVELS, ROWS, COLUMNS), 7.0, dtype="float64")
     return xarray.Dataset(
         {variable_name: (("time", "ens", depth_name, "y", "x"), values)},
         coords={
-            "time": _times(first_day_datetime),
+            "time": _times(initialisation_datetime),
             "ens": numpy.arange(MEMBERS),
             depth_name: DEPTH_VALUES,
             "latitude": (("y", "x"), missing),
@@ -99,19 +109,19 @@ def _subsurface_store(first_day_datetime: datetime, content: str) -> xarray.Data
     )
 
 
-def _published_stores(first_day_datetime: datetime) -> dict[str, xarray.Dataset]:
+def _published_stores(initialisation_datetime: datetime) -> dict[str, xarray.Dataset]:
     return {
-        gloens_store_url(first_day_datetime, GLOENS_SURFACE_CONTENT): _surface_store(first_day_datetime),
+        gloens_store_url(initialisation_datetime, GLOENS_SURFACE_CONTENT): _surface_store(initialisation_datetime),
         **{
-            gloens_store_url(first_day_datetime, content): _subsurface_store(first_day_datetime, content)
+            gloens_store_url(initialisation_datetime, content): _subsurface_store(initialisation_datetime, content)
             for content in GLOENS_SUBSURFACE_CONTENTS
         },
     }
 
 
 def _open_published_store(store_url: str) -> xarray.Dataset:
-    for first_day_datetime in challenger_datasets._gloens_first_day_datetimes():
-        stores = _published_stores(first_day_datetime)
+    for initialisation_datetime in challenger_datasets._gloens_initialisation_datetimes():
+        stores = _published_stores(initialisation_datetime)
         if store_url in stores:
             return stores[store_url]
     raise AssertionError(f"the opener asked for a store no initialisation publishes: {store_url}")
@@ -133,7 +143,7 @@ def _on_a_small_target_grid(monkeypatch) -> None:
     )
 
 
-def _week(first_day_datetime: datetime = FIRST_INITIALISATION) -> xarray.Dataset:
+def _week(first_day_datetime: datetime = FIRST_DAY) -> xarray.Dataset:
     return challenger_datasets._open_gloens_forecast_week(first_day_datetime)
 
 
@@ -151,12 +161,12 @@ def test_the_companion_grid_store_is_the_surface_content_of_the_same_initialisat
 
 
 def test_the_gloens_initialisations_are_the_thursdays_of_the_year():
-    first_day_datetimes = challenger_datasets._gloens_first_day_datetimes()
+    initialisation_datetimes = challenger_datasets._gloens_initialisation_datetimes()
 
-    assert len(first_day_datetimes) == 52
-    assert first_day_datetimes[0] == FIRST_INITIALISATION
-    assert first_day_datetimes[-1] == datetime(2024, 12, 26)
-    assert {first_day_datetime.weekday() for first_day_datetime in first_day_datetimes} == {3}
+    assert len(initialisation_datetimes) == 52
+    assert initialisation_datetimes[0] == FIRST_INITIALISATION
+    assert initialisation_datetimes[-1] == datetime(2024, 12, 26)
+    assert {initialisation_datetime.weekday() for initialisation_datetime in initialisation_datetimes} == {3}
 
 
 def test_a_gloens_week_is_the_five_published_stores_read_as_one_dataset(monkeypatch):
@@ -167,13 +177,33 @@ def test_a_gloens_week_is_the_five_published_stores_read_as_one_dataset(monkeypa
     assert set(week.data_vars) == {"tos", "zos", "ssh_ib", "thetao", "so", "uo", "vo"}
 
 
-def test_the_first_gloens_field_is_valid_on_the_day_the_initialisation_starts(monkeypatch):
+def test_a_gloens_week_reads_its_time_axis_as_the_lead_day_index(monkeypatch):
     _with_published_stores(monkeypatch)
 
     week = _week()
 
     assert list(week["lead_day_index"].values) == list(range(LEAD_DAYS))
     assert "time" not in week.dims
+
+
+def test_gloens_lead_day_one_is_the_forecast_day_after_the_initialisation_not_its_nowcast(monkeypatch):
+    """The convention fingerprint, which no other assertion of this file can fail on.
+
+    GloEns is the only challenger of the benchmark that publishes a daily mean for the day it
+    starts from. Reading that nowcast as lead day one would score this challenger a day ahead
+    of every other one, and the library reads consistently either way, so the reading is pinned
+    here against the two facts that distinguish it: the week starts the day after the
+    initialisation, and the field the store holds for the initialisation day is not in it.
+    """
+    _with_published_stores(monkeypatch)
+
+    first_day_datetimes = challenger_datasets._gloens_first_day_datetimes()
+    week = _week()
+
+    assert first_day_datetimes[0] == FIRST_INITIALISATION + timedelta(days=1)
+    assert {first_day_datetime.weekday() for first_day_datetime in first_day_datetimes} == {4}
+    assert week.sizes["lead_day_index"] == PUBLISHED_DAYS - 1
+    assert week["tos"].values.min() == numpy.float32(13.0)
 
 
 def test_the_gloens_members_carry_the_name_the_ensemble_metrics_read(monkeypatch):
@@ -229,7 +259,7 @@ def test_the_gloens_challenger_is_read_through_onto_the_scoring_grid(monkeypatch
     monkeypatch.setattr(
         challenger_datasets,
         "_gloens_first_day_datetimes",
-        lambda: [FIRST_INITIALISATION, FIRST_INITIALISATION + timedelta(days=7)],
+        lambda: [FIRST_DAY, FIRST_DAY + timedelta(days=7)],
     )
 
     challenger_dataset = gloens()
