@@ -825,7 +825,28 @@ def _score_command(arguments: argparse.Namespace) -> None:
 AGGREGATION_KEYS = ["challenger", "challenger_version", "region", "reference", "variable", "depth", "lead_day"]
 
 
+def _refuse_missing_metric_values(per_start: pandas.DataFrame) -> None:
+    """Refuse a campaign that carries a missing per-start value, which averages silently.
+
+    The pivot below means over the starts that carried a value and skips the ones that did not,
+    while the start count beside it counts every start of the group, so a cell could publish a
+    full year while holding the mean of fewer starts. Worse, the spread and the error of a
+    spread-error ratio could then be averaged over different start sets before being divided.
+    Nothing downstream can tell that has happened, so the campaign is refused here instead.
+    """
+    missing = per_start[~numpy.isfinite(per_start["value"])]
+    if missing.empty:
+        return
+    first = missing.iloc[0]
+    raise RuntimeError(
+        f"{len(missing)} per-start values are missing, for example {first['metric']} of "
+        f"{first['variable']} at depth {first['depth']} lead {first['lead_day']} on "
+        f"{first['start_date']}; a year mean over them would not be the year mean it claims"
+    )
+
+
 def _aggregate_over_start_dates(per_start: pandas.DataFrame) -> pandas.DataFrame:
+    _refuse_missing_metric_values(per_start)
     values = per_start.pivot_table(index=AGGREGATION_KEYS, columns="metric", values="value", aggfunc="mean")
     values[METRIC_SPREAD_ERROR_RATIO] = values[METRIC_ENSEMBLE_SPREAD] / values[METRIC_ENSEMBLE_MEAN_RMSD]
     counts = per_start.groupby(AGGREGATION_KEYS, dropna=False).agg(
