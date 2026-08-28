@@ -38,6 +38,13 @@ DEFAULT_GLOENS_SURFACE_PATH = f"{DEFAULT_AGGREGATE_ROOT}/02-gridded-glorys/score
 OBSERVATION_SIDECAR_NAME = "aggregate_currents.parquet"
 OBSERVATION_ROW_KEY = ["stream", "region", "depth_band", "lead_day"]
 
+# The gridded fill waves scored the cells the first waves left empty, the two velocity components on
+# every level and salinity at the surface, and they follow the same rule as the observation sidecar:
+# the fill is written beside the aggregate it completes rather than into it, so the aggregate stays
+# the frozen artifact its campaign produced and the fill stays separately auditable.
+GRIDDED_FILL_SUFFIX = "-fill.parquet"
+GRIDDED_ROW_KEY = ["variable", "depth", "lead_day", "metric"]
+
 SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_OUTPUT_PATH = os.path.join(os.path.dirname(SCRIPT_DIRECTORY), "data", "ensemble-scores.json")
 
@@ -165,6 +172,8 @@ GRIDDED_VARIABLE_LABELS = {
     "sea_water_potential_temperature": "Temperature",
     "sea_water_salinity": "Salinity",
     "sea_surface_height_above_geoid": "Sea surface height",
+    "eastward_sea_water_velocity": "Eastward current",
+    "northward_sea_water_velocity": "Northward current",
 }
 
 GRIDDED_VARIABLE_ORDER = list(GRIDDED_VARIABLE_LABELS)
@@ -173,6 +182,8 @@ GRIDDED_VARIABLE_DECIMALS = {
     "sea_water_potential_temperature": 3,
     "sea_water_salinity": 3,
     "sea_surface_height_above_geoid": 4,
+    "eastward_sea_water_velocity": 4,
+    "northward_sea_water_velocity": 4,
 }
 
 SPREAD_ERROR_RATIO_DECIMALS = 2
@@ -194,11 +205,14 @@ FROZEN_METRIC_COLUMNS = [
 ]
 RATIO_METRIC = "spread_error_ratio"
 RATIO_UNIT = "1"
-# The frozen record carries no unit column, so the units of the two variables it does carry are
-# restated here, exactly as the depth aggregate spells them.
+# Neither the frozen surface record nor a fill sidecar carries a unit column, so the units of the
+# variables they carry are restated here, exactly as the depth aggregate spells them.
 GRIDDED_VARIABLE_UNITS = {
     "sea_water_potential_temperature": "°C",
     "sea_surface_height_above_geoid": "m",
+    "sea_water_salinity": "PSU",
+    "eastward_sea_water_velocity": "m s-1",
+    "northward_sea_water_velocity": "m s-1",
 }
 
 
@@ -296,6 +310,45 @@ def with_gloens_surface(depth_frame: pd.DataFrame, frozen: pd.DataFrame) -> pd.D
     if GLOENS_SURFACE_DEPTH in set(depth_frame["depth"]):
         raise ValueError("the GloEns depth aggregate already carries a surface band, so the frozen record is stale")
     return pd.concat([depth_frame, gloens_surface_frame(frozen)], ignore_index=True)
+
+
+def gridded_fill_frame(fill: pd.DataFrame) -> pd.DataFrame:
+    """Shape a wide gridded fill record like a year mean slice of the depth aggregate."""
+    long = fill.melt(
+        id_vars=["variable", "depth", "lead_day", "start_count"],
+        value_vars=FROZEN_METRIC_COLUMNS,
+        var_name="metric",
+        value_name="value",
+    )
+    long["aggregation"] = "year_mean"
+    long["unit"] = [
+        RATIO_UNIT if metric == RATIO_METRIC else GRIDDED_VARIABLE_UNITS[variable]
+        for metric, variable in zip(long["metric"], long["variable"])
+    ]
+    return long
+
+
+def with_gridded_fill(frame: pd.DataFrame, fill: pd.DataFrame) -> pd.DataFrame:
+    """Append the rows of a fill, refusing a fill that repeats rows of the aggregate it completes."""
+    shaped = gridded_fill_frame(fill)
+    year_mean = frame[frame["aggregation"] == "year_mean"]
+    repeated = year_mean.merge(shaped[GRIDDED_ROW_KEY].drop_duplicates(), on=GRIDDED_ROW_KEY)
+    if not repeated.empty:
+        raise ValueError("the gridded fill repeats rows of the aggregate it completes, so they cannot be concatenated")
+    return pd.concat([frame, shaped], ignore_index=True)
+
+
+def with_gridded_fill_beside(aggregate_path: str, frame: pd.DataFrame) -> pd.DataFrame:
+    """Add the fill a later campaign wave may have written beside this aggregate.
+
+    The frame is passed in rather than read here because the GloEns aggregate has its frozen
+    surface band added first: that step refuses a frame which already carries a surface band, and
+    the fill carries one, so the two have to be applied in this order.
+    """
+    fill_path = aggregate_path.removesuffix(".parquet") + GRIDDED_FILL_SUFFIX
+    if not os.path.exists(fill_path):
+        return frame
+    return with_gridded_fill(frame, pd.read_parquet(fill_path))
 
 
 def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio: bool) -> list[dict]:
@@ -488,8 +541,11 @@ def main() -> None:
     arguments = parser.parse_args()
 
     scores = build_ensemble_scores(
-        with_gloens_surface(pd.read_parquet(arguments.gridded_gloens), pd.read_csv(arguments.gloens_surface)),
-        pd.read_parquet(arguments.gridded_icp),
+        with_gridded_fill_beside(
+            arguments.gridded_gloens,
+            with_gloens_surface(pd.read_parquet(arguments.gridded_gloens), pd.read_csv(arguments.gloens_surface)),
+        ),
+        with_gridded_fill_beside(arguments.gridded_icp, pd.read_parquet(arguments.gridded_icp)),
         pd.read_parquet(arguments.deterministic_glonet),
         pd.read_parquet(arguments.deterministic_glo12),
         pd.read_parquet(arguments.class4_gloens_mean),
