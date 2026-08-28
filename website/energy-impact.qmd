@@ -8,6 +8,7 @@ jupyter: python3
 format:
   html:
     echo: false
+    anchor-sections: false
 ---
 
 ```{python}
@@ -174,6 +175,12 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
 .ei-kpi-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 1.25rem 0 2rem;
+}
+.ei-kpi-grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 14px;
   margin: 1.25rem 0 2rem;
 }
@@ -740,11 +747,11 @@ HTML("""
      TAB NAVIGATION
 ════════════════════════════════════════════════ -->
 <div class="ei-tabs">
-  <button class="ei-tab-btn active" onclick="switchTab('overview', this)">Overview</button>
-  <button class="ei-tab-btn" onclick="switchTab('report', this)">Report Analysis</button>
-  <button class="ei-tab-btn" onclick="switchTab('individual', this)">Individual Scores</button>
-  <button class="ei-tab-btn" onclick="switchTab('comparison', this)">AI Models Inter-Comparison</button>
-  <button class="ei-tab-btn" onclick="switchTab('aivsnumeric', this)">AI vs Numeric Systems</button>
+  <button class="ei-tab-btn active" data-tab="overview" onclick="switchTab('overview', this)">Overview</button>
+  <button class="ei-tab-btn" data-tab="report" onclick="switchTab('report', this)">Report Analysis</button>
+  <button class="ei-tab-btn" data-tab="individual" onclick="switchTab('individual', this)">Individual Scores</button>
+  <button class="ei-tab-btn" data-tab="comparison" onclick="switchTab('comparison', this)">AI Models Inter-Comparison</button>
+  <button class="ei-tab-btn" data-tab="aivsnumeric" onclick="switchTab('aivsnumeric', this)">AI vs Numeric Systems</button>
 </div>
 
 <!-- ══════════════════════════════════════════════
@@ -768,46 +775,6 @@ HTML("""
       Measurements use the
       <a href="https://github.com/mlco2/codecarbon" style="color: #1D4ED8;">codecarbon</a>
       open-source library for carbon tracking.
-    </div>
-  </div>
-
-  <div class="ei-section-title-overview">Key figures</div>
-
-  <p>
-    Six forecasting systems are tracked on this page: one physics-based numerical model
-    (GLO12) and five AI models (GLONET, GLONET2, WenHai, XiHe, LangYa). The figures below summarise the key findings of the study, with each one explained in more detail across the different tabs.
-  </p>
-
-  <div class="ei-kpi-grid">
-    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
-      <div class="ei-kpi-label">Systems tracked</div>
-      <div class="ei-kpi-value">6</div>
-      <div class="ei-kpi-note">1 numerical model (GLO12) + 5 AI models, all measured with the same method</div>
-    </div>
-    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
-      <div class="ei-kpi-label">Numerical run · GLO12</div>
-      <div class="ei-kpi-value">18.4<span class="ei-kpi-unit">kWh / run</span></div>
-      <div class="ei-kpi-note">883 gCO₂e per forecast</div>
-    </div>
-    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
-      <div class="ei-kpi-label">Lightest AI inference · GLONET2</div>
-      <div class="ei-kpi-value">3.63<span class="ei-kpi-unit">Wh / run</span></div>
-      <div class="ei-kpi-note">2.40 gCO₂e per forecast</div>
-    </div>
-    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
-      <div class="ei-kpi-label">Training cost · GLONET2</div>
-      <div class="ei-kpi-value">698<span class="ei-kpi-unit">kWh</span></div>
-      <div class="ei-kpi-note">≈ 39.1 kg CO₂e</div>
-    </div>
-    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
-      <div class="ei-kpi-label">Spread between AI models</div>
-      <div class="ei-kpi-value">4-7×</div>
-      <div class="ei-kpi-note">WenHai's inference footprint vs. GLONET2's, despite a similar role</div>
-    </div>
-    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
-      <div class="ei-kpi-label">Infrastructures used</div>
-      <div class="ei-kpi-value">4</div>
-      <div class="ei-kpi-note">Belenos, Lir, Datalab EDITO, Destination Earth Data Lake</div>
     </div>
   </div>
 
@@ -882,6 +849,86 @@ HTML("""
     <a href="https://www.nexamp.com/blog/do-tvs-use-a-lot-of-electricity">LED TV</a> ·
     <a href="https://medium.com/@zodhyatech/how-much-co2-do-you-emit-in-a-day-60be76e491dc">Video streaming &amp; car</a>
   </p>
+
+  <div class="ei-section-title-overview">Key figures</div>
+
+  <p>
+    Six forecasting systems are tracked on this page: one physics-based numerical model
+    (GLO12) and five AI models (GLONET, GLONET2, WenHai, XiHe, LangYa). The figures below summarise the key findings of the study, with each one explained in more detail across the different tabs.
+  </p>
+
+  <div class="ei-kpi-grid">
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Systems tracked</div>
+      <div class="ei-kpi-value">6</div>
+      <div class="ei-kpi-note">1 numerical model (GLO12) + 5 AI models, all measured with the same method</div>
+    </div>
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Numerical run · GLO12</div>
+      <div class="ei-kpi-value">18.4<span class="ei-kpi-unit">kWh / run</span></div>
+      <div class="ei-kpi-note">883 gCO₂e per forecast</div>
+    </div>
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Lightest AI inference · GLONET2</div>
+      <div class="ei-kpi-value">3.63<span class="ei-kpi-unit">Wh / run</span></div>
+      <div class="ei-kpi-note">2.40 gCO₂e per forecast</div>
+    </div>
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Training cost · GLONET2</div>
+      <div class="ei-kpi-value">698<span class="ei-kpi-unit">kWh</span></div>
+      <div class="ei-kpi-note">≈ 39.1 kg CO₂e</div>
+    </div>
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Spread between AI models</div>
+      <div class="ei-kpi-value">4-7×</div>
+      <div class="ei-kpi-note">WenHai's inference footprint vs. GLONET2's, despite a similar role</div>
+    </div>
+    <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+      <div class="ei-kpi-label">Infrastructures used</div>
+      <div class="ei-kpi-value">4</div>
+      <div class="ei-kpi-note">Belenos, Lir, Datalab EDITO, Destination Earth Data Lake</div>
+    </div>
+  </div>
+
+  <div class="ei-section-title-overview">Key lessons</div>
+    These are the main takeaways from the study. The full reasoning behind each one is detailed in the Report Analysis tab.
+  <p>
+  </p>
+
+<div class="ei-kpi-grid2">
+  <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+    <div class="ei-kpi-label">GPU emissions responsibility</div>
+    <div class="ei-kpi-value">49<span class="ei-kpi-unit">%</span></div>
+    <div class="ei-kpi-note">
+      During inference, GPU consumption represents nearly half of the total energy consumed.
+    </div>
+  </div>
+
+  <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+    <div class="ei-kpi-label">Correlation coefficient between Duration and Energy</div>
+    <div class="ei-kpi-value">0.99</div>
+    <div class="ei-kpi-note">
+      There is a clear correlation between time and energy consumption. The closer the Pearson correlation coefficient is to 1, the more strongly the variables are correlated.
+    </div>
+  </div>
+
+  <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+    <div class="ei-kpi-label">Correlation coefficient between FLOPs and Energy</div>
+    <div class="ei-kpi-value">0.95</div>
+    <div class="ei-kpi-note">
+      There is a clear correlation between the number of operations performed during inference and energy consumption. The closer the Pearson correlation coefficient is to 1, the more strongly the variables are correlated.
+    </div>
+  </div>
+
+  <div class="ei-kpi-card" style="--kpi-accent:#046293;">
+    <div class="ei-kpi-label">GLONET2 vs GLO12</div>
+    <div class="ei-kpi-value">30 to 60<span class="ei-kpi-unit">runs</span></div>
+    <div class="ei-kpi-note">
+      This is the number of runs after which GLONET2 (considering both training and inference costs) becomes more energy-efficient than GLO12. To see the full analysis and the limitations behind this number, go to "AI vs. numeric system".
+    </div>
+  </div>
+</div>
+
 
   <div class="ei-section-title-overview ">Formulas</div>
 
@@ -1266,7 +1313,7 @@ HTML("""
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
-    <div><strong>Note:</strong> The result value depends a lot on the infrastructure and resources used by the code. To see the test specifications, go to the end of Overview tab.</div>
+    <div><strong>Note:</strong> The result value depends a lot on the infrastructure and resources used by the code. To see the test specifications, go to the end of the Overview tab.</div>
   </div>
   <p style="font-size: 13.5px; color: #666; margin-bottom: 1rem;">
     Results are based on average 9 runs. Measurements taken on the Météo-France (Belenos) supercomputer in Toulouse.
@@ -1307,7 +1354,7 @@ HTML("""
   </div>
 
   <div style="padding: 1rem 0;">
-    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consume the most — Inference Process</div>
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consumes the most — Inference Process</div>
     <div id="stacked-bar-glonet" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
     <div id="bar-legend-glonet" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
   </div>
@@ -1354,7 +1401,7 @@ HTML("""
     </table>
   </div>
     <div style="padding: 1rem 0;">
-    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consume the most — Inference Process</div>
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consumes the most — Inference Process</div>
     <div id="stacked-bar-glonet2" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
     <div id="bar-legend-glonet2" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
   </div>
@@ -1384,7 +1431,7 @@ HTML("""
     </table>
   </div>
   <div style="padding: 1rem 0;">
-    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consume the most — Inference Process</div>
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consumes the most — Inference Process</div>
     <div id="stacked-bar-wenhai" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
     <div id="bar-legend-wenhai" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
   </div>
@@ -1414,7 +1461,7 @@ HTML("""
     </table>
   </div>
   <div style="padding: 1rem 0;">
-    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consume the most — Inference Process</div>
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consumes the most — Inference Process</div>
     <div id="stacked-bar-xihe" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
     <div id="bar-legend-xihe" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
   </div>
@@ -1444,7 +1491,7 @@ HTML("""
     </table>
   </div>
   <div style="padding: 1rem 0;">
-    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consume the most — Inference Process</div>
+    <div style="font-size: 15px; font-weight: 500; color: #111; margin-bottom: 12px;">Which part consumes the most — Inference Process</div>
     <div id="stacked-bar-langya" style="display: flex; width: 100%; height: 80px; border-radius: 8px; overflow: hidden;"></div>
     <div id="bar-legend-langya" style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 12px; color: #888;"></div>
   </div>
@@ -1464,11 +1511,11 @@ HTML("""
     This report synthesizes the key results from the other tabs into several evidence-backed findings: what
     actually drives energy consumption during inference, where the numbers can and cannot be compared, and
     what that means in practice for how models and infrastructure should be chosen. Each finding is
-    illustrated with the same charts shown in Individual scores, AI models Comparaison and AI vs Numeric system sections, reused as-is, not redrawn, so
+    illustrated with the same charts shown in Individual scores, AI models Comparison and AI vs Numeric system sections, reused as-is, not redrawn, so
     every conclusion can be traced straight back to its source.
   </p>
 
-  <h2 class="ei-title">
+  <h2 class="ei-title" id="inference-vs-process">
     Inference vs. Inference process
   </h2>
 
@@ -1537,7 +1584,7 @@ HTML("""
     <h2 class="ei-title">
     Duration and consumption
   </h2>
-    As expected, there is a clear correlation between the duration and the energy consumption with hight pearson coefficient. In fact more time a program use resource more energy he will consume regardless the intensity of the usage. During inference the GPU usage dominate, then it’s more how many time you use it that will define your energy consumed than the intensity of the usage, since the energy you consume is not evloving linearly with the usage intensity.
+    As expected, there is a clear correlation between the duration and the energy consumption with high Pearson coefficient. In fact, the longer a program uses resources, the more energy it will consume, regardless of the intensity of usage. During inference the GPU usage dominates, then it’s more how much time you use it that will define your energy consumed than the intensity of the usage, since the energy you consume is not evolving linearly with the usage intensity.
 
   </p>
   
@@ -1605,14 +1652,15 @@ Results are not captured the same way everywhere, which matters when comparing i
     Some models still deviate from this trend, GLONET2 in particular consumes more than its operation count alone would predict. This is likely explained by a higher average GPU usage during inference with no low peaks, which can make the run take longer overall despite the workload itself being similar, since the relationship between GPU energy draw and % usage is not linear. Measurement uncertainty can also play a role: two models with a similar operation count may show slightly different consumption even across repeated runs, and these small gaps shouldn't be over-interpreted as meaningful differences unless they clearly exceed run-to-run variability.
   </p>
 
-
+  <!--
   <h2 class="ei-title">
-    Data fetching: local vs. S3 !!WILL BE CHANGE!!
+    Data fetching: local vs. S3 !!WILL BE CHANGED!!
   </h2>
   <p class="ei-report">
     The original pipeline (for GLONET only) fetched data from Copernicus Marine, wrote it to a temporary file, uploaded it to an S3 bucket, and then re-downloaded it from there during inference. The local variant fetches the same data directly into a local folder and passes local file paths at inference time, skipping the S3 round trip entirely for files that are only ever used within the same job.
     This local method is faster (61s vs 75s, about 19% less) and uses roughly 10% less power. The result makes sense: the original approach sends data away and brings it back down again for no real benefit, since the files never leave the job. Removing that extra upload-then-download step cuts both transfer time and the associated energy draw. It's similar to streaming vs. downloading a movie: streaming keeps you dependent on the network for the whole playback, with the latency and instability that implies, while downloading first means only the initial fetch depends on the connection, everything after that is local and unaffected by network conditions, as long as you have the storage for it.
   </p>
+  -->
 
   <h2 class="ei-title">
     Number of parameters: no clear impact
@@ -1631,7 +1679,7 @@ Results are not captured the same way everywhere, which matters when comparing i
   <h2 class="ei-title">
     GLONET vs. GLONET2
   </h2>
-    Although their names are similar, GLONET and GLONET2 differ in several key aspects. First, GLONET is based on three models that make predictions at different levels. Therefore, generating a single prediction requires running all three models and merging their outputs into the final prediction, whereas GLONET2 relies on a single model. Second, GLONET2 uses significantly fewer parameters than GLONET (80M vs. 417M). Third, although GLONET2 performs slightly more operations during inference than GLONET, but all these operations are executed within a single model rather than across three separate models. As result, GLONET2 is faster and consumes less energy than GLONET, which is consistent with the observed correlation between inference time and energy consumption.
+    Although their names are similar, GLONET and GLONET2 differ in several key aspects. First, GLONET is based on three models that make predictions at different levels. Therefore, generating a single prediction requires running all three models and merging their outputs into the final prediction, whereas GLONET2 relies on a single model. Second, GLONET2 uses significantly fewer parameters than GLONET (80M vs. 417M). Third, although GLONET2 performs slightly more operations during inference than GLONET, all these operations are executed within a single model rather than across three separate models. As a result, GLONET2 is faster and consumes less energy than GLONET, which is consistent with the observed correlation between inference time and energy consumption.
   </p>
   
 
@@ -1687,12 +1735,14 @@ Results are not captured the same way everywhere, which matters when comparing i
     performed</strong>, making them reliable signals for anticipating a
     model's impact.
   </li>
-  <li>
+   <!--
+   <li>
     <strong>Data handling matters too</strong>, not just the model itself:
     keeping files local and avoiding unnecessary round trips to remote
     storage reduces both time and energy at once (see "Data fetching:
     local vs. S3").
   </li>
+  -->
 </ul>
 
 <p>
@@ -1707,7 +1757,7 @@ Results are not captured the same way everywhere, which matters when comparing i
     performance can draw very different amounts of power, particularly at
     idle. Comparing GPU benchmarks and technical specs before committing
     to a setup, whether for inference or training, helps avoid paying an
-    energy cost for performance that ends up unused.
+    energy cost for performance that ends up unused. Leverage heterogeneous infrastructure rather than relying on a single hardware architecture, assigning different workloads to the architecture where they are most energy-efficient can significantly reduce overall energy consumption. A study on the<a href="https://dl.acm.org/doi/10.1145/3777884.3796996"> ICON climate model</a>), for instance, reports around <strong>40% energy savings</strong> at comparable throughput by combining different CPU/GPU architectures.
   </li>
   <li>
     <strong>Optimize the models themselves</strong>: reducing the number
@@ -1716,12 +1766,14 @@ Results are not captured the same way everywhere, which matters when comparing i
     example through more efficient architectures, has a direct effect on
     consumption.
   </li>
+  <!--
   <li>
     <strong>Limit dependencies at the data layer</strong>: avoiding or
     limiting reliance on remote servers and buckets, whether for reading
     or writing, cuts down on both latency and the energy spent on
     transfers.
   </li>
+  -->
 </ul>
 
 </div>
@@ -1774,7 +1826,7 @@ Results are not captured the same way everywhere, which matters when comparing i
 
   <!-- Chart 2 -->
   <div style="padding:1rem 0; margin-top:1.5rem;">
-    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between model — energy breakdown</p>
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between models — energy breakdown</p>
     <div style="display:flex; flex-direction:column; gap:10px;" id="breakdown-container"></div>
     <div style="display:flex; flex-wrap:wrap; gap:14px; margin-top:1rem; font-size:12px; color:#888;" id="breakdown-legend"></div>
     <div class="ei-chart-explain">The difference between GLONET and GLONET2 and the other models can be explained by the regridding of the data during the PRE-INFERENCE phase, which is required for them but not for the other models.</div>
@@ -1782,7 +1834,7 @@ Results are not captured the same way everywhere, which matters when comparing i
 
   <!-- Chart 3 -->
   <div style="padding:1rem 0; margin-top:1.5rem;">
-    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between model — INFERENCE</p>
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between models — INFERENCE</p>
     <div style="position:relative; width:100%; height:260px;">
       <canvas id="inferenceEnergyChart"></canvas>
     </div>
@@ -1791,7 +1843,7 @@ Results are not captured the same way everywhere, which matters when comparing i
 
   <!-- Chart 3bis — Duration comparison -->
   <div style="padding:1rem 0; margin-top:1.5rem;">
-    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between model — DURATION</p>
+    <p style="font-size:13px; color:#888; margin:0 0 1rem;">Difference between models — DURATION</p>
     <div style="display:flex; flex-wrap:wrap; gap:16px; font-size:12px; color:#888; margin-bottom:12px;" id="durationLegend"></div>
     <div style="position:relative; width:100%; height:280px;">
       <canvas id="durationCompChart"></canvas>
@@ -1807,7 +1859,7 @@ Results are not captured the same way everywhere, which matters when comparing i
     </div>
     <div class="ei-chart-explain">This chart compares the size of each model, measured by its number of parameters, to give a sense of model scale independently of energy measurements.</div>
   </div>
-  <div><strong>Note:</strong> GLONET uses only 247M parameters, distributed across 3 models. The 170M others parameters are inactive.</div>
+  <div><strong>Note:</strong> GLONET uses only 247M parameters, distributed across 3 models. The other 170M parameters are inactive.</div>
 
   <!-- Chart 5 -->
   <div style="padding:1rem 0; margin-top:1.5rem;">
@@ -1885,7 +1937,7 @@ Results are not captured the same way everywhere, which matters when comparing i
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
-    <div><strong>Note: </strong>When we compare GLO12 sytem to GLONET2 we have to add 10% of energy consumed by GLO12 to compute the initial ocean state to run to GLONET2 inference. This 10% is an acceptable approximation of the GLO12 consumption to forecast only one day, the relevant point being to add a constant load that offsets the daily energy consumption of AI models that relies on numerical model output. That's why the GLONET2 inference energy comsuption is evaluated at 1.8528 kWh , but "only" 12.8 Wh when we compare it to other AI models.</div>
+    <div><strong>Note: </strong>When we compare GLO12 system to GLONET2 we have to add 10% of energy consumed by GLO12 to compute the initial ocean state needed to run the GLONET2 inference. This 10% is an acceptable approximation of the GLO12 consumption to forecast only one day, the relevant point being to add a constant load that offsets the daily energy consumption of AI models that rely on numerical model output. That's why the GLONET2 inference energy consumption is evaluated at 1.8528 kWh , but "only" 12.8 Wh when we compare it to other AI models.</div>
   </div>
 
 
@@ -1901,7 +1953,7 @@ Results are not captured the same way everywhere, which matters when comparing i
   output enabled).
 </p>
 
-<p>The system were run using the following command:</p>
+<p>The system was run using the following command:</p>
 
 <pre><code>mpiexec.hydra -machine machine.file -n 5160 NEMOSAM_block_NEMO -cycle 1 \
   -logdir /scratch/work/paronuzzis/GLO12V4/LOG/R20260107/HINDCAST/BLOCK_NEMO_cycle1/NEMOSAM_block_NEMO_cycle1.log \
@@ -1936,7 +1988,7 @@ Results are not captured the same way everywhere, which matters when comparing i
 
 <div class="ei-report">
 <p>
-The graph doesn't aim to say that one system is better than another if you use it exactly X times, and worse if you use it Y times, from an ecological point of view. Rather, it aims to proof that after a finite number of uses, an AI system will inevitably have a better footprint than a numerical system. The question introduced by this graph is more: how many times/usages are you planning to use your AI/numerical system? Then the graph gives you an order of magnitude, but not a perfectly accurate value to chose the better option.
+The graph doesn't aim to say that one system is better than another if you use it exactly X times, and worse if you use it Y times, from an ecological point of view. Rather, it aims to prove that after a finite number of uses, an AI system will inevitably have a better footprint than a numerical system. The question introduced by this graph is more: how many times/usages are you planning to use your AI/numerical system? Then the graph gives you an order of magnitude, but not a perfectly accurate value to choose the better option.
 </p>
 
 </div>
@@ -2056,13 +2108,29 @@ The graph doesn't aim to say that one system is better than another if you use i
      TAB CONTROLLER
 ════════════════════════════════════════════════ -->
 <script>
-function switchTab(id, btn) {
+function switchTab(id, btn, skipHash) {
   document.querySelectorAll('.ei-tab-btn').forEach(function(b) { b.classList.remove('active'); });
   document.querySelectorAll('.ei-tab-panel').forEach(function(p) { p.classList.remove('active'); });
   btn.classList.add('active');
   document.getElementById('tab-'+id).classList.add('active');
   if (id === 'individual' && window._stackedBarsReady) { window._stackedBarsReady(); }
+  if (id === 'report' && window._reportChartsReady) { window._reportChartsReady(); }
+  if (!skipHash) {
+    history.replaceState(null, '', '#'+id);
+  }
 }
+
+(function() {
+  var TAB_IDS = ['overview','report','individual','comparison','aivsnumeric'];
+  function activateFromHash() {
+    var id = (window.location.hash || '').replace('#', '');
+    if (TAB_IDS.indexOf(id) === -1) return;
+    var btn = document.querySelector('.ei-tab-btn[data-tab="'+id+'"]');
+    if (btn) switchTab(id, btn, true);
+  }
+  activateFromHash();
+  window.addEventListener('hashchange', activateFromHash);
+})();
 (function() {
   var accents = ['#D9583E', '#378ADD', '#4A3E8C', '#1D9E75', '#D4537E', '#D4C853'];
   var track   = document.getElementById('ei-carousel-track');
@@ -3142,7 +3210,7 @@ require(['chartjs'], function(ChartModule) {
   var HW_BREAKDOWN = {
     full:  [32,35,33],
     pre:   [34,30,36],
-    infer: [25,49,25],
+    infer: [25,49,26],
     post:  [28,42,30]
   };
 
@@ -3177,11 +3245,23 @@ require(['chartjs'], function(ChartModule) {
     });
   }
 
-  makeHwPieChart('hwBreakdownFullChart',  HW_BREAKDOWN.full);
-  makeHwPieChart('hwBreakdownPreChart',   HW_BREAKDOWN.pre);
-  makeHwPieChart('hwBreakdownInferChart', HW_BREAKDOWN.infer);
-  makeHwPieChart('hwBreakdownPostChart',  HW_BREAKDOWN.post);
+  var hwFullChart  = makeHwPieChart('hwBreakdownFullChart',  HW_BREAKDOWN.full);
+  var hwPreChart   = makeHwPieChart('hwBreakdownPreChart',   HW_BREAKDOWN.pre);
+  var hwInferChart = makeHwPieChart('hwBreakdownInferChart', HW_BREAKDOWN.infer);
+  var hwPostChart  = makeHwPieChart('hwBreakdownPostChart',  HW_BREAKDOWN.post);
   buildHwBreakdownLegend();
+
+  // The Report Analysis tab is hidden (display:none) at page load, so any
+  // Chart.js canvas created inside it — the hardware pie charts and the two
+  // duration/energy correlation scatter plots — gets sized against a 0-width
+  // container. Force a resize once the tab is actually shown.
+  window._reportChartsReady = function() {
+    [hwFullChart, hwPreChart, hwInferChart, hwPostChart,
+     correlationDurationOpsChart2, correlationDurationEnergyChart2,
+     comparisonChartAIReport].forEach(function(chart) {
+      if (chart && typeof chart.resize === 'function') { chart.resize(); }
+    });
+  };
 
 });
 """))
