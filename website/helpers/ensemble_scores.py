@@ -200,7 +200,6 @@ def _section_metrics(scores: dict, block_keys: list[str]) -> list[dict]:
             "metric_key": METRIC_KEYS[block_key],
             "title": scores["blocks"][block_key]["title"],
             "note": _metric_note(block_key, scores["blocks"][block_key]),
-            "colorize": True,
             "color_transform": "closeness_to_one" if block_key in CLOSENESS_TO_ONE_BLOCKS else None,
             "unify_variables": block_key in UNIFIED_VARIABLE_BLOCKS,
             "depth_groups": BLOCK_DEPTH_GROUPS.get(block_key),

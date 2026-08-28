@@ -41,10 +41,12 @@ function getPaletteColors() {
   return [PALETTE.blue.end, PALETTE.blue.mid, neutral, PALETTE.red.mid, PALETTE.red.end];
 }
 
+const MINIMUM_SCORE_DECIMALS = 2;
+const SCORE_SIGNIFICANT_DIGITS = 2;
+
 let selectedDepths = new Set();
 let showAllMode = true;
 let showPercentDiff = false;
-let heatmapEnabled = true;
 let parsedData = null;
 let parsedDataByView = {};
 let ensembleSections = [];
@@ -156,7 +158,14 @@ function getCellStyle(referenceValue, comparedValue) {
   return `background-color:rgb(${color[0]}, ${color[1]}, ${color[2]}); color: ${textColorForBackground(color)}`;
 }
 
-function formatScoreValue(value, decimals) {
+function formatScoreValue(value) {
+  // Two significant digits, and never fewer than two decimals. A score below 0.1 keeps the digits
+  // that tell two systems apart, which two decimals alone collapse into one printed number, and a
+  // score above 1 keeps every digit two decimals already showed it.
+  if (!Number.isFinite(value)) return "";
+  if (value === 0) return (0).toFixed(MINIMUM_SCORE_DECIMALS);
+  const magnitude = Math.floor(Math.log10(Math.abs(value)));
+  const decimals = Math.max(MINIMUM_SCORE_DECIMALS, SCORE_SIGNIFICANT_DIGITS - 1 - magnitude);
   return value.toFixed(decimals);
 }
 
@@ -211,14 +220,6 @@ function getStandardName(scoreData, depth, variable) {
     return scoreData.depths[depth].variables[variable].standard_name || "";
   } catch {
     return "";
-  }
-}
-
-function getDecimals(scoreData, depth, variable) {
-  try {
-    return scoreData.depths[depth].variables[variable].decimals ?? 2;
-  } catch {
-    return 2;
   }
 }
 
@@ -329,9 +330,9 @@ function modelHeaderCell(name, regionId) {
   return `<th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
 }
 
-function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName, decimals = 2) {
+function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName) {
   const unitSuffix = unit ? ` ${unit}` : "";
-  let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${formatScoreValue(value, decimals)}${unitSuffix}`;
+  let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${formatScoreValue(value)}${unitSuffix}`;
   if (!isBaseline && referenceValue !== null) {
     tooltip += `\nvs ${displayName(baselineName)}: ${formatPercentDiff(referenceValue, value)}`;
   }
@@ -365,7 +366,6 @@ function buildDataRows(
         continue;
       }
       const unit = getUnit(baselineScore, depth, variable);
-      const decimals = getDecimals(score, depth, variable);
       const referenceValues = {};
       for (const day of leadDays) {
         referenceValues[day] = getValue(baselineScore, depth, variable, day);
@@ -374,7 +374,7 @@ function buildDataRows(
         const value = getValue(score, depth, variable, day);
         const referenceValue = referenceValues[day];
         let style = "";
-        if (heatmapEnabled && !isBaseline && value !== null && referenceValue !== null) {
+        if (!isBaseline && value !== null && referenceValue !== null) {
           style = getCellStyle(referenceValue, value);
         }
         let display = "";
@@ -382,11 +382,11 @@ function buildDataRows(
           if (showPercentDiff && !isBaseline && referenceValue !== null) {
             display = formatPercentDiffForCell(referenceValue, value);
           } else {
-            display = formatScoreValue(value, decimals);
+            display = formatScoreValue(value);
           }
         }
         const title = value !== null
-          ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline, decimals)
+          ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
           : "";
         rows += `<td class="score-value-cell" style="${style}" title="${title}">${display}</td>`;
       }
@@ -427,7 +427,7 @@ function buildCombinedDataRows(
             if (showPercentDiff && !isBaseline && referenceValue !== null) {
               display = formatPercentDiffForCell(referenceValue, value);
             } else {
-              display = formatScoreValue(value, getDecimals(score, "flat", variable));
+              display = formatScoreValue(value);
             }
           }
           const title = value !== null
@@ -1088,7 +1088,6 @@ function renderEnsembleMetric(challengers, challengerNames, regionId, metric, ba
   const metricBaseline = resolveMetricBaseline(challengers, challengerNames, metric.metric_key, baseline);
   if (!metricBaseline) return "";
 
-  heatmapEnabled = metric.colorize;
   colorTransform = metric.color_transform || null;
   const tables = renderDepthMetric(
     challengers,
@@ -1100,7 +1099,6 @@ function renderEnsembleMetric(challengers, challengerNames, regionId, metric, ba
     metric.depth_groups || null,
     metric.layout,
   );
-  heatmapEnabled = true;
   colorTransform = null;
   if (!tables) return "";
 

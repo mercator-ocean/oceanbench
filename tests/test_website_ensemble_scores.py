@@ -155,11 +155,11 @@ def test_build_ensemble_scores_rounds_and_labels_each_row() -> None:
     assert temperature_row["variable"] == "Temperature"
     assert temperature_row["depth_band"] == "47.374 m"
     assert temperature_row["unit"] == "°C"
-    assert temperature_row["values"] == [0.881] * len(GRIDDED_LEAD_DAYS)
+    assert temperature_row["values"] == [0.8812] * len(GRIDDED_LEAD_DAYS)
 
     ratio_row = scores["blocks"]["gridded_spread_error_ratio"]["rows"][0]
     assert ratio_row["unit"] == ""
-    assert ratio_row["values"] == [0.48] * len(GRIDDED_LEAD_DAYS)
+    assert ratio_row["values"] == [0.4812] * len(GRIDDED_LEAD_DAYS)
 
 
 def test_build_ensemble_scores_carries_no_display_precision_of_its_own() -> None:
@@ -189,9 +189,9 @@ def test_build_ensemble_scores_keeps_both_deterministic_references_next_to_the_e
     assert [row["system"] for row in rows] == ["glonet", "glo12", "gloens", "glonet2-ens-icp"]
     assert [row["depth_band"] for row in rows] == ["Surface"] * 4
     assert [row["system_label"] for row in rows[:2]] == ["GLONET (deterministic)", "GLO12 (deterministic)"]
-    assert rows[0]["values"] == [0.822] * len(OBSERVATION_LEAD_DAYS)
-    assert rows[1]["values"] == [0.733] * len(OBSERVATION_LEAD_DAYS)
-    assert rows[2]["values"] == [0.944] * len(OBSERVATION_LEAD_DAYS)
+    assert rows[0]["values"] == [0.8221] * len(OBSERVATION_LEAD_DAYS)
+    assert rows[1]["values"] == [0.7331] * len(OBSERVATION_LEAD_DAYS)
+    assert rows[2]["values"] == [0.9441] * len(OBSERVATION_LEAD_DAYS)
 
 
 def test_build_ensemble_scores_takes_the_ensemble_mean_error_from_the_class4_route() -> None:
@@ -201,7 +201,7 @@ def test_build_ensemble_scores_takes_the_ensemble_mean_error_from_the_class4_rou
     icp_row = next(row for row in rows if row["system"] == "glonet2-ens-icp")
 
     assert icp_row["depth_band"] == "Surface"
-    assert icp_row["values"] == [0.955, 0.955, 0.955, 0.955, 0.955, None]
+    assert icp_row["values"] == [0.9551, 0.9551, 0.9551, 0.9551, 0.9551, None]
     assert all(row["depth_band"] in {"Surface", "15 m", "0-5 m", "5-100 m", "100-300 m", "300-600 m"} for row in rows)
 
 
@@ -311,7 +311,7 @@ def test_ensemble_score_bundle_reads_like_the_deterministic_score_bundle() -> No
     temperature = region["challengers"]["gloens"]["rmsd_gridded"]["depths"]["47.374 m"]["variables"]["Temperature"]
     assert temperature["unit"] == "°C"
     assert "decimals" not in temperature
-    assert temperature["data"] == {str(lead_day): 0.881 for lead_day in GRIDDED_LEAD_DAYS}
+    assert temperature["data"] == {str(lead_day): 0.8812 for lead_day in GRIDDED_LEAD_DAYS}
 
 
 def test_ensemble_score_bundle_exposes_a_metric_per_section_with_a_full_layout() -> None:
@@ -329,7 +329,6 @@ def test_ensemble_score_bundle_exposes_a_metric_per_section_with_a_full_layout()
         "crps_gridded",
         "spread_error_ratio_gridded",
     ]
-    assert [metric["colorize"] for metric in sections[2]["metrics"]] == [True, True, True, True]
     assert [metric["color_transform"] for metric in sections[2]["metrics"]] == [
         None,
         "closeness_to_one",
