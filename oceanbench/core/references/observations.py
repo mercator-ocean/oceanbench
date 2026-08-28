@@ -26,7 +26,6 @@ from oceanbench.core.remote_http import (
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
 OBSERVATIONS_STAGE_VERSION = "v3"
-_CLOUDFERRO_PUBLIC_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public"
 
 
 class ObservationDataUnavailableError(ValueError):
@@ -35,11 +34,11 @@ class ObservationDataUnavailableError(ValueError):
 
 def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
     if resolution == "twelfth_degree":
-        return f"{_CLOUDFERRO_PUBLIC_URL}/GLO12_MDT/GLO-MFC_001_024_mdt.zarr"
+        return "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/GLO12_MDT/GLO-MFC_001_024_mdt.zarr"
     if resolution == "quarter_degree":
-        return f"{_CLOUDFERRO_PUBLIC_URL}/GLO12_MDT/GLO-MFC_001_024_mdt_025deg.zarr"
+        return "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/GLO12_MDT/GLO-MFC_001_024_mdt_025deg.zarr"
     if resolution == "one_degree":
-        return f"{_CLOUDFERRO_PUBLIC_URL}/GLO12_MDT/GLO-MFC_001_024_mdt_1_deg.zarr"
+        return "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/GLO12_MDT/GLO-MFC_001_024_mdt_1_deg.zarr"
     raise ValueError(f"Unsupported resolution : {resolution}.")
 
 
@@ -94,7 +93,7 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
 
 def observation_path(day_datetime: numpy.datetime64) -> str:
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
-    return f"{_CLOUDFERRO_PUBLIC_URL}/observations2024/{day_string}.zarr"
+    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/observations2024/{day_string}.zarr"
 
 
 def _assign_standard_names(observations_dataset: Dataset) -> Dataset:

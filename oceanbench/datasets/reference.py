@@ -13,8 +13,6 @@ import xarray
 from oceanbench.core.references import glorys
 from oceanbench.core.references import glo12
 
-_CLOUDFERRO_PUBLIC_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public"
-
 
 def glorys_reanalysis() -> xarray.Dataset:
     """
@@ -58,7 +56,7 @@ def glorys_reanalysis_1_degree() -> xarray.Dataset:
 
     This dataset is intended to support training on the 1 degree OceanBench track.
     It exposes the historical GLORYS reanalysis published at 1 degree resolution
-    in the CloudFerro oceanbench-bucket public area.
+    in the OceanBench public EDITO bucket.
 
     Returns
     -------
@@ -92,7 +90,7 @@ def glorys_reanalysis_1_degree() -> xarray.Dataset:
 
     monthly_dates = pandas.date_range("1993-01-01", "2019-12-01", freq="MS")
     dataset_paths = [
-        f"{_CLOUDFERRO_PUBLIC_URL}/glorys_1degree_1993_2019/{monthly_date.strftime('%Y%m')}.zarr"
+        f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glorys_1degree_1993_2019/{monthly_date.strftime('%Y%m')}.zarr"
         for monthly_date in monthly_dates
     ]
 
