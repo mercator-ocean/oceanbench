@@ -38,6 +38,8 @@ _GLO12_FORECAST_VARIABLE_NAMES = ["so", "thetao", "uo", "vo", "zos"]
 _LANGYA_LEAD_DAYS_COUNT = 7
 _GLOENS_FIRST_INITIALISATION = "2024-01-04"
 _GLOENS_LAST_INITIALISATION = "2024-12-26"
+_GLOENS_INITIALISATION_TO_FIRST_DAY = timedelta(days=1)
+_GLOENS_SCORED_FORECAST_DAYS = GLOENS_FORECAST_DAYS - 1
 
 
 def _default_first_day_datetimes() -> list[datetime]:
@@ -177,7 +179,7 @@ def gloens() -> xarray.Dataset:
             dataset_kind="challenger",
             dataset_name=GLOENS_SOURCE_NAME,
             first_day_datetimes=first_day_datetimes,
-            lead_days_count=GLOENS_FORECAST_DAYS,
+            lead_days_count=_GLOENS_SCORED_FORECAST_DAYS,
             open_week_dataset=_open_gloens_forecast_week,
             open_remote_dataset=lambda: _remote_gloens_dataset(first_day_datetimes),
             attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
@@ -186,7 +188,7 @@ def gloens() -> xarray.Dataset:
     return with_remote_http_retries("gloens challenger dataset open", open_dataset)
 
 
-def _gloens_first_day_datetimes() -> list[datetime]:
+def _gloens_initialisation_datetimes() -> list[datetime]:
     """The initialisations of the GloEns year, which are Thursdays rather than Wednesdays.
 
     Every other challenger of the benchmark starts its weeks on the Wednesdays of 2024, and
@@ -195,19 +197,34 @@ def _gloens_first_day_datetimes() -> list[datetime]:
     return generate_dates(_GLOENS_FIRST_INITIALISATION, _GLOENS_LAST_INITIALISATION, 7)
 
 
-def _open_gloens_store_content(first_day_datetime: datetime, content: str) -> xarray.Dataset:
-    """One store of one GloEns initialisation, with its time axis read as the lead day index.
+def _gloens_first_day_datetimes() -> list[datetime]:
+    """The first scored day of each GloEns week, which is the day after its initialisation.
 
-    Field zero of the 28 daily means is valid on the initialisation day itself, so the index
-    that names it is the index the whole library reads as the first forecast day, and the day
-    the week is opened for is the day that field is valid on. The scalar time descriptions of
-    the store go first: they name the same axis and mean nothing once it is an index.
+    Lead day one of the benchmark is the first day a forecast predicts, never the day it starts
+    from. GloEns publishes the daily mean of its own initialisation day as field zero of every
+    store, a nowcast no other challenger of the benchmark offers, so reading that field as lead
+    day one would score this challenger a day ahead of every other one. The week therefore
+    begins the day after the initialisation, and field zero is dropped as the store is read.
     """
-    store_dataset = open_gloens_store(gloens_store_url(first_day_datetime, content))
-    return _prepared_challenger_week_dataset(
-        store_dataset.drop_vars(NEMO_TIME_DESCRIPTION_VARIABLES, errors="ignore"),
-        "gloens challenger dataset open",
-    )
+    return [
+        initialisation_datetime + _GLOENS_INITIALISATION_TO_FIRST_DAY
+        for initialisation_datetime in _gloens_initialisation_datetimes()
+    ]
+
+
+def _open_gloens_store_content(first_day_datetime: datetime, content: str) -> xarray.Dataset:
+    """One store of one GloEns week, with its time axis read as the lead day index.
+
+    The store is named after the initialisation the week starts from, which is the day before
+    the first day the week is scored on, and its field for that initialisation day is dropped
+    so that the index the library reads as lead day one is the first day the forecast predicts.
+    The scalar time descriptions of the store go first: they name the same axis and mean
+    nothing once it is an index.
+    """
+    initialisation_datetime = first_day_datetime - _GLOENS_INITIALISATION_TO_FIRST_DAY
+    store_dataset = open_gloens_store(gloens_store_url(initialisation_datetime, content))
+    forecast_days = store_dataset.drop_vars(NEMO_TIME_DESCRIPTION_VARIABLES, errors="ignore").isel(time=slice(1, None))
+    return _prepared_challenger_week_dataset(forecast_days, "gloens challenger dataset open")
 
 
 def _with_float32_data_variables(dataset: xarray.Dataset) -> xarray.Dataset:
