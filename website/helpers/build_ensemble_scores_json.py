@@ -10,6 +10,7 @@ build, so this converter is run by hand and its output is committed next to the 
 
 import argparse
 import json
+import math
 import os
 
 import pandas as pd
@@ -100,18 +101,8 @@ STREAM_LABELS = {
 
 STREAM_ORDER = list(STREAM_LABELS)
 
-# These decimals are a storage choice, not a display choice: they keep the committed JSON short.
-# No row carries a display precision, because the page formats an ensemble cell with the same
-# function and the same default precision as a deterministic cell, so the two views of the scores
-# page can never drift apart.
-STREAM_DECIMALS = {
-    "drifter_sst": 3,
-    "profiles_t": 3,
-    "profiles_s": 3,
-    "sla": 4,
-    "currents_u": 3,
-    "currents_v": 3,
-}
+# The digits a stored value keeps, which is a storage choice alone: see :func:`_rounded`.
+STORED_SIGNIFICANT_DIGITS = 4
 
 # The temperature streams are scored in kelvin and the deterministic class 4 aggregate in degrees
 # Celsius: an error is a difference, so both are numerically the same.
@@ -178,16 +169,6 @@ GRIDDED_VARIABLE_LABELS = {
 
 GRIDDED_VARIABLE_ORDER = list(GRIDDED_VARIABLE_LABELS)
 
-GRIDDED_VARIABLE_DECIMALS = {
-    "sea_water_potential_temperature": 3,
-    "sea_water_salinity": 3,
-    "sea_surface_height_above_geoid": 4,
-    "eastward_sea_water_velocity": 4,
-    "northward_sea_water_velocity": 4,
-}
-
-SPREAD_ERROR_RATIO_DECIMALS = 2
-
 # The frozen surface record holds both references and both sea level bases. Only the GLORYS rows
 # belong next to the depth aggregate, and of the two sea level bases only the datum aligned one is
 # comparable: GloEns carries a sea level datum of its own, while the other system and the reference
@@ -222,10 +203,22 @@ def _depth_sort_key(depth: str) -> float:
     return float(depth.removesuffix("m"))
 
 
-def _rounded(value, decimals: int):
+def _rounded(value):
+    """Round a stored value to its significant digits, which keeps the committed JSON short.
+
+    This is a storage choice, not a display choice, and it is the same for every variable: the
+    page formats an ensemble cell through the same function as a deterministic cell, so the two
+    views of the scores page can never drift apart, and neither of them reads a precision from
+    the data. The digits kept here are more than that function shows, because the percent
+    differences the page also computes are read from these values rather than from the source.
+    """
     if value is None or pd.isna(value):
         return None
-    return round(float(value), decimals)
+    number = float(value)
+    if number == 0.0:
+        return 0.0
+    magnitude = math.floor(math.log10(abs(number)))
+    return round(number, STORED_SIGNIFICANT_DIGITS - 1 - magnitude)
 
 
 def _row(
@@ -255,7 +248,6 @@ def gridded_rows(frame: pd.DataFrame, system_key: str, metric: str, is_ratio: bo
         variable_frame = selected[selected["variable"] == variable]
         if variable_frame.empty:
             continue
-        decimals = SPREAD_ERROR_RATIO_DECIMALS if is_ratio else GRIDDED_VARIABLE_DECIMALS[variable]
         for depth in sorted(variable_frame["depth"].unique(), key=_depth_sort_key):
             depth_frame = variable_frame[variable_frame["depth"] == depth].set_index("lead_day")
             values = []
@@ -265,7 +257,7 @@ def gridded_rows(frame: pd.DataFrame, system_key: str, metric: str, is_ratio: bo
                     values.append(None)
                     continue
                 entry = depth_frame.loc[lead_day]
-                values.append(_rounded(entry["value"], decimals))
+                values.append(_rounded(entry["value"]))
                 if int(entry["start_count"]) < FULL_START_COUNT:
                     reduced_leads.append(lead_day)
             unit = "" if is_ratio else str(depth_frame["unit"].iloc[0])
@@ -359,7 +351,6 @@ def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio
         stream_frame = selected[selected["stream"] == stream]
         if stream_frame.empty:
             continue
-        decimals = SPREAD_ERROR_RATIO_DECIMALS if is_ratio else STREAM_DECIMALS[stream]
         available_bands = [band for band in DEPTH_BAND_ORDER if band in set(stream_frame["depth_band"])]
         for band in available_bands:
             band_frame = stream_frame[stream_frame["depth_band"] == band].set_index("lead_day")
@@ -370,7 +361,7 @@ def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio
                     values.append(None)
                     continue
                 entry = band_frame.loc[lead_day]
-                values.append(_rounded(entry[column], decimals))
+                values.append(_rounded(entry[column]))
                 if int(entry["n_inits"]) < FULL_START_COUNT:
                     reduced_leads.append(lead_day)
             unit = "" if is_ratio else STREAM_UNITS[stream]
@@ -403,7 +394,7 @@ def class4_rows(frame: pd.DataFrame, system_key: str) -> list[dict]:
                 values.append(None)
                 continue
             entry = bin_frame.loc[lead_day]
-            values.append(_rounded(entry["rmsd"], STREAM_DECIMALS[stream]))
+            values.append(_rounded(entry["rmsd"]))
             if int(entry["start_count"]) < FULL_START_COUNT:
                 reduced_leads.append(lead_day)
         rows.append(
