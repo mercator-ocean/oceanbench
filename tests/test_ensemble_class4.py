@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import logging
+import math
 import weakref
 
 import numpy
@@ -39,6 +40,7 @@ from oceanbench.core.ensemble_class4 import (
     group_metric_values,
     interpolate_class4_ensemble_to_observations,
     ranks_with_random_ties,
+    spread_error_ratio_additive,
 )
 from oceanbench.core.score_records import RunContext, records_to_dataframe
 from test_classiv_interpolation import _model_data, _observations_dataframe
@@ -764,3 +766,45 @@ def test_a_cached_observation_context_of_a_dead_dataset_is_not_served_to_a_new_o
     assert not base_dataframe.empty
     assert selected_observation_indices.size == len(base_dataframe)
     assert _CLASS4_OBSERVATIONS_CACHE[(id(observations_dataset), lead_days_count)][0]() is observations_dataset
+
+
+def test_the_additive_ratio_puts_the_observation_error_on_the_spread_side() -> None:
+    without_sigma = spread_error_ratio_additive(1.0, 0.0, 2.0, 50)
+    with_sigma = spread_error_ratio_additive(1.0, 0.5, 2.0, 50)
+
+    assert without_sigma == pytest.approx(math.sqrt(1.02) / math.sqrt(2.0))
+    assert with_sigma == pytest.approx(math.sqrt(1.02 + 0.5) / math.sqrt(2.0))
+    # The instrument error is predicted innovation, not error to be explained away, so adding it
+    # raises the ratio. A version that subtracted it from the error instead would raise it too,
+    # which is why the value and not only the direction is pinned above.
+    assert with_sigma > without_sigma
+
+
+def test_the_additive_ratio_reads_one_when_the_ensemble_and_the_instrument_explain_the_innovation() -> None:
+    generator = numpy.random.default_rng(20260830)
+    member_count = 25
+    observation_count = 40000
+    # A reliable ensemble does not surround the truth, it draws the truth from the same
+    # distribution its members come from, and the instrument then adds its own error on top.
+    forecast = generator.standard_normal(observation_count)
+    members = forecast[:, None] + generator.standard_normal((observation_count, member_count))
+    truth = forecast + generator.standard_normal(observation_count)
+    sigma = 0.3
+    observations = truth + sigma * generator.standard_normal(observation_count)
+
+    ensemble_mean = members.mean(axis=1)
+    ratio = spread_error_ratio_additive(
+        float(members.var(axis=1, ddof=1).mean()),
+        sigma**2,
+        float(((observations - ensemble_mean) ** 2).mean()),
+        member_count,
+    )
+
+    assert ratio == pytest.approx(1.0, abs=0.02)
+
+
+def test_the_additive_ratio_refuses_a_group_it_cannot_read() -> None:
+    assert math.isnan(spread_error_ratio_additive(1.0, 0.0, 2.0, 1))
+    assert math.isnan(spread_error_ratio_additive(float("nan"), 0.0, 2.0, 50))
+    assert math.isnan(spread_error_ratio_additive(1.0, 0.0, 0.0, 50))
+    assert math.isnan(spread_error_ratio_additive(1.0, 0.0, -1.0, 50))
