@@ -15,10 +15,13 @@
 
 set -uo pipefail
 
-WORK=/scratch/jseillade/ensemble-eval-fills
+# Every path below comes from the environment, so any user can run the campaign from any
+# tree. The #SBATCH log path cannot read one: slurm reads it before the shell does, so pass
+# sbatch --output to move the logs.
+WORK=${ENSEMBLE_CAMPAIGN_ROOT:?export ENSEMBLE_CAMPAIGN_ROOT, the directory holding src, output and logs}
 SRC=$WORK/src
-VENV=/scratch/jseillade/oceanbench-venv-050
-PYLIBS=/scratch/jseillade/probax/gridded/pylibs
+VENV=${ENSEMBLE_VENV:?export ENSEMBLE_VENV, the python environment that carries oceanbench}
+PYLIBS=${ENSEMBLE_PYTHON_LIBRARIES:?export ENSEMBLE_PYTHON_LIBRARIES, the pure python s3fs stack}
 OUT=$WORK/output/$CHALLENGER
 LOG=$WORK/logs/$CHALLENGER
 
@@ -29,7 +32,7 @@ export PYTHONPATH=$SRC:$PYLIBS
 export PYTHONPYCACHEPREFIX=$TMPDIR/pycache
 
 set -a
-. /scratch/jseillade/gpu2_archive/data/cloudferro-oceanbench.env
+. "${ENSEMBLE_CREDENTIALS_FILE:?export ENSEMBLE_CREDENTIALS_FILE, the env file holding the object store keys}"
 set +a
 
 rm -f "$LOG/year.done"

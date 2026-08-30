@@ -12,9 +12,8 @@ and vertical interpolation and the SSH to SLA conversion are
 :mod:`oceanbench.core.classIV_support` untouched, called member by member. There is no
 superobbing and no distance guard, exactly as on the deterministic path.
 
-The metric math is ported from the frozen campaign scorer
-``/scratch/jseillade/probax/campaign/src/score_matchup.py`` (scorer-v2.0.0) on lir, which is
-the code that produced the published GloEns and glonet2-ens class-4 numbers. Ported here:
+The metric math is ported from the frozen campaign scorer ``score_matchup.py`` of scorer-v2.0.0,
+which is the code that produced the published GloEns and glonet2-ens class-4 numbers. Ported here:
 
 ``crps_fair``
     The fair (finite-ensemble unbiased) CRPS of Ferro (2014),
