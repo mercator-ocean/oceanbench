@@ -7,13 +7,20 @@
 # Concurrency is set by what the challenger store can serve, not by the node: CloudFerro
 # saturates near eight readers, and GLORYS is read from the local stage and costs it nothing.
 #
+# The queue does cap the cores of a single job, at 64, so this asks for a share of a node
+# rather than the whole one. Eight starts of four cores fit in half that: a start spends its
+# time waiting on the network, four cores of one measured at 22 minutes of processor time
+# over 54 minutes of wall clock, so cores are not what it is short of.
+#
 # Submit with --export=ALL,CHALLENGER=...,FIRST_START=...  and the paths below in the
 # environment. Every start keeps its own done marker, so a resubmission skips what already
 # succeeded, including starts an earlier array had finished.
 #SBATCH --job-name=obens-ser-leg
 #SBATCH --partition=small
 #SBATCH --nodes=1
-#SBATCH --exclusive
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=256G
 #SBATCH --time=24:00:00
 #SBATCH --output=/dev/null
 
@@ -45,9 +52,9 @@ set +a
 
 export PYTHONNOUSERSITE=1
 export PYTHONPATH=$SRC:$PYLIBS
-# The node is held whole, so the threads of one start are what is left once the others have
-# theirs. They are bounded anyway because this work waits on the network, not on the cores.
-export OMP_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8 MKL_NUM_THREADS=8
+# Four threads per start, the same as the array tasks this replaces, so the cores asked for
+# cover the concurrency exactly.
+export OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 MKL_NUM_THREADS=4
 
 echo "=== context ==="
 date -u
