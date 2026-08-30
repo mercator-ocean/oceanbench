@@ -28,6 +28,14 @@ CLOSENESS_TO_ONE_BLOCKS = {"observations_spread_error_ratio", "gridded_spread_er
 
 DATUM_NOTE = "The sea surface height of GloEns is datum aligned to the reference before it is scored."
 SHORT_HORIZON_NOTE = "GloNet2-ens-icp stops at lead day 9."
+# GloEns starts on Thursdays and every other system on Wednesdays, so a lead day of GloEns falls on
+# a different calendar day, and the observations that day carries are not the same ones.
+UNPAIRED_SAMPLE_NOTE = (
+    "GloEns starts on Thursdays and the other systems on Wednesdays, so at a given lead day they "
+    "are scored against different observations: a year of both is a fair comparison of the two "
+    "years, not a paired comparison of the same matchups, and a small difference between two rows "
+    "can be the sample rather than the system."
+)
 CLOSENESS_TO_ONE_NOTE = (
     "Cells are shaded by closeness to one, the target of the ratio: a cell reads better than the "
     "baseline when its ratio sits nearer to one, whichever side of one it falls. The percentages "
@@ -50,14 +58,14 @@ SUPEROB_MATCHUP_NOTE = (
 BLOCK_NOTES = {
     "observations_rmsd": (
         "The ensemble mean of each ensemble is scored exactly as the deterministic systems are, through the "
-        "class 4 matchup and its depth bins, so every row of a variable is directly comparable. "
-        f"{SHORT_HORIZON_NOTE}"
+        "class 4 matchup and its depth bins, so every row of a variable reads on the same scale. "
+        f"{UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}"
     ),
-    "observations_crps": f"{SHORT_HORIZON_NOTE} {SUPEROB_MATCHUP_NOTE}",
-    "observations_spread_error_ratio": f"{SHORT_HORIZON_NOTE} {SUPEROB_MATCHUP_NOTE}",
-    "gridded_rmsd": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE}",
-    "gridded_crps": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE}",
-    "gridded_spread_error_ratio": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE}",
+    "observations_crps": f"{UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {SUPEROB_MATCHUP_NOTE}",
+    "observations_spread_error_ratio": f"{UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {SUPEROB_MATCHUP_NOTE}",
+    "gridded_rmsd": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}",
+    "gridded_crps": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}",
+    "gridded_spread_error_ratio": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}",
 }
 
 # The error table now carries the class 4 depth bins for every system, so it is laid out in the
