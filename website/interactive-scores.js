@@ -147,10 +147,21 @@ function colorScore(value) {
   return value;
 }
 
-function getCellStyle(referenceValue, comparedValue) {
+// The percent a cell reads compares the very numbers its shading compares, so a cell shaded as
+// better can never print a worse percent. For a ratio those numbers are the distances from one.
+function comparedPercent(referenceValue, comparedValue) {
   const reference = colorScore(referenceValue);
   const compared = colorScore(comparedValue);
-  const percentDiff = reference === 0 ? 0 : ((compared - reference) / Math.abs(reference)) * 100;
+  if (reference === 0) return compared === 0 ? 0 : null;
+  return ((compared - reference) / Math.abs(reference)) * 100;
+}
+
+function comparisonBasisLabel() {
+  return colorTransform === "closeness_to_one" ? " (distance from 1)" : "";
+}
+
+function getCellStyle(referenceValue, comparedValue) {
+  const percentDiff = comparedPercent(referenceValue, comparedValue) ?? 0;
   const binIndex = getBinIndex(percentDiff);
   const color = getBinColor(binIndex);
   return `background-color:rgb(${color[0]}, ${color[1]}, ${color[2]}); color: ${textColorForBackground(color)}`;
@@ -168,15 +179,15 @@ function formatScoreValue(value) {
 }
 
 function formatPercentDiff(referenceValue, comparedValue) {
-  if (referenceValue === 0) return comparedValue === 0 ? "0%" : "N/A";
-  const percent = ((comparedValue - referenceValue) / Math.abs(referenceValue)) * 100;
+  const percent = comparedPercent(referenceValue, comparedValue);
+  if (percent === null) return "N/A";
   const sign = percent > 0 ? "+" : "";
   return `${sign}${Math.round(percent)}%`;
 }
 
 function formatPercentDiffForCell(referenceValue, comparedValue) {
-  if (referenceValue === 0) return comparedValue === 0 ? "0%" : "N/A";
-  const percent = ((comparedValue - referenceValue) / Math.abs(referenceValue)) * 100;
+  const percent = comparedPercent(referenceValue, comparedValue);
+  if (percent === null) return "N/A";
   if (percent > 999) return ">999%";
   if (percent < -999) return "<-999%";
   return `${Math.round(percent)}%`;
@@ -276,7 +287,7 @@ function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, bas
   const unitSuffix = unit ? ` ${unit}` : "";
   let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${formatScoreValue(value)}${unitSuffix}`;
   if (!isBaseline && referenceValue !== null) {
-    tooltip += `\nvs ${displayName(baselineName)}: ${formatPercentDiff(referenceValue, value)}`;
+    tooltip += `\nvs ${displayName(baselineName)}${comparisonBasisLabel()}: ${formatPercentDiff(referenceValue, value)}`;
   }
   return tooltip;
 }
