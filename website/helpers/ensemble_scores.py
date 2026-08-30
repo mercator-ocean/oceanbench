@@ -26,7 +26,6 @@ METRIC_KEYS = {
 # one instead of by their value. The shading then reads on the same ramp as every other table.
 CLOSENESS_TO_ONE_BLOCKS = {"observations_spread_error_ratio", "gridded_spread_error_ratio"}
 
-REDUCED_START_NOTE = "Lead days 9 and 10 of GloEns average 51 starts instead of 52."
 DATUM_NOTE = "The sea surface height of GloEns is datum aligned to the reference before it is scored."
 SHORT_HORIZON_NOTE = "GloNet2-ens-icp stops at lead day 9."
 CLOSENESS_TO_ONE_NOTE = (
@@ -56,9 +55,9 @@ BLOCK_NOTES = {
     ),
     "observations_crps": f"{SHORT_HORIZON_NOTE} {SUPEROB_MATCHUP_NOTE}",
     "observations_spread_error_ratio": f"{SHORT_HORIZON_NOTE} {SUPEROB_MATCHUP_NOTE}",
-    "gridded_rmsd": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
-    "gridded_crps": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
-    "gridded_spread_error_ratio": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE} {REDUCED_START_NOTE}",
+    "gridded_rmsd": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE}",
+    "gridded_crps": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE}",
+    "gridded_spread_error_ratio": f"{DATUM_NOTE} {SHORT_HORIZON_NOTE}",
 }
 
 # The error table now carries the class 4 depth bins for every system, so it is laid out in the
@@ -189,8 +188,37 @@ def _challenger_scores(scores: dict) -> dict:
     }
 
 
-def _metric_note(block_key: str, block: dict) -> str:
-    notes = [block["note"], BLOCK_NOTES.get(block_key, "")]
+def _joined_lead_days(lead_days: list[int]) -> str:
+    if len(lead_days) == 1:
+        return f"Lead day {lead_days[0]}"
+    return f"Lead days {', '.join(str(lead_day) for lead_day in lead_days[:-1])} and {lead_days[-1]}"
+
+
+def _reduced_start_note(block: dict, full_start_count: int) -> str:
+    """The starts a table actually averaged, read from the rows rather than written by hand.
+
+    A caveat written by hand outlives the numbers it describes: it said lead days 9 and 10 for
+    every table while the observation tables lose only lead day 10, so it claimed a shortfall the
+    observation numbers did not have.
+    """
+    reduced_counts: dict[str, dict[int, set]] = {}
+    for row in block["rows"]:
+        for lead_day, start_count in row["reduced_start_counts"].items():
+            reduced_counts.setdefault(row["system_label"], {}).setdefault(int(lead_day), set()).add(start_count)
+    sentences = []
+    for system_label, lead_days in reduced_counts.items():
+        counts = sorted({count for lead_counts in lead_days.values() for count in lead_counts})
+        spread = str(counts[0]) if len(counts) == 1 else f"{counts[0]} to {counts[-1]}"
+        sentences.append(
+            f"{_joined_lead_days(sorted(lead_days))} of {system_label} "
+            f"{'averages' if len(lead_days) == 1 else 'average'} {spread} starts "
+            f"instead of {full_start_count}."
+        )
+    return " ".join(sentences)
+
+
+def _metric_note(block_key: str, block: dict, full_start_count: int) -> str:
+    notes = [block["note"], BLOCK_NOTES.get(block_key, ""), _reduced_start_note(block, full_start_count)]
     if block_key in CLOSENESS_TO_ONE_BLOCKS:
         notes.append(CLOSENESS_TO_ONE_NOTE)
     return " ".join(note for note in notes if note)
@@ -201,7 +229,7 @@ def _section_metrics(scores: dict, block_keys: list[str]) -> list[dict]:
         {
             "metric_key": METRIC_KEYS[block_key],
             "title": scores["blocks"][block_key]["title"],
-            "note": _metric_note(block_key, scores["blocks"][block_key]),
+            "note": _metric_note(block_key, scores["blocks"][block_key], scores["full_start_count"]),
             "color_transform": "closeness_to_one" if block_key in CLOSENESS_TO_ONE_BLOCKS else None,
             "unify_variables": block_key in UNIFIED_VARIABLE_BLOCKS,
             "depth_groups": BLOCK_DEPTH_GROUPS.get(block_key),

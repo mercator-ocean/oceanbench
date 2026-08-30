@@ -56,7 +56,7 @@
             1.041,
             1.014
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -72,7 +72,7 @@
             0.9389,
             0.9139
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -88,9 +88,9 @@
             0.8453,
             0.8661
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -106,7 +106,7 @@
             1.028,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -122,7 +122,7 @@
             1.093,
             1.095
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -138,7 +138,7 @@
             1.288,
             1.307
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -154,7 +154,7 @@
             0.9991,
             1.016
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -170,7 +170,7 @@
             0.6267,
             0.6497
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -186,7 +186,7 @@
             0.8892,
             0.9346
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -202,7 +202,7 @@
             1.036,
             1.057
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -218,7 +218,7 @@
             0.967,
             0.9644
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -234,7 +234,7 @@
             0.6641,
             0.6786
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -250,9 +250,9 @@
             0.8451,
             0.8542
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -268,9 +268,9 @@
             0.9138,
             0.9012
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -286,9 +286,9 @@
             0.7985,
             0.8213
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -304,9 +304,9 @@
             0.5573,
             0.5361
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -322,7 +322,7 @@
             1.052,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -338,7 +338,7 @@
             1.162,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -354,7 +354,7 @@
             0.9906,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -370,7 +370,7 @@
             0.6433,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -386,7 +386,7 @@
             0.2903,
             0.2994
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -402,7 +402,7 @@
             0.2414,
             0.2485
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -418,7 +418,7 @@
             0.152,
             0.1589
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -434,7 +434,7 @@
             0.09488,
             0.1002
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -450,7 +450,7 @@
             0.3208,
             0.3331
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -466,7 +466,7 @@
             0.2782,
             0.2829
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -482,7 +482,7 @@
             0.1554,
             0.16
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -498,7 +498,7 @@
             0.1029,
             0.1045
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -514,9 +514,9 @@
             0.3452,
             0.3381
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -532,9 +532,9 @@
             0.2985,
             0.3327
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -550,9 +550,9 @@
             0.1398,
             0.1437
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -568,9 +568,9 @@
             0.08217,
             0.07827
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -586,7 +586,7 @@
             0.3299,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -602,7 +602,7 @@
             0.2625,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -618,7 +618,7 @@
             0.16,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -634,7 +634,7 @@
             0.0998,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -650,7 +650,7 @@
             0.06748,
             0.07011
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -666,7 +666,7 @@
             0.07077,
             0.07268
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -682,9 +682,9 @@
             0.05874,
             0.06015
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -700,7 +700,7 @@
             0.07101,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -716,7 +716,7 @@
             0.1395,
             0.1419
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -732,7 +732,7 @@
             0.1638,
             0.167
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -748,9 +748,9 @@
             0.1263,
             0.1285
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -766,7 +766,7 @@
             0.1397,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet",
@@ -782,7 +782,7 @@
             0.1351,
             0.1366
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glo12",
@@ -798,7 +798,7 @@
             0.1603,
             0.1634
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -814,9 +814,9 @@
             0.1209,
             0.1231
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -832,7 +832,7 @@
             0.1352,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         }
       ]
     },
@@ -862,10 +862,10 @@
             0.5777,
             0.587
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -881,10 +881,10 @@
             0.9058,
             0.9113
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -900,10 +900,10 @@
             1.241,
             1.245
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -919,10 +919,10 @@
             1.173,
             1.177
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -938,10 +938,10 @@
             0.8204,
             0.8228
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -957,10 +957,10 @@
             0.8385,
             0.8406
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -976,10 +976,10 @@
             0.6523,
             0.6552
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -995,10 +995,10 @@
             0.6237,
             0.6263
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1014,10 +1014,10 @@
             0.6743,
             0.6764
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1033,10 +1033,10 @@
             0.4849,
             0.4872
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1052,10 +1052,10 @@
             0.4601,
             0.4618
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1071,10 +1071,10 @@
             0.8592,
             0.8597
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1090,10 +1090,10 @@
             0.2679,
             0.268
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1109,10 +1109,10 @@
             0.2152,
             0.2153
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1128,10 +1128,10 @@
             0.1753,
             0.1755
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1147,10 +1147,10 @@
             0.1385,
             0.1387
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1166,10 +1166,10 @@
             0.1199,
             0.1202
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1185,10 +1185,10 @@
             0.09848,
             0.09876
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1204,10 +1204,10 @@
             0.09229,
             0.09255
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1223,10 +1223,10 @@
             0.09171,
             0.09192
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1242,10 +1242,10 @@
             0.07097,
             0.07116
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1261,10 +1261,10 @@
             0.0654,
             0.06554
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1280,10 +1280,10 @@
             0.07903,
             0.07996
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1299,10 +1299,10 @@
             0.1325,
             0.1347
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1318,10 +1318,10 @@
             0.1171,
             0.1187
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1337,10 +1337,10 @@
             0.1138,
             0.1148
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1356,10 +1356,10 @@
             0.1093,
             0.1098
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1375,10 +1375,10 @@
             0.1073,
             0.1075
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1394,10 +1394,10 @@
             0.1044,
             0.1044
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1413,10 +1413,10 @@
             0.101,
             0.101
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1432,10 +1432,10 @@
             0.09883,
             0.09872
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1451,10 +1451,10 @@
             0.09724,
             0.09706
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1470,10 +1470,10 @@
             0.096,
             0.09571
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1489,10 +1489,10 @@
             0.09482,
             0.09447
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1508,10 +1508,10 @@
             0.1246,
             0.1263
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1527,10 +1527,10 @@
             0.112,
             0.1134
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1546,10 +1546,10 @@
             0.1061,
             0.107
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1565,10 +1565,10 @@
             0.1011,
             0.1016
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1584,10 +1584,10 @@
             0.09824,
             0.09852
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1603,10 +1603,10 @@
             0.09382,
             0.09393
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1622,10 +1622,10 @@
             0.09153,
             0.09156
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1641,10 +1641,10 @@
             0.08863,
             0.08856
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1660,10 +1660,10 @@
             0.08572,
             0.08551
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1679,10 +1679,10 @@
             0.08313,
             0.08282
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -1698,10 +1698,10 @@
             0.07957,
             0.07915
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -1717,7 +1717,7 @@
             0.8561,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1733,7 +1733,7 @@
             1.045,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1749,7 +1749,7 @@
             1.171,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1765,7 +1765,7 @@
             1.125,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1781,7 +1781,7 @@
             0.9736,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1797,7 +1797,7 @@
             0.8105,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1813,7 +1813,7 @@
             0.7309,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1829,7 +1829,7 @@
             0.6658,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1845,7 +1845,7 @@
             0.5957,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1861,7 +1861,7 @@
             0.5223,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1877,7 +1877,7 @@
             0.4614,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1893,7 +1893,7 @@
             0.4795,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1909,7 +1909,7 @@
             0.2433,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1925,7 +1925,7 @@
             0.1934,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1941,7 +1941,7 @@
             0.1778,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1957,7 +1957,7 @@
             0.1616,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1973,7 +1973,7 @@
             0.1336,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -1989,7 +1989,7 @@
             0.1193,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2005,7 +2005,7 @@
             0.1082,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2021,7 +2021,7 @@
             0.09642,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2037,7 +2037,7 @@
             0.08461,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2053,7 +2053,7 @@
             0.07488,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2069,7 +2069,7 @@
             0.08007,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2085,7 +2085,7 @@
             0.1371,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2101,7 +2101,7 @@
             0.1219,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2117,7 +2117,7 @@
             0.1197,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2133,7 +2133,7 @@
             0.1159,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2149,7 +2149,7 @@
             0.1133,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2165,7 +2165,7 @@
             0.1077,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2181,7 +2181,7 @@
             0.1043,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2197,7 +2197,7 @@
             0.1009,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2213,7 +2213,7 @@
             0.09766,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2229,7 +2229,7 @@
             0.09372,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2245,7 +2245,7 @@
             0.08936,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2261,7 +2261,7 @@
             0.1341,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2277,7 +2277,7 @@
             0.1212,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2293,7 +2293,7 @@
             0.1153,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2309,7 +2309,7 @@
             0.1094,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2325,7 +2325,7 @@
             0.1064,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2341,7 +2341,7 @@
             0.1021,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2357,7 +2357,7 @@
             0.09907,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2373,7 +2373,7 @@
             0.09571,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2389,7 +2389,7 @@
             0.09232,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2405,7 +2405,7 @@
             0.0881,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -2421,7 +2421,7 @@
             0.08327,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         }
       ]
     },
@@ -2451,10 +2451,10 @@
             0.2935,
             0.2976
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2470,10 +2470,10 @@
             0.4492,
             0.451
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2489,10 +2489,10 @@
             0.6793,
             0.6801
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2508,10 +2508,10 @@
             0.6612,
             0.6616
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2527,10 +2527,10 @@
             0.4754,
             0.4758
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2546,10 +2546,10 @@
             0.5206,
             0.5206
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2565,10 +2565,10 @@
             0.3726,
             0.373
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2584,10 +2584,10 @@
             0.3633,
             0.3633
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2603,10 +2603,10 @@
             0.416,
             0.4159
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2622,10 +2622,10 @@
             0.2728,
             0.2729
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2641,10 +2641,10 @@
             0.2667,
             0.2667
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2660,10 +2660,10 @@
             0.2817,
             0.2811
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2679,10 +2679,10 @@
             0.1559,
             0.1557
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2698,10 +2698,10 @@
             0.1286,
             0.1285
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2717,10 +2717,10 @@
             0.1052,
             0.1052
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2736,10 +2736,10 @@
             0.08179,
             0.08178
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2755,10 +2755,10 @@
             0.07421,
             0.07421
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2774,10 +2774,10 @@
             0.05867,
             0.05869
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2793,10 +2793,10 @@
             0.05622,
             0.05623
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2812,10 +2812,10 @@
             0.05742,
             0.05742
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2831,10 +2831,10 @@
             0.04276,
             0.04277
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2850,10 +2850,10 @@
             0.03983,
             0.03985
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2869,10 +2869,10 @@
             0.05116,
             0.05119
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2888,10 +2888,10 @@
             0.06614,
             0.06708
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2907,10 +2907,10 @@
             0.05821,
             0.05879
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2926,10 +2926,10 @@
             0.05674,
             0.05711
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2945,10 +2945,10 @@
             0.0552,
             0.05532
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2964,10 +2964,10 @@
             0.05448,
             0.05451
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -2983,10 +2983,10 @@
             0.05329,
             0.05326
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3002,10 +3002,10 @@
             0.05195,
             0.0519
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3021,10 +3021,10 @@
             0.05105,
             0.05097
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3040,10 +3040,10 @@
             0.05025,
             0.05014
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3059,10 +3059,10 @@
             0.04937,
             0.04922
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3078,10 +3078,10 @@
             0.0483,
             0.04813
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3097,10 +3097,10 @@
             0.06296,
             0.0637
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3116,10 +3116,10 @@
             0.05595,
             0.05642
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3135,10 +3135,10 @@
             0.05335,
             0.05367
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3154,10 +3154,10 @@
             0.05152,
             0.05166
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3173,10 +3173,10 @@
             0.05046,
             0.05051
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3192,10 +3192,10 @@
             0.04886,
             0.04885
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3211,10 +3211,10 @@
             0.04786,
             0.04781
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3230,10 +3230,10 @@
             0.04667,
             0.04659
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3249,10 +3249,10 @@
             0.04543,
             0.0453
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3268,10 +3268,10 @@
             0.04416,
             0.044
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -3287,10 +3287,10 @@
             0.04247,
             0.04228
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -3306,7 +3306,7 @@
             0.4807,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3322,7 +3322,7 @@
             0.5591,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3338,7 +3338,7 @@
             0.6242,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3354,7 +3354,7 @@
             0.6029,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3370,7 +3370,7 @@
             0.5263,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3386,7 +3386,7 @@
             0.4289,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3402,7 +3402,7 @@
             0.3826,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3418,7 +3418,7 @@
             0.3447,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3434,7 +3434,7 @@
             0.3027,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3450,7 +3450,7 @@
             0.2642,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3466,7 +3466,7 @@
             0.2303,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3482,7 +3482,7 @@
             0.1786,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3498,7 +3498,7 @@
             0.1205,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3514,7 +3514,7 @@
             0.0982,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3530,7 +3530,7 @@
             0.08951,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3546,7 +3546,7 @@
             0.08328,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3562,7 +3562,7 @@
             0.06889,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3578,7 +3578,7 @@
             0.06138,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3594,7 +3594,7 @@
             0.05475,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3610,7 +3610,7 @@
             0.04797,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3626,7 +3626,7 @@
             0.04148,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3642,7 +3642,7 @@
             0.03556,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3658,7 +3658,7 @@
             0.04689,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3674,7 +3674,7 @@
             0.07184,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3690,7 +3690,7 @@
             0.06152,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3706,7 +3706,7 @@
             0.06039,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3722,7 +3722,7 @@
             0.06002,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3738,7 +3738,7 @@
             0.06006,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3754,7 +3754,7 @@
             0.05844,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3770,7 +3770,7 @@
             0.05726,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3786,7 +3786,7 @@
             0.05612,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3802,7 +3802,7 @@
             0.05496,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3818,7 +3818,7 @@
             0.05319,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3834,7 +3834,7 @@
             0.05082,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3850,7 +3850,7 @@
             0.0701,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3866,7 +3866,7 @@
             0.06089,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3882,7 +3882,7 @@
             0.05791,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3898,7 +3898,7 @@
             0.05605,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3914,7 +3914,7 @@
             0.05546,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3930,7 +3930,7 @@
             0.05447,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3946,7 +3946,7 @@
             0.05346,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3962,7 +3962,7 @@
             0.0523,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3978,7 +3978,7 @@
             0.05103,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -3994,7 +3994,7 @@
             0.04913,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -4010,7 +4010,7 @@
             0.04661,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         }
       ]
     },
@@ -4040,10 +4040,10 @@
             0.5723,
             0.592
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4059,10 +4059,10 @@
             0.5686,
             0.5791
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4078,10 +4078,10 @@
             0.4913,
             0.499
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4097,10 +4097,10 @@
             0.466,
             0.4716
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4116,10 +4116,10 @@
             0.5383,
             0.5428
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4135,10 +4135,10 @@
             0.4088,
             0.4129
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4154,10 +4154,10 @@
             0.4966,
             0.5011
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4173,10 +4173,10 @@
             0.4675,
             0.4725
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4192,10 +4192,10 @@
             0.3837,
             0.3883
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4211,10 +4211,10 @@
             0.4966,
             0.5019
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4230,10 +4230,10 @@
             0.4386,
             0.4432
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4249,10 +4249,10 @@
             0.2338,
             0.2416
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4268,10 +4268,10 @@
             0.3673,
             0.3739
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4287,10 +4287,10 @@
             0.3463,
             0.3506
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4306,10 +4306,10 @@
             0.3739,
             0.3772
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4325,10 +4325,10 @@
             0.4334,
             0.4369
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4344,10 +4344,10 @@
             0.3483,
             0.3523
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4363,10 +4363,10 @@
             0.385,
             0.3896
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4382,10 +4382,10 @@
             0.3495,
             0.3546
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4401,10 +4401,10 @@
             0.2929,
             0.2976
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4420,10 +4420,10 @@
             0.3381,
             0.3433
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4439,10 +4439,10 @@
             0.2817,
             0.2857
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4458,10 +4458,10 @@
             0.4952,
             0.5132
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4477,10 +4477,10 @@
             0.7685,
             0.7791
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4496,10 +4496,10 @@
             0.7489,
             0.7574
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4515,10 +4515,10 @@
             0.7396,
             0.7468
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4534,10 +4534,10 @@
             0.7669,
             0.7729
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4553,10 +4553,10 @@
             0.7946,
             0.8008
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4572,10 +4572,10 @@
             0.8146,
             0.8208
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4591,10 +4591,10 @@
             0.8362,
             0.8429
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4610,10 +4610,10 @@
             0.8383,
             0.8449
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4629,10 +4629,10 @@
             0.8316,
             0.838
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4648,10 +4648,10 @@
             0.8304,
             0.8373
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4667,10 +4667,10 @@
             0.8154,
             0.8217
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4686,10 +4686,10 @@
             0.7857,
             0.7977
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4705,10 +4705,10 @@
             0.7729,
             0.7832
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4724,10 +4724,10 @@
             0.7808,
             0.7892
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4743,10 +4743,10 @@
             0.8222,
             0.8282
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4762,10 +4762,10 @@
             0.8634,
             0.8697
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4781,10 +4781,10 @@
             0.9007,
             0.907
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4800,10 +4800,10 @@
             0.9154,
             0.9221
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4819,10 +4819,10 @@
             0.9249,
             0.932
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4838,10 +4838,10 @@
             0.931,
             0.9386
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4857,10 +4857,10 @@
             0.9446,
             0.953
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -4876,10 +4876,10 @@
             0.9527,
             0.9612
           ],
-          "reduced_start_leads": [
-            9,
-            10
-          ]
+          "reduced_start_counts": {
+            "9": 51,
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -4895,7 +4895,7 @@
             0.722,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -4911,7 +4911,7 @@
             0.7641,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -4927,7 +4927,7 @@
             0.7321,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -4943,7 +4943,7 @@
             0.6782,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -4959,7 +4959,7 @@
             0.6381,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -4975,7 +4975,7 @@
             0.6612,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -4991,7 +4991,7 @@
             0.6801,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5007,7 +5007,7 @@
             0.6835,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5023,7 +5023,7 @@
             0.7047,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5039,7 +5039,7 @@
             0.7147,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5055,7 +5055,7 @@
             0.7149,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5071,7 +5071,7 @@
             0.6824,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5087,7 +5087,7 @@
             0.7246,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5103,7 +5103,7 @@
             0.753,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5119,7 +5119,7 @@
             0.7118,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5135,7 +5135,7 @@
             0.6647,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5151,7 +5151,7 @@
             0.6434,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5167,7 +5167,7 @@
             0.6362,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5183,7 +5183,7 @@
             0.6419,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5199,7 +5199,7 @@
             0.6412,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5215,7 +5215,7 @@
             0.6298,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5231,7 +5231,7 @@
             0.637,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5247,7 +5247,7 @@
             0.6188,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5263,7 +5263,7 @@
             0.6444,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5279,7 +5279,7 @@
             0.6874,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5295,7 +5295,7 @@
             0.6875,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5311,7 +5311,7 @@
             0.6349,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5327,7 +5327,7 @@
             0.6025,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5343,7 +5343,7 @@
             0.5765,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5359,7 +5359,7 @@
             0.5597,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5375,7 +5375,7 @@
             0.5417,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5391,7 +5391,7 @@
             0.5235,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5407,7 +5407,7 @@
             0.5099,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5423,7 +5423,7 @@
             0.5039,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5439,7 +5439,7 @@
             0.6568,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5455,7 +5455,7 @@
             0.6972,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5471,7 +5471,7 @@
             0.706,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5487,7 +5487,7 @@
             0.6677,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5503,7 +5503,7 @@
             0.6369,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5519,7 +5519,7 @@
             0.6056,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5535,7 +5535,7 @@
             0.5884,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5551,7 +5551,7 @@
             0.5701,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5567,7 +5567,7 @@
             0.5533,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5583,7 +5583,7 @@
             0.5394,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5599,7 +5599,7 @@
             0.5355,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         }
       ]
     },
@@ -5629,9 +5629,9 @@
             0.3798,
             0.3883
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -5647,7 +5647,7 @@
             0.5277,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -5663,9 +5663,9 @@
             0.2276,
             0.2323
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -5681,9 +5681,9 @@
             0.3939,
             0.4031
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -5699,9 +5699,9 @@
             0.3354,
             0.3457
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -5717,9 +5717,9 @@
             0.1568,
             0.1567
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -5735,7 +5735,7 @@
             0.3985,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5751,7 +5751,7 @@
             0.6,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5767,7 +5767,7 @@
             0.4213,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5783,7 +5783,7 @@
             0.2304,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -5799,9 +5799,9 @@
             0.04355,
             0.0448
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -5817,9 +5817,9 @@
             0.119,
             0.1244
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -5835,9 +5835,9 @@
             0.06075,
             0.06227
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -5853,9 +5853,9 @@
             0.02481,
             0.02473
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -5871,7 +5871,7 @@
             0.06765,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5887,7 +5887,7 @@
             0.1228,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5903,7 +5903,7 @@
             0.06701,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -5919,7 +5919,7 @@
             0.03404,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -5935,9 +5935,9 @@
             0.02945,
             0.02977
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -5953,7 +5953,7 @@
             0.03584,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -5969,9 +5969,9 @@
             0.06846,
             0.06925
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -5987,7 +5987,7 @@
             0.08098,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -6003,9 +6003,9 @@
             0.06507,
             0.06566
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -6021,7 +6021,7 @@
             0.07632,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         }
       ]
     },
@@ -6051,9 +6051,9 @@
             0.4096,
             0.414
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -6069,7 +6069,7 @@
             0.5921,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -6085,9 +6085,9 @@
             0.6175,
             0.6358
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -6103,9 +6103,9 @@
             0.5955,
             0.6202
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -6121,9 +6121,9 @@
             0.6382,
             0.6509
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -6139,9 +6139,9 @@
             0.594,
             0.6161
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -6157,7 +6157,7 @@
             0.7371,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -6173,7 +6173,7 @@
             0.7181,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -6189,7 +6189,7 @@
             0.732,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -6205,7 +6205,7 @@
             0.8243,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -6221,9 +6221,9 @@
             0.4453,
             0.4249
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -6239,9 +6239,9 @@
             0.3855,
             0.3559
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -6257,9 +6257,9 @@
             0.5361,
             0.5456
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "gloens",
@@ -6275,9 +6275,9 @@
             0.5064,
             0.5165
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -6293,7 +6293,7 @@
             0.7369,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -6309,7 +6309,7 @@
             0.7146,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -6325,7 +6325,7 @@
             0.7562,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "glonet2-ens-icp",
@@ -6341,7 +6341,7 @@
             0.822,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -6357,9 +6357,9 @@
             0.8228,
             0.833
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -6375,7 +6375,7 @@
             0.7997,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -6391,9 +6391,9 @@
             0.6821,
             0.6833
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -6409,7 +6409,7 @@
             0.5982,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         },
         {
           "system": "gloens",
@@ -6425,9 +6425,9 @@
             0.6995,
             0.7005
           ],
-          "reduced_start_leads": [
-            10
-          ]
+          "reduced_start_counts": {
+            "10": 51
+          }
         },
         {
           "system": "glonet2-ens-icp",
@@ -6443,7 +6443,7 @@
             0.6186,
             null
           ],
-          "reduced_start_leads": []
+          "reduced_start_counts": {}
         }
       ]
     }

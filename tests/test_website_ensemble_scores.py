@@ -176,8 +176,8 @@ def test_build_ensemble_scores_marks_the_reduced_start_lead_days_of_gloens() -> 
     gloens_rows = [row for row in scores["blocks"]["gridded_rmsd"]["rows"] if row["system"] == "gloens"]
     icp_rows = [row for row in scores["blocks"]["gridded_rmsd"]["rows"] if row["system"] == "glonet2-ens-icp"]
 
-    assert all(row["reduced_start_leads"] == [9, 10] for row in gloens_rows)
-    assert all(row["reduced_start_leads"] == [] for row in icp_rows)
+    assert all(row["reduced_start_counts"] == {"9": 51, "10": 51} for row in gloens_rows)
+    assert all(row["reduced_start_counts"] == {} for row in icp_rows)
     assert all(row["values"][-1] is None for row in icp_rows)
 
 
@@ -343,3 +343,15 @@ def test_ensemble_score_bundle_exposes_a_metric_per_section_with_a_full_layout()
     challengers = bundle["versions"]["ensemble"]["regions"]["global"]["challengers"]
     for system_scores in challengers.values():
         assert set(system_scores["rmsd_observations"]["depths"]) <= set(layout_depths)
+
+
+def test_ensemble_score_bundle_reads_its_reduced_start_caveat_from_the_rows() -> None:
+    scores = _built_scores()
+    scores["blocks"]["observations_crps"]["rows"][0]["reduced_start_counts"] = {"10": 50}
+    sections = ensemble_score_bundle(scores)["ensemble_sections"]
+
+    gridded_note = sections[1]["metrics"][0]["note"]
+    observations_note = sections[2]["metrics"][0]["note"]
+
+    assert "Lead days 9 and 10 of GloEns average 51 starts instead of 52." in gridded_note
+    assert "Lead day 10 of GloEns averages 50 starts instead of 52." in observations_note

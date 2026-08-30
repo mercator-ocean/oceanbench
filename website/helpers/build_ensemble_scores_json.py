@@ -227,7 +227,7 @@ def _row(
     depth_label: str,
     unit: str,
     values: list,
-    reduced_leads: list,
+    reduced_start_counts: dict,
 ) -> dict:
     return {
         "system": system_key,
@@ -236,7 +236,7 @@ def _row(
         "depth_band": depth_label,
         "unit": unit,
         "values": values,
-        "reduced_start_leads": reduced_leads,
+        "reduced_start_counts": reduced_start_counts,
     }
 
 
@@ -251,7 +251,7 @@ def gridded_rows(frame: pd.DataFrame, system_key: str, metric: str, is_ratio: bo
         for depth in sorted(variable_frame["depth"].unique(), key=_depth_sort_key):
             depth_frame = variable_frame[variable_frame["depth"] == depth].set_index("lead_day")
             values = []
-            reduced_leads = []
+            reduced_start_counts = {}
             for lead_day in GRIDDED_LEAD_DAYS:
                 if lead_day not in depth_frame.index:
                     values.append(None)
@@ -259,7 +259,7 @@ def gridded_rows(frame: pd.DataFrame, system_key: str, metric: str, is_ratio: bo
                 entry = depth_frame.loc[lead_day]
                 values.append(_rounded(entry["value"]))
                 if int(entry["start_count"]) < FULL_START_COUNT:
-                    reduced_leads.append(lead_day)
+                    reduced_start_counts[str(lead_day)] = int(entry["start_count"])
             unit = "" if is_ratio else str(depth_frame["unit"].iloc[0])
             depth_label = "Surface" if depth == "surface" else str(depth).replace("m", " m")
             rows.append(
@@ -269,7 +269,7 @@ def gridded_rows(frame: pd.DataFrame, system_key: str, metric: str, is_ratio: bo
                     depth_label,
                     unit,
                     values,
-                    reduced_leads,
+                    reduced_start_counts,
                 )
             )
     return rows
@@ -355,7 +355,7 @@ def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio
         for band in available_bands:
             band_frame = stream_frame[stream_frame["depth_band"] == band].set_index("lead_day")
             values = []
-            reduced_leads = []
+            reduced_start_counts = {}
             for lead_day in OBSERVATION_LEAD_DAYS:
                 if lead_day not in band_frame.index:
                     values.append(None)
@@ -363,7 +363,7 @@ def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio
                 entry = band_frame.loc[lead_day]
                 values.append(_rounded(entry[column]))
                 if int(entry["n_inits"]) < FULL_START_COUNT:
-                    reduced_leads.append(lead_day)
+                    reduced_start_counts[str(lead_day)] = int(entry["n_inits"])
             unit = "" if is_ratio else STREAM_UNITS[stream]
             depth_label = SINGLE_DEPTH_STREAM_LABELS.get(stream, DEPTH_BAND_LABELS[band])
             rows.append(
@@ -373,7 +373,7 @@ def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio
                     depth_label,
                     unit,
                     values,
-                    reduced_leads,
+                    reduced_start_counts,
                 )
             )
     return rows
@@ -388,7 +388,7 @@ def class4_rows(frame: pd.DataFrame, system_key: str) -> list[dict]:
             continue
         bin_frame = bin_frame.set_index("lead_day_number")
         values = []
-        reduced_leads = []
+        reduced_start_counts = {}
         for lead_day in OBSERVATION_LEAD_DAYS:
             if lead_day not in bin_frame.index:
                 values.append(None)
@@ -396,7 +396,7 @@ def class4_rows(frame: pd.DataFrame, system_key: str) -> list[dict]:
             entry = bin_frame.loc[lead_day]
             values.append(_rounded(entry["rmsd"]))
             if int(entry["start_count"]) < FULL_START_COUNT:
-                reduced_leads.append(lead_day)
+                reduced_start_counts[str(lead_day)] = int(entry["start_count"])
         rows.append(
             _row(
                 system_key,
@@ -404,7 +404,7 @@ def class4_rows(frame: pd.DataFrame, system_key: str) -> list[dict]:
                 DETERMINISTIC_DEPTH_BIN_LABELS[depth_bin],
                 STREAM_UNITS[stream],
                 values,
-                reduced_leads,
+                reduced_start_counts,
             )
         )
     return rows
