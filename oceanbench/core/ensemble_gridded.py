@@ -165,7 +165,11 @@ def ensemble_field_statistics(
     ensemble_mean = members.mean(dim=ensemble_dimension)
     ensemble_mean_error = ensemble_mean - reference
     member_error = members - reference
-    variance = members.var(dim=ensemble_dimension, ddof=1)
+    # The spread is averaged over the cells the error is averaged over. The members cover cells the
+    # reference does not, an ice edge or an unusable target cell, and the area weighted mean skips
+    # what is not finite, so an unmasked variance would average a wider ocean than the error it is
+    # divided by and the ratio would compare two different fields.
+    variance = members.var(dim=ensemble_dimension, ddof=1).where(numpy.isfinite(ensemble_mean_error))
     return EnsembleFieldStatistics(
         member_count=member_count,
         scored_cell_count=int(numpy.isfinite(ensemble_mean_error).sum()),

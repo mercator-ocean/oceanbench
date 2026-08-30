@@ -299,3 +299,29 @@ def test_a_lead_day_whose_error_vanished_carries_no_ratio() -> None:
     }
 
     assert math.isnan(_aggregate_metric_values([values])[METRIC_SPREAD_ERROR_RATIO])
+
+
+def test_the_spread_is_averaged_over_the_cells_the_error_is_averaged_over() -> None:
+    generator = numpy.random.default_rng(7)
+    truth = _field(generator.normal(size=(8, 12)))
+    members = _ensemble(truth.values + generator.normal(scale=0.7, size=(10, 8, 12)))
+    # A band the reference does not cover, an ice edge or an unusable target cell, where the
+    # members happen to disagree far more than anywhere else.
+    wide = members.values.copy()
+    wide[:, :2, :] = truth.values[None, :2, :] + generator.normal(scale=8.0, size=(10, 2, 12))
+    members = _ensemble(wide)
+    uncovered = truth.values.copy()
+    uncovered[:2, :] = numpy.nan
+    reference = _field(uncovered)
+
+    statistics = ensemble_field_statistics(members, reference)
+    scored_only = ensemble_field_statistics(
+        members.isel({LATITUDE_KEY: slice(2, None)}), reference.isel({LATITUDE_KEY: slice(2, None)})
+    )
+
+    assert statistics.scored_cell_count == 6 * 12
+    assert statistics.ensemble_variance == pytest.approx(scored_only.ensemble_variance)
+    assert statistics.crps_fair == pytest.approx(scored_only.crps_fair)
+    assert statistics.ensemble_mean_squared_error == pytest.approx(scored_only.ensemble_mean_squared_error)
+    # The uncovered band alone would have multiplied the spread of the field it is not part of.
+    assert area_weighted_mean(members.var(dim=ENSEMBLE_DIMENSION, ddof=1)) > 3 * statistics.ensemble_variance
