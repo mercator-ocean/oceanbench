@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import math
+
 import numpy
 import pytest
 import xarray
@@ -16,12 +18,14 @@ from oceanbench.core.ensemble_gridded import (
     METRIC_ENSEMBLE_SPREAD,
     METRIC_MEMBER_RMSD,
     METRIC_SPREAD_ERROR_RATIO,
+    _aggregate_metric_values,
     area_weighted_mean,
     continuous_ranked_probability_score,
     ensemble_field_statistics,
     ensemble_gridded_records,
     ensemble_spread,
     field_metric_values,
+    finite_ensemble_correction,
 )
 from oceanbench.core.score_records import RunContext, records_to_dataframe
 
@@ -227,3 +231,71 @@ def test_sample_onto_target_grid_returns_the_nearest_source_value():
     sampled = sample_onto_target_grid(source_latitude, mapping)
     expected_latitude, _ = numpy.meshgrid(numpy.arange(-9.0, 9.5, 0.5), numpy.arange(-9.0, 9.5, 0.5), indexing="ij")
     numpy.testing.assert_allclose(sampled.values, expected_latitude)
+
+
+def test_the_finite_ensemble_correction_is_the_factor_that_makes_a_small_ensemble_reliable() -> None:
+    assert finite_ensemble_correction(2) == 1.5
+    assert finite_ensemble_correction(50) == 1.02
+    assert finite_ensemble_correction(1000000) == pytest.approx(1.0, abs=1e-5)
+
+    # A perfectly reliable ensemble draws its members and the truth from one distribution, so the
+    # corrected spread equals the ensemble mean error however few members it carries. Without the
+    # correction a small ensemble reads as under dispersive when it is not.
+    generator = numpy.random.default_rng(20260830)
+    for member_count in (3, 8, 50):
+        members = generator.standard_normal((20000, member_count))
+        truth = generator.standard_normal(20000)
+        variance = members.var(axis=1, ddof=1).mean()
+        squared_error = ((truth - members.mean(axis=1)) ** 2).mean()
+        corrected = finite_ensemble_correction(member_count) * variance
+        assert corrected / squared_error == pytest.approx(1.0, abs=0.05)
+        assert variance / squared_error < 0.99
+
+
+def test_aggregating_a_lead_day_averages_the_roots_and_rebuilds_the_ratio() -> None:
+    first = {
+        METRIC_CRPS_FAIR: 0.2,
+        METRIC_ENSEMBLE_MEAN_RMSD: 1.0,
+        METRIC_ENSEMBLE_SPREAD: 1.0,
+        METRIC_SPREAD_ERROR_RATIO: 1.0,
+    }
+    second = {
+        METRIC_CRPS_FAIR: 0.4,
+        METRIC_ENSEMBLE_MEAN_RMSD: 0.01,
+        METRIC_ENSEMBLE_SPREAD: 0.5,
+        METRIC_SPREAD_ERROR_RATIO: 50.0,
+    }
+
+    aggregated = _aggregate_metric_values([first, second])
+
+    assert aggregated[METRIC_CRPS_FAIR] == pytest.approx(0.3)
+    assert aggregated[METRIC_ENSEMBLE_MEAN_RMSD] == pytest.approx(0.505)
+    # The one start whose error nearly vanished carries a ratio of 50, which a plain mean would
+    # turn into a year of 25.5. The ratio is rebuilt from the averaged spread and error instead.
+    assert aggregated[METRIC_SPREAD_ERROR_RATIO] == pytest.approx(0.75 / 0.505)
+
+
+def test_aggregating_a_lead_day_propagates_a_missing_start_rather_than_dropping_it() -> None:
+    present = {
+        METRIC_CRPS_FAIR: 0.2,
+        METRIC_ENSEMBLE_MEAN_RMSD: 1.0,
+        METRIC_ENSEMBLE_SPREAD: 1.0,
+        METRIC_SPREAD_ERROR_RATIO: 1.0,
+    }
+    missing = {**present, METRIC_CRPS_FAIR: float("nan")}
+
+    aggregated = _aggregate_metric_values([present, missing])
+
+    assert math.isnan(aggregated[METRIC_CRPS_FAIR])
+    assert aggregated[METRIC_ENSEMBLE_MEAN_RMSD] == pytest.approx(1.0)
+
+
+def test_a_lead_day_whose_error_vanished_carries_no_ratio() -> None:
+    values = {
+        METRIC_CRPS_FAIR: 0.0,
+        METRIC_ENSEMBLE_MEAN_RMSD: 0.0,
+        METRIC_ENSEMBLE_SPREAD: 0.0,
+        METRIC_SPREAD_ERROR_RATIO: float("nan"),
+    }
+
+    assert math.isnan(_aggregate_metric_values([values])[METRIC_SPREAD_ERROR_RATIO])
