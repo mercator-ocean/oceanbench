@@ -31,7 +31,9 @@ DATUM_NOTE = "The sea surface height of GloEns is datum aligned to the reference
 SHORT_HORIZON_NOTE = "GloNet2-ens-icp stops at lead day 9."
 CLOSENESS_TO_ONE_NOTE = (
     "Cells are shaded by closeness to one, the target of the ratio: a cell reads better than the "
-    "baseline when its ratio sits nearer to one, whichever side of one it falls."
+    "baseline when its ratio sits nearer to one, whichever side of one it falls. The percentages "
+    "the cells and the tooltips carry compare those same distances from one, not the ratios "
+    "themselves, so a cell never reads better in colour and worse in number."
 )
 
 # The error table reads one matchup for everybody, the probabilistic tables need the members and so
