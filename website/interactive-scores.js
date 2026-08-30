@@ -1051,6 +1051,13 @@ function renderEnsembleMetric(challengers, challengerNames, regionId, metric, ba
 
   let markup = '<div class="depth-section">';
   markup += `<h3>${metric.title}</h3>`;
+  if (metricBaseline !== baseline) {
+    // The selector still names the system the reader chose, so a table that had to fall back onto
+    // another baseline says so rather than letting the shading and the percentages read as if the
+    // chosen system were the reference.
+    markup += `<p class="ensemble-table-note">${displayName(baseline)} carries no score in this table,`
+      + ` so the cells are shaded and compared against ${displayName(metricBaseline)}.</p>`;
+  }
   markup += tables;
   if (metric.note) {
     markup += `<p class="ensemble-table-note">${metric.note}</p>`;
