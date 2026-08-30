@@ -16,26 +16,34 @@
 
 set -euo pipefail
 
+# Every path below comes from the environment, so any user can run the campaign from any
+# tree. The #SBATCH log path cannot read one: slurm reads it before the shell does, so pass
+# sbatch --output to move the logs.
+SRC=${ENSEMBLE_CAMPAIGN_ROOT:?export ENSEMBLE_CAMPAIGN_ROOT, the directory holding src, output and logs}/src
+VENV=${ENSEMBLE_VENV:?export ENSEMBLE_VENV, the python environment that carries oceanbench}
+PYLIBS=${ENSEMBLE_PYTHON_LIBRARIES:?export ENSEMBLE_PYTHON_LIBRARIES, the pure python s3fs stack}
+OUTPUT_ROOT=${ENSEMBLE_CAMPAIGN_ROOT}
+
 INDEX=${SLURM_ARRAY_TASK_ID}
 if [ "${INDEX}" -lt 52 ]; then
   CHALLENGER=glonet2-ens
-  OUTPUT=/scratch/jseillade/probax/gridded/output-year-g2e
+  OUTPUT=$OUTPUT_ROOT/output-year-g2e
 else
   CHALLENGER=glonet2-ens-icp
-  OUTPUT=/scratch/jseillade/probax/gridded/output-year-g2e-icp
+  OUTPUT=$OUTPUT_ROOT/output-year-g2e-icp
   INDEX=$((INDEX - 52))
 fi
 START=$(date -u -d "2024-01-03 + $((INDEX * 7)) days" +%Y-%m-%d)
 echo "task ${SLURM_ARRAY_TASK_ID} challenger ${CHALLENGER} start ${START} on $(hostname)"
 
 set -a
-. /scratch/jseillade/gpu2_archive/data/cloudferro-oceanbench.env
+. "${ENSEMBLE_CREDENTIALS_FILE:?export ENSEMBLE_CREDENTIALS_FILE, the env file holding the object store keys}"
 set +a
 
-cd /scratch/jseillade/probax/gridded/src
+cd "$SRC"
 export PYTHONNOUSERSITE=1
-export PYTHONPATH=/scratch/jseillade/probax/gridded/pylibs:/scratch/jseillade/probax/gridded/src
-/scratch/jseillade/oceanbench-venv-rebuild/bin/python -W ignore \
+export PYTHONPATH=$PYLIBS:$SRC
+"$VENV/bin/python" -W ignore \
   helper_scripts/ensemble_gridded/score_ensemble_gridded_multi.py \
   --output-root "${OUTPUT}" \
   score --challenger "${CHALLENGER}" --start-date "${START}" --references glorys

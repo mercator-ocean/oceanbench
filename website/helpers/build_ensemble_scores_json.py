@@ -15,7 +15,9 @@ import os
 
 import pandas as pd
 
-DEFAULT_AGGREGATE_ROOT = "/Users/jseillade/projects/probax-report"
+# The aggregates live outside the repository, so the tree that holds them is read from the
+# environment and only falls back to the one they were built in.
+DEFAULT_AGGREGATE_ROOT = os.environ.get("OCEANBENCH_ENSEMBLE_AGGREGATE_ROOT", "/Users/jseillade/projects/probax-report")
 DEFAULT_GRIDDED_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gloens.parquet"
 DEFAULT_GRIDDED_ICP_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-icp.parquet"
 DEFAULT_DETERMINISTIC_GLONET_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-glonet.parquet"

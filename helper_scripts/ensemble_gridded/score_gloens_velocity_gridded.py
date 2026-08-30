@@ -20,9 +20,11 @@ components are on the common target grid, and target cells whose two faces come 
 oriented native cells are dropped. Nothing of that is reimplemented here.
 
 The salinity of the same fill is not velocity and needs no rotation, so it is delegated to
-``score_ensemble_gridded_multi.py`` and takes the nearest-neighbour path every other GloEns
-tracer field took. Both halves land in one score file per forecast start, with the schema and
-the record layout of every other gridded run, so the aggregation is the generic
+``score_ensemble_gridded_multi.py`` and takes its nearest-neighbour path. That is not the route
+the other GloEns tracer fields took: temperature and sea surface height were scored through the
+library, so the surface salinity of this fill is the one GloEns tracer whose numbers come from
+the nearest-neighbour gather. Both halves land in one score file per forecast start, with the
+schema and the record layout of every other gridded run, so the aggregation is the generic
 ``aggregate`` command of that same script and is not repeated here.
 
     python score_gloens_velocity_gridded.py --output-root DIR score --start-date 2024-01-04
