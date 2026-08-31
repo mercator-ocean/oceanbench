@@ -41,8 +41,7 @@ function getPaletteColors() {
   return [PALETTE.blue.end, PALETTE.blue.mid, neutral, PALETTE.red.mid, PALETTE.red.end];
 }
 
-const MINIMUM_SCORE_DECIMALS = 2;
-const SCORE_SIGNIFICANT_DIGITS = 2;
+const SCORE_DECIMALS = 2;
 
 let selectedDepths = new Set();
 let showAllMode = true;
@@ -168,14 +167,10 @@ function getCellStyle(referenceValue, comparedValue) {
 }
 
 function formatScoreValue(value) {
-  // Two significant digits, and never fewer than two decimals. A score below 0.1 keeps the digits
-  // that tell two systems apart, which two decimals alone collapse into one printed number, and a
-  // score above 1 keeps every digit two decimals already showed it.
+  // Two decimals everywhere, like the deterministic score tables. Scores that only differ past
+  // the second decimal print the same; the shading and the tooltip still carry the difference.
   if (!Number.isFinite(value)) return "";
-  if (value === 0) return (0).toFixed(MINIMUM_SCORE_DECIMALS);
-  const magnitude = Math.floor(Math.log10(Math.abs(value)));
-  const decimals = Math.max(MINIMUM_SCORE_DECIMALS, SCORE_SIGNIFICANT_DIGITS - 1 - magnitude);
-  return value.toFixed(decimals);
+  return value.toFixed(SCORE_DECIMALS);
 }
 
 function formatPercentDiff(referenceValue, comparedValue) {
@@ -285,7 +280,7 @@ function modelHeaderCell(name, regionId) {
 
 function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName) {
   const unitSuffix = unit ? ` ${unit}` : "";
-  let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${formatScoreValue(value)}${unitSuffix}`;
+  let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${value}${unitSuffix}`;
   if (!isBaseline && referenceValue !== null) {
     tooltip += `\nvs ${displayName(baselineName)}${comparisonBasisLabel()}: ${formatPercentDiff(referenceValue, value)}`;
   }
