@@ -90,8 +90,7 @@ def glorys_reanalysis_1_degree() -> xarray.Dataset:
 
     monthly_dates = pandas.date_range("1993-01-01", "2019-12-01", freq="MS")
     dataset_paths = [
-        "https://minio.dive.edito.eu/project-oceanbench/public/"
-        f"glorys_1degree_1993_2019/{monthly_date.strftime('%Y%m')}.zarr"
+        f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glorys_1degree_1993_2019/{monthly_date.strftime('%Y%m')}.zarr"
         for monthly_date in monthly_dates
     ]
 

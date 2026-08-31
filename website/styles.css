@@ -1003,11 +1003,11 @@ body.quarto-dark #comparison-to-observations > h2 {
 /* --- Theme switching --- */
 
 body.quarto-dark .navbar-logo {
-  content: url('https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-dark.png');
+  content: url('https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/favicon-dark.png');
 }
 
 body.quarto-light .navbar-logo {
-  content: url('https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-light.png');
+  content: url('https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/favicon-light.png');
 }
 
 body.quarto-light .only-dark {

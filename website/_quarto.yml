@@ -13,7 +13,7 @@ website:
   favicon: favicon-light.png
   open-graph: true
   navbar:
-    logo: https://minio.dive.edito.eu/project-oceanbench/public/logo/favicon-light.png
+    logo: https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/favicon-light.png
     logo-alt: "OceanBench logo."
     left:
       - href: index.qmd
@@ -26,8 +26,8 @@ website:
   page-footer: |
     Powered by:
     <a href="https://edito.eu">
-      <img class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_A1%20Version.png" alt="EDITO logo" height="65" />
-      <img class="only-dark" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_A1%20Version%20Negative.png" alt="EDITO logo" height="65" />
+      <img class="only-light" src="https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/EDITO_A1%20Version.png" alt="EDITO logo" height="65" />
+      <img class="only-dark" src="https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/EDITO_A1%20Version%20Negative.png" alt="EDITO logo" height="65" />
     </a>
 execute:
   cache: false

@@ -20,7 +20,7 @@ a:visited:hover {
 }
 
 :root {
-    --logo-dark-url: url("https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-dark.png");
+    --logo-dark-url: url("https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/oceanbench-logo-dark.png");
     --logo-height: 100px;
 }
 

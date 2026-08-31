@@ -78,7 +78,7 @@ def glo36v1() -> xarray.Dataset:
     challenger_dataset = (
         xarray.open_mfdataset(
             [
-                f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/{dt.strftime('%Y%m%d')}.zarr"
+                f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glo36v1/{dt.strftime('%Y%m%d')}.zarr"
                 for dt in first_day_datetimes
             ],
             engine="zarr",
@@ -95,7 +95,7 @@ def glo36v1() -> xarray.Dataset:
 
 
 def _glo36v1_dataset_path(start_datetime: datetime) -> str:
-    return f"https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/{start_datetime.strftime('%Y%m%d')}.zarr"
+    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glo36v1/{start_datetime.strftime('%Y%m%d')}.zarr"
 
 
 def glonet() -> xarray.Dataset:
