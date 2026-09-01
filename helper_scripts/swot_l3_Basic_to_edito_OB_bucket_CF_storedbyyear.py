@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # -*- coding: utf-8 -*-
 """
 Created on Tue Aug 18 16:02:10 2026
@@ -24,7 +27,7 @@ from urllib3.util.retry import Retry
 from dotenv import load_dotenv
 
 
-load_dotenv() #load the .env file 
+load_dotenv()  # load the .env file
 
 # CREATE .ENV FILE WITH CREDENTIALS TO LOG INTO AVISO AND EDITO
 
@@ -46,7 +49,7 @@ TARGET_BUCKET = "oceanbench-bucket"
 TARGET_PREFIX = "class4/swot/l3"
 
 cf_key = os.getenv("CLOUDFERRO_KEY")
-cf_secret = os.getenv("CLOUDFERRO_SECRET") 
+cf_secret = os.getenv("CLOUDFERRO_SECRET")
 
 # =============================================================================
 # CONFIGURATION S3FS
@@ -72,9 +75,11 @@ target_fs = s3fs.S3FileSystem(**target_storage_options)
 # SECONDARY SUPPORT FUNCTIONS
 # =============================================================================
 
+
 def remote_key(prefix):
     """Build the total path for CloudFerro"""
     return f"{TARGET_BUCKET}/{prefix}"
+
 
 def assert_cloudferro_write_works():
     """Writing test for CloudFerro"""
@@ -90,14 +95,14 @@ def assert_cloudferro_write_works():
         logging.error(f"Writing test on CloudFerro: {e}")
         return False
 
+
 def extract_year_from_url(url: str) -> str:
     """Get the year from the name of the SWOT file"""
     filename = Path(url).name
     if match := re.search(r"_(\d{4})\d{4}T\d{6}_", filename):
         return match.group(1)
     raise ValueError(f"Impossible to get the year: {filename}")
-    
-    
+
 
 # =============================================================================
 # STRUCTURE FOR SWOT FILE ON EDITO / FILTERING FILES TO ADD
@@ -107,11 +112,11 @@ Explanation:
     We are not taking all the swot l3 files ("Basic" level) from AVISO server
     We are taking only the files from the v3_0
     we will organise file by years in 2 folders: forward and reprocessed
-    
+
     -> v2_0_1 (2023) is outdated
     -> v3_0 / Reprocessed = 2023, 2025(until May)
     -> v3_0 / foward = 2025(from May), 2026, until yesterday
-    
+
 Filtering files that should be added on EDITO (avoiding duplicates)
 """
 
@@ -135,9 +140,7 @@ def build_s3_path(url: str) -> str:
     return f"{TARGET_BUCKET}/{TARGET_PREFIX}/{subfolder}/{year}/{filename}"
 
 
-
-
-#list the file already in oceanbench bucket on edito to avoid creating duplicates
+# list the file already in oceanbench bucket on edito to avoid creating duplicates
 def list_existing_remote_keys() -> set:
     """List all the files under TARGET_BUCKET/TARGET_PREFIX/ (including forward/ and reproc/)"""
     base = remote_key(TARGET_PREFIX)
@@ -149,8 +152,6 @@ def list_existing_remote_keys() -> set:
     return keys
 
 
-
-
 def filter_new_urls(urls: list, existing_keys: set) -> list:
     """
     Filter URLs (AVISO) to keep only the ones not on EDITO
@@ -158,7 +159,7 @@ def filter_new_urls(urls: list, existing_keys: set) -> list:
     """
     to_transfer = []
     skipped = 0
-    
+
     for url in urls:
         try:
             filename = Path(url).name
@@ -187,7 +188,6 @@ def filter_new_urls(urls: list, existing_keys: set) -> list:
     return to_transfer
 
 
-
 # =============================================================================
 # GETTING FILES FROM AVISO
 # =============================================================================
@@ -209,7 +209,6 @@ def create_aviso_session() -> requests.Session:
     return session
 
 
-
 def get_aviso_l3_basic_urls(
     thredds_base_url: str = AVISO_BASE_URL,
     username: str = AVISO_USERNAME,
@@ -220,8 +219,6 @@ def get_aviso_l3_basic_urls(
     cycle_names: list[str] | None = None,
     stop_event: threading.Event = None,
 ) -> list:
-    
-    
     """Discovering AVISO URLs (forward + reproc)"""
     thredds_base_url = thredds_base_url.rstrip("/")
     session = create_aviso_session()
@@ -253,8 +250,7 @@ def get_aviso_l3_basic_urls(
                 logging.error(f"Error with catalog {sub_folder}: {e}")
     finally:
         session.close()
-        
-        
+
     def read_cycle_catalog(cycle_info):
         if stop_event is not None and stop_event.is_set():
             return []
@@ -284,17 +280,16 @@ def get_aviso_l3_basic_urls(
             return []
         finally:
             session.close()
-            
-         
-    #Multithreading
-    
+
+    # Multithreading
+
     executor = ThreadPoolExecutor(max_workers=max_workers)
     futures = [executor.submit(read_cycle_catalog, info) for info in all_cycle_infos]
     urls = []
     try:
         for future in as_completed(futures):
             urls.extend(future.result())
-            
+
     except KeyboardInterrupt:
         logging.warning("Interrupted while discovering AVISO files")
         if stop_event is not None:
@@ -307,10 +302,6 @@ def get_aviso_l3_basic_urls(
     urls = list(dict.fromkeys(urls))  # Getting rid of duplicates
     logging.info(f"Total AVISO files: {len(urls)}")
     return urls
-
-
-
-
 
 
 # =============================================================================
@@ -343,7 +334,7 @@ def transfer_to_cloudferro(url: str, stop_event: threading.Event) -> bool:
         with session.get(url, stream=True, timeout=(30, 600)) as response:
             response.raise_for_status()
             size = int(response.headers.get("Content-Length", 0))
-            logging.info(f"→ {filename} ({size/1024/1024:.1f} MB) → {remote_path}")
+            logging.info(f"→ {filename} ({size / 1024 / 1024:.1f} MB) → {remote_path}")
 
             with target_fs.open(remote_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=4 * 1024 * 1024):
@@ -356,7 +347,7 @@ def transfer_to_cloudferro(url: str, stop_event: threading.Event) -> bool:
         logging.info(f"OK: {remote_path}")
         return True
 
-    #interruption during the transfer and the file has been only partially loaded
+    # interruption during the transfer and the file has been only partially loaded
     # the file is removed from the bucket
     except KeyboardInterrupt:
         if remote_path and target_fs.exists(remote_path):
@@ -374,12 +365,7 @@ def transfer_to_cloudferro(url: str, stop_event: threading.Event) -> bool:
     finally:
         if session is not None:
             session.close()
-            
-            
-            
-            
-            
-            
+
 
 def transfer_all(urls: list, stop_event: threading.Event, max_workers: int = 4) -> dict:
     """Transfer in parallel of all the files to EDITO"""
@@ -410,20 +396,14 @@ def transfer_all(urls: list, stop_event: threading.Event, max_workers: int = 4) 
     return {"total": len(urls), "transferred": success, "failed": failed}
 
 
-
-
-
-
 # =============================================================================
 # MAIN
 # =============================================================================
 
 if __name__ == "__main__":
-    
+
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler()]
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", handlers=[logging.StreamHandler()]
     )
 
     stop_event = threading.Event()
@@ -434,11 +414,9 @@ if __name__ == "__main__":
         if not assert_cloudferro_write_works():
             raise Exception("Failed writing test on CloudFerro")
 
-
         # 2. Inventory of EDITO OceanBench swot bucket
         logging.info("Inventory of swot data on EDITO...")
         existing_keys = list_existing_remote_keys()
-
 
         # 3. Discovering AVISO files
         logging.info("Discovering AVISO files...")
@@ -449,9 +427,8 @@ if __name__ == "__main__":
             version="v3_0",
             sub_folders=("forward", "reproc"),
             max_workers=16,
-            stop_event=stop_event
+            stop_event=stop_event,
         )
-
 
         # 4. Filter to avoid duplicates
         logging.info("Filtering duplicates...")
@@ -459,7 +436,7 @@ if __name__ == "__main__":
 
         if not urls:
             logging.info("Nothing to transfer...Everything is already in OceanBench on EDITO")
-        
+
         else:
             # 5. Test with 1 file
             logging.info("Testing transfer of 1 file")
@@ -470,13 +447,13 @@ if __name__ == "__main__":
                 logging.info("Test Completed Successfully! Launching transfer of all files...")
                 remaining_urls = urls[1:]  # To avoid transferring again the test file
                 full_result = transfer_all(remaining_urls, stop_event, max_workers=4)
-                
+
                 result = {
                     "total": result["total"] + full_result["total"],
                     "transferred": result["transferred"] + full_result["transferred"],
                     "failed": result["failed"] + full_result["failed"],
                 }
-                
+
             else:
                 logging.error("Test failed! Some errors need to be corrected before proceeding")
 
