@@ -13,6 +13,7 @@ sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
 from helpers.build_ensemble_scores_json import (  # noqa: E402
     build_ensemble_scores,
+    deterministic_gridded_frame,
     with_gloens_surface,
     with_observation_sidecar,
 )
@@ -116,10 +117,32 @@ def _class4_frame(lead_days: list[int], rmsd: float = 0.8221234) -> pd.DataFrame
     )
 
 
+def _deterministic_gridded_frame(challenger: str, rmsd: float) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "challenger": challenger,
+                "challenger_version": challenger,
+                "region": "global",
+                "reference": "glorys",
+                "variable": "sea_water_potential_temperature",
+                "depth": "47.374m",
+                "lead_day": lead_day,
+                "ensemble_mean_rmsd": rmsd,
+                "start_count": 52,
+                "scored_cells": 675217,
+            }
+            for lead_day in range(1, 11)
+        ]
+    )
+
+
 def _built_scores() -> dict:
     return build_ensemble_scores(
         _gridded_frame("gloens", list(range(1, 11)), {9: 51, 10: 51}),
         _gridded_frame("glonet2-ens-icp", list(range(1, 10)), {}),
+        deterministic_gridded_frame(_deterministic_gridded_frame("glonet", 0.6661234)),
+        deterministic_gridded_frame(_deterministic_gridded_frame("glo12", 0.5551234)),
         _class4_frame(list(range(1, 11))),
         _class4_frame(list(range(1, 11)), rmsd=0.7331234),
         _class4_frame(list(range(1, 11)), rmsd=0.9441234),
@@ -203,6 +226,25 @@ def test_build_ensemble_scores_takes_the_ensemble_mean_error_from_the_class4_rou
     assert icp_row["depth_band"] == "Surface"
     assert icp_row["values"] == [0.9551, 0.9551, 0.9551, 0.9551, 0.9551, None]
     assert all(row["depth_band"] in {"Surface", "15 m", "0-5 m", "5-100 m", "100-300 m", "300-600 m"} for row in rows)
+
+
+def test_build_ensemble_scores_reads_the_deterministic_systems_on_the_gridded_axis_too() -> None:
+    scores = _built_scores()
+
+    gridded_rmsd_systems = [row["system"] for row in scores["blocks"]["gridded_rmsd"]["rows"]]
+    glonet_row = next(row for row in scores["blocks"]["gridded_rmsd"]["rows"] if row["system"] == "glonet")
+
+    assert set(gridded_rmsd_systems) == {"gloens", "glonet2-ens-icp", "glonet", "glo12"}
+    assert glonet_row["values"] == [0.6661] * len(GRIDDED_LEAD_DAYS)
+    assert glonet_row["system_label"] == "GLONET (deterministic)"
+
+
+def test_build_ensemble_scores_publishes_no_probabilistic_score_for_a_one_member_system() -> None:
+    scores = _built_scores()
+
+    for block_key in ("gridded_crps", "gridded_spread_error_ratio"):
+        systems = {row["system"] for row in scores["blocks"][block_key]["rows"]}
+        assert systems == {"gloens", "glonet2-ens-icp"}
 
 
 def test_build_ensemble_scores_names_no_glonet2_deterministic_system() -> None:

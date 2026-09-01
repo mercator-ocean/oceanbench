@@ -21,6 +21,8 @@ DEFAULT_AGGREGATE_ROOT = os.environ.get("OCEANBENCH_ENSEMBLE_AGGREGATE_ROOT", "/
 DEFAULT_GRIDDED_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gloens.parquet"
 DEFAULT_GRIDDED_ICP_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-icp.parquet"
 DEFAULT_DETERMINISTIC_GLONET_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-glonet.parquet"
+DEFAULT_GRIDDED_GLONET_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gridded-glonet.parquet"
+DEFAULT_GRIDDED_GLO12_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gridded-glo12.parquet"
 DEFAULT_DETERMINISTIC_GLO12_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-glo12.parquet"
 DEFAULT_OBSERVATIONS_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-gloens/aggregate.parquet"
 DEFAULT_OBSERVATIONS_ICP_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-icp/aggregate.parquet"
@@ -186,6 +188,9 @@ FROZEN_METRIC_COLUMNS = [
     "member_rmsd",
     "spread_error_ratio",
 ]
+# A deterministic system is scored on this axis as an ensemble of one, and an ensemble of one has
+# no spread and no fair CRPS, so its aggregate carries the root mean square difference alone.
+DETERMINISTIC_METRIC_COLUMNS = ["ensemble_mean_rmsd"]
 RATIO_METRIC = "spread_error_ratio"
 RATIO_UNIT = "1"
 # Neither the frozen surface record nor a fill sidecar carries a unit column, so the units of the
@@ -277,17 +282,11 @@ def gridded_rows(frame: pd.DataFrame, system_key: str, metric: str, is_ratio: bo
     return rows
 
 
-def gloens_surface_frame(frozen: pd.DataFrame) -> pd.DataFrame:
-    """Shape the frozen GloEns surface record like a year mean slice of the depth aggregate."""
-    against_reference = frozen[frozen["reference"] == GRIDDED_REFERENCE]
-    sea_level = against_reference["variable"] == "sea_surface_height_above_geoid"
-    datum_aligned = against_reference["depth"] == GLOENS_DATUM_ALIGNED_DEPTH
-    kept = against_reference[(sea_level & datum_aligned) | (~sea_level & ~datum_aligned)].copy()
-    kept["depth"] = GLOENS_SURFACE_DEPTH
-
-    long = kept.melt(
+def gridded_long_frame(wide: pd.DataFrame, metric_columns: list[str]) -> pd.DataFrame:
+    """Shape a wide gridded record, one column per metric, like a year mean slice of an aggregate."""
+    long = wide.melt(
         id_vars=["variable", "depth", "lead_day", "start_count"],
-        value_vars=FROZEN_METRIC_COLUMNS,
+        value_vars=metric_columns,
         var_name="metric",
         value_name="value",
     )
@@ -297,6 +296,21 @@ def gloens_surface_frame(frozen: pd.DataFrame) -> pd.DataFrame:
         for metric, variable in zip(long["metric"], long["variable"])
     ]
     return long
+
+
+def gloens_surface_frame(frozen: pd.DataFrame) -> pd.DataFrame:
+    """Shape the frozen GloEns surface record like a year mean slice of the depth aggregate."""
+    against_reference = frozen[frozen["reference"] == GRIDDED_REFERENCE]
+    sea_level = against_reference["variable"] == "sea_surface_height_above_geoid"
+    datum_aligned = against_reference["depth"] == GLOENS_DATUM_ALIGNED_DEPTH
+    kept = against_reference[(sea_level & datum_aligned) | (~sea_level & ~datum_aligned)].copy()
+    kept["depth"] = GLOENS_SURFACE_DEPTH
+    return gridded_long_frame(kept, FROZEN_METRIC_COLUMNS)
+
+
+def deterministic_gridded_frame(aggregate: pd.DataFrame) -> pd.DataFrame:
+    """Shape the aggregate of a one-member gridded campaign like the ensemble aggregates."""
+    return gridded_long_frame(aggregate, DETERMINISTIC_METRIC_COLUMNS)
 
 
 def with_gloens_surface(depth_frame: pd.DataFrame, frozen: pd.DataFrame) -> pd.DataFrame:
@@ -308,18 +322,7 @@ def with_gloens_surface(depth_frame: pd.DataFrame, frozen: pd.DataFrame) -> pd.D
 
 def gridded_fill_frame(fill: pd.DataFrame) -> pd.DataFrame:
     """Shape a wide gridded fill record like a year mean slice of the depth aggregate."""
-    long = fill.melt(
-        id_vars=["variable", "depth", "lead_day", "start_count"],
-        value_vars=FROZEN_METRIC_COLUMNS,
-        var_name="metric",
-        value_name="value",
-    )
-    long["aggregation"] = "year_mean"
-    long["unit"] = [
-        RATIO_UNIT if metric == RATIO_METRIC else GRIDDED_VARIABLE_UNITS[variable]
-        for metric, variable in zip(long["metric"], long["variable"])
-    ]
-    return long
+    return gridded_long_frame(fill, FROZEN_METRIC_COLUMNS)
 
 
 def with_gridded_fill(frame: pd.DataFrame, fill: pd.DataFrame) -> pd.DataFrame:
@@ -430,6 +433,8 @@ def _sorted_observation_rows(rows: list[dict]) -> list[dict]:
 def build_ensemble_scores(
     gridded_gloens: pd.DataFrame,
     gridded_icp: pd.DataFrame,
+    gridded_glonet: pd.DataFrame,
+    gridded_glo12: pd.DataFrame,
     deterministic_glonet: pd.DataFrame,
     deterministic_glo12: pd.DataFrame,
     class4_gloens_mean: pd.DataFrame,
@@ -459,11 +464,16 @@ def build_ensemble_scores(
             "rows": _sorted_observation_rows(observation_rmsd),
         },
         "gridded_rmsd": {
-            "title": "Ensemble mean root mean square difference against GLORYS",
-            "note": "Quarter degree GLORYS reanalysis reference.",
+            "title": "Root mean square difference against GLORYS",
+            "note": (
+                "Quarter degree GLORYS reanalysis reference. Ensemble mean difference for the "
+                "ensembles, single member difference for the two deterministic references."
+            ),
             "lead_days": GRIDDED_LEAD_DAYS,
             "rows": gridded_rows(gridded_gloens, GLOENS, "ensemble_mean_rmsd", is_ratio=False)
-            + gridded_rows(gridded_icp, ICP, "ensemble_mean_rmsd", is_ratio=False),
+            + gridded_rows(gridded_icp, ICP, "ensemble_mean_rmsd", is_ratio=False)
+            + gridded_rows(gridded_glonet, GLONET, "ensemble_mean_rmsd", is_ratio=False)
+            + gridded_rows(gridded_glo12, GLO12, "ensemble_mean_rmsd", is_ratio=False),
         },
         "gridded_crps": {
             "title": "Fair continuous ranked probability score against GLORYS",
@@ -523,6 +533,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gridded-gloens", default=DEFAULT_GRIDDED_GLOENS_PATH)
     parser.add_argument("--gridded-icp", default=DEFAULT_GRIDDED_ICP_PATH)
+    parser.add_argument("--gridded-glonet", default=DEFAULT_GRIDDED_GLONET_PATH)
+    parser.add_argument("--gridded-glo12", default=DEFAULT_GRIDDED_GLO12_PATH)
     parser.add_argument("--deterministic-glonet", default=DEFAULT_DETERMINISTIC_GLONET_PATH)
     parser.add_argument("--deterministic-glo12", default=DEFAULT_DETERMINISTIC_GLO12_PATH)
     parser.add_argument("--class4-gloens-mean", default=DEFAULT_CLASS4_GLOENS_MEAN_PATH)
@@ -539,6 +551,8 @@ def main() -> None:
             with_gloens_surface(pd.read_parquet(arguments.gridded_gloens), pd.read_csv(arguments.gloens_surface)),
         ),
         with_gridded_fill_beside(arguments.gridded_icp, pd.read_parquet(arguments.gridded_icp)),
+        deterministic_gridded_frame(pd.read_parquet(arguments.gridded_glonet)),
+        deterministic_gridded_frame(pd.read_parquet(arguments.gridded_glo12)),
         pd.read_parquet(arguments.deterministic_glonet),
         pd.read_parquet(arguments.deterministic_glo12),
         pd.read_parquet(arguments.class4_gloens_mean),
