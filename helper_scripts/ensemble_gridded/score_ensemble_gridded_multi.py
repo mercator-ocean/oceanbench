@@ -11,6 +11,8 @@ adds the challengers and the depth axis it does not cover:
   glonet2-ens       8 members, regular quarter-degree grid, 20 levels to 763.33 m
   glonet2-ens-icp   the initial-condition-perturbed variant of the same
   gloens-depth      the GloEns 3D stores, 50 members, tripolar grid, 75 levels
+  glonet            the deterministic GloNet forecast, read as an ensemble of one
+  glo12             the as-issued GLO12 forecast, one member on the twelfth-degree grid
 
 The metrics, the records and the aggregation all come from ``oceanbench.core.ensemble_gridded``
 unchanged, so a row written here is the same kind of row the surface run wrote.
@@ -92,13 +94,15 @@ def _depth_label(nominal_depth: float) -> str:
     return f"{nominal_depth:.3f}m"
 
 
-# Sea surface height carries a per-system datum. The glonet2 family was calibrated against
-# altimeter SLA with the same shift the reference path applies to its own zos
-# (REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT), and unlike GloEns it ships no inverse-barometer
-# field, so there is no basis change either. Subtracting an identical constant from both sides
-# of a difference is a no-op, so glonet2 zos is scored once, on the plain basis, and the
-# datum-aligned duplicate the GloEns run needed is not written. See the metadata note.
-GLONET2_DATUM_SHIFT = -0.1148
+# Sea surface height carries a per-system datum. Every challenger scored here was calibrated
+# against altimeter SLA with the same shift the reference path applies to its own zos
+# (REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT, which the class 4 route gives to every challenger
+# that registers none of its own, GloEns being the only one that does), and unlike GloEns none
+# of them ships an inverse-barometer field, so there is no basis change either. Subtracting an
+# identical constant from both sides of a difference is a no-op, so their zos is scored once,
+# on the plain basis, and the datum-aligned duplicate the GloEns run needed is not written.
+# See the metadata note.
+CHALLENGER_DATUM_SHIFT = -0.1148
 REFERENCE_DATUM_SHIFT = -0.1148
 
 # The staged quarter-degree reference has no level between 0.494 m and 47.374 m, so the 15 m
@@ -135,6 +139,20 @@ class ScoredVariable:
     reference_datum_shift: float = 0.0
 
 
+# How a challenger's grid reaches the staged quarter-degree grid the scores are computed on.
+GRID_REFERENCE = "reference"
+GRID_FINER_REGULAR = "finer-regular"
+GRID_CURVILINEAR = "curvilinear"
+
+# Where the store of one forecast start lives, and how its variables are laid out in it.
+STORE_ML_FORECAST_DEV = "ml-forecast-dev"
+STORE_ML_FORECAST_PUBLIC = "ml-forecast-public"
+STORE_GLOENS_PER_VARIABLE = "gloens-per-variable"
+STORE_GLO12_VARIABLE_GROUPS = "glo12-variable-groups"
+
+VARIABLE_KEYED_STORE_LAYOUTS = (STORE_GLOENS_PER_VARIABLE, STORE_GLO12_VARIABLE_GROUPS)
+
+
 @dataclass(frozen=True)
 class ChallengerSpec:
     """Everything that differs between the ensemble challengers scored here."""
@@ -150,10 +168,14 @@ class ChallengerSpec:
     # glonet2 filenames carry the first valid day, so lead 1 sits at time index 0; the GloEns
     # stores carry the initialisation day at time index 0, so lead 1 sits at time index 1.
     lead_day_to_time_index: int
-    curvilinear: bool
-    # One store per init holding every variable, or one store per variable per init.
-    store_per_variable: bool
+    grid: str
+    store_layout: str
     anonymous: bool
+
+    @property
+    def store_per_variable(self) -> bool:
+        """Whether one variable at a time is opened, rather than one store holding all of them."""
+        return self.store_layout in VARIABLE_KEYED_STORE_LAYOUTS
 
 
 def _glonet2_variables() -> tuple[ScoredVariable, ...]:
@@ -171,7 +193,7 @@ def _glonet2_variables() -> tuple[ScoredVariable, ...]:
             reference_name="zos",
             depth_label=SURFACE_DEPTH_LABEL,
             nominal_depth=None,
-            challenger_datum_shift=GLONET2_DATUM_SHIFT,
+            challenger_datum_shift=CHALLENGER_DATUM_SHIFT,
             reference_datum_shift=REFERENCE_DATUM_SHIFT,
         ),
     ]
@@ -266,6 +288,15 @@ def _fill_variables() -> tuple[ScoredVariable, ...]:
     return tuple(variables)
 
 
+def _deterministic_variables() -> tuple[ScoredVariable, ...]:
+    """Every cell the ensemble rows carry, which for them took a first wave and a fill wave.
+
+    A one-member challenger costs one member per read, so its two waves are run as one and the
+    two deterministic systems fill the table wherever an ensemble fills it.
+    """
+    return _glonet2_variables() + _fill_variables()
+
+
 CHALLENGERS = {
     "glonet2-ens": ChallengerSpec(
         name="glonet2-ens",
@@ -276,8 +307,8 @@ CHALLENGERS = {
         first_lead_day=1,
         last_lead_day=9,
         lead_day_to_time_index=1,
-        curvilinear=False,
-        store_per_variable=False,
+        grid=GRID_REFERENCE,
+        store_layout=STORE_ML_FORECAST_DEV,
         anonymous=False,
     ),
     "glonet2-ens-icp": ChallengerSpec(
@@ -289,8 +320,8 @@ CHALLENGERS = {
         first_lead_day=1,
         last_lead_day=9,
         lead_day_to_time_index=1,
-        curvilinear=False,
-        store_per_variable=False,
+        grid=GRID_REFERENCE,
+        store_layout=STORE_ML_FORECAST_DEV,
         anonymous=False,
     ),
     "gloens-depth": ChallengerSpec(
@@ -302,8 +333,8 @@ CHALLENGERS = {
         first_lead_day=1,
         last_lead_day=10,
         lead_day_to_time_index=0,
-        curvilinear=True,
-        store_per_variable=True,
+        grid=GRID_CURVILINEAR,
+        store_layout=STORE_GLOENS_PER_VARIABLE,
         anonymous=True,
     ),
     "glonet2-ens-icp-fill": ChallengerSpec(
@@ -315,8 +346,8 @@ CHALLENGERS = {
         first_lead_day=1,
         last_lead_day=9,
         lead_day_to_time_index=1,
-        curvilinear=False,
-        store_per_variable=False,
+        grid=GRID_REFERENCE,
+        store_layout=STORE_ML_FORECAST_DEV,
         anonymous=False,
     ),
     # Read by the library route, which rotates the velocity onto east and north. Running this
@@ -330,19 +361,62 @@ CHALLENGERS = {
         first_lead_day=1,
         last_lead_day=10,
         lead_day_to_time_index=0,
-        curvilinear=True,
-        store_per_variable=True,
+        grid=GRID_CURVILINEAR,
+        store_layout=STORE_GLOENS_PER_VARIABLE,
         anonymous=True,
+    ),
+    # The two deterministic systems of the observation table, scored here on the gridded axis
+    # from the same stores that table reads, so a row of one table refers to the same forecast
+    # as a row of the other. Each is read as an ensemble of one member: the metrics are the same
+    # code path, and the ones that need an ensemble are not published, see DETERMINISTIC_PUBLISHED_METRICS.
+    "glonet": ChallengerSpec(
+        name="glonet",
+        version="glonet",
+        member_dimension="member",
+        member_count=1,
+        variables=_deterministic_variables(),
+        first_lead_day=1,
+        last_lead_day=10,
+        lead_day_to_time_index=1,
+        grid=GRID_REFERENCE,
+        store_layout=STORE_ML_FORECAST_PUBLIC,
+        anonymous=False,
+    ),
+    "glo12": ChallengerSpec(
+        name="glo12",
+        version="glo12",
+        member_dimension="member",
+        member_count=1,
+        variables=_deterministic_variables(),
+        first_lead_day=1,
+        last_lead_day=10,
+        lead_day_to_time_index=1,
+        grid=GRID_FINER_REGULAR,
+        store_layout=STORE_GLO12_VARIABLE_GROUPS,
+        anonymous=False,
     ),
 }
 
-GLONET2_BUCKET = "oceanbench-bucket"
-GLONET2_PREFIX = "dev/ml-forecast-outputs"
+OCEANBENCH_BUCKET = "oceanbench-bucket"
+ML_FORECAST_DEV_PREFIX = "dev/ml-forecast-outputs"
+ML_FORECAST_PUBLIC_PREFIX = "public/ml-forecast-outputs"
+# The as-issued GLO12 forecast, one store per bulletin holding one group per variable. The
+# bulletin is named for the day after the first day it forecasts, which is how the library
+# reaches it in oceanbench.core.challenger_datasets.
+GLO12_FORECAST_PREFIX = "dev/additionnal-data/GLO12"
+GLO12_BULLETIN_OFFSET = pandas.Timedelta(days=1)
 GLOENS_BUCKET = "MOISICEEF"
 GLOENS_3D_PATTERN = "glo4-ens50_ng_1d-m_*_3D{grid}-{variable}_fcst_R{start_date:%Y%m%d}.zarr"
 GLOENS_3D_GRID_CODE = {"thetao": "T", "so": "T", "uo": "U", "vo": "V"}
 
 MAXIMUM_NEIGHBOUR_KILOMETRES = 55.0
+
+# What a one-member challenger publishes. It has no ensemble: its spread is undefined, and the
+# fair CRPS estimator, whose spread term divides by M - 1, falls back to the mean absolute
+# error, which is not a CRPS and must not be read in a CRPS table. Only the root mean square
+# difference of such a challenger is written, so nothing downstream can pick up a number that
+# looks like an ensemble score without being one.
+DETERMINISTIC_PUBLISHED_METRICS = (METRIC_ENSEMBLE_MEAN_RMSD,)
 
 
 def _filesystem(anonymous: bool) -> s3fs.S3FileSystem:
@@ -358,22 +432,43 @@ def _filesystem(anonymous: bool) -> s3fs.S3FileSystem:
     return s3fs.S3FileSystem(key=key, secret=secret, client_kwargs={"endpoint_url": CLOUDFERRO_ENDPOINT})
 
 
+def _store_location(
+    specification: ChallengerSpec,
+    start_date: pandas.Timestamp,
+    variable_name: str | None,
+    filesystem: s3fs.S3FileSystem,
+) -> tuple[str, str | None]:
+    """The store root of one forecast start, and the group inside it holding this variable."""
+    if specification.store_layout == STORE_ML_FORECAST_DEV:
+        return f"{OCEANBENCH_BUCKET}/{ML_FORECAST_DEV_PREFIX}/{specification.name}/{start_date:%Y%m%d}.zarr", None
+    if specification.store_layout == STORE_ML_FORECAST_PUBLIC:
+        return f"{OCEANBENCH_BUCKET}/{ML_FORECAST_PUBLIC_PREFIX}/{specification.name}/{start_date:%Y%m%d}.zarr", None
+    if specification.store_layout == STORE_GLO12_VARIABLE_GROUPS:
+        bulletin_date = start_date + GLO12_BULLETIN_OFFSET
+        root = f"{OCEANBENCH_BUCKET}/{GLO12_FORECAST_PREFIX}/glo12_rg_1d-m_fcst_R{bulletin_date:%Y%m%d}.zarr"
+        return root, variable_name
+    grid_code = GLOENS_3D_GRID_CODE[variable_name]
+    store_name = GLOENS_3D_PATTERN.format(grid=grid_code, variable=variable_name, start_date=start_date)
+    matches = sorted(filesystem.glob(f"{GLOENS_BUCKET}/{store_name}"))
+    if len(matches) != 1:
+        raise RuntimeError(f"expected one store for {variable_name} at {start_date:%Y-%m-%d}, found {matches}")
+    return matches[0], None
+
+
+def _with_member_dimension(dataset: xarray.Dataset, specification: ChallengerSpec) -> xarray.Dataset:
+    """Give a deterministic store the member axis of length one the ensemble metrics read."""
+    if specification.member_dimension in dataset.dims:
+        return dataset
+    return dataset.expand_dims({specification.member_dimension: [0]})
+
+
 def _open_challenger(
     specification: ChallengerSpec, start_date: pandas.Timestamp, variable_name: str | None
 ) -> tuple[xarray.Dataset, str]:
     filesystem = _filesystem(specification.anonymous)
-    if specification.store_per_variable:
-        grid_code = GLOENS_3D_GRID_CODE[variable_name]
-        store_name = GLOENS_3D_PATTERN.format(grid=grid_code, variable=variable_name, start_date=start_date)
-        pattern = f"{GLOENS_BUCKET}/{store_name}"
-        matches = sorted(filesystem.glob(pattern))
-        if len(matches) != 1:
-            raise RuntimeError(f"expected one store for {variable_name} at {start_date:%Y-%m-%d}, found {matches}")
-        root = matches[0]
-    else:
-        root = f"{GLONET2_BUCKET}/{GLONET2_PREFIX}/{specification.name}/{start_date:%Y%m%d}.zarr"
-    dataset = xarray.open_zarr(s3fs.S3Map(root=root, s3=filesystem, check=False), consolidated=True)
-    return dataset, root
+    root, group = _store_location(specification, start_date, variable_name, filesystem)
+    dataset = xarray.open_zarr(s3fs.S3Map(root=root, s3=filesystem, check=False), group=group, consolidated=True)
+    return _with_member_dimension(dataset, specification), root
 
 
 def _challenger_depth_index(dataset: xarray.Dataset, nominal_depth: float) -> tuple[int, float]:
@@ -515,6 +610,37 @@ def _curvilinear_mapping(
     )
 
 
+def _finer_regular_mapping(
+    dataset: xarray.Dataset,
+    variable_name: str,
+    latitude: numpy.ndarray,
+    longitude: numpy.ndarray,
+) -> NearestNeighbourMapping:
+    """Nearest-neighbour mapping from a finer regular challenger grid onto the staged grid.
+
+    A twelfth-degree challenger is gathered onto the quarter-degree reference by the same
+    nearest-neighbour-on-the-sphere route the tripolar stores take, so the value scored is a
+    value the model produced rather than an interpolation between several of them. The ocean
+    mask is read from the first level of the field, as it is for a tripolar store.
+    """
+    field = dataset[variable_name]
+    horizontal = ("latitude", "longitude")
+    sample = field.isel({name: 0 for name in field.dims if name not in horizontal}).values
+    source_latitude, source_longitude = numpy.meshgrid(
+        dataset["latitude"].values.astype("float64"),
+        dataset["longitude"].values.astype("float64"),
+        indexing="ij",
+    )
+    return nearest_neighbour_mapping(
+        source_latitude,
+        source_longitude,
+        numpy.isfinite(sample),
+        latitude,
+        longitude,
+        maximum_distance_kilometres=MAXIMUM_NEIGHBOUR_KILOMETRES,
+    )
+
+
 def _score_start_date(
     specification: ChallengerSpec,
     start_date: pandas.Timestamp,
@@ -553,12 +679,19 @@ def _score_start_date(
             )
             dataset, root = open_challenger_stores[store_key]
             print(f"challenger store: {root}", flush=True)
-            if specification.curvilinear:
+            if specification.grid == GRID_CURVILINEAR:
                 mapping_started = time.time()
                 source_latitude, source_longitude = _gloens_source_grid(start_date)
                 mappings[store_key] = _curvilinear_mapping(
                     dataset, challenger_variable, source_latitude, source_longitude, latitude, longitude
                 )
+                print(
+                    f"{mappings[store_key].describe()} ({time.time() - mapping_started:.1f}s)",
+                    flush=True,
+                )
+            elif specification.grid == GRID_FINER_REGULAR:
+                mapping_started = time.time()
+                mappings[store_key] = _finer_regular_mapping(dataset, challenger_variable, latitude, longitude)
                 print(
                     f"{mappings[store_key].describe()} ({time.time() - mapping_started:.1f}s)",
                     flush=True,
@@ -660,9 +793,12 @@ def _score_start_date(
                         map_fields.setdefault((reference, variable_key, variable.depth_label, "crps_fair"), []).append(
                             (lead_day, continuous_ranked_probability_score(members, reference_field))
                         )
+                    # The CRPS of a one-member challenger is not published, so it is not printed
+                    # either: what it holds at one member is the mean absolute error.
+                    crps = "" if specification.member_count == 1 else f"crps {field_statistics.crps_fair:.4f} "
                     print(
                         f"  {reference} {variable.challenger_name} [{variable.depth_label}] lead {lead_day}: "
-                        f"crps {field_statistics.crps_fair:.4f} "
+                        f"{crps}"
                         f"rmsd {numpy.sqrt(field_statistics.ensemble_mean_squared_error):.4f} "
                         f"cells {field_statistics.scored_cell_count}",
                         flush=True,
@@ -717,7 +853,7 @@ def _read_members(
         return {None: values.astype("float64")}
 
     depth_name = "deptht" if "deptht" in dataset[variable_name].dims else "depth"
-    if specification.curvilinear:
+    if specification.grid == GRID_CURVILINEAR:
         # Column-chunked: read one member at a time and keep only the wanted levels.
         per_depth = {index: [] for index in depth_indices}
         for member_index in range(specification.member_count):
@@ -772,9 +908,15 @@ def _run_context(specification: ChallengerSpec) -> RunContext:
     )
 
 
+def _published_records(records: list[dict], specification: ChallengerSpec) -> list[dict]:
+    if specification.member_count > 1:
+        return records
+    return [record for record in records if record["metric"] in DETERMINISTIC_PUBLISHED_METRICS]
+
+
 def _score_command(arguments: argparse.Namespace) -> None:
     specification = CHALLENGERS[arguments.challenger]
-    if specification.curvilinear and any(
+    if specification.grid == GRID_CURVILINEAR and any(
         variable.challenger_name in ("uo", "vo") for variable in specification.variables
     ):
         raise RuntimeError(CURVILINEAR_VELOCITY_ROUTE_REASON)
@@ -807,6 +949,7 @@ def _score_command(arguments: argparse.Namespace) -> None:
                 depth_statistics, context=_run_context(specification), reference=reference, depth=depth_label
             )
         ]
+        records = _published_records(records, specification)
         if not records:
             print(f"no covered lead day for {reference} at {start_date:%Y-%m-%d}, no score file written")
             continue
@@ -850,7 +993,9 @@ def _refuse_missing_metric_values(per_start: pandas.DataFrame) -> None:
 def _aggregate_over_start_dates(per_start: pandas.DataFrame) -> pandas.DataFrame:
     _refuse_missing_metric_values(per_start)
     values = per_start.pivot_table(index=AGGREGATION_KEYS, columns="metric", values="value", aggfunc="mean")
-    values[METRIC_SPREAD_ERROR_RATIO] = values[METRIC_ENSEMBLE_SPREAD] / values[METRIC_ENSEMBLE_MEAN_RMSD]
+    # A one-member challenger publishes no spread, so it has no ratio to recompute either.
+    if METRIC_ENSEMBLE_SPREAD in values.columns:
+        values[METRIC_SPREAD_ERROR_RATIO] = values[METRIC_ENSEMBLE_SPREAD] / values[METRIC_ENSEMBLE_MEAN_RMSD]
     counts = per_start.groupby(AGGREGATION_KEYS, dropna=False).agg(
         start_count=("start_date", "nunique"), scored_cells=("n", "max")
     )
