@@ -743,6 +743,13 @@ def evaluate(
             encoding="utf-8",
         )
 
+        # The viewer rail reads the score index, which otherwise names only the published
+        # summary; without this the locally scored model draws no curve next to the officials.
+        if viewer_result is not None:
+            from oceanbench.packs.local_viewer import write_local_scores_summary
+
+            write_local_scores_summary(viewer_result.viewer_directory, summary_to_json_records(summary))
+
     published_prefix = None
     if s3_bucket is not None:
         from oceanbench.publish.s3 import EDITO_MINIO_ENDPOINT, upload_tree

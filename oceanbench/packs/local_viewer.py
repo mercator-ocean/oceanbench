@@ -30,6 +30,7 @@ from oceanbench.pyramids import build_pyramid, viewer_layers
 OFFICIAL_PUBLISHED_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/benchmark/rebuild-preview/"
 LOCAL_VIEWER_DIRECTORY = "viewer"
 INSIGHTS_FILENAME = "insights.json"
+LOCAL_SCORES_SUMMARY_FILENAME = "scores-summary.json"
 
 # The insights index key each artifact of a dataset is published under.
 _LOCAL_INSIGHT_FILENAMES = {
@@ -200,3 +201,27 @@ def build_local_viewer(
         zarr_path=pyramid_zarr_path,
         manifest_path=pyramid_manifest_path,
     )
+
+
+def write_local_scores_summary(viewer_directory: str, summary_records: list) -> str:
+    """Merge this run's summary rows into the viewer's score index and repoint it locally.
+
+    The rail draws its lead curves from the ``scores_summary`` entry of ``insights.json``.
+    Left pointing at the published summary, that index knows every official product and
+    nothing about the model just scored, so the local dataset gets "no scored observations"
+    instead of a curve. Writing the published rows plus the local ones beside the viewer and
+    repointing the index at that file is what puts the local model on the officials' axes.
+    """
+    data_directory = Path(viewer_directory) / "data"
+    index_path = data_directory / INSIGHTS_FILENAME
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    published_reference = index.get("scores_summary")
+    published_rows = read_json_url(published_reference) if published_reference else []
+    merged_path = data_directory / LOCAL_SCORES_SUMMARY_FILENAME
+    merged_path.write_text(
+        json.dumps([*published_rows, *summary_records], sort_keys=True, indent=2, default=str),
+        encoding="utf-8",
+    )
+    index["scores_summary"] = f"./data/{LOCAL_SCORES_SUMMARY_FILENAME}"
+    index_path.write_text(json.dumps(index, sort_keys=True, indent=2), encoding="utf-8")
+    return str(merged_path)

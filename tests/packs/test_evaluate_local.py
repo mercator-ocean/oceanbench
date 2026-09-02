@@ -449,6 +449,29 @@ def test_the_insights_index_merges_local_entries_into_absolutised_official_ones(
     assert "eddies" not in local
 
 
+def test_the_local_score_summary_carries_the_published_rows_and_the_local_ones(monkeypatch, tmp_path):
+    """The rail needs one file holding both, and the index has to point at it locally."""
+    from oceanbench.packs import local_viewer
+
+    published_url = "https://example.invalid/data/scores-summary.json"
+    published_row = {"challenger": "glonet", "lead_day": 1, "value": 0.5}
+    monkeypatch.setattr(local_viewer, "read_json_url", lambda url: [published_row] if url == published_url else [])
+
+    data_directory = tmp_path / "viewer" / "data"
+    data_directory.mkdir(parents=True)
+    (data_directory / local_viewer.INSIGHTS_FILENAME).write_text(
+        json.dumps({"datasets": {}, "scores_summary": published_url}), encoding="utf-8"
+    )
+
+    local_row = {"challenger": "your_model", "lead_day": 1, "value": 0.7}
+    merged_path = local_viewer.write_local_scores_summary(str(tmp_path / "viewer"), [local_row])
+
+    assert json.loads(Path(merged_path).read_text(encoding="utf-8")) == [published_row, local_row]
+    index = json.loads((data_directory / local_viewer.INSIGHTS_FILENAME).read_text(encoding="utf-8"))
+    assert index["scores_summary"] == "./data/" + local_viewer.LOCAL_SCORES_SUMMARY_FILENAME
+    assert index["datasets"] == {}
+
+
 def test_the_local_viewer_does_not_ship_the_maintainers_qa_harness(local_evaluation_fixture, tmp_path, monkeypatch):
     """website/viewer/qa carries its own node_modules and is not part of a user's viewer."""
     monkeypatch.setattr("oceanbench.packs.local_viewer._official_datasets", lambda: [])
