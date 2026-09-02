@@ -6,7 +6,7 @@
 
 Submodules:
 
-- ``records`` — convert legacy per-metric dataframes into long-format records.
-- ``run`` — compute the metric functions directly and write ``scores.parquet``.
-- ``parity`` — compare a runner parquet against the published golden.
+- ``records``: convert legacy per-metric dataframes into long-format records.
+- ``run``: compute the metric functions directly and write ``scores.parquet``.
+- ``parity``: compare a runner parquet against the published golden.
 """

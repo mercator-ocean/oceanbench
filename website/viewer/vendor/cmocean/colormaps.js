@@ -1,5 +1,5 @@
 // Perceptually uniform colormaps from cmocean (Kristen M. Thyng, MIT).
-// https://matplotlib.org/cmocean/ — each map is a 256-entry RGB lookup table,
+// https://matplotlib.org/cmocean/, each map is a 256-entry RGB lookup table,
 // byte-packed and base64-encoded here so the viewer vendors them as small data
 // with no external dependency. Regenerate with the builder in the viewer README.
 // SPDX-FileCopyrightText: 2015 Kristen M. Thyng

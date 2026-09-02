@@ -10,7 +10,7 @@
 # Quarto only copies `resources:` (the viewer app) into _site during a full render,
 # so `quarto preview` never picks up viewer edits on its own. This script replaces
 # _site/viewer with a symlink to ../viewer, so every edit to a viewer file is served
-# immediately — no re-copy, no "is this cached?" guesswork. Run it once per checkout;
+# immediately, no re-copy, no "is this cached?" guesswork. Run it once per checkout;
 # it is idempotent.
 #
 # _site is a build output (git-ignored); `quarto render` wipes _site and regenerates

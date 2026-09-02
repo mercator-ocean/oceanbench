@@ -6,7 +6,7 @@
 
 The field pyramid (``oceanbench.pyramids``) serves *maps*: one surface (or 15 m)
 layer per fetch, coarsened for pan/zoom. It deliberately drops the depth axis. The
-column store is its complement — it serves *profiles and sections*: the full water
+column store is its complement, it serves *profiles and sections*: the full water
 column of temperature and salinity, so a click on the map reads a whole vertical
 profile (all depths at one point) or a section without any server-side compute. Only
 ``sea_water_potential_temperature`` and ``sea_water_salinity`` are stored; every other
@@ -27,7 +27,7 @@ holds one array per variable with dims ``(start_date, lead_day, depth, latitude,
 longitude)``. Each variable is the same quantized ``uint16`` (per-variable
 ``scale_factor`` / ``add_offset``, land/missing = ``_FillValue`` 65535, DEFLATE) as the
 pyramid, so round-trip error stays at or below half a quantization step and the browser
-decodes tiles with the platform ``DecompressionStream('deflate')`` — no wasm codec.
+decodes tiles with the platform ``DecompressionStream('deflate')``, no wasm codec.
 
 Chunking arithmetic
 -------------------
@@ -35,20 +35,20 @@ The 1-degree global grid is ``start_date=52, lead_day=10, depth=50, latitude=170
 longitude=360``. Two hard targets pull against each other:
 
 * a single profile click (1 start, 1 lead, all depths, 1 point, 1 variable) must
-  download at most ~1.5 MB compressed — the client fetches whole chunks, so the
+  download at most ~1.5 MB compressed, the client fetches whole chunks, so the
   click cost is the compressed size of the one chunk covering that point;
 * the total object (chunk file) count per challenger must stay at or below ~300k,
   because an object store charges per object and the browser lists them.
 
 Depth must be contiguous (a profile is one axis read), so the depth chunk is the full
-depth axis — never split. That fixes ``depth`` in every chunk. The two remaining levers
+depth axis, never split. That fixes ``depth`` in every chunk. The two remaining levers
 are the horizontal tile ``(latitude, longitude)`` and whether the 10 lead days are
 packed into one chunk:
 
 * NOT packing leads (lead chunk = 1) keeps a click small but multiplies the object
   count by 10.
 * Packing all 10 leads (lead chunk = 10) cuts the object count 10x. A click then
-  downloads all leads of the point — which is exactly what a lead-scrubbing profile
+  downloads all leads of the point, which is exactly what a lead-scrubbing profile
   view wants.
 
 So leads are packed and the chunk is ``[start=1, lead=10, depth=50, lat=64, lon=64]``,
@@ -70,8 +70,8 @@ Both levers are parameters (``latitude_tile_size``, ``longitude_tile_size``,
 
 Streaming: the year is never materialised. The per-variable quantization range comes
 from a single lazy ``dask`` min/max pass (no data pulled into memory), then the store
-is written one forecast start at a time — the first start creates the store, each later
-start is appended along ``start_date`` — so peak memory is one start's chunks. The
+is written one forecast start at a time, the first start creates the store, each later
+start is appended along ``start_date``, so peak memory is one start's chunks. The
 write is I/O bound, so a serial per-start loop is enough; it consumes the same lazy
 multi-store challenger dataset the wave's pyramid step does.
 """

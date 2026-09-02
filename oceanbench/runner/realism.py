@@ -21,7 +21,7 @@ Spectral-band naming. Branch 249's zonal PSD bands are ``Large scale`` (≥ 2000
 ``Regional scale`` (500–2000 km) and ``Near-grid scale`` (< 500 km). The contract
 (§3.2) names the band column ``large`` / ``regional`` / ``mesoscale``; the map below
 is the single source of truth. The contract's ``mesoscale`` is 249's sub-500 km
-``Near-grid scale`` band — the scale at which eddy-resolving models carry mesoscale
+``Near-grid scale`` band: the scale at which eddy-resolving models carry mesoscale
 energy. At 1° the grid cannot resolve < 500 km, so the ``mesoscale`` band is narrow
 and degenerate (see the Phase-4 smoke).
 """
@@ -501,7 +501,7 @@ def _eddy_records_and_census(
     if total_detections == 0:
         flags.append(
             "eddy detection found zero challenger eddies (valid at 1 degree; the coarse "
-            "grid rarely resolves closed mesoscale contours — needs 1/12 degree data)."
+            "grid rarely resolves closed mesoscale contours, needs 1/12 degree data)."
         )
     return metric_records, census, flags
 

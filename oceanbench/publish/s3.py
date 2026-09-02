@@ -226,7 +226,7 @@ def resolve_credentials(
     """Resolve S3 credentials following the documented order (AWS_* env, then STS).
 
     ``environment`` defaults to ``os.environ``. AWS_* variables are honoured only
-    from the environment, never from ``env_file`` — the env file is consulted
+    from the environment, never from ``env_file``, the env file is consulted
     solely to locate the EDITO offline token (so a stale AWS_* pair left in a
     ``.env`` cannot shadow the STS flow that MinIO writes actually require).
     """
@@ -310,7 +310,7 @@ def should_skip_upload(s3_client, bucket: str, item: UploadPlanItem, *, force: b
     Content-addressed blob keys make size+key a sufficient cheap idempotency check:
     a differing blob yields a different key. For the few fixed-name files
     (``catalog.json``, ``scores.parquet``, ``challengers.json``) a same-size edit
-    would not be detected — pass ``force`` to guarantee an overwrite of those.
+    would not be detected, pass ``force`` to guarantee an overwrite of those.
     """
     if force:
         return False

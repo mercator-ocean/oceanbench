@@ -8,15 +8,15 @@ Each scoring run writes ``runs/<challenger>/<year>/<region>/scores*.parquet`` (t
 schema as the public file). ``publish`` merges every run into one consolidated
 ``scores.parquet``:
 
-- **schema-enforced** — the merged frame is reindexed onto the contract column order and
+- **schema-enforced**: the merged frame is reindexed onto the contract column order and
   dtypes (``oceanbench.runner.records.SCORE_COLUMNS``); a run missing or renaming a column
   is rejected.
-- **newest run wins** — an upstream reprocessing re-scores the same key; the row from the
+- **newest run wins**: an upstream reprocessing re-scores the same key; the row from the
   most recent run supersedes the older one. Rows carrying a *different* ``challenger_version``
   coexist (old and new scores live side by side, §1), so the dedup key includes the version.
-- **deterministic ordering** — the output is sorted by its full key so identical inputs
+- **deterministic ordering**: the output is sorted by its full key so identical inputs
   always produce a byte-identical file.
-- **stamped** — the compaction ``oceanbench_version`` is recorded in the parquet file metadata.
+- **stamped**: the compaction ``oceanbench_version`` is recorded in the parquet file metadata.
 """
 
 from pathlib import Path

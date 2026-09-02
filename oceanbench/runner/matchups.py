@@ -6,7 +6,7 @@
 
 One row per observation point: the observation value, the model value interpolated
 to that point, its latitude / longitude / depth / time, the CF standard-name
-variable, the 1-based ``lead_day``, the forecast ``start_date``, and — for sea level —
+variable, the 1-based ``lead_day``, the forecast ``start_date``, and (for sea level)
 the SLA shift already folded into ``model_value``.
 
 The model-at-observation values are the very ones the Class-4 metric consumes. This
@@ -58,7 +58,7 @@ from oceanbench.runner.records import RunContext
 # datasets copies a multi-threaded process (an aiohttp event-loop thread, SSL sockets, dask worker
 # threads) whose locks and sockets are meaningless in the child, which deadlocks or corrupts reads.
 # A spawned worker instead starts from a clean interpreter and opens its OWN copy of the challenger
-# and observation datasets from a picklable spec — preferably the ORIGINAL store URL plus the exact
+# and observation datasets from a picklable spec, preferably the ORIGINAL store URL plus the exact
 # coordinate labels of the applied subsetting, so at native resolution nothing is copied and each
 # worker lazily reads only its own starts' slices; a small in-memory dataset falls back to a
 # size-guarded temporary zarr copy. The opened datasets are cached in a module-level global so every

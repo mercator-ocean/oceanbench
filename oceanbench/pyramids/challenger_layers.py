@@ -5,8 +5,8 @@
 """Extract the viewer layers of a challenger / reference dataset (contracts.md §6).
 
 Viewer datasets carry ``zos, thetao, so, uo, vo`` at the surface and ``uo, vo`` at
-15 m. This module selects those layers from a forecast dataset — surface is the
-shallowest model level, 15 m is linearly interpolated in depth — and renames the
+15 m. This module selects those layers from a forecast dataset, surface is the
+shallowest model level, 15 m is linearly interpolated in depth, and renames the
 forecast dimensions to the viewer coordinates ``start_date`` (from
 ``first_day_datetime``) and 1-based ``lead_day`` (from ``lead_day_index``).
 """

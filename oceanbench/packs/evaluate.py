@@ -168,7 +168,7 @@ def open_forecast_dataset(forecasts_path: str) -> xarray.Dataset:
     - a **single combined zarr** with dims ``(first_day_datetime, lead_day_index, depth,
       latitude, longitude)`` and the CF-named forecast variables;
     - a **directory of weekly zarr stores** named ``YYYYMMDD.zarr`` (one per forecast start),
-      each with a ``time`` lead-day dimension — the same shape a challenger publishes.
+      each with a ``time`` lead-day dimension, the same shape a challenger publishes.
     """
     path = Path(forecasts_path)
     if _looks_like_weekly_store_directory(path):

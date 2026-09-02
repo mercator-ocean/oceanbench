@@ -103,7 +103,7 @@ _YEAR_TARGETS = [
 _YEAR_GEOGRAPHY_DECIMALS = {"SSH": 4, "T": 3, "S": 4, "u": 4, "v": 4}
 
 # Uncertainty on the per-start point estimates. The RMSD interval reuses the lead-curve method
-# (seeded percentile bootstrap, aggregate.py) — same seed and 95% percentile interval — but
+# (seeded percentile bootstrap, aggregate.py), same seed and 95% percentile interval, but
 # resamples the match-ups of that single start rather than the whole-year start axis, so the band
 # reflects the observation spread inside that start, consistent with the pooled per-start
 # reduction. Above ``_YEAR_RMSD_CI_EXACT_MAXIMUM`` match-ups the resampling switches to an
@@ -503,7 +503,7 @@ def write_matchup_parquet_streamed(
     produces). Because ``start_date`` is the leading sort key and the starts are disjoint and
     ascending, sorting each start on its own ``(start_date, lead_day, variable, depth_bin)`` keys
     and appending its row groups yields a file byte-for-byte equivalent in row content and layout to
-    :func:`write_matchup_parquet` over the concatenated frame — but peak memory is one start, not the
+    :func:`write_matchup_parquet` over the concatenated frame, but peak memory is one start, not the
     whole year, which also keeps every written array well under Arrow's 2 GiB single-array limit.
     ``on_partition`` is invoked with each raw (pre-projection) frame for callers that also aggregate
     from the match-ups (e.g. per-start bias records).
@@ -715,7 +715,7 @@ def _bootstrap_rmsd_ci(
     resampled unit here is the individual match-up of that start, matching the pooled per-start
     reduction ``sqrt(mean(error ** 2))``. Small starts resample match-ups exactly; large starts
     (above ``_YEAR_RMSD_CI_EXACT_MAXIMUM``) use an equal-count quantile-binned multinomial
-    bootstrap of the mean squared error — the resample weight of each of the
+    bootstrap of the mean squared error, the resample weight of each of the
     ``_YEAR_RMSD_CI_BINS`` sorted equal-count bins is drawn from Multinomial(n, count_bin / n),
     which reproduces the bootstrap distribution of the mean up to the (negligible at that n)
     within-bin variance, at a cost independent of n.
@@ -919,7 +919,7 @@ def _write_year_artifacts(
             "ci_method": (
                 f"rmsd_ci: seeded percentile bootstrap over the start's match-ups "
                 f"({_YEAR_RMSD_CI_BOOTSTRAP_DRAWS} resamples, seed {_YEAR_CI_SEED}, "
-                f"{int(_YEAR_CI_CONFIDENCE * 100)}% percentile interval — same method/seed as the "
+                f"{int(_YEAR_CI_CONFIDENCE * 100)}% percentile interval, same method/seed as the "
                 f"lead-curve bootstrap, resampling match-ups within the start rather than starts; "
                 f"above {_YEAR_RMSD_CI_EXACT_MAXIMUM} match-ups an equal-count quantile-binned "
                 f"({_YEAR_RMSD_CI_BINS} bins) multinomial bootstrap of the mean squared error is "
@@ -973,8 +973,8 @@ def rmsd_by_depth(matchup_parquet_path: str) -> dict:
     Streams the Class-4 match-up parquet once, accumulating over *all* match-ups of the year (every
     forecast start pooled together) the squared error ``(model - obs) ** 2``, the signed error
     ``model - obs`` and the finite-observation count for each ``(variable, depth_bin, lead_day)``
-    cell. The pooled RMSD is ``sqrt(mean(squared error))`` — the same observation-pooled reduction
-    the official Class-4 score uses — the bias is ``mean(model - obs)`` and ``n`` is the pooled obs
+    cell. The pooled RMSD is ``sqrt(mean(squared error))``, the same observation-pooled reduction
+    the official Class-4 score uses, the bias is ``mean(model - obs)`` and ``n`` is the pooled obs
     count. Only 3D variables carrying more than one depth bin are returned (surface-only variables
     such as SSH or the 15 m currents are skipped); depth bins are ordered surface -> deep with the
     exact labels found in the parquet.

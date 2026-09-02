@@ -14,11 +14,11 @@ report can be trusted without re-running the whole evaluation:
   ``sqrt(mean((model_value - observation_value) ** 2))`` (algebraically the n-weighted recombination the official
   ``class4_rmsd`` aggregate uses) and compared to ``scores-summary.json`` at ``class4_rtol``. When
   the official record carries the pooled observation count ``n`` (emitted by the aggregation
-  library), the parquet's finite-obs count is additionally asserted against it — an independent
+  library), the parquet's finite-obs count is additionally asserted against it, an independent
   guard that catches uniform obs thinning an RMSD tolerance alone would miss. On older
   ``scores-summary.json`` without ``n`` the count assertion is skipped (and logged as skipped, so
   it degrades gracefully rather than silently passing as if checked).
-- **Year by-start pooled vs official** — the published ``year-rmsd-by-start.json`` per-start RMSD
+- **Year by-start pooled vs official**: the published ``year-rmsd-by-start.json`` per-start RMSD
   series recombined n-weighted over its starts (``sqrt(sum(rmsd ** 2 * n) / sum(n))``) and compared
   to the official ``class4_rmsd`` in ``scores-summary.json``. This is an *independent* cross-check:
   the year JSON derives from the match-up parquet while the official value derives from the
@@ -33,7 +33,7 @@ report can be trusted without re-running the whole evaluation:
   compared to ``year-error-geography.json`` for a random sample of cells per variable. Also a
   materialization-consistency check (parquet <-> derived JSON), with no independent official
   counterpart (the official scores carry no per-cell geography).
-- **RMSD-by-depth (independent recompute)** — a sample of ``(variable, depth_bin, lead)`` cells of
+- **RMSD-by-depth (independent recompute)**: a sample of ``(variable, depth_bin, lead)`` cells of
   the published ``rmsd-by-depth.json`` recomputed straight from the match-up parquet as the
   year-pooled ``sqrt(mean(err ** 2))`` and compared on RMSD (relative tolerance) and obs count
   ``n`` (exact), the same tolerance pattern as the Class-4 checks; a thinned ``n`` fails the count

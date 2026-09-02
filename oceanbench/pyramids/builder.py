@@ -4,8 +4,8 @@
 
 """Build a multiscale viewer zarr pyramid and its manifest (contracts.md §6).
 
-The builder takes a *layer dataset* — dims ``(start_date, lead_day, latitude,
-longitude)``, one data variable per viewer layer — plus a display/encoding spec
+The builder takes a *layer dataset*, dims ``(start_date, lead_day, latitude,
+longitude)``, one data variable per viewer layer, plus a display/encoding spec
 per layer, and writes a zarr store whose groups ``level/<k>`` hold the field at
 halving resolutions from native up to about one degree. Each variable is stored
 as quantized ``uint16`` (1024x1024 spatial tiles, one ``(start_date, lead_day)``

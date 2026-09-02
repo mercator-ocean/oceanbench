@@ -5,8 +5,8 @@
 """Self-contained overlay scorecard for local evaluation (contracts.md §7).
 
 Renders the same no-ranking scorecard semantics as the website scores page
-(``website-rebuild/scores/``) — mean +/- 95% CI over forecast starts, baselines pinned,
-neutral order, no composite score — but with the user's model overlaid on the published
+(``website-rebuild/scores/``): mean +/- 95% CI over forecast starts, baselines pinned,
+neutral order, no composite score, but with the user's model overlaid on the published
 challengers and clearly labelled "your model".
 
 Data is **inlined** into ``index.html`` rather than fetched: a local file opened over
@@ -143,14 +143,14 @@ SPDX-License-Identifier: EUPL-1.2
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>OceanBench \u2014 local evaluation scorecard</title>
+<title>OceanBench: local evaluation scorecard</title>
 <style>{styles}</style>
 </head>
 <body>
 <header class="page-header">
-  <h1>OceanBench \u2014 local evaluation</h1>
+  <h1>OceanBench: local evaluation</h1>
   <p class="tagline"><strong>Your model</strong> overlaid on the published challengers.
-  Mean &plusmn; 95% CI over the shared forecast starts. No ranking, no composite score \u2014
+  Mean &plusmn; 95% CI over the shared forecast starts. No ranking, no composite score:
   baselines are pinned, order is neutral.</p>
 </header>
 <section class="controls" id="controls"></section>

@@ -29,7 +29,7 @@
 
   function nullable(v) { return (v === null || v === undefined || v === "") ? null : v; }
   function distinct(a) { return Array.prototype.filter.call(a, function (v, i) { return a.indexOf(v) === i; }); }
-  function variableLabel(v) { return VARIABLE_LABELS[v] || v || "—"; }
+  function variableLabel(v) { return VARIABLE_LABELS[v] || v || "-"; }
   function challengerLabel(s) { return (challengers[s] && challengers[s].display_name) || s; }
   function isBaseline(s) { return !!(challengers[s] && challengers[s].is_baseline); }
   function isYourModel(s) { return !!(challengers[s] && challengers[s].is_your_model); }
@@ -41,7 +41,7 @@
     });
   }
   function fmt(v) {
-    if (v === null || v === undefined || !isFinite(v)) return "—";
+    if (v === null || v === undefined || !isFinite(v)) return "-";
     var m = Math.abs(v);
     if (m >= 100) return v.toFixed(1);
     if (m >= 1) return v.toFixed(2);
@@ -156,7 +156,7 @@
     var depthText = metric === "class4_rmsd" ? "" : (" at " + selection.depth);
     document.getElementById("scorecard-note").textContent =
       METRIC_PHRASE[metric] + " vs " + (REFERENCE_LABELS[selection.reference] || selection.reference) +
-      " — " + payload.region + ", day " + selection.lead + depthText + ". Mean ± 95% CI over forecast starts.";
+      ", " + payload.region + ", day " + selection.lead + depthText + ". Mean ± 95% CI over forecast starts.";
 
     var thead = document.querySelector("#scorecard thead");
     var headRow = el("tr");
@@ -181,7 +181,7 @@
         var td = el("td");
         var c = cellFor(slug, col);
         if (!c || c.mean === null || c.mean === undefined) {
-          td.appendChild(el("span", { "class": "cell-empty" }, "—"));
+          td.appendChild(el("span", { "class": "cell-empty" }, "-"));
           tr.appendChild(td);
           return;
         }

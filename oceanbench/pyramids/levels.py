@@ -6,7 +6,7 @@
 
 Level 0 is the native grid; each further level halves the spatial resolution
 (a 2x2 block mean over ocean cells) up to about one degree. A dataset already at
-about one degree collapses to a single level — the degenerate case is handled by
+about one degree collapses to a single level, the degenerate case is handled by
 producing only ``level/0``.
 """
 

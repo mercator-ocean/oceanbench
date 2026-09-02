@@ -10,7 +10,7 @@ the runner records over start dates, maps the ``(metric, reference, variable)``
 triple onto the legacy golden metric key, joins on the shared keys, and reports
 the maximum absolute and relative differences per metric with a tolerance gate.
 
-Pure pandas/numpy — no dependency on the metric machinery.
+Pure pandas/numpy, no dependency on the metric machinery.
 """
 
 from dataclasses import dataclass

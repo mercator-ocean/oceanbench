@@ -10,17 +10,17 @@ stored per run. This keeps every aggregate recomputable against any baseline.
 
 Three derivations, all over the forecast-start axis (the 52 weekly starts):
 
-- **mean over starts** — a plain mean for gridded/Lagrangian metrics; for Class-4
+- **mean over starts**: a plain mean for gridded/Lagrangian metrics; for Class-4
   RMSD the n-weighted recombination ``sqrt(sum(value ** 2 * n) / sum(n))`` (the single
   pooled-over-observations RMSD), reusing
   :func:`oceanbench.runner.parity.recombine_class4_over_starts`. Class-4 rows additionally
   carry the pooled observation count ``n`` (= ``sum`` of the per-start ``n`` over the present
   starts) so a downstream reconcile can assert the served match-up count independently of the
   RMSD value; other metrics leave ``n`` null.
-- **bootstrap 95% CI** — resample the starts with replacement, ``n_bootstrap`` draws
+- **bootstrap 95% CI**: resample the starts with replacement, ``n_bootstrap`` draws
   under a fixed seed, percentile interval. Class-4 carries each start's ``(value, n)``
   pair through the recombination inside every draw.
-- **skill vs a named baseline** — ``1 - value_model / value_baseline`` per metric key,
+- **skill vs a named baseline**: ``1 - value_model / value_baseline`` per metric key,
   computed on the *same* starts (paired). One resample of the starts is drawn per bootstrap
   draw and applied to both the model and the baseline, so their correlation across starts
   narrows the interval.
@@ -104,7 +104,7 @@ def _point_aggregate(values: numpy.ndarray, counts: numpy.ndarray, present: nump
     """Aggregate the present starts into the single point estimate.
 
     Class-4 delegates to :func:`recombine_class4_over_starts` so the pooled RMSD comes from the
-    exact same recombination the scoring/parity pipeline uses — one source of truth for the value,
+    exact same recombination the scoring/parity pipeline uses, one source of truth for the value,
     while the bootstrap inner loop uses the vectorised form for speed.
     """
     if not is_class4:
