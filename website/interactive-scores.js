@@ -45,7 +45,6 @@ let selectedDepths = new Set();
 let showAllMode = true;
 let showPercentDiff = false;
 let challengerVisibility = {};
-let selectedBaselineName = null;
 let openControl = null;
 let parsedData = null;
 let challengerLabels = {};
@@ -1259,7 +1258,7 @@ function resolveTrackSelection(challengerNames) {
 function resolveDisplayState(challengerNames) {
   const availableTracks = resolveTrackSelection(challengerNames);
   const trackChallengerNames = getTrackChallengerNames(challengerNames, activeTrack);
-  const baseline = resolveBaselineSelectionForTrack(trackChallengerNames, selectedBaselineName);
+  const baseline = resolveBaselineSelectionForTrack(trackChallengerNames, selectedBaseline);
   const visibleChallengerNames = trackChallengerNames.filter(
     (name) => name === baseline || isChallengerVisible(name),
   );
@@ -1307,7 +1306,7 @@ function setupChallengerActionDelegation() {
     } else if (action === "show") {
       challengerVisibility[name] = true;
     } else if (action === "pin") {
-      selectedBaselineName = name;
+      selectedBaseline = name;
     } else {
       return;
     }
