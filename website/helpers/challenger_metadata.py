@@ -103,8 +103,8 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1°",
     },
-    "persistence": {
-        "label": "Persistence",
+    "glo12_persistence": {
+        "label": "GLO12 persistence",
         "url": "https://github.com/mercator-ocean/oceanbench",
         "organisation": "OceanBench",
         "organisation_url": "https://github.com/mercator-ocean/oceanbench",
@@ -113,8 +113,8 @@ CHALLENGERS = {
         "initial_conditions": "GLO12 nowcast",
         "resolution": "1/12°",
     },
-    "persistence_1_degree": {
-        "label": "Persistence",
+    "glo12_persistence_1_degree": {
+        "label": "GLO12 persistence",
         "url": "https://github.com/mercator-ocean/oceanbench",
         "organisation": "OceanBench",
         "organisation_url": "https://github.com/mercator-ocean/oceanbench",

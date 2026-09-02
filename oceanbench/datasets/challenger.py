@@ -391,11 +391,11 @@ def langya_1_degree() -> xarray.Dataset:
     return challenger_datasets.langya_1_degree()
 
 
-def persistence() -> xarray.Dataset:
+def glo12_persistence() -> xarray.Dataset:
     """
-    Open the persistence baseline challenger dataset.
+    Open the GLO12 persistence baseline challenger dataset.
 
-    The persistence baseline holds the GLO12 nowcast (the initial condition
+    The GLO12 persistence baseline holds the GLO12 nowcast (the initial condition
     shared by the machine-learning challengers) constant across every lead day.
     It is the short-lead reference floor: a forecast that does not beat
     persistence adds no skill beyond doing nothing at that lead time.
@@ -403,9 +403,9 @@ def persistence() -> xarray.Dataset:
     Returns
     -------
     Dataset
-        The Dataset containing persistence baseline forecasts.
+        The Dataset containing GLO12 persistence baseline forecasts.
 
-    >>> persistence() # doctest: +SKIP
+    >>> glo12_persistence() # doctest: +SKIP
     <xarray.Dataset> Size: 4TB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 50,
                              latitude: 2041, longitude: 4320)
@@ -417,24 +417,24 @@ def persistence() -> xarray.Dataset:
         zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 ...
     """
 
-    return challenger_datasets.persistence()
+    return challenger_datasets.glo12_persistence()
 
 
-def persistence_1_degree() -> xarray.Dataset:
+def glo12_persistence_1_degree() -> xarray.Dataset:
     """
-    Open the persistence baseline challenger dataset interpolated to 1 degree.
+    Open the GLO12 persistence baseline challenger dataset interpolated to 1 degree.
 
     Returns
     -------
     Dataset
-        The Dataset containing persistence baseline forecasts interpolated to 1
+        The Dataset containing GLO12 persistence baseline forecasts interpolated to 1
         degree resolution.
 
-    >>> persistence_1_degree() # doctest: +SKIP
+    >>> glo12_persistence_1_degree() # doctest: +SKIP
     <xarray.Dataset> Size: 26GB
     Dimensions:                          (first_day_datetime: 52,
                                           lead_day_index: 10, depth: 50,
                                           latitude: 170, longitude: 360)
     """
 
-    return challenger_datasets.persistence_1_degree()
+    return challenger_datasets.glo12_persistence_1_degree()

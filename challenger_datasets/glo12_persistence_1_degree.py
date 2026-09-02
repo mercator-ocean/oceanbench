@@ -2,10 +2,10 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Open persistence baseline 1 degree interpolated forecasts with xarray
+# Open GLO12 persistence baseline 1 degree interpolated forecasts with xarray
 import xarray
 import oceanbench
 
-challenger_dataset: xarray.Dataset = oceanbench.datasets.challenger.persistence_1_degree()
+challenger_dataset: xarray.Dataset = oceanbench.datasets.challenger.glo12_persistence_1_degree()
 
 challenger_dataset

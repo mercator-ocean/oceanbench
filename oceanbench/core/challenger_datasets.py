@@ -153,15 +153,15 @@ def _langya_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/langya/{start_datetime_string}.zarr"
 
 
-def persistence() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_persistence_dataset_path)
+def glo12_persistence() -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(_glo12_persistence_dataset_path)
 
 
-def persistence_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(persistence())
+def glo12_persistence_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(glo12_persistence())
 
 
-def _persistence_dataset_path(start_datetime: datetime) -> str:
+def _glo12_persistence_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"{_CLOUDFERRO_BASELINE_FORECASTS_URL}/persistence/{start_datetime_string}.zarr"
 
