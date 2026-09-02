@@ -1507,9 +1507,7 @@ HTML("""
 <!-- ══════════════════════════════════════════════
      TAB 3 — REPORT ANALTSIS
 ════════════════════════════════════════════════ -->
-  <h2 class="ei-title" id="inference-vs-process">
-    Introduction
-  </h2>
+
 <div class="ei-tab-panel" id="tab-report">
   <p class="ei-report">
     This report <strong>synthesizes the key results from the other tabs</strong> into several evidence-backed findings: <strong>what</strong>
