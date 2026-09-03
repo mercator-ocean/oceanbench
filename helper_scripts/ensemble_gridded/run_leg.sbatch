@@ -41,6 +41,7 @@ export CHALLENGER=${CHALLENGER:?export CHALLENGER, the entry of the scorer to ru
 export FIRST_START=${FIRST_START:?export FIRST_START, the first forecast start of the year}
 export SCORER=${SCORER:-score_ensemble_gridded_multi.py}
 export START_COUNT=${START_COUNT:-52}
+export SCORE_REFERENCES=${SCORE_REFERENCES:-glorys}
 export CONCURRENCY=${CONCURRENCY:-8}
 export OUT=$WORK/output/$CHALLENGER
 export LOG=$WORK/logs/$CHALLENGER
@@ -79,7 +80,12 @@ score_one_start() {
   export PYTHONPYCACHEPREFIX=$TMPDIR/pycache
   mkdir -p "$TMPDIR"
   started=$(date +%s)
-  if [ "$SCORER" = "score_gloens_velocity_gridded.py" ]; then
+  if [ "$SCORER" = "score_ensemble_gridded.py" ]; then
+    (cd "$SRC" && "$VENV/bin/python" -W ignore "helper_scripts/ensemble_gridded/$SCORER" \
+      --output-root "$OUT" score --start-date "$start" --references $SCORE_REFERENCES \
+      --first-lead-day 1 --last-lead-day 10) \
+      > "$task_log" 2>&1
+  elif [ "$SCORER" = "score_gloens_velocity_gridded.py" ]; then
     (cd "$SRC" && "$VENV/bin/python" -W ignore "helper_scripts/ensemble_gridded/$SCORER" \
       --output-root "$OUT" score --start-date "$start" --references glorys --last-lead-day 10) \
       > "$task_log" 2>&1
@@ -117,10 +123,19 @@ echo "SCORING_FAILED=$FAILED" >> "$LOG/year.done"
 
 echo "=== aggregate ==="
 cd "$SRC" || exit 1
-"$VENV/bin/python" -W ignore \
-  helper_scripts/ensemble_gridded/score_ensemble_gridded_multi.py \
-  --output-root "$OUT" \
-  aggregate --expect-starts "$START_COUNT"
+# The surface scorer averages every start it finds and carries no count to check them against,
+# so the marker count above is what says the year is whole for that leg.
+if [ "$SCORER" = "score_ensemble_gridded.py" ]; then
+  "$VENV/bin/python" -W ignore \
+    helper_scripts/ensemble_gridded/score_ensemble_gridded.py \
+    --output-root "$OUT" \
+    aggregate
+else
+  "$VENV/bin/python" -W ignore \
+    helper_scripts/ensemble_gridded/score_ensemble_gridded_multi.py \
+    --output-root "$OUT" \
+    aggregate --expect-starts "$START_COUNT"
+fi
 RC=$?
 echo "AGGREGATE_EXIT=$RC" >> "$LOG/year.done"
 echo "=== aggregate rc=$RC ==="
