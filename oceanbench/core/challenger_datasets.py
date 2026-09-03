@@ -6,6 +6,8 @@
 This module exposes the challenger datasets evaluated in the benchmark.
 """
 
+import warnings
+
 import xarray
 from datetime import datetime, timedelta
 from collections.abc import Callable
@@ -22,6 +24,12 @@ _CLOUDFERRO_ML_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-buck
 _GLO12_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data/GLO12"
 _GLO12_FORECAST_VARIABLE_NAMES = ["so", "thetao", "uo", "vo", "zos"]
 _LANGYA_LEAD_DAYS_COUNT = 7
+
+# Reading a lead day and a depth at a time splits the blocks some stores are
+# written in, which xarray warns could be slower. It is not, and the threads
+# that stage a week race to report it, which makes the warning appear a
+# different number of times from one evaluation to the next.
+warnings.filterwarnings("ignore", message="The specified chunks separate the stored chunks")
 
 
 def _default_first_day_datetimes() -> list[datetime]:
