@@ -2,10 +2,13 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from time import sleep
-from typing import TypeVar
+from typing import Any, TypeVar
 import logging
+
+import xarray
+import zarr
 
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
@@ -20,6 +23,13 @@ RETRIABLE_REMOTE_BACKEND_MODULE_PREFIXES = (
     "aiohttp",
     "botocore",
 )
+RETRIABLE_REMOTE_TRANSPORT_ERRORS = (TimeoutError, ConnectionError)
+
+# `zarr.storage.FSStore` swallows every exception listed here during a chunk download and lets the
+# array fall back to its fill value. `fsspec` already reports a genuinely absent key as `KeyError`,
+# so keeping only `KeyError` preserves sparse-store semantics while download failures (timeouts,
+# connection errors, unexpected 404s, which are all `OSError` subclasses) propagate.
+REMOTE_ZARR_STORE_MISSING_KEY_EXCEPTIONS: tuple[type[BaseException], ...] = (KeyError,)
 
 REMOTE_ZARR_LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +56,7 @@ def _originates_from_retriable_remote_backend(exception: Exception) -> bool:
 
 def _is_retriable_remote_data_error(error: Exception) -> bool:
     return any(
-        isinstance(exception, RetriableRemoteDataError)
+        isinstance(exception, (RetriableRemoteDataError, *RETRIABLE_REMOTE_TRANSPORT_ERRORS))
         or _originates_from_retriable_remote_backend(exception)
         or any(token in str(exception) for token in RETRIABLE_HTTP_ERROR_TOKENS)
         for exception in _exception_chain(error)
@@ -91,3 +101,43 @@ def with_remote_http_retries(
             sleep(backoff_seconds)
 
     raise RuntimeError(f"Remote data retries exhausted for {operation_name}")
+
+
+def remote_zarr_store(
+    url: str,
+    storage_options: dict[str, Any] | None = None,
+) -> zarr.storage.FSStore:
+    """
+    Build a read-only zarr store that raises on failed chunk downloads instead of returning
+    fill values.
+    """
+    return zarr.storage.FSStore(
+        url,
+        mode="r",
+        exceptions=REMOTE_ZARR_STORE_MISSING_KEY_EXCEPTIONS,
+        **(storage_options or {}),
+    )
+
+
+def open_remote_zarr(
+    url: str,
+    storage_options: dict[str, Any] | None = None,
+    **open_dataset_keyword_arguments: Any,
+) -> xarray.Dataset:
+    return xarray.open_dataset(
+        remote_zarr_store(url, storage_options),
+        engine="zarr",
+        **open_dataset_keyword_arguments,
+    )
+
+
+def open_remote_multizarr(
+    urls: Sequence[str],
+    storage_options: dict[str, Any] | None = None,
+    **open_mfdataset_keyword_arguments: Any,
+) -> xarray.Dataset:
+    return xarray.open_mfdataset(
+        [remote_zarr_store(url, storage_options) for url in urls],
+        engine="zarr",
+        **open_mfdataset_keyword_arguments,
+    )
