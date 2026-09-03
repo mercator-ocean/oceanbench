@@ -5,6 +5,11 @@
 name: Evaluate samples
 on:
   workflow_dispatch:
+    inputs:
+      samples:
+        description: 'Comma separated samples to evaluate, for example "langya,xihe". Empty evaluates them all.'
+        required: false
+        default: ''
   schedule:
     # Nightly at 02:00 UTC
     - cron: '0 2 * * *'
@@ -12,30 +17,38 @@ concurrency:
   group: evaluate-samples-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  select-samples:
+    name: select samples
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - name: Build the sample matrix
+        id: select
+        env:
+          # glonet and glo36v1 stay on the raw xarray open, unstaged, so the
+          # path an external challenger takes keeps end to end coverage.
+          ALL_SAMPLES: '[{"sample": "glonet", "stage": ""}, {"sample": "glo36v1", "stage": ""}, {"sample": "glo12", "stage": "challenger"}, {"sample": "glonet_1_degree", "stage": "challenger"}, {"sample": "langya", "stage": "challenger"}, {"sample": "wenhai", "stage": "challenger"}, {"sample": "xihe", "stage": "challenger"}]'
+          SELECTED_SAMPLES: ${{ github.event.inputs.samples }}
+        run: |
+          selected=$(jq -c --arg selected "$SELECTED_SAMPLES" '
+            ($selected | split(",") | map(sub("^ +"; "") | sub(" +$"; "")) | map(select(length > 0))) as $names
+            | {include: (if ($names | length) == 0 then . else map(select(.sample as $s | $names | index($s))) end)}
+          ' <<<"$ALL_SAMPLES")
+          echo "$selected"
+          if [ "$(jq '.include | length' <<<"$selected")" -eq 0 ]; then
+            echo "No sample matched '$SELECTED_SAMPLES'." >&2
+            exit 1
+          fi
+          echo "matrix=$selected" >> "$GITHUB_OUTPUT"
   evaluate-sample:
     name: evaluate ${{ matrix.sample }}
+    needs: select-samples
     runs-on: ubuntu-latest
     timeout-minutes: 360
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          # glonet and glo36v1 stay on the raw xarray open, unstaged, so the
-          # path an external challenger takes keeps end to end coverage.
-          - sample: glonet
-            stage: ''
-          - sample: glo36v1
-            stage: ''
-          - sample: glo12
-            stage: challenger
-          - sample: glonet_1_degree
-            stage: challenger
-          - sample: langya
-            stage: challenger
-          - sample: wenhai
-            stage: challenger
-          - sample: xihe
-            stage: challenger
+      matrix: ${{ fromJSON(needs.select-samples.outputs.matrix) }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -107,6 +120,9 @@ jobs:
             ${{ matrix.sample }}_sample.*.report.ipynb
   evaluate-extras:
     name: evaluate ibi region, notebooks and doctests
+    # A dispatch that narrows the samples is debugging one of them, so the
+    # unrelated extras are left out of that run.
+    if: ${{ github.event.inputs.samples == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
