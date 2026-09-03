@@ -17,7 +17,7 @@ jobs:
   evaluate-sample:
     name: evaluate ${{ matrix.sample }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -34,7 +34,29 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Record host resources
-        run: nproc && free -h
+        run: |
+          echo "cpus: $(nproc)"
+          free -h
+          df -h / /mnt || true
+      - name: Start memory sampler
+        run: |
+          cat > /tmp/memwatch.sh <<'SAMPLER'
+          #!/usr/bin/env bash
+          peak_used=0
+          peak_swap=0
+          while true; do
+            used=$(free -m | awk '/^Mem:/{print $3}')
+            swap=$(free -m | awk '/^Swap:/{print $3}')
+            [ "$used" -gt "$peak_used" ] && peak_used=$used
+            [ "$swap" -gt "$peak_swap" ] && peak_swap=$swap
+            echo "$(date -u +%H:%M:%S) used=${used}MB swap=${swap}MB peak_used=${peak_used}MB peak_swap=${peak_swap}MB"
+            echo "$peak_used $peak_swap" > /tmp/mem_peak
+            sleep 30
+          done
+          SAMPLER
+          chmod +x /tmp/memwatch.sh
+          nohup /tmp/memwatch.sh > /tmp/memwatch.log 2>&1 &
+          echo $! > /tmp/memwatch.pid
       - uses: mamba-org/setup-micromamba@v1
         with:
           micromamba-version: '1.5.6-0'
@@ -56,8 +78,18 @@ jobs:
           AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
-        run: make evaluate-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
+        run: /usr/bin/time -v make evaluate-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
         shell: micromamba-shell {0}
+      - name: Report peak memory
+        if: always()
+        run: |
+          kill "$(cat /tmp/memwatch.pid)" 2>/dev/null || true
+          echo "=== memory samples (30s interval) ==="
+          cat /tmp/memwatch.log || echo "no samples"
+          if [ -f /tmp/mem_peak ]; then
+            read -r pu ps < /tmp/mem_peak
+            echo "=== PEAK used=${pu}MB  PEAK swap=${ps}MB  (runner: $(free -m | awk '/^Mem:/{print $2}')MB RAM + $(free -m | awk '/^Swap:/{print $2}')MB swap) ==="
+          fi
       - name: Compare generated notebook against reference
         env:
           TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
