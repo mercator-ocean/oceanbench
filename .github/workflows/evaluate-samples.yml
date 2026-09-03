@@ -4,8 +4,6 @@
 
 name: Evaluate samples
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
   schedule:
     # Nightly at 02:00 UTC
@@ -22,6 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         sample:
+          - glo12
           - glo36v1
           - glonet_1_degree
           - glonet
