@@ -185,7 +185,7 @@ def _opened_challenger_week_dataset(
     opened_dataset = xarray.open_dataset(
         forecast_zarr_path_from_start_datetime(first_day_datetime),
         engine="zarr",
-        chunks={},
+        chunks={"time": 1, "depth": 1, "latitude": -1, "longitude": -1},
     )
     return preprocess_dataset(opened_dataset) if preprocess_dataset is not None else opened_dataset
 
