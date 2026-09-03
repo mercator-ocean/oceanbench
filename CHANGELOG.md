@@ -18,6 +18,21 @@ forecasts refreshed — do **not** bump the version. They are recorded as dated 
 **Challengers** heading in the current version's section, and the affected reports are
 re-published (never silently overwritten).
 
+## 0.5.1 - 2026-09-02
+
+**Scores:** unchanged vs 0.5.0. This release only moves public data access paths from the
+previous EDITO MinIO project buckets to the CloudFerro `oceanbench-bucket` public area.
+
+### Fixed
+
+- Updated package, documentation, website and metadata data URLs to read OceanBench public
+  datasets and report assets from CloudFerro instead of the previous EDITO MinIO project
+  buckets.
+
+### Reports
+
+- Official reports: unchanged from `public/evaluation-reports/0.5.0/`.
+
 ## 0.5.0 - 2026-08-13
 
 **Scores:** grid-averaged scores change for the challengers whose grids do not land exactly on
