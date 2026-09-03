@@ -320,6 +320,19 @@ def with_gloens_surface(depth_frame: pd.DataFrame, frozen: pd.DataFrame) -> pd.D
     return pd.concat([depth_frame, gloens_surface_frame(frozen)], ignore_index=True)
 
 
+def gridded_aggregate_frame(aggregate: pd.DataFrame) -> pd.DataFrame:
+    """Read a gridded ensemble aggregate in either shape a campaign has written it.
+
+    The retired producer wrote one row per metric, holding the year mean and every start it was
+    taken over. The producer that runs now writes one row per lead day with a column per metric,
+    the shape a fill already carries. Both are read here, so the aggregate a campaign produced is
+    the artifact this reads rather than a copy someone reshaped by hand.
+    """
+    if "aggregation" in aggregate.columns:
+        return aggregate
+    return gridded_long_frame(aggregate, FROZEN_METRIC_COLUMNS)
+
+
 def gridded_fill_frame(fill: pd.DataFrame) -> pd.DataFrame:
     """Shape a wide gridded fill record like a year mean slice of the depth aggregate."""
     return gridded_long_frame(fill, FROZEN_METRIC_COLUMNS)
@@ -548,9 +561,14 @@ def main() -> None:
     scores = build_ensemble_scores(
         with_gridded_fill_beside(
             arguments.gridded_gloens,
-            with_gloens_surface(pd.read_parquet(arguments.gridded_gloens), pd.read_csv(arguments.gloens_surface)),
+            with_gloens_surface(
+                gridded_aggregate_frame(pd.read_parquet(arguments.gridded_gloens)),
+                pd.read_csv(arguments.gloens_surface),
+            ),
         ),
-        with_gridded_fill_beside(arguments.gridded_icp, pd.read_parquet(arguments.gridded_icp)),
+        with_gridded_fill_beside(
+            arguments.gridded_icp, gridded_aggregate_frame(pd.read_parquet(arguments.gridded_icp))
+        ),
         deterministic_gridded_frame(pd.read_parquet(arguments.gridded_glonet)),
         deterministic_gridded_frame(pd.read_parquet(arguments.gridded_glo12)),
         pd.read_parquet(arguments.deterministic_glonet),

@@ -14,6 +14,7 @@ sys.path.insert(0, str(WEBSITE_DIRECTORY))
 from helpers.build_ensemble_scores_json import (  # noqa: E402
     build_ensemble_scores,
     deterministic_gridded_frame,
+    gridded_aggregate_frame,
     with_gloens_surface,
     with_observation_sidecar,
 )
@@ -397,3 +398,35 @@ def test_ensemble_score_bundle_reads_its_reduced_start_caveat_from_the_rows() ->
 
     assert "Lead days 9 and 10 of GloEns average 51 starts instead of 52." in gridded_note
     assert "Lead day 10 of GloEns averages 50 starts instead of 52." in observations_note
+
+
+def test_gridded_aggregate_frame_reads_both_shapes_a_campaign_has_written() -> None:
+    wide = pd.DataFrame(
+        [
+            {
+                "challenger": "gloens",
+                "region": "global",
+                "reference": "glorys",
+                "variable": "sea_water_salinity",
+                "depth": "47.374m",
+                "lead_day": 1,
+                "crps_biased": 0.1,
+                "crps_fair": 0.09,
+                "ensemble_mean_rmsd": 0.2,
+                "ensemble_spread": 0.08,
+                "member_rmsd": 0.22,
+                "spread_error_ratio": 0.4,
+                "start_count": 52,
+                "scored_cells": 619676,
+            }
+        ]
+    )
+    read = gridded_aggregate_frame(wide)
+    ratio = read[read["metric"] == "spread_error_ratio"]
+    assert list(read["aggregation"].unique()) == ["year_mean"]
+    assert float(ratio["value"].iloc[0]) == pytest.approx(0.4)
+    assert str(ratio["unit"].iloc[0]) == "1"
+    assert str(read[read["metric"] == "ensemble_mean_rmsd"]["unit"].iloc[0]) == "PSU"
+
+    already_long = _gridded_frame("gloens", GRIDDED_LEAD_DAYS, {})
+    assert gridded_aggregate_frame(already_long) is already_long
