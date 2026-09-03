@@ -74,7 +74,7 @@ def staged_weekly_dataset(
         def build_stage(path: Path) -> None:
             week_dataset = open_week_dataset(first_day_datetime)
             try:
-                write_dataset_to_local_stage(week_dataset, path)
+                write_dataset_to_local_stage(week_dataset, path, clear_chunk_encoding=True)
             finally:
                 week_dataset.close()
 

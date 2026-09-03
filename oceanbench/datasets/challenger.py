@@ -8,11 +8,14 @@
 This module exposes the challenger datasets evaluated in the benchmark.
 """
 
+from datetime import datetime
+
 import xarray
+
 from oceanbench.core import challenger_datasets
 
 
-def glo12() -> xarray.Dataset:
+def glo12(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the GLO12 challenger dataset.
 
@@ -39,10 +42,10 @@ def glo12() -> xarray.Dataset:
         zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 640, 1280), meta=np.ndarray>
     """
 
-    return challenger_datasets.glo12()
+    return challenger_datasets.glo12(first_day_datetimes)
 
 
-def glo12_1_degree() -> xarray.Dataset:
+def glo12_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the GLO12 challenger dataset interpolated to the 1 degree resolution.
 
@@ -70,10 +73,10 @@ def glo12_1_degree() -> xarray.Dataset:
         sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float32 127MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
     """
 
-    return challenger_datasets.glo12_1_degree()
+    return challenger_datasets.glo12_1_degree(first_day_datetimes)
 
 
-def glo36v1() -> xarray.Dataset:
+def glo36v1(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the GLO36V1 challenger dataset.
 
@@ -100,10 +103,10 @@ def glo36v1() -> xarray.Dataset:
         zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 13GB dask.array<chunksize=(1, 1, 256, 1080), meta=np.ndarray>
     """
 
-    return challenger_datasets.glo36v1()
+    return challenger_datasets.glo36v1(first_day_datetimes)
 
 
-def glonet() -> xarray.Dataset:
+def glonet(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the GLONET challenger dataset.
 
@@ -140,10 +143,10 @@ def glonet() -> xarray.Dataset:
         title:                    Daily mean fields from GLONET 1/4 degree resolu...
     """
 
-    return challenger_datasets.glonet()
+    return challenger_datasets.glonet(first_day_datetimes)
 
 
-def glonet_1_degree() -> xarray.Dataset:
+def glonet_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the GLONET challenger dataset interpolated to the 1 degree resolution.
 
@@ -181,10 +184,10 @@ def glonet_1_degree() -> xarray.Dataset:
         title:                    Daily mean fields from GLONET 1/4 degree resolu...
     """
 
-    return challenger_datasets.glonet_1_degree()
+    return challenger_datasets.glonet_1_degree(first_day_datetimes)
 
 
-def xihe() -> xarray.Dataset:
+def xihe(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the XiHe challenger dataset.
 
@@ -215,10 +218,10 @@ def xihe() -> xarray.Dataset:
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.xihe()
+    return challenger_datasets.xihe(first_day_datetimes)
 
 
-def xihe_1_degree() -> xarray.Dataset:
+def xihe_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the XiHe challenger dataset interpolated to the 1 degree resolution.
 
@@ -250,10 +253,10 @@ def xihe_1_degree() -> xarray.Dataset:
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.xihe_1_degree()
+    return challenger_datasets.xihe_1_degree(first_day_datetimes)
 
 
-def wenhai() -> xarray.Dataset:
+def wenhai(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the WenHai challenger dataset.
 
@@ -284,10 +287,10 @@ def wenhai() -> xarray.Dataset:
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.wenhai()
+    return challenger_datasets.wenhai(first_day_datetimes)
 
 
-def wenhai_1_degree() -> xarray.Dataset:
+def wenhai_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the WenHai challenger dataset interpolated to the 1 degree resolution.
 
@@ -319,10 +322,10 @@ def wenhai_1_degree() -> xarray.Dataset:
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.wenhai_1_degree()
+    return challenger_datasets.wenhai_1_degree(first_day_datetimes)
 
 
-def langya() -> xarray.Dataset:
+def langya(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the LangYa challenger dataset.
 
@@ -353,10 +356,10 @@ def langya() -> xarray.Dataset:
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.langya()
+    return challenger_datasets.langya(first_day_datetimes)
 
 
-def langya_1_degree() -> xarray.Dataset:
+def langya_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the LangYa challenger dataset interpolated to the 1 degree resolution.
 
@@ -388,4 +391,4 @@ def langya_1_degree() -> xarray.Dataset:
         forecast_reference_time:  2024-01-02
     """
 
-    return challenger_datasets.langya_1_degree()
+    return challenger_datasets.langya_1_degree(first_day_datetimes)

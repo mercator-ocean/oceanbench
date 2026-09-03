@@ -1,0 +1,180 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Evaluate samples
+on:
+  workflow_dispatch:
+    inputs:
+      samples:
+        description: 'Comma separated samples to evaluate, for example "langya,xihe". Empty evaluates them all.'
+        required: false
+        default: ''
+  schedule:
+    # Nightly at 02:00 UTC
+    - cron: '0 2 * * *'
+concurrency:
+  group: evaluate-samples-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  select-samples:
+    name: select samples
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - name: Build the sample matrix
+        id: select
+        env:
+          # glonet stays on the raw xarray open, unstaged, so the path an
+          # external challenger takes keeps end to end coverage.
+          ALL_SAMPLES: '[{"sample": "glonet", "stage": ""}, {"sample": "glo36v1", "stage": "challenger"}, {"sample": "glo12", "stage": "challenger"}, {"sample": "glonet_1_degree", "stage": "challenger"}, {"sample": "langya", "stage": "challenger"}, {"sample": "wenhai", "stage": "challenger"}, {"sample": "xihe", "stage": "challenger"}]'
+          SELECTED_SAMPLES: ${{ github.event.inputs.samples }}
+        run: |
+          selected=$(jq -c --arg selected "$SELECTED_SAMPLES" '
+            ($selected | split(",") | map(sub("^ +"; "") | sub(" +$"; "")) | map(select(length > 0))) as $names
+            | {include: (if ($names | length) == 0 then . else map(select(.sample as $s | $names | index($s))) end)}
+          ' <<<"$ALL_SAMPLES")
+          echo "$selected"
+          if [ "$(jq '.include | length' <<<"$selected")" -eq 0 ]; then
+            echo "No sample matched '$SELECTED_SAMPLES'." >&2
+            exit 1
+          fi
+          echo "matrix=$selected" >> "$GITHUB_OUTPUT"
+  evaluate-sample:
+    name: evaluate ${{ matrix.sample }}
+    needs: select-samples
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select-samples.outputs.matrix) }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Free disk space for staging
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/.ghcup
+          df -h / /mnt || true
+      - name: Record host resources
+        run: |
+          echo "cpus: $(nproc)"
+          free -h
+          df -h / /mnt || true
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.5.6-0'
+          micromamba-binary-path: ${{ runner.temp }}/bin/micromamba
+          environment-file: conda_environment_test.yaml
+          environment-name: oceanbench_test_${{ github.sha }}
+          condarc-file: .condarc
+          cache-environment: true
+          post-cleanup: 'all'
+      - name: Install package
+        run: pip install --editable .
+        shell: micromamba-shell {0}
+      - name: Evaluate sample
+        env:
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
+          OCEANBENCH_STAGE: ${{ matrix.stage }}
+          OCEANBENCH_STAGE_MAX_WORKERS: '8'
+        run: |
+          # Sample memory straight into the step log every 5 seconds. A runner
+          # killed mid step takes any post step report with it, so the numbers
+          # have to be streamed as they are measured.
+          (
+            while true; do
+              echo "MEMWATCH $(date -u +%H:%M:%S) used=$(free -m | awk '/^Mem:/{print $3}')MB available=$(free -m | awk '/^Mem:/{print $7}')MB swap=$(free -m | awk '/^Swap:/{print $3}')MB"
+              sleep 5
+            done
+          ) &
+          memory_sampler_pid=$!
+          trap 'kill "$memory_sampler_pid" 2>/dev/null || true' EXIT
+          /usr/bin/time -v make evaluate-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
+        shell: micromamba-shell {0}
+      - name: Report disk and kernel state
+        if: always()
+        run: |
+          df -h / || true
+          echo "=== kernel out of memory kills, if any ==="
+          sudo dmesg | grep -iE "out of memory|oom-kill|killed process" || echo "none"
+      - name: Compare generated notebook against reference
+        env:
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
+        run: make compare-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
+        shell: micromamba-shell {0}
+      - name: Archive generated notebooks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-notebook-${{ matrix.sample }}
+          path: |
+            ${{ matrix.sample }}_sample.*.report.ipynb
+  evaluate-extras:
+    name: evaluate ibi region, notebooks and doctests
+    # A dispatch that narrows the samples is debugging one of them, so the
+    # unrelated extras are left out of that run.
+    if: ${{ github.event.inputs.samples == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Record host resources
+        run: nproc && free -h
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.5.6-0'
+          micromamba-binary-path: ${{ runner.temp }}/bin/micromamba
+          environment-file: conda_environment_test.yaml
+          environment-name: oceanbench_test_${{ github.sha }}
+          condarc-file: .condarc
+          cache-environment: true
+          post-cleanup: 'all'
+      - name: Install package
+        run: pip install --editable .
+        shell: micromamba-shell {0}
+      - name: Evaluate IBI region sample
+        env:
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
+        run: make evaluate-ibi-region
+        shell: micromamba-shell {0}
+      - name: Compare IBI notebook against reference
+        env:
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
+        run: make compare-ibi
+        shell: micromamba-shell {0}
+      - name: Run dataset doctests
+        env:
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
+        run: make doctest
+        shell: micromamba-shell {0}
+      - name: Archive generated notebooks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-notebook-ibi
+          path: |
+            *.ibi.report.ipynb

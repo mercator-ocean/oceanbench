@@ -197,6 +197,29 @@ oceanbench.evaluate_challenger("path/to/file/opening/the/challenger/datasets.py"
 
 More details in the [documentation](https://oceanbench.readthedocs.io/en/latest/source/oceanbench.html#oceanbench.evaluate_challenger).
 
+### Staging the datasets on a local disk
+
+An evaluation reads every forecast week from the remote stores, several times over, once per metric.
+On a machine with a modest amount of memory or a slow link to the stores, it is faster and lighter to copy each week to a local disk first, then compute the metrics from there.
+
+Set `OCEANBENCH_STAGE` to the datasets to copy, `challenger`, `references`, or `all`:
+
+```bash
+OCEANBENCH_STAGE=all oceanbench evaluate path/to/challenger.py
+```
+
+The other staging variables are optional:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `OCEANBENCH_STAGE` | empty, no staging | Comma separated list of `challenger`, `references`, or `all` |
+| `OCEANBENCH_STAGE_DIR` | `oceanbench-stage` in the system temporary directory | Where the copied weeks are written |
+| `OCEANBENCH_STAGE_MAX_WORKERS` | number of CPUs, at most 4 | How many weeks are copied at the same time |
+| `OCEANBENCH_REMOTE_RETRIES` | 5 | How many times a failing remote open is retried |
+
+A staged week is reused as it is on the next run, so an evaluation that is interrupted resumes where it stopped.
+Staging a 1/12° challenger needs about 16 GB of disk per week, so remove the stage directory once the evaluation is over.
+
 ### Dependency on the Copernicus Marine Service
 
 Running OceanBench to evaluate systems with 1/12° resolution uses the [Copernicus Marine Toolbox](https://github.com/mercator-ocean/copernicus-marine-toolbox/) and therefore requires authentication with the [Copernicus Marine Service](https://marine.copernicus.eu/).

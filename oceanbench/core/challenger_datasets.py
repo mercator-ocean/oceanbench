@@ -6,11 +6,12 @@
 This module exposes the challenger datasets evaluated in the benchmark.
 """
 
+import warnings
+
 import xarray
 from datetime import datetime, timedelta
 from collections.abc import Callable
 
-from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
 from oceanbench.core.remote_http import require_remote_dataset_dimensions, with_remote_http_retries
@@ -21,15 +22,22 @@ from oceanbench.core.interpolate import interpolate_1_degree
 _CLOUDFERRO_ML_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs"
 _GLO12_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data/GLO12"
 _GLO12_FORECAST_VARIABLE_NAMES = ["so", "thetao", "uo", "vo", "zos"]
+_GLO36V1_LEAD_DAYS_COUNT = 7
 _LANGYA_LEAD_DAYS_COUNT = 7
+
+# Reading a lead day and a depth at a time splits the blocks some stores are
+# written in, which xarray warns could be slower. It is not, and the threads
+# that stage a week race to report it, which makes the warning appear a
+# different number of times from one evaluation to the next.
+warnings.filterwarnings("ignore", message="The specified chunks separate the stored chunks")
 
 
 def _default_first_day_datetimes() -> list[datetime]:
     return generate_dates("2024-01-03", "2024-12-25", 7)
 
 
-def glo12() -> xarray.Dataset:
-    first_day_datetimes = _default_first_day_datetimes()
+def glo12(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes)
 
     def open_dataset() -> xarray.Dataset:
         return maybe_stage_weekly_dataset(
@@ -46,8 +54,8 @@ def glo12() -> xarray.Dataset:
     return with_remote_http_retries("glo12 challenger dataset open", open_dataset)
 
 
-def glo12_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(glo12())
+def glo12_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(glo12(first_day_datetimes))
 
 
 def _glo12_dataset_path(start_datetime: datetime) -> str:
@@ -73,14 +81,42 @@ def _remote_glo12_dataset(first_day_datetimes: list[datetime]) -> xarray.Dataset
     ).assign({"first_day_datetime": first_day_datetimes})
 
 
-def glo36v1() -> xarray.Dataset:
-    first_day_datetimes = generate_dates("2023-01-04", "2023-12-27", 7)
-    challenger_dataset = (
+def glo36v1(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    resolved_first_day_datetimes = (
+        first_day_datetimes if first_day_datetimes is not None else generate_dates("2023-01-04", "2023-12-27", 7)
+    )
+
+    def open_dataset() -> xarray.Dataset:
+        return maybe_stage_weekly_dataset(
+            stage_key="challenger",
+            dataset_kind="challenger",
+            dataset_name="glo36v1",
+            first_day_datetimes=resolved_first_day_datetimes,
+            lead_days_count=_GLO36V1_LEAD_DAYS_COUNT,
+            open_week_dataset=_open_glo36v1_forecast_week,
+            open_remote_dataset=lambda: _remote_glo36v1_dataset(resolved_first_day_datetimes),
+            attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
+        )
+
+    return with_remote_http_retries("glo36v1 challenger dataset open", open_dataset)
+
+
+def _glo36v1_dataset_path(start_datetime: datetime) -> str:
+    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glo36v1/{start_datetime.strftime('%Y%m%d')}.zarr"
+
+
+def _open_glo36v1_forecast_week(first_day_datetime: datetime) -> xarray.Dataset:
+    return xarray.open_dataset(
+        _glo36v1_dataset_path(first_day_datetime),
+        engine="zarr",
+        chunks={"first_day_datetime": 1, "lead_day_index": 1, "lat": -1, "lon": -1},
+    ).rename({"lat": "latitude", "lon": "longitude"})
+
+
+def _remote_glo36v1_dataset(first_day_datetimes: list[datetime]) -> xarray.Dataset:
+    return (
         xarray.open_mfdataset(
-            [
-                f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glo36v1/{dt.strftime('%Y%m%d')}.zarr"
-                for dt in first_day_datetimes
-            ],
+            list(map(_glo36v1_dataset_path, first_day_datetimes)),
             engine="zarr",
             combine="nested",
             concat_dim="first_day_datetime",
@@ -89,21 +125,16 @@ def glo36v1() -> xarray.Dataset:
         .rename({"lat": "latitude", "lon": "longitude"})
         .assign({"first_day_datetime": first_day_datetimes})
     )
-    if not current_runtime_configuration().has_local_stage():
-        return challenger_dataset
-    return with_dataset_source(challenger_dataset, kind="challenger", name="glo36v1")
 
 
-def _glo36v1_dataset_path(start_datetime: datetime) -> str:
-    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glo36v1/{start_datetime.strftime('%Y%m%d')}.zarr"
+def glonet(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _glonet_dataset_path, first_day_datetimes=first_day_datetimes
+    )
 
 
-def glonet() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_glonet_dataset_path)
-
-
-def glonet_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(glonet())
+def glonet_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(glonet(first_day_datetimes))
 
 
 def _glonet_dataset_path(start_datetime: datetime) -> str:
@@ -111,12 +142,12 @@ def _glonet_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/glonet/{start_datetime_string}.zarr"
 
 
-def xihe() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_xihe_dataset_path)
+def xihe(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(_xihe_dataset_path, first_day_datetimes=first_day_datetimes)
 
 
-def xihe_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(xihe())
+def xihe_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(xihe(first_day_datetimes))
 
 
 def _xihe_dataset_path(start_datetime: datetime) -> str:
@@ -124,12 +155,14 @@ def _xihe_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/xihe/{start_datetime_string}.zarr"
 
 
-def wenhai() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_wenhai_dataset_path)
+def wenhai(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _wenhai_dataset_path, first_day_datetimes=first_day_datetimes
+    )
 
 
-def wenhai_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(wenhai())
+def wenhai_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(wenhai(first_day_datetimes))
 
 
 def _wenhai_dataset_path(start_datetime: datetime) -> str:
@@ -137,14 +170,16 @@ def _wenhai_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/wenhai/v2/{start_datetime_string}.zarr"
 
 
-def langya() -> xarray.Dataset:
+def langya(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     return _open_multizarr_forecasts_as_challenger_dataset(
-        _langya_dataset_path, lead_days_count=_LANGYA_LEAD_DAYS_COUNT
+        _langya_dataset_path,
+        first_day_datetimes=first_day_datetimes,
+        lead_days_count=_LANGYA_LEAD_DAYS_COUNT,
     )
 
 
-def langya_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(langya())
+def langya_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(langya(first_day_datetimes))
 
 
 def _langya_dataset_path(start_datetime: datetime) -> str:
@@ -179,6 +214,7 @@ def _opened_challenger_week_dataset(
     opened_dataset = xarray.open_dataset(
         forecast_zarr_path_from_start_datetime(first_day_datetime),
         engine="zarr",
+        chunks={"time": 1, "depth": 1, "latitude": -1, "longitude": -1},
     )
     return preprocess_dataset(opened_dataset) if preprocess_dataset is not None else opened_dataset
 
