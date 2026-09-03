@@ -50,25 +50,6 @@ jobs:
           echo "cpus: $(nproc)"
           free -h
           df -h / /mnt || true
-      - name: Start memory sampler
-        run: |
-          cat > /tmp/memwatch.sh <<'SAMPLER'
-          #!/usr/bin/env bash
-          peak_used=0
-          peak_swap=0
-          while true; do
-            used=$(free -m | awk '/^Mem:/{print $3}')
-            swap=$(free -m | awk '/^Swap:/{print $3}')
-            [ "$used" -gt "$peak_used" ] && peak_used=$used
-            [ "$swap" -gt "$peak_swap" ] && peak_swap=$swap
-            echo "$(date -u +%H:%M:%S) used=${used}MB swap=${swap}MB peak_used=${peak_used}MB peak_swap=${peak_swap}MB"
-            echo "$peak_used $peak_swap" > /tmp/mem_peak
-            sleep 30
-          done
-          SAMPLER
-          chmod +x /tmp/memwatch.sh
-          nohup /tmp/memwatch.sh > /tmp/memwatch.log 2>&1 &
-          echo $! > /tmp/memwatch.pid
       - uses: mamba-org/setup-micromamba@v1
         with:
           micromamba-version: '1.5.6-0'
@@ -92,20 +73,26 @@ jobs:
           TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
           OCEANBENCH_STAGE: ${{ matrix.stage }}
           OCEANBENCH_STAGE_MAX_WORKERS: '8'
-        run: /usr/bin/time -v make evaluate-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
+        run: |
+          # Sample memory straight into the step log every 5 seconds. A runner
+          # killed mid step takes any post step report with it, so the numbers
+          # have to be streamed as they are measured.
+          (
+            while true; do
+              echo "MEMWATCH $(date -u +%H:%M:%S) used=$(free -m | awk '/^Mem:/{print $3}')MB available=$(free -m | awk '/^Mem:/{print $7}')MB swap=$(free -m | awk '/^Swap:/{print $3}')MB"
+              sleep 5
+            done
+          ) &
+          memory_sampler_pid=$!
+          trap 'kill "$memory_sampler_pid" 2>/dev/null || true' EXIT
+          /usr/bin/time -v make evaluate-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
         shell: micromamba-shell {0}
-      - name: Report peak memory
+      - name: Report disk and kernel state
         if: always()
         run: |
-          kill "$(cat /tmp/memwatch.pid)" 2>/dev/null || true
-          echo "=== memory samples (30s interval) ==="
-          cat /tmp/memwatch.log || echo "no samples"
           df -h / || true
-          du -sh /tmp/oceanbench-stage 2>/dev/null || echo "no stage directory"
-          if [ -f /tmp/mem_peak ]; then
-            read -r pu ps < /tmp/mem_peak
-            echo "=== PEAK used=${pu}MB  PEAK swap=${ps}MB  (runner: $(free -m | awk '/^Mem:/{print $2}')MB RAM + $(free -m | awk '/^Swap:/{print $2}')MB swap) ==="
-          fi
+          echo "=== kernel out of memory kills, if any ==="
+          sudo dmesg | grep -iE "out of memory|oom-kill|killed process" || echo "none"
       - name: Compare generated notebook against reference
         env:
           TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
