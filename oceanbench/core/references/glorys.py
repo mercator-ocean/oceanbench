@@ -5,7 +5,7 @@
 from datetime import datetime
 import numpy
 import pandas
-from xarray import Dataset, open_dataset, open_mfdataset, concat
+from xarray import Dataset, concat
 import logging
 import copernicusmarine
 from oceanbench.core.resolution import get_dataset_resolution
@@ -15,7 +15,7 @@ from oceanbench.core.reference_depths import (
     reference_depth_grid_stage_variant,
     with_reference_depth_grid_metadata,
 )
-from oceanbench.core.remote_http import with_remote_http_retries
+from oceanbench.core.remote_http import open_remote_multizarr, open_remote_zarr, with_remote_http_retries
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_reference_week_dataset
 
 logger = logging.getLogger("copernicusmarine")
@@ -44,13 +44,12 @@ def _glorys_reanalysis_dataset_1_4(challenger_dataset: Dataset) -> Dataset:
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
         open_week_dataset=lambda first_day_datetime: prepare_reference_week_dataset(
-            open_dataset(_glorys_1_4_path(first_day_datetime), engine="zarr"),
+            open_remote_zarr(_glorys_1_4_path(first_day_datetime)),
             lead_days_count=lead_days_count,
             operation_name="GLORYS quarter-degree dataset open",
         ),
-        open_remote_dataset=lambda: open_mfdataset(
+        open_remote_dataset=lambda: open_remote_multizarr(
             list(map(_glorys_1_4_path, first_day_datetimes)),
-            engine="zarr",
             preprocess=lambda dataset: prepare_reference_week_dataset(
                 dataset,
                 lead_days_count=lead_days_count,
@@ -141,13 +140,12 @@ def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
         open_week_dataset=lambda first_day_datetime: prepare_reference_week_dataset(
-            open_dataset(_glorys_1_degree_path(first_day_datetime), engine="zarr"),
+            open_remote_zarr(_glorys_1_degree_path(first_day_datetime)),
             lead_days_count=lead_days_count,
             operation_name="GLORYS one-degree dataset open",
         ),
-        open_remote_dataset=lambda: open_mfdataset(
+        open_remote_dataset=lambda: open_remote_multizarr(
             list(map(_glorys_1_degree_path, first_day_datetimes)),
-            engine="zarr",
             preprocess=lambda dataset: prepare_reference_week_dataset(
                 dataset,
                 lead_days_count=lead_days_count,

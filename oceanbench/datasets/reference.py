@@ -11,6 +11,7 @@ This module exposes the reference datasets used in OceanBench for OceanBench cha
 import pandas
 import xarray
 from oceanbench.core.references import glorys
+from oceanbench.core.remote_http import open_remote_multizarr
 from oceanbench.core.references import glo12
 
 
@@ -94,9 +95,8 @@ def glorys_reanalysis_1_degree() -> xarray.Dataset:
         for monthly_date in monthly_dates
     ]
 
-    return xarray.open_mfdataset(
+    return open_remote_multizarr(
         dataset_paths,
-        engine="zarr",
         parallel=False,
     )
 
