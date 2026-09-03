@@ -19,19 +19,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sample:
-          - glo12
-          - glo36v1
-          - glonet_1_degree
-          - glonet
-          - langya
-          - wenhai
-          - xihe
+        include:
+          # glonet and glo36v1 stay on the raw xarray open, unstaged, so the
+          # path an external challenger takes keeps end to end coverage.
+          - sample: glonet
+            stage: ''
+          - sample: glo36v1
+            stage: ''
+          - sample: glo12
+            stage: challenger
+          - sample: glonet_1_degree
+            stage: challenger
+          - sample: langya
+            stage: challenger
+          - sample: wenhai
+            stage: challenger
+          - sample: xihe
+            stage: challenger
     steps:
       - name: Check out code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Free disk space for staging
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/.ghcup
+          df -h / /mnt || true
       - name: Record host resources
         run: |
           echo "cpus: $(nproc)"
@@ -77,6 +90,8 @@ jobs:
           AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
+          OCEANBENCH_STAGE: ${{ matrix.stage }}
+          OCEANBENCH_STAGE_MAX_WORKERS: '8'
         run: /usr/bin/time -v make evaluate-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
         shell: micromamba-shell {0}
       - name: Report peak memory
@@ -85,6 +100,8 @@ jobs:
           kill "$(cat /tmp/memwatch.pid)" 2>/dev/null || true
           echo "=== memory samples (30s interval) ==="
           cat /tmp/memwatch.log || echo "no samples"
+          df -h / || true
+          du -sh /tmp/oceanbench-stage 2>/dev/null || echo "no stage directory"
           if [ -f /tmp/mem_peak ]; then
             read -r pu ps < /tmp/mem_peak
             echo "=== PEAK used=${pu}MB  PEAK swap=${ps}MB  (runner: $(free -m | awk '/^Mem:/{print $2}')MB RAM + $(free -m | awk '/^Swap:/{print $2}')MB swap) ==="

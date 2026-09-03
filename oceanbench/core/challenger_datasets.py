@@ -28,8 +28,8 @@ def _default_first_day_datetimes() -> list[datetime]:
     return generate_dates("2024-01-03", "2024-12-25", 7)
 
 
-def glo12() -> xarray.Dataset:
-    first_day_datetimes = _default_first_day_datetimes()
+def glo12(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes)
 
     def open_dataset() -> xarray.Dataset:
         return maybe_stage_weekly_dataset(
@@ -46,8 +46,8 @@ def glo12() -> xarray.Dataset:
     return with_remote_http_retries("glo12 challenger dataset open", open_dataset)
 
 
-def glo12_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(glo12())
+def glo12_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(glo12(first_day_datetimes))
 
 
 def _glo12_dataset_path(start_datetime: datetime) -> str:
@@ -98,12 +98,14 @@ def _glo36v1_dataset_path(start_datetime: datetime) -> str:
     return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glo36v1/{start_datetime.strftime('%Y%m%d')}.zarr"
 
 
-def glonet() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_glonet_dataset_path)
+def glonet(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _glonet_dataset_path, first_day_datetimes=first_day_datetimes
+    )
 
 
-def glonet_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(glonet())
+def glonet_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(glonet(first_day_datetimes))
 
 
 def _glonet_dataset_path(start_datetime: datetime) -> str:
@@ -111,12 +113,12 @@ def _glonet_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/glonet/{start_datetime_string}.zarr"
 
 
-def xihe() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_xihe_dataset_path)
+def xihe(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(_xihe_dataset_path, first_day_datetimes=first_day_datetimes)
 
 
-def xihe_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(xihe())
+def xihe_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(xihe(first_day_datetimes))
 
 
 def _xihe_dataset_path(start_datetime: datetime) -> str:
@@ -124,12 +126,14 @@ def _xihe_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/xihe/{start_datetime_string}.zarr"
 
 
-def wenhai() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_wenhai_dataset_path)
+def wenhai(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _wenhai_dataset_path, first_day_datetimes=first_day_datetimes
+    )
 
 
-def wenhai_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(wenhai())
+def wenhai_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(wenhai(first_day_datetimes))
 
 
 def _wenhai_dataset_path(start_datetime: datetime) -> str:
@@ -137,14 +141,16 @@ def _wenhai_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/wenhai/v2/{start_datetime_string}.zarr"
 
 
-def langya() -> xarray.Dataset:
+def langya(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     return _open_multizarr_forecasts_as_challenger_dataset(
-        _langya_dataset_path, lead_days_count=_LANGYA_LEAD_DAYS_COUNT
+        _langya_dataset_path,
+        first_day_datetimes=first_day_datetimes,
+        lead_days_count=_LANGYA_LEAD_DAYS_COUNT,
     )
 
 
-def langya_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(langya())
+def langya_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(langya(first_day_datetimes))
 
 
 def _langya_dataset_path(start_datetime: datetime) -> str:
