@@ -295,7 +295,7 @@ def _score_start_date(
                 if write_maps:
                     map_fields.setdefault(
                         (reference, variable_key, variable.depth_label, "ensemble_spread"), []
-                    ).append((lead_day, ensemble_spread(members)))
+                    ).append((lead_day, ensemble_spread(members).where(numpy.isfinite(reference_field))))
                     map_fields.setdefault((reference, variable_key, variable.depth_label, "crps_fair"), []).append(
                         (lead_day, continuous_ranked_probability_score(members, reference_field))
                     )
