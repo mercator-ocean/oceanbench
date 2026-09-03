@@ -26,9 +26,9 @@ jobs:
       - name: Build the sample matrix
         id: select
         env:
-          # glonet and glo36v1 stay on the raw xarray open, unstaged, so the
-          # path an external challenger takes keeps end to end coverage.
-          ALL_SAMPLES: '[{"sample": "glonet", "stage": ""}, {"sample": "glo36v1", "stage": ""}, {"sample": "glo12", "stage": "challenger"}, {"sample": "glonet_1_degree", "stage": "challenger"}, {"sample": "langya", "stage": "challenger"}, {"sample": "wenhai", "stage": "challenger"}, {"sample": "xihe", "stage": "challenger"}]'
+          # glonet stays on the raw xarray open, unstaged, so the path an
+          # external challenger takes keeps end to end coverage.
+          ALL_SAMPLES: '[{"sample": "glonet", "stage": ""}, {"sample": "glo36v1", "stage": "challenger"}, {"sample": "glo12", "stage": "challenger"}, {"sample": "glonet_1_degree", "stage": "challenger"}, {"sample": "langya", "stage": "challenger"}, {"sample": "wenhai", "stage": "challenger"}, {"sample": "xihe", "stage": "challenger"}]'
           SELECTED_SAMPLES: ${{ github.event.inputs.samples }}
         run: |
           selected=$(jq -c --arg selected "$SELECTED_SAMPLES" '

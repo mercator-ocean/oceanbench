@@ -76,7 +76,7 @@ def glo12_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.
     return challenger_datasets.glo12_1_degree(first_day_datetimes)
 
 
-def glo36v1() -> xarray.Dataset:
+def glo36v1(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the GLO36V1 challenger dataset.
 
@@ -103,7 +103,7 @@ def glo36v1() -> xarray.Dataset:
         zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 13GB dask.array<chunksize=(1, 1, 256, 1080), meta=np.ndarray>
     """
 
-    return challenger_datasets.glo36v1()
+    return challenger_datasets.glo36v1(first_day_datetimes)
 
 
 def glonet(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
