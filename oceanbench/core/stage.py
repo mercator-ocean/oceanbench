@@ -13,6 +13,11 @@ import os
 import sys
 
 from oceanbench.core.evaluate import resolve_evaluation_region
+from oceanbench.core.marine_heatwave_climatology import (
+    marine_heatwave_climatology_is_available,
+    marine_heatwave_climatology_mean_and_percentile_90,
+)
+from oceanbench.core.marine_heatwave_history import marine_heatwave_history_dataset
 from oceanbench.core.ocean_mask import ocean_mask
 from oceanbench.core.python2jupyter import _parse_challenger_python_code
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
@@ -61,3 +66,7 @@ def stage_challenger_assets(
         pass
     load_mean_dynamic_topography(get_dataset_resolution(challenger_dataset))
     ocean_mask()
+    if marine_heatwave_climatology_is_available(challenger_dataset):
+        marine_heatwave_climatology_mean_and_percentile_90(challenger_dataset)
+        marine_heatwave_history_dataset(challenger_dataset, glorys_reanalysis_dataset)
+        marine_heatwave_history_dataset(challenger_dataset, glo12_analysis_dataset)
