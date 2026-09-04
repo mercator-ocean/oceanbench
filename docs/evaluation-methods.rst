@@ -104,3 +104,80 @@ Deviation of Lagrangian trajectories compared to GLO12 analysis
 The deviation in kilometers between the two sets of drifting particles computed over the challenger datasets and the GLO12 analysis dataset.
 
 The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)``-weighted probabilities, then simulated over the area.
+
+Marine Heatwave diagnostics
+**********************************************
+
+OceanBench evaluates surface Marine Heatwave (MHW) forecasts following the event definition of
+`Hobday et al. (2016) <https://doi.org/10.1016/j.pocean.2015.12.014>`_. At each horizontal grid point,
+sea-surface temperature is compared with the seasonally varying 90th-percentile threshold. A MHW is
+detected when this threshold is exceeded for at least five consecutive days. After events shorter than
+five days have been removed, internal gaps of at most two days between detected periods are filled.
+The same detection procedure and climatology are applied to the challenger and reference temperatures.
+
+The daily climatological mean and 90th-percentile threshold are derived from the 1993--2022 GLORYS12V1
+reference period. OceanBench currently provides climatologies for the native 1/12 degree and 1/4 degree
+evaluation tracks. MHW diagnostics are not computed for the 1 degree track because no compatible
+climatology is currently available.
+
+For forecast initializations after the first one in an evaluation collection, seven days of analysis
+history are prepended before detecting events. GLO12 analysis supplies the challenger history. The
+reference history is supplied by GLORYS for the comparison with GLORYS reanalysis and by GLO12 for the
+comparison with GLO12 analysis. This context prevents an event already in progress at forecast
+initialization from being treated as a new short event. The history is used only for detection: reported
+scores are restricted to the original forecast lead days. The first initialization is retained and
+evaluated without preceding history when it is unavailable.
+
+Detection scores
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Let :math:`TP`, :math:`FP`, and :math:`FN` denote the area-weighted numbers of grid points and forecast
+initializations classified as true positives, false positives, and false negatives, respectively. The
+weights are proportional to :math:`\cos(\mathrm{latitude})`. OceanBench reports one value for each
+forecast lead day:
+
+.. math::
+
+   \mathrm{POD} = \frac{TP}{TP + FN},
+
+.. math::
+
+   \mathrm{FAR} = \frac{FP}{TP + FP},
+
+.. math::
+
+   \mathrm{CSI} = \frac{TP}{TP + FP + FN}.
+
+The probability of detection (POD) measures the fraction of reference MHW occurrences detected by the
+challenger. The false alarm ratio (FAR) measures the fraction of challenger detections absent from the
+reference. The critical success index (CSI), also known as intersection over union (IoU), combines missed
+events and false alarms in a single score. A zero denominator produces a missing score rather than an
+arbitrary perfect or null value.
+
+Intensity score
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Following the MHW intensity definition of Hobday et al. (2016), intensity is the temperature anomaly
+relative to the daily climatological mean, not merely the exceedance above the 90th-percentile threshold:
+
+.. math::
+
+   I(t, x, y) = T(t, x, y) - T_{\mathrm{clim}}(t, x, y).
+
+Intensity is set to zero outside each product's detected MHW mask. The intensity RMSE is evaluated over
+the union of the challenger and reference MHW masks and is reduced over forecast initializations and
+horizontal grid points using :math:`\cos(\mathrm{latitude})` area weights. It is reported independently
+for every forecast lead day:
+
+.. math::
+
+   \mathrm{RMSE}_{I} =
+   \sqrt{\frac{\sum w\,\left(I_{\mathrm{challenger}}-I_{\mathrm{reference}}\right)^2}
+   {\sum w}}, \qquad w = \cos(\mathrm{latitude}).
+
+These diagnostics evaluate binary MHW occurrence and intensity on surface-temperature fields. They do
+not currently identify connected multi-dimensional events, track spatial objects through time, or score
+the MHW severity categories introduced by
+`Hobday et al. (2018) <https://doi.org/10.5670/oceanog.2018.205>`_. Such object-based diagnostics are
+outside the present OceanBench implementation; for a broader review of MHW definitions and properties,
+see `Oliver et al. (2021) <https://doi.org/10.1146/annurev-marine-032720-095144>`_.
