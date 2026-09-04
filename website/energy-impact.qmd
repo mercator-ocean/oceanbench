@@ -784,7 +784,7 @@ HTML("""
       <div class="ei-kpi-label">Numerical run · GLO12</div>
       <div class="ei-kpi-value">18.4<span class="ei-kpi-unit">kWh / run</span></div>
       <div class="ei-kpi-note">883 gCO₂e per forecast</div>
-      <div class="ei-kpi-note">Same impact than driving a car for 5 minutes (at 60 km/h)</div>
+      <div class="ei-kpi-note">Same impact than driving a car for 8-9 minutes (at 60 km/h)</div>
     </div>
     <div class="ei-kpi-card" style="--kpi-accent:#046293;">
       <div class="ei-kpi-label">Lightest AI inference · GLONET2</div>
@@ -796,7 +796,7 @@ HTML("""
       <div class="ei-kpi-label">Training cost · GLONET2</div>
       <div class="ei-kpi-value">698<span class="ei-kpi-unit">kWh</span></div>
       <div class="ei-kpi-note">≈ 39.1 kg CO₂e</div>
-      <div class="ei-kpi-note">Same impact than driving a car for 3h50 (at 60 km/h)</div>
+      <div class="ei-kpi-note">Same impact than driving a car for 6h06 (at 60 km/h)</div>
     </div>
     <div class="ei-kpi-card" style="--kpi-accent:#046293;">
       <div class="ei-kpi-label">Spread between AI models</div>
@@ -909,8 +909,8 @@ HTML("""
     </div>
     <div class="ei-ref-card2">
       <div class="ei-ref-card-label">Usage</div>
-      <div class="ei-ref-card-item">Petrol car (60 km/h)</div>
-      <div class="ei-ref-card-value">10200</div>
+      <div class="ei-ref-card-item">Car (60 km/h)</div>
+      <div class="ei-ref-card-value">6402</div>
       <div class="ei-ref-card-unit">gCO₂e</div>
     </div>
   </div>
@@ -919,7 +919,8 @@ HTML("""
     Sources:
     <a>Standard phone charger (10W)</a> ·
     <a href="https://www.carbonbrief.org/factcheck-what-is-the-carbon-footprint-of-streaming-video-on-netflix">Netflix</a> ·
-    <a href="https://medium.com/@zodhyatech/how-much-co2-do-you-emit-in-a-day-60be76e491dc">Video call streaming &amp; car</a>
+    <a href="https://medium.com/@zodhyatech/how-much-co2-do-you-emit-in-a-day-60be76e491dc">Video call streaming</a> ·
+    <a href="https://www.eea.europa.eu/en/analysis/indicators/co2-performance-of-new-passenger">Car</a>
   </p>
 
 <div class="ei-section-title-overview "> System list presentation</div>
