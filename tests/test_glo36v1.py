@@ -7,6 +7,7 @@ import xarray
 
 from oceanbench.core import challenger_datasets, glo36v1, metrics
 from oceanbench.core.dataset_source import with_dataset_source
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.references import glo36
 
@@ -94,11 +95,74 @@ def test_prepare_glo36v1_week_dataset_accepts_time_dimension_without_first_day()
     assert prepared[Dimension.LEAD_DAY_INDEX.key()].values.tolist() == [0, 1]
 
 
-def test_glonet_high_resolution_dataset_path_uses_edito_bucket_path() -> None:
+def test_glonet_high_resolution_dataset_path_uses_2026_cloudferro_stream_path() -> None:
     assert (
-        glo36v1.glonet_high_resolution_dataset_path(numpy.datetime64("2023-01-04"))
-        == "https://minio.dive.edito.eu/moiai-octo-bucket/public/octo/v0/ai-gallery/octo-glonet-hr-p1d/20230104.zarr"
+        glo36v1.glonet_high_resolution_dataset_path(numpy.datetime64("2026-09-05"))
+        == "https://s3.waw3-1.cloudferro.com/moiai-octo-bucket/public/octo/v0/ai-gallery/"
+        "octo-glonet-hr-p1d/2026-09-04/2026-09-04.zarr"
     )
+
+
+def test_glonet_high_resolution_dataset_path_allows_base_uri_override(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv(
+        OceanbenchEnvironmentVariable.OCEANBENCH_GLONET_HIGH_RESOLUTION_BASE_URI.value,
+        str(tmp_path),
+    )
+
+    assert glo36v1.glonet_high_resolution_dataset_path(numpy.datetime64("2026-09-05")) == str(
+        tmp_path / "2026-09-04" / "2026-09-04.zarr"
+    )
+
+
+def test_available_glonet_high_resolution_first_day_datetimes_from_local_base(tmp_path) -> None:
+    (tmp_path / "2026-01-01" / "2026-01-01.zarr").mkdir(parents=True)
+    (tmp_path / "2026-01-03" / "2026-01-03.zarr").mkdir(parents=True)
+    (tmp_path / "2026-01-04").mkdir()
+
+    first_day_datetimes = glo36v1.available_glonet_high_resolution_first_day_datetimes(str(tmp_path))
+
+    assert list(numpy.array(first_day_datetimes, dtype="datetime64[D]")) == [
+        numpy.datetime64("2026-01-02"),
+        numpy.datetime64("2026-01-04"),
+    ]
+
+
+def test_available_glonet_high_resolution_first_day_datetimes_from_s3_listing(monkeypatch) -> None:
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return b"""
+                <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+                    <CommonPrefixes>
+                        <Prefix>public/octo/v0/ai-gallery/octo-glonet-hr-p1d/2026-09-04/</Prefix>
+                    </CommonPrefixes>
+                </ListBucketResult>
+            """
+
+    captured = {}
+
+    def fake_urlopen(url, timeout):
+        captured["url"] = url
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(glo36v1, "urlopen", fake_urlopen)
+
+    first_day_datetimes = glo36v1.available_glonet_high_resolution_first_day_datetimes(
+        "https://s3.example.test/bucket/public/octo/v0/ai-gallery/octo-glonet-hr-p1d"
+    )
+
+    assert list(numpy.array(first_day_datetimes, dtype="datetime64[D]")) == [numpy.datetime64("2026-09-05")]
+    assert captured["url"] == (
+        "https://s3.example.test/bucket?list-type=2&delimiter=/&prefix="
+        "public/octo/v0/ai-gallery/octo-glonet-hr-p1d/&max-keys=1000"
+    )
+    assert captured["timeout"] == glo36v1.GLONET_HIGH_RESOLUTION_LISTING_TIMEOUT_SECONDS
 
 
 def test_glonet_high_resolution_challenger_loader_uses_super_resolution_track(
@@ -120,13 +184,65 @@ def test_glonet_high_resolution_challenger_loader_uses_super_resolution_track(
         "with_remote_http_retries",
         lambda _operation_name, callback: callback(),
     )
+    monkeypatch.setattr(
+        challenger_datasets,
+        "available_glonet_high_resolution_first_day_datetimes",
+        lambda: glo36v1.GLONET_HIGH_RESOLUTION_FIRST_DAY_DATETIMES,
+    )
 
     challenger_datasets.glonet_high_resolution()
 
     assert captured["dataset_kind"] == "challenger"
     assert captured["dataset_name"] == "glonet_high_resolution"
     assert captured["resolution"] == "super_resolution"
-    assert captured["lead_days_count"] == glo36v1.GLO36V1_LEAD_DAYS_COUNT
+    assert captured["lead_days_count"] == glo36v1.GLONET_HIGH_RESOLUTION_LEAD_DAYS_COUNT
+    assert list(captured["first_day_datetimes"]) == glo36v1.GLONET_HIGH_RESOLUTION_FIRST_DAY_DATETIMES
+
+
+def test_glonet_high_resolution_week_loader_opens_zarr_lazily(monkeypatch) -> None:
+    captured = {}
+
+    def fake_maybe_stage_weekly_dataset(**kwargs):
+        kwargs["open_week_dataset"](numpy.datetime64("2026-09-05"))
+        return xarray.Dataset()
+
+    def fake_open_dataset(path, **kwargs):
+        captured["path"] = path
+        captured["open_kwargs"] = kwargs
+        return xarray.Dataset()
+
+    def fake_prepare_glo36v1_week_dataset(dataset, **kwargs):
+        captured["prepare_kwargs"] = kwargs
+        return dataset
+
+    monkeypatch.setattr(
+        challenger_datasets,
+        "maybe_stage_weekly_dataset",
+        fake_maybe_stage_weekly_dataset,
+    )
+    monkeypatch.setattr(
+        challenger_datasets,
+        "with_remote_http_retries",
+        lambda _operation_name, callback: callback(),
+    )
+    monkeypatch.setattr(
+        challenger_datasets,
+        "available_glonet_high_resolution_first_day_datetimes",
+        lambda: [numpy.datetime64("2026-09-05")],
+    )
+    monkeypatch.setattr(challenger_datasets.xarray, "open_dataset", fake_open_dataset)
+    monkeypatch.setattr(
+        challenger_datasets,
+        "prepare_glo36v1_week_dataset",
+        fake_prepare_glo36v1_week_dataset,
+    )
+
+    challenger_datasets.glonet_high_resolution()
+
+    assert captured["path"] == glo36v1.glonet_high_resolution_dataset_path(numpy.datetime64("2026-09-05"))
+    assert captured["open_kwargs"] == {"engine": "zarr", "chunks": "auto"}
+    assert captured["prepare_kwargs"]["lead_days_count"] == glo36v1.GLONET_HIGH_RESOLUTION_LEAD_DAYS_COUNT
+    assert captured["prepare_kwargs"]["first_day_datetime"] == numpy.datetime64("2026-09-05")
 
 
 def test_matching_glo36v1_first_day_datetimes_keeps_only_available_dates() -> None:
@@ -221,3 +337,28 @@ def test_glorys_and_glo12_scores_are_skipped_for_super_resolution_challengers(
         scores = metric_function(challenger_dataset)
         assert list(scores.columns) == ["Message"]
         assert "GLO36V1 reference scores" in scores["Message"].iloc[0]
+
+
+def test_glonet_high_resolution_observation_scores_use_current_variables_only(
+    monkeypatch,
+) -> None:
+    captured = {}
+
+    def fake_rmsd_class4_validation(**kwargs):
+        captured.update(kwargs)
+        return xarray.Dataset()
+
+    monkeypatch.setattr(metrics, "observations", lambda _dataset: xarray.Dataset())
+    monkeypatch.setattr(metrics, "rmsd_class4_validation", fake_rmsd_class4_validation)
+    challenger_dataset = with_dataset_source(
+        _challenger_dataset(["2026-08-30"], lead_days_count=1),
+        kind="challenger",
+        name="glonet_high_resolution",
+    )
+
+    metrics.rmsd_of_variables_compared_to_observations(challenger_dataset)
+
+    assert captured["variables"] == [
+        Variable.NORTHWARD_SEA_WATER_VELOCITY,
+        Variable.EASTWARD_SEA_WATER_VELOCITY,
+    ]

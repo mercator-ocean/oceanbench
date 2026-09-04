@@ -15,6 +15,8 @@ from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
 from oceanbench.core.glo36v1 import (
     GLO36V1_FIRST_DAY_DATETIMES,
     GLO36V1_LEAD_DAYS_COUNT,
+    GLONET_HIGH_RESOLUTION_LEAD_DAYS_COUNT,
+    available_glonet_high_resolution_first_day_datetimes,
     glo36v1_dataset_path,
     glonet_high_resolution_dataset_path,
     prepare_glo36v1_week_dataset,
@@ -121,12 +123,12 @@ def _glo36v1_dataset_path(start_datetime: datetime) -> str:
 
 
 def glonet_high_resolution() -> xarray.Dataset:
-    first_day_datetimes = GLO36V1_FIRST_DAY_DATETIMES
+    first_day_datetimes = available_glonet_high_resolution_first_day_datetimes()
 
     def open_week_dataset(first_day_datetime: datetime) -> xarray.Dataset:
         return prepare_glo36v1_week_dataset(
-            xarray.open_dataset(glonet_high_resolution_dataset_path(first_day_datetime), engine="zarr"),
-            lead_days_count=GLO36V1_LEAD_DAYS_COUNT,
+            xarray.open_dataset(glonet_high_resolution_dataset_path(first_day_datetime), engine="zarr", chunks="auto"),
+            lead_days_count=GLONET_HIGH_RESOLUTION_LEAD_DAYS_COUNT,
             operation_name="GLONET high-resolution challenger dataset open",
             first_day_datetime=first_day_datetime,
         )
@@ -143,7 +145,7 @@ def glonet_high_resolution() -> xarray.Dataset:
             dataset_kind="challenger",
             dataset_name="glonet_high_resolution",
             first_day_datetimes=first_day_datetimes,
-            lead_days_count=GLO36V1_LEAD_DAYS_COUNT,
+            lead_days_count=GLONET_HIGH_RESOLUTION_LEAD_DAYS_COUNT,
             open_week_dataset=open_week_dataset,
             open_remote_dataset=open_remote_dataset,
             resolution="super_resolution",

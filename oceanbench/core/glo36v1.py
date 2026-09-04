@@ -3,6 +3,12 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from datetime import datetime
+import os
+from pathlib import Path, PurePosixPath
+import re
+from urllib.parse import quote, urlparse
+from urllib.request import urlopen
+import xml.etree.ElementTree as ElementTree
 
 import numpy
 import pandas
@@ -14,15 +20,20 @@ from oceanbench.core.climate_forecast_standard_names import (
 from oceanbench.core.dataset_source import get_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.datetime_utils import generate_dates
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.remote_http import require_remote_dataset_dimensions
 from oceanbench.core.resolution import get_dataset_resolution
 
 GLO36V1_BASE_URL = "https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public"
 GLONET_HIGH_RESOLUTION_BASE_URL = (
-    "https://minio.dive.edito.eu/moiai-octo-bucket/public/octo/v0/ai-gallery/octo-glonet-hr-p1d"
+    "https://s3.waw3-1.cloudferro.com/moiai-octo-bucket/public/octo/v0/ai-gallery/octo-glonet-hr-p1d"
 )
 GLO36V1_LEAD_DAYS_COUNT = 7
 GLO36V1_FIRST_DAY_DATETIMES = generate_dates("2023-01-04", "2024-01-03", 7)
+GLONET_HIGH_RESOLUTION_LEAD_DAYS_COUNT = 10
+GLONET_HIGH_RESOLUTION_FIRST_DAY_DATETIMES = generate_dates("2026-08-30", "2026-09-05", 1)
+GLONET_HIGH_RESOLUTION_RUN_DAY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+GLONET_HIGH_RESOLUTION_LISTING_TIMEOUT_SECONDS = 30
 GLO36V1_SUPER_RESOLUTION_SOURCE_NAMES = {
     "glo36v1",
     "glonet_high_resolution",
@@ -39,11 +50,86 @@ def glo36v1_dataset_path(first_day_datetime: datetime | numpy.datetime64) -> str
     return f"{GLO36V1_BASE_URL}/{first_day}.zarr"
 
 
+def glonet_high_resolution_base_uri() -> str:
+    configured_base_uri = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_GLONET_HIGH_RESOLUTION_BASE_URI.value)
+    if configured_base_uri:
+        return configured_base_uri.rstrip("/")
+    return GLONET_HIGH_RESOLUTION_BASE_URL
+
+
+def _is_http_uri(uri: str) -> bool:
+    return urlparse(uri).scheme in {"http", "https"}
+
+
+def _join_uri(base_uri: str, *parts: str) -> str:
+    return "/".join([base_uri.rstrip("/"), *(part.strip("/") for part in parts)])
+
+
 def glonet_high_resolution_dataset_path(
     first_day_datetime: datetime | numpy.datetime64,
+    base_uri: str | None = None,
 ) -> str:
-    first_day = pandas.Timestamp(first_day_datetime).strftime("%Y%m%d")
-    return f"{GLONET_HIGH_RESOLUTION_BASE_URL}/{first_day}.zarr"
+    run_day = pandas.Timestamp(first_day_datetime) - pandas.Timedelta(days=1)
+    run_day_string = run_day.strftime("%Y-%m-%d")
+    source_base_uri = glonet_high_resolution_base_uri() if base_uri is None else base_uri
+    return _join_uri(source_base_uri, run_day_string, f"{run_day_string}.zarr")
+
+
+def _glonet_high_resolution_s3_listing_url(base_uri: str) -> str:
+    parsed_base_uri = urlparse(base_uri)
+    bucket_and_prefix = parsed_base_uri.path.lstrip("/")
+    bucket, separator, prefix = bucket_and_prefix.partition("/")
+    if not separator:
+        raise ValueError(f"GLONET high-resolution base URI has no object prefix: {base_uri}")
+    prefix = prefix.rstrip("/") + "/"
+    return (
+        f"{parsed_base_uri.scheme}://{parsed_base_uri.netloc}/{bucket}"
+        f"?list-type=2&delimiter=/&prefix={quote(prefix)}&max-keys=1000"
+    )
+
+
+def _http_glonet_high_resolution_run_day_strings(base_uri: str) -> list[str]:
+    listing_url = _glonet_high_resolution_s3_listing_url(base_uri)
+    with urlopen(listing_url, timeout=GLONET_HIGH_RESOLUTION_LISTING_TIMEOUT_SECONDS) as response:
+        listing_document = ElementTree.fromstring(response.read())
+    run_day_strings = []
+    for prefix_element in listing_document.findall(".//{*}CommonPrefixes/{*}Prefix"):
+        if prefix_element.text is None:
+            continue
+        run_day_string = PurePosixPath(prefix_element.text.rstrip("/")).name
+        if GLONET_HIGH_RESOLUTION_RUN_DAY_PATTERN.fullmatch(run_day_string):
+            run_day_strings.append(run_day_string)
+    return sorted(set(run_day_strings))
+
+
+def _local_glonet_high_resolution_run_day_strings(base_uri: str) -> list[str]:
+    base_path = Path(base_uri)
+    if not base_path.exists():
+        return []
+    run_day_strings = []
+    for run_day_path in base_path.iterdir():
+        run_day_string = run_day_path.name
+        if not GLONET_HIGH_RESOLUTION_RUN_DAY_PATTERN.fullmatch(run_day_string):
+            continue
+        if (run_day_path / f"{run_day_string}.zarr").exists():
+            run_day_strings.append(run_day_string)
+    return sorted(run_day_strings)
+
+
+def available_glonet_high_resolution_first_day_datetimes(
+    base_uri: str | None = None,
+) -> list[datetime]:
+    source_base_uri = glonet_high_resolution_base_uri() if base_uri is None else base_uri.rstrip("/")
+    if _is_http_uri(source_base_uri):
+        run_day_strings = _http_glonet_high_resolution_run_day_strings(source_base_uri)
+    else:
+        run_day_strings = _local_glonet_high_resolution_run_day_strings(source_base_uri)
+    if not run_day_strings:
+        raise ValueError(f"No GLONET high-resolution datasets found under {source_base_uri}")
+    return [
+        (pandas.Timestamp(run_day_string) + pandas.Timedelta(days=1)).to_pydatetime()
+        for run_day_string in run_day_strings
+    ]
 
 
 def _rename_glo36v1_dimensions(dataset: xarray.Dataset) -> xarray.Dataset:

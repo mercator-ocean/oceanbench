@@ -6,6 +6,7 @@ import numpy
 import pandas
 import xarray
 
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.classIV import _create_observations_dataframe
 from oceanbench.core.references import observations
@@ -84,7 +85,26 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(mo
 def test_observations_stage_path_uses_overlap_safe_version() -> None:
     assert (
         observations._observations_stage_path("2024-01-03", "2025-01-03", 10).name
-        == "observations-v3-20240103-20250103-10d.zarr"
+        == "observations-v4-observations2024-20240103-20250103-10d.zarr"
+    )
+
+
+def test_observation_path_uses_requested_collection() -> None:
+    assert (
+        observations.observation_path(numpy.datetime64("2026-01-01"), "observations2026")
+        == "https://minio.dive.edito.eu/project-oceanbench/public/observations2026/20260101.zarr"
+    )
+
+
+def test_observation_path_allows_2026_base_uri_override(monkeypatch) -> None:
+    monkeypatch.setenv(
+        OceanbenchEnvironmentVariable.OCEANBENCH_OBSERVATIONS_2026_BASE_URI.value,
+        "/data/oceanbench/observations2026/",
+    )
+
+    assert (
+        observations.observation_path(numpy.datetime64("2026-01-01"), "observations2026")
+        == "/data/oceanbench/observations2026/20260101.zarr"
     )
 
 
@@ -117,6 +137,67 @@ def test_observations_use_overlap_when_challenger_starts_before_observations(mon
     assert captured["observation_days"][0] == numpy.datetime64("2024-01-01")
     assert captured["observation_days"][-1] == numpy.datetime64("2024-01-12")
     assert captured["first_day_timestamps"].min() == pandas.Timestamp("2023-12-27")
+    assert captured["observations_collection"] == "observations2024"
+
+
+def test_observations_use_2026_collection_for_2026_challenger(monkeypatch) -> None:
+    captured = {}
+
+    def fake_selected_observations_dataset(**kwargs):
+        captured.update(kwargs)
+        return xarray.Dataset()
+
+    monkeypatch.setattr(observations, "_should_stage_observations_locally", lambda: False)
+    monkeypatch.setattr(observations, "_selected_observations_dataset", fake_selected_observations_dataset)
+    monkeypatch.setattr(observations, "_observation_dataset_exists", lambda *_: True)
+
+    observations.observations(
+        _challenger_dataset(
+            ["2026-08-30", "2026-09-05"],
+            lead_days_count=10,
+        )
+    )
+
+    assert captured["observations_collection"] == "observations2026"
+    assert captured["observation_days"][0] == numpy.datetime64("2026-08-30")
+    assert captured["observation_days"][-1] == numpy.datetime64("2026-09-14")
+
+
+def test_observations_filter_unavailable_2026_days(monkeypatch) -> None:
+    captured = {}
+
+    def fake_selected_observations_dataset(**kwargs):
+        captured.update(kwargs)
+        return xarray.Dataset()
+
+    def fake_observation_dataset_exists(day_datetime, _observations_collection):
+        return day_datetime in {
+            numpy.datetime64("2026-01-01"),
+            numpy.datetime64("2026-01-03"),
+        }
+
+    monkeypatch.setattr(observations, "_should_stage_observations_locally", lambda: False)
+    monkeypatch.setattr(observations, "_selected_observations_dataset", fake_selected_observations_dataset)
+    monkeypatch.setattr(observations, "_observation_dataset_exists", fake_observation_dataset_exists)
+
+    observations.observations(_challenger_dataset(["2026-01-01"], lead_days_count=3))
+
+    assert list(captured["observation_days"]) == [
+        numpy.datetime64("2026-01-01"),
+        numpy.datetime64("2026-01-03"),
+    ]
+
+
+def test_observations_fail_when_no_2026_days_are_available(monkeypatch) -> None:
+    monkeypatch.setattr(observations, "_should_stage_observations_locally", lambda: False)
+    monkeypatch.setattr(observations, "_observation_dataset_exists", lambda *_: False)
+
+    try:
+        observations.observations(_challenger_dataset(["2026-01-01"], lead_days_count=3))
+    except observations.ObservationDataUnavailableError as error:
+        assert "No observations2026 data files were available between 2026-01-01 and 2026-01-03" in str(error)
+    else:
+        raise AssertionError("Expected unavailable 2026 observation data to fail.")
 
 
 def test_observations_still_fail_when_no_forecast_window_overlaps_available_observations() -> None:

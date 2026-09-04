@@ -6,6 +6,7 @@ import pandas
 import xarray
 
 from oceanbench.core.classIV import rmsd_class4_validation
+from oceanbench.core.dataset_source import get_dataset_source
 from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import (
     compute_geostrophic_currents,
@@ -35,6 +36,22 @@ from oceanbench.core.rmsd import rmsd
 
 GLOBAL_LAGRANGIAN_PARTICLE_COUNT = 10000
 MINIMUM_LAGRANGIAN_PARTICLE_COUNT = 2000
+GLONET_HIGH_RESOLUTION_SOURCE_NAMES = {
+    "glonet_high_resolution",
+    "glonet_hr",
+    "glonet_super_resolution",
+}
+OBSERVATION_RMSD_VARIABLES = [
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+    Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+    Variable.SEA_WATER_SALINITY,
+    Variable.NORTHWARD_SEA_WATER_VELOCITY,
+    Variable.EASTWARD_SEA_WATER_VELOCITY,
+]
+GLONET_HIGH_RESOLUTION_OBSERVATION_RMSD_VARIABLES = [
+    Variable.NORTHWARD_SEA_WATER_VELOCITY,
+    Variable.EASTWARD_SEA_WATER_VELOCITY,
+]
 
 
 def _unavailable_scores(error: Exception) -> pandas.DataFrame:
@@ -50,6 +67,13 @@ def _reference_unavailable_for_super_resolution(
             "Use observation scores and GLO36V1 reference scores for the super-resolution track."
         )
     )
+
+
+def _observation_rmsd_variables(challenger_dataset: xarray.Dataset) -> list[Variable]:
+    dataset_source = get_dataset_source(challenger_dataset)
+    if dataset_source and dataset_source.name in GLONET_HIGH_RESOLUTION_SOURCE_NAMES:
+        return GLONET_HIGH_RESOLUTION_OBSERVATION_RMSD_VARIABLES
+    return OBSERVATION_RMSD_VARIABLES
 
 
 def _lagrangian_particle_count(
@@ -76,13 +100,7 @@ def rmsd_of_variables_compared_to_observations(
     return rmsd_class4_validation(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
-        variables=[
-            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
-            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
-            Variable.SEA_WATER_SALINITY,
-            Variable.NORTHWARD_SEA_WATER_VELOCITY,
-            Variable.EASTWARD_SEA_WATER_VELOCITY,
-        ],
+        variables=_observation_rmsd_variables(challenger_dataset),
     )
 
 

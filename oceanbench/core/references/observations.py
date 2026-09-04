@@ -2,7 +2,12 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from functools import lru_cache
+import os
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 import numpy
 import pandas
@@ -10,6 +15,7 @@ from xarray import Dataset, open_dataset, open_mfdataset
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.datetime_utils import generate_dates
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.local_stage import (
     local_stage_directory,
@@ -23,9 +29,22 @@ from oceanbench.core.remote_http import (
     with_remote_http_retries,
 )
 
-OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
+DEFAULT_OBSERVATIONS_COLLECTION = "observations2024"
+OBSERVATIONS_BASE_URI_BY_COLLECTION = {
+    "observations2024": "https://minio.dive.edito.eu/project-oceanbench/public/observations2024",
+    "observations2026": "https://minio.dive.edito.eu/project-oceanbench/public/observations2026",
+}
+OBSERVATIONS_BASE_URI_ENVIRONMENT_VARIABLE_BY_COLLECTION = {
+    "observations2026": OceanbenchEnvironmentVariable.OCEANBENCH_OBSERVATIONS_2026_BASE_URI,
+}
+OBSERVATIONS_FIRST_AVAILABLE_DATES = {
+    "observations2024": numpy.datetime64("2024-01-01"),
+    "observations2026": numpy.datetime64("2026-01-01"),
+}
+OBSERVATIONS_FIRST_AVAILABLE_DATE = OBSERVATIONS_FIRST_AVAILABLE_DATES[DEFAULT_OBSERVATIONS_COLLECTION]
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
-OBSERVATIONS_STAGE_VERSION = "v3"
+OBSERVATIONS_STAGE_VERSION = "v4"
+OBSERVATION_DATASET_EXISTS_TIMEOUT_SECONDS = 10
 
 
 class ObservationDataUnavailableError(ValueError):
@@ -95,9 +114,77 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
     return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 
 
-def observation_path(day_datetime: numpy.datetime64) -> str:
+def _observations_collection_for_challenger(first_challenger_day: numpy.datetime64) -> str:
+    if first_challenger_day >= OBSERVATIONS_FIRST_AVAILABLE_DATES["observations2026"]:
+        return "observations2026"
+    return DEFAULT_OBSERVATIONS_COLLECTION
+
+
+def _is_http_uri(uri: str) -> bool:
+    return urlparse(uri).scheme in {"http", "https"}
+
+
+def _observation_base_uri(observations_collection: str) -> str:
+    try:
+        default_base_uri = OBSERVATIONS_BASE_URI_BY_COLLECTION[observations_collection]
+    except KeyError as error:
+        supported_collections = ", ".join(sorted(OBSERVATIONS_BASE_URI_BY_COLLECTION))
+        raise ValueError(
+            f"Unsupported observation collection: {observations_collection!r}. "
+            f"Supported values are: {supported_collections}."
+        ) from error
+    environment_variable = OBSERVATIONS_BASE_URI_ENVIRONMENT_VARIABLE_BY_COLLECTION.get(observations_collection)
+    if environment_variable is None:
+        return default_base_uri
+    configured_base_uri = os.environ.get(environment_variable.value)
+    if configured_base_uri:
+        return configured_base_uri.rstrip("/")
+    return default_base_uri
+
+
+def observation_path(
+    day_datetime: numpy.datetime64,
+    observations_collection: str = DEFAULT_OBSERVATIONS_COLLECTION,
+) -> str:
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/observations2024/{day_string}.zarr"
+    return f"{_observation_base_uri(observations_collection)}/{day_string}.zarr"
+
+
+@lru_cache(maxsize=4096)
+def _observation_dataset_exists_uri(observation_uri: str) -> bool:
+    if not _is_http_uri(observation_uri):
+        return Path(observation_uri).exists()
+    request = Request(f"{observation_uri.rstrip('/')}/.zmetadata", method="HEAD")
+    try:
+        with urlopen(request, timeout=OBSERVATION_DATASET_EXISTS_TIMEOUT_SECONDS):
+            return True
+    except HTTPError as error:
+        if error.code == 404:
+            return False
+        raise
+
+
+def _observation_dataset_exists(
+    day_datetime: numpy.datetime64,
+    observations_collection: str,
+) -> bool:
+    return _observation_dataset_exists_uri(observation_path(day_datetime, observations_collection))
+
+
+def _available_observation_days(
+    observation_days: numpy.ndarray,
+    observations_collection: str,
+) -> numpy.ndarray:
+    if observations_collection != "observations2026":
+        return observation_days
+    available_days = [day for day in observation_days if _observation_dataset_exists(day, observations_collection)]
+    if available_days:
+        return numpy.array(available_days, dtype="datetime64[D]")
+    first_day_string = pandas.Timestamp(observation_days[0]).strftime("%Y-%m-%d")
+    last_day_string = pandas.Timestamp(observation_days[-1]).strftime("%Y-%m-%d")
+    raise ObservationDataUnavailableError(
+        f"No {observations_collection} data files were available " f"between {first_day_string} and {last_day_string}."
+    )
 
 
 def _assign_standard_names(observations_dataset: Dataset) -> Dataset:
@@ -121,9 +208,14 @@ def _should_stage_observations_locally() -> bool:
     return should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY)
 
 
-def _observations_stage_path(first_day_start: str, last_day_end: str, lead_days_count: int) -> Path:
+def _observations_stage_path(
+    first_day_start: str,
+    last_day_end: str,
+    lead_days_count: int,
+    observations_collection: str = DEFAULT_OBSERVATIONS_COLLECTION,
+) -> Path:
     return local_stage_directory() / (
-        f"observations-{OBSERVATIONS_STAGE_VERSION}-"
+        f"observations-{OBSERVATIONS_STAGE_VERSION}-{observations_collection}-"
         f"{first_day_start.replace('-', '')}-{last_day_end.replace('-', '')}-{lead_days_count}d.zarr"
     )
 
@@ -138,12 +230,14 @@ def _build_staged_observations_dataset(
     first_day_timestamps: pandas.DatetimeIndex,
     first_day_datetimes: numpy.ndarray,
     lead_days_count: int,
+    observations_collection: str = DEFAULT_OBSERVATIONS_COLLECTION,
 ) -> None:
     observations_dataset = _selected_observations_dataset(
         observation_days=observation_days,
         first_day_timestamps=first_day_timestamps,
         first_day_datetimes=first_day_datetimes,
         lead_days_count=lead_days_count,
+        observations_collection=observations_collection,
     )
     try:
         write_dataset_to_local_stage(
@@ -185,6 +279,7 @@ def _selected_observations_dataset(
     first_day_timestamps: pandas.DatetimeIndex,
     first_day_datetimes: numpy.ndarray,
     lead_days_count: int,
+    observations_collection: str = DEFAULT_OBSERVATIONS_COLLECTION,
 ) -> Dataset:
     time_key = Dimension.TIME.key()
     source_observation_dimension_key = "obs"
@@ -192,7 +287,7 @@ def _selected_observations_dataset(
     first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
 
     observations_dataset = open_mfdataset(
-        list(map(observation_path, observation_days)),
+        [observation_path(day, observations_collection) for day in observation_days],
         engine="zarr",
         decode_cf=False,
         parallel=False,
@@ -242,21 +337,24 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     first_day_dates = first_day_datetimes.astype("datetime64[D]")
     first_challenger_day = first_day_dates.min()
     last_challenger_day = first_day_dates.max() + numpy.timedelta64(lead_days_count - 1, "D")
-    if last_challenger_day < OBSERVATIONS_FIRST_AVAILABLE_DATE:
+    observations_collection = _observations_collection_for_challenger(first_challenger_day)
+    observations_first_available_date = OBSERVATIONS_FIRST_AVAILABLE_DATES[observations_collection]
+    if last_challenger_day < observations_first_available_date:
         last_challenger_day_string = pandas.Timestamp(last_challenger_day).strftime("%Y-%m-%d")
-        first_available_day_string = pandas.Timestamp(OBSERVATIONS_FIRST_AVAILABLE_DATE).strftime("%Y-%m-%d")
+        first_available_day_string = pandas.Timestamp(observations_first_available_date).strftime("%Y-%m-%d")
         raise ObservationDataUnavailableError(
             "Observation-based Class IV scores were not computed for this challenger. "
-            f"Observation data is available from {first_available_day_string}, "
+            f"{observations_collection} data is available from {first_available_day_string}, "
             f"while challenger forecast windows end on {last_challenger_day_string}."
         )
 
     first_day_timestamps = pandas.to_datetime(first_day_datetimes)
-    observation_start_day = max(first_challenger_day, OBSERVATIONS_FIRST_AVAILABLE_DATE)
+    observation_start_day = max(first_challenger_day, observations_first_available_date)
     first_day_start = pandas.Timestamp(observation_start_day).strftime("%Y-%m-%d")
     last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count - 1)).strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
-    local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)
+    observation_days = _available_observation_days(observation_days, observations_collection)
+    local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count, observations_collection)
 
     def open_selected_observations() -> Dataset:
         if not _should_stage_observations_locally():
@@ -265,6 +363,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
                 first_day_timestamps=first_day_timestamps,
                 first_day_datetimes=first_day_datetimes,
                 lead_days_count=lead_days_count,
+                observations_collection=observations_collection,
             )
         return open_or_create_local_stage_dataset(
             local_stage_path,
@@ -275,6 +374,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
                 first_day_timestamps=first_day_timestamps,
                 first_day_datetimes=first_day_datetimes,
                 lead_days_count=lead_days_count,
+                observations_collection=observations_collection,
             ),
         )
 

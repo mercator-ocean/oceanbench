@@ -50,10 +50,15 @@ OceanBench exposes the following GLO36V1 comparison metrics:
 * ``oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo36v1_reference()``
 
 These metrics are computed only for super-resolution challenger datasets. The
-GLONET high-resolution challenger loader uses:
+GLONET high-resolution challenger loader uses the 2026 CloudFerro stream:
 
-* ``https://minio.dive.edito.eu/moiai-octo-bucket/public/octo/v0/ai-gallery/octo-glonet-hr-p1d/``
+* ``https://s3.waw3-1.cloudferro.com/moiai-octo-bucket/public/octo/v0/ai-gallery/octo-glonet-hr-p1d/``
 
-This path is derived from the EDITO file explorer location:
+The observations used for 2026 challengers are read from:
 
-* ``https://datalab.dive.edito.eu/file-explorer/moiai-octo-bucket/public/octo/v0/ai-gallery/octo-glonet-hr-p1d/``
+* ``https://minio.dive.edito.eu/project-oceanbench/public/observations2026/``
+
+Set ``OCEANBENCH_GLONET_HIGH_RESOLUTION_BASE_URI`` and
+``OCEANBENCH_OBSERVATIONS_2026_BASE_URI`` to local directories or object-store
+prefixes when running against LIR-mounted copies. The challenger loader
+discovers dated GLONET high-resolution runs under that base URI.
