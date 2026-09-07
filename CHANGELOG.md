@@ -25,6 +25,10 @@ and the affected reports are re-published (never silently overwritten).
 
 - Package, documentation, website and metadata now read OceanBench public datasets and report assets from the CloudFerro `oceanbench-bucket` instead of the previous EDITO MinIO project buckets ([#311](https://github.com/mercator-ocean/oceanbench/issues/311), [#313](https://github.com/mercator-ocean/oceanbench/pull/313)).
 
+### Challengers
+
+- 2026-09-07: HClimRep added: an ECMWF WeatherGenerator fine-tune on GLORYS producing 10-day global ocean forecasts at 1/4 degree, initialized from GLORYS nowcasts. Forecasts are published by the model authors at https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench. The store carries 9 vertical levels only, and it has no bathymetry mask: the surface land-sea mask is repeated at every level, so mixed layer depth and shelf Class IV scores should be read with that in mind.
+
 ### Reports
 
 - Official reports: `public/evaluation-reports/0.5.0/` (unchanged)
