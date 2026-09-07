@@ -103,6 +103,26 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1°",
     },
+    "hclimrep": {
+        "label": "HClimRep (WeatherGenerator)",
+        "url": "https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench",
+        "organisation": "ECMWF",
+        "organisation_url": "https://github.com/ecmwf/WeatherGenerator",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLORYS",
+        "resolution": "1/4°",
+    },
+    "hclimrep_1_degree": {
+        "label": "HClimRep (WeatherGenerator)",
+        "url": "https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench",
+        "organisation": "ECMWF",
+        "organisation_url": "https://github.com/ecmwf/WeatherGenerator",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLORYS",
+        "resolution": "1°",
+    },
 }
 
 
