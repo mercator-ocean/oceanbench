@@ -8,35 +8,31 @@ SPDX-License-Identifier: EUPL-1.2
 
 All notable changes to OceanBench are documented in this file.
 
-**How to read this file.** The **version number tracks how scores are computed.** A new
-version means the scoring methodology changed and scores are **not directly comparable** to
-the previous version — every challenger is re-evaluated. Each version begins with a one-line
-**Scores** summary stating whether and why scores moved.
+**How to read this file.** A **minor** version (0.x.0) means the scoring methodology changed:
+scores are **not comparable** with the previous version and every challenger is re-evaluated.
+A **patch** version (0.x.y) changes packaging, data paths or docs only: scores are identical.
+Each version begins with a one-line **Scores** summary stating whether and why scores moved.
 
-Changes that do **not** change the methodology — a challenger added, or a challenger's
-forecasts refreshed — do **not** bump the version. They are recorded as dated bullets under a
-**Challengers** heading in the current version's section, and the affected reports are
-re-published (never silently overwritten).
+A challenger added or a challenger's forecasts refreshed does not bump the version. It is
+recorded as a dated bullet under a **Challengers** heading in the current version's section,
+and the affected reports are re-published (never silently overwritten).
 
 ## 0.5.1 - 2026-09-02
 
-**Scores:** unchanged vs 0.5.0. This release only moves public data access paths from the
-previous EDITO MinIO project buckets to the CloudFerro `oceanbench-bucket` public area.
+**Scores:** unchanged vs 0.5.0. Data paths only.
 
-### Fixed
+### Changed
 
-- Updated package, documentation, website and metadata data URLs to read OceanBench public
-  datasets and report assets from CloudFerro instead of the previous EDITO MinIO project
-  buckets.
+- Package, documentation, website and metadata now read OceanBench public datasets and report assets from the CloudFerro `oceanbench-bucket` instead of the previous EDITO MinIO project buckets ([#311](https://github.com/mercator-ocean/oceanbench/issues/311), [#313](https://github.com/mercator-ocean/oceanbench/pull/313)).
 
 ### Reports
 
-- Official reports: unchanged from `public/evaluation-reports/0.5.0/`.
+- Official reports: `public/evaluation-reports/0.5.0/` (unchanged)
 
 ## 0.5.0 - 2026-08-13
 
 **Scores:** grid-averaged scores change for the challengers whose grids do not land exactly on
-the reference grid (GLO36v1, LangYa, WenHai, XiHe) vs 0.4.0 — the reference grid is now snapped
+the reference grid (GLO36v1, LangYa, WenHai, XiHe) vs 0.4.0. The reference grid is now snapped
 onto the challenger grid before the difference is taken, so points that were previously
 misaligned by a fraction of a grid cell are compared like for like. Challengers already on the
 reference grid (GLONET, GLONET 1 degree) are unchanged, and the observation-based Class IV
@@ -57,7 +53,7 @@ every challenger. See the
 ## 0.4.0 - 2026-07-07
 
 **Scores:** every score computed against the gridded GLORYS/GLO12 reference changes for every
-challenger vs 0.3.0 — grid-averaged RMSD (variables, mixed-layer depth, geostrophic currents)
+challenger vs 0.3.0. Grid-averaged RMSD (variables, mixed-layer depth, geostrophic currents)
 now uses cos(latitude) area weighting, and Lagrangian trajectory seeds are drawn with the same
 cos-latitude weighting, so scores reflect skill per unit ocean area rather than per grid cell.
 The observation-based Class IV scores (temperature, salinity, sea level anomaly and currents vs
@@ -66,7 +62,7 @@ observations) are unchanged. See the
 
 ### Changed
 
-- Grid-averaged RMSD — variables, mixed-layer depth and geostrophic currents against both GLORYS and GLO12 — now uses cos-latitude area weighting instead of an unweighted lat/lon mean.
+- Grid-averaged RMSD (variables, mixed-layer depth and geostrophic currents, against both GLORYS and GLO12) now uses cos-latitude area weighting instead of an unweighted lat/lon mean.
 - Lagrangian trajectory seed points are drawn with cos-latitude area probabilities.
 
 ### Reports
@@ -75,7 +71,7 @@ observations) are unchanged. See the
 
 ## 0.3.0 - 2026-07-07
 
-**Scores:** global sea-level-anomaly scores change for every challenger vs 0.2.1 — global SSH
+**Scores:** global sea-level-anomaly scores change for every challenger vs 0.2.1. Global SSH
 is now converted to SLA using the GLO12 mean dynamic topography instead of the GLORYS MDT,
 matching the GLO12 datum the global challengers are initialised on and correcting the
 overestimated SLA reported in [#293](https://github.com/mercator-ocean/oceanbench/issues/293).
@@ -83,7 +79,7 @@ IBI SLA and all other scores are unchanged.
 
 ### Changed
 
-- Global SSH→SLA conversion now uses the GLO12 mean dynamic topography (GLO-MFC_001_024) paired with the GLO12 datum shift, replacing the GLORYS MDT ([#295](https://github.com/mercator-ocean/oceanbench/issues/295)).
+- Global SSH to SLA conversion now uses the GLO12 mean dynamic topography (GLO-MFC_001_024) paired with the GLO12 datum shift, replacing the GLORYS MDT ([#295](https://github.com/mercator-ocean/oceanbench/issues/295)).
 
 ### Reports
 
@@ -99,10 +95,10 @@ is unchanged from 0.2.0.
 
 ### Challengers
 
-- 2026-06-30 — WenHai forecasts recomputed to mask initial-condition land as NaN, fixing the spurious minimum-value points from the land-sea mask mismatch ([#294](https://github.com/mercator-ocean/oceanbench/issues/294)).
-- 2026-06-23 — LangYa added: a machine-learning model from IOCAS producing 7-day global ocean forecasts initialized from GLO12 nowcasts and IFS atmospheric forcings.
-- 2026-06-16 — GLONET, XiHe and WenHai forecasts recomputed with updated GLO12 nowcasts and IFS atmospheric forcings. For WenHai this resolves the surface-forcing issue reported in [#269](https://github.com/mercator-ocean/oceanbench/issues/269): the model is now forced with net shortwave radiation, replacing the previously corrupted shortwave input that had inflated its error.
-- 2026-06-16 — GLO12 now reads the full GLO12 operational forecast (50 depth levels), replacing the previous reduced-depth product.
+- 2026-06-30: WenHai forecasts recomputed to mask initial-condition land as NaN, fixing the spurious minimum-value points from the land-sea mask mismatch ([#294](https://github.com/mercator-ocean/oceanbench/issues/294)).
+- 2026-06-23: LangYa added: a machine-learning model from IOCAS producing 7-day global ocean forecasts initialized from GLO12 nowcasts and IFS atmospheric forcings.
+- 2026-06-16: GLONET, XiHe and WenHai forecasts recomputed with updated GLO12 nowcasts and IFS atmospheric forcings. For WenHai this resolves the surface-forcing issue reported in [#269](https://github.com/mercator-ocean/oceanbench/issues/269): the model is now forced with net shortwave radiation, replacing the previously corrupted shortwave input that had inflated its error.
+- 2026-06-16: GLO12 now reads the full GLO12 operational forecast (50 depth levels), replacing the previous reduced-depth product.
 
 ### Changed
 
@@ -114,7 +110,7 @@ is unchanged from 0.2.0.
 
 ## 0.2.0 - 2026-06-15
 
-**Scores:** change vs 0.1.4 — the 600 m mixed-layer-depth cap and the one-day Class IV
+**Scores:** change vs 0.1.4. The 600 m mixed-layer-depth cap and the one-day Class IV
 observation realignment change computed scores. 1-degree challenger scores added.
 
 ### Added
@@ -138,7 +134,7 @@ observation realignment change computed scores. 1-degree challenger scores added
 
 ## 0.1.4 - 2026-05-20
 
-**Scores:** Class IV scores change vs 0.1.3 — observations in overlapping forecast windows
+**Scores:** Class IV scores change vs 0.1.3. Observations in overlapping forecast windows
 are now preserved for every matching forecast. Other scores unchanged.
 
 ### Fixed
@@ -153,7 +149,7 @@ are now preserved for every matching forecast. Other scores unchanged.
 
 ## 0.1.3 - 2026-05-13
 
-**Scores:** unchanged — local lagrangian staging correctness fix.
+**Scores:** unchanged. Local lagrangian staging correctness fix.
 
 ### Fixed
 
@@ -166,7 +162,7 @@ are now preserved for every matching forecast. Other scores unchanged.
 
 ## 0.1.2 - 2026-05-12
 
-**Scores:** unchanged — local reference staging correctness fix.
+**Scores:** unchanged. Local reference staging correctness fix.
 
 ### Fixed
 
