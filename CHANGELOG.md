@@ -27,7 +27,7 @@ and the affected reports are re-published (never silently overwritten).
 
 ### Challengers
 
-- 2026-09-07: HClimRep added: an ECMWF WeatherGenerator fine-tune on GLORYS producing 10-day global ocean forecasts at 1/4 degree, initialized from GLORYS nowcasts. Forecasts are published by the model authors at https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench. The store carries 9 vertical levels only, and it has no bathymetry mask: the surface land-sea mask is repeated at every level, so mixed layer depth and shelf Class IV scores should be read with that in mind.
+- 2026-09-07: HClimRep added: a fine-tune of the WeatherGenerator model (https://github.com/ecmwf/WeatherGenerator) on GLORYS, producing 10-day global ocean forecasts at 1/4 degree, initialized from GLORYS nowcasts. It is developed at the Alfred Wegener Institute (AWI) in Bremerhaven within the Helmholtz HClimRep project, and the forecasts are published by the model authors at https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench. The store carries 9 vertical levels only, and it has no bathymetry mask: the surface land-sea mask is repeated at every level, so mixed layer depth and shelf Class IV scores should be read with that in mind.
 
 ### Reports
 

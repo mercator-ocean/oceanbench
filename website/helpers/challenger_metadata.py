@@ -106,8 +106,8 @@ CHALLENGERS = {
     "hclimrep": {
         "label": "HClimRep (WeatherGenerator)",
         "url": "https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench",
-        "organisation": "ECMWF",
-        "organisation_url": "https://github.com/ecmwf/WeatherGenerator",
+        "organisation": "Alfred Wegener Institute (AWI)",
+        "organisation_url": "https://www.awi.de/en/",
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLORYS",
@@ -116,8 +116,8 @@ CHALLENGERS = {
     "hclimrep_1_degree": {
         "label": "HClimRep (WeatherGenerator)",
         "url": "https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench",
-        "organisation": "ECMWF",
-        "organisation_url": "https://github.com/ecmwf/WeatherGenerator",
+        "organisation": "Alfred Wegener Institute (AWI)",
+        "organisation_url": "https://www.awi.de/en/",
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLORYS",
