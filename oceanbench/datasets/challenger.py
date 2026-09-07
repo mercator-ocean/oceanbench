@@ -389,3 +389,84 @@ def langya_1_degree() -> xarray.Dataset:
     """
 
     return challenger_datasets.langya_1_degree()
+
+
+def hclimrep() -> xarray.Dataset:
+    """
+    Open the HClimRep challenger dataset.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing HClimRep forecasts.
+
+    >>> hclimrep() # doctest: +ELLIPSIS
+    <xarray.Dataset> Size: 74GB
+    Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 9,
+                             latitude: 672, longitude: 1440)
+    Coordinates:
+      * depth               (depth) float64 72B 0.494 47.37 92.33 ... 453.9 541.1
+      * latitude            (latitude) float64 5kB -78.0 -77.75 -77.5 ... 89.5 89.75
+      * longitude           (longitude) float64 12kB -180.0 -179.8 ... 179.5 179.8
+      * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
+      * first_day_datetime  (first_day_datetime) datetime64[...] 416B 2024-01-03 ....
+    Data variables:
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1, 672, 1440), meta=np.ndarray>
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1, 672, 1440), meta=np.ndarray>
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1, 672, 1440), meta=np.ndarray>
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1, 672, 1440), meta=np.ndarray>
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 2GB dask.array<chunksize=(1, 1, 672, 1440), meta=np.ndarray>
+    Attributes:
+        Conventions:                                        CF-1.8
+        area:                                               Global
+        challenger:                                         hclimrep
+        institution:                                        ECMWF
+        references:                                         https://huggingface.c...
+        source:                                             WeatherGenerator infe...
+        title:                                              WeatherGenerator GLOR...
+        oceanbench_reference_depth_grid_rounding_decimals:  3
+        oceanbench_reference_target_depths_m:               [0.494, 47.374, 92.32...
+    """
+
+    return challenger_datasets.hclimrep()
+
+
+def hclimrep_1_degree() -> xarray.Dataset:
+    """
+    Open the HClimRep challenger dataset interpolated to the 1 degree resolution.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing HClimRep forecasts interpolated to 1 degree resolution.
+
+    >>> hclimrep_1_degree() # doctest: +ELLIPSIS
+    <xarray.Dataset> Size: 5GB
+    Dimensions:                          (first_day_datetime: 52,
+                                          lead_day_index: 10, depth: 9,
+                                          latitude: 168, longitude: 360)
+    Coordinates:
+      * depth                            (depth) float64 72B 0.494 47.37 ... 541.1
+      * lead_day_index                   (lead_day_index) int64 80B 0 1 2 ... 7 8 9
+      * first_day_datetime               (first_day_datetime) datetime64[...] 416B ...
+      * latitude                         (latitude) float64 1kB -77.5 -76.5 ... 89.5
+      * longitude                        (longitude) float64 3kB -179.5 ... 179.5
+    Data variables:
+        sea_water_salinity               (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 1GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
+        sea_water_potential_temperature  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 1GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
+        eastward_sea_water_velocity      (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 1GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
+        northward_sea_water_velocity     (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 1GB dask.array<chunksize=(1, 1, 1, 168, 360), meta=np.ndarray>
+        sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float32 126MB dask.array<chunksize=(1, 1, 168, 360), meta=np.ndarray>
+    Attributes:
+        Conventions:                                        CF-1.8
+        area:                                               Global
+        challenger:                                         hclimrep
+        institution:                                        ECMWF
+        references:                                         https://huggingface.c...
+        source:                                             WeatherGenerator infe...
+        title:                                              WeatherGenerator GLOR...
+        oceanbench_reference_depth_grid_rounding_decimals:  3
+        oceanbench_reference_target_depths_m:               [0.494, 47.374, 92.32...
+    """
+
+    return challenger_datasets.hclimrep_1_degree()

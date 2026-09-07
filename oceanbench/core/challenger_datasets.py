@@ -152,6 +152,19 @@ def _langya_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/langya/{start_datetime_string}.zarr"
 
 
+def hclimrep() -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(_hclimrep_dataset_path)
+
+
+def hclimrep_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(hclimrep())
+
+
+def _hclimrep_dataset_path(start_datetime: datetime) -> str:
+    start_datetime_string = start_datetime.strftime("%Y%m%d")
+    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/hclimrep/{start_datetime_string}.zarr"
+
+
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:
     return forecast_zarr_path_from_start_datetime.__name__.removeprefix("_").replace("_dataset_path", "")
 
