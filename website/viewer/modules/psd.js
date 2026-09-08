@@ -14,8 +14,7 @@
 //
 // Method (surfaced in the chart caption/tooltip): Hann window + mean-fill of land,
 // mean removed. This is a pragmatic estimate for exploration, not a calibrated
-// realism metric (the precomputed spectra battery on the scores page remains the
-// reference for that).
+// realism metric.
 
 const MAX_SIDE = 256; // resample the box to a square power-of-two grid of at most this side
 const EARTH_KM_PER_DEGREE = 111.32;

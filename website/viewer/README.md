@@ -79,8 +79,8 @@ never fetches the same tile twice. The fetch layer is driven by each array's `.z
 chunk grid and the manifest `levels` array, so multi-level pyramids work without code
 change.
 
-Insight artifacts (`modules/insights.js`) are read lazily and memoised: eddy/spectra
-JSON by `fetch`, the Class-4 match-up parquet with the vendored **hyparquet** (MIT,
+Insight artifacts (`modules/insights.js`) are read lazily and memoised: the eddy
+census JSON by `fetch`, the Class-4 match-up parquet with the vendored **hyparquet** (MIT,
 snappy codec) in a worker, with a prefetch of neighbouring lead days that is promoted
 rather than refetched when the user arrives. Colormaps (`vendor/cmocean/`) are cmocean
 LUTs (MIT), byte-packed and base64-encoded so nothing is fetched from a CDN.
@@ -97,11 +97,10 @@ data/
   insights.json                                # index: per (slug, region) URLs + region bounds
   scores-summary.json                          # aggregated mean ± CI (publish artifact)
   insights/<slug>/<region>/eddies.json         # eddy census (contracts.md §4)
-  insights/<slug>/<region>/spectra.json        # realism PSD
   insights/<slug>/ibi/class4-matchups.parquet  # decimated Class-4 (snappy, for hyparquet)
 ```
 
-`insights.json` maps `datasets[slug][region] → {eddies, spectra, class4_matchups,
+`insights.json` maps `datasets[slug][region] → {eddies, class4_matchups,
 rmsd_by_depth, year_error_geography, year_rmsd_by_start}` and carries `regions[id]`
 lat/lon bounds and the `scores_summary` URL. The Class-4 parquet is a decimated copy of
 the published match-up artifact (deterministic stride + snappy so hyparquet can read it

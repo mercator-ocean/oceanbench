@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Loaders for the insight artifacts the viewer overlays and context rail read
-// (contracts.md §4): eddy census (JSON, snake_case schema), realism spectra
-// (JSON), the aggregated score summary (mean ± CI per lead), and Class-4 obs
+// (contracts.md §4): eddy census (JSON, snake_case schema), the aggregated score
+// summary (mean ± CI per lead), and Class-4 obs
 // match-ups (parquet, read with the vendored hyparquet). Everything is fetched
 // lazily and memoised by URL, a panel only pays for the overlay it turns on.
 
@@ -110,11 +110,6 @@ function eddyLeadFrame(eddies, entries, leadDay) {
     );
   }
   return eddyLeadFrameCache.get(key);
-}
-
-export async function loadSpectra(url) {
-  if (!url) return null;
-  return fetchJSON(url).catch(() => null);
 }
 
 export async function loadRmsdByDepth(url) {
@@ -385,20 +380,6 @@ export async function alignedEddyCensuses(eddiesA, eddiesB, leadDay) {
     lead: null,
     mismatch: true,
   };
-}
-
-/** Spectra entry for the requested variable/reference and available lead nearest leadDay. */
-export function spectraEntry(spectra, variable, reference, leadDay) {
-  if (!spectra || !Array.isArray(spectra.entries)) return null;
-  const candidates = spectra.entries.filter(
-    (entry) => entry.variable === variable && (!reference || entry.reference === reference),
-  );
-  if (!candidates.length) return null;
-  let best = candidates[0];
-  for (const entry of candidates) {
-    if (Math.abs(entry.lead_day - leadDay) < Math.abs(best.lead_day - leadDay)) best = entry;
-  }
-  return best;
 }
 
 /**

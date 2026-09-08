@@ -111,8 +111,7 @@ layouts are accepted:
 Under `--output`:
 
 - `scores.parquet` — the standard long-format per-start records (contracts.md §3.1): gridded
-  RMSD + geostrophic currents, Class-4 RMSD, and the realism battery (spectra / activity /
-  eddies).
+  RMSD + geostrophic currents and Class-4 RMSD.
 - `scores-summary.json` — the aggregated means and 95% bootstrap CIs (contracts.md §3.4),
   produced by the same aggregation library as the hosted page.
 - `scorecard/index.html` — a self-contained overlay scorecard. Written for your own forecast
@@ -143,7 +142,7 @@ sibling files nor load an ES module — both are blocked by the browser same-ori
 | `--output DIR` | output directory (default: `./oceanbench-evaluation`) |
 | `--region REGION` | region to score over (default: `global`) |
 | `--year YEAR` | evaluation year (default: `2024`) |
-| `--metrics M [M ...]` | select metric families: `rmsd`, `mld`, `geostrophic`, `class4`, `lagrangian`, `realism` (default: all) |
+| `--metrics M [M ...]` | select metric families: `rmsd`, `mld`, `geostrophic`, `class4`, `lagrangian` (default: all) |
 | `--viewer-artifacts` | also build the map viewer and its serving artifacts (off by default) |
 | `--offline-references DIR` | read references and observations from a local directory instead of the live bucket |
 

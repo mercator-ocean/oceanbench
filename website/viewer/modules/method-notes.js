@@ -98,7 +98,7 @@ export const METHOD_NOTES = {
     title: "Live power spectrum",
     body:
       "Power spectrum of the boxed region, computed in the browser on the model's finest " +
-      "published grid. Exploratory; the official spectra are on the scores page. Hann " +
+      "published grid. Exploratory. Hann " +
       "window, land filled with the region mean, radially averaged, normalized so models " +
       "of different resolution are comparable. The box size is capped so the estimate " +
       "stays reliable. In compare mode both forecasts share one box; models with very " +

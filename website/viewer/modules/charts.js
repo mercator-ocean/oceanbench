@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Tiny dependency-free SVG charts for the viewer context rail (contracts.md §6:
-// "quantitative curves for the current view … linked to the map state"). Two
-// charts: the RMSE-vs-lead curve with bootstrap CI band (from scores-summary.json)
-// and the realism PSD spectrum (challenger vs reference power, from spectra.json).
+// "quantitative curves for the current view … linked to the map state"), starting
+// with the RMSE-vs-lead curve with bootstrap CI band (from scores-summary.json).
 // Styling references the page CSS variables so both themes stay consistent; no
 // chart library is vendored.
 
@@ -168,67 +167,6 @@ export function leadCurveSVG(
     : "";
 
   return svgOpen(title) + axes(area, "lead day", unit || "RMSE") + body + legendMarkup + interactionLayer() + "</svg>";
-}
-
-/** PSD spectrum (log-log): challenger vs reference power, plus error power. */
-export function spectraSVG(entry, { title = "Power spectrum", productA = "product A", productB = "product B" } = {}) {
-  const area = plotArea();
-  if (!entry || !entry.wavelength || !entry.wavelength.length) {
-    return emptyChart(title, "no spectrum for this variable/region");
-  }
-  const wavelengths = entry.wavelength;
-  const lines = [
-    { key: "challenger", values: entry.challenger_power, color: SERIES_COLORS.challenger, label: productA },
-    { key: "reference", values: entry.reference_power, color: SERIES_COLORS.reference, label: productB },
-    { key: "error", values: entry.error_power, color: SERIES_COLORS.error, label: `error (${productA}-${productB})` },
-  ].filter((line) => Array.isArray(line.values) && line.values.length);
-
-  const positive = (list) => list.filter((value) => value > 0);
-  const xValues = positive(wavelengths).map((value) => Math.log10(value));
-  const allPowers = lines.flatMap((line) => positive(line.values)).map((value) => Math.log10(value));
-  if (!xValues.length || !allPowers.length) return emptyChart(title, "spectrum values non-positive");
-  const xMin = Math.min(...xValues);
-  const xMax = Math.max(...xValues);
-  const yMin = Math.min(...allPowers);
-  const yMax = Math.max(...allPowers);
-  const xOf = (wavelength) => area.x1 - ((Math.log10(wavelength) - xMin) / (xMax - xMin || 1)) * area.width;
-  const yOf = (power) => area.y1 - ((Math.log10(power) - yMin) / (yMax - yMin || 1)) * area.height;
-
-  let body = "";
-  for (let t = 0; t <= 3; t += 1) {
-    const y = area.y0 + (area.height * t) / 3;
-    body += `<line x1="${area.x0}" y1="${y.toFixed(1)}" x2="${area.x1}" y2="${y.toFixed(1)}" class="grid"/>`;
-  }
-  // Wavelength ticks (km) at decade boundaries, right-to-left (large scales left).
-  for (let exponent = Math.ceil(xMin); exponent <= Math.floor(xMax); exponent += 1) {
-    const wavelengthMetres = Math.pow(10, exponent);
-    const x = xOf(wavelengthMetres);
-    body += `<line x1="${x.toFixed(1)}" y1="${area.y0}" x2="${x.toFixed(1)}" y2="${area.y1}" class="grid"/>`;
-    body += `<text x="${x.toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="middle">${formatKm(wavelengthMetres)}</text>`;
-  }
-
-  for (const line of lines) {
-    const path = [];
-    for (let i = 0; i < wavelengths.length; i += 1) {
-      const wavelength = wavelengths[i];
-      const power = line.values[i];
-      if (!(wavelength > 0) || !(power > 0)) continue;
-      path.push(`${path.length === 0 ? "M" : "L"}${xOf(wavelength).toFixed(1)} ${yOf(power).toFixed(1)}`);
-    }
-    body += `<path d="${path.join(" ")}" fill="none" stroke="${line.color}" stroke-width="1.6" ${
-      line.key === "error" ? 'stroke-dasharray="4 3"' : ""
-    }/>`;
-    for (let i = 0; i < wavelengths.length; i += 1) {
-      const wavelength = wavelengths[i];
-      const power = line.values[i];
-      if (!(wavelength > 0) || !(power > 0)) continue;
-      body += `<circle class="chart-point" data-line="${escapeText(line.label)}" data-x-label="${formatKm(wavelength)}" data-y-label="${formatPower(power)}" cx="${xOf(wavelength).toFixed(1)}" cy="${yOf(power).toFixed(1)}" r="7"/>`;
-    }
-  }
-
-  const legend = renderLegend(area, lines, 78);
-
-  return svgOpen(title) + axes(area, "wavelength", "power") + body + legend + interactionLayer() + "</svg>";
 }
 
 /**

@@ -25,12 +25,9 @@ publish (compaction)              → scores.parquet, catalog.json, static site 
 
 Design principles:
 
-- **Two scientific axes.** Primary skill evidence comes from the *observation
-  track* (skill vs persistence and climatology at obs points, bootstrap CIs
-  over the 52 weekly starts). The *realism battery* (PSD / effective
-  resolution, error spectrum, activity ratio, eddy census) answers "is the
-  model physically alive or a blurry RMSD-optimizer". Gridded RMSD vs
-  GLORYS/GLO12 is a diagnostic layer.
+- **One scientific axis.** Skill evidence comes from the *observation track*
+  (skill vs persistence and climatology at obs points, bootstrap CIs over the
+  52 weekly starts). Gridded RMSD vs GLORYS/GLO12 is a diagnostic layer.
 - **No ranking.** OceanBench presents diagnostics; it does not crown a best
   model. The score page is a sortable scorecard with **no composite score and
   no default rank order** (neutral ordering, baselines pinned). Skill vs
@@ -117,8 +114,6 @@ another producer writing these same contracts, tagged obs-only.
 |---|---|---|
 | `global` | — | all metrics |
 | `ibi` | 26.17–56.08 N, −19.08–5.08 E | all metrics |
-| `gulfstream` | 30–45 N, −80 – −50 E | realism battery only |
-| `kuroshio` | 25–45 N, 130–165 E | realism battery only |
 
 ### Challenger registry
 
@@ -156,8 +151,8 @@ baselines) happens downstream and is recomputable against any baseline.
 | `depth` | str? | depth label or bin, null if not applicable |
 | `lead_day` | int8 | 1-based |
 | `start_date` | date | forecast initialization date |
-| `band` | str? | spectral band (`large`, `regional`, `mesoscale`), else null |
-| `polarity` | str? | `cyclone` \| `anticyclone`, else null |
+| `band` | str? | always null; kept so the column set matches the published parquet |
+| `polarity` | str? | always null; kept so the column set matches the published parquet |
 | `value` | float64 | |
 | `unit` | str | |
 | `n` | int32? | sample size (e.g. obs count in a Class-4 cell) |
@@ -183,15 +178,7 @@ scores the 0–600 m range where forecast skill is measurable. Deeper model
 structure remains inspectable in the viewer's water-column tools but feeds no
 score.
 
-Realism battery (native grid, per region incl. WBC boxes):
-`psd_band_energy_fraction` (band column set), `effective_resolution_km`
-(wavelength where challenger PSD falls to half of reference),
-`error_spectrum_band_energy` (PSD of challenger−reference, band column set),
-`activity_ratio` (challenger anomaly std / reference anomaly std),
-`eddy_count`, `eddy_hit_rate`, `eddy_miss_rate`, `eddy_mean_displacement_km`
-(polarity column set).
-
-The eddy census detects SSH-anomaly extrema using physical, grid-independent
+The eddy census (a viewer overlay artifact, not a scored metric) detects SSH-anomaly extrema using physical, grid-independent
 parameters. Gaussian background and detection scales are specified in kilometres
 and converted to latitude/longitude cell sigmas from the grid spacing (longitude
 spacing is scaled by the cosine of the domain-mean latitude). Candidate peaks are
@@ -276,14 +263,12 @@ Blobs are content-hash named (immutable, CDN-cacheable).
 | kind | file | content |
 |---|---|---|
 | `aggregate-map` | small zarr (or webp+json meta) | time-mean bias AND rmse per variable, leads {1,5,10}, surface |
-| `spectra` | JSON | per variable×region×lead {1,5,10}: wavelength[], challenger_power[], reference_power[], error_power[] |
 | `eddies` | JSON | per lead: matches (with displacement km), spurious, missed; contour polygons point-limited |
 | `trajectories` | JSON | Parcels particle trajectories (challenger vs reference), decimated |
 | `class4-matchups` | parquet | one row per obs point: obs value, model value, lat, lon, depth, time, variable, lead_day |
 
-Schemas for `spectra` and `eddies` are adapted from branch 249's payload
-formats (proven shapes) with `kind` + `schema_version` fields added and the
-widget/XHR coupling removed.
+The `eddies` schema is adapted from branch 249's payload format (a proven shape)
+with `kind` + `schema_version` fields added and the widget/XHR coupling removed.
 
 TODO pipeline: `class4-matchups` manifest entries may add
 `row_group_index: {by_variable: {<variable>: [row_group_index, ...]}}`. The
@@ -568,9 +553,6 @@ hand-maintained `index.json` flow.
   re-score of one 1/12° challenger in << 24 h; incremental re-run is a no-op.**
 - **Phase 3 — publish + score page + local evaluate.** Compaction,
   catalog, static score page with skill-vs-baseline + CIs, overlay scorecard.
-- **Phase 4 — realism battery.** Port 249 PSD/eddies; error spectrum,
-  activity ratio, effective resolution; WBC regions; insight artifacts.
-  (3 and 4 parallelize.)
 - **Phase 5 — viewer v1.** Battery browser + snapshot maps/differences/
   current animation from viewer zarr.
 - **Phase 6 — viewer v2.** Hand-drawn box PSD, free-form exploration.
