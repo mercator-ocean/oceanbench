@@ -26,7 +26,7 @@ from oceanbench.publish.viewer_artifacts import (
 from oceanbench.pyramids import build_pyramid, viewer_layers
 
 # Keep aligned with website/viewer/config.js. Update both rebuild-preview values at release.
-# CloudFerro is the only data origin; EDITO MinIO is retired.
+# CloudFerro is the only data origin.
 OFFICIAL_PUBLISHED_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/benchmark/rebuild-preview/"
 LOCAL_VIEWER_DIRECTORY = "viewer"
 INSIGHTS_FILENAME = "insights.json"

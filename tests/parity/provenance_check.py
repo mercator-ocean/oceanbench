@@ -10,7 +10,7 @@ with unweighted RMSD (pre-#298)?
 
 Cheapest decisive data path: surface sea-surface-height RMSD of the
 ``glonet_1_degree`` challenger (public CloudFerro HTTP) against the 1-degree
-GLORYS reference (public EDITO MinIO), over the full 52 weekly starts of 2024,
+GLORYS reference (public CloudFerro), over the full 52 weekly starts of 2024,
 computed BOTH ways and compared to the golden values for
 ``rmsd_variables_glorys / sea_surface_height_above_geoid / surface``.
 
@@ -19,7 +19,7 @@ The per-lead reduction mirrors ``oceanbench.core.rmsd._rmsd`` exactly:
 over the 52 starts, with the weighting toggled off for the unweighted variant.
 
 Run: ``python tests/parity/provenance_check.py [--starts N]``. Requires network
-access to CloudFerro and EDITO MinIO. This is a confirmatory check: Julien
+access to CloudFerro. This is a confirmatory check: Julien
 confirmed (authoritative) the published 0.2.1 golden is pre-#298 (unweighted).
 """
 import argparse
@@ -34,7 +34,7 @@ import xarray
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 _GLONET_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/glonet"
-_GLORYS_1DEGREE_URL = "https://minio.dive.edito.eu/project-oceanbench/public/glorys_1degree_2024_V2"
+_GLORYS_1DEGREE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glorys_1degree_2024_V2"
 _SSH = "sea_surface_height_above_geoid"
 _LEAD_DAYS = 10
 

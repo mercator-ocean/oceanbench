@@ -62,7 +62,6 @@ def test_evaluate_cli_has_only_the_approved_surface():
         "--s3-bucket",
         "--s3-prefix",
         "--s3-endpoint",
-        "--s3-env-file",
         # Restored from the 0.4.0 CLI so an old command line still runs, on the new route.
         "--all-challengers",
         "--region-file",
@@ -372,13 +371,13 @@ def test_viewer_builds_local_pyramid_and_mixed_catalog(local_evaluation_fixture,
 
 
 def test_official_datasets_are_absolute_cloudferro_urls(monkeypatch):
-    """The official half of the catalog must point at CloudFerro; EDITO MinIO is retired."""
+    """The official half of the catalog must point at CloudFerro, the only data origin."""
     from oceanbench.packs import local_viewer
 
     monkeypatch.delenv("OCEANBENCH_PUBLISHED_BASE", raising=False)
     published = local_viewer.published_base_url()
     assert published.startswith("https://s3.waw3-1.cloudferro.com/oceanbench-bucket/")
-    assert "minio" not in local_viewer.official_data_base_url()
+    assert local_viewer.official_data_base_url().startswith("https://s3.waw3-1.cloudferro.com/")
 
     captured = {}
 

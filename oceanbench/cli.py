@@ -168,7 +168,6 @@ def _evaluate_one_target(
             s3_bucket=s3_bucket,
             s3_prefix=s3_prefix,
             s3_endpoint=args.s3_endpoint,
-            s3_env_file=args.s3_env_file,
         )
     except _USER_FACING_ERRORS as error:
         print(f"Error: {error}", file=sys.stderr)
@@ -224,7 +223,7 @@ def _add_evaluate_parser(subparsers: "argparse._SubParsersAction") -> None:
         ),
         epilog=(
             "Published scores, challenger metadata, and viewer datasets default to the official "
-            "OceanBench MinIO release. Set OCEANBENCH_PUBLISHED_BASE to override that base URL."
+            "OceanBench release on CloudFerro. Set OCEANBENCH_PUBLISHED_BASE to override that base URL."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -297,12 +296,7 @@ def _add_evaluate_parser(subparsers: "argparse._SubParsersAction") -> None:
     parser.add_argument(
         "--s3-endpoint",
         default=None,
-        help="S3-compatible endpoint URL (defaults to the EDITO MinIO endpoint)",
-    )
-    parser.add_argument(
-        "--s3-env-file",
-        default=None,
-        help="Optional .env file to source the EDITO offline token from (AWS_* env vars still win)",
+        help="S3-compatible endpoint URL (defaults to AWS_S3_ENDPOINT, else the CloudFerro endpoint)",
     )
     parser.add_argument(
         "--region-file",
@@ -437,7 +431,6 @@ def _run_publish_s3(args: argparse.Namespace) -> int:
             endpoint=args.endpoint,
             force=args.force,
             max_workers=args.max_workers,
-            env_file=args.env_file,
         )
     except Exception as error:  # noqa: BLE001 - surface a clean message to the CLI user
         print(f"Error: {error}", file=sys.stderr)
@@ -456,7 +449,7 @@ def _run_publish_s3(args: argparse.Namespace) -> int:
 
 
 def _add_publish_s3_parser(subparsers: "argparse._SubParsersAction") -> None:
-    from oceanbench.publish.s3 import DEFAULT_MAX_WORKERS, EDITO_MINIO_ENDPOINT
+    from oceanbench.publish.s3 import DEFAULT_MAX_WORKERS, default_endpoint
 
     parser = subparsers.add_parser(
         "publish-s3",
@@ -465,13 +458,13 @@ def _add_publish_s3_parser(subparsers: "argparse._SubParsersAction") -> None:
             "Upload the local publish output (the catalog tree from the benchmark publish step) to "
             "s3://<bucket>/<prefix>/, preserving layout (contracts.md §8). Uploads run in parallel; objects "
             "whose remote size already matches the local size are skipped (idempotent) unless --force is given. "
-            "Credentials resolve from AWS_* env vars if set, otherwise from an EDITO offline token "
-            "(EDITO_MINIO_OFFLINE_TOKEN) minted into temporary STS credentials."
+            "Credentials come from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (plus optional "
+            "AWS_SESSION_TOKEN)."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("local_root", help="Local directory containing the catalog tree to upload")
-    parser.add_argument("--bucket", required=True, help="Target S3 bucket (e.g. project-oceanbench)")
+    parser.add_argument("--bucket", required=True, help="Target S3 bucket (e.g. oceanbench-bucket)")
     parser.add_argument(
         "--prefix",
         required=True,
@@ -479,13 +472,8 @@ def _add_publish_s3_parser(subparsers: "argparse._SubParsersAction") -> None:
     )
     parser.add_argument(
         "--endpoint",
-        default=EDITO_MINIO_ENDPOINT,
-        help=f"S3-compatible endpoint URL (default: {EDITO_MINIO_ENDPOINT})",
-    )
-    parser.add_argument(
-        "--env-file",
-        default=None,
-        help="Optional .env file to source the EDITO offline token from (AWS_* env vars still win)",
+        default=default_endpoint(),
+        help=f"S3-compatible endpoint URL (default: {default_endpoint()})",
     )
     parser.add_argument(
         "--max-workers",

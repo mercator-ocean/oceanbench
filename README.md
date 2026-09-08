@@ -5,7 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 
 <div align="center">
-  <img src="https://minio.dive.edito.eu/project-oceanbench/public/logo/oceanbench-logo-light.png" alt="OceanBench logo" height="200"/>
+  <img src="https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/oceanbench-logo-light.png" alt="OceanBench logo" height="200"/>
 </div>
 
 # OceanBench
@@ -164,6 +164,10 @@ a separate step:
 oceanbench publish-s3 ./catalog --bucket my-bucket --prefix results/
 ```
 
+Credentials come from `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (plus `AWS_SESSION_TOKEN`
+when they are temporary). The endpoint defaults to `AWS_S3_ENDPOINT`, else the CloudFerro
+endpoint `https://s3.waw3-1.cloudferro.com`.
+
 See [Evaluation](docs/local-evaluation.md) for forecast layouts, metrics, and outputs.
 
 #### Python
@@ -208,5 +212,5 @@ As part of a fruitful collaboration with:
 Powered by:
 
 <a href="https://edito.eu">
-  <img class="only-light" src="https://minio.dive.edito.eu/project-oceanbench/public/logo/EDITO_Full_Logo.png" alt="EDITO logo"  height=100  />
+  <img class="only-light" src="https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/EDITO_Full_Logo.png" alt="EDITO logo"  height=100  />
 </a>

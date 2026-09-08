@@ -6,14 +6,11 @@
 
 The benchmark publish stage (``publish/benchmark.py``) writes a catalog tree to a
 local ``output_root``. This module uploads that tree, preserving its layout, under
-``s3://<bucket>/<prefix>/`` on an S3-compatible endpoint (EDITO MinIO by default).
+``s3://<bucket>/<prefix>/`` on an S3-compatible endpoint (CloudFerro by default).
 
-Credentials resolve in this order:
-
-1. Standard ``AWS_ACCESS_KEY_ID`` / ``AWS_SECRET_ACCESS_KEY`` (plus optional
-   ``AWS_SESSION_TOKEN``) environment variables when they are set.
-2. Otherwise, temporary STS credentials minted from an EDITO offline token
-   (``EDITO_MINIO_OFFLINE_TOKEN``) via Keycloak + ``AssumeRoleWithWebIdentity``.
+Credentials come from the standard ``AWS_ACCESS_KEY_ID`` / ``AWS_SECRET_ACCESS_KEY``
+environment variables (plus optional ``AWS_SESSION_TOKEN``). ``AWS_S3_ENDPOINT``
+overrides the default endpoint.
 
 Secret values are never logged, printed or returned in any human-facing summary.
 """
@@ -24,17 +21,11 @@ from pathlib import Path
 import os
 import re
 import time
-import xml.etree.ElementTree as ElementTree
 
-import requests
-
-EDITO_KEYCLOAK_TOKEN_URL = "https://auth.dive.edito.eu/auth/realms/datalab/protocol/openid-connect/token"
-EDITO_KEYCLOAK_MINIO_CLIENT_ID = "onyxia-minio"
-EDITO_MINIO_ENDPOINT = "https://minio.dive.edito.eu"
-EDITO_OFFLINE_TOKEN_ENVIRONMENT_VARIABLE = "EDITO_MINIO_OFFLINE_TOKEN"
+CLOUDFERRO_ENDPOINT = "https://s3.waw3-1.cloudferro.com"
+ENDPOINT_ENVIRONMENT_VARIABLE = "AWS_S3_ENDPOINT"
 
 DEFAULT_MAX_WORKERS = 24
-DEFAULT_ASSUME_ROLE_DURATION_SECONDS = 86400
 
 _CONTENT_TYPE_BY_SUFFIX = {
     ".css": "text/css",
@@ -122,128 +113,30 @@ class UploadSummary:
     elapsed_seconds: float
 
 
-def _parse_environment_file(env_file: str | os.PathLike) -> dict[str, str]:
-    values: dict[str, str] = {}
-    for raw_line in Path(env_file).read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.removeprefix("export ").strip()
-        value = value.strip().strip('"').strip("'")
-        values[key] = value
-    return values
+def default_endpoint(environment: dict[str, str] | None = None) -> str:
+    """Return the S3 endpoint to publish to: ``AWS_S3_ENDPOINT`` when set, else CloudFerro."""
+    resolved_environment = os.environ if environment is None else environment
+    return resolved_environment.get(ENDPOINT_ENVIRONMENT_VARIABLE) or CLOUDFERRO_ENDPOINT
 
 
-def _resolve_offline_token(environment: dict[str, str], env_file: str | os.PathLike | None) -> str:
-    token = environment.get(EDITO_OFFLINE_TOKEN_ENVIRONMENT_VARIABLE)
-    if not token and env_file is not None:
-        token = _parse_environment_file(env_file).get(EDITO_OFFLINE_TOKEN_ENVIRONMENT_VARIABLE)
-    if not token:
-        raise RuntimeError(
-            "No AWS_* credentials in the environment and no "
-            f"{EDITO_OFFLINE_TOKEN_ENVIRONMENT_VARIABLE} available to mint STS credentials. "
-            "Export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, or provide the offline token "
-            "(source the EDITO env or pass --env-file)."
-        )
-    return token
+def resolve_credentials(environment: dict[str, str] | None = None) -> AwsCredentials:
+    """Resolve S3 credentials from the AWS environment variables.
 
-
-def _keycloak_access_token(offline_token: str) -> str:
-    response = requests.post(
-        EDITO_KEYCLOAK_TOKEN_URL,
-        data={
-            "client_id": EDITO_KEYCLOAK_MINIO_CLIENT_ID,
-            "grant_type": "refresh_token",
-            "refresh_token": offline_token,
-            "scope": "openid email profile",
-        },
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        timeout=60,
-    )
-    response.raise_for_status()
-    access_token = response.json().get("access_token")
-    if not access_token:
-        raise RuntimeError("Keycloak did not return an access_token for the offline token.")
-    return access_token
-
-
-def _local_tag(element: ElementTree.Element) -> str:
-    return element.tag.rsplit("}", 1)[-1]
-
-
-def _assume_role_with_web_identity(access_token: str, *, endpoint: str, duration_seconds: int) -> AwsCredentials:
-    response = requests.post(
-        endpoint,
-        params={
-            "Action": "AssumeRoleWithWebIdentity",
-            "WebIdentityToken": access_token,
-            "DurationSeconds": str(duration_seconds),
-            "Version": "2011-06-15",
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    root = ElementTree.fromstring(response.text)
-    fields = {
-        _local_tag(element): element.text
-        for element in root.iter()
-        if _local_tag(element) in ("AccessKeyId", "SecretAccessKey", "SessionToken")
-    }
-    if "AccessKeyId" not in fields or "SecretAccessKey" not in fields:
-        raise RuntimeError("AssumeRoleWithWebIdentity response did not contain credentials.")
-    return AwsCredentials(
-        access_key_id=fields["AccessKeyId"],
-        secret_access_key=fields["SecretAccessKey"],
-        session_token=fields.get("SessionToken"),
-        source="edito-sts",
-    )
-
-
-def mint_sts_credentials(
-    offline_token: str,
-    *,
-    endpoint: str = EDITO_MINIO_ENDPOINT,
-    duration_seconds: int = DEFAULT_ASSUME_ROLE_DURATION_SECONDS,
-) -> AwsCredentials:
-    """Mint temporary S3 credentials from an EDITO offline token.
-
-    Exchanges the offline (refresh) token for a Keycloak access token, then calls
-    ``AssumeRoleWithWebIdentity`` on the MinIO endpoint. The returned credentials
-    carry a ``SessionToken`` and expire after ``duration_seconds``. The offline
-    token and minted secrets are never logged.
-    """
-    access_token = _keycloak_access_token(offline_token)
-    return _assume_role_with_web_identity(access_token, endpoint=endpoint, duration_seconds=duration_seconds)
-
-
-def resolve_credentials(
-    *,
-    endpoint: str = EDITO_MINIO_ENDPOINT,
-    env_file: str | os.PathLike | None = None,
-    environment: dict[str, str] | None = None,
-) -> AwsCredentials:
-    """Resolve S3 credentials following the documented order (AWS_* env, then STS).
-
-    ``environment`` defaults to ``os.environ``. AWS_* variables are honoured only
-    from the environment, never from ``env_file``, the env file is consulted
-    solely to locate the EDITO offline token (so a stale AWS_* pair left in a
-    ``.env`` cannot shadow the STS flow that MinIO writes actually require).
+    ``environment`` defaults to ``os.environ``. ``AWS_SESSION_TOKEN`` is carried
+    through when present so temporary credentials also work.
     """
     resolved_environment = dict(os.environ if environment is None else environment)
 
     access_key_id = resolved_environment.get("AWS_ACCESS_KEY_ID")
     secret_access_key = resolved_environment.get("AWS_SECRET_ACCESS_KEY")
-    if access_key_id and secret_access_key:
-        return AwsCredentials(
-            access_key_id=access_key_id,
-            secret_access_key=secret_access_key,
-            session_token=resolved_environment.get("AWS_SESSION_TOKEN"),
-            source="aws-env",
-        )
-
-    offline_token = _resolve_offline_token(resolved_environment, env_file)
-    return mint_sts_credentials(offline_token, endpoint=endpoint)
+    if not access_key_id or not secret_access_key:
+        raise RuntimeError("No S3 credentials: export AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.")
+    return AwsCredentials(
+        access_key_id=access_key_id,
+        secret_access_key=secret_access_key,
+        session_token=resolved_environment.get("AWS_SESSION_TOKEN"),
+        source="aws-env",
+    )
 
 
 def _walk_files_following_symlinks(root: Path) -> list[Path]:
@@ -440,11 +333,10 @@ def upload_tree(
     *,
     bucket: str,
     prefix: str,
-    endpoint: str = EDITO_MINIO_ENDPOINT,
+    endpoint: str | None = None,
     credentials: AwsCredentials | None = None,
     force: bool = False,
     max_workers: int = DEFAULT_MAX_WORKERS,
-    env_file: str | os.PathLike | None = None,
     compress_json: bool = False,
 ) -> UploadSummary:
     """Upload the catalog tree at ``local_root`` to ``s3://<bucket>/<prefix>/``.
@@ -463,8 +355,9 @@ def upload_tree(
     it transparently (large viewer JSON compresses roughly 7-15x); other objects are unchanged.
     """
     plan = build_upload_plan(local_root, prefix)
-    resolved_credentials = credentials or resolve_credentials(endpoint=endpoint, env_file=env_file)
-    s3_client = _build_s3_client(endpoint, resolved_credentials, max_workers)
+    resolved_endpoint = endpoint or default_endpoint()
+    resolved_credentials = credentials or resolve_credentials()
+    s3_client = _build_s3_client(resolved_endpoint, resolved_credentials, max_workers)
 
     if not force:
         unchanged = unchanged_dataset_slugs(s3_client, bucket, local_root, prefix)

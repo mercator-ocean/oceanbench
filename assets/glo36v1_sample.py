@@ -9,7 +9,7 @@ import xarray
 challenger_dataset: xarray.Dataset = (
     xarray.open_mfdataset(
         [
-            "https://minio.dive.edito.eu/project-moi-glo36-oceanbench/public/20230104.zarr",
+            "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glo36v1/20230104.zarr",
         ],
         engine="zarr",
         combine="nested",

@@ -500,7 +500,6 @@ def evaluate(
     s3_bucket: str | None = None,
     s3_prefix: str | None = None,
     s3_endpoint: str | None = None,
-    s3_env_file: str | None = None,
 ) -> EvaluateLocalResult:
     """Score ``target`` and emit the long-format records and the aggregated summary.
 
@@ -688,7 +687,7 @@ def evaluate(
 
     published_prefix = None
     if s3_bucket is not None:
-        from oceanbench.publish.s3 import EDITO_MINIO_ENDPOINT, upload_tree
+        from oceanbench.publish.s3 import upload_tree
 
         if s3_prefix is None:
             raise ValueError("s3_prefix is required when s3_bucket is given")
@@ -696,8 +695,7 @@ def evaluate(
             output_directory,
             bucket=s3_bucket,
             prefix=s3_prefix,
-            endpoint=s3_endpoint if s3_endpoint is not None else EDITO_MINIO_ENDPOINT,
-            env_file=s3_env_file,
+            endpoint=s3_endpoint,
             compress_json=True,
         )
         published_prefix = f"s3://{s3_bucket}/{s3_prefix.strip('/')}/"

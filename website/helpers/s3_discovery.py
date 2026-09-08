@@ -10,7 +10,7 @@ import requests
 
 from helpers.published_regions import published_region_ids
 
-S3_BASE_URL = "https://minio.dive.edito.eu/project-oceanbench"
+S3_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
 REPORTS_ROOT_PREFIX = "public/evaluation-reports"
 REPORT_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
 REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")

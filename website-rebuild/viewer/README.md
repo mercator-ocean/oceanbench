@@ -84,7 +84,7 @@ python -m http.server -d website-rebuild/viewer 8799
 # open http://127.0.0.1:8799/
 ```
 
-In production `store`/`manifest`/insight URLs point at the EDITO MinIO
+In production `store`/`manifest`/insight URLs point at the CloudFerro
 `viewer/<year>/<slug>.zarr` and `insights/` artifacts (CORS-enabled, §6).
 
 ## Verification
