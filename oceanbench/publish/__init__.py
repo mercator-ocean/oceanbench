@@ -10,7 +10,6 @@ from oceanbench.publish.benchmark import (
 )
 from oceanbench.publish.catalog import CatalogEntry, build_catalog, write_catalog
 from oceanbench.publish.column_store import ColumnStoreResult, build_column_store
-from oceanbench.publish.content_address import PublishedBlob, content_addressed_name, publish_blob, sha256_hex
 from oceanbench.publish.viewer_artifacts import (
     ViewerArtifactsResult,
     class4_bias_per_start_records,
@@ -38,7 +37,6 @@ __all__ = [
     "AwsCredentials",
     "CatalogEntry",
     "ColumnStoreResult",
-    "PublishedBlob",
     "UploadPlanItem",
     "UploadSummary",
     "ViewerArtifactsResult",
@@ -46,15 +44,12 @@ __all__ = [
     "build_column_store",
     "build_upload_plan",
     "class4_bias_per_start_records",
-    "content_addressed_name",
     "content_type_for_path",
     "dataset_eddy_census",
     "dataset_fingerprint",
     "publish_benchmark_catalog",
-    "publish_blob",
     "publish_challengers_registry",
     "resolve_credentials",
-    "sha256_hex",
     "should_skip_upload",
     "stamp_dataset_fingerprint",
     "unchanged_dataset_slugs",
