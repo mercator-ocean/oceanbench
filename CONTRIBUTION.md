@@ -44,9 +44,9 @@ Check out the [Makefile](Makefile) and CI/Actions to discover what is done autom
 
 ## Library life cycle
 
-The main objective of the library is to be used as part of a notebook whose execution serves as an evaluation report.
+The main objective of the library is to score forecasts and emit the data artifacts the website reads.
 On each new version release, the participating models are re-evaluated.
-The OceanBench maintainers store the versioned evaluation reports of all participating models on [EDITO](https://datalab.dive.edito.eu/my-files/project-oceanbench/public/evaluation-reports/).
+The OceanBench maintainers store the versioned evaluation reports of all participating models on CloudFerro, under `oceanbench-bucket/public/evaluation-reports/`.
 
 The library source code is under the `oceanbench` directory:
 
@@ -95,7 +95,7 @@ make release-patch
 
 The website source code is under the `website` directory.
 The `main` branch is automatically deployed to the OceanBench website.
-The website parses and displays a given version of the evaluation reports stored on [EDITO](https://datalab.dive.edito.eu/my-files/project-oceanbench/public/evaluation-reports/).
+The website parses and displays a given version of the evaluation reports stored on CloudFerro, under `oceanbench-bucket/public/evaluation-reports/`.
 
 ## Development guidelines and conventions
 

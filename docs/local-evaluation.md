@@ -11,7 +11,7 @@ Score a forecast and get the scores file the benchmark website reads. The target
 also gets a self-contained overlay scorecard laying it over the published challengers, so you
 can see where you stand before publishing.
 
-References and observations are read **live from the public EDITO objects**, so there is no
+References and observations are read **live from the public CloudFerro objects**, so there is no
 download step to run first.
 
 ## Score your own forecast
@@ -28,7 +28,7 @@ Narrow the run to what you care about:
 ```sh
 oceanbench evaluate ./my-forecasts.zarr \
   --output ./my-evaluation \
-  --region gulfstream \
+  --region ibi \
   --metrics rmsd class4
 ```
 
@@ -56,7 +56,7 @@ python -m http.server --directory ./my-evaluation/viewer 8799
 
 Building it reads the current official viewer catalog, so `--viewer-artifacts` needs network access.
 Your own pyramid, scores and scorecard are then fully local; the official comparison layers
-are fetched from the public EDITO MinIO objects named by `datasets.json` as you browse them.
+are fetched from the public CloudFerro objects named by `datasets.json` as you browse them.
 
 ## Running without network: `--offline-references`
 
@@ -119,7 +119,7 @@ Under `--output`:
 - With `--viewer-artifacts`, `insights/<slug>/<region>/` — the match-up parquet, eddy census and
   year-mode JSON, and `viewer/` — the static viewer application, `data/<slug>.zarr`, its viewer
   manifest, and a mixed `data/datasets.json`. The local descriptor uses relative URLs; official
-  descriptors use absolute public MinIO URLs.
+  descriptors use absolute public CloudFerro URLs.
 
 ## The overlay scorecard
 
@@ -146,5 +146,5 @@ sibling files nor load an ES module — both are blocked by the browser same-ori
 | `--viewer-artifacts` | also build the map viewer and its serving artifacts (off by default) |
 | `--offline-references DIR` | read references and observations from a local directory instead of the live bucket |
 
-Published scores, challenger metadata, and viewer datasets use the official MinIO release.
+Published scores, challenger metadata, and viewer datasets use the official CloudFerro release.
 Set `OCEANBENCH_PUBLISHED_BASE` to override that base URL.

@@ -8,7 +8,7 @@
 Shape of the challenger dataset
 ===================================================
 
-For people familiar with Python, `xarray <https://docs.xarray.dev/en/stable/index.html>`_ and `dask <https://www.dask.org/>`_, the fastest way to get an idea of the required challenger datacube is to look at `this notebook <https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.report.ipynb>`_.
+For people familiar with Python, `xarray <https://docs.xarray.dev/en/stable/index.html>`_ and `dask <https://www.dask.org/>`_, the fastest way to get an idea of the required challenger datacube is to look at `this sample <https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.py>`_.
 In addition, you can open and explore the official challenger datasets by using the :mod:`oceanbench.datasets.challenger` module.
 The module also exposes the official challenger datasets interpolated to 1 degree: ``glo12_1_degree``, ``glonet_1_degree``, ``wenhai_1_degree`` and ``xihe_1_degree`` for the :ref:`1 degree track <one-degree-track-page>`.
 

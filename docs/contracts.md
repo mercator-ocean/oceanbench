@@ -31,13 +31,11 @@ Design principles:
 - **No ranking.** OceanBench presents diagnostics; it does not crown a best
   model. The score page is a sortable scorecard with **no composite score and
   no default rank order** (neutral ordering, baselines pinned). Skill vs
-  baselines with CIs is per-metric evidence, not a leaderboard. Each model
-  additionally gets a plain-language summary card (non-expert reading level)
-  above the expert table.
+  baselines with CIs is per-metric evidence, not a leaderboard.
 - **Native resolution everywhere.** Each challenger is scored on its native
   grid against the matching-resolution reference (status quo). No coarsened
   or common-grid scores. Cross-resolution honesty is provided by the obs track
-  (grid-agnostic by construction) and the effective-resolution column.
+  (grid-agnostic by construction).
 - **Precompute the standardized battery; compute snapshots client-side.**
   Batch precomputes only (a) aggregates over the 52-start ensemble and
   (b) non-browser algorithms (eddy detection, Parcels advection, Class-4
@@ -46,9 +44,9 @@ Design principles:
 - **Baselines are challengers** (`is_baseline: true`): climatology,
   persistence. Skill scores are *derived at aggregation/display time* from
   per-start records — never hardcoded in the scoring run.
-- **Incremental by content address.** A score run is keyed by
-  (challenger id+version, metric version, reference version, year, region).
-  Unchanged keys are never recomputed.
+- **Incremental at publish.** A dataset whose local viewer-manifest fingerprint
+  already matches the published one is skipped before any of its objects is
+  uploaded.
 - **Reference data is fetched live at scoring time, never mirrored.** The
   observation and gridded references are read directly from Copernicus Marine /
   the source buckets through the resilient chunk-fetch engine (below), backed by
@@ -63,7 +61,7 @@ Design principles:
   triggers an **explicit, announced benchmark-wide re-score**, never silent
   drift; old and new scores coexist in `scores.parquet` (rows carry input
   versions).
-- **Product storage (MinIO) holds only product artifacts** — scores, insights,
+- **Product storage (CloudFerro) holds only product artifacts**: scores, insights,
   viewer pyramids, evaluation packs; reference data is never among them.
   Evaluation packs remain published snapshots, stamped with the upstream
   versions they derive from and refreshed on an upstream bump. The
@@ -242,11 +240,8 @@ Reserved for later (schema needs no change): `crps`, `spread`, `spread_skill_rat
 ### 3.3 Per-run increment
 
 Each scoring run writes
-`runs/<challenger>/<year>/<region>/scores-<content_hash>.parquet` (same schema).
+`runs/<challenger>/<year>/<region>/scores.parquet` (same schema).
 `publish` compacts all runs into the single public `scores.parquet`.
-A small per-challenger `scores.json` (aggregated means only, nested legacy
-`ModelScore` shape) is emitted by an adapter for transition-period
-compatibility with the existing website; it is deprecated from day one.
 
 ### 3.4 Derived at display/aggregation time (never stored per-run)
 
@@ -256,15 +251,12 @@ compatibility with the existing website; it is deprecated from day one.
 
 ## 4. Insight artifacts
 
-Per (challenger, year, region), under `insights/`, referenced by a
-`manifest.json` mapping semantic key → `{kind, schema_version, url, bytes}`.
-Blobs are content-hash named (immutable, CDN-cacheable).
+Per (challenger, year, region), under `insights/`, indexed for the viewer by
+`insights.json` (semantic key → URL) written alongside the local viewer site.
 
 | kind | file | content |
 |---|---|---|
-| `aggregate-map` | small zarr (or webp+json meta) | time-mean bias AND rmse per variable, leads {1,5,10}, surface |
-| `eddies` | JSON | per lead: matches (with displacement km), spurious, missed; contour polygons point-limited |
-| `trajectories` | JSON | Parcels particle trajectories (challenger vs reference), decimated |
+| `eddies` | JSON | one dataset's own detections per lead day; contour polygons point-limited |
 | `class4-matchups` | parquet | one row per obs point: obs value, model value, lat, lon, depth, time, variable, lead_day |
 
 The `eddies` schema is adapted from branch 249's payload format (a proven shape)
@@ -349,7 +341,6 @@ hand-edited**:
           "regions": {
             "global": {
               "glonet": {
-                "insights_manifest_url": "…",
                 "viewer_zarr_url": "…"
 } } } } } } }
 }
@@ -390,16 +381,18 @@ artifacts.
   baselines so any pair can be differenced client-side.
 - Volume: ~40–50 GB per 1/12° dataset-year compressed (×1.33 pyramid
   overhead included); ~0.5 TB per benchmark year across all datasets.
-  Write-once, content-addressed paths → immutable/CDN-cacheable.
+  Write-once paths, published with an immutable Cache-Control.
 
 ### Read path (what "fluid" means, testable)
 
-- Client (static SPA: maplibre or deck.gl + zarrita) fetches only viewport-
-  visible tiles at the zoom-matched pyramid level: **≤ ~4 MB per displayed
-  layer at any zoom**, target < 500 ms to first paint on a warm cache.
-- WebGL rendering: colormap in shader; **difference mode** = two tile
-  sources subtracted in-shader (growing-error view at native resolution);
-  animated currents = GPU particle advection over `uo/vo` tiles.
+- Client (static SPA with its own zarr reader,
+  `website/viewer/modules/zarr.js`) fetches only viewport-visible tiles at the
+  zoom-matched pyramid level: **≤ ~4 MB per displayed layer at any zoom**,
+  target < 500 ms to first paint on a warm cache.
+- Canvas 2D rendering: colormap applied per pixel when the tile is painted;
+  **difference mode** = two tile sources subtracted before painting (growing-
+  error view at native resolution); animated currents = particle advection over
+  `uo/vo` tiles.
 - Time scrubbing prefetches adjacent lead days for the active layer.
 - Overlays from insight artifacts: eddy contours per lead day, Lagrangian
   trajectories (with divergence vs reference), Class-4 obs locations/errors.
@@ -408,18 +401,17 @@ artifacts.
 
 ### Viewer UX contract
 
-- **Default theme: cinematic dark** (dark ocean canvas, glowing GPU particle
+- **Default theme: cinematic dark** (dark ocean canvas, glowing particle
   flows, luminous colormaps). A light "publication" theme is available for
   exporting paper-ready figures.
 - **2D equirectangular maps, no globe.** Pixel = grid cell at native zoom.
   (Optional polar projection is a post-v1 add-on.)
-- **Comparison is the primitive.** 1/2/4 synchronized panels (linked viewport
+- **Comparison is the primitive.** 1 or 2 synchronized panels (linked viewport
   + lead day); panel = {dataset, variable, start_date, lead_day}; first-class
-  **difference panels** (A − B in shader, diverging colormap centered at 0);
+  **difference panels** (A − B, diverging colormap centered at 0);
   blink/swipe toggle within a panel.
-- **Small multiples for error growth** (lead 1/3/5/7/10 strip, shared
-  colorbar); **animation only for motion** (GPU current particles, Lagrangian
-  divergence trails). Never animate error maps.
+- **Animation only for motion** (current particles, Lagrangian divergence
+  trails). Never animate error maps.
 - **Context rail**: quantitative curves for the current view (RMSE vs lead,
   regional PSD, score rows) linked to the map state.
 - **Overlays with purpose-modes**, toggleable, never all at once: eddies
@@ -427,21 +419,13 @@ artifacts.
   particle trajectories. Default state = one panel, one field.
 - **Colors**: perceptually uniform only (cmocean: thermal/haline/balance…);
   compared panels always share a fixed colorbar.
-- **Every view state is a URL** (panels, viewport, lead, overlays). The score
-  page deep-links into the viewer (bad score cell → preconfigured difference
-  view). Artifact contracts above already provide everything these features
-  read; no additional server-side capability is implied.
+- **Every view state is a URL** (panels, viewport, lead, overlays). Artifact
+  contracts above already provide everything these features read; no additional
+  server-side capability is implied.
 
 ### Infra prerequisites (Phase 0 checks, blocking for viewer work)
 
-- **RESOLVED (2026-07-03), SUPERSEDED (2026-08-24).** The original benchmark ran
-  against both candidates, EDITO MinIO and CloudFerro S3. They tie on throughput
-  (50-way concurrent 256 KB range reads clean on both, no throttling), but at the
-  time only EDITO MinIO served `Access-Control-Allow-Origin: *` with a working
-  OPTIONS preflight, so the decision was that EDITO MinIO serves all
-  browser-facing artifacts and CloudFerro stays a server-side ingest source.
-
-- **CURRENT (2026-08-24). Decision: CloudFerro serves all browser-facing
+- **RESOLVED (2026-08-24). Decision: CloudFerro serves all browser-facing
   artifacts.** The 2026-08 migration copied the full artifact to
   `oceanbench-bucket` and the CORS blocker is gone: the bucket carries a CORS
   configuration whose first rule allow-lists the EDITO datalab origins for
@@ -449,8 +433,7 @@ artifacts.
   `GET`/`HEAD` with the `range` request header, exposing
   `Content-Range`/`Accept-Ranges`/`ETag`/`Content-Length`. Anonymous preflight
   now returns 200 with `Access-Control-Allow-Origin` for an arbitrary origin, so
-  cross-origin browser range reads work. EDITO MinIO is being retired; it is no
-  longer a data origin for the viewer. CDN deferred (origin is not the
+  cross-origin browser range reads work. CDN deferred (origin is not the
   bottleneck); the data contract is unchanged if one is added later.
 
 ## 7. `oceanbench evaluate`
@@ -462,8 +445,9 @@ slug of a challenger already in the benchmark; a user forecast also gets a local
 HTML scorecard overlaying it on the published `scores.parquet` (a published
 challenger has nothing to overlay, so it gets none).
 
-**Live by default.** References and observations are read from the public EDITO
-objects through the resilient chunk-fetch engine and its persistent cache (§1).
+**Live by default.** References and observations are read from the public
+CloudFerro objects through the resilient chunk-fetch engine and its persistent
+cache (§1).
 No download step precedes a first run. `--region` and `--year` select the
 evaluation context, defaulting to `global` and 2024.
 
@@ -480,24 +464,25 @@ pyramid, not under the local data root.
 ## 8. S3 layout
 
 ```
-s3://project-oceanbench/dev/benchmark/<release>/
+s3://oceanbench-bucket/dev/benchmark/<release>/
   catalog.json
   scores.parquet
   scores-summary.json                  (precomputed aggregate for the score page)
   challengers.json                     (copy of registry at publish time)
   <year>/<region>/<challenger>/
-    runs/scores-<hash>.parquet
-    insights/manifest.json
-    insights/<content-hash blobs>
+    runs/scores.parquet
+    insights/<artifact files>
   viewer/<year>/<slug>.zarr            (challengers, references, baselines)
 ```
 
 Artifacts publish under the **dev prefix** `dev/benchmark/<release>/` on the
-`project-oceanbench` bucket, uploaded by `oceanbench publish-s3` (see
-`oceanbench/publish/s3.py`). The endpoint is EDITO MinIO,
-`https://minio.dive.edito.eu`. Anonymous (public) read on the dev prefix is
-enabled manually by a maintainer through the EDITO console — the publish step
-never touches bucket policy. CORS is already configured bucket-wide, so browser
+`oceanbench-bucket` bucket, uploaded by `oceanbench publish-s3` (see
+`oceanbench/publish/s3.py`). The endpoint is CloudFerro,
+`https://s3.waw3-1.cloudferro.com`; `AWS_S3_ENDPOINT` overrides it and
+credentials come from `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. Anonymous
+(public) read on the dev prefix is enabled manually by a maintainer, and the
+publish step never touches bucket policy. CORS is already configured
+bucket-wide, so browser
 range GETs against the published tree work without any per-publish setup. The
 current site and `public/evaluation-reports/` remain untouched until parity
 (see Phase gates). The earlier `benchmark-dev/` dev prefix is retired.
@@ -535,11 +520,11 @@ hand-maintained `index.json` flow.
 ## 10. Phase plan & gates
 
 - **Phase 0 — foundations.** Long-lived `pipeline-rebuild` branch in this repo; this doc
-  merged; JSON Schemas for catalog/manifest/insight payloads; storage
-  benchmark MinIO vs CloudFerro (§6); Copernicus Marine redistribution-terms
+  merged; JSON Schemas for catalog and insight payloads; storage
+  benchmark against CloudFerro (§6); Copernicus Marine redistribution-terms
   check for evaluation packs; parity harness capturing current published 2024
   scores as golden data.
-  Status (2026-07-03): storage check DONE (EDITO MinIO, §6); licensing DONE
+  Status: storage check DONE (CloudFerro, §6); licensing DONE
   (§11); parity goldens DONE (9,810 rows — 10 challengers × ≤2 regions ×
   9 metrics, published version 0.2.1, `tests/parity/`). Caveat: published-
   report provenance vs main-tip code (#298 area-weighted RMSD reapply) must

@@ -129,15 +129,10 @@ pip install oceanbench
 git clone git@github.com:mercator-ocean/oceanbench.git && cd oceanbench/ && pip install --editable .
 ```
 
-#### Execute on EDITO
-
-You can open and manually execute the example notebook in EDITO datalab by clicking here:
-[![Link to open resource in EDITO](https://dive.edito.eu/badges/Open-in-EDITO.svg)](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-python-ocean-science?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.global.report.ipynb»)
-
 ### Programmatic evaluation
 
 Once [installed](#installation), score your forecasts. References and observations are read
-live from the public EDITO objects, so there is no download step first.
+live from the public CloudFerro objects, so there is no download step first.
 
 #### CLI
 
