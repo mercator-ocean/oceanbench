@@ -39,7 +39,7 @@ import pandas
 import xarray
 
 from oceanbench.core import runtime_configuration as runtime_configuration_module
-from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.regions import GLOBAL_REGION_NAME, normalize_region_name, subset_dataset_to_region
 from oceanbench.core.remote_json import read_json_url
 from oceanbench.core.runtime_configuration import (
@@ -52,8 +52,6 @@ from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 from oceanbench.packs.manifest import PACK_MANIFEST_FILENAME
 from oceanbench.packs.scorecard import write_overlay_scorecard
 from oceanbench.publish.aggregate import aggregate_scores, summary_to_json_records
-from oceanbench.publish.insights import write_realism_insights
-from oceanbench.publish.viewer_artifacts import INSIGHTS_RELATIVE_ROOT
 from oceanbench.runner import records
 from oceanbench.runner.run import (
     LIVE_REFERENCE_OPENERS,
@@ -75,7 +73,7 @@ SCORECARD_DIRECTORY = "scorecard"
 DEFAULT_EVALUATION_YEAR = 2024
 
 _PER_START_KEY_COLUMNS = ["metric", "reference", "variable", "depth", "lead_day", "start_date"]
-METRIC_NAMES = ("rmsd", "mld", "geostrophic", "class4", "lagrangian", "realism")
+METRIC_NAMES = ("rmsd", "mld", "geostrophic", "class4", "lagrangian")
 
 # Skill is quoted against one baseline. Climatology is the conventional reference for a
 # forecast, so it wins when a pack bundles several; the resolution variants are the same
@@ -382,8 +380,8 @@ def _write_scores_and_summary(
     the summary stay recomputable from the artifact alone.
 
     Only per-start metrics (gridded / Class-4) carry a start distribution to aggregate into a
-    mean and bootstrap CI. Realism records are already aggregates over the starts (start_date
-    is null, contracts.md §3.2); they stay in the long-format parquet but are not re-aggregated.
+    mean and bootstrap CI; records without a start date stay in the long-format parquet but are
+    not re-aggregated.
     """
     combined = scores if baseline_scores.empty else pandas.concat([scores, baseline_scores], ignore_index=True)
     combined.to_parquet(str(scores_path), index=False)
@@ -463,33 +461,6 @@ def _open_evaluation_target(target: str) -> tuple[xarray.Dataset, str, str]:
     if "://" not in target and not Path(target).exists():
         raise ValueError(_unknown_target_message(target))
     return open_forecast_dataset(target), YOUR_MODEL_SLUG, "local"
-
-
-def _realism_result(
-    regional_challenger: xarray.Dataset,
-    reference_openers: dict,
-    region: str,
-    context: records.RunContext,
-    start_limit: int | None,
-):
-    from oceanbench.runner.realism import compute_realism_battery
-
-    reference_datasets = {
-        name: subset_dataset_to_region(opener(regional_challenger), region)
-        for name, opener in reference_openers.items()
-    }
-    start_count = regional_challenger.sizes.get(Dimension.FIRST_DAY_DATETIME.key(), 1)
-    start_indices = list(range(start_count if start_limit is None else min(start_limit, start_count)))
-    result = compute_realism_battery(
-        regional_challenger,
-        reference_datasets,
-        region=region,
-        context=context,
-        variable=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
-        start_indices=start_indices,
-        eddy_start_indices=[start_indices[0]] if start_indices else [0],
-    )
-    return result
 
 
 def per_start_agreement(local_scores: pandas.DataFrame, published_scores: pandas.DataFrame) -> pandas.DataFrame:
@@ -617,41 +588,6 @@ def evaluate(
         skill_baseline = skill_baseline_slug(
             set(baseline_scores["challenger"].unique()) if not baseline_scores.empty else set()
         )
-
-        if "realism" in selected_metrics:
-            regional_challenger = subset_dataset_to_region(
-                forecast_dataset,
-                region,
-            )
-            context = records.RunContext(
-                challenger=challenger_slug,
-                challenger_version=challenger_version,
-                year=year,
-                region=region,
-                oceanbench_version=OCEANBENCH_VERSION,
-            )
-            try:
-                realism_result = _realism_result(regional_challenger, reference_openers, region, context, None)
-                scores = pandas.concat(
-                    [scores, records.records_to_dataframe(realism_result.records)], ignore_index=True
-                )
-                flags.extend(realism_result.flags)
-            except Exception as error:  # noqa: BLE001 - realism must not abort the local run
-                flags.append(f"realism battery skipped: {error}")
-                realism_result = None
-
-            # The spectra and eddies payloads live next to the other per-(challenger, region)
-            # insights the viewer reads (viewer/data/insights/<slug>/<region>/spectra.json).
-            if realism_result is not None:
-                try:
-                    write_realism_insights(
-                        realism_result.spectra_entries,
-                        realism_result.eddy_census,
-                        str(output_path / INSIGHTS_RELATIVE_ROOT / challenger_slug / region),
-                        variable=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
-                    )
-                except Exception as error:  # noqa: BLE001 - one artifact must not abort the others
-                    flags.append(f"realism insights skipped: {error}")
 
     scores_path = output_path / SCORES_FILENAME
     summary_path = output_path / SCORES_SUMMARY_FILENAME

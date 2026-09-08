@@ -2,17 +2,15 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-"""Publish stage: catalog and insights-manifest writers (contracts.md §4, §5, §8)."""
+"""Publish stage: catalog writer and upload (contracts.md §5, §8)."""
 
 from oceanbench.publish.benchmark import (
     publish_benchmark_catalog,
-    publish_challenger_insights,
     publish_challengers_registry,
 )
 from oceanbench.publish.catalog import CatalogEntry, build_catalog, write_catalog
 from oceanbench.publish.column_store import ColumnStoreResult, build_column_store
 from oceanbench.publish.content_address import PublishedBlob, content_addressed_name, publish_blob, sha256_hex
-from oceanbench.publish.insights_manifest import InsightArtifact, write_insights_manifest
 from oceanbench.publish.viewer_artifacts import (
     ViewerArtifactsResult,
     class4_bias_per_start_records,
@@ -41,7 +39,6 @@ __all__ = [
     "AwsCredentials",
     "CatalogEntry",
     "ColumnStoreResult",
-    "InsightArtifact",
     "PublishedBlob",
     "UploadPlanItem",
     "UploadSummary",
@@ -57,7 +54,6 @@ __all__ = [
     "mint_sts_credentials",
     "publish_benchmark_catalog",
     "publish_blob",
-    "publish_challenger_insights",
     "publish_challengers_registry",
     "resolve_credentials",
     "sha256_hex",
@@ -68,7 +64,6 @@ __all__ = [
     "verify_matchup_parquet",
     "write_catalog",
     "write_eddy_census",
-    "write_insights_manifest",
     "write_matchup_parquet",
     "write_viewer_artifacts",
 ]

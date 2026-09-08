@@ -91,8 +91,8 @@ def build_scorecard_payload(
     if published_scores is not None and not published_scores.empty:
         frames.append(_shared_start_published(published_scores, your_model_scores))
     combined = pandas.concat(frames, ignore_index=True)
-    # Only per-start metrics have a start distribution to aggregate (realism records carry a null
-    # start_date, contracts.md §3.2); the scorecard shows the mean +/- CI per-start metrics.
+    # Only per-start metrics have a start distribution to aggregate; the scorecard shows the
+    # mean +/- CI per-start metrics.
     combined = combined[combined["start_date"].notna()].reset_index(drop=True)
     return {
         "generated_at": generated_at,

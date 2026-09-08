@@ -17,7 +17,6 @@ def _entry(challenger: str = "glonet_1_degree", region: str = "global") -> Catal
         year="2024",
         region=region,
         challenger=challenger,
-        insights_manifest_url=f"https://example.org/2024/{region}/{challenger}/insights/manifest.json",
         viewer_zarr_url=f"https://example.org/viewer/2024/{challenger}.zarr",
     )
 
@@ -63,7 +62,6 @@ def test_bad_release_version_is_rejected_by_schema():
         year="2024",
         region="global",
         challenger="glonet_1_degree",
-        insights_manifest_url="https://example.org/m.json",
         viewer_zarr_url="https://example.org/v.zarr",
     )
     with pytest.raises(jsonschema.ValidationError):

@@ -9,8 +9,8 @@ interactive viewer streams: the Class-4 match-up parquet in its row-group servin
 per-dataset eddy detection census, the multiscale field pyramid with its viewer manifest, and
 the year-mode error-geography and per-start RMSD JSON. This module produces those same
 artifacts from the objects a local ``evaluate`` already has in hand, reusing the numerical core
-(``oceanbench.runner.matchups``, ``oceanbench.runner.realism``, ``oceanbench.core.eddies`` and
-``oceanbench.pyramids``); no new science lives here, only the serving-layout shaping.
+(``oceanbench.runner.matchups``, ``oceanbench.core.eddies`` and ``oceanbench.pyramids``); no new
+science lives here, only the serving-layout shaping.
 """
 
 from dataclasses import dataclass, field
@@ -34,7 +34,6 @@ from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 from oceanbench.publish import class4_overlays
 from oceanbench.publish.aggregate import DEFAULT_SEED as _LEAD_CURVE_BOOTSTRAP_SEED, _confidence_interval
 from oceanbench.pyramids import build_pyramid, viewer_layers
-from oceanbench.runner import realism
 
 MATCHUP_PARQUET_FILENAME = "class4-matchups.parquet"
 EDDY_CENSUS_FILENAME = "eddies.json"
@@ -85,6 +84,11 @@ _MATCHUP_TARGET_SCHEMA = pyarrow.schema(
 _EDDY_CENSUS_SCHEMA_VERSION = "1"
 _EDDY_CENSUS_LEAD_DAYS = (1, 5, 10)
 _SEA_SURFACE_HEIGHT_VARIABLE = "sea_surface_height_above_geoid"
+
+# Contours are decimated to keep the served census small, and coordinates rounded to the
+# precision the viewer draws at.
+_MAXIMUM_CONTOUR_POINT_COUNT = 64
+_COORDINATE_ROUNDING_DECIMALS = 4
 
 # Year-mode super-observation grids: global at 2 degrees, IBI at a quarter degree. The bin
 # origins and cell counts match the published year artifacts exactly.
@@ -584,6 +588,77 @@ def verify_matchup_parquet(output_path: str) -> dict:
     return {"row_groups": metadata.num_row_groups, "rows": metadata.num_rows}
 
 
+def _contour_filtered_detections(
+    dataset: xarray.Dataset,
+    detections: pandas.DataFrame,
+    first_day_index: int,
+) -> pandas.DataFrame:
+    contours = _contours(dataset, detections, first_day_index)
+    return eddies_core.filter_mesoscale_eddy_detections_by_contours(detections, contours)
+
+
+def _contours(
+    dataset: xarray.Dataset,
+    detections: pandas.DataFrame,
+    first_day_index: int,
+) -> pandas.DataFrame:
+    if detections.empty:
+        return detections.iloc[0:0]
+    return eddies_core.mesoscale_eddy_contours_from_detections(detections, dataset, first_day_index=first_day_index)
+
+
+def _lead_detection_indices(detections: pandas.DataFrame, lead_day_index: int) -> list[int]:
+    if detections.empty:
+        return []
+    return [int(index) for index in detections.loc[detections[eddies_core.LEAD_DAY_COLUMN] == lead_day_index].index]
+
+
+def _eddy_dict(
+    detection_index: int,
+    detections: pandas.DataFrame,
+    contours: pandas.DataFrame,
+) -> dict:
+    detection_row = detections.loc[detection_index]
+    contour_latitudes, contour_longitudes = _contour_polygon(detection_index, contours)
+    return {
+        "id": int(detection_index),
+        "latitude": round(float(detection_row[eddies_core.LATITUDE_COLUMN]), _COORDINATE_ROUNDING_DECIMALS),
+        "longitude": round(float(detection_row[eddies_core.LONGITUDE_COLUMN]), _COORDINATE_ROUNDING_DECIMALS),
+        "polarity": str(detection_row[eddies_core.POLARITY_COLUMN]),
+        "contour_latitude": contour_latitudes,
+        "contour_longitude": contour_longitudes,
+    }
+
+
+def _contour_polygon(
+    detection_index: int,
+    contours: pandas.DataFrame,
+) -> tuple[list[float], list[float]]:
+    if contours.empty:
+        return [], []
+    matching_contours = contours.loc[contours["detection_index"] == detection_index]
+    if matching_contours.empty:
+        return [], []
+    contour_row = matching_contours.iloc[0]
+    latitudes = numpy.asarray(contour_row[eddies_core.CONTOUR_LATITUDES_COLUMN], dtype=float)
+    longitudes = numpy.asarray(contour_row[eddies_core.CONTOUR_LONGITUDES_COLUMN], dtype=float)
+    latitudes, longitudes = _decimated_contour(latitudes, longitudes)
+    return (
+        [round(float(value), _COORDINATE_ROUNDING_DECIMALS) for value in latitudes],
+        [round(float(value), _COORDINATE_ROUNDING_DECIMALS) for value in longitudes],
+    )
+
+
+def _decimated_contour(
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+) -> tuple[numpy.ndarray, numpy.ndarray]:
+    if latitudes.size <= _MAXIMUM_CONTOUR_POINT_COUNT:
+        return latitudes, longitudes
+    stride = int(numpy.ceil(latitudes.size / _MAXIMUM_CONTOUR_POINT_COUNT))
+    return latitudes[::stride], longitudes[::stride]
+
+
 def _clamp(value, low: float, high: float):
     if isinstance(value, list):
         return [min(high, max(low, element)) for element in value]
@@ -604,10 +679,10 @@ def _eddy_frame(dataset: xarray.Dataset, detections, contours, lead_day: int) ->
     import jsonschema
 
     eddy_schema = load_schema("eddies")["$defs"]["eddy"]
-    detection_indices = realism._lead_detection_indices(detections, lead_day - 1)
+    detection_indices = _lead_detection_indices(detections, lead_day - 1)
     eddies = []
     for detection_index in detection_indices:
-        eddy = _clamp_eddy(realism._eddy_dict(detection_index, detections, contours))
+        eddy = _clamp_eddy(_eddy_dict(detection_index, detections, contours))
         jsonschema.validate(instance=eddy, schema=eddy_schema)
         eddies.append(eddy)
     return {"lead_day": lead_day, "detections": eddies}
@@ -633,8 +708,8 @@ def dataset_eddy_census(
         dataset, first_day_index=start_index, lead_day_indices=lead_day_indices
     )
     if apply_contour_filtering:
-        detections = realism._contour_filtered_detections(dataset, detections, start_index)
-    contours = realism._contours(dataset, detections, start_index)
+        detections = _contour_filtered_detections(dataset, detections, start_index)
+    contours = _contours(dataset, detections, start_index)
     parameters = {
         **eddies_core.default_eddy_detection_parameters(),
         "apply_contour_filtering": apply_contour_filtering,

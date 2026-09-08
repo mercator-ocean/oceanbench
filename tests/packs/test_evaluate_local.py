@@ -417,7 +417,6 @@ def test_the_insights_index_merges_local_entries_into_absolutised_official_ones(
                 "glonet": {
                     "global": {
                         "class4_matchups": "./data/insights/glonet/global/class4-matchups.parquet",
-                        "spectra": None,
                         "class4_overlays": {"manifest": "./data/insights/glonet/global/class4-overlays/manifest.json"},
                     }
                 }
@@ -439,7 +438,6 @@ def test_the_insights_index_merges_local_entries_into_absolutised_official_ones(
     official = index["datasets"]["glonet"]["global"]
     assert official["class4_matchups"] == base + "insights/glonet/global/class4-matchups.parquet"
     assert official["class4_overlays"]["manifest"] == base + "insights/glonet/global/class4-overlays/manifest.json"
-    assert official["spectra"] is None
     assert index["scores_summary"] == base + "scores-summary.json"
     assert index["regions"] == {"global": None}
 
@@ -549,18 +547,3 @@ def test_scoring_a_published_challenger_needs_no_forecast_path(local_evaluation_
     scores = pandas.read_parquet(result.scores_path)
     assert set(scores["challenger"]) == {"glonet_1_degree"}
     assert result.scorecard_path is None
-
-
-def test_realism_writes_the_spectra_insight_next_to_the_other_insights(local_evaluation_fixture, tmp_path):
-    """The viewer reads viewer/data/insights/<slug>/<region>/spectra.json, so realism must write it."""
-    result = _run(local_evaluation_fixture, tmp_path, metrics=("realism",))
-
-    spectra_path = (
-        Path(result.scores_path).parent / "viewer" / "data" / "insights" / "your_model" / "global" / "spectra.json"
-    )
-    assert spectra_path.exists(), result.flags
-    spectra_payload = json.loads(spectra_path.read_text())
-    assert spectra_payload["kind"] == "spectra"
-    assert spectra_payload["entries"]
-    manifest = json.loads((spectra_path.parent / "manifest.json").read_text())
-    assert manifest["spectra"]["kind"] == "spectra"

@@ -36,7 +36,6 @@ LOCAL_SCORES_SUMMARY_FILENAME = "scores-summary.json"
 _LOCAL_INSIGHT_FILENAMES = {
     "class4_matchups": MATCHUP_PARQUET_FILENAME,
     "eddies": EDDY_CENSUS_FILENAME,
-    "spectra": "spectra.json",
     "rmsd_by_depth": RMSD_BY_DEPTH_FILENAME,
     "year_error_geography": YEAR_ERROR_GEOGRAPHY_FILENAME,
     "year_rmsd_by_start": YEAR_RMSD_BY_START_FILENAME,

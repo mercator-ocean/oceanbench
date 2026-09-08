@@ -103,15 +103,9 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "insights_manifest_url",
         "viewer_zarr_url"
       ],
       "properties": {
-        "insights_manifest_url": {
-          "description": "URL of this challenger's insights/manifest.json for the release/year/region.",
-          "type": "string",
-          "format": "uri"
-        },
         "viewer_zarr_url": {
           "description": "URL of this challenger's viewer zarr pyramid for the year.",
           "type": "string",
