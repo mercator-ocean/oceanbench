@@ -104,8 +104,8 @@ CHALLENGERS = {
         "resolution": "1°",
     },
     "hclimrep": {
-        "label": "HClimRep (WeatherGenerator)",
-        "url": "https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench",
+        "label": "HClimRep",
+        "url": "https://hclimrep-project.de/",
         "organisation": "Alfred Wegener Institute (AWI)",
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
         "method": "ML-based",
@@ -114,8 +114,8 @@ CHALLENGERS = {
         "resolution": "1/4°",
     },
     "hclimrep_1_degree": {
-        "label": "HClimRep (WeatherGenerator)",
-        "url": "https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench",
+        "label": "HClimRep",
+        "url": "https://hclimrep-project.de/",
         "organisation": "Alfred Wegener Institute (AWI)",
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
         "method": "ML-based",

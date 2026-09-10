@@ -21,13 +21,17 @@ and the affected reports are re-published (never silently overwritten).
 
 **Scores:** unchanged vs 0.5.0. Data paths only.
 
+### Challengers
+
+- 2026-09-07: HClimRep added: a fine-tune of the ECMWF WeatherGenerator model on GLORYS,
+  developed at the Alfred Wegener Institute within the Helmholtz HClimRep project, producing
+  10-day global ocean forecasts at 1/4 degree initialized from GLORYS
+  (https://hclimrep-project.de/). The store carries 9 vertical levels only and has no
+  bathymetry mask, so mixed layer depth and shelf Class IV scores should be read with that in mind.
+
 ### Changed
 
 - Package, documentation, website and metadata now read OceanBench public datasets and report assets from the CloudFerro `oceanbench-bucket` instead of the previous EDITO MinIO project buckets ([#311](https://github.com/mercator-ocean/oceanbench/issues/311), [#313](https://github.com/mercator-ocean/oceanbench/pull/313)).
-
-### Challengers
-
-- 2026-09-07: HClimRep added: a fine-tune of the WeatherGenerator model (https://github.com/ecmwf/WeatherGenerator) on GLORYS, producing 10-day global ocean forecasts at 1/4 degree, initialized from GLORYS nowcasts. It is developed at the Alfred Wegener Institute (AWI) in Bremerhaven within the Helmholtz HClimRep project, and the forecasts are published by the model authors at https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench. The store carries 9 vertical levels only, and it has no bathymetry mask: the surface land-sea mask is repeated at every level, so mixed layer depth and shelf Class IV scores should be read with that in mind.
 
 ### Reports
 
