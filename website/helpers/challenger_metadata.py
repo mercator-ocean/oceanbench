@@ -113,7 +113,7 @@ CHALLENGERS = {
         "initial_conditions": "GLO12 nowcast (as issued)",
         "resolution": "1/4\u00b0",
         "description": (
-            "local evaluation, 51 Tuesday starts 2024, as-issued GLO12 nowcast ICs, "
+            "local evaluation, 52 Wednesday starts 2024 (Tuesday ICs), nine lead days, as-issued GLO12 nowcast ICs, "
             "OceanBench 0.5.1 harness, not an official submission"
         ),
     },
