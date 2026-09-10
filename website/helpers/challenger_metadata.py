@@ -106,7 +106,7 @@ CHALLENGERS = {
     "hclimrep": {
         "label": "HClimRep",
         "url": "https://hclimrep-project.de/",
-        "organisation": "Alfred Wegener Institute (AWI)",
+        "organisation": "AWI",
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
         "forecasts_supplied_by_authors": True,
         "method": "ML-based",
@@ -117,7 +117,7 @@ CHALLENGERS = {
     "hclimrep_1_degree": {
         "label": "HClimRep",
         "url": "https://hclimrep-project.de/",
-        "organisation": "Alfred Wegener Institute (AWI)",
+        "organisation": "AWI",
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
         "forecasts_supplied_by_authors": True,
         "method": "ML-based",
