@@ -70,6 +70,6 @@ if any(map(challenger_forecasts_supplied_by_authors, challengers)):
     print(
         '\n<p class="challengers-table-note">&dagger; Forecasts supplied by the system authors. '
         'All other forecasts were produced by running each system at '
-        'Mercator Ocean International.</p>'
+        'Mercator Ocean.</p>'
     )
 ```
