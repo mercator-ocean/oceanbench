@@ -23,11 +23,8 @@ and the affected reports are re-published (never silently overwritten).
 
 ### Challengers
 
-- 2026-09-07: HClimRep added: a fine-tune of the WeatherGenerator model on GLORYS,
-  developed at the Alfred Wegener Institute within the Helmholtz HClimRep project, producing
-  10-day global ocean forecasts at 1/4 degree initialized from GLO12 nowcasts
-  (https://hclimrep-project.de/). The store carries 9 vertical levels only and has no
-  bathymetry mask, so mixed layer depth and shelf Class IV scores should be read with that in mind.
+- 2026-09-07: HClimRep added: a machine-learning model from AWI (WeatherGenerator fine-tuned on
+  GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts.
 
 ### Changed
 
