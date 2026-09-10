@@ -23,7 +23,7 @@ and the affected reports are re-published (never silently overwritten).
 
 ### Challengers
 
-- 2026-09-07: HClimRep added: a fine-tune of the ECMWF WeatherGenerator model on GLORYS,
+- 2026-09-07: HClimRep added: a fine-tune of the WeatherGenerator model on GLORYS,
   developed at the Alfred Wegener Institute within the Helmholtz HClimRep project, producing
   10-day global ocean forecasts at 1/4 degree initialized from GLORYS
   (https://hclimrep-project.de/). The store carries 9 vertical levels only and has no
