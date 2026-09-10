@@ -1,3 +1,3 @@
-,Lead day 1,Lead day 2,Lead day 3,Lead day 4,Lead day 5,Lead day 6,Lead day 7,Lead day 8,Lead day 9,Lead day 10
-Meridional geostrophic current (m/s) [geostrophic_northward_sea_water_velocity]{surface},0.044352,0.051281,0.058448,0.065914,0.073233,0.080879,0.088487,0.095453,0.100264,0.104876
-Zonal geostrophic current (m/s) [geostrophic_eastward_sea_water_velocity]{surface},0.046147,0.054125,0.062465,0.07048,0.078353,0.086508,0.094343,0.101517,0.106324,0.111266
+,Lead day 1,Lead day 2,Lead day 3,Lead day 4,Lead day 5,Lead day 6,Lead day 7,Lead day 8,Lead day 9
+Meridional geostrophic current (m/s) [geostrophic_northward_sea_water_velocity]{surface},0.044166,0.051074,0.058204,0.065617,0.072933,0.080553,0.088143,0.095098,0.099915
+Zonal geostrophic current (m/s) [geostrophic_eastward_sea_water_velocity]{surface},0.045946,0.053929,0.062199,0.0702,0.078055,0.086213,0.094047,0.101192,0.105986

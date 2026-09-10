@@ -15,14 +15,29 @@ Nothing here is uploaded anywhere.
 
 ## glow
 
-`0.5.0/glow.global.report.ipynb` is a local evaluation: 51 Tuesday starts of 2024,
-as-issued GLO12 nowcast initial conditions, OceanBench 0.5.1 harness, quarter degree,
-not an official submission. It is listed under the 0.5.0 leaderboard column because
-0.5.0 is the default published version, so the officially published systems it sits
-next to were scored with 0.5.0.
+`0.5.0/glow.global.report.ipynb` is a local evaluation: all 52 Wednesday challenger
+starts of 2024, 20240103 through 20241225, each initialised from the as-issued GLO12
+nowcast of the Tuesday before it, quarter degree, not an official submission.
 
-`tables/` holds the nine metric CSV files the harness wrote for the same run. The
-website reads the notebook, not the CSV files; they are kept for provenance.
+It scores NINE lead days, not ten. The IFS forecast package that forces the run
+carries lead_day_index 0..9, so the tenth forecast day would be driven by persisted
+lead 9 forcing rather than by a real forecast. The entry stops at the nine days a
+real IFS forecast covers. The forecast store still holds ten days per start; the
+challenger module drops the last time step on the way in, nothing was recomputed.
+Both harnesses accept a nine day submission natively: seven of the nine metrics
+return lead days 1 to 9 and the two Lagrangian metrics return lead days 2 to 8, with
+no empty cells. Beside a ten day baseline the website simply leaves the lead 10 cell
+blank.
+
+The harness that produced this notebook is OceanBench 0.5.1. The file sits in the
+0.5.0 directory because that key is what places a system in the 0.5.0 leaderboard
+column, and 0.5.0 is the default published version, so this entry appears next to
+officially published systems that were themselves scored with 0.5.0. Keep that
+difference in mind when reading small gaps between GLOW and its neighbours.
+
+`tables/glowcascade_final.*.csv` holds the nine metric tables read back out of that
+notebook. The website reads the notebook, not the CSV files; they are kept for
+provenance.
 
 ## hclimrep
 

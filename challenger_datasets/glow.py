@@ -5,8 +5,15 @@
 # Open GLOW forecasts with xarray.
 # GLOW is evaluated locally and is not an official submission: the forecasts live on
 # the machine that produced them, so this file opens them from disk rather than from
-# a published bucket. 51 Tuesday starts of 2024, as-issued GLO12 nowcast initial
-# conditions, quarter degree, 10 lead days.
+# a published bucket. All 52 Wednesday challenger starts of 2024, 20240103 through
+# 20241225, each initialised from the as-issued GLO12 nowcast of the Tuesday before
+# it, quarter degree, 9 lead days.
+#
+# Nine, not ten: the IFS forecast package that forces the run carries
+# lead_day_index 0..9, so a tenth forecast day would ride on persisted lead 9
+# forcing rather than on a real forecast. The store on disk still holds ten days per
+# start and nothing was recomputed; this module drops the last time step on the way
+# in.
 import datetime
 import pathlib
 
@@ -17,7 +24,11 @@ _PATHS = sorted(_ROOT.glob("2024*.zarr"))
 _FIRST_DAYS = [datetime.datetime.strptime(path.stem, "%Y%m%d") for path in _PATHS]
 
 
+_LEAD_DAYS = 9
+
+
 def _prepared(dataset: xarray.Dataset) -> xarray.Dataset:
+    dataset = dataset.isel(time=slice(0, _LEAD_DAYS))
     lead_count = dataset.sizes["time"]
     return dataset.rename({"time": "lead_day_index"}).assign_coords({"lead_day_index": range(lead_count)})
 
