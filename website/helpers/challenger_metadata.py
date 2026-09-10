@@ -103,8 +103,26 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1°",
     },
+    "glow": {
+        "label": "GLOW (experimental, not submitted)",
+        "url": "https://github.com/mercator-ocean/oceanbench",
+        "organisation": "Mercator Ocean",
+        "organisation_url": "https://mercator-ocean.eu",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12 nowcast (as issued)",
+        "resolution": "1/4\u00b0",
+        "description": (
+            "local evaluation, 51 Tuesday starts 2024, as-issued GLO12 nowcast ICs, "
+            "OceanBench 0.5.1 harness, not an official submission"
+        ),
+    },
 }
 
 
 def challenger_label(challenger_name: str) -> str:
     return CHALLENGERS.get(challenger_name, {}).get("label", challenger_name)
+
+
+def challenger_description(challenger_name: str) -> str:
+    return CHALLENGERS.get(challenger_name, {}).get("description", "")

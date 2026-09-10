@@ -15,7 +15,7 @@ format:
 ```{python}
 #| output: asis
 
-from helpers.challenger_metadata import CHALLENGERS
+from helpers.challenger_metadata import CHALLENGERS, challenger_description
 from helpers.s3_discovery import default_version, discover_downloaded_reports
 from helpers.published_regions import published_region_ids, published_region_label
 
@@ -60,5 +60,12 @@ def format_row(challenger_name):
 
 rows = "\n".join(map(format_row, challengers))
 
-print('<div class="challengers-table-wrap">\n\n' + header + rows + "\n\n</div>")
+notes = "\n".join(
+    f"- **{CHALLENGERS[challenger_name]['label']}**: {challenger_description(challenger_name)}"
+    for challenger_name in challengers
+    if challenger_description(challenger_name)
+)
+notes = "\n\n" + notes + "\n" if notes else ""
+
+print('<div class="challengers-table-wrap">\n\n' + header + rows + "\n\n</div>" + notes)
 ```

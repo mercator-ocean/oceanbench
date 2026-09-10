@@ -3,8 +3,10 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import os
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 
+from helpers.local_challengers import local_reports
 from helpers.s3_discovery import (
     MAXIMUM_PARALLEL_REQUESTS,
     available_versions,
@@ -31,6 +33,18 @@ def _clear_version_report_notebooks(version_directory: str) -> None:
             os.remove(os.path.join(version_directory, file_name))
 
 
+def _copy_local_reports(version: str) -> int:
+    version_directory = os.path.join(REPORTS_DIRECTORY, version)
+    copied = 0
+    for challenger_name, region_id, source_path in local_reports(version):
+        os.makedirs(version_directory, exist_ok=True)
+        destination_path = os.path.join(version_directory, f"{challenger_name}.{region_id}.report.ipynb")
+        shutil.copyfile(source_path, destination_path)
+        print(f"Copied local report {version}/{challenger_name}.{region_id} -> {destination_path}")
+        copied += 1
+    return copied
+
+
 def _download_version_reports(version: str) -> bool:
     version_directory = os.path.join(REPORTS_DIRECTORY, version)
     published_reports = discover_official_reports(version)
@@ -52,7 +66,8 @@ def _download_version_reports(version: str) -> bool:
         if not downloaded_path:
             raise RuntimeError(f"Failed to download notebook for {version}/{challenger_name}.{region_id}.")
         print(f"Downloaded {version}/{challenger_name}.{region_id} -> {downloaded_path}")
-    return bool(pending_reports)
+    copied_locally = _copy_local_reports(version)
+    return bool(pending_reports) or bool(copied_locally)
 
 
 def main() -> None:

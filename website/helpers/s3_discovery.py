@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
+from helpers.local_challengers import local_challengers_for_version
 from helpers.published_regions import published_region_ids
 
 S3_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
@@ -57,7 +58,9 @@ def default_version() -> str:
 
 
 def challengers_for_version(version: str) -> list[str]:
-    return _report_index().get("versions", {}).get(version, {}).get("challengers", [])
+    published = _report_index().get("versions", {}).get(version, {}).get("challengers", [])
+    local = [name for name in local_challengers_for_version(version) if name not in published]
+    return published + local
 
 
 def _notebook_url(version: str, challenger_name: str, region_id: str) -> str:
