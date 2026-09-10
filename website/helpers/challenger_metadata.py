@@ -117,6 +117,21 @@ CHALLENGERS = {
             "OceanBench 0.5.1 harness, not an official submission"
         ),
     },
+    "hclimrep": {
+        "label": "HClimRep (experimental, not submitted)",
+        "url": "https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench",
+        "organisation": "ECMWF",
+        "organisation_url": "https://github.com/ecmwf/WeatherGenerator",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLORYS nowcast (preceding Tuesday)",
+        "resolution": "1/4\u00b0",
+        "description": (
+            "local evaluation, WeatherGenerator run ft0818, 52 weekly Wednesday starts "
+            "2024-01-03 to 2024-12-25, GLORYS nowcast initial conditions of the preceding "
+            "Tuesday, OceanBench 0.5.0 harness, not an official submission"
+        ),
+    },
 }
 
 

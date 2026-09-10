@@ -18,6 +18,7 @@ LOCAL_REPORTS_DIRECTORY = os.path.join(_REPOSITORY_ROOT, "local_reports")
 LOCAL_CHALLENGERS = {
     "0.5.0": {
         "glow": ["global"],
+        "hclimrep": ["global"],
     },
 }
 
