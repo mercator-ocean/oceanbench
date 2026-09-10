@@ -15,7 +15,7 @@ format:
 ```{python}
 #| output: asis
 
-from helpers.challenger_metadata import CHALLENGERS
+from helpers.challenger_metadata import CHALLENGERS, DEFAULT_FORECASTS_RUN_BY, challenger_forecasts_run_by
 from helpers.s3_discovery import default_version, discover_downloaded_reports
 from helpers.published_regions import published_region_ids, published_region_label
 
@@ -47,6 +47,11 @@ def format_row(challenger_name):
     report_links = f'<span class="region-report-badges">{report_links}</span>' if report_links else ""
     if challenger_metadata:
         system = f"[{challenger_metadata['label']}]({challenger_metadata['url']})"
+        forecasts_run_by = challenger_forecasts_run_by(challenger_name)
+        if forecasts_run_by != DEFAULT_FORECASTS_RUN_BY:
+            system += (
+                f'<sup class="run-by-marker" title="Forecasts supplied by {forecasts_run_by}">&dagger;</sup>'
+            )
         organisation = (
             f"[{challenger_metadata['organisation']}]"
             f"({challenger_metadata['organisation_url']})"
@@ -61,4 +66,17 @@ def format_row(challenger_name):
 rows = "\n".join(map(format_row, challengers))
 
 print('<div class="challengers-table-wrap">\n\n' + header + rows + "\n\n</div>")
+
+external_forecast_runners = sorted({
+    challenger_forecasts_run_by(challenger_name)
+    for challenger_name in challengers
+    if challenger_forecasts_run_by(challenger_name) != DEFAULT_FORECASTS_RUN_BY
+})
+
+if external_forecast_runners:
+    print(
+        '\n<p class="challengers-table-note">&dagger; Forecasts supplied by the system authors '
+        f'({", ".join(external_forecast_runners)}). All other forecasts were produced by running '
+        f'each system at {DEFAULT_FORECASTS_RUN_BY}.</p>'
+    )
 ```

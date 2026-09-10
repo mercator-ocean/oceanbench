@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+DEFAULT_FORECASTS_RUN_BY = "Mercator Ocean International"
+
 CHALLENGERS = {
     "glo12": {
         "label": "GLO12",
@@ -108,6 +110,7 @@ CHALLENGERS = {
         "url": "https://hclimrep-project.de/",
         "organisation": "Alfred Wegener Institute (AWI)",
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
+        "forecasts_run_by": "Alfred Wegener Institute (AWI)",
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12",
@@ -118,6 +121,7 @@ CHALLENGERS = {
         "url": "https://hclimrep-project.de/",
         "organisation": "Alfred Wegener Institute (AWI)",
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
+        "forecasts_run_by": "Alfred Wegener Institute (AWI)",
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12",
@@ -128,3 +132,7 @@ CHALLENGERS = {
 
 def challenger_label(challenger_name: str) -> str:
     return CHALLENGERS.get(challenger_name, {}).get("label", challenger_name)
+
+
+def challenger_forecasts_run_by(challenger_name: str) -> str:
+    return CHALLENGERS.get(challenger_name, {}).get("forecasts_run_by", DEFAULT_FORECASTS_RUN_BY)
