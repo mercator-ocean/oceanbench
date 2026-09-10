@@ -110,7 +110,7 @@ CHALLENGERS = {
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
         "method": "ML-based",
         "forecast_type": "Deterministic",
-        "initial_conditions": "GLORYS",
+        "initial_conditions": "GLO12",
         "resolution": "1/4°",
     },
     "hclimrep_1_degree": {
@@ -120,7 +120,7 @@ CHALLENGERS = {
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
         "method": "ML-based",
         "forecast_type": "Deterministic",
-        "initial_conditions": "GLORYS",
+        "initial_conditions": "GLO12",
         "resolution": "1°",
     },
 }
