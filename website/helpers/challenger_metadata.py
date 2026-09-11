@@ -111,7 +111,7 @@ CHALLENGERS = {
         "forecasts_supplied_by_authors": True,
         "method": "ML-based",
         "forecast_type": "Deterministic",
-        "initial_conditions": "GLO12",
+        "initial_conditions": "GLO12/ERA5",
         "resolution": "1/4°",
     },
     "hclimrep_1_degree": {
@@ -122,7 +122,7 @@ CHALLENGERS = {
         "forecasts_supplied_by_authors": True,
         "method": "ML-based",
         "forecast_type": "Deterministic",
-        "initial_conditions": "GLO12",
+        "initial_conditions": "GLO12/ERA5",
         "resolution": "1°",
     },
 }

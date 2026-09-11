@@ -24,7 +24,7 @@ and the affected reports are re-published (never silently overwritten).
 ### Challengers
 
 - 2026-09-07: HClimRep added: a machine-learning model from AWI (WeatherGenerator fine-tuned on
-  GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts.
+  GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts and ERA5 atmospheric fields.
 
 ### Changed
 
