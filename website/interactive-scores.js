@@ -191,12 +191,12 @@ function displayNameHtml(name) {
   if (!note) return displayName(name);
   return (
     `${displayName(name)}` +
-    `<sup class="challenger-note-marker" title="${escapeAttribute(note)}">&Dagger;</sup>`
+    `<sup class="challenger-note-marker" title="${escapeAttribute(note)}">*</sup>`
   );
 }
 
 function displayNameText(name) {
-  return challengerNote(name) ? `${displayName(name)} \u2021` : displayName(name);
+  return challengerNote(name) ? `${displayName(name)} *` : displayName(name);
 }
 
 function buildChallengerNotesHtml(challengerNames) {
@@ -207,7 +207,7 @@ function buildChallengerNotesHtml(challengerNames) {
     const label = displayName(name);
     if (!note || seen.has(label)) continue;
     seen.add(label);
-    items += `<span class="challenger-note-entry">&Dagger; ${label}: ${note}</span>`;
+    items += `<span class="challenger-note-entry">* ${label}: ${note}</span>`;
   }
   if (!items) return "";
   return `<p class="challengers-table-note">${items}</p>`;

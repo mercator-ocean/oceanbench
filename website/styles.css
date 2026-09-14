@@ -141,7 +141,6 @@ div.sourceCode.cell-code pre.sourceCode {
   display: block;
 }
 
-.run-by-marker,
 .challenger-note-marker {
   color: var(--ob-muted);
   font-weight: 400;

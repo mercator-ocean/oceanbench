@@ -15,11 +15,7 @@ format:
 ```{python}
 #| output: asis
 
-from helpers.challenger_metadata import (
-    CHALLENGERS,
-    challenger_forecasts_supplied_by_authors,
-    challenger_note,
-)
+from helpers.challenger_metadata import CHALLENGERS, challenger_note
 from helpers.s3_discovery import default_version, discover_downloaded_reports
 from helpers.published_regions import published_region_ids, published_region_label
 
@@ -51,13 +47,9 @@ def format_row(challenger_name):
     report_links = f'<span class="region-report-badges">{report_links}</span>' if report_links else ""
     if challenger_metadata:
         system = f"[{challenger_metadata['label']}]({challenger_metadata['url']})"
-        if challenger_forecasts_supplied_by_authors(challenger_name):
-            system += (
-                '<sup class="run-by-marker" title="Forecasts supplied by the system authors">&dagger;</sup>'
-            )
         note = challenger_note(challenger_name)
         if note:
-            system += f'<sup class="challenger-note-marker" title="{note}">&Dagger;</sup>'
+            system += f'<sup class="challenger-note-marker" title="{note}">*</sup>'
         organisation = (
             f"[{challenger_metadata['organisation']}]"
             f"({challenger_metadata['organisation_url']})"
@@ -74,12 +66,6 @@ rows = "\n".join(map(format_row, challengers))
 print('<div class="challengers-table-wrap">\n\n' + header + rows + "\n\n</div>")
 
 footnotes = []
-if any(map(challenger_forecasts_supplied_by_authors, challengers)):
-    footnotes.append(
-        '<span class="challenger-note-entry">&dagger; Forecasts supplied by the system authors. '
-        'All other forecasts were produced by running each system at '
-        'Mercator Ocean.</span>'
-    )
 
 seen_notes = set()
 for challenger_name in challengers:
@@ -88,8 +74,12 @@ for challenger_name in challengers:
     if not note or label in seen_notes:
         continue
     seen_notes.add(label)
-    footnotes.append(f'<span class="challenger-note-entry">&Dagger; {label}: {note}</span>')
+    footnotes.append(f'<span class="challenger-note-entry">* {label}: {note}</span>')
 
-if footnotes:
-    print('\n<p class="challengers-table-note">' + "".join(footnotes) + '</p>')
+intro = (
+    "Unless noted otherwise, all forecasts were produced by running each system at "
+    "Mercator Ocean."
+)
+
+print('\n<p class="challengers-table-note">' + intro + "".join(footnotes) + '</p>')
 ```
