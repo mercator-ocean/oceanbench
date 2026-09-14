@@ -405,16 +405,36 @@ def glo12_persistence() -> xarray.Dataset:
     Dataset
         The Dataset containing GLO12 persistence baseline forecasts.
 
-    >>> glo12_persistence() # doctest: +SKIP
+    >>> glo12_persistence() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 4TB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 50,
                              latitude: 2041, longitude: 4320)
+    Coordinates:
+      * depth               (depth) float32 200B 0.494 1.541 ... 5.275e+03 5.728e+03
+      * latitude            (latitude) float32 8kB -80.0 -79.92 ... 89.92 90.0
+      * longitude           (longitude) float32 17kB -180.0 -179.9 ... 179.8 179.9
+      * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
+      * first_day_datetime  (first_day_datetime) datetime64[...] 416B 2024-01-03 ....
     Data variables:
-        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
-        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
-        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
-        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 ...
-        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 ...
+        so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 917GB dask.array<chunksize=(1, 1, 1, 640, 1280), meta=np.ndarray>
+        thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 917GB dask.array<chunksize=(1, 1, 1, 640, 1280), meta=np.ndarray>
+        uo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 917GB dask.array<chunksize=(1, 1, 1, 640, 1280), meta=np.ndarray>
+        vo                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 917GB dask.array<chunksize=(1, 1, 1, 640, 1280), meta=np.ndarray>
+        zos                 (first_day_datetime, lead_day_index, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 640, 1280), meta=np.ndarray>
+    Attributes: (12/13)
+        Conventions:                CF-1.8
+        NCO:                        netCDF Operators version 4.9.7 (Homepage = ht...
+        area:                       Global
+        contact:                    https://marine.copernicus.eu/contact
+        credit:                     E.U. Copernicus Marine Service Information (C...
+        history:                    Mon Mar 31 11:20:47 2025: ncks -A /data/rd_ex...
+        ...                         ...
+        institution:                Mercator Ocean International
+        licence:                    http://marine.copernicus.eu/services-portfoli...
+        producer:                   CMEMS - Global Monitoring and Forecasting Centre
+        references:                 http://marine.copernicus.eu
+        source:                     MOI GLO12
+        title:                      daily mean fields from Global Ocean Physics A...
     """
 
     return challenger_datasets.glo12_persistence()
@@ -430,11 +450,37 @@ def glo12_persistence_1_degree() -> xarray.Dataset:
         The Dataset containing GLO12 persistence baseline forecasts interpolated to 1
         degree resolution.
 
-    >>> glo12_persistence_1_degree() # doctest: +SKIP
+    >>> glo12_persistence_1_degree() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 26GB
     Dimensions:                          (first_day_datetime: 52,
                                           lead_day_index: 10, depth: 50,
                                           latitude: 170, longitude: 360)
+    Coordinates:
+      * depth                            (depth) float32 200B 0.494 ... 5.728e+03
+      * lead_day_index                   (lead_day_index) int64 80B 0 1 2 ... 7 8 9
+      * first_day_datetime               (first_day_datetime) datetime64[...] 416B ...
+      * latitude                         (latitude) float64 1kB -79.5 -78.5 ... 89.5
+      * longitude                        (longitude) float64 3kB -179.5 ... 179.5
+    Data variables:
+        sea_water_salinity               (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        sea_water_potential_temperature  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        eastward_sea_water_velocity      (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        northward_sea_water_velocity     (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 6GB dask.array<chunksize=(1, 1, 1, 170, 360), meta=np.ndarray>
+        sea_surface_height_above_geoid   (first_day_datetime, lead_day_index, latitude, longitude) float32 127MB dask.array<chunksize=(1, 1, 170, 360), meta=np.ndarray>
+    Attributes: (12/13)
+        Conventions:                CF-1.8
+        NCO:                        netCDF Operators version 4.9.7 (Homepage = ht...
+        area:                       Global
+        contact:                    https://marine.copernicus.eu/contact
+        credit:                     E.U. Copernicus Marine Service Information (C...
+        history:                    Mon Mar 31 11:20:47 2025: ncks -A /data/rd_ex...
+        ...                         ...
+        institution:                Mercator Ocean International
+        licence:                    http://marine.copernicus.eu/services-portfoli...
+        producer:                   CMEMS - Global Monitoring and Forecasting Centre
+        references:                 http://marine.copernicus.eu
+        source:                     MOI GLO12
+        title:                      daily mean fields from Global Ocean Physics A...
     """
 
     return challenger_datasets.glo12_persistence_1_degree()
