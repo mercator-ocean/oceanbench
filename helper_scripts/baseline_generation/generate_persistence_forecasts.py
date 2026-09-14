@@ -14,6 +14,7 @@ writing one zarr per start date in the standard challenger schema
 """
 
 import os
+import sys
 import time
 from datetime import timedelta
 
@@ -26,7 +27,6 @@ VARIABLES = ["so", "thetao", "uo", "vo", "zos"]
 LEAD_DAYS = 10
 CHUNKS = {"time": 1, "depth": 1, "latitude": 640, "longitude": 1280}
 FILL_VALUE = 9.969209968386869e36
-OUTPUT_ROOT = "/mnt/data/jseillade/persistence_forecasts_nowcast"
 
 _STORAGE_OPTIONS = {"client_kwargs": {"timeout": aiohttp.ClientTimeout(total=900, sock_connect=60, sock_read=120)}}
 
@@ -62,10 +62,11 @@ def build_persistence(start):
 
 
 def main():
-    os.makedirs(OUTPUT_ROOT, exist_ok=True)
+    output_root = sys.argv[1] if len(sys.argv) > 1 else "persistence_forecasts"
+    os.makedirs(output_root, exist_ok=True)
     dates = start_dates()
     for position, start in enumerate(dates, start=1):
-        output_path = os.path.join(OUTPUT_ROOT, f"{start.strftime('%Y%m%d')}.zarr")
+        output_path = os.path.join(output_root, f"{start.strftime('%Y%m%d')}.zarr")
         if os.path.exists(output_path):
             print(f"skip {start:%Y-%m-%d} (exists)", flush=True)
             continue
