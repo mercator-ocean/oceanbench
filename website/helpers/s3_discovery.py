@@ -10,8 +10,9 @@ import requests
 
 from helpers.published_regions import published_region_ids
 
-S3_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
-REPORTS_ROOT_PREFIX = "public/evaluation-reports"
+CLOUDFERRO_BUCKET_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
+S3_BASE_URL = CLOUDFERRO_BUCKET_URL
+REPORTS_ROOT_PREFIX = "public/evaluation-reports-multi-year"
 REPORT_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
 YEAR_VERSION_PATTERN = re.compile(r"^\d{4}$")
 REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+?)(?:\.(?P<year>\d{4}))?\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")
