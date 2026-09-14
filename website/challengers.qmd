@@ -32,8 +32,8 @@ challengers = sorted({
 })
 
 header = (
-    "| System | Organisation | Method | Forecast type | Initial conditions | Output resolution | Forecasts run by | Report |\n"
-    "|--------|--------------|--------|---------------|--------------------|-------------------|------------------|--------|\n"
+    "| System | Organisation | Method | Forecast type | Initial conditions | Resolution | Run by | Report |\n"
+    "|--------|--------------|--------|---------------|--------------------|------------|--------|--------|\n"
 )
 
 def format_row(challenger_name):
