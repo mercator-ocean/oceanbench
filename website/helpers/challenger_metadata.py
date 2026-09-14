@@ -109,7 +109,7 @@ CHALLENGERS = {
         "organisation": "AWI",
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
         "note": "Initialised with ERA5 reanalysis atmosphere, which is not available in real time.",
-        "forecasts_supplied_by_authors": True,
+        "forecasts_run_by": "Authors",
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12/ERA5",
@@ -121,7 +121,7 @@ CHALLENGERS = {
         "organisation": "AWI",
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
         "note": "Initialised with ERA5 reanalysis atmosphere, which is not available in real time.",
-        "forecasts_supplied_by_authors": True,
+        "forecasts_run_by": "Authors",
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12/ERA5",
@@ -138,5 +138,5 @@ def challenger_note(challenger_name: str) -> str | None:
     return CHALLENGERS.get(challenger_name, {}).get("note")
 
 
-def challenger_forecasts_supplied_by_authors(challenger_name: str) -> bool:
-    return bool(CHALLENGERS.get(challenger_name, {}).get("forecasts_supplied_by_authors"))
+def challenger_forecasts_run_by(challenger_name: str) -> str:
+    return CHALLENGERS.get(challenger_name, {}).get("forecasts_run_by", "Mercator Ocean")

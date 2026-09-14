@@ -15,7 +15,7 @@ format:
 ```{python}
 #| output: asis
 
-from helpers.challenger_metadata import CHALLENGERS, challenger_forecasts_supplied_by_authors
+from helpers.challenger_metadata import CHALLENGERS, challenger_forecasts_run_by
 from helpers.s3_discovery import default_version, discover_downloaded_reports
 from helpers.published_regions import published_region_ids, published_region_label
 
@@ -32,8 +32,8 @@ challengers = sorted({
 })
 
 header = (
-    "| System | Organisation | Method | Forecast type | Initial conditions | Output resolution | Report |\n"
-    "|--------|--------------|--------|---------------|--------------------|-------------------|--------|\n"
+    "| System | Organisation | Method | Forecast type | Initial conditions | Output resolution | Forecasts run by | Report |\n"
+    "|--------|--------------|--------|---------------|--------------------|-------------------|------------------|--------|\n"
 )
 
 def format_row(challenger_name):
@@ -47,8 +47,6 @@ def format_row(challenger_name):
     report_links = f'<span class="region-report-badges">{report_links}</span>' if report_links else ""
     if challenger_metadata:
         system = f"[{challenger_metadata['label']}]({challenger_metadata['url']})"
-        if challenger_forecasts_supplied_by_authors(challenger_name):
-            system += '<sup class="challenger-note-marker" title="Forecasts supplied by the system authors">*</sup>'
         organisation = (
             f"[{challenger_metadata['organisation']}]"
             f"({challenger_metadata['organisation_url']})"
@@ -56,18 +54,11 @@ def format_row(challenger_name):
         return (
             f"| {system} | {organisation} | {challenger_metadata['method']} | "
             f"{challenger_metadata['forecast_type']} | {challenger_metadata['initial_conditions']} | "
-            f"{challenger_metadata['resolution']} | {report_links} |"
+            f"{challenger_metadata['resolution']} | {challenger_forecasts_run_by(challenger_name)} | {report_links} |"
         )
-    return f"| {challenger_name} |  |  |  |  |  | {report_links} |"
+    return f"| {challenger_name} |  |  |  |  |  |  | {report_links} |"
 
 rows = "\n".join(map(format_row, challengers))
 
 print('<div class="challengers-table-wrap">\n\n' + header + rows + "\n\n</div>")
-
-supplied_by_authors = any(map(challenger_forecasts_supplied_by_authors, challengers))
-
-note = "All forecasts were produced by running each system at Mercator Ocean"
-if supplied_by_authors:
-    note = "&#42; Forecasts supplied by the system authors. " + note.replace("All", "All other", 1)
-print(f'\n<p class="challengers-table-note">{note}.</p>')
 ```

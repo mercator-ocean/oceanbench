@@ -928,9 +928,13 @@ function renderMetricSection(
     markup += flatMarkup;
   }
 
-  markup += buildChallengerNotesHtml(challengerNames);
-
   container.innerHTML = markup;
+}
+
+function renderChallengerNotes(challengerNames) {
+  const container = document.getElementById("challenger-notes");
+  if (!container) return;
+  container.innerHTML = buildChallengerNotesHtml(challengerNames);
 }
 
 function formatRgb(color) {
@@ -1265,6 +1269,7 @@ function renderTablesOnly() {
     );
   }
 
+  renderChallengerNotes(visibleChallengerNames);
   updateColorLegend();
   setupCellHighlight();
 
@@ -1303,6 +1308,8 @@ function renderAllTables() {
       sectionConfig.depth_groups || null,
     );
   }
+
+  renderChallengerNotes(visibleChallengerNames);
 
   const versionTracks = getVersionTracks(getActiveVersionData(data));
 
