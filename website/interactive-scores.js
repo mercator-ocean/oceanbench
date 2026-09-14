@@ -204,10 +204,9 @@ function buildChallengerNotesHtml(challengerNames) {
   let items = "";
   for (const name of challengerNames) {
     const note = challengerNote(name);
-    const label = displayName(name);
-    if (!note || seen.has(label)) continue;
-    seen.add(label);
-    items += `<span class="challenger-note-entry">* ${label}: ${note}</span>`;
+    if (!note || seen.has(note)) continue;
+    seen.add(note);
+    items += `<span class="challenger-note-entry">* ${note}</span>`;
   }
   if (!items) return "";
   return `<p class="challengers-table-note">${items}</p>`;

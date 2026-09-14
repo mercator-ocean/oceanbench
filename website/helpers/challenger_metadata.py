@@ -108,10 +108,8 @@ CHALLENGERS = {
         "url": "https://hclimrep-project.de/",
         "organisation": "AWI",
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
-        "note": (
-            "Forecasts supplied by the system authors; initialised with ERA5 reanalysis "
-            "atmosphere, which is not available in real time."
-        ),
+        "note": "Initialised with ERA5 reanalysis atmosphere, which is not available in real time.",
+        "forecasts_supplied_by_authors": True,
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12/ERA5",
@@ -122,10 +120,8 @@ CHALLENGERS = {
         "url": "https://hclimrep-project.de/",
         "organisation": "AWI",
         "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
-        "note": (
-            "Forecasts supplied by the system authors; initialised with ERA5 reanalysis "
-            "atmosphere, which is not available in real time."
-        ),
+        "note": "Initialised with ERA5 reanalysis atmosphere, which is not available in real time.",
+        "forecasts_supplied_by_authors": True,
         "method": "ML-based",
         "forecast_type": "Deterministic",
         "initial_conditions": "GLO12/ERA5",
@@ -140,3 +136,7 @@ def challenger_label(challenger_name: str) -> str:
 
 def challenger_note(challenger_name: str) -> str | None:
     return CHALLENGERS.get(challenger_name, {}).get("note")
+
+
+def challenger_forecasts_supplied_by_authors(challenger_name: str) -> bool:
+    return bool(CHALLENGERS.get(challenger_name, {}).get("forecasts_supplied_by_authors"))

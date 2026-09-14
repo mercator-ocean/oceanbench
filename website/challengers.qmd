@@ -15,7 +15,7 @@ format:
 ```{python}
 #| output: asis
 
-from helpers.challenger_metadata import CHALLENGERS, challenger_note
+from helpers.challenger_metadata import CHALLENGERS, challenger_forecasts_supplied_by_authors
 from helpers.s3_discovery import default_version, discover_downloaded_reports
 from helpers.published_regions import published_region_ids, published_region_label
 
@@ -47,9 +47,8 @@ def format_row(challenger_name):
     report_links = f'<span class="region-report-badges">{report_links}</span>' if report_links else ""
     if challenger_metadata:
         system = f"[{challenger_metadata['label']}]({challenger_metadata['url']})"
-        note = challenger_note(challenger_name)
-        if note:
-            system += f'<sup class="challenger-note-marker" title="{note}">*</sup>'
+        if challenger_forecasts_supplied_by_authors(challenger_name):
+            system += '<sup class="challenger-note-marker" title="Forecasts supplied by the system authors">*</sup>'
         organisation = (
             f"[{challenger_metadata['organisation']}]"
             f"({challenger_metadata['organisation_url']})"
@@ -65,21 +64,10 @@ rows = "\n".join(map(format_row, challengers))
 
 print('<div class="challengers-table-wrap">\n\n' + header + rows + "\n\n</div>")
 
-footnotes = []
+supplied_by_authors = any(map(challenger_forecasts_supplied_by_authors, challengers))
 
-seen_notes = set()
-for challenger_name in challengers:
-    note = challenger_note(challenger_name)
-    label = CHALLENGERS.get(challenger_name, {}).get("label", challenger_name)
-    if not note or label in seen_notes:
-        continue
-    seen_notes.add(label)
-    footnotes.append(f'<span class="challenger-note-entry">* {label}: {note}</span>')
-
-intro = (
-    "Unless noted otherwise, all forecasts were produced by running each system at "
-    "Mercator Ocean."
-)
-
-print('\n<p class="challengers-table-note">' + intro + "".join(footnotes) + '</p>')
+note = "All forecasts were produced by running each system at Mercator Ocean"
+if supplied_by_authors:
+    note = "&#42; Forecasts supplied by the system authors. " + note.replace("All", "All other", 1)
+print(f'\n<p class="challengers-table-note">{note}.</p>')
 ```
