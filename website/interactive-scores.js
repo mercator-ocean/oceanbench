@@ -46,6 +46,7 @@ let showAllMode = true;
 let showPercentDiff = false;
 let parsedData = null;
 let challengerLabels = {};
+let challengerNotes = {};
 let regionLabels = {};
 let regionMetadata = {};
 let activeTrack = "high_resolution";
@@ -173,6 +174,45 @@ function displayName(name) {
   return challengerLabels[name] || name;
 }
 
+function challengerNote(name) {
+  return challengerNotes[name] || null;
+}
+
+function escapeAttribute(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function displayNameHtml(name) {
+  const note = challengerNote(name);
+  if (!note) return displayName(name);
+  return (
+    `${displayName(name)}` +
+    `<sup class="challenger-note-marker" title="${escapeAttribute(note)}">&Dagger;</sup>`
+  );
+}
+
+function displayNameText(name) {
+  return challengerNote(name) ? `${displayName(name)} \u2021` : displayName(name);
+}
+
+function buildChallengerNotesHtml(challengerNames) {
+  const seen = new Set();
+  let items = "";
+  for (const name of challengerNames) {
+    const note = challengerNote(name);
+    const label = displayName(name);
+    if (!note || seen.has(label)) continue;
+    seen.add(label);
+    items += `<span class="challenger-note-entry">&Dagger; ${label}: ${note}</span>`;
+  }
+  if (!items) return "";
+  return `<p class="challengers-table-note">${items}</p>`;
+}
+
 function trackKeyForChallenger(name) {
   return name.endsWith("_1_degree") ? "one_degree" : "high_resolution";
 }
@@ -233,7 +273,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -283,7 +323,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -464,7 +504,7 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   markup += '<label>Baseline: <select id="baseline-select">';
   for (const name of challengerNames) {
     const selected = name === baseline ? " selected" : "";
-    markup += `<option value="${name}"${selected}>${displayName(name)}</option>`;
+    markup += `<option value="${name}"${selected}>${displayNameText(name)}</option>`;
   }
   markup += "</select></label>";
 
@@ -889,6 +929,8 @@ function renderMetricSection(
     markup += flatMarkup;
   }
 
+  markup += buildChallengerNotesHtml(challengerNames);
+
   container.innerHTML = markup;
 }
 
@@ -1136,6 +1178,7 @@ function getActiveVersionData(data) {
 function applyActiveVersion() {
   const versionData = getActiveVersionData(parsedData) || {};
   challengerLabels = versionData.challenger_labels || {};
+  challengerNotes = versionData.challenger_notes || {};
   regionLabels = versionData.region_labels || {};
   regionMetadata = versionData.region_metadata || {};
   const regionIds = versionData.region_order || Object.keys(versionData.regions || {});

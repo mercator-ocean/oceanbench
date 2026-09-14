@@ -137,6 +137,17 @@ div.sourceCode.cell-code pre.sourceCode {
   color: var(--ob-muted);
 }
 
+.challengers-table-note .challenger-note-entry {
+  display: block;
+}
+
+.run-by-marker,
+.challenger-note-marker {
+  color: var(--ob-muted);
+  font-weight: 400;
+  cursor: help;
+}
+
 .region-report-badges {
   display: inline-flex;
   flex-wrap: wrap;
