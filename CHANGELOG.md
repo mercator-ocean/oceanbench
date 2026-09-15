@@ -23,6 +23,8 @@ and the affected reports are re-published (never silently overwritten).
 
 ### Challengers
 
+- 2026-09-11: GLO12 persistence added: a reference baseline holding the GLO12 nowcast constant
+  over the 10-day horizon, listed in the baseline category on the website ([#297](https://github.com/mercator-ocean/oceanbench/pull/297)).
 - 2026-09-15: HClimRep added: a machine-learning model from AWI (WeatherGenerator fine-tuned on
   GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts and ERA5 atmospheric fields.
 
