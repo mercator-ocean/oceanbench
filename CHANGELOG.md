@@ -33,10 +33,6 @@ and the affected reports are re-published (never silently overwritten).
 
 - The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
 
-### Challengers
-
-- 2026-09-11: `glo12_persistence` baseline, the GLO12 nowcast held constant over the lead days. Website baseline category only ([#297](https://github.com/mercator-ocean/oceanbench/pull/297)).
-
 ## 0.5.1 - 2026-09-02
 
 **Scores:** unchanged vs 0.5.0. Data paths only.
