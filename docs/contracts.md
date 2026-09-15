@@ -306,7 +306,9 @@ evaluation by `oceanbench/publish/viewer_artifacts.py` (opt-in via
   under `starts`, repeated for the first start under `leads` so a reader of the
   previous index shape still resolves a census. `write_viewer_artifacts` serves
   the first start (`eddy_start_indices`); every start of every dataset would be
-  gigabytes of JSON per dataset. Coordinates clamped to ±180/±90 and rounded to 4
+  gigabytes of JSON per dataset. The viewer reads a census only for a start it was
+  written for: a start with no published census draws no eddies and says which
+  starts have one, rather than drawing another start's detections over this field. Coordinates clamped to ±180/±90 and rounded to 4
   decimals; each detection validated against the `eddy` `$def` of
   `schemas/eddies.schema.json`.
 - viewer pyramid + `viewer-manifest.json` — built through the shared

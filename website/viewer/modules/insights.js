@@ -95,33 +95,31 @@ function eddyStartEntries(eddies) {
 }
 
 /**
- * The lead entries to read for `startDate`. A per-start index answers with the requested
- * start when it published one and with its nearest published start otherwise, so a census
- * served for fewer starts than the pyramid still resolves; a per-lead index ignores the
- * start entirely, which is what the shape means.
+ * The lead entries to read for `startDate`. A per-start index answers only for a start it
+ * actually published: a census is a detection on one forecast field, so serving a
+ * neighbouring start would draw eddies that do not belong to the field on screen. A
+ * per-lead index carries no start at all, which is what that older shape means, so it
+ * answers for any start. Asking for no start at all reads the first published one.
  */
 function eddyLeadEntries(eddies, startDate) {
   const starts = eddyStartEntries(eddies);
-  const leads = starts ? nearestStartEntry(starts, startDate).leads : eddies && eddies.leads;
+  let leads = eddies && eddies.leads;
+  if (starts) {
+    const entry = startDate
+      ? starts.find((candidate) => candidate.start_date === startDate)
+      : starts[0];
+    if (!entry) return null;
+    leads = entry.leads;
+  }
   if (!Array.isArray(leads)) return null;
   const usable = leads.filter((entry) => entry && entry.file && Number.isFinite(Number(entry.lead_day)));
   return usable.length ? usable : null;
 }
 
-/** The published start nearest `startDate` (the first one when no start date is asked for). */
-function nearestStartEntry(starts, startDate) {
-  const requested = startDate ? Date.parse(startDate) : Number.NaN;
-  if (!Number.isFinite(requested)) return starts[0];
-  let best = starts[0];
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const entry of starts) {
-    const distance = Math.abs(Date.parse(entry.start_date) - requested);
-    if (Number.isFinite(distance) && distance < bestDistance) {
-      best = entry;
-      bestDistance = distance;
-    }
-  }
-  return best;
+/** The start dates a per-start index published, or null for the older per-lead shape. */
+export function eddyPublishedStartDates(eddies) {
+  const starts = eddyStartEntries(eddies);
+  return starts ? starts.map((entry) => entry.start_date) : null;
 }
 
 /** Fetch (once per sidecar) the frame for the available lead nearest `leadDay`. */

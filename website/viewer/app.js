@@ -57,6 +57,7 @@ import {
   cancelClass4Prefetches,
   insightsFor,
   eddyCensus,
+  eddyPublishedStartDates,
   alignedEddyCensuses,
   class4Points,
   class4ParquetVariable,
@@ -1142,7 +1143,14 @@ function updatePanelBadge(panel) {
 
 // ---- overlays ---------------------------------------------------------------
 
-let overlayData = { eddiesCensuses: [], eddiesMatch: null, class4: null, class4Error: null, region: null };
+let overlayData = {
+  eddiesCensuses: [],
+  eddiesMatch: null,
+  eddiesPublishedStarts: null,
+  class4: null,
+  class4Error: null,
+  region: null,
+};
 let redrawAllPanelsFrame = 0;
 // The lead day a shared link asked for, until the horizon of the loaded forecast is known,
 // and the one line that says so when the two differ. Panel renders clear the status line as
@@ -1178,6 +1186,7 @@ async function loadOverlayData() {
   overlayData.region = region;
   overlayData.eddiesCensuses = [];
   overlayData.eddiesMatch = null;
+  overlayData.eddiesPublishedStarts = null;
   overlayData.eddiesLeadMismatch = false;
   overlayData.class4 = null;
   overlayData.class4Error = null;
@@ -1195,6 +1204,7 @@ async function loadOverlayData() {
       }),
     );
     if (superseded()) return false;
+    overlayData.eddiesPublishedStarts = eddyPublishedStartDates(eddiesByPanel.find(Boolean) || null);
     // Two forecasts are cross-matched only at a lead day BOTH publish: snap the requested
     // lead to the intersection of their available leads and read both censuses there, so a
     // wave challenger with a different lead set can never silently match different leads.
@@ -4094,17 +4104,7 @@ async function applyOverlayMode() {
   }
   const current = await loadOverlayData();
   if (!current || superseded()) return;
-  if (shared.overlayMode === OVERLAY_EDDIES) {
-    const censuses = overlayData.eddiesCensuses || [];
-    if (!censuses.some(Boolean)) {
-      note.textContent = "No eddy detections are available for this selection.";
-    } else if (shared.layout === 2 && overlayData.eddiesMatch) {
-      note.textContent =
-        "Eddy intercomparison between the two selected forecasts. This shows agreement, not ground truth.";
-    } else {
-      note.textContent = "Showing this forecast's own eddy census.";
-    }
-  }
+  if (shared.overlayMode === OVERLAY_EDDIES) writeEddyOverlayNote();
   if (shared.overlayMode === OVERLAY_CLASS4) {
     note.textContent = class4EmptyMessage() || "Class-4 match-ups for the selected start and lead. Hover a point for details.";
   }
@@ -4479,6 +4479,27 @@ function wirePlaybackControls() {
   setPlaybackSpeed(playback.speed);
 }
 
+// The eddy note describes the census actually loaded, so every path that reloads the
+// overlay (mode switch, start date, region) writes it from the same place. A start with
+// no published census says so instead of leaving the previous start's sentence up.
+function writeEddyOverlayNote() {
+  const note = elements["overlay-note"];
+  if (!note) return;
+  const censuses = overlayData.eddiesCensuses || [];
+  if (!censuses.some(Boolean)) {
+    const published = overlayData.eddiesPublishedStarts;
+    note.textContent =
+      published && published.length && !published.includes(currentStartDate(panels[0].state.dataset))
+        ? `No eddy census is published for this start date. Published starts: ${published.join(", ")}.`
+        : "No eddy detections are available for this selection.";
+  } else if (shared.layout === 2 && overlayData.eddiesMatch) {
+    note.textContent =
+      "Eddy intercomparison between the two selected forecasts. This shows agreement, not ground truth.";
+  } else {
+    note.textContent = "Showing this forecast's own eddy census.";
+  }
+}
+
 function wireGlobalControls() {
   for (const button of document.querySelectorAll(".scope-switch [data-scope]")) {
     button.addEventListener("click", () => setScope(button.dataset.scope));
@@ -4519,6 +4540,7 @@ function wireGlobalControls() {
     // A newer start date (or region, or lead) already owns the overlay: leave the redraw and
     // the rail to the load that answers the selection actually on screen.
     if (!(await loadOverlayData())) return;
+    if (shared.overlayMode === OVERLAY_EDDIES) writeEddyOverlayNote();
     redrawOverlaysAll();
     await updateContextRail();
     // The clicked column is start-specific; re-read it at the same point for the new start.
