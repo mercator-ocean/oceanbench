@@ -41,7 +41,7 @@ import json
 import os
 from helpers.s3_discovery import available_versions, default_version, discover_downloaded_reports
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
-from helpers.challenger_metadata import challenger_label
+from helpers.challenger_metadata import challenger_label, challenger_category
 from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
 
 def _load_scores(version, challenger_name, region_id, strict):
@@ -85,6 +85,11 @@ def _version_bundle(version, strict):
         "region_metadata": {region_id: published_region_metadata(region_id) for region_id in region_ids},
         "challenger_labels": {
             challenger_name: challenger_label(challenger_name)
+            for region in regions.values()
+            for challenger_name in region["challenger_names"]
+        },
+        "challenger_categories": {
+            challenger_name: challenger_category(challenger_name)
             for region in regions.values()
             for challenger_name in region["challenger_names"]
         },
