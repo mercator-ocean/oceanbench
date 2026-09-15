@@ -580,7 +580,12 @@ class SigmaLookup:
                 )
                 replacement = table[month_index]
             sigma_r = numpy.where(missing, replacement, sigma_r)
-        sigma_r = numpy.where(numpy.isfinite(sigma_r), sigma_r, 0.0)
+        unresolved_count = int((~numpy.isfinite(sigma_r)).sum())
+        if unresolved_count:
+            raise ValueError(
+                f"sigma_r of {observation_type} is not finite for {unresolved_count} of {len(sigma_r)} rows "
+                f"after the {self.fallback_region} fallback: the artifact carries no representativity error there"
+            )
         diagnostics = {
             "sigma_r_fallback_rows": fallback_count,
             "sigma_r_fallback_fraction": float(fallback_count / max(len(sigma_r), 1)),

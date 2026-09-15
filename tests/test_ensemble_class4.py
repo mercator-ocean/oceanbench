@@ -354,6 +354,19 @@ def test_sigma_falls_back_to_the_region_value_where_the_cell_has_no_days(sigma_l
     assert sigma_total[1] == pytest.approx(numpy.sqrt(0.051**2 + 0.4**2), abs=1e-6)
 
 
+def test_sigma_refuses_a_row_the_fallback_cannot_resolve(tmp_path):
+    dataset = _synthetic_sigma_dataset()
+    dataset["sigma_r_fallback"][SIGMA_OBSERVATION_TYPES.index("drifter_sst"), 0] = numpy.nan
+    store = tmp_path / "sigma-lookup-dry-fallback.zarr"
+    dataset.to_zarr(store, consolidated=True)
+    sigma_lookup = SigmaLookup(str(store))
+
+    with pytest.raises(ValueError, match="drifter_sst is not finite for 1 of 2 rows"):
+        sigma_lookup.total(
+            "drifter_sst", numpy.array([1, 1]), numpy.array([-79.6, -79.9]), numpy.array([-179.6, -179.9])
+        )
+
+
 def test_sigma_interpolates_linearly_in_depth_for_the_argo_streams(sigma_lookup):
     midpoint = float(SIGMA_LEVEL_DEPTHS[0] + SIGMA_LEVEL_DEPTHS[1]) / 2.0
     sigma_total, _instrument, diagnostics = sigma_lookup.total(
