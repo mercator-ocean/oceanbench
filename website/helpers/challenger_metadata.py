@@ -123,6 +123,30 @@ CHALLENGERS = {
         "initial_conditions": "GLO12 nowcast",
         "resolution": "1°",
     },
+    "hclimrep": {
+        "label": "HClimRep",
+        "url": "https://hclimrep-project.de/",
+        "organisation": "AWI",
+        "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
+        "note": "Initialised with ERA5 reanalysis atmosphere, which is not available in real time.",
+        "forecasts_run_by": "Authors",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12/ERA5",
+        "resolution": "1/4°",
+    },
+    "hclimrep_1_degree": {
+        "label": "HClimRep",
+        "url": "https://hclimrep-project.de/",
+        "organisation": "AWI",
+        "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
+        "note": "Initialised with ERA5 reanalysis atmosphere, which is not available in real time.",
+        "forecasts_run_by": "Authors",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12/ERA5",
+        "resolution": "1°",
+    },
 }
 
 
@@ -133,3 +157,11 @@ def challenger_label(challenger_name: str) -> str:
 def challenger_category(challenger_name: str) -> str:
     method = CHALLENGERS.get(challenger_name, {}).get("method")
     return "baseline" if method == "Baseline" else "model"
+
+
+def challenger_note(challenger_name: str) -> str | None:
+    return CHALLENGERS.get(challenger_name, {}).get("note")
+
+
+def challenger_forecasts_run_by(challenger_name: str) -> str:
+    return CHALLENGERS.get(challenger_name, {}).get("forecasts_run_by", "Mercator Ocean")

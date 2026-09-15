@@ -32,6 +32,8 @@ Please keep in mind that these metrics capture key aspects of forecast quality r
 
 Want to evaluate your system or get involved in OceanBench? Check out the [GitHub project](https://github.com/mercator-ocean/oceanbench/)!
 
+Most challenger forecasts are produced by running each system at Mercator Ocean; the [Challengers](challengers.qmd) page shows who ran each forecast.
+
 For the 1 degree track, the interpolation method used for challengers, the corresponding reference datasets, and the exact implementation paths are documented [here](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html).
 
 ```{python}
@@ -41,7 +43,7 @@ import json
 import os
 from helpers.s3_discovery import available_versions, default_version, discover_downloaded_reports
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
-from helpers.challenger_metadata import challenger_label, challenger_category
+from helpers.challenger_metadata import challenger_label, challenger_note, challenger_category
 from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
 
 def _load_scores(version, challenger_name, region_id, strict):
@@ -87,6 +89,12 @@ def _version_bundle(version, strict):
             challenger_name: challenger_label(challenger_name)
             for region in regions.values()
             for challenger_name in region["challenger_names"]
+        },
+        "challenger_notes": {
+            challenger_name: note
+            for region in regions.values()
+            for challenger_name in region["challenger_names"]
+            if (note := challenger_note(challenger_name))
         },
         "challenger_categories": {
             challenger_name: challenger_category(challenger_name)
@@ -138,6 +146,8 @@ Absolute RMSE scores against 2024 [GLORYS reanalysis](https://data.marine.copern
 Absolute RMSE scores against 2024 [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024). These are the deterministic scores for the forecasted variables and physically consistent diagnostic variables. The colors denote % difference to the selected baseline.
 
 <div id="analysis-scores"></div>
+
+<div id="challenger-notes"></div>
 
 :::
 

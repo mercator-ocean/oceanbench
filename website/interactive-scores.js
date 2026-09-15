@@ -46,6 +46,7 @@ let showAllMode = true;
 let showPercentDiff = false;
 let parsedData = null;
 let challengerLabels = {};
+let challengerNotes = {};
 let challengerCategories = {};
 let regionLabels = {};
 let regionMetadata = {};
@@ -174,6 +175,44 @@ function displayName(name) {
   return challengerLabels[name] || name;
 }
 
+function challengerNote(name) {
+  return challengerNotes[name] || null;
+}
+
+function escapeAttribute(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function displayNameHtml(name) {
+  const note = challengerNote(name);
+  if (!note) return displayName(name);
+  return (
+    `${displayName(name)}` +
+    `<sup class="challenger-note-marker" title="${escapeAttribute(note)}">*</sup>`
+  );
+}
+
+function displayNameText(name) {
+  return challengerNote(name) ? `${displayName(name)} *` : displayName(name);
+}
+
+function buildChallengerNotesHtml(challengerNames) {
+  const seen = new Set();
+  let items = "";
+  for (const name of challengerNames) {
+    const note = challengerNote(name);
+    if (!note || seen.has(note)) continue;
+    seen.add(note);
+    items += `<span class="challenger-note-entry">* ${note}</span>`;
+  }
+  if (!items) return "";
+  return `<p class="challengers-table-note">${items}</p>`;
+}
+
 function isReferenceBaseline(name) {
   return challengerCategories[name] === "baseline";
 }
@@ -252,7 +291,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -302,7 +341,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayName(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -483,7 +522,7 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   markup += '<label>Baseline: <select id="baseline-select">';
   for (const name of partitionReferencesLast(challengerNames)) {
     const selected = name === baseline ? " selected" : "";
-    markup += `<option value="${name}"${selected}>${displayName(name)}</option>`;
+    markup += `<option value="${name}"${selected}>${displayNameText(name)}</option>`;
   }
   markup += "</select></label>";
 
@@ -911,6 +950,12 @@ function renderMetricSection(
   container.innerHTML = markup;
 }
 
+function renderChallengerNotes(challengerNames) {
+  const container = document.getElementById("challenger-notes");
+  if (!container) return;
+  container.innerHTML = buildChallengerNotesHtml(challengerNames);
+}
+
 function formatRgb(color) {
   return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
@@ -1155,6 +1200,7 @@ function getActiveVersionData(data) {
 function applyActiveVersion() {
   const versionData = getActiveVersionData(parsedData) || {};
   challengerLabels = versionData.challenger_labels || {};
+  challengerNotes = versionData.challenger_notes || {};
   challengerCategories = versionData.challenger_categories || {};
   regionLabels = versionData.region_labels || {};
   regionMetadata = versionData.region_metadata || {};
@@ -1244,6 +1290,7 @@ function renderTablesOnly() {
     );
   }
 
+  renderChallengerNotes(visibleChallengerNames);
   updateColorLegend();
   setupCellHighlight();
 
@@ -1283,6 +1330,8 @@ function renderAllTables() {
       sectionConfig.depth_groups || null,
     );
   }
+
+  renderChallengerNotes(visibleChallengerNames);
 
   const versionTracks = getVersionTracks(getActiveVersionData(data));
 

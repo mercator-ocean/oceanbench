@@ -21,6 +21,11 @@ and the affected reports are re-published (never silently overwritten).
 
 **Scores:** unchanged vs 0.5.0. Data paths only.
 
+### Challengers
+
+- 2026-09-15: HClimRep added: a machine-learning model from AWI (WeatherGenerator fine-tuned on
+  GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts and ERA5 atmospheric fields.
+
 ### Changed
 
 - Package, documentation, website and metadata now read OceanBench public datasets and report assets from the CloudFerro `oceanbench-bucket` instead of the previous EDITO MinIO project buckets ([#311](https://github.com/mercator-ocean/oceanbench/issues/311), [#313](https://github.com/mercator-ocean/oceanbench/pull/313)).

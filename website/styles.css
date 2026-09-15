@@ -114,7 +114,7 @@ div.sourceCode.cell-code pre.sourceCode {
 
 .challengers-table-wrap th,
 .challengers-table-wrap td {
-  padding: 0.5rem 0.65rem;
+  padding: 0.5rem;
   line-height: 1.25;
   vertical-align: middle;
 }
@@ -129,6 +129,22 @@ div.sourceCode.cell-code pre.sourceCode {
 .challengers-table-wrap th:last-child,
 .challengers-table-wrap td:last-child {
   white-space: nowrap;
+}
+
+.challengers-table-note {
+  margin-top: 0.6rem;
+  font-size: 0.9em;
+  color: var(--ob-muted);
+}
+
+.challengers-table-note .challenger-note-entry {
+  display: block;
+}
+
+.challenger-note-marker {
+  color: var(--ob-muted);
+  font-weight: 400;
+  cursor: help;
 }
 
 .region-report-badges {
