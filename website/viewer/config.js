@@ -110,12 +110,20 @@ export function resolveViewerDataUrl(url) {
 }
 
 // The column store conventionally sits beside the pyramid as `<slug>.columns.zarr`.
-// A catalog entry may carry an absolute pyramid store URL: that is how a locally built
+// A catalog entry may instead name its column store explicitly, which is how two datasets
+// share one store: the water column of a coarsened dataset is the column of the dataset it
+// was coarsened from, so the 1 degree products name their native twin's store rather than
+// carrying a byte-identical copy of it. An explicit name wins over the slug convention.
+// A catalog entry may also carry an absolute pyramid store URL: that is how a locally built
 // viewer lists the official products, which stay on the published bucket while the local
 // challenger is served from disk. Such a dataset keeps its column store beside its own
 // pyramid, so the local data root (and any columns_base override of it, which exists to
 // repoint the LOCAL stores) must not be applied to it.
-export function resolveColumnStoreUrl(slug, storeUrl) {
+export function resolveColumnStoreUrl(slug, storeUrl, columnsUrl) {
+  if (columnsUrl) {
+    if (/^(?:[a-z]+:)?\/\//i.test(columnsUrl)) return columnsUrl.replace(/\/+$/, "");
+    return new URL(columnsUrl.replace(/^\.?\/*data\//, "").replace(/\/+$/, ""), columnsBaseUrl).href;
+  }
   if (storeUrl && /^(?:[a-z]+:)?\/\//i.test(storeUrl)) {
     return storeUrl.replace(/\/+$/, "").replace(/\.zarr$/, ".columns.zarr");
   }

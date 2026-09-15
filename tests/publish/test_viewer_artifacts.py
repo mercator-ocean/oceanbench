@@ -365,12 +365,16 @@ def test_rmsd_by_depth_returns_none_when_no_multi_depth_variable(tmp_path) -> No
     assert not (tmp_path / "rmsd-by-depth.json").exists()
 
 
-def _sea_surface_height_dataset() -> xarray.Dataset:
+def _sea_surface_height_dataset(start_dates: tuple[str, ...] = ("2024-01-03",)) -> xarray.Dataset:
     latitudes = numpy.linspace(-10.0, 10.0, 41)
     longitudes = numpy.linspace(-10.0, 10.0, 41)
     grid_y, grid_x = numpy.meshgrid(latitudes, longitudes, indexing="ij")
     field = 0.3 * numpy.exp(-((grid_y) ** 2 + (grid_x) ** 2) / 8.0)
-    values = numpy.broadcast_to(field[None, None, :, :], (1, 5, field.shape[0], field.shape[1])).copy()
+    values = numpy.broadcast_to(field[None, None, :, :], (len(start_dates), 5, field.shape[0], field.shape[1])).copy()
+    # Each start gets its own eddy, displaced with the start, so a per-start census is
+    # distinguishable from a census that ignored the start it was asked for.
+    for start_index in range(len(start_dates)):
+        values[start_index] += 0.3 * numpy.exp(-((grid_y - start_index) ** 2 + (grid_x - 2 * start_index) ** 2) / 4.0)
     return xarray.Dataset(
         {
             _SEA_SURFACE_HEIGHT_KEY: (
@@ -385,7 +389,7 @@ def _sea_surface_height_dataset() -> xarray.Dataset:
             )
         },
         coords={
-            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(list(start_dates), dtype="datetime64[ns]"),
             Dimension.LEAD_DAY_INDEX.key(): numpy.arange(5),
             Dimension.LATITUDE.key(): latitudes,
             Dimension.LONGITUDE.key(): longitudes,
@@ -398,7 +402,7 @@ def test_dataset_eddy_census_payload_shape_and_stamp(tmp_path) -> None:
         _sea_surface_height_dataset(), dataset_slug="your_model", lead_days=(1,)
     )
     assert census["kind"] == "eddy-census"
-    assert census["schema_version"] == "1"
+    assert census["schema_version"] == "2"
     assert census["dataset"] == "your_model"
     assert census["parameters"]["apply_contour_filtering"] is True
     assert "oceanbench_version" in census["parameters"]
@@ -417,12 +421,68 @@ def test_dataset_eddy_census_payload_shape_and_stamp(tmp_path) -> None:
     )
     index = json.loads(open(output_path).read())
     assert index["kind"] == "eddy-census"
-    # The index lists one file per lead and each lead file carries just that lead's frame.
+    # The index lists one file per (start, lead) and each file carries just that frame.
     assert [entry["lead_day"] for entry in index["leads"]] == [1, 5]
+    assert [entry["start_date"] for entry in index["starts"]] == ["2024-01-03"]
     for entry in index["leads"]:
         lead_payload = json.loads(open(tmp_path / entry["file"]).read())
         assert lead_payload["frame"]["lead_day"] == entry["lead_day"]
         assert lead_payload["kind"] == "eddy-census"
+        assert lead_payload["start_date"] == "2024-01-03"
+
+
+def test_dataset_eddy_census_defaults_to_every_lead_the_dataset_carries() -> None:
+    # The viewer scrubs every lead, so a census that published a sparse subset would snap
+    # neighbouring leads to one frame and paint eddies that do not move.
+    dataset = _sea_surface_height_dataset()
+    assert viewer_artifacts.dataset_lead_days(dataset) == (1, 2, 3, 4, 5)
+    census = viewer_artifacts.dataset_eddy_census(dataset, dataset_slug="your_model")
+    assert [frame["lead_day"] for frame in census["frames"]] == [1, 2, 3, 4, 5]
+
+
+def test_write_eddy_census_writes_every_start_and_lead_with_distinct_frames(tmp_path) -> None:
+    starts = ("2024-01-03", "2024-01-10", "2024-01-17")
+    dataset = _sea_surface_height_dataset(starts)
+    output_path = str(tmp_path / "eddies.json")
+    viewer_artifacts.write_eddy_census(dataset, output_path, dataset_slug="your_model", lead_days=(1, 2))
+
+    index = json.loads(open(output_path).read())
+    assert [entry["start_date"] for entry in index["starts"]] == list(starts)
+    # The previous index shape stays resolvable: `leads` repeats the first start.
+    assert index["leads"] == index["starts"][0]["leads"]
+
+    centres_by_start = {}
+    for start_entry in index["starts"]:
+        assert [entry["lead_day"] for entry in start_entry["leads"]] == [1, 2]
+        for lead_entry in start_entry["leads"]:
+            assert lead_entry["file"] == f"eddies-start-{start_entry['start_date']}-lead-{lead_entry['lead_day']}.json"
+            payload = json.loads(open(tmp_path / lead_entry["file"]).read())
+            assert payload["start_date"] == start_entry["start_date"]
+            assert payload["start_index"] == start_entry["start_index"]
+            assert payload["frame"]["lead_day"] == lead_entry["lead_day"]
+        first_lead = start_entry["leads"][0]["file"]
+        frame = json.loads(open(tmp_path / first_lead).read())["frame"]
+        centres_by_start[start_entry["start_date"]] = sorted(
+            (eddy["latitude"], eddy["longitude"]) for eddy in frame["detections"]
+        )
+    # Three starts carrying three different fields must not produce one repeated census.
+    assert len({json.dumps(value) for value in centres_by_start.values()}) == 3
+
+
+def test_write_eddy_census_honours_a_published_start_subset(tmp_path) -> None:
+    starts = ("2024-01-03", "2024-01-10", "2024-01-17")
+    dataset = _sea_surface_height_dataset(starts)
+    output_path = str(tmp_path / "eddies.json")
+    viewer_artifacts.write_eddy_census(
+        dataset, output_path, dataset_slug="your_model", start_indices=(1,), lead_days=(1,)
+    )
+    index = json.loads(open(output_path).read())
+    assert [entry["start_index"] for entry in index["starts"]] == [1]
+    assert [entry["start_date"] for entry in index["starts"]] == ["2024-01-10"]
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "eddies-start-2024-01-10-lead-1.json",
+        "eddies.json",
+    ]
 
 
 def test_matchup_parquet_carries_provenance_metadata(tmp_path) -> None:

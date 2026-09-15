@@ -1185,8 +1185,9 @@ async function loadOverlayData() {
   // Nothing may prefetch match-ups for an overlay that is no longer showing them.
   if (shared.overlayMode !== OVERLAY_CLASS4) stopClass4Prefetch(null);
   if (shared.overlayMode === OVERLAY_EDDIES) {
-    // Load each visible forecast's own eddy artifact and reduce it to a census. The
-    // two forecasts come from the panel pickers; no dataset is a hardcoded truth.
+    // Load each visible forecast's own eddy artifact and reduce it to a census at the
+    // start date and lead day on screen. The two forecasts come from the panel pickers;
+    // no dataset is a hardcoded truth.
     const eddiesByPanel = await Promise.all(
       panels.slice(0, shared.layout).map((panel) => {
         const panelUrls = insightsFor(insightIndex, panel.state.dataset, region);
@@ -1199,7 +1200,12 @@ async function loadOverlayData() {
     // wave challenger with a different lead set can never silently match different leads.
     // No shared lead → suppress the match and report both leads (see renderEddyLegend).
     if (shared.layout === 2 && eddiesByPanel[0] && eddiesByPanel[1]) {
-      const aligned = await alignedEddyCensuses(eddiesByPanel[0], eddiesByPanel[1], shared.leadDay);
+      const aligned = await alignedEddyCensuses(
+        eddiesByPanel[0],
+        eddiesByPanel[1],
+        shared.leadDay,
+        currentStartDate(panels[0].state.dataset),
+      );
       if (superseded()) return false;
       overlayData.eddiesCensuses = aligned.censuses;
       overlayData.eddiesLeadMismatch = aligned.mismatch;
@@ -1208,7 +1214,11 @@ async function loadOverlayData() {
           ? matchCensuses(aligned.censuses[0].detections, aligned.censuses[1].detections)
           : null;
     } else {
-      const censuses = await Promise.all(eddiesByPanel.map((eddies) => eddyCensus(eddies, shared.leadDay)));
+      const censuses = await Promise.all(
+        eddiesByPanel.map((eddies, index) =>
+          eddyCensus(eddies, shared.leadDay, currentStartDate(panels[index].state.dataset)),
+        ),
+      );
       if (superseded()) return false;
       overlayData.eddiesCensuses = censuses;
       overlayData.eddiesMatch = null;
@@ -1770,7 +1780,9 @@ async function ensureColumnStore(slug) {
   let store = false;
   try {
     const descriptor = datasetCatalog.find((entry) => entry.slug === slug);
-    store = await loadStore(resolveColumnStoreUrl(slug, descriptor && descriptor.store));
+    store = await loadStore(
+      resolveColumnStoreUrl(slug, descriptor && descriptor.store, descriptor && descriptor.columns),
+    );
   } catch {
     store = false;
   }

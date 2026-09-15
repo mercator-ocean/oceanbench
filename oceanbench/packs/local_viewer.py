@@ -66,6 +66,11 @@ def _official_datasets() -> list[dict]:
             **entry,
             "store": urljoin(data_base_url, entry["store"].removeprefix("./data/")),
             "manifest": urljoin(data_base_url, entry["manifest"].removeprefix("./data/")),
+            **(
+                {"columns": urljoin(data_base_url, entry["columns"].removeprefix("./data/"))}
+                if entry.get("columns")
+                else {}
+            ),
         }
         for entry in catalog["datasets"]
     ]

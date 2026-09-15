@@ -63,18 +63,20 @@ async function fetchJSON(url) {
   return promise;
 }
 
-// Where an eddy artifact was fetched from, so the per-lead sidecars of the index format can
+// Where an eddy artifact was fetched from, so the per-frame sidecars of the index format can
 // be resolved against the same directory. Symbol-keyed so it never lands in JSON consumers.
 const EDDY_SOURCE_URL = Symbol("eddySourceUrl");
-// `${indexUrl}|${lead}` -> Promise<frame|null>, so scrubbing back to an already-read lead
-// (or the second panel showing the same dataset) never refetches a sidecar.
+// `${indexUrl}|${start}|${lead}` -> Promise<frame|null>, so scrubbing back to an already-read
+// frame (or the second panel showing the same dataset) never refetches a sidecar.
 const eddyLeadFrameCache = new Map();
 
 /**
- * Load a dataset's eddy-census artifact. Two published shapes are supported and the
+ * Load a dataset's eddy-census artifact. Three published shapes are supported and the
  * difference is invisible to callers:
- *   - index (current): `{ ...metadata, leads: [{ lead_day, file }] }`, each `file` a sidecar
- *     next to the index holding that one lead's `frame`.
+ *   - per-start index (current): `{ ...metadata, starts: [{ start_date, leads: [...] }] }`,
+ *     one sidecar per (start date, lead day) next to the index.
+ *   - per-lead index: `{ ...metadata, leads: [{ lead_day, file }] }`, one sidecar per lead
+ *     covering a single start date. Current indexes repeat their first start here.
  *   - inline (legacy, still served by the carried datasets): `{ ...metadata, frames: [...] }`.
  */
 export async function loadEddies(url) {
@@ -85,13 +87,44 @@ export async function loadEddies(url) {
   return data;
 }
 
-/** The index format's lead entries, or null when the artifact carries inline frames. */
-function eddyLeadEntries(eddies) {
-  if (!eddies || !Array.isArray(eddies.leads)) return null;
-  return eddies.leads.filter((entry) => entry && entry.file && Number.isFinite(Number(entry.lead_day)));
+/** The index's start entries, or null when the artifact predates the per-start shape. */
+function eddyStartEntries(eddies) {
+  if (!eddies || !Array.isArray(eddies.starts)) return null;
+  const entries = eddies.starts.filter((entry) => entry && Array.isArray(entry.leads) && entry.leads.length);
+  return entries.length ? entries : null;
 }
 
-/** Fetch (once per index + lead) the sidecar frame for the available lead nearest `leadDay`. */
+/**
+ * The lead entries to read for `startDate`. A per-start index answers with the requested
+ * start when it published one and with its nearest published start otherwise, so a census
+ * served for fewer starts than the pyramid still resolves; a per-lead index ignores the
+ * start entirely, which is what the shape means.
+ */
+function eddyLeadEntries(eddies, startDate) {
+  const starts = eddyStartEntries(eddies);
+  const leads = starts ? nearestStartEntry(starts, startDate).leads : eddies && eddies.leads;
+  if (!Array.isArray(leads)) return null;
+  const usable = leads.filter((entry) => entry && entry.file && Number.isFinite(Number(entry.lead_day)));
+  return usable.length ? usable : null;
+}
+
+/** The published start nearest `startDate` (the first one when no start date is asked for). */
+function nearestStartEntry(starts, startDate) {
+  const requested = startDate ? Date.parse(startDate) : Number.NaN;
+  if (!Number.isFinite(requested)) return starts[0];
+  let best = starts[0];
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const entry of starts) {
+    const distance = Math.abs(Date.parse(entry.start_date) - requested);
+    if (Number.isFinite(distance) && distance < bestDistance) {
+      best = entry;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+/** Fetch (once per sidecar) the frame for the available lead nearest `leadDay`. */
 function eddyLeadFrame(eddies, entries, leadDay) {
   let best = null;
   for (const entry of entries) {
@@ -99,7 +132,7 @@ function eddyLeadFrame(eddies, entries, leadDay) {
   }
   if (!best) return Promise.resolve(null);
   const indexUrl = eddies[EDDY_SOURCE_URL] || "";
-  const key = `${indexUrl}|${best.lead_day}`;
+  const key = `${indexUrl}|${best.file}`;
   if (!eddyLeadFrameCache.has(key)) {
     const sidecarUrl = `${indexUrl.slice(0, indexUrl.lastIndexOf("/") + 1)}${best.file}`;
     eddyLeadFrameCache.set(
@@ -323,17 +356,17 @@ function nearestLeadFrame(frames, leadDay) {
 }
 
 /**
- * Per-lead census of a dataset's OWN eddy detections ("eddy-census" artifact:
- * frame.detections directly), at the available lead nearest `leadDay`. Returns
+ * Census of a dataset's OWN eddy detections ("eddy-census" artifact: frame.detections
+ * directly) for one forecast start, at the available lead nearest `leadDay`. Returns
  * { detections, leadDay, parameters } or null. Nothing here privileges any dataset
  * as ground truth, a census is symmetric across forecasts and references.
  *
- * Async because the index format holds each lead in its own sidecar file; the legacy
- * inline-frames format resolves without a fetch.
+ * Async because the index format holds each (start, lead) in its own sidecar file; the
+ * legacy inline-frames format resolves without a fetch.
  */
-export async function eddyCensus(eddies, leadDay) {
+export async function eddyCensus(eddies, leadDay, startDate) {
   if (!eddies) return null;
-  const entries = eddyLeadEntries(eddies);
+  const entries = eddyLeadEntries(eddies, startDate);
   const frame = entries ? await eddyLeadFrame(eddies, entries, leadDay) : nearestLeadFrame(eddies.frames, leadDay);
   if (!frame) return null;
   return {
@@ -343,9 +376,9 @@ export async function eddyCensus(eddies, leadDay) {
   };
 }
 
-/** Sorted, de-duplicated lead days present in an eddy-census artifact (either format). */
-export function eddyLeads(eddies) {
-  const entries = eddyLeadEntries(eddies);
+/** Sorted, de-duplicated lead days an eddy-census artifact publishes for `startDate`. */
+export function eddyLeads(eddies, startDate) {
+  const entries = eddyLeadEntries(eddies, startDate);
   const source = entries || (eddies && Array.isArray(eddies.frames) ? eddies.frames : null);
   if (!source) return [];
   const leads = new Set();
@@ -369,14 +402,19 @@ function nearestLead(leads, leadDay) {
  * census is read at its own nearest lead and `mismatch` is set so the caller suppresses the
  * cross-match and reports both leads. Returns `{ censuses: [censusA, censusB], lead, mismatch }`.
  */
-export async function alignedEddyCensuses(eddiesA, eddiesB, leadDay) {
-  const common = eddyLeads(eddiesA).filter((lead) => eddyLeads(eddiesB).includes(lead));
+export async function alignedEddyCensuses(eddiesA, eddiesB, leadDay, startDate) {
+  const leadsB = eddyLeads(eddiesB, startDate);
+  const common = eddyLeads(eddiesA, startDate).filter((lead) => leadsB.includes(lead));
   if (common.length) {
     const lead = nearestLead(common, leadDay);
-    return { censuses: await Promise.all([eddyCensus(eddiesA, lead), eddyCensus(eddiesB, lead)]), lead, mismatch: false };
+    return {
+      censuses: await Promise.all([eddyCensus(eddiesA, lead, startDate), eddyCensus(eddiesB, lead, startDate)]),
+      lead,
+      mismatch: false,
+    };
   }
   return {
-    censuses: await Promise.all([eddyCensus(eddiesA, leadDay), eddyCensus(eddiesB, leadDay)]),
+    censuses: await Promise.all([eddyCensus(eddiesA, leadDay, startDate), eddyCensus(eddiesB, leadDay, startDate)]),
     lead: null,
     mismatch: true,
   };

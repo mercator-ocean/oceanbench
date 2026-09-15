@@ -29,6 +29,7 @@ import pyarrow.parquet
 import xarray
 
 from oceanbench.core import eddies as eddies_core
+from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.schema_validation import load_schema
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 from oceanbench.publish import class4_overlays
@@ -81,8 +82,12 @@ _MATCHUP_TARGET_SCHEMA = pyarrow.schema(
     ]
 )
 
-_EDDY_CENSUS_SCHEMA_VERSION = "1"
-_EDDY_CENSUS_LEAD_DAYS = (1, 5, 10)
+_EDDY_CENSUS_SCHEMA_VERSION = "2"
+# Start dates whose census the publish path serves. Every lead day of a start is written, so
+# the lead scrub moves real eddies; every start of every dataset would be several gigabytes of
+# JSON per dataset (3 MB a frame at 1/12 degree, 52 starts x 10 leads), so the published set is
+# the first start. ``None`` here writes every start the dataset carries.
+_PUBLISHED_EDDY_START_INDICES: tuple[int, ...] | None = (0,)
 _SEA_SURFACE_HEIGHT_VARIABLE = "sea_surface_height_above_geoid"
 
 # Contours are decimated to keep the served census small, and coordinates rounded to the
@@ -688,21 +693,36 @@ def _eddy_frame(dataset: xarray.Dataset, detections, contours, lead_day: int) ->
     return {"lead_day": lead_day, "detections": eddies}
 
 
+def dataset_lead_days(dataset: xarray.Dataset) -> tuple[int, ...]:
+    """Every 1-based lead day the dataset carries, which is the axis the viewer scrubs."""
+    return tuple(range(1, int(dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]) + 1))
+
+
+def dataset_start_dates(dataset: xarray.Dataset) -> list[str]:
+    """Every forecast start date as ``YYYY-MM-DD``, in the order the pyramid manifest lists them."""
+    values = dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    return [str(numpy.datetime_as_string(value, unit="D")) for value in numpy.atleast_1d(values)]
+
+
 def dataset_eddy_census(
     dataset: xarray.Dataset,
     *,
     dataset_slug: str,
-    lead_days: tuple[int, ...] = _EDDY_CENSUS_LEAD_DAYS,
+    lead_days: tuple[int, ...] | None = None,
     start_index: int = 0,
     apply_contour_filtering: bool = eddies_core.DEFAULT_APPLY_CONTOUR_FILTERING,
 ) -> dict:
-    """Build a dataset's own mesoscale-eddy detection census (census-only, no reference side).
+    """Build one forecast start's own mesoscale-eddy detection census (census-only, no reference).
 
     One frame per lead day, each listing that dataset's own detections (centre, polarity and
     point-limited contour) with coordinates clamped to the served ranges and validated against the
-    eddies schema ``eddy`` definition. The km-based literature detection parameters are stamped,
-    including ``apply_contour_filtering`` and the emitting ``oceanbench_version``.
+    eddies schema ``eddy`` definition. ``lead_days`` defaults to every lead the dataset carries, so
+    the census resolves the same lead axis the viewer scrubs. The km-based literature detection
+    parameters are stamped, including ``apply_contour_filtering`` and the emitting
+    ``oceanbench_version``.
     """
+    if lead_days is None:
+        lead_days = dataset_lead_days(dataset)
     lead_day_indices = [lead_day - 1 for lead_day in lead_days]
     detections = eddies_core.detect_mesoscale_eddies(
         dataset, first_day_index=start_index, lead_day_indices=lead_day_indices
@@ -715,44 +735,73 @@ def dataset_eddy_census(
         "apply_contour_filtering": apply_contour_filtering,
         "oceanbench_version": OCEANBENCH_VERSION,
     }
+    start_dates = dataset_start_dates(dataset)
     return {
         "kind": "eddy-census",
         "schema_version": _EDDY_CENSUS_SCHEMA_VERSION,
         "variable": _SEA_SURFACE_HEIGHT_VARIABLE,
         "dataset": dataset_slug,
+        "start_index": start_index,
+        "start_date": start_dates[start_index] if start_index < len(start_dates) else None,
         "parameters": parameters,
         PROVENANCE_KEY: provenance_block(source=dataset_slug, parameters=parameters),
         "frames": [_eddy_frame(dataset, detections, contours, lead_day) for lead_day in lead_days],
     }
 
 
-def _lead_census_filename(lead_day: int) -> str:
-    return f"eddies-lead-{lead_day}.json"
+def _lead_census_filename(start_date: str | None, lead_day: int) -> str:
+    """Sidecar name for one (start date, lead day) frame, or the legacy per-lead name without one."""
+    if start_date is None:
+        return f"eddies-lead-{lead_day}.json"
+    return f"eddies-start-{start_date}-lead-{lead_day}.json"
 
 
-def write_eddy_census(dataset: xarray.Dataset, output_path: str, *, dataset_slug: str, **census_options) -> str:
-    """Write a dataset's eddy detection census as one JSON file per lead day, plus a small index.
+def write_eddy_census(
+    dataset: xarray.Dataset,
+    output_path: str,
+    *,
+    dataset_slug: str,
+    start_indices: tuple[int, ...] | None = None,
+    **census_options,
+) -> str:
+    """Write a dataset's eddy census as one JSON file per (start date, lead day), plus an index.
 
-    Only one lead day is viewed at a time, so each frame is written to its own
-    ``eddies-lead-<N>.json`` (payload metadata plus that lead's ``frame``) next to ``output_path``,
-    and ``output_path`` itself receives a tiny index listing the per-lead files. Returns the index
-    path.
+    Only one start date and one lead day are on screen at a time, so each frame is written to its
+    own ``eddies-start-<date>-lead-<N>.json`` (payload metadata plus that frame) next to
+    ``output_path``, and ``output_path`` itself receives a small index. ``start_indices`` defaults
+    to every start the dataset carries; a caller that serves fewer (the published demo serves the
+    first start, the whole census being several gigabytes per dataset otherwise) passes the subset
+    it wants. The index lists the files under ``starts``, and repeats the first start's list under
+    ``leads`` so a reader of the previous index shape still resolves a census. Frames are written
+    compactly: the indented form cost 2.3x the bytes for the same numbers. Returns the index path.
     """
-    census = dataset_eddy_census(dataset, dataset_slug=dataset_slug, **census_options)
+    if start_indices is None:
+        start_indices = tuple(range(len(dataset_start_dates(dataset))))
     directory = Path(os.path.dirname(output_path) or ".")
     directory.mkdir(parents=True, exist_ok=True)
     metadata_keys = ("kind", "schema_version", "variable", "dataset", "parameters", PROVENANCE_KEY)
-    metadata = {key: census[key] for key in metadata_keys}
 
-    lead_entries = []
-    for frame in census["frames"]:
-        lead_filename = _lead_census_filename(frame["lead_day"])
-        (directory / lead_filename).write_text(
-            json.dumps({**metadata, "frame": frame}, sort_keys=True, indent=2), encoding="utf-8"
-        )
-        lead_entries.append({"lead_day": frame["lead_day"], "file": lead_filename})
+    metadata: dict = {}
+    start_entries = []
+    for start_index in start_indices:
+        census = dataset_eddy_census(dataset, dataset_slug=dataset_slug, start_index=start_index, **census_options)
+        metadata = {key: census[key] for key in metadata_keys}
+        start_date = census["start_date"]
+        lead_entries = []
+        for frame in census["frames"]:
+            lead_filename = _lead_census_filename(start_date, frame["lead_day"])
+            payload = {**metadata, "start_index": start_index, "start_date": start_date, "frame": frame}
+            (directory / lead_filename).write_text(
+                json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+            )
+            lead_entries.append({"lead_day": frame["lead_day"], "file": lead_filename})
+        start_entries.append({"start_index": start_index, "start_date": start_date, "leads": lead_entries})
 
-    index = {**metadata, "leads": lead_entries}
+    index = {
+        **metadata,
+        "starts": start_entries,
+        "leads": start_entries[0]["leads"] if start_entries else [],
+    }
     Path(output_path).write_text(json.dumps(index, sort_keys=True, indent=2), encoding="utf-8")
     return output_path
 
@@ -1175,8 +1224,12 @@ def write_viewer_artifacts(
     matchup_max_workers: int | None = None,
     enable_column_store: bool = True,
     enable_class4_overlays: bool = True,
+    eddy_start_indices: tuple[int, ...] | None = _PUBLISHED_EDDY_START_INDICES,
 ) -> ViewerArtifactsResult:
     """Produce every viewer serving artifact for one evaluated dataset into ``output_directory``.
+
+    ``eddy_start_indices`` selects the forecast starts whose eddy census is written (``None``
+    writes every start); each selected start gets every lead day the dataset carries.
 
     Writes the Class-4 match-up parquet, the eddy detection census and the year-mode error
     geography / per-start RMSD under ``insights/<dataset_slug>/<region>/``, and the field pyramid
@@ -1231,7 +1284,9 @@ def write_viewer_artifacts(
 
     eddy_census_path = str(insights_directory / EDDY_CENSUS_FILENAME)
     try:
-        write_eddy_census(forecast_dataset, eddy_census_path, dataset_slug=dataset_slug)
+        write_eddy_census(
+            forecast_dataset, eddy_census_path, dataset_slug=dataset_slug, start_indices=eddy_start_indices
+        )
     except Exception as error:  # noqa: BLE001 - one artifact must not abort the others
         flags.append(f"eddy census skipped: {error}")
         eddy_census_path = None

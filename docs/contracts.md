@@ -297,12 +297,18 @@ evaluation by `oceanbench/publish/viewer_artifacts.py` (opt-in via
   Scores never derive from an extract.
 - `eddy-census` JSON — `write_eddy_census` / `dataset_eddy_census`: a
   dataset's *own* detections only (no matching/reference side),
-  `{kind: "eddy-census", schema_version: "1", variable, dataset, parameters
-  (km literature defaults incl. apply_contour_filtering + oceanbench_version),
-  frames: [{lead_day, detections: [...]}]}`. Only one lead is viewed at a time,
-  so each lead is written to its own `eddies-lead-<N>.json` with a tiny index at
-  `eddies.json`. Coordinates clamped to ±180/±90 and rounded to 4 decimals; each
-  detection validated against the `eddy` `$def` of `schemas/eddies.schema.json`.
+  `{kind: "eddy-census", schema_version: "2", variable, dataset, start_index,
+  start_date, parameters (km literature defaults incl. apply_contour_filtering +
+  oceanbench_version), frames: [{lead_day, detections: [...]}]}`. A census covers
+  one forecast start and every lead day the dataset carries. Only one (start,
+  lead) is viewed at a time, so each frame is written compactly to its own
+  `eddies-start-<date>-lead-<N>.json` with an index at `eddies.json` listing them
+  under `starts`, repeated for the first start under `leads` so a reader of the
+  previous index shape still resolves a census. `write_viewer_artifacts` serves
+  the first start (`eddy_start_indices`); every start of every dataset would be
+  gigabytes of JSON per dataset. Coordinates clamped to ±180/±90 and rounded to 4
+  decimals; each detection validated against the `eddy` `$def` of
+  `schemas/eddies.schema.json`.
 - viewer pyramid + `viewer-manifest.json` — built through the shared
   `oceanbench/pyramids` builder (`build_pyramid`, `viewer_layers`,
   `DEFAULT_TILE_SIZE = 1024`), identical outputs to the published ones.
@@ -459,7 +465,8 @@ not need to be downloaded. The serving artifacts and the local site write the sa
 pyramid path, so it is built once and adopted, not twice. The catalog is the local
 one, so the viewer must be opened against it (`?data_base=local`, which the command
 prints); an official entry's water-column store is resolved beside its own absolute
-pyramid, not under the local data root.
+pyramid, not under the local data root, or from the absolute `columns` url the entry
+names when it shares another dataset's store.
 
 ## 8. S3 layout
 

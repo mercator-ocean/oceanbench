@@ -402,6 +402,30 @@ def test_official_datasets_are_absolute_cloudferro_urls(monkeypatch):
     assert entry["manifest"] == local_viewer.official_data_base_url() + "glonet.viewer-manifest.json"
 
 
+def test_an_official_shared_column_store_is_absolutised_too(monkeypatch):
+    """A dataset reading another dataset's water column keeps that url when it is rebased."""
+    from oceanbench.packs import local_viewer
+
+    monkeypatch.setattr(
+        local_viewer,
+        "read_json_url",
+        lambda url: {
+            "datasets": [
+                {
+                    "slug": "glonet_1_degree",
+                    "label": "GLONET (1 degree)",
+                    "store": "./data/glonet_1_degree.zarr",
+                    "manifest": "./data/glonet_1_degree.viewer-manifest.json",
+                    "columns": "./data/glonet.columns.zarr",
+                }
+            ]
+        },
+    )
+    entry = local_viewer._official_datasets()[0]
+
+    assert entry["columns"] == local_viewer.official_data_base_url() + "glonet.columns.zarr"
+
+
 def test_the_insights_index_merges_local_entries_into_absolutised_official_ones(monkeypatch, tmp_path):
     """Officials keep their scores by absolute URL; the local dataset is referenced relatively."""
     from oceanbench.packs import local_viewer

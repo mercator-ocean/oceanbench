@@ -93,7 +93,7 @@ a `datasets.json`, and, for overlays and the rail, the insight artifacts:
 ```
 data/
   <slug>.zarr  <slug>.viewer-manifest.json     # viewer pyramids (per dataset)
-  datasets.json                                # [{slug,label,store,manifest}, …]
+  datasets.json                                # [{slug,label,store,manifest,columns?}, …]
   insights.json                                # index: per (slug, region) URLs + region bounds
   scores-summary.json                          # aggregated mean ± CI (publish artifact)
   insights/<slug>/<region>/eddies.json         # eddy census (contracts.md §4)
@@ -132,6 +132,10 @@ The data root is resolved at startup in this priority order:
 `columnsBaseUrl` for the separately published `<slug>.columns.zarr` stores). Copy it
 to `viewer-config.json` (git-ignored) to pin a root for a local checkout; an offline
 `oceanbench view <dir>` mode would write the same file next to the copied viewer.
+
+A dataset that names a `columns` url in `datasets.json` reads that store instead of the
+`<slug>.columns.zarr` convention, which is how the 1 degree products share the water column
+of the native dataset they were coarsened from rather than duplicating it.
 
 ```sh
 # both data roots exercised against the live, anonymously readable bucket
