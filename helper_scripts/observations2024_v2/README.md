@@ -21,19 +21,21 @@ installed package. Nothing imports it.
 The `POLICY` dictionary at the top of the script is the only place the decisions
 live. In short:
 
-- only quality control flag 1 reaches the scored columns, with position and time
-  flags 1 and 2 and depth flags 1, 2 and 7 accepted for the row itself
+- only quality control flag 1 reaches the scored columns, with position flag 1,
+  time flags 1 and 2 and depth flags 1, 2 and 7 accepted for the row itself
 - drifter currents come from the Copernicus filtered basis (`EWCT_FILTR` and
   `NSCT_FILTR`, inertial band removed) rather than the raw components
-- undrogued drifters, `CURRENT_TEST` code 11, are flagged out
+- the wind slippage estimate shipped with the drifter files is subtracted from
+  the velocities wherever it is finite
+- undrogued drifters, `CURRENT_TEST` codes 11 and 211, are flagged out
 - sea level anomalies are bounded at 2 metres in absolute value
 - rows falling outside the target UTC day are flagged rather than dropped
 - every source row is kept: a row that fails the policy carries `qc_keep=0`, its
-  raw values, its own flags and a `qc_reason`, and its legacy measurement
+  raw values, its own flags and a `qc_reason`, and its scored measurement
   columns are blank
 
-The nine legacy variable names and dtypes are unchanged, so the scorer reads the
-store without any other change.
+The nine scored variable names and dtypes are those read by
+`oceanbench/core/references/observations.py`.
 
 ## Basis versions
 
@@ -42,18 +44,13 @@ attribute `obs_basis_version`, and the reader refuses any day store that does
 not declare the expected one.
 
 - `2024-v2.0.0` first build
-- `2024-v2.0.1` sea level anomaly longitude normalised onto [-180, 180); this
-  fix is now folded into `normalize_longitude` in the builder, so a fresh build
-  produces it directly
-- `2024-v2.1.0` adopted currents policy: the default velocity columns become the
-  filtered components minus the wind slippage where the slippage is finite, and
-  rows with `CURRENT_TEST` code 11 or 211 are blanked
+- `2024-v2.0.1` sea level anomaly longitude normalised onto [-180, 180)
+- `2024-v2.1.0` currents policy: filtered components minus the wind slippage
+  where it is finite, `CURRENT_TEST` codes 11 and 211 blanked
 
-The `2024-v2.1.0` step was applied as an in-place rewrite of the published
-store, not by this script, so a fresh run of `build_observations.py` alone
-reproduces `2024-v2.0.1` and not the live store. The rewrite script, the
-longitude patch script and the ladder tooling that measured each step are on the
-`obs-rebuild-builder-scripts` branch at commit 92c28f0.
+The published store is at `2024-v2.1.0`. The two later steps were applied to it
+in place; they are now folded into this script, so a fresh run with the default
+policy reproduces the published store directly.
 
 ## Running it
 
@@ -74,7 +71,5 @@ counts before and after the policy, and the package versions used.
 ## Note on the recorded script hash
 
 Each day store records `builder_script_sha256`, the hash of the script as it ran
-on the build machine. The copy here has been reformatted to the repository line
-length, so its hash no longer matches that attribute. The code is otherwise
-unchanged; the byte-exact original is on the `obs-rebuild-builder-scripts`
-branch at commit 92c28f0.
+on the build machine. The published days were built and patched in steps, so
+that hash does not match the copy here.

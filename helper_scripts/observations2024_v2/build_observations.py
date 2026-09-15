@@ -6,12 +6,14 @@
 
 """Build the OceanBench class-4 observation store, one zarr per UTC day.
 
-Rewrite of the notebook creation_data_2025.ipynb with a flagged-archive schema:
-every row that the source files contain is kept, and rows that fail the default
-policy are marked qc_keep=0 with their flags and raw values preserved. The nine
-legacy variable names keep their exact legacy dtypes so the existing scorer
-reads the new store unchanged; for a policy-failing row the legacy measurement
-columns are NaN, so a legacy consumer sees a corrected store.
+The store is a flagged archive: every row that the source files contain is
+kept, and rows that fail the default policy are marked qc_keep=0 with their
+flags and raw values preserved. The nine scored variables keep the names and
+dtypes read by oceanbench/core/references/observations.py; for a
+policy-failing row the scored columns are NaN.
+
+A run with the default policy reproduces the published store, basis version
+2024-v2.1.0.
 
 Credentials are read from the environment only. Nothing is hardcoded.
   COPERNICUSMARINE_SERVICE_USERNAME / COPERNICUSMARINE_SERVICE_PASSWORD
@@ -47,14 +49,14 @@ logger = logging.getLogger("build_observations")
 # ============================================================
 
 POLICY: dict[str, Any] = {
-    "policy_version": "v2.0.0",
-    # QC flags accepted for a measurement to reach the legacy columns.
+    "policy_version": "v2.1.0",
+    # QC flags accepted for a measurement to reach the scored columns.
     # OceanSITES reference table 2: 1 = good_data, 2 = probably_good_data.
-    # Default is flag 1 only, matching the legacy store. Every row keeps its
-    # raw flag, so relaxing to [1, 2] is a scoring-time choice, not a rebuild.
+    # Every row keeps its raw flag, so relaxing to [1, 2] is a scoring-time
+    # choice, not a rebuild.
     "accepted_qc_flags": [1],
     # Position and time QC flags accepted for any row.
-    "accepted_position_qc_flags": [1, 2],
+    "accepted_position_qc_flags": [1],
     "accepted_time_qc_flags": [1, 2],
     # Depth QC accepts 7 = nominal_value in addition to good and probably good.
     # Surface drifters (CO_TS_DB) carry DEPH_QC 7 on every level because their
@@ -64,10 +66,15 @@ POLICY: dict[str, Any] = {
     # Current basis: "filtr" uses EWCT_FILTR / NSCT_FILTR (3-day Lanczos,
     # inertial band removed), "raw" uses EWCT / NSCT.
     "current_basis": "filtr",
-    # CURRENT_TEST is a 3-digit SAW drogue-loss code. 011 (int 11) means the
-    # drogue is considered missing, so the velocity is surface circulation
-    # contaminated by direct wind drag. Those rows are flagged out.
-    "drop_undrogued_current_test": [11],
+    # CURRENT_TEST is a 3-digit SAW drogue-loss code. 011 (int 11) and 211
+    # mean the drogue is considered missing, so the velocity is surface
+    # circulation contaminated by direct wind drag. Those rows are flagged out.
+    "drop_undrogued_current_test": [11, 211],
+    # The Copernicus files carry a wind slippage estimate (EWCT_WS_FILTR and
+    # NSCT_WS_FILTR) at the drogue depth. When True it is subtracted from the
+    # scored velocity wherever it is finite.
+    "current_wind_slippage_removed": True,
+    "current_wind_slippage_source": "uo_ws/vo_ws, subtracted where finite",
     # Rows with unknown drogue status (CURRENT_TEST absent or fill) are kept
     # when this is True.
     "keep_unknown_drogue": True,
@@ -97,8 +104,8 @@ CURRENTS_DATASET = "cmems_obs-ins_glo_phy-cur_nrt_drifter-filt-assim_irr_202311"
 TS_PRODUCT = "INSITU_GLO_PHY_TSASSIM_DISCRETE_NRT_013_047"
 TS_DATASET = "cmems_obs-ins_glo_phy-temp-sal_nrt_assim_irr_202211"
 
-# DUACS L3 my missions, kept deliberately equal to the legacy notebook's set.
-# Days of 2024 available per mission, measured 2026-08-05 by listing
+# DUACS L3 my missions, the same set as the previous observations2024 store.
+# Days of 2024 available per mission, as listed in the catalogue on 2026-08-05 by
 # SEALEVEL_GLO_PHY_L3_MY_008_062 with the pattern *_1hz_2024*:
 #   alg    366  SARAL/AltiKa drifting phase
 #   c2n    365  CryoSat-2 new orbit
@@ -108,12 +115,12 @@ TS_DATASET = "cmems_obs-ins_glo_phy-temp-sal_nrt_assim_irr_202211"
 #   s6a_lr 366  Sentinel-6A low resolution
 #   swon   366  SWOT nadir
 #
-# "al" (SARAL nominal orbit) replaced by "alg". The legacy notebook asked for
-# "al", which then served the drifting-phase data; the catalogue has since split
-# the drifting phase into its own dataset and "al" now has zero 2024 files.
+# "al" (SARAL nominal orbit) replaced by "alg". The previous store was built
+# from "al", which then served the drifting-phase data; the catalogue has since
+# split the drifting phase into its own dataset and "al" has zero 2024 files.
 #
 # j3n (Jason-3 interleaved, 366 days of 2024) is available and deliberately NOT
-# included: it was not in the legacy set and adding it inflates 2024-06-15 by
+# included: it was not in the previous set and adding it inflates 2024-06-15 by
 # 50220 points, about 18 percent. Add it only as a conscious basis change.
 # Zero 2024 coverage, not candidates: al, c2, en, enn, g2, h2a, h2ag, j3, j3g,
 # swonc.
@@ -128,11 +135,11 @@ SLA_SATELLITES = {
 }
 
 DEFAULT_TARGET = "s3://oceanbench-bucket/dev/observations2024-v2"
-DEFAULT_OBS_BASIS_VERSION = "2024-v2.0.1"
+DEFAULT_OBS_BASIS_VERSION = "2024-v2.1.0"
 DEFAULT_MIN_SATELLITES = 5
 RECENT_DAYS = 183  # about 6 months
 
-# Legacy variable names, unchanged.
+# Variable names read by oceanbench/core/references/observations.py.
 VAR_DEPTH = "depth"
 VAR_LAT = "latitude"
 VAR_LON = "longitude"
@@ -143,7 +150,7 @@ VAR_SAL = "sea_water_salinity"
 VAR_UO = "eastward_sea_water_velocity"
 VAR_VO = "northward_sea_water_velocity"
 
-LEGACY_MEASUREMENTS = [VAR_ZOS, VAR_TEMP, VAR_SAL, VAR_UO, VAR_VO]
+SCORED_MEASUREMENTS = [VAR_ZOS, VAR_TEMP, VAR_SAL, VAR_UO, VAR_VO]
 
 OBS_TYPE_ARGO = 1
 OBS_TYPE_DRIFTER_SST = 2
@@ -397,7 +404,7 @@ def archive_file(local_path: Path, archive_dir: Path | None, date: dt.date) -> N
 
 
 # ============================================================
-# EXTRACTORS, one per stream, mirroring the notebook structure
+# EXTRACTORS, one per stream
 # ============================================================
 
 
@@ -451,8 +458,8 @@ def _base_frame(n: int, obs_type: int) -> dict[str, Any]:
 def extract_currents(nc_path: Path) -> pd.DataFrame:
     """Drifter velocities from GL_TS_DC_{YYYYMMDD}_FILTR.nc.
 
-    The DEPTH dimension has length 1 in this product, so column 0 is taken as
-    in the notebook. Both the filtered and the unfiltered components are kept.
+    The DEPTH dimension has length 1 in this product, so column 0 is taken.
+    Both the filtered and the unfiltered components are kept.
     """
     ds = xr.open_dataset(nc_path)
     try:
@@ -496,6 +503,14 @@ def extract_currents(nc_path: Path) -> pd.DataFrame:
             columns["uo_ws"] = np.asarray(ws_east)[:, 0].astype(np.float64)
         if ws_north is not None:
             columns["vo_ws"] = np.asarray(ws_north)[:, 0].astype(np.float64)
+
+        if POLICY["current_wind_slippage_removed"]:
+            # Subtracted where finite, left as is otherwise. A velocity that is
+            # already NaN stays NaN.
+            uo_ws = columns["uo_ws"]
+            vo_ws = columns["vo_ws"]
+            columns[VAR_UO] = columns[VAR_UO] - np.where(np.isfinite(uo_ws), uo_ws, 0.0)
+            columns[VAR_VO] = columns[VAR_VO] - np.where(np.isfinite(vo_ws), vo_ws, 0.0)
 
         ws_type = optional(ds, "WS_TYPE_OF_PROCESSING")
         if ws_type is not None:
@@ -765,7 +780,7 @@ def normalize_longitude(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def apply_policy(frame: pd.DataFrame, date: dt.date, policy: dict[str, Any]) -> pd.DataFrame:
-    """Set qc_keep, qc_reason and blank the legacy columns of failing rows.
+    """Set qc_keep, qc_reason and blank the scored columns of failing rows.
 
     Pure: it only reads the frame and the policy, and returns a new frame.
     """
@@ -775,10 +790,7 @@ def apply_policy(frame: pd.DataFrame, date: dt.date, policy: dict[str, Any]) -> 
         return frame
 
     accepted = np.asarray(policy["accepted_qc_flags"], dtype=np.int8)
-    # As built, the position check below reads "accepted", not this list, so the
-    # store is stricter on position QC than the policy declares. Kept unused so
-    # that what the published store was written with stays visible here.
-    accepted_pos = np.asarray(policy["accepted_position_qc_flags"], dtype=np.int8)  # noqa: F841
+    accepted_pos = np.asarray(policy["accepted_position_qc_flags"], dtype=np.int8)
     accepted_time = np.asarray(policy["accepted_time_qc_flags"], dtype=np.int8)
     accepted_depth = np.asarray(policy["accepted_depth_qc_flags"], dtype=np.int8)
 
@@ -795,7 +807,7 @@ def apply_policy(frame: pd.DataFrame, date: dt.date, policy: dict[str, Any]) -> 
     # Position and time QC apply to every in-situ row. Satellite rows carry
     # QC 9 for these because the L3 product has no such flags.
     insitu = obs_type != OBS_TYPE_SLA
-    fail(insitu & ~np.isin(frame["position_qc"].to_numpy(), accepted), "position_qc")
+    fail(insitu & ~np.isin(frame["position_qc"].to_numpy(), accepted_pos), "position_qc")
     fail(insitu & ~np.isin(frame["time_qc"].to_numpy(), accepted_time), "time_qc")
 
     # Day alignment.
@@ -834,10 +846,10 @@ def apply_policy(frame: pd.DataFrame, date: dt.date, policy: dict[str, Any]) -> 
     frame["qc_keep"] = keep.astype(np.int8)
     frame["qc_reason"] = reason
 
-    # Legacy measurement columns hold policy-passing values only. Per-variable
+    # Scored measurement columns hold policy-passing values only. Per-variable
     # QC additionally blanks the individual variable inside a kept row.
     nan = np.nan
-    frame.loc[~keep, LEGACY_MEASUREMENTS] = nan
+    frame.loc[~keep, SCORED_MEASUREMENTS] = nan
     frame.loc[keep & ts_rows & ~temp_ok, VAR_TEMP] = nan
     frame.loc[keep & ts_rows & ~psal_ok, VAR_SAL] = nan
     return frame
