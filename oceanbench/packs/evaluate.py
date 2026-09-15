@@ -385,8 +385,7 @@ def _write_scores_and_summary(
     """
     combined = scores if baseline_scores.empty else pandas.concat([scores, baseline_scores], ignore_index=True)
     combined.to_parquet(str(scores_path), index=False)
-    per_start_scores = combined[combined["start_date"].notna()].reset_index(drop=True)
-    summary = aggregate_scores(per_start_scores, baseline_challenger=skill_baseline)
+    summary = aggregate_scores(combined, baseline_challenger=skill_baseline)
     summary_path.write_text(
         json.dumps(summary_to_json_records(summary), sort_keys=True, indent=2, default=str),
         encoding="utf-8",

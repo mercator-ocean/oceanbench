@@ -139,7 +139,7 @@ def _align_group_to_starts(
     values = numpy.full(start_count, numpy.nan)
     counts = numpy.zeros(start_count)
     present = numpy.zeros(start_count, dtype=bool)
-    positions = group["start_date"].map(start_position).to_numpy()
+    positions = group["start_date"].map(start_position).to_numpy(dtype=numpy.intp)
     values[positions] = group["value"].to_numpy(dtype=float)
     present[positions] = True
     if is_class4:
@@ -221,11 +221,16 @@ def aggregate_scores(
     when given, adds paired skill-vs-baseline columns for every challenger that shares a
     metric key with the baseline (including the baseline against itself, which is exactly 0).
 
-    Diagnostic rows (``grid_coverage``) describe how a run was computed rather than how the
-    model performed, so they are dropped here: a mean and a confidence interval over them
-    would be meaningless, and they must never reach a scorecard.
+    Records without a start date (year-level metrics) and diagnostic rows (``grid_coverage``)
+    are dropped: a mean and a confidence interval over them would be meaningless, and they must
+    never reach a scorecard.
     """
-    scores = scores[~scores["metric"].isin(DIAGNOSTIC_METRICS)] if not scores.empty else scores
+    if not scores.empty:
+        # Year-level metrics (eddy, psd, ...) carry a null start date: they have no start
+        # distribution to average or bootstrap, so they are dropped here rather than by every
+        # caller. Diagnostic rows (``grid_coverage``) describe how a run was computed, not how
+        # the model performed, and must never reach a scorecard either.
+        scores = scores[~scores["metric"].isin(DIAGNOSTIC_METRICS) & scores["start_date"].notna()]
     if scores.empty:
         return pandas.DataFrame(columns=IDENTITY_COLUMNS + _CARRIED_COLUMNS + ["mean", "ci_low", "ci_high", "n_starts"])
 

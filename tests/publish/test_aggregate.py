@@ -10,7 +10,7 @@ import numpy
 import pandas
 import pytest
 
-from oceanbench.publish.aggregate import aggregate_scores
+from oceanbench.publish.aggregate import _align_group_to_starts, aggregate_scores
 from oceanbench.runner.parity import recombine_class4_over_starts
 
 _GOLDEN = Path(__file__).resolve().parents[1] / "parity" / "golden_scores_main_1degree.parquet"
@@ -197,3 +197,24 @@ def test_year_by_start_recombination_matches_official_on_golden():
 
     assert worst_full < 1e-7  # full-precision series recovers the official value to machine epsilon
     assert worst_published < 1e-4  # the six-decimal published series stays well inside the year tolerance
+
+
+def test_null_start_date_rows_are_dropped_and_positions_stay_integral():
+    """Year-level rows (null start date) must not reach the start alignment."""
+    frame = _gridded_frame("model", [0.10, 0.12, 0.11, 0.13])
+    year_level = pandas.DataFrame([_row(metric="eddy", start_date=pandas.NaT, value=0.5, lead_day=None)])
+    aggregated = aggregate_scores(pandas.concat([frame, year_level], ignore_index=True), seed=1)
+    assert set(aggregated["metric"]) == {"rmsd"}
+    (row,) = aggregated.to_dict(orient="records")
+    assert row["n_starts"] == 4
+    assert row["mean"] == pytest.approx(numpy.mean([0.10, 0.12, 0.11, 0.13]))
+
+
+def test_start_alignment_places_values_at_integer_positions():
+    """The start map must index the aligned arrays as integers, whatever dtype ``map`` returns."""
+    starts = pandas.date_range("2024-01-03", periods=3, freq="7D")
+    start_position = {start: index for index, start in enumerate(starts)}
+    group = pandas.DataFrame([_row(start_date=starts[2], value=0.7)])
+    aligned = _align_group_to_starts(group, start_position, len(starts), is_class4=False)
+    assert aligned.present.tolist() == [False, False, True]
+    assert aligned.values[2] == pytest.approx(0.7)
