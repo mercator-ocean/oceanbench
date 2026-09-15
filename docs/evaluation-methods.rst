@@ -24,11 +24,11 @@ OceanBench evaluates challengers against the following reference datasets:
 
 - `2024 GLORYS reanalysis <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_
 - `2024 GLO12 analysis <https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024>`_
+- 2024 in situ and satellite observations: Argo temperature and salinity profiles, drifter currents at 15 meters and along track sea level anomaly from the Copernicus Marine in situ and altimetry services
 
 You can open and explore these datasets by using the :mod:`oceanbench.datasets.reference` module.
 
-Class IV observation-based scores use the rebuilt ``observations2024-v2`` store, policy version ``2024-v2.1.0``: only quality control flag 1 observations are kept, drifter currents come from the filtered (FILTR) basis with wind slippage subtracted and undrogued platforms blanked, and sea level anomalies are bounded at 2 meters.
-Observation scores produced with this store are not comparable to scores produced with the legacy ``observations2024`` bucket, which used a raw, unfiltered basis.
+Class IV scores compare each forecast with these observations at the observation time, position and depth. Only quality flag 1 values are kept, drifter currents use the filtered basis with wind slippage removed and undrogued drifters excluded, and sea level anomalies are bounded at 2 meters.
 
 For gridded RMSD metrics, OceanBench computes an area-weighted spatial mean of squared errors using ``cos(latitude)`` weights, so each grid cell contributes in proportion to the ocean area it represents rather than counting equally, ignoring missing land values during the weighted reduction, then averages the daily RMSE over forecast initialization days.
 
