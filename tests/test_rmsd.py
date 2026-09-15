@@ -277,3 +277,37 @@ def test_rmsd_raises_when_too_much_spatial_grid_is_unmatched() -> None:
         match="matched 99.8000%.*required at least 99.9000%.*latitude=99.8000%.*longitude=100.0000%",
     ):
         _rmsd(challenger_dataset, reference_dataset)
+
+
+def test_rmsd_takes_the_square_root_per_first_day_and_depth_before_averaging_over_first_days() -> None:
+    variable_key = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
+    dimension_names = [
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        Dimension.DEPTH.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
+    ]
+    # Latitude weights are cos(0) = 1 and cos(60) = 0.5, so a column [a, b] has weighted mean square
+    # (a^2 + b^2 / 2) / 1.5: [1, 5] -> 9, [2, 10] -> 36, [a, a] -> a^2.
+    values = numpy.array(
+        [
+            [[[[1.0], [5.0]], [[1.0], [1.0]]], [[[2.0], [2.0]], [[2.0], [10.0]]]],
+            [[[[2.0], [10.0]], [[1.0], [5.0]]], [[[4.0], [4.0]], [[6.0], [6.0]]]],
+        ]
+    )
+    coordinates = {
+        Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]"),
+        Dimension.LEAD_DAY_INDEX.key(): [0, 1],
+        Dimension.DEPTH.key(): [0.5, 50.0],
+        Dimension.LATITUDE.key(): [0.0, 60.0],
+        Dimension.LONGITUDE.key(): [10.0],
+    }
+    challenger_dataset = xarray.Dataset({variable_key: (dimension_names, values)}, coords=coordinates)
+
+    rmsd_dataset = _rmsd(challenger_dataset, xarray.zeros_like(challenger_dataset))
+
+    numpy.testing.assert_allclose(
+        rmsd_dataset[variable_key].transpose(Dimension.LEAD_DAY_INDEX.key(), Dimension.DEPTH.key()).values,
+        [[(3.0 + 6.0) / 2, (1.0 + 3.0) / 2], [(2.0 + 4.0) / 2, (6.0 + 6.0) / 2]],
+    )
