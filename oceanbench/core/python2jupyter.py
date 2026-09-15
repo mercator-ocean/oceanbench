@@ -3,12 +3,20 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from importlib import resources
+from pathlib import PurePosixPath
+from urllib.parse import urlparse
 from urllib.request import urlopen
 
 import nbformat
 
 from oceanbench.core import templates
 from oceanbench.core.regions import RegionLike, resolve_region, region_to_dict
+
+
+_MARINE_HEATWAVE_CELL_PATTERNS = (
+    "Marine Heatwave diagnostics",
+    "marine_heatwave_diagnostics_compared_to_",
+)
 
 
 def _parse_challenger_python_code(
@@ -32,6 +40,10 @@ def generate_evaluation_notebook_file(
     notebook = _generate_template_notebook()
     notebook = _replace_code_to_open_challenger_datasets(challenger_python_code, notebook)
     notebook = _replace_evaluation_configuration_code(resolved_region, notebook)
+    notebook = _remove_unsupported_metric_cells(
+        notebook,
+        challenger_python_code_uri_or_local_path,
+    )
     notebook.metadata.setdefault("oceanbench", {})["region"] = region_to_dict(resolved_region)
     nbformat.write(notebook, output_notebook_file_path)
 
@@ -41,6 +53,22 @@ def _generate_template_notebook() -> nbformat.NotebookNode:
     with evaluation_template_file.open("r", encoding="utf8") as file:
         evaluation_template_code = file.read()
         return _python_to_jupyter_notebook(evaluation_template_code)
+
+
+def _remove_unsupported_metric_cells(notebook, challenger_path):
+    if _is_one_degree_challenger(challenger_path):
+        notebook.cells = [
+            cell
+            for cell in notebook.cells
+            if not any(pattern in cell.source for pattern in _MARINE_HEATWAVE_CELL_PATTERNS)
+        ]
+    return notebook
+
+
+def _is_one_degree_challenger(challenger_path: str) -> bool:
+    path = urlparse(challenger_path).path
+    stem = PurePosixPath(path).stem
+    return "_1_degree" in stem
 
 
 def _new_cell(cell_content: str, cell_type: str):
