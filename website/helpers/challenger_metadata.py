@@ -103,6 +103,26 @@ CHALLENGERS = {
         "initial_conditions": "GLO12/IFS",
         "resolution": "1°",
     },
+    "glo12_persistence": {
+        "label": "GLO12 persistence",
+        "url": "https://github.com/mercator-ocean/oceanbench",
+        "organisation": "OceanBench",
+        "organisation_url": "https://github.com/mercator-ocean/oceanbench",
+        "method": "Baseline",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12 nowcast",
+        "resolution": "1/12°",
+    },
+    "glo12_persistence_1_degree": {
+        "label": "GLO12 persistence",
+        "url": "https://github.com/mercator-ocean/oceanbench",
+        "organisation": "OceanBench",
+        "organisation_url": "https://github.com/mercator-ocean/oceanbench",
+        "method": "Baseline",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12 nowcast",
+        "resolution": "1°",
+    },
     "hclimrep": {
         "label": "HClimRep",
         "url": "https://hclimrep-project.de/",
@@ -132,6 +152,11 @@ CHALLENGERS = {
 
 def challenger_label(challenger_name: str) -> str:
     return CHALLENGERS.get(challenger_name, {}).get("label", challenger_name)
+
+
+def challenger_category(challenger_name: str) -> str:
+    method = CHALLENGERS.get(challenger_name, {}).get("method")
+    return "baseline" if method == "Baseline" else "model"
 
 
 def challenger_note(challenger_name: str) -> str | None:

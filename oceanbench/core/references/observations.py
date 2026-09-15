@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy
 import pandas
-from xarray import Dataset, open_dataset, open_mfdataset
+from xarray import Dataset, open_dataset
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.datetime_utils import generate_dates
@@ -19,6 +19,8 @@ from oceanbench.core.local_stage import (
 )
 from oceanbench.core.remote_http import (
     RetriableRemoteDataError,
+    open_remote_multizarr,
+    open_remote_zarr,
     require_remote_dataset_dimensions,
     with_remote_http_retries,
 )
@@ -54,9 +56,8 @@ def _build_staged_mean_dynamic_topography_dataset(
     mean_dynamic_topography_url: str,
     stage_path: Path,
 ) -> None:
-    mean_dynamic_topography_dataset = open_dataset(
+    mean_dynamic_topography_dataset = open_remote_zarr(
         mean_dynamic_topography_url,
-        engine="zarr",
         chunks="auto",
         consolidated=True,
     )
@@ -70,9 +71,8 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
     def open_mean_dynamic_topography_dataset() -> Dataset:
         mean_dynamic_topography_url = _mean_dynamic_topography_zarr_url(resolution)
         if not should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY):
-            return open_dataset(
+            return open_remote_zarr(
                 mean_dynamic_topography_url,
-                engine="zarr",
                 chunks="auto",
                 consolidated=True,
             )
@@ -187,9 +187,8 @@ def _selected_observations_dataset(
     observation_dimension_key = "observations"
     first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
 
-    observations_dataset = open_mfdataset(
+    observations_dataset = open_remote_multizarr(
         list(map(observation_path, observation_days)),
-        engine="zarr",
         decode_cf=False,
         parallel=False,
         concat_dim=source_observation_dimension_key,

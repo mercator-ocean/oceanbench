@@ -37,7 +37,7 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(mo
     source = _observation_source()
     first_day_datetimes = numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]")
 
-    monkeypatch.setattr(observations, "open_mfdataset", lambda *_, **__: source)
+    monkeypatch.setattr(observations, "open_remote_multizarr", lambda *_, **__: source)
     monkeypatch.setattr(observations, "require_remote_dataset_dimensions", lambda dataset, *_: dataset)
 
     selected = observations._selected_observations_dataset(

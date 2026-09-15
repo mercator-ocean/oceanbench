@@ -1113,3 +1113,58 @@ body.quarto-dark .version-select {
 .version-changelog-link:hover {
   text-decoration: underline;
 }
+
+/* --- Native select chrome (baseline and version selects) --- */
+
+/*
+ * Native selects are painted by the browser, which turns them into a dark
+ * block under a dark colour scheme and never matches the neighbouring
+ * chips. Strip the default chrome and rebuild the chip look, chevron
+ * included. A background-image cannot use currentColor, so the token value
+ * is inlined and swapped again under the dark theme. These rules come last
+ * so they win over the earlier background shorthands.
+ */
+.version-select,
+#baseline-select {
+  display: inline-block;
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333940' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+  color-scheme: light;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+#baseline-select {
+  height: calc(1.4em + 0.4rem + 2px);
+  padding: 0.2rem calc(0.45rem + 0.3rem + 12px) 0.2rem 0.45rem;
+  background-color: var(--ob-surface);
+  color: var(--bs-body-color, #333940);
+  background-position: right 0.45rem center;
+}
+
+.version-select {
+  height: calc(1.4em + 0.6rem + 2px);
+  padding: 0.3rem calc(0.6rem + 0.3rem + 12px) 0.3rem 0.6rem;
+  background-color: var(--ob-surface-raised);
+  background-position: right 0.6rem center;
+}
+
+body.quarto-dark .version-select,
+body.quarto-dark #baseline-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23dee2e6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
+  color-scheme: dark;
+}
+
+body.quarto-dark #baseline-select {
+  background-color: var(--ob-surface);
+  color: var(--bs-body-color, #d4d4d8);
+}
+
+body.quarto-dark .version-select {
+  background-color: var(--ob-surface);
+}

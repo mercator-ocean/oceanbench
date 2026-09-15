@@ -14,6 +14,7 @@ import xarray
 import zarr
 
 from oceanbench.core.datetime_utils import generate_dates
+from oceanbench.core.remote_http import open_remote_zarr, remote_zarr_store
 
 
 _CLOUDFERRO_STORAGE_OPTIONS = {
@@ -70,17 +71,16 @@ def _open_weekly_zarr_datasets(
 
 
 def _open_grouped_zarr_dataset(dataset_path: str) -> xarray.Dataset:
-    groups = tuple(zarr.open_group(dataset_path, mode="r", storage_options=_CLOUDFERRO_STORAGE_OPTIONS).group_keys())
+    groups = tuple(zarr.open_group(remote_zarr_store(dataset_path, _CLOUDFERRO_STORAGE_OPTIONS), mode="r").group_keys())
     datasets = [_open_zarr_group_dataset(dataset_path, group) for group in groups]
     return xarray.merge(datasets, compat="override", combine_attrs="override", join="override")
 
 
 def _open_zarr_group_dataset(dataset_path: str, group: str) -> xarray.Dataset:
-    dataset = xarray.open_dataset(
+    dataset = open_remote_zarr(
         dataset_path,
-        engine="zarr",
+        _CLOUDFERRO_STORAGE_OPTIONS,
         group=group,
-        storage_options=_CLOUDFERRO_STORAGE_OPTIONS,
         chunks={},
     )
     return _deduplicate_indexed_dimensions(dataset)

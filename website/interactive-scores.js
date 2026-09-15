@@ -47,6 +47,7 @@ let showPercentDiff = false;
 let parsedData = null;
 let challengerLabels = {};
 let challengerNotes = {};
+let challengerCategories = {};
 let regionLabels = {};
 let regionMetadata = {};
 let activeTrack = "high_resolution";
@@ -210,6 +211,24 @@ function buildChallengerNotesHtml(challengerNames) {
   }
   if (!items) return "";
   return `<p class="challengers-table-note">${items}</p>`;
+}
+
+function isReferenceBaseline(name) {
+  return challengerCategories[name] === "baseline";
+}
+
+// Reference baselines sit after the models in the Baseline select, and their
+// rows are only shown when they are the selected baseline.
+function partitionReferencesLast(names) {
+  const models = names.filter((name) => !isReferenceBaseline(name));
+  const references = names.filter((name) => isReferenceBaseline(name));
+  return [...models, ...references];
+}
+
+function visibleRowNames(trackChallengerNames, baseline) {
+  return trackChallengerNames.filter(
+    (name) => name === baseline || !isReferenceBaseline(name),
+  );
 }
 
 function trackKeyForChallenger(name) {
@@ -501,7 +520,7 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   let markup = "";
 
   markup += '<label>Baseline: <select id="baseline-select">';
-  for (const name of challengerNames) {
+  for (const name of partitionReferencesLast(challengerNames)) {
     const selected = name === baseline ? " selected" : "";
     markup += `<option value="${name}"${selected}>${displayNameText(name)}</option>`;
   }
@@ -1182,6 +1201,7 @@ function applyActiveVersion() {
   const versionData = getActiveVersionData(parsedData) || {};
   challengerLabels = versionData.challenger_labels || {};
   challengerNotes = versionData.challenger_notes || {};
+  challengerCategories = versionData.challenger_categories || {};
   regionLabels = versionData.region_labels || {};
   regionMetadata = versionData.region_metadata || {};
   const regionIds = versionData.region_order || Object.keys(versionData.regions || {});
@@ -1224,11 +1244,11 @@ function resolveTrackSelection(challengerNames) {
   return availableTracks;
 }
 
-function resolveVisibleChallengerNames(challengerNames) {
+function resolveTrackChallengerNames(challengerNames) {
   const availableTracks = resolveTrackSelection(challengerNames);
   return {
     availableTracks,
-    visibleChallengerNames: getTrackChallengerNames(challengerNames, activeTrack),
+    trackChallengerNames: getTrackChallengerNames(challengerNames, activeTrack),
   };
 }
 
@@ -1247,12 +1267,13 @@ function renderTablesOnly() {
   const { challengers, challenger_names: challengerNames } = regionData;
   if (!challengerNames || challengerNames.length === 0) return;
   const { metric_titles: metricTitles, sections } = data;
-  const { visibleChallengerNames } = resolveVisibleChallengerNames(challengerNames);
-  if (visibleChallengerNames.length === 0) return;
+  const { trackChallengerNames } = resolveTrackChallengerNames(challengerNames);
+  if (trackChallengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value ?? selectedBaseline);
+  const baseline = resolveBaselineSelectionForTrack(trackChallengerNames, existingSelect?.value ?? selectedBaseline);
   if (!baseline) return;
+  const visibleChallengerNames = visibleRowNames(trackChallengerNames, baseline);
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
     renderMetricSection(
@@ -1286,12 +1307,13 @@ function renderAllTables() {
   const { metric_titles: metricTitles, sections } = data;
   const regionIds = getRegionIds(data);
   if (!challengerNames || challengerNames.length === 0) return;
-  const { availableTracks, visibleChallengerNames } = resolveVisibleChallengerNames(challengerNames);
-  if (visibleChallengerNames.length === 0) return;
+  const { availableTracks, trackChallengerNames } = resolveTrackChallengerNames(challengerNames);
+  if (trackChallengerNames.length === 0) return;
 
   const existingSelect = document.getElementById("baseline-select");
-  const baseline = resolveBaselineSelectionForTrack(visibleChallengerNames, existingSelect?.value ?? selectedBaseline);
+  const baseline = resolveBaselineSelectionForTrack(trackChallengerNames, existingSelect?.value ?? selectedBaseline);
   if (!baseline) return;
+  const visibleChallengerNames = visibleRowNames(trackChallengerNames, baseline);
   const availableDepths = getAvailableDepths(challengers, baseline, sections);
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
@@ -1314,7 +1336,7 @@ function renderAllTables() {
   const versionTracks = getVersionTracks(getActiveVersionData(data));
 
   const controlsElement = ensureHeaderElement();
-  controlsElement.innerHTML = buildControlsInnerHtml(visibleChallengerNames, baseline, availableDepths);
+  controlsElement.innerHTML = buildControlsInnerHtml(trackChallengerNames, baseline, availableDepths);
   renderRegionSelector(regionIds, versionTracks, availableTracks);
   renderVersionSelector(getVersions(data));
 
