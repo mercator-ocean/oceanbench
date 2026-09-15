@@ -12,14 +12,11 @@ flags and raw values preserved. The nine scored variables keep the names and
 dtypes read by oceanbench/core/references/observations.py; for a
 policy-failing row the scored columns are NaN.
 
-A run with the default policy reproduces the published store, basis version
-2024-v2.1.0.
+The default policy is basis version 2024-v2.1.0.
 
-Credentials are read from the environment only. Nothing is hardcoded.
-  COPERNICUSMARINE_SERVICE_USERNAME / COPERNICUSMARINE_SERVICE_PASSWORD
-  CF_KEY / CF_SECRET  (falls back to AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)
-
-This script performs no build on import. Run it explicitly.
+Environment variables:
+  COPERNICUSMARINE_SERVICE_USERNAME, COPERNICUSMARINE_SERVICE_PASSWORD
+  CF_KEY, CF_SECRET (or AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 """
 
 from __future__ import annotations
@@ -45,15 +42,14 @@ import xarray as xr
 logger = logging.getLogger("build_observations")
 
 # ============================================================
-# POLICY (edit here, it is the only place decisions live)
+# POLICY
 # ============================================================
 
 POLICY: dict[str, Any] = {
     "policy_version": "v2.1.0",
     # QC flags accepted for a measurement to reach the scored columns.
     # OceanSITES reference table 2: 1 = good_data, 2 = probably_good_data.
-    # Every row keeps its raw flag, so relaxing to [1, 2] is a scoring-time
-    # choice, not a rebuild.
+    # Every row keeps its raw flag.
     "accepted_qc_flags": [1],
     # Position and time QC flags accepted for any row.
     "accepted_position_qc_flags": [1],
@@ -80,8 +76,7 @@ POLICY: dict[str, Any] = {
     "keep_unknown_drogue": True,
     # Absolute bound on sea level anomaly in metres.
     "sla_abs_max_m": 2.0,
-    # Rows whose time falls outside the target UTC day are flagged, not dropped
-    # silently and not silently included.
+    # Rows whose time falls outside the target UTC day are flagged.
     "enforce_day_alignment": True,
     # Duplicate obs_id within a day: keep the first row that passes policy,
     # else the first row seen.
@@ -104,9 +99,9 @@ CURRENTS_DATASET = "cmems_obs-ins_glo_phy-cur_nrt_drifter-filt-assim_irr_202311"
 TS_PRODUCT = "INSITU_GLO_PHY_TSASSIM_DISCRETE_NRT_013_047"
 TS_DATASET = "cmems_obs-ins_glo_phy-temp-sal_nrt_assim_irr_202211"
 
-# DUACS L3 my missions, the same set as the previous observations2024 store.
-# Days of 2024 available per mission, as listed in the catalogue on 2026-08-05 by
-# SEALEVEL_GLO_PHY_L3_MY_008_062 with the pattern *_1hz_2024*:
+# DUACS L3 my missions. Days of 2024 available per mission, as listed in the
+# catalogue on 2026-08-05 by SEALEVEL_GLO_PHY_L3_MY_008_062 with the pattern
+# *_1hz_2024*:
 #   alg    366  SARAL/AltiKa drifting phase
 #   c2n    365  CryoSat-2 new orbit
 #   h2b    281  HY-2B, real gaps inside 2024, absent on 2024-06-15
@@ -115,15 +110,10 @@ TS_DATASET = "cmems_obs-ins_glo_phy-temp-sal_nrt_assim_irr_202211"
 #   s6a_lr 366  Sentinel-6A low resolution
 #   swon   366  SWOT nadir
 #
-# "al" (SARAL nominal orbit) replaced by "alg". The previous store was built
-# from "al", which then served the drifting-phase data; the catalogue has since
-# split the drifting phase into its own dataset and "al" has zero 2024 files.
-#
-# j3n (Jason-3 interleaved, 366 days of 2024) is available and deliberately NOT
-# included: it was not in the previous set and adding it inflates 2024-06-15 by
-# 50220 points, about 18 percent. Add it only as a conscious basis change.
-# Zero 2024 coverage, not candidates: al, c2, en, enn, g2, h2a, h2ag, j3, j3g,
-# swonc.
+# "al" (SARAL nominal orbit) has zero 2024 files; the drifting phase is served
+# under "alg". j3n (Jason-3 interleaved, 366 days) is not included; adding it
+# changes the sample by about 18 percent. Missions with zero 2024 coverage:
+# al, c2, en, enn, g2, h2a, h2ag, j3, j3g, swonc.
 SLA_SATELLITES = {
     "alg": "cmems_obs-sl_glo_phy-ssh_my_alg-l3-duacs_PT1S",
     "c2n": "cmems_obs-sl_glo_phy-ssh_my_c2n-l3-duacs_PT1S",
@@ -256,9 +246,8 @@ def qc_to_int8(values: Any, size: int) -> np.ndarray:
 def _decode_token(value: Any) -> str:
     """One element of a char or string array as text, no stripping yet.
 
-    xarray hands these back either as numpy bytes or as an object array still
-    holding python bytes. str() on bytes yields the repr "b'...'", so the
-    decode has to be explicit.
+    xarray returns either numpy bytes or an object array of python bytes;
+    str() on bytes would give "b'...'".
     """
     if isinstance(value, (bytes, np.bytes_)):
         return value.decode("utf-8", "ignore")
@@ -505,8 +494,7 @@ def extract_currents(nc_path: Path) -> pd.DataFrame:
             columns["vo_ws"] = np.asarray(ws_north)[:, 0].astype(np.float64)
 
         if POLICY["current_wind_slippage_removed"]:
-            # Subtracted where finite, left as is otherwise. A velocity that is
-            # already NaN stays NaN.
+            # Subtracted where finite.
             uo_ws = columns["uo_ws"]
             vo_ws = columns["vo_ws"]
             columns[VAR_UO] = columns[VAR_UO] - np.where(np.isfinite(uo_ws), uo_ws, 0.0)
@@ -599,8 +587,7 @@ def _extract_profile_like(nc_path: Path, obs_type: int, with_salinity: bool) -> 
             platform = optional(ds, "PLATFORM_NUMBER")
         columns["platform_code"] = char_to_str(platform, n_prof)[pi]
 
-        # WMO_INST_TYPE is present but blank in the Coriolis MERC files, so an
-        # "is it absent" fallback never fires. Fall back on emptiness instead.
+        # WMO_INST_TYPE is present but blank in the Coriolis MERC files.
         source_text = char_to_str(optional(ds, "WMO_INST_TYPE"), n_prof)
         if not any(str(v).strip() for v in source_text):
             source_text = char_to_str(optional(ds, "SOURCE"), n_prof)
@@ -693,12 +680,9 @@ def extract_sla(
         for attempt in range(1, retries + 1):
             try:
                 before = set(tmp_dir.glob("*.nc"))
-                # DUACS names a file dt_global_{mission}_phy_l3_1hz_{measurement
-                # date}_{production date}.nc, so a bare *{date}* also matches
-                # every file merely produced on that date, which is thousands of
-                # files from other measurement days. Anchoring on the separators
-                # keeps only the measurement-date field, because the production
-                # date is followed by ".nc" rather than "_".
+                # File names are dt_global_{mission}_phy_l3_1hz_{measurement
+                # date}_{production date}.nc. The underscores match the
+                # measurement date only, not the production date.
                 copernicusmarine.get(
                     dataset_id=dataset_id,
                     filter=f"*_{date:%Y%m%d}_*",
@@ -747,16 +731,9 @@ def extract_sla(
 def normalize_longitude(frame: pd.DataFrame) -> pd.DataFrame:
     """Put longitude on [-180, 180) for every stream.
 
-    The in-situ sources publish longitude on -180..180 but the DUACS L3
-    along-track files publish it on 0..360, so SLA rows east of 180 fall off a
-    -180..180 model grid and score as missing. Applied once on the combined
-    frame so every stream shares one convention. Idempotent.
-
-    The wrap is a single exact addition or subtraction of 360 rather than a
-    modulo, so a value already inside the range keeps its exact bits: a modulo
-    round-trips through a larger magnitude and perturbs in-range values by an
-    ulp. A value outside [-540, 540) would need more than one step and is
-    treated as a source that no longer matches the assumed convention.
+    The in-situ sources publish longitude on -180..180 and the DUACS L3
+    along-track files on 0..360. Values already in range are left untouched;
+    a value outside [-540, 540) is an error.
     """
     if len(frame) == 0:
         return frame
@@ -780,10 +757,7 @@ def normalize_longitude(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def apply_policy(frame: pd.DataFrame, date: dt.date, policy: dict[str, Any]) -> pd.DataFrame:
-    """Set qc_keep, qc_reason and blank the scored columns of failing rows.
-
-    Pure: it only reads the frame and the policy, and returns a new frame.
-    """
+    """Set qc_keep, qc_reason and blank the scored columns of failing rows."""
     frame = frame.copy()
     n = len(frame)
     if n == 0:
@@ -863,9 +837,8 @@ def apply_policy(frame: pd.DataFrame, date: dt.date, policy: dict[str, Any]) -> 
 def build_obs_ids(frame: pd.DataFrame) -> pd.Series:
     """obs_id = obs_type:platform_code:isotime:depth:group.
 
-    Collisions inside a day are resolved by appending -N to the second and
-    later occurrences, so the identifier stays unique per day and stable for a
-    given source row. The key never includes a measured value.
+    Collisions inside a day get -N appended to the second and later
+    occurrences.
     """
     times = pd.to_datetime(frame["time_ns"]).dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
     depth = frame[VAR_DEPTH].fillna(-999.0).map(lambda v: f"{v:.2f}")
@@ -902,11 +875,7 @@ def dedup(frame: pd.DataFrame, strategy: str) -> tuple[pd.DataFrame, int]:
 
 
 def to_fixed_string(series: pd.Series, width: int, name: str) -> np.ndarray:
-    """Cast to a fixed-width unicode column, refusing to truncate silently.
-
-    A truncated obs_id stops being unique, so an overflow is a build error
-    rather than something to absorb.
-    """
+    """Cast to a fixed-width unicode column; raise if a value would be truncated."""
     text = series.fillna("").astype(str)
     longest = int(text.str.len().max()) if len(text) else 0
     if longest > width:
@@ -938,11 +907,10 @@ def combine_to_dataset(frame: pd.DataFrame, date: dt.date, attrs: dict[str, Any]
 
 
 def publish_prefix(fs, tmp_path: str, final_path: str) -> None:
-    """Move every key of the written tmp prefix onto the final prefix.
+    """Move every key of the tmp prefix onto the final prefix.
 
-    fsspec's recursive mv on this S3 endpoint raises FileNotFoundError while a
-    per-key copy of the exact same objects succeeds, so the keys are enumerated
-    and copied one by one.
+    fsspec's recursive mv raises FileNotFoundError on this S3 endpoint, so keys
+    are copied one by one.
     """
     keys = fs.find(tmp_path)
     if not keys:
@@ -958,7 +926,7 @@ def publish_prefix(fs, tmp_path: str, final_path: str) -> None:
 
 
 def write_dataset(ds: xr.Dataset, target_root: str, date: dt.date, overwrite: bool) -> str:
-    """Write to a .tmp suffix then rename, so a partial write never lands."""
+    """Write to a .tmp suffix, then rename."""
     fs, storage_options = get_target_fs(target_root)
     final_url = f"{target_root.rstrip('/')}/{date:%Y%m%d}.zarr"
     tmp_url = f"{final_url}.tmp"
