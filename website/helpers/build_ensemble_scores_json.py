@@ -171,8 +171,9 @@ GRIDDED_VARIABLE_ORDER = list(GRIDDED_VARIABLE_LABELS)
 GRIDDED_REFERENCE = "glorys"
 GLOENS_SURFACE_DEPTH = "surface"
 GLOENS_DATUM_ALIGNED_DEPTH = "surface-datum-aligned"
+# The biased CRPS the frozen record also carries is left out: it is the fair estimator without its
+# finite-ensemble correction, so it rewards a small ensemble, and no table on the page reads it.
 FROZEN_METRIC_COLUMNS = [
-    "crps_biased",
     "crps_fair",
     "ensemble_mean_rmsd",
     "ensemble_spread",

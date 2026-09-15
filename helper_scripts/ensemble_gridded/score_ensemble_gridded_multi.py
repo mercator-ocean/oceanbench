@@ -1002,22 +1002,39 @@ def _aggregate_over_start_dates(per_start: pandas.DataFrame) -> pandas.DataFrame
     return values.join(counts).reset_index().sort_values(AGGREGATION_KEYS)
 
 
+GROUP_COMPLETENESS_KEYS = ["challenger", "variable", "depth", "lead_day", "metric"]
+
+
+def _refuse_incomplete_groups(per_start: pandas.DataFrame, expect_starts: int, output_root: Path) -> None:
+    """Refuse a campaign where any scored group is short of the expected forecast starts.
+
+    Counting the union of the starts on disk only says that the campaign ran that many times.
+    A start that scored one variable and not another, or one lead day and not the next, still
+    leaves the union full while the group it skipped is averaged over fewer starts than the
+    year it is published as. The count that has to be full is the one per group.
+    """
+    counts = per_start.groupby(GROUP_COMPLETENESS_KEYS, dropna=False)["start_date"].nunique()
+    short = counts[counts < expect_starts]
+    if short.empty:
+        return
+    group = dict(zip(GROUP_COMPLETENESS_KEYS, short.index[0]))
+    raise RuntimeError(
+        f"completeness guard: {len(short)} of {len(counts)} groups under {output_root} are short of "
+        f"{expect_starts} forecast starts, the first being {group} with {int(short.iloc[0])}; "
+        "not aggregating a partial campaign"
+    )
+
+
 def _aggregate_command(arguments: argparse.Namespace) -> None:
     output_root = Path(arguments.output_root)
     score_files = sorted(output_root.glob("scores-*.parquet"))
     score_files = [path for path in score_files if path.name != "scores-per-start.parquet"]
     if not score_files:
         raise RuntimeError(f"no per-start score files under {output_root}")
-    if arguments.expect_starts is not None:
-        starts = {path.stem.rsplit("-", 1)[-1] for path in score_files}
-        if len(starts) < arguments.expect_starts:
-            raise RuntimeError(
-                f"completeness guard: {len(starts)} distinct forecast starts under {output_root}, "
-                f"expected {arguments.expect_starts}; not aggregating a partial campaign"
-            )
-
     per_start = pandas.concat([pandas.read_parquet(path) for path in score_files], ignore_index=True)
     per_start = per_start[per_start["start_date"].notna()]
+    if arguments.expect_starts is not None:
+        _refuse_incomplete_groups(per_start, arguments.expect_starts, output_root)
     aggregated = _aggregate_over_start_dates(per_start)
 
     per_start.to_parquet(output_root / "scores-per-start.parquet", index=False, compression="zstd")
@@ -1049,7 +1066,7 @@ def main() -> int:
         "--expect-starts",
         type=int,
         default=None,
-        help="refuse to aggregate unless this many distinct forecast starts are present",
+        help="refuse to aggregate unless every scored group carries this many forecast starts",
     )
     aggregate_parser.set_defaults(function=_aggregate_command)
 
