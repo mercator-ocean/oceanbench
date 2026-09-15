@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import dask.array
+import numpy
 import nbformat
 import pytest
 import xarray
@@ -174,3 +175,25 @@ def test_generate_evaluation_notebook_keeps_official_region_string(tmp_path) -> 
     assert _region_cell(notebook).source == "region = 'ibi'"
     assert notebook.metadata["oceanbench"]["region"]["id"] == "ibi"
     assert notebook.metadata["oceanbench"]["region"]["official"] is True
+
+
+def _global_grid(longitudes: numpy.ndarray) -> xarray.Dataset:
+    return xarray.Dataset(coords={"latitude": [0.0], "longitude": longitudes})
+
+
+def test_region_longitude_box_spanning_greenwich_selects_the_same_cells_on_a_0_360_grid() -> None:
+    region = oceanbench.regions.custom("greenwich", "Greenwich", -1.0, 1.0, -10.0, 10.0)
+
+    subset = oceanbench.regions.subset(_global_grid(numpy.arange(0.0, 360.0)), region)
+
+    assert subset["longitude"].values.tolist() == list(range(0, 11)) + list(range(350, 360))
+
+
+def test_region_longitude_box_crossing_the_dateline_selects_cells_on_both_grid_conventions() -> None:
+    region = oceanbench.regions.custom("dateline", "Dateline", -1.0, 1.0, 170.0, -170.0)
+
+    positive_subset = oceanbench.regions.subset(_global_grid(numpy.arange(0.0, 360.0)), region)
+    signed_subset = oceanbench.regions.subset(_global_grid(numpy.arange(-180.0, 180.0)), region)
+
+    assert positive_subset["longitude"].values.tolist() == list(range(170, 191))
+    assert signed_subset["longitude"].values.tolist() == list(range(-180, -169)) + list(range(170, 180))
