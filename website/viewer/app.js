@@ -1886,12 +1886,13 @@ async function readColumnProfileAt(longitude, latitude) {
 // one on screen. The clicked chunk already carries all leads (this is the design win), so
 // the profile axis can be fixed exactly: sliding the lead then swings the profile inside a
 // still frame, which is the whole point of scrubbing it. Returns [[low, high], depthMax].
-function columnProfileBounds() {
+// The caller passes the forecasts sharing one chart, so a chart never takes its bounds
+// from a quantity plotted somewhere else.
+function columnProfileBounds(forecasts) {
   let valueMin = Infinity;
   let valueMax = -Infinity;
   let depthMax = 0;
-  if (!columnProfile) return [null, 0];
-  for (const forecast of columnProfile.forecasts) {
+  for (const forecast of forecasts) {
     if (forecast.allNaN) continue;
     for (let index = 0; index < forecast.values.length; index += 1) {
       const value = forecast.values[index];
@@ -1925,8 +1926,10 @@ function renderColumnProfileRail() {
   elements["rail-column-point"].textContent = formatLatLon(columnProfile.lon, columnProfile.lat);
   const comparison = columnProfile.forecasts.length === 2;
   const leadIndex = Math.max(0, shared.leadDay - 1);
-  const lines = [];
-  let unit = "";
+  // columnVariableFor maps each panel to its own column variable, so the two panels can
+  // hold different quantities. Those do not belong on one axis, so group by variable and
+  // draw one chart per group, each with its own unit, label and value bound.
+  const groups = new Map();
   for (const forecast of columnProfile.forecasts) {
     if (forecast.allNaN) continue;
     const lead = Math.min(leadIndex, forecast.leads - 1);
@@ -1936,26 +1939,45 @@ function renderColumnProfileRail() {
       if (Number.isFinite(value)) points.push({ depth: forecast.depths[depth], value });
     }
     if (!points.length) continue;
-    unit = unit || forecast.unit;
-    lines.push({
+    const key = `${forecast.variableLabel}|${forecast.unit}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { label: forecast.variableLabel, unit: forecast.unit, lines: [], forecasts: [] };
+      groups.set(key, group);
+    }
+    group.lines.push({
       label: comparison ? `F${forecast.panelIndex + 1} · ${forecast.variableLabel}` : forecast.variableLabel,
       color: forecast.color,
       points,
     });
+    group.forecasts.push(forecast);
   }
-  const variableLabel = columnProfile.forecasts.find((forecast) => !forecast.allNaN)?.variableLabel || "Value";
-  const [valueBound, depthBound] = columnProfileBounds();
-  elements["rail-column-chart"].innerHTML = columnProfileSVG(lines, {
-    title: comparison ? "Water column (both forecasts)" : "Water column",
-    unit,
-    xLabel: variableLabel,
-    valueBound,
-    depthBound,
-  });
-  if (!lines.length) {
+  const charts = [];
+  for (const group of groups.values()) {
+    const [valueBound, depthBound] = columnProfileBounds(group.forecasts);
+    const title =
+      groups.size > 1
+        ? `Water column · ${group.label}`
+        : comparison && group.lines.length === 2
+          ? "Water column (both forecasts)"
+          : "Water column";
+    charts.push(
+      columnProfileSVG(group.lines, {
+        title,
+        unit: group.unit,
+        xLabel: group.label,
+        valueBound,
+        depthBound,
+      }),
+    );
+  }
+  if (!charts.length) charts.push(columnProfileSVG([], { title: "Water column" }));
+  elements["rail-column-chart"].innerHTML = charts.join("");
+  if (!groups.size) {
     elements["rail-column-note"].textContent = "No water column at this point.";
   } else {
-    elements["rail-column-note"].textContent = `Model ${variableLabel.toLowerCase()} profile at the selected start and lead day ${shared.leadDay}. Move the lead slider to re-read from the same download.`;
+    const labels = [...groups.values()].map((group) => group.label.toLowerCase()).join(" and ");
+    elements["rail-column-note"].textContent = `Model ${labels} profile at the selected start and lead day ${shared.leadDay}. Move the lead slider to re-read from the same download.`;
   }
   const heading = section.querySelector("h3");
   if (heading) attachMethodNote(heading, "column-profile");
@@ -3426,6 +3448,17 @@ function ensurePsdBox(shown) {
   return shared.psdBox;
 }
 
+// A region change moves the map to a different window, and the box was placed inside the
+// one it was created in: it ends up off screen, unreachable, while the rail keeps drawing
+// its spectrum under the new region's name. Drop it so ensurePsdBox re-seeds it at the
+// default size in the middle of the new viewport.
+function reseedPsdBox() {
+  if (!shared.psdBox) return;
+  shared.psdBox = null;
+  shared.psdBoxRequest = null;
+  ensurePsdBox(panels.slice(0, shared.layout));
+}
+
 // Clamp size to [min, cap] and keep the box on the globe. Returns true when the SIZE
 // was reduced by the cap (used to trigger the "max size" flash during a resize).
 function clampPsdBox(fromResize) {
@@ -3848,8 +3881,11 @@ function currentViewport() {
 // for each series under the cursor, and place the tooltip right next to the pointer -
 // no delay, no fixed corner (rail chart interaction requirement).
 function wireCursorTooltip(container) {
-  const svg = container.querySelector("svg");
-  if (!svg) return;
+  // The water column rail can hold one chart per variable, so wire each of them.
+  for (const svg of container.querySelectorAll("svg")) wireChartCursorTooltip(svg);
+}
+
+function wireChartCursorTooltip(svg) {
   const crosshair = svg.querySelector(".chart-crosshair");
   const tooltip = svg.querySelector(".chart-tooltip");
   const rect = tooltip ? tooltip.querySelector("rect") : null;
@@ -4269,7 +4305,12 @@ function cancelLeadFetchTimer() {
 }
 
 function runLeadRender() {
-  renderAllPanels().then(() => {
+  renderAllPanels().then(async () => {
+    // The eddy census is published one file per lead day, so a lead change must re-read it
+    // before the redraw; without this the map keeps painting the lead the overlay was first
+    // loaded at. The per-lead frames are cached in insights.js, so a warm scrub refetches
+    // nothing and a lead with no published census still snaps to its nearest neighbour.
+    if (shared.overlayMode === OVERLAY_EDDIES) await loadOverlayData();
     redrawOverlaysAll();
     updateContextRail();
   });
@@ -4316,6 +4357,7 @@ async function renderLeadNow() {
     await reloadClass4Overlay();
     return;
   }
+  if (shared.overlayMode === OVERLAY_EDDIES) await loadOverlayData();
   redrawOverlaysAll();
   await updateContextRail();
 }
@@ -4491,6 +4533,7 @@ function wireGlobalControls() {
     clearColumnProfile();
     setSharedRegion(event.target.value);
     fitRegionView();
+    reseedPsdBox();
     renderAllPanels().then(() => {
       redrawOverlaysAll();
       updateContextRail();
