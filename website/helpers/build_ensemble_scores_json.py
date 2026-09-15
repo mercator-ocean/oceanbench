@@ -470,7 +470,9 @@ def build_ensemble_scores(
             "title": "Root mean square difference against GLORYS",
             "note": (
                 "Quarter degree GLORYS reanalysis reference. Ensemble mean difference for the "
-                "ensembles, single member difference for the two deterministic references."
+                "ensembles, single member difference for the two deterministic references. "
+                "Systems built from or initialised by the GLORYS family are favoured by a GLORYS "
+                "reference; weight the observation tables."
             ),
             "lead_days": GRIDDED_LEAD_DAYS,
             "rows": gridded_rows(gridded_gloens, GLOENS, "ensemble_mean_rmsd", is_ratio=False)
@@ -487,7 +489,10 @@ def build_ensemble_scores(
         },
         "gridded_spread_error_ratio": {
             "title": "Spread error ratio against GLORYS",
-            "note": "One is a reliable ensemble, below one is under dispersive.",
+            "note": (
+                "Spread of the ensemble over its mean difference to GLORYS, without observation or "
+                "analysis error, so it reads low; agreement with the analysis, not a calibration test."
+            ),
             "lead_days": GRIDDED_LEAD_DAYS,
             "rows": gridded_rows(gridded_gloens, GLOENS, "spread_error_ratio", is_ratio=True)
             + gridded_rows(gridded_icp, ICP, "spread_error_ratio", is_ratio=True),
