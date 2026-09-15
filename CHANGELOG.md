@@ -17,9 +17,10 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
-## 0.6.0 - 2026-09-11
+## Unreleased
 
 **Scores:** Class IV tables change for every challenger; gridded and Lagrangian scores unchanged.
+To be published as 0.6.0 once every challenger is rescored; the website shows the 0.5.0 reports until then.
 
 ### Changed
 
