@@ -162,19 +162,22 @@ def ensemble_field_statistics(
 ) -> EnsembleFieldStatistics:
     """Reduce one ensemble field and its reference to the area-weighted statistics above."""
     member_count = members.sizes[ensemble_dimension]
-    ensemble_mean = members.mean(dim=ensemble_dimension)
-    ensemble_mean_error = ensemble_mean - reference
-    member_error = members - reference
-    # The spread is averaged over the cells the error is averaged over. The members cover cells the
-    # reference does not, an ice edge or an unusable target cell, and the area weighted mean skips
-    # what is not finite, so an unmasked variance would average a wider ocean than the error it is
-    # divided by and the ratio would compare two different fields.
-    variance = members.var(dim=ensemble_dimension, ddof=1).where(numpy.isfinite(ensemble_mean_error))
+    # Every statistic is averaged over the same cells: those where every member and the reference
+    # are finite. The members cover cells the reference does not, an ice edge or an unusable target
+    # cell, and a member can be missing where the others are not; xarray's mean and var skip what
+    # is not finite while the CRPS returns NaN there, so without one shared mask the statistics
+    # would average different oceans and the spread-error ratio would compare two different fields.
+    scored = numpy.isfinite(members).all(dim=ensemble_dimension) & numpy.isfinite(reference)
+    ensemble_mean_error = (members.mean(dim=ensemble_dimension) - reference).where(scored)
+    member_error = (members - reference).where(scored)
+    variance = members.var(dim=ensemble_dimension, ddof=1).where(scored)
     return EnsembleFieldStatistics(
         member_count=member_count,
-        scored_cell_count=int(numpy.isfinite(ensemble_mean_error).sum()),
-        crps_fair=area_weighted_mean(continuous_ranked_probability_score(members, reference, fair=True)),
-        crps_biased=area_weighted_mean(continuous_ranked_probability_score(members, reference, fair=False)),
+        scored_cell_count=int(scored.sum()),
+        crps_fair=area_weighted_mean(continuous_ranked_probability_score(members, reference, fair=True).where(scored)),
+        crps_biased=area_weighted_mean(
+            continuous_ranked_probability_score(members, reference, fair=False).where(scored)
+        ),
         ensemble_mean_absolute_error=area_weighted_mean(abs(ensemble_mean_error)),
         ensemble_mean_squared_error=area_weighted_mean(ensemble_mean_error**2),
         ensemble_variance=float("nan") if member_count < 2 else area_weighted_mean(variance),

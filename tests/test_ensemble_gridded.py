@@ -325,3 +325,19 @@ def test_the_spread_is_averaged_over_the_cells_the_error_is_averaged_over() -> N
     assert statistics.ensemble_mean_squared_error == pytest.approx(scored_only.ensemble_mean_squared_error)
     # The uncovered band alone would have multiplied the spread of the field it is not part of.
     assert area_weighted_mean(members.var(dim=ENSEMBLE_DIMENSION, ddof=1)) > 3 * statistics.ensemble_variance
+
+
+def test_a_cell_with_one_missing_member_is_dropped_from_every_statistic() -> None:
+    members = _ensemble(numpy.array([[[1.0, 2.0]], [[3.0, numpy.nan]]]))
+    reference = _field(numpy.array([[2.0, 2.0]]))
+
+    statistics = ensemble_field_statistics(members, reference)
+
+    # Only the first cell is scored: members 1 and 3 against 2.
+    assert statistics.scored_cell_count == 1
+    assert statistics.crps_fair == pytest.approx(1.0 - 2.0 / 2.0)
+    assert statistics.crps_biased == pytest.approx(1.0 - 4.0 / 8.0)
+    assert statistics.ensemble_mean_absolute_error == pytest.approx(0.0)
+    assert statistics.ensemble_mean_squared_error == pytest.approx(0.0)
+    assert statistics.ensemble_variance == pytest.approx(2.0)
+    assert statistics.member_squared_error == pytest.approx(1.0)
