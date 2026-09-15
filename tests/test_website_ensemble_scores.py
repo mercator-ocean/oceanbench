@@ -50,13 +50,13 @@ def _gridded_frame(challenger: str, lead_days: list[int], start_counts: dict[int
     )
 
 
-def _observation_frame(lead_days: list[int], streams: list[str]) -> pd.DataFrame:
+def _observation_frame(lead_days: list[int], streams: list[str], depth_bands: tuple[str, ...] = ("surface",)):
     return pd.DataFrame(
         [
             {
                 "stream": stream,
                 "region": region,
-                "depth_band": "all",
+                "depth_band": depth_band,
                 "lead_day": lead_day,
                 "n_inits": 52,
                 "crps_fair": 0.3211234,
@@ -65,6 +65,7 @@ def _observation_frame(lead_days: list[int], streams: list[str]) -> pd.DataFrame
             }
             for stream in streams
             for region in ("global", "tropics")
+            for depth_band in depth_bands
             for lead_day in lead_days
         ]
     )
@@ -430,3 +431,24 @@ def test_gridded_aggregate_frame_reads_both_shapes_a_campaign_has_written() -> N
 
     already_long = _gridded_frame("gloens", GRIDDED_LEAD_DAYS, {})
     assert gridded_aggregate_frame(already_long) is already_long
+
+
+def test_the_observation_rows_read_the_default_depth_bins_and_not_the_campaign_bands() -> None:
+    bands = ("0-5m", "5-100m", "100-300m", "300-600m", "100-500")
+    scores = build_ensemble_scores(
+        _gridded_frame("gloens", list(range(1, 11)), {}),
+        _gridded_frame("glonet2-ens-icp", list(range(1, 10)), {}),
+        deterministic_gridded_frame(_deterministic_gridded_frame("glonet", 0.6661234)),
+        deterministic_gridded_frame(_deterministic_gridded_frame("glo12", 0.5551234)),
+        _class4_frame(list(range(1, 11))),
+        _class4_frame(list(range(1, 11)), rmsd=0.7331234),
+        _class4_frame(list(range(1, 11)), rmsd=0.9441234),
+        _class4_frame(list(range(1, 10)), rmsd=0.9551234),
+        _observation_frame(list(range(1, 11)), ["profiles_t"], bands),
+        _observation_frame(list(range(1, 10)), ["profiles_t"], bands),
+    )
+
+    gloens_rows = [row for row in scores["blocks"]["observations_crps"]["rows"] if row["system"] == "gloens"]
+
+    # The four default bins in their depth order, and the campaign band beside them is not read.
+    assert [row["depth_band"] for row in gloens_rows] == ["0-5 m", "5-100 m", "100-300 m", "300-600 m"]

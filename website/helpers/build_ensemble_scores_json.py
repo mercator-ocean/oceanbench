@@ -119,24 +119,22 @@ STREAM_UNITS = {
     "currents_v": "m s-1",
 }
 
+# One depth axis for every observation space row, ensemble and deterministic alike. These are the
+# bins of DEPTH_BINS_DEFAULT in oceanbench.core.dataset_utils, plus the surface bin the drifting
+# buoys and the altimeter are scored in and the 15 m bin the currents are interpolated to. The
+# earlier campaign bands, 0-100, 100-500, 500+ and an unbounded all depths, pooled a different
+# ocean than the deterministic table and could not be read beside it.
 DEPTH_BAND_LABELS = {
-    "all": "All depths",
-    "0-100": "0-100 m",
-    "100-500": "100-500 m",
-    "500+": "500+ m",
+    "surface": "Surface",
+    "15m": "15 m",
+    "0-5m": "0-5 m",
+    "5-100m": "5-100 m",
+    "100-300m": "100-300 m",
+    "300-600m": "300-600 m",
 }
 
-DEPTH_BAND_ORDER = ["all", "0-100", "100-500", "500+"]
+DEPTH_BAND_ORDER = list(DEPTH_BAND_LABELS)
 
-# The streams that carry no depth structure are scored at the depth of their observations.
-SINGLE_DEPTH_STREAM_LABELS = {
-    "drifter_sst": "Surface",
-    "sla": "Surface",
-    "currents_u": "15 m",
-    "currents_v": "15 m",
-}
-
-# The deterministic class 4 aggregate uses its own depth bins, which do not match the ensemble bands.
 DETERMINISTIC_STREAMS = {
     ("sea_water_potential_temperature", "surface"): "drifter_sst",
     ("sea_water_potential_temperature", "0-5m"): "profiles_t",
@@ -152,16 +150,9 @@ DETERMINISTIC_STREAMS = {
     ("northward_sea_water_velocity", "15m"): "currents_v",
 }
 
-DETERMINISTIC_DEPTH_BIN_LABELS = {
-    "surface": "Surface",
-    "15m": "15 m",
-    "0-5m": "0-5 m",
-    "5-100m": "5-100 m",
-    "100-300m": "100-300 m",
-    "300-600m": "300-600 m",
-}
+DETERMINISTIC_DEPTH_BIN_LABELS = DEPTH_BAND_LABELS
 
-DETERMINISTIC_DEPTH_BIN_ORDER = ["surface", "15m", "0-5m", "5-100m", "100-300m", "300-600m"]
+DETERMINISTIC_DEPTH_BIN_ORDER = DEPTH_BAND_ORDER
 
 GRIDDED_VARIABLE_LABELS = {
     "sea_water_potential_temperature": "Temperature",
@@ -383,7 +374,7 @@ def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio
                 if int(entry["n_inits"]) < FULL_START_COUNT:
                     reduced_start_counts[str(lead_day)] = int(entry["n_inits"])
             unit = "" if is_ratio else STREAM_UNITS[stream]
-            depth_label = SINGLE_DEPTH_STREAM_LABELS.get(stream, DEPTH_BAND_LABELS[band])
+            depth_label = DEPTH_BAND_LABELS[band]
             rows.append(
                 _row(
                     system_key,
@@ -430,9 +421,7 @@ def class4_rows(frame: pd.DataFrame, system_key: str) -> list[dict]:
 
 def _sorted_observation_rows(rows: list[dict]) -> list[dict]:
     stream_labels = list(STREAM_LABELS.values())
-    depth_labels = list(DEPTH_BAND_LABELS.values()) + [
-        DETERMINISTIC_DEPTH_BIN_LABELS[depth_bin] for depth_bin in DETERMINISTIC_DEPTH_BIN_ORDER
-    ]
+    depth_labels = [DEPTH_BAND_LABELS[band] for band in DEPTH_BAND_ORDER]
     return sorted(
         rows,
         key=lambda row: (
