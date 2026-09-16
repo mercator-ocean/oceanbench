@@ -177,6 +177,7 @@ div.sourceCode.cell-code pre.sourceCode {
 
 .score-table-wrapper {
   margin-bottom: 1.5rem;
+  max-width: 100%;
 }
 
 
@@ -202,11 +203,8 @@ div.sourceCode.cell-code pre.sourceCode {
 
 /* Keep table width stable when toggling Values / % diff mode */
 .score-table td.score-value-cell {
-  width: 5ch;
-  min-width: 5ch;
-  max-width: 5ch;
-  overflow: hidden;
-  text-overflow: clip;
+  width: 6ch;
+  min-width: 6ch;
   padding-left: 0.2rem;
   padding-right: 0.2rem;
 }
@@ -309,7 +307,7 @@ body.quarto-dark .score-table .standard-name {
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-md);
   box-shadow: var(--ob-soft-shadow);
-  min-width: max-content;
+  max-width: 100%;
   overflow: hidden;
 }
 
@@ -807,12 +805,13 @@ body.quarto-dark #scale-input {
 .legend-bar-wrapper {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   margin-top: -4px;
 }
 
 .legend-bar {
   display: flex;
-  width: 300px;
+  width: clamp(120px, 26vw, 300px);
   height: 12px;
   border-radius: 3px;
   border: 1px solid var(--ob-border);
@@ -1167,4 +1166,42 @@ body.quarto-dark #baseline-select {
 
 body.quarto-dark .version-select {
   background-color: var(--ob-surface);
+}
+
+/* --- Narrow screens: scroll the table inside its own box --- */
+
+/* The sticky thead needs the page itself to scroll sideways, so it is kept on
+   wide screens only and the wrapper takes over the horizontal scrolling below. */
+@media (max-width: 900px) {
+  .score-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .depth-table thead {
+    position: static;
+  }
+}
+
+/* --- Phone layout --- */
+
+@media (max-width: 600px) {
+  .controls {
+    flex-wrap: wrap;
+    padding: 0.35rem 0.4rem;
+    gap: 0.35rem 0.5rem;
+  }
+
+  .display-toggle {
+    margin-left: 0;
+  }
+
+  .score-table {
+    font-size: 0.72rem;
+  }
+
+  .score-table th,
+  .score-table td {
+    padding: 0.15rem 0.2rem;
+  }
 }
