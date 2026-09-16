@@ -844,8 +844,12 @@ function renderDepthGroup(
   }
   tbody += "</tbody>";
 
-  const tableClass = depths.length > 1 ? "score-table depth-table" : "score-table";
-  return `<div class="score-table-wrapper"><table class="${tableClass}">${thead}${tbody}</table></div>`;
+  const isDepthTable = depths.length > 1;
+  const tableClass = isDepthTable ? "score-table depth-table" : "score-table";
+  const wrapperClass = isDepthTable
+    ? "score-table-wrapper depth-table-wrapper"
+    : "score-table-wrapper";
+  return `<div class="${wrapperClass}"><table class="${tableClass}">${thead}${tbody}</table></div>`;
 }
 
 function renderCombinedFlatMetrics(
@@ -1471,7 +1475,29 @@ function openTapTooltip(element) {
   tip.style.top = `${rect.bottom + window.scrollY + 4}px`;
 }
 
+let tapTooltipClicksAttached = false;
+
 function attachTapTooltips() {
+  // Desktop clicks must not open the tooltip, so wait for a real touch unless the
+  // device reports that it has no hover at all.
+  if (!window.matchMedia("(hover: none)").matches) {
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.pointerType === "touch" || event.pointerType === "pen") {
+          attachTapTooltipClicks();
+        }
+      },
+      { capture: true },
+    );
+    return;
+  }
+  attachTapTooltipClicks();
+}
+
+function attachTapTooltipClicks() {
+  if (tapTooltipClicksAttached) return;
+  tapTooltipClicksAttached = true;
   document.addEventListener("click", (event) => {
     const target = event.target.closest(
       ".score-table td.score-value-cell, .challenger-note-marker",
