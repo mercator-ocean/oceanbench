@@ -689,6 +689,26 @@ def _without_native_grid_description(
     return without_native_grid_description(challenger_dataset, native_grid.source_dimensions)
 
 
+REALIZATION_STANDARD_NAME = "realization"
+
+
+def _without_member_labels(challenger_dataset: xarray.Dataset, ensemble_dimension: str) -> xarray.Dataset:
+    """The dataset with nothing but the bare member axis left of its member coordinate.
+
+    An ensemble store labels that axis with a coordinate declaring the standard name
+    ``realization``, and the standard-name rename that runs next renames every variable that
+    declares one, member axis included, so the matchup would not find it any more. The labels
+    carry nothing the matchup reads: members are taken positionally.
+    """
+    labelled = [
+        str(name)
+        for name, coordinate in challenger_dataset.coords.items()
+        if coordinate.dims == (ensemble_dimension,)
+        and coordinate.attrs.get("standard_name") == REALIZATION_STANDARD_NAME
+    ]
+    return challenger_dataset.drop_vars(labelled)
+
+
 def _variables_the_native_grid_can_match(variables: Sequence[Variable]) -> list[Variable]:
     """The requested variables minus the ones the native grid cannot answer.
 
@@ -754,7 +774,12 @@ def ensemble_class4_matchup(
     overlap and each of them is then read once for all of them.
     """
     native_grid = native_grid_of_dataset(challenger_dataset)
-    challenger = rename_dataset_with_standard_names(_without_native_grid_description(challenger_dataset, native_grid))
+    challenger = rename_dataset_with_standard_names(
+        _without_member_labels(
+            _without_native_grid_description(challenger_dataset, native_grid),
+            ensemble_dimension,
+        )
+    )
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
     requested = variables if native_grid is None else _variables_the_native_grid_can_match(variables)
     requests = _class4_observation_requests(observations_dataset, requested, lead_days_count)

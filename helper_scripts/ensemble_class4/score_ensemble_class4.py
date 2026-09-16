@@ -160,48 +160,6 @@ def _open_dev_prefix_week(specification: ChallengerSpecification, start_label: p
     return week.rename({specification.member_dimension: ENSEMBLE_DIMENSION})
 
 
-LOADED_CHALLENGER_BYTE_LIMIT = 64 * 1024**3
-
-
-def _resident_byte_count(week: xarray.Dataset) -> int:
-    return sum(int(field.size) * int(field.dtype.itemsize) for field in week.data_vars.values())
-
-
-def _read_into_memory(week: xarray.Dataset, description: str) -> xarray.Dataset:
-    """The week in memory when it fits, so the matchup indexes numpy and not the object store.
-
-    The library slices one member and one lead day at a time and computes each slice on its own.
-    Against a lazy glonet2 store that is pathological: a chunk spans all eight members, so every
-    member slice fetches the whole chunk and discards seven eighths of it, and it does that again
-    for every lead day and every depth level. Reading each variable exactly once here removes the
-    repetition without touching the library, which then sees an ordinary in-memory array.
-
-    A challenger too large to hold is left lazy rather than read in pieces, because its cost is
-    the volume it genuinely reads once, not repetition, and holding it would buy nothing.
-    """
-    resident_bytes = _resident_byte_count(week)
-    if resident_bytes > LOADED_CHALLENGER_BYTE_LIMIT:
-        print(
-            f"leaving {description} lazy: it would need {resident_bytes / 1024**3:.1f} GiB resident, "
-            f"over the {LOADED_CHALLENGER_BYTE_LIMIT / 1024**3:.0f} GiB limit",
-            flush=True,
-        )
-        return week
-    print(f"reading {description} into memory: {resident_bytes / 1024**3:.1f} GiB", flush=True)
-    return week.load()
-
-
-def _without_ensemble_coordinate(week: xarray.Dataset) -> xarray.Dataset:
-    """The week with no coordinate variable on its member axis.
-
-    A glonet2 store labels that axis with a ``member`` coordinate carrying the standard name
-    ``realization``, and the library renames every variable that declares a standard name before
-    it looks for the member axis, so the axis would be renamed out from under it. The labels
-    themselves carry nothing: members are read positionally.
-    """
-    return week.drop_vars(ENSEMBLE_DIMENSION, errors="ignore")
-
-
 def _open_challenger_start(
     specification: ChallengerSpecification, start_label: pandas.Timestamp
 ) -> tuple[xarray.Dataset, pandas.Timestamp]:
@@ -212,10 +170,7 @@ def _open_challenger_start(
     else:
         first_day = start_label
         week = _open_dev_prefix_week(specification, start_label)
-    week = _read_into_memory(week, f"{specification.name} {start_label:%Y-%m-%d}")
-    challenger = _without_ensemble_coordinate(week).expand_dims(
-        {Dimension.FIRST_DAY_DATETIME.key(): [first_day.to_datetime64()]}
-    )
+    challenger = week.expand_dims({Dimension.FIRST_DAY_DATETIME.key(): [first_day.to_datetime64()]})
     if specification.declares_dataset_source:
         challenger = with_dataset_source(challenger, kind="challenger", name=GLOENS_SOURCE_NAME)
     return challenger, first_day

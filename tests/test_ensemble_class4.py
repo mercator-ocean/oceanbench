@@ -588,6 +588,27 @@ def test_ensemble_matchup_runs_mains_pipeline_once_per_member():
     numpy.testing.assert_allclose(matchup.member_values, expected)
 
 
+def test_a_member_axis_labelled_realization_reaches_the_matchup():
+    """A store labels its member axis with a coordinate the standard-name rename would take.
+
+    The rename runs on the whole challenger, so the label has to go before it, or the member
+    axis is called ``realization`` by the time the matchup looks for it.
+    """
+    challenger = _ensemble_model_data().to_dataset()
+    challenger = challenger.assign_coords(
+        {ENSEMBLE_DIMENSION: challenger[ENSEMBLE_DIMENSION].assign_attrs(standard_name="realization")}
+    )
+
+    matchups = ensemble_class4_matchup(
+        challenger,
+        _observations_dataset(),
+        [Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+    )
+
+    expected = numpy.array(DETERMINISTIC_MODEL_VALUES)[:, None] + MEMBER_OFFSETS[None, :]
+    numpy.testing.assert_allclose(matchups[0].member_values, expected)
+
+
 # ---------------------------------------------------------------------------
 # Matchup of a challenger left on its native curvilinear grid
 # ---------------------------------------------------------------------------
