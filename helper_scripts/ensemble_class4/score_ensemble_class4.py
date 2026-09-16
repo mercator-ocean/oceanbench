@@ -247,6 +247,8 @@ def _score_command(arguments: argparse.Namespace) -> None:
     _start_directory(output_root, arguments.challenger).mkdir(parents=True, exist_ok=True)
 
     challenger, first_day = _open_challenger_start(specification, start_label)
+    if arguments.member_limit is not None:
+        challenger = challenger.isel({ENSEMBLE_DIMENSION: slice(0, arguments.member_limit)})
     print(f"challenger={arguments.challenger} start={start_label:%Y-%m-%d} first_day={first_day:%Y-%m-%d}")
     print(
         f"members={challenger.sizes[ENSEMBLE_DIMENSION]} lead_days={challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]}"
@@ -340,6 +342,7 @@ def main() -> int:
     score_parser.add_argument("--challenger", required=True, choices=sorted(CHALLENGERS))
     score_parser.add_argument("--start-date", required=True)
     score_parser.add_argument("--sigma-store", default=DEFAULT_SIGMA_STORE)
+    score_parser.add_argument("--member-limit", type=int, default=None)
     score_parser.set_defaults(handler=_score_command)
 
     aggregate_parser = subparsers.add_parser("aggregate")
