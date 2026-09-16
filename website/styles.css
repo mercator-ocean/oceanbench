@@ -180,6 +180,10 @@ div.sourceCode.cell-code pre.sourceCode {
   max-width: 100%;
 }
 
+.score-table-wrapper:has(> .depth-table) {
+  margin-bottom: 0;
+}
+
 
 .score-table {
   border-collapse: collapse;
@@ -201,10 +205,11 @@ div.sourceCode.cell-code pre.sourceCode {
   font-variant-numeric: tabular-nums;
 }
 
-/* Keep table width stable when toggling Values / % diff mode */
+/* Keep table width stable when toggling Values / % diff mode. A clamped
+   percent like >999% is wider than 5ch and grows its own cell instead of
+   being cut off. */
 .score-table td.score-value-cell {
-  width: 6ch;
-  min-width: 6ch;
+  min-width: 5ch;
   padding-left: 0.2rem;
   padding-right: 0.2rem;
 }
@@ -890,7 +895,8 @@ body.nav-hidden .depth-table thead {
 
 /* --- Spacing between sub-tables (e.g. observations depth groups) --- */
 
-.score-table + .score-table {
+.score-table + .score-table,
+.score-table-wrapper + .score-table-wrapper {
   margin-top: 3rem;
 }
 
@@ -1203,6 +1209,11 @@ body.quarto-dark .version-select {
   .score-table th,
   .score-table td {
     padding: 0.15rem 0.2rem;
+  }
+
+  /* The eleven tick labels need the full 300px bar to stay apart */
+  .legend-ticks {
+    display: none;
   }
 }
 

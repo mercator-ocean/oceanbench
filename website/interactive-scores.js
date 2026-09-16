@@ -845,7 +845,7 @@ function renderDepthGroup(
   tbody += "</tbody>";
 
   const tableClass = depths.length > 1 ? "score-table depth-table" : "score-table";
-  return `<table class="${tableClass}">${thead}${tbody}</table>`;
+  return `<div class="score-table-wrapper"><table class="${tableClass}">${thead}${tbody}</table></div>`;
 }
 
 function renderCombinedFlatMetrics(
