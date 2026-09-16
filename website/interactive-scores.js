@@ -129,7 +129,7 @@ function formatPercentDiffForCell(referenceValue, comparedValue) {
   if (referenceValue === 0) return comparedValue === 0 ? "0%" : "N/A";
   const percent = ((comparedValue - referenceValue) / Math.abs(referenceValue)) * 100;
   if (percent > 999) return ">999%";
-  if (percent < -999) return "<-999%";
+  if (percent < -999) return "&lt;-999%";
   return `${Math.round(percent)}%`;
 }
 
@@ -1433,6 +1433,62 @@ function writeUrlState() {
   window.history.replaceState(null, "", newRelativeUrl);
 }
 
+function ensureTipElement() {
+  let tip = document.getElementById("score-tip");
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.id = "score-tip";
+    document.body.appendChild(tip);
+  }
+  return tip;
+}
+
+function closeTapTooltip() {
+  const open = document.querySelector("[data-tip-open]");
+  if (open) open.removeAttribute("data-tip-open");
+  const tip = document.getElementById("score-tip");
+  if (tip) tip.classList.remove("is-open");
+}
+
+function openTapTooltip(element) {
+  const text = element.getAttribute("title");
+  if (!text) return;
+  const tip = ensureTipElement();
+  tip.textContent = text;
+  tip.classList.add("is-open");
+  element.setAttribute("data-tip-open", "");
+
+  const rect = element.getBoundingClientRect();
+  const width = tip.getBoundingClientRect().width;
+  const left = Math.max(
+    4,
+    Math.min(
+      rect.left + window.scrollX + rect.width / 2 - width / 2,
+      window.scrollX + document.documentElement.clientWidth - width - 4,
+    ),
+  );
+  tip.style.left = `${left}px`;
+  tip.style.top = `${rect.bottom + window.scrollY + 4}px`;
+}
+
+function attachTapTooltips() {
+  document.addEventListener("click", (event) => {
+    const target = event.target.closest(
+      ".score-table td.score-value-cell, .challenger-note-marker",
+    );
+    if (!target) {
+      closeTapTooltip();
+      return;
+    }
+    if (target.classList.contains("challenger-note-marker")) {
+      event.preventDefault();
+    }
+    const wasOpen = target.hasAttribute("data-tip-open");
+    closeTapTooltip();
+    if (!wasOpen) openTapTooltip(target);
+  });
+}
+
 function init() {
   if (!document.getElementById("scores-data")) return;
   const initialSection = readSectionFromHash();
@@ -1454,6 +1510,7 @@ function init() {
   });
 
   window.addEventListener("scroll", scheduleScrollSpyRefresh, { passive: true });
+  attachTapTooltips();
 
   let wasDark = document.body.classList.contains("quarto-dark");
   new MutationObserver(() => {
