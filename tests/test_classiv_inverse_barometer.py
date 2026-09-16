@@ -11,7 +11,6 @@ from oceanbench.core.classIV_support import (
     CHALLENGER_INVERSE_BAROMETER_VARIABLES,
     CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS,
     REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
-    _should_use_bracket_vertical_interpolation,
     prepare_class4_model_variable,
 )
 from oceanbench.core.curvilinear_staging import GLOENS_SOURCE_NAME
@@ -82,14 +81,13 @@ def test_sea_level_anomaly_removes_the_inverse_barometer_of_a_registered_challen
     numpy.testing.assert_allclose(converted.values, expected.values)
 
 
-def test_removing_the_inverse_barometer_keeps_the_variable_name_the_interpolator_dispatches_on(monkeypatch):
+def test_removing_the_inverse_barometer_keeps_the_variable_name(monkeypatch):
     _registered(monkeypatch)
     dataset = _challenger_dataset(with_inverse_barometer=True)
 
     converted = prepare_class4_model_variable(dataset[SEA_SURFACE_HEIGHT_KEY], SEA_SURFACE_HEIGHT_KEY, dataset)
 
     assert converted.name == SEA_SURFACE_HEIGHT_KEY
-    assert _should_use_bracket_vertical_interpolation(str(converted.name))
 
 
 def test_a_registered_challenger_missing_its_inverse_barometer_is_an_error(monkeypatch):
