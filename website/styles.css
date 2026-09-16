@@ -644,7 +644,7 @@ body.quarto-dark .score-tab.active {
 
 .controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.4rem 0.75rem;
   padding: 0.4rem 0.6rem;
   background: var(--ob-surface-raised);
@@ -1176,9 +1176,20 @@ body.quarto-dark .version-select {
 
 /* --- Narrow screens: scroll the table inside its own box --- */
 
+/* Desktop keeps the bar on one line, so the header takes its natural width */
+@media (min-width: 901px) {
+  #score-header {
+    min-width: max-content;
+  }
+}
+
 /* The sticky thead needs the page itself to scroll sideways, so it is kept on
    wide screens only and the wrapper takes over the horizontal scrolling below. */
 @media (max-width: 900px) {
+  .controls {
+    flex-wrap: wrap;
+  }
+
   .score-table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
