@@ -8,6 +8,8 @@ import pandas
 import pytest
 import xarray
 
+from oceanbench.core import curvilinear_class4
+from oceanbench.core.classIV_support import GLOENS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
 from oceanbench.core.curvilinear_class4 import (
     NativeGrid,
     interpolate_class4_native_ensemble_to_observations,
@@ -18,6 +20,7 @@ from oceanbench.core.curvilinear_class4 import (
 )
 from oceanbench.core.curvilinear_staging import (
     CLASS4_ROUTE_NATIVE,
+    GLOENS_SOURCE_NAME,
     CLASS4_ROUTE_REGRIDDED,
     CurvilinearChallenger,
     maybe_regridded_curvilinear_dataset,
@@ -226,16 +229,97 @@ def test_the_velocity_components_are_found_under_either_name():
     assert velocity_component_names(standard_names) == ("sea_water_x_velocity", "sea_water_y_velocity")
 
 
-def test_sea_level_is_refused_on_the_native_grid():
-    dataset = _model_dataset(numpy.zeros((1, 1, 4, 4)), name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key())
+MEAN_DYNAMIC_TOPOGRAPHY_PER_LATITUDE = 0.01
+MEAN_DYNAMIC_TOPOGRAPHY_PER_LONGITUDE = 0.002
 
-    with pytest.raises(ValueError, match="mean dynamic topography"):
-        interpolate_class4_native_model_to_observations(
-            dataset,
-            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
-            _observations([40.1], [10.1]),
-            _native_grid(),
-        )
+
+def _mean_dynamic_topography() -> xarray.DataArray:
+    """A topography linear in both axes, so a bilinear read of it is its own formula."""
+    latitude = numpy.arange(38.5, 45.01, 1.5)
+    longitude = numpy.arange(8.5, 15.01, 1.5)
+    values = (
+        MEAN_DYNAMIC_TOPOGRAPHY_PER_LATITUDE * latitude[:, numpy.newaxis]
+        + MEAN_DYNAMIC_TOPOGRAPHY_PER_LONGITUDE * longitude[numpy.newaxis, :]
+    )
+    return xarray.DataArray(
+        values,
+        dims=(Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()),
+        coords={Dimension.LATITUDE.key(): latitude, Dimension.LONGITUDE.key(): longitude},
+    )
+
+
+def test_native_sea_level_takes_off_the_barometer_the_topography_and_the_shift(monkeypatch):
+    monkeypatch.setattr(
+        curvilinear_class4,
+        "load_mean_dynamic_topography",
+        lambda _resolution: _mean_dynamic_topography(),
+    )
+    sea_level_key = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
+    dataset = _model_dataset(numpy.arange(16.0).reshape(1, 1, 4, 4) / 10.0, name=sea_level_key)
+    dataset = dataset.assign({"ssh_ib": xarray.full_like(dataset[sea_level_key], 0.05)})
+    dataset = with_dataset_source(dataset, kind="challenger", name=GLOENS_SOURCE_NAME)
+    observations = _observations([40.1, 42.9], [12.2, 10.1])
+
+    model_values = interpolate_class4_native_model_to_observations(
+        dataset,
+        sea_level_key,
+        observations,
+        _native_grid(),
+    )
+
+    cell_latitudes = numpy.array([40.0, 43.0])
+    cell_longitudes = numpy.array([12.0, 10.0])
+    topography = (
+        MEAN_DYNAMIC_TOPOGRAPHY_PER_LATITUDE * cell_latitudes + MEAN_DYNAMIC_TOPOGRAPHY_PER_LONGITUDE * cell_longitudes
+    )
+    expected = numpy.array([0.2, 1.2]) - 0.05 - topography - GLOENS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    numpy.testing.assert_allclose(model_values, expected)
+
+
+def test_native_sea_level_answers_for_every_member_as_the_member_loop_does(monkeypatch):
+    monkeypatch.setattr(
+        curvilinear_class4,
+        "load_mean_dynamic_topography",
+        lambda _resolution: _mean_dynamic_topography(),
+    )
+    sea_level_key = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
+    values = numpy.arange(3 * 1 * 4 * 4 * 4, dtype="float64").reshape(3, 1, 4, 4, 4) / 100.0
+    dataset = xarray.Dataset(
+        {
+            sea_level_key: (
+                ["member", Dimension.FIRST_DAY_DATETIME.key(), Dimension.LEAD_DAY_INDEX.key(), *SOURCE_DIMENSIONS],
+                values,
+            )
+        },
+        coords={
+            "member": numpy.arange(3),
+            Dimension.FIRST_DAY_DATETIME.key(): [FIRST_DAY],
+            Dimension.LEAD_DAY_INDEX.key(): numpy.arange(1, 5),
+        },
+    )
+    observations = _spread_observations([1, 2, 3, 4])
+
+    member_values = interpolate_class4_native_ensemble_to_observations(
+        dataset,
+        sea_level_key,
+        observations,
+        _native_grid(),
+        ensemble_dimension="member",
+    )
+    member_loop = numpy.stack(
+        [
+            interpolate_class4_native_model_to_observations(
+                dataset.isel(member=member_index),
+                sea_level_key,
+                observations,
+                _native_grid(),
+            )
+            for member_index in range(dataset.sizes["member"])
+        ],
+        axis=1,
+    )
+
+    assert numpy.array_equal(member_values, member_loop, equal_nan=True)
 
 
 def test_a_challenger_that_is_not_declared_curvilinear_has_no_native_grid():

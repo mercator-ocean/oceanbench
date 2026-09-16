@@ -45,11 +45,12 @@ The vertical axis is staggered
     ``deptht``, ``depthu`` and ``depthv`` are the same levels published under three names, so
     the axis is renamed to the common one and the tracer values are used.
 
-Sea level cannot be scored here
-    Turning a model sea surface height into an altimeter anomaly subtracts a mean dynamic
-    topography resolved by grid resolution, which is not defined on a curvilinear grid. That
-    conversion belongs after the regrid, so it is refused here with an error rather than
-    approximated.
+Sea level carries its datum on another grid
+    Turning a model sea surface height into an altimeter anomaly subtracts the challenger's
+    inverse barometer, a mean dynamic topography and a per-challenger shift. The mean dynamic
+    topography is published on a regular grid, so it is interpolated onto the native cells the
+    observations took their sea surface height from rather than the field being regridded onto
+    it.
 """
 
 from collections.abc import Mapping, Sequence
@@ -60,7 +61,11 @@ import numpy
 import pandas
 import xarray
 
-from oceanbench.core.classIV_support import vertically_interpolate_class4_profiles
+from oceanbench.core.classIV_support import (
+    challenger_inverse_barometer_variable,
+    challenger_mean_sea_surface_height_shift,
+    vertically_interpolate_class4_profiles,
+)
 from oceanbench.core.curvilinear_c_grid import (
     GRID_TYPE_MERIDIONAL_VELOCITY,
     GRID_TYPE_TRACER,
@@ -78,6 +83,7 @@ from oceanbench.core.curvilinear_grid import (
 )
 from oceanbench.core.curvilinear_staging import NEMO_DEPTH_DIMENSIONS, CurvilinearChallenger, curvilinear_challenger
 from oceanbench.core.dataset_source import get_dataset_source
+from oceanbench.core.references.observations import load_mean_dynamic_topography
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 OBSERVATION_DIMENSION = "observation"
@@ -87,6 +93,15 @@ OBSERVATION_DIMENSION = "observation"
 #: A native ensemble store chunks a field by member, so a batch is fetched in a single dask
 #: call and its reads overlap in the object store instead of queueing one behind the other.
 MEMBER_BATCH_SIZE = 8
+
+SEA_LEVEL_VARIABLE_KEY = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
+
+#: The mean dynamic topography a native-grid sea level matchup subtracts.
+#:
+#: The regridded path samples a curvilinear challenger onto the standard quarter-degree
+#: scoring grid, whose sea level conversion then reads the quarter-degree mean dynamic
+#: topography, so the native path reads that same one and the two routes stay comparable.
+NATIVE_MEAN_DYNAMIC_TOPOGRAPHY_RESOLUTION = "quarter_degree"
 
 VELOCITY_VARIABLE_KEYS = (
     Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
@@ -315,36 +330,18 @@ def interpolate_class4_native_model_to_observations(
     wherever the nearest native cell is land, is further away than the neighbour cutoff, or
     the vertical descent could not reach the observation depth.
     """
-    if variable_key == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
-        raise ValueError(
-            "sea level cannot be matched up on a native curvilinear grid: converting a model "
-            "sea surface height to an altimeter anomaly subtracts a mean dynamic topography "
-            "resolved by grid resolution, which a curvilinear grid does not have. Score it "
-            "through the regridded staging path of oceanbench.core.curvilinear_staging."
-        )
-    if variable_key not in VELOCITY_VARIABLE_KEYS and variable_key not in challenger_dataset.data_vars:
-        raise ValueError(f"the challenger holds {sorted(challenger_dataset.data_vars)} and not {variable_key}")
     observations_dataframe = observations_dataframe.reset_index(drop=True)
     depth_values = _tracer_depth_values(challenger_dataset)
-
-    def values_of(name: str) -> numpy.ndarray:
-        return _model_values_on_one_grid_point(
-            _with_common_depth_dimension(challenger_dataset[name], depth_values),
+    gathered = {
+        field_name: _model_values_on_one_grid_point(
+            _with_common_depth_dimension(challenger_dataset[field_name], depth_values),
             observations_dataframe,
             native_grid,
-            grid_type_of_variable(name),
+            grid_type_of_variable(field_name),
         )
-
-    if variable_key not in VELOCITY_VARIABLE_KEYS:
-        return values_of(variable_key)
-
-    zonal_name, meridional_name = velocity_component_names(challenger_dataset)
-    eastward, northward = rotated_to_east_north(
-        values_of(zonal_name),
-        values_of(meridional_name),
-        _observation_angle(native_grid, observations_dataframe),
-    )
-    return eastward if variable_key == VELOCITY_VARIABLE_KEYS[0] else northward
+        for field_name in _source_field_names(challenger_dataset, variable_key)
+    }
+    return _combined_values(challenger_dataset, variable_key, gathered, native_grid, observations_dataframe)
 
 
 def interpolate_class4_native_ensemble_to_observations(
@@ -381,18 +378,14 @@ class _FieldConsumer:
 
 def _source_field_names(challenger_dataset: xarray.Dataset, variable_key: str) -> tuple[str, ...]:
     """The store fields a variable is made of, in the order its combination reads them."""
-    if variable_key == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
-        raise ValueError(
-            "sea level cannot be matched up on a native curvilinear grid: converting a model "
-            "sea surface height to an altimeter anomaly subtracts a mean dynamic topography "
-            "resolved by grid resolution, which a curvilinear grid does not have. Score it "
-            "through the regridded staging path of oceanbench.core.curvilinear_staging."
-        )
     if variable_key in VELOCITY_VARIABLE_KEYS:
         return velocity_component_names(challenger_dataset)
     if variable_key not in challenger_dataset.data_vars:
         raise ValueError(f"the challenger holds {sorted(challenger_dataset.data_vars)} and not {variable_key}")
-    return (variable_key,)
+    if variable_key != SEA_LEVEL_VARIABLE_KEY:
+        return (variable_key,)
+    inverse_barometer = challenger_inverse_barometer_variable(challenger_dataset)
+    return (variable_key,) if inverse_barometer is None else (variable_key, inverse_barometer)
 
 
 def _field_consumers(
@@ -497,7 +490,51 @@ def _gather_field(
                 )
 
 
-def _combined_member_values(
+def _per_observation(per_row: numpy.ndarray, gathered_values: numpy.ndarray) -> numpy.ndarray:
+    """One value per observation, shaped to broadcast over whatever follows the row axis."""
+    return per_row.reshape(per_row.shape + (1,) * (gathered_values.ndim - 1))
+
+
+def _mapped_cell_positions(
+    native_grid: NativeGrid,
+    observations_dataframe: pandas.DataFrame,
+    grid_type: str,
+) -> tuple[numpy.ndarray, numpy.ndarray]:
+    """Where the cell each observation took its value from actually sits."""
+    mapping = observation_mapping(
+        native_grid,
+        grid_type,
+        observations_dataframe[Dimension.LATITUDE.key()].to_numpy("float64"),
+        observations_dataframe[Dimension.LONGITUDE.key()].to_numpy("float64"),
+    )
+    latitude, longitude = c_grid_positions(native_grid.latitude, native_grid.longitude, grid_type)
+    return latitude.ravel()[mapping.source_flat_indices], longitude.ravel()[mapping.source_flat_indices]
+
+
+def _sea_level_datum(
+    challenger_dataset: xarray.Dataset,
+    native_grid: NativeGrid,
+    observations_dataframe: pandas.DataFrame,
+) -> numpy.ndarray:
+    """What the altimeter convention takes off the sea surface height of each observation.
+
+    The mean dynamic topography is published on a regular grid, so it is read at the position
+    of the native cell the sea surface height came from rather than at the observation itself,
+    which is the same cell value the regridded path would have carried there.
+    """
+    latitude, longitude = _mapped_cell_positions(native_grid, observations_dataframe, GRID_TYPE_TRACER)
+    mean_dynamic_topography = load_mean_dynamic_topography(NATIVE_MEAN_DYNAMIC_TOPOGRAPHY_RESOLUTION).interp(
+        {
+            Dimension.LATITUDE.key(): xarray.DataArray(latitude, dims=OBSERVATION_DIMENSION),
+            Dimension.LONGITUDE.key(): xarray.DataArray(longitude, dims=OBSERVATION_DIMENSION),
+        },
+        method="linear",
+    )
+    shift = challenger_mean_sea_surface_height_shift(challenger_dataset)
+    return numpy.asarray(mean_dynamic_topography.values, dtype="float64") + shift
+
+
+def _combined_values(
     challenger_dataset: xarray.Dataset,
     variable_key: str,
     gathered: Mapping[str, numpy.ndarray],
@@ -505,15 +542,22 @@ def _combined_member_values(
     observations_dataframe: pandas.DataFrame,
 ) -> numpy.ndarray:
     """What the source fields of one variable make together, once all of them are gathered."""
-    if variable_key not in VELOCITY_VARIABLE_KEYS:
+    if variable_key in VELOCITY_VARIABLE_KEYS:
+        zonal_name, meridional_name = velocity_component_names(challenger_dataset)
+        eastward, northward = rotated_to_east_north(
+            gathered[zonal_name],
+            gathered[meridional_name],
+            _per_observation(_observation_angle(native_grid, observations_dataframe), gathered[zonal_name]),
+        )
+        return eastward if variable_key == VELOCITY_VARIABLE_KEYS[0] else northward
+    if variable_key != SEA_LEVEL_VARIABLE_KEY:
         return gathered[variable_key]
-    zonal_name, meridional_name = velocity_component_names(challenger_dataset)
-    eastward, northward = rotated_to_east_north(
-        gathered[zonal_name],
-        gathered[meridional_name],
-        _observation_angle(native_grid, observations_dataframe)[:, numpy.newaxis],
-    )
-    return eastward if variable_key == VELOCITY_VARIABLE_KEYS[0] else northward
+    sea_surface_height = gathered[variable_key]
+    inverse_barometer = challenger_inverse_barometer_variable(challenger_dataset)
+    if inverse_barometer is not None:
+        sea_surface_height = sea_surface_height - gathered[inverse_barometer]
+    datum = _sea_level_datum(challenger_dataset, native_grid, observations_dataframe)
+    return sea_surface_height - _per_observation(datum, sea_surface_height)
 
 
 def interpolate_class4_native_ensemble_variables_to_observations(
@@ -551,7 +595,7 @@ def interpolate_class4_native_ensemble_variables_to_observations(
             ensemble_dimension,
         )
     return [
-        _combined_member_values(
+        _combined_values(
             challenger_dataset,
             variable_key,
             {

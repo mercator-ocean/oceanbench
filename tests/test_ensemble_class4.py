@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import logging
 import math
 import weakref
 
@@ -12,8 +11,10 @@ import pandas
 import pytest
 import xarray
 
+from oceanbench.core import curvilinear_class4
 from oceanbench.core.classIV_support import (
     _CLASS4_OBSERVATIONS_CACHE,
+    REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
     _prepared_class4_observations,
     interpolate_class4_model_to_observations,
 )
@@ -705,29 +706,45 @@ def test_a_store_that_describes_its_cells_twice_reaches_the_native_matchup(monke
     numpy.testing.assert_array_equal(matchups[0].member_values[:, 0], [0.0, 5.0, 10.0])
 
 
-def test_sea_level_is_left_out_of_a_native_run_instead_of_taking_the_other_variables_down(monkeypatch, caplog):
-    challenger = _declare_native_challenger(monkeypatch)
+NATIVE_MEAN_DYNAMIC_TOPOGRAPHY = 0.25
 
-    with caplog.at_level(logging.WARNING, logger="oceanbench.core.ensemble_class4"):
-        matchups = ensemble_class4_matchup(
-            challenger,
-            _native_observations_dataset(depth=15.0),
-            [
-                Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
-                Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
-                Variable.EASTWARD_SEA_WATER_VELOCITY,
-                Variable.NORTHWARD_SEA_WATER_VELOCITY,
-            ],
-        )
+
+def test_sea_level_is_matched_up_on_the_native_grid_beside_the_other_variables(monkeypatch):
+    challenger = _declare_native_challenger(monkeypatch)
+    monkeypatch.setattr(
+        curvilinear_class4,
+        "load_mean_dynamic_topography",
+        lambda _resolution: xarray.DataArray(
+            numpy.full((6, 6), NATIVE_MEAN_DYNAMIC_TOPOGRAPHY),
+            dims=(Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()),
+            coords={
+                Dimension.LATITUDE.key(): numpy.arange(39.0, 45.0),
+                Dimension.LONGITUDE.key(): numpy.arange(9.0, 15.0),
+            },
+        ),
+    )
+
+    matchups = ensemble_class4_matchup(
+        challenger,
+        _native_observations_dataset(depth=15.0),
+        [
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+            Variable.EASTWARD_SEA_WATER_VELOCITY,
+            Variable.NORTHWARD_SEA_WATER_VELOCITY,
+        ],
+    )
 
     assert [matchup.variable for matchup in matchups] == [
         Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
         Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
         Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
     ]
-    warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
-    assert len(warnings) == 1
-    assert Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key() in warnings[0].getMessage()
+    numpy.testing.assert_allclose(
+        matchups[1].member_values[:, 0],
+        -NATIVE_MEAN_DYNAMIC_TOPOGRAPHY - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
+    )
 
 
 # ---------------------------------------------------------------------------
