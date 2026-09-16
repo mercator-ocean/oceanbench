@@ -137,3 +137,22 @@ def test_unexpected_observation_basis_version_raises_with_found_version(tmp_path
 
     assert "2024-v2.0.1" in str(raised_error.value)
     assert observations.EXPECTED_OBSERVATIONS_BASIS_VERSION in str(raised_error.value)
+
+
+def test_observation_basis_version_is_required_on_every_day_store(tmp_path, monkeypatch) -> None:
+    _write_observation_day_store(tmp_path / "20240103.zarr", observations.EXPECTED_OBSERVATIONS_BASIS_VERSION)
+    _write_observation_day_store(tmp_path / "20240104.zarr", "2024-v2.0.1")
+    monkeypatch.setattr(
+        observations,
+        "observation_path",
+        lambda day: str(tmp_path / f"{pandas.Timestamp(day):%Y%m%d}.zarr"),
+    )
+    first_day_datetimes = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
+
+    with pytest.raises(observations.ObservationBasisVersionError, match="2024-v2.0.1"):
+        observations._selected_observations_dataset(
+            observation_days=numpy.array(["2024-01-03", "2024-01-04"], dtype="datetime64[D]"),
+            first_day_timestamps=pandas.to_datetime(first_day_datetimes),
+            first_day_datetimes=first_day_datetimes,
+            lead_days_count=10,
+        )
