@@ -17,6 +17,23 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
+## Unreleased
+
+**Scores:** Class IV tables change for every challenger; gridded and Lagrangian scores unchanged.
+To be published as 0.6.0 once every challenger is rescored; the website shows the 0.5.0 reports until then.
+
+### Changed
+
+- Class IV observations come from the rebuilt `observations2024-v2` store: quality flag 1 only, drifter currents filtered with undrogued drifters dropped and wind slippage subtracted, code 211 dropped, SLA outliers beyond 2 m flagged. Currents RMSD drops by roughly a third, salinity by under 1 percent ([#316](https://github.com/mercator-ocean/oceanbench/pull/316)).
+
+### Fixed
+
+- Class IV salinity is vertically interpolated with the same two level linear bracket as the other variables. The cubic spline it used before needed four valid levels and silently dropped shallow profiles ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+
+### Added
+
+- The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+
 ## 0.5.1 - 2026-09-02
 
 **Scores:** unchanged vs 0.5.0. Data paths only.

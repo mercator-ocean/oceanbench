@@ -5,7 +5,6 @@
 import numpy
 import pandas
 import xarray
-from scipy.interpolate import CubicSpline
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import (
@@ -23,9 +22,8 @@ from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
-MINIMUM_POINTS_FOR_CUBIC_SPLINE = 4
-VERTICAL_INTERPOLATION_BATCH_SIZE = 1000
 VELOCITY_TARGET_DEPTH_METERS = 15.0
+OBSERVATION_COUNT_COLUMN = "Observations"
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
 
 
@@ -252,53 +250,6 @@ def prepare_class4_model_variable(
     return _convert_forecast_ssh_to_sla(model_variable, variable_key)
 
 
-def _interpolate_vertically(
-    profiles: numpy.ndarray,
-    model_depths: numpy.ndarray,
-    target_depths: numpy.ndarray,
-) -> numpy.ndarray:
-    if len(model_depths) == 1:
-        return profiles[0, :]
-    observation_count = profiles.shape[1]
-    result = numpy.full(observation_count, numpy.nan)
-    sort_order = numpy.argsort(model_depths)
-    sorted_depths = model_depths[sort_order]
-    sorted_profiles = profiles[sort_order, :]
-    valid_masks = ~numpy.isnan(sorted_profiles)
-    valid_counts = valid_masks.sum(axis=0)
-    enough_points = valid_counts >= MINIMUM_POINTS_FOR_CUBIC_SPLINE
-    if not numpy.any(enough_points):
-        return result
-    eligible_indices = numpy.where(enough_points)[0]
-    # Group equal validity masks without encoding them in a fixed-width integer.
-    packed_valid_masks = numpy.packbits(valid_masks[:, eligible_indices].T, axis=1)
-    unique_valid_masks, inverse = numpy.unique(packed_valid_masks, axis=0, return_inverse=True)
-    for group_idx in range(len(unique_valid_masks)):
-        group_local = numpy.where(inverse == group_idx)[0]
-        indices = eligible_indices[group_local]
-        valid_mask = valid_masks[:, indices[0]]
-        group_depths = sorted_depths[valid_mask]
-        group_targets = target_depths[indices]
-        in_range = (group_targets >= group_depths[0]) & (group_targets <= group_depths[-1])
-        if not numpy.any(in_range):
-            continue
-        active_indices = indices[in_range]
-        active_targets = group_targets[in_range]
-        active_profiles = sorted_profiles[valid_mask][:, active_indices]
-        for start in range(0, len(active_indices), VERTICAL_INTERPOLATION_BATCH_SIZE):
-            end = min(start + VERTICAL_INTERPOLATION_BATCH_SIZE, len(active_indices))
-            batch_idx = active_indices[start:end]
-            batch_targets = active_targets[start:end]
-            batch_profiles = active_profiles[:, start:end]
-            spline = CubicSpline(group_depths, batch_profiles, axis=0, bc_type="natural")
-            interpolated = spline(batch_targets)
-            if interpolated.ndim == 2:
-                result[batch_idx] = interpolated[numpy.arange(len(batch_idx)), numpy.arange(len(batch_idx))]
-            else:
-                result[batch_idx] = interpolated
-    return result
-
-
 def _interpolate_vertically_bracket(
     profiles: numpy.ndarray,
     model_depths: numpy.ndarray,
@@ -349,15 +300,6 @@ def _model_data_with_depth_dimension(model_data: xarray.DataArray) -> xarray.Dat
     return model_data.expand_dims({depth_key: [0.0]})
 
 
-def _should_use_bracket_vertical_interpolation(variable_key: str) -> bool:
-    return variable_key in (
-        Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
-        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
-        Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
-        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
-    )
-
-
 def _horizontally_interpolated_profiles(
     time_slice: xarray.DataArray,
     observation_group: pandas.DataFrame,
@@ -380,17 +322,14 @@ def _interpolated_model_values_for_observation_group(
     time_slice: xarray.DataArray,
     observation_group: pandas.DataFrame,
     model_depths: numpy.ndarray,
-    variable_key: str,
 ) -> numpy.ndarray:
     observation_depths = observation_group[Dimension.DEPTH.key()].values
     horizontally_interpolated = _horizontally_interpolated_profiles(time_slice, observation_group)
-    if _should_use_bracket_vertical_interpolation(variable_key):
-        return _interpolate_vertically_bracket(
-            horizontally_interpolated,
-            model_depths,
-            observation_depths,
-        )
-    return _interpolate_vertically(horizontally_interpolated, model_depths, observation_depths)
+    return _interpolate_vertically_bracket(
+        horizontally_interpolated,
+        model_depths,
+        observation_depths,
+    )
 
 
 def _assign_model_values_for_first_day(
@@ -425,7 +364,6 @@ def _assign_model_values_for_first_day(
             time_slice,
             observation_group,
             model_depths,
-            variable_key,
         )
 
 
@@ -521,7 +459,9 @@ def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: 
     lead_columns = [column for column in pivot_table.columns if isinstance(column, (int, numpy.integer))]
     lead_labels = lead_day_labels(1, lead_days_count)
     column_rename = {column: lead_labels[column] for column in lead_columns}
-    result = pivot_table.set_index("label")[lead_columns].rename(columns=column_rename)
+    result = pivot_table.set_index("label")[lead_columns + ["count"]].rename(
+        columns=column_rename | {"count": OBSERVATION_COUNT_COLUMN}
+    )
     result.index.name = None
     result.columns.name = None
     return result

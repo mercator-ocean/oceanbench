@@ -8,7 +8,8 @@ import pandas
 import xarray
 
 from oceanbench.core.classIV_support import (
-    _interpolate_vertically,
+    _interpolate_vertically_bracket,
+    format_class4_results,
     interpolate_class4_model_to_observations,
 )
 from oceanbench.core.dataset_utils import Dimension, Variable
@@ -116,6 +117,78 @@ def test_class4_vertical_interpolation_supports_128_depth_levels() -> None:
     profiles[0, 1] = numpy.nan
     profiles[-1, 2] = numpy.nan
 
-    model_values = _interpolate_vertically(profiles, model_depths, target_depths)
+    model_values = _interpolate_vertically_bracket(profiles, model_depths, target_depths)
 
     numpy.testing.assert_allclose(model_values, target_depths + offsets)
+
+
+def _salinity_model_data() -> xarray.DataArray:
+    first_days = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
+    lead_days = numpy.array([0])
+    depths = numpy.array([0.0, 10.0, 20.0])
+    latitudes = numpy.array([0.0, 1.0])
+    longitudes = numpy.array([10.0, 11.0])
+    values = numpy.empty((1, 1, len(depths), len(latitudes), len(longitudes)))
+    for depth_index, depth in enumerate(depths):
+        values[0, 0, depth_index, :, :] = 35.0 + depth / 10.0
+
+    return xarray.DataArray(
+        dask.array.from_array(values, chunks=(1, 1, 1, len(latitudes), len(longitudes))),
+        dims=[
+            Dimension.FIRST_DAY_DATETIME.key(),
+            Dimension.LEAD_DAY_INDEX.key(),
+            Dimension.DEPTH.key(),
+            Dimension.LATITUDE.key(),
+            Dimension.LONGITUDE.key(),
+        ],
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): first_days,
+            Dimension.LEAD_DAY_INDEX.key(): lead_days,
+            Dimension.DEPTH.key(): depths,
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+        name=Variable.SEA_WATER_SALINITY.key(),
+    )
+
+
+def _salinity_observations_dataframe() -> pandas.DataFrame:
+    first_days = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
+    return pandas.DataFrame(
+        {
+            Dimension.TIME.key(): pandas.to_datetime(["2024-01-03", "2024-01-03", "2024-01-03"]),
+            Dimension.LATITUDE.key(): [0.0, 0.0, 0.0],
+            Dimension.LONGITUDE.key(): [10.0, 10.0, 10.0],
+            "first_day": [first_days[0]] * 3,
+            Dimension.DEPTH.key(): [5.0, 15.0, 25.0],
+            "lead_day": [0, 0, 0],
+            "observation_value": [35.0, 35.0, 35.0],
+        }
+    )
+
+
+def test_class4_salinity_uses_bracket_interpolation_on_a_shallow_column() -> None:
+    model_values = interpolate_class4_model_to_observations(
+        _salinity_model_data(),
+        _salinity_observations_dataframe(),
+    )
+
+    assert not numpy.isnan(model_values).any()
+    numpy.testing.assert_allclose(model_values, [35.5, 36.5, 37.0])
+
+
+def test_class4_formatted_results_keep_the_observation_count_column() -> None:
+    results_dataframe = pandas.DataFrame(
+        {
+            "variable": [Variable.SEA_WATER_SALINITY.key()] * 2,
+            "depth_bin": ["0-5m"] * 2,
+            "lead_day": [0, 1],
+            "rmsd": [0.1, 0.2],
+            "count": [1234, 1200],
+        }
+    )
+
+    formatted = format_class4_results(results_dataframe, 2)
+
+    assert list(formatted.columns) == ["Lead day 1", "Lead day 2", "Observations"]
+    assert formatted["Observations"].tolist() == [1234]
