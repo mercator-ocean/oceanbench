@@ -462,6 +462,7 @@ function navigateToSection(
   if (!SECTION_ID_MAP[sectionKey]) return;
   scrollToSection(sectionKey);
   setActiveSection(sectionKey, { updateHash, replaceHistory });
+  updateFloatingHead();
 }
 
 function sectionInView() {
@@ -485,6 +486,7 @@ function refreshScrollSpy() {
   if (currentSection) {
     setActiveSection(currentSection, { updateHash: false });
   }
+  updateFloatingHead();
 }
 
 function scheduleScrollSpyRefresh() {
@@ -1028,13 +1030,108 @@ function updateStickyOffsets() {
     const headerHeight = header.getBoundingClientRect().height;
     document.documentElement.style.setProperty("--controls-height", headerHeight + "px");
   }
-  // The second header row sticks below the first one, so it needs its height.
-  const firstHeadRow = [...document.querySelectorAll(".score-table thead tr:first-child")]
-    .find((row) => row.offsetParent !== null);
-  if (firstHeadRow) {
-    const rowHeight = firstHeadRow.getBoundingClientRect().height;
-    document.documentElement.style.setProperty("--thead-row1-height", rowHeight + "px");
+}
+
+// --- Floating header clone (narrow screens) ---
+
+// Above this width the table head is read straight from the page.
+const FLOATING_HEAD_MAX_WIDTH = 900;
+
+// The table the current clone was built from, so it is only rebuilt when the
+// columns it copies can have changed.
+let floatingHeadSource = null;
+
+function getFloatingHeadHost() {
+  let host = document.getElementById("floating-thead");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "floating-thead";
+    host.setAttribute("aria-hidden", "true");
+    document.body.appendChild(host);
   }
+  return host;
+}
+
+function hideFloatingHead() {
+  const host = document.getElementById("floating-thead");
+  if (host) host.classList.remove("is-visible");
+  floatingHeadSource = null;
+}
+
+// Force a rebuild, for when the column widths themselves have moved.
+function resetFloatingHead() {
+  hideFloatingHead();
+  const host = document.getElementById("floating-thead");
+  if (host) host.innerHTML = "";
+}
+
+function syncFloatingHeadScroll(wrapper) {
+  if (!floatingHeadSource || !wrapper.contains(floatingHeadSource)) return;
+  const host = document.getElementById("floating-thead");
+  if (!host) return;
+  host.scrollLeft = wrapper.scrollLeft;
+  host.classList.toggle("at-right-end", wrapper.classList.contains("at-right-end"));
+}
+
+// The table whose head has passed under the page header while the rest of its
+// rows are still on screen.
+function findTableUnderHeader(headerBottom) {
+  let found = null;
+  for (const wrapper of document.querySelectorAll(".score-table-wrapper")) {
+    const table = wrapper.querySelector(".score-table");
+    if (!table || !table.tHead || table.offsetParent === null) continue;
+    const headRect = table.tHead.getBoundingClientRect();
+    const tableRect = table.getBoundingClientRect();
+    if (headRect.top < headerBottom && tableRect.bottom > headerBottom + headRect.height) {
+      found = { wrapper, table };
+    }
+  }
+  return found;
+}
+
+// A deep copy of the head carrying the measured width of every live header
+// cell, so the copy lines up with the columns underneath it.
+function buildFloatingHead(host, table) {
+  host.innerHTML = "";
+  const clone = document.createElement("table");
+  clone.className = table.className;
+  clone.appendChild(table.tHead.cloneNode(true));
+  host.appendChild(clone);
+
+  const liveCells = table.tHead.querySelectorAll("th");
+  const cloneCells = clone.querySelectorAll("th");
+  liveCells.forEach((cell, index) => {
+    const target = cloneCells[index];
+    if (!target) return;
+    const width = cell.getBoundingClientRect().width;
+    target.style.width = `${width}px`;
+    target.style.minWidth = `${width}px`;
+    target.style.maxWidth = `${width}px`;
+  });
+  clone.style.width = `${table.getBoundingClientRect().width}px`;
+  floatingHeadSource = table;
+}
+
+function updateFloatingHead() {
+  if (window.innerWidth > FLOATING_HEAD_MAX_WIDTH) {
+    hideFloatingHead();
+    return;
+  }
+  const headerBottom = getStickyBottomOffset();
+  const target = findTableUnderHeader(headerBottom);
+  if (!target) {
+    hideFloatingHead();
+    return;
+  }
+  const host = getFloatingHeadHost();
+  if (floatingHeadSource !== target.table) buildFloatingHead(host, target.table);
+
+  const wrapperRect = target.wrapper.getBoundingClientRect();
+  host.style.left = `${wrapperRect.left}px`;
+  host.style.width = `${target.wrapper.clientWidth}px`;
+  host.classList.add("is-visible");
+  host.classList.toggle("at-right-end", target.wrapper.classList.contains("at-right-end"));
+  host.scrollLeft = target.wrapper.scrollLeft;
 }
 
 // Mark a scroll box that is already scrolled to its right edge so the fade
@@ -1044,6 +1141,7 @@ function setupScrollFade() {
     const update = () => {
       const atEnd = wrapper.scrollLeft + wrapper.clientWidth >= wrapper.scrollWidth - 1;
       wrapper.classList.toggle("at-right-end", atEnd);
+      syncFloatingHeadScroll(wrapper);
     };
     wrapper.addEventListener("scroll", update, { passive: true });
     update();
@@ -1319,6 +1417,8 @@ function renderTablesOnly() {
   setupCellHighlight();
   updateStickyOffsets();
   setupScrollFade();
+  resetFloatingHead();
+  updateFloatingHead();
 
   selectedBaseline = baseline;
   writeUrlState();
@@ -1380,6 +1480,8 @@ function renderAllTables() {
   refreshScrollSpy();
   setupCellHighlight();
   setupScrollFade();
+  resetFloatingHead();
+  updateFloatingHead();
 
   defaultVersionValue = resolveDefaultVersion(data);
   defaultRegionValue = regionIds[0] || null;
@@ -1592,11 +1694,13 @@ function init() {
 
     window.addEventListener("resize", () => {
       document.documentElement.style.setProperty("--navbar-full-height", `${navbar.offsetHeight}px`);
+      resetFloatingHead();
       syncHeaderState();
     });
   } else {
     window.addEventListener("resize", () => {
       updateStickyOffsets();
+      resetFloatingHead();
       refreshScrollSpy();
     });
   }

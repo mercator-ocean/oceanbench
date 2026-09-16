@@ -1190,16 +1190,13 @@ body.quarto-dark .version-select {
     flex-wrap: wrap;
   }
 
-  /* The table gets its own scroll box under the sticky page header, so the
-     header row and the model column can stay put inside it. */
+  /* The table scrolls sideways in its own box, and never vertically: with no
+     height limit the box has nothing to scroll down, so a vertical swipe over
+     it (or over the empty space beside it) always moves the page. */
   .score-table-wrapper {
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: visible;
     -webkit-overflow-scrolling: touch;
-    max-height: calc(100vh - var(--navbar-full-height, 0px) - var(--controls-height, 6rem) - 2rem);
-    overscroll-behavior: contain;
-    /* Keep the box below the sticky page header when it is scrolled into view,
-       otherwise its own header row lands behind that header. */
-    scroll-margin-top: calc(var(--navbar-full-height, 0px) + var(--controls-height, 6rem) + 0.5rem);
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
     mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
   }
@@ -1213,21 +1210,6 @@ body.quarto-dark .version-select {
     position: static;
   }
 
-  .score-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-  }
-
-  .score-table thead tr:last-child th {
-    top: var(--thead-row1-height, 0px);
-  }
-
-  .score-table thead .model-col {
-    left: 0;
-    z-index: 4;
-  }
-
   /* A drawn edge on the frozen column, as a pseudo-element so it survives
      the baseline row marker, which owns the box-shadow of those cells. */
   .score-table .model-col::after {
@@ -1239,6 +1221,43 @@ body.quarto-dark .version-select {
     width: 1px;
     background: var(--ob-border);
   }
+}
+
+/* --- Floating header clone (narrow screens) --- */
+
+/* A copy of the table head, held under the page header while the table itself
+   is scrolled past it. It is a scroll box of its own so the model column can
+   stay frozen while the copy follows the table sideways. */
+#floating-thead {
+  position: fixed;
+  /* The same offset as #score-header plus its height, with its transition, so
+     the copy stays glued to it while the navbar slides in and out. */
+  top: calc(var(--navbar-full-height, 0px) + var(--controls-height, 0px));
+  transition: top 0.2s linear;
+  z-index: 9;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bs-body-bg, #fafaf7);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+}
+
+#floating-thead.at-right-end {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+body.quarto-dark #floating-thead {
+  background: var(--bs-body-bg, #1a1a2e);
+}
+
+body.nav-hidden #floating-thead {
+  top: var(--controls-height, 0px);
+}
+
+#floating-thead.is-visible {
+  display: block;
 }
 
 /* --- Phone layout --- */
