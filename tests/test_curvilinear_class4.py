@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import dask.array
 import numpy
 import pandas
 import pytest
@@ -10,6 +11,7 @@ import xarray
 from oceanbench.core.curvilinear_class4 import (
     NativeGrid,
     interpolate_class4_native_ensemble_to_observations,
+    interpolate_class4_native_ensemble_variables_to_observations,
     interpolate_class4_native_model_to_observations,
     native_grid_of_dataset,
     velocity_component_names,
@@ -317,3 +319,156 @@ def test_a_store_on_a_depth_axis_it_does_not_describe_is_refused():
             _observations([40.1], [10.1], depths=[10.0]),
             _native_grid(),
         )
+
+
+class _CountingSource:
+    """A numpy array that records every block dask asks it for."""
+
+    def __init__(self, values: numpy.ndarray):
+        self.values = values
+        self.reads: list[object] = []
+        self.shape = values.shape
+        self.dtype = values.dtype
+        self.ndim = values.ndim
+
+    def __getitem__(self, key):
+        self.reads.append(key)
+        return self.values[key]
+
+
+def _velocity_ensemble(values: numpy.ndarray) -> tuple[xarray.Dataset, list[_CountingSource]]:
+    """``uo`` and ``vo`` over ``(member, first_day, lead_day, depth, y, x)``, one chunk per block."""
+    dimensions = [
+        "member",
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        "depthu",
+        *SOURCE_DIMENSIONS,
+    ]
+    sources = [_CountingSource(values), _CountingSource(values + 0.5)]
+    chunks = (1, 1, 1) + values.shape[3:]
+    dataset = xarray.Dataset(
+        {
+            "uo": (dimensions, dask.array.from_array(sources[0], chunks=chunks)),
+            "vo": (dimensions, dask.array.from_array(sources[1], chunks=chunks)),
+        },
+        coords={
+            "member": numpy.arange(values.shape[0]),
+            Dimension.FIRST_DAY_DATETIME.key(): [FIRST_DAY],
+            Dimension.LEAD_DAY_INDEX.key(): numpy.arange(1, values.shape[2] + 1),
+            "depthu": numpy.array([0.0, 10.0, 50.0, 100.0, 200.0]),
+        },
+    )
+    for source in sources:
+        source.reads.clear()
+    return dataset, sources
+
+
+def _turning_grid() -> NativeGrid:
+    latitude, longitude = _tracer_grid()
+    return NativeGrid(
+        latitude=latitude + 0.5 * numpy.arange(4.0)[numpy.newaxis, :],
+        longitude=longitude,
+        ocean_mask=numpy.ones(latitude.shape, dtype=bool),
+        source_dimensions=SOURCE_DIMENSIONS,
+    )
+
+
+def _spread_observations(lead_days: list[int]) -> pandas.DataFrame:
+    count = len(lead_days)
+    latitudes = 40.1 + 0.7 * numpy.arange(count)
+    longitudes = 10.2 + 0.6 * numpy.arange(count)
+    observations = _observations(latitudes, longitudes, depths=5.0 + 30.0 * numpy.arange(count))
+    return observations.assign(lead_day=numpy.asarray(lead_days, dtype="int64"))
+
+
+def test_the_batched_ensemble_answers_exactly_as_the_member_loop_does():
+    values = numpy.arange(3 * 1 * 4 * 5 * 4 * 4, dtype="float64").reshape(3, 1, 4, 5, 4, 4) / 100.0
+    dataset, _sources = _velocity_ensemble(values)
+    native_grid = _turning_grid()
+    eastward_observations = _spread_observations([1, 2, 3, 4, 2])
+    northward_observations = _spread_observations([4, 3, 2, 1])
+
+    batched = interpolate_class4_native_ensemble_variables_to_observations(
+        dataset,
+        [(EASTWARD_KEY, eastward_observations), (NORTHWARD_KEY, northward_observations)],
+        native_grid,
+        ensemble_dimension="member",
+    )
+
+    for variable_key, observations, answer in (
+        (EASTWARD_KEY, eastward_observations, batched[0]),
+        (NORTHWARD_KEY, northward_observations, batched[1]),
+    ):
+        member_loop = numpy.stack(
+            [
+                interpolate_class4_native_model_to_observations(
+                    dataset.isel(member=member_index),
+                    variable_key,
+                    observations,
+                    native_grid,
+                )
+                for member_index in range(dataset.sizes["member"])
+            ],
+            axis=1,
+        )
+        assert numpy.array_equal(answer, member_loop, equal_nan=True)
+
+
+def test_a_tracer_is_batched_exactly_as_the_member_loop_reads_it():
+    values = numpy.arange(3 * 1 * 4 * 5 * 4 * 4, dtype="float64").reshape(3, 1, 4, 5, 4, 4) / 10.0
+    dataset, _sources = _velocity_ensemble(values)
+    dataset = dataset.rename({"uo": TEMPERATURE_KEY, "depthu": "deptht"}).drop_vars("vo")
+    observations = _spread_observations([1, 2, 3, 4])
+
+    batched = interpolate_class4_native_ensemble_to_observations(
+        dataset,
+        TEMPERATURE_KEY,
+        observations,
+        _native_grid(),
+        ensemble_dimension="member",
+    )
+    member_loop = numpy.stack(
+        [
+            interpolate_class4_native_model_to_observations(
+                dataset.isel(member=member_index),
+                TEMPERATURE_KEY,
+                observations,
+                _native_grid(),
+            )
+            for member_index in range(dataset.sizes["member"])
+        ],
+        axis=1,
+    )
+
+    assert numpy.array_equal(batched, member_loop, equal_nan=True)
+
+
+def test_each_block_of_a_source_field_is_read_once_for_every_variable_that_needs_it():
+    values = numpy.arange(3 * 1 * 4 * 5 * 4 * 4, dtype="float64").reshape(3, 1, 4, 5, 4, 4) / 100.0
+    dataset, sources = _velocity_ensemble(values)
+    native_grid = _turning_grid()
+    observations = _spread_observations([1, 2, 3, 4])
+    blocks_in_the_store = dataset.sizes["member"] * dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
+
+    interpolate_class4_native_ensemble_variables_to_observations(
+        dataset,
+        [(EASTWARD_KEY, observations), (NORTHWARD_KEY, observations)],
+        native_grid,
+        ensemble_dimension="member",
+    )
+    batched_reads = [len(source.reads) for source in sources]
+
+    for source in sources:
+        source.reads.clear()
+    for variable_key in (EASTWARD_KEY, NORTHWARD_KEY):
+        interpolate_class4_native_ensemble_variables_to_observations(
+            dataset,
+            [(variable_key, observations)],
+            native_grid,
+            ensemble_dimension="member",
+        )
+    per_variable_reads = [len(source.reads) for source in sources]
+
+    assert batched_reads == [blocks_in_the_store, blocks_in_the_store]
+    assert per_variable_reads == [2 * blocks_in_the_store, 2 * blocks_in_the_store]

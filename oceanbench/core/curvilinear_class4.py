@@ -52,6 +52,7 @@ Sea level cannot be scored here
     approximated.
 """
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
 
@@ -80,6 +81,12 @@ from oceanbench.core.dataset_source import get_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 OBSERVATION_DIMENSION = "observation"
+
+#: How many members one read of a source field asks for.
+#:
+#: A native ensemble store chunks a field by member, so a batch is fetched in a single dask
+#: call and its reads overlap in the object store instead of queueing one behind the other.
+MEMBER_BATCH_SIZE = 8
 
 VELOCITY_VARIABLE_KEYS = (
     Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
@@ -350,23 +357,211 @@ def interpolate_class4_native_ensemble_to_observations(
 ) -> numpy.ndarray:
     """Native-grid model values at every observation for every member, shape ``(n, M)``.
 
-    The member loop is here for the same reason it is in
-    :func:`oceanbench.core.ensemble_class4.interpolate_class4_ensemble_to_observations`: one
-    member slice goes in at a time, so the matchup itself never has a member dimension to
-    reason about. The observation to cell mapping does not depend on the member, so it is
-    built on the first member and read from the cache by all the others.
+    One variable of
+    :func:`interpolate_class4_native_ensemble_variables_to_observations`, which is where the
+    reading happens.
+    """
+    return interpolate_class4_native_ensemble_variables_to_observations(
+        challenger_dataset,
+        [(variable_key, observations_dataframe)],
+        native_grid,
+        ensemble_dimension=ensemble_dimension,
+    )[0]
+
+
+@dataclass(frozen=True)
+class _FieldConsumer:
+    """What one variable takes from one source field: its rows, its cells and where they go."""
+
+    variable_key: str
+    observations_dataframe: pandas.DataFrame
+    mapping: ScatteredNearestNeighbourMapping
+    member_values: numpy.ndarray
+
+
+def _source_field_names(challenger_dataset: xarray.Dataset, variable_key: str) -> tuple[str, ...]:
+    """The store fields a variable is made of, in the order its combination reads them."""
+    if variable_key == Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
+        raise ValueError(
+            "sea level cannot be matched up on a native curvilinear grid: converting a model "
+            "sea surface height to an altimeter anomaly subtracts a mean dynamic topography "
+            "resolved by grid resolution, which a curvilinear grid does not have. Score it "
+            "through the regridded staging path of oceanbench.core.curvilinear_staging."
+        )
+    if variable_key in VELOCITY_VARIABLE_KEYS:
+        return velocity_component_names(challenger_dataset)
+    if variable_key not in challenger_dataset.data_vars:
+        raise ValueError(f"the challenger holds {sorted(challenger_dataset.data_vars)} and not {variable_key}")
+    return (variable_key,)
+
+
+def _field_consumers(
+    challenger_dataset: xarray.Dataset,
+    variable_requests: Sequence[tuple[str, pandas.DataFrame]],
+    native_grid: NativeGrid,
+    member_count: int,
+) -> dict[str, list[_FieldConsumer]]:
+    """Every claim on every source field, so a field is read once for all of them.
+
+    Both velocity variables read both components, and the two ask for different observations,
+    so a field carries several consumers and each of them keeps its own rows and its own
+    nearest-cell mapping.
+    """
+    consumers: dict[str, list[_FieldConsumer]] = {}
+    for variable_key, observations_dataframe in variable_requests:
+        for field_name in _source_field_names(challenger_dataset, variable_key):
+            consumers.setdefault(field_name, []).append(
+                _FieldConsumer(
+                    variable_key=variable_key,
+                    observations_dataframe=observations_dataframe,
+                    mapping=observation_mapping(
+                        native_grid,
+                        grid_type_of_variable(field_name),
+                        observations_dataframe[Dimension.LATITUDE.key()].to_numpy("float64"),
+                        observations_dataframe[Dimension.LONGITUDE.key()].to_numpy("float64"),
+                    ),
+                    member_values=numpy.full((len(observations_dataframe), member_count), numpy.nan),
+                )
+            )
+    return consumers
+
+
+def _observation_groups_per_block(
+    consumers: Sequence[_FieldConsumer],
+) -> dict[tuple, list[tuple[_FieldConsumer, pandas.DataFrame]]]:
+    """Which rows of which consumer each ``(first day, lead day)`` block of the field answers."""
+    blocks: dict[tuple, list[tuple[_FieldConsumer, pandas.DataFrame]]] = {}
+    for consumer in consumers:
+        for block_key, group in consumer.observations_dataframe.groupby(["first_day", "lead_day"], sort=False):
+            blocks.setdefault(block_key, []).append((consumer, group))
+    return blocks
+
+
+def _assign_block_values(
+    block: xarray.DataArray,
+    consumer: _FieldConsumer,
+    group: pandas.DataFrame,
+    model_depths: numpy.ndarray,
+    member_start: int,
+    source_dimensions: tuple[str, str],
+    ensemble_dimension: str,
+) -> None:
+    row_indices = group.index.to_numpy()
+    target_depths = group[Dimension.DEPTH.key()].to_numpy("float64")
+    for offset in range(block.sizes[ensemble_dimension]):
+        consumer.member_values[row_indices, member_start + offset] = vertically_interpolate_class4_profiles(
+            _gathered_profiles(
+                block.isel({ensemble_dimension: offset}),
+                consumer.mapping,
+                row_indices,
+                source_dimensions,
+            ),
+            model_depths,
+            target_depths,
+        )
+
+
+def _gather_field(
+    field: xarray.DataArray,
+    consumers: Sequence[_FieldConsumer],
+    native_grid: NativeGrid,
+    member_count: int,
+    ensemble_dimension: str,
+) -> None:
+    """Read each ``(member batch, first day, lead day)`` block of one field once and share it."""
+    blocks = _observation_groups_per_block(consumers)
+    model_depths = numpy.asarray(field[Dimension.DEPTH.key()].values, dtype="float64")
+    first_day_to_index = {
+        first_day: index for index, first_day in enumerate(field[Dimension.FIRST_DAY_DATETIME.key()].values)
+    }
+    lead_day_to_index = {lead_day: index for index, lead_day in enumerate(field[Dimension.LEAD_DAY_INDEX.key()].values)}
+    for member_start in range(0, member_count, MEMBER_BATCH_SIZE):
+        members = slice(member_start, min(member_start + MEMBER_BATCH_SIZE, member_count))
+        for (first_day, lead_day), groups in blocks.items():
+            block = field.isel(
+                {
+                    Dimension.FIRST_DAY_DATETIME.key(): first_day_to_index[first_day],
+                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+                    ensemble_dimension: members,
+                }
+            ).compute()
+            for consumer, group in groups:
+                _assign_block_values(
+                    block,
+                    consumer,
+                    group,
+                    model_depths,
+                    member_start,
+                    native_grid.source_dimensions,
+                    ensemble_dimension,
+                )
+
+
+def _combined_member_values(
+    challenger_dataset: xarray.Dataset,
+    variable_key: str,
+    gathered: Mapping[str, numpy.ndarray],
+    native_grid: NativeGrid,
+    observations_dataframe: pandas.DataFrame,
+) -> numpy.ndarray:
+    """What the source fields of one variable make together, once all of them are gathered."""
+    if variable_key not in VELOCITY_VARIABLE_KEYS:
+        return gathered[variable_key]
+    zonal_name, meridional_name = velocity_component_names(challenger_dataset)
+    eastward, northward = rotated_to_east_north(
+        gathered[zonal_name],
+        gathered[meridional_name],
+        _observation_angle(native_grid, observations_dataframe)[:, numpy.newaxis],
+    )
+    return eastward if variable_key == VELOCITY_VARIABLE_KEYS[0] else northward
+
+
+def interpolate_class4_native_ensemble_variables_to_observations(
+    challenger_dataset: xarray.Dataset,
+    variable_requests: Sequence[tuple[str, pandas.DataFrame]],
+    native_grid: NativeGrid,
+    *,
+    ensemble_dimension: str,
+) -> list[numpy.ndarray]:
+    """Every requested variable at every observation for every member, one ``(n, M)`` array each.
+
+    ``variable_requests`` pairs a variable key with the observations asked of it, and the
+    answers come back in the same order. Taking them together is what keeps a field from being
+    read twice: the two velocity variables are both made of both components, so a per-variable
+    call reads the zonal and the meridional store field once each per variable instead of once
+    each in total.
+
+    A block of the store is ``(field, member, first day, lead day)``, and the loop here is
+    field, then member batch, then block, so each one is read exactly once and every consumer
+    of it is served before it is dropped. A batch of :data:`MEMBER_BATCH_SIZE` members is asked
+    for in a single dask call, so the reads of the batch overlap rather than queue.
     """
     if ensemble_dimension not in challenger_dataset.dims:
         raise ValueError(f"the challenger has no {ensemble_dimension} dimension, found {list(challenger_dataset.dims)}")
-    return numpy.stack(
-        [
-            interpolate_class4_native_model_to_observations(
-                challenger_dataset.isel({ensemble_dimension: member_index}),
-                variable_key,
-                observations_dataframe,
-                native_grid,
-            )
-            for member_index in range(challenger_dataset.sizes[ensemble_dimension])
-        ],
-        axis=1,
-    )
+    requests = [(variable_key, frame.reset_index(drop=True)) for variable_key, frame in variable_requests]
+    member_count = challenger_dataset.sizes[ensemble_dimension]
+    depth_values = _tracer_depth_values(challenger_dataset)
+    consumers_by_field = _field_consumers(challenger_dataset, requests, native_grid, member_count)
+    for field_name, consumers in consumers_by_field.items():
+        _gather_field(
+            _with_common_depth_dimension(challenger_dataset[field_name], depth_values),
+            consumers,
+            native_grid,
+            member_count,
+            ensemble_dimension,
+        )
+    return [
+        _combined_member_values(
+            challenger_dataset,
+            variable_key,
+            {
+                field_name: consumer.member_values
+                for field_name, consumers in consumers_by_field.items()
+                for consumer in consumers
+                if consumer.variable_key == variable_key
+            },
+            native_grid,
+            observations_dataframe,
+        )
+        for variable_key, observations_dataframe in requests
+    ]

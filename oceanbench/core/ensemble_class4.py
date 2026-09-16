@@ -80,7 +80,7 @@ from oceanbench.core.classIV_support import (
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.curvilinear_class4 import (
     NativeGrid,
-    interpolate_class4_native_ensemble_to_observations,
+    interpolate_class4_native_ensemble_variables_to_observations,
     native_grid_of_dataset,
 )
 from oceanbench.core.curvilinear_staging import without_native_grid_description
@@ -682,6 +682,30 @@ def _variables_the_native_grid_can_match(variables: Sequence[Variable]) -> list[
     return matchable
 
 
+def _class4_observation_requests(
+    observations_dataset: xarray.Dataset,
+    variables: Sequence[Variable],
+    lead_days_count: int,
+) -> list[tuple[str, pandas.DataFrame]]:
+    """Each variable that has observations to answer for, with the rows it has to answer."""
+    requests = []
+    for variable in variables:
+        variable_key = variable.key()
+        observations_dataframe = create_class4_observations_dataframe(
+            observations_dataset,
+            variable_key,
+            variable_key,
+            lead_days_count,
+        )
+        if observations_dataframe.empty:
+            continue
+        observations_dataframe = observations_dataframe.dropna(subset=["observation_value"]).reset_index(drop=True)
+        if observations_dataframe.empty:
+            continue
+        requests.append((variable_key, observations_dataframe))
+    return requests
+
+
 def ensemble_class4_matchup(
     challenger_dataset: xarray.Dataset,
     observations_dataset: xarray.Dataset,
@@ -699,45 +723,38 @@ def ensemble_class4_matchup(
     A challenger still on its native curvilinear grid takes the horizontal step of
     :mod:`oceanbench.core.curvilinear_class4` instead, which reads the native cell of each
     observation rather than interpolating along axes the grid does not have. Everything else,
-    the observation dataframe and the vertical descent included, is the same code. Sea level
-    is left out of such a run, with a warning, because it needs the regridded path.
+    the observation dataframe and the vertical descent included, is the same code. That path
+    is given every variable at once, because the store fields the variables are made of
+    overlap and each of them is then read once for all of them.
     """
     native_grid = native_grid_of_dataset(challenger_dataset)
     challenger = rename_dataset_with_standard_names(_without_native_grid_description(challenger_dataset, native_grid))
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
     requested = variables if native_grid is None else _variables_the_native_grid_can_match(variables)
+    requests = _class4_observation_requests(observations_dataset, requested, lead_days_count)
 
-    matchups = []
-    for variable in requested:
-        variable_key = variable.key()
-        observations_dataframe = create_class4_observations_dataframe(
-            observations_dataset,
-            variable_key,
-            variable_key,
-            lead_days_count,
+    if native_grid is None:
+        member_values_per_variable = [
+            interpolate_class4_ensemble_to_observations(
+                prepare_class4_model_variable(challenger[variable_key], variable_key, challenger),
+                observations_dataframe,
+                ensemble_dimension=ensemble_dimension,
+            )
+            for variable_key, observations_dataframe in requests
+        ]
+    else:
+        member_values_per_variable = interpolate_class4_native_ensemble_variables_to_observations(
+            challenger,
+            requests,
+            native_grid,
+            ensemble_dimension=ensemble_dimension,
         )
-        if observations_dataframe.empty:
-            continue
-        observations_dataframe = observations_dataframe.dropna(subset=["observation_value"]).reset_index(drop=True)
-        if observations_dataframe.empty:
-            continue
-        if native_grid is None:
-            model_variable = prepare_class4_model_variable(challenger[variable_key], variable_key, challenger)
-            member_values = interpolate_class4_ensemble_to_observations(
-                model_variable,
-                observations_dataframe,
-                ensemble_dimension=ensemble_dimension,
-            )
-        else:
-            member_values = interpolate_class4_native_ensemble_to_observations(
-                challenger,
-                variable_key,
-                observations_dataframe,
-                native_grid,
-                ensemble_dimension=ensemble_dimension,
-            )
-        matchups.append(Class4EnsembleMatchup(variable_key, observations_dataframe, member_values))
-    return matchups
+    return [
+        Class4EnsembleMatchup(variable_key, observations_dataframe, member_values)
+        for (variable_key, observations_dataframe), member_values in zip(
+            requests, member_values_per_variable, strict=True
+        )
+    ]
 
 
 def _finite_matchup_rows(matchup: Class4EnsembleMatchup) -> tuple[pandas.DataFrame, numpy.ndarray]:
