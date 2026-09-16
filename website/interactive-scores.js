@@ -1028,6 +1028,26 @@ function updateStickyOffsets() {
     const headerHeight = header.getBoundingClientRect().height;
     document.documentElement.style.setProperty("--controls-height", headerHeight + "px");
   }
+  // The second header row sticks below the first one, so it needs its height.
+  const firstHeadRow = [...document.querySelectorAll(".score-table thead tr:first-child")]
+    .find((row) => row.offsetParent !== null);
+  if (firstHeadRow) {
+    const rowHeight = firstHeadRow.getBoundingClientRect().height;
+    document.documentElement.style.setProperty("--thead-row1-height", rowHeight + "px");
+  }
+}
+
+// Mark a scroll box that is already scrolled to its right edge so the fade
+// hinting at more columns can be hidden there.
+function setupScrollFade() {
+  document.querySelectorAll(".score-table-wrapper").forEach((wrapper) => {
+    const update = () => {
+      const atEnd = wrapper.scrollLeft + wrapper.clientWidth >= wrapper.scrollWidth - 1;
+      wrapper.classList.toggle("at-right-end", atEnd);
+    };
+    wrapper.addEventListener("scroll", update, { passive: true });
+    update();
+  });
 }
 
 function attachSelectorListeners() {
@@ -1297,6 +1317,8 @@ function renderTablesOnly() {
   renderChallengerNotes(visibleChallengerNames);
   updateColorLegend();
   setupCellHighlight();
+  updateStickyOffsets();
+  setupScrollFade();
 
   selectedBaseline = baseline;
   writeUrlState();
@@ -1357,6 +1379,7 @@ function renderAllTables() {
   setActiveSection(activeSection);
   refreshScrollSpy();
   setupCellHighlight();
+  setupScrollFade();
 
   defaultVersionValue = resolveDefaultVersion(data);
   defaultRegionValue = regionIds[0] || null;

@@ -1190,13 +1190,54 @@ body.quarto-dark .version-select {
     flex-wrap: wrap;
   }
 
+  /* The table gets its own scroll box under the sticky page header, so the
+     header row and the model column can stay put inside it. */
   .score-table-wrapper {
-    overflow-x: auto;
+    overflow: auto;
     -webkit-overflow-scrolling: touch;
+    max-height: calc(100vh - var(--navbar-full-height, 0px) - var(--controls-height, 6rem) - 2rem);
+    overscroll-behavior: contain;
+    /* Keep the box below the sticky page header when it is scrolled into view,
+       otherwise its own header row lands behind that header. */
+    scroll-margin-top: calc(var(--navbar-full-height, 0px) + var(--controls-height, 6rem) + 0.5rem);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+  }
+
+  .score-table-wrapper.at-right-end {
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 
   .depth-table thead {
     position: static;
+  }
+
+  .score-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .score-table thead tr:last-child th {
+    top: var(--thead-row1-height, 0px);
+  }
+
+  .score-table thead .model-col {
+    left: 0;
+    z-index: 4;
+  }
+
+  /* A drawn edge on the frozen column, as a pseudo-element so it survives
+     the baseline row marker, which owns the box-shadow of those cells. */
+  .score-table .model-col::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -1px;
+    width: 1px;
+    background: var(--ob-border);
   }
 }
 
