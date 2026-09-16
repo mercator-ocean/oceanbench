@@ -73,8 +73,9 @@ import pandas
 import xarray
 
 from oceanbench.core.classIV_support import (
+    class4_model_data_with_depth_dimension,
     create_class4_observations_dataframe,
-    interpolate_class4_model_to_observations,
+    interpolate_class4_model_values_for_observation_group,
     prepare_class4_model_variable,
 )
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
@@ -94,6 +95,7 @@ from oceanbench.core.ensemble_gridded import (
     continuous_ranked_probability_score,
     finite_ensemble_correction,
 )
+from oceanbench.core.remote_http import with_remote_http_retries
 from oceanbench.core.score_records import RunContext, score_record
 
 NATIVE_CLASS4_LOGGER = logging.getLogger(__name__)
@@ -610,23 +612,47 @@ def interpolate_class4_ensemble_to_observations(
 ) -> numpy.ndarray:
     """Model values at every observation for every member, shape ``(n, M)``.
 
-    The member loop lives here and not inside
-    :func:`oceanbench.core.classIV_support.interpolate_class4_model_to_observations`, which
-    is called once per member on a slice that has no member dimension left. That function
-    therefore sees exactly the array a deterministic challenger hands it, and the
-    deterministic path is untouched.
+    The loop is over the store and not over the members: one ``(first day, lead day)`` block
+    is read with all its members at once and each of them is then served from memory, through
+    :func:`oceanbench.core.classIV_support.interpolate_class4_model_values_for_observation_group`,
+    the same horizontal and vertical steps a deterministic challenger takes. A member loop
+    reading lazily would refetch the whole block per member, because an ensemble store chunks
+    its members together.
     """
     if ensemble_dimension not in model_data.dims:
         raise ValueError(f"model data has no {ensemble_dimension} dimension, found {list(model_data.dims)}")
+    observations_dataframe = observations_dataframe.reset_index(drop=True)
+    model_data = class4_model_data_with_depth_dimension(model_data)
+    model_depths = model_data[Dimension.DEPTH.key()].values
+    first_day_to_index = {
+        first_day: index for index, first_day in enumerate(model_data[Dimension.FIRST_DAY_DATETIME.key()].values)
+    }
+    lead_day_to_index = {
+        lead_day: index for index, lead_day in enumerate(model_data[Dimension.LEAD_DAY_INDEX.key()].values)
+    }
     member_count = model_data.sizes[ensemble_dimension]
-    columns = [
-        interpolate_class4_model_to_observations(
-            model_data.isel({ensemble_dimension: member_index}),
-            observations_dataframe,
+    member_values = numpy.full((len(observations_dataframe), member_count), numpy.nan)
+    for (first_day, lead_day), observation_group in observations_dataframe.groupby(
+        ["first_day", "lead_day"], sort=False
+    ):
+        block = with_remote_http_retries(
+            f"Class IV ensemble {model_data.name} read for lead day {lead_day}",
+            model_data.isel(
+                {
+                    Dimension.FIRST_DAY_DATETIME.key(): first_day_to_index[first_day],
+                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+                }
+            ).compute,
         )
-        for member_index in range(member_count)
-    ]
-    return numpy.stack(columns, axis=1)
+        for member_index in range(member_count):
+            member_values[observation_group.index.values, member_index] = (
+                interpolate_class4_model_values_for_observation_group(
+                    block.isel({ensemble_dimension: member_index}),
+                    observation_group,
+                    model_depths,
+                )
+            )
+    return member_values
 
 
 @dataclass(frozen=True)

@@ -6,6 +6,7 @@ import logging
 import math
 import weakref
 
+import dask.array
 import numpy
 import pandas
 import pytest
@@ -499,6 +500,54 @@ def test_a_single_member_ensemble_reproduces_the_deterministic_values():
 def test_the_member_dimension_is_required():
     with pytest.raises(ValueError, match=ENSEMBLE_DIMENSION):
         interpolate_class4_ensemble_to_observations(_model_data(), _observations_dataframe())
+
+
+class _CountingSource:
+    """A numpy array that records every block dask asks it for."""
+
+    def __init__(self, values: numpy.ndarray):
+        self.values = values
+        self.reads: list[object] = []
+        self.shape = values.shape
+        self.dtype = values.dtype
+        self.ndim = values.ndim
+
+    def __getitem__(self, key):
+        self.reads.append(key)
+        return self.values[key]
+
+
+def _member_spanning_ensemble() -> tuple[xarray.DataArray, _CountingSource]:
+    """The ensemble field chunked as a store chunks it, with every member in one chunk."""
+    members = _ensemble_model_data().compute()
+    source = _CountingSource(members.values)
+    chunks = (members.sizes[ENSEMBLE_DIMENSION], 1, 1) + members.shape[3:]
+    counted = members.copy(data=dask.array.from_array(source, chunks=chunks))
+    source.reads.clear()
+    return counted, source
+
+
+def test_a_member_spanning_chunk_is_read_once_and_not_once_per_member():
+    observations = _observations_dataframe()
+    blocks_the_observations_need = len(observations.groupby(["first_day", "lead_day"], sort=False))
+
+    counted, source = _member_spanning_ensemble()
+    member_values = interpolate_class4_ensemble_to_observations(counted, observations)
+    block_reads = len(source.reads)
+
+    counted, source = _member_spanning_ensemble()
+    member_loop = numpy.stack(
+        [
+            interpolate_class4_model_to_observations(counted.isel({ENSEMBLE_DIMENSION: member_index}), observations)
+            for member_index in range(counted.sizes[ENSEMBLE_DIMENSION])
+        ],
+        axis=1,
+    )
+    member_loop_reads = len(source.reads)
+
+    assert numpy.array_equal(member_values, member_loop, equal_nan=True)
+    assert block_reads == blocks_the_observations_need
+    assert member_loop_reads == counted.sizes[ENSEMBLE_DIMENSION] * blocks_the_observations_need
 
 
 def _observations_dataset() -> xarray.Dataset:

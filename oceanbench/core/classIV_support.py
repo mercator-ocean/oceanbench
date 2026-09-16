@@ -389,7 +389,8 @@ def _interpolate_vertically_bracket(
     return result
 
 
-def _model_data_with_depth_dimension(model_data: xarray.DataArray) -> xarray.DataArray:
+def class4_model_data_with_depth_dimension(model_data: xarray.DataArray) -> xarray.DataArray:
+    """``model_data`` on a depth axis, the surface one it is implicitly on when it carries none."""
     depth_key = Dimension.DEPTH.key()
     if depth_key in model_data.dims:
         return model_data
@@ -434,11 +435,17 @@ def vertically_interpolate_class4_profiles(
     )
 
 
-def _interpolated_model_values_for_observation_group(
+def interpolate_class4_model_values_for_observation_group(
     time_slice: xarray.DataArray,
     observation_group: pandas.DataFrame,
     model_depths: numpy.ndarray,
 ) -> numpy.ndarray:
+    """The model values of one lead day block at the observations of that block.
+
+    The horizontal and vertical steps of a Class IV matchup on one block of the model, so
+    that a caller holding a block several members wide can serve every member from it rather
+    than reading the block once per member.
+    """
     return vertically_interpolate_class4_profiles(
         _horizontally_interpolated_profiles(time_slice, observation_group),
         model_depths,
@@ -474,7 +481,7 @@ def _assign_model_values_for_first_day(
                 ),
             )
         )
-        model_values[observation_group.index.values] = _interpolated_model_values_for_observation_group(
+        model_values[observation_group.index.values] = interpolate_class4_model_values_for_observation_group(
             time_slice,
             observation_group,
             model_depths,
@@ -487,7 +494,7 @@ def _interpolate_model_to_observations(
     variable_key: str,
 ) -> numpy.ndarray:
     observations_dataframe = observations_dataframe.reset_index(drop=True)
-    model_data = _model_data_with_depth_dimension(model_data)
+    model_data = class4_model_data_with_depth_dimension(model_data)
     model_depths = model_data[Dimension.DEPTH.key()].values
     first_days = model_data[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days = model_data[Dimension.LEAD_DAY_INDEX.key()].values
