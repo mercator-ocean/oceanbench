@@ -60,13 +60,11 @@ evaluate-samples:
 	oceanbench evaluate --max-workers 1 $(SAMPLE_FILES)
 	oceanbench evaluate ${IBI_SAMPLE_FILE} --region ibi
 
-# Evaluate a single sample file (used by the CI matrix). Pass SAMPLE=assets/<name>_sample.py
 evaluate-sample: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-sample:
 	${ACTIVATE_ENVIRONMENT}
 	oceanbench evaluate --max-workers 1 $(SAMPLE)
 
-# Evaluate the IBI region sample (used by the CI matrix).
 evaluate-ibi-region: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-ibi-region:
 	${ACTIVATE_ENVIRONMENT}
@@ -81,15 +79,12 @@ compare-notebooks:
 	done
 	python tests/compare_notebook.py assets/$(IBI_NOTEBOOK) $(IBI_NOTEBOOK)
 
-# Compare a single generated notebook against its committed reference (used by the CI matrix).
-# Pass SAMPLE=assets/<name>_sample.py
 compare-sample: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-sample:
 	${ACTIVATE_ENVIRONMENT}
 	name=$$(basename $(SAMPLE) .py); \
 	python tests/compare_notebook.py assets/$$name.global.report.ipynb $$name.global.report.ipynb
 
-# Compare the IBI region notebook against its committed reference (used by the CI matrix).
 compare-ibi: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-ibi:
 	${ACTIVATE_ENVIRONMENT}
