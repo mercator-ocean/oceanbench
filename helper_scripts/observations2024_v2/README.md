@@ -10,7 +10,7 @@ SPDX-License-Identifier: EUPL-1.2
 `oceanbench/core/references/observations.py` reads, one zarr per UTC day:
 
 ```
-s3://oceanbench-bucket/dev/observations2024-v2/<YYYYMMDD>.zarr
+s3://oceanbench-bucket/public/observations2024-v2/<YYYYMMDD>.zarr
 ```
 
 It is not part of the installed package.

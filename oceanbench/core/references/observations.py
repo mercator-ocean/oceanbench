@@ -99,7 +99,7 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
 
 def observation_path(day_datetime: numpy.datetime64) -> str:
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
-    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/observations2024-v2/{day_string}.zarr"
+    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/observations2024-v2/{day_string}.zarr"
 
 
 def _require_observation_basis_version(day_observations_dataset: Dataset) -> Dataset:
