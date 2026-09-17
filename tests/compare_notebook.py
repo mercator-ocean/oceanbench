@@ -3,12 +3,13 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import json
-import math
 import re
 from deepdiff import DeepDiff
 import sys
 
-NOTEBOOK_TEXT_FLOAT_ABSOLUTE_TOLERANCE = 1e-5
+NOTEBOOK_TEXT_FLOAT_RELATIVE_TOLERANCE = 1e-6
+# Report tables print 6 decimal places, so one unit in the last printed decimal is 1e-6 whatever the magnitude.
+NOTEBOOK_TEXT_FLOAT_PRINTED_UNIT_FLOOR = 1e-6
 
 NUMBER_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])[-+]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][-+]?\d+)?(?![A-Za-z0-9_])"
@@ -56,6 +57,13 @@ def _normalize_alignment_whitespace(text_parts: list[str]) -> list[str]:
     return [re.sub(r"[ \t]+", " ", text_part) for text_part in text_parts]
 
 
+def _floats_are_within_tolerance(first_number: float, second_number: float) -> bool:
+    tolerance = NOTEBOOK_TEXT_FLOAT_PRINTED_UNIT_FLOOR + NOTEBOOK_TEXT_FLOAT_RELATIVE_TOLERANCE * max(
+        abs(first_number), abs(second_number)
+    )
+    return abs(first_number - second_number) <= tolerance
+
+
 def _strings_differ_only_by_tolerated_float_rounding(first_value: str, second_value: str) -> bool:
     first_text_parts, first_numbers = _split_numeric_text(first_value)
     second_text_parts, second_numbers = _split_numeric_text(second_value)
@@ -65,12 +73,7 @@ def _strings_differ_only_by_tolerated_float_rounding(first_value: str, second_va
         and len(first_numbers) == len(second_numbers)
         and len(first_numbers) > 0
         and all(
-            math.isclose(
-                first_number,
-                second_number,
-                rel_tol=0.0,
-                abs_tol=NOTEBOOK_TEXT_FLOAT_ABSOLUTE_TOLERANCE,
-            )
+            _floats_are_within_tolerance(first_number, second_number)
             for first_number, second_number in zip(first_numbers, second_numbers)
         )
     )
