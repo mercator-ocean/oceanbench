@@ -141,9 +141,21 @@ div.sourceCode.cell-code pre.sourceCode {
   display: block;
 }
 
+/*
+ * Not a <sup>: the browser's superscript sizing shrank the asterisk to
+ * about three pixels of ink, which the fonts Linux and Android fall back
+ * to render as a horizontal smudge that reads as a dash. Keep it on the
+ * body font stack at a size that still resolves the glyph's arms.
+ */
 .challenger-note-marker {
-  color: var(--ob-muted);
-  font-weight: 400;
+  display: inline-block;
+  margin-left: 0.15em;
+  font-family: inherit;
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: super;
+  color: var(--ob-accent);
   cursor: help;
 }
 

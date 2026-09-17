@@ -192,7 +192,7 @@ function displayNameHtml(name) {
   if (!note) return displayName(name);
   return (
     `${displayName(name)}` +
-    `<sup class="challenger-note-marker" title="${escapeAttribute(note)}">*</sup>`
+    `<span class="challenger-note-marker" title="${escapeAttribute(note)}">*</span>`
   );
 }
 
