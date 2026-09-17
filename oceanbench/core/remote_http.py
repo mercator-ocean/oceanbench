@@ -18,6 +18,8 @@ RETRIABLE_HTTP_ERROR_TOKENS = (
     "Connection reset by peer",
     "Not enough data to satisfy content length header",
     "Response payload is not completed",
+    # A truncated chunk payload surfaces as this numcodecs RuntimeError.
+    "error during blosc decompression",
 )
 RETRIABLE_REMOTE_BACKEND_MODULE_PREFIXES = (
     "aiohttp",

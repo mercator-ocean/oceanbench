@@ -34,6 +34,21 @@ def test_with_remote_http_retries_retries_incomplete_payload_messages(monkeypatc
     assert attempts == 2
 
 
+def test_with_remote_http_retries_retries_blosc_decompression_errors(monkeypatch) -> None:
+    _configure_fast_retries(monkeypatch)
+    attempts = 0
+
+    def callback() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("error during blosc decompression: -1")
+        return "loaded"
+
+    assert with_remote_http_retries("remote read", callback) == "loaded"
+    assert attempts == 2
+
+
 def test_class4_compute_uses_remote_http_retries(monkeypatch) -> None:
     _configure_fast_retries(monkeypatch)
 

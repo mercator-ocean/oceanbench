@@ -59,6 +59,27 @@ def test_failed_chunk_download_during_stage_build_raises_and_leaves_no_finished_
     assert [path.name for path in stage_directory.iterdir()] == ["20240103.zarr.tmp"]
 
 
+def test_transient_chunk_download_failure_during_stage_build_is_retried(
+    monkeypatch, tmp_path, zarr_store_url, fail_chunk_download
+) -> None:
+    _use_runtime_configuration(monkeypatch, RuntimeConfiguration())
+    direct = _open_forecast(zarr_store_url).load()
+
+    _use_runtime_configuration(
+        monkeypatch,
+        RuntimeConfiguration(staged_components=("challenger",), stage_directory=str(tmp_path), remote_retries=2),
+    )
+    monkeypatch.setattr("oceanbench.core.remote_http.sleep", lambda _seconds: None)
+    fail_chunk_download(failure_count=1)
+
+    staged = _open_forecast(zarr_store_url).load()
+
+    xarray.testing.assert_equal(staged, direct)
+    stage_directory = tmp_path / "challenger-forecast-10d"
+    assert (stage_directory / "20240103.zarr").is_dir()
+    assert [path.name for path in stage_directory.iterdir()] == ["20240103.zarr"]
+
+
 def test_challenger_week_time_axis_becomes_lead_day_index_with_first_day_from_the_file_name(
     monkeypatch, tmp_path
 ) -> None:
