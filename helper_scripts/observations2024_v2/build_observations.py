@@ -124,7 +124,7 @@ SLA_SATELLITES = {
     "swon": "cmems_obs-sl_glo_phy-ssh_my_swon-l3-duacs_PT1S",
 }
 
-DEFAULT_TARGET = "s3://oceanbench-bucket/dev/observations2024-v2"
+DEFAULT_TARGET = "s3://oceanbench-bucket/public/observations2024-v2"
 DEFAULT_OBS_BASIS_VERSION = "2024-v2.1.0"
 DEFAULT_MIN_SATELLITES = 5
 RECENT_DAYS = 183  # about 6 months
