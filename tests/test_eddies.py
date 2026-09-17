@@ -85,9 +85,9 @@ def test_literature_km_defaults_detect_planted_eddies_without_extra_smoothing() 
     # old test that pinned the pre-c1f1099 grid-cell-count behaviour (extra 1.5-cell
     # blur, 8-cell separation, 4 cm threshold), which is no longer the default.
     assert eddies.DEFAULT_DETECTION_SIGMA_KM is None
-    # Gaussian half power sits near 7.5 sigma, so these sigmas are the ~2000 x 1000 km
-    # half-power block of Chelton et al. (2011), not a 265/130 km cutoff.
-    assert eddies.DEFAULT_BACKGROUND_SIGMA_KM == (265.0, 130.0)
+    # Gaussian half power sits near 7.5 sigma, so these sigmas are the ~1000 km meridional
+    # by ~2000 km zonal half-power block of Chelton et al. (2011), not a 130/265 km cutoff.
+    assert eddies.DEFAULT_BACKGROUND_SIGMA_KM == (130.0, 265.0)
     assert eddies.DEFAULT_MAX_EDDY_AREA_KM2 == 300_000.0
     assert eddies.DEFAULT_AMPLITUDE_THRESHOLD_METERS == 0.01
     assert eddies.DEFAULT_MIN_PEAK_SEPARATION_KM == 100.0
@@ -182,3 +182,52 @@ def test_detection_sigma_parameter_reproduces_pre_change_smoothing() -> None:
     )
     new_rows = sorted((row.polarity, row.latitude, row.longitude) for row in detections.itertuples(index=False))
     assert new_rows == legacy_rows
+
+
+def test_amplitude_is_measured_above_the_outermost_closed_contour() -> None:
+    # Chelton amplitude: what a detection reports is the height of its peak above the level
+    # of the outermost closed contour that passed the area and solidity tests, not the raw
+    # peak anomaly. Every accepted eddy must satisfy that identity exactly, must clear the
+    # threshold on that contour-relative value, and must report less than its raw peak.
+    latitudes = numpy.arange(-20.0, 20.0, 0.25)
+    longitudes = numpy.arange(0.0, 20.0, 0.25)
+    latitude_grid = latitudes[:, None]
+    longitude_grid = longitudes[None, :]
+    values = 0.30 * numpy.exp(-(((latitude_grid - 0.0) / 6.0) ** 2 + ((longitude_grid - 10.0) / 6.0) ** 2))
+    values = values + 0.20 * numpy.exp(-(((latitude_grid - 0.0) / 0.8) ** 2 + ((longitude_grid - 10.0) / 0.8) ** 2))
+    dataset = xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                (
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ),
+                values[None, None],
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-01"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+    raw_detections = eddies.detect_mesoscale_eddies(dataset)
+    contours = eddies.mesoscale_eddy_contours_from_detections(raw_detections, dataset)
+    accepted = eddies.filter_mesoscale_eddy_detections_by_contours(raw_detections, contours)
+    assert not accepted.empty
+
+    for detection_index, accepted_row in accepted.iterrows():
+        contour_row = contours.loc[contours["detection_index"] == detection_index].iloc[0]
+        raw_peak = abs(float(raw_detections.loc[detection_index, eddies.AMPLITUDE_COLUMN]))
+        reported = abs(float(accepted_row[eddies.AMPLITUDE_COLUMN]))
+        level = float(contour_row[eddies.CONTOUR_LEVEL_COLUMN])
+        assert abs(reported - (raw_peak - level)) < 1e-12
+        assert reported >= eddies.DEFAULT_AMPLITUDE_THRESHOLD_METERS
+        assert reported < raw_peak
+        # Polarity sign is preserved, so cyclones stay negative.
+        expected_sign = 1.0 if accepted_row[eddies.POLARITY_COLUMN] == eddies.ANTICYCLONE else -1.0
+        assert numpy.sign(accepted_row[eddies.AMPLITUDE_COLUMN]) == expected_sign

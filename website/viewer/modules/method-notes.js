@@ -150,7 +150,7 @@ export const METHOD_NOTES = {
 // Order in which the eddy-census parameters render, with human labels and a formatter.
 // Keys are the exact snake_case fields of the census json's `parameters` block.
 const EDDY_PARAMETER_ROWS = [
-  ["amplitude_threshold_meters", "amplitude threshold", (v) => `${v} m`],
+  ["amplitude_threshold_meters", "amplitude above outermost closed contour", (v) => `\u2265 ${v} m`],
   ["min_eddy_area_km2", "min area", (v) => `${Number(v).toLocaleString("en-US")} km²`],
   ["max_eddy_area_km2", "max area", (v) => `${Number(v).toLocaleString("en-US")} km²`],
   ["min_peak_separation_km", "min peak separation", (v) => `${v} km`],

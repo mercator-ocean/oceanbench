@@ -42,17 +42,22 @@ ONE_DEGREE_LATITUDE_KM = numpy.pi * EARTH_RADIUS_KM / 180.0
 # Background high-pass, as a (latitude, longitude) Gaussian sigma in kilometres.
 # These are SIGMAS, not cutoffs: a Gaussian low-pass exp(-k^2 sigma^2 / 2) reaches half
 # power at a wavelength of roughly 7.5 sigma, so (265, 130) km corresponds to half-power
-# wavelengths of about 2000 km x 1000 km, the scale of Chelton et al. (2011)'s
-# 20-degree x 10-degree half-power block. The earlier default of 12 degrees of latitude
-# (1334 km) was applied directly as the sigma, i.e. a ~10000 km half-power filter, which
-# left gyre and front-scale sea surface height inside the "anomaly".
-DEFAULT_BACKGROUND_SIGMA_KM = (265.0, 130.0)
+# wavelengths of about 1000 km meridional x 2000 km zonal, the scale of Chelton et al.
+# (2011)'s 20-degree zonal x 10-degree meridional half-power block. The earlier default of
+# 12 degrees of latitude (1334 km) was applied directly as the sigma, i.e. a ~10000 km
+# half-power filter, which left gyre and front-scale sea surface height in the "anomaly".
+DEFAULT_BACKGROUND_SIGMA_KM = (130.0, 265.0)
 # Second smoothing pass of the anomaly is OFF by default: Chelton/META and
 # py-eddy-tracker do not blur the mesoscale field before peak detection. The
 # parameter is kept so old artifacts remain reproducible by passing an explicit value.
 DEFAULT_DETECTION_SIGMA_KM = None
 DEFAULT_MIN_PEAK_SEPARATION_KM = 100.0  # ~ one mesoscale eddy diameter
-DEFAULT_AMPLITUDE_THRESHOLD_METERS = 0.01  # Chelton/META 1 cm SSH-anomaly threshold
+# Chelton/META 1 cm amplitude. This is the Chelton amplitude: the peak anomaly measured
+# ABOVE the level of the outermost closed contour that passes the area and solidity tests,
+# not the raw peak value. It doubles as the cheap `peak_local_max` prefilter threshold and
+# as the level ladder's first rung, but a centre is only accepted if peak minus contour
+# level clears it, so a broad plateau with a 1 cm bump on it no longer counts as an eddy.
+DEFAULT_AMPLITUDE_THRESHOLD_METERS = 0.01
 DEFAULT_MAX_ABS_LATITUDE_DEGREES = 70.0
 DEFAULT_MATCH_DISTANCE_KM = 200.0
 DEFAULT_CONTOUR_LEVEL_STEP_METERS = 0.01
@@ -765,9 +770,21 @@ def mesoscale_eddy_contours_from_detections(
                     if contour_info[CONTOUR_CONVEXITY_COLUMN] < min_contour_convexity:
                         continue
 
+                    # Chelton amplitude: height of the peak above the outermost closed
+                    # contour, not the raw peak anomaly. Levels are walked from low to
+                    # high, so this first accepted level IS the outermost valid contour
+                    # and gives the largest amplitude this centre can ever have; if it
+                    # falls short of the threshold the centre is rejected outright rather
+                    # than retried at a higher level.
+                    contour_amplitude = float(center_magnitudes[subset_index]) - float(level_value)
+                    if contour_amplitude < amplitude_threshold_meters:
+                        unresolved_mask[subset_index] = False
+                        continue
+
                     contour_rows.append(
                         {
                             "detection_index": int(subset.loc[subset_index, "detection_index"]),
+                            AMPLITUDE_COLUMN: contour_amplitude if polarity == ANTICYCLONE else -contour_amplitude,
                             LEAD_DAY_COLUMN: int(lead_day_index),
                             POLARITY_COLUMN: polarity,
                             LATITUDE_COLUMN: float(subset.loc[subset_index, LATITUDE_COLUMN]),
@@ -789,6 +806,7 @@ def mesoscale_eddy_contours_from_detections(
         contour_rows,
         columns=[
             "detection_index",
+            AMPLITUDE_COLUMN,
             LEAD_DAY_COLUMN,
             POLARITY_COLUMN,
             LATITUDE_COLUMN,
@@ -810,7 +828,13 @@ def filter_mesoscale_eddy_detections_by_contours(
     if detections.empty or contours.empty:
         return detections.iloc[0:0].copy()
     accepted_detection_indices = pandas.Index(contours["detection_index"]).unique()
-    return detections.loc[detections.index.isin(accepted_detection_indices)].copy()
+    accepted = detections.loc[detections.index.isin(accepted_detection_indices)].copy()
+    # Republish the Chelton amplitude carried by the accepted contour over the raw peak
+    # anomaly the detector recorded, so every consumer of AMPLITUDE_COLUMN sees the height
+    # above the outermost closed contour.
+    contour_amplitudes = contours.drop_duplicates("detection_index").set_index("detection_index")[AMPLITUDE_COLUMN]
+    accepted[AMPLITUDE_COLUMN] = accepted.index.map(contour_amplitudes)
+    return accepted
 
 
 def mesoscale_eddy_concentration_from_detections(
