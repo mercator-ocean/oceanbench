@@ -28,6 +28,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 
 ### Fixed
 
+- Local stage builds retry transient remote chunk failures, including blosc decompression errors from truncated chunk payloads.
 - Class IV salinity is vertically interpolated with the same two level linear bracket as the other variables. The cubic spline it used before needed four valid levels and silently dropped shallow profiles ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
 
 ### Added

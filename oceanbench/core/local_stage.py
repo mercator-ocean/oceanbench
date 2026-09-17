@@ -16,6 +16,7 @@ from typing import Iterator, TypeVar
 
 import xarray
 
+from oceanbench.core.remote_http import with_remote_http_retries
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
 DEFAULT_LOCAL_STAGE_LOCK_TIMEOUT_SECONDS = 24 * 60 * 60
@@ -74,8 +75,12 @@ def write_dataset_to_local_stage(
             staged_dataset[variable_name].encoding.pop("chunks", None)
     temporary_stage_path = stage_path.with_name(f"{stage_path.name}.tmp")
     stage_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.rmtree(temporary_stage_path, ignore_errors=True)
-    staged_dataset.to_zarr(temporary_stage_path, mode="w")
+
+    def write_temporary_stage() -> None:
+        shutil.rmtree(temporary_stage_path, ignore_errors=True)
+        staged_dataset.to_zarr(temporary_stage_path, mode="w")
+
+    with_remote_http_retries(f"local stage build of {stage_path.name}", write_temporary_stage)
     shutil.rmtree(stage_path, ignore_errors=True)
     temporary_stage_path.rename(stage_path)
 
