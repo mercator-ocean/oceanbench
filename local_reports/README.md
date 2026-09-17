@@ -15,21 +15,23 @@ Nothing here is uploaded anywhere.
 
 ## glow
 
-`0.5.0/glow.global.report.ipynb` is a local evaluation of run `glowcascade_v4`:
-all 52 Wednesday challenger starts of 2024, 20240103 through 20241225, each
-initialised from the as-issued GLO12 nowcast of the Tuesday before it, quarter
-degree, not an official submission.
+`0.5.0/glow.global.report.ipynb` is a local evaluation of run
+`glowcascade_v4_nofilter`: all 52 Wednesday challenger starts of 2024, 20240103
+through 20241225, each initialised from the as-issued GLO12 nowcast of the Tuesday
+before it, quarter degree, not an official submission.
 
-`glowcascade_v4` is a replay of the served cascade recipe on the 32 epoch pretrain,
-with two checkpoints and nothing else changed:
+`glowcascade_v4_nofilter` is the no-filter variant of the v4 cascade, the same two
+checkpoints as `glowcascade_v4` and nothing else changed:
 
 - lead 1 from the v4 anneal checkpoint, step 87616
   (`glow930m_scratch_v4/runs/scratch_v4/keep_epochs/ckpt_step00087616.pt`)
 - leads 2 to 9 from the v4 ladder h5 checkpoint, step 1869
   (`glow930m_v4_ladder/runs/stage2_ladder/keep_epochs/ckpt_step00001869.pt`)
 
-It replaces the earlier `glowcascade_final` entry that stood here before; only one
-GLOW report is kept at a time, the website shows a single file per challenger.
+It replaces the `glowcascade_v4` entry that stood here before; only one GLOW report
+is kept at a time, the website shows a single file per challenger. On the mean of
+the nine metric tables the two runs sit 0.012 percent apart, the no-filter run very
+slightly the worse of the two.
 
 It scores NINE lead days, not ten. The IFS forecast package that forces the run
 carries lead_day_index 0..9, so the tenth forecast day would be driven by persisted
@@ -41,14 +43,18 @@ return lead days 1 to 9 and the two Lagrangian metrics return lead days 2 to 8, 
 no empty cells. Beside a ten day baseline the website simply leaves the lead 10 cell
 blank.
 
-The harness that produced this notebook is OceanBench 0.5.1. The file sits in the
+The harness that produced this notebook is oceanbench `origin/main` 7e5ec87, the
+pending 0.6.0; its installed dist-info still stamps `__version__` as 0.5.1, so the
+first cell of the notebook reads 0.5.1. The observations metric therefore comes from
+the observations-v2 basis, which is why its table carries an observation count column
+and lower current errors than the earlier 0.5.1 scored entry did. The file sits in the
 0.5.0 directory because that key is what places a system in the 0.5.0 leaderboard
 column, and 0.5.0 is the default published version, so this entry appears next to
 officially published systems that were themselves scored with 0.5.0. Keep that
 difference in mind when reading small gaps between GLOW and its neighbours.
 
-`tables/glowcascade_v4.*.csv` holds the nine metric tables read back out of that
-notebook. The website reads the notebook, not the CSV files; they are kept for
+`tables/glowcascade_v4_nofilter.*.csv` holds the nine metric tables read back out of
+that notebook. The website reads the notebook, not the CSV files; they are kept for
 provenance.
 
 ## hclimrep
