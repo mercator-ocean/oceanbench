@@ -1099,8 +1099,13 @@ body.quarto-dark {
   border-color: var(--ob-accent);
 }
 
+/*
+ * Only the colour, never the shorthand: a `background` here outranks the
+ * chevron longhands further down and would reset the arrow to a tiled,
+ * full-size image sitting on top of the value.
+ */
 body.quarto-dark .version-select {
-  background: var(--ob-surface);
+  background-color: var(--ob-surface);
   border-color: var(--ob-border);
 }
 
