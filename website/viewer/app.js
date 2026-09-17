@@ -1746,7 +1746,7 @@ function renderTrajectoryRail() {
   elements["rail-trajectory-note"].textContent = trajectoryState.loading
     ? "Loading current fields and advecting 20 shared seeds…"
     : trajectoryState.separation.length
-      ? "Mean separation between corresponding Forecast 1 and Forecast 2 particles."
+      ? "Mean separation between corresponding Forecast 1 and Forecast 2 particles. A pair is dropped once either particle beaches or leaves the field."
       : "Single-forecast trajectory fan.";
   wireCursorTooltip(elements["rail-trajectory-chart"]);
 }
@@ -3851,9 +3851,11 @@ async function renderRailPsd(shown, comparison) {
       if (metres > wavelengthMax) wavelengthMax = metres;
     }
   }
+  // These are the ends of the wavelength axis (two cells up to the box size), not
+  // scales the model resolves: effective resolution is several cells coarser.
   const kmRange =
     Number.isFinite(wavelengthMin) && wavelengthMax > 0
-      ? `resolves ≈ ${Math.round(wavelengthMin / 1000)} to ${Math.round(wavelengthMax / 1000)} km`
+      ? `axis spans ${Math.round(wavelengthMin / 1000)} to ${Math.round(wavelengthMax / 1000)} km`
       : "";
   const oceanFractions = sources
     .filter((entry) => entry.spectrum && Number.isFinite(entry.spectrum.oceanFraction))
@@ -4482,6 +4484,13 @@ function wirePlaybackControls() {
 // The eddy note describes the census actually loaded, so every path that reloads the
 // overlay (mode switch, start date, region) writes it from the same place. A start with
 // no published census says so instead of leaving the previous start's sentence up.
+// Detection runs per dataset on that dataset's own grid, so a 1/12-degree field offers
+// far more candidate extrema than a 1-degree one and the raw counts are not a like-for-like
+// comparison. Said once here and once in the legend note.
+const NATIVE_GRID_EDDY_CAVEAT =
+  "Detection runs on each dataset's own native grid, so counts are not comparable between "
+  + "a 1-degree and a 1/12-degree dataset.";
+
 function writeEddyOverlayNote() {
   const note = elements["overlay-note"];
   if (!note) return;
@@ -4494,9 +4503,10 @@ function writeEddyOverlayNote() {
         : "No eddy detections are available for this selection.";
   } else if (shared.layout === 2 && overlayData.eddiesMatch) {
     note.textContent =
-      "Eddy intercomparison between the two selected forecasts. This shows agreement, not ground truth.";
+      "Eddy intercomparison between the two selected forecasts. This shows agreement, not ground truth. "
+      + NATIVE_GRID_EDDY_CAVEAT;
   } else {
-    note.textContent = "Showing this forecast's own eddy census.";
+    note.textContent = "Showing this forecast's own eddy census. " + NATIVE_GRID_EDDY_CAVEAT;
   }
 }
 

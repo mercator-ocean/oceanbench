@@ -90,10 +90,16 @@ self.onmessage = ({ data }) => {
         const a = trajectories[0][particle][lead];
         const b = trajectories[1][particle][lead];
         if (!a || !b) continue;
+        // A frozen particle (beached, or advected out of the read window) no longer
+        // carries the forecast's drift, so the pair says nothing about disagreement.
+        // The offline metric drops such pairs too; keeping them would let one model's
+        // drift alone inflate the curve near coasts.
+        if (a.stopped || b.stopped) continue;
         total += haversineKilometres(a, b);
         count += 1;
       }
-      separation.push({ lead_day: lead, mean: count ? total / count : 0 });
+      // Leads where no pair survives are left out rather than plotted as zero.
+      if (count) separation.push({ lead_day: lead, mean: total / count, count });
     }
   }
   self.postMessage({ requestId: data.requestId, trajectories, separation });

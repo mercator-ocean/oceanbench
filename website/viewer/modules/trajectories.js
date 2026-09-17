@@ -34,7 +34,8 @@ export function trajectorySeparationSVG(rows, currentLead, typeScale = 1) {
     const py = y(row.mean).toFixed(1);
     return `<circle cx="${px}" cy="${py}" r="2" fill="${TRAJECTORY_COLORS[0]}"/>`
       + `<circle class="chart-point" data-line="mean separation" data-x-label="lead day ${row.lead_day}" `
-      + `data-y-label="${row.mean.toFixed(1)} km" cx="${px}" cy="${py}" r="8"/>`;
+      + `data-y-label="${row.mean.toFixed(1)} km${row.count == null ? "" : ` · ${row.count} pairs`}" `
+      + `cx="${px}" cy="${py}" r="8"/>`;
   }).join("");
   const markerRow = Number.isFinite(currentLead)
     ? rows.reduce((closest, row) =>
