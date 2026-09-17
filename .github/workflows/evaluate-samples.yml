@@ -32,7 +32,7 @@ jobs:
         env:
           # glonet stays on the raw xarray open, unstaged, so the path an
           # external challenger takes keeps end to end coverage.
-          ALL_SAMPLES: '[{"sample": "glonet", "stage": ""}, {"sample": "glo36v1", "stage": "challenger"}, {"sample": "glo12", "stage": "challenger"}, {"sample": "glonet_1_degree", "stage": "challenger"}, {"sample": "langya", "stage": "challenger"}, {"sample": "wenhai", "stage": "challenger"}, {"sample": "xihe", "stage": "challenger"}]'
+          ALL_SAMPLES: '[{"sample": "glonet", "stage": ""}, {"sample": "hclimrep", "stage": ""}, {"sample": "glo36v1", "stage": "challenger"}, {"sample": "glo12", "stage": "challenger"}, {"sample": "glonet_1_degree", "stage": "challenger"}, {"sample": "langya", "stage": "challenger"}, {"sample": "wenhai", "stage": "challenger"}, {"sample": "xihe", "stage": "challenger"}]'
           SELECTED_SAMPLES: ${{ github.event.inputs.samples }}
         run: |
           selected=$(jq -c --arg selected "$SELECTED_SAMPLES" '
@@ -89,13 +89,13 @@ jobs:
           OCEANBENCH_STAGE: ${{ matrix.stage }}
           OCEANBENCH_STAGE_MAX_WORKERS: '8'
         run: |
-          # Sample memory straight into the step log every 5 seconds. A runner
+          # Sample memory straight into the step log every 30 seconds. A runner
           # killed mid step takes any post step report with it, so the numbers
           # have to be streamed as they are measured.
           (
             while true; do
               echo "MEMWATCH $(date -u +%H:%M:%S) used=$(free -m | awk '/^Mem:/{print $3}')MB available=$(free -m | awk '/^Mem:/{print $7}')MB swap=$(free -m | awk '/^Swap:/{print $3}')MB"
-              sleep 5
+              sleep 30
             done
           ) &
           memory_sampler_pid=$!
