@@ -14,12 +14,16 @@
 # forcing rather than on a real forecast. The store on disk still holds ten days per
 # start and nothing was recomputed; this module drops the last time step on the way
 # in.
+#
+# Run glowcascade_v4: a replay of the served cascade recipe on the 32 epoch
+# pretrain. Lead 1 comes from the v4 anneal checkpoint at step 87616, leads 2 to 9
+# from the v4 ladder h5 checkpoint at step 1869. Nothing else in the recipe changed.
 import datetime
 import pathlib
 
 import xarray
 
-_ROOT = pathlib.Path("/mnt/data/glonet2/ifs21/forecasts/glowcascade_final")
+_ROOT = pathlib.Path("/mnt/data/glonet2/ifs21/forecasts/glowcascade_v4")
 _PATHS = sorted(_ROOT.glob("2024*.zarr"))
 _FIRST_DAYS = [datetime.datetime.strptime(path.stem, "%Y%m%d") for path in _PATHS]
 
