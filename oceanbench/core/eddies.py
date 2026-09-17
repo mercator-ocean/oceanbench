@@ -38,7 +38,15 @@ ONE_DEGREE_LATITUDE_KM = numpy.pi * EARTH_RADIUS_KM / 180.0
 # ~1500-2500 expected from the literature. The values below are literature-derived
 # (Chelton et al. 2011, DOI:10.1016/j.pocean.2011.01.002; the META / py-eddy-tracker
 # product line, Mason et al. 2014) and resolution-independent.
-DEFAULT_BACKGROUND_SIGMA_KM = 12.0 * ONE_DEGREE_LATITUDE_KM  # ~1334 km high-pass (Chelton 20x10-deg block)
+#
+# Background high-pass, as a (latitude, longitude) Gaussian sigma in kilometres.
+# These are SIGMAS, not cutoffs: a Gaussian low-pass exp(-k^2 sigma^2 / 2) reaches half
+# power at a wavelength of roughly 7.5 sigma, so (265, 130) km corresponds to half-power
+# wavelengths of about 2000 km x 1000 km, the scale of Chelton et al. (2011)'s
+# 20-degree x 10-degree half-power block. The earlier default of 12 degrees of latitude
+# (1334 km) was applied directly as the sigma, i.e. a ~10000 km half-power filter, which
+# left gyre and front-scale sea surface height inside the "anomaly".
+DEFAULT_BACKGROUND_SIGMA_KM = (265.0, 130.0)
 # Second smoothing pass of the anomaly is OFF by default: Chelton/META and
 # py-eddy-tracker do not blur the mesoscale field before peak detection. The
 # parameter is kept so old artifacts remain reproducible by passing an explicit value.
@@ -49,7 +57,7 @@ DEFAULT_MAX_ABS_LATITUDE_DEGREES = 70.0
 DEFAULT_MATCH_DISTANCE_KM = 200.0
 DEFAULT_CONTOUR_LEVEL_STEP_METERS = 0.01
 DEFAULT_MIN_EDDY_AREA_KM2 = 2000.0  # radius ~ 25 km (small mesoscale floor)
-DEFAULT_MAX_EDDY_AREA_KM2 = 3_500_000.0  # radius ~ 1000 km (generous vs Chelton's ~1000-pixel cap)
+DEFAULT_MAX_EDDY_AREA_KM2 = 300_000.0  # radius ~ 300 km (Chelton-order upper bound on eddy size)
 DEFAULT_MIN_CONTOUR_CONVEXITY = 0.75
 DEFAULT_APPLY_CONTOUR_FILTERING = True
 GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES = 300.0
@@ -122,7 +130,7 @@ def _gaussian_filter_with_mask(
 
 def _ssh_anomaly(
     field: xarray.DataArray,
-    background_sigma_km: float,
+    background_sigma_km: float | tuple[float, float],
     detection_sigma_km: float | None,
 ) -> numpy.ndarray:
     field_values = numpy.asarray(field.values, dtype=float)
@@ -143,7 +151,13 @@ def _median_positive_spacing(values: numpy.ndarray) -> float:
     return float(numpy.median(positive))
 
 
-def _kilometres_to_grid_sigma(field: xarray.DataArray, sigma_km: float) -> tuple[float, float]:
+def _kilometres_to_grid_sigma(
+    field: xarray.DataArray,
+    sigma_km: float | tuple[float, float],
+) -> tuple[float, float]:
+    # `sigma_km` is either one isotropic physical sigma or a (latitude, longitude) pair;
+    # the result is always the pair of grid sigmas for the (latitude, longitude) axes.
+    latitude_sigma_km, longitude_sigma_km = sigma_km if isinstance(sigma_km, tuple) else (sigma_km, sigma_km)
     latitude_values = numpy.asarray(field[LATITUDE_COLUMN].values, dtype=float)
     latitude_spacing_km = _median_positive_spacing(latitude_values) * ONE_DEGREE_LATITUDE_KM
     characteristic_latitude = float(numpy.nanmean(latitude_values))
@@ -152,7 +166,7 @@ def _kilometres_to_grid_sigma(field: xarray.DataArray, sigma_km: float) -> tuple
         * ONE_DEGREE_LATITUDE_KM
         * numpy.cos(numpy.deg2rad(characteristic_latitude))
     )
-    return sigma_km / latitude_spacing_km, sigma_km / longitude_spacing_km
+    return latitude_sigma_km / latitude_spacing_km, longitude_sigma_km / longitude_spacing_km
 
 
 def _valid_detection_mask(field: xarray.DataArray, max_abs_latitude_degrees: float) -> numpy.ndarray:
@@ -215,7 +229,7 @@ def detect_mesoscale_eddies(
     dataset: xarray.Dataset,
     first_day_index: int = 0,
     lead_day_indices: list[int] | None = None,
-    background_sigma_km: float = DEFAULT_BACKGROUND_SIGMA_KM,
+    background_sigma_km: float | tuple[float, float] = DEFAULT_BACKGROUND_SIGMA_KM,
     detection_sigma_km: float | None = DEFAULT_DETECTION_SIGMA_KM,
     min_peak_separation_km: float = DEFAULT_MIN_PEAK_SEPARATION_KM,
     amplitude_threshold_meters: float = DEFAULT_AMPLITUDE_THRESHOLD_METERS,
@@ -390,7 +404,7 @@ def mesoscale_eddy_summary(
     reference_dataset: xarray.Dataset,
     first_day_index: int = 0,
     lead_day_indices: list[int] | None = None,
-    background_sigma_km: float = DEFAULT_BACKGROUND_SIGMA_KM,
+    background_sigma_km: float | tuple[float, float] = DEFAULT_BACKGROUND_SIGMA_KM,
     detection_sigma_km: float | None = DEFAULT_DETECTION_SIGMA_KM,
     min_peak_separation_km: float = DEFAULT_MIN_PEAK_SEPARATION_KM,
     amplitude_threshold_meters: float = DEFAULT_AMPLITUDE_THRESHOLD_METERS,
@@ -645,7 +659,7 @@ def mesoscale_eddy_contours_from_detections(
     detections: pandas.DataFrame,
     dataset: xarray.Dataset,
     first_day_index: int = 0,
-    background_sigma_km: float = DEFAULT_BACKGROUND_SIGMA_KM,
+    background_sigma_km: float | tuple[float, float] = DEFAULT_BACKGROUND_SIGMA_KM,
     detection_sigma_km: float | None = DEFAULT_DETECTION_SIGMA_KM,
     amplitude_threshold_meters: float = DEFAULT_AMPLITUDE_THRESHOLD_METERS,
     max_abs_latitude_degrees: float = DEFAULT_MAX_ABS_LATITUDE_DEGREES,
@@ -951,7 +965,7 @@ def surface_ssh_anomaly_field(
     dataset: xarray.Dataset,
     first_day_index: int = 0,
     lead_day_index: int = 0,
-    background_sigma_km: float = DEFAULT_BACKGROUND_SIGMA_KM,
+    background_sigma_km: float | tuple[float, float] = DEFAULT_BACKGROUND_SIGMA_KM,
     detection_sigma_km: float | None = DEFAULT_DETECTION_SIGMA_KM,
     max_abs_latitude_degrees: float | None = None,
 ) -> xarray.DataArray:

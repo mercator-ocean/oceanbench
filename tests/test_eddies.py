@@ -85,6 +85,10 @@ def test_literature_km_defaults_detect_planted_eddies_without_extra_smoothing() 
     # old test that pinned the pre-c1f1099 grid-cell-count behaviour (extra 1.5-cell
     # blur, 8-cell separation, 4 cm threshold), which is no longer the default.
     assert eddies.DEFAULT_DETECTION_SIGMA_KM is None
+    # Gaussian half power sits near 7.5 sigma, so these sigmas are the ~2000 x 1000 km
+    # half-power block of Chelton et al. (2011), not a 265/130 km cutoff.
+    assert eddies.DEFAULT_BACKGROUND_SIGMA_KM == (265.0, 130.0)
+    assert eddies.DEFAULT_MAX_EDDY_AREA_KM2 == 300_000.0
     assert eddies.DEFAULT_AMPLITUDE_THRESHOLD_METERS == 0.01
     assert eddies.DEFAULT_MIN_PEAK_SEPARATION_KM == 100.0
 
@@ -133,6 +137,8 @@ def test_literature_km_defaults_detect_planted_eddies_without_extra_smoothing() 
 def test_detection_sigma_parameter_reproduces_pre_change_smoothing() -> None:
     # The detection_sigma_km parameter is retained for reproducing pre-change artifacts:
     # passing the old 1.5-cell (at 1 degree) value must re-enable the second smoothing pass.
+    # The old isotropic 12-degree background sigma is passed explicitly as well, since the
+    # default background is now the anisotropic (265, 130) km pair.
     latitudes = numpy.arange(-20.0, 21.0)
     longitudes = numpy.arange(0.0, 80.0)
     latitude_grid = latitudes[:, None]
@@ -169,11 +175,10 @@ def test_detection_sigma_parameter_reproduces_pre_change_smoothing() -> None:
 
     detections = eddies.detect_mesoscale_eddies(
         dataset,
+        background_sigma_km=12.0 * eddies.ONE_DEGREE_LATITUDE_KM,
         detection_sigma_km=1.5 * eddies.ONE_DEGREE_LATITUDE_KM,
         min_peak_separation_km=8.0 * eddies.ONE_DEGREE_LATITUDE_KM,
         amplitude_threshold_meters=0.04,
     )
-    new_rows = sorted(
-        (row.polarity, row.latitude, row.longitude) for row in detections.itertuples(index=False)
-    )
+    new_rows = sorted((row.polarity, row.latitude, row.longitude) for row in detections.itertuples(index=False))
     assert new_rows == legacy_rows

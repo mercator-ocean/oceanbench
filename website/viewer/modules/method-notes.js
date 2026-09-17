@@ -90,7 +90,8 @@ export const METHOD_NOTES = {
       "{params}Eddies are detected as closed sea surface height anomaly contours (Chelton " +
       "et al. 2011 family). With two forecasts, eddy centres of the same polarity are " +
       "matched within 200 km. This measures agreement between the forecasts, not accuracy " +
-      "against observations.",
+      "against observations. Detection runs on each dataset's own native grid, so counts " +
+      "are not comparable between a 1-degree and a 1/12-degree dataset.",
   },
 
   // Live power spectrum (rail-psd, live FFT over the map rectangle).
@@ -154,7 +155,10 @@ const EDDY_PARAMETER_ROWS = [
   ["max_eddy_area_km2", "max area", (v) => `${Number(v).toLocaleString("en-US")} km²`],
   ["min_peak_separation_km", "min peak separation", (v) => `${v} km`],
   ["max_match_distance_km", "max match distance", (v) => `${v} km`],
-  ["background_sigma_km", "background sigma", (v) => `${Number(v).toFixed(0)} km`],
+  // Background sigma is a (latitude, longitude) pair of Gaussian sigmas; half power sits
+  // near 7.5 sigma, so the pair is shown as sigma and the reader is told it is a sigma.
+  ["background_sigma_km", "background sigma", (v) =>
+    Array.isArray(v) ? `${Number(v[0]).toFixed(0)} km lat × ${Number(v[1]).toFixed(0)} km lon` : `${Number(v).toFixed(0)} km`],
   ["contour_level_step_meters", "contour step", (v) => `${v} m`],
   ["min_contour_convexity", "min convexity", (v) => `${v}`],
   ["max_abs_latitude_degrees", "max abs latitude", (v) => `${v}°`],
