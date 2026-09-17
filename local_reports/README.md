@@ -20,13 +20,20 @@ Nothing here is uploaded anywhere.
 through 20241225, each initialised from the as-issued GLO12 nowcast of the Tuesday
 before it, quarter degree, not an official submission.
 
-`glowcascade_v4_nofilter` is the no-filter variant of the v4 cascade, the same two
-checkpoints as `glowcascade_v4` and nothing else changed:
+`glowcascade_v4_nofilter` is the `glowcascade_v4` recipe with the equatorial notch
+turned off, that is the rollout run without `--eqfilter`. That is the configuration
+GLOW actually serves, so the preview entry now matches the served model. The two
+checkpoints and everything else are the same:
 
 - lead 1 from the v4 anneal checkpoint, step 87616
   (`glow930m_scratch_v4/runs/scratch_v4/keep_epochs/ckpt_step00087616.pt`)
-- leads 2 to 9 from the v4 ladder h5 checkpoint, step 1869
-  (`glow930m_v4_ladder/runs/stage2_ladder/keep_epochs/ckpt_step00001869.pt`)
+- leads 2 to 9 from the v4 ladder h5 checkpoint, step 1869, switched in after lead 1
+  (`eqfilter_v2/stage/ckpt_ladder_step00001869.pt`)
+
+The notch is not a small thing in the box it acts on: the in-box band power median
+runs 58 to 181 times higher without it for temperature, 130 to 232 for the zonal
+current, and 85 to 403 for sea surface height, growing with lead. It is the headline
+scores that barely move, because the box is a small part of the global domain.
 
 It replaces the `glowcascade_v4` entry that stood here before; only one GLOW report
 is kept at a time, the website shows a single file per challenger. On the mean of
