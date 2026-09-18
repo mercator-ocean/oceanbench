@@ -315,15 +315,31 @@ div.sourceCode.cell-code pre.sourceCode {
 }
 
 /* Dark mode overrides */
+
+/* The grid between cells is quieter than a card edge, or it draws a lattice
+   over the colours it is meant to separate. */
+body.quarto-dark .score-table th,
+body.quarto-dark .score-table td {
+  border-color: var(--ob-grid-border);
+}
+
+/* The frozen column and the head scroll over the coloured cells, so they need
+   an opaque fill: the table surface, one step up from the page. */
 body.quarto-dark .score-table .model-col,
 body.quarto-dark .score-table thead th {
-  background: var(--bs-body-bg, #1a1a2e);
+  background: var(--ob-surface);
 }
 
 body.quarto-dark .score-table .lead-day,
 body.quarto-dark .score-table .lead-day-label,
 body.quarto-dark .score-table .standard-name {
-  color: #adb5bd;
+  color: var(--ob-muted);
+}
+
+/* The row under the pointer lifts by a hair. Only the frozen cell can carry
+   it: every other cell in the row owns its own colour. */
+body.quarto-dark .score-table tbody tr:hover .model-col {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04));
 }
 
 /* --- Two-row sticky header (tabs + controls) --- */
@@ -363,7 +379,7 @@ body.nav-hidden #score-header {
 }
 
 body.quarto-dark #region-selector {
-  background: var(--ob-surface-raised);
+  background: var(--ob-surface);
   border-color: var(--ob-border);
 }
 
@@ -450,7 +466,7 @@ body.quarto-dark #region-selector {
 
 body.quarto-dark .selector-chip {
   background: var(--ob-surface);
-  color: var(--bs-body-color, #d4d4d8);
+  color: var(--ob-text);
   border-color: var(--ob-border);
 }
 
@@ -562,7 +578,7 @@ body.quarto-dark .region-globe-graticule {
 }
 
 body.quarto-dark .region-globe-active-region {
-  fill: rgba(58, 166, 211, 0.34);
+  fill: rgba(79, 181, 227, 0.32);
 }
 
 body.quarto-dark .region-globe-active-region-outline-halo {
@@ -652,7 +668,7 @@ body.quarto-dark .score-tab {
 }
 
 body.quarto-dark .score-tab:hover:not(.active) {
-  color: var(--bs-body-color, #d4d4d8);
+  color: var(--ob-text);
 }
 
 body.quarto-dark .score-tab.active {
@@ -701,7 +717,7 @@ body.quarto-dark .controls {
 
 body.quarto-dark .controls select {
   background: var(--ob-surface-raised);
-  color: var(--bs-body-color, #d4d4d8);
+  color: var(--ob-text);
   border-color: var(--ob-border);
 }
 
@@ -813,7 +829,7 @@ body.quarto-dark .display-toggle-btn.active {
 
 body.quarto-dark #scale-input {
   background: var(--ob-surface-raised);
-  color: var(--bs-body-color, #d4d4d8);
+  color: var(--ob-text);
   border-color: var(--ob-border);
 }
 
@@ -951,7 +967,7 @@ body.nav-hidden .depth-table thead {
 }
 
 body.quarto-dark .score-table .depth-separator-cell {
-  background: var(--ob-surface-raised);
+  background: var(--ob-surface);
   border-bottom-color: var(--ob-border) !important;
   color: var(--ob-muted);
 }
@@ -988,6 +1004,10 @@ body.quarto-dark .depth-table thead th:last-child {
   color: white !important;
 }
 
+body.quarto-dark .score-table th.highlight-label a {
+  color: var(--ob-accent-contrast) !important;
+}
+
 /* --- Baseline row --- */
 
 .score-table tr.baseline-row th {
@@ -998,8 +1018,10 @@ body.quarto-dark .depth-table thead th:last-child {
   background: var(--bs-tertiary-bg, #f0f0f0);
 }
 
+/* A wash of the accent rather than a grey slab, matched to the accent bar the
+   shared rule draws down the frozen cell. */
 body.quarto-dark .score-table tr.baseline-row td {
-  background: #2a2a2a;
+  background: rgba(79, 181, 227, 0.12);
 }
 
 /* --- Section headings --- */
@@ -1067,14 +1089,14 @@ body.quarto-dark .only-light {
 /* --- xarray output dark mode (notebooks use different selectors) --- */
 
 body.quarto-dark {
-  --xr-font-color0: rgba(255, 255, 255, 1);
-  --xr-font-color2: rgba(255, 255, 255, 0.54);
-  --xr-font-color3: rgba(255, 255, 255, 0.38);
-  --xr-border-color: #1f1f1f;
-  --xr-disabled-color: #515151;
-  --xr-background-color: #111111;
-  --xr-background-color-row-even: #111111;
-  --xr-background-color-row-odd: #313131;
+  --xr-font-color0: var(--ob-text);
+  --xr-font-color2: var(--ob-muted);
+  --xr-font-color3: rgba(255, 255, 255, 0.45);
+  --xr-border-color: var(--ob-grid-border);
+  --xr-disabled-color: #6d7685;
+  --xr-background-color: var(--ob-surface);
+  --xr-background-color-row-even: var(--ob-surface);
+  --xr-background-color-row-odd: var(--ob-surface-raised);
 }
 
 /* --- Mobile tab responsiveness --- */
@@ -1197,7 +1219,7 @@ body.quarto-dark #baseline-select {
 
 body.quarto-dark #baseline-select {
   background-color: var(--ob-surface);
-  color: var(--bs-body-color, #d4d4d8);
+  color: var(--ob-text);
 }
 
 body.quarto-dark .version-select {
@@ -1279,7 +1301,7 @@ body.quarto-dark .version-select {
 
 body.quarto-dark #floating-thead,
 body.quarto-dark #floating-thead .score-table thead th {
-  background: var(--bs-body-bg, #1a1a2e);
+  background: var(--ob-surface);
 }
 
 body.nav-hidden #floating-thead {
