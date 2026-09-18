@@ -2943,7 +2943,7 @@ require(['chartjs'], function(ChartModule) {
     type:'line',
     data:{
       labels:['1 GPU','2 GPU','3 GPU'],
-      datasets:[{ label:'Duration (s)', data:[81,63,51], borderColor:'#3AA9C9', backgroundColor:'#3AA9C9', pointRadius:5, pointHoverRadius:7, borderWidth:2, tension:0 }]
+      datasets:[{ label:'Duration (s)', data:[81,63,51], borderColor:'#046293', backgroundColor:'#046293', pointRadius:5, pointHoverRadius:7, borderWidth:2, tension:0 }]
     },
     options:{
       responsive:true, maintainAspectRatio:false,
@@ -2963,7 +2963,7 @@ require(['chartjs'], function(ChartModule) {
     type:'line',
     data:{
       labels:['1 GPU','2 GPU','3 GPU'],
-      datasets:[{ label:'Energy Consumed (Wh)', data:[7.42,7.81,7.88], borderColor:'#3AA9C9', backgroundColor:'#3AA9C9', pointRadius:5, pointHoverRadius:7, borderWidth:2, tension:0 }]
+      datasets:[{ label:'Energy Consumed (Wh)', data:[7.42,7.81,7.88], borderColor:'#046293', backgroundColor:'#046293', pointRadius:5, pointHoverRadius:7, borderWidth:2, tension:0 }]
     },
     options:{
       responsive:true, maintainAspectRatio:false,
