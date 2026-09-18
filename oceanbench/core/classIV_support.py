@@ -38,8 +38,12 @@ REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 #: correcting it.
 GLOENS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.160262
 
-#: The inverse barometer field of the GloEns stores.
-GLOENS_INVERSE_BAROMETER_VARIABLE = "ssh_ib"
+#: The inverse barometer field of the GloEns stores, under the name the seam reads it by.
+#:
+#: The stores publish it as ``ssh_ib`` and declare its standard name, and every path that takes
+#: it off works on a dataset already renamed to standard names, so this is that standard name
+#: and not the store name.
+GLOENS_INVERSE_BAROMETER_VARIABLE = "sea_surface_height_correction_due_to_air_pressure_at_low_frequency"
 
 #: Challenger source name to the sea surface height shift its own basis needs.
 #:

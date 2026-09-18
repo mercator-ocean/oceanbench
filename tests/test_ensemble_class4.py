@@ -14,11 +14,12 @@ import xarray
 from oceanbench.core import curvilinear_class4
 from oceanbench.core.classIV_support import (
     _CLASS4_OBSERVATIONS_CACHE,
+    GLOENS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
     REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
     _prepared_class4_observations,
     interpolate_class4_model_to_observations,
 )
-from oceanbench.core.curvilinear_staging import CurvilinearChallenger
+from oceanbench.core.curvilinear_staging import CurvilinearChallenger, GLOENS_SOURCE_NAME
 from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.ensemble_class4 import (
@@ -664,6 +665,7 @@ def _native_observations_dataset(depth: float = 0.0) -> xarray.Dataset:
     return xarray.Dataset(
         {
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): (("observation",), observation_values),
+            Variable.SEA_WATER_SALINITY.key(): (("observation",), observation_values),
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (("observation",), observation_values),
             Variable.EASTWARD_SEA_WATER_VELOCITY.key(): (("observation",), observation_values),
             Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): (("observation",), observation_values),
@@ -745,6 +747,111 @@ def test_sea_level_is_matched_up_on_the_native_grid_beside_the_other_variables(m
         matchups[1].member_values[:, 0],
         -NATIVE_MEAN_DYNAMIC_TOPOGRAPHY - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
     )
+
+
+#: The names a GloEns store gives its fields, and the standard names it declares them under.
+#:
+#: They are the names of the NEMO vocabulary rather than the names the benchmark scores under,
+#: which is what the standard name aliases of the library exist to reconcile.
+GLOENS_STORE_STANDARD_NAMES = {
+    "thetao": "sea_water_potential_temperature",
+    "so": "sea_water_practical_salinity",
+    "zos": "dynamic_sea_surface_height_above_geoid",
+    "ssh_ib": "sea_surface_height_correction_due_to_air_pressure_at_low_frequency",
+    "uo": "sea_water_x_velocity",
+    "vo": "sea_water_y_velocity",
+}
+
+GLOENS_INVERSE_BAROMETER_VALUE = 0.05
+
+
+def _gloens_named_challenger(monkeypatch) -> xarray.Dataset:
+    """A native week named as the real GloEns stores name their fields."""
+    latitude, longitude = _native_tracer_grid()
+    dimensions = (
+        ENSEMBLE_DIMENSION,
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        "y",
+        "x",
+    )
+    shape = (1, 1, 1, 4, 4)
+    fields = {
+        "thetao": numpy.arange(16.0).reshape(shape),
+        "so": 35.0 + numpy.arange(16.0).reshape(shape) / 100.0,
+        "zos": numpy.zeros(shape),
+        "ssh_ib": numpy.full(shape, GLOENS_INVERSE_BAROMETER_VALUE),
+        "uo": numpy.ones(shape),
+        "vo": numpy.zeros(shape),
+    }
+    dataset = xarray.Dataset(
+        {
+            name: (dimensions, values, {"standard_name": GLOENS_STORE_STANDARD_NAMES[name]})
+            for name, values in fields.items()
+        },
+        coords={
+            ENSEMBLE_DIMENSION: [0],
+            Dimension.FIRST_DAY_DATETIME.key(): [NATIVE_FIRST_DAY],
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.LATITUDE.key(): (("y", "x"), latitude, {"standard_name": "latitude"}),
+            Dimension.LONGITUDE.key(): (("y", "x"), longitude, {"standard_name": "longitude"}),
+        },
+    )
+    monkeypatch.setattr(
+        "oceanbench.core.curvilinear_staging.CURVILINEAR_CHALLENGERS",
+        {
+            GLOENS_SOURCE_NAME: CurvilinearChallenger(
+                tracer_grid=lambda _dataset: (latitude, longitude),
+                tracer_ocean_mask=lambda _dataset: numpy.ones(latitude.shape, dtype=bool),
+            )
+        },
+    )
+    return with_dataset_source(dataset, kind="challenger", name=GLOENS_SOURCE_NAME)
+
+
+def test_a_store_named_as_gloens_names_its_fields_matches_up_every_variable(monkeypatch):
+    challenger = _gloens_named_challenger(monkeypatch)
+    monkeypatch.setattr(
+        curvilinear_class4,
+        "load_mean_dynamic_topography",
+        lambda _resolution: xarray.DataArray(
+            numpy.full((6, 6), NATIVE_MEAN_DYNAMIC_TOPOGRAPHY),
+            dims=(Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()),
+            coords={
+                Dimension.LATITUDE.key(): numpy.arange(39.0, 45.0),
+                Dimension.LONGITUDE.key(): numpy.arange(9.0, 15.0),
+            },
+        ),
+    )
+
+    matchups = ensemble_class4_matchup(
+        challenger,
+        _native_observations_dataset(depth=15.0),
+        [
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+            Variable.SEA_WATER_SALINITY,
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+            Variable.EASTWARD_SEA_WATER_VELOCITY,
+            Variable.NORTHWARD_SEA_WATER_VELOCITY,
+        ],
+    )
+
+    values = {matchup.variable: matchup.member_values[:, 0] for matchup in matchups}
+    assert list(values) == [
+        Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+        Variable.SEA_WATER_SALINITY.key(),
+        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+        Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+    ]
+    numpy.testing.assert_array_equal(values[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()], [0.0, 5.0, 10.0])
+    numpy.testing.assert_allclose(values[Variable.SEA_WATER_SALINITY.key()], [35.0, 35.05, 35.1])
+    numpy.testing.assert_allclose(
+        values[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()],
+        -GLOENS_INVERSE_BAROMETER_VALUE - NATIVE_MEAN_DYNAMIC_TOPOGRAPHY - GLOENS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
+    )
+    numpy.testing.assert_allclose(values[Variable.EASTWARD_SEA_WATER_VELOCITY.key()], 1.0)
+    numpy.testing.assert_allclose(values[Variable.NORTHWARD_SEA_WATER_VELOCITY.key()], 0.0, atol=1e-12)
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import pytest
 import xarray
 
 from oceanbench.core import curvilinear_class4
-from oceanbench.core.classIV_support import GLOENS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+from oceanbench.core.classIV_support import GLOENS_INVERSE_BAROMETER_VARIABLE, GLOENS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
 from oceanbench.core.curvilinear_class4 import (
     NativeGrid,
     interpolate_class4_native_ensemble_to_observations,
@@ -256,7 +256,7 @@ def test_native_sea_level_takes_off_the_barometer_the_topography_and_the_shift(m
     )
     sea_level_key = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
     dataset = _model_dataset(numpy.arange(16.0).reshape(1, 1, 4, 4) / 10.0, name=sea_level_key)
-    dataset = dataset.assign({"ssh_ib": xarray.full_like(dataset[sea_level_key], 0.05)})
+    dataset = dataset.assign({GLOENS_INVERSE_BAROMETER_VARIABLE: xarray.full_like(dataset[sea_level_key], 0.05)})
     dataset = with_dataset_source(dataset, kind="challenger", name=GLOENS_SOURCE_NAME)
     observations = _observations([40.1, 42.9], [12.2, 10.1])
 

@@ -11,6 +11,7 @@ import xarray
 from oceanbench.core import challenger_datasets
 from oceanbench.core.challenger_datasets import gloens
 from oceanbench.core.classIV_support import CHALLENGER_INVERSE_BAROMETER_VARIABLES
+from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.curvilinear_staging import (
     CURVILINEAR_CHALLENGERS,
     GLOENS_FORECAST_DAYS,
@@ -76,9 +77,17 @@ def _surface_store(initialisation_datetime: datetime) -> xarray.Dataset:
     surface_dimensions = ("time", "ens", "y", "x")
     return xarray.Dataset(
         {
-            "tos": (surface_dimensions, _daily_ramp(12.0)),
-            "zos": (surface_dimensions, _surface_values(0.3)),
-            "ssh_ib": (surface_dimensions, _surface_values(0.02)),
+            "tos": (surface_dimensions, _daily_ramp(12.0), {"standard_name": "bulk_sea_surface_temperature"}),
+            "zos": (
+                surface_dimensions,
+                _surface_values(0.3),
+                {"standard_name": "dynamic_sea_surface_height_above_geoid"},
+            ),
+            "ssh_ib": (
+                surface_dimensions,
+                _surface_values(0.02),
+                {"standard_name": "sea_surface_height_correction_due_to_air_pressure_at_low_frequency"},
+            ),
         },
         coords={
             "time": _times(initialisation_datetime),
@@ -249,7 +258,8 @@ def test_the_gloens_week_leaves_its_inverse_barometer_beside_its_sea_level(monke
 
     week = _week()
 
-    assert CHALLENGER_INVERSE_BAROMETER_VARIABLES[GLOENS_SOURCE_NAME] in week.data_vars
+    renamed = rename_dataset_with_standard_names(week)
+    assert CHALLENGER_INVERSE_BAROMETER_VARIABLES[GLOENS_SOURCE_NAME] in renamed.data_vars
     assert week["zos"].values.max() == numpy.float32(0.3)
 
 

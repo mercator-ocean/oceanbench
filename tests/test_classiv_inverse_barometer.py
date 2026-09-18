@@ -18,7 +18,7 @@ from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 SEA_SURFACE_HEIGHT_KEY = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
-INVERSE_BAROMETER_NAME = "ssh_ib"
+INVERSE_BAROMETER_NAME = "sea_surface_height_correction_due_to_air_pressure_at_low_frequency"
 CHALLENGER_NAME = "challenger_with_inverse_barometer"
 CHALLENGER_SHIFT = -0.1301
 
@@ -146,7 +146,7 @@ def test_declaring_an_inverse_barometer_without_a_shift_is_an_error(monkeypatch)
 
 
 def test_gloens_is_the_challenger_that_declares_an_inverse_barometer_and_a_shift():
-    assert CHALLENGER_INVERSE_BAROMETER_VARIABLES == {GLOENS_SOURCE_NAME: "ssh_ib"}
+    assert CHALLENGER_INVERSE_BAROMETER_VARIABLES == {GLOENS_SOURCE_NAME: INVERSE_BAROMETER_NAME}
     assert CHALLENGER_MEAN_SEA_SURFACE_HEIGHT_SHIFTS == {GLOENS_SOURCE_NAME: -0.160262}
 
 
