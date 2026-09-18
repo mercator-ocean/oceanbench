@@ -83,6 +83,9 @@ _MATCHUP_TARGET_SCHEMA = pyarrow.schema(
 )
 
 _EDDY_CENSUS_SCHEMA_VERSION = "2"
+# Lead days of one start are independent, so the census can run them in parallel processes.
+# Left at one worker unless a caller asks for more, the serial path being the published one.
+_EDDY_CENSUS_WORKERS_VARIABLE = "OCEANBENCH_EDDY_CENSUS_WORKERS"
 # Start dates whose census the publish path serves. Every lead day of a start is written, so
 # the lead scrub moves real eddies; every start of every dataset would be several gigabytes of
 # JSON per dataset (3 MB a frame at 1/12 degree, 52 starts x 10 leads), so the published set is
@@ -613,9 +616,10 @@ def _eddy_dict(
     detection_index: int,
     detections: pandas.DataFrame,
     contours: pandas.DataFrame,
+    contour_rows_by_detection_index: dict | None = None,
 ) -> dict:
     detection_row = detections.loc[detection_index]
-    contour_latitudes, contour_longitudes = _contour_polygon(detection_index, contours)
+    contour_latitudes, contour_longitudes = _contour_polygon(detection_index, contours, contour_rows_by_detection_index)
     return {
         "id": int(detection_index),
         "latitude": round(float(detection_row[eddies_core.LATITUDE_COLUMN]), _COORDINATE_ROUNDING_DECIMALS),
@@ -626,16 +630,24 @@ def _eddy_dict(
     }
 
 
+def _contour_rows_by_detection_index(contours: pandas.DataFrame) -> dict:
+    """First contour row per detection index, so a frame does not rescan the table per eddy."""
+    if contours.empty:
+        return {}
+    first_rows = contours.drop_duplicates("detection_index")
+    return {int(row["detection_index"]): row for _, row in first_rows.iterrows()}
+
+
 def _contour_polygon(
     detection_index: int,
     contours: pandas.DataFrame,
+    contour_rows_by_detection_index: dict | None = None,
 ) -> tuple[list[float], list[float]]:
-    if contours.empty:
+    if contour_rows_by_detection_index is None:
+        contour_rows_by_detection_index = _contour_rows_by_detection_index(contours)
+    contour_row = contour_rows_by_detection_index.get(int(detection_index))
+    if contour_row is None:
         return [], []
-    matching_contours = contours.loc[contours["detection_index"] == detection_index]
-    if matching_contours.empty:
-        return [], []
-    contour_row = matching_contours.iloc[0]
     latitudes = numpy.asarray(contour_row[eddies_core.CONTOUR_LATITUDES_COLUMN], dtype=float)
     longitudes = numpy.asarray(contour_row[eddies_core.CONTOUR_LONGITUDES_COLUMN], dtype=float)
     latitudes, longitudes = _decimated_contour(latitudes, longitudes)
@@ -671,14 +683,22 @@ def _clamp_eddy(eddy: dict) -> dict:
     }
 
 
-def _eddy_frame(dataset: xarray.Dataset, detections, contours, lead_day: int) -> dict:
+def _eddy_frame(
+    dataset: xarray.Dataset,
+    detections,
+    contours,
+    lead_day: int,
+    contour_rows_by_detection_index: dict | None = None,
+) -> dict:
     import jsonschema
 
     eddy_schema = load_schema("eddies")["$defs"]["eddy"]
+    if contour_rows_by_detection_index is None:
+        contour_rows_by_detection_index = _contour_rows_by_detection_index(contours)
     detection_indices = _lead_detection_indices(detections, lead_day - 1)
     eddies = []
     for detection_index in detection_indices:
-        eddy = _clamp_eddy(_eddy_dict(detection_index, detections, contours))
+        eddy = _clamp_eddy(_eddy_dict(detection_index, detections, contours, contour_rows_by_detection_index))
         jsonschema.validate(instance=eddy, schema=eddy_schema)
         eddies.append(eddy)
     return {"lead_day": lead_day, "detections": eddies}
@@ -693,6 +713,83 @@ def dataset_start_dates(dataset: xarray.Dataset) -> list[str]:
     """Every forecast start date as ``YYYY-MM-DD``, in the order the pyramid manifest lists them."""
     values = dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     return [str(numpy.datetime_as_string(value, unit="D")) for value in numpy.atleast_1d(values)]
+
+
+def _eddy_census_worker_count() -> int:
+    """Lead days to detect and contour in parallel, from ``OCEANBENCH_EDDY_CENSUS_WORKERS``."""
+    try:
+        return max(1, int(os.environ.get(_EDDY_CENSUS_WORKERS_VARIABLE, "1")))
+    except ValueError:
+        return 1
+
+
+def _single_lead_dataset(dataset: xarray.Dataset, start_index: int, lead_day_index: int) -> xarray.Dataset:
+    """One lead day's sea surface height field on its own, as the eddy functions expect a dataset.
+
+    The field is the same array ``detect_mesoscale_eddies`` would read out of the full dataset, so
+    a worker handed this sees exactly the values the serial path sees; it carries no lead or start
+    axis, so the eddy functions resolve it as the single lead 0.
+    """
+    field = eddies_core.surface_ssh_field(dataset, first_day_index=start_index, lead_day_index=lead_day_index)
+    return xarray.Dataset({_SEA_SURFACE_HEIGHT_VARIABLE: field.reset_coords(drop=True)})
+
+
+def _lead_detections(single_lead_dataset: xarray.Dataset) -> pandas.DataFrame:
+    return eddies_core.detect_mesoscale_eddies(single_lead_dataset, first_day_index=0, lead_day_indices=[0])
+
+
+def _lead_contours(task: tuple[xarray.Dataset, pandas.DataFrame]) -> pandas.DataFrame:
+    single_lead_dataset, lead_detections = task
+    return eddies_core.mesoscale_eddy_contours_from_detections(lead_detections, single_lead_dataset, 0)
+
+
+def _relabelled_lead_frames(frames: list[pandas.DataFrame], lead_day_indices: list[int]) -> pandas.DataFrame | None:
+    """Stamp each per-lead frame with its real lead day and stack them in lead order."""
+    populated = []
+    for frame, lead_day_index in zip(frames, lead_day_indices, strict=True):
+        if frame.empty:
+            continue
+        frame = frame.copy()
+        frame[eddies_core.LEAD_DAY_COLUMN] = int(lead_day_index)
+        populated.append(frame)
+    if not populated:
+        return None
+    return pandas.concat(populated, ignore_index=True)
+
+
+def _parallel_detections_and_contours(
+    dataset: xarray.Dataset,
+    start_index: int,
+    lead_day_indices: list[int],
+    worker_count: int,
+) -> tuple[pandas.DataFrame, pandas.DataFrame]:
+    """Detect and contour each lead day in its own process, then stack the frames in lead order.
+
+    Lead days are independent, so this only moves the work; the stacked frames carry the same rows
+    in the same order, and therefore the same detection indices, as the serial path produces.
+    """
+    from concurrent.futures import ProcessPoolExecutor
+
+    single_lead_datasets = [
+        _single_lead_dataset(dataset, start_index, lead_day_index) for lead_day_index in lead_day_indices
+    ]
+    with ProcessPoolExecutor(max_workers=worker_count) as pool:
+        lead_detection_frames = list(pool.map(_lead_detections, single_lead_datasets))
+    detections = _relabelled_lead_frames(lead_detection_frames, lead_day_indices)
+    if detections is None:
+        return lead_detection_frames[0], lead_detection_frames[0].iloc[0:0]
+
+    tasks = []
+    for single_lead_dataset, lead_day_index in zip(single_lead_datasets, lead_day_indices, strict=True):
+        lead_detections = detections.loc[detections[eddies_core.LEAD_DAY_COLUMN] == lead_day_index].copy()
+        lead_detections[eddies_core.LEAD_DAY_COLUMN] = 0
+        tasks.append((single_lead_dataset, lead_detections))
+    with ProcessPoolExecutor(max_workers=worker_count) as pool:
+        lead_contour_frames = list(pool.map(_lead_contours, tasks))
+    contours = _relabelled_lead_frames(lead_contour_frames, lead_day_indices)
+    if contours is None:
+        contours = lead_contour_frames[0]
+    return detections, contours
 
 
 def dataset_eddy_census(
@@ -715,18 +812,23 @@ def dataset_eddy_census(
     if lead_days is None:
         lead_days = dataset_lead_days(dataset)
     lead_day_indices = [lead_day - 1 for lead_day in lead_days]
-    detections = eddies_core.detect_mesoscale_eddies(
-        dataset, first_day_index=start_index, lead_day_indices=lead_day_indices
-    )
-    # Contours are computed once and then subset, never recomputed on the filtered
-    # detections. Recomputing changes which centres share a component, so the ladder
-    # resolves at different levels and the exported outline stops being the contour whose
-    # level defined the reported Chelton amplitude; centres accepted by the filter could
-    # come back with no contour at all.
-    contours = _contours(dataset, detections, start_index)
+    worker_count = min(_eddy_census_worker_count(), len(lead_day_indices))
+    if worker_count > 1:
+        detections, contours = _parallel_detections_and_contours(dataset, start_index, lead_day_indices, worker_count)
+    else:
+        detections = eddies_core.detect_mesoscale_eddies(
+            dataset, first_day_index=start_index, lead_day_indices=lead_day_indices
+        )
+        # Contours are computed once and then subset, never recomputed on the filtered
+        # detections. Recomputing changes which centres share a component, so the ladder
+        # resolves at different levels and the exported outline stops being the contour whose
+        # level defined the reported Chelton amplitude; centres accepted by the filter could
+        # come back with no contour at all.
+        contours = _contours(dataset, detections, start_index)
     if apply_contour_filtering:
         detections = eddies_core.filter_mesoscale_eddy_detections_by_contours(detections, contours)
         contours = contours.loc[contours["detection_index"].isin(detections.index)]
+    contour_rows_by_detection_index = _contour_rows_by_detection_index(contours)
     parameters = {
         **eddies_core.default_eddy_detection_parameters(),
         "apply_contour_filtering": apply_contour_filtering,
@@ -742,7 +844,10 @@ def dataset_eddy_census(
         "start_date": start_dates[start_index] if start_index < len(start_dates) else None,
         "parameters": parameters,
         PROVENANCE_KEY: provenance_block(source=dataset_slug, parameters=parameters),
-        "frames": [_eddy_frame(dataset, detections, contours, lead_day) for lead_day in lead_days],
+        "frames": [
+            _eddy_frame(dataset, detections, contours, lead_day, contour_rows_by_detection_index)
+            for lead_day in lead_days
+        ],
     }
 
 

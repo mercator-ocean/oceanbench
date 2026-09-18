@@ -213,20 +213,40 @@ def _detect_polarity_peaks(
     if coordinates.size == 0:
         return coordinates
     ranked = coordinates[numpy.argsort(-numpy.abs(masked_values[coordinates[:, 0], coordinates[:, 1]]))]
+    # A great-circle distance is never shorter than the latitude difference alone, so an
+    # already accepted peak further than `min_peak_separation_km` in latitude cannot be the
+    # one that rejects this candidate. Only the peaks inside that latitude band are measured,
+    # which leaves the accept/reject decision exactly as the all-pairs sweep had it.
+    latitude_window_degrees = min_peak_separation_km / ONE_DEGREE_LATITUDE_KM
+    accepted_by_latitude_index: dict[int, list[int]] = {}
     accepted: list[numpy.ndarray] = []
     for coordinate in ranked:
-        if not accepted:
-            accepted.append(coordinate)
-            continue
-        accepted_array = numpy.asarray(accepted)
-        distances = _haversine_distance_km(
-            numpy.asarray([latitude_values[coordinate[0]]]),
-            numpy.asarray([longitude_values[coordinate[1]]]),
-            latitude_values[accepted_array[:, 0]],
-            longitude_values[accepted_array[:, 1]],
-        )
-        if numpy.all(distances >= min_peak_separation_km):
-            accepted.append(coordinate)
+        latitude_index = int(coordinate[0])
+        if accepted:
+            candidate_latitude = latitude_values[latitude_index]
+            neighbour_latitude_indices = numpy.searchsorted(
+                latitude_values,
+                [candidate_latitude - latitude_window_degrees, candidate_latitude + latitude_window_degrees],
+                side="left",
+            )
+            neighbour_rows: list[int] = []
+            neighbours: list[int] = []
+            for row in range(int(neighbour_latitude_indices[0]) - 1, int(neighbour_latitude_indices[1]) + 1):
+                row_longitude_indices = accepted_by_latitude_index.get(row)
+                if row_longitude_indices:
+                    neighbour_rows.extend([row] * len(row_longitude_indices))
+                    neighbours.extend(row_longitude_indices)
+            if neighbours:
+                distances = _haversine_distance_km(
+                    numpy.asarray([candidate_latitude]),
+                    numpy.asarray([longitude_values[coordinate[1]]]),
+                    latitude_values[numpy.asarray(neighbour_rows)],
+                    longitude_values[numpy.asarray(neighbours)],
+                )
+                if not numpy.all(distances >= min_peak_separation_km):
+                    continue
+        accepted.append(coordinate)
+        accepted_by_latitude_index.setdefault(latitude_index, []).append(int(coordinate[1]))
     return numpy.asarray(sorted(accepted, key=lambda item: (item[0], item[1])), dtype=int)
 
 
@@ -520,13 +540,28 @@ def _unwrapped_periodic_longitudes(longitude_values: numpy.ndarray) -> numpy.nda
     longitudes = numpy.asarray(longitude_values, dtype=float)
     if longitudes.size == 0:
         return longitudes
-    unwrapped_longitudes = longitudes.copy()
-    for index in range(1, unwrapped_longitudes.size):
-        unwrapped_longitudes[index] = unwrapped_longitudes[index - 1] + _periodic_longitude_delta(
-            float(longitudes[index - 1]),
-            float(longitudes[index]),
-        )
-    return unwrapped_longitudes
+    # `cumsum` accumulates left to right over [first longitude, delta, delta, ...], which is
+    # the same association, and so the same rounding, as the running sum this replaced.
+    steps = numpy.empty(longitudes.size, dtype=float)
+    steps[0] = longitudes[0]
+    steps[1:] = (
+        (numpy.diff(longitudes) + GLOBAL_LONGITUDE_PERIOD_DEGREES / 2.0) % GLOBAL_LONGITUDE_PERIOD_DEGREES
+    ) - GLOBAL_LONGITUDE_PERIOD_DEGREES / 2.0
+    return numpy.cumsum(steps)
+
+
+def _cell_area_by_latitude_row(
+    latitude_values: numpy.ndarray,
+    longitude_values: numpy.ndarray,
+) -> numpy.ndarray:
+    latitude_spacing_radians = numpy.deg2rad(_median_positive_spacing(latitude_values))
+    longitude_spacing_radians = numpy.deg2rad(_median_positive_spacing(longitude_values))
+    return (
+        EARTH_RADIUS_KM**2
+        * latitude_spacing_radians
+        * longitude_spacing_radians
+        * numpy.cos(numpy.deg2rad(latitude_values))
+    )
 
 
 def _anchor_periodic_longitudes(longitudes: numpy.ndarray, anchor_longitude: float) -> numpy.ndarray:
@@ -595,30 +630,73 @@ def _connected_component_labels(
     return _merge_periodic_longitude_labels(labels, component_count)
 
 
-def _component_contour_info(
+def _component_positions_by_label(
     labels: numpy.ndarray,
-    component_label: int,
+    component_count: int,
+    wanted_labels: numpy.ndarray,
+) -> dict[int, tuple[numpy.ndarray, numpy.ndarray]]:
+    # One pass over the label field for every component a level needs, instead of one
+    # `labels == component_label` scan per eddy centre. Rows come out of `nonzero` in
+    # row-major order and the sort is stable, so each component's positions stay in the
+    # order `numpy.argwhere` produced them.
+    unique_labels = numpy.unique(numpy.asarray(wanted_labels, dtype=int))
+    unique_labels = unique_labels[unique_labels > 0]
+    if unique_labels.size == 0:
+        return {}
+    selector = numpy.zeros(component_count + 1, dtype=bool)
+    selector[unique_labels] = True
+    rows, columns = numpy.nonzero(selector[labels])
+    if rows.size == 0:
+        return {}
+    values = labels[rows, columns]
+    order = numpy.argsort(values, kind="stable")
+    sorted_values = values[order]
+    boundaries = numpy.searchsorted(sorted_values, unique_labels, side="left")
+    ends = numpy.searchsorted(sorted_values, unique_labels, side="right")
+    positions: dict[int, tuple[numpy.ndarray, numpy.ndarray]] = {}
+    for position, component_label in enumerate(unique_labels):
+        span = order[boundaries[position] : ends[position]]
+        positions[int(component_label)] = (rows[span], columns[span])
+    return positions
+
+
+def _component_contour_info(
+    component_rows: numpy.ndarray,
+    component_columns: numpy.ndarray,
+    grid_shape: tuple[int, int],
     latitude_values: numpy.ndarray,
     longitude_values: numpy.ndarray,
     center_longitude_index: int | None = None,
     periodic_longitude: bool = False,
+    unwrapped_longitude_cache: dict[int, numpy.ndarray] | None = None,
+    cell_area_by_latitude_row: numpy.ndarray | None = None,
 ) -> dict[str, object] | None:
-    working_labels = labels
+    # `component_rows` / `component_columns` are the component's positions in the unrolled
+    # label field. The periodic case used to roll the whole label array per centre; rolling
+    # the positions arithmetically gives the same working frame for a few dozen values.
+    working_columns = component_columns
     working_longitude_values = longitude_values
-    if periodic_longitude and center_longitude_index is not None and labels.shape[1] > 1:
-        longitude_roll = labels.shape[1] // 2 - int(center_longitude_index)
-        working_labels = numpy.roll(labels, longitude_roll, axis=1)
-        working_longitude_values = _unwrapped_periodic_longitudes(numpy.roll(longitude_values, longitude_roll))
+    if periodic_longitude and center_longitude_index is not None and grid_shape[1] > 1:
+        longitude_roll = grid_shape[1] // 2 - int(center_longitude_index)
+        working_columns = (component_columns + longitude_roll) % grid_shape[1]
+        cache = unwrapped_longitude_cache if unwrapped_longitude_cache is not None else {}
+        cached_longitudes = cache.get(longitude_roll)
+        if cached_longitudes is None:
+            cached_longitudes = _unwrapped_periodic_longitudes(numpy.roll(longitude_values, longitude_roll))
+            cache[longitude_roll] = cached_longitudes
+        working_longitude_values = cached_longitudes
 
-    component_positions = numpy.argwhere(working_labels == component_label)
-    if component_positions.size == 0:
+    if component_rows.size == 0:
         return None
-    latitude_min = max(int(component_positions[:, 0].min()) - 1, 0)
-    latitude_max = min(int(component_positions[:, 0].max()) + 2, working_labels.shape[0])
-    longitude_min = max(int(component_positions[:, 1].min()) - 1, 0)
-    longitude_max = min(int(component_positions[:, 1].max()) + 2, working_labels.shape[1])
+    latitude_min = max(int(component_rows.min()) - 1, 0)
+    latitude_max = min(int(component_rows.max()) + 2, grid_shape[0])
+    longitude_min = max(int(working_columns.min()) - 1, 0)
+    longitude_max = min(int(working_columns.max()) + 2, grid_shape[1])
 
-    component_mask = working_labels[latitude_min:latitude_max, longitude_min:longitude_max] == component_label
+    component_mask = numpy.zeros((latitude_max - latitude_min, longitude_max - longitude_min), dtype=bool)
+    component_mask[component_rows - latitude_min, working_columns - longitude_min] = True
+    component_positions = numpy.argwhere(component_mask)
+    component_positions[:, 0] += latitude_min
     properties = regionprops(component_mask.astype(numpy.uint8))
     if not properties:
         return None
@@ -643,14 +721,9 @@ def _component_contour_info(
 
     region = properties[0]
     component_latitude_indices = component_positions[:, 0]
-    latitude_spacing_radians = numpy.deg2rad(_median_positive_spacing(latitude_values))
-    longitude_spacing_radians = numpy.deg2rad(_median_positive_spacing(longitude_values))
-    cell_areas_km2 = (
-        EARTH_RADIUS_KM**2
-        * latitude_spacing_radians
-        * longitude_spacing_radians
-        * numpy.cos(numpy.deg2rad(latitude_values[component_latitude_indices]))
-    )
+    if cell_area_by_latitude_row is None:
+        cell_area_by_latitude_row = _cell_area_by_latitude_row(latitude_values, longitude_values)
+    cell_areas_km2 = cell_area_by_latitude_row[component_latitude_indices]
     return {
         CONTOUR_LATITUDES_COLUMN: contour_latitudes,
         CONTOUR_LONGITUDES_COLUMN: contour_longitudes,
@@ -693,6 +766,13 @@ def mesoscale_eddy_contours_from_detections(
         latitude_values = anomaly_field[LATITUDE_COLUMN].values
         longitude_values = anomaly_field[LONGITUDE_COLUMN].values
         periodic_longitude = _is_periodic_longitude_domain(longitude_values)
+        # Per-field quantities the level ladder used to rebuild for every level and every
+        # centre: the finite mask, the per-row cell area and the unwrapped longitudes of a
+        # given roll all depend on the grid alone.
+        finite_mask = numpy.isfinite(anomaly_values)
+        cell_area_by_latitude_row = _cell_area_by_latitude_row(latitude_values, longitude_values)
+        unwrapped_longitude_cache: dict[int, numpy.ndarray] = {}
+        grid_shape = (latitude_values.size, longitude_values.size)
 
         for polarity in POLARITY_ORDER:
             subset = detections.loc[
@@ -727,7 +807,7 @@ def mesoscale_eddy_contours_from_detections(
                     component_mask = anomaly_values >= level_value
                 else:
                     component_mask = anomaly_values <= -level_value
-                component_mask = component_mask & numpy.isfinite(anomaly_values)
+                component_mask &= finite_mask
                 labels, component_count = _connected_component_labels(
                     component_mask,
                     structure=connectivity,
@@ -743,22 +823,35 @@ def mesoscale_eddy_contours_from_detections(
                 active_label_counts = numpy.bincount(center_component_labels[active_label_mask])
                 component_cache: dict[int, dict[str, object] | None] = {}
 
-                for subset_index in numpy.where(candidate_mask)[0]:
-                    component_label = int(center_component_labels[subset_index])
-                    if component_label <= 0:
+                candidate_indices = numpy.where(candidate_mask)[0]
+                candidate_labels = center_component_labels[candidate_indices]
+                resolvable = (candidate_labels > 0) & (candidate_labels < len(active_label_counts))
+                resolvable[resolvable] = active_label_counts[candidate_labels[resolvable]] == 1
+                # Every component this level needs is located in one sweep of the label
+                # field, rather than one `labels == component_label` sweep per centre.
+                wanted_labels = candidate_labels[resolvable]
+                component_positions = _component_positions_by_label(labels, component_count, wanted_labels)
+
+                for subset_index, component_label, is_resolvable in zip(
+                    candidate_indices, candidate_labels, resolvable, strict=True
+                ):
+                    if not is_resolvable:
                         continue
-                    if component_label >= len(active_label_counts) or active_label_counts[component_label] != 1:
-                        continue
+                    component_label = int(component_label)
 
                     contour_info = component_cache.get(component_label)
                     if contour_info is None:
+                        rows, columns = component_positions[component_label]
                         contour_info = _component_contour_info(
-                            labels,
-                            component_label=component_label,
+                            rows,
+                            columns,
+                            grid_shape=grid_shape,
                             latitude_values=latitude_values,
                             longitude_values=longitude_values,
                             center_longitude_index=int(center_longitude_indices[subset_index]),
                             periodic_longitude=periodic_longitude,
+                            unwrapped_longitude_cache=unwrapped_longitude_cache,
+                            cell_area_by_latitude_row=cell_area_by_latitude_row,
                         )
                         component_cache[component_label] = contour_info
                     if contour_info is None:

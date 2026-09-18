@@ -448,6 +448,17 @@ def test_contour_filtered_census_gives_every_accepted_eddy_an_outline() -> None:
         assert len(eddy["contour_latitude"]) == len(eddy["contour_longitude"])
 
 
+def test_parallel_eddy_census_matches_the_serial_census(monkeypatch) -> None:
+    # Lead days are farmed out to worker processes, each seeing one lead's field on its own.
+    # The stacked frames must carry the same rows in the same order as the serial path, or the
+    # detection ids the viewer draws would renumber.
+    dataset = _sea_surface_height_dataset()
+    serial = viewer_artifacts.dataset_eddy_census(dataset, dataset_slug="your_model")
+    monkeypatch.setenv(viewer_artifacts._EDDY_CENSUS_WORKERS_VARIABLE, "3")
+    parallel = viewer_artifacts.dataset_eddy_census(dataset, dataset_slug="your_model")
+    assert parallel["frames"] == serial["frames"]
+
+
 def test_dataset_eddy_census_defaults_to_every_lead_the_dataset_carries() -> None:
     # The viewer scrubs every lead, so a census that published a sparse subset would snap
     # neighbouring leads to one frame and paint eddies that do not move.
