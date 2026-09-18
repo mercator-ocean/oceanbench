@@ -431,6 +431,23 @@ def test_dataset_eddy_census_payload_shape_and_stamp(tmp_path) -> None:
         assert lead_payload["start_date"] == "2024-01-03"
 
 
+def test_contour_filtered_census_gives_every_accepted_eddy_an_outline() -> None:
+    # Contours are computed once and subset, never recomputed on the filtered detections.
+    # Recomputing changed which centres shared a component, so the ladder resolved at
+    # different levels and centres the filter had accepted came back with no contour at
+    # all: a census where most eddies drew as a bare marker with no outline.
+    census = viewer_artifacts.dataset_eddy_census(
+        _sea_surface_height_dataset(), dataset_slug="your_model", lead_days=(1, 2, 3)
+    )
+    assert census["parameters"]["apply_contour_filtering"] is True
+    detections = [eddy for frame in census["frames"] for eddy in frame["detections"]]
+    assert detections, "expected the synthetic field to yield accepted eddies"
+    for eddy in detections:
+        # A closed polygon needs at least three vertices, and both axes must agree.
+        assert len(eddy["contour_latitude"]) >= 3
+        assert len(eddy["contour_latitude"]) == len(eddy["contour_longitude"])
+
+
 def test_dataset_eddy_census_defaults_to_every_lead_the_dataset_carries() -> None:
     # The viewer scrubs every lead, so a census that published a sparse subset would snap
     # neighbouring leads to one frame and paint eddies that do not move.

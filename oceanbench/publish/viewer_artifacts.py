@@ -593,15 +593,6 @@ def verify_matchup_parquet(output_path: str) -> dict:
     return {"row_groups": metadata.num_row_groups, "rows": metadata.num_rows}
 
 
-def _contour_filtered_detections(
-    dataset: xarray.Dataset,
-    detections: pandas.DataFrame,
-    first_day_index: int,
-) -> pandas.DataFrame:
-    contours = _contours(dataset, detections, first_day_index)
-    return eddies_core.filter_mesoscale_eddy_detections_by_contours(detections, contours)
-
-
 def _contours(
     dataset: xarray.Dataset,
     detections: pandas.DataFrame,
@@ -727,9 +718,15 @@ def dataset_eddy_census(
     detections = eddies_core.detect_mesoscale_eddies(
         dataset, first_day_index=start_index, lead_day_indices=lead_day_indices
     )
-    if apply_contour_filtering:
-        detections = _contour_filtered_detections(dataset, detections, start_index)
+    # Contours are computed once and then subset, never recomputed on the filtered
+    # detections. Recomputing changes which centres share a component, so the ladder
+    # resolves at different levels and the exported outline stops being the contour whose
+    # level defined the reported Chelton amplitude; centres accepted by the filter could
+    # come back with no contour at all.
     contours = _contours(dataset, detections, start_index)
+    if apply_contour_filtering:
+        detections = eddies_core.filter_mesoscale_eddy_detections_by_contours(detections, contours)
+        contours = contours.loc[contours["detection_index"].isin(detections.index)]
     parameters = {
         **eddies_core.default_eddy_detection_parameters(),
         "apply_contour_filtering": apply_contour_filtering,
