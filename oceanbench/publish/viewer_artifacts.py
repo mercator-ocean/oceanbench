@@ -86,11 +86,10 @@ _EDDY_CENSUS_SCHEMA_VERSION = "2"
 # Lead days of one start are independent, so the census can run them in parallel processes.
 # Left at one worker unless a caller asks for more, the serial path being the published one.
 _EDDY_CENSUS_WORKERS_VARIABLE = "OCEANBENCH_EDDY_CENSUS_WORKERS"
-# Start dates whose census the publish path serves. Every lead day of a start is written, so
-# the lead scrub moves real eddies; every start of every dataset would be several gigabytes of
-# JSON per dataset (3 MB a frame at 1/12 degree, 52 starts x 10 leads), so the published set is
-# the first start. ``None`` here writes every start the dataset carries.
-_PUBLISHED_EDDY_START_INDICES: tuple[int, ...] | None = (0,)
+# Start dates whose census the publish path serves. ``None`` writes every start the dataset
+# carries, so both the start selector and the lead scrub move real eddies rather than falling
+# back to a neighbouring field.
+_PUBLISHED_EDDY_START_INDICES: tuple[int, ...] | None = None
 _SEA_SURFACE_HEIGHT_VARIABLE = "sea_surface_height_above_geoid"
 
 # Contours are decimated to keep the served census small, and coordinates rounded to the
@@ -871,9 +870,8 @@ def write_eddy_census(
     Only one start date and one lead day are on screen at a time, so each frame is written to its
     own ``eddies-start-<date>-lead-<N>.json`` (payload metadata plus that frame) next to
     ``output_path``, and ``output_path`` itself receives a small index. ``start_indices`` defaults
-    to every start the dataset carries; a caller that serves fewer (the published demo serves the
-    first start, the whole census being several gigabytes per dataset otherwise) passes the subset
-    it wants. The index lists the files under ``starts``, and repeats the first start's list under
+    to every start the dataset carries; a caller that serves fewer passes the subset it wants.
+    The index lists the files under ``starts``, and repeats the first start's list under
     ``leads`` so a reader of the previous index shape still resolves a census. Frames are written
     compactly: the indented form cost 2.3x the bytes for the same numbers. Returns the index path.
     """
