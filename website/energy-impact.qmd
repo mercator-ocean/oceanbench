@@ -1645,6 +1645,73 @@ Results are not captured the same way everywhere, which matters when comparing i
     The same logic applies to CPUs: Eumetsat uses more CPU than Lir for the same GPU, and consumes more energy per inference as a result, since the extra CPU capacity sits mostly idle during inference without saving any time. That said, more CPU isn't always wasted, GLONET and GLONET2 both have a pre-inference phase that runs faster with more CPU available, so the right amount of CPU depends on which phase of the pipeline is being optimized, not on a blanket rule.
   </p> 
 
+  <h2 class="ei-title">
+    Why not use more than one GPU ?
+  </h2>
+    <p class="ei-report">
+      Since the GPU accounts for the largest share of power consumption during inference, the impact of adding a second or third GPU can be evaluated in terms of total energy consumption.
+      The trade-off is straightforward: additional GPUs increase instantaneous power consumption, while potentially reducing inference time through parallelization. Since total energy depends on both power and execution time, the key factor is whether the speedup is sufficient to offset the additional GPU power.
+      <br>
+      For a single-GPU run, GPU consumption accounts for 49% of the total, while CPU and RAM account for the remaining 51%:
+      <br>
+      E₁ = (0.51 + 0.49) × t = t
+      <br>
+      With two GPUs, the CPU/RAM contribution remains unchanged, while GPU consumption potentially doubles. With a speedup of <em>s</em>, the inference time becomes t/s:
+      <br>
+      E₂ = (0.51 + 0.49 × 2) × t/s = 1.49 × t/s
+      <br>
+      Under the hypothesis (GPU consumption doubles using 2 GPUs), a speedup of at least 1.49× is therefore required for the two-GPU configuration to reduce total energy consumption:
+      <br>
+      s ≥ 1.49
+      <br>
+      Two- and three-GPU configurations were tested on GLONET, one of the models supporting multi-GPU execution, to determine whether the additional parallelism actually resulted in lower overall energy consumption.
+    </p>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:1rem;">
+    <div>
+      <p style="font-size:13px; color:#888; margin:0 0 1rem;">GPU vs Duration (GLONET Inference on Eumetsat)</p>
+      <div style="position:relative; width:100%; height:280px;">
+        <canvas id="gpuCountDurationChart"></canvas>
+      </div>
+    </div>
+    <div>
+      <p style="font-size:13px; color:#888; margin:0 0 1rem;">GPU vs Energy consumed (GLONET Inference on Eumetsat)</p>
+      <div style="position:relative; width:100%; height:280px;">
+        <canvas id="gpuCountEnergyChart"></canvas>
+      </div>
+    </div>
+  </div>
+  <p class="ei-report">
+    The speedup achieved with two GPUs reaches only 1.29×, which is below the 1.49× threshold required to reduce total energy consumption, as shown in the plots.
+    The multi-GPU configuration therefore does not reduce energy consumption in its current state. The time saved through parallelization is not sufficient to offset the additional power consumed by the extra GPUs.
+  </p>
+    
+
+  <h2 class="ei-title">
+    Why not use a CPU instead of a GPU ?
+  </h2>
+  <p class="ei-report">
+    GPU-free inference provides a direct trade-off between power consumption and execution time: lower instantaneous power consumption in exchange for longer inference times. The key question is whether the reduction in power is sufficient to offset the additional execution time and ultimately reduce total energy consumption.
+  </p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:1rem;">
+    <div>
+      <p style="font-size:13px; color:#888; margin:0 0 1rem;">WenHai inference duration (On Lir)</p>
+      <div style="position:relative; width:100%; height:280px;">
+        <canvas id="cpuVsGpuDurationChart"></canvas>
+      </div>
+    </div>
+    <div>
+      <p style="font-size:13px; color:#888; margin:0 0 1rem;">WenHai inference energy consumed (On Lir)</p>
+      <div style="position:relative; width:100%; height:280px;">
+        <canvas id="cpuVsGpuEnergyChart"></canvas>
+      </div>
+    </div>
+  </div>
+  <p class="ei-report">
+    CPU-only inference results in approximately 70% higher total energy consumption, despite lower instantaneous power consumption than GPU-based inference. The lower power draw is therefore outweighed by the additional execution time.
+    On the tested models, CPU-only execution does not provide an energy advantage: the increase in inference time has a greater impact on total energy consumption than the reduction in instantaneous power.
+  </p>
+
 
   <h2 class="ei-title">
     Number of operations and energy consumption
@@ -2775,20 +2842,28 @@ require(['chartjs'], function(ChartModule) {
     return { datasets:scatterDatasets.concat([lineDataset]), r:r };
   }
 
+  function swapXY(datasets) {
+    return datasets.map(function(ds){
+      var newDs = Object.assign({}, ds);
+      newDs.data = ds.data.map(function(p){ return { x:p.y, y:p.x }; });
+      return newDs;
+    });
+  }
+
   var corrInit = buildCorrelationDatasets('B');
   var correlationChart = new Chart(document.getElementById('correlationChart'), {
     type:'scatter',
-    data:{ datasets:corrInit.datasets },
+    data:{ datasets:swapXY(corrInit.datasets) },
     options:{
       responsive:true, maintainAspectRatio:false,
       animation:{ duration:500, easing:'easeInOutQuart' },
       plugins:{
         legend:{ display:true, position:'bottom', labels:{ color:'#888', font:{size:11}, boxWidth:10, padding:14, filter:function(item){ return !item.text.startsWith('Linear'); } } },
-        tooltip:{ callbacks:{ label:function(ctx){ if(ctx.dataset.type==='line') return null; return ' '+ctx.dataset.label+'  —  Inference: '+ctx.parsed.x.toFixed(2)+' Wh | Ops: '+ctx.parsed.y.toFixed(1)+' TFLOPs'; } } }
+        tooltip:{ callbacks:{ label:function(ctx){ if(ctx.dataset.type==='line') return null; return ' '+ctx.dataset.label+'  —  Inference: '+ctx.parsed.y.toFixed(2)+' Wh | Ops: '+ctx.parsed.x.toFixed(1)+' TFLOPs'; } } }
       },
       scales:{
-        x:{ title:{display:true,text:'Inference energy (Wh)',color:'#888',font:{size:12}}, ticks:{color:'#888',callback:function(v){ return v+' Wh'; }}, grid:{color:'rgba(128,128,128,0.08)'} },
-        y:{ title:{display:true,text:'Number of operations (TFLOPs)',color:'#888',font:{size:12}}, ticks:{color:'#888',callback:function(v){ return v<0?'':v+' T'; }}, grid:{color:'rgba(128,128,128,0.08)'} }
+        x:{ title:{display:true,text:'Number of operations (TFLOPs)',color:'#888',font:{size:12}}, ticks:{color:'#888',callback:function(v){ return v<0?'':v+' T'; }}, grid:{color:'rgba(128,128,128,0.08)'} },
+        y:{ title:{display:true,text:'Inference energy (Wh)',color:'#888',font:{size:12}}, ticks:{color:'#888',callback:function(v){ return v+' Wh'; }}, grid:{color:'rgba(128,128,128,0.08)'} }
       }
     },
     plugins:[{
@@ -2796,7 +2871,7 @@ require(['chartjs'], function(ChartModule) {
       afterDraw:function(chart) {
         var idx2 = activeIndices();
         if (idx2.length < 2) return;
-        var pts2 = idx2.map(function(i){ return { x:ALL_INFERENCE[currentMachine][i], y:ALL_NB_OPE[currentMachine][i] }; });
+        var pts2 = idx2.map(function(i){ return { x:ALL_NB_OPE[currentMachine][i], y:ALL_INFERENCE[currentMachine][i] }; });
         var r2 = pearson(pts2);
         var ctx2 = chart.ctx;
         ctx2.save();
@@ -2808,17 +2883,17 @@ require(['chartjs'], function(ChartModule) {
   });
     var correlationChart2 = new Chart(document.getElementById('correlationChart2'), {
     type:'scatter',
-    data:{ datasets:corrInit.datasets },
+    data:{ datasets:swapXY(corrInit.datasets) },
     options:{
       responsive:true, maintainAspectRatio:false,
       animation:{ duration:500, easing:'easeInOutQuart' },
       plugins:{
         legend:{ display:true, position:'bottom', labels:{ color:'#888', font:{size:11}, boxWidth:10, padding:14, filter:function(item){ return !item.text.startsWith('Linear'); } } },
-        tooltip:{ callbacks:{ label:function(ctx){ if(ctx.dataset.type==='line') return null; return ' '+ctx.dataset.label+'  —  Inference: '+ctx.parsed.x.toFixed(2)+' Wh | Ops: '+ctx.parsed.y.toFixed(1)+' TFLOPs'; } } }
+        tooltip:{ callbacks:{ label:function(ctx){ if(ctx.dataset.type==='line') return null; return ' '+ctx.dataset.label+'  —  Inference: '+ctx.parsed.y.toFixed(2)+' Wh | Ops: '+ctx.parsed.x.toFixed(1)+' TFLOPs'; } } }
       },
       scales:{
-        x:{ title:{display:true,text:'Inference energy (Wh)',color:'#888',font:{size:12}}, ticks:{color:'#888',callback:function(v){ return v+' Wh'; }}, grid:{color:'rgba(128,128,128,0.08)'} },
-        y:{ title:{display:true,text:'Number of operations (TFLOPs)',color:'#888',font:{size:12}}, ticks:{color:'#888',callback:function(v){ return v<0?'':v+' T'; }}, grid:{color:'rgba(128,128,128,0.08)'} }
+        x:{ title:{display:true,text:'Number of operations (TFLOPs)',color:'#888',font:{size:12}}, ticks:{color:'#888',callback:function(v){ return v<0?'':v+' T'; }}, grid:{color:'rgba(128,128,128,0.08)'} },
+        y:{ title:{display:true,text:'Inference energy (Wh)',color:'#888',font:{size:12}}, ticks:{color:'#888',callback:function(v){ return v+' Wh'; }}, grid:{color:'rgba(128,128,128,0.08)'} }
       }
     },
     plugins:[{
@@ -2826,7 +2901,7 @@ require(['chartjs'], function(ChartModule) {
       afterDraw:function(chart) {
         var idx2 = activeIndices();
         if (idx2.length < 2) return;
-        var pts2 = idx2.map(function(i){ return { x:ALL_INFERENCE[currentMachine][i], y:ALL_NB_OPE[currentMachine][i] }; });
+        var pts2 = idx2.map(function(i){ return { x:ALL_NB_OPE[currentMachine][i], y:ALL_INFERENCE[currentMachine][i] }; });
         var r2 = pearson(pts2);
         var ctx2 = chart.ctx;
         ctx2.save();
@@ -2837,6 +2912,112 @@ require(['chartjs'], function(ChartModule) {
     }]
   });
 
+  // ── "Why not use more than one GPU / a CPU instead of a GPU" mini-charts ──
+  function fmtDuration(vMin) {
+    var totalSec = Math.round(vMin*60);
+    var h = Math.floor(totalSec/3600);
+    var m = Math.floor((totalSec%3600)/60);
+    var s = totalSec%60;
+    function pad(n){ return n<10 ? '0'+n : ''+n; }
+    return pad(h)+':'+pad(m)+':'+pad(s);
+  }
+
+  function deltaLabelPlugin(labels, color) {
+    return {
+      id:'deltaLabel',
+      afterDatasetsDraw:function(chart) {
+        var meta = chart.getDatasetMeta(0);
+        var ctx = chart.ctx;
+        ctx.save();
+        ctx.font='11px sans-serif'; ctx.fillStyle=color||'#036aa1'; ctx.textAlign='center';
+        meta.data.forEach(function(el, i) {
+          if (!labels[i]) return;
+          ctx.fillText(labels[i], el.x, el.y - 12);
+        });
+        ctx.restore();
+      }
+    };
+  }
+
+  var gpuCountDurationChart = new Chart(document.getElementById('gpuCountDurationChart'), {
+    type:'line',
+    data:{
+      labels:['1 GPU','2 GPU','3 GPU'],
+      datasets:[{ label:'Duration (s)', data:[81,63,51], borderColor:'#3AA9C9', backgroundColor:'#3AA9C9', pointRadius:5, pointHoverRadius:7, borderWidth:2, tension:0 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label:function(ctx){ return ' '+ctx.parsed.y+' s'; } } }
+      },
+      scales:{
+        x:{ ticks:{color:'#888'}, grid:{display:false} },
+        y:{ title:{display:true,text:'Duration (seconds)',color:'#888',font:{size:12}}, ticks:{color:'#888'}, grid:{color:'rgba(128,128,128,0.08)'} }
+      }
+    },
+    plugins:[ deltaLabelPlugin([null,'-22.2%','-19.0%']) ]
+  });
+
+  var gpuCountEnergyChart = new Chart(document.getElementById('gpuCountEnergyChart'), {
+    type:'line',
+    data:{
+      labels:['1 GPU','2 GPU','3 GPU'],
+      datasets:[{ label:'Energy Consumed (Wh)', data:[7.42,7.81,7.88], borderColor:'#3AA9C9', backgroundColor:'#3AA9C9', pointRadius:5, pointHoverRadius:7, borderWidth:2, tension:0 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label:function(ctx){ return ' '+ctx.parsed.y.toFixed(2)+' Wh'; } } }
+      },
+      scales:{
+        x:{ ticks:{color:'#888'}, grid:{display:false} },
+        y:{ title:{display:true,text:'Energy Consumed (Wh)',color:'#888',font:{size:12}}, ticks:{color:'#888'}, grid:{color:'rgba(128,128,128,0.08)'} }
+      }
+    },
+    plugins:[ deltaLabelPlugin([null,'+5.26%','+0.90%']) ]
+  });
+
+  var cpuVsGpuDurationChart = new Chart(document.getElementById('cpuVsGpuDurationChart'), {
+    type:'bar',
+    data:{
+      labels:['GPU','CPU'],
+      datasets:[{ label:'Duration', data:[4.76,18.25], backgroundColor:'#046293', borderRadius:4, barPercentage:0.6, categoryPercentage:0.6 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label:function(ctx){ return ' '+fmtDuration(ctx.parsed.y); } } }
+      },
+      scales:{
+        x:{ ticks:{color:'#888'}, grid:{display:false} },
+        y:{ title:{display:true,text:'Duration (minutes)',color:'#888',font:{size:12}}, ticks:{color:'#888', callback:function(v){ return fmtDuration(v); }}, grid:{color:'rgba(128,128,128,0.08)'} }
+      }
+    },
+    plugins:[ deltaLabelPlugin([null,'+283%'],'#0a3d52') ]
+  });
+
+  var cpuVsGpuEnergyChart = new Chart(document.getElementById('cpuVsGpuEnergyChart'), {
+    type:'bar',
+    data:{
+      labels:['GPU','CPU'],
+      datasets:[{ label:'Wh', data:[19.4,33.0], backgroundColor:'#046293', borderRadius:4, barPercentage:0.6, categoryPercentage:0.6 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label:function(ctx){ return ' '+ctx.parsed.y.toFixed(1)+' Wh'; } } }
+      },
+      scales:{
+        x:{ ticks:{color:'#888'}, grid:{display:false} },
+        y:{ title:{display:true,text:'Wh',color:'#888',font:{size:12}}, ticks:{color:'#888'}, grid:{color:'rgba(128,128,128,0.08)'} }
+      }
+    },
+    plugins:[ deltaLabelPlugin([null,'+70%'],'#0a3d52') ]
+  });
 
   // ── Generic correlation builder (reused for duration-based charts) ───────
   function buildGenericCorrelationDatasets(machine, xData, yData) {
@@ -3136,8 +3317,10 @@ require(['chartjs'], function(ChartModule) {
     nbOpeChart.update();
     // correlation
     var corrResult = buildCorrelationDatasets(m);
-    correlationChart.data.datasets = corrResult.datasets;
+    correlationChart.data.datasets = swapXY(corrResult.datasets);
     correlationChart.update();
+    correlationChart2.data.datasets = swapXY(corrResult.datasets);
+    correlationChart2.update();
     // correlation duration vs ops
     var corrDurationOps = buildGenericCorrelationDatasets(m, ALL_DURATION_TOTAL, ALL_ENERGY_TOTAL);
     correlationDurationOpsChart.data.datasets = corrDurationOps.datasets;
@@ -3268,6 +3451,8 @@ require(['chartjs'], function(ChartModule) {
   window._reportChartsReady = function() {
     [hwFullChart, hwPreChart, hwInferChart, hwPostChart,
      correlationDurationOpsChart2, correlationDurationEnergyChart2,
+     gpuCountDurationChart, gpuCountEnergyChart,
+     cpuVsGpuDurationChart, cpuVsGpuEnergyChart,
      comparisonChartAIReport].forEach(function(chart) {
       if (chart && typeof chart.resize === 'function') { chart.resize(); }
     });
