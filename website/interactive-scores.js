@@ -29,16 +29,24 @@ const PALETTE = {
   blue: { end: [33, 102, 172], mid: [146, 197, 222] },
   red:  { mid: [244, 165, 130], end: [178, 24, 43] },
   light: [255, 255, 255],
-  dark: [40, 40, 40],
+  /*
+   * The dark scale keeps the hues of the light one but drops the lightness,
+   * so the tiles sit inside the page instead of becoming the brightest thing
+   * on it and one text colour works on every one of them. The neutral is the
+   * raised-surface family, which makes a zero-difference cell read as page.
+   */
+  darkScale: [[36, 99, 168], [39, 68, 102], [30, 36, 47], [112, 56, 52], [176, 52, 60]],
 };
+
+const DARK_CELL_TEXT = "rgba(255, 255, 255, 0.88)";
 
 function isDarkMode() {
   return document.body.classList.contains("quarto-dark");
 }
 
 function getPaletteColors() {
-  const neutral = isDarkMode() ? PALETTE.dark : PALETTE.light;
-  return [PALETTE.blue.end, PALETTE.blue.mid, neutral, PALETTE.red.mid, PALETTE.red.end];
+  if (isDarkMode()) return PALETTE.darkScale;
+  return [PALETTE.blue.end, PALETTE.blue.mid, PALETTE.light, PALETTE.red.mid, PALETTE.red.end];
 }
 
 let selectedDepths = new Set();
@@ -89,6 +97,12 @@ function interpolateColor(startColor, endColor, ratio) {
 }
 
 function textColorForBackground(rgb) {
+  /*
+   * Every colour on the dark scale is dark enough for one text colour, which
+   * is the point of that scale: no cell flips to dark text and fights the
+   * light text around it.
+   */
+  if (isDarkMode()) return DARK_CELL_TEXT;
   const luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
   return luminance > 140 ? "black" : "white";
 }
