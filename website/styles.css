@@ -17,14 +17,27 @@
   --ob-soft-shadow: 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06);
 }
 
+/*
+ * Dark palette. Mirrors the variables at the top of theme-dark.scss, which
+ * feeds the same values to Bootstrap; keep the two in step. The scale is
+ * page -> surface -> raised surface, so elevation reads as a step towards
+ * the viewer, and neither end of it is pure black or pure white.
+ */
 body.quarto-dark {
-  --ob-accent: var(--bs-primary, #3aa6d3);
-  --ob-accent-contrast: #111827;
-  --ob-border: var(--bs-border-color, #495057);
-  --ob-muted: #adb5bd;
-  --ob-surface: #202032;
-  --ob-surface-raised: var(--bs-body-bg, #1a1a2e);
-  --ob-soft-shadow: none;
+  --ob-accent: #4fb5e3;
+  --ob-accent-contrast: #0b1a24;
+  --ob-border: rgba(255, 255, 255, 0.1);
+  --ob-grid-border: rgba(255, 255, 255, 0.07);
+  --ob-heading: #e8ebf0;
+  --ob-muted: #8b95a5;
+  --ob-page-bg: #11151c;
+  --ob-surface: #171c25;
+  --ob-surface-raised: #1e242f;
+  --ob-soft-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --ob-table-text: rgba(255, 255, 255, 0.88);
+  --ob-text: #d3d8e0;
+  background-color: var(--ob-page-bg);
+  color: var(--ob-text);
 }
 
 /* --- Shared surfaces and markdown content --- */

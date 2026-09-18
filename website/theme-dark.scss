@@ -4,17 +4,72 @@
  * SPDX-License-Identifier: EUPL-1.2
  */
 
-$primary: #3aa6d3;
-$link-color: $primary;
-$body-bg: #1a1a2e;
-$body-color: #d4d4d8;
+/*-- scss:defaults --*/
+
+/*
+ * Dark palette. The same values are mirrored in the `body.quarto-dark` token
+ * block of styles.css, which is what the hand-written components read; keep
+ * the two in step.
+ *
+ * The scale is deliberately shallow and never reaches pure black or pure
+ * white: the page is the darkest large area, surfaces step up towards the
+ * viewer, and text stops short of white so it does not bloom on them.
+ */
+$ob-page-bg: #11151c;
+$ob-surface: #171c25;
+$ob-surface-raised: #1e242f;
+$ob-navbar-bg: #0d1117;
+$ob-border: rgba(255, 255, 255, 0.1);
+$ob-grid-border: rgba(255, 255, 255, 0.07);
+$ob-text: #d3d8e0;
+$ob-heading: #e8ebf0;
+$ob-muted: #8b95a5;
+$ob-accent: #4fb5e3;
+$ob-accent-hover: #7fcbec;
+$ob-table-text: rgba(255, 255, 255, 0.88);
+
+$primary: $ob-accent;
+$secondary: $ob-muted;
+$link-color: $ob-accent;
+$link-hover-color: $ob-accent-hover;
+
+$body-bg: $ob-page-bg;
+$body-color: $ob-text;
+$body-secondary-color: $ob-muted;
+$body-tertiary-bg: $ob-surface;
+$headings-color: $ob-heading;
+$border-color: $ob-border;
+
+$card-bg: $ob-surface;
+$card-border-color: $ob-border;
+
+$input-bg: $ob-surface-raised;
+$input-color: $ob-text;
+$input-border-color: $ob-border;
+$input-placeholder-color: $ob-muted;
+
+$dropdown-bg: $ob-surface-raised;
+$dropdown-border-color: $ob-border;
+$dropdown-link-color: $ob-text;
+$dropdown-link-hover-bg: rgba(255, 255, 255, 0.06);
+$dropdown-link-hover-color: $ob-heading;
+
+$table-color: $ob-table-text;
+$table-bg: transparent;
+$table-border-color: $ob-grid-border;
+$table-striped-bg: rgba(255, 255, 255, 0.03);
+$table-striped-color: $ob-table-text;
+$table-hover-bg: rgba(255, 255, 255, 0.04);
+$table-hover-color: $ob-table-text;
+
+$navbar-bg: $ob-navbar-bg;
+$navbar-dark-bg: $ob-navbar-bg;
+
+$box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+$box-shadow-sm: 0 3px 10px rgba(0, 0, 0, 0.4);
 
 /*-- scss:rules --*/
 
-.navbar {
-  background-color: #16213e !important;
-}
-
-body {
-  background-color: #1a1a2e !important;
+a:visited {
+  color: $ob-accent;
 }
