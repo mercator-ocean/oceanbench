@@ -1070,7 +1070,6 @@ function syncFloatingHeadScroll(wrapper) {
   const host = document.getElementById("floating-thead");
   if (!host) return;
   host.scrollLeft = wrapper.scrollLeft;
-  host.classList.toggle("at-right-end", wrapper.classList.contains("at-right-end"));
 }
 
 // The table whose head has passed under the page header while the rest of its
@@ -1130,7 +1129,6 @@ function updateFloatingHead() {
   host.style.left = `${wrapperRect.left}px`;
   host.style.width = `${target.wrapper.clientWidth}px`;
   host.classList.add("is-visible");
-  host.classList.toggle("at-right-end", target.wrapper.classList.contains("at-right-end"));
   host.scrollLeft = target.wrapper.scrollLeft;
 }
 

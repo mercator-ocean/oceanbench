@@ -1255,17 +1255,17 @@ body.quarto-dark .version-select {
   display: none;
   overflow: hidden;
   pointer-events: none;
+  /* Opaque, and never masked: the fade belongs to the rows scrolling past
+     underneath, so a masked copy would let them show through its own text. */
   background: var(--bs-body-bg, #fafaf7);
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
 }
 
-#floating-thead.at-right-end {
-  -webkit-mask-image: none;
-  mask-image: none;
+#floating-thead .score-table thead th {
+  background: var(--bs-body-bg, #fafaf7);
 }
 
-body.quarto-dark #floating-thead {
+body.quarto-dark #floating-thead,
+body.quarto-dark #floating-thead .score-table thead th {
   background: var(--bs-body-bg, #1a1a2e);
 }
 
