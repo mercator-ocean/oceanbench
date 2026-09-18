@@ -3694,8 +3694,11 @@ async function psdWindowRead(slug, variable, level, start, leadIndex, boxRange) 
   return promise;
 }
 
-// Native-grid field for one panel over the PSD rectangle (speed magnitude for the
-// derived currents variables). Returns { field, latitudes, longitudes, cellDeg } | null.
+// Native-grid field(s) for one panel over the PSD rectangle. The derived currents
+// variables return their two velocity components rather than a speed magnitude, so the
+// spectrum can be the kinetic energy KE(k) = 0.5 (PSD_u + PSD_v): the spectrum of the
+// speed magnitude is the spectrum of a nonlinear function of the flow and is not the
+// energy at any scale. Returns { fields, latitudes, longitudes, cellDeg, kinetic } | null.
 async function psdSourceFor(panel, boxRange) {
   const manifest = manifestFor(panel.state.dataset);
   if (!manifest) return null;
@@ -3713,12 +3716,12 @@ async function psdSourceFor(panel, boxRange) {
         psdWindowRead(panel.state.dataset, components.v, level, start, leadIndex, boxRange),
       ]);
       if (!u || !v) return null;
-      return { field: speedMagnitudeField(u.field, v.field), latitudes: u.latitudes, longitudes: u.longitudes, cellDeg };
+      return { fields: [u.field, v.field], latitudes: u.latitudes, longitudes: u.longitudes, cellDeg, kinetic: true };
     }
     if (!variableExists(manifest, panel.state.variable)) return null;
     const record = await psdWindowRead(panel.state.dataset, panel.state.variable, level, start, leadIndex, boxRange);
     if (!record) return null;
-    return { ...record, cellDeg };
+    return { fields: [record.field], latitudes: record.latitudes, longitudes: record.longitudes, cellDeg, kinetic: false };
   } catch {
     return null;
   }
@@ -3743,6 +3746,70 @@ function truncateToCommonScales(spectrum, cellDegrees, centreLatitudeDegrees) {
   }
   if (!wavelength.length) return null;
   return { ...spectrum, wavelength, power };
+}
+
+// One curve from a source's component spectra. A scalar variable has a single component;
+// currents have two, combined into the kinetic energy spectrum KE(k) = 0.5 (PSD_u + PSD_v).
+// Components share a grid and a box, so their rings line up index by index.
+function combineComponentSpectra(spectra) {
+  if (!spectra.length || spectra.some((spectrum) => !spectrum)) return null;
+  if (spectra.length === 1) return spectra[0];
+  return { ...spectra[0], power: spectra[0].power.map((value, index) => 0.5 * (value + spectra[1].power[index])) };
+}
+
+function panelSpectrum(source, viewport) {
+  return combineComponentSpectra(
+    source.fields.map((field) => boxPowerSpectrum(field, source.latitudes, source.longitudes, viewport)),
+  );
+}
+
+// The gridded truth the offline scores are computed against. Effective resolution needs
+// one of these in the other panel; two forecasts alone have no reference between them.
+function isReferenceDataset(slug) {
+  const name = String(slug || "");
+  return name.startsWith("glo12") || name.startsWith("glorys");
+}
+
+// Effective resolution after Ballarotta et al. (2019, Ocean Science): the wavelength at
+// which the spectrum of the difference from a reference reaches half the reference's own
+// spectrum, i.e. the scale below which the field carries as much error as signal. Scan
+// from the largest resolved wavelength down to the first crossing and interpolate the
+// wavelength on the log axis. Returns metres, or NaN when the ratio never crosses.
+function effectiveResolutionMetres(errorSpectrum, referenceSpectrum) {
+  if (!errorSpectrum || !referenceSpectrum) return NaN;
+  if (errorSpectrum.wavelength.length !== referenceSpectrum.wavelength.length) return NaN;
+  const order = errorSpectrum.wavelength
+    .map((_, index) => index)
+    .sort((first, second) => errorSpectrum.wavelength[second] - errorSpectrum.wavelength[first]);
+  const ratioAt = (index) => {
+    const reference = referenceSpectrum.power[index];
+    return reference > 0 ? errorSpectrum.power[index] / reference : NaN;
+  };
+  for (let step = 1; step < order.length; step += 1) {
+    const longer = order[step - 1];
+    const shorter = order[step];
+    const longerRatio = ratioAt(longer);
+    const shorterRatio = ratioAt(shorter);
+    if (!(longerRatio > 0 && longerRatio < 0.5) || !(shorterRatio >= 0.5)) continue;
+    const span = Math.log10(shorterRatio) - Math.log10(longerRatio);
+    const fraction = span === 0 ? 0 : (Math.log10(0.5) - Math.log10(longerRatio)) / span;
+    const logWavelength =
+      Math.log10(errorSpectrum.wavelength[longer]) +
+      fraction * (Math.log10(errorSpectrum.wavelength[shorter]) - Math.log10(errorSpectrum.wavelength[longer]));
+    return Math.pow(10, logWavelength);
+  }
+  return NaN;
+}
+
+// y-axis label for the spectrum: a spectral density, so the units carry a per-wavenumber
+// factor. Currents are shown as kinetic energy, everything else as the variable's own
+// squared units.
+function psdAxisLabel(panel) {
+  if (isCurrentsVariable(panel.state.variable)) return "KE (m²/s² per cy/km)";
+  const manifest = manifestFor(panel.state.dataset);
+  const entry = manifest && variableEntry(manifest, panel.state.variable);
+  const units = entry && entry.units ? entry.units : "";
+  return units ? `power (${units}² per cy/km)` : "power (per cy/km)";
 }
 
 let psdRenderToken = 0;
@@ -3787,7 +3854,7 @@ async function renderRailPsd(shown, comparison) {
     const source = await psdSourceFor(panel, boxRange);
     if (token !== psdRenderToken) return; // stale (box moved / view changed again)
     if (!source) continue;
-    const spectrum = boxPowerSpectrum(source.field, source.latitudes, source.longitudes, boxViewport);
+    const spectrum = panelSpectrum(source, boxViewport);
     sources.push({ panel, spectrum, source });
     if (spectrum) {
       curves.push({
@@ -3797,10 +3864,16 @@ async function renderRailPsd(shown, comparison) {
       });
     }
   }
-  if (comparison && sources.length === 2 && sources[0].source.field && sources[1].source.field) {
+  let effectiveResolution = NaN;
+  let effectiveReferenceLabel = "";
+  if (comparison && sources.length === 2) {
     const [a, b] = sources.map((entry) => entry.source);
-    const alignedB = resampleOntoGrid(b.field, b.latitudes, b.longitudes, a.latitudes, a.longitudes);
-    let errorSpectrum = differenceBoxSpectrum(a.field, a.latitudes, a.longitudes, alignedB, boxViewport, true);
+    const alignedB = b.fields.map((field) => resampleOntoGrid(field, b.latitudes, b.longitudes, a.latitudes, a.longitudes));
+    let errorSpectrum = combineComponentSpectra(
+      a.fields.map((field, index) =>
+        differenceBoxSpectrum(field, a.latitudes, a.longitudes, alignedB[index], boxViewport, true),
+      ),
+    );
     // A difference spectrum is only meaningful over the commonly-resolved scales: below
     // 2× the COARSER model's native cell size the "difference" is interpolation artifact,
     // not model disagreement, so the error curve is truncated there. The two individual
@@ -3808,6 +3881,24 @@ async function renderRailPsd(shown, comparison) {
     errorSpectrum = truncateToCommonScales(errorSpectrum, [a.cellDeg, b.cellDeg], box.lat);
     if (errorSpectrum) {
       curves.push({ label: `error (F1−F2)`, color: SERIES_COLORS.error, dashed: true, ...errorSpectrum });
+    }
+    // Effective resolution needs a reference on one side and a forecast on the other.
+    // The reference spectrum is recomputed on panel 1's grid, the grid the difference
+    // already lives on, so the two curves share their rings and the ratio is defined
+    // point by point.
+    const referenceIndex = sources.findIndex((entry) => isReferenceDataset(entry.panel.state.dataset));
+    const otherIndex = referenceIndex === 0 ? 1 : 0;
+    if (referenceIndex >= 0 && !isReferenceDataset(sources[otherIndex].panel.state.dataset)) {
+      const referenceFields = referenceIndex === 0 ? a.fields : alignedB;
+      const referenceSpectrum = truncateToCommonScales(
+        combineComponentSpectra(
+          referenceFields.map((field) => boxPowerSpectrum(field, a.latitudes, a.longitudes, boxViewport)),
+        ),
+        [a.cellDeg, b.cellDeg],
+        box.lat,
+      );
+      effectiveResolution = effectiveResolutionMetres(errorSpectrum, referenceSpectrum);
+      effectiveReferenceLabel = labelFor(sources[referenceIndex].panel.state.dataset);
     }
   }
   if (token !== psdRenderToken) return;
@@ -3836,10 +3927,15 @@ async function renderRailPsd(shown, comparison) {
   psdBoundsKey = boxKey;
   const xBounds = stableInterval(`${boxKey}|x`, xLow, xHigh);
   const yBounds = stableInterval(`${boxKey}|y`, yLow, yHigh);
+  const kinetic = isCurrentsVariable(shown[0].state.variable);
+  const spectrumName = kinetic ? "Live kinetic energy spectrum" : "Live power spectrum";
+  const effectiveKm = Number.isFinite(effectiveResolution) ? Math.round(effectiveResolution / 1000) : NaN;
   elements["rail-spectra"].innerHTML = psdSpectraSVG(curves, {
-    title: comparison ? "Live power spectrum (both forecasts)" : "Live power spectrum",
+    title: comparison ? `${spectrumName} (both forecasts)` : spectrumName,
     xBounds,
     yBounds,
+    yLabel: psdAxisLabel(shown[0]),
+    marker: Number.isFinite(effectiveKm) ? { wavelength: effectiveResolution, label: `${effectiveKm} km` } : null,
   });
   // Caption: box dimensions + native grid spacing + resolved wavelength range.
   const gridLabels = [...new Set(sources.filter((entry) => entry.spectrum).map((entry) => cellDegreesLabel(entry.source.cellDeg)))];
@@ -3851,10 +3947,14 @@ async function renderRailPsd(shown, comparison) {
       if (metres > wavelengthMax) wavelengthMax = metres;
     }
   }
-  // These are the ends of the wavelength axis (two cells up to the box size), not
-  // scales the model resolves: effective resolution is several cells coarser.
-  const kmRange =
-    Number.isFinite(wavelengthMin) && wavelengthMax > 0
+  // With a reference in the other panel the honest number to print is the effective
+  // resolution (Ballarotta et al. 2019), the scale at which the difference from that
+  // reference reaches half its spectrum. Without one, fall back to the ends of the
+  // wavelength axis (two cells up to the box size), which are NOT scales the model
+  // resolves: effective resolution is several cells coarser.
+  const kmRange = Number.isFinite(effectiveKm)
+    ? `effective resolution ${effectiveKm} km vs ${effectiveReferenceLabel}`
+    : Number.isFinite(wavelengthMin) && wavelengthMax > 0
       ? `axis spans ${Math.round(wavelengthMin / 1000)} to ${Math.round(wavelengthMax / 1000)} km`
       : "";
   const oceanFractions = sources

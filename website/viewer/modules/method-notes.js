@@ -99,12 +99,20 @@ export const METHOD_NOTES = {
     title: "Live power spectrum",
     body:
       "Power spectrum of the boxed region, computed in the browser on the model's finest " +
-      "published grid. Exploratory. Hann " +
-      "window, land filled with the region mean, radially averaged, normalized so models " +
-      "of different resolution are comparable. The box size is capped so the estimate " +
-      "stays reliable. In compare mode both forecasts share one box; models with very " +
-      "different resolution cannot share a fair one. Near its grid scale every model is " +
-      "damped by its own dissipation, so compare models only at scales both resolve.",
+      "published grid. Exploratory. Hann window, land filled with the region mean, then " +
+      "the two-dimensional spectrum is SUMMED over wavenumber rings and divided by the " +
+      "ring width, so the curve is an isotropic spectral density (field units squared per " +
+      "cycle per km) whose integral over wavenumber is the variance of the box. For " +
+      "currents the curve is the kinetic energy spectrum KE(k) = 0.5 (PSD_u + PSD_v), not " +
+      "the spectrum of the speed magnitude. The box size is capped so the estimate stays " +
+      "reliable. In compare mode both forecasts share one box; models with very different " +
+      "resolution cannot share a fair one. Near its grid scale every model is damped by " +
+      "its own dissipation, so compare models only at scales both resolve. " +
+      "With a reference (GLO12 or GLORYS) in the other panel, the marked vertical line is " +
+      "the effective resolution after Ballarotta et al. (2019, Ocean Science, " +
+      "doi:10.5194/os-15-1091-2019): the wavelength at which the spectrum of the " +
+      "difference from that reference reaches half the reference's own spectrum. Below it " +
+      "the field carries as much error as signal.",
   },
 
   // Trajectories overlay.
