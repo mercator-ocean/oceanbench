@@ -7,35 +7,37 @@
 /*-- scss:defaults --*/
 
 /*
- * Dark palette, taken from the OceanBench logo: the navy of the wordmark
- * darkened into the surfaces, the cream of the disc as the text, and the
- * logo's sky blue and cyan as the two interactive states. The same values
- * are mirrored in the `body.quarto-dark` token block of styles.css, which
- * is what the hand-written components read; keep the two in step.
+ * Dark palette, taken from the greyscale OceanBench logo: its whites and
+ * greys are the whole scale, so the dark page is monochrome and colour is
+ * reserved for the score tiles. The same values are mirrored in the
+ * `body.quarto-dark` token block of styles.css, which is what the
+ * hand-written components read; keep the two in step.
  *
  * The scale is deliberately shallow and never reaches pure black or pure
  * white: the page is the darkest large area, surfaces step up towards the
  * viewer, and text stops short of white so it does not bloom on them.
+ * With no accent hue left, a link is marked by its underline.
  */
-$ob-page-bg: #0d1320;
-$ob-surface: #121a2b;
-$ob-surface-raised: #182238;
-$ob-navbar-bg: #0a0f1a;
-$ob-border: rgba(185, 208, 217, 0.14);
-$ob-grid-border: rgba(185, 208, 217, 0.09);
-$ob-text: #d6d2cc;
-$ob-heading: #ede4de;
-$ob-muted: #9fb3bf;
-$ob-accent: #80c5de;
-$ob-accent-hover: #a8d9ea;
-$ob-active: #00a3d3;
+$ob-page-bg: #0e0e10;
+$ob-surface: #151517;
+$ob-surface-raised: #1c1c1f;
+$ob-navbar-bg: #0a0a0b;
+$ob-border: rgba(255, 255, 255, 0.12);
+$ob-grid-border: rgba(255, 255, 255, 0.08);
+$ob-text: #d0d0d0;
+$ob-heading: #f0f0f0;
+$ob-muted: #909090;
+$ob-accent: #e6e6e6;
+$ob-accent-hover: #ffffff;
+$ob-active: #f0f0f0;
 $ob-active-contrast: $ob-page-bg;
-$ob-table-text: rgba(237, 228, 222, 0.9);
+$ob-table-text: rgba(240, 240, 240, 0.9);
 
 $primary: $ob-accent;
 $secondary: $ob-muted;
 $link-color: $ob-accent;
 $link-hover-color: $ob-accent-hover;
+$link-decoration: underline;
 
 $body-bg: $ob-page-bg;
 $body-color: $ob-text;
@@ -55,15 +57,15 @@ $input-placeholder-color: $ob-muted;
 $dropdown-bg: $ob-surface-raised;
 $dropdown-border-color: $ob-border;
 $dropdown-link-color: $ob-text;
-$dropdown-link-hover-bg: rgba(185, 208, 217, 0.07);
+$dropdown-link-hover-bg: rgba(255, 255, 255, 0.07);
 $dropdown-link-hover-color: $ob-heading;
 
 $table-color: $ob-table-text;
 $table-bg: transparent;
 $table-border-color: $ob-grid-border;
-$table-striped-bg: rgba(185, 208, 217, 0.035);
+$table-striped-bg: rgba(255, 255, 255, 0.035);
 $table-striped-color: $ob-table-text;
-$table-hover-bg: rgba(185, 208, 217, 0.045);
+$table-hover-bg: rgba(255, 255, 255, 0.04);
 $table-hover-color: $ob-table-text;
 
 $navbar-bg: $ob-navbar-bg;

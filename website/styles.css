@@ -18,29 +18,30 @@
 }
 
 /*
- * Dark palette, taken from the OceanBench logo. Mirrors the variables at the
- * top of theme-dark.scss, which feeds the same values to Bootstrap; keep the
- * two in step. The scale is page -> surface -> raised surface, so elevation
- * reads as a step towards the viewer, and neither end of it is pure black or
- * pure white. The accent is the logo wordmark blue and carries every link,
- * focus ring and marker; the cyan of the logo wave is reserved for the one
- * selected thing on screen, so an active state never reads as just a link.
+ * Dark palette, taken from the greyscale OceanBench logo. Mirrors the
+ * variables at the top of theme-dark.scss, which feeds the same values to
+ * Bootstrap; keep the two in step. The scale is page -> surface -> raised
+ * surface, so elevation reads as a step towards the viewer, and neither end
+ * of it is pure black or pure white. Nothing in the frame carries a hue: the
+ * only colour on a dark page is the score tile itself, links are marked by
+ * their underline, and the brightest grey marks the one selected thing on
+ * screen.
  */
 body.quarto-dark {
-  --ob-accent: #80c5de;
-  --ob-accent-contrast: #0d1320;
-  --ob-active: #00a3d3;
-  --ob-active-contrast: #0d1320;
-  --ob-border: rgba(185, 208, 217, 0.14);
-  --ob-grid-border: rgba(185, 208, 217, 0.09);
-  --ob-heading: #ede4de;
-  --ob-muted: #9fb3bf;
-  --ob-page-bg: #0d1320;
-  --ob-surface: #121a2b;
-  --ob-surface-raised: #182238;
+  --ob-accent: #e6e6e6;
+  --ob-accent-contrast: #0e0e10;
+  --ob-active: #f0f0f0;
+  --ob-active-contrast: #0e0e10;
+  --ob-border: rgba(255, 255, 255, 0.12);
+  --ob-grid-border: rgba(255, 255, 255, 0.08);
+  --ob-heading: #f0f0f0;
+  --ob-muted: #909090;
+  --ob-page-bg: #0e0e10;
+  --ob-surface: #151517;
+  --ob-surface-raised: #1c1c1f;
   --ob-soft-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
-  --ob-table-text: rgba(237, 228, 222, 0.9);
-  --ob-text: #d6d2cc;
+  --ob-table-text: rgba(240, 240, 240, 0.9);
+  --ob-text: #d0d0d0;
   background-color: var(--ob-page-bg);
   color: var(--ob-text);
 }
@@ -352,7 +353,7 @@ body.quarto-dark .score-table td.no-value-cell {
 /* The row under the pointer lifts by a hair. Only the frozen cell can carry
    it: every other cell in the row owns its own colour. */
 body.quarto-dark .score-table tbody tr:hover .model-col {
-  background-image: linear-gradient(rgba(185, 208, 217, 0.05), rgba(185, 208, 217, 0.05));
+  background-image: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04));
 }
 
 /* --- Two-row sticky header (tabs + controls) --- */
@@ -677,16 +678,16 @@ body.quarto-dark .region-globe-outline {
 }
 
 body.quarto-dark .score-tab {
-  color: var(--ob-muted);
-}
-
-body.quarto-dark .score-tab:hover:not(.active) {
   color: var(--ob-text);
 }
 
+body.quarto-dark .score-tab:hover:not(.active) {
+  color: var(--ob-heading);
+}
+
 body.quarto-dark .score-tab.active {
-  color: var(--ob-accent);
-  border-bottom-color: var(--ob-active);
+  color: var(--ob-heading);
+  border-bottom-color: var(--ob-heading);
 }
 
 .score-tab:focus-visible {
@@ -1034,7 +1035,7 @@ body.quarto-dark .score-table th.highlight-label a {
 /* A wash of the accent rather than a grey slab, matched to the accent bar the
    shared rule draws down the frozen cell. */
 body.quarto-dark .score-table tr.baseline-row td {
-  background: rgba(128, 197, 222, 0.12);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* --- Section headings --- */
@@ -1099,14 +1100,33 @@ body.quarto-dark .only-light {
   display: none !important;
 }
 
+/* --- Dark monochrome details --- */
+
+/* With no accent hue left, the focus ring is a ring of light rather than a
+   ring of colour, so it reads on every surface the page owns. */
+body.quarto-dark .score-tab:focus-visible,
+body.quarto-dark [data-tip-open] {
+  outline-color: rgba(255, 255, 255, 0.35);
+}
+
+/* The marker bar down the baseline row is the logo white held back a little
+   so it marks the row without outshining the tiles beside it. */
+body.quarto-dark .score-table tr.baseline-row th {
+  box-shadow: inset 3px 0 0 rgba(240, 240, 240, 0.7);
+}
+
+body.quarto-dark .challenger-note-marker {
+  color: var(--ob-heading);
+}
+
 /* --- xarray output dark mode (notebooks use different selectors) --- */
 
 body.quarto-dark {
   --xr-font-color0: var(--ob-text);
   --xr-font-color2: var(--ob-muted);
-  --xr-font-color3: rgba(237, 228, 222, 0.45);
+  --xr-font-color3: rgba(240, 240, 240, 0.45);
   --xr-border-color: var(--ob-grid-border);
-  --xr-disabled-color: #6d7685;
+  --xr-disabled-color: #707070;
   --xr-background-color: var(--ob-surface);
   --xr-background-color-row-even: var(--ob-surface);
   --xr-background-color-row-odd: var(--ob-surface-raised);
@@ -1226,7 +1246,7 @@ body.quarto-dark .version-select {
 
 body.quarto-dark .version-select,
 body.quarto-dark #baseline-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2380c5de' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d0d0d0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
   color-scheme: dark;
 }
 
