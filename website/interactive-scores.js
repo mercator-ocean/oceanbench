@@ -30,15 +30,16 @@ const PALETTE = {
   red:  { mid: [244, 165, 130], end: [178, 24, 43] },
   light: [255, 255, 255],
   /*
-   * The dark scale keeps the hues of the light one but drops the lightness,
-   * so the tiles sit inside the page instead of becoming the brightest thing
-   * on it and one text colour works on every one of them. The neutral is the
-   * raised-surface family, which makes a zero-difference cell read as page.
+   * The dark scale is the logo navy on the better side and a matching muted
+   * red on the worse one, both dark enough that one cream text colour clears
+   * 4.5:1 on every tile, so no cell flips to dark text and fights the light
+   * text around it. The neutral is the surface colour, which makes a
+   * zero-difference cell read as part of the table rather than as a tile.
    */
-  darkScale: [[36, 99, 168], [39, 68, 102], [30, 36, 47], [112, 56, 52], [176, 52, 60]],
+  darkScale: [[39, 68, 122], [30, 50, 88], [18, 26, 43], [112, 56, 52], [169, 50, 58]],
 };
 
-const DARK_CELL_TEXT = "rgba(255, 255, 255, 0.88)";
+const DARK_CELL_TEXT = "rgba(237, 228, 222, 0.9)";
 
 function isDarkMode() {
   return document.body.classList.contains("quarto-dark");

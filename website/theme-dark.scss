@@ -7,26 +7,30 @@
 /*-- scss:defaults --*/
 
 /*
- * Dark palette. The same values are mirrored in the `body.quarto-dark` token
- * block of styles.css, which is what the hand-written components read; keep
- * the two in step.
+ * Dark palette, taken from the OceanBench logo: the navy of the wordmark
+ * darkened into the surfaces, the cream of the disc as the text, and the
+ * logo's sky blue and cyan as the two interactive states. The same values
+ * are mirrored in the `body.quarto-dark` token block of styles.css, which
+ * is what the hand-written components read; keep the two in step.
  *
  * The scale is deliberately shallow and never reaches pure black or pure
  * white: the page is the darkest large area, surfaces step up towards the
  * viewer, and text stops short of white so it does not bloom on them.
  */
-$ob-page-bg: #11151c;
-$ob-surface: #171c25;
-$ob-surface-raised: #1e242f;
-$ob-navbar-bg: #0d1117;
-$ob-border: rgba(255, 255, 255, 0.1);
-$ob-grid-border: rgba(255, 255, 255, 0.07);
-$ob-text: #d3d8e0;
-$ob-heading: #e8ebf0;
-$ob-muted: #8b95a5;
-$ob-accent: #4fb5e3;
-$ob-accent-hover: #7fcbec;
-$ob-table-text: rgba(255, 255, 255, 0.88);
+$ob-page-bg: #0d1320;
+$ob-surface: #121a2b;
+$ob-surface-raised: #182238;
+$ob-navbar-bg: #0a0f1a;
+$ob-border: rgba(185, 208, 217, 0.14);
+$ob-grid-border: rgba(185, 208, 217, 0.09);
+$ob-text: #d6d2cc;
+$ob-heading: #ede4de;
+$ob-muted: #9fb3bf;
+$ob-accent: #80c5de;
+$ob-accent-hover: #a8d9ea;
+$ob-active: #00a3d3;
+$ob-active-contrast: $ob-page-bg;
+$ob-table-text: rgba(237, 228, 222, 0.9);
 
 $primary: $ob-accent;
 $secondary: $ob-muted;
@@ -51,22 +55,22 @@ $input-placeholder-color: $ob-muted;
 $dropdown-bg: $ob-surface-raised;
 $dropdown-border-color: $ob-border;
 $dropdown-link-color: $ob-text;
-$dropdown-link-hover-bg: rgba(255, 255, 255, 0.06);
+$dropdown-link-hover-bg: rgba(185, 208, 217, 0.07);
 $dropdown-link-hover-color: $ob-heading;
 
 $table-color: $ob-table-text;
 $table-bg: transparent;
 $table-border-color: $ob-grid-border;
-$table-striped-bg: rgba(255, 255, 255, 0.03);
+$table-striped-bg: rgba(185, 208, 217, 0.035);
 $table-striped-color: $ob-table-text;
-$table-hover-bg: rgba(255, 255, 255, 0.04);
+$table-hover-bg: rgba(185, 208, 217, 0.045);
 $table-hover-color: $ob-table-text;
 
 $navbar-bg: $ob-navbar-bg;
 $navbar-dark-bg: $ob-navbar-bg;
 
-$box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
-$box-shadow-sm: 0 3px 10px rgba(0, 0, 0, 0.4);
+$box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+$box-shadow-sm: 0 3px 10px rgba(0, 0, 0, 0.45);
 
 /*-- scss:rules --*/
 

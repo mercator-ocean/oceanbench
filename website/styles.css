@@ -18,24 +18,29 @@
 }
 
 /*
- * Dark palette. Mirrors the variables at the top of theme-dark.scss, which
- * feeds the same values to Bootstrap; keep the two in step. The scale is
- * page -> surface -> raised surface, so elevation reads as a step towards
- * the viewer, and neither end of it is pure black or pure white.
+ * Dark palette, taken from the OceanBench logo. Mirrors the variables at the
+ * top of theme-dark.scss, which feeds the same values to Bootstrap; keep the
+ * two in step. The scale is page -> surface -> raised surface, so elevation
+ * reads as a step towards the viewer, and neither end of it is pure black or
+ * pure white. The accent is the logo wordmark blue and carries every link,
+ * focus ring and marker; the cyan of the logo wave is reserved for the one
+ * selected thing on screen, so an active state never reads as just a link.
  */
 body.quarto-dark {
-  --ob-accent: #4fb5e3;
-  --ob-accent-contrast: #0b1a24;
-  --ob-border: rgba(255, 255, 255, 0.1);
-  --ob-grid-border: rgba(255, 255, 255, 0.07);
-  --ob-heading: #e8ebf0;
-  --ob-muted: #8b95a5;
-  --ob-page-bg: #11151c;
-  --ob-surface: #171c25;
-  --ob-surface-raised: #1e242f;
-  --ob-soft-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
-  --ob-table-text: rgba(255, 255, 255, 0.88);
-  --ob-text: #d3d8e0;
+  --ob-accent: #80c5de;
+  --ob-accent-contrast: #0d1320;
+  --ob-active: #00a3d3;
+  --ob-active-contrast: #0d1320;
+  --ob-border: rgba(185, 208, 217, 0.14);
+  --ob-grid-border: rgba(185, 208, 217, 0.09);
+  --ob-heading: #ede4de;
+  --ob-muted: #9fb3bf;
+  --ob-page-bg: #0d1320;
+  --ob-surface: #121a2b;
+  --ob-surface-raised: #182238;
+  --ob-soft-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  --ob-table-text: rgba(237, 228, 222, 0.9);
+  --ob-text: #d6d2cc;
   background-color: var(--ob-page-bg);
   color: var(--ob-text);
 }
@@ -339,7 +344,7 @@ body.quarto-dark .score-table .standard-name {
 /* The row under the pointer lifts by a hair. Only the frozen cell can carry
    it: every other cell in the row owns its own colour. */
 body.quarto-dark .score-table tbody tr:hover .model-col {
-  background-image: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04));
+  background-image: linear-gradient(rgba(185, 208, 217, 0.05), rgba(185, 208, 217, 0.05));
 }
 
 /* --- Two-row sticky header (tabs + controls) --- */
@@ -476,9 +481,9 @@ body.quarto-dark .selector-chip:hover:not(.active):not(.disabled) {
 }
 
 body.quarto-dark .selector-chip.active {
-  background: var(--ob-accent);
-  border-color: var(--ob-accent);
-  color: var(--ob-accent-contrast);
+  background: var(--ob-active);
+  border-color: var(--ob-active);
+  color: var(--ob-active-contrast);
 }
 
 /* --- Region globe --- */
@@ -578,7 +583,7 @@ body.quarto-dark .region-globe-graticule {
 }
 
 body.quarto-dark .region-globe-active-region {
-  fill: rgba(79, 181, 227, 0.32);
+  fill: rgba(128, 197, 222, 0.32);
 }
 
 body.quarto-dark .region-globe-active-region-outline-halo {
@@ -673,7 +678,7 @@ body.quarto-dark .score-tab:hover:not(.active) {
 
 body.quarto-dark .score-tab.active {
   color: var(--ob-accent);
-  border-bottom-color: var(--ob-accent);
+  border-bottom-color: var(--ob-active);
 }
 
 .score-tab:focus-visible {
@@ -783,9 +788,9 @@ body.quarto-dark .display-toggle-btn {
 
 body.quarto-dark .depth-toggle-btn.active,
 body.quarto-dark .display-toggle-btn.active {
-  background: var(--ob-accent);
-  color: var(--ob-accent-contrast);
-  border-color: var(--ob-accent);
+  background: var(--ob-active);
+  color: var(--ob-active-contrast);
+  border-color: var(--ob-active);
 }
 
 /* --- Display toggle (values / % diff) --- */
@@ -1021,7 +1026,7 @@ body.quarto-dark .score-table th.highlight-label a {
 /* A wash of the accent rather than a grey slab, matched to the accent bar the
    shared rule draws down the frozen cell. */
 body.quarto-dark .score-table tr.baseline-row td {
-  background: rgba(79, 181, 227, 0.12);
+  background: rgba(128, 197, 222, 0.12);
 }
 
 /* --- Section headings --- */
@@ -1091,7 +1096,7 @@ body.quarto-dark .only-light {
 body.quarto-dark {
   --xr-font-color0: var(--ob-text);
   --xr-font-color2: var(--ob-muted);
-  --xr-font-color3: rgba(255, 255, 255, 0.45);
+  --xr-font-color3: rgba(237, 228, 222, 0.45);
   --xr-border-color: var(--ob-grid-border);
   --xr-disabled-color: #6d7685;
   --xr-background-color: var(--ob-surface);
@@ -1213,7 +1218,7 @@ body.quarto-dark .version-select {
 
 body.quarto-dark .version-select,
 body.quarto-dark #baseline-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23dee2e6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2380c5de' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
   color-scheme: dark;
 }
 
