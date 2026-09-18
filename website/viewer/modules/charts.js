@@ -174,8 +174,13 @@ export function leadCurveSVG(
  * an array of { label, color, wavelength: number[] (metres), power: number[], dashed }.
  * Wavelength axis in km (large scales left). Points carry per-series data attributes
  * so the cursor tooltip can report wavelength + power for the curve under the cursor.
+ * `yLabel` names the y quantity and its units; `marker` is an optional
+ * { wavelength (metres), label } vertical line, used for the effective resolution.
  */
-export function psdSpectraSVG(curves, { title = "Live power spectrum", xBounds = null, yBounds = null } = {}) {
+export function psdSpectraSVG(
+  curves,
+  { title = "Live power spectrum", xBounds = null, yBounds = null, yLabel = "power", marker = null } = {},
+) {
   const area = plotArea();
   const usable = (curves || []).filter((curve) => curve && curve.wavelength && curve.wavelength.length);
   if (!usable.length) return emptyChart(title, "no field in view for a spectrum");
@@ -237,9 +242,23 @@ export function psdSpectraSVG(curves, { title = "Live power spectrum", xBounds =
     }
   }
 
+  // Effective-resolution marker: a labelled vertical line at one wavelength, drawn last
+  // so it sits over the curves. `marker` is { wavelength (metres), label }.
+  if (marker && marker.wavelength > 0) {
+    const x = xOf(marker.wavelength);
+    if (x >= area.x0 && x <= area.x1) {
+      body += `<line x1="${x.toFixed(1)}" y1="${area.y0}" x2="${x.toFixed(1)}" y2="${area.y1}" class="axis" stroke-dasharray="2 3"/>`;
+      const anchor = x > area.x0 + area.width / 2 ? "end" : "start";
+      const offset = anchor === "end" ? -4 : 4;
+      body += `<text x="${(x + offset).toFixed(1)}" y="${area.y0 + 10}" class="tick" text-anchor="${anchor}">${escapeText(
+        marker.label,
+      )}</text>`;
+    }
+  }
+
   const legend = renderLegend(area, usable, 96);
 
-  return svgOpen(title) + axes(area, "wavelength (km)", "power") + body + legend + interactionLayer() + "</svg>";
+  return svgOpen(title) + axes(area, "wavelength (km)", yLabel) + body + legend + interactionLayer() + "</svg>";
 }
 
 /**

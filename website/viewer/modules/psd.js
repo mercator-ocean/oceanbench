@@ -6,23 +6,34 @@
 // The viewer already holds the decoded field for the selected variable/lead/level
 // as a Float32 grid; this module crops it to the visible geographic box, fills land
 // (NaN) with the box mean, removes the mean, applies a separable Hann window, runs a
-// radix-2 2D FFT, and radially averages |F|² into a power-vs-wavenumber curve. The
-// wavenumber axis is converted to physical wavelength in kilometres using a
-// latitude-aware cell size at the box centre, so the same routine works for every
-// variable, model and region, spectra from a 1° model simply stop at a coarser
-// wavelength than a 1/12° one, which is honest and expected.
+// radix-2 2D FFT, and sums |F|² over annular wavenumber rings into an isotropic
+// power-vs-wavenumber curve. The wavenumber axis is converted to physical wavelength in
+// kilometres using a latitude-aware cell size at the box centre, so the same routine
+// works for every variable, model and region, spectra from a 1° model simply stop at a
+// coarser wavelength than a 1/12° one, which is honest and expected.
 //
 // Method (surfaced in the chart caption/tooltip): Hann window + mean-fill of land,
 // mean removed. This is a pragmatic estimate for exploration, not a calibrated
 // realism metric.
+//
+// The ring reduction is a SUM, not a mean, and the result is divided by the ring width
+// in wavenumber, so the curve is a one-dimensional isotropic spectral density whose
+// integral over wavenumber is the variance of the windowed field (Parseval). The Hann
+// window's own power loss is divided out, so that integral is the variance of the field
+// itself rather than the variance of the tapered copy. The ring MEAN this used to return
+// carried no such property and could not be integrated back to anything physical.
+// As with any annular binning, the corners of the rectangular mode grid (|k| beyond the
+// Nyquist ring) fall outside the last ring and are dropped: a fraction of a percent of
+// the variance for the red spectra of ocean fields, around a fifth for flat noise.
 
 const MAX_SIDE = 256; // resample the box to a square power-of-two grid of at most this side
 const EARTH_KM_PER_DEGREE = 111.32;
 
 /**
- * Radially-averaged PSD of the visible box of `field` for the given normalized-world
- * viewport. Returns { wavelength: number[] (metres), power: number[], samples,
- * cellKm } sorted by ascending wavelength, or null when the box is too small/empty.
+ * Isotropic (ring-summed) PSD of the visible box of `field` for the given
+ * normalized-world viewport. Returns { wavelength: number[] (metres), power: number[]
+ * (field-units² per cycle/km), samples, cellKm }, ordered from the longest wavelength
+ * down, or null when the box is too small/empty.
  */
 export function boxPowerSpectrum(field, latitudes, longitudes, viewport) {
   if (!field || !latitudes || !longitudes) return null;
@@ -58,19 +69,23 @@ export function boxPowerSpectrum(field, latitudes, longitudes, viewport) {
   const cellKm = Math.sqrt(dxKm * dyKm);
   if (!(cellKm > 0)) return null;
 
-  const radial = radialAveragedPower(box.data, side, dxKm, dyKm);
+  const rings = ringSummedPower(box.data, side, dxKm, dyKm);
   const wavelength = [];
   const power = [];
-  for (let r = 1; r < radial.length; r += 1) {
-    if (radial[r].count === 0) continue;
+  // Rings are spaced one cycle-per-box apart, so the ring width in wavenumber is
+  // 1 / boxKm. Dividing the ring sum by it turns "variance in this ring" into a spectral
+  // density in field-units² per cycle/km, which is what the chart plots and what
+  // integrates back to the variance. The side⁴ divisor is the DFT's own Parseval factor
+  // (sum |F|² = N sum |f|² with N = side²), and windowPower undoes the Hann taper's
+  // power loss. Everything here is physical, so spectra from models of different grid
+  // size are directly comparable.
+  const boxKm = side * cellKm;
+  const scale = boxKm / (side * side * side * side * box.windowPower);
+  for (let r = 1; r < rings.length; r += 1) {
+    if (rings[r].count === 0) continue;
     const wavelengthSamples = side / r; // one radial ring = r cycles across the box
     wavelength.push(wavelengthSamples * cellKm * 1000); // metres, chart converts to km
-    // Normalize raw ring-averaged |F|² to a grid-independent 2D periodogram density
-    // (variance·km²): raw |F|² scales as side⁴ for the same physical field, so the
-    // factor cellKm²/side² (= boxKm²/side⁴) cancels that resolution-dependent inflation
-    // and makes spectra from models of different grid size directly comparable.
-    const density = (cellKm * cellKm) / (side * side);
-    power.push((radial[r].sum / radial[r].count) * density);
+    power.push(rings[r].sum * scale);
   }
   if (!wavelength.length) return null;
   return { wavelength, power, samples: side * side, cellKm, oceanFraction: box.oceanFraction };
@@ -150,19 +165,25 @@ function resampleBox(field, rows, columns, side) {
   const mean = sum / finiteCount;
   const hann = new Float64Array(side);
   for (let i = 0; i < side; i += 1) hann[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (side - 1));
+  // Mean square of the separable window, the factor by which the taper lowers the
+  // variance of whatever it multiplies. Dividing the spectrum by it restores the
+  // untapered variance, so the curve integrates to the variance of the field.
+  let windowSquares = 0;
   for (let y = 0; y < side; y += 1) {
     for (let x = 0; x < side; x += 1) {
       const target = y * side + x;
       const detrended = (filled[target] ? raw[target] : mean) - mean;
-      raw[target] = detrended * hann[y] * hann[x];
+      const weight = hann[y] * hann[x];
+      raw[target] = detrended * weight;
+      windowSquares += weight * weight;
     }
   }
-  return { data: raw, oceanFraction };
+  return { data: raw, oceanFraction, windowPower: windowSquares / (side * side) };
 }
 
-// 2D FFT (rows then columns) of a real box, radially averaging |F|² into bins by the
-// integer wavenumber magnitude. Uses a shared in-place radix-2 FFT over rows/columns.
-function radialAveragedPower(box, side, dxKm, dyKm) {
+// 2D FFT (rows then columns) of a real box, summing |F|² into annular bins by the
+// wavenumber magnitude. Uses a shared in-place radix-2 FFT over rows/columns.
+function ringSummedPower(box, side, dxKm, dyKm) {
   const real = Float64Array.from(box);
   const imaginary = new Float64Array(side * side);
   const rowReal = new Float64Array(side);
