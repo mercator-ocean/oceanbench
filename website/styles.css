@@ -1238,6 +1238,17 @@ body.quarto-dark .version-select {
 /* The sticky thead needs the page itself to scroll sideways, so it is kept on
    wide screens only and the wrapper takes over the horizontal scrolling below. */
 @media (max-width: 900px) {
+  /*
+   * A sideways swipe rubber-bands the page while the fixed floating header
+   * stays put. Stop the page bouncing horizontally, and stop the end of the
+   * table's own sideways scroll from chaining into that bounce.
+   * iOS Safari honours overscroll-behavior from version 16.
+   */
+  html,
+  body {
+    overscroll-behavior-x: none;
+  }
+
   .controls {
     flex-wrap: wrap;
   }
@@ -1248,6 +1259,7 @@ body.quarto-dark .version-select {
   .score-table-wrapper {
     overflow-x: auto;
     overflow-y: visible;
+    overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
     mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
