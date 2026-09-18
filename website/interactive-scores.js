@@ -337,7 +337,8 @@ function buildDataRows(
         const title = value !== null
           ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
           : "";
-        rows += `<td class="score-value-cell" style="${style}" title="${title}">${display}</td>`;
+        const emptyClass = value === null ? " no-value-cell" : "";
+        rows += `<td class="score-value-cell${emptyClass}" style="${style}" title="${title}">${display}</td>`;
       }
     }
     rows += "</tr>";
@@ -382,7 +383,8 @@ function buildCombinedDataRows(
           const title = value !== null
             ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
             : "";
-          rows += `<td class="score-value-cell" style="${style}" title="${title}">${display}</td>`;
+          const emptyClass = value === null ? " no-value-cell" : "";
+          rows += `<td class="score-value-cell${emptyClass}" style="${style}" title="${title}">${display}</td>`;
         }
       }
     }

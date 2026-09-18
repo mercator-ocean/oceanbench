@@ -341,6 +341,14 @@ body.quarto-dark .score-table .standard-name {
   color: var(--ob-muted);
 }
 
+/* A cell with no value carries no colour of its own. Left transparent it
+   falls through to the page behind the table and reads as a hole punched in
+   a field of coloured tiles, so give it the table's own surface. The
+   baseline-row wash further down is allowed to win over it. */
+body.quarto-dark .score-table td.no-value-cell {
+  background: var(--ob-surface);
+}
+
 /* The row under the pointer lifts by a hair. Only the frozen cell can carry
    it: every other cell in the row owns its own colour. */
 body.quarto-dark .score-table tbody tr:hover .model-col {
@@ -1074,14 +1082,6 @@ body.quarto-dark #comparison-to-observations > h2 {
 }
 
 /* --- Theme switching --- */
-
-body.quarto-dark .navbar-logo {
-  content: url('https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/favicon-dark.png');
-}
-
-body.quarto-light .navbar-logo {
-  content: url('https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/favicon-light.png');
-}
 
 body.quarto-light .only-dark {
   display: none !important;
