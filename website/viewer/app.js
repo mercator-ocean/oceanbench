@@ -3417,11 +3417,13 @@ function renderRailSkill(shown, comparison) {
 //
 // The spectrum is computed over an explicit rectangle drawn on the map, draggable,
 // resizable, shared between both forecasts in compare mode. Its size is HARD-CAPPED at
-// what the finest (native) pyramid grid honestly resolves with the 256-cell FFT budget
-// (≈ 256 × finest cell size per axis), so the PSD is ALWAYS computed at native
-// resolution from a windowed tile-cropped read, downsampled spectra never exist.
+// what the finest (native) pyramid grid honestly resolves with the 512-cell FFT budget
+// (≈ 512 × finest cell size per axis), so a box at the cap is transformed at native
+// resolution from a windowed tile-cropped read. A smaller box carries fewer cells than
+// the FFT grid can take, and the power-of-two side then covers whole blocks of source
+// cells, which are averaged rather than sampled.
 
-const PSD_FFT_CELLS = 256; // matches psd.js MAX_SIDE
+const PSD_FFT_CELLS = 512; // matches psd.js MAX_SIDE
 const PSD_MIN_CELLS = 32; // minimum native cells across for a meaningful FFT
 const PSD_DEFAULT_WIDTH_DEG = 10;
 const PSD_FLASH_MILLISECONDS = 700;
@@ -3727,10 +3729,11 @@ async function psdSourceFor(panel, boxRange) {
   }
 }
 
-// Drop the error-spectrum points below the coarser model's resolution limit:
-// wavelengths shorter than 2× the coarser native cell size (km at the box centre
-// latitude, zonal/meridional mean, the same convention as the spectrum's cellKm).
-function truncateToCommonScales(spectrum, cellDegrees, centreLatitudeDegrees) {
+// Drop the spectrum points below a resolution limit: wavelengths shorter than 2× the
+// coarsest listed native cell size (km at the box centre latitude, zonal/meridional
+// mean, the same convention as the spectrum's cellKm). One cell size for a model's own
+// curve, both for the difference curve, which is only as good as the coarser grid.
+function truncateToResolvedScales(spectrum, cellDegrees, centreLatitudeDegrees) {
   if (!spectrum) return null;
   const coarsest = Math.max(...cellDegrees.filter(Number.isFinite));
   if (!Number.isFinite(coarsest) || coarsest <= 0) return spectrum;
@@ -3855,48 +3858,53 @@ async function renderRailPsd(shown, comparison) {
     if (token !== psdRenderToken) return; // stale (box moved / view changed again)
     if (!source) continue;
     const spectrum = panelSpectrum(source, boxViewport);
+    // Each curve stops at its own grid's limit, so no model is drawn into scales its
+    // grid cannot carry and the two curves are only ever compared where both are real.
+    const curve = truncateToResolvedScales(spectrum, [source.cellDeg], box.lat);
     sources.push({ panel, spectrum, source });
-    if (spectrum) {
+    if (curve) {
       curves.push({
         label: comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}` : labelFor(panel.state.dataset),
         color: forecastColor(panel.index),
-        ...spectrum,
+        ...curve,
       });
     }
   }
   let effectiveResolution = NaN;
   let effectiveReferenceLabel = "";
   if (comparison && sources.length === 2) {
-    const [a, b] = sources.map((entry) => entry.source);
-    const alignedB = b.fields.map((field) => resampleOntoGrid(field, b.latitudes, b.longitudes, a.latitudes, a.longitudes));
+    // Effective resolution needs a reference on one side and a forecast on the other,
+    // and it is measured ON THE REFERENCE GRID: the difference and the reference
+    // spectrum are both computed there, so the number is a property of the pair and not
+    // of which panel the user happened to put the reference in. With no reference
+    // between the two panels the difference stays on Forecast 1's grid, as before.
+    const referenceIndex = sources.findIndex((entry) => isReferenceDataset(entry.panel.state.dataset));
+    const otherIndex = referenceIndex === 0 ? 1 : 0;
+    const hasReference = referenceIndex >= 0 && !isReferenceDataset(sources[otherIndex].panel.state.dataset);
+    const baseIndex = hasReference ? referenceIndex : 0;
+    const base = sources[baseIndex].source;
+    const other = sources[1 - baseIndex].source;
+    const cellDegrees = [base.cellDeg, other.cellDeg];
+    const alignedOther = other.fields.map((field) =>
+      resampleOntoGrid(field, other.latitudes, other.longitudes, base.latitudes, base.longitudes),
+    );
     let errorSpectrum = combineComponentSpectra(
-      a.fields.map((field, index) =>
-        differenceBoxSpectrum(field, a.latitudes, a.longitudes, alignedB[index], boxViewport, true),
+      base.fields.map((field, index) =>
+        differenceBoxSpectrum(field, base.latitudes, base.longitudes, alignedOther[index], boxViewport, true),
       ),
     );
     // A difference spectrum is only meaningful over the commonly-resolved scales: below
     // 2× the COARSER model's native cell size the "difference" is interpolation artifact,
-    // not model disagreement, so the error curve is truncated there. The two individual
-    // model curves stay full-range (each to its own native limit).
-    errorSpectrum = truncateToCommonScales(errorSpectrum, [a.cellDeg, b.cellDeg], box.lat);
+    // not model disagreement, so the error curve is truncated there.
+    errorSpectrum = truncateToResolvedScales(errorSpectrum, cellDegrees, box.lat);
     if (errorSpectrum) {
       curves.push({ label: `error (F1−F2)`, color: SERIES_COLORS.error, dashed: true, ...errorSpectrum });
     }
-    // Effective resolution needs a reference on one side and a forecast on the other.
-    // The reference spectrum is recomputed on panel 1's grid, the grid the difference
-    // already lives on, so the two curves share their rings and the ratio is defined
-    // point by point.
-    const referenceIndex = sources.findIndex((entry) => isReferenceDataset(entry.panel.state.dataset));
-    const otherIndex = referenceIndex === 0 ? 1 : 0;
-    if (referenceIndex >= 0 && !isReferenceDataset(sources[otherIndex].panel.state.dataset)) {
-      const referenceFields = referenceIndex === 0 ? a.fields : alignedB;
-      const referenceSpectrum = truncateToCommonScales(
-        combineComponentSpectra(
-          referenceFields.map((field) => boxPowerSpectrum(field, a.latitudes, a.longitudes, boxViewport)),
-        ),
-        [a.cellDeg, b.cellDeg],
-        box.lat,
-      );
+    if (hasReference) {
+      // The reference's own spectrum on that same grid, cut to the same commonly
+      // resolved scales, so the ratio is defined ring by ring and the marker is searched
+      // only where both curves are real.
+      const referenceSpectrum = truncateToResolvedScales(sources[referenceIndex].spectrum, cellDegrees, box.lat);
       effectiveResolution = effectiveResolutionMetres(errorSpectrum, referenceSpectrum);
       effectiveReferenceLabel = labelFor(sources[referenceIndex].panel.state.dataset);
     }

@@ -98,21 +98,31 @@ export const METHOD_NOTES = {
   psd: {
     title: "Live power spectrum",
     body:
-      "Power spectrum of the boxed region, computed in the browser on the model's finest " +
-      "published grid. Exploratory. Hann window, land filled with the region mean, then " +
-      "the two-dimensional spectrum is SUMMED over wavenumber rings and divided by the " +
-      "ring width, so the curve is an isotropic spectral density (field units squared per " +
-      "cycle per km) whose integral over wavenumber is the variance of the box. For " +
-      "currents the curve is the kinetic energy spectrum KE(k) = 0.5 (PSD_u + PSD_v), not " +
-      "the spectrum of the speed magnitude. The box size is capped so the estimate stays " +
-      "reliable. In compare mode both forecasts share one box; models with very different " +
-      "resolution cannot share a fair one. Near its grid scale every model is damped by " +
-      "its own dissipation, so compare models only at scales both resolve. " +
+      "A spectrum measures how much variation the boxed region holds at each size, not " +
+      "where that variation sits. The height of a curve is the energy at that size, so " +
+      "the two panels can be read against each other size by size: where a forecast sits " +
+      "below the reference it is smoothing that size away. Where a curve ends is its grid " +
+      "limit: no model is drawn at sizes its own grid cannot carry, so a coarse model's " +
+      "curve stops well before a fine one's. " +
       "With a reference (GLO12 or GLORYS) in the other panel, the marked vertical line is " +
       "the effective resolution after Ballarotta et al. (2019, Ocean Science, " +
-      "doi:10.5194/os-15-1091-2019): the wavelength at which the spectrum of the " +
-      "difference from that reference reaches half the reference's own spectrum. Below it " +
-      "the field carries as much error as signal.",
+      "doi:10.5194/os-15-1091-2019), measured on the reference grid so it does not depend " +
+      "on which panel holds the reference: the size below which the forecast disagrees " +
+      "with the reference by more than half the signal. Below that size the forecast is " +
+      "mostly wrong about where things are or when they happen, however much energy it " +
+      "carries there. A model can match GLO12 energy for energy at 100 km and still have " +
+      "an effective resolution of 500 km, because its eddies are in the wrong places. " +
+      "Computed in the browser on the model's finest published grid, averaged in blocks " +
+      "onto the square grid the transform needs. Exploratory. Hann window, land filled " +
+      "with the region mean, then the two-dimensional spectrum is SUMMED over wavenumber " +
+      "rings and divided by the ring width, so the curve is an isotropic spectral density " +
+      "(field units squared per cycle per km) whose integral over wavenumber is the " +
+      "variance of the box. For currents the curve is the kinetic energy spectrum " +
+      "KE(k) = 0.5 (PSD_u + PSD_v), not the spectrum of the speed magnitude. The box size " +
+      "is capped so the estimate stays reliable. In compare mode both forecasts share one " +
+      "box; models with very different resolution cannot share a fair one. Near its grid " +
+      "scale every model is damped by its own dissipation, so compare models only at " +
+      "sizes both resolve.",
   },
 
   // Trajectories overlay.

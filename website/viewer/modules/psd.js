@@ -4,13 +4,14 @@
 
 // Live client-side power spectral density of the currently visible viewport box.
 // The viewer already holds the decoded field for the selected variable/lead/level
-// as a Float32 grid; this module crops it to the visible geographic box, fills land
-// (NaN) with the box mean, removes the mean, applies a separable Hann window, runs a
-// radix-2 2D FFT, and sums |F|² over annular wavenumber rings into an isotropic
-// power-vs-wavenumber curve. The wavenumber axis is converted to physical wavelength in
-// kilometres using a latitude-aware cell size at the box centre, so the same routine
-// works for every variable, model and region, spectra from a 1° model simply stop at a
-// coarser wavelength than a 1/12° one, which is honest and expected.
+// as a Float32 grid; this module crops it to the visible geographic box, block-averages
+// it onto the square FFT grid, fills land (NaN) with the box mean, removes the mean,
+// applies a separable Hann window, runs a radix-2 2D FFT, and sums |F|² over annular
+// wavenumber rings into an isotropic power-vs-wavenumber curve. The wavenumber axis is
+// converted to physical wavelength in kilometres using a latitude-aware cell size at
+// the box centre, so the same routine works for every variable, model and region,
+// spectra from a 1° model simply stop at a coarser wavelength than a 1/12° one, which
+// is honest and expected.
 //
 // Method (surfaced in the chart caption/tooltip): Hann window + mean-fill of land,
 // mean removed. This is a pragmatic estimate for exploration, not a calibrated
@@ -26,7 +27,7 @@
 // Nyquist ring) fall outside the last ring and are dropped: a fraction of a percent of
 // the variance for the red spectra of ocean fields, around a fifth for flat noise.
 
-const MAX_SIDE = 256; // resample the box to a square power-of-two grid of at most this side
+const MAX_SIDE = 512; // resample the box to a square power-of-two grid of at most this side
 const EARTH_KM_PER_DEGREE = 111.32;
 
 /**
@@ -134,28 +135,47 @@ function powerOfTwoAtMost(value) {
   return power;
 }
 
-// Nearest-sample resample of the field sub-box into a square `side`×`side` grid,
+// Block-average resample of the field sub-box into a square `side`×`side` grid,
 // mean-filling land (NaN), removing the mean, then applying a separable Hann window.
+// `side` never exceeds the number of source cells along either axis, so each output
+// sample covers one or more whole source cells and is their mean over the finite ones.
+// A block of one cell is the source cell itself, so a box the FFT grid already matches
+// is untouched. Nearest sampling threw away most of the cells of a large box and let
+// the discarded ones alias into the curve; averaging them keeps their variance where it
+// belongs and simply stops the curve at the coarser scale the averaging can carry.
 function resampleBox(field, rows, columns, side) {
   const raw = new Float64Array(side * side);
   const filled = new Uint8Array(side * side);
+  const sourceColumnAt = columns.indexAt
+    ? (ordinal) => columns.indexAt(ordinal / (columns.count - 1))
+    : (ordinal) => columns.start + ordinal;
   let sum = 0;
   let finiteCount = 0;
   for (let y = 0; y < side; y += 1) {
-    const sourceRow = rows.start + Math.round((y / (side - 1)) * (rows.count - 1));
+    const rowStart = Math.floor((y * rows.count) / side);
+    const rowEnd = Math.max(rowStart + 1, Math.floor(((y + 1) * rows.count) / side));
     for (let x = 0; x < side; x += 1) {
-      const fraction = x / (side - 1);
-      const sourceColumn = columns.indexAt
-        ? columns.indexAt(fraction)
-        : columns.start + Math.round(fraction * (columns.count - 1));
-      const value = field.data[sourceRow * field.width + sourceColumn];
+      const columnStart = Math.floor((x * columns.count) / side);
+      const columnEnd = Math.max(columnStart + 1, Math.floor(((x + 1) * columns.count) / side));
+      let blockSum = 0;
+      let blockCount = 0;
+      for (let rowOrdinal = rowStart; rowOrdinal < rowEnd; rowOrdinal += 1) {
+        const base = (rows.start + rowOrdinal) * field.width;
+        for (let ordinal = columnStart; ordinal < columnEnd; ordinal += 1) {
+          const value = field.data[base + sourceColumnAt(ordinal)];
+          if (Number.isNaN(value)) continue;
+          blockSum += value;
+          blockCount += 1;
+        }
+      }
       const target = y * side + x;
-      if (Number.isNaN(value)) {
+      if (blockCount === 0) {
         filled[target] = 0;
       } else {
-        raw[target] = value;
+        const blockMean = blockSum / blockCount;
+        raw[target] = blockMean;
         filled[target] = 1;
-        sum += value;
+        sum += blockMean;
         finiteCount += 1;
       }
     }
