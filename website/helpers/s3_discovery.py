@@ -12,7 +12,8 @@ from helpers.local_challengers import local_challengers_for_version
 from helpers.published_regions import published_region_ids
 
 S3_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
-REPORTS_ROOT_PREFIX = "public/evaluation-reports"
+# Dev preview: 0.6.0 reports next to the published 0.5.0 set for comparison. Do not merge.
+REPORTS_ROOT_PREFIX = "dev/evaluation-reports/preview-060"
 REPORT_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
 REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")
 

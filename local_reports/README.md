@@ -15,7 +15,7 @@ Nothing here is uploaded anywhere.
 
 ## glow
 
-`0.5.0/glow.global.report.ipynb` is a local evaluation of run
+`0.6.0/glow.global.report.ipynb` is a local evaluation of run
 `glowcascade_v4_nofilter`: all 52 Wednesday challenger starts of 2024, 20240103
 through 20241225, each initialised from the as-issued GLO12 nowcast of the Tuesday
 before it, quarter degree, not an official submission.
@@ -55,10 +55,9 @@ pending 0.6.0; its installed dist-info still stamps `__version__` as 0.5.1, so t
 first cell of the notebook reads 0.5.1. The observations metric therefore comes from
 the observations-v2 basis, which is why its table carries an observation count column
 and lower current errors than the earlier 0.5.1 scored entry did. The file sits in the
-0.5.0 directory because that key is what places a system in the 0.5.0 leaderboard
-column, and 0.5.0 is the default published version, so this entry appears next to
-officially published systems that were themselves scored with 0.5.0. Keep that
-difference in mind when reading small gaps between GLOW and its neighbours.
+0.6.0 directory because that key is what places a system in the 0.6.0 leaderboard
+column, which is the default of this preview index, so this entry appears next to
+systems rescored with 0.6.0, the same harness basis it was scored with.
 
 `tables/glowcascade_v4_nofilter.*.csv` holds the nine metric tables read back out of
 that notebook. The website reads the notebook, not the CSV files; they are kept for
