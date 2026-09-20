@@ -84,6 +84,9 @@ STORE_ML_FORECAST_DEV = "ml-forecast-dev"
 STORE_GLOENS_WEEK = "gloens-week"
 STORE_LOCAL_ROOT = "local-root"
 
+#: Horizontal axis names a local store may carry, and the names every path downstream asks for.
+HORIZONTAL_COORDINATE_ALIASES = {"lat": "latitude", "lon": "longitude"}
+
 
 @dataclass(frozen=True)
 class ChallengerSpecification:
@@ -172,13 +175,23 @@ def _open_dev_prefix_week(specification: ChallengerSpecification, start_label: p
     return week.rename({specification.member_dimension: ENSEMBLE_DIMENSION})
 
 
+def _with_standard_horizontal_names(dataset: xarray.Dataset) -> xarray.Dataset:
+    """Give a store that names its axes ``lat`` and ``lon`` the names the rest of the helper reads."""
+    renames = {
+        alias: standard
+        for alias, standard in HORIZONTAL_COORDINATE_ALIASES.items()
+        if alias in dataset.dims or alias in dataset.variables
+    }
+    return dataset.rename(renames) if renames else dataset
+
+
 def _open_local_root_week(specification: ChallengerSpecification, start_label: pandas.Timestamp) -> xarray.Dataset:
     """One forecast start read off a local directory, as the library's weekly challenger dataset.
 
     The directory holds one store per start named after the first day it predicts, laid out as the
     dev prefix stores are, so the time axis becomes the lead day index with no offset.
     """
-    store = xarray.open_zarr(f"{specification.store_root}/{start_label:%Y%m%d}.zarr")
+    store = _with_standard_horizontal_names(xarray.open_zarr(f"{specification.store_root}/{start_label:%Y%m%d}.zarr"))
     ensemble_fields = [name for name in CHALLENGER_ENSEMBLE_VARIABLE_NAMES if name in store.data_vars]
     forecast_days = store[ensemble_fields].isel(time=slice(0, specification.lead_days_count))
     week = _prepared_challenger_week_dataset(forecast_days, f"{specification.name} challenger dataset open")

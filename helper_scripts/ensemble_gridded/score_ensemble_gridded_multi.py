@@ -153,6 +153,9 @@ STORE_LOCAL_ROOT = "local-root"
 
 VARIABLE_KEYED_STORE_LAYOUTS = (STORE_GLOENS_PER_VARIABLE, STORE_GLO12_VARIABLE_GROUPS)
 
+#: Horizontal axis names a local store may carry, and the names every path downstream asks for.
+HORIZONTAL_COORDINATE_ALIASES = {"lat": "latitude", "lon": "longitude"}
+
 
 @dataclass(frozen=True)
 class ChallengerSpec:
@@ -472,6 +475,16 @@ def _store_location(
     return matches[0], None
 
 
+def _with_standard_horizontal_names(dataset: xarray.Dataset) -> xarray.Dataset:
+    """Give a store that names its axes ``lat`` and ``lon`` the names the rest of the helper reads."""
+    renames = {
+        alias: standard
+        for alias, standard in HORIZONTAL_COORDINATE_ALIASES.items()
+        if alias in dataset.dims or alias in dataset.variables
+    }
+    return dataset.rename(renames) if renames else dataset
+
+
 def _with_member_dimension(dataset: xarray.Dataset, specification: ChallengerSpec) -> xarray.Dataset:
     """Give a deterministic store the member axis of length one the ensemble metrics read."""
     if specification.member_dimension in dataset.dims:
@@ -484,7 +497,8 @@ def _open_challenger(
 ) -> tuple[xarray.Dataset, str]:
     if specification.store_layout == STORE_LOCAL_ROOT:
         root = f"{specification.store_root}/{start_date:%Y%m%d}.zarr"
-        return _with_member_dimension(xarray.open_zarr(root), specification), root
+        store = _with_standard_horizontal_names(xarray.open_zarr(root))
+        return _with_member_dimension(store, specification), root
     filesystem = _filesystem(specification.anonymous)
     root, group = _store_location(specification, start_date, variable_name, filesystem)
     dataset = xarray.open_zarr(s3fs.S3Map(root=root, s3=filesystem, check=False), group=group, consolidated=True)

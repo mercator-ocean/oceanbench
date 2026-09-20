@@ -35,7 +35,13 @@ def gridded_helper() -> ModuleType:
     return _helper_module("ensemble_gridded/score_ensemble_gridded_multi.py", "score_ensemble_gridded_multi")
 
 
-def _tiny_forecast_store(directory: Path, start_date: pandas.Timestamp, member_count: int) -> Path:
+def _tiny_forecast_store(
+    directory: Path,
+    start_date: pandas.Timestamp,
+    member_count: int,
+    latitude_name: str = "latitude",
+    longitude_name: str = "longitude",
+) -> Path:
     days = pandas.date_range(start_date, periods=2, freq="D")
     latitude = numpy.array([-0.25, 0.25])
     longitude = numpy.array([0.25, 0.75])
@@ -58,6 +64,7 @@ def _tiny_forecast_store(directory: Path, start_date: pandas.Timestamp, member_c
             "longitude": longitude,
         },
     )
+    dataset = dataset.rename({"latitude": latitude_name, "longitude": longitude_name})
     store_path = directory / f"{start_date:%Y%m%d}.zarr"
     dataset.to_zarr(store_path)
     return store_path
@@ -100,3 +107,31 @@ def test_the_local_root_specification_names_the_directory_it_reads(class4_helper
     assert gridded_helper.CHALLENGERS["glowens"].store_root == store_root
     assert gridded_helper.CHALLENGERS["glowens"].member_count == 16
     assert gridded_helper.CHALLENGERS["glowens"].last_lead_day == 10
+
+
+def test_the_class4_helper_reads_a_store_that_names_its_axes_lat_and_lon(class4_helper, tmp_path):
+    start_date = pandas.Timestamp("2024-01-03")
+    _tiny_forecast_store(tmp_path, start_date, member_count=2, latitude_name="lat", longitude_name="lon")
+    specification = dataclasses.replace(
+        class4_helper.CHALLENGERS["glowens"], store_root=str(tmp_path), lead_days_count=2
+    )
+
+    challenger, _ = class4_helper._open_challenger_start(specification, start_date)
+
+    assert "latitude" in challenger.dims
+    assert "longitude" in challenger.dims
+    assert "lat" not in challenger.dims
+    assert "lon" not in challenger.dims
+
+
+def test_the_gridded_helper_reads_a_store_that_names_its_axes_lat_and_lon(gridded_helper, tmp_path):
+    start_date = pandas.Timestamp("2024-01-03")
+    _tiny_forecast_store(tmp_path, start_date, member_count=2, latitude_name="lat", longitude_name="lon")
+    specification = dataclasses.replace(gridded_helper.CHALLENGERS["glowens"], store_root=str(tmp_path))
+
+    dataset, _ = gridded_helper._open_challenger(specification, start_date, "thetao")
+
+    assert "latitude" in dataset.dims
+    assert "longitude" in dataset.dims
+    assert "lat" not in dataset.dims
+    assert "lon" not in dataset.dims
