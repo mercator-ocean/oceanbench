@@ -61,7 +61,10 @@ REFERENCE_NAME = "class4"
 REGION_NAME = "global"
 SCORED_YEAR = 2024
 
-DEFAULT_SIGMA_STORE = "/scratch/jseillade/probax/campaign/artifacts/sigma-lookup-v3.0.0.zarr"
+# The sigma-v3 artifact published alongside the ensemble reports. ``SigmaLookup`` hands the
+# store straight to ``xarray.open_zarr``, so this anonymous https prefix opens the same way a
+# local directory does. A run on the machine that holds the artifact can pass the local path.
+DEFAULT_SIGMA_STORE = f"{CLOUDFERRO_ENDPOINT}/{OCEANBENCH_BUCKET}/dev/ensemble/sigma-lookup-v3.0.0.zarr"
 
 # Every variable the Class IV observation store carries. The depth bins each one is reported on,
 # and the 15 m target the velocity components are read at, are the library's own.
