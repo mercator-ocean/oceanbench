@@ -41,6 +41,7 @@ def _tiny_forecast_store(
     member_count: int,
     latitude_name: str = "latitude",
     longitude_name: str = "longitude",
+    with_member_dimension: bool = True,
 ) -> Path:
     days = pandas.date_range(start_date, periods=2, freq="D")
     latitude = numpy.array([-0.25, 0.25])
@@ -64,6 +65,8 @@ def _tiny_forecast_store(
             "longitude": longitude,
         },
     )
+    if not with_member_dimension:
+        dataset = dataset.isel(member=0, drop=True)
     dataset = dataset.rename({"latitude": latitude_name, "longitude": longitude_name})
     store_path = directory / f"{start_date:%Y%m%d}.zarr"
     dataset.to_zarr(store_path)
@@ -135,3 +138,22 @@ def test_the_gridded_helper_reads_a_store_that_names_its_axes_lat_and_lon(gridde
     assert "longitude" in dataset.dims
     assert "lat" not in dataset.dims
     assert "lon" not in dataset.dims
+
+
+def test_the_gridded_helper_refuses_an_ensemble_store_that_carries_no_member_axis(gridded_helper, tmp_path):
+    start_date = pandas.Timestamp("2024-01-03")
+    _tiny_forecast_store(tmp_path, start_date, member_count=1, with_member_dimension=False)
+    specification = dataclasses.replace(gridded_helper.CHALLENGERS["glowens"], store_root=str(tmp_path))
+
+    with pytest.raises(ValueError, match="member"):
+        gridded_helper._open_challenger(specification, start_date, "thetao")
+
+
+def test_the_gridded_helper_gives_a_deterministic_store_a_member_axis_of_length_one(gridded_helper, tmp_path):
+    start_date = pandas.Timestamp("2024-01-03")
+    _tiny_forecast_store(tmp_path, start_date, member_count=1, with_member_dimension=False)
+    specification = dataclasses.replace(gridded_helper.CHALLENGERS["glowens"], store_root=str(tmp_path), member_count=1)
+
+    dataset, _ = gridded_helper._open_challenger(specification, start_date, "thetao")
+
+    assert dataset.sizes["member"] == 1

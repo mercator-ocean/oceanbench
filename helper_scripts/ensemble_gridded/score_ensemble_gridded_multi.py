@@ -489,6 +489,11 @@ def _with_member_dimension(dataset: xarray.Dataset, specification: ChallengerSpe
     """Give a deterministic store the member axis of length one the ensemble metrics read."""
     if specification.member_dimension in dataset.dims:
         return dataset
+    if specification.member_count > 1:
+        raise ValueError(
+            f"challenger {specification.name} is scored over {specification.member_count} members but its "
+            f"store carries no {specification.member_dimension} dimension, only {tuple(dataset.dims)}"
+        )
     return dataset.expand_dims({specification.member_dimension: [0]})
 
 
