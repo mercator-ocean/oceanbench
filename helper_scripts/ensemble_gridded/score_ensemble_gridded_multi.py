@@ -52,7 +52,7 @@ from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 
 CLOUDFERRO_ENDPOINT = "https://s3.waw3-1.cloudferro.com"
 
-DEFAULT_STAGE_ROOT = Path("/scratch/jseillade/probax/stage-extract")
+DEFAULT_STAGE_ROOT = Path("/scratch/jseillade/oceanbench-060/stage")
 
 REFERENCE_STAGE_DIRECTORIES = {
     "glorys": "reference-glorys-quarter_degree-10d",
