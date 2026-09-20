@@ -149,6 +149,7 @@ STORE_ML_FORECAST_DEV = "ml-forecast-dev"
 STORE_ML_FORECAST_PUBLIC = "ml-forecast-public"
 STORE_GLOENS_PER_VARIABLE = "gloens-per-variable"
 STORE_GLO12_VARIABLE_GROUPS = "glo12-variable-groups"
+STORE_LOCAL_ROOT = "local-root"
 
 VARIABLE_KEYED_STORE_LAYOUTS = (STORE_GLOENS_PER_VARIABLE, STORE_GLO12_VARIABLE_GROUPS)
 
@@ -171,6 +172,8 @@ class ChallengerSpec:
     grid: str
     store_layout: str
     anonymous: bool
+    # The directory holding one store per start, for a challenger under the local root layout.
+    store_root: str | None = None
 
     @property
     def store_per_variable(self) -> bool:
@@ -324,6 +327,20 @@ CHALLENGERS = {
         store_layout=STORE_ML_FORECAST_DEV,
         anonymous=False,
     ),
+    "glowens": ChallengerSpec(
+        name="glowens",
+        version="glowens_v5_ringA",
+        member_dimension="member",
+        member_count=16,
+        variables=_glonet2_variables(),
+        first_lead_day=1,
+        last_lead_day=10,
+        lead_day_to_time_index=1,
+        grid=GRID_REFERENCE,
+        store_layout=STORE_LOCAL_ROOT,
+        anonymous=False,
+        store_root="/mnt/data/glonet2/ifs21/forecasts/glowens_v5_ringA",
+    ),
     "gloens-depth": ChallengerSpec(
         name="gloens",
         version="glo4-ens50_ng",
@@ -465,6 +482,9 @@ def _with_member_dimension(dataset: xarray.Dataset, specification: ChallengerSpe
 def _open_challenger(
     specification: ChallengerSpec, start_date: pandas.Timestamp, variable_name: str | None
 ) -> tuple[xarray.Dataset, str]:
+    if specification.store_layout == STORE_LOCAL_ROOT:
+        root = f"{specification.store_root}/{start_date:%Y%m%d}.zarr"
+        return _with_member_dimension(xarray.open_zarr(root), specification), root
     filesystem = _filesystem(specification.anonymous)
     root, group = _store_location(specification, start_date, variable_name, filesystem)
     dataset = xarray.open_zarr(s3fs.S3Map(root=root, s3=filesystem, check=False), group=group, consolidated=True)
