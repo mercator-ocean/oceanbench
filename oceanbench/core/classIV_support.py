@@ -417,14 +417,16 @@ def gate_class4_observations_to_reference_population(
     """
     Keep only the observations the GLO12 analysis can bracket on the canonical depth grid.
 
-    The mask goes through the same horizontal linear interpolation as a challenger, so an
-    observation is over the ocean only when the four surrounding GLO12 cells are wet, and it is
-    kept only when both of its bracketing levels on the canonical grid are wet there. The scored
-    population therefore does not depend on the challenger vertical axis.
+    The mask is carried as one where the analysis is wet and not a number where it is dry, and it
+    goes through the same horizontal linear interpolation as a challenger, so an observation is
+    over the ocean exactly when that interpolation stays finite. It is kept only when both of its
+    bracketing levels on the canonical grid are finite there, so the scored population does not
+    depend on the challenger vertical axis.
     """
     observations_dataframe = observations_dataframe.reset_index(drop=True)
+    finite_mask = ocean_mask.where(ocean_mask, numpy.nan).astype(float)
     wet_profiles = _horizontally_interpolated_profiles(
-        ocean_mask.astype(float),
+        finite_mask,
         observations_dataframe,
     )
     mask_depths = ocean_mask[Dimension.DEPTH.key()].values
@@ -437,8 +439,8 @@ def gate_class4_observations_to_reference_population(
         observations_dataframe[Dimension.DEPTH.key()].values,
     )
     obs_indices = numpy.arange(len(observations_dataframe))
-    is_eligible = (sorted_wet_profiles[idx_lower, obs_indices] == 1.0) & (
-        sorted_wet_profiles[idx_upper, obs_indices] == 1.0
+    is_eligible = numpy.isfinite(sorted_wet_profiles[idx_lower, obs_indices]) & numpy.isfinite(
+        sorted_wet_profiles[idx_upper, obs_indices]
     )
     return observations_dataframe.loc[is_eligible]
 
