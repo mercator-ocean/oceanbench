@@ -185,14 +185,18 @@ def _layout_score(block: dict) -> dict:
     return _score(block, "layout", block["rows"])
 
 
-def _challenger_scores(scores: dict) -> dict:
+def _system_scores(scores: dict, system: str) -> dict:
     return {
-        system: {
-            METRIC_KEYS[block_key]: score
-            for block_key, block in scores["blocks"].items()
-            if (score := _system_score(block, system))
-        }
-        for system in scores["system_order"]
+        METRIC_KEYS[block_key]: score
+        for block_key, block in scores["blocks"].items()
+        if (score := _system_score(block, system))
+    }
+
+
+def _challenger_scores(scores: dict) -> dict:
+    """The systems that carry rows, so a system named by the converter but not yet scored is left out."""
+    return {
+        system: system_scores for system in scores["system_order"] if (system_scores := _system_scores(scores, system))
     }
 
 

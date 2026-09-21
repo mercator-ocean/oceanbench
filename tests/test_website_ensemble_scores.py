@@ -15,6 +15,7 @@ from helpers.build_ensemble_scores_json import (  # noqa: E402
     build_ensemble_scores,
     deterministic_gridded_frame,
     gridded_aggregate_frame,
+    helper_gridded_frame,
     with_gloens_surface,
     with_observation_sidecar,
 )
@@ -135,6 +136,83 @@ def _deterministic_gridded_frame(challenger: str, rmsd: float) -> pd.DataFrame:
                 "scored_cells": 675217,
             }
             for lead_day in range(1, 11)
+        ]
+    )
+
+
+# The variables, depth bins and metric names the class 4 helper writes, one group per display row.
+HELPER_OBSERVATION_GROUPS = (
+    ("sea_water_potential_temperature", "surface"),
+    ("sea_water_salinity", "5-100m"),
+    ("eastward_sea_water_velocity", "15m"),
+)
+
+HELPER_OBSERVATION_VALUES = {
+    "ensemble_mean_rmsd": 0.7771234,
+    "crps_fair": 0.2221234,
+    "ssr_add": 0.6661234,
+}
+
+
+def _helper_class4_frame(
+    challenger: str,
+    lead_days: list[int],
+    start_dates: list[pd.Timestamp],
+    reduced_lead_days: tuple[int, ...] = (),
+) -> pd.DataFrame:
+    """A class 4 helper scores frame, holding the pooled rows and the per-start rows beside them."""
+    pooled = [
+        {
+            "challenger": challenger,
+            "challenger_version": challenger,
+            "year": 2024,
+            "region": region,
+            "metric": metric,
+            "reference": "class4",
+            "variable": variable,
+            "depth": depth,
+            "lead_day": lead_day,
+            "start_date": pd.NaT,
+            "value": value,
+            "unit": "°C",
+            "n": 1000,
+            "oceanbench_version": "0.6.0",
+        }
+        for region in ("global", "tropics")
+        for variable, depth in HELPER_OBSERVATION_GROUPS
+        for lead_day in lead_days
+        for metric, value in HELPER_OBSERVATION_VALUES.items()
+    ]
+    per_start = [
+        {**row, "start_date": pd.Timestamp(start_date), "value": row["value"] + 0.01, "n": 20}
+        for row in pooled
+        for start_date in (start_dates[:-1] if row["lead_day"] in reduced_lead_days else start_dates)
+    ]
+    return pd.DataFrame(pooled + per_start)
+
+
+def _helper_gridded_scores_frame(challenger: str, lead_days: list[int]) -> pd.DataFrame:
+    """A gridded helper scores frame, wide over the metrics and holding both references."""
+    return pd.DataFrame(
+        [
+            {
+                "challenger": challenger,
+                "challenger_version": challenger,
+                "region": "global",
+                "reference": reference,
+                "variable": "sea_water_salinity",
+                "depth": "47.374m",
+                "lead_day": lead_day,
+                "crps_fair": 0.0901234,
+                "ensemble_mean_rmsd": 0.2001234,
+                "ensemble_spread": 0.0801234,
+                "member_rmsd": 0.2201234,
+                "spread_error_ratio": 0.4001234,
+                "start_count": 52,
+                "scored_cells": 619676,
+            }
+            for reference in ("glorys", "glo12")
+            for lead_day in lead_days
         ]
     )
 
@@ -452,3 +530,85 @@ def test_the_observation_rows_read_the_default_depth_bins_and_not_the_campaign_b
 
     # The four default bins in their depth order, and the campaign band beside them is not read.
     assert [row["depth_band"] for row in gloens_rows] == ["0-5 m", "5-100 m", "100-300 m", "300-600 m"]
+
+
+def _built_scores_from_helpers() -> dict:
+    start_dates = list(pd.date_range("2024-01-03", periods=52, freq="7D"))
+    return build_ensemble_scores(
+        _gridded_frame("gloens", list(range(1, 11)), {}),
+        _gridded_frame("glonet2-ens-icp", list(range(1, 10)), {}),
+        deterministic_gridded_frame(_deterministic_gridded_frame("glonet", 0.6661234)),
+        deterministic_gridded_frame(_deterministic_gridded_frame("glo12", 0.5551234)),
+        _class4_frame(list(range(1, 11))),
+        _class4_frame(list(range(1, 11)), rmsd=0.7331234),
+        _class4_frame(list(range(1, 11)), rmsd=0.9441234),
+        _class4_frame(list(range(1, 10)), rmsd=0.9551234),
+        _observation_frame(list(range(1, 11)), ["drifter_sst"]),
+        _observation_frame(list(range(1, 10)), ["drifter_sst"]),
+        {
+            "glowens": _helper_class4_frame("glowens", list(range(1, 11)), start_dates, reduced_lead_days=(10,)),
+        },
+        {
+            "glowens": helper_gridded_frame(_helper_gridded_scores_frame("glowens", list(range(1, 11)))),
+        },
+    )
+
+
+def test_helper_observation_rows_carry_the_display_labels_and_depth_bands() -> None:
+    scores = _built_scores_from_helpers()
+
+    rows = [row for row in scores["blocks"]["observations_rmsd"]["rows"] if row["system"] == "glowens"]
+
+    assert [(row["variable"], row["depth_band"], row["unit"]) for row in rows] == [
+        ("Drifter SST", "Surface", "K"),
+        ("Profile salinity", "5-100 m", "PSU"),
+        ("Eastward current", "15 m", "m s-1"),
+    ]
+    assert rows[0]["system_label"] == "GLOW-ens"
+    assert rows[0]["values"] == [0.7771] * len(OBSERVATION_LEAD_DAYS)
+
+
+def test_helper_observation_rows_read_one_metric_per_block() -> None:
+    scores = _built_scores_from_helpers()
+
+    crps = next(row for row in scores["blocks"]["observations_crps"]["rows"] if row["system"] == "glowens")
+    ratio = next(
+        row for row in scores["blocks"]["observations_spread_error_ratio"]["rows"] if row["system"] == "glowens"
+    )
+
+    assert crps["values"] == [0.2221] * len(OBSERVATION_LEAD_DAYS)
+    assert crps["unit"] == "K"
+    assert ratio["values"] == [0.6661] * len(OBSERVATION_LEAD_DAYS)
+    assert ratio["unit"] == ""
+
+
+def test_helper_observation_rows_count_the_starts_on_the_per_start_rows() -> None:
+    scores = _built_scores_from_helpers()
+
+    rows = [row for row in scores["blocks"]["observations_crps"]["rows"] if row["system"] == "glowens"]
+
+    assert all(row["reduced_start_counts"] == {"10": 51} for row in rows)
+
+
+def test_helper_gridded_rows_read_the_glorys_reference_only() -> None:
+    scores = _built_scores_from_helpers()
+
+    rows = [row for row in scores["blocks"]["gridded_rmsd"]["rows"] if row["system"] == "glowens"]
+    ratio = next(row for row in scores["blocks"]["gridded_spread_error_ratio"]["rows"] if row["system"] == "glowens")
+
+    assert [(row["variable"], row["depth_band"], row["unit"]) for row in rows] == [
+        ("Salinity", "47.374 m", "PSU"),
+    ]
+    assert rows[0]["values"] == [0.2001] * len(GRIDDED_LEAD_DAYS)
+    assert ratio["values"] == [0.4001] * len(GRIDDED_LEAD_DAYS)
+    assert ratio["unit"] == ""
+
+
+def test_helper_scores_leave_the_campaign_sourced_systems_alone() -> None:
+    scores = _built_scores_from_helpers()
+
+    observation_systems = [row["system"] for row in scores["blocks"]["observations_rmsd"]["rows"]]
+    gridded_systems = [row["system"] for row in scores["blocks"]["gridded_rmsd"]["rows"]]
+
+    assert set(observation_systems) == {"glonet", "glo12", "gloens", "glonet2-ens-icp", "glowens"}
+    assert set(gridded_systems) == {"glonet", "glo12", "gloens", "glonet2-ens-icp", "glowens"}

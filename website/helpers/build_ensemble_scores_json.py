@@ -6,6 +6,10 @@
 
 The aggregates are produced once by the evaluation campaigns and are not readable from the website
 build, so this converter is run by hand and its output is committed next to the page.
+
+A system scored by the helper scripts of this branch rather than by a campaign passes its
+``scores.parquet`` instead, on ``--helper-observations-<system>`` and ``--helper-gridded-<system>``,
+and those rows replace the campaign rows of that system.
 """
 
 import argparse
@@ -50,6 +54,12 @@ OBSERVATION_ROW_KEY = ["stream", "region", "depth_band", "lead_day"]
 GRIDDED_FILL_SUFFIX = "-fill.parquet"
 GRIDDED_ROW_KEY = ["variable", "depth", "lead_day", "metric"]
 
+# The helper scores of both axes carry every region and, on the gridded axis, every reference they
+# were run against. The page reads the global rows against GLORYS alone, as the campaign aggregates
+# it replaces already did.
+HELPER_REGION = "global"
+
+
 SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_OUTPUT_PATH = os.path.join(os.path.dirname(SCRIPT_DIRECTORY), "data", "ensemble-scores.json")
 
@@ -64,10 +74,12 @@ GRIDDED_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
 
 GLOENS = "gloens"
 ICP = "glonet2-ens-icp"
+GLOWENS = "glowens"
 GLONET = "glonet"
 GLO12 = "glo12"
 
 DETERMINISTIC_SYSTEMS = [GLONET, GLO12]
+ENSEMBLE_SYSTEMS = [GLOENS, ICP, GLOWENS]
 
 SYSTEMS = {
     GLONET: {
@@ -90,9 +102,14 @@ SYSTEMS = {
         "kind": "Ensemble",
         "description": "GloNet2 machine learning ensemble, 8 members, Wednesday starts.",
     },
+    GLOWENS: {
+        "label": "GLOW-ens",
+        "kind": "Ensemble",
+        "description": "GLOW machine learning ensemble, 16 members, Wednesday starts.",
+    },
 }
 
-SYSTEM_ORDER = [*DETERMINISTIC_SYSTEMS, GLOENS, ICP]
+SYSTEM_ORDER = [*DETERMINISTIC_SYSTEMS, GLOENS, ICP, GLOWENS]
 
 STREAM_LABELS = {
     "drifter_sst": "Drifter SST",
@@ -353,6 +370,56 @@ def with_gridded_fill_beside(aggregate_path: str, frame: pd.DataFrame) -> pd.Dat
     return with_gridded_fill(frame, pd.read_parquet(fill_path))
 
 
+def helper_gridded_frame(scores: pd.DataFrame) -> pd.DataFrame:
+    """Read the gridded helper scores, which are the wide shape the aggregate reader already takes."""
+    kept = scores[(scores["reference"] == GRIDDED_REFERENCE) & (scores["region"] == HELPER_REGION)]
+    return gridded_aggregate_frame(kept)
+
+
+def helper_start_counts(scores: pd.DataFrame) -> dict[tuple, int]:
+    """The scored starts of every observation group, counted on the per-start rows beside the pooled ones.
+
+    The class 4 helper writes one record per start next to the record pooling them, so the start
+    count the page caveats on is read here rather than carried by the pooled row itself.
+    """
+    per_start = scores[scores["start_date"].notna()]
+    counted = per_start.groupby(["variable", "depth", "lead_day"])["start_date"].nunique()
+    return {key: int(count) for key, count in counted.items()}
+
+
+def helper_observation_rows(scores: pd.DataFrame, system_key: str, metric: str, is_ratio: bool) -> list[dict]:
+    """Read the pooled global rows of one class 4 helper scores frame for one metric."""
+    pooled = scores[(scores["region"] == HELPER_REGION) & scores["start_date"].isna() & (scores["metric"] == metric)]
+    start_counts = helper_start_counts(scores)
+    rows = []
+    for (variable, depth), stream in DETERMINISTIC_STREAMS.items():
+        bin_frame = pooled[(pooled["variable"] == variable) & (pooled["depth"] == depth)]
+        if bin_frame.empty:
+            continue
+        bin_frame = bin_frame.set_index("lead_day")
+        values = []
+        reduced_start_counts = {}
+        for lead_day in OBSERVATION_LEAD_DAYS:
+            if lead_day not in bin_frame.index:
+                values.append(None)
+                continue
+            values.append(_rounded(bin_frame.loc[lead_day, "value"]))
+            start_count = start_counts.get((variable, depth, lead_day))
+            if start_count is not None and start_count < FULL_START_COUNT:
+                reduced_start_counts[str(lead_day)] = start_count
+        rows.append(
+            _row(
+                system_key,
+                STREAM_LABELS[stream],
+                DEPTH_BAND_LABELS[depth],
+                "" if is_ratio else STREAM_UNITS[stream],
+                values,
+                reduced_start_counts,
+            )
+        )
+    return rows
+
+
 def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio: bool) -> list[dict]:
     """Read the global rows of one observation space aggregate for one metric column."""
     selected = frame[frame["region"] == "global"]
@@ -433,6 +500,23 @@ def _sorted_observation_rows(rows: list[dict]) -> list[dict]:
     )
 
 
+def ensemble_gridded_rows(
+    campaign_gridded: dict[str, pd.DataFrame],
+    helper_gridded: dict[str, pd.DataFrame],
+    metric: str,
+    is_ratio: bool,
+) -> list[dict]:
+    """Read one gridded metric for every ensemble system, from its helper scores when it has them."""
+    return [
+        row
+        for system_key in ENSEMBLE_SYSTEMS
+        if system_key in helper_gridded or system_key in campaign_gridded
+        for row in gridded_rows(
+            helper_gridded.get(system_key, campaign_gridded.get(system_key)), system_key, metric, is_ratio
+        )
+    ]
+
+
 def build_ensemble_scores(
     gridded_gloens: pd.DataFrame,
     gridded_icp: pd.DataFrame,
@@ -444,17 +528,27 @@ def build_ensemble_scores(
     class4_icp_mean: pd.DataFrame,
     observations_gloens: pd.DataFrame,
     observations_icp: pd.DataFrame,
+    helper_observations: dict[str, pd.DataFrame] = {},
+    helper_gridded: dict[str, pd.DataFrame] = {},
 ) -> dict:
+    campaign_class4_means = {GLOENS: class4_gloens_mean, ICP: class4_icp_mean}
+    campaign_observations = {GLOENS: observations_gloens, ICP: observations_icp}
+    campaign_gridded = {GLOENS: gridded_gloens, ICP: gridded_icp}
+
     observation_rmsd = class4_rows(deterministic_glonet, GLONET)
     observation_rmsd += class4_rows(deterministic_glo12, GLO12)
-    observation_rmsd += class4_rows(class4_gloens_mean, GLOENS)
-    observation_rmsd += class4_rows(class4_icp_mean, ICP)
-
-    observation_crps = observation_rows(observations_gloens, GLOENS, "crps_fair", is_ratio=False)
-    observation_crps += observation_rows(observations_icp, ICP, "crps_fair", is_ratio=False)
-
-    observation_ratio = observation_rows(observations_gloens, GLOENS, "ssr_add", is_ratio=True)
-    observation_ratio += observation_rows(observations_icp, ICP, "ssr_add", is_ratio=True)
+    observation_crps = []
+    observation_ratio = []
+    for system_key in ENSEMBLE_SYSTEMS:
+        helper_scores = helper_observations.get(system_key)
+        if helper_scores is not None:
+            observation_rmsd += helper_observation_rows(helper_scores, system_key, "ensemble_mean_rmsd", is_ratio=False)
+            observation_crps += helper_observation_rows(helper_scores, system_key, "crps_fair", is_ratio=False)
+            observation_ratio += helper_observation_rows(helper_scores, system_key, "ssr_add", is_ratio=True)
+        elif system_key in campaign_observations:
+            observation_rmsd += class4_rows(campaign_class4_means[system_key], system_key)
+            observation_crps += observation_rows(campaign_observations[system_key], system_key, "crps_fair", False)
+            observation_ratio += observation_rows(campaign_observations[system_key], system_key, "ssr_add", True)
 
     blocks = {
         "observations_rmsd": {
@@ -475,8 +569,7 @@ def build_ensemble_scores(
                 "reference; weight the observation tables."
             ),
             "lead_days": GRIDDED_LEAD_DAYS,
-            "rows": gridded_rows(gridded_gloens, GLOENS, "ensemble_mean_rmsd", is_ratio=False)
-            + gridded_rows(gridded_icp, ICP, "ensemble_mean_rmsd", is_ratio=False)
+            "rows": ensemble_gridded_rows(campaign_gridded, helper_gridded, "ensemble_mean_rmsd", is_ratio=False)
             + gridded_rows(gridded_glonet, GLONET, "ensemble_mean_rmsd", is_ratio=False)
             + gridded_rows(gridded_glo12, GLO12, "ensemble_mean_rmsd", is_ratio=False),
         },
@@ -484,8 +577,7 @@ def build_ensemble_scores(
             "title": "Fair continuous ranked probability score against GLORYS",
             "note": "Lower is better, in the unit of the variable.",
             "lead_days": GRIDDED_LEAD_DAYS,
-            "rows": gridded_rows(gridded_gloens, GLOENS, "crps_fair", is_ratio=False)
-            + gridded_rows(gridded_icp, ICP, "crps_fair", is_ratio=False),
+            "rows": ensemble_gridded_rows(campaign_gridded, helper_gridded, "crps_fair", is_ratio=False),
         },
         "gridded_spread_error_ratio": {
             "title": "Spread error ratio against GLORYS",
@@ -494,8 +586,7 @@ def build_ensemble_scores(
                 "analysis error, so it reads low; agreement with the analysis, not a calibration test."
             ),
             "lead_days": GRIDDED_LEAD_DAYS,
-            "rows": gridded_rows(gridded_gloens, GLOENS, "spread_error_ratio", is_ratio=True)
-            + gridded_rows(gridded_icp, ICP, "spread_error_ratio", is_ratio=True),
+            "rows": ensemble_gridded_rows(campaign_gridded, helper_gridded, "spread_error_ratio", is_ratio=True),
         },
         "observations_crps": {
             "title": "Fair continuous ranked probability score against observations",
@@ -537,6 +628,20 @@ def read_observation_aggregate(path: str) -> pd.DataFrame:
     return with_observation_sidecar(frame, pd.read_parquet(sidecar_path))
 
 
+def _helper_destination(prefix: str, system_key: str) -> str:
+    return f"{prefix}-{system_key}".replace("-", "_")
+
+
+def _add_helper_arguments(parser: argparse.ArgumentParser, prefix: str) -> None:
+    for system_key in ENSEMBLE_SYSTEMS:
+        parser.add_argument(f"--{prefix}-{system_key}", dest=_helper_destination(prefix, system_key), default=None)
+
+
+def _helper_frames(arguments: argparse.Namespace, prefix: str, read) -> dict[str, pd.DataFrame]:
+    paths = {system_key: getattr(arguments, _helper_destination(prefix, system_key)) for system_key in ENSEMBLE_SYSTEMS}
+    return {system_key: read(path) for system_key, path in paths.items() if path is not None}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gridded-gloens", default=DEFAULT_GRIDDED_GLOENS_PATH)
@@ -550,6 +655,8 @@ def main() -> None:
     parser.add_argument("--gloens-surface", default=DEFAULT_GLOENS_SURFACE_PATH)
     parser.add_argument("--observations-gloens", default=DEFAULT_OBSERVATIONS_GLOENS_PATH)
     parser.add_argument("--observations-icp", default=DEFAULT_OBSERVATIONS_ICP_PATH)
+    _add_helper_arguments(parser, "helper-observations")
+    _add_helper_arguments(parser, "helper-gridded")
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
     arguments = parser.parse_args()
 
@@ -572,6 +679,8 @@ def main() -> None:
         pd.read_parquet(arguments.class4_icp_mean),
         read_observation_aggregate(arguments.observations_gloens),
         read_observation_aggregate(arguments.observations_icp),
+        _helper_frames(arguments, "helper-observations", pd.read_parquet),
+        _helper_frames(arguments, "helper-gridded", lambda path: helper_gridded_frame(pd.read_parquet(path))),
     )
 
     os.makedirs(os.path.dirname(arguments.output), exist_ok=True)
