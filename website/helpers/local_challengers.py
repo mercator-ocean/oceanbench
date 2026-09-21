@@ -19,6 +19,9 @@ LOCAL_CHALLENGERS = {
     "0.5.0": {
         "hclimrep": ["global"],
     },
+    "0.6.0": {
+        "glow": ["global"],
+    },
 }
 
 
