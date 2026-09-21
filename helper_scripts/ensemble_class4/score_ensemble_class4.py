@@ -207,7 +207,12 @@ def _open_challenger_start(
     """The challenger dataset of one start, shaped as the library reads it, and its first day."""
     if specification.store_layout == STORE_GLOENS_WEEK:
         first_day = start_label + GLOENS_START_LABEL_TO_FIRST_DAY
-        week = _open_gloens_forecast_week(first_day.to_pydatetime())
+        # The GloEns store holds far more days than the benchmark scores, and the library opener
+        # hands back a week whose time axis is already the lead day index, so the horizon is cut
+        # on that axis rather than on ``time`` as the other two layouts cut it.
+        week = _open_gloens_forecast_week(first_day.to_pydatetime()).isel(
+            {Dimension.LEAD_DAY_INDEX.key(): slice(0, specification.lead_days_count)}
+        )
     elif specification.store_layout == STORE_LOCAL_ROOT:
         first_day = start_label
         week = _open_local_root_week(specification, start_label)

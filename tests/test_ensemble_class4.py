@@ -961,7 +961,9 @@ def test_rank_histograms_are_keyed_on_the_group_and_hold_every_observation():
     histograms = ensemble_class4_rank_histograms([matchup])
 
     assert set(histograms) == {
-        (matchup.variable, "surface", lead_day, mode) for lead_day in (0, 1) for mode in ("member", "obs")
+        (matchup.variable, "surface", lead_day, mode)
+        for lead_day in (FIRST_LEAD_DAY, FIRST_LEAD_DAY + 1)
+        for mode in ("member", "obs")
     }
     for counts in histograms.values():
         assert counts.size == matchup.member_count + 1

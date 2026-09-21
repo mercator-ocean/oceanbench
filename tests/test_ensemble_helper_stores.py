@@ -157,3 +157,36 @@ def test_the_gridded_helper_gives_a_deterministic_store_a_member_axis_of_length_
     dataset, _ = gridded_helper._open_challenger(specification, start_date, "thetao")
 
     assert dataset.sizes["member"] == 1
+
+
+def _tiny_gloens_week(lead_days_count: int, member_count: int = 2) -> xarray.Dataset:
+    """A GloEns week as the library opener hands it back, with its time axis already an index."""
+    latitude = numpy.array([-0.25, 0.25])
+    longitude = numpy.array([0.25, 0.75])
+    depth = numpy.array([0.494, 47.37])
+    shape = (member_count, lead_days_count, len(depth), len(latitude), len(longitude))
+    surface_shape = (member_count, lead_days_count, len(latitude), len(longitude))
+    dimensions = ("member", "lead_day_index", "depth", "latitude", "longitude")
+    return xarray.Dataset(
+        {
+            "thetao": (dimensions, numpy.full(shape, 12.0)),
+            "zos": (tuple(name for name in dimensions if name != "depth"), numpy.full(surface_shape, 0.1)),
+        },
+        coords={
+            "member": numpy.arange(member_count),
+            "lead_day_index": numpy.arange(lead_days_count),
+            "depth": depth,
+            "latitude": latitude,
+            "longitude": longitude,
+        },
+    )
+
+
+def test_the_class4_helper_cuts_the_gloens_week_to_the_scored_horizon(class4_helper, monkeypatch):
+    start_label = pandas.Timestamp("2024-01-04")
+    monkeypatch.setattr(class4_helper, "_open_gloens_forecast_week", lambda _: _tiny_gloens_week(27))
+
+    challenger, first_day = class4_helper._open_challenger_start(class4_helper.CHALLENGERS["gloens"], start_label)
+
+    assert first_day == start_label + class4_helper.GLOENS_START_LABEL_TO_FIRST_DAY
+    assert challenger.sizes["lead_day_index"] == class4_helper.CHALLENGERS["gloens"].lead_days_count == 10

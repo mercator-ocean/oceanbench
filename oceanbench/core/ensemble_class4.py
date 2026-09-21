@@ -926,6 +926,9 @@ def ensemble_class4_rank_histograms(
 ) -> dict[tuple[str, str, int, str], numpy.ndarray]:
     """Rank histograms keyed on ``(variable, depth bin, lead day, dressing mode)``.
 
+    The lead day of the key is the one the score records carry, counting the first day a
+    forecast predicts as day one, so a histogram and a score of the same group agree.
+
     Histograms are not scalar scores and do not belong in the score records, so they are
     returned on their own. With no sigma lookup the dressing is a zero-width draw, which
     leaves the plain rank histogram.
@@ -942,8 +945,9 @@ def ensemble_class4_rank_histograms(
             if sigma_total is None:
                 sigma_total = numpy.zeros(len(group))
             observation_values = group["observation_value"].to_numpy("float64")
+            scored_lead_day = int(lead_day) + FIRST_LEAD_DAY
             for mode in modes:
-                histograms[(matchup.variable, depth_bin, int(lead_day), mode)] = dressed_rank_histogram(
+                histograms[(matchup.variable, depth_bin, scored_lead_day, mode)] = dressed_rank_histogram(
                     group_members,
                     observation_values,
                     sigma_total,
