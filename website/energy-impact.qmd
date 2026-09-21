@@ -734,6 +734,14 @@ body, .quarto-container { font-family: 'DM Sans', sans-serif !important; }
   }
 
 }
+
+.ei-math {
+  font-family: "Cambria Math", "STIX Two Math", "Times New Roman", serif;
+  font-size: 1.2rem;
+  text-align: center;
+  margin: 1.5rem 0;
+  line-height: 1.8;
+}
 </style>
 """
 HTML(page_css)
@@ -1654,17 +1662,17 @@ Results are not captured the same way everywhere, which matters when comparing i
       <br>
       For a single-GPU run, GPU consumption accounts for 49% of the total, while CPU and RAM account for the remaining 51%:
       <br>
-      E₁ = (0.51 + 0.49) × t = t
+      <p class="ei-math">E₁ = (0.51 + 0.49) × t = t</p>
       <br>
       With two GPUs, the CPU/RAM contribution remains unchanged, while GPU consumption potentially doubles. With a speedup of <em>s</em>, the inference time becomes t/s:
       <br>
-      E₂ = (0.51 + 0.49 × 2) × t/s = 1.49 × t/s
+      <p class="ei-math">E₂ = (0.51 + 0.49 × 2) × t/s = 1.49 × t/s</p>
       <br>
       Under the hypothesis (GPU consumption doubles using 2 GPUs), a speedup of at least 1.49× is therefore required for the two-GPU configuration to reduce total energy consumption:
       <br>
-      s ≥ 1.49
+      <p class="ei-math">s ≥ 1.49</p>
       <br>
-      Two- and three-GPU configurations were tested on GLONET, one of the models supporting multi-GPU execution, to determine whether the additional parallelism actually resulted in lower overall energy consumption.
+      Two- and three-GPU configurations were tested on GLONET, one of the models supporting (with a small code modification) multi-GPU execution, to determine whether the additional parallelism actually resulted in lower overall energy consumption.
     </p>
 
   <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:1rem;">
@@ -1685,6 +1693,15 @@ Results are not captured the same way everywhere, which matters when comparing i
     The speedup achieved with two GPUs reaches only 1.29×, which is below the 1.49× threshold required to reduce total energy consumption, as shown in the plots.
     The multi-GPU configuration therefore does not reduce energy consumption in its current state. The time saved through parallelization is not sufficient to offset the additional power consumed by the extra GPUs.
   </p>
+
+  <div class="ei-callout">
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <div><strong>Note:</strong>The speedup depends on how the workload is parallelized across GPUs. The results may differ when using another AI model, as it may have a different parallelization strategy.</div>
+  </div>
+
+
     
 
   <h2 class="ei-title">
