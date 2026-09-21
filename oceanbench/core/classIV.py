@@ -55,7 +55,7 @@ def _convert_forecast_ssh_to_sla(
 def rmsd_class4_validation(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    surface_ocean_mask: xarray.DataArray,
+    ocean_mask: xarray.DataArray,
     variables: list[Variable],
 ) -> pandas.DataFrame:
     challenger = rename_dataset_with_standard_names(challenger_dataset)
@@ -77,7 +77,7 @@ def rmsd_class4_validation(
 
         observations_dataframe = gate_class4_observations_to_reference_population(
             observations_dataframe.dropna(subset=["observation_value"]),
-            surface_ocean_mask,
+            ocean_mask,
         )
         if observations_dataframe.empty:
             continue

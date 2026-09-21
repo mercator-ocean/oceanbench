@@ -45,14 +45,15 @@ def test_bracket_interpolation_propagates_nan_from_the_shallower_bracketing_leve
     assert interpolated[1] == 2.5
 
 
-def test_bracket_interpolation_falls_back_to_the_shallower_level_above_the_seabed() -> None:
+def test_bracket_interpolation_propagates_nan_from_the_deeper_bracketing_level() -> None:
     interpolated = _interpolate_vertically_bracket(
-        _profiles([1.0, 2.0, numpy.nan]),
+        _profiles([1.0, 2.0, numpy.nan], [1.0, 2.0, 3.0]),
         MODEL_DEPTHS,
-        numpy.array([25.0]),
+        numpy.array([25.0, 25.0]),
     )
 
-    numpy.testing.assert_array_equal(interpolated, [2.0])
+    assert numpy.isnan(interpolated[0])
+    assert interpolated[1] == 2.5
 
 
 def test_bracket_interpolation_returns_nan_when_the_whole_column_is_missing() -> None:
@@ -157,15 +158,17 @@ LONGITUDES = numpy.array([10.0, 11.0, 12.0])
 FIRST_DAYS = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
 
 
-def _salinity_dataset(depths: numpy.ndarray, land_column: bool) -> xarray.Dataset:
-    values = numpy.broadcast_to(
-        35.0 + depths[:, numpy.newaxis, numpy.newaxis] / 10.0,
-        (len(depths), len(LATITUDES), len(LONGITUDES)),
-    ).astype(float)
-    values = numpy.where(depths[:, numpy.newaxis, numpy.newaxis] > 40.0, numpy.nan, values)
-    if land_column:
-        values = values.copy()
-        values[:, 0, 0] = numpy.nan
+def _salinity_dataset(depths: numpy.ndarray, missing_column: bool) -> xarray.Dataset:
+    values = (
+        numpy.broadcast_to(
+            35.0 + depths[:, numpy.newaxis, numpy.newaxis] / 10.0,
+            (len(depths), len(LATITUDES), len(LONGITUDES)),
+        )
+        .astype(float)
+        .copy()
+    )
+    if missing_column:
+        values[:, 2, 2] = numpy.nan
     return xarray.Dataset(
         {
             Variable.SEA_WATER_SALINITY.key(): (
@@ -189,13 +192,20 @@ def _salinity_dataset(depths: numpy.ndarray, land_column: bool) -> xarray.Datase
     )
 
 
-def _surface_ocean_mask() -> xarray.DataArray:
-    values = numpy.full((len(LATITUDES), len(LONGITUDES)), 15.0)
-    values[0, 2] = numpy.nan
+MASK_DEPTHS = numpy.array([0.5, 10.0, 50.0])
+
+
+def _ocean_mask() -> xarray.DataArray:
+    values = numpy.full((len(MASK_DEPTHS), len(LATITUDES), len(LONGITUDES)), True)
+    values[2, 0, 2] = False
     return xarray.DataArray(
         values,
-        dims=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
-        coords={Dimension.LATITUDE.key(): LATITUDES, Dimension.LONGITUDE.key(): LONGITUDES},
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): MASK_DEPTHS,
+            Dimension.LATITUDE.key(): LATITUDES,
+            Dimension.LONGITUDE.key(): LONGITUDES,
+        },
         name=Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
     )
 
@@ -219,12 +229,12 @@ def test_challengers_with_different_vertical_axes_share_the_scored_observation_p
 
     formatted_tables = [
         rmsd_class4_validation(
-            challenger_dataset=_salinity_dataset(challenger_depths, land_column=land_column),
+            challenger_dataset=_salinity_dataset(challenger_depths, missing_column=missing_column),
             reference_dataset=observations_dataset,
-            surface_ocean_mask=_surface_ocean_mask(),
+            ocean_mask=_ocean_mask(),
             variables=[Variable.SEA_WATER_SALINITY],
         )
-        for challenger_depths, land_column in [
+        for challenger_depths, missing_column in [
             (numpy.array([0.5, 10.0, 50.0]), False),
             (numpy.array([0.5, 47.0]), True),
         ]

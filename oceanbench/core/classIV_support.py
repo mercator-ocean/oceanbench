@@ -251,6 +251,19 @@ def prepare_class4_model_variable(
     return _convert_forecast_ssh_to_sla(model_variable, variable_key)
 
 
+def _bracketing_level_indices(
+    sorted_depths: numpy.ndarray,
+    target_depths: numpy.ndarray,
+) -> tuple[numpy.ndarray, numpy.ndarray]:
+    insert_idx = numpy.searchsorted(sorted_depths, target_depths)
+    idx_upper = numpy.clip(insert_idx, 0, len(sorted_depths) - 1)
+    idx_lower = numpy.clip(insert_idx - 1, 0, len(sorted_depths) - 1)
+
+    exact_mask = sorted_depths[idx_upper] == target_depths
+    idx_lower = numpy.where(exact_mask, idx_upper, idx_lower)
+    return idx_lower, idx_upper
+
+
 def _interpolate_vertically_bracket(
     profiles: numpy.ndarray,
     model_depths: numpy.ndarray,
@@ -264,12 +277,7 @@ def _interpolate_vertically_bracket(
     sorted_depths = model_depths[sort_order]
     sorted_profiles = profiles[sort_order, :]
 
-    insert_idx = numpy.searchsorted(sorted_depths, target_depths)
-    idx_upper = numpy.clip(insert_idx, 0, len(sorted_depths) - 1)
-    idx_lower = numpy.clip(insert_idx - 1, 0, len(sorted_depths) - 1)
-
-    exact_mask = sorted_depths[idx_upper] == target_depths
-    idx_lower = numpy.where(exact_mask, idx_upper, idx_lower)
+    idx_lower, idx_upper = _bracketing_level_indices(sorted_depths, target_depths)
 
     obs_indices = numpy.arange(observation_count)
     lower_values = sorted_profiles[idx_lower, obs_indices]
@@ -289,12 +297,8 @@ def _interpolate_vertically_bracket(
             upper_values[different] - lower_values[different]
         )
 
-    shallower_is_missing = numpy.isnan(lower_values)
-    deeper_is_missing = numpy.isnan(upper_values)
-    bracket_is_valid = ~shallower_is_missing & ~deeper_is_missing
-    seabed_fallback = deeper_is_missing & ~shallower_is_missing
+    bracket_is_valid = ~numpy.isnan(lower_values) & ~numpy.isnan(upper_values)
     result[bracket_is_valid] = interpolated[bracket_is_valid]
-    result[seabed_fallback] = lower_values[seabed_fallback]
     return result
 
 
@@ -408,18 +412,35 @@ def interpolate_class4_model_to_observations(
 
 def gate_class4_observations_to_reference_population(
     observations_dataframe: pandas.DataFrame,
-    surface_ocean_mask: xarray.DataArray,
+    ocean_mask: xarray.DataArray,
 ) -> pandas.DataFrame:
     """
-    Keep only the observations lying over the GLO12 analysis surface ocean.
+    Keep only the observations the GLO12 analysis can bracket on the canonical depth grid.
 
-    The mask goes through the same horizontal linear interpolation as a challenger, so the
-    coastal halo is identical, and the scored population no longer depends on the challenger
-    vertical axis: with the seabed fallback a challenger column is usable as soon as its
-    shallowest level is wet.
+    The mask goes through the same horizontal linear interpolation as a challenger, so an
+    observation is over the ocean only when the four surrounding GLO12 cells are wet, and it is
+    kept only when both of its bracketing levels on the canonical grid are wet there. The scored
+    population therefore does not depend on the challenger vertical axis.
     """
-    surface_values = _horizontally_interpolated_profiles(surface_ocean_mask, observations_dataframe)
-    return observations_dataframe.reset_index(drop=True).loc[numpy.isfinite(surface_values)]
+    observations_dataframe = observations_dataframe.reset_index(drop=True)
+    wet_profiles = _horizontally_interpolated_profiles(
+        ocean_mask.astype(float),
+        observations_dataframe,
+    )
+    mask_depths = ocean_mask[Dimension.DEPTH.key()].values
+    sort_order = numpy.argsort(mask_depths)
+    sorted_depths = mask_depths[sort_order]
+    sorted_wet_profiles = wet_profiles[sort_order, :]
+
+    idx_lower, idx_upper = _bracketing_level_indices(
+        sorted_depths,
+        observations_dataframe[Dimension.DEPTH.key()].values,
+    )
+    obs_indices = numpy.arange(len(observations_dataframe))
+    is_eligible = (sorted_wet_profiles[idx_lower, obs_indices] == 1.0) & (
+        sorted_wet_profiles[idx_upper, obs_indices] == 1.0
+    )
+    return observations_dataframe.loc[is_eligible]
 
 
 def _compute_rmsd_table(
