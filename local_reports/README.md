@@ -40,7 +40,8 @@ out of that notebook. The website reads the notebook, not the CSV files; they ar
 kept for provenance.
 
 The earlier pre-remask report is kept under `local_reports/withdrawn/0.6.0/` for
-reference.
+reference. The `tables/glowcascade_v4_nofilter.*.csv` files and their license
+sidecars belong to that withdrawn report.
 
 ## hclimrep
 
