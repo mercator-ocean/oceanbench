@@ -15,56 +15,32 @@ Nothing here is uploaded anywhere.
 
 ## glow
 
-`0.6.0/glow.global.report.ipynb` is the corrected re-masked run, and the earlier
-report is kept under `local_reports/withdrawn/0.6.0/` for reference.
+`0.6.0/glow.global.report.ipynb` is a local evaluation of GLOW run
+`glowcascade_v5_ring`, a 930M parameter cascade. It is not an official submission.
 
-`withdrawn/0.6.0/glow.global.report.ipynb` is a local evaluation of run
-`glowcascade_v4_nofilter`: all 52 Wednesday challenger starts of 2024, 20240103
-through 20241225, each initialised from the as-issued GLO12 nowcast of the Tuesday
-before it, quarter degree, not an official submission.
+Lead 1 comes from the annealed checkpoint, step 87616, md5
+`5215b85c13f7bb356ff38235286abc70`. Leads 2 to 9 come from the ring-clean ladder
+checkpoint, step 2400, md5 `8ce27dab259d588e4ba9030c6d51dc17`, switched in after
+lead 1. Both use EMA weights and the equatorial notch is off.
 
-`glowcascade_v4_nofilter` is the `glowcascade_v4` recipe with the equatorial notch
-turned off, that is the rollout run without `--eqfilter`. That is the configuration
-GLOW actually serves, so the preview entry now matches the served model. The two
-checkpoints and everything else are the same:
+It covers all 52 Wednesday starts of 2024, 20240103 through 20241225, nine scored
+lead days, forced with the as-issued IFS package and initialised from the as-issued
+GLO12 nowcast, with a zos datum shift of 0.0.
 
-- lead 1 from the v4 anneal checkpoint, step 87616
-  (`glow930m_scratch_v4/runs/scratch_v4/keep_epochs/ckpt_step00087616.pt`)
-- leads 2 to 9 from the v4 ladder h5 checkpoint, step 1869, switched in after lead 1
-  (`eqfilter_v2/stage/ckpt_ladder_step00001869.pt`)
+The forecast stores are exported on the canonical 672x1440 grid with 21 serve
+levels. Since 2026-09-21 every store is masked level by level with the combined
+GLO12 and GLORYS wet mask, taking the first reference level at or deeper than the
+GLOW level, so no below seabed values are served.
 
-The notch is not a small thing in the box it acts on: the in-box band power median
-runs 58 to 181 times higher without it for temperature, 130 to 232 for the zonal
-current, and 85 to 403 for sea surface height, growing with lead. It is the headline
-scores that barely move, because the box is a small part of the global domain.
+The harness that produced this notebook is oceanbench `main` 7e5ec87, the pending
+0.6.0, run under a local venv.
 
-It replaces the `glowcascade_v4` entry that stood here before; only one GLOW report
-is kept at a time, the website shows a single file per challenger. On the mean of
-the nine metric tables the two runs sit 0.012 percent apart, the no-filter run very
-slightly the worse of the two.
+`tables/glowcascade_v5_ring_060_remask.*.csv` holds the nine metric tables read back
+out of that notebook. The website reads the notebook, not the CSV files; they are
+kept for provenance.
 
-It scores NINE lead days, not ten. The IFS forecast package that forces the run
-carries lead_day_index 0..9, so the tenth forecast day would be driven by persisted
-lead 9 forcing rather than by a real forecast. The entry stops at the nine days a
-real IFS forecast covers. The forecast store still holds ten days per start; the
-challenger module drops the last time step on the way in, nothing was recomputed.
-Both harnesses accept a nine day submission natively: seven of the nine metrics
-return lead days 1 to 9 and the two Lagrangian metrics return lead days 2 to 8, with
-no empty cells. Beside a ten day baseline the website simply leaves the lead 10 cell
-blank.
-
-The harness that produced this notebook is oceanbench `origin/main` 7e5ec87, the
-pending 0.6.0; its installed dist-info still stamps `__version__` as 0.5.1, so the
-first cell of the notebook reads 0.5.1. The observations metric therefore comes from
-the observations-v2 basis, which is why its table carries an observation count column
-and lower current errors than the earlier 0.5.1 scored entry did. The file sits in the
-0.6.0 directory because that key is what places a system in the 0.6.0 leaderboard
-column, which is the default of this preview index, so this entry appears next to
-systems rescored with 0.6.0, the same harness basis it was scored with.
-
-`tables/glowcascade_v4_nofilter.*.csv` holds the nine metric tables read back out of
-that notebook. The website reads the notebook, not the CSV files; they are kept for
-provenance.
+The earlier pre-remask report is kept under `local_reports/withdrawn/0.6.0/` for
+reference.
 
 ## hclimrep
 
