@@ -24,6 +24,7 @@ from oceanbench.core.dataset_source import with_dataset_source
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.ensemble_class4 import (
     ENSEMBLE_DIMENSION,
+    FIRST_LEAD_DAY,
     METRIC_CRPS_FAIR,
     METRIC_ENSEMBLE_MEAN_RMSD,
     METRIC_ENSEMBLE_SPREAD,
@@ -874,7 +875,8 @@ def _synthetic_matchup(observation_count: int = 60, member_count: int = 8) -> Cl
             Dimension.LONGITUDE.key(): numpy.full(observation_count, -179.9),
             "first_day": numpy.repeat(first_days, observation_count // 2),
             Dimension.DEPTH.key(): numpy.zeros(observation_count),
-            "lead_day": numpy.tile([1, 2], observation_count // 2),
+            # The matchup dataframe carries the zero-based offset from the first day.
+            "lead_day": numpy.tile([0, 1], observation_count // 2),
             "depth_bin": "surface",
         }
     )
@@ -910,6 +912,15 @@ def test_records_carry_every_metric_per_start_and_an_aggregate():
     assert set(dataframe[dataframe["metric"] == METRIC_SSR_UNCORRECTED]["unit"]) == {"1"}
 
 
+def test_records_write_one_based_lead_days():
+    records = ensemble_class4_records([_synthetic_matchup()], context=_run_context(), reference="class4")
+
+    dataframe = records_to_dataframe(records)
+
+    # The matchup offsets are 0 and 1, so the first forecast day is written as lead day 1.
+    assert sorted(dataframe["lead_day"].unique()) == [1, 2]
+
+
 def test_records_gain_the_sigma_aware_ratio_only_with_a_sigma_lookup(sigma_lookup):
     without_sigma = records_to_dataframe(
         ensemble_class4_records([_synthetic_matchup()], context=_run_context(), reference="class4")
@@ -931,7 +942,7 @@ def test_records_gain_the_sigma_aware_ratio_only_with_a_sigma_lookup(sigma_looku
 def test_records_drop_rows_where_a_member_is_missing():
     matchup = _synthetic_matchup()
     matchup.member_values[0, 3] = numpy.nan
-    lead_day = int(matchup.observations.loc[0, "lead_day"])
+    lead_day = int(matchup.observations.loc[0, "lead_day"]) + FIRST_LEAD_DAY
     first_day = matchup.observations.loc[0, "first_day"]
 
     dataframe = records_to_dataframe(ensemble_class4_records([matchup], context=_run_context(), reference="class4"))
@@ -950,7 +961,7 @@ def test_rank_histograms_are_keyed_on_the_group_and_hold_every_observation():
     histograms = ensemble_class4_rank_histograms([matchup])
 
     assert set(histograms) == {
-        (matchup.variable, "surface", lead_day, mode) for lead_day in (1, 2) for mode in ("member", "obs")
+        (matchup.variable, "surface", lead_day, mode) for lead_day in (0, 1) for mode in ("member", "obs")
     }
     for counts in histograms.values():
         assert counts.size == matchup.member_count + 1

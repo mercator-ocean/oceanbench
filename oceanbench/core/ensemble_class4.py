@@ -103,6 +103,11 @@ METRIC_SIGMA_TOTAL_RMS = "sigma_total_rms"
 
 RATIO_UNIT = "1"
 
+#: Lead day written for the first day a forecast predicts. The Class IV matchup dataframe
+#: carries the zero-based offset from the first day, while the gridded axis and the mainline
+#: tables label that day as lead day 1, so records add this offset.
+FIRST_LEAD_DAY = 1
+
 #: Dressing draws averaged into each rank histogram. One draw makes the histogram itself a
 #: random variable at the same order as the signal in the end bins; four cuts that noise in
 #: half at negligible cost. The campaign scorer uses the same number.
@@ -865,6 +870,11 @@ def ensemble_class4_records(
     pooling weights each observation once. This is the one place the observation-space axis
     aggregates differently from the gridded one, where every start covers the same grid and
     the per-start roots are averaged.
+
+    Lead days are written one-based, so lead day 1 is the first day the forecast predicts,
+    which is the convention of the gridded axis and of the mainline tables built with
+    :func:`oceanbench.core.lead_day_utils.lead_day_labels`. The matchup dataframe carries the
+    raw zero-based offset from the first day, so the offset is shifted here.
     """
     records = []
     for matchup in matchups:
@@ -881,7 +891,7 @@ def ensemble_class4_records(
                 reference=reference,
                 variable=matchup.variable,
                 depth_bin=depth_bin,
-                lead_day=int(lead_day),
+                lead_day=int(lead_day) + FIRST_LEAD_DAY,
                 start_date=None,
                 observation_count=len(group),
             )
@@ -899,7 +909,7 @@ def ensemble_class4_records(
                     reference=reference,
                     variable=matchup.variable,
                     depth_bin=depth_bin,
-                    lead_day=int(lead_day),
+                    lead_day=int(lead_day) + FIRST_LEAD_DAY,
                     start_date=start_date,
                     observation_count=len(start_group),
                 )
