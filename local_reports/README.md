@@ -15,7 +15,10 @@ Nothing here is uploaded anywhere.
 
 ## glow
 
-`0.6.0/glow.global.report.ipynb` is a local evaluation of run
+This local report is withdrawn from the preview website pending a rescoring, and the
+notebook now lives under `local_reports/withdrawn/0.6.0/`.
+
+`withdrawn/0.6.0/glow.global.report.ipynb` is a local evaluation of run
 `glowcascade_v4_nofilter`: all 52 Wednesday challenger starts of 2024, 20240103
 through 20241225, each initialised from the as-issued GLO12 nowcast of the Tuesday
 before it, quarter degree, not an official submission.

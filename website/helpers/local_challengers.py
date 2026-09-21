@@ -16,9 +16,6 @@ LOCAL_REPORTS_DIRECTORY = os.path.join(_REPOSITORY_ROOT, "local_reports")
 
 # version -> challenger name -> report file name inside LOCAL_REPORTS_DIRECTORY/<version>
 LOCAL_CHALLENGERS = {
-    "0.6.0": {
-        "glow": ["global"],
-    },
     "0.5.0": {
         "hclimrep": ["global"],
     },
