@@ -34,7 +34,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 ### Added
 
 - The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
-- Class IV scores a challenger independent observation population, defined as the observations with a valid bracketing pair of levels on the canonical GLO12 depth grid inside the GLO12 ocean mask. The population is shared, but the RMSD support is not: each challenger's RMSD averages over the eligible observations where that challenger has a finite value. The `Missing` column is the size of that gap for that challenger at the first lead day, and `Observations` is also counted at the first lead day.
+- Class IV scores the observations that lie between two wet OceanBench standard depths (the six depths listed in the evaluation methods) in the GLO12 analysis; the population is therefore the same for every challenger. A challenger value missing inside that population is reported in the `Missing` column. The `Missing` column is the size of that gap for that challenger at the first lead day, and `Observations` is also counted at the first lead day.
 
 ## 0.5.1 - 2026-09-02
 

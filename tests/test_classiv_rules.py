@@ -278,13 +278,9 @@ def test_ocean_mask_depths_are_glo12_native_levels() -> None:
         0.494025,
         47.37369,
         92.32607,
-        155.85069,
         222.47520,
         318.12741,
-        380.21301,
-        453.93771,
         541.08893,
-        643.56677,
     ]
 
     numpy.testing.assert_allclose(OCEAN_MASK_DEPTHS, expected_native_levels, atol=1e-3)

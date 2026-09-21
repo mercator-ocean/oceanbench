@@ -27,22 +27,17 @@ logger.setLevel(level=logging.WARNING)
 
 _GLO12_ANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
 
-# Canonical GLO12 depth grid used to define the Class IV observation population. These are the
-# GLO12 native levels down to the first one below the deepest Class IV depth bin. The axis ends at
-# 643.57 because temperature and salinity observations deeper than 600 m are binned out before the
-# gate, so no observation can ever reach the next native level.
+# The six OceanBench standard depths, on the native GLO12 levels, used to define the Class IV
+# observation population. The population is defined on the documented standard depths so every
+# challenger scores the same observations with the same support.
 OCEAN_MASK_DEPTHS = numpy.array(
     [
         0.494025,
         47.37369,
         92.32607,
-        155.85069,
         222.47520,
         318.12741,
-        380.21301,
-        453.93771,
         541.08893,
-        643.56677,
     ]
 )
 
