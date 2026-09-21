@@ -13,9 +13,11 @@ from oceanbench.core.classIV_support import (
     _convert_forecast_ssh_to_sla,
     _interpolate_vertically_bracket,
     format_class4_results,
+    gate_class4_observations_to_reference_population,
 )
 from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.references.glo12 import OCEAN_MASK_DEPTHS
 
 MODEL_DEPTHS = numpy.array([10.0, 20.0, 30.0])
 
@@ -243,3 +245,46 @@ def test_challengers_with_different_vertical_axes_share_the_scored_observation_p
     assert [table["Observations"].tolist() for table in formatted_tables] == [[2], [2]]
     assert [table["Missing"].tolist() for table in formatted_tables] == [[0], [1]]
     assert [table.index.tolist() for table in formatted_tables] == [["Salinity (PSU) [sea_water_salinity]{5-100m}"]] * 2
+
+
+def _gated_depths(latitudes: list[float], longitudes: list[float], depths: list[float]) -> list[float]:
+    observations_dataframe = pandas.DataFrame(
+        {
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+            Dimension.DEPTH.key(): depths,
+        }
+    )
+    gated = gate_class4_observations_to_reference_population(observations_dataframe, _ocean_mask())
+    return gated.index.tolist()
+
+
+def test_gate_keeps_a_surface_observation_where_the_first_mask_level_is_wet() -> None:
+    # Sea level anomaly is scored on a single fake level at depth zero, so both bracketing indices
+    # fall on the first mask level.
+    assert _gated_depths([0.0, 0.0], [10.0, 12.0], [0.0, 0.0]) == [0, 1]
+
+
+def test_gate_drops_an_observation_outside_the_mask_horizontal_range() -> None:
+    assert _gated_depths([0.5, 5.0], [10.5, 10.5], [20.0, 20.0]) == [0]
+
+
+def test_gate_clamps_an_observation_deeper_than_the_last_mask_level_to_that_level() -> None:
+    assert _gated_depths([0.0, 0.0], [10.0, 12.0], [100.0, 100.0]) == [0]
+
+
+def test_ocean_mask_depths_are_glo12_native_levels() -> None:
+    expected_native_levels = [
+        0.494025,
+        47.37369,
+        92.32607,
+        155.85069,
+        222.47520,
+        318.12741,
+        380.21301,
+        453.93771,
+        541.08893,
+        643.56677,
+    ]
+
+    numpy.testing.assert_allclose(OCEAN_MASK_DEPTHS, expected_native_levels, atol=1e-3)

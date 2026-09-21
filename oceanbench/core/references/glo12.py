@@ -28,7 +28,9 @@ logger.setLevel(level=logging.WARNING)
 _GLO12_ANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
 
 # Canonical GLO12 depth grid used to define the Class IV observation population. These are the
-# GLO12 native levels down to the first one below the deepest Class IV depth bin.
+# GLO12 native levels down to the first one below the deepest Class IV depth bin. The axis ends at
+# 643.57 because temperature and salinity observations deeper than 600 m are binned out before the
+# gate, so no observation can ever reach the next native level.
 OCEAN_MASK_DEPTHS = numpy.array(
     [
         0.494025,
@@ -41,9 +43,12 @@ OCEAN_MASK_DEPTHS = numpy.array(
         453.93771,
         541.08893,
         643.56677,
-        763.33313,
     ]
 )
+
+# Anchor day used to open the ocean mask. It is a Wednesday inside the benchmark year, so it is a
+# valid GLO12 date, and using a fixed day makes the mask independent of the challenger being scored.
+OCEAN_MASK_ANCHOR_DAY = "2024-01-03"
 
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
@@ -254,8 +259,10 @@ def glo12_ocean_mask(challenger_dataset: Dataset) -> DataArray:
     """
     Open the GLO12 twelfth of a degree ocean mask on the canonical depth grid.
 
-    The three dimensional boolean field is true where the analysis temperature is finite, and is
-    cached for the process because the GLO12 land mask does not vary in time.
+    The three dimensional boolean field is true where the analysis temperature is finite. The NEMO
+    land and sea mask is time invariant, so the mask is read on a single anchor day rather than on
+    the challenger dates: that keeps the scored observation population identical across challengers
+    by construction. The challenger dataset is only part of the signature so that call sites do not
+    change.
     """
-    first_day_datetime = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values[0]
-    return _glo12_ocean_mask(str(first_day_datetime))
+    return _glo12_ocean_mask(OCEAN_MASK_ANCHOR_DAY)
