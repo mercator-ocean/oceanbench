@@ -14,6 +14,7 @@ from oceanbench.core.classIV_support import (
     _interpolate_vertically_bracket,
     format_class4_results,
 )
+from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 MODEL_DEPTHS = numpy.array([10.0, 20.0, 30.0])
@@ -33,15 +34,46 @@ def test_bracket_interpolation_clamps_observations_outside_the_model_column_to_t
     numpy.testing.assert_array_equal(interpolated, [1.0, 3.0])
 
 
-def test_bracket_interpolation_propagates_nan_from_bracketing_levels_only() -> None:
+def test_bracket_interpolation_propagates_nan_from_the_shallower_bracketing_level() -> None:
     interpolated = _interpolate_vertically_bracket(
-        _profiles([1.0, numpy.nan, 3.0], [numpy.nan, 2.0, 3.0]),
+        _profiles([numpy.nan, 2.0, 3.0], [1.0, 2.0, 3.0]),
         MODEL_DEPTHS,
         numpy.array([15.0, 25.0]),
     )
 
     assert numpy.isnan(interpolated[0])
     assert interpolated[1] == 2.5
+
+
+def test_bracket_interpolation_falls_back_to_the_shallower_level_above_the_seabed() -> None:
+    interpolated = _interpolate_vertically_bracket(
+        _profiles([1.0, 2.0, numpy.nan]),
+        MODEL_DEPTHS,
+        numpy.array([25.0]),
+    )
+
+    numpy.testing.assert_array_equal(interpolated, [2.0])
+
+
+def test_bracket_interpolation_returns_nan_when_the_whole_column_is_missing() -> None:
+    interpolated = _interpolate_vertically_bracket(
+        _profiles([numpy.nan, numpy.nan, numpy.nan]),
+        MODEL_DEPTHS,
+        numpy.array([25.0]),
+    )
+
+    assert numpy.isnan(interpolated).all()
+
+
+def test_bracket_interpolation_keeps_the_deep_and_top_clamps_unchanged() -> None:
+    interpolated = _interpolate_vertically_bracket(
+        _profiles([1.0, 2.0, numpy.nan], [1.0, 2.0, 3.0]),
+        MODEL_DEPTHS,
+        numpy.array([35.0, 5.0]),
+    )
+
+    assert numpy.isnan(interpolated[0])
+    assert interpolated[1] == 1.0
 
 
 def test_bracket_interpolation_is_invariant_under_model_level_order() -> None:
@@ -65,6 +97,7 @@ def test_formatted_results_report_the_first_lead_day_count_per_variable_and_dept
             "lead_day": [0, 1, 0, 1, 0, 1],
             "rmsd": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
             "count": [10, 8, 20, 15, 30, 29],
+            "missing": [1, 0, 2, 0, 3, 0],
         }
     )
 
@@ -72,10 +105,11 @@ def test_formatted_results_report_the_first_lead_day_count_per_variable_and_dept
 
     assert formatted["Observations"].tolist() == [30, 10, 20]
     assert formatted["Observations"].dtype.kind == "i"
+    assert formatted["Missing"].tolist() == [3, 1, 2]
     assert formatted["Lead day 2"].tolist() == [0.6, 0.2, 0.4]
 
 
-def test_rmsd_table_counts_only_pairs_where_both_model_and_observation_are_finite() -> None:
+def test_rmsd_table_counts_every_eligible_observation_and_reports_the_missing_ones() -> None:
     dataframe = pandas.DataFrame(
         {
             "depth_bin": ["0-5m"] * 4,
@@ -87,7 +121,8 @@ def test_rmsd_table_counts_only_pairs_where_both_model_and_observation_are_finit
 
     table = _compute_rmsd_table(dataframe, Variable.SEA_WATER_SALINITY.key())
 
-    assert table["count"].tolist() == [2]
+    assert table["count"].tolist() == [3]
+    assert table["missing"].tolist() == [1]
     assert table["rmsd"].tolist() == [numpy.sqrt(2.0)]
 
 
@@ -115,3 +150,86 @@ def test_forecast_sea_surface_height_becomes_sla_by_removing_mdt_and_the_reanaly
 
     assert REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT == -0.1148
     numpy.testing.assert_allclose(sla.values[0, 0], [[0.8148, 0.8148], [0.6148, 0.6148]])
+
+
+LATITUDES = numpy.array([0.0, 1.0, 2.0])
+LONGITUDES = numpy.array([10.0, 11.0, 12.0])
+FIRST_DAYS = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
+
+
+def _salinity_dataset(depths: numpy.ndarray, land_column: bool) -> xarray.Dataset:
+    values = numpy.broadcast_to(
+        35.0 + depths[:, numpy.newaxis, numpy.newaxis] / 10.0,
+        (len(depths), len(LATITUDES), len(LONGITUDES)),
+    ).astype(float)
+    values = numpy.where(depths[:, numpy.newaxis, numpy.newaxis] > 40.0, numpy.nan, values)
+    if land_column:
+        values = values.copy()
+        values[:, 0, 0] = numpy.nan
+    return xarray.Dataset(
+        {
+            Variable.SEA_WATER_SALINITY.key(): (
+                [
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.DEPTH.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ],
+                values[numpy.newaxis, numpy.newaxis, :, :, :],
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): FIRST_DAYS,
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.DEPTH.key(): depths,
+            Dimension.LATITUDE.key(): LATITUDES,
+            Dimension.LONGITUDE.key(): LONGITUDES,
+        },
+    )
+
+
+def _surface_ocean_mask() -> xarray.DataArray:
+    values = numpy.full((len(LATITUDES), len(LONGITUDES)), 15.0)
+    values[0, 2] = numpy.nan
+    return xarray.DataArray(
+        values,
+        dims=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={Dimension.LATITUDE.key(): LATITUDES, Dimension.LONGITUDE.key(): LONGITUDES},
+        name=Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+    )
+
+
+def _salinity_observations_dataset() -> xarray.Dataset:
+    observation_dimension = "observation"
+    return xarray.Dataset(
+        {
+            Dimension.TIME.key(): (observation_dimension, numpy.repeat(FIRST_DAYS, 3)),
+            Dimension.LATITUDE.key(): (observation_dimension, numpy.array([0.25, 1.5, 0.5])),
+            Dimension.LONGITUDE.key(): (observation_dimension, numpy.array([10.25, 11.5, 11.5])),
+            Dimension.FIRST_DAY_DATETIME.key(): (observation_dimension, numpy.repeat(FIRST_DAYS, 3)),
+            Dimension.DEPTH.key(): (observation_dimension, numpy.array([20.0, 20.0, 20.0])),
+            Variable.SEA_WATER_SALINITY.key(): (observation_dimension, numpy.array([35.0, 35.0, 35.0])),
+        }
+    )
+
+
+def test_challengers_with_different_vertical_axes_share_the_scored_observation_population() -> None:
+    observations_dataset = _salinity_observations_dataset()
+
+    formatted_tables = [
+        rmsd_class4_validation(
+            challenger_dataset=_salinity_dataset(challenger_depths, land_column=land_column),
+            reference_dataset=observations_dataset,
+            surface_ocean_mask=_surface_ocean_mask(),
+            variables=[Variable.SEA_WATER_SALINITY],
+        )
+        for challenger_depths, land_column in [
+            (numpy.array([0.5, 10.0, 50.0]), False),
+            (numpy.array([0.5, 47.0]), True),
+        ]
+    ]
+
+    assert [table["Observations"].tolist() for table in formatted_tables] == [[2], [2]]
+    assert [table["Missing"].tolist() for table in formatted_tables] == [[0], [1]]
+    assert [table.index.tolist() for table in formatted_tables] == [["Salinity (PSU) [sea_water_salinity]{5-100m}"]] * 2

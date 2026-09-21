@@ -185,10 +185,12 @@ def test_class4_formatted_results_keep_the_observation_count_column() -> None:
             "lead_day": [0, 1],
             "rmsd": [0.1, 0.2],
             "count": [1234, 1200],
+            "missing": [4, 2],
         }
     )
 
     formatted = format_class4_results(results_dataframe, 2)
 
-    assert list(formatted.columns) == ["Lead day 1", "Lead day 2", "Observations"]
+    assert list(formatted.columns) == ["Lead day 1", "Lead day 2", "Observations", "Missing"]
     assert formatted["Observations"].tolist() == [1234]
+    assert formatted["Missing"].tolist() == [4]

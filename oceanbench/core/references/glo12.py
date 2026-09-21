@@ -3,14 +3,18 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from datetime import datetime
+from functools import lru_cache
 import numpy
 import pandas
-from xarray import Dataset, merge, concat
+from xarray import DataArray, Dataset, merge, concat
 import logging
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.resolution import get_dataset_resolution
 import copernicusmarine
-from oceanbench.core.climate_forecast_standard_names import StandardVariable
+from oceanbench.core.climate_forecast_standard_names import (
+    StandardVariable,
+    rename_dataset_with_standard_names,
+)
 from oceanbench.core.reference_depths import (
     reference_depth_grid_stage_variant,
     with_reference_depth_grid_metadata,
@@ -22,6 +26,8 @@ logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
 _GLO12_ANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
+
+SURFACE_OCEAN_MASK_DEPTHS = numpy.array([0.0])
 
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
@@ -209,3 +215,31 @@ def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
     reference_dataset = with_remote_http_retries("GLO12 reference dataset open", open_dataset)
     _GLO12_ANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
     return reference_dataset
+
+
+@lru_cache(maxsize=1)
+def _glo12_surface_ocean_mask(first_day: str) -> DataArray:
+    def open_surface_field() -> DataArray:
+        # The GLO12 land mask comes from the static NEMO bathymetry, so a single day masks every valid date.
+        surface_dataset = _glo12_1_12_path(
+            numpy.datetime64(first_day),
+            days_count=1,
+            target_depths=SURFACE_OCEAN_MASK_DEPTHS,
+        )
+        surface_field = rename_dataset_with_standard_names(surface_dataset)[
+            StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value
+        ]
+        return surface_field.isel({Dimension.TIME.key(): 0, Dimension.DEPTH.key(): 0}).compute()
+
+    return with_remote_http_retries("GLO12 surface ocean mask open", open_surface_field)
+
+
+def glo12_surface_ocean_mask(challenger_dataset: Dataset) -> DataArray:
+    """
+    Open the shallowest GLO12 twelfth of a degree analysis level as the Class IV observation mask.
+
+    The single two dimensional field is finite over ocean and missing over land, and is cached
+    for the process because the GLO12 land mask does not vary in time.
+    """
+    first_day_datetime = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values[0]
+    return _glo12_surface_ocean_mask(str(first_day_datetime))

@@ -12,7 +12,7 @@ from oceanbench.core.lagrangian_trajectory import (
     deviation_of_lagrangian_trajectories,
     lagrangian_particle_count_for_region,
 )
-from oceanbench.core.references.glo12 import glo12_analysis_dataset
+from oceanbench.core.references.glo12 import glo12_analysis_dataset, glo12_surface_ocean_mask
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
 from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, subset_dataset_to_region
@@ -46,6 +46,7 @@ def rmsd_of_variables_compared_to_observations(
     return rmsd_class4_validation(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
+        surface_ocean_mask=glo12_surface_ocean_mask(challenger_dataset),
         variables=[
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,

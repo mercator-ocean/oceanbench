@@ -24,6 +24,7 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 VELOCITY_TARGET_DEPTH_METERS = 15.0
 OBSERVATION_COUNT_COLUMN = "Observations"
+MISSING_COUNT_COLUMN = "Missing"
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
 
 
@@ -288,8 +289,12 @@ def _interpolate_vertically_bracket(
             upper_values[different] - lower_values[different]
         )
 
-    invalid = numpy.isnan(lower_values) | numpy.isnan(upper_values)
-    result[~invalid] = interpolated[~invalid]
+    shallower_is_missing = numpy.isnan(lower_values)
+    deeper_is_missing = numpy.isnan(upper_values)
+    bracket_is_valid = ~shallower_is_missing & ~deeper_is_missing
+    seabed_fallback = deeper_is_missing & ~shallower_is_missing
+    result[bracket_is_valid] = interpolated[bracket_is_valid]
+    result[seabed_fallback] = lower_values[seabed_fallback]
     return result
 
 
@@ -401,24 +406,43 @@ def interpolate_class4_model_to_observations(
     return _interpolate_model_to_observations(model_data, observations_dataframe, variable_key)
 
 
+def gate_class4_observations_to_reference_population(
+    observations_dataframe: pandas.DataFrame,
+    surface_ocean_mask: xarray.DataArray,
+) -> pandas.DataFrame:
+    """
+    Keep only the observations lying over the GLO12 analysis surface ocean.
+
+    The mask goes through the same horizontal linear interpolation as a challenger, so the
+    coastal halo is identical, and the scored population no longer depends on the challenger
+    vertical axis: with the seabed fallback a challenger column is usable as soon as its
+    shallowest level is wet.
+    """
+    surface_values = _horizontally_interpolated_profiles(surface_ocean_mask, observations_dataframe)
+    return observations_dataframe.reset_index(drop=True).loc[numpy.isfinite(surface_values)]
+
+
 def _compute_rmsd_table(
     dataframe: pandas.DataFrame,
     variable_key: str,
 ) -> pandas.DataFrame:
-    valid_dataframe = dataframe.dropna(subset=["model_value", "observation_value"])
+    eligible_dataframe = dataframe.dropna(subset=["observation_value"])
     grouped = (
-        valid_dataframe.assign(
-            squared_difference=(valid_dataframe["model_value"] - valid_dataframe["observation_value"]) ** 2
+        eligible_dataframe.assign(
+            squared_difference=(eligible_dataframe["model_value"] - eligible_dataframe["observation_value"]) ** 2,
+            missing=eligible_dataframe["model_value"].isna(),
         )
         .groupby(["depth_bin", "lead_day"], as_index=False)
         .agg(
             rmsd=("squared_difference", lambda values: numpy.sqrt(values.mean())),
             count=("squared_difference", "size"),
+            missing=("missing", "sum"),
         )
     )
     grouped["count"] = grouped["count"].astype(int)
+    grouped["missing"] = grouped["missing"].astype(int)
     grouped["variable"] = variable_key
-    return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
+    return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count", "missing"]]
 
 
 def compute_class4_rmsd_table(
@@ -445,7 +469,7 @@ def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: 
     ).reset_index()
     first_available_day = results_dataframe["lead_day"].min()
     observation_counts = results_dataframe[results_dataframe["lead_day"] == first_available_day][
-        ["variable", "depth_bin", "count"]
+        ["variable", "depth_bin", "count", "missing"]
     ]
     pivot_table = pivot_table.merge(observation_counts, on=["variable", "depth_bin"], how="left")
     pivot_table["variable_sort"] = pivot_table["variable"].map(VARIABLE_DISPLAY_ORDER).astype(float)
@@ -459,8 +483,8 @@ def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: 
     lead_columns = [column for column in pivot_table.columns if isinstance(column, (int, numpy.integer))]
     lead_labels = lead_day_labels(1, lead_days_count)
     column_rename = {column: lead_labels[column] for column in lead_columns}
-    result = pivot_table.set_index("label")[lead_columns + ["count"]].rename(
-        columns=column_rename | {"count": OBSERVATION_COUNT_COLUMN}
+    result = pivot_table.set_index("label")[lead_columns + ["count", "missing"]].rename(
+        columns=column_rename | {"count": OBSERVATION_COUNT_COLUMN, "missing": MISSING_COUNT_COLUMN}
     )
     result.index.name = None
     result.columns.name = None

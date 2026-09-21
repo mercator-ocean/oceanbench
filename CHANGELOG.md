@@ -34,6 +34,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 ### Added
 
 - The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- Every challenger is now scored on the same Class IV observation population, the observations lying over the GLO12 analysis surface ocean, and a `Missing` column reports the eligible observations a challenger cannot provide a value for.
 
 ## 0.5.1 - 2026-09-02
 
