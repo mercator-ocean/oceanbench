@@ -104,7 +104,7 @@ CHALLENGERS = {
         "resolution": "1°",
     },
     "glow": {
-        "label": "GLOW (experimental, not submitted)",
+        "label": "GLOW",
         "url": "https://github.com/mercator-ocean/oceanbench",
         "organisation": "Mercator Ocean",
         "organisation_url": "https://mercator-ocean.eu",
@@ -118,7 +118,7 @@ CHALLENGERS = {
         ),
     },
     "hclimrep": {
-        "label": "HClimRep (experimental, not submitted)",
+        "label": "HClimRep",
         "url": "https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench",
         "organisation": "ECMWF",
         "organisation_url": "https://github.com/ecmwf/WeatherGenerator",
