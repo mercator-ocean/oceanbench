@@ -82,3 +82,41 @@ def ifs_forcings() -> xarray.Dataset:
     """
 
     return input_datasets.ifs_forcings()
+
+
+def ifs_nowcasts() -> xarray.Dataset:
+    """
+    Open the 2024 IFS atmospheric nowcasts.
+
+    The 52 Tuesday stores, from January 2 to December 24, are concatenated
+    along ``time``. The returned Dataset has dimensions ``(time, lat, lon)``
+    and five UTC timestamps per store: Tuesday 00/06/12/18Z and Wednesday
+    00Z. It preserves the native regular ECMWF F1280 grid (2560 latitude
+    points by 5120 longitude points); no interpolation is applied.
+
+    The Dataset preserves the 15 IFS forcing variable names. The instantaneous
+    analysis variables are ``sotemair``, ``sotemhum``, ``sohumspe``,
+    ``sowinu10``, ``sowinv10``, ``skt``, ``somslpre`` and ``sp``. The
+    accumulated forecast variables are ``sosudosw``, ``sosudolw``,
+    ``sowaprec``, ``cp``, ``sosnowfa``, ``ewss`` and ``nsss``; they are already
+    converted to six-hour means or rates. Their final Wednesday 00Z value is
+    intentionally ``NaN`` because there is no following six-hour interval.
+    This loader does not fill that value or perform a daily aggregation.
+
+    For daily aggregation, use the trapezoidal weighted mean for instantaneous
+    variables and the arithmetic mean of the first four six-hour values for
+    accumulated variables; do not average raw accumulations.
+
+    The stores are publicly available at
+    ``s3://oceanbench-bucket/public/ifs-nowcasts24/``.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing IFS nowcasts.
+
+    >>> ifs_nowcasts() # doctest: +SKIP
+    <xarray.Dataset>
+    """
+
+    return input_datasets.ifs_nowcasts()

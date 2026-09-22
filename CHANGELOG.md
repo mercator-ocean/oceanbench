@@ -31,6 +31,7 @@ and the affected reports are re-published (never silently overwritten).
 ### Changed
 
 - Package, documentation, website and metadata now read OceanBench public datasets and report assets from the CloudFerro `oceanbench-bucket` instead of the previous EDITO MinIO project buckets ([#311](https://github.com/mercator-ocean/oceanbench/issues/311), [#313](https://github.com/mercator-ocean/oceanbench/pull/313)).
+- Weekly IFS nowcasts for 2024 are exposed through `oceanbench.datasets.input` from the CloudFerro public `ifs-nowcasts24` Zarr collection ([#323](https://github.com/mercator-ocean/oceanbench/issues/323)).
 
 ### Reports
 
