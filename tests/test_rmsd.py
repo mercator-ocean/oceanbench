@@ -497,3 +497,32 @@ def test_rmsd_scores_a_dataset_whose_two_variables_have_no_depth() -> None:
         assert numpy.isfinite(table.loc[label, "Lead day 1"])
         assert table.loc[label, MISSING_COUNT_COLUMN] == 0
         assert table.loc[label, MISSING_FRACTION_COLUMN] == 0.0
+
+
+def test_rmsd_regrids_a_finer_offset_mask_onto_the_challenger_grid() -> None:
+    variable_key = Variable.MIXED_LAYER_DEPTH.key()
+    challenger_dataset = _depth_free_dataset({variable_key: [numpy.nan, 4.0, 100.0]})
+    reference_dataset = xarray.zeros_like(challenger_dataset)
+    fine_latitudes = numpy.arange(-1.0, 62.0, 0.5) + 0.125
+    fine_longitudes = numpy.array([9.625, 10.125, 10.625])
+    values = numpy.ones((len(OCEAN_MASK_DEPTHS), len(fine_latitudes), len(fine_longitudes)), dtype=bool)
+    values[0, numpy.abs(fine_latitudes - 60.0).argmin(), 1] = False
+    fine_mask = xarray.DataArray(
+        values,
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): OCEAN_MASK_DEPTHS,
+            Dimension.LATITUDE.key(): fine_latitudes,
+            Dimension.LONGITUDE.key(): fine_longitudes,
+        },
+    )
+
+    table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.MIXED_LAYER_DEPTH],
+        ocean_mask=fine_mask,
+    )
+
+    assert table.loc[MIXED_LAYER_DEPTH_LABEL, "Lead day 1"] == 4.0
+    assert table.loc[MIXED_LAYER_DEPTH_LABEL, MISSING_COUNT_COLUMN] == 1

@@ -138,7 +138,13 @@ def _ocean_mask_on_challenger_grid(
         },
         method="nearest",
     )
-    return regridded_mask.assign_coords({Dimension.DEPTH.key(): [DEPTH_LABELS[level] for level in DepthLevel]})
+    return regridded_mask.assign_coords(
+        {
+            Dimension.DEPTH.key(): [DEPTH_LABELS[level] for level in DepthLevel],
+            latitude_key: challenger_dataset[latitude_key],
+            longitude_key: challenger_dataset[longitude_key],
+        }
+    )
 
 
 def _variable_ocean_mask(
