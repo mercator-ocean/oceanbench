@@ -49,7 +49,10 @@ from oceanbench.core.ensemble_class4 import (
     ensemble_class4_records,
 )
 from oceanbench.core.ensemble_gridded import ENSEMBLE_DIMENSION
-from oceanbench.core.references.observations import observations as reference_observations
+from oceanbench.core.references.observations import (
+    available_observation_days,
+    observations as reference_observations,
+)
 from oceanbench.core.score_records import RunContext, records_to_dataframe
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 
@@ -225,6 +228,38 @@ def _open_challenger_start(
     return challenger, first_day
 
 
+def _lead_days_with_observations(first_day: pandas.Timestamp, lead_days_count: int) -> int:
+    """How many of the lead days of a start the observation coverage actually holds.
+
+    The observation store is built one day at a time and its coverage ends on a day, so the last
+    start of a year asks for days beyond the last one that was built. The deterministic path
+    guards the other end of the coverage in :func:`oceanbench.core.references.observations`,
+    where a challenger starting before the first available day is refused. Here the horizon is
+    cut instead, because the earlier lead days of the same start are scorable and the pooled
+    Class IV value is taken over the observations themselves rather than over whole starts.
+    """
+    wanted_days = [(first_day + pandas.Timedelta(days=lead_day)).to_datetime64() for lead_day in range(lead_days_count)]
+    return len(available_observation_days(wanted_days))
+
+
+def _cut_to_observed_lead_days(challenger: xarray.Dataset, first_day: pandas.Timestamp) -> xarray.Dataset:
+    """The start with its lead days beyond the observation coverage dropped, and a line saying so."""
+    lead_day_index_key = Dimension.LEAD_DAY_INDEX.key()
+    lead_days_count = challenger.sizes[lead_day_index_key]
+    observed_lead_days = _lead_days_with_observations(first_day, lead_days_count)
+    if observed_lead_days == lead_days_count:
+        return challenger
+    if observed_lead_days == 0:
+        raise SystemExit(f"no observation day exists for the start of {first_day:%Y-%m-%d}: nothing to score")
+    dropped_days = [
+        f"{first_day + pandas.Timedelta(days=lead_day):%Y-%m-%d}"
+        for lead_day in range(observed_lead_days, lead_days_count)
+    ]
+    print(f"dropped lead days without observations: {' '.join(dropped_days)}")
+    print(f"scored lead days=1..{observed_lead_days}")
+    return challenger.isel({lead_day_index_key: slice(0, observed_lead_days)})
+
+
 def _run_context(specification: ChallengerSpecification) -> RunContext:
     return RunContext(
         challenger=specification.name,
@@ -303,6 +338,7 @@ def _score_command(arguments: argparse.Namespace) -> None:
         f"members={challenger.sizes[ENSEMBLE_DIMENSION]} lead_days={challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]}"
     )
 
+    challenger = _cut_to_observed_lead_days(challenger, first_day)
     observations_dataset = reference_observations(challenger)
     matchups = ensemble_class4_matchup(challenger, observations_dataset, SCORED_VARIABLES)
     print(f"matched variables={[matchup.variable for matchup in matchups]}")

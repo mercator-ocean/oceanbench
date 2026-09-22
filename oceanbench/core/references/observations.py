@@ -2,8 +2,10 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from collections.abc import Sequence
 from pathlib import Path
 
+import fsspec
 import numpy
 import pandas
 from xarray import Dataset, open_dataset
@@ -105,6 +107,27 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
 def observation_path(day_datetime: numpy.datetime64) -> str:
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
     return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/observations2024-v2/{day_string}.zarr"
+
+
+def observation_day_is_published(day_datetime: numpy.datetime64) -> bool:
+    """Whether the observation store of one day exists, read off its consolidated metadata key."""
+    return fsspec.filesystem("https").exists(f"{observation_path(day_datetime)}/.zmetadata")
+
+
+def available_observation_days(day_datetimes: Sequence[numpy.datetime64]) -> numpy.ndarray:
+    """The leading run of days whose observation store is published.
+
+    Observation coverage runs from the first available date to the last day that was built, so
+    the days a forecast asks for are available as a prefix: the first day that is not published
+    ends the run and no later day is published either. A caller that asks for more days than the
+    coverage holds reads the returned length as the horizon it can score.
+    """
+    published_days = []
+    for day_datetime in day_datetimes:
+        if not observation_day_is_published(day_datetime):
+            break
+        published_days.append(day_datetime)
+    return numpy.array(published_days, dtype="datetime64[D]")
 
 
 def _require_observation_basis_version(day_observations_dataset: Dataset) -> Dataset:

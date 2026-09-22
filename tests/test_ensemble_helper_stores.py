@@ -14,6 +14,8 @@ import pandas
 import pytest
 import xarray
 
+from oceanbench.core.references import observations as observations_module
+
 HELPER_ROOT = Path(__file__).resolve().parent.parent / "helper_scripts"
 
 
@@ -190,3 +192,35 @@ def test_the_class4_helper_cuts_the_gloens_week_to_the_scored_horizon(class4_hel
 
     assert first_day == start_label + class4_helper.GLOENS_START_LABEL_TO_FIRST_DAY
     assert challenger.sizes["lead_day_index"] == class4_helper.CHALLENGERS["gloens"].lead_days_count == 10
+
+
+def _coverage_ending_on(last_published_day: str):
+    """An observation store whose published days stop on ``last_published_day``."""
+    last_day = numpy.datetime64(last_published_day, "D")
+    return lambda day_datetime: numpy.datetime64(day_datetime, "D") <= last_day
+
+
+def test_the_class4_helper_scores_only_the_lead_days_that_have_observations(class4_helper, monkeypatch, capsys):
+    start_label = pandas.Timestamp("2024-12-26")
+    monkeypatch.setattr(class4_helper, "_open_gloens_forecast_week", lambda _: _tiny_gloens_week(10))
+    monkeypatch.setattr(observations_module, "observation_day_is_published", _coverage_ending_on("2025-01-04"))
+
+    challenger, first_day = class4_helper._open_challenger_start(class4_helper.CHALLENGERS["gloens"], start_label)
+    cut = class4_helper._cut_to_observed_lead_days(challenger, first_day)
+
+    assert first_day == pandas.Timestamp("2024-12-27")
+    assert challenger.sizes["lead_day_index"] == 10
+    assert cut.sizes["lead_day_index"] == 9
+    assert "dropped lead days without observations: 2025-01-05" in capsys.readouterr().out
+
+
+def test_the_class4_helper_keeps_the_whole_horizon_when_every_observation_day_exists(class4_helper, monkeypatch):
+    start_label = pandas.Timestamp("2024-12-19")
+    monkeypatch.setattr(class4_helper, "_open_gloens_forecast_week", lambda _: _tiny_gloens_week(10))
+    monkeypatch.setattr(observations_module, "observation_day_is_published", _coverage_ending_on("2025-01-04"))
+
+    challenger, first_day = class4_helper._open_challenger_start(class4_helper.CHALLENGERS["gloens"], start_label)
+    cut = class4_helper._cut_to_observed_lead_days(challenger, first_day)
+
+    assert cut is challenger
+    assert cut.sizes["lead_day_index"] == 10
