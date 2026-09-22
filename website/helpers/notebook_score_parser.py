@@ -12,8 +12,6 @@ from helpers.type import ModelScore
 
 _VARIABLE_LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]+)\) \[([^\]]*)\](?:\{([^}]+)\})?$")
 _LEAD_DAY_NUMBER_PATTERN = re.compile(r"(\d+)$")
-_OBSERVATION_COUNT_HEADER = "observations"
-_MISSING_COUNT_HEADER = "missing"
 _DISPLAY_NAME_RENAMES = {
     "height": "sea surface height",
     "surface height": "sea surface height",
@@ -146,11 +144,7 @@ def _extract_lead_day_number(header: str) -> str:
 def _parse_html_table_rows(raw_table: str) -> list[dict]:
     soup = BeautifulSoup(raw_table, features="html.parser")
     headers = [th.get_text(strip=True) for th in soup.find("thead").find_all("th")]
-    lead_days = [
-        _extract_lead_day_number(header)
-        for header in headers[1:]
-        if header.strip().lower() not in (_OBSERVATION_COUNT_HEADER, _MISSING_COUNT_HEADER)
-    ]
+    lead_days = [_extract_lead_day_number(header) for header in headers[1:]]
     return [_parse_html_table_row(row, lead_days) for row in soup.find("tbody").find_all("tr")]
 
 
