@@ -21,13 +21,19 @@
       "label": "GloNet2-ens-icp",
       "kind": "Ensemble",
       "description": "GloNet2 machine learning ensemble, 8 members, Wednesday starts."
+    },
+    "glowens": {
+      "label": "GLOW-ens",
+      "kind": "Ensemble",
+      "description": "GLOW machine learning ensemble, 16 members, Wednesday starts."
     }
   },
   "system_order": [
     "glonet",
     "glo12",
     "gloens",
-    "glonet2-ens-icp"
+    "glonet2-ens-icp",
+    "glowens"
   ],
   "blocks": {
     "observations_rmsd": {
@@ -104,6 +110,22 @@
             0.9588,
             0.9891,
             1.028,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Drifter SST",
+          "depth_band": "Surface",
+          "unit": "K",
+          "values": [
+            0.7352,
+            0.7286,
+            0.7786,
+            0.8204,
+            0.861,
             null
           ],
           "reduced_start_counts": {}
@@ -373,6 +395,70 @@
           "reduced_start_counts": {}
         },
         {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "0-5 m",
+          "unit": "K",
+          "values": [
+            0.7246,
+            0.7577,
+            0.7865,
+            0.8192,
+            0.8101,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "5-100 m",
+          "unit": "K",
+          "values": [
+            0.8611,
+            0.8571,
+            0.8801,
+            0.9072,
+            0.9359,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "100-300 m",
+          "unit": "K",
+          "values": [
+            0.7803,
+            0.7907,
+            0.8094,
+            0.8378,
+            0.8702,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "300-600 m",
+          "unit": "K",
+          "values": [
+            0.5191,
+            0.5262,
+            0.5389,
+            0.5603,
+            0.591,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
           "system": "glonet",
           "system_label": "GLONET (deterministic)",
           "variable": "Profile salinity",
@@ -507,12 +593,12 @@
           "depth_band": "0-5 m",
           "unit": "PSU",
           "values": [
-            0.3181,
-            0.3105,
-            0.3021,
-            0.3376,
-            0.3452,
-            0.3381
+            0.3153,
+            0.3131,
+            0.304,
+            0.3394,
+            0.3486,
+            0.3403
           ],
           "reduced_start_counts": {
             "10": 51
@@ -525,12 +611,12 @@
           "depth_band": "5-100 m",
           "unit": "PSU",
           "values": [
-            0.2977,
-            0.3199,
-            0.3006,
-            0.3195,
-            0.2985,
-            0.3327
+            0.2973,
+            0.3196,
+            0.3003,
+            0.3192,
+            0.2982,
+            0.3325
           ],
           "reduced_start_counts": {
             "10": 51
@@ -543,12 +629,12 @@
           "depth_band": "100-300 m",
           "unit": "PSU",
           "values": [
-            0.1321,
-            0.1332,
-            0.1394,
-            0.1375,
-            0.1398,
-            0.1437
+            0.1311,
+            0.1323,
+            0.1385,
+            0.1366,
+            0.139,
+            0.1428
           ],
           "reduced_start_counts": {
             "10": 51
@@ -561,12 +647,12 @@
           "depth_band": "300-600 m",
           "unit": "PSU",
           "values": [
-            0.07131,
-            0.0717,
-            0.07766,
-            0.07662,
-            0.08217,
-            0.07827
+            0.07075,
+            0.07115,
+            0.07717,
+            0.07611,
+            0.08171,
+            0.0778
           ],
           "reduced_start_counts": {
             "10": 51
@@ -637,6 +723,70 @@
           "reduced_start_counts": {}
         },
         {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "0-5 m",
+          "unit": "PSU",
+          "values": [
+            0.2507,
+            0.2669,
+            0.2688,
+            0.2678,
+            0.2879,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "5-100 m",
+          "unit": "PSU",
+          "values": [
+            0.1951,
+            0.2035,
+            0.2027,
+            0.2071,
+            0.2092,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "100-300 m",
+          "unit": "PSU",
+          "values": [
+            0.1264,
+            0.1283,
+            0.1304,
+            0.1353,
+            0.1351,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "300-600 m",
+          "unit": "PSU",
+          "values": [
+            0.08019,
+            0.07946,
+            0.08051,
+            0.08202,
+            0.08609,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
           "system": "glonet",
           "system_label": "GLONET (deterministic)",
           "variable": "Sea level anomaly",
@@ -675,12 +825,12 @@
           "depth_band": "Surface",
           "unit": "m",
           "values": [
-            0.0493,
-            0.05223,
-            0.0546,
-            0.05719,
-            0.05874,
-            0.06015
+            0.05019,
+            0.05313,
+            0.05522,
+            0.05797,
+            0.05947,
+            0.06077
           ],
           "reduced_start_counts": {
             "10": 51
@@ -698,6 +848,22 @@
             0.06472,
             0.06744,
             0.07101,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Sea level anomaly",
+          "depth_band": "Surface",
+          "unit": "m",
+          "values": [
+            0.04812,
+            0.05047,
+            0.05432,
+            0.05883,
+            0.0633,
             null
           ],
           "reduced_start_counts": {}
@@ -769,6 +935,22 @@
           "reduced_start_counts": {}
         },
         {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Eastward current",
+          "depth_band": "15 m",
+          "unit": "m s-1",
+          "values": [
+            0.1208,
+            0.1256,
+            0.1274,
+            0.1323,
+            0.1381,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
           "system": "glonet",
           "system_label": "GLONET (deterministic)",
           "variable": "Northward current",
@@ -833,12 +1015,28 @@
             null
           ],
           "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Northward current",
+          "depth_band": "15 m",
+          "unit": "m s-1",
+          "values": [
+            0.1167,
+            0.1197,
+            0.1248,
+            0.1296,
+            0.1342,
+            null
+          ],
+          "reduced_start_counts": {}
         }
       ]
     },
     "gridded_rmsd": {
       "title": "Root mean square difference against GLORYS",
-      "note": "Quarter degree GLORYS reanalysis reference. Ensemble mean difference for the ensembles, single member difference for the two deterministic references.",
+      "note": "Quarter degree GLORYS reanalysis reference. Ensemble mean difference for the ensembles, single member difference for the two deterministic references. Systems built from or initialised by the GLORYS family are favoured by a GLORYS reference; weight the observation tables.",
       "lead_days": [
         1,
         3,
@@ -2419,6 +2617,358 @@
             0.08587,
             0.08453,
             0.08327,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "Surface",
+          "unit": "\u00b0C",
+          "values": [
+            0.5149,
+            0.5127,
+            0.5205,
+            0.5409,
+            0.5633,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "47.374 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.8626,
+            0.8559,
+            0.8546,
+            0.8617,
+            0.8698,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "92.326 m",
+          "unit": "\u00b0C",
+          "values": [
+            1.056,
+            1.05,
+            1.05,
+            1.061,
+            1.069,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "155.851 m",
+          "unit": "\u00b0C",
+          "values": [
+            1.021,
+            1.016,
+            1.017,
+            1.023,
+            1.027,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "222.475 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.8733,
+            0.87,
+            0.8691,
+            0.8737,
+            0.8773,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "318.127 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.7358,
+            0.7328,
+            0.7326,
+            0.7377,
+            0.7421,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "380.213 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.6763,
+            0.6741,
+            0.6742,
+            0.6791,
+            0.6836,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "453.938 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.6243,
+            0.6228,
+            0.6234,
+            0.6281,
+            0.6323,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "541.089 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.5654,
+            0.5645,
+            0.5654,
+            0.5698,
+            0.5737,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "643.567 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.4976,
+            0.4969,
+            0.4975,
+            0.5009,
+            0.504,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "763.333 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.4388,
+            0.4389,
+            0.44,
+            0.4431,
+            0.4458,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "47.374 m",
+          "unit": "PSU",
+          "values": [
+            0.2423,
+            0.2406,
+            0.2392,
+            0.2388,
+            0.2383,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "92.326 m",
+          "unit": "PSU",
+          "values": [
+            0.1898,
+            0.1876,
+            0.1859,
+            0.185,
+            0.1843,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "155.851 m",
+          "unit": "PSU",
+          "values": [
+            0.1719,
+            0.1701,
+            0.1685,
+            0.1675,
+            0.1665,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "222.475 m",
+          "unit": "PSU",
+          "values": [
+            0.1546,
+            0.1531,
+            0.1516,
+            0.1508,
+            0.1499,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "318.127 m",
+          "unit": "PSU",
+          "values": [
+            0.1286,
+            0.1275,
+            0.1265,
+            0.126,
+            0.1254,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "380.213 m",
+          "unit": "PSU",
+          "values": [
+            0.1183,
+            0.1174,
+            0.1165,
+            0.116,
+            0.1155,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "453.938 m",
+          "unit": "PSU",
+          "values": [
+            0.1098,
+            0.109,
+            0.1082,
+            0.1077,
+            0.1072,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "541.089 m",
+          "unit": "PSU",
+          "values": [
+            0.0977,
+            0.09708,
+            0.09645,
+            0.09607,
+            0.0956,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "643.567 m",
+          "unit": "PSU",
+          "values": [
+            0.08497,
+            0.08451,
+            0.084,
+            0.08367,
+            0.08325,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "763.333 m",
+          "unit": "PSU",
+          "values": [
+            0.07238,
+            0.07204,
+            0.07162,
+            0.07129,
+            0.07085,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Sea surface height",
+          "depth_band": "Surface",
+          "unit": "m",
+          "values": [
+            0.06679,
+            0.06777,
+            0.06939,
+            0.07202,
+            0.07494,
             null
           ],
           "reduced_start_counts": {}
@@ -5451,12 +6001,364 @@
             null
           ],
           "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "Surface",
+          "unit": "\u00b0C",
+          "values": [
+            0.254,
+            0.2538,
+            0.2581,
+            0.2691,
+            0.2815,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "47.374 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.4144,
+            0.4116,
+            0.4101,
+            0.4119,
+            0.4134,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "92.326 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.5439,
+            0.5409,
+            0.5393,
+            0.5411,
+            0.541,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "155.851 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.5537,
+            0.5515,
+            0.5497,
+            0.5489,
+            0.5464,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "222.475 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.4803,
+            0.4781,
+            0.4755,
+            0.4743,
+            0.4717,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "318.127 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.4057,
+            0.4037,
+            0.4012,
+            0.3999,
+            0.3976,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "380.213 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.3733,
+            0.3716,
+            0.3694,
+            0.368,
+            0.3657,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "453.938 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.3431,
+            0.3417,
+            0.3397,
+            0.3383,
+            0.3358,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "541.089 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.3089,
+            0.3078,
+            0.3062,
+            0.3047,
+            0.3024,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "643.567 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.274,
+            0.2729,
+            0.2709,
+            0.269,
+            0.2664,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "763.333 m",
+          "unit": "\u00b0C",
+          "values": [
+            0.2424,
+            0.2419,
+            0.2404,
+            0.2389,
+            0.2367,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "47.374 m",
+          "unit": "PSU",
+          "values": [
+            0.122,
+            0.1209,
+            0.1196,
+            0.1188,
+            0.1178,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "92.326 m",
+          "unit": "PSU",
+          "values": [
+            0.1024,
+            0.1009,
+            0.09929,
+            0.09803,
+            0.09675,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "155.851 m",
+          "unit": "PSU",
+          "values": [
+            0.09279,
+            0.09156,
+            0.08999,
+            0.08864,
+            0.0872,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "222.475 m",
+          "unit": "PSU",
+          "values": [
+            0.08357,
+            0.08255,
+            0.08119,
+            0.07998,
+            0.07863,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "318.127 m",
+          "unit": "PSU",
+          "values": [
+            0.07111,
+            0.07029,
+            0.06911,
+            0.06797,
+            0.06673,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "380.213 m",
+          "unit": "PSU",
+          "values": [
+            0.0655,
+            0.06475,
+            0.06366,
+            0.06256,
+            0.06133,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "453.938 m",
+          "unit": "PSU",
+          "values": [
+            0.06032,
+            0.05965,
+            0.0586,
+            0.05752,
+            0.05631,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "541.089 m",
+          "unit": "PSU",
+          "values": [
+            0.05341,
+            0.05281,
+            0.05185,
+            0.05085,
+            0.04975,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "643.567 m",
+          "unit": "PSU",
+          "values": [
+            0.04686,
+            0.04634,
+            0.04546,
+            0.04454,
+            0.04352,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "763.333 m",
+          "unit": "PSU",
+          "values": [
+            0.03972,
+            0.03932,
+            0.03858,
+            0.03777,
+            0.03687,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Sea surface height",
+          "depth_band": "Surface",
+          "unit": "m",
+          "values": [
+            0.04154,
+            0.0421,
+            0.04265,
+            0.04355,
+            0.04463,
+            null
+          ],
+          "reduced_start_counts": {}
         }
       ]
     },
     "gridded_spread_error_ratio": {
       "title": "Spread error ratio against GLORYS",
-      "note": "One is a reliable ensemble, below one is under dispersive.",
+      "note": "Spread of the ensemble over its mean difference to GLORYS, without observation or analysis error, so it reads low; agreement with the analysis, not a calibration test.",
       "lead_days": [
         1,
         3,
@@ -7040,6 +7942,358 @@
             null
           ],
           "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "Surface",
+          "unit": "",
+          "values": [
+            0.6746,
+            0.6501,
+            0.648,
+            0.6533,
+            0.6647,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "47.374 m",
+          "unit": "",
+          "values": [
+            0.7712,
+            0.7438,
+            0.7327,
+            0.7352,
+            0.7495,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "92.326 m",
+          "unit": "",
+          "values": [
+            0.8661,
+            0.8343,
+            0.8164,
+            0.8115,
+            0.8214,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "155.851 m",
+          "unit": "",
+          "values": [
+            0.8693,
+            0.843,
+            0.8259,
+            0.8222,
+            0.8311,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "222.475 m",
+          "unit": "",
+          "values": [
+            0.8393,
+            0.8065,
+            0.7847,
+            0.7759,
+            0.7817,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "318.127 m",
+          "unit": "",
+          "values": [
+            0.7791,
+            0.7562,
+            0.7417,
+            0.7382,
+            0.7472,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "380.213 m",
+          "unit": "",
+          "values": [
+            0.7622,
+            0.739,
+            0.7235,
+            0.7192,
+            0.7276,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "453.938 m",
+          "unit": "",
+          "values": [
+            0.7554,
+            0.7327,
+            0.7173,
+            0.713,
+            0.7215,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "541.089 m",
+          "unit": "",
+          "values": [
+            0.7422,
+            0.7248,
+            0.7133,
+            0.7115,
+            0.7212,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "643.567 m",
+          "unit": "",
+          "values": [
+            0.7568,
+            0.7382,
+            0.7268,
+            0.726,
+            0.7372,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Temperature",
+          "depth_band": "763.333 m",
+          "unit": "",
+          "values": [
+            0.7538,
+            0.7346,
+            0.7243,
+            0.7249,
+            0.7379,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "47.374 m",
+          "unit": "",
+          "values": [
+            0.5536,
+            0.532,
+            0.5265,
+            0.5326,
+            0.5475,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "92.326 m",
+          "unit": "",
+          "values": [
+            0.6023,
+            0.5807,
+            0.577,
+            0.5861,
+            0.6043,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "155.851 m",
+          "unit": "",
+          "values": [
+            0.6096,
+            0.5897,
+            0.5848,
+            0.5923,
+            0.6101,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "222.475 m",
+          "unit": "",
+          "values": [
+            0.6433,
+            0.6211,
+            0.6119,
+            0.6153,
+            0.6304,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "318.127 m",
+          "unit": "",
+          "values": [
+            0.5432,
+            0.5331,
+            0.5365,
+            0.5524,
+            0.5783,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "380.213 m",
+          "unit": "",
+          "values": [
+            0.486,
+            0.479,
+            0.4868,
+            0.507,
+            0.5367,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "453.938 m",
+          "unit": "",
+          "values": [
+            0.4507,
+            0.4448,
+            0.454,
+            0.4757,
+            0.5068,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "541.089 m",
+          "unit": "",
+          "values": [
+            0.4249,
+            0.4213,
+            0.4321,
+            0.4549,
+            0.4863,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "643.567 m",
+          "unit": "",
+          "values": [
+            0.408,
+            0.4037,
+            0.4135,
+            0.4357,
+            0.4668,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Salinity",
+          "depth_band": "763.333 m",
+          "unit": "",
+          "values": [
+            0.3922,
+            0.3871,
+            0.396,
+            0.4179,
+            0.449,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Sea surface height",
+          "depth_band": "Surface",
+          "unit": "",
+          "values": [
+            0.5676,
+            0.554,
+            0.5579,
+            0.5766,
+            0.6055,
+            null
+          ],
+          "reduced_start_counts": {}
         }
       ]
     },
@@ -7062,12 +8316,12 @@
           "depth_band": "Surface",
           "unit": "K",
           "values": [
-            0.3213,
-            0.3374,
-            0.3571,
-            0.3738,
-            0.3798,
-            0.3883
+            0.3065,
+            0.3203,
+            0.3401,
+            0.3579,
+            0.3646,
+            0.3723
           ],
           "reduced_start_counts": {
             "10": 51
@@ -7080,11 +8334,27 @@
           "depth_band": "Surface",
           "unit": "K",
           "values": [
-            0.5331,
-            0.5341,
-            0.519,
-            0.5191,
-            0.5277,
+            0.5098,
+            0.5118,
+            0.4974,
+            0.4985,
+            0.5078,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Drifter SST",
+          "depth_band": "Surface",
+          "unit": "K",
+          "values": [
+            0.289,
+            0.3065,
+            0.3266,
+            0.3521,
+            0.3766,
             null
           ],
           "reduced_start_counts": {}
@@ -7093,15 +8363,15 @@
           "system": "gloens",
           "system_label": "GloEns",
           "variable": "Profile temperature",
-          "depth_band": "All depths",
+          "depth_band": "0-5 m",
           "unit": "K",
           "values": [
-            0.2102,
-            0.212,
-            0.2201,
-            0.2219,
-            0.2276,
-            0.2323
+            0.2315,
+            0.2429,
+            0.2664,
+            0.2708,
+            0.2931,
+            0.3029
           ],
           "reduced_start_counts": {
             "10": 51
@@ -7111,68 +8381,68 @@
           "system": "gloens",
           "system_label": "GloEns",
           "variable": "Profile temperature",
-          "depth_band": "0-100 m",
+          "depth_band": "5-100 m",
           "unit": "K",
           "values": [
-            0.3376,
-            0.3496,
-            0.3736,
-            0.3823,
-            0.3939,
-            0.4031
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile temperature",
-          "depth_band": "100-500 m",
-          "unit": "K",
-          "values": [
-            0.3034,
-            0.3057,
-            0.3199,
-            0.3245,
-            0.3354,
-            0.3457
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile temperature",
-          "depth_band": "500+ m",
-          "unit": "K",
-          "values": [
-            0.1508,
-            0.1493,
-            0.153,
-            0.1535,
-            0.1568,
-            0.1567
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile temperature",
-          "depth_band": "All depths",
-          "unit": "K",
-          "values": [
+            0.3445,
+            0.357,
+            0.3809,
             0.39,
-            0.3842,
-            0.387,
-            0.3861,
-            0.3985,
+            0.4009,
+            0.4102
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile temperature",
+          "depth_band": "100-300 m",
+          "unit": "K",
+          "values": [
+            0.3499,
+            0.3531,
+            0.3686,
+            0.3747,
+            0.3863,
+            0.4023
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile temperature",
+          "depth_band": "300-600 m",
+          "unit": "K",
+          "values": [
+            0.2374,
+            0.2375,
+            0.2496,
+            0.2524,
+            0.2615,
+            0.2646
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile temperature",
+          "depth_band": "0-5 m",
+          "unit": "K",
+          "values": [
+            0.5393,
+            0.5365,
+            0.5097,
+            0.5018,
+            0.5041,
             null
           ],
           "reduced_start_counts": {}
@@ -7181,14 +8451,14 @@
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Profile temperature",
-          "depth_band": "0-100 m",
+          "depth_band": "5-100 m",
           "unit": "K",
           "values": [
-            0.6215,
-            0.6119,
+            0.6212,
+            0.6128,
             0.5986,
-            0.5891,
-            0.6,
+            0.5897,
+            0.6004,
             null
           ],
           "reduced_start_counts": {}
@@ -7197,30 +8467,94 @@
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Profile temperature",
-          "depth_band": "100-500 m",
+          "depth_band": "100-300 m",
           "unit": "K",
           "values": [
-            0.3971,
+            0.4623,
+            0.4663,
+            0.4743,
+            0.4737,
+            0.4951,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile temperature",
+          "depth_band": "300-600 m",
+          "unit": "K",
+          "values": [
+            0.2856,
+            0.284,
+            0.2868,
+            0.2888,
+            0.3034,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "0-5 m",
+          "unit": "K",
+          "values": [
+            0.2344,
+            0.2453,
+            0.262,
+            0.2831,
+            0.2949,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "5-100 m",
+          "unit": "K",
+          "values": [
+            0.3821,
+            0.386,
             0.3961,
-            0.4027,
-            0.4029,
-            0.4213,
+            0.4075,
+            0.4182,
             null
           ],
           "reduced_start_counts": {}
         },
         {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
+          "system": "glowens",
+          "system_label": "GLOW-ens",
           "variable": "Profile temperature",
-          "depth_band": "500+ m",
+          "depth_band": "100-300 m",
           "unit": "K",
           "values": [
-            0.2204,
-            0.2196,
-            0.218,
-            0.2216,
-            0.2304,
+            0.3823,
+            0.3898,
+            0.3914,
+            0.398,
+            0.4157,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "300-600 m",
+          "unit": "K",
+          "values": [
+            0.2537,
+            0.2583,
+            0.2597,
+            0.2622,
+            0.2762,
             null
           ],
           "reduced_start_counts": {}
@@ -7229,102 +8563,86 @@
           "system": "gloens",
           "system_label": "GloEns",
           "variable": "Profile salinity",
-          "depth_band": "All depths",
-          "unit": "PSU",
-          "values": [
-            0.0428,
-            0.04291,
-            0.04352,
-            0.04382,
-            0.04355,
-            0.0448
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile salinity",
-          "depth_band": "0-100 m",
-          "unit": "PSU",
-          "values": [
-            0.116,
-            0.1161,
-            0.1175,
-            0.1218,
-            0.119,
-            0.1244
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile salinity",
-          "depth_band": "100-500 m",
-          "unit": "PSU",
-          "values": [
-            0.05913,
-            0.05891,
-            0.06024,
-            0.06026,
-            0.06075,
-            0.06227
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile salinity",
-          "depth_band": "500+ m",
-          "unit": "PSU",
-          "values": [
-            0.02455,
-            0.02419,
-            0.02454,
-            0.02477,
-            0.02481,
-            0.02473
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile salinity",
-          "depth_band": "All depths",
-          "unit": "PSU",
-          "values": [
-            0.06624,
-            0.06517,
-            0.06497,
-            0.06528,
-            0.06765,
-            null
-          ],
-          "reduced_start_counts": {}
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile salinity",
-          "depth_band": "0-100 m",
+          "depth_band": "0-5 m",
           "unit": "PSU",
           "values": [
             0.124,
+            0.1215,
+            0.1239,
+            0.1284,
+            0.1307,
+            0.133
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile salinity",
+          "depth_band": "5-100 m",
+          "unit": "PSU",
+          "values": [
+            0.1147,
+            0.115,
+            0.1168,
+            0.1212,
+            0.1181,
+            0.1237
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile salinity",
+          "depth_band": "100-300 m",
+          "unit": "PSU",
+          "values": [
+            0.0736,
+            0.07306,
+            0.0746,
+            0.07472,
+            0.07445,
+            0.07723
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile salinity",
+          "depth_band": "300-600 m",
+          "unit": "PSU",
+          "values": [
+            0.04029,
+            0.04006,
+            0.04122,
+            0.04135,
+            0.04252,
+            0.04228
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile salinity",
+          "depth_band": "0-5 m",
+          "unit": "PSU",
+          "values": [
+            0.1249,
+            0.1258,
+            0.1198,
             0.1217,
-            0.1178,
-            0.1165,
-            0.1228,
+            0.127,
             null
           ],
           "reduced_start_counts": {}
@@ -7333,14 +8651,14 @@
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Profile salinity",
-          "depth_band": "100-500 m",
+          "depth_band": "5-100 m",
           "unit": "PSU",
           "values": [
-            0.06318,
-            0.06359,
-            0.06379,
-            0.06465,
-            0.06701,
+            0.1119,
+            0.1127,
+            0.1094,
+            0.1095,
+            0.113,
             null
           ],
           "reduced_start_counts": {}
@@ -7349,116 +8667,244 @@
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
           "variable": "Profile salinity",
-          "depth_band": "500+ m",
+          "depth_band": "100-300 m",
           "unit": "PSU",
           "values": [
-            0.03269,
-            0.03227,
-            0.0321,
-            0.03253,
-            0.03404,
+            0.07266,
+            0.07451,
+            0.07423,
+            0.07535,
+            0.07799,
             null
           ],
           "reduced_start_counts": {}
         },
         {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Sea level anomaly",
-          "depth_band": "Surface",
-          "unit": "m",
-          "values": [
-            0.02709,
-            0.02811,
-            0.02859,
-            0.02927,
-            0.02945,
-            0.02977
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
           "system": "glonet2-ens-icp",
           "system_label": "GloNet2-ens-icp",
-          "variable": "Sea level anomaly",
-          "depth_band": "Surface",
-          "unit": "m",
+          "variable": "Profile salinity",
+          "depth_band": "300-600 m",
+          "unit": "PSU",
           "values": [
-            0.03502,
-            0.03543,
-            0.03472,
-            0.03493,
-            0.03584,
+            0.04387,
+            0.04343,
+            0.04344,
+            0.04408,
+            0.04582,
             null
           ],
           "reduced_start_counts": {}
         },
         {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Eastward current",
-          "depth_band": "15 m",
-          "unit": "m s-1",
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "0-5 m",
+          "unit": "PSU",
           "values": [
-            0.06145,
-            0.06261,
-            0.06348,
-            0.0662,
-            0.06846,
-            0.06925
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Eastward current",
-          "depth_band": "15 m",
-          "unit": "m s-1",
-          "values": [
-            0.09044,
-            0.08636,
-            0.08249,
-            0.08071,
-            0.08098,
+            0.09817,
+            0.1,
+            0.09953,
+            0.1007,
+            0.1062,
             null
           ],
           "reduced_start_counts": {}
         },
         {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Northward current",
-          "depth_band": "15 m",
-          "unit": "m s-1",
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "5-100 m",
+          "unit": "PSU",
           "values": [
-            0.05735,
-            0.05919,
-            0.06053,
-            0.06242,
-            0.06507,
-            0.06566
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Northward current",
-          "depth_band": "15 m",
-          "unit": "m s-1",
-          "values": [
+            0.08463,
+            0.0865,
             0.08652,
-            0.08177,
-            0.07917,
-            0.07711,
-            0.07632,
+            0.08782,
+            0.08999,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "100-300 m",
+          "unit": "PSU",
+          "values": [
+            0.0614,
+            0.0626,
+            0.06263,
+            0.06323,
+            0.0642,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "300-600 m",
+          "unit": "PSU",
+          "values": [
+            0.03882,
+            0.0385,
+            0.03848,
+            0.03817,
+            0.03969,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Sea level anomaly",
+          "depth_band": "Surface",
+          "unit": "m",
+          "values": [
+            0.02768,
+            0.02875,
+            0.02926,
+            0.02995,
+            0.03017,
+            0.0305
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Sea level anomaly",
+          "depth_band": "Surface",
+          "unit": "m",
+          "values": [
+            0.03503,
+            0.03574,
+            0.03514,
+            0.03543,
+            0.03642,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Sea level anomaly",
+          "depth_band": "Surface",
+          "unit": "m",
+          "values": [
+            0.02475,
+            0.02592,
+            0.0277,
+            0.02979,
+            0.03181,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Eastward current",
+          "depth_band": "15 m",
+          "unit": "m s-1",
+          "values": [
+            0.06022,
+            0.06143,
+            0.06273,
+            0.06535,
+            0.06758,
+            0.06842
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Eastward current",
+          "depth_band": "15 m",
+          "unit": "m s-1",
+          "values": [
+            0.08559,
+            0.08344,
+            0.08066,
+            0.07963,
+            0.08051,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Eastward current",
+          "depth_band": "15 m",
+          "unit": "m s-1",
+          "values": [
+            0.06634,
+            0.06884,
+            0.07022,
+            0.07271,
+            0.07605,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Northward current",
+          "depth_band": "15 m",
+          "unit": "m s-1",
+          "values": [
+            0.05606,
+            0.05822,
+            0.05951,
+            0.06154,
+            0.06431,
+            0.06497
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Northward current",
+          "depth_band": "15 m",
+          "unit": "m s-1",
+          "values": [
+            0.08212,
+            0.07911,
+            0.07742,
+            0.076,
+            0.07576,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Northward current",
+          "depth_band": "15 m",
+          "unit": "m s-1",
+          "values": [
+            0.06323,
+            0.06533,
+            0.06785,
+            0.07001,
+            0.07242,
             null
           ],
           "reduced_start_counts": {}
@@ -7484,12 +8930,12 @@
           "depth_band": "Surface",
           "unit": "",
           "values": [
-            0.3365,
-            0.3399,
-            0.3521,
-            0.376,
-            0.4096,
-            0.414
+            0.3817,
+            0.3855,
+            0.3978,
+            0.4153,
+            0.4563,
+            0.4646
           ],
           "reduced_start_counts": {
             "10": 51
@@ -7502,317 +8948,27 @@
           "depth_band": "Surface",
           "unit": "",
           "values": [
-            0.4395,
-            0.4573,
-            0.4948,
-            0.5418,
-            0.5921,
+            0.4641,
+            0.4905,
+            0.5333,
+            0.5848,
+            0.6264,
             null
           ],
           "reduced_start_counts": {}
         },
         {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile temperature",
-          "depth_band": "All depths",
-          "unit": "",
-          "values": [
-            0.6244,
-            0.6368,
-            0.6172,
-            0.6354,
-            0.6175,
-            0.6358
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile temperature",
-          "depth_band": "0-100 m",
-          "unit": "",
-          "values": [
-            0.5903,
-            0.6073,
-            0.5812,
-            0.5926,
-            0.5955,
-            0.6202
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile temperature",
-          "depth_band": "100-500 m",
-          "unit": "",
-          "values": [
-            0.6558,
-            0.6669,
-            0.6462,
-            0.6681,
-            0.6382,
-            0.6509
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile temperature",
-          "depth_band": "500+ m",
-          "unit": "",
-          "values": [
-            0.5897,
-            0.6003,
-            0.593,
-            0.6102,
-            0.594,
-            0.6161
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile temperature",
-          "depth_band": "All depths",
-          "unit": "",
-          "values": [
-            0.6322,
-            0.6217,
-            0.6594,
-            0.7061,
-            0.7371,
-            null
-          ],
-          "reduced_start_counts": {}
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile temperature",
-          "depth_band": "0-100 m",
-          "unit": "",
-          "values": [
-            0.5334,
-            0.5419,
-            0.6065,
-            0.672,
-            0.7181,
-            null
-          ],
-          "reduced_start_counts": {}
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile temperature",
-          "depth_band": "100-500 m",
-          "unit": "",
-          "values": [
-            0.6694,
-            0.6455,
-            0.6698,
-            0.7086,
-            0.732,
-            null
-          ],
-          "reduced_start_counts": {}
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile temperature",
-          "depth_band": "500+ m",
-          "unit": "",
-          "values": [
-            0.7712,
-            0.7483,
-            0.7838,
-            0.8053,
-            0.8243,
-            null
-          ],
-          "reduced_start_counts": {}
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile salinity",
-          "depth_band": "All depths",
-          "unit": "",
-          "values": [
-            0.4112,
-            0.3993,
-            0.4313,
-            0.4321,
-            0.4453,
-            0.4249
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile salinity",
-          "depth_band": "0-100 m",
-          "unit": "",
-          "values": [
-            0.3434,
-            0.3244,
-            0.3694,
-            0.3609,
-            0.3855,
-            0.3559
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile salinity",
-          "depth_band": "100-500 m",
-          "unit": "",
-          "values": [
-            0.5283,
-            0.5386,
-            0.5314,
-            0.5572,
-            0.5361,
-            0.5456
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Profile salinity",
-          "depth_band": "500+ m",
-          "unit": "",
-          "values": [
-            0.4901,
-            0.5069,
-            0.4981,
-            0.5103,
-            0.5064,
-            0.5165
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile salinity",
-          "depth_band": "All depths",
-          "unit": "",
-          "values": [
-            0.5411,
-            0.5753,
-            0.6325,
-            0.6945,
-            0.7369,
-            null
-          ],
-          "reduced_start_counts": {}
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile salinity",
-          "depth_band": "0-100 m",
-          "unit": "",
-          "values": [
-            0.4789,
-            0.5179,
-            0.5878,
-            0.6702,
-            0.7146,
-            null
-          ],
-          "reduced_start_counts": {}
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile salinity",
-          "depth_band": "100-500 m",
-          "unit": "",
-          "values": [
-            0.6374,
-            0.6515,
-            0.6821,
-            0.7158,
-            0.7562,
-            null
-          ],
-          "reduced_start_counts": {}
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Profile salinity",
-          "depth_band": "500+ m",
-          "unit": "",
-          "values": [
-            0.6746,
-            0.6921,
-            0.755,
-            0.775,
-            0.822,
-            null
-          ],
-          "reduced_start_counts": {}
-        },
-        {
-          "system": "gloens",
-          "system_label": "GloEns",
-          "variable": "Sea level anomaly",
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Drifter SST",
           "depth_band": "Surface",
           "unit": "",
           "values": [
-            0.6847,
-            0.6915,
-            0.7281,
-            0.7663,
-            0.8228,
-            0.833
-          ],
-          "reduced_start_counts": {
-            "10": 51
-          }
-        },
-        {
-          "system": "glonet2-ens-icp",
-          "system_label": "GloNet2-ens-icp",
-          "variable": "Sea level anomaly",
-          "depth_band": "Surface",
-          "unit": "",
-          "values": [
-            0.6231,
-            0.6247,
-            0.6792,
-            0.7405,
-            0.7997,
+            0.5098,
+            0.4997,
+            0.4777,
+            0.4764,
+            0.4787,
             null
           ],
           "reduced_start_counts": {}
@@ -7820,16 +8976,466 @@
         {
           "system": "gloens",
           "system_label": "GloEns",
-          "variable": "Eastward current",
-          "depth_band": "15 m",
+          "variable": "Profile temperature",
+          "depth_band": "0-5 m",
+          "unit": "",
+          "values": [
+            0.3933,
+            0.41,
+            0.4246,
+            0.4806,
+            0.4761,
+            0.4824
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile temperature",
+          "depth_band": "5-100 m",
+          "unit": "",
+          "values": [
+            0.5702,
+            0.5808,
+            0.5629,
+            0.5724,
+            0.5748,
+            0.6033
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile temperature",
+          "depth_band": "100-300 m",
+          "unit": "",
+          "values": [
+            0.6276,
+            0.6389,
+            0.6226,
+            0.6439,
+            0.6189,
+            0.626
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile temperature",
+          "depth_band": "300-600 m",
           "unit": "",
           "values": [
             0.6372,
-            0.655,
-            0.6743,
-            0.6774,
+            0.6503,
+            0.6264,
+            0.6521,
+            0.6212,
+            0.6512
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile temperature",
+          "depth_band": "0-5 m",
+          "unit": "",
+          "values": [
+            0.4693,
+            0.4853,
+            0.5469,
+            0.611,
+            0.6768,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile temperature",
+          "depth_band": "5-100 m",
+          "unit": "",
+          "values": [
+            0.5032,
+            0.5252,
+            0.5848,
+            0.6545,
+            0.6934,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile temperature",
+          "depth_band": "100-300 m",
+          "unit": "",
+          "values": [
+            0.609,
+            0.5922,
+            0.6189,
+            0.6584,
+            0.6888,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile temperature",
+          "depth_band": "300-600 m",
+          "unit": "",
+          "values": [
+            0.7368,
+            0.7056,
+            0.7294,
+            0.7677,
+            0.7831,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "0-5 m",
+          "unit": "",
+          "values": [
+            0.5549,
+            0.5072,
+            0.5063,
+            0.5165,
+            0.5527,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "5-100 m",
+          "unit": "",
+          "values": [
+            0.7484,
+            0.7084,
+            0.7111,
+            0.7061,
+            0.711,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "100-300 m",
+          "unit": "",
+          "values": [
+            0.8687,
+            0.8328,
+            0.8362,
+            0.8127,
+            0.8122,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile temperature",
+          "depth_band": "300-600 m",
+          "unit": "",
+          "values": [
+            0.8789,
+            0.8473,
+            0.8355,
+            0.8243,
+            0.7931,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile salinity",
+          "depth_band": "0-5 m",
+          "unit": "",
+          "values": [
+            0.4099,
+            0.4104,
+            0.4562,
+            0.4149,
+            0.451,
+            0.4443
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile salinity",
+          "depth_band": "5-100 m",
+          "unit": "",
+          "values": [
+            0.3339,
+            0.3101,
+            0.3521,
+            0.3484,
+            0.3662,
+            0.3397
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile salinity",
+          "depth_band": "100-300 m",
+          "unit": "",
+          "values": [
+            0.4721,
+            0.4815,
+            0.4804,
+            0.5016,
+            0.4871,
+            0.4922
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Profile salinity",
+          "depth_band": "300-600 m",
+          "unit": "",
+          "values": [
+            0.5332,
+            0.5576,
+            0.5401,
+            0.5718,
+            0.5422,
+            0.5779
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile salinity",
+          "depth_band": "0-5 m",
+          "unit": "",
+          "values": [
+            0.5667,
+            0.6009,
+            0.6835,
+            0.7574,
+            0.8188,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile salinity",
+          "depth_band": "5-100 m",
+          "unit": "",
+          "values": [
+            0.4963,
+            0.5357,
+            0.6178,
+            0.6968,
+            0.7565,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile salinity",
+          "depth_band": "100-300 m",
+          "unit": "",
+          "values": [
+            0.649,
+            0.6523,
+            0.7028,
+            0.7391,
+            0.7838,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Profile salinity",
+          "depth_band": "300-600 m",
+          "unit": "",
+          "values": [
+            0.6596,
+            0.6756,
+            0.7353,
+            0.7713,
+            0.8174,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "0-5 m",
+          "unit": "",
+          "values": [
+            0.7217,
+            0.6814,
+            0.6474,
+            0.6813,
+            0.6693,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "5-100 m",
+          "unit": "",
+          "values": [
+            0.6955,
+            0.642,
+            0.6408,
+            0.6458,
+            0.6695,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "100-300 m",
+          "unit": "",
+          "values": [
+            0.7027,
             0.6821,
-            0.6833
+            0.6813,
+            0.6702,
+            0.6957,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Profile salinity",
+          "depth_band": "300-600 m",
+          "unit": "",
+          "values": [
+            0.6856,
+            0.6803,
+            0.6804,
+            0.6998,
+            0.7012,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Sea level anomaly",
+          "depth_band": "Surface",
+          "unit": "",
+          "values": [
+            0.6749,
+            0.6797,
+            0.7133,
+            0.7496,
+            0.8026,
+            0.8121
+          ],
+          "reduced_start_counts": {
+            "10": 51
+          }
+        },
+        {
+          "system": "glonet2-ens-icp",
+          "system_label": "GloNet2-ens-icp",
+          "variable": "Sea level anomaly",
+          "depth_band": "Surface",
+          "unit": "",
+          "values": [
+            0.614,
+            0.6093,
+            0.6602,
+            0.7186,
+            0.7755,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Sea level anomaly",
+          "depth_band": "Surface",
+          "unit": "",
+          "values": [
+            0.9473,
+            0.8946,
+            0.8499,
+            0.8275,
+            0.8278,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "gloens",
+          "system_label": "GloEns",
+          "variable": "Eastward current",
+          "depth_band": "15 m",
+          "unit": "",
+          "values": [
+            0.6117,
+            0.6331,
+            0.6503,
+            0.6567,
+            0.6643,
+            0.6666
           ],
           "reduced_start_counts": {
             "10": 51
@@ -7842,11 +9448,27 @@
           "depth_band": "15 m",
           "unit": "",
           "values": [
-            0.3491,
-            0.3937,
-            0.4698,
-            0.5383,
-            0.5982,
+            0.3124,
+            0.3469,
+            0.4135,
+            0.4746,
+            0.5289,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Eastward current",
+          "depth_band": "15 m",
+          "unit": "",
+          "values": [
+            0.7543,
+            0.7075,
+            0.7055,
+            0.7082,
+            0.7118,
             null
           ],
           "reduced_start_counts": {}
@@ -7858,12 +9480,12 @@
           "depth_band": "15 m",
           "unit": "",
           "values": [
-            0.6606,
-            0.6699,
-            0.682,
-            0.6974,
-            0.6995,
-            0.7005
+            0.6369,
+            0.6465,
+            0.6611,
+            0.6783,
+            0.6812,
+            0.6829
           ],
           "reduced_start_counts": {
             "10": 51
@@ -7876,11 +9498,27 @@
           "depth_band": "15 m",
           "unit": "",
           "values": [
-            0.3393,
-            0.3987,
-            0.4688,
-            0.5452,
-            0.6186,
+            0.297,
+            0.348,
+            0.4128,
+            0.4849,
+            0.5539,
+            null
+          ],
+          "reduced_start_counts": {}
+        },
+        {
+          "system": "glowens",
+          "system_label": "GLOW-ens",
+          "variable": "Northward current",
+          "depth_band": "15 m",
+          "unit": "",
+          "values": [
+            0.788,
+            0.7558,
+            0.7332,
+            0.7382,
+            0.7476,
             null
           ],
           "reduced_start_counts": {}

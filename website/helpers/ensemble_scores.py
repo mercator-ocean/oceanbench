@@ -27,7 +27,7 @@ METRIC_KEYS = {
 CLOSENESS_TO_ONE_BLOCKS = {"observations_spread_error_ratio", "gridded_spread_error_ratio"}
 
 DATUM_NOTE = "The sea surface height of GloEns is datum aligned to the reference before it is scored."
-SHORT_HORIZON_NOTE = "GloNet2-ens-icp stops at lead day 9."
+SHORT_HORIZON_NOTE = "GloNet2-ens-icp and GLOW-ens stop at lead day 9."
 # GloEns starts on Thursdays and every other system on Wednesdays, so a lead day of GloEns falls on
 # a different calendar day, and the observations that day carries are not the same ones.
 UNPAIRED_SAMPLE_NOTE = (
@@ -43,17 +43,18 @@ CLOSENESS_TO_ONE_NOTE = (
     "themselves, so a cell never reads better in colour and worse in number."
 )
 
-# The error table reads one matchup for everybody, the probabilistic tables need the members and so
-# read the superob matchup, which is a different pairing of forecast and observation.
-SUPEROB_MATCHUP_NOTE = (
-    "These scores come from the superob matchup, where observations are placed on the quarter "
-    "degree cells of the model and averaged when several of them share a cell, because an ensemble "
-    "predicts the average of a cell while a single observation also carries the small scale noise "
-    "no forecast can resolve. In practice that averaging bites on the along track sea level, which "
-    "brings about seven observations to a cell; the drifter temperature and the currents arrive at "
-    "roughly one observation per cell, so for them the step is a change of position and not an "
-    "averaging away of noise."
+# Every ensemble observation row, the error table and the probabilistic tables alike, is read from
+# the class 4 matchup of oceanbench.core.ensemble_class4, which interpolates each member to the
+# observation position with no superobbing and no distance guard, exactly as the deterministic path
+# does. The earlier campaign rows came from a superob matchup and from its own depth bands.
+CLASS4_MATCHUP_NOTE = (
+    "The probabilistic scores read the same class 4 matchup as the error table, one member at a "
+    "time and with no superobbing, so every table of the page pairs forecast and observation the "
+    "same way and reads on the same depth bins."
 )
+
+# GLOW-ens was scored on the gridded axis for temperature, salinity and sea surface height only.
+GLOWENS_GRIDDED_NOTE = "GLOW-ens has no gridded current rows and no gridded surface salinity row."
 
 BLOCK_NOTES = {
     "observations_rmsd": (
@@ -61,11 +62,11 @@ BLOCK_NOTES = {
         "class 4 matchup and its depth bins, so every row of a variable reads on the same scale. "
         f"{UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}"
     ),
-    "observations_crps": f"{UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {SUPEROB_MATCHUP_NOTE}",
-    "observations_spread_error_ratio": f"{UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {SUPEROB_MATCHUP_NOTE}",
-    "gridded_rmsd": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}",
-    "gridded_crps": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}",
-    "gridded_spread_error_ratio": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}",
+    "observations_crps": f"{UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {CLASS4_MATCHUP_NOTE}",
+    "observations_spread_error_ratio": f"{UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {CLASS4_MATCHUP_NOTE}",
+    "gridded_rmsd": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {GLOWENS_GRIDDED_NOTE}",
+    "gridded_crps": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {GLOWENS_GRIDDED_NOTE}",
+    "gridded_spread_error_ratio": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {GLOWENS_GRIDDED_NOTE}",
 }
 
 # The error table now carries the class 4 depth bins for every system, so it is laid out in the
