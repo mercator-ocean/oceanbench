@@ -284,3 +284,45 @@ def test_ocean_mask_depths_are_twelfth_degree_native_levels() -> None:
     ]
 
     numpy.testing.assert_allclose(OCEAN_MASK_DEPTHS, expected_native_levels, atol=1e-3)
+
+
+def test_formatted_results_keep_a_variable_and_depth_bin_whose_scores_are_all_missing() -> None:
+    results_dataframe = pandas.DataFrame(
+        {
+            "variable": [Variable.SEA_WATER_SALINITY.key()] * 2 + [Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()] * 2,
+            "depth_bin": ["0-5m", "0-5m", "surface", "surface"],
+            "lead_day": [0, 1, 0, 1],
+            "rmsd": [numpy.nan, numpy.nan, 0.5, 0.6],
+            "count": [10, 10, 30, 30],
+            "missing": [10, 10, 0, 0],
+        }
+    )
+
+    formatted = format_class4_results(results_dataframe, 2)
+
+    assert formatted.index.tolist() == [
+        "Temperature (\u00b0C) [sea_water_potential_temperature]{surface}",
+        "Salinity (PSU) [sea_water_salinity]{0-5m}",
+    ]
+    assert formatted["Missing"].tolist() == [0, 10]
+    assert numpy.isnan(formatted.loc["Salinity (PSU) [sea_water_salinity]{0-5m}", "Lead day 1"])
+
+
+def test_formatted_results_keep_a_lead_day_with_no_scored_value_at_all() -> None:
+    results_dataframe = pandas.DataFrame(
+        {
+            "variable": [Variable.SEA_WATER_SALINITY.key()] * 2,
+            "depth_bin": ["0-5m", "0-5m"],
+            "lead_day": [0, 1],
+            "rmsd": [0.1, numpy.nan],
+            "count": [10, 10],
+            "missing": [0, 10],
+        }
+    )
+
+    formatted = format_class4_results(results_dataframe, 3)
+
+    assert formatted.columns.tolist() == ["Lead day 1", "Lead day 2", "Lead day 3", "Observations", "Missing"]
+    assert formatted["Lead day 1"].tolist() == [0.1]
+    assert numpy.isnan(formatted["Lead day 2"]).all()
+    assert numpy.isnan(formatted["Lead day 3"]).all()

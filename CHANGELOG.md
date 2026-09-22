@@ -30,11 +30,14 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 
 - Local stage builds retry transient remote chunk failures, including blosc decompression errors from truncated chunk payloads.
 - Class IV salinity is vertically interpolated with the same two level linear bracket as the other variables. The cubic spline it used before needed four valid levels and silently dropped shallow profiles ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- The Class IV table keeps a variable and depth bin whose scores are all missing instead of dropping the row, and no longer breaks when a lead day has no scored value at all.
 
 ### Added
 
 - The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
-- Class IV scores the observations that lie between two wet OceanBench standard depths (the six depths listed in the evaluation methods) in the GLO12 analysis; the population is therefore the same for every challenger. A challenger value missing inside that population is reported in the `Missing` column. The `Missing` column is the size of that gap for that challenger at the first lead day, and `Observations` is also counted at the first lead day.
+- The OceanBench ocean mask, wet where both the GLO12 and the GLORYS12 official static masks are wet at the six standard depths, built as a checksum pinned artefact.
+- Class IV scores the observations bracketed by two wet standard depths of that mask, so the population is the same for every challenger. A challenger value missing inside that population is counted in the `Missing` column, at the first lead day like `Observations`.
+- Gridded RMSD scores only the cells the ocean mask calls ocean, and reports the ocean cells a challenger leaves empty in the `Missing` and `Missing fraction` columns.
 
 ## 0.5.1 - 2026-09-02
 

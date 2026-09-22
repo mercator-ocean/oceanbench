@@ -484,12 +484,17 @@ def _observation_variable_depth_label(standard_name: str, depth_bin: str) -> str
 
 
 def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -> pandas.DataFrame:
-    pivot_table = results_dataframe.pivot_table(
-        values="rmsd",
-        index=["variable", "depth_bin"],
-        columns="lead_day",
-        aggfunc="first",
-    ).reset_index()
+    scored_pairs = pandas.MultiIndex.from_frame(results_dataframe[["variable", "depth_bin"]].drop_duplicates())
+    pivot_table = (
+        results_dataframe.pivot_table(
+            values="rmsd",
+            index=["variable", "depth_bin"],
+            columns="lead_day",
+            aggfunc="first",
+        )
+        .reindex(index=scored_pairs, columns=range(lead_days_count))
+        .reset_index()
+    )
     first_available_day = results_dataframe["lead_day"].min()
     observation_counts = results_dataframe[results_dataframe["lead_day"] == first_available_day][
         ["variable", "depth_bin", "count", "missing"]
