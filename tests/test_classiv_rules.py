@@ -17,7 +17,7 @@ from oceanbench.core.classIV_support import (
 )
 from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.references.glo12 import OCEAN_MASK_DEPTHS
+from oceanbench.core.ocean_mask import OCEAN_MASK_DEPTHS
 
 MODEL_DEPTHS = numpy.array([10.0, 20.0, 30.0])
 
@@ -273,7 +273,7 @@ def test_gate_clamps_an_observation_deeper_than_the_last_mask_level_to_that_leve
     assert _gated_depths([0.0, 0.0], [10.0, 12.0], [100.0, 100.0]) == [0]
 
 
-def test_ocean_mask_depths_are_glo12_native_levels() -> None:
+def test_ocean_mask_depths_are_twelfth_degree_native_levels() -> None:
     expected_native_levels = [
         0.494025,
         47.37369,

@@ -415,13 +415,13 @@ def gate_class4_observations_to_reference_population(
     ocean_mask: xarray.DataArray,
 ) -> pandas.DataFrame:
     """
-    Keep only the observations the GLO12 analysis can bracket on the canonical depth grid.
+    Keep only the observations the OceanBench ocean mask brackets on the standard depth grid.
 
-    The mask is carried as one where the analysis is wet and not a number where it is dry, and it
-    goes through the same horizontal linear interpolation as a challenger, so an observation is
-    over the ocean exactly when that interpolation stays finite. It is kept only when both of its
-    bracketing levels on the canonical grid are finite there, so the scored population does not
-    depend on the challenger vertical axis.
+    The mask is carried as one where OceanBench considers the cell ocean and not a number where it
+    does not, and it goes through the same horizontal linear interpolation as a challenger, so an
+    observation is over the ocean exactly when that interpolation stays finite. It is kept only
+    when both of its bracketing standard depths are finite there, so the scored population depends
+    neither on the challenger vertical axis nor on the reference a metric happens to use.
     """
     observations_dataframe = observations_dataframe.reset_index(drop=True)
     finite_mask = ocean_mask.where(ocean_mask, numpy.nan).astype(float)

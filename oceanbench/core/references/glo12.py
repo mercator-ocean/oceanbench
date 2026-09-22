@@ -3,18 +3,14 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from datetime import datetime
-from functools import lru_cache
 import numpy
 import pandas
-from xarray import DataArray, Dataset, merge, concat
+from xarray import Dataset, merge, concat
 import logging
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.resolution import get_dataset_resolution
 import copernicusmarine
-from oceanbench.core.climate_forecast_standard_names import (
-    StandardVariable,
-    rename_dataset_with_standard_names,
-)
+from oceanbench.core.climate_forecast_standard_names import StandardVariable
 from oceanbench.core.reference_depths import (
     reference_depth_grid_stage_variant,
     with_reference_depth_grid_metadata,
@@ -26,24 +22,6 @@ logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
 _GLO12_ANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
-
-# The six OceanBench standard depths, on the native GLO12 levels, used to define the Class IV
-# observation population. The population is defined on the documented standard depths so every
-# challenger scores the same observations with the same support.
-OCEAN_MASK_DEPTHS = numpy.array(
-    [
-        0.494025,
-        47.37369,
-        92.32607,
-        222.47520,
-        318.12741,
-        541.08893,
-    ]
-)
-
-# Anchor day used to open the ocean mask. It is a Wednesday inside the benchmark year, so it is a
-# valid GLO12 date, and using a fixed day makes the mask independent of the challenger being scored.
-OCEAN_MASK_ANCHOR_DAY = "2024-01-03"
 
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
@@ -231,33 +209,3 @@ def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
     reference_dataset = with_remote_http_retries("GLO12 reference dataset open", open_dataset)
     _GLO12_ANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
     return reference_dataset
-
-
-@lru_cache(maxsize=1)
-def _glo12_ocean_mask(first_day: str) -> DataArray:
-    def open_ocean_field() -> DataArray:
-        # The GLO12 land mask comes from the static NEMO bathymetry, so a single day masks every valid date.
-        mask_dataset = _glo12_1_12_path(
-            numpy.datetime64(first_day),
-            days_count=1,
-            target_depths=OCEAN_MASK_DEPTHS,
-        )
-        mask_field = rename_dataset_with_standard_names(mask_dataset)[
-            StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value
-        ]
-        return numpy.isfinite(mask_field.isel({Dimension.TIME.key(): 0})).compute()
-
-    return with_remote_http_retries("GLO12 ocean mask open", open_ocean_field)
-
-
-def glo12_ocean_mask(challenger_dataset: Dataset) -> DataArray:
-    """
-    Open the GLO12 twelfth of a degree ocean mask on the canonical depth grid.
-
-    The three dimensional boolean field is true where the analysis temperature is finite. The NEMO
-    land and sea mask is time invariant, so the mask is read on a single anchor day rather than on
-    the challenger dates: that keeps the scored observation population identical across challengers
-    by construction. The challenger dataset is only part of the signature so that call sites do not
-    change.
-    """
-    return _glo12_ocean_mask(OCEAN_MASK_ANCHOR_DAY)
