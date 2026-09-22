@@ -7,7 +7,13 @@ import pytest
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.rmsd import _rmsd
+from oceanbench.core.ocean_mask import OCEAN_MASK_DEPTHS
+from oceanbench.core.rmsd import (
+    MISSING_COUNT_COLUMN,
+    MISSING_FRACTION_COLUMN,
+    _rmsd,
+    rmsd,
+)
 
 
 def _dataset_with_spatial_coordinates(
@@ -311,3 +317,102 @@ def test_rmsd_takes_the_square_root_per_first_day_and_depth_before_averaging_ove
         rmsd_dataset[variable_key].transpose(Dimension.LEAD_DAY_INDEX.key(), Dimension.DEPTH.key()).values,
         [[(3.0 + 6.0) / 2, (1.0 + 3.0) / 2], [(2.0 + 4.0) / 2, (6.0 + 6.0) / 2]],
     )
+
+
+MASK_TEST_LATITUDES = numpy.array([0.0, 30.0, 60.0])
+MASK_TEST_LONGITUDES = numpy.array([10.0])
+
+
+def _temperature_dataset(surface_values: list[float], deep_value: float) -> xarray.Dataset:
+    variable_key = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
+    depths = OCEAN_MASK_DEPTHS
+    values = numpy.full((1, 1, len(depths), len(MASK_TEST_LATITUDES), len(MASK_TEST_LONGITUDES)), deep_value)
+    values[0, 0, 0, :, 0] = surface_values
+    return xarray.Dataset(
+        {
+            variable_key: (
+                [
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.DEPTH.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ],
+                values,
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.DEPTH.key(): depths,
+            Dimension.LATITUDE.key(): MASK_TEST_LATITUDES,
+            Dimension.LONGITUDE.key(): MASK_TEST_LONGITUDES,
+        },
+    )
+
+
+def _surface_dry_at_sixty_degrees_mask() -> xarray.DataArray:
+    values = numpy.ones(
+        (len(OCEAN_MASK_DEPTHS), len(MASK_TEST_LATITUDES), len(MASK_TEST_LONGITUDES)),
+        dtype=bool,
+    )
+    values[0, 2, 0] = False
+    return xarray.DataArray(
+        values,
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): OCEAN_MASK_DEPTHS,
+            Dimension.LATITUDE.key(): MASK_TEST_LATITUDES,
+            Dimension.LONGITUDE.key(): MASK_TEST_LONGITUDES,
+        },
+    )
+
+
+SURFACE_TEMPERATURE_LABEL = "Temperature (°C) [sea_water_potential_temperature]{surface}"
+FIFTY_METERS_TEMPERATURE_LABEL = "Temperature (°C) [sea_water_potential_temperature]{50m}"
+
+
+def test_rmsd_scores_only_the_mask_wet_cells_and_reports_the_missing_ones() -> None:
+    challenger_dataset = _temperature_dataset(surface_values=[numpy.nan, 4.0, 100.0], deep_value=1.0)
+    reference_dataset = xarray.zeros_like(challenger_dataset)
+
+    table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+    )
+
+    assert table.loc[SURFACE_TEMPERATURE_LABEL, "Lead day 1"] == 4.0
+    assert table.loc[SURFACE_TEMPERATURE_LABEL, MISSING_COUNT_COLUMN] == 1
+    assert numpy.isclose(
+        table.loc[SURFACE_TEMPERATURE_LABEL, MISSING_FRACTION_COLUMN],
+        1.0 / (1.0 + numpy.cos(numpy.deg2rad(30.0))),
+    )
+    assert table.loc[FIFTY_METERS_TEMPERATURE_LABEL, "Lead day 1"] == 1.0
+    assert table.loc[FIFTY_METERS_TEMPERATURE_LABEL, MISSING_COUNT_COLUMN] == 0
+    assert table.loc[FIFTY_METERS_TEMPERATURE_LABEL, MISSING_FRACTION_COLUMN] == 0.0
+
+
+def test_rmsd_excludes_a_mask_dry_cell_even_when_both_sides_are_finite() -> None:
+    challenger_dataset = _temperature_dataset(surface_values=[4.0, 4.0, 100.0], deep_value=1.0)
+    reference_dataset = xarray.zeros_like(challenger_dataset)
+
+    masked_table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+    )
+    fully_wet_mask = _surface_dry_at_sixty_degrees_mask()
+    fully_wet_mask.values[0, 2, 0] = True
+    unmasked_table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+        ocean_mask=fully_wet_mask,
+    )
+
+    assert masked_table.loc[SURFACE_TEMPERATURE_LABEL, "Lead day 1"] == 4.0
+    assert masked_table.loc[SURFACE_TEMPERATURE_LABEL, MISSING_COUNT_COLUMN] == 0
+    assert unmasked_table.loc[SURFACE_TEMPERATURE_LABEL, "Lead day 1"] > 40.0
