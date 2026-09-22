@@ -416,3 +416,84 @@ def test_rmsd_excludes_a_mask_dry_cell_even_when_both_sides_are_finite() -> None
     assert masked_table.loc[SURFACE_TEMPERATURE_LABEL, "Lead day 1"] == 4.0
     assert masked_table.loc[SURFACE_TEMPERATURE_LABEL, MISSING_COUNT_COLUMN] == 0
     assert unmasked_table.loc[SURFACE_TEMPERATURE_LABEL, "Lead day 1"] > 40.0
+
+
+def _depth_free_dataset(variable_values: dict[str, list[float]]) -> xarray.Dataset:
+    dimensions = [
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
+    ]
+    return xarray.Dataset(
+        {
+            variable_key: (
+                dimensions,
+                numpy.array(values).reshape(1, 1, len(MASK_TEST_LATITUDES), len(MASK_TEST_LONGITUDES)),
+            )
+            for variable_key, values in variable_values.items()
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.DEPTH.key(): OCEAN_MASK_DEPTHS,
+            Dimension.LATITUDE.key(): MASK_TEST_LATITUDES,
+            Dimension.LONGITUDE.key(): MASK_TEST_LONGITUDES,
+        },
+    )
+
+
+MIXED_LAYER_DEPTH_LABEL = "Mixed layer depth (m) [ocean_mixed_layer_thickness]{surface}"
+MERIDIONAL_GEOSTROPHIC_LABEL = (
+    "Meridional geostrophic current (m/s) [geostrophic_northward_sea_water_velocity]{surface}"
+)
+ZONAL_GEOSTROPHIC_LABEL = "Zonal geostrophic current (m/s) [geostrophic_eastward_sea_water_velocity]{surface}"
+
+
+def test_rmsd_scores_a_dataset_whose_only_variable_has_no_depth() -> None:
+    variable_key = Variable.MIXED_LAYER_DEPTH.key()
+    challenger_dataset = _depth_free_dataset({variable_key: [numpy.nan, 4.0, 100.0]})
+    reference_dataset = xarray.zeros_like(challenger_dataset)
+
+    table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.MIXED_LAYER_DEPTH],
+        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+    )
+
+    assert list(table.index) == [MIXED_LAYER_DEPTH_LABEL]
+    assert table.loc[MIXED_LAYER_DEPTH_LABEL, "Lead day 1"] == 4.0
+    assert table.loc[MIXED_LAYER_DEPTH_LABEL, MISSING_COUNT_COLUMN] == 1
+    assert numpy.isclose(
+        table.loc[MIXED_LAYER_DEPTH_LABEL, MISSING_FRACTION_COLUMN],
+        1.0 / (1.0 + numpy.cos(numpy.deg2rad(30.0))),
+    )
+
+
+def test_rmsd_scores_a_dataset_whose_two_variables_have_no_depth() -> None:
+    northward_key = Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key()
+    eastward_key = Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key()
+    challenger_dataset = _depth_free_dataset(
+        {
+            northward_key: [0.0, 4.0, 100.0],
+            eastward_key: [0.0, 4.0, 100.0],
+        }
+    )
+    reference_dataset = xarray.zeros_like(challenger_dataset)
+
+    table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[
+            Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
+        ],
+        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+    )
+
+    assert sorted(table.index) == sorted([MERIDIONAL_GEOSTROPHIC_LABEL, ZONAL_GEOSTROPHIC_LABEL])
+    for label in (MERIDIONAL_GEOSTROPHIC_LABEL, ZONAL_GEOSTROPHIC_LABEL):
+        assert numpy.isfinite(table.loc[label, "Lead day 1"])
+        assert table.loc[label, MISSING_COUNT_COLUMN] == 0
+        assert table.loc[label, MISSING_FRACTION_COLUMN] == 0.0

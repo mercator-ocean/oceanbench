@@ -148,7 +148,8 @@ def _variable_ocean_mask(
 ) -> xarray.DataArray:
     if Dimension.DEPTH.key() in dataset[variable_name].dims:
         return ocean_mask
-    return ocean_mask.sel({Dimension.DEPTH.key(): DEPTH_LABELS[DepthLevel.SURFACE]})
+    surface_mask = ocean_mask.sel({Dimension.DEPTH.key(): DEPTH_LABELS[DepthLevel.SURFACE]})
+    return surface_mask.drop_vars(Dimension.DEPTH.key())
 
 
 def _masked_to_ocean(dataset: xarray.Dataset, ocean_mask: xarray.DataArray) -> xarray.Dataset:
