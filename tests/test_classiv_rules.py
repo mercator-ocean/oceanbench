@@ -4,6 +4,7 @@
 
 import numpy
 import pandas
+import pytest
 import xarray
 
 import oceanbench.core.classIV_support as classIV_support
@@ -153,6 +154,74 @@ def test_forecast_sea_surface_height_becomes_sla_by_removing_mdt_and_the_reanaly
 
     assert REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT == -0.1148
     numpy.testing.assert_allclose(sla.values[0, 0], [[0.8148, 0.8148], [0.6148, 0.6148]])
+
+
+def _quarter_degree_sea_surface_height(latitudes: numpy.ndarray, longitudes: numpy.ndarray) -> xarray.DataArray:
+    coordinates = {
+        Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+        Dimension.LEAD_DAY_INDEX.key(): [0],
+        Dimension.LATITUDE.key(): latitudes,
+        Dimension.LONGITUDE.key(): longitudes,
+    }
+    return xarray.DataArray(
+        numpy.full((1, 1, latitudes.size, longitudes.size), 1.0),
+        dims=list(coordinates),
+        coords=coordinates,
+        name=Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+    )
+
+
+def _quarter_degree_mean_dynamic_topography(latitudes: numpy.ndarray, longitudes: numpy.ndarray) -> xarray.DataArray:
+    return xarray.DataArray(
+        numpy.full((latitudes.size, longitudes.size), 0.3, dtype=numpy.float32),
+        dims=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.LATITUDE.key(): latitudes.astype(numpy.float32),
+            Dimension.LONGITUDE.key(): longitudes.astype(numpy.float32),
+        },
+    )
+
+
+def test_sla_keeps_the_full_challenger_grid_when_its_coordinates_differ_from_the_mdt_by_rounding(
+    monkeypatch,
+) -> None:
+    latitudes = numpy.arange(-10.0, 10.0, 0.25)
+    longitudes = numpy.arange(-20.0, 20.0, 0.25)
+    zos = _quarter_degree_sea_surface_height(latitudes + 1e-6, longitudes + 1e-6)
+    mean_dynamic_topography = _quarter_degree_mean_dynamic_topography(latitudes, longitudes)
+    monkeypatch.setattr(classIV_support, "load_mean_dynamic_topography", lambda _resolution: mean_dynamic_topography)
+
+    sla = _convert_forecast_ssh_to_sla(zos, Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key())
+
+    assert sla.sizes == zos.sizes
+    numpy.testing.assert_array_equal(sla[Dimension.LATITUDE.key()], zos[Dimension.LATITUDE.key()])
+    numpy.testing.assert_array_equal(sla[Dimension.LONGITUDE.key()], zos[Dimension.LONGITUDE.key()])
+    numpy.testing.assert_allclose(sla.values, 0.8148, rtol=1e-6)
+
+
+def test_sla_is_missing_where_the_challenger_grid_extends_beyond_the_mdt(monkeypatch) -> None:
+    latitudes = numpy.arange(-10.0, 10.0, 0.25)
+    longitudes = numpy.arange(-20.0, 20.0, 0.25)
+    zos = _quarter_degree_sea_surface_height(latitudes, longitudes)
+    mean_dynamic_topography = _quarter_degree_mean_dynamic_topography(latitudes[4:], longitudes)
+    monkeypatch.setattr(classIV_support, "load_mean_dynamic_topography", lambda _resolution: mean_dynamic_topography)
+
+    sla = _convert_forecast_ssh_to_sla(zos, Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key())
+
+    assert sla.sizes == zos.sizes
+    assert numpy.isnan(sla.values[..., :4, :]).all()
+    numpy.testing.assert_allclose(sla.values[..., 4:, :], 0.8148, rtol=1e-6)
+
+
+def test_sla_conversion_fails_when_the_challenger_grid_is_shifted_from_the_mdt(monkeypatch) -> None:
+    latitudes = numpy.arange(-10.0, 10.0, 0.25)
+    longitudes = numpy.arange(-20.0, 20.0, 0.25)
+    zos = _quarter_degree_sea_surface_height(latitudes + 0.125, longitudes)
+    mean_dynamic_topography = _quarter_degree_mean_dynamic_topography(latitudes, longitudes)
+    monkeypatch.setattr(classIV_support, "load_mean_dynamic_topography", lambda _resolution: mean_dynamic_topography)
+
+    with pytest.raises(ValueError, match="latitude"):
+        _convert_forecast_ssh_to_sla(zos, Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key())
 
 
 LATITUDES = numpy.array([0.0, 1.0, 2.0])

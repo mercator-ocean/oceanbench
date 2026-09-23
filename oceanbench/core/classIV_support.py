@@ -241,8 +241,45 @@ def _convert_forecast_ssh_to_sla(
     model_dataset = rename_dataset_with_standard_names(model_variable.to_dataset(name=variable_key))
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
-    mean_dynamic_topography = load_mean_dynamic_topography(resolution)
+    mean_dynamic_topography = _mean_dynamic_topography_on_challenger_grid(
+        load_mean_dynamic_topography(resolution),
+        model_variable,
+    )
     return model_variable - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+
+
+def _mean_dynamic_topography_on_challenger_grid(
+    mean_dynamic_topography: xarray.DataArray,
+    model_variable: xarray.DataArray,
+) -> xarray.DataArray:
+    """
+    Put the MDT on the challenger grid, by nearest neighbour within a tenth of a grid step.
+
+    The challenger and MDT coordinates can differ by rounding, and a plain subtraction would then keep
+    only the bit-identical ones. The MDT takes the challenger coordinates instead, is missing where the
+    challenger grid extends beyond it, and a challenger coordinate inside the MDT extent that matches
+    none of its coordinates is an error.
+    """
+    for coordinate_name in (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()):
+        challenger_values = model_variable[coordinate_name].values
+        mean_dynamic_topography_values = mean_dynamic_topography[coordinate_name].values
+        tolerance = numpy.abs(numpy.diff(challenger_values)).min() / 10
+        nearest_indexes = pandas.Index(mean_dynamic_topography_values).get_indexer(
+            challenger_values, method="nearest", tolerance=tolerance
+        )
+        is_inside = (challenger_values > mean_dynamic_topography_values.min() - tolerance) & (
+            challenger_values < mean_dynamic_topography_values.max() + tolerance
+        )
+        if (nearest_indexes[is_inside] < 0).any():
+            raise ValueError(
+                f"Challenger {coordinate_name} coordinates do not match the mean dynamic topography grid "
+                f"within tolerance {tolerance}"
+            )
+        challenger_coordinate = {coordinate_name: model_variable[coordinate_name]}
+        mean_dynamic_topography = mean_dynamic_topography.reindex(
+            challenger_coordinate, method="nearest", tolerance=tolerance
+        ).assign_coords(challenger_coordinate)
+    return mean_dynamic_topography
 
 
 def prepare_class4_model_variable(
