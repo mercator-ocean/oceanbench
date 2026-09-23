@@ -18,7 +18,7 @@ LIVE_CLASS4_OBSERVATION_ZARR_TEMPLATE = (
 )
 LIVE_CLASS4_OBSERVATION_LAST_DAY = "2026-05-30"
 LIVE_GLONET_FORECAST_ZARR_TEMPLATE = (
-    "https://minio.dive.edito.eu/project-moiai-octo/public/octo/v0/ai-gallery/" "octo-glonet-p1d/{date}/{date}.zarr"
+    "https://s3.waw3-1.cloudferro.com/moiai-octo-bucket/public/octo/v0/ai-gallery/" "octo-glonet-p1d/{date}/{date}.zarr"
 )
 
 
