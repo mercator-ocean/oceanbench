@@ -263,22 +263,33 @@ def _salinity_dataset(depths: numpy.ndarray, missing_column: bool) -> xarray.Dat
     )
 
 
-MASK_DEPTHS = numpy.array([0.5, 10.0, 50.0])
+def _twelfth_degree_ocean_mask(
+    is_wet: numpy.ndarray,
+    first_latitude: float = 0.0,
+    first_longitude: float = 10.0,
+) -> xarray.DataArray:
+    _, latitude_count, longitude_count = is_wet.shape
+    return xarray.DataArray(
+        is_wet,
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): OCEAN_MASK_DEPTHS,
+            Dimension.LATITUDE.key(): first_latitude + numpy.arange(latitude_count) / 12.0,
+            Dimension.LONGITUDE.key(): first_longitude + numpy.arange(longitude_count) / 12.0,
+        },
+    )
+
+
+def _all_wet(latitude_count: int, longitude_count: int) -> numpy.ndarray:
+    return numpy.full((len(OCEAN_MASK_DEPTHS), latitude_count, longitude_count), True)
 
 
 def _ocean_mask() -> xarray.DataArray:
-    values = numpy.full((len(MASK_DEPTHS), len(LATITUDES), len(LONGITUDES)), True)
-    values[2, 0, 2] = False
-    return xarray.DataArray(
-        values,
-        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
-        coords={
-            Dimension.DEPTH.key(): MASK_DEPTHS,
-            Dimension.LATITUDE.key(): LATITUDES,
-            Dimension.LONGITUDE.key(): LONGITUDES,
-        },
-        name=Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
-    )
+    # Twelfth of a degree over the challenger grid, with one shallow cell in the quarter degree
+    # cell next to the observation at (0.5, 11.5) but not among its twelfth of a degree corners.
+    is_wet = _all_wet(25, 25)
+    is_wet[1:, 5, 17] = False
+    return _twelfth_degree_ocean_mask(is_wet)
 
 
 def _salinity_observations_dataset() -> xarray.Dataset:
@@ -334,12 +345,20 @@ def test_gate_keeps_a_surface_observation_where_the_first_mask_level_is_wet() ->
     assert _gated_depths([0.0, 0.0], [10.0, 12.0], [0.0, 0.0]) == [0, 1]
 
 
-def test_gate_drops_an_observation_outside_the_mask_horizontal_range() -> None:
-    assert _gated_depths([0.5, 5.0], [10.5, 10.5], [20.0, 20.0]) == [0]
-
-
 def test_gate_clamps_an_observation_deeper_than_the_last_mask_level_to_that_level() -> None:
-    assert _gated_depths([0.0, 0.0], [10.0, 12.0], [100.0, 100.0]) == [0]
+    is_wet = _all_wet(25, 25)
+    is_wet[-1, 18, 18] = False
+    observations_dataframe = pandas.DataFrame(
+        {
+            Dimension.LATITUDE.key(): [0.25, 1.5],
+            Dimension.LONGITUDE.key(): [10.25, 11.5],
+            Dimension.DEPTH.key(): [700.0, 700.0],
+        }
+    )
+
+    gated = gate_class4_observations_to_reference_population(observations_dataframe, _twelfth_degree_ocean_mask(is_wet))
+
+    assert gated.index.tolist() == [0]
 
 
 def test_ocean_mask_depths_are_twelfth_degree_native_levels() -> None:
@@ -357,17 +376,9 @@ def test_ocean_mask_depths_are_twelfth_degree_native_levels() -> None:
 
 
 def _mask_on_the_ocean_mask_depths(wet_below_600_meters: bool) -> xarray.DataArray:
-    values = numpy.full((len(OCEAN_MASK_DEPTHS), len(LATITUDES), len(LONGITUDES)), True)
-    values[OCEAN_MASK_DEPTHS > 600.0] = wet_below_600_meters
-    return xarray.DataArray(
-        values,
-        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
-        coords={
-            Dimension.DEPTH.key(): OCEAN_MASK_DEPTHS,
-            Dimension.LATITUDE.key(): LATITUDES,
-            Dimension.LONGITUDE.key(): LONGITUDES,
-        },
-    )
+    is_wet = _all_wet(25, 25)
+    is_wet[OCEAN_MASK_DEPTHS > 600.0] = wet_below_600_meters
+    return _twelfth_degree_ocean_mask(is_wet)
 
 
 def test_gate_vets_an_observation_of_the_deepest_depth_bin_against_the_level_below_600_meters() -> None:
@@ -435,17 +446,7 @@ def test_formatted_results_keep_a_lead_day_with_no_scored_value_at_all() -> None
 
 
 def test_gate_keeps_observations_across_the_dateline_on_a_global_mask() -> None:
-    longitudes = numpy.arange(-180.0, 180.0, 1.0 / 12.0)
-    latitudes = numpy.array([-1.0, 0.0, 1.0])
-    ocean_mask = xarray.DataArray(
-        numpy.full((len(MASK_DEPTHS), len(latitudes), len(longitudes)), True),
-        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
-        coords={
-            Dimension.DEPTH.key(): MASK_DEPTHS,
-            Dimension.LATITUDE.key(): latitudes,
-            Dimension.LONGITUDE.key(): longitudes,
-        },
-    )
+    ocean_mask = _twelfth_degree_ocean_mask(_all_wet(25, 4320), first_latitude=-1.0, first_longitude=-180.0)
     observations_dataframe = pandas.DataFrame(
         {
             Dimension.LATITUDE.key(): [0.0, 0.0, 0.0, 0.0],
@@ -457,3 +458,96 @@ def test_gate_keeps_observations_across_the_dateline_on_a_global_mask() -> None:
     gated = gate_class4_observations_to_reference_population(observations_dataframe, ocean_mask)
 
     assert gated.index.tolist() == [0, 1, 2, 3]
+
+
+def _surface_observations(latitudes: list[float], longitudes: list[float]) -> pandas.DataFrame:
+    return pandas.DataFrame(
+        {
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+            Dimension.DEPTH.key(): [0.0] * len(latitudes),
+        }
+    )
+
+
+def _make_shallow(is_wet: numpy.ndarray, rows: slice, columns: slice) -> None:
+    is_wet[2:, rows, columns] = False
+
+
+def test_gate_drops_an_observation_with_a_shallow_corner_cell() -> None:
+    is_wet = _all_wet(61, 61)
+    _make_shallow(is_wet, slice(30, 31), slice(30, 31))
+    observations_dataframe = _surface_observations([2.5 + 0.5 / 12, 1.0], [12.5 + 0.5 / 12, 11.0])
+
+    gated = gate_class4_observations_to_reference_population(observations_dataframe, _twelfth_degree_ocean_mask(is_wet))
+
+    assert gated.index.tolist() == [1]
+
+
+def test_gate_keeps_an_observation_in_a_shallow_region_larger_than_the_size_threshold() -> None:
+    # 1600 cells of about 86 square kilometres at the equator is about 137,000 square kilometres,
+    # while the four cell region is far below the threshold.
+    is_wet = _all_wet(61, 61)
+    _make_shallow(is_wet, slice(10, 50), slice(10, 50))
+    _make_shallow(is_wet, slice(55, 57), slice(55, 57))
+    observations_dataframe = _surface_observations(
+        [2.5 + 0.5 / 12, 55 / 12 + 0.5 / 12], [12.5 + 0.5 / 12, 10 + 55.5 / 12]
+    )
+
+    gated = gate_class4_observations_to_reference_population(observations_dataframe, _twelfth_degree_ocean_mask(is_wet))
+
+    assert gated.index.tolist() == [0]
+
+
+def test_gate_sums_the_area_of_a_shallow_region_across_the_dateline() -> None:
+    # Each half of the region straddling the dateline is below the threshold and only their sum is
+    # above it, like the lone region of the same size as one half.
+    is_wet = _all_wet(61, 4320)
+    _make_shallow(is_wet, slice(10, 50), slice(0, 20))
+    _make_shallow(is_wet, slice(10, 50), slice(4300, 4320))
+    _make_shallow(is_wet, slice(10, 50), slice(2000, 2020))
+    observations_dataframe = _surface_observations(
+        [2.5 + 0.5 / 12, 2.5 + 0.5 / 12, 2.5 + 0.5 / 12],
+        [-180.0 + 5.5 / 12, 179.5 + 0.5 / 12, -180.0 + 2005.5 / 12],
+    )
+    ocean_mask = _twelfth_degree_ocean_mask(is_wet, first_latitude=0.0, first_longitude=-180.0)
+
+    gated = gate_class4_observations_to_reference_population(observations_dataframe, ocean_mask)
+
+    assert gated.index.tolist() == [0, 1]
+
+
+def _observation_at_100_meters_in_quarter_degree_cells_10_and_11() -> pandas.DataFrame:
+    return pandas.DataFrame(
+        {
+            Dimension.LATITUDE.key(): [2.55],
+            Dimension.LONGITUDE.key(): [12.55],
+            Dimension.DEPTH.key(): [100.0],
+        }
+    )
+
+
+def test_gate_drops_an_observation_next_to_a_dry_quarter_degree_cell() -> None:
+    # The dry fine cell is not one of the observation twelfth of a degree corners, and is wet at
+    # 92 metres so it is not shallow either: only the quarter degree cell centred on (33, 33) sees it.
+    is_wet = _all_wet(61, 61)
+    is_wet[3:, 34, 34] = False
+
+    gated = gate_class4_observations_to_reference_population(
+        _observation_at_100_meters_in_quarter_degree_cells_10_and_11(),
+        _twelfth_degree_ocean_mask(is_wet),
+    )
+
+    assert gated.index.tolist() == []
+
+
+def test_gate_keeps_an_observation_whose_four_quarter_degree_cells_are_wet() -> None:
+    is_wet = _all_wet(61, 61)
+    is_wet[3:, 36, 36] = False
+
+    gated = gate_class4_observations_to_reference_population(
+        _observation_at_100_meters_in_quarter_degree_cells_10_and_11(),
+        _twelfth_degree_ocean_mask(is_wet),
+    )
+
+    assert gated.index.tolist() == [0]

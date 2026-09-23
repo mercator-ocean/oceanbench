@@ -2,9 +2,13 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from typing import NamedTuple
+
 import numpy
 import pandas
 import xarray
+from scipy import ndimage, sparse
+from scipy.sparse import csgraph
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import (
@@ -17,6 +21,7 @@ from oceanbench.core.dataset_utils import (
     is_global_longitude_grid,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
+from oceanbench.core.ocean_mask import OCEAN_MASK_STANDARD_DEPTHS
 from oceanbench.core.remote_http import with_remote_http_retries
 from oceanbench.core.references.observations import load_mean_dynamic_topography
 from oceanbench.core.resolution import get_dataset_resolution
@@ -27,6 +32,28 @@ VELOCITY_TARGET_DEPTH_METERS = 15.0
 OBSERVATION_COUNT_COLUMN = "Observations"
 MISSING_COUNT_COLUMN = "Missing"
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
+
+# A cell is shallow when it is wet at the surface and dry at 92 metres.
+CLASS4_SHALLOW_DEPTH = OCEAN_MASK_STANDARD_DEPTHS[2]
+CLASS4_SHALLOW_REGION_MINIMUM_AREA_SQUARE_KILOMETERS = 100_000.0
+EARTH_RADIUS_KILOMETERS = 6371.0
+
+# The quarter degree model grid, centred on every third point of the twelfth of a degree mask.
+CLASS4_COARSE_GRID_FACTOR = 3
+CLASS4_COARSE_GRID_STEP_DEGREES = 0.25
+
+
+class _Class4PopulationLayers(NamedTuple):
+    depths: numpy.ndarray
+    latitudes: numpy.ndarray
+    longitudes: numpy.ndarray
+    is_shallow: numpy.ndarray
+    is_in_large_shallow_region: numpy.ndarray
+    coarse_cells_are_wet: numpy.ndarray
+
+
+# The layers are derived once per mask object; a DataArray cannot key an lru_cache.
+_CLASS4_POPULATION_LAYERS_CACHE: dict[int, tuple[xarray.DataArray, _Class4PopulationLayers]] = {}
 
 
 def _compute_with_remote_retries(operation_name: str, data):
@@ -489,38 +516,154 @@ def interpolate_class4_model_to_observations(
     return _interpolate_model_to_observations(model_data, observations_dataframe, variable_key)
 
 
+def _dateline_neighbour_labels(labels: numpy.ndarray, row_shift: int) -> tuple[numpy.ndarray, numpy.ndarray]:
+    rows = numpy.arange(max(0, -row_shift), min(labels.shape[0], labels.shape[0] - row_shift))
+    return labels[rows, 0], labels[rows + row_shift, -1]
+
+
+def _labels_linked_across_the_dateline(labels: numpy.ndarray) -> tuple[numpy.ndarray, numpy.ndarray]:
+    """Pairs of labels, one in the first longitude column and one in the last, that are 8-connected."""
+    neighbour_labels = [_dateline_neighbour_labels(labels, row_shift) for row_shift in (-1, 0, 1)]
+    first_labels = numpy.concatenate([first for first, _ in neighbour_labels])
+    last_labels = numpy.concatenate([last for _, last in neighbour_labels])
+    is_linked = (first_labels > 0) & (last_labels > 0)
+    return first_labels[is_linked], last_labels[is_linked]
+
+
+def _is_in_large_shallow_region(
+    is_shallow: numpy.ndarray,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+) -> numpy.ndarray:
+    """
+    Whether each shallow cell lies in an 8-connected shallow region larger than the size threshold.
+
+    The mask is global, so a region carries on across the dateline: the labels touching the first
+    and the last longitude column are merged before the areas are summed.
+    """
+    labels, label_count = ndimage.label(is_shallow, structure=numpy.ones((3, 3), dtype=int))
+    first_labels, last_labels = _labels_linked_across_the_dateline(labels)
+    label_graph = sparse.coo_matrix(
+        (numpy.ones(len(first_labels)), (first_labels, last_labels)),
+        shape=(label_count + 1, label_count + 1),
+    )
+    _, region_of_label = csgraph.connected_components(label_graph, directed=False)
+    region_of_cell = region_of_label[labels]
+    cell_area = (
+        (EARTH_RADIUS_KILOMETERS**2)
+        * numpy.deg2rad(abs(latitudes[1] - latitudes[0]))
+        * numpy.deg2rad(abs(longitudes[1] - longitudes[0]))
+        * numpy.cos(numpy.deg2rad(latitudes))
+    )
+    region_area = numpy.bincount(
+        region_of_cell.ravel(),
+        weights=numpy.broadcast_to(cell_area[:, numpy.newaxis], is_shallow.shape).ravel(),
+    )
+    region_area[region_of_label[0]] = 0.0
+    return region_area[region_of_cell] > CLASS4_SHALLOW_REGION_MINIMUM_AREA_SQUARE_KILOMETERS
+
+
+def _coarse_cells_are_wet(is_wet: numpy.ndarray) -> numpy.ndarray:
+    """
+    Coarsen the mask to the quarter degree model grid, whose cells are centred on every third
+    twelfth of a degree point. A coarse cell is wet at a depth only when its nine fine cells are.
+    """
+    _, latitude_count, longitude_count = is_wet.shape
+    coarse_rows = numpy.arange(0, latitude_count, CLASS4_COARSE_GRID_FACTOR)
+    coarse_columns = numpy.arange(0, longitude_count, CLASS4_COARSE_GRID_FACTOR)
+    return numpy.logical_and.reduce(
+        [
+            is_wet[:, numpy.clip(coarse_rows + row_offset, 0, latitude_count - 1)][
+                :, :, numpy.mod(coarse_columns + column_offset, longitude_count)
+            ]
+            for row_offset in (-1, 0, 1)
+            for column_offset in (-1, 0, 1)
+        ]
+    )
+
+
+def _class4_population_layers(ocean_mask: xarray.DataArray) -> _Class4PopulationLayers:
+    cached_layers = _CLASS4_POPULATION_LAYERS_CACHE.get(id(ocean_mask))
+    if cached_layers is not None and cached_layers[0] is ocean_mask:
+        return cached_layers[1]
+    sorted_mask = ocean_mask.sortby(Dimension.DEPTH.key())
+    latitudes = sorted_mask[Dimension.LATITUDE.key()].values.astype("float64")
+    longitudes = sorted_mask[Dimension.LONGITUDE.key()].values.astype("float64")
+    is_wet = sorted_mask.values.astype(bool)
+    is_shallow = is_wet[0] & ~sorted_mask.sel(
+        {Dimension.DEPTH.key(): CLASS4_SHALLOW_DEPTH}, method="nearest"
+    ).values.astype(bool)
+    layers = _Class4PopulationLayers(
+        depths=sorted_mask[Dimension.DEPTH.key()].values,
+        latitudes=latitudes,
+        longitudes=longitudes,
+        is_shallow=is_shallow,
+        is_in_large_shallow_region=_is_in_large_shallow_region(is_shallow, latitudes, longitudes),
+        coarse_cells_are_wet=_coarse_cells_are_wet(is_wet),
+    )
+    _CLASS4_POPULATION_LAYERS_CACHE.clear()
+    _CLASS4_POPULATION_LAYERS_CACHE[id(ocean_mask)] = (ocean_mask, layers)
+    return layers
+
+
+def _surrounding_cells(
+    row_below: numpy.ndarray,
+    column_left: numpy.ndarray,
+    row_count: int,
+    column_count: int,
+) -> list[tuple[numpy.ndarray, numpy.ndarray]]:
+    first_row = numpy.clip(row_below, 0, row_count - 1)
+    rows = [first_row, numpy.clip(first_row + 1, 0, row_count - 1)]
+    columns = [numpy.mod(column_left, column_count), numpy.mod(column_left + 1, column_count)]
+    return [(row, column) for row in rows for column in columns]
+
+
 def gate_class4_observations_to_reference_population(
     observations_dataframe: pandas.DataFrame,
     ocean_mask: xarray.DataArray,
 ) -> pandas.DataFrame:
     """
-    Keep only the observations the OceanBench ocean mask brackets on its depth grid.
+    Keep only the observations of the OceanBench Class IV population, built from the ocean mask alone.
 
-    The mask is carried as one where OceanBench considers the cell ocean and not a number where it
-    does not, and it goes through the same horizontal linear interpolation as a challenger, so an
-    observation is over the ocean exactly when that interpolation stays finite. It is kept only
-    when both of its bracketing mask depths are finite there, so the scored population depends
-    neither on the challenger vertical axis nor on the reference a metric happens to use.
+    An observation is dropped when one of its four surrounding twelfth of a degree cells is shallow,
+    wet at the surface but dry at 92 metres, unless one of those shallow cells belongs to a shallow
+    region larger than 100,000 square kilometres. It is also dropped unless its four surrounding
+    quarter degree cells, each wet only when its nine twelfth of a degree cells are, are wet at its
+    deeper bracketing mask depth. The population is therefore the same for every challenger and
+    every reference, whatever their grids.
     """
     observations_dataframe = observations_dataframe.reset_index(drop=True)
-    finite_mask = ocean_mask.where(ocean_mask, numpy.nan).astype(float)
-    wet_profiles = _horizontally_interpolated_profiles(
-        finite_mask,
-        observations_dataframe,
-    )
-    mask_depths = ocean_mask[Dimension.DEPTH.key()].values
-    sort_order = numpy.argsort(mask_depths)
-    sorted_depths = mask_depths[sort_order]
-    sorted_wet_profiles = wet_profiles[sort_order, :]
+    layers = _class4_population_layers(ocean_mask)
+    latitudes = observations_dataframe[Dimension.LATITUDE.key()].values
+    longitudes = observations_dataframe[Dimension.LONGITUDE.key()].values
 
-    idx_lower, idx_upper = _bracketing_level_indices(
-        sorted_depths,
+    fine_cells = _surrounding_cells(
+        numpy.searchsorted(layers.latitudes, latitudes, side="right") - 1,
+        numpy.searchsorted(layers.longitudes, longitudes, side="right") - 1,
+        len(layers.latitudes),
+        len(layers.longitudes),
+    )
+    has_shallow_cell = numpy.logical_or.reduce([layers.is_shallow[cell] for cell in fine_cells])
+    has_large_shallow_region_cell = numpy.logical_or.reduce(
+        [layers.is_in_large_shallow_region[cell] for cell in fine_cells]
+    )
+
+    _, coarse_row_count, coarse_column_count = layers.coarse_cells_are_wet.shape
+    coarse_cells = _surrounding_cells(
+        numpy.floor((latitudes - layers.latitudes[0]) / CLASS4_COARSE_GRID_STEP_DEGREES).astype(numpy.int64),
+        numpy.floor((longitudes - layers.longitudes[0]) / CLASS4_COARSE_GRID_STEP_DEGREES).astype(numpy.int64),
+        coarse_row_count,
+        coarse_column_count,
+    )
+    _, deeper_level = _bracketing_level_indices(
+        layers.depths,
         observations_dataframe[Dimension.DEPTH.key()].values,
     )
-    obs_indices = numpy.arange(len(observations_dataframe))
-    is_eligible = numpy.isfinite(sorted_wet_profiles[idx_lower, obs_indices]) & numpy.isfinite(
-        sorted_wet_profiles[idx_upper, obs_indices]
+    has_wet_coarse_cells = numpy.logical_and.reduce(
+        [layers.coarse_cells_are_wet[deeper_level, row, column] for row, column in coarse_cells]
     )
+
+    is_eligible = (~has_shallow_cell | has_large_shallow_region_cell) & has_wet_coarse_cells
     return observations_dataframe.loc[is_eligible]
 
 
