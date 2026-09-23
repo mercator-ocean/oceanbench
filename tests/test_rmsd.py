@@ -7,10 +7,12 @@ import pytest
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.ocean_mask import OCEAN_MASK_DEPTHS
+from oceanbench.core.ocean_mask import OCEAN_MASK_DEPTHS, OCEAN_MASK_STANDARD_DEPTHS
 from oceanbench.core.rmsd import (
     MISSING_COUNT_COLUMN,
     MISSING_FRACTION_COLUMN,
+    DEPTH_LABELS,
+    _ocean_mask_on_challenger_grid,
     _rmsd,
     rmsd,
 )
@@ -325,7 +327,7 @@ MASK_TEST_LONGITUDES = numpy.array([10.0])
 
 def _temperature_dataset(surface_values: list[float], deep_value: float) -> xarray.Dataset:
     variable_key = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
-    depths = OCEAN_MASK_DEPTHS
+    depths = OCEAN_MASK_STANDARD_DEPTHS
     values = numpy.full((1, 1, len(depths), len(MASK_TEST_LATITUDES), len(MASK_TEST_LONGITUDES)), deep_value)
     values[0, 0, 0, :, 0] = surface_values
     return xarray.Dataset(
@@ -366,6 +368,16 @@ def _surface_dry_at_sixty_degrees_mask() -> xarray.DataArray:
             Dimension.LONGITUDE.key(): MASK_TEST_LONGITUDES,
         },
     )
+
+
+def test_gridded_rmsd_puts_only_the_six_standard_depths_of_the_mask_on_the_challenger_grid() -> None:
+    challenger_mask = _ocean_mask_on_challenger_grid(
+        _surface_dry_at_sixty_degrees_mask(),
+        _temperature_dataset(surface_values=[4.0, 4.0, 4.0], deep_value=1.0),
+    )
+
+    assert len(OCEAN_MASK_DEPTHS) == 7
+    assert challenger_mask[Dimension.DEPTH.key()].values.tolist() == list(DEPTH_LABELS.values())
 
 
 SURFACE_TEMPERATURE_LABEL = "Temperature (°C) [sea_water_potential_temperature]{surface}"
@@ -436,7 +448,7 @@ def _depth_free_dataset(variable_values: dict[str, list[float]]) -> xarray.Datas
         coords={
             Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
             Dimension.LEAD_DAY_INDEX.key(): [0],
-            Dimension.DEPTH.key(): OCEAN_MASK_DEPTHS,
+            Dimension.DEPTH.key(): OCEAN_MASK_STANDARD_DEPTHS,
             Dimension.LATITUDE.key(): MASK_TEST_LATITUDES,
             Dimension.LONGITUDE.key(): MASK_TEST_LONGITUDES,
         },

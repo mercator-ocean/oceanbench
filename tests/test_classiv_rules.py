@@ -350,9 +350,46 @@ def test_ocean_mask_depths_are_twelfth_degree_native_levels() -> None:
         222.47520,
         318.12741,
         541.08893,
+        643.56677,
     ]
 
     numpy.testing.assert_allclose(OCEAN_MASK_DEPTHS, expected_native_levels, atol=1e-3)
+
+
+def _mask_on_the_ocean_mask_depths(wet_below_600_meters: bool) -> xarray.DataArray:
+    values = numpy.full((len(OCEAN_MASK_DEPTHS), len(LATITUDES), len(LONGITUDES)), True)
+    values[OCEAN_MASK_DEPTHS > 600.0] = wet_below_600_meters
+    return xarray.DataArray(
+        values,
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): OCEAN_MASK_DEPTHS,
+            Dimension.LATITUDE.key(): LATITUDES,
+            Dimension.LONGITUDE.key(): LONGITUDES,
+        },
+    )
+
+
+def test_gate_vets_an_observation_of_the_deepest_depth_bin_against_the_level_below_600_meters() -> None:
+    observations_dataframe = pandas.DataFrame(
+        {
+            Dimension.LATITUDE.key(): [1.0],
+            Dimension.LONGITUDE.key(): [11.0],
+            Dimension.DEPTH.key(): [580.0],
+        }
+    )
+
+    dry_below = gate_class4_observations_to_reference_population(
+        observations_dataframe,
+        _mask_on_the_ocean_mask_depths(wet_below_600_meters=False),
+    )
+    wet_below = gate_class4_observations_to_reference_population(
+        observations_dataframe,
+        _mask_on_the_ocean_mask_depths(wet_below_600_meters=True),
+    )
+
+    assert dry_below.index.tolist() == []
+    assert wet_below.index.tolist() == [0]
 
 
 def test_formatted_results_keep_a_variable_and_depth_bin_whose_scores_are_all_missing() -> None:

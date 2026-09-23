@@ -35,8 +35,8 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 ### Added
 
 - The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
-- The OceanBench ocean mask, wet where both the GLO12 and the GLORYS12 official static masks are wet at the six standard depths, built as a checksum pinned artefact.
-- Class IV scores the observations bracketed by two wet standard depths of that mask, so the population is the same for every challenger. A challenger value missing inside that population is counted in the `Missing` column, at the first lead day like `Observations`.
+- The OceanBench ocean mask, wet where both the GLO12 and the GLORYS12 official static masks are wet at the six standard depths and at 643 m, the first native level below 600 m, built as a checksum pinned artefact.
+- Class IV scores the observations bracketed by two wet depths of that mask, down to 600 m, so the population is the same for every challenger. A challenger value missing inside that population is counted in the `Missing` column, at the first lead day like `Observations`.
 - Gridded RMSD scores only the cells the ocean mask calls ocean, and reports the ocean cells a challenger leaves empty in the `Missing` and `Missing fraction` columns.
 
 ## 0.5.1 - 2026-09-02

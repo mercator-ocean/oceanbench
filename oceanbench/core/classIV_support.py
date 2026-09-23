@@ -494,12 +494,12 @@ def gate_class4_observations_to_reference_population(
     ocean_mask: xarray.DataArray,
 ) -> pandas.DataFrame:
     """
-    Keep only the observations the OceanBench ocean mask brackets on the standard depth grid.
+    Keep only the observations the OceanBench ocean mask brackets on its depth grid.
 
     The mask is carried as one where OceanBench considers the cell ocean and not a number where it
     does not, and it goes through the same horizontal linear interpolation as a challenger, so an
     observation is over the ocean exactly when that interpolation stays finite. It is kept only
-    when both of its bracketing standard depths are finite there, so the scored population depends
+    when both of its bracketing mask depths are finite there, so the scored population depends
     neither on the challenger vertical axis nor on the reference a metric happens to use.
     """
     observations_dataframe = observations_dataframe.reset_index(drop=True)

@@ -16,6 +16,7 @@ from oceanbench.core.dataset_utils import (
     VARIABLE_METADATA,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
+from oceanbench.core.ocean_mask import OCEAN_MASK_STANDARD_DEPTHS
 
 DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.SURFACE: "surface",
@@ -127,11 +128,12 @@ def _ocean_mask_on_challenger_grid(
 
     Nearest neighbour rather than a conservative remapping: on a coarser challenger grid a cell is
     wet when the twelfth of a degree cell at its centre is wet, which is simple to state and to
-    reproduce, at the price of ignoring the sub-cell coastline.
+    reproduce, at the price of ignoring the sub-cell coastline. Only the six standard depths are
+    kept, the deeper mask level serves the Class IV gate alone.
     """
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
-    regridded_mask = ocean_mask.sel(
+    regridded_mask = ocean_mask.sel({Dimension.DEPTH.key(): OCEAN_MASK_STANDARD_DEPTHS}).sel(
         {
             latitude_key: challenger_dataset[latitude_key],
             longitude_key: challenger_dataset[longitude_key],

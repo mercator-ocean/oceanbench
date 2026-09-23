@@ -5,11 +5,12 @@
 """
 The OceanBench ocean mask.
 
-The mask says, for each of the six OceanBench standard depths, which cells of the twelfth of a
-degree grid are ocean for OceanBench. A cell is wet when it is wet in both official Copernicus
-Marine static masks, the GLO12 analysis and forecast one and the GLORYS12 reanalysis one, so the
-scored population never depends on which reference a metric happens to use. The two masks differ by
-a few thousand cells per depth, almost all of them in the Arctic.
+The mask says, for each of the six OceanBench standard depths and for the first native level below
+600 metres, which cells of the twelfth of a degree grid are ocean for OceanBench. A cell is wet
+when it is wet in both official Copernicus Marine static masks, the GLO12 analysis and forecast one
+and the GLORYS12 reanalysis one, so the scored population never depends on which reference a metric
+happens to use. The two masks differ by a few thousand cells per depth, almost all of them in the
+Arctic.
 
 The artefact is built once from the two static datasets and pinned by the checksum of its array
 bytes, so a silent change of the upstream static files or of the stored file is an error rather
@@ -32,7 +33,7 @@ from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.remote_http import open_remote_zarr, with_remote_http_retries
 
 # The six OceanBench standard depths, on the native twelfth of a degree levels.
-OCEAN_MASK_DEPTHS = numpy.array(
+OCEAN_MASK_STANDARD_DEPTHS = numpy.array(
     [
         0.494025,
         47.37369,
@@ -43,8 +44,14 @@ OCEAN_MASK_DEPTHS = numpy.array(
     ]
 )
 
-# Indices of the six standard depths in the fifty native levels, identical in both static datasets.
-OCEAN_MASK_LEVEL_INDEXES = (0, 17, 21, 26, 28, 31)
+# The first native level below 600 metres, the bottom of the deepest Class IV depth bin, so the Class
+# IV gate brackets every observation it scores. Only the Class IV gate uses it.
+OCEAN_MASK_CLASS4_BOTTOM_DEPTH = 643.56677
+
+OCEAN_MASK_DEPTHS = numpy.append(OCEAN_MASK_STANDARD_DEPTHS, OCEAN_MASK_CLASS4_BOTTOM_DEPTH)
+
+# Indices of the mask depths in the fifty native levels, identical in both static datasets.
+OCEAN_MASK_LEVEL_INDEXES = (0, 17, 21, 26, 28, 31, 32)
 
 GLO12_STATIC_DATASET_ID = "cmems_mod_glo_phy_anfc_0.083deg_static"
 GLORYS_STATIC_DATASET_ID = "cmems_mod_glo_phy_my_0.083deg_static"
@@ -58,10 +65,10 @@ OCEAN_MASK_VARIABLE = "ocean_mask"
 
 # Placeholder: the artefact is not published yet. Until it is, point
 # OCEANBENCH_OCEAN_MASK_PATH at a local copy.
-OCEAN_MASK_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/ocean_mask/oceanbench-ocean-mask-v1.zarr"
+OCEAN_MASK_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/ocean_mask/oceanbench-ocean-mask-v2.zarr"
 
 # SHA256 of the boolean array bytes, C order, depth then latitude then longitude.
-OCEAN_MASK_SHA256 = "7459357ee1af87a2956ae98017799dcc513e9cb4be1b699b83de69c27776e4fb"
+OCEAN_MASK_SHA256 = "9aa92afe12a1d35f35b9ce0ad6631d835cbd85f783075beea07d4188e869c52d"
 
 
 class OceanMaskChecksumError(ValueError):
@@ -123,7 +130,7 @@ def build_ocean_mask() -> DataArray:
             "long_name": "OceanBench ocean mask",
             "description": (
                 "True where both the GLO12 and the GLORYS12 official static masks are wet, "
-                "on the six OceanBench standard depths."
+                "on the six OceanBench standard depths and the first native level below 600 metres."
             ),
             "glo12_static_dataset_id": GLO12_STATIC_DATASET_ID,
             "glorys_static_dataset_id": GLORYS_STATIC_DATASET_ID,
