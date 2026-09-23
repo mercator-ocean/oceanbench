@@ -14,6 +14,7 @@ from oceanbench.core.dataset_utils import (
     VARIABLE_DISPLAY_ORDER,
     VARIABLE_METADATA,
     Variable,
+    is_global_longitude_grid,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.remote_http import with_remote_http_retries
@@ -341,10 +342,8 @@ def _horizontally_interpolated_profiles(
     observation_longitudes = observation_group[longitude_key].values
     grid_longitudes = time_slice[longitude_key].values
     first_longitude, last_longitude = grid_longitudes[0], grid_longitudes[-1]
-    longitude_step = (last_longitude - first_longitude) / (grid_longitudes.size - 1)
-    is_global = abs(last_longitude - first_longitude + longitude_step - 360) < longitude_step / 2
     is_on_grid = (observation_longitudes >= first_longitude) & (observation_longitudes <= last_longitude)
-    if not is_global or is_on_grid.all():
+    if not is_global_longitude_grid(grid_longitudes) or is_on_grid.all():
         return _linearly_interpolated_profiles(time_slice, observation_latitudes, observation_longitudes)
 
     wrapped_longitudes = numpy.where(
