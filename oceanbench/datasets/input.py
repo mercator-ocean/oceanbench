@@ -86,29 +86,7 @@ def ifs_forcings() -> xarray.Dataset:
 
 def ifs_nowcasts() -> xarray.Dataset:
     """
-    Open the 2024 IFS atmospheric nowcasts.
-
-    The 52 Tuesday stores, from January 2 to December 24, are concatenated
-    along ``time``. The returned Dataset has dimensions ``(time, lat, lon)``
-    and five UTC timestamps per store: Tuesday 00/06/12/18Z and Wednesday
-    00Z. It preserves the native regular ECMWF F1280 grid (2560 latitude
-    points by 5120 longitude points); no interpolation is applied.
-
-    The Dataset preserves the 15 IFS forcing variable names. The instantaneous
-    analysis variables are ``sotemair``, ``sotemhum``, ``sohumspe``,
-    ``sowinu10``, ``sowinv10``, ``skt``, ``somslpre`` and ``sp``. The
-    accumulated forecast variables are ``sosudosw``, ``sosudolw``,
-    ``sowaprec``, ``cp``, ``sosnowfa``, ``ewss`` and ``nsss``; they are already
-    converted to six-hour means or rates. Their final Wednesday 00Z value is
-    intentionally ``NaN`` because there is no following six-hour interval.
-    This loader does not fill that value or perform a daily aggregation.
-
-    For daily aggregation, use the trapezoidal weighted mean for instantaneous
-    variables and the arithmetic mean of the first four six-hour values for
-    accumulated variables; do not average raw accumulations.
-
-    The stores are publicly available at
-    ``s3://oceanbench-bucket/public/ifs-nowcasts24/``.
+    Open 6-hourly IFS atmospheric nowcasts from 2024.
 
     Returns
     -------
@@ -116,7 +94,28 @@ def ifs_nowcasts() -> xarray.Dataset:
         The Dataset containing IFS nowcasts.
 
     >>> ifs_nowcasts() # doctest: +SKIP
-    <xarray.Dataset>
+    <xarray.Dataset> Size: 164GB
+    Dimensions:             (time: 208, lat: 2560, lon: 5120)
+    Coordinates:
+      * time                (time) datetime64[ns] 2kB 2024-01-02 ... 2024-12-24T18:00:00
+      * lat                 (lat) float32 10kB 89.95 89.88 89.81 ... -89.81 -89.88 -89.95
+      * lon                 (lon) float64 41kB 0.0 0.07031 0.1406 ... 359.8 359.9 359.9
+    Data variables:
+        cp                  (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        ewss                (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        nsss                (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        skt                 (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sohumspe            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        somslpre            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sosnowfa            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sosudolw            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sosudosw            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sotemair            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sotemhum            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sowaprec            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sowinu10            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sowinv10            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sp                  (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
     """
 
     return input_datasets.ifs_nowcasts()
