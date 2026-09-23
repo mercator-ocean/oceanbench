@@ -309,22 +309,65 @@ def _model_data_with_depth_dimension(model_data: xarray.DataArray) -> xarray.Dat
     return model_data.expand_dims({depth_key: [0.0]})
 
 
-def _horizontally_interpolated_profiles(
-    time_slice: xarray.DataArray,
-    observation_group: pandas.DataFrame,
+def _linearly_interpolated_profiles(
+    data: xarray.DataArray,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
 ) -> numpy.ndarray:
-    latitude_key = Dimension.LATITUDE.key()
-    longitude_key = Dimension.LONGITUDE.key()
-    observation_latitudes = observation_group[latitude_key].values
-    observation_longitudes = observation_group[longitude_key].values
-    interpolated_profiles = time_slice.interp(
+    interpolated_profiles = data.interp(
         {
-            latitude_key: xarray.DataArray(observation_latitudes, dims="observation"),
-            longitude_key: xarray.DataArray(observation_longitudes, dims="observation"),
+            Dimension.LATITUDE.key(): xarray.DataArray(latitudes, dims="observation"),
+            Dimension.LONGITUDE.key(): xarray.DataArray(longitudes, dims="observation"),
         },
         method="linear",
     )
     return interpolated_profiles.compute().values
+
+
+def _horizontally_interpolated_profiles(
+    time_slice: xarray.DataArray,
+    observation_group: pandas.DataFrame,
+) -> numpy.ndarray:
+    """
+    Interpolate linearly to the observation positions, across the dateline on a global grid.
+
+    A global grid stops one step short of closing the circle, so an observation in that last gap is
+    interpolated between the last longitude and the first one carried round by 360 degrees. Every other
+    observation goes through the plain interpolation, and a regional grid is left as it is.
+    """
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
+    observation_latitudes = observation_group[latitude_key].values
+    observation_longitudes = observation_group[longitude_key].values
+    grid_longitudes = time_slice[longitude_key].values
+    first_longitude, last_longitude = grid_longitudes[0], grid_longitudes[-1]
+    longitude_step = (last_longitude - first_longitude) / (grid_longitudes.size - 1)
+    is_global = abs(last_longitude - first_longitude + longitude_step - 360) < longitude_step / 2
+    is_on_grid = (observation_longitudes >= first_longitude) & (observation_longitudes <= last_longitude)
+    if not is_global or is_on_grid.all():
+        return _linearly_interpolated_profiles(time_slice, observation_latitudes, observation_longitudes)
+
+    wrapped_longitudes = numpy.where(
+        is_on_grid,
+        observation_longitudes,
+        first_longitude + (observation_longitudes - first_longitude) % 360,
+    )
+    is_in_seam = wrapped_longitudes > last_longitude
+    seam_columns = time_slice.isel({longitude_key: [-1, 0]}).assign_coords(
+        {longitude_key: [last_longitude, first_longitude + 360]}
+    )
+    profile_shape = [
+        time_slice.sizes[dimension] for dimension in time_slice.dims if dimension not in (latitude_key, longitude_key)
+    ]
+    interpolated_profiles = numpy.full(profile_shape + [len(observation_group)], numpy.nan)
+    for data, is_selected in ((time_slice, ~is_in_seam), (seam_columns, is_in_seam)):
+        if is_selected.any():
+            interpolated_profiles[..., is_selected] = _linearly_interpolated_profiles(
+                data,
+                observation_latitudes[is_selected],
+                wrapped_longitudes[is_selected],
+            )
+    return interpolated_profiles
 
 
 def _interpolated_model_values_for_observation_group(

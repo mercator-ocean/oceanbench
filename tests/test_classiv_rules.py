@@ -326,3 +326,28 @@ def test_formatted_results_keep_a_lead_day_with_no_scored_value_at_all() -> None
     assert formatted["Lead day 1"].tolist() == [0.1]
     assert numpy.isnan(formatted["Lead day 2"]).all()
     assert numpy.isnan(formatted["Lead day 3"]).all()
+
+
+def test_gate_keeps_observations_across_the_dateline_on_a_global_mask() -> None:
+    longitudes = numpy.arange(-180.0, 180.0, 1.0 / 12.0)
+    latitudes = numpy.array([-1.0, 0.0, 1.0])
+    ocean_mask = xarray.DataArray(
+        numpy.full((len(MASK_DEPTHS), len(latitudes), len(longitudes)), True),
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): MASK_DEPTHS,
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+    observations_dataframe = pandas.DataFrame(
+        {
+            Dimension.LATITUDE.key(): [0.0, 0.0, 0.0, 0.0],
+            Dimension.LONGITUDE.key(): [179.95, 180.0, -180.0, 0.0],
+            Dimension.DEPTH.key(): [20.0, 20.0, 20.0, 20.0],
+        }
+    )
+
+    gated = gate_class4_observations_to_reference_population(observations_dataframe, ocean_mask)
+
+    assert gated.index.tolist() == [0, 1, 2, 3]

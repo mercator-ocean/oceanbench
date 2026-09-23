@@ -194,3 +194,61 @@ def test_class4_formatted_results_keep_the_observation_count_column() -> None:
     assert list(formatted.columns) == ["Lead day 1", "Lead day 2", "Observations", "Missing"]
     assert formatted["Observations"].tolist() == [1234]
     assert formatted["Missing"].tolist() == [4]
+
+
+def _surface_model_data(longitudes: numpy.ndarray) -> xarray.DataArray:
+    latitudes = numpy.array([-1.5, -0.5, 0.5, 1.5])
+    values = latitudes[:, numpy.newaxis] + longitudes[numpy.newaxis, :]
+    return xarray.DataArray(
+        values[numpy.newaxis, numpy.newaxis, numpy.newaxis, :, :],
+        dims=[
+            Dimension.FIRST_DAY_DATETIME.key(),
+            Dimension.LEAD_DAY_INDEX.key(),
+            Dimension.DEPTH.key(),
+            Dimension.LATITUDE.key(),
+            Dimension.LONGITUDE.key(),
+        ],
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.DEPTH.key(): [0.0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+        name=Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+    )
+
+
+def _surface_observations_dataframe(latitudes: list[float], longitudes: list[float]) -> pandas.DataFrame:
+    first_day = numpy.datetime64("2024-01-03", "ns")
+    return pandas.DataFrame(
+        {
+            Dimension.TIME.key(): pandas.to_datetime(["2024-01-03"] * len(latitudes)),
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+            "first_day": [first_day] * len(latitudes),
+            Dimension.DEPTH.key(): [0.0] * len(latitudes),
+            "lead_day": [0] * len(latitudes),
+            "observation_value": [0.0] * len(latitudes),
+        }
+    )
+
+
+def test_class4_interpolation_crosses_the_dateline_on_a_global_one_degree_grid() -> None:
+    # The field is latitude plus longitude, so across the seam it goes linearly from 179.5 at the last
+    # column to -179.5 at the first one, one degree further east.
+    model_values = interpolate_class4_model_to_observations(
+        _surface_model_data(numpy.arange(-179.5, 180.0, 1.0)),
+        _surface_observations_dataframe([0.0, 0.0, 1.0, 0.0, 0.0], [179.9, -179.9, 180.0, -180.0, 100.25]),
+    )
+
+    numpy.testing.assert_allclose(model_values, [179.5 - 0.4 * 359, 179.5 - 0.6 * 359, 1.0, 0.0, 100.25])
+
+
+def test_class4_interpolation_leaves_a_regional_grid_unwrapped() -> None:
+    model_values = interpolate_class4_model_to_observations(
+        _surface_model_data(numpy.arange(-19.5, 5.0, 1.0)),
+        _surface_observations_dataframe([0.0, 0.0, 0.0], [-10.25, 4.9, -19.9]),
+    )
+
+    numpy.testing.assert_allclose(model_values, [-10.25, numpy.nan, numpy.nan])
