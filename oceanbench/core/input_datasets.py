@@ -20,7 +20,7 @@ from oceanbench.core.remote_http import open_remote_zarr, remote_zarr_store
 
 _ADDITIONAL_DATA_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data"
 
-_IFS_NOWCAST_DATASET_ROOT = "s3://oceanbench-bucket/public/ifs-nowcasts24"
+_IFS_NOWCAST_DATASET_ROOT = "s3://oceanbench-bucket/public/ifs-nowcast"
 
 _IFS_NOWCAST_ANALYSIS_VARIABLES = (
     "sotemair",
@@ -42,6 +42,8 @@ _IFS_NOWCAST_ACCUMULATED_VARIABLES = (
     "ewss",
     "nsss",
 )
+
+_IFS_NOWCAST_TIME_SIZES = (4, 5)
 
 
 def _glo12_nowcast_datetimes() -> list[datetime]:
@@ -104,7 +106,7 @@ def _open_ifs_nowcast_dataset(dataset_path: str) -> xarray.Dataset:
     dataset = open_remote_zarr(
         dataset_path,
         _CLOUDFERRO_STORAGE_OPTIONS,
-        consolidated=False,
+        consolidated=True,
         chunks={},
     )
     dataset = _deduplicate_indexed_dimensions(dataset)
@@ -168,11 +170,15 @@ def _validate_ifs_nowcast_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
         raise ValueError("IFS nowcast latitude and longitude coordinates must be finite")
     if not dataset.indexes["lat"].is_monotonic_decreasing or not dataset.indexes["lon"].is_monotonic_increasing:
         raise ValueError("IFS nowcast latitude must decrease and longitude must increase")
-    if dataset.sizes["time"] != 5:
-        raise ValueError(f"IFS nowcast datasets must contain 5 time steps, got {dataset.sizes['time']}")
+    if dataset.sizes["time"] not in _IFS_NOWCAST_TIME_SIZES:
+        raise ValueError(
+            "IFS nowcast datasets must contain 4 time steps (published format) "
+            f"or 5 time steps (with a Wednesday 00Z sentinel), got {dataset.sizes['time']}"
+        )
 
-    # The final timestamp is intentionally NaN for accumulated variables because
-    # there is no following six-hour interval. Do not fill or transform it here.
+    # The published format has four valid six-hour intervals. If a compatible
+    # store includes a fifth Wednesday 00Z timestamp, preserve its accumulated
+    # NaN sentinel rather than filling or transforming it.
     return dataset
 
 
