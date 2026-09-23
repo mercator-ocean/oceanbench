@@ -53,9 +53,6 @@ CLASS4_MATCHUP_NOTE = (
     "same way and reads on the same depth bins."
 )
 
-# GLOW-ens was scored on the gridded axis for temperature, salinity and sea surface height only.
-GLOWENS_GRIDDED_NOTE = "GLOW-ens has no gridded current rows and no gridded surface salinity row."
-
 BLOCK_NOTES = {
     "observations_rmsd": (
         "The ensemble mean of each ensemble is scored exactly as the deterministic systems are, through the "
@@ -64,9 +61,9 @@ BLOCK_NOTES = {
     ),
     "observations_crps": f"{UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {CLASS4_MATCHUP_NOTE}",
     "observations_spread_error_ratio": f"{UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {CLASS4_MATCHUP_NOTE}",
-    "gridded_rmsd": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {GLOWENS_GRIDDED_NOTE}",
-    "gridded_crps": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {GLOWENS_GRIDDED_NOTE}",
-    "gridded_spread_error_ratio": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE} {GLOWENS_GRIDDED_NOTE}",
+    "gridded_rmsd": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}",
+    "gridded_crps": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}",
+    "gridded_spread_error_ratio": f"{DATUM_NOTE} {UNPAIRED_SAMPLE_NOTE} {SHORT_HORIZON_NOTE}",
 }
 
 # The error table now carries the class 4 depth bins for every system, so it is laid out in the
