@@ -228,7 +228,7 @@ export function differenceField(fieldA, fieldB) {
 // to the whole colormap; a caller whose marks only use part of it (the Class-4 obs points
 // skip the darkest sliver) passes that same segment so the key shows the colours actually
 // on the map.
-export function drawColorbar(canvas, colormapName, range, { label = "", textColor = "#e6edf3", ramp = [0, 1] } = {}) {
+export function drawColorbar(canvas, colormapName, range, { label = "", units = "", textColor = "#e6edf3", ramp = [0, 1] } = {}) {
   const context = canvas.getContext("2d");
   const ratio = window.devicePixelRatio || 1;
   const width = Math.max(1, Math.round(canvas.clientWidth || canvas.width));
@@ -277,10 +277,13 @@ export function drawColorbar(canvas, colormapName, range, { label = "", textColo
     context.textAlign = "left";
     context.fillText(fitLabel(context, label, width), 0, 1);
   }
+  // The units ride on the end ticks, not the caption, so a long caption that has to be
+  // ellipsized never loses them.
+  const tickText = (value) => (units ? `${formatTick(value)} ${units}` : formatTick(value));
   context.textAlign = "left";
-  context.fillText(formatTick(range[0]), 0, barTop + barHeight + 2);
+  context.fillText(tickText(range[0]), 0, barTop + barHeight + 2);
   context.textAlign = "right";
-  context.fillText(formatTick(range[1]), width, barTop + barHeight + 2);
+  context.fillText(tickText(range[1]), width, barTop + barHeight + 2);
 }
 
 function fitLabel(context, label, maxWidth) {

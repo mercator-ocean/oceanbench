@@ -122,6 +122,7 @@ import {
   currentsDepthLabel,
   currentsVariableDepth,
   currentsVariableOptions,
+  depthLabel,
   isCurrentsVariable,
   isSurfaceCurrentVariable,
   isVelocityFamilyVariable,
@@ -2945,7 +2946,7 @@ function updateSharedColorbar() {
     shownPanels.some((candidate) => candidate.state.variable !== shownPanels[0].state.variable || candidate.units !== shownPanels[0].units);
   const scalePanels = split ? shownPanels : [panel];
   const canvases = [colorbar, secondColorbar];
-  const prefixFor = (candidate) => (split ? `panel ${candidate.index + 1} · ` : "");
+  const prefixFor = (candidate) => (split ? `Forecast ${candidate.index + 1} · ` : "");
   secondColorbar.hidden = true;
 
   // Year scope keeps its own colorbar untouched (design: don't touch year legend).
@@ -2962,7 +2963,8 @@ function updateSharedColorbar() {
       const biasMode = candidate.yearMetric === YEAR_METRIC_BIAS;
       canvases[index].hidden = false;
       drawColorbar(canvases[index], candidate.colormap, candidate.range, {
-        label: `${prefixFor(candidate)}${biasMode ? "mean (model − obs)" : "mean |obs − model|"} over ${nStarts || "?"} start dates · ${candidate.label} (${candidate.units})`,
+        label: `${prefixFor(candidate)}${biasMode ? "mean (model − obs)" : "mean |obs − model|"} over ${nStarts || "?"} start dates · ${candidate.label}`,
+        units: candidate.units,
         textColor,
       });
     });
@@ -2988,7 +2990,8 @@ function updateSharedColorbar() {
       const scale = class4CurrentScale(candidate);
       canvases[index].hidden = false;
       drawColorbar(canvases[index], CLASS4_COLORMAP, [0, scale || 1], {
-        label: `${prefixFor(candidate)}|obs − model| (${candidate.units})`,
+        label: `${prefixFor(candidate)}|obs − model|`,
+        units: candidate.units,
         textColor,
         // The dots skip the darkest sliver of the colormap; the bar has to skip it too, or the
         // key names colours that are nowhere on the map.
@@ -3005,15 +3008,17 @@ function updateSharedColorbar() {
     renderTrajectoryLegend(legend);
   } else {
     hideMapLegend(legend);
-    // Which panel the scale describes leads the caption rather than trailing it: a
-    // long variable name is ellipsized on the right, and that qualifier is the part a
-    // reader with two panels in front of them cannot do without.
-    const sharedPrefix = !isDiffView() && shared.layout > 1 && !split ? "shared · " : "";
+    // Which forecast the scale describes leads the caption rather than trailing it: a
+    // long caption is ellipsized on the right, and that qualifier is the part a reader
+    // with two panels in front of them cannot do without. One bar under two panels of
+    // the same variable describes both, so it names the variable and no dataset.
+    const sharedBar = !isDiffView() && shared.layout > 1 && !split;
     scalePanels.forEach((candidate, index) => {
       if (!candidate.colormap || !candidate.range) return;
       canvases[index].hidden = false;
       drawColorbar(canvases[index], candidate.colormap, candidate.range, {
-        label: `${sharedPrefix}${prefixFor(candidate)}${candidate.label} (${candidate.units})`,
+        label: sharedBar ? prettyVariable(candidate) : `${prefixFor(candidate)}${candidate.label}`,
+        units: candidate.units,
         textColor,
       });
     });
@@ -3455,7 +3460,7 @@ function prettyVariable(panel) {
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && variableEntry(manifest, panel.state.variable);
   if (isCurrentsVariable(panel.state.variable)) return `currents (${currentsDepthLabel(panel.state.variable)})`;
-  return entry ? `${prettyName(entry.standard_name)} · ${entry.depth}` : panel.state.variable;
+  return entry ? `${prettyName(entry.standard_name)} · ${depthLabel(entry.depth)}` : panel.state.variable;
 }
 
 // Obs-based skill (Class-4 RMSE vs observations) for a forecast's selected variable.

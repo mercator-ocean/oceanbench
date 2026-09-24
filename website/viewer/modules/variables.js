@@ -84,11 +84,26 @@ export function currentsVariableOptions(manifest) {
   return options;
 }
 
+// Short plain names for the standard names the pyramids carry: the full CF names were
+// ellipsized in every selector and colour-scale caption they appeared in.
+const SHORT_NAMES = {
+  sea_surface_height_above_geoid: "Sea surface height",
+  sea_water_potential_temperature: "Temperature",
+  sea_water_salinity: "Salinity",
+  eastward_sea_water_velocity: "Eastward current (u)",
+  northward_sea_water_velocity: "Northward current (v)",
+  sea_water_speed: "Current speed",
+};
+
 export function prettyName(standardName) {
-  return standardName.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+  return SHORT_NAMES[standardName] || standardName.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+export function depthLabel(depth) {
+  return String(depth).replace(/^(\d+)m$/, "$1 m");
 }
 
 export function variableLabel(manifest, key) {
   const entry = manifest.variables[key];
-  return `${prettyName(entry.standard_name)} · ${entry.depth}`;
+  return `${prettyName(entry.standard_name)} · ${depthLabel(entry.depth)}`;
 }
