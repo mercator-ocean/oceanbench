@@ -33,9 +33,9 @@ import {
   fieldToImageData,
   landStencilImageData,
   areaWeightedMean,
-  symmetricRange,
   differenceField,
   resampleOntoGrid,
+  robustDifferenceMagnitude,
   drawColorbar,
   landColor,
   noObsColor,
@@ -736,8 +736,9 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   const difference = differenceField(primary.field, compare.field);
   // The difference field only exists for the lead on screen, so its symmetric range is
   // held grow-only for this selection: without that, a difference that doubles between
-  // two leads is drawn in the same colours at both and the growth is invisible.
-  const [, magnitude] = symmetricRange(difference);
+  // two leads is drawn in the same colours at both and the growth is invisible. The
+  // magnitude is a robust area-weighted p99, not the single largest cell.
+  const magnitude = robustDifferenceMagnitude(difference, primary.latitudes);
   const bound = stableMax(`diff|${panel.index}|${compareSlug}`, magnitude) || magnitude;
   const range = [-bound, bound];
   applyPanelField(panel, { field: difference, latitudes: primary.latitudes, longitudes: primary.longitudes,
@@ -774,7 +775,7 @@ async function renderCurrentsDifferencePanel(panel, token, manifest, level, star
     speedMagnitudeField(uPrimary.field, vPrimary.field),
     speedMagnitudeField(uCompare.field, vCompare.field),
   );
-  const [, magnitude] = symmetricRange(difference);
+  const magnitude = robustDifferenceMagnitude(difference, uPrimary.latitudes);
   const bound = stableMax(`diff|${panel.index}|${compareSlug}|currents`, magnitude) || magnitude;
   const range = [-bound, bound];
   applyPanelField(panel, { field: difference, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,

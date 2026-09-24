@@ -167,17 +167,40 @@ export function areaWeightedMean({ data, width, height }, latitudes) {
   return weightTotal === 0 ? NaN : weightedSum / weightTotal;
 }
 
-/** Symmetric range about zero covering a difference field's magnitude. */
-export function symmetricRange({ data }) {
-  let magnitude = 0;
+/**
+ * Magnitude for a symmetric difference scale: the cos(latitude)-weighted 99th
+ * percentile of |value| over the finite cells, so a few extreme cells (coastlines,
+ * sea-ice edges, grid seams) do not wash the rest of the map out to white. Read off a
+ * weighted histogram of |value| rather than a sort. `latitudes` are the field's row
+ * coordinates; without them every row weighs the same. Returns 1 for an empty field.
+ */
+export function robustDifferenceMagnitude({ data, width, height }, latitudes) {
+  let maximum = 0;
   for (let i = 0; i < data.length; i += 1) {
-    const value = data[i];
-    if (Number.isNaN(value)) continue;
-    const absolute = Math.abs(value);
-    if (absolute > magnitude) magnitude = absolute;
+    const absolute = Math.abs(data[i]);
+    if (absolute > maximum) maximum = absolute;
   }
-  const bound = magnitude || 1;
-  return [-bound, bound];
+  if (!(maximum > 0)) return 1;
+  const binCount = 2048;
+  const histogram = new Float64Array(binCount);
+  let weightTotal = 0;
+  for (let row = 0; row < height; row += 1) {
+    const weight = latitudes && latitudes.length === height ? Math.max(0, Math.cos((latitudes[row] * Math.PI) / 180)) : 1;
+    if (weight === 0) continue;
+    for (let column = 0; column < width; column += 1) {
+      const value = data[row * width + column];
+      if (Number.isNaN(value)) continue;
+      histogram[Math.min(binCount - 1, Math.floor((Math.abs(value) / maximum) * binCount))] += weight;
+      weightTotal += weight;
+    }
+  }
+  const target = 0.99 * weightTotal;
+  let cumulative = 0;
+  for (let bin = 0; bin < binCount; bin += 1) {
+    cumulative += histogram[bin];
+    if (cumulative >= target) return ((bin + 1) / binCount) * maximum;
+  }
+  return maximum;
 }
 
 /**
