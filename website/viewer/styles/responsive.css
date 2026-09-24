@@ -49,6 +49,17 @@ SPDX-License-Identifier: EUPL-1.2
   .drawer-right { width: min(var(--rail-open-width), 78vw); }
 }
 
+/* Two maps side by side on a phone are two slivers of a 2:1 world with empty space above
+   and below each; stacked, each keeps the full width. */
+@media (max-width: 800px) {
+  .panel-grid[data-layout="2"][data-display="side"] {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    column-gap: 0;
+    row-gap: 1px;
+  }
+}
+
 /* The map column, not the window, decides how much the strip can ask for. As it
    narrows the colour scale gives up width first, since it is a legend and the scrubber
    beside it is a control. Narrower still, the status line stops painting, being the

@@ -2396,10 +2396,14 @@ function minimumZoomFor(panel) {
 // already wraps copies, so the flanks fill themselves. Measured on the wrap's CSS
 // box, not the canvas backing store, which can still be at its 300x150 default
 // before the first resize pass.
+// Cover the panel with the rows the fields have, not with the whole globe: no grid
+// reaches 90°S, so a globe-sized cover left an empty band under the Southern Ocean.
 function coverZoomFor(panel) {
   const rectangle = panel && panel.els.wrap ? panel.els.wrap.getBoundingClientRect() : null;
   if (!rectangle || !rectangle.width || !rectangle.height) return 1;
-  return Math.max(1, rectangle.height / (rectangle.width / 2));
+  const [dataTop, dataBottom] = shownDataRowsExtent();
+  const fit = Math.min(rectangle.height, rectangle.width / 2);
+  return Math.max(1, rectangle.height / (fit * (dataBottom - dataTop)));
 }
 
 function clampView() {
@@ -2438,8 +2442,24 @@ function clampView() {
     view.centerNY = 0.5;
     return;
   }
+  // Clamp to the rows the shown fields actually have, not to the poles: no model grid
+  // reaches 90°S, so a pole-bounded clamp left an empty band under the Southern Ocean.
   const halfViewport = projection.height / (2 * projection.displayHeight);
-  view.centerNY = Math.min(1 - halfViewport, Math.max(halfViewport, view.centerNY));
+  const [dataTop, dataBottom] = shownDataRowsExtent();
+  const low = dataTop + halfViewport;
+  const high = dataBottom - halfViewport;
+  view.centerNY =
+    low <= high
+      ? Math.min(high, Math.max(low, view.centerNY))
+      : Math.min(1 - halfViewport, Math.max(halfViewport, (dataTop + dataBottom) / 2));
+}
+
+// Normalized [top, bottom] of the rows any shown field covers; the whole globe until a
+// field has loaded.
+function shownDataRowsExtent() {
+  const edges = panels.slice(0, shared.layout).map((panel) => panel && panel.edgesA).filter(Boolean);
+  if (!edges.length) return [0, 1];
+  return [Math.max(0, Math.min(...edges.map((edge) => edge.nyTop))), Math.min(1, Math.max(...edges.map((edge) => edge.nyBottom)))];
 }
 
 function fitRegionView() {
@@ -5527,6 +5547,14 @@ async function main() {
   }
   writeHash();
   await renderAllPanels();
+  // The first cover and clamp ran before any field existed, so they could only use the
+  // poles; now the fields' own rows are known.
+  if (!parameters.has("z") || !parameters.has("cy")) {
+    const before = [view.zoom, view.centerNY];
+    if (!parameters.has("z")) view.zoom = coverZoomFor(panels.find((candidate) => candidate.els.field.width > 0));
+    clampView();
+    if (view.zoom !== before[0] || view.centerNY !== before[1]) redrawAllPanels();
+  }
   if (leadClampNote) setStatus(leadClampNote);
   // A link that turns the spectrum on without carrying a box (psdOn=1 and no psd=) opened on
   // an empty spectrum card and no rectangle on the map until something else nudged the rail.
