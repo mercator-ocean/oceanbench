@@ -20,7 +20,7 @@
     "field-currents-lead3": "p0[field=832x730:eb4421fa,overlay=832x730:85ce45c5]",
     "two-panel-side-lead1": "p0[field=416x730:e9c4ee17,overlay=416x730:c64d71c5] p1[field=416x730:091c465c,overlay=416x730:c64d71c5]",
     "two-panel-swipe-lead1": "p0[field=832x687:e3696d2f,overlay=832x687:8a11b9c5] p1[field=1x1:3e5151fa,overlay=1x1:4b95f515]",
-    "two-panel-difference-lead1": "p0[field=832x687:5a64d573,overlay=832x687:8a11b9c5] p1[field=1x1:3e5151fa,overlay=1x1:4b95f515]",
+    "two-panel-difference-lead1": "p0[field=832x687:27eba2a9,overlay=832x687:8a11b9c5] p1[field=1x1:3e5151fa,overlay=1x1:4b95f515]",
     "overlay-class4-lead1": "p0[field=832x730:ce5870be,overlay=832x730:70901fb2]",
     "overlay-eddies-lead1": "p0[field=832x730:ce5870be,overlay=832x730:f08ac8e8]",
     "year-scope-error": "p0[field=832x730:82482821,overlay=832x730:85ce45c5]",
