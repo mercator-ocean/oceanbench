@@ -31,14 +31,14 @@ const PALETTE = {
   light: [255, 255, 255],
   /*
    * The dark scale steps in lightness as well as hue: the neutral end is the
-   * panel surface the table sits on, so a zero-difference cell reads as part
-   * of the table, and each step away from it is lighter and more saturated,
-   * a blue better side and a red worse one at matched lightness. The
-   * extremes are the panel blended 62% towards #388bfd and #f85149 and the
-   * middle steps 36%, which keeps one light text colour above 4.5:1 on
-   * every tile.
+   * page colour the table sits on, so a zero-difference or missing cell reads
+   * as page, as white does in light mode, and each step away from it is
+   * lighter and more saturated, a blue better side and a red worse one at
+   * matched lightness. The extremes are the page blended 62% towards #388bfd
+   * and #f85149 and the middle steps 36%, which keeps one light text colour
+   * above 4.5:1 on every tile.
    */
-  darkScale: [[48, 101, 174], [42, 75, 121], [34, 39, 46], [111, 54, 56], [167, 65, 63]],
+  darkScale: [[45, 99, 172], [38, 71, 117], [28, 33, 40], [107, 50, 52], [164, 63, 60]],
 };
 
 const DARK_CELL_TEXT = "#e6edf3";

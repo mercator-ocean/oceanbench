@@ -147,7 +147,7 @@ body.quarto-dark .content table:not(.score-table) th {
 }
 
 body.quarto-dark .challengers-table-wrap {
-  background: var(--ob-surface);
+  background: var(--ob-page-bg);
 }
 
 .challengers-table-wrap {
@@ -355,11 +355,12 @@ body.quarto-dark .challengers-table-wrap {
 
 /* Dark mode overrides */
 
-/* The table sits on the panel surface, one step up from the page, with no
-   vertical grid: faint row lines are enough to guide the eye along a row,
-   and the tiles themselves separate the columns. */
+/* The table sits straight on the page, as it does in light mode, so an
+   empty or neutral cell is just page. There is no vertical grid: faint row
+   lines are enough to guide the eye along a row, and the tiles themselves
+   separate the columns. */
 body.quarto-dark .score-table {
-  background: var(--ob-surface);
+  background: var(--ob-page-bg);
   box-shadow: 0 0 0 1px var(--ob-border);
 }
 
@@ -371,10 +372,10 @@ body.quarto-dark .score-table td {
 }
 
 /* The frozen column and the head scroll over the coloured cells, so they need
-   an opaque fill: the panel surface. */
+   an opaque fill: the page colour. */
 body.quarto-dark .score-table .model-col,
 body.quarto-dark .score-table thead th {
-  background: var(--ob-surface);
+  background: var(--ob-page-bg);
 }
 
 body.quarto-dark .score-table thead th {
@@ -396,11 +397,11 @@ body.quarto-dark .score-table .model-col a:hover {
   color: var(--ob-accent-hover);
 }
 
-/* A cell with no value carries no colour of its own: it is the panel, like a
+/* A cell with no value carries no colour of its own: it is the page, like a
    cell with no difference. The baseline-row wash further down is allowed to
    win over it. */
 body.quarto-dark .score-table td.no-value-cell {
-  background: var(--ob-surface);
+  background: var(--ob-page-bg);
 }
 
 /* The row under the pointer lifts by a hair. Only the frozen cell can carry
@@ -1034,7 +1035,7 @@ body.nav-hidden .depth-table thead {
 }
 
 body.quarto-dark .score-table .depth-separator-cell {
-  background: var(--ob-surface);
+  background: var(--ob-page-bg);
   border-bottom-color: var(--ob-border) !important;
   color: var(--ob-muted);
 }
@@ -1408,7 +1409,7 @@ body.quarto-dark .version-select {
 
 body.quarto-dark #floating-thead,
 body.quarto-dark #floating-thead .score-table thead th {
-  background: var(--ob-surface);
+  background: var(--ob-page-bg);
 }
 
 body.nav-hidden #floating-thead {
