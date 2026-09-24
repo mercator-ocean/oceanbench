@@ -61,13 +61,15 @@ Absolute RMSE scores against in-situ observations (Class IV validation). The col
 
 ## Comparison to reanalysis
 
-Absolute RMSE scores against 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030). These are the deterministic scores for the forecasted variables and physically consistent diagnostic variables. The colors denote % difference to the selected baseline.
+Absolute RMSE scores against 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030). These are the deterministic scores for the forecasted variables and physically consistent diagnostic variables. The colors denote % difference to the selected baseline. GLORYS is the independent reference for forecasts initialised from the GLO12 nowcast.
 
 <div id="reanalysis-scores"></div>
 
 ## Comparison to analysis
 
 Absolute RMSE scores against 2024 [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024). These are the deterministic scores for the forecasted variables and physically consistent diagnostic variables. The colors denote % difference to the selected baseline.
+
+Read these with care at short leads. A model initialised from the GLO12 nowcast starts from almost the same ocean state as the GLO12 analysis, so it scores well against that analysis in the first days by construction, not only by skill. GLORYS, above, is the independent reference.
 
 <div id="analysis-scores"></div>
 
