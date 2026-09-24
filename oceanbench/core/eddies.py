@@ -41,12 +41,18 @@ ONE_DEGREE_LATITUDE_KM = numpy.pi * EARTH_RADIUS_KM / 180.0
 #
 # Background high-pass, as a (latitude, longitude) Gaussian sigma in kilometres.
 # These are SIGMAS, not cutoffs: a Gaussian low-pass exp(-k^2 sigma^2 / 2) reaches half
-# power at a wavelength of roughly 7.5 sigma, so (265, 130) km corresponds to half-power
-# wavelengths of about 1000 km meridional x 2000 km zonal, the scale of Chelton et al.
+# power at a wavelength of roughly 7.5 sigma, so (130, 265) km (latitude, longitude) gives
+# half-power wavelengths of about 1000 km meridional x 2000 km zonal, the scale of Chelton et al.
 # (2011)'s 20-degree zonal x 10-degree meridional half-power block. The earlier default of
 # 12 degrees of latitude (1334 km) was applied directly as the sigma, i.e. a ~10000 km
 # half-power filter, which left gyre and front-scale sea surface height in the "anomaly".
 DEFAULT_BACKGROUND_SIGMA_KM = (130.0, 265.0)
+# The filter is applied in degrees. A grid spanning the full 360 degrees of longitude converts the
+# km pair at its own mean latitude (about 5 N on the 80 S..90 N global grids: 1.17 deg latitude x
+# 2.39 deg longitude, half power near 8.8 x 17.9 deg) and wraps in longitude. A regional crop
+# converts at this reference latitude instead, so it gets the global degree widths rather than
+# wider ones at its own mean latitude, and its longitude edges are not joined.
+BACKGROUND_REFERENCE_LATITUDE_DEGREES = 5.0
 # Second smoothing pass of the anomaly is OFF by default: Chelton/META and
 # py-eddy-tracker do not blur the mesoscale field before peak detection. The
 # parameter is kept so old artifacts remain reproducible by passing an explicit value.
@@ -119,14 +125,16 @@ def _lead_day_indices(dataset: xarray.Dataset, lead_day_indices: list[int] | Non
 def _gaussian_filter_with_mask(
     values: numpy.ndarray,
     sigma: float | tuple[float, float],
+    periodic_longitude: bool = True,
 ) -> numpy.ndarray:
     valid_mask = numpy.isfinite(values)
     if not numpy.any(valid_mask):
         return numpy.full_like(values, numpy.nan, dtype=float)
     filled_values = numpy.where(valid_mask, values, 0.0)
     weights = valid_mask.astype(float)
-    filtered_values = gaussian_filter(filled_values, sigma=sigma, mode=("nearest", "wrap"))
-    filtered_weights = gaussian_filter(weights, sigma=sigma, mode=("nearest", "wrap"))
+    mode = ("nearest", "wrap") if periodic_longitude else "nearest"
+    filtered_values = gaussian_filter(filled_values, sigma=sigma, mode=mode)
+    filtered_weights = gaussian_filter(weights, sigma=sigma, mode=mode)
     with numpy.errstate(invalid="ignore", divide="ignore"):
         smoothed_values = filtered_values / filtered_weights
     smoothed_values[filtered_weights <= 0] = numpy.nan
@@ -139,13 +147,23 @@ def _ssh_anomaly(
     detection_sigma_km: float | None,
 ) -> numpy.ndarray:
     field_values = numpy.asarray(field.values, dtype=float)
+    periodic = _longitude_is_periodic(field)
     background_values = _gaussian_filter_with_mask(
-        field_values, sigma=_kilometres_to_grid_sigma(field, background_sigma_km)
+        field_values, sigma=_kilometres_to_grid_sigma(field, background_sigma_km), periodic_longitude=periodic
     )
     anomaly_values = field_values - background_values
     if detection_sigma_km is None or detection_sigma_km <= 0:
         return anomaly_values
-    return _gaussian_filter_with_mask(anomaly_values, sigma=_kilometres_to_grid_sigma(field, detection_sigma_km))
+    return _gaussian_filter_with_mask(
+        anomaly_values, sigma=_kilometres_to_grid_sigma(field, detection_sigma_km), periodic_longitude=periodic
+    )
+
+
+def _longitude_is_periodic(field: xarray.DataArray) -> bool:
+    """True when the grid spans the full 360 degrees of longitude (within half a cell)."""
+    longitude_values = numpy.asarray(field[LONGITUDE_COLUMN].values, dtype=float)
+    spacing = _median_positive_spacing(longitude_values)
+    return longitude_values.size * spacing >= 360.0 - 0.5 * spacing
 
 
 def _median_positive_spacing(values: numpy.ndarray) -> float:
@@ -165,7 +183,11 @@ def _kilometres_to_grid_sigma(
     latitude_sigma_km, longitude_sigma_km = sigma_km if isinstance(sigma_km, tuple) else (sigma_km, sigma_km)
     latitude_values = numpy.asarray(field[LATITUDE_COLUMN].values, dtype=float)
     latitude_spacing_km = _median_positive_spacing(latitude_values) * ONE_DEGREE_LATITUDE_KM
-    characteristic_latitude = float(numpy.nanmean(latitude_values))
+    characteristic_latitude = (
+        float(numpy.nanmean(latitude_values))
+        if _longitude_is_periodic(field)
+        else BACKGROUND_REFERENCE_LATITUDE_DEGREES
+    )
     longitude_spacing_km = (
         _median_positive_spacing(field[LONGITUDE_COLUMN].values)
         * ONE_DEGREE_LATITUDE_KM

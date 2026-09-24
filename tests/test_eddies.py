@@ -4,6 +4,7 @@
 
 import numpy
 import pandas
+import pytest
 import xarray
 from scipy.ndimage import gaussian_filter
 from skimage.feature import peak_local_max
@@ -231,3 +232,42 @@ def test_amplitude_is_measured_above_the_outermost_closed_contour() -> None:
         # Polarity sign is preserved, so cyclones stay negative.
         expected_sign = 1.0 if accepted_row[eddies.POLARITY_COLUMN] == eddies.ANTICYCLONE else -1.0
         assert numpy.sign(accepted_row[eddies.AMPLITUDE_COLUMN]) == expected_sign
+
+
+def test_regional_background_uses_global_degree_widths_without_wrapping() -> None:
+    # A regional crop (here 40 N, 20 degrees wide) must neither join its west and east edges
+    # nor widen the longitude sigma at its own mean latitude: it gets the global degree widths.
+    latitudes = numpy.arange(30.0, 50.0, 0.25)
+    longitudes = numpy.arange(-20.0, 0.0, 0.25)
+    values = numpy.zeros((latitudes.size, longitudes.size))
+    values[:, -8:] = 1.0  # a step along the east edge only
+    field = xarray.DataArray(
+        values,
+        dims=(eddies.LATITUDE_COLUMN, eddies.LONGITUDE_COLUMN),
+        coords={eddies.LATITUDE_COLUMN: latitudes, eddies.LONGITUDE_COLUMN: longitudes},
+    )
+    assert not eddies._longitude_is_periodic(field)
+    latitude_sigma, longitude_sigma = eddies._kilometres_to_grid_sigma(field, eddies.DEFAULT_BACKGROUND_SIGMA_KM)
+    reference = numpy.cos(numpy.deg2rad(eddies.BACKGROUND_REFERENCE_LATITUDE_DEGREES))
+    assert longitude_sigma * 0.25 == pytest.approx(265.0 / (eddies.ONE_DEGREE_LATITUDE_KM * reference))
+    assert latitude_sigma * 0.25 == pytest.approx(130.0 / eddies.ONE_DEGREE_LATITUDE_KM)
+
+    anomaly = eddies._ssh_anomaly(field, eddies.DEFAULT_BACKGROUND_SIGMA_KM, None)
+    wrapped = values - gaussian_filter(values, sigma=(latitude_sigma, longitude_sigma), mode=("nearest", "wrap"))
+    # The west edge sees none of the east-edge step; with wrapping it would.
+    assert numpy.abs(anomaly[:, 0]).max() < 1e-6
+    assert numpy.abs(wrapped[:, 0]).max() > 1e-3
+
+
+def test_global_grid_still_wraps_at_its_own_mean_latitude() -> None:
+    latitudes = numpy.arange(-80.0, 90.0, 1.0)
+    longitudes = numpy.arange(-180.0, 180.0, 1.0)
+    field = xarray.DataArray(
+        numpy.zeros((latitudes.size, longitudes.size)),
+        dims=(eddies.LATITUDE_COLUMN, eddies.LONGITUDE_COLUMN),
+        coords={eddies.LATITUDE_COLUMN: latitudes, eddies.LONGITUDE_COLUMN: longitudes},
+    )
+    assert eddies._longitude_is_periodic(field)
+    _, longitude_sigma = eddies._kilometres_to_grid_sigma(field, eddies.DEFAULT_BACKGROUND_SIGMA_KM)
+    own = numpy.cos(numpy.deg2rad(latitudes.mean()))
+    assert longitude_sigma == 265.0 / (eddies.ONE_DEGREE_LATITUDE_KM * own)
