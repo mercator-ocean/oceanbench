@@ -355,6 +355,7 @@ function buildPanel(index) {
       <div class="panel-ghost-cursor" aria-hidden="true" hidden></div>
       <div class="panel-loading" hidden>Loading dataset…</div>
       <div class="panel-swipe-hint" hidden></div>
+      <div class="panel-swipe-handle" aria-hidden="true" hidden>↔</div>
     </div>`;
   const panel = {
     index,
@@ -372,6 +373,7 @@ function buildPanel(index) {
       ghostCursor: container.querySelector(".panel-ghost-cursor"),
       loading: container.querySelector(".panel-loading"),
       swipeHint: container.querySelector(".panel-swipe-hint"),
+      swipeHandle: container.querySelector(".panel-swipe-handle"),
     },
     offscreenA: null,
     offscreenB: null,
@@ -1091,6 +1093,7 @@ function drawPanel(panel) {
       context.textBaseline = "middle";
       context.fillText(panel.yearMissing, canvas.width / 2, canvas.height / 2);
       panel.els.swipeHint.hidden = true;
+      panel.els.swipeHandle.hidden = true;
     }
     updatePanelMethodNote(panel);
     return;
@@ -1126,12 +1129,18 @@ function drawPanel(panel) {
     drawImageWorld(context, panel.offscreenB, panel.edgesB, projection);
     context.restore();
     context.filter = "none";
-    context.strokeStyle = themeToken("--ob-viewer-swipe-divider", shared.theme === THEME_LIGHT ? "#1f6feb" : "#38bdf8");
+    const dividerColor = themeToken("--ob-viewer-swipe-divider", shared.theme === THEME_LIGHT ? "#1f6feb" : "#38bdf8");
+    context.strokeStyle = dividerColor;
     context.lineWidth = 2 * (window.devicePixelRatio || 1);
     context.beginPath();
     context.moveTo(dividerX, 0);
     context.lineTo(dividerX, canvas.height);
     context.stroke();
+    // The grab handle is a visual cue only (pointer-events: none); the 12 px grab zone
+    // around the divider in beginPanelDrag does the dragging, so the handle sits inside it.
+    panel.els.swipeHandle.hidden = false;
+    panel.els.swipeHandle.style.left = `${panel.swipeX * 100}%`;
+    panel.els.swipeHandle.style.setProperty("--swipe-divider", dividerColor);
     panel.els.swipeHint.hidden = false;
     panel.els.swipeHint.textContent = `◀ Forecast 1 · ${labelFor(panels[0].state.dataset)}  |  Forecast 2 · ${labelFor(panels[1].state.dataset)} ▶`;
   } else {
@@ -1139,6 +1148,7 @@ function drawPanel(panel) {
     drawImageWorld(context, panel.offscreenA, panel.edgesA, projection);
     context.filter = "none";
     panel.els.swipeHint.hidden = true;
+    panel.els.swipeHandle.hidden = true;
   }
   // In year scope outline the raster extent so the map's data limits are legible at
   // zoom 1, especially the regional (ibi) domain against the empty page outside it.

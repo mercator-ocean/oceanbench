@@ -203,6 +203,27 @@ SPDX-License-Identifier: EUPL-1.2
   pointer-events: none;
 }
 
+/* Round grab cue centred on the swipe divider. Visual only: the drag itself is the
+   canvas grab zone around the divider line, which this handle sits inside. */
+.panel-swipe-handle {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  margin-top: -11px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--swipe-divider, var(--accent));
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.panel-swipe-handle[hidden] { display: none; }
+
 /* The map strip: the lead scrubber, the colour scale and the status line, below the
    map and inside the shell's grid rather than laid over the imagery. Equal side
    tracks put the scale on the centre of the map column, so nothing has to know how
