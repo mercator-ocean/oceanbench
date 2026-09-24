@@ -1982,6 +1982,7 @@ async function readColumnProfileAt(longitude, latitude) {
       slug: panel.state.dataset,
       variable: choice.name,
       startIndex,
+      startClamped: startIndex !== shared.startIndex,
       latIndex,
       lonIndex,
       color: forecastColor(panel.index),
@@ -2101,7 +2102,13 @@ function renderColumnProfileRail() {
     elements["rail-column-note"].textContent = "No water column at this point.";
   } else {
     const labels = [...groups.values()].map((group) => group.label.toLowerCase()).join(" and ");
-    elements["rail-column-note"].textContent = `Model ${labels} profile at the selected start and lead day ${shared.leadDay}. Move the lead slider to re-read from the same download.`;
+    // readColumnProfileAt clamps to the column store's last start when it holds fewer
+    // starts than the maps; say so rather than show another date's profile unannounced.
+    const clamped = (columnProfile ? columnProfile.forecasts : []).filter((forecast) => forecast.startClamped);
+    const clampNote = clamped.length
+      ? ` ${clamped.map((forecast) => forecast.datasetLabel).join(" and ")}: the column store ends before this start, so the profile is from its last stored start.`
+      : "";
+    elements["rail-column-note"].textContent = `Model ${labels} profile at the selected start and lead day ${shared.leadDay}. Move the lead slider to re-read from the same download.${clampNote}`;
   }
   const heading = section.querySelector("h3");
   if (heading) attachMethodNote(heading, "column-profile");
