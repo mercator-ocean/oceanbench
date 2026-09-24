@@ -369,9 +369,19 @@ function buildPanel(index) {
 }
 
 function refreshPanelControls(panel) {
+  // The reference reanalysis is listed apart from the forecasts; GLO12, climatology and
+  // persistence are all forecasts here.
+  const datasetOption = (entry) => ({
+    value: entry.slug,
+    label: entry.label,
+    group: isReferenceDataset(entry.slug) ? "Reference" : "Forecasts",
+  });
   populateSelect(
     panel.els.dataset,
-    datasetCatalog.map((entry) => ({ value: entry.slug, label: entry.label })),
+    [
+      ...datasetCatalog.filter((entry) => isReferenceDataset(entry.slug)),
+      ...datasetCatalog.filter((entry) => !isReferenceDataset(entry.slug)),
+    ].map(datasetOption),
     panel.state.dataset,
   );
   const manifest = manifestFor(panel.state.dataset);
@@ -3876,11 +3886,11 @@ function panelSpectrum(source, viewport) {
   );
 }
 
-// The gridded truth the offline scores are computed against. Effective resolution needs
-// one of these in the other panel; two forecasts alone have no reference between them.
+// The reanalysis the offline gridded scores are computed against. Effective resolution
+// needs it in the other panel; two forecasts alone have no reference between them. The
+// GLO12 stores are forecasts (their lead 1 is the nowcast), so they do not count.
 function isReferenceDataset(slug) {
-  const name = String(slug || "");
-  return name.startsWith("glo12") || name.startsWith("glorys");
+  return String(slug || "").startsWith("glorys");
 }
 
 // Effective resolution after Ballarotta et al. (2019, Ocean Science): the wavelength at

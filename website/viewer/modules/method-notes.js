@@ -104,7 +104,7 @@ export const METHOD_NOTES = {
       "below the reference it is smoothing that size away. Where a curve ends is its grid " +
       "limit: no model is drawn at sizes its own grid cannot carry, so a coarse model's " +
       "curve stops well before a fine one's. " +
-      "With a reference (GLO12 or GLORYS) in the other panel, the marked vertical line is " +
+      "With the GLORYS reanalysis in the other panel, the marked vertical line is " +
       "the effective resolution after Ballarotta et al. (2019, Ocean Science, " +
       "doi:10.5194/os-15-1091-2019), measured on the reference grid so it does not depend " +
       "on which panel holds the reference: the size below which the forecast disagrees " +
@@ -112,6 +112,11 @@ export const METHOD_NOTES = {
       "mostly wrong about where things are or when they happen, however much energy it " +
       "carries there. A model can match GLO12 energy for energy at 100 km and still have " +
       "an effective resolution of 500 km, because its eddies are in the wrong places. " +
+      "Ballarotta et al. measure against independent along-track altimetry; taking a model " +
+      "reanalysis as the reference is an adaptation of their method. GLORYS is published " +
+      "here on a 1° grid, so against it an effective resolution below about 220 km (two " +
+      "grid cells) cannot be measured. GLO12 is listed as a forecast, not a reference: its " +
+      "lead 1 is its nowcast. " +
       "Computed in the browser on the model's finest published grid, averaged in blocks " +
       "onto the square grid the transform needs. Exploratory. Hann window, land filled " +
       "with the region mean, then the two-dimensional spectrum is SUMMED over wavenumber " +

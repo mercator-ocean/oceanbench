@@ -25,11 +25,18 @@ export function populateSelect(select, options, selectedValue) {
     return;
   }
   select.innerHTML = "";
+  // Options that name a group are placed under an <optgroup> of that label, in order.
+  let parent = select;
   for (const option of options) {
+    if (option.group && (parent === select || parent.label !== option.group)) {
+      parent = document.createElement("optgroup");
+      parent.label = option.group;
+      select.appendChild(parent);
+    }
     const element = document.createElement("option");
     element.value = option.value;
     element.textContent = option.label;
     if (String(option.value) === String(selectedValue)) element.selected = true;
-    select.appendChild(element);
+    parent.appendChild(element);
   }
 }
