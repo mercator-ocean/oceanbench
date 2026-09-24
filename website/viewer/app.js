@@ -5266,6 +5266,29 @@ function scheduleRailUpdate() {
 
 // ---- URL hash (every view state is a URL, §6) ------------------------------
 
+// Keys that move continuously (scrub, pan, zoom, drag). A change confined to these
+// replaces the current history entry; any other change pushes a new one, so Back steps
+// through choices rather than through every frame of a drag.
+const CONTINUOUS_HASH_KEYS = new Set(["l", "z", "cx", "cy", "rw", "cw", "spd", "psd", "col"]);
+let lastWrittenHash = null;
+let hashHistoryReady = false;
+// A dated start (s=YYYY-MM-DD) can only become an index once the manifests are known.
+let pendingStartDate = null;
+
+function hashChangeIsContinuous(previous, next) {
+  const before = new URLSearchParams(previous.slice(1));
+  const after = new URLSearchParams(next.slice(1));
+  const keys = new Set([...before.keys(), ...after.keys()]);
+  return [...keys].every((key) => CONTINUOUS_HASH_KEYS.has(key) || before.get(key) === after.get(key));
+}
+
+// Back / forward or a hand-edited hash names a view we did not write. Every view is a
+// deep link, so the page reopens on it exactly as a shared link would.
+function onNavigatedHash() {
+  if (location.hash === lastWrittenHash) return;
+  location.reload();
+}
+
 let hashWriteTimer = null;
 function scheduleHashWrite() {
   clearTimeout(hashWriteTimer);
@@ -5282,7 +5305,8 @@ function encodePanel(panel) {
 function writeHash() {
   const parameters = new URLSearchParams();
   parameters.set("layout", String(shared.layout));
-  parameters.set("s", String(shared.startIndex));
+  const startDate = sharedStartDate();
+  parameters.set("s", startDate ? String(startDate).slice(0, 10) : pendingStartDate || String(shared.startIndex));
   parameters.set("l", String(shared.leadDay));
   parameters.set("z", view.zoom.toFixed(3));
   parameters.set("cx", view.centerNX.toFixed(4));
@@ -5305,8 +5329,13 @@ function writeHash() {
   }
   parameters.set("region", shared.region);
   if (shared.overlayMode === OVERLAY_EDDIES) parameters.set("eref", shared.eddyReference);
-  if (shared.railCollapsed) parameters.set("rail", "collapsed");
-  if (shared.controlsCollapsed) parameters.set("ctrl", "collapsed");
+  // Explicit 0/1 so a link overrides the drawer state this browser remembers. While the
+  // drawers overlay the map they are folded by the viewport, not by choice: leave them out.
+  if (!drawersOverlaying()) {
+    parameters.set("rail", shared.railCollapsed ? "0" : "1");
+    parameters.set("ctrl", shared.controlsCollapsed ? "0" : "1");
+  }
+  if (shared.layout === 2 && shared.railForecast === 1) parameters.set("rf", "F2");
   parameters.set("rw", String(shared.railWidth));
   parameters.set("cw", String(shared.controlsWidth));
   if (shared.layout === 2) parameters.set("dm", shared.displayMode);
@@ -5314,7 +5343,11 @@ function writeHash() {
   parameters.set("spd", shared.particleSpeed.toFixed(1));
   for (let i = 0; i < shared.layout; i += 1) parameters.set(`p${i}`, encodePanel(panels[i]));
   const encoded = `#${parameters.toString()}`;
-  if (encoded !== location.hash) history.replaceState(null, "", encoded);
+  if (encoded !== location.hash) {
+    const replace = !hashHistoryReady || !location.hash || hashChangeIsContinuous(location.hash, encoded);
+    history[replace ? "replaceState" : "pushState"](null, "", encoded);
+  }
+  lastWrittenHash = encoded;
   syncExampleNote();
 }
 
@@ -5330,7 +5363,10 @@ function readHash() {
     return Number.isFinite(value) ? value : fallback;
   };
   shared.layout = number("layout", shared.layout);
-  shared.startIndex = number("s", shared.startIndex);
+  // s is a start date (YYYY-MM-DD); older links carry an index into the shared dates.
+  const startParameter = parameters.get("s");
+  if (startParameter && /^\d{4}-\d{2}-\d{2}$/.test(startParameter)) pendingStartDate = startParameter;
+  else shared.startIndex = number("s", shared.startIndex);
   shared.leadDay = number("l", shared.leadDay);
   // A shared link can name a lead this forecast does not reach. The slider is clamped to the
   // horizon either way; remember what was asked for so the clamp can be said out loud instead
@@ -5358,8 +5394,10 @@ function readHash() {
   }
   if (parameters.has("region")) setSharedRegion(parameters.get("region"));
   if (parameters.has("eref")) setSharedEddyReference(parameters.get("eref"));
-  if (parameters.get("rail") === "0" || parameters.get("rail") === "collapsed") shared.railCollapsed = true;
-  if (parameters.get("ctrl") === "0" || parameters.get("ctrl") === "collapsed") shared.controlsCollapsed = true;
+  // "collapsed" is the older spelling of 0.
+  if (parameters.has("rail")) shared.railCollapsed = ["0", "collapsed"].includes(parameters.get("rail"));
+  if (parameters.has("ctrl")) shared.controlsCollapsed = ["0", "collapsed"].includes(parameters.get("ctrl"));
+  if (parameters.has("rf")) shared.railForecast = parameters.get("rf") === "F2" ? 1 : 0;
   const railWidth = number("rw", null);
   if (railWidth !== null) shared.railWidth = Math.min(620, Math.max(280, railWidth));
   shared.controlsWidth = number("cw", shared.controlsWidth);
@@ -5511,6 +5549,8 @@ async function main() {
   }
 
   const parameters = readHash();
+  window.addEventListener("popstate", onNavigatedHash);
+  window.addEventListener("hashchange", onNavigatedHash);
   if (!location.hash.slice(1) && exampleViewAvailable()) {
     exampleViewActive = true;
     shared.layout = 2;
@@ -5554,6 +5594,11 @@ async function main() {
   // Ensure the primary dataset store so start-date / lead options are known.
   // Warm every visible panel's store so variable/start selectors populate on first paint.
   await Promise.all(panels.slice(0, shared.layout).map((panel) => ensureStore(panel.state.dataset).catch(() => {})));
+  if (pendingStartDate) {
+    const index = sharedStartDates().findIndex((date) => String(date).slice(0, 10) === pendingStartDate);
+    if (index >= 0) shared.startIndex = index;
+    pendingStartDate = null;
+  }
   updateSharedTimeControls();
 
   markLayoutButtons();
@@ -5599,6 +5644,7 @@ async function main() {
     await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
   }
   writeHash();
+  hashHistoryReady = true;
 }
 
 main();
