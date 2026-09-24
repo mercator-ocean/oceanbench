@@ -8,7 +8,6 @@ import xarray
 
 from oceanbench.core import ocean_mask as ocean_mask_module
 from oceanbench.core.dataset_utils import Dimension
-from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.ocean_mask import (
     OCEAN_MASK_DEPTHS,
     OCEAN_MASK_VARIABLE,
@@ -41,16 +40,13 @@ def stored_ocean_mask(tmp_path, monkeypatch) -> xarray.DataArray:
     mask = _synthetic_ocean_mask()
     store_path = tmp_path / "ocean-mask.zarr"
     mask.to_dataset(name=OCEAN_MASK_VARIABLE).to_zarr(store_path, mode="w", consolidated=True)
-    monkeypatch.setenv(
-        OceanbenchEnvironmentVariable.OCEANBENCH_OCEAN_MASK_PATH.value,
-        str(store_path),
-    )
+    monkeypatch.setattr(ocean_mask_module, "OCEAN_MASK_URL", str(store_path))
     ocean_mask_module._ocean_mask.cache_clear()
     yield mask
     ocean_mask_module._ocean_mask.cache_clear()
 
 
-def test_ocean_mask_loads_the_artefact_pointed_at_by_the_environment_variable(stored_ocean_mask, monkeypatch) -> None:
+def test_ocean_mask_loads_the_artefact_pointed_at_by_the_mask_url(stored_ocean_mask, monkeypatch) -> None:
     monkeypatch.setattr(ocean_mask_module, "OCEAN_MASK_SHA256", ocean_mask_checksum(stored_ocean_mask))
 
     loaded_mask = ocean_mask()

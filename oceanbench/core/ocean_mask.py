@@ -19,7 +19,6 @@ than a quiet shift of the scores.
 
 import argparse
 import hashlib
-import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -29,7 +28,6 @@ import xarray
 from xarray import DataArray, Dataset
 
 from oceanbench.core.dataset_utils import Dimension
-from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.remote_http import open_remote_zarr, with_remote_http_retries
 
 # The six OceanBench standard depths, on the native twelfth of a degree levels.
@@ -63,7 +61,7 @@ STATIC_GRID_ALIGNMENT_ATOL = 1e-4
 
 OCEAN_MASK_VARIABLE = "ocean_mask"
 
-# Public copy of the ocean mask artefact, overridden by OCEANBENCH_OCEAN_MASK_PATH when set.
+# Public copy of the ocean mask artefact.
 OCEAN_MASK_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ocean_mask/oceanbench-ocean-mask-v2.zarr"
 
 # SHA256 of the boolean array bytes, C order, depth then latitude then longitude.
@@ -149,13 +147,6 @@ def write_ocean_mask(path: Path) -> str:
     return ocean_mask_checksum(mask)
 
 
-def _ocean_mask_path() -> str:
-    return os.environ.get(
-        OceanbenchEnvironmentVariable.OCEANBENCH_OCEAN_MASK_PATH.value,
-        OCEAN_MASK_URL,
-    )
-
-
 def _open_ocean_mask_dataset(path: str) -> Dataset:
     if path.startswith("http://") or path.startswith("https://"):
         return with_remote_http_retries("ocean mask open", lambda: open_remote_zarr(path))
@@ -185,10 +176,9 @@ def ocean_mask() -> DataArray:
     """
     Load the OceanBench ocean mask, boolean, with depth, latitude and longitude coordinates.
 
-    The artefact is read from OCEANBENCH_OCEAN_MASK_PATH when it is set, from the published URL
-    otherwise, and its checksum is verified against OCEAN_MASK_SHA256.
+    The artefact is read from OCEAN_MASK_URL and its checksum is verified against OCEAN_MASK_SHA256.
     """
-    return _ocean_mask(_ocean_mask_path())
+    return _ocean_mask(OCEAN_MASK_URL)
 
 
 def main() -> None:
