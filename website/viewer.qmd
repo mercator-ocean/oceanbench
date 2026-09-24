@@ -5,7 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 
 ---
-pagetitle: "Viewer - OceanBench"
+pagetitle: "Viewer"
 description: "Interactive explorer of OceanBench forecast fields: synchronized panels, currents and insight overlays."
 format:
   html:
