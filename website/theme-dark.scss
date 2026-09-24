@@ -18,18 +18,18 @@
  * so nothing large blooms, and the accent is kept for what can be acted on:
  * links, the active tab and chip, focus rings and the baseline marker.
  */
-$ob-page-bg: #0d1117;
-$ob-surface: #161b22;
-$ob-surface-raised: #1c2330;
-$ob-navbar-bg: #0d1117;
-$ob-border: #30363d;
+$ob-page-bg: #1c2128;
+$ob-surface: #22272e;
+$ob-surface-raised: #2d333b;
+$ob-navbar-bg: #1a2740;
+$ob-border: #444c56;
 $ob-grid-border: rgba(240, 246, 252, 0.06);
-$ob-text: #c9d1d9;
-$ob-heading: #e6edf3;
-$ob-muted: #8b949e;
-$ob-accent: #80c5de;
-$ob-accent-hover: #a8d8ea;
-$ob-table-text: #e6edf3;
+$ob-text: #adbac7;
+$ob-heading: #cdd9e5;
+$ob-muted: #909dab;
+$ob-accent: #8fd0e8;
+$ob-accent-hover: #b4e0f0;
+$ob-table-text: #cdd9e5;
 
 $primary: $ob-accent;
 $secondary: $ob-muted;
@@ -55,7 +55,7 @@ $input-placeholder-color: $ob-muted;
 $dropdown-bg: $ob-surface-raised;
 $dropdown-border-color: $ob-border;
 $dropdown-link-color: $ob-text;
-$dropdown-link-hover-bg: rgba(128, 197, 222, 0.1);
+$dropdown-link-hover-bg: rgba(143, 208, 232, 0.1);
 $dropdown-link-hover-color: $ob-heading;
 
 $table-color: $ob-text;
@@ -80,7 +80,7 @@ $box-shadow-sm: 0 3px 10px rgba(1, 4, 9, 0.5);
 /*-- scss:rules --*/
 
 .navbar {
-  border-bottom: 1px solid $ob-border;
+  border-bottom: 1px solid #2a3d5e;
 }
 
 .nav-footer {

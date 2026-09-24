@@ -34,10 +34,11 @@ const PALETTE = {
    * panel surface the table sits on, so a zero-difference cell reads as part
    * of the table, and each step away from it is lighter and more saturated,
    * a blue better side and a red worse one at matched lightness. The
-   * extremes are the panel blended 70% towards #388bfd and #f85149, which
-   * keeps one light text colour above 4.5:1 on every tile.
+   * extremes are the panel blended 62% towards #388bfd and #f85149 and the
+   * middle steps 36%, which keeps one light text colour above 4.5:1 on
+   * every tile.
    */
-  darkScale: [[46, 105, 187], [35, 70, 117], [22, 27, 34], [108, 48, 49], [180, 65, 61]],
+  darkScale: [[48, 101, 174], [42, 75, 121], [34, 39, 46], [111, 54, 56], [167, 65, 63]],
 };
 
 const DARK_CELL_TEXT = "#e6edf3";

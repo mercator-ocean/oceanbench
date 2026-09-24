@@ -26,21 +26,21 @@
  * selected; the score tiles carry the only other colour.
  */
 body.quarto-dark {
-  --ob-accent: #80c5de;
-  --ob-accent-hover: #a8d8ea;
-  --ob-accent-contrast: #0d1117;
-  --ob-accent-soft: rgba(128, 197, 222, 0.15);
-  --ob-accent-line: rgba(128, 197, 222, 0.45);
-  --ob-border: #30363d;
+  --ob-accent: #8fd0e8;
+  --ob-accent-hover: #b4e0f0;
+  --ob-accent-contrast: #1c2128;
+  --ob-accent-soft: rgba(143, 208, 232, 0.15);
+  --ob-accent-line: rgba(143, 208, 232, 0.45);
+  --ob-border: #444c56;
   --ob-grid-border: rgba(240, 246, 252, 0.06);
-  --ob-heading: #e6edf3;
-  --ob-muted: #8b949e;
-  --ob-page-bg: #0d1117;
-  --ob-surface: #161b22;
-  --ob-surface-raised: #1c2330;
+  --ob-heading: #cdd9e5;
+  --ob-muted: #909dab;
+  --ob-page-bg: #1c2128;
+  --ob-surface: #22272e;
+  --ob-surface-raised: #2d333b;
   --ob-soft-shadow: 0 6px 20px rgba(1, 4, 9, 0.55);
-  --ob-table-text: #e6edf3;
-  --ob-text: #c9d1d9;
+  --ob-table-text: #cdd9e5;
+  --ob-text: #adbac7;
   background-color: var(--ob-page-bg);
   color: var(--ob-text);
 }
@@ -51,7 +51,7 @@ body.quarto-dark {
    keeps its own decoration. */
 :where(body.quarto-dark main.content) a {
   text-decoration: underline;
-  text-decoration-color: rgba(128, 197, 222, 0.35);
+  text-decoration-color: rgba(143, 208, 232, 0.35);
 }
 
 :where(body.quarto-dark main.content) a:hover {
@@ -633,11 +633,11 @@ body.quarto-dark .selector-chip.active {
 }
 
 body.quarto-dark .region-globe-ocean-stop-highlight {
-  stop-color: #25476a;
+  stop-color: #2c4359;
 }
 
 body.quarto-dark .region-globe-ocean-stop {
-  stop-color: #122338;
+  stop-color: #1f2e3e;
 }
 
 body.quarto-dark .region-globe-graticule {
@@ -645,15 +645,15 @@ body.quarto-dark .region-globe-graticule {
 }
 
 body.quarto-dark .region-globe-active-region {
-  fill: rgba(128, 197, 222, 0.32);
+  fill: rgba(143, 208, 232, 0.32);
 }
 
 body.quarto-dark .region-globe-active-region-outline-halo {
-  stroke: rgba(18, 35, 56, 0.9);
+  stroke: rgba(31, 46, 62, 0.9);
 }
 
 body.quarto-dark .region-globe-land {
-  fill: #3b4453;
+  fill: #434c57;
   stroke: rgba(230, 237, 243, 0.2);
 }
 
@@ -1080,7 +1080,7 @@ body.quarto-dark .depth-table thead th:last-child {
 /* The hovered row and column labels take an accent tint rather than a slab
    of it, so the hover never outshines the tile it points at. */
 body.quarto-dark .score-table th.highlight-label {
-  background: #22343f !important;
+  background: #303d46 !important;
   color: var(--ob-heading) !important;
 }
 
@@ -1101,7 +1101,7 @@ body.quarto-dark .score-table th.highlight-label a {
 /* A wash of the accent rather than a grey slab, matched to the accent bar the
    shared rule draws down the frozen cell. */
 body.quarto-dark .score-table tr.baseline-row td {
-  background: rgba(128, 197, 222, 0.06);
+  background: rgba(143, 208, 232, 0.06);
 }
 
 /* --- Section headings --- */
@@ -1308,7 +1308,7 @@ body.quarto-dark .version-select {
 
 body.quarto-dark .version-select,
 body.quarto-dark #baseline-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9d1d9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23adbac7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
   color-scheme: dark;
 }
 
