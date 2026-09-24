@@ -258,7 +258,6 @@ function labelFor(slug) {
 
 function scoreProductKey(slug) {
   if (slug === "glorys_one_degree") return "glorys";
-  if (slug === "glo12_one_degree") return "glo12";
   return slug;
 }
 
@@ -3221,8 +3220,8 @@ async function updateContextRail() {
 
   const shown = comparison ? forecasts : [forecasts[toggleForecasts ? shared.railForecast : 0]];
   elements["rail-subtitle"].textContent = comparison
-    ? `${shown.map((p) => labelFor(p.state.dataset)).join(" vs ")} · ${prettyVariable(shown[0])} · ${shared.region}`
-    : `${shown[0].label} · ${shared.region}`;
+    ? `${shown.map((p) => labelFor(p.state.dataset)).join(" vs ")} · ${prettyVariable(shown[0])} · ${regionDisplayName()}`
+    : `${shown[0].label} · ${regionDisplayName()}`;
 
   updateCurrentDepthGateNote(shown);
   renderRailSkill(shown, comparison);
