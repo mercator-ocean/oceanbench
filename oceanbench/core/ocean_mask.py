@@ -63,9 +63,8 @@ STATIC_GRID_ALIGNMENT_ATOL = 1e-4
 
 OCEAN_MASK_VARIABLE = "ocean_mask"
 
-# Placeholder: the artefact is not published yet. Until it is, point
-# OCEANBENCH_OCEAN_MASK_PATH at a local copy.
-OCEAN_MASK_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/ocean_mask/oceanbench-ocean-mask-v2.zarr"
+# Public copy of the ocean mask artefact, overridden by OCEANBENCH_OCEAN_MASK_PATH when set.
+OCEAN_MASK_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ocean_mask/oceanbench-ocean-mask-v2.zarr"
 
 # SHA256 of the boolean array bytes, C order, depth then latitude then longitude.
 OCEAN_MASK_SHA256 = "9aa92afe12a1d35f35b9ce0ad6631d835cbd85f783075beea07d4188e869c52d"
