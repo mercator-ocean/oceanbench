@@ -458,6 +458,7 @@ function wirePanel(panel) {
   field.addEventListener("pointerdown", (event) => beginPanelDrag(panel, event));
   field.addEventListener("wheel", (event) => onPanelWheel(panel, event), { passive: false });
   field.addEventListener("mouseleave", () => {
+    lastHoverPoint = null;
     panel.els.readout.textContent = "";
     panel.els.field.style.cursor = "";
     hideClass4Tooltip();
@@ -561,6 +562,7 @@ async function renderPanel(panel) {
       resizePanelCanvases(panel);
       drawPanel(panel);
       updateSharedColorbar();
+      refreshHoverReadout();
       setPanelError(panel, "");
       return;
     }
@@ -585,6 +587,7 @@ async function renderPanel(panel) {
     drawOverlays(panel);
     drawTrajectoryFans(panel);
     updateSharedColorbar();
+    refreshHoverReadout();
     setPanelError(panel, "");
   } catch (error) {
     if (error && error.name === "AbortError") return;
@@ -2437,9 +2440,21 @@ function resetZoomPan() {
   writeHash();
 }
 
+// Where the pointer last was over the page, until it leaves a map. A readout names the
+// value under the cursor in the field on screen, so every redrawn field re-samples it
+// there, or clears it once the pointer has left: a new dataset, variable, start or lead
+// must never keep the previous field's number under the cursor.
+let lastHoverPoint = null;
+
+function refreshHoverReadout() {
+  if (lastHoverPoint) updateHover(lastHoverPoint);
+  else for (const panel of panels.slice(0, shared.layout)) panel.els.readout.textContent = "";
+}
+
 // INVARIANT I3: the swipe branches below read panel.offscreenB / panel.swipeX, both
 // produced by drawPanel, to decide which forecast the cursor is over.
 function updateHover(event) {
+  lastHoverPoint = { clientX: event.clientX, clientY: event.clientY };
   let hoverPanel = null;
   let hoverRectangle = null;
   for (const panel of panels.slice(0, shared.layout)) {
@@ -2607,7 +2622,7 @@ function updatePanelReadout(panel, lat, lon, suffix = "", source = panel, prefix
     const column = nearestIndex(source.longitudes, lon);
     const row = nearestIndex(source.latitudes, lat);
     if (column < 0 || row < 0) {
-      panel.els.readout.textContent = suffix ? `${prefix}${formatFixed(lat, 2)}°, ${formatFixed(lon, 2)}°${suffix}` : "";
+      panel.els.readout.textContent = suffix ? `${prefix}${formatLatLon(lon, lat)}${suffix}` : "";
       return;
     }
     const value = source.field.data[row * source.field.width + column];
@@ -2617,7 +2632,7 @@ function updatePanelReadout(panel, lat, lon, suffix = "", source = panel, prefix
         ? source.yearBiasSE.data[row * source.yearBiasSE.width + column]
         : null;
     const valueText = fieldReadoutValue(source, value, count, standardError);
-    panel.els.readout.textContent = `${prefix}${formatFixed(lat, 2)}°, ${formatFixed(lon, 2)}° · ${valueText}${suffix}`;
+    panel.els.readout.textContent = `${prefix}${formatLatLon(lon, lat)} · ${valueText}${suffix}`;
 }
 
 function fieldReadoutValue(panel, value, count, standardError) {
