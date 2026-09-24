@@ -108,6 +108,60 @@ def test_skill_versus_itself_is_zero_with_a_tight_interval():
     assert row["n_starts_paired"] == 8
 
 
+def _frame(challenger: str, values: list[float], **overrides) -> pandas.DataFrame:
+    frame = _gridded_frame(challenger, values)
+    for column, value in overrides.items():
+        frame[column] = value
+    return frame
+
+
+def test_skill_pairs_the_baseline_of_the_same_region_and_track():
+    frame = pandas.concat(
+        [
+            _frame("persistence_1_degree", [0.5, 0.5], region="global"),
+            _frame("persistence", [0.4, 0.4], region="global"),
+            _frame("persistence", [0.2, 0.2], region="ibi"),
+            _frame("model_1_degree", [0.25, 0.25], region="global"),
+            _frame("model", [0.2, 0.2], region="global"),
+            _frame("model", [0.1, 0.1], region="ibi"),
+            _frame("model_1_degree", [0.1, 0.1], region="ibi"),
+        ],
+        ignore_index=True,
+    )
+    aggregated = aggregate_scores(frame, baseline_challenger="persistence_1_degree", n_bootstrap=10)
+    skill = {
+        (row["challenger"], row["region"]): (row["skill_baseline"], row["skill_vs_persistence_1_degree"])
+        for row in aggregated.to_dict(orient="records")
+    }
+    assert skill[("model_1_degree", "global")] == ("persistence_1_degree", pytest.approx(0.5))
+    assert skill[("model", "global")] == ("persistence", pytest.approx(0.5))
+    assert skill[("model", "ibi")] == ("persistence", pytest.approx(0.5))
+    # No 1-degree IBI baseline: no skill rather than the global or native one.
+    assert pandas.isna(skill[("model_1_degree", "ibi")][1])
+
+
+def test_no_skill_on_bias_or_on_gridded_rmsd_across_grids():
+    bias = dict(metric="class4_bias", reference="observations", n=10)
+    class4 = dict(metric="class4_rmsd", reference="observations", n=10)
+    frame = pandas.concat(
+        [
+            _frame("persistence", [0.4, 0.4]),
+            _frame("model", [0.2, 0.2]),
+            _frame("persistence", [0.4, 0.4], **class4),
+            _frame("model", [0.2, 0.2], **class4),
+            _frame("persistence", [-0.1, -0.1], **bias),
+            _frame("model", [0.2, 0.2], **bias),
+        ],
+        ignore_index=True,
+    )
+    grids = {"persistence": "1/12", "model": "1/4"}
+    aggregated = aggregate_scores(frame, baseline_challenger="persistence", n_bootstrap=10, challenger_grids=grids)
+    model = aggregated[aggregated["challenger"] == "model"].set_index("metric")["skill_vs_persistence"]
+    assert pandas.isna(model["rmsd"])
+    assert pandas.isna(model["class4_bias"])
+    assert model["class4_rmsd"] == pytest.approx(0.5)
+
+
 def test_paired_skill_interval_is_narrower_than_the_unpaired_one():
     generator = numpy.random.default_rng(0)
     baseline_values = 0.30 + generator.normal(0.0, 0.05, size=40)

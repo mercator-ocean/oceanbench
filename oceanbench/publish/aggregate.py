@@ -21,9 +21,11 @@ Three derivations, all over the forecast-start axis (the 52 weekly starts):
   under a fixed seed, percentile interval. Class-4 carries each start's ``(value, n)``
   pair through the recombination inside every draw.
 - **skill vs a named baseline**: ``1 - value_model / value_baseline`` per metric key,
-  computed on the *same* starts (paired). One resample of the starts is drawn per bootstrap
-  draw and applied to both the model and the baseline, so their correlation across starts
-  narrows the interval.
+  computed on the *same* starts (paired), against the baseline of the same year, region and
+  track (a ``_1_degree`` slug pairs with the ``_1_degree`` baseline, a native slug with the
+  native one); the baseline actually used is recorded per row in ``skill_baseline``. One
+  resample of the starts is drawn per bootstrap draw and applied to both the model and the
+  baseline, so their correlation across starts narrows the interval.
 
 The output is one tidy row per (challenger, year, region, metric key, lead_day).
 """
@@ -37,6 +39,11 @@ from oceanbench.runner.parity import recombine_class4_over_starts
 from oceanbench.runner.records import DIAGNOSTIC_METRICS
 
 CLASS4_METRIC = "class4_rmsd"
+GRIDDED_RMSD_METRIC = "rmsd"
+ONE_DEGREE_TRACK_SUFFIX = "_1_degree"
+# A signed bias has no ratio skill: 1 - bias_model / bias_baseline explodes as the baseline bias
+# crosses zero, so these metrics never carry a skill value.
+_NO_SKILL_METRICS = frozenset({"class4_bias"})
 
 METRIC_KEY_COLUMNS = ["metric", "reference", "variable", "depth", "lead_day", "band", "polarity"]
 IDENTITY_COLUMNS = ["challenger", "year", "region"] + METRIC_KEY_COLUMNS
@@ -214,12 +221,19 @@ def aggregate_scores(
     n_bootstrap: int = DEFAULT_BOOTSTRAP_DRAWS,
     seed: int = DEFAULT_SEED,
     confidence: float = DEFAULT_CONFIDENCE,
+    challenger_grids: dict[str, str] | None = None,
 ) -> pandas.DataFrame:
     """Aggregate per-start score records into a tidy mean/CI (and optional skill) table.
 
     One row per (challenger, year, region, metric key, lead_day). ``baseline_challenger``,
     when given, adds paired skill-vs-baseline columns for every challenger that shares a
     metric key with the baseline (including the baseline against itself, which is exactly 0).
+    The baseline is matched on year, region and track: ``baseline_challenger`` with its
+    ``_1_degree`` suffix for ``_1_degree`` challengers, without it for native ones. Rows with no
+    such baseline, and signed-bias rows, get no skill (never a fallback to another baseline).
+    ``challenger_grids`` (slug -> grid label), when given, also withholds gridded RMSD skill
+    where the challenger and its baseline sit on different grids; Class-4 and Lagrangian skill
+    stay, being paired at the same observations or seeds.
 
     Records without a start date (year-level metrics) and diagnostic rows (``grid_coverage``)
     are dropped: a mean and a confidence interval over them would be meaningless, and they must
@@ -245,9 +259,10 @@ def aggregate_scores(
 
     baseline_by_metric_key: dict[tuple, _StartAlignedGroup] = {}
     if baseline_challenger is not None:
+        track_baselines = {_track_baseline(baseline_challenger, is_one_degree) for is_one_degree in (False, True)}
         for identity, group in aligned_groups.items():
-            if identity[0] == baseline_challenger:
-                baseline_by_metric_key[_metric_key_of(identity)] = group
+            if identity[0] in track_baselines:
+                baseline_by_metric_key[(identity[0], *_metric_key_of(identity))] = group
 
     rows = []
     for identity, group in aligned_groups.items():
@@ -256,9 +271,21 @@ def aggregate_scores(
         row.update(carried[identity])
         row.update(summary)
         if baseline_challenger is not None:
-            baseline_group = baseline_by_metric_key.get(_metric_key_of(identity))
+            baseline_slug = _track_baseline(baseline_challenger, identity[0].endswith(ONE_DEGREE_TRACK_SUFFIX))
+            baseline_group = baseline_by_metric_key.get((baseline_slug, *_metric_key_of(identity)))
+            metric = row["metric"]
+            if metric in _NO_SKILL_METRICS:
+                baseline_group = None
+            if (
+                baseline_group is not None
+                and metric == GRIDDED_RMSD_METRIC
+                and challenger_grids is not None
+                and challenger_grids.get(identity[0]) != challenger_grids.get(baseline_slug)
+            ):
+                baseline_group = None
             if baseline_group is not None:
                 skill = _skill_for_pair(group, baseline_group, bootstrap_indices, confidence)
+                row["skill_baseline"] = baseline_slug
                 row[f"skill_vs_{baseline_challenger}"] = skill["skill"]
                 row["skill_ci_low"] = skill["skill_ci_low"]
                 row["skill_ci_high"] = skill["skill_ci_high"]
@@ -272,7 +299,14 @@ def aggregate_scores(
 
 
 def _metric_key_of(identity: tuple) -> tuple:
-    return identity[len(["challenger", "year", "region"]) :]
+    """Everything but the challenger: year, region and the metric key columns."""
+    return identity[1:]
+
+
+def _track_baseline(baseline_challenger: str, is_one_degree: bool) -> str:
+    """The baseline slug on the given track (native or ``_1_degree``)."""
+    native = baseline_challenger.removesuffix(ONE_DEGREE_TRACK_SUFFIX)
+    return native + ONE_DEGREE_TRACK_SUFFIX if is_one_degree else native
 
 
 def summary_to_json_records(summary: pandas.DataFrame) -> list[dict]:

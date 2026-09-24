@@ -15,7 +15,8 @@
 //
 // The published rows are already lead-time resolved: one row per challenger, region,
 // variable, depth, metric and lead day, carrying the mean, its bootstrap confidence
-// interval and the skill against the 1 degree persistence baseline. Nothing is
+// interval and the skill against the persistence baseline of the same region and
+// track (native or 1 degree, named per row in skill_baseline). Nothing is
 // recomputed here, so the page never touches scores.parquet.
 
 import { loadInsightIndex, loadScoresSummary } from "./insights.js";
