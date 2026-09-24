@@ -1148,6 +1148,7 @@ let overlayData = {
   eddiesMatch: null,
   eddiesPublishedStarts: null,
   class4: null,
+  class4BySlug: {},
   class4Error: null,
   region: null,
 };
@@ -1182,13 +1183,13 @@ async function loadOverlayData() {
   const superseded = () => generation !== overlayGeneration;
   const slug = panels[activePanelIndex] ? panels[activePanelIndex].state.dataset : datasetCatalog[0].slug;
   const region = shared.region;
-  const urls = insightsFor(insightIndex, slug, region);
   overlayData.region = region;
   overlayData.eddiesCensuses = [];
   overlayData.eddiesMatch = null;
   overlayData.eddiesPublishedStarts = null;
   overlayData.eddiesLeadMismatch = false;
   overlayData.class4 = null;
+  overlayData.class4BySlug = {};
   overlayData.class4Error = null;
   overlayData.class4Unpublished = false;
   // Nothing may prefetch match-ups for an overlay that is no longer showing them.
@@ -1234,43 +1235,67 @@ async function loadOverlayData() {
       overlayData.eddiesMatch = null;
     }
   } else if (shared.overlayMode === OVERLAY_CLASS4) {
-    const class4Url = urls.class4_matchups;
-    // Reference datasets (and any dataset without published match-ups) carry an
-    // explicit null class4_matchups in insights.json. That is a legitimate absence,
-    // not a failure, show the honest "not published" empty state and paint no
-    // points. We never substitute another model's obs: a fallback to some other
-    // dataset's match-ups would paint provenance-mismatched points under this
-    // dataset's name while the rail truthfully says it has none.
-    if (!class4Url) {
-      overlayData.class4Unpublished = true;
-      return true;
-    }
-    const manifest = await loadInsightManifest(urls.manifest);
+    // Every visible panel draws its OWN forecast's match-ups, so each shown dataset gets its
+    // own read (two panels on one dataset share it). The notes and the rail describe the
+    // active panel's entry, mirrored into overlayData.class4 below.
+    const slugs = [...new Set(panels.slice(0, shared.layout).map((panel) => panel.state.dataset))];
+    const requests = await Promise.all(slugs.map((panelSlug) => class4RequestFor(panelSlug, region)));
     if (superseded()) return false;
-    const class4Manifest = manifest && manifest["class4-matchups"];
-    const request = {
-      url: class4Url,
-      byteLength: class4ByteLengthHint(class4Url, class4Manifest),
-      startDate: currentStartDate(slug),
-      leadDay: shared.leadDay,
-      variables: class4RequestVariables(),
-    };
     // The user is waiting now: stop any prefetch of another lead from holding connections
-    // this read needs. A prefetch of this very pair is kept, it is the read we want.
-    stopClass4Prefetch(request);
-    let loaded = null;
-    let failure = null;
-    try {
-      loaded = await loadClass4(request.url, { ...request, onProgress: showClass4Progress });
-    } catch (error) {
-      failure = error instanceof Error ? error.message : String(error);
-    }
+    // these reads need. A prefetch of one of these very pairs is kept, it is the read we want.
+    stopClass4Prefetch(requests.filter(Boolean));
+    const entries = await Promise.all(
+      requests.map(async (request, index) => {
+        // Reference datasets (and any dataset without published match-ups) carry an
+        // explicit null class4_matchups in insights.json. That is a legitimate absence,
+        // not a failure: the panel paints no points. We never substitute another model's
+        // obs, which would paint provenance-mismatched points under this dataset's name.
+        if (!request) return { data: null, error: null, unpublished: true, request: null };
+        const isActive = slugs[index] === slug;
+        try {
+          const data = await loadClass4(request.url, { ...request, ...(isActive ? { onProgress: showClass4Progress } : {}) });
+          return { data, error: null, unpublished: false, request };
+        } catch (error) {
+          return { data: null, error: error instanceof Error ? error.message : String(error), unpublished: false, request };
+        }
+      }),
+    );
     if (superseded()) return false;
-    overlayData.class4 = loaded;
-    overlayData.class4Error = failure;
-    if (overlayData.class4) scheduleClass4Prefetch(request, slug);
+    overlayData.class4BySlug = Object.fromEntries(slugs.map((panelSlug, index) => [panelSlug, entries[index]]));
+    mirrorActiveClass4(slug);
+    for (let index = 0; index < slugs.length; index += 1) {
+      if (entries[index].data) scheduleClass4Prefetch(entries[index].request, slugs[index]);
+    }
   }
   return true;
+}
+
+// The notes, legend and rail speak for the active panel: point the single-dataset slots at
+// its entry (or the first shown dataset's when the active one has none).
+function mirrorActiveClass4(slug) {
+  const entries = Object.values(overlayData.class4BySlug);
+  const active = overlayData.class4BySlug[slug] || entries[0];
+  if (!active) return;
+  overlayData.class4 = active.data;
+  overlayData.class4Error = active.error;
+  overlayData.class4Unpublished = active.unpublished;
+}
+
+// The targeted match-up read for one dataset at the start and lead on screen, or null when
+// that dataset publishes no match-ups for this region.
+async function class4RequestFor(slug, region) {
+  const urls = insightsFor(insightIndex, slug, region);
+  const class4Url = urls.class4_matchups;
+  if (!class4Url) return null;
+  const manifest = await loadInsightManifest(urls.manifest);
+  const class4Manifest = manifest && manifest["class4-matchups"];
+  return {
+    url: class4Url,
+    byteLength: class4ByteLengthHint(class4Url, class4Manifest),
+    startDate: currentStartDate(slug),
+    leadDay: shared.leadDay,
+    variables: class4RequestVariables(),
+  };
 }
 
 // Scrubbing the lead slider is the common move, and each lead is its own download. Once the
@@ -1452,7 +1477,8 @@ function drawOverlays(panel) {
     }
   } else if (
     shared.overlayMode === OVERLAY_CLASS4 &&
-    overlayData.class4 &&
+    overlayData.class4BySlug[panel.state.dataset] &&
+    overlayData.class4BySlug[panel.state.dataset].data &&
     // A redraw can fire between a region switch and the overlay reload nulling the slot;
     // painting the old region's rows would also widen the fresh ramp with their p90,
     // silently carrying one region's scale into another (p8).
@@ -1463,8 +1489,10 @@ function drawOverlays(panel) {
     const entry = manifest && manifest.variables[panel.state.variable];
     const depthBin = class4DepthBin(entry);
     const startDate = manifest ? manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)] : null;
-    const rows = overlayData.class4.rows || [];
-    const targeted = overlayData.class4.targeted;
+    // This panel's own forecast's match-ups, never the active panel's.
+    const class4 = overlayData.class4BySlug[panel.state.dataset].data;
+    const rows = class4.rows || [];
+    const targeted = class4.targeted;
     const selector = {
       variable: panel.state.variable,
       depthBin,
@@ -1474,7 +1502,7 @@ function drawOverlays(panel) {
     // Row-scan (filtering + error scale + match count) depends only on the selector and
     // the loaded rows, not the viewport, cache it so pan/zoom rAF redraws only reproject
     // the already-filtered points instead of rescanning every row again (perf).
-    const cacheKey = `${panel.state.variable}|${depthBin || ""}|${shared.leadDay}|${startDate || ""}|${rows.length}|${overlayData.class4.targeted}`;
+    const cacheKey = `${panel.state.dataset}|${panel.state.variable}|${depthBin || ""}|${shared.leadDay}|${startDate || ""}|${rows.length}|${targeted}`;
     let prepared = panel.class4Prepared;
     if (!prepared || prepared.key !== cacheKey) {
       const preparedPoints = class4Points(rows, selector);
@@ -2711,6 +2739,7 @@ function setActivePanel(index) {
   if (index >= shared.layout) return;
   activePanelIndex = index;
   markActivePanel();
+  if (shared.overlayMode === OVERLAY_CLASS4) mirrorActiveClass4(panels[index].state.dataset);
   updateContextRail();
   updateSharedColorbar();
 }

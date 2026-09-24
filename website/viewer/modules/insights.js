@@ -273,15 +273,16 @@ export function prefetchClass4(url, options = {}) {
 }
 
 /**
- * Call off every prefetch still in flight except the pair described by `keep` (the load the
- * user just asked for, if that is what was being prefetched), so prefetching never competes
- * with a user-initiated read for the origin's connections.
+ * Call off every prefetch still in flight except the pairs described by `keep` (the loads the
+ * user just asked for, one per shown dataset, if that is what was being prefetched), so
+ * prefetching never competes with a user-initiated read for the origin's connections.
  */
 export function cancelClass4Prefetches(keep) {
-  const keepKey = keep && keep.url ? class4CacheKey(keep.url, keep) : null;
+  const keeps = Array.isArray(keep) ? keep : keep ? [keep] : [];
+  const keepKeys = new Set(keeps.filter((entry) => entry && entry.url).map((entry) => class4CacheKey(entry.url, entry)));
   const cancelled = [];
   for (const [key, id] of class4PrefetchRequests) {
-    if (key === keepKey) continue;
+    if (keepKeys.has(key)) continue;
     cancelled.push(id);
     class4PrefetchRequests.delete(key);
     class4TargetedCache.delete(key);
