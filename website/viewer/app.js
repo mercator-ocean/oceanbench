@@ -3325,9 +3325,27 @@ function wireYearRmsdDrilldown(slot, lines) {
   });
 }
 
+// A new start date, from the drawer's picker or from a drill-down in the year chart.
+async function selectStartDate(index) {
+  clearTrajectories();
+  shared.startIndex = index;
+  await renderAllPanels();
+  // A newer start date (or region, or lead) already owns the overlay: leave the redraw and
+  // the rail to the load that answers the selection actually on screen.
+  if (!(await loadOverlayData())) return;
+  if (shared.overlayMode === OVERLAY_EDDIES) writeEddyOverlayNote();
+  redrawOverlaysAll();
+  await updateContextRail();
+  // The clicked column is start-specific; re-read it at the same point for the new start.
+  if (columnModeActive() && shared.columnPoint) await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
+  writeHash();
+}
+
 // Switch from year scope to single-forecast scope, selecting the clicked start date
-// (matched against the primary forecast's manifest start_dates; nearest if inexact).
-function drillDownToStartDate(date) {
+// (matched against the start dates every visible forecast has; nearest if inexact). The
+// new start then loads through the start-date picker's own path, so the overlays, the
+// rail and the clicked column follow it exactly as they do after a pick in the drawer.
+async function drillDownToStartDate(date) {
   const dates = sharedStartDates();
   let index = dates.findIndex((candidate) => String(candidate).slice(0, 10) === date);
   if (index < 0 && dates.length) {
@@ -3343,8 +3361,11 @@ function drillDownToStartDate(date) {
     });
     index = best;
   }
-  if (index >= 0) shared.startIndex = index;
-  setScope(SCOPE_SINGLE_DATE);
+  if (index < 0) return;
+  elements["start-date"].value = String(index);
+  if (setSharedScope(SCOPE_SINGLE_DATE)) applyScope();
+  await selectStartDate(index);
+  updateCurrentsControlVisibility();
 }
 
 // When a surface current variable is selected in an obs-based context (Class-4 overlay
@@ -4806,20 +4827,7 @@ function wireGlobalControls() {
       writeHash();
     });
   }
-  elements["start-date"].addEventListener("change", async (event) => {
-    clearTrajectories();
-    shared.startIndex = Number(event.target.value);
-    await renderAllPanels();
-    // A newer start date (or region, or lead) already owns the overlay: leave the redraw and
-    // the rail to the load that answers the selection actually on screen.
-    if (!(await loadOverlayData())) return;
-    if (shared.overlayMode === OVERLAY_EDDIES) writeEddyOverlayNote();
-    redrawOverlaysAll();
-    await updateContextRail();
-    // The clicked column is start-specific; re-read it at the same point for the new start.
-    if (columnModeActive() && shared.columnPoint) await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
-    writeHash();
-  });
+  elements["start-date"].addEventListener("change", (event) => selectStartDate(Number(event.target.value)));
   elements["lead-day"].addEventListener("input", (event) => {
     // A programmatic step sets `.value` without firing `input`, so reaching here means
     // the user took the slider; the pause-on-interaction listener has already stopped
