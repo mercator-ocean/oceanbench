@@ -45,6 +45,23 @@ def _dataset_with_spatial_coordinates(
     )
 
 
+def _all_wet_mask(dataset: xarray.Dataset) -> xarray.DataArray:
+    depths = (
+        dataset[Dimension.DEPTH.key()].values if Dimension.DEPTH.key() in dataset.dims else list(DEPTH_LABELS.values())
+    )
+    latitudes = dataset[Dimension.LATITUDE.key()].values
+    longitudes = dataset[Dimension.LONGITUDE.key()].values
+    return xarray.DataArray(
+        numpy.ones((len(depths), len(latitudes), len(longitudes)), dtype=bool),
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): depths,
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+
 def test_rmsd_uses_area_weights_without_land_in_denominator() -> None:
     variable_key = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
     values = numpy.array(
@@ -85,7 +102,7 @@ def test_rmsd_uses_area_weights_without_land_in_denominator() -> None:
     )
     reference_dataset = xarray.zeros_like(challenger_dataset)
 
-    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset)
+    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset, _all_wet_mask(challenger_dataset))
 
     expected_first_day_rmsd = numpy.sqrt((1.0**2 * 1.0 + 3.0**2 * 0.5 + 5.0**2 * 0.5) / (1.0 + 0.5 + 0.5))
     expected_second_day_rmsd = numpy.sqrt((2.0**2 * 1.0 + 4.0**2 * 1.0 + 6.0**2 * 0.5) / (1.0 + 1.0 + 0.5))
@@ -151,7 +168,7 @@ def test_rmsd_snaps_nearly_matching_spatial_coordinates_before_xarray_alignment(
         },
     )
 
-    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset)
+    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset, _all_wet_mask(challenger_dataset))
 
     latitude_weights = numpy.cos(numpy.deg2rad(challenger_latitudes))[:, numpy.newaxis]
     expected_rmsd = numpy.sqrt(
@@ -233,7 +250,7 @@ def test_rmsd_snaps_reference_to_challenger_when_challenger_has_one_extra_coordi
         },
     )
 
-    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset)
+    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset, _all_wet_mask(challenger_dataset))
 
     latitude_weights = numpy.cos(numpy.deg2rad(matched_challenger_latitudes))[:, numpy.newaxis]
     matched_challenger_values = challenger_values[0, 0, : matched_challenger_latitudes.size]
@@ -262,7 +279,7 @@ def test_rmsd_raises_when_spatial_coordinate_alignment_is_ambiguous() -> None:
     )
 
     with pytest.raises(ValueError, match="latitude coordinates: multiple challenger coordinates match"):
-        _rmsd(challenger_dataset, reference_dataset)
+        _rmsd(challenger_dataset, reference_dataset, _all_wet_mask(challenger_dataset))
 
 
 def test_rmsd_raises_when_too_much_spatial_grid_is_unmatched() -> None:
@@ -284,7 +301,7 @@ def test_rmsd_raises_when_too_much_spatial_grid_is_unmatched() -> None:
         ValueError,
         match="matched 99.8000%.*required at least 99.9000%.*latitude=99.8000%.*longitude=100.0000%",
     ):
-        _rmsd(challenger_dataset, reference_dataset)
+        _rmsd(challenger_dataset, reference_dataset, _all_wet_mask(challenger_dataset))
 
 
 def test_rmsd_takes_the_square_root_per_first_day_and_depth_before_averaging_over_first_days() -> None:
@@ -313,7 +330,7 @@ def test_rmsd_takes_the_square_root_per_first_day_and_depth_before_averaging_ove
     }
     challenger_dataset = xarray.Dataset({variable_key: (dimension_names, values)}, coords=coordinates)
 
-    rmsd_dataset = _rmsd(challenger_dataset, xarray.zeros_like(challenger_dataset))
+    rmsd_dataset = _rmsd(challenger_dataset, xarray.zeros_like(challenger_dataset), _all_wet_mask(challenger_dataset))
 
     numpy.testing.assert_allclose(
         rmsd_dataset[variable_key].transpose(Dimension.LEAD_DAY_INDEX.key(), Dimension.DEPTH.key()).values,

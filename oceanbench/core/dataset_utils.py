@@ -12,6 +12,10 @@ from oceanbench.core.climate_forecast_standard_names import (
 )
 
 
+SPATIAL_COORDINATE_ALIGNMENT_ATOL = 1e-4
+MISSING_COUNT_COLUMN = "Missing"
+
+
 class Variable(Enum):
     SEA_SURFACE_HEIGHT_ABOVE_GEOID = StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID
     SEA_WATER_POTENTIAL_TEMPERATURE = StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE

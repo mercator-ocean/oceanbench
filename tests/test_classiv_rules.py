@@ -14,7 +14,7 @@ from oceanbench.core.classIV_support import (
     _convert_forecast_ssh_to_sla,
     _interpolate_vertically_bracket,
     format_class4_results,
-    gate_class4_observations_to_reference_population,
+    class4_observations_in_shared_population,
 )
 from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.dataset_utils import Dimension, Variable
@@ -335,7 +335,7 @@ def _gated_depths(latitudes: list[float], longitudes: list[float], depths: list[
             Dimension.DEPTH.key(): depths,
         }
     )
-    gated = gate_class4_observations_to_reference_population(observations_dataframe, _ocean_mask())
+    gated = class4_observations_in_shared_population(observations_dataframe, _ocean_mask())
     return gated.index.tolist()
 
 
@@ -356,7 +356,7 @@ def test_gate_clamps_an_observation_deeper_than_the_last_mask_level_to_that_leve
         }
     )
 
-    gated = gate_class4_observations_to_reference_population(observations_dataframe, _twelfth_degree_ocean_mask(is_wet))
+    gated = class4_observations_in_shared_population(observations_dataframe, _twelfth_degree_ocean_mask(is_wet))
 
     assert gated.index.tolist() == [0]
 
@@ -390,11 +390,11 @@ def test_gate_vets_an_observation_of_the_deepest_depth_bin_against_the_level_bel
         }
     )
 
-    dry_below = gate_class4_observations_to_reference_population(
+    dry_below = class4_observations_in_shared_population(
         observations_dataframe,
         _mask_on_the_ocean_mask_depths(wet_below_600_meters=False),
     )
-    wet_below = gate_class4_observations_to_reference_population(
+    wet_below = class4_observations_in_shared_population(
         observations_dataframe,
         _mask_on_the_ocean_mask_depths(wet_below_600_meters=True),
     )
@@ -455,7 +455,7 @@ def test_gate_keeps_observations_across_the_dateline_on_a_global_mask() -> None:
         }
     )
 
-    gated = gate_class4_observations_to_reference_population(observations_dataframe, ocean_mask)
+    gated = class4_observations_in_shared_population(observations_dataframe, ocean_mask)
 
     assert gated.index.tolist() == [0, 1, 2, 3]
 
@@ -479,7 +479,7 @@ def test_gate_drops_an_observation_with_a_shallow_corner_cell() -> None:
     _make_shallow(is_wet, slice(30, 31), slice(30, 31))
     observations_dataframe = _surface_observations([2.5 + 0.5 / 12, 1.0], [12.5 + 0.5 / 12, 11.0])
 
-    gated = gate_class4_observations_to_reference_population(observations_dataframe, _twelfth_degree_ocean_mask(is_wet))
+    gated = class4_observations_in_shared_population(observations_dataframe, _twelfth_degree_ocean_mask(is_wet))
 
     assert gated.index.tolist() == [1]
 
@@ -494,7 +494,7 @@ def test_gate_keeps_an_observation_in_a_shallow_region_larger_than_the_size_thre
         [2.5 + 0.5 / 12, 55 / 12 + 0.5 / 12], [12.5 + 0.5 / 12, 10 + 55.5 / 12]
     )
 
-    gated = gate_class4_observations_to_reference_population(observations_dataframe, _twelfth_degree_ocean_mask(is_wet))
+    gated = class4_observations_in_shared_population(observations_dataframe, _twelfth_degree_ocean_mask(is_wet))
 
     assert gated.index.tolist() == [0]
 
@@ -512,7 +512,7 @@ def test_gate_sums_the_area_of_a_shallow_region_across_the_dateline() -> None:
     )
     ocean_mask = _twelfth_degree_ocean_mask(is_wet, first_latitude=0.0, first_longitude=-180.0)
 
-    gated = gate_class4_observations_to_reference_population(observations_dataframe, ocean_mask)
+    gated = class4_observations_in_shared_population(observations_dataframe, ocean_mask)
 
     assert gated.index.tolist() == [0, 1]
 
@@ -533,7 +533,7 @@ def test_gate_drops_an_observation_next_to_a_dry_quarter_degree_cell() -> None:
     is_wet = _all_wet(61, 61)
     is_wet[3:, 34, 34] = False
 
-    gated = gate_class4_observations_to_reference_population(
+    gated = class4_observations_in_shared_population(
         _observation_at_100_meters_in_quarter_degree_cells_10_and_11(),
         _twelfth_degree_ocean_mask(is_wet),
     )
@@ -545,7 +545,7 @@ def test_gate_keeps_an_observation_whose_four_quarter_degree_cells_are_wet() -> 
     is_wet = _all_wet(61, 61)
     is_wet[3:, 36, 36] = False
 
-    gated = gate_class4_observations_to_reference_population(
+    gated = class4_observations_in_shared_population(
         _observation_at_100_meters_in_quarter_degree_cells_10_and_11(),
         _twelfth_degree_ocean_mask(is_wet),
     )

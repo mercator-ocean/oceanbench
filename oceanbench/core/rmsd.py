@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import dask
 import numpy
 import xarray
 import pandas
@@ -13,10 +14,11 @@ from oceanbench.core.dataset_utils import (
     Variable,
     Dimension,
     DepthLevel,
+    MISSING_COUNT_COLUMN,
+    SPATIAL_COORDINATE_ALIGNMENT_ATOL,
     VARIABLE_METADATA,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
-from oceanbench.core.ocean_mask import OCEAN_MASK_STANDARD_DEPTHS
 
 DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.SURFACE: "surface",
@@ -27,10 +29,8 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.MINUS_500_METERS: "500m",
 }
 
-MISSING_COUNT_COLUMN = "Missing"
 MISSING_FRACTION_COLUMN = "Missing fraction"
 
-SPATIAL_COORDINATE_ALIGNMENT_ATOL = 1e-4
 SPATIAL_GRID_MINIMUM_MATCH_RATIO = 0.999
 SPATIAL_COORDINATE_NAMES = (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key())
 
@@ -123,17 +123,11 @@ def _ocean_mask_on_challenger_grid(
     ocean_mask: xarray.DataArray,
     challenger_dataset: xarray.Dataset,
 ) -> xarray.DataArray:
-    """
-    Put the OceanBench ocean mask on the challenger grid, by nearest neighbour.
-
-    Nearest neighbour rather than a conservative remapping: on a coarser challenger grid a cell is
-    wet when the twelfth of a degree cell at its centre is wet, which is simple to state and to
-    reproduce, at the price of ignoring the sub-cell coastline. Only the six standard depths are
-    kept, the deeper mask level serves the Class IV gate alone.
-    """
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
-    regridded_mask = ocean_mask.sel({Dimension.DEPTH.key(): OCEAN_MASK_STANDARD_DEPTHS}).sel(
+    regridded_mask = ocean_mask.sel(
+        {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}, method="nearest"
+    ).sel(
         {
             latitude_key: challenger_dataset[latitude_key],
             longitude_key: challenger_dataset[longitude_key],
@@ -193,12 +187,6 @@ def _missing_ocean_cells(
 
 
 def _missing_counts(challenger_dataset: xarray.Dataset, ocean_mask: xarray.DataArray) -> xarray.Dataset:
-    """
-    Count, per variable and depth, the ocean cells the challenger leaves empty.
-
-    The count and the area weighted fraction are averaged over initialization days and lead days,
-    so they describe the challenger rather than one particular forecast.
-    """
     missing_by_variable = {
         variable_name: _missing_ocean_cells(challenger_dataset, ocean_mask, variable_name)
         for variable_name in challenger_dataset.data_vars
@@ -213,12 +201,11 @@ def _missing_counts(challenger_dataset: xarray.Dataset, ocean_mask: xarray.DataA
 def _rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-    ocean_mask: xarray.DataArray | None = None,
+    ocean_mask: xarray.DataArray,
 ) -> xarray.Dataset:
     reference_dataset = _snap_reference_spatial_coordinates_to_challenger(challenger_dataset, reference_dataset)
-    if ocean_mask is not None:
-        challenger_dataset = _masked_to_ocean(challenger_dataset, ocean_mask)
-        reference_dataset = _masked_to_ocean(reference_dataset, ocean_mask)
+    challenger_dataset = _masked_to_ocean(challenger_dataset, ocean_mask)
+    reference_dataset = _masked_to_ocean(reference_dataset, ocean_mask)
     squared_error = (challenger_dataset - reference_dataset) ** 2
     area_weighted_mean_squared_error = squared_error.weighted(_spatial_area_weights(squared_error)).mean(
         dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
@@ -320,7 +307,8 @@ def rmsd(
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
     prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
     challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
-    missing_dataset = _missing_counts(prepared_challenger_dataset, challenger_ocean_mask).compute()
-    rmsd_dataset = _rmsd(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask)
-    computed_rmsd_dataset = rmsd_dataset.compute()
+    computed_rmsd_dataset, missing_dataset = dask.compute(
+        _rmsd(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask),
+        _missing_counts(prepared_challenger_dataset, challenger_ocean_mask),
+    )
     return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_dataset)

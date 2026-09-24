@@ -9,7 +9,7 @@ from oceanbench.core.classIV_support import (
     compute_class4_rmsd_table,
     create_class4_observations_dataframe,
     format_class4_results,
-    gate_class4_observations_to_reference_population,
+    class4_observations_in_shared_population,
     interpolate_class4_model_to_observations,
     prepare_class4_model_variable,
 )
@@ -75,7 +75,7 @@ def rmsd_class4_validation(
         if observations_dataframe.empty:
             continue
 
-        observations_dataframe = gate_class4_observations_to_reference_population(
+        observations_dataframe = class4_observations_in_shared_population(
             observations_dataframe.dropna(subset=["observation_value"]),
             ocean_mask,
         )

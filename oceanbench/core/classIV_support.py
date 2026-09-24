@@ -17,6 +17,8 @@ from oceanbench.core.dataset_utils import (
     Dimension,
     VARIABLE_DISPLAY_ORDER,
     VARIABLE_METADATA,
+    MISSING_COUNT_COLUMN,
+    SPATIAL_COORDINATE_ALIGNMENT_ATOL,
     Variable,
     is_global_longitude_grid,
 )
@@ -30,7 +32,6 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 VELOCITY_TARGET_DEPTH_METERS = 15.0
 OBSERVATION_COUNT_COLUMN = "Observations"
-MISSING_COUNT_COLUMN = "Missing"
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
 
 # A cell is shallow when it is wet at the surface and dry at 92 metres.
@@ -279,32 +280,23 @@ def _mean_dynamic_topography_on_challenger_grid(
     mean_dynamic_topography: xarray.DataArray,
     model_variable: xarray.DataArray,
 ) -> xarray.DataArray:
-    """
-    Put the MDT on the challenger grid, by nearest neighbour within a tenth of a grid step.
-
-    The challenger and MDT coordinates can differ by rounding, and a plain subtraction would then keep
-    only the bit-identical ones. The MDT takes the challenger coordinates instead, is missing where the
-    challenger grid extends beyond it, and a challenger coordinate inside the MDT extent that matches
-    none of its coordinates is an error.
-    """
     for coordinate_name in (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()):
         challenger_values = model_variable[coordinate_name].values
         mean_dynamic_topography_values = mean_dynamic_topography[coordinate_name].values
-        tolerance = numpy.abs(numpy.diff(challenger_values)).min() / 10
         nearest_indexes = pandas.Index(mean_dynamic_topography_values).get_indexer(
-            challenger_values, method="nearest", tolerance=tolerance
+            challenger_values, method="nearest", tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL
         )
-        is_inside = (challenger_values > mean_dynamic_topography_values.min() - tolerance) & (
-            challenger_values < mean_dynamic_topography_values.max() + tolerance
+        is_inside = (challenger_values > mean_dynamic_topography_values.min() - SPATIAL_COORDINATE_ALIGNMENT_ATOL) & (
+            challenger_values < mean_dynamic_topography_values.max() + SPATIAL_COORDINATE_ALIGNMENT_ATOL
         )
         if (nearest_indexes[is_inside] < 0).any():
             raise ValueError(
                 f"Challenger {coordinate_name} coordinates do not match the mean dynamic topography grid "
-                f"within tolerance {tolerance}"
+                f"within tolerance {SPATIAL_COORDINATE_ALIGNMENT_ATOL}"
             )
         challenger_coordinate = {coordinate_name: model_variable[coordinate_name]}
         mean_dynamic_topography = mean_dynamic_topography.reindex(
-            challenger_coordinate, method="nearest", tolerance=tolerance
+            challenger_coordinate, method="nearest", tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL
         ).assign_coords(challenger_coordinate)
     return mean_dynamic_topography
 
@@ -393,13 +385,6 @@ def _horizontally_interpolated_profiles(
     time_slice: xarray.DataArray,
     observation_group: pandas.DataFrame,
 ) -> numpy.ndarray:
-    """
-    Interpolate linearly to the observation positions, across the dateline on a global grid.
-
-    A global grid stops one step short of closing the circle, so an observation in that last gap is
-    interpolated between the last longitude and the first one carried round by 360 degrees. Every other
-    observation goes through the plain interpolation, and a regional grid is left as it is.
-    """
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
     observation_latitudes = observation_group[latitude_key].values
@@ -522,7 +507,6 @@ def _dateline_neighbour_labels(labels: numpy.ndarray, row_shift: int) -> tuple[n
 
 
 def _labels_linked_across_the_dateline(labels: numpy.ndarray) -> tuple[numpy.ndarray, numpy.ndarray]:
-    """Pairs of labels, one in the first longitude column and one in the last, that are 8-connected."""
     neighbour_labels = [_dateline_neighbour_labels(labels, row_shift) for row_shift in (-1, 0, 1)]
     first_labels = numpy.concatenate([first for first, _ in neighbour_labels])
     last_labels = numpy.concatenate([last for _, last in neighbour_labels])
@@ -535,12 +519,6 @@ def _is_in_large_shallow_region(
     latitudes: numpy.ndarray,
     longitudes: numpy.ndarray,
 ) -> numpy.ndarray:
-    """
-    Whether each shallow cell lies in an 8-connected shallow region larger than the size threshold.
-
-    The mask is global, so a region carries on across the dateline: the labels touching the first
-    and the last longitude column are merged before the areas are summed.
-    """
     labels, label_count = ndimage.label(is_shallow, structure=numpy.ones((3, 3), dtype=int))
     first_labels, last_labels = _labels_linked_across_the_dateline(labels)
     label_graph = sparse.coo_matrix(
@@ -564,10 +542,6 @@ def _is_in_large_shallow_region(
 
 
 def _coarse_cells_are_wet(is_wet: numpy.ndarray) -> numpy.ndarray:
-    """
-    Coarsen the mask to the quarter degree model grid, whose cells are centred on every third
-    twelfth of a degree point. A coarse cell is wet at a depth only when its nine fine cells are.
-    """
     _, latitude_count, longitude_count = is_wet.shape
     coarse_rows = numpy.arange(0, latitude_count, CLASS4_COARSE_GRID_FACTOR)
     coarse_columns = numpy.arange(0, longitude_count, CLASS4_COARSE_GRID_FACTOR)
@@ -618,7 +592,7 @@ def _surrounding_cells(
     return [(row, column) for row in rows for column in columns]
 
 
-def gate_class4_observations_to_reference_population(
+def class4_observations_in_shared_population(
     observations_dataframe: pandas.DataFrame,
     ocean_mask: xarray.DataArray,
 ) -> pandas.DataFrame:
