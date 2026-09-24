@@ -43,7 +43,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 - The Class IV table shows, in an `Observations` column, the number of observations in the shared population at the first lead day ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
 - The OceanBench ocean mask, wet where both the GLO12 and the GLORYS12 official static masks are wet at the six standard depths and at 643 m, the first native level below 600 m, built as a checksum pinned artefact ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
 - The Class IV table counts the challenger values missing inside the shared population in a `Missing` column, at the first lead day like `Observations` ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
-- The gridded RMSD tables report the ocean cells a challenger leaves empty in the `Missing` and `Missing fraction` columns ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
+- The gridded RMSD tables report the ocean cells where the reference has a value and the challenger has none in the `Missing` and `Missing fraction` columns, the fraction being taken over the ocean cells where the reference has a value ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
 
 ## 0.5.1 - 2026-09-02
 

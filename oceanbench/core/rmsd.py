@@ -169,16 +169,19 @@ def _missing_fraction_key(variable_name: str) -> str:
 
 def _missing_ocean_cells(
     challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
     ocean_mask: xarray.DataArray,
     variable_name: str,
 ) -> tuple[xarray.DataArray, xarray.DataArray]:
     spatial_dimensions = [Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
     forecast_dimensions = [Dimension.FIRST_DAY_DATETIME.key(), Dimension.LEAD_DAY_INDEX.key()]
-    variable_mask = _variable_ocean_mask(ocean_mask, challenger_dataset, variable_name)
-    is_missing = variable_mask & challenger_dataset[variable_name].isnull()
+    is_scorable = (
+        _variable_ocean_mask(ocean_mask, challenger_dataset, variable_name) & reference_dataset[variable_name].notnull()
+    )
+    is_missing = is_scorable & challenger_dataset[variable_name].isnull()
     missing_count = is_missing.sum(dim=spatial_dimensions).mean(dim=forecast_dimensions)
     missing_fraction = (
-        is_missing.where(variable_mask)
+        is_missing.where(is_scorable)
         .weighted(_spatial_area_weights(challenger_dataset))
         .mean(dim=spatial_dimensions)
         .mean(dim=forecast_dimensions)
@@ -186,9 +189,14 @@ def _missing_ocean_cells(
     return missing_count, missing_fraction
 
 
-def _missing_counts(challenger_dataset: xarray.Dataset, ocean_mask: xarray.DataArray) -> xarray.Dataset:
+def _missing_counts(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    ocean_mask: xarray.DataArray,
+) -> xarray.Dataset:
+    snapped_reference_dataset = _snap_reference_spatial_coordinates_to_challenger(challenger_dataset, reference_dataset)
     missing_by_variable = {
-        variable_name: _missing_ocean_cells(challenger_dataset, ocean_mask, variable_name)
+        variable_name: _missing_ocean_cells(challenger_dataset, snapped_reference_dataset, ocean_mask, variable_name)
         for variable_name in challenger_dataset.data_vars
     }
     missing_counts = {variable_name: count for variable_name, (count, _) in missing_by_variable.items()}
@@ -301,14 +309,15 @@ def rmsd(
 
     A cell is scored when the mask is wet there and both the challenger and the reference have a
     value, the reference having first been snapped to the challenger grid by nearest index. The
-    ocean cells the challenger leaves empty are not scored but are reported, as a count and as an
-    area weighted fraction, in the Missing columns.
+    ocean cells where the reference has a value and the challenger has none are not scored but are
+    reported, as a count and as an area weighted fraction of the ocean cells where the reference has
+    a value, in the Missing columns.
     """
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
     prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
     challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
     computed_rmsd_dataset, missing_dataset = dask.compute(
         _rmsd(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask),
-        _missing_counts(prepared_challenger_dataset, challenger_ocean_mask),
+        _missing_counts(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask),
     )
     return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_dataset)

@@ -555,3 +555,25 @@ def test_rmsd_regrids_a_finer_offset_mask_onto_the_challenger_grid() -> None:
 
     assert table.loc[MIXED_LAYER_DEPTH_LABEL, "Lead day 1"] == 4.0
     assert table.loc[MIXED_LAYER_DEPTH_LABEL, MISSING_COUNT_COLUMN] == 1
+
+
+def test_rmsd_counts_as_missing_only_the_ocean_cells_where_the_reference_has_a_value() -> None:
+    variable_key = Variable.MIXED_LAYER_DEPTH.key()
+    challenger_dataset = _depth_free_dataset({variable_key: [numpy.nan, numpy.nan, 4.0]})
+    reference_dataset = _depth_free_dataset({variable_key: [numpy.nan, 0.0, 0.0]})
+    fully_wet_mask = _surface_dry_at_sixty_degrees_mask()
+    fully_wet_mask.values[0, 2, 0] = True
+
+    table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.MIXED_LAYER_DEPTH],
+        ocean_mask=fully_wet_mask,
+    )
+
+    assert table.loc[MIXED_LAYER_DEPTH_LABEL, "Lead day 1"] == 4.0
+    assert table.loc[MIXED_LAYER_DEPTH_LABEL, MISSING_COUNT_COLUMN] == 1
+    assert numpy.isclose(
+        table.loc[MIXED_LAYER_DEPTH_LABEL, MISSING_FRACTION_COLUMN],
+        numpy.cos(numpy.deg2rad(30.0)) / (numpy.cos(numpy.deg2rad(30.0)) + numpy.cos(numpy.deg2rad(60.0))),
+    )
