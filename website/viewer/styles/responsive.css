@@ -42,12 +42,18 @@ SPDX-License-Identifier: EUPL-1.2
   .drawer-right { right: 0; width: var(--rail-open-width); }
   .drawer.collapsed { width: var(--drawer-tab-width); box-shadow: none; }
   .drawer-resizer { display: none; }
+  /* A folded drawer is a thin strip over the map; a chevron alone does not say what
+     opens, so the strip names it. */
+  .drawer.collapsed > .drawer-tab { align-content: center; gap: 0.5rem; }
+  .drawer.collapsed > .drawer-tab::after {
+    content: attr(data-label);
+    writing-mode: vertical-rl;
+    font-size: var(--text-caption);
+    letter-spacing: 0.04em;
+  }
+  .drawer-left.collapsed > .drawer-tab::after { transform: rotate(180deg); }
 }
 
-@media (max-width: 780px) {
-  .drawer-left { width: min(var(--controls-open-width), 78vw); }
-  .drawer-right { width: min(var(--rail-open-width), 78vw); }
-}
 
 /* Two maps side by side on a phone are two slivers of a 2:1 world with empty space above
    and below each; stacked, each keeps the full width. */

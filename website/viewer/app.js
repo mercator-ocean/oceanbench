@@ -5035,6 +5035,17 @@ let layoutRenderTimer = null;
 
 function layoutLimits() {
   const workspace = document.querySelector(".workspace").getBoundingClientRect();
+  // A floating drawer takes no map width, so its only bound is the window: open, it may
+  // cover all but a tab's width of map on each side. The fractions below are for docked
+  // drawers, which share the row with the map; applied to a phone they left a 125 px
+  // controls sheet and a 163 px rail.
+  if (window.matchMedia(DRAWER_OVERLAY_QUERY).matches) {
+    const room = Math.max(0, workspace.width - 2 * DRAWER_TAB_WIDTH);
+    return {
+      controlsWidth: [Math.min(208, room), Math.min(380, room)],
+      railWidth: [Math.min(280, room), Math.min(620, room)],
+    };
+  }
   return {
     controlsWidth: [208, Math.min(380, workspace.width * 0.32)],
     railWidth: [280, Math.min(620, workspace.width * 0.42)],
