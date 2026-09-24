@@ -1090,8 +1090,9 @@ function syncFloatingHeadScroll(wrapper) {
   host.scrollLeft = wrapper.scrollLeft;
 }
 
-// The table whose head has passed under the page header while the rest of its
-// rows are still on screen.
+// The table whose head has passed fully under the page header while the rest
+// of its rows are still on screen. Waiting for the whole head keeps the copy
+// from showing while a row of the real head is still visible beneath it.
 function findTableUnderHeader(headerBottom) {
   let found = null;
   for (const wrapper of document.querySelectorAll(".score-table-wrapper")) {
@@ -1099,7 +1100,7 @@ function findTableUnderHeader(headerBottom) {
     if (!table || !table.tHead || table.offsetParent === null) continue;
     const headRect = table.tHead.getBoundingClientRect();
     const tableRect = table.getBoundingClientRect();
-    if (headRect.top < headerBottom && tableRect.bottom > headerBottom + headRect.height) {
+    if (headRect.bottom <= headerBottom + 1 && tableRect.bottom > headerBottom + headRect.height) {
       found = { wrapper, table };
     }
   }
