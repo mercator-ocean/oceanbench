@@ -19,7 +19,7 @@ and the affected reports are re-published (never silently overwritten).
 
 ## Unreleased
 
-**Scores:** Class IV tables change for every challenger; gridded and Lagrangian scores unchanged.
+**Scores:** every table changes for every challenger. Gridded RMSD is restricted to the ocean mask cells, Class IV scores one population shared by all challengers, the Class IV, Lagrangian and geostrophic metrics handle the dateline on global grids, and the SSH to SLA conversion keeps the full challenger grid.
 To be published as 0.6.0 once every challenger is rescored; the website shows the 0.5.0 reports until then.
 
 ### Changed
@@ -31,12 +31,16 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 - Local stage builds retry transient remote chunk failures, including blosc decompression errors from truncated chunk payloads.
 - Class IV salinity is vertically interpolated with the same two level linear bracket as the other variables. The cubic spline it used before needed four valid levels and silently dropped shallow profiles ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
 - The Class IV table keeps a variable and depth bin whose scores are all missing instead of dropping the row, and no longer breaks when a lead day has no scored value at all.
+- Class IV interpolates the observations lying between the last longitude of a global grid and 180 degrees across the dateline instead of leaving them without a value.
+- Lagrangian particles cross the dateline on global grids instead of being deleted, and the challenger to reference distance takes the short way across it.
+- Geostrophic currents use a periodic zonal difference on global grids, so the first and last longitude columns get the same centred stencil as the interior.
+- The SSH to SLA conversion matches the MDT to the full challenger grid by nearest neighbour instead of exact coordinate equality, which silently dropped most of some challenger grids.
 
 ### Added
 
 - The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
-- The OceanBench ocean mask, wet where both the GLO12 and the GLORYS12 official static masks are wet at the six standard depths and at 643 m, the first native level below 600 m, built as a checksum pinned artefact.
-- Class IV scores the same observations for every challenger, taken from that mask alone, down to 600 m: an observation is dropped when a surrounding cell is shallower than 92 m unless that cell belongs to a shallow sea larger than 100,000 km², and it must be wet at its deeper bracketing depth in all four surrounding cells of the mask coarsened to a quarter degree, the coarsest native grid OceanBench scores. A challenger value missing inside that population is counted in the `Missing` column, at the first lead day like `Observations`.
+- The OceanBench ocean mask, wet where both the GLO12 and the GLORYS12 official static masks are wet at the six standard depths and at 643 m, the first native level below 600 m, built as a checksum pinned artefact. The `OCEANBENCH_OCEAN_MASK_PATH` environment variable points OceanBench at a local copy instead of the published one.
+- Class IV scores the same observations for every challenger, taken from that mask alone, down to 600 m: an observation is dropped when one of its four surrounding cells is shallow, wet at the surface but dry at 92 m, and it is kept anyway when any of those four cells lies in a shallow region larger than 100,000 km². It must also be wet at its deeper bracketing depth in all four surrounding cells of the mask coarsened to a quarter degree, the coarsest native grid OceanBench scores. A challenger value missing inside that population is counted in the `Missing` column, at the first lead day like `Observations`.
 - Gridded RMSD scores only the cells the ocean mask calls ocean, and reports the ocean cells a challenger leaves empty in the `Missing` and `Missing fraction` columns.
 
 ## 0.5.1 - 2026-09-02
