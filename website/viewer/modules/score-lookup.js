@@ -3,13 +3,13 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Reading the published scores summary from the viewer's point of view: which column of a
-// summary row carries the number, which depth key a variable's scores live under, and how
-// several rows for one lead day collapse into a mean with a confidence interval. The
-// aggregation is here rather than in scores-data.js because the scores page reads rows the
-// publisher already aggregated, while the viewer regroups them per panel selection.
+// summary row carries the number, which single depth key a variable's scores live under, and
+// how the published rows of one selection become a lead series.
 
 import { class4DepthBin } from "./class4-index.js";
 
+// One published row per lead day: its mean and bootstrap CI are used as published. Rows are
+// never averaged here, and a CI is never recomputed in the browser.
 export function aggregateLeadSeries(grouped) {
   const series = new Map();
   for (const [key, rows] of grouped) {
@@ -17,27 +17,15 @@ export function aggregateLeadSeries(grouped) {
     for (const row of rows) {
       const leadDay = Number(row.lead_day);
       const value = scoreValue(row);
-      if (!Number.isFinite(leadDay) || !Number.isFinite(value)) continue;
-      if (!byLead.has(leadDay)) byLead.set(leadDay, []);
-      byLead.get(leadDay).push({ row, value });
+      if (!Number.isFinite(leadDay) || !Number.isFinite(value) || byLead.has(leadDay)) continue;
+      byLead.set(leadDay, {
+        lead_day: leadDay,
+        mean: value,
+        ci_low: Number.isFinite(row.ci_low) ? row.ci_low : value,
+        ci_high: Number.isFinite(row.ci_high) ? row.ci_high : value,
+      });
     }
-    const aggregated = [];
-    for (const [leadDay, values] of byLead) {
-      const mean = values.reduce((total, item) => total + item.value, 0) / values.length;
-      let ciLow = mean;
-      let ciHigh = mean;
-      if (values.length === 1) {
-        const row = values[0].row;
-        ciLow = Number.isFinite(row.ci_low) ? row.ci_low : mean;
-        ciHigh = Number.isFinite(row.ci_high) ? row.ci_high : mean;
-      } else {
-        const variance = values.reduce((total, item) => total + (item.value - mean) ** 2, 0) / (values.length - 1);
-        const error = 1.96 * Math.sqrt(variance / values.length);
-        ciLow = mean - error;
-        ciHigh = mean + error;
-      }
-      aggregated.push({ lead_day: leadDay, mean, ci_low: ciLow, ci_high: ciHigh });
-    }
+    const aggregated = [...byLead.values()];
     if (aggregated.length) series.set(key, aggregated.sort((a, b) => a.lead_day - b.lead_day));
   }
   return series;
@@ -57,11 +45,17 @@ export function mapDepthToScoreDepth(entry) {
   return entry.depth;
 }
 
+// Exactly one published depth key per variable, the same bin the Class-4 overlay and the
+// year artifacts use, so every obs-based view of a variable reads one obs population.
 export function scoreDepthKeys(entry) {
-  const keys = [];
-  const class4Bin = class4DepthBin(entry);
-  if (class4Bin) keys.push(class4Bin);
-  const legacyDepth = mapDepthToScoreDepth(entry);
-  if (legacyDepth && !keys.includes(legacyDepth)) keys.push(legacyDepth);
-  return keys;
+  const key = class4DepthBin(entry) || mapDepthToScoreDepth(entry);
+  return key ? [key] : [];
+}
+
+// Human label for a published obs depth bin.
+export function depthBinLabel(entry, key) {
+  if (key === "surface" && entry && entry.standard_name === "sea_water_potential_temperature") return "obs shallower than 1 m";
+  if (key === "0-5m") return "obs 0-5 m";
+  if (key === "15m") return "obs at 15 m";
+  return key ? `obs ${key}` : "";
 }

@@ -140,7 +140,7 @@ import {
   countClass4Matches,
   drawClass4Frame,
 } from "./modules/class4-index.js";
-import { aggregateLeadSeries, scoreDepthKeys } from "./modules/score-lookup.js";
+import { aggregateLeadSeries, depthBinLabel, scoreDepthKeys } from "./modules/score-lookup.js";
 import { populateSelect } from "./modules/select-options.js";
 import {
   DEFAULT_LAYOUT,
@@ -3214,6 +3214,7 @@ async function renderRailYearRmsd(shown) {
   // constant frame. yearRmsdSeriesMax is a pure function of the loaded artifact, so this
   // effectively only changes with the dataset/variable/region/metric selection.
   let yBound = 0;
+  const yearBins = new Set();
   for (const panel of shown) {
     if (isSurfaceCurrentVariable(panel.state.variable)) continue; // 15 m obs only; covered by switch note
     const url = insightsFor(insightIndex, panel.state.dataset, shared.region).year_rmsd_by_start;
@@ -3228,6 +3229,9 @@ async function renderRailYearRmsd(shown) {
     }
     yBound = Math.max(yBound, yearRmsdSeriesMax(rmsd, mapping.short, { signed: biasMode }));
     unit = unit || (mapping.unit ? mapping.unit : "");
+    const yearManifest = manifestFor(panel.state.dataset);
+    const yearBin = depthBinLabel(yearManifest && variableEntry(yearManifest, panel.state.variable), entry.depthBin);
+    if (yearBin) yearBins.add(yearBin);
     lines.push({
       label: `${labelFor(panel.state.dataset)}${mapping.component ? " · u" : ""}`,
       color: forecastColor(panel.index),
@@ -3240,7 +3244,7 @@ async function renderRailYearRmsd(shown) {
     });
   }
   slot.innerHTML = rmsdByStartSVG(lines, {
-    title: biasMode ? "Bias by start date" : "RMSE by start date",
+    title: `${biasMode ? "Bias by start date" : "RMSE by start date"}${yearBins.size ? ` · ${[...yearBins].join(" / ")}` : ""}`,
     unit,
     signed: biasMode,
     yBound,
@@ -3370,7 +3374,7 @@ function obsSkillSeries(panel) {
     rowsByVariable.get(row.variable).push(row);
   }
   if (![...rowsByVariable.values()].some((rows) => rows.length)) return null;
-  return { rowsByVariable, unit, n: starts };
+  return { rowsByVariable, unit, n: starts, binLabel: depthBinLabel(entry, depthKeys[0]) };
 }
 
 function renderRailSkill(shown, comparison) {
@@ -3379,6 +3383,7 @@ function renderRailSkill(shown, comparison) {
   const colors = new Map();
   let unit = "";
   const notes = [];
+  const binLabels = new Set();
   try {
     for (const panel of shown) {
       const skill = obsSkillSeries(panel);
@@ -3392,6 +3397,7 @@ function renderRailSkill(shown, comparison) {
         continue;
       }
       unit = skill.unit || unit;
+      if (skill.binLabel) binLabels.add(skill.binLabel);
       for (const [variable, rows] of skill.rowsByVariable) {
         if (!rows.length) continue;
         const component = variable === "eastward_sea_water_velocity" ? "eastward" : "northward";
@@ -3434,7 +3440,9 @@ function renderRailSkill(shown, comparison) {
         unit,
         labels,
         colors,
-        title: comparison ? "RMSE vs lead day (both forecasts)" : "RMSE vs lead day",
+        title: `${comparison ? "RMSE vs lead day (both forecasts)" : "RMSE vs lead day"}${
+          binLabels.size ? ` · ${[...binLabels].join(" / ")}` : ""
+        }`,
         emptyMessage: "no scored observations for this variable/product",
       })
     : "";

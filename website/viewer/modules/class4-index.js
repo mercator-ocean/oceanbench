@@ -203,7 +203,11 @@ export function class4DepthBin(entry) {
   if (entry.depth === "15m") return "15m";
   if (entry.standard_name.includes("velocity")) return "15m";
   if (entry.standard_name === "sea_surface_height_above_geoid") return "surface";
-  return "0-5m"; // temperature / salinity near-surface bin matching the surface viewer field
+  // Temperature: the published "surface" bin holds the obs shallower than 1 m, the closest match
+  // to the model's top level; its "0-5m" bin is really 1-5 m (Argo top levels), a different obs
+  // population. Salinity has no sub-1 m bin, so "0-5m" is its only near-surface bin.
+  if (entry.standard_name === "sea_water_potential_temperature") return "surface";
+  return "0-5m";
 }
 
 export function class4DepthLabel(entry, depthBin) {

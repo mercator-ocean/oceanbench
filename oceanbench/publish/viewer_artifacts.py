@@ -106,7 +106,9 @@ _YEAR_GRIDS = {
 _YEAR_LEAD_DAY_COUNT = 10
 _YEAR_TARGETS = [
     ("sea_surface_height_above_geoid", "surface", "SSH"),
-    ("sea_water_potential_temperature", "0-5m", "T"),
+    # Temperature's "surface" bin holds the obs shallower than 1 m (its "0-5m" bin is 1-5 m), the
+    # same bin the viewer's lead curve and Class-4 overlay read.
+    ("sea_water_potential_temperature", "surface", "T"),
     ("sea_water_salinity", "0-5m", "S"),
     ("eastward_sea_water_velocity", "15m", "u"),
     ("northward_sea_water_velocity", "15m", "v"),

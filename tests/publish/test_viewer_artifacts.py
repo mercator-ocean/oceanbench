@@ -121,7 +121,7 @@ def test_year_artifacts_handle_a_mixed_variable_row_group(tmp_path) -> None:
     """A row group pure in (start_date, lead_day) but mixing variables must not be corrupted.
 
     The buggy assumption that a row group is homogeneous in variable would attribute every row to
-    a single variable. Here one row group carries both SSH (surface) and temperature (0-5m) super
+    a single variable. Here one row group carries both SSH and temperature (both "surface") super
     observations at distinct latitudes; each must land in its own variable channel and cell.
     """
     frame = pandas.DataFrame(
@@ -132,7 +132,7 @@ def test_year_artifacts_handle_a_mixed_variable_row_group(tmp_path) -> None:
                 "sea_water_potential_temperature",
                 "sea_water_potential_temperature",
             ],
-            "depth_bin": ["surface", "surface", "0-5m", "0-5m"],
+            "depth_bin": ["surface", "surface", "surface", "surface"],
             "lead_day": [1, 1, 1, 1],
             "start_date": [numpy.datetime64("2024-01-03")] * 4,
             # SSH near the equator (grid cell A), temperature near 40N (grid cell B).
@@ -164,7 +164,7 @@ def test_year_artifacts_handle_a_mixed_variable_row_group(tmp_path) -> None:
     rmsd = json.loads(open(rmsd_path).read())
     assert rmsd["variables"]["SSH"]["leads"]["1"]["dates"] == ["2024-01-03"]
     assert rmsd["variables"]["SSH"]["leads"]["1"]["bias"] == [pytest.approx(3.0)]
-    assert rmsd["variables"]["T"]["depth_bin"] == "0-5m"
+    assert rmsd["variables"]["T"]["depth_bin"] == "surface"
 
 
 def _year_ci_frame() -> pandas.DataFrame:
