@@ -159,7 +159,7 @@ Absolute RMSE scores against 2024 [GLO12 analysis](https://data.marine.copernicu
 
 ::: {#ensemble-view hidden="true"}
 
-Two ensembles are evaluated over 2024 on 52 weekly starts, against the version 2 observation basis of OceanBench and the quarter degree [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030): GloEns, the Mercator Ocean physics ensemble with 50 members, and GloNet2-ens-icp, the GloNet2 machine learning ensemble with 8 perturbed initial conditions. Two deterministic forecasts are kept next to the ensemble means as references: GLONET, the machine learning system, and GLO12, the physics system both of them start from.
+Two ensembles are evaluated over 2024 on 52 weekly starts, against the version 2 observation basis of OceanBench and the quarter degree [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030): GloEns, the Mercator Ocean physics ensemble with 50 members, and GLOW-ens, the GLOW machine learning ensemble with 16 members. Two deterministic forecasts are kept next to the ensemble means as references: GLONET, the machine learning system, and GLO12, the physics system GloEns starts from.
 
 ```{=html}
 <details class="ensemble-details">

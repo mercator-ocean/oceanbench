@@ -159,6 +159,7 @@ def _helper_class4_frame(
     lead_days: list[int],
     start_dates: list[pd.Timestamp],
     reduced_lead_days: tuple[int, ...] = (),
+    groups: tuple[tuple[str, str], ...] = HELPER_OBSERVATION_GROUPS,
 ) -> pd.DataFrame:
     """A class 4 helper scores frame, holding the pooled rows and the per-start rows beside them."""
     pooled = [
@@ -179,7 +180,7 @@ def _helper_class4_frame(
             "oceanbench_version": "0.6.0",
         }
         for region in ("global", "tropics")
-        for variable, depth in HELPER_OBSERVATION_GROUPS
+        for variable, depth in groups
         for lead_day in lead_days
         for metric, value in HELPER_OBSERVATION_VALUES.items()
     ]
@@ -218,17 +219,18 @@ def _helper_gridded_scores_frame(challenger: str, lead_days: list[int]) -> pd.Da
 
 
 def _built_scores() -> dict:
+    start_dates = list(pd.date_range("2024-01-03", periods=52, freq="7D"))
+    surface_temperature = (("sea_water_potential_temperature", "surface"),)
     return build_ensemble_scores(
         _gridded_frame("gloens", list(range(1, 11)), {9: 51, 10: 51}),
-        _gridded_frame("glonet2-ens-icp", list(range(1, 10)), {}),
         deterministic_gridded_frame(_deterministic_gridded_frame("glonet", 0.6661234)),
         deterministic_gridded_frame(_deterministic_gridded_frame("glo12", 0.5551234)),
         _class4_frame(list(range(1, 11))),
         _class4_frame(list(range(1, 11)), rmsd=0.7331234),
         _class4_frame(list(range(1, 11)), rmsd=0.9441234),
-        _class4_frame(list(range(1, 10)), rmsd=0.9551234),
         _observation_frame(list(range(1, 11)), ["drifter_sst"]),
-        _observation_frame(list(range(1, 10)), ["drifter_sst"]),
+        {"glowens": _helper_class4_frame("glowens", list(range(1, 10)), start_dates, groups=surface_temperature)},
+        {"glowens": helper_gridded_frame(_helper_gridded_scores_frame("glowens", list(range(1, 10))))},
     )
 
 
@@ -277,11 +279,11 @@ def test_build_ensemble_scores_marks_the_reduced_start_lead_days_of_gloens() -> 
     scores = _built_scores()
 
     gloens_rows = [row for row in scores["blocks"]["gridded_rmsd"]["rows"] if row["system"] == "gloens"]
-    icp_rows = [row for row in scores["blocks"]["gridded_rmsd"]["rows"] if row["system"] == "glonet2-ens-icp"]
+    glowens_rows = [row for row in scores["blocks"]["gridded_rmsd"]["rows"] if row["system"] == "glowens"]
 
     assert all(row["reduced_start_counts"] == {"9": 51, "10": 51} for row in gloens_rows)
-    assert all(row["reduced_start_counts"] == {} for row in icp_rows)
-    assert all(row["values"][-1] is None for row in icp_rows)
+    assert all(row["reduced_start_counts"] == {} for row in glowens_rows)
+    assert all(row["values"][-1] is None for row in glowens_rows)
 
 
 def test_build_ensemble_scores_keeps_both_deterministic_references_next_to_the_ensemble_means() -> None:
@@ -289,7 +291,7 @@ def test_build_ensemble_scores_keeps_both_deterministic_references_next_to_the_e
 
     rows = scores["blocks"]["observations_rmsd"]["rows"]
 
-    assert [row["system"] for row in rows] == ["glonet", "glo12", "gloens", "glonet2-ens-icp"]
+    assert [row["system"] for row in rows] == ["glonet", "glo12", "gloens", "glowens"]
     assert [row["depth_band"] for row in rows] == ["Surface"] * 4
     assert [row["system_label"] for row in rows[:2]] == ["GLONET (deterministic)", "GLO12 (deterministic)"]
     assert rows[0]["values"] == [0.8221] * len(OBSERVATION_LEAD_DAYS)
@@ -301,10 +303,13 @@ def test_build_ensemble_scores_takes_the_ensemble_mean_error_from_the_class4_rou
     scores = _built_scores()
 
     rows = scores["blocks"]["observations_rmsd"]["rows"]
-    icp_row = next(row for row in rows if row["system"] == "glonet2-ens-icp")
+    gloens_row = next(row for row in rows if row["system"] == "gloens")
+    glowens_row = next(row for row in rows if row["system"] == "glowens")
 
-    assert icp_row["depth_band"] == "Surface"
-    assert icp_row["values"] == [0.9551, 0.9551, 0.9551, 0.9551, 0.9551, None]
+    assert gloens_row["depth_band"] == "Surface"
+    assert gloens_row["values"] == [0.9441] * len(OBSERVATION_LEAD_DAYS)
+    assert glowens_row["depth_band"] == "Surface"
+    assert glowens_row["values"] == [0.7771, 0.7771, 0.7771, 0.7771, 0.7771, None]
     assert all(row["depth_band"] in {"Surface", "15 m", "0-5 m", "5-100 m", "100-300 m", "300-600 m"} for row in rows)
 
 
@@ -314,7 +319,7 @@ def test_build_ensemble_scores_reads_the_deterministic_systems_on_the_gridded_ax
     gridded_rmsd_systems = [row["system"] for row in scores["blocks"]["gridded_rmsd"]["rows"]]
     glonet_row = next(row for row in scores["blocks"]["gridded_rmsd"]["rows"] if row["system"] == "glonet")
 
-    assert set(gridded_rmsd_systems) == {"gloens", "glonet2-ens-icp", "glonet", "glo12"}
+    assert set(gridded_rmsd_systems) == {"gloens", "glowens", "glonet", "glo12"}
     assert glonet_row["values"] == [0.6661] * len(GRIDDED_LEAD_DAYS)
     assert glonet_row["system_label"] == "GLONET (deterministic)"
 
@@ -324,7 +329,7 @@ def test_build_ensemble_scores_publishes_no_probabilistic_score_for_a_one_member
 
     for block_key in ("gridded_crps", "gridded_spread_error_ratio"):
         systems = {row["system"] for row in scores["blocks"][block_key]["rows"]}
-        assert systems == {"gloens", "glonet2-ens-icp"}
+        assert systems == {"gloens", "glowens"}
 
 
 def test_build_ensemble_scores_names_no_glonet2_deterministic_system() -> None:
@@ -426,7 +431,7 @@ def test_ensemble_score_bundle_reads_like_the_deterministic_score_bundle() -> No
     assert bundle["version_order"] == ["ensemble"]
     assert bundle["default_version"] == "ensemble"
     assert region["display_name"] == "Global"
-    assert region["challenger_names"] == ["glonet", "glo12", "gloens", "glonet2-ens-icp"]
+    assert region["challenger_names"] == ["glonet", "glo12", "gloens", "glowens"]
     assert bundle["versions"]["ensemble"]["challenger_labels"]["gloens"] == "GloEns"
     assert bundle["versions"]["ensemble"]["challenger_labels"]["glo12"] == "GLO12 (deterministic)"
 
@@ -515,15 +520,12 @@ def test_the_observation_rows_read_the_default_depth_bins_and_not_the_campaign_b
     bands = ("0-5m", "5-100m", "100-300m", "300-600m", "100-500")
     scores = build_ensemble_scores(
         _gridded_frame("gloens", list(range(1, 11)), {}),
-        _gridded_frame("glonet2-ens-icp", list(range(1, 10)), {}),
         deterministic_gridded_frame(_deterministic_gridded_frame("glonet", 0.6661234)),
         deterministic_gridded_frame(_deterministic_gridded_frame("glo12", 0.5551234)),
         _class4_frame(list(range(1, 11))),
         _class4_frame(list(range(1, 11)), rmsd=0.7331234),
         _class4_frame(list(range(1, 11)), rmsd=0.9441234),
-        _class4_frame(list(range(1, 10)), rmsd=0.9551234),
         _observation_frame(list(range(1, 11)), ["profiles_t"], bands),
-        _observation_frame(list(range(1, 10)), ["profiles_t"], bands),
     )
 
     gloens_rows = [row for row in scores["blocks"]["observations_crps"]["rows"] if row["system"] == "gloens"]
@@ -536,15 +538,12 @@ def _built_scores_from_helpers() -> dict:
     start_dates = list(pd.date_range("2024-01-03", periods=52, freq="7D"))
     return build_ensemble_scores(
         _gridded_frame("gloens", list(range(1, 11)), {}),
-        _gridded_frame("glonet2-ens-icp", list(range(1, 10)), {}),
         deterministic_gridded_frame(_deterministic_gridded_frame("glonet", 0.6661234)),
         deterministic_gridded_frame(_deterministic_gridded_frame("glo12", 0.5551234)),
         _class4_frame(list(range(1, 11))),
         _class4_frame(list(range(1, 11)), rmsd=0.7331234),
         _class4_frame(list(range(1, 11)), rmsd=0.9441234),
-        _class4_frame(list(range(1, 10)), rmsd=0.9551234),
         _observation_frame(list(range(1, 11)), ["drifter_sst"]),
-        _observation_frame(list(range(1, 10)), ["drifter_sst"]),
         {
             "glowens": _helper_class4_frame("glowens", list(range(1, 11)), start_dates, reduced_lead_days=(10,)),
         },
@@ -610,5 +609,5 @@ def test_helper_scores_leave_the_campaign_sourced_systems_alone() -> None:
     observation_systems = [row["system"] for row in scores["blocks"]["observations_rmsd"]["rows"]]
     gridded_systems = [row["system"] for row in scores["blocks"]["gridded_rmsd"]["rows"]]
 
-    assert set(observation_systems) == {"glonet", "glo12", "gloens", "glonet2-ens-icp", "glowens"}
-    assert set(gridded_systems) == {"glonet", "glo12", "gloens", "glonet2-ens-icp", "glowens"}
+    assert set(observation_systems) == {"glonet", "glo12", "gloens", "glowens"}
+    assert set(gridded_systems) == {"glonet", "glo12", "gloens", "glowens"}

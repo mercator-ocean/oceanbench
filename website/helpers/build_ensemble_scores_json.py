@@ -23,19 +23,16 @@ import pandas as pd
 # environment and only falls back to the one they were built in.
 DEFAULT_AGGREGATE_ROOT = os.environ.get("OCEANBENCH_ENSEMBLE_AGGREGATE_ROOT", "/Users/jseillade/projects/probax-report")
 DEFAULT_GRIDDED_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gloens.parquet"
-DEFAULT_GRIDDED_ICP_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-icp.parquet"
 DEFAULT_DETERMINISTIC_GLONET_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-glonet.parquet"
 DEFAULT_GRIDDED_GLONET_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gridded-glonet.parquet"
 DEFAULT_GRIDDED_GLO12_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gridded-glo12.parquet"
 DEFAULT_DETERMINISTIC_GLO12_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-glo12.parquet"
 DEFAULT_OBSERVATIONS_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-gloens/aggregate.parquet"
-DEFAULT_OBSERVATIONS_ICP_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-icp/aggregate.parquet"
 
 # The ensemble means are also scored through the class 4 route the deterministic systems go through,
 # so the error against observations reads on one matchup and one set of depth bins for every system.
 # The superob aggregates above stay the source of the probabilistic scores, which need the members.
 DEFAULT_CLASS4_GLOENS_MEAN_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-gloens-mean.parquet"
-DEFAULT_CLASS4_ICP_MEAN_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-icp-mean.parquet"
 
 # The GloEns year on the depth axis was run subsurface only, because its surface fields had already
 # been scored by the earlier campaign and were deliberately not scored again. That frozen record is
@@ -73,13 +70,12 @@ OBSERVATION_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
 GRIDDED_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
 
 GLOENS = "gloens"
-ICP = "glonet2-ens-icp"
 GLOWENS = "glowens"
 GLONET = "glonet"
 GLO12 = "glo12"
 
 DETERMINISTIC_SYSTEMS = [GLONET, GLO12]
-ENSEMBLE_SYSTEMS = [GLOENS, ICP, GLOWENS]
+ENSEMBLE_SYSTEMS = [GLOENS, GLOWENS]
 
 SYSTEMS = {
     GLONET: {
@@ -97,11 +93,6 @@ SYSTEMS = {
         "kind": "Ensemble",
         "description": "Mercator Ocean physics ensemble, 50 members, Thursday starts.",
     },
-    ICP: {
-        "label": "GloNet2-ens-icp",
-        "kind": "Ensemble",
-        "description": "GloNet2 machine learning ensemble, 8 members, Wednesday starts.",
-    },
     GLOWENS: {
         "label": "GLOW-ens",
         "kind": "Ensemble",
@@ -109,7 +100,7 @@ SYSTEMS = {
     },
 }
 
-SYSTEM_ORDER = [*DETERMINISTIC_SYSTEMS, GLOENS, ICP, GLOWENS]
+SYSTEM_ORDER = [*DETERMINISTIC_SYSTEMS, GLOENS, GLOWENS]
 
 STREAM_LABELS = {
     "drifter_sst": "Drifter SST",
@@ -519,21 +510,18 @@ def ensemble_gridded_rows(
 
 def build_ensemble_scores(
     gridded_gloens: pd.DataFrame,
-    gridded_icp: pd.DataFrame,
     gridded_glonet: pd.DataFrame,
     gridded_glo12: pd.DataFrame,
     deterministic_glonet: pd.DataFrame,
     deterministic_glo12: pd.DataFrame,
     class4_gloens_mean: pd.DataFrame,
-    class4_icp_mean: pd.DataFrame,
     observations_gloens: pd.DataFrame,
-    observations_icp: pd.DataFrame,
     helper_observations: dict[str, pd.DataFrame] = {},
     helper_gridded: dict[str, pd.DataFrame] = {},
 ) -> dict:
-    campaign_class4_means = {GLOENS: class4_gloens_mean, ICP: class4_icp_mean}
-    campaign_observations = {GLOENS: observations_gloens, ICP: observations_icp}
-    campaign_gridded = {GLOENS: gridded_gloens, ICP: gridded_icp}
+    campaign_class4_means = {GLOENS: class4_gloens_mean}
+    campaign_observations = {GLOENS: observations_gloens}
+    campaign_gridded = {GLOENS: gridded_gloens}
 
     observation_rmsd = class4_rows(deterministic_glonet, GLONET)
     observation_rmsd += class4_rows(deterministic_glo12, GLO12)
@@ -645,16 +633,13 @@ def _helper_frames(arguments: argparse.Namespace, prefix: str, read) -> dict[str
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gridded-gloens", default=DEFAULT_GRIDDED_GLOENS_PATH)
-    parser.add_argument("--gridded-icp", default=DEFAULT_GRIDDED_ICP_PATH)
     parser.add_argument("--gridded-glonet", default=DEFAULT_GRIDDED_GLONET_PATH)
     parser.add_argument("--gridded-glo12", default=DEFAULT_GRIDDED_GLO12_PATH)
     parser.add_argument("--deterministic-glonet", default=DEFAULT_DETERMINISTIC_GLONET_PATH)
     parser.add_argument("--deterministic-glo12", default=DEFAULT_DETERMINISTIC_GLO12_PATH)
     parser.add_argument("--class4-gloens-mean", default=DEFAULT_CLASS4_GLOENS_MEAN_PATH)
-    parser.add_argument("--class4-icp-mean", default=DEFAULT_CLASS4_ICP_MEAN_PATH)
     parser.add_argument("--gloens-surface", default=DEFAULT_GLOENS_SURFACE_PATH)
     parser.add_argument("--observations-gloens", default=DEFAULT_OBSERVATIONS_GLOENS_PATH)
-    parser.add_argument("--observations-icp", default=DEFAULT_OBSERVATIONS_ICP_PATH)
     _add_helper_arguments(parser, "helper-observations")
     _add_helper_arguments(parser, "helper-gridded")
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
@@ -668,17 +653,12 @@ def main() -> None:
                 pd.read_csv(arguments.gloens_surface),
             ),
         ),
-        with_gridded_fill_beside(
-            arguments.gridded_icp, gridded_aggregate_frame(pd.read_parquet(arguments.gridded_icp))
-        ),
         deterministic_gridded_frame(pd.read_parquet(arguments.gridded_glonet)),
         deterministic_gridded_frame(pd.read_parquet(arguments.gridded_glo12)),
         pd.read_parquet(arguments.deterministic_glonet),
         pd.read_parquet(arguments.deterministic_glo12),
         pd.read_parquet(arguments.class4_gloens_mean),
-        pd.read_parquet(arguments.class4_icp_mean),
         read_observation_aggregate(arguments.observations_gloens),
-        read_observation_aggregate(arguments.observations_icp),
         _helper_frames(arguments, "helper-observations", pd.read_parquet),
         _helper_frames(arguments, "helper-gridded", lambda path: helper_gridded_frame(pd.read_parquet(path))),
     )

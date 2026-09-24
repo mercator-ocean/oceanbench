@@ -27,7 +27,7 @@ METRIC_KEYS = {
 CLOSENESS_TO_ONE_BLOCKS = {"observations_spread_error_ratio", "gridded_spread_error_ratio"}
 
 DATUM_NOTE = "The sea surface height of GloEns is datum aligned to the reference before it is scored."
-SHORT_HORIZON_NOTE = "GloNet2-ens-icp and GLOW-ens stop at lead day 9."
+SHORT_HORIZON_NOTE = "GLOW-ens stops at lead day 9."
 # GloEns starts on Thursdays and every other system on Wednesdays, so a lead day of GloEns falls on
 # a different calendar day, and the observations that day carries are not the same ones.
 UNPAIRED_SAMPLE_NOTE = (
