@@ -412,11 +412,15 @@ function wirePanel(panel) {
         const fallbackLabel = manifest.variables[fallback] ? prettyName(manifest.variables[fallback].standard_name) : fallback;
         fallbackNote = `${prettyName(previousVariable)} is not available for ${labelFor(panel.state.dataset)}, showing ${fallbackLabel} instead`;
       }
-      updateSharedTimeControls(manifest);
+      const timeMoved = updateSharedTimeControls();
       refreshPanelControls(panel);
       setActivePanel(panel.index);
-      await renderPanel(panel);
-      if (isDiffView() && panel.index === 1) await renderPanel(panels[0]);
+      // A shorter horizon can pull the shared lead back; every panel then redraws at it.
+      if (timeMoved) await renderAllPanels();
+      else {
+        await renderPanel(panel);
+        if (isDiffView() && panel.index === 1) await renderPanel(panels[0]);
+      }
       // Reload overlays through applyOverlayMode so the overlay note is refreshed too:
       // switching to a dataset without published match-ups must flip the note to the
       // quiet "not published" message instead of leaving the previous dataset's note.
@@ -505,8 +509,8 @@ function panelLeadCached(panel, leadDay) {
   const store = stores.get(panel.state.dataset);
   if (!manifest || !store) return false;
   const level = selectRenderLevel(manifest);
-  const startIndex = Math.min(shared.startIndex, manifest.start_dates.length - 1);
-  const leadIndex = leadDay - 1;
+  const startIndex = storeStartIndex(manifest);
+  const leadIndex = storeLeadIndex(manifest, leadDay);
   const currents = isCurrentsVariable(panel.state.variable);
   const variables = currents
     ? [currentDepthVariables(panel).u, currentDepthVariables(panel).v]
@@ -517,9 +521,11 @@ function panelLeadCached(panel, leadDay) {
   // The difference view reads the partner forecast's field(s) on the same slice.
   if (isDiffHost(panel)) {
     const partner = stores.get(panels[1].state.dataset);
-    if (!partner) return false;
+    const partnerManifest = manifestFor(panels[1].state.dataset);
+    if (!partner || !partnerManifest) return false;
+    const partnerSlice = { startIndex: storeStartIndex(partnerManifest), leadIndex: storeLeadIndex(partnerManifest, leadDay) };
     for (const variable of variables) {
-      if (!isLayerCached(partner, { variable, level, startIndex, leadIndex })) return false;
+      if (!isLayerCached(partner, { variable, level, ...partnerSlice })) return false;
     }
   }
   return true;
@@ -555,14 +561,14 @@ async function renderPanel(panel) {
       resizePanelCanvases(panel);
       drawPanel(panel);
       updateSharedColorbar();
-      setStatus("");
+      setPanelError(panel, "");
       return;
     }
 
     const level = selectRenderLevel(manifest);
     panel.renderedLevel = level; // the pyramid level the displayed field came from
-    const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
-    const leadIndex = shared.leadDay - 1;
+    const start = storeStartIndex(manifest);
+    const leadIndex = storeLeadIndex(manifest, shared.leadDay);
 
     if (isDiffHost(panel) && isCurrentsVariable(panel.state.variable)) {
       await renderCurrentsDifferencePanel(panel, token, manifest, level, start, leadIndex, panels[1].state.dataset);
@@ -579,10 +585,10 @@ async function renderPanel(panel) {
     drawOverlays(panel);
     drawTrajectoryFans(panel);
     updateSharedColorbar();
-    setStatus("");
+    setPanelError(panel, "");
   } catch (error) {
     if (error && error.name === "AbortError") return;
-    if (token === panel.renderToken) setStatus(String(error.message || error), true);
+    if (token === panel.renderToken) setPanelError(panel, String(error.message || error));
     console.error(error);
   } finally {
     if (token === panel.renderToken) setPanelLoading(panel, false);
@@ -591,6 +597,13 @@ async function renderPanel(panel) {
 
 async function readAlignedField(panel, sourceSlug, variable, level, start, leadIndex, targetLat, targetLon) {
   await ensureStore(sourceSlug);
+  // The indices arrive in the host panel's store; a partner store is indexed by the same
+  // start date and lead day, which can sit at other positions on its own axes.
+  if (sourceSlug !== panel.state.dataset) {
+    const sourceManifest = manifestFor(sourceSlug);
+    start = storeStartIndex(sourceManifest);
+    leadIndex = storeLeadIndex(sourceManifest, shared.leadDay);
+  }
   const signal = panel.renderAbort ? panel.renderAbort.signal : undefined;
   const layer = await readLayer(stores.get(sourceSlug), { variable, level, startIndex: start, leadIndex, signal });
   const coordinates = await loadCoordinates(sourceSlug, level);
@@ -933,16 +946,15 @@ async function yearLandMask(panel, latitudes, longitudes) {
 function prefetchNeighbours(panel, level, start, leadIndex) {
   const manifest = manifestFor(panel.state.dataset);
   if (!manifest || !manifest.lead_days) return;
-  const maxLead = Math.max(...manifest.lead_days);
   for (const delta of [1, -1]) {
     const lead = shared.leadDay + delta;
-    if (lead < 1 || lead > maxLead) continue;
+    if (storeLeadIndex(manifest, lead) < 0) continue;
     if (isCurrentsVariable(panel.state.variable)) {
       const variables = currentDepthVariables(panel);
-      prefetchLayer(stores.get(panel.state.dataset), { variable: variables.u, level, startIndex: start, leadIndex: lead - 1 });
-      prefetchLayer(stores.get(panel.state.dataset), { variable: variables.v, level, startIndex: start, leadIndex: lead - 1 });
+      prefetchLayer(stores.get(panel.state.dataset), { variable: variables.u, level, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
+      prefetchLayer(stores.get(panel.state.dataset), { variable: variables.v, level, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
     } else {
-      prefetchLayer(stores.get(panel.state.dataset), { variable: panel.state.variable, level, startIndex: start, leadIndex: lead - 1 });
+      prefetchLayer(stores.get(panel.state.dataset), { variable: panel.state.variable, level, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
     }
   }
 }
@@ -1158,6 +1170,9 @@ let redrawAllPanelsFrame = 0;
 // they finish, so the note is written once the first frame is up rather than before it.
 let requestedLeadDay = null;
 let leadClampNote = "";
+// Which forecast limits the shared lead range when the visible forecasts reach different
+// horizons. It is what the status line shows while nothing else needs saying.
+let leadRangeNote = "";
 
 async function loadInsightManifest(url) {
   if (!url) return null;
@@ -1327,9 +1342,10 @@ function scheduleClass4Prefetch(request, slug) {
 function neighbouringLeads(leadDay, slug) {
   const manifest = manifestFor(slug);
   if (!manifest || !Array.isArray(manifest.lead_days) || !manifest.lead_days.length) return [];
-  const minimum = Math.min(...manifest.lead_days);
-  const maximum = Math.max(...manifest.lead_days);
-  return [leadDay + 1, leadDay - 1].filter((lead) => lead >= minimum && lead <= maximum);
+  const range = sharedLeadRange();
+  return [leadDay + 1, leadDay - 1].filter(
+    (lead) => manifest.lead_days.includes(lead) && (!range || (lead >= range.minimum && lead <= range.maximum)),
+  );
 }
 
 function whenIdle(run) {
@@ -1394,10 +1410,8 @@ function class4ByteLengthHint(class4Url, class4Manifest) {
 
 // The forecast start date currently selected, as the YYYY-MM-DD string the
 // match-up parquet's start_date column and row-group statistics use.
-function currentStartDate(slug) {
-  const manifest = manifestFor(slug) || (panels[0] && manifestFor(panels[0].state.dataset));
-  if (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length) return null;
-  return manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)];
+function currentStartDate() {
+  return sharedStartDate();
 }
 
 // ONE obs-error ramp for the whole view, not one per panel: with two forecasts side by side
@@ -1488,7 +1502,7 @@ function drawOverlays(panel) {
     const manifest = manifestFor(panel.state.dataset);
     const entry = manifest && manifest.variables[panel.state.variable];
     const depthBin = class4DepthBin(entry);
-    const startDate = manifest ? manifest.start_dates[Math.min(shared.startIndex, manifest.start_dates.length - 1)] : null;
+    const startDate = sharedStartDate();
     // This panel's own forecast's match-ups, never the active panel's.
     const class4 = overlayData.class4BySlug[panel.state.dataset].data;
     const rows = class4.rows || [];
@@ -1678,7 +1692,7 @@ async function loadTrajectoryFields(panel, maximumLead, seedCentre) {
   const level = finestLevel(manifest);
   const coordinates = await loadCoordinates(panel.state.dataset, level);
   const variables = currentDepthVariables(panel);
-  const startIndex = Math.min(shared.startIndex, manifest.start_dates.length - 1);
+  const startIndex = storeStartIndex(manifest);
   const margin = TRAJECTORY_MARGIN_BASE_DEG + TRAJECTORY_MARGIN_PER_LEAD_DEG * maximumLead;
   const box = {
     latMin: seedCentre.latitude - margin,
@@ -1688,7 +1702,8 @@ async function loadTrajectoryFields(panel, maximumLead, seedCentre) {
   };
   const store = stores.get(panel.state.dataset);
   const fields = [];
-  for (let leadIndex = 0; leadIndex < maximumLead; leadIndex += 1) {
+  for (let lead = 1; lead <= maximumLead; lead += 1) {
+    const leadIndex = storeLeadIndex(manifest, lead);
     const [u, v] = await Promise.all([
       readLayerWindow(store, { variable: variables.u, level, startIndex, leadIndex }, coordinates.latitudes, coordinates.longitudes, box),
       readLayerWindow(store, { variable: variables.v, level, startIndex, leadIndex }, coordinates.latitudes, coordinates.longitudes, box),
@@ -3275,8 +3290,7 @@ function wireYearRmsdDrilldown(slot, lines) {
 // Switch from year scope to single-forecast scope, selecting the clicked start date
 // (matched against the primary forecast's manifest start_dates; nearest if inexact).
 function drillDownToStartDate(date) {
-  const manifest = manifestFor(panels[0].state.dataset);
-  const dates = (manifest && manifest.start_dates) || [];
+  const dates = sharedStartDates();
   let index = dates.findIndex((candidate) => String(candidate).slice(0, 10) === date);
   if (index < 0 && dates.length) {
     const target = Date.parse(date);
@@ -3744,8 +3758,8 @@ async function psdSourceFor(panel, boxRange) {
   const cellDeg = finestCellDegFor(panel.state.dataset);
   const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
   const level = levels[0].level;
-  const start = Math.min(shared.startIndex, manifest.start_dates.length - 1);
-  const leadIndex = shared.leadDay - 1;
+  const start = storeStartIndex(manifest);
+  const leadIndex = storeLeadIndex(manifest, shared.leadDay);
   try {
     if (isCurrentsVariable(panel.state.variable)) {
       const components = currentDepthVariables(panel);
@@ -4158,29 +4172,88 @@ function updateCurrentsControlVisibility() {
   }
 }
 
-function updateSharedTimeControls(manifest) {
-  if (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length) return;
-  shared.startIndex = Math.min(shared.startIndex, manifest.start_dates.length - 1);
+// The forecasts on screen share one start date and one lead day. The difference view's
+// partner is panels[1], which is on screen whenever it is used.
+function visibleManifests() {
+  return panels
+    .slice(0, shared.layout)
+    .filter(Boolean)
+    .map((panel) => ({ slug: panel.state.dataset, manifest: manifestFor(panel.state.dataset) }))
+    .filter(({ manifest }) => manifest && Array.isArray(manifest.start_dates) && Array.isArray(manifest.lead_days));
+}
+
+// Start dates every visible forecast has, matched by date; shared.startIndex indexes this list.
+function sharedStartDates() {
+  const visible = visibleManifests();
+  if (!visible.length) return [];
+  return visible[0].manifest.start_dates.filter((date) => visible.every(({ manifest }) => manifest.start_dates.includes(date)));
+}
+
+function sharedStartDate() {
+  const dates = sharedStartDates();
+  return dates.length ? dates[Math.min(shared.startIndex, dates.length - 1)] : null;
+}
+
+// Where the shared start date and a lead day sit on one store's own axes.
+function storeStartIndex(manifest) {
+  return manifest.start_dates.indexOf(sharedStartDate());
+}
+
+function storeLeadIndex(manifest, leadDay) {
+  return manifest.lead_days.indexOf(leadDay);
+}
+
+// The leads every visible forecast reaches, and the forecast that stops the range short of
+// the others (null when all reach the same lead). Clamping each panel to its own horizon
+// would put lead 10 beside lead 7 under one "Lead day" label.
+function sharedLeadRange() {
+  const visible = visibleManifests().filter(({ manifest }) => manifest.lead_days.length);
+  if (!visible.length) return null;
+  let minimum = -Infinity;
+  let maximum = Infinity;
+  let limiting = null;
+  for (const { slug, manifest } of visible) {
+    minimum = Math.max(minimum, Math.min(...manifest.lead_days));
+    const horizon = Math.max(...manifest.lead_days);
+    if (horizon < maximum) {
+      maximum = horizon;
+      limiting = slug;
+    }
+  }
+  const longest = Math.max(...visible.map(({ manifest }) => Math.max(...manifest.lead_days)));
+  return { minimum, maximum, limiting: maximum < longest ? limiting : null };
+}
+
+// Rebuild the start and lead controls from the visible forecasts. Returns whether the
+// shared start date or lead day moved, so a caller can redraw the panels it did not touch.
+function updateSharedTimeControls() {
+  const dates = sharedStartDates();
+  if (!dates.length) return false;
+  const previousDate = sharedStartDate();
+  const previousLead = shared.leadDay;
+  shared.startIndex = Math.min(shared.startIndex, dates.length - 1);
   populateSelect(
     elements["start-date"],
-    manifest.start_dates.map((date, index) => ({ value: index, label: date })),
+    dates.map((date, index) => ({ value: index, label: date })),
     shared.startIndex,
   );
-  if (!Array.isArray(manifest.lead_days) || !manifest.lead_days.length) return;
-  const minimumLead = Math.min(...manifest.lead_days);
-  const maximumLead = Math.max(...manifest.lead_days);
+  const range = sharedLeadRange();
+  if (!range) return sharedStartDate() !== previousDate;
+  const { minimum: minimumLead, maximum: maximumLead } = range;
   const requested = requestedLeadDay;
   requestedLeadDay = null;
   shared.leadDay = Math.min(Math.max(shared.leadDay, minimumLead), maximumLead);
   leadClampNote =
     requested != null && requested !== shared.leadDay
-      ? `Lead ${requested} is outside this forecast's horizon (${minimumLead} to ${maximumLead}); showing lead ${shared.leadDay}.`
+      ? `Lead ${requested} is outside the shown forecasts' horizon (${minimumLead} to ${maximumLead}); showing lead ${shared.leadDay}.`
       : "";
+  leadRangeNote = range.limiting ? `Leads ${minimumLead} to ${maximumLead} only: the ${labelFor(range.limiting)} horizon.` : "";
   elements["lead-day"].min = String(minimumLead);
   elements["lead-day"].max = String(maximumLead);
   elements["lead-day"].value = String(shared.leadDay);
   elements["lead-value"].textContent = `Lead day ${shared.leadDay}`;
   fillLeadTicks(minimumLead, maximumLead);
+  return sharedStartDate() !== previousDate || shared.leadDay !== previousLead;
 }
 
 // One tick per available lead day. The marks are drawn in CSS across the thumb's
@@ -4676,7 +4749,14 @@ function wireGlobalControls() {
       }
       markLayoutButtons();
       syncPanelGrid();
-      renderAllPanels().then(() => {
+      // The shared start and lead ranges follow the forecasts on screen, so they are rebuilt
+      // once the stores behind the new layout are known.
+      Promise.all(panels.slice(0, shared.layout).map((panel) => ensureStore(panel.state.dataset).catch(() => {})))
+        .then(() => {
+          updateSharedTimeControls();
+          return renderAllPanels();
+        })
+        .then(() => {
         updateSharedColorbar();
         updateContextRail();
         updateCurrentsControlVisibility();
@@ -5170,9 +5250,21 @@ function applyPanelHash(parameters) {
 // ---- status -----------------------------------------------------------------
 
 function setStatus(message, isError = false) {
+  if (!message) message = leadRangeNote;
   elements.status.textContent = message;
   elements.status.classList.toggle("error", isError);
   elements.status.hidden = !message;
+}
+
+// Each panel owns its render error. A panel that renders fine clears only its own, so the
+// status line keeps naming a failure in the other panel.
+function setPanelError(panel, message) {
+  panel.renderError = message;
+  const failing = panels.slice(0, shared.layout).filter((candidate) => candidate && candidate.renderError);
+  const text = failing
+    .map((candidate) => (shared.layout > 1 ? `Forecast ${candidate.index + 1}: ${candidate.renderError}` : candidate.renderError))
+    .join(" ");
+  setStatus(text, failing.length > 0);
 }
 
 function selectElements() {
@@ -5311,8 +5403,7 @@ async function main() {
   // Ensure the primary dataset store so start-date / lead options are known.
   // Warm every visible panel's store so variable/start selectors populate on first paint.
   await Promise.all(panels.slice(0, shared.layout).map((panel) => ensureStore(panel.state.dataset).catch(() => {})));
-  const manifest = manifestFor(panels[0].state.dataset);
-  updateSharedTimeControls(manifest);
+  updateSharedTimeControls();
 
   markLayoutButtons();
   syncPanelGrid();
