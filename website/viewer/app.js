@@ -5557,7 +5557,10 @@ async function main() {
   const parameters = readHash();
   window.addEventListener("popstate", onNavigatedHash);
   window.addEventListener("hashchange", onNavigatedHash);
-  if (!location.hash.slice(1) && exampleViewAvailable()) {
+  // The site shell always hands its theme over in the hash, so a hash naming nothing but
+  // the theme is still a first visit.
+  const namesAView = [...parameters.keys()].some((key) => key !== "theme");
+  if (!namesAView && exampleViewAvailable()) {
     exampleViewActive = true;
     shared.layout = 2;
     shared.leadDay = EXAMPLE_VIEW.leadDay;
