@@ -28,6 +28,10 @@ _CLOUDFERRO_BASELINE_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbenc
 _GLO12_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data/GLO12"
 _GLO12_FORECAST_VARIABLE_NAMES = ["so", "thetao", "uo", "vo", "zos"]
 _LANGYA_LEAD_DAYS_COUNT = 7
+_GLOWCASCADE_V5_RING_URL = (
+    "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/ml-forecast-outputs/glowcascade_v5_ring"
+)
+_GLOWCASCADE_V5_RING_LEAD_DAYS_COUNT = 9
 
 
 def _default_first_day_datetimes() -> list[datetime]:
@@ -153,6 +157,28 @@ def langya_1_degree() -> xarray.Dataset:
 def _langya_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/langya/{start_datetime_string}.zarr"
+
+
+def glowcascade_v5_ring() -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _glowcascade_v5_ring_dataset_path,
+        preprocess_dataset=_glowcascade_v5_ring_week,
+        lead_days_count=_GLOWCASCADE_V5_RING_LEAD_DAYS_COUNT,
+    )
+
+
+def glowcascade_v5_ring_1_degree() -> xarray.Dataset:
+    return interpolate_1_degree(glowcascade_v5_ring())
+
+
+def _glowcascade_v5_ring_dataset_path(start_datetime: datetime) -> str:
+    return f"{_GLOWCASCADE_V5_RING_URL}/{start_datetime.strftime('%Y%m%d')}.zarr"
+
+
+def _glowcascade_v5_ring_week(dataset: xarray.Dataset) -> xarray.Dataset:
+    return dataset.rename({"lat": "latitude", "lon": "longitude"}).isel(
+        time=slice(0, _GLOWCASCADE_V5_RING_LEAD_DAYS_COUNT)
+    )
 
 
 def persistence() -> xarray.Dataset:

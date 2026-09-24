@@ -391,6 +391,32 @@ def langya_1_degree() -> xarray.Dataset:
     return challenger_datasets.langya_1_degree()
 
 
+def glowcascade_v5_ring() -> xarray.Dataset:
+    """
+    Open the GLOW challenger dataset (glowcascade_v5_ring, 1/4 degree, 9 lead days).
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing GLOW forecasts.
+    """
+
+    return challenger_datasets.glowcascade_v5_ring()
+
+
+def glowcascade_v5_ring_1_degree() -> xarray.Dataset:
+    """
+    Open the GLOW challenger dataset interpolated to the 1 degree resolution.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing GLOW forecasts interpolated to 1 degree resolution.
+    """
+
+    return challenger_datasets.glowcascade_v5_ring_1_degree()
+
+
 def persistence() -> xarray.Dataset:
     """
     Open the persistence baseline challenger dataset.

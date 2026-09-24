@@ -78,6 +78,7 @@ const CHALLENGER_LABELS = {
   xihe: "XiHe",
   wenhai: "WenHai",
   langya: "LangYa",
+  glowcascade_v5_ring: "GLOW",
   glo12: "GLO12",
   climatology: "Climatology",
   persistence: "Persistence",
