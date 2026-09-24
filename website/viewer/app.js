@@ -1414,14 +1414,18 @@ function currentStartDate() {
   return sharedStartDate();
 }
 
-// ONE obs-error ramp for the whole view, not one per panel: with two forecasts side by side
-// the single colour bar under the map can only be labelled with one scale, and two panels on
-// two different ramps make the same colour mean two different errors.
+// ONE obs-error ramp per variable, not one per panel: two forecasts of the same variable
+// share a ramp, since two ramps would make the same colour mean two different errors. Two
+// different variables are errors in different units, so each keeps its own ramp and bar.
 const CLASS4_SCALE_ID = "class4";
 
+function class4ScaleId(panel) {
+  return `${CLASS4_SCALE_ID}|${panel.state.variable}`;
+}
+
 // The ramp as it stands, without offering a measurement (stableMax ignores a candidate of 0).
-function class4CurrentScale() {
-  return stableMax(CLASS4_SCALE_ID, 0);
+function class4CurrentScale(panel) {
+  return stableMax(class4ScaleId(panel), 0);
 }
 
 // Widen the shared ramp with this lead's measurement. A non-finite measurement means the set
@@ -1431,9 +1435,9 @@ function class4CurrentScale() {
 // INVARIANT I2: grow-only within the selection. A lead whose points happen to be calm
 // must keep the ramp the earlier leads established, or the colours mean a different
 // number at every step of the slider.
-function class4StableScale(measure) {
-  const previous = class4CurrentScale();
-  const scale = stableMax(CLASS4_SCALE_ID, measure);
+function class4StableScale(measure, panel) {
+  const previous = class4CurrentScale(panel);
+  const scale = stableMax(class4ScaleId(panel), measure);
   if (scale > previous) {
     // The colorbar and legend read the ramp at render time, which can run before the
     // first widening draw; refresh them so "scale ≈ n/a" never outlives the first
@@ -1539,7 +1543,7 @@ function drawOverlays(panel) {
     // screen, so left alone it renormalises on every lead step and a growing error keeps
     // rendering the same colours. Held to the widest ramp this selection has needed, the
     // points visibly redden as the forecast ages.
-    const scale = class4StableScale(prepared.measure);
+    const scale = class4StableScale(prepared.measure, panel);
     // Larger points at high zoom so individual obs are distinguishable from a line.
     const radius = 2.2 + 2.6 * Math.min(1, (view.zoom - 1) / 20);
     const display = drawClass4Frame(context, projection, prepared, copyOffsets, canvas, {
@@ -2874,8 +2878,20 @@ function updateSharedColorbar() {
   const panel = isDiffView() ? panels[0] : panels[activePanelIndex];
   updateYearLegend(shared.scope === SCOPE_WHOLE_YEAR);
   const colorbar = elements.colorbar;
+  const secondColorbar = elements["colorbar-2"];
   const legend = elements["map-legend"];
   const textColor = themeToken("--ob-viewer-colorbar-text", shared.theme === THEME_LIGHT ? "#14181d" : "#e6edf3");
+  // Two panels showing different variables (or units) are on two scales, and both are
+  // drawn: a reader should not have to click a panel to learn what its colours mean.
+  const shownPanels = panels.slice(0, shared.layout).filter(Boolean);
+  const split =
+    !isDiffView() &&
+    shownPanels.length > 1 &&
+    shownPanels.some((candidate) => candidate.state.variable !== shownPanels[0].state.variable || candidate.units !== shownPanels[0].units);
+  const scalePanels = split ? shownPanels : [panel];
+  const canvases = [colorbar, secondColorbar];
+  const prefixFor = (candidate) => (split ? `panel ${candidate.index + 1} · ` : "");
+  secondColorbar.hidden = true;
 
   // Year scope keeps its own colorbar untouched (design: don't touch year legend).
   if (shared.scope === SCOPE_WHOLE_YEAR) {
@@ -2885,11 +2901,15 @@ function updateSharedColorbar() {
       elements["layer-info"].textContent = `entire year · zoom ${view.zoom.toFixed(1)}×`;
       return;
     }
-    const nStarts = panel.yearMeta && panel.yearMeta.nStarts;
-    const biasMode = panel.yearMetric === YEAR_METRIC_BIAS;
-    drawColorbar(colorbar, panel.colormap, panel.range, {
-      label: `${biasMode ? "mean (model − obs)" : "mean |obs − model|"} over ${nStarts || "?"} start dates · ${panel.label} (${panel.units})`,
-      textColor,
+    scalePanels.forEach((candidate, index) => {
+      if (!candidate.colormap || !candidate.range) return;
+      const nStarts = candidate.yearMeta && candidate.yearMeta.nStarts;
+      const biasMode = candidate.yearMetric === YEAR_METRIC_BIAS;
+      canvases[index].hidden = false;
+      drawColorbar(canvases[index], candidate.colormap, candidate.range, {
+        label: `${prefixFor(candidate)}${biasMode ? "mean (model − obs)" : "mean |obs − model|"} over ${nStarts || "?"} start dates · ${candidate.label} (${candidate.units})`,
+        textColor,
+      });
     });
     // The start-date count is already on the colorbar caption above; do not repeat it.
     elements["layer-info"].textContent = `entire year · zoom ${view.zoom.toFixed(1)}×`;
@@ -2907,18 +2927,21 @@ function updateSharedColorbar() {
       setLayerInfo(panel);
       return;
     }
-    // The one bound both panels colour from, so the number under the bar is the number the
-    // dots were painted with, in one panel or in two.
-    const scale = class4CurrentScale();
-    colorbar.hidden = false;
-    drawColorbar(colorbar, CLASS4_COLORMAP, [0, scale || 1], {
-      label: `|obs − model| (${panel.units})`,
-      textColor,
-      // The dots skip the darkest sliver of the colormap; the bar has to skip it too, or the
-      // key names colours that are nowhere on the map.
-      ramp: [CLASS4_RAMP_START, CLASS4_RAMP_END],
+    // The bound each panel's dots were painted with, so the number under a bar is the
+    // number its dots mean: one bar for one variable, one per panel for two.
+    const scales = scalePanels.map((candidate, index) => {
+      const scale = class4CurrentScale(candidate);
+      canvases[index].hidden = false;
+      drawColorbar(canvases[index], CLASS4_COLORMAP, [0, scale || 1], {
+        label: `${prefixFor(candidate)}|obs − model| (${candidate.units})`,
+        textColor,
+        // The dots skip the darkest sliver of the colormap; the bar has to skip it too, or the
+        // key names colours that are nowhere on the map.
+        ramp: [CLASS4_RAMP_START, CLASS4_RAMP_END],
+      });
+      return { scale, units: candidate.units };
     });
-    renderClass4Legend(legend, panel, scale);
+    renderClass4Legend(legend, scales);
   } else if (mode === OVERLAY_EDDIES) {
     colorbar.hidden = true;
     renderEddyLegend(legend);
@@ -2926,18 +2949,18 @@ function updateSharedColorbar() {
     colorbar.hidden = true;
     renderTrajectoryLegend(legend);
   } else {
-    colorbar.hidden = false;
     hideMapLegend(legend);
-    const sameVariable = panels
-      .slice(0, shared.layout)
-      .every((candidate) => candidate.state.variable === panel.state.variable);
     // Which panel the scale describes leads the caption rather than trailing it: a
     // long variable name is ellipsized on the right, and that qualifier is the part a
     // reader with two panels in front of them cannot do without.
-    const prefix = isDiffView() ? "" : shared.layout > 1 ? (sameVariable ? "shared · " : `panel ${activePanelIndex + 1} · `) : "";
-    drawColorbar(colorbar, panel.colormap, panel.range, {
-      label: `${prefix}${panel.label} (${panel.units})`,
-      textColor,
+    const sharedPrefix = !isDiffView() && shared.layout > 1 && !split ? "shared · " : "";
+    scalePanels.forEach((candidate, index) => {
+      if (!candidate.colormap || !candidate.range) return;
+      canvases[index].hidden = false;
+      drawColorbar(canvases[index], candidate.colormap, candidate.range, {
+        label: `${sharedPrefix}${prefixFor(candidate)}${candidate.label} (${candidate.units})`,
+        textColor,
+      });
     });
   }
   setLayerInfo(panel);
@@ -2994,7 +3017,7 @@ function legendLine(color, label) {
 // Class-4 obs mode: the obs-error ramp is the primary key (drawn on the colorbar
 // canvas). This strip carries the density note (moved out of the right rail), the
 // muted-background note and the "?" helper.
-function renderClass4Legend(legend, panel, scale) {
+function renderClass4Legend(legend, scales) {
   const hostPanel = panels[0];
   const shown = hostPanel ? hostPanel.class4Count || 0 : 0;
   const visibleTotal = hostPanel ? hostPanel.class4VisibleTotal || shown : shown;
@@ -3007,7 +3030,7 @@ function renderClass4Legend(legend, panel, scale) {
     : `<strong>${formatCount(matched)} obs</strong>`;
   legend.hidden = false;
   legend.innerHTML =
-    `<span class="legend-note">${countText} · scale ≈ ${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(panel.units)} · region ${escapeHtml(regionDisplayName())}${weak}${legendHelpAnchor()}</span>`;
+    `<span class="legend-note">${countText} · scale ≈ ${scales.map(({ scale, units }) => `${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(units)}`).join(" / ")} · region ${escapeHtml(regionDisplayName())}${weak}${legendHelpAnchor()}</span>`;
   attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
 }
 
@@ -5294,6 +5317,7 @@ function selectElements() {
     "lead-play",
     "playback-speed",
     "colorbar",
+    "colorbar-2",
     "map-legend",
     "year-legend",
     "layer-info",

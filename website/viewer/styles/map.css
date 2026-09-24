@@ -375,6 +375,8 @@ SPDX-License-Identifier: EUPL-1.2
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
+/* The second panel's scale, drawn only when the two panels show different variables. */
+#colorbar-2[hidden] { display: none; }
 /* The one reading that stays on the map: what the view is doing, in its corner. */
 .layer-info {
   position: absolute;
