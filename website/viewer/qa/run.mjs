@@ -34,36 +34,46 @@ const expectationsPath = path.join(qaDir, "expectations.json");
 // all eight on device pixel ratio crossed with viewport width, which bought four ways to
 // discover the same rounding drift; trading two of those for a swipe cell and an overlay
 // cell covers code paths nothing else in the harness ever entered, at the same runtime.
+// A hashless first visit opens the two-panel example comparison. The rendering cells and
+// the layout expectations were measured on the single-panel view, so they ask for it.
+const SINGLE_PANEL_HASH = "#layout=1";
+
 const MATRIX = [
   {
     name: "gpu-dpr1-1440",
+    hash: SINGLE_PANEL_HASH,
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
   },
   {
     name: "gpu-dpr1-1437",
+    hash: SINGLE_PANEL_HASH,
     viewport: { width: 1437, height: 900 },
     deviceScaleFactor: 1,
   },
   {
     name: "gpu-dpr2-1440",
+    hash: SINGLE_PANEL_HASH,
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 2,
   },
   {
     name: "nogpu-dpr1-1440",
+    hash: SINGLE_PANEL_HASH,
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
     launchArgs: ["--disable-gpu"],
   },
   {
     name: "nogpu-dpr2-1440",
+    hash: SINGLE_PANEL_HASH,
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 2,
     launchArgs: ["--disable-gpu"],
   },
   {
     name: "nogpu-dpr2-1437",
+    hash: SINGLE_PANEL_HASH,
     viewport: { width: 1437, height: 900 },
     deviceScaleFactor: 2,
     launchArgs: ["--disable-gpu"],
@@ -356,7 +366,7 @@ async function seedExpectations(playwright, baseUrl) {
       deviceScaleFactor: 1,
     });
     const page = await context.newPage();
-    await page.goto(`${baseUrl}${viewerUrlPath}`, { waitUntil: "load" });
+    await page.goto(`${baseUrl}${viewerUrlPath}${SINGLE_PANEL_HASH}`, { waitUntil: "load" });
 
     const slider = page.locator("#lead-day");
     await scrubToLeadTen(page, slider);

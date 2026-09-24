@@ -396,6 +396,25 @@ SPDX-License-Identifier: EUPL-1.2
 }
 .layer-info:empty { display: none; }
 
+/* First-visit label: says the opening view is one example, not the viewer's verdict. */
+.example-note {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 5;
+  max-width: min(34rem, calc(100% - 9rem));
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  color: var(--text);
+  font-size: var(--text-caption);
+  background: var(--readout-bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
 /* Hovered observation, beside the cursor. Same surface, border and mono type as the
    readout pill and the chart tooltips; fixed positioning keeps it off the map's layout. */
 .class4-tooltip {

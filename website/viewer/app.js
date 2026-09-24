@@ -290,6 +290,36 @@ function otherSlug(slug) {
   );
 }
 
+// A first visit (no hash at all) opens on one worked comparison instead of a lone field:
+// a forecast against the independent reanalysis, same variable, mid-horizon lead. Both
+// sit at their native resolution; the 1-degree pair loaded no faster (about 0.1 s).
+const EXAMPLE_VIEW = {
+  datasets: ["glonet", "glorys"],
+  variable: "sea_water_potential_temperature",
+  leadDay: 5,
+  note: "Example comparison: GLONET forecast vs GLORYS reanalysis, surface temperature. Change any selector to explore.",
+};
+let exampleViewActive = false;
+
+function exampleViewAvailable() {
+  return EXAMPLE_VIEW.datasets.every((slug) => datasetCatalog.some((entry) => entry.slug === slug));
+}
+
+// The note names what is on screen, so it goes the moment the screen stops being that
+// example (another dataset, variable or layout) and does not come back.
+function syncExampleNote() {
+  if (
+    exampleViewActive &&
+    (shared.layout !== 2 ||
+      panels.slice(0, 2).some(
+        (panel, index) => !panel || panel.state.dataset !== EXAMPLE_VIEW.datasets[index] || panel.state.variable !== EXAMPLE_VIEW.variable,
+      ))
+  ) {
+    exampleViewActive = false;
+  }
+  elements["example-note"].hidden = !exampleViewActive;
+}
+
 function defaultPanelState(index) {
   // Forecast 1's dataset when it already exists, so a 1 -> 2 switch pairs against what
   // is actually on screen rather than against the first catalog entry.
@@ -5233,6 +5263,7 @@ function writeHash() {
   for (let i = 0; i < shared.layout; i += 1) parameters.set(`p${i}`, encodePanel(panels[i]));
   const encoded = `#${parameters.toString()}`;
   if (encoded !== location.hash) history.replaceState(null, "", encoded);
+  syncExampleNote();
 }
 
 function readHash() {
@@ -5328,6 +5359,7 @@ function selectElements() {
     "start-date",
     "lead-day",
     "lead-ticks",
+    "example-note",
     "lead-value",
     "overlay-mode",
     "overlay-region",
@@ -5427,6 +5459,12 @@ async function main() {
   }
 
   const parameters = readHash();
+  if (!location.hash.slice(1) && exampleViewAvailable()) {
+    exampleViewActive = true;
+    shared.layout = 2;
+    shared.leadDay = EXAMPLE_VIEW.leadDay;
+    setSharedDisplayMode(DISPLAY_SIDE_BY_SIDE);
+  }
   // Only 1 or 2 panels are supported; old 4-panel hashes degrade to 2.
   if (!Number.isFinite(shared.layout) || shared.layout < 1) shared.layout = 1;
   else if (shared.layout > 2) shared.layout = 2;
@@ -5449,6 +5487,10 @@ async function main() {
   elements["eddy-reference"].value = shared.eddyReference;
 
   for (let i = 0; i < shared.layout; i += 1) if (!panels[i]) panels[i] = buildPanel(i);
+  if (exampleViewActive) {
+    EXAMPLE_VIEW.datasets.forEach((dataset, index) => Object.assign(panels[index].state, { dataset, variable: EXAMPLE_VIEW.variable }));
+    elements["example-note"].textContent = EXAMPLE_VIEW.note;
+  }
   applyPanelHash(parameters);
   clampView();
   writeHash();
