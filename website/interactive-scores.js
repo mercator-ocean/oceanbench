@@ -30,17 +30,17 @@ const PALETTE = {
   red:  { mid: [244, 165, 130], end: [178, 24, 43] },
   light: [255, 255, 255],
   /*
-   * The dark scale is the one place colour survives on a dark page: a blue
-   * better side and a matching muted red worse one, both dark enough that
-   * one light text colour clears 4.5:1 on every tile, so no cell flips to
-   * dark text and fights the light text around it. The neutral is the grey
-   * surface colour, which makes a zero-difference cell read as part of the
-   * table rather than as a tile.
+   * The dark scale steps in lightness as well as hue: the neutral end is the
+   * panel surface the table sits on, so a zero-difference cell reads as part
+   * of the table, and each step away from it is lighter and more saturated,
+   * a blue better side and a red worse one at matched lightness. The
+   * extremes are the panel blended 70% towards #388bfd and #f85149, which
+   * keeps one light text colour above 4.5:1 on every tile.
    */
-  darkScale: [[37, 89, 148], [32, 56, 88], [21, 21, 23], [112, 56, 52], [169, 50, 58]],
+  darkScale: [[46, 105, 187], [35, 70, 117], [22, 27, 34], [108, 48, 49], [180, 65, 61]],
 };
 
-const DARK_CELL_TEXT = "rgba(240, 240, 240, 0.9)";
+const DARK_CELL_TEXT = "#e6edf3";
 
 function isDarkMode() {
   return document.body.classList.contains("quarto-dark");

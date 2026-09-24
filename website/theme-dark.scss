@@ -7,37 +7,35 @@
 /*-- scss:defaults --*/
 
 /*
- * Dark palette, taken from the greyscale OceanBench logo: its whites and
- * greys are the whole scale, so the dark page is monochrome and colour is
- * reserved for the score tiles. The same values are mirrored in the
- * `body.quarto-dark` token block of styles.css, which is what the
- * hand-written components read; keep the two in step.
+ * Dark palette: blue-tinted neutrals with one accent, the brand sky blue of
+ * the logo. The same values are mirrored in the `body.quarto-dark` token
+ * block of styles.css, which is what the hand-written components read; keep
+ * the two in step.
  *
- * The scale is deliberately shallow and never reaches pure black or pure
- * white: the page is the darkest large area, surfaces step up towards the
- * viewer, and text stops short of white so it does not bloom on them.
- * With no accent hue left, a link is marked by its underline.
+ * The neutrals step up towards the viewer: the page is the darkest large
+ * area, panels (the score table, cards) sit one step above it and raised
+ * chrome (the controls bar, dropdowns) one more. Text stops at a soft white
+ * so nothing large blooms, and the accent is kept for what can be acted on:
+ * links, the active tab and chip, focus rings and the baseline marker.
  */
-$ob-page-bg: #0e0e10;
-$ob-surface: #151517;
-$ob-surface-raised: #1c1c1f;
-$ob-navbar-bg: #0a0a0b;
-$ob-border: rgba(255, 255, 255, 0.12);
-$ob-grid-border: rgba(255, 255, 255, 0.08);
-$ob-text: #d0d0d0;
-$ob-heading: #f0f0f0;
-$ob-muted: #909090;
-$ob-accent: #e6e6e6;
-$ob-accent-hover: #ffffff;
-$ob-active: #f0f0f0;
-$ob-active-contrast: $ob-page-bg;
-$ob-table-text: rgba(240, 240, 240, 0.9);
+$ob-page-bg: #0d1117;
+$ob-surface: #161b22;
+$ob-surface-raised: #1c2330;
+$ob-navbar-bg: #0d1117;
+$ob-border: #30363d;
+$ob-grid-border: rgba(240, 246, 252, 0.06);
+$ob-text: #c9d1d9;
+$ob-heading: #e6edf3;
+$ob-muted: #8b949e;
+$ob-accent: #80c5de;
+$ob-accent-hover: #a8d8ea;
+$ob-table-text: #e6edf3;
 
 $primary: $ob-accent;
 $secondary: $ob-muted;
 $link-color: $ob-accent;
 $link-hover-color: $ob-accent-hover;
-$link-decoration: underline;
+$link-decoration: none;
 
 $body-bg: $ob-page-bg;
 $body-color: $ob-text;
@@ -57,25 +55,34 @@ $input-placeholder-color: $ob-muted;
 $dropdown-bg: $ob-surface-raised;
 $dropdown-border-color: $ob-border;
 $dropdown-link-color: $ob-text;
-$dropdown-link-hover-bg: rgba(255, 255, 255, 0.07);
+$dropdown-link-hover-bg: rgba(128, 197, 222, 0.1);
 $dropdown-link-hover-color: $ob-heading;
 
-$table-color: $ob-table-text;
+$table-color: $ob-text;
 $table-bg: transparent;
-$table-border-color: $ob-grid-border;
-$table-striped-bg: rgba(255, 255, 255, 0.035);
-$table-striped-color: $ob-table-text;
-$table-hover-bg: rgba(255, 255, 255, 0.04);
-$table-hover-color: $ob-table-text;
+$table-border-color: $ob-border;
+$table-striped-bg: rgba(240, 246, 252, 0.03);
+$table-striped-color: $ob-text;
+$table-hover-bg: rgba(240, 246, 252, 0.04);
+$table-hover-color: $ob-text;
 
 $navbar-bg: $ob-navbar-bg;
 $navbar-dark-bg: $ob-navbar-bg;
+$navbar-fg: $ob-text;
+$navbar-hl: $ob-heading;
 
-$box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
-$box-shadow-sm: 0 3px 10px rgba(0, 0, 0, 0.45);
+$footer-bg: $ob-page-bg;
+$footer-fg: $ob-muted;
+
+$box-shadow: 0 6px 20px rgba(1, 4, 9, 0.55);
+$box-shadow-sm: 0 3px 10px rgba(1, 4, 9, 0.5);
 
 /*-- scss:rules --*/
 
-a:visited {
-  color: $ob-accent;
+.navbar {
+  border-bottom: 1px solid $ob-border;
+}
+
+.nav-footer {
+  border-top: 1px solid $ob-border;
 }

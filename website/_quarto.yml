@@ -8,6 +8,8 @@ project:
   post-render: python generate_report_redirects.py
   resources:
     - assets/land-110m.json
+    - assets/favicon-dark.png
+    - assets/oceanbench-logo-dark.png
 website:
   title: "OceanBench"
   favicon: favicon-light.png
