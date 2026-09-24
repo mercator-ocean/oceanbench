@@ -3377,10 +3377,15 @@ async function renderRailYearRmsd(shown) {
     signed: biasMode,
     yBound,
   });
+  const bandNote = !lines.some((line) => line.ciLow)
+    ? ""
+    : biasMode
+      ? " Band: analytic 95% interval, mean ± 1.96 sd/√n."
+      : " Band: 95% bootstrap over the match-ups, a lower bound since nearby obs are correlated.";
   note.textContent = lines.length
     ? biasMode
-      ? "Pooled mean(model − obs) per start date, same method as the official scores. Click a point to open that start date."
-      : "Class-4 RMSE per start date, same method as the official scores (pooled over all match-ups for that start). Click a point to open that start date."
+      ? `Pooled mean(model − obs) per start date, same method as the official scores.${bandNote} Click a point to open that start date.`
+      : `Class-4 RMSE per start date, same method as the official scores (pooled over all match-ups for that start).${bandNote} Click a point to open that start date.`
     : biasMode
       ? "Bias by start not available for this dataset/region."
       : "Year RMSE-by-start not available for this dataset/region.";

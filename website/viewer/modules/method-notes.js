@@ -67,8 +67,11 @@ export const METHOD_NOTES = {
     body:
       "Class-4 RMSE for each start date, pooled over all match-ups of that start, same " +
       "method as the official scores. Bias mode shows the pooled mean of model minus obs. " +
-      "The shaded band is a 95% bootstrap confidence interval. Click a point to open that " +
-      "start date.",
+      "The shaded band is a 95% interval for each start. In RMSE mode it is a bootstrap " +
+      "over that start's match-ups, which treats them as independent; spatial and " +
+      "along-track correlation make the true uncertainty larger, so read it as a lower " +
+      "bound. In bias mode it is analytic, mean ± 1.96 sd/√n (normal approximation), with " +
+      "the same caveat. Click a point to open that start date.",
   },
 
   // Year error geography map / its colorbar.
