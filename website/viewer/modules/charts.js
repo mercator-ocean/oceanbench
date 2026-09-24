@@ -12,7 +12,9 @@ import { formatFixed } from "./render.js";
 
 const VIEW_WIDTH = 360;
 const VIEW_HEIGHT = 220;
-const PAD_LEFT = 40;
+// Room for a five-character tick plus the rotated axis title beside it; at 40 the two
+// overlapped.
+const PAD_LEFT = 50;
 const PAD_RIGHT = 12;
 const PAD_TOP = 14;
 const PAD_BOTTOM = 30;
@@ -67,13 +69,23 @@ function axes(area, xLabel, yLabel) {
   );
 }
 
+// Maxima whose quarters are short numbers (0.3, 0.6, 0.9, 1.2 rather than 0.1875), since
+// the gridlines sit at quarters of this value and each one carries a tick label.
 function niceMax(value) {
   if (!(value > 0)) return 1;
   const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
-  for (const step of [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10]) {
+  for (const step of [1, 1.2, 1.6, 2, 2.4, 3.2, 4, 6, 8, 10]) {
     if (value <= step * magnitude) return step * magnitude;
   }
   return 10 * magnitude;
+}
+
+// The v component shares its forecast's colour with u, so it is told apart by a dash.
+const DASH_PATTERN = "5 3";
+const DASH_PATTERN_SHORT = "3 2";
+
+function isDashedSeries(key) {
+  return key === "northward" || String(key).endsWith(":northward");
 }
 
 function renderLegend(area, entries, columnStride = 0) {
@@ -81,10 +93,10 @@ function renderLegend(area, entries, columnStride = 0) {
     .map((entry, index) => {
       const x = area.x0 + index * columnStride;
       const y = 2 + index * (columnStride ? 0 : 14);
-      return (
-        `<rect x="${x}" y="${y}" width="9" height="9" rx="2" fill="${entry.color}"/>` +
-        `<text x="${x + 12}" y="${y + 8}" class="legend">${escapeText(entry.label)}</text>`
-      );
+      const swatch = entry.dashed
+        ? `<line x1="${x}" y1="${y + 4.5}" x2="${x + 9}" y2="${y + 4.5}" stroke="${entry.color}" stroke-width="2" stroke-dasharray="${DASH_PATTERN_SHORT}"/>`
+        : `<rect x="${x}" y="${y}" width="9" height="9" rx="2" fill="${entry.color}"/>`;
+      return swatch + `<text x="${x + 12}" y="${y + 8}" class="legend">${escapeText(entry.label)}</text>`;
     })
     .join("");
 }
@@ -153,7 +165,8 @@ export function leadCurveSVG(
       .map((row) => `${xOf(row.lead_day).toFixed(1)},${yOf(row.ci_low ?? row.mean).toFixed(1)}`);
     body += `<polygon points="${bandTop.concat(bandBottom).join(" ")}" fill="${color}" fill-opacity="0.16" stroke="none"/>`;
     const line = rows.map((row, index) => `${index === 0 ? "M" : "L"}${xOf(row.lead_day).toFixed(1)} ${yOf(row.mean).toFixed(1)}`);
-    body += `<path d="${line.join(" ")}" fill="none" stroke="${color}" stroke-width="1.8"/>`;
+    const dash = isDashedSeries(reference) ? ` stroke-dasharray="${DASH_PATTERN}"` : "";
+    body += `<path d="${line.join(" ")}" fill="none" stroke="${color}" stroke-width="1.8"${dash}/>`;
     for (const row of rows) {
       const x = xOf(row.lead_day).toFixed(1);
       const y = yOf(row.mean).toFixed(1);
@@ -163,10 +176,17 @@ export function leadCurveSVG(
   }
 
   const legendMarkup = legend
-    ? renderLegend(area, references.map((reference) => ({ color: seriesColor(reference), label: labels.get(reference) || reference })))
+    ? renderLegend(
+        area,
+        references.map((reference) => ({
+          color: seriesColor(reference),
+          label: labels.get(reference) || reference,
+          dashed: isDashedSeries(reference),
+        })),
+      )
     : "";
 
-  return svgOpen(title) + axes(area, "lead day", unit || "RMSE") + body + legendMarkup + interactionLayer() + "</svg>";
+  return svgOpen(title) + axes(area, "lead day", unit ? `RMSE (${unit})` : "RMSE") + body + legendMarkup + interactionLayer() + "</svg>";
 }
 
 /**
@@ -439,7 +459,7 @@ export function rmsdByDepthSVG(
 
   // Depth axis reads downward; the tooltip's crosshair (a vertical line) is not meaningful
   // for a profile, so only the point readout is used (interactionLayer supplies the tooltip).
-  return svgOpen(title) + axes(area, unit || "RMSE", "depth") + body + legend + interactionLayer() + "</svg>";
+  return svgOpen(title) + axes(area, unit ? `RMSE (${unit})` : "RMSE", "depth") + body + legend + interactionLayer() + "</svg>";
 }
 
 /**
@@ -571,7 +591,7 @@ function emptyChart(title, message) {
 }
 
 // A tick labels the gridline it sits on, so it has to be that line's value. Gridlines are
-// quarters of a "nice" maximum (1, 1.5, 2, 2.5, 3, 4, 5, 7.5 times a power of ten), and every
+// quarters of a "nice" maximum (1, 1.2, 1.6, 2, 2.4, 3.2, 4, 6, 8 times a power of ten), and every
 // such quarter is exact in four significant digits. Rounding to two decimals printed 0.07 on
 // the line at 0.075 and 2e+3 on the line at 1875, which is a reader misreading the whole chart
 // by up to 7% off the axis alone.
