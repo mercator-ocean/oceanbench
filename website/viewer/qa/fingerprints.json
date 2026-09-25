@@ -14,17 +14,17 @@
   },
   "deviceScaleFactor": 1,
   "states": {
-    "field-height-lead1": "p0[field=832x730:e15c007b,overlay=832x730:85ce45c5]",
-    "field-height-lead10": "p0[field=832x730:031c662b,overlay=832x730:85ce45c5]",
-    "field-temperature-lead5": "p0[field=832x730:4f53420d,overlay=832x730:85ce45c5]",
-    "field-currents-lead3": "p0[field=832x730:eb4421fa,overlay=832x730:85ce45c5]",
-    "two-panel-side-lead1": "p0[field=416x730:e9c4ee17,overlay=416x730:c64d71c5] p1[field=416x730:091c465c,overlay=416x730:c64d71c5]",
-    "two-panel-swipe-lead1": "p0[field=832x687:e3696d2f,overlay=832x687:8a11b9c5] p1[field=1x1:3e5151fa,overlay=1x1:4b95f515]",
-    "two-panel-difference-lead1": "p0[field=832x687:27eba2a9,overlay=832x687:8a11b9c5] p1[field=1x1:3e5151fa,overlay=1x1:4b95f515]",
-    "overlay-class4-lead1": "p0[field=832x730:ce5870be,overlay=832x730:70901fb2]",
-    "overlay-eddies-lead1": "p0[field=832x730:ce5870be,overlay=832x730:f08ac8e8]",
+    "field-height-lead1": "p0[field=832x730:40020f4e,overlay=832x730:85ce45c5]",
+    "field-height-lead10": "p0[field=832x730:a0c0c43f,overlay=832x730:85ce45c5]",
+    "field-temperature-lead5": "p0[field=832x730:36a4418d,overlay=832x730:85ce45c5]",
+    "field-currents-lead3": "p0[field=832x730:1b4554a4,overlay=832x730:85ce45c5]",
+    "two-panel-side-lead1": "p0[field=416x730:0da3d38f,overlay=416x730:c64d71c5] p1[field=416x730:b5b5b5c6,overlay=416x730:c64d71c5]",
+    "two-panel-swipe-lead1": "p0[field=832x687:4536227c,overlay=832x687:8a11b9c5] p1[field=1x1:805d75c7,overlay=1x1:4b95f515]",
+    "two-panel-difference-lead1": "p0[field=832x687:3cd40fea,overlay=832x687:8a11b9c5] p1[field=1x1:805d75c7,overlay=1x1:4b95f515]",
+    "overlay-class4-lead1": "p0[field=832x730:4d213066,overlay=832x730:70901fb2]",
+    "overlay-eddies-lead1": "p0[field=832x730:4d213066,overlay=832x730:f08ac8e8]",
     "year-scope-error": "p0[field=832x730:82482821,overlay=832x730:85ce45c5]",
     "year-scope-bias": "p0[field=832x730:c8baa56c,overlay=832x730:85ce45c5]",
-    "region-ibi-zoomed": "p0[field=832x730:e9095317,overlay=832x730:85ce45c5]"
+    "region-ibi-zoomed": "p0[field=832x730:638e68c2,overlay=832x730:85ce45c5]"
   }
 }
