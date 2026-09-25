@@ -64,6 +64,37 @@ SPDX-License-Identifier: EUPL-1.2
     column-gap: 0;
     row-gap: 1px;
   }
+  /* A head floating over a stacked phone map hid a third of it, and the fit centred the
+     world on the whole box, so the part left visible was the Southern Ocean. The head
+     becomes a compact strip above the map instead, so the fit measures only the map. */
+  .panel-head {
+    position: static;
+    gap: 0.15rem 0.3rem;
+    padding: 0.2rem 0.5rem;
+    min-height: 0;
+    background: var(--surface);
+    backdrop-filter: none;
+  }
+  .panel-head select {
+    height: 1.6rem;
+    min-width: 0;
+    padding: 0 0.25rem;
+    font-size: 0.75rem;
+  }
+  /* Both selects and the label share one line on a 390px phone; the badge takes the second. */
+  .panel-head .panel-dataset { max-width: 7rem; }
+  .panel-head .panel-variable { max-width: 8.5rem; }
+  .panel-forecast-label { font-size: 0.75rem; }
+  .panel-badge { font-size: 0.68rem; }
+  /* The first-visit note takes its own line above the maps, since at this width any
+     corner of the map it could sit in is part of a panel. */
+  .example-note {
+    position: static;
+    order: -1;
+    max-width: none;
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
 }
 
 /* The map column, not the window, decides how much the strip can ask for. As it
