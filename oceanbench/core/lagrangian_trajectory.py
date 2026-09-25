@@ -15,6 +15,7 @@ from parcels import (
     ParticleSet,
     JITParticle,
     AdvectionRK4,
+    FieldSetWarning,
     Variable as ParcelsVariable,
 )
 import xarray
@@ -23,7 +24,7 @@ import xarray
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
 )
-from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.dataset_utils import Dimension, Variable, is_global_longitude_grid
 from oceanbench.core.lagrangian_support import (
     LAGRANGIAN_ROW_LABEL,
     all_weekly_lagrangian_deviations,
@@ -65,6 +66,13 @@ LEAD_DAY_START = 2
 def _delete_error_particle(particle, _fieldset, _time):
     if particle.state == StatusCode.ErrorOutOfBounds:
         particle.delete()
+
+
+def _wrap_particle_longitude(particle, fieldset, time):
+    if particle.lon < fieldset.first_longitude:
+        particle_dlon += 360  # noqa
+    elif particle.lon >= fieldset.first_longitude + 360:
+        particle_dlon -= 360  # noqa
 
 
 def deviation_of_lagrangian_trajectories(
@@ -252,6 +260,13 @@ def _get_all_particles_positions(
     dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
     field_set = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
     field_set = _set_domain_bounds(field_set, dataset)
+    is_global = is_global_longitude_grid(dataset.longitude.values)
+    if is_global:
+        # A global grid gets a periodic halo so a particle crosses the dateline instead of leaving the domain
+        field_set.add_constant("first_longitude", float(dataset.longitude.values[0]))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FieldSetWarning)
+            field_set.add_periodic_halo(zonal=True)
 
     particle_set = ParticleSet.from_list(
         fieldset=field_set,
@@ -264,6 +279,7 @@ def _get_all_particles_positions(
 
     kernels = [
         AdvectionRK4,
+        *([_wrap_particle_longitude] if is_global else []),
         _delete_error_particle,
     ]  # Keep your original kernel setup
 
@@ -368,7 +384,13 @@ def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset)
     latitude_reference_set_rad = numpy.deg2rad(reference_set["lat"])
 
     dlatitude = (model_set["lat"] - reference_set["lat"]) * 111  # meters
-    dlongitude = (model_set["lon"] - reference_set["lon"]) * 111 * numpy.cos(latitude_reference_set_rad)
+    longitude_difference = model_set["lon"] - reference_set["lon"]
+    longitude_difference = xarray.where(
+        abs(longitude_difference) > 180,
+        longitude_difference - 360 * numpy.sign(longitude_difference),
+        longitude_difference,
+    )
+    dlongitude = longitude_difference * 111 * numpy.cos(latitude_reference_set_rad)
 
     distance = numpy.sqrt(dlatitude**2 + dlongitude**2)  # shape: (particle, time)
     distance = distance.mean(axis=0)  # shape: (time,)

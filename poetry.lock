@@ -4721,4 +4721,4 @@ jupyter = ["ipytree (>=0.2.2)", "ipywidgets (>=8.0.0)", "notebook"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12.9"
-content-hash = "4551940bbca1fba97933525b29119d38acead0d72f76311338ee67074113f570"
+content-hash = "f13a913a1ea9ba5720fe394a7ccd0e90399c7a5f43172d3daf5bd8fca83ef264"

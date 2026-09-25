@@ -4,10 +4,16 @@
 
 from enum import Enum
 
+import numpy
+
 from oceanbench.core.climate_forecast_standard_names import (
     StandardDimension,
     StandardVariable,
 )
+
+
+SPATIAL_COORDINATE_ALIGNMENT_ATOL = 1e-4
+MISSING_COUNT_COLUMN = "Missing"
 
 
 class Variable(Enum):
@@ -34,6 +40,12 @@ class Dimension(Enum):
 
     def key(self) -> str:
         return self.value.value if isinstance(self.value, StandardDimension) else self.value
+
+
+def is_global_longitude_grid(longitudes: numpy.ndarray) -> bool:
+    """A global grid stops one step short of closing the circle."""
+    longitude_step = (longitudes[-1] - longitudes[0]) / (longitudes.size - 1)
+    return bool(abs(longitudes[-1] - longitudes[0] + longitude_step - 360) < longitude_step / 2)
 
 
 class DepthLevel(Enum):

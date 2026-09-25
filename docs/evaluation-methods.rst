@@ -28,9 +28,19 @@ OceanBench evaluates challengers against the following reference datasets:
 
 You can open and explore these datasets by using the :mod:`oceanbench.datasets.reference` module.
 
+The OceanBench ocean mask says which cells of the twelfth of a degree grid OceanBench treats as ocean, at seven levels: the six standard depths listed below and 643.57 m, the first native level below 600 m, used to bracket the deepest Class IV observations. A cell is ocean when it is wet in both official Copernicus Marine static masks, the one of the GLO12 analysis and forecast product and the one of the GLORYS12 reanalysis product, so the scored population never depends on which reference a metric uses. The mask is built once from those two datasets and stored as an artefact pinned by the SHA256 checksum of its array bytes, which is verified every time the mask is loaded.
+
 Class IV scores follow the IV-TT CLASS-4 framework (`Hernandez et al., 2009 <https://doi.org/10.5670/oceanog.2009.71>`_, `Ryan et al., 2015 <https://doi.org/10.1080/1755876X.2015.1022330>`_, `Divakaran et al., 2015 <https://doi.org/10.1080/1755876X.2015.1022333>`_): each forecast is compared with the observations at the observation time, position and depth, and the RMSD is reported per variable, depth bin and lead day. The observation selection and quality control applied when building the observation store are documented in the README above. Temperature and salinity are scored in depth bins down to 600 m. A challenger whose deepest level is shallower than 600 m is still scored on the full range, with its deepest level standing in for the missing depths.
 
+Class IV scores the same observations for every challenger and every reference, whatever their grids. They are selected from the OceanBench ocean mask alone, with two rules:
+
+- Shallow cut: an observation is dropped when the seafloor next to it is shallower than 92 m, that is when one of its four surrounding twelfth of a degree cells is ocean at the surface but land at 92 m. Large shallow seas are kept: the observation stays when that shallow area covers more than 100,000 km², such as the Baltic Sea. Shallow cells touching by a side or a corner, including across the dateline, count as one area.
+- Coastline: an observation is kept only when it lies in open water at a quarter of a degree, the coarsest native challenger grid: its four surrounding quarter degree cells must be ocean at the first mask depth at or below the observation. A quarter degree cell counts as ocean only when all nine twelfth of a degree cells inside it are.
+
+``Observations`` counts this set at the first lead day. A challenger with no value for one of these observations gets it counted in the ``Missing`` column, at the first lead day, instead of silently skipped.
+
 For gridded RMSD metrics, OceanBench computes an area-weighted spatial mean of squared errors using ``cos(latitude)`` weights, so each grid cell contributes in proportion to the ocean area it represents rather than counting equally, ignoring missing land values during the weighted reduction, then averages the daily RMSE over forecast initialization days.
+A gridded cell is scored when the ocean mask says ocean there and both the challenger and the reference have a value. For a challenger coarser than a twelfth of a degree, the nearest mask cell is used. An ocean cell where the reference has a value but the challenger has none is counted per variable and depth in ``Missing``, and its area weighted share in ``Missing fraction``. Both are averaged over initialization and lead days and do not change the RMSD.
 
 Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
 **********************************************************************************************

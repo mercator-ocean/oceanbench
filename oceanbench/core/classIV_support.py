@@ -2,9 +2,13 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from typing import NamedTuple
+
 import numpy
 import pandas
 import xarray
+from scipy import ndimage, sparse
+from scipy.sparse import csgraph
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import (
@@ -13,9 +17,13 @@ from oceanbench.core.dataset_utils import (
     Dimension,
     VARIABLE_DISPLAY_ORDER,
     VARIABLE_METADATA,
+    MISSING_COUNT_COLUMN,
+    SPATIAL_COORDINATE_ALIGNMENT_ATOL,
     Variable,
+    is_global_longitude_grid,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
+from oceanbench.core.ocean_mask import OCEAN_MASK_STANDARD_DEPTHS
 from oceanbench.core.remote_http import with_remote_http_retries
 from oceanbench.core.references.observations import load_mean_dynamic_topography
 from oceanbench.core.resolution import get_dataset_resolution
@@ -25,6 +33,28 @@ REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 VELOCITY_TARGET_DEPTH_METERS = 15.0
 OBSERVATION_COUNT_COLUMN = "Observations"
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
+
+# A cell is shallow when it is wet at the surface and dry at 92 metres.
+CLASS4_SHALLOW_DEPTH = OCEAN_MASK_STANDARD_DEPTHS[2]
+CLASS4_SHALLOW_REGION_MINIMUM_AREA_SQUARE_KILOMETERS = 100_000.0
+EARTH_RADIUS_KILOMETERS = 6371.0
+
+# The quarter degree model grid, centred on every third point of the twelfth of a degree mask.
+CLASS4_COARSE_GRID_FACTOR = 3
+CLASS4_COARSE_GRID_STEP_DEGREES = 0.25
+
+
+class _Class4PopulationLayers(NamedTuple):
+    depths: numpy.ndarray
+    latitudes: numpy.ndarray
+    longitudes: numpy.ndarray
+    is_shallow: numpy.ndarray
+    is_in_large_shallow_region: numpy.ndarray
+    coarse_cells_are_wet: numpy.ndarray
+
+
+# The layers are derived once per mask object; a DataArray cannot key an lru_cache.
+_CLASS4_POPULATION_LAYERS_CACHE: dict[int, tuple[xarray.DataArray, _Class4PopulationLayers]] = {}
 
 
 def _compute_with_remote_retries(operation_name: str, data):
@@ -239,8 +269,36 @@ def _convert_forecast_ssh_to_sla(
     model_dataset = rename_dataset_with_standard_names(model_variable.to_dataset(name=variable_key))
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
-    mean_dynamic_topography = load_mean_dynamic_topography(resolution)
+    mean_dynamic_topography = _mean_dynamic_topography_on_challenger_grid(
+        load_mean_dynamic_topography(resolution),
+        model_variable,
+    )
     return model_variable - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+
+
+def _mean_dynamic_topography_on_challenger_grid(
+    mean_dynamic_topography: xarray.DataArray,
+    model_variable: xarray.DataArray,
+) -> xarray.DataArray:
+    for coordinate_name in (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()):
+        challenger_values = model_variable[coordinate_name].values
+        mean_dynamic_topography_values = mean_dynamic_topography[coordinate_name].values
+        nearest_indexes = pandas.Index(mean_dynamic_topography_values).get_indexer(
+            challenger_values, method="nearest", tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL
+        )
+        is_inside = (challenger_values > mean_dynamic_topography_values.min() - SPATIAL_COORDINATE_ALIGNMENT_ATOL) & (
+            challenger_values < mean_dynamic_topography_values.max() + SPATIAL_COORDINATE_ALIGNMENT_ATOL
+        )
+        if (nearest_indexes[is_inside] < 0).any():
+            raise ValueError(
+                f"Challenger {coordinate_name} coordinates do not match the mean dynamic topography grid "
+                f"within tolerance {SPATIAL_COORDINATE_ALIGNMENT_ATOL}"
+            )
+        challenger_coordinate = {coordinate_name: model_variable[coordinate_name]}
+        mean_dynamic_topography = mean_dynamic_topography.reindex(
+            challenger_coordinate, method="nearest", tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL
+        ).assign_coords(challenger_coordinate)
+    return mean_dynamic_topography
 
 
 def prepare_class4_model_variable(
@@ -248,6 +306,19 @@ def prepare_class4_model_variable(
     variable_key: str,
 ) -> xarray.DataArray:
     return _convert_forecast_ssh_to_sla(model_variable, variable_key)
+
+
+def _bracketing_level_indices(
+    sorted_depths: numpy.ndarray,
+    target_depths: numpy.ndarray,
+) -> tuple[numpy.ndarray, numpy.ndarray]:
+    insert_idx = numpy.searchsorted(sorted_depths, target_depths)
+    idx_upper = numpy.clip(insert_idx, 0, len(sorted_depths) - 1)
+    idx_lower = numpy.clip(insert_idx - 1, 0, len(sorted_depths) - 1)
+
+    exact_mask = sorted_depths[idx_upper] == target_depths
+    idx_lower = numpy.where(exact_mask, idx_upper, idx_lower)
+    return idx_lower, idx_upper
 
 
 def _interpolate_vertically_bracket(
@@ -263,12 +334,7 @@ def _interpolate_vertically_bracket(
     sorted_depths = model_depths[sort_order]
     sorted_profiles = profiles[sort_order, :]
 
-    insert_idx = numpy.searchsorted(sorted_depths, target_depths)
-    idx_upper = numpy.clip(insert_idx, 0, len(sorted_depths) - 1)
-    idx_lower = numpy.clip(insert_idx - 1, 0, len(sorted_depths) - 1)
-
-    exact_mask = sorted_depths[idx_upper] == target_depths
-    idx_lower = numpy.where(exact_mask, idx_upper, idx_lower)
+    idx_lower, idx_upper = _bracketing_level_indices(sorted_depths, target_depths)
 
     obs_indices = numpy.arange(observation_count)
     lower_values = sorted_profiles[idx_lower, obs_indices]
@@ -288,8 +354,8 @@ def _interpolate_vertically_bracket(
             upper_values[different] - lower_values[different]
         )
 
-    invalid = numpy.isnan(lower_values) | numpy.isnan(upper_values)
-    result[~invalid] = interpolated[~invalid]
+    bracket_is_valid = ~numpy.isnan(lower_values) & ~numpy.isnan(upper_values)
+    result[bracket_is_valid] = interpolated[bracket_is_valid]
     return result
 
 
@@ -300,6 +366,21 @@ def _model_data_with_depth_dimension(model_data: xarray.DataArray) -> xarray.Dat
     return model_data.expand_dims({depth_key: [0.0]})
 
 
+def _linearly_interpolated_profiles(
+    data: xarray.DataArray,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+) -> numpy.ndarray:
+    interpolated_profiles = data.interp(
+        {
+            Dimension.LATITUDE.key(): xarray.DataArray(latitudes, dims="observation"),
+            Dimension.LONGITUDE.key(): xarray.DataArray(longitudes, dims="observation"),
+        },
+        method="linear",
+    )
+    return interpolated_profiles.compute().values
+
+
 def _horizontally_interpolated_profiles(
     time_slice: xarray.DataArray,
     observation_group: pandas.DataFrame,
@@ -308,14 +389,33 @@ def _horizontally_interpolated_profiles(
     longitude_key = Dimension.LONGITUDE.key()
     observation_latitudes = observation_group[latitude_key].values
     observation_longitudes = observation_group[longitude_key].values
-    interpolated_profiles = time_slice.interp(
-        {
-            latitude_key: xarray.DataArray(observation_latitudes, dims="observation"),
-            longitude_key: xarray.DataArray(observation_longitudes, dims="observation"),
-        },
-        method="linear",
+    grid_longitudes = time_slice[longitude_key].values
+    first_longitude, last_longitude = grid_longitudes[0], grid_longitudes[-1]
+    is_on_grid = (observation_longitudes >= first_longitude) & (observation_longitudes <= last_longitude)
+    if not is_global_longitude_grid(grid_longitudes) or is_on_grid.all():
+        return _linearly_interpolated_profiles(time_slice, observation_latitudes, observation_longitudes)
+
+    wrapped_longitudes = numpy.where(
+        is_on_grid,
+        observation_longitudes,
+        first_longitude + (observation_longitudes - first_longitude) % 360,
     )
-    return interpolated_profiles.compute().values
+    is_in_seam = wrapped_longitudes > last_longitude
+    seam_columns = time_slice.isel({longitude_key: [-1, 0]}).assign_coords(
+        {longitude_key: [last_longitude, first_longitude + 360]}
+    )
+    profile_shape = [
+        time_slice.sizes[dimension] for dimension in time_slice.dims if dimension not in (latitude_key, longitude_key)
+    ]
+    interpolated_profiles = numpy.full(profile_shape + [len(observation_group)], numpy.nan)
+    for data, is_selected in ((time_slice, ~is_in_seam), (seam_columns, is_in_seam)):
+        if is_selected.any():
+            interpolated_profiles[..., is_selected] = _linearly_interpolated_profiles(
+                data,
+                observation_latitudes[is_selected],
+                wrapped_longitudes[is_selected],
+            )
+    return interpolated_profiles
 
 
 def _interpolated_model_values_for_observation_group(
@@ -401,24 +501,167 @@ def interpolate_class4_model_to_observations(
     return _interpolate_model_to_observations(model_data, observations_dataframe, variable_key)
 
 
+def _dateline_neighbour_labels(labels: numpy.ndarray, row_shift: int) -> tuple[numpy.ndarray, numpy.ndarray]:
+    rows = numpy.arange(max(0, -row_shift), min(labels.shape[0], labels.shape[0] - row_shift))
+    return labels[rows, 0], labels[rows + row_shift, -1]
+
+
+def _labels_linked_across_the_dateline(labels: numpy.ndarray) -> tuple[numpy.ndarray, numpy.ndarray]:
+    neighbour_labels = [_dateline_neighbour_labels(labels, row_shift) for row_shift in (-1, 0, 1)]
+    first_labels = numpy.concatenate([first for first, _ in neighbour_labels])
+    last_labels = numpy.concatenate([last for _, last in neighbour_labels])
+    is_linked = (first_labels > 0) & (last_labels > 0)
+    return first_labels[is_linked], last_labels[is_linked]
+
+
+def _is_in_large_shallow_region(
+    is_shallow: numpy.ndarray,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+) -> numpy.ndarray:
+    labels, label_count = ndimage.label(is_shallow, structure=numpy.ones((3, 3), dtype=int))
+    first_labels, last_labels = _labels_linked_across_the_dateline(labels)
+    label_graph = sparse.coo_matrix(
+        (numpy.ones(len(first_labels)), (first_labels, last_labels)),
+        shape=(label_count + 1, label_count + 1),
+    )
+    _, region_of_label = csgraph.connected_components(label_graph, directed=False)
+    region_of_cell = region_of_label[labels]
+    cell_area = (
+        (EARTH_RADIUS_KILOMETERS**2)
+        * numpy.deg2rad(abs(latitudes[1] - latitudes[0]))
+        * numpy.deg2rad(abs(longitudes[1] - longitudes[0]))
+        * numpy.cos(numpy.deg2rad(latitudes))
+    )
+    region_area = numpy.bincount(
+        region_of_cell.ravel(),
+        weights=numpy.broadcast_to(cell_area[:, numpy.newaxis], is_shallow.shape).ravel(),
+    )
+    region_area[region_of_label[0]] = 0.0
+    return region_area[region_of_cell] > CLASS4_SHALLOW_REGION_MINIMUM_AREA_SQUARE_KILOMETERS
+
+
+def _coarse_cells_are_wet(is_wet: numpy.ndarray) -> numpy.ndarray:
+    _, latitude_count, longitude_count = is_wet.shape
+    coarse_rows = numpy.arange(0, latitude_count, CLASS4_COARSE_GRID_FACTOR)
+    coarse_columns = numpy.arange(0, longitude_count, CLASS4_COARSE_GRID_FACTOR)
+    return numpy.logical_and.reduce(
+        [
+            is_wet[:, numpy.clip(coarse_rows + row_offset, 0, latitude_count - 1)][
+                :, :, numpy.mod(coarse_columns + column_offset, longitude_count)
+            ]
+            for row_offset in (-1, 0, 1)
+            for column_offset in (-1, 0, 1)
+        ]
+    )
+
+
+def _class4_population_layers(ocean_mask: xarray.DataArray) -> _Class4PopulationLayers:
+    cached_layers = _CLASS4_POPULATION_LAYERS_CACHE.get(id(ocean_mask))
+    if cached_layers is not None and cached_layers[0] is ocean_mask:
+        return cached_layers[1]
+    sorted_mask = ocean_mask.sortby(Dimension.DEPTH.key())
+    latitudes = sorted_mask[Dimension.LATITUDE.key()].values.astype("float64")
+    longitudes = sorted_mask[Dimension.LONGITUDE.key()].values.astype("float64")
+    is_wet = sorted_mask.values.astype(bool)
+    is_shallow = is_wet[0] & ~sorted_mask.sel(
+        {Dimension.DEPTH.key(): CLASS4_SHALLOW_DEPTH}, method="nearest"
+    ).values.astype(bool)
+    layers = _Class4PopulationLayers(
+        depths=sorted_mask[Dimension.DEPTH.key()].values,
+        latitudes=latitudes,
+        longitudes=longitudes,
+        is_shallow=is_shallow,
+        is_in_large_shallow_region=_is_in_large_shallow_region(is_shallow, latitudes, longitudes),
+        coarse_cells_are_wet=_coarse_cells_are_wet(is_wet),
+    )
+    _CLASS4_POPULATION_LAYERS_CACHE.clear()
+    _CLASS4_POPULATION_LAYERS_CACHE[id(ocean_mask)] = (ocean_mask, layers)
+    return layers
+
+
+def _surrounding_cells(
+    row_below: numpy.ndarray,
+    column_left: numpy.ndarray,
+    row_count: int,
+    column_count: int,
+) -> list[tuple[numpy.ndarray, numpy.ndarray]]:
+    first_row = numpy.clip(row_below, 0, row_count - 1)
+    rows = [first_row, numpy.clip(first_row + 1, 0, row_count - 1)]
+    columns = [numpy.mod(column_left, column_count), numpy.mod(column_left + 1, column_count)]
+    return [(row, column) for row in rows for column in columns]
+
+
+def class4_observations_in_shared_population(
+    observations_dataframe: pandas.DataFrame,
+    ocean_mask: xarray.DataArray,
+) -> pandas.DataFrame:
+    """
+    Keep only the observations of the OceanBench Class IV population, built from the ocean mask alone.
+
+    An observation is dropped when one of its four surrounding twelfth of a degree cells is shallow,
+    wet at the surface but dry at 92 metres, unless one of those shallow cells belongs to a shallow
+    region larger than 100,000 square kilometres. It is also dropped unless its four surrounding
+    quarter degree cells, each wet only when its nine twelfth of a degree cells are, are wet at its
+    deeper bracketing mask depth. The population is therefore the same for every challenger and
+    every reference, whatever their grids.
+    """
+    observations_dataframe = observations_dataframe.reset_index(drop=True)
+    layers = _class4_population_layers(ocean_mask)
+    latitudes = observations_dataframe[Dimension.LATITUDE.key()].values
+    longitudes = observations_dataframe[Dimension.LONGITUDE.key()].values
+
+    fine_cells = _surrounding_cells(
+        numpy.searchsorted(layers.latitudes, latitudes, side="right") - 1,
+        numpy.searchsorted(layers.longitudes, longitudes, side="right") - 1,
+        len(layers.latitudes),
+        len(layers.longitudes),
+    )
+    has_shallow_cell = numpy.logical_or.reduce([layers.is_shallow[cell] for cell in fine_cells])
+    has_large_shallow_region_cell = numpy.logical_or.reduce(
+        [layers.is_in_large_shallow_region[cell] for cell in fine_cells]
+    )
+
+    _, coarse_row_count, coarse_column_count = layers.coarse_cells_are_wet.shape
+    coarse_cells = _surrounding_cells(
+        numpy.floor((latitudes - layers.latitudes[0]) / CLASS4_COARSE_GRID_STEP_DEGREES).astype(numpy.int64),
+        numpy.floor((longitudes - layers.longitudes[0]) / CLASS4_COARSE_GRID_STEP_DEGREES).astype(numpy.int64),
+        coarse_row_count,
+        coarse_column_count,
+    )
+    _, deeper_level = _bracketing_level_indices(
+        layers.depths,
+        observations_dataframe[Dimension.DEPTH.key()].values,
+    )
+    has_wet_coarse_cells = numpy.logical_and.reduce(
+        [layers.coarse_cells_are_wet[deeper_level, row, column] for row, column in coarse_cells]
+    )
+
+    is_eligible = (~has_shallow_cell | has_large_shallow_region_cell) & has_wet_coarse_cells
+    return observations_dataframe.loc[is_eligible]
+
+
 def _compute_rmsd_table(
     dataframe: pandas.DataFrame,
     variable_key: str,
 ) -> pandas.DataFrame:
-    valid_dataframe = dataframe.dropna(subset=["model_value", "observation_value"])
+    eligible_dataframe = dataframe.dropna(subset=["observation_value"])
     grouped = (
-        valid_dataframe.assign(
-            squared_difference=(valid_dataframe["model_value"] - valid_dataframe["observation_value"]) ** 2
+        eligible_dataframe.assign(
+            squared_difference=(eligible_dataframe["model_value"] - eligible_dataframe["observation_value"]) ** 2,
+            missing=eligible_dataframe["model_value"].isna(),
         )
         .groupby(["depth_bin", "lead_day"], as_index=False)
         .agg(
             rmsd=("squared_difference", lambda values: numpy.sqrt(values.mean())),
             count=("squared_difference", "size"),
+            missing=("missing", "sum"),
         )
     )
     grouped["count"] = grouped["count"].astype(int)
+    grouped["missing"] = grouped["missing"].astype(int)
     grouped["variable"] = variable_key
-    return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
+    return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count", "missing"]]
 
 
 def compute_class4_rmsd_table(
@@ -437,15 +680,20 @@ def _observation_variable_depth_label(standard_name: str, depth_bin: str) -> str
 
 
 def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -> pandas.DataFrame:
-    pivot_table = results_dataframe.pivot_table(
-        values="rmsd",
-        index=["variable", "depth_bin"],
-        columns="lead_day",
-        aggfunc="first",
-    ).reset_index()
+    scored_pairs = pandas.MultiIndex.from_frame(results_dataframe[["variable", "depth_bin"]].drop_duplicates())
+    pivot_table = (
+        results_dataframe.pivot_table(
+            values="rmsd",
+            index=["variable", "depth_bin"],
+            columns="lead_day",
+            aggfunc="first",
+        )
+        .reindex(index=scored_pairs, columns=range(lead_days_count))
+        .reset_index()
+    )
     first_available_day = results_dataframe["lead_day"].min()
     observation_counts = results_dataframe[results_dataframe["lead_day"] == first_available_day][
-        ["variable", "depth_bin", "count"]
+        ["variable", "depth_bin", "count", "missing"]
     ]
     pivot_table = pivot_table.merge(observation_counts, on=["variable", "depth_bin"], how="left")
     pivot_table["variable_sort"] = pivot_table["variable"].map(VARIABLE_DISPLAY_ORDER).astype(float)
@@ -459,8 +707,8 @@ def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: 
     lead_columns = [column for column in pivot_table.columns if isinstance(column, (int, numpy.integer))]
     lead_labels = lead_day_labels(1, lead_days_count)
     column_rename = {column: lead_labels[column] for column in lead_columns}
-    result = pivot_table.set_index("label")[lead_columns + ["count"]].rename(
-        columns=column_rename | {"count": OBSERVATION_COUNT_COLUMN}
+    result = pivot_table.set_index("label")[lead_columns + ["count", "missing"]].rename(
+        columns=column_rename | {"count": OBSERVATION_COUNT_COLUMN, "missing": MISSING_COUNT_COLUMN}
     )
     result.index.name = None
     result.columns.name = None

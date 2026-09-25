@@ -12,7 +12,7 @@ from helpers.type import ModelScore
 
 _VARIABLE_LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]+)\) \[([^\]]*)\](?:\{([^}]+)\})?$")
 _LEAD_DAY_NUMBER_PATTERN = re.compile(r"(\d+)$")
-_OBSERVATION_COUNT_HEADER = "observations"
+_NON_LEAD_DAY_HEADERS = ("observations", "missing", "missing fraction")
 _DISPLAY_NAME_RENAMES = {
     "height": "sea surface height",
     "surface height": "sea surface height",
@@ -148,7 +148,7 @@ def _parse_html_table_rows(raw_table: str) -> list[dict]:
     lead_days = [
         _extract_lead_day_number(header)
         for header in headers[1:]
-        if header.strip().lower() != _OBSERVATION_COUNT_HEADER
+        if header.strip().lower() not in _NON_LEAD_DAY_HEADERS
     ]
     return [_parse_html_table_row(row, lead_days) for row in soup.find("tbody").find_all("tr")]
 
