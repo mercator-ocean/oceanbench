@@ -104,19 +104,25 @@ body.viewer-page .nav-footer { flex: 0 0 auto; }
     if (event.data && event.data.type === "oceanbench-viewer-ready") sendTheme();
   });
 
-  // Deep links: seed the iframe from this page's hash, and mirror the app's hash back
-  // so shared URLs (…/viewer.html#…) reproduce the exact view.
+  // Deep links: seed the iframe from this page's hash. The app reports every hash it
+  // writes (with its push or replace choice) so this page's URL and history follow the
+  // view; Back/Forward here navigate the app to the restored hash.
   var base = "viewer/index.html?embed=1&theme=" + currentTheme();
   frame.src = base + (location.hash || "#theme=" + currentTheme());
   frame.addEventListener("load", function () {
     sizeApp();
     sendTheme();
-    try {
-      frame.contentWindow.addEventListener("hashchange", function () {
-        var h = frame.contentWindow.location.hash;
-        if (h && h !== location.hash) history.replaceState(null, "", location.pathname + location.search + h);
-      });
-    } catch (e) { /* cross-origin (shouldn't happen, same host) */ }
+  });
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
+    if (!data || data.type !== "oceanbench-viewer-hash" || data.hash === location.hash) return;
+    history[data.replace ? "replaceState" : "pushState"](null, "", location.pathname + location.search + data.hash);
+  });
+  window.addEventListener("popstate", function () {
+    var app = frame.contentWindow.location;
+    var hash = location.hash || "#theme=" + currentTheme();
+    if (hash !== app.hash) app.replace(app.href.split("#")[0] + hash);
   });
 })();
 </script>

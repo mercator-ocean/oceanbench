@@ -5380,7 +5380,15 @@ function writeHash() {
   const encoded = `#${parameters.toString()}`;
   if (encoded !== location.hash) {
     const replace = !hashHistoryReady || !location.hash || hashChangeIsContinuous(location.hash, encoded);
-    history[replace ? "replaceState" : "pushState"](null, "", encoded);
+    if (window.parent === window) {
+      history[replace ? "replaceState" : "pushState"](null, "", encoded);
+    } else {
+      // Embedded, the host page owns the address bar and the history: it applies the
+      // push or replace to its own URL, and navigates this frame back on Back/Forward.
+      // Pushing here too would add a second joint-history entry per change.
+      history.replaceState(null, "", encoded);
+      window.parent.postMessage({ type: "oceanbench-viewer-hash", hash: encoded, replace }, location.origin);
+    }
   }
   lastWrittenHash = encoded;
   syncExampleNote();
