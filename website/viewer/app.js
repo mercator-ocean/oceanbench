@@ -3307,19 +3307,31 @@ function legendLine(color, label) {
 // muted-background note and the "?" helper.
 function renderClass4Legend(legend, scales) {
   const hostPanel = panels[0];
-  const shown = hostPanel ? hostPanel.class4Count || 0 : 0;
-  const visibleTotal = hostPanel ? hostPanel.class4VisibleTotal || shown : shown;
   const matched = hostPanel ? hostPanel.class4Matched || 0 : 0;
-  const thinned = Boolean(hostPanel && hostPanel.class4Thinned);
   const weak = matched > 0 && matched < 30 ? " · low count, statistic is weak" : "";
-  const fullDensityNote = thinned ? " · zoom in for full density" : "";
-  const countText = thinned
-    ? `<strong>showing ${formatCount(shown)} of ${formatCount(visibleTotal)} obs</strong>${fullDensityNote}`
-    : `<strong>${formatCount(matched)} obs</strong>`;
+  // Side by side, two panels on different datasets or variables draw different points, so
+  // each gets its own count; one count would describe only Forecast 1's dots.
+  const sidePanels = shared.layout === 2 && shared.displayMode === DISPLAY_SIDE_BY_SIDE ? panels.slice(0, 2).filter(Boolean) : [];
+  const perPanel =
+    sidePanels.length === 2 &&
+    (sidePanels[0].state.dataset !== sidePanels[1].state.dataset || sidePanels[0].state.variable !== sidePanels[1].state.variable);
+  const countText = perPanel
+    ? sidePanels.map((panel) => `Forecast ${panel.index + 1}: ${class4PanelCountText(panel)}`).join(" · ")
+    : class4PanelCountText(hostPanel);
   legend.hidden = false;
   legend.innerHTML =
     `<span class="legend-note">${countText} · scale ≈ ${scales.map(({ scale, units }) => `${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(units)}`).join(" / ")} · region ${escapeHtml(regionDisplayName())}${weak}${legendHelpAnchor()}</span>`;
   attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
+}
+
+function class4PanelCountText(panel) {
+  if (!panel) return "<strong>0 obs</strong>";
+  if (isReferenceDataset(panel.state.dataset)) return "no points (the reanalysis assimilates these obs)";
+  const shown = panel.class4Count || 0;
+  const visibleTotal = panel.class4VisibleTotal || shown;
+  return panel.class4Thinned
+    ? `<strong>showing ${formatCount(shown)} of ${formatCount(visibleTotal)} obs</strong> · zoom in for full density`
+    : `<strong>${formatCount(panel.class4Matched || 0)} obs</strong>`;
 }
 
 // Eddies mode: categorical swatch row faithful to what is drawn, matched pairs (the
@@ -4477,11 +4489,20 @@ function wireChartCursorTooltip(svg) {
   });
 }
 
+// Why a reference panel draws no Class-4 points: it is not missing data, the reanalysis
+// assimilates the same observations, so scoring it against them would not be independent.
+const CLASS4_REFERENCE_NOTE = "the reanalysis assimilates these observations, so it is not scored against them";
+
 // The single sentence for every "nothing to draw" Class-4 state. One source, so the
 // sidebar note, the legend strip and the colorbar never state the same absence three
 // different ways. Empty string means there are match-ups to show.
 function class4EmptyMessage() {
-  if (overlayData.class4Unpublished) return "No Class-4 match-ups are published for this dataset.";
+  if (overlayData.class4Unpublished) {
+    const active = panels[activePanelIndex];
+    return active && isReferenceDataset(active.state.dataset)
+      ? `${labelFor(active.state.dataset)} has no Class-4 points: ${CLASS4_REFERENCE_NOTE}.`
+      : "No Class-4 match-ups are published for this dataset.";
+  }
   if (overlayData.class4Error) return `Class-4 match-ups failed to load (${overlayData.class4Error}).`;
   if (!overlayData.class4) return "No Class-4 match-ups are available for this dataset and region.";
   if ((overlayData.class4.rows || []).length === 0) return class4SelectionNote();
