@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import dask
 import numpy
 import xarray
 import pandas
@@ -316,8 +315,10 @@ def rmsd(
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
     prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
     challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
-    computed_rmsd_dataset, missing_dataset = dask.compute(
-        _rmsd(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask),
-        _missing_counts(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask),
-    )
+    missing_dataset = _missing_counts(
+        prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
+    ).compute()
+    computed_rmsd_dataset = _rmsd(
+        prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
+    ).compute()
     return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_dataset)
