@@ -3658,15 +3658,16 @@ async function drillDownToStartDate(date) {
   updateCurrentsControlVisibility();
 }
 
-// When a surface current variable is selected in an obs-based context (Class-4 overlay
-// or year scope), there are no honest surface observations to compare against: the
-// drifter obs sit at 15 m. Explain this and offer a one-click switch to the 15 m field.
+// When a surface current variable is selected there are no honest surface observations
+// to compare against: the drifter obs sit at 15 m. Explain this and offer a one-click
+// switch to the 15 m field.
 function updateCurrentDepthGateNote(shown) {
   const note = elements["rail-current-depth-note"];
   if (!note) return;
-  const obsContext = shared.overlayMode === OVERLAY_CLASS4 || shared.scope === SCOPE_WHOLE_YEAR;
-  const gated = obsContext && shown.filter((panel) => isSurfaceCurrentVariable(panel.state.variable));
-  if (!obsContext || !gated.length) {
+  // Shown whatever the overlay: the RMSE vs lead chart is empty for surface currents in
+  // every mode, and this is the note that says why.
+  const gated = shown.filter((panel) => isSurfaceCurrentVariable(panel.state.variable));
+  if (!gated.length) {
     note.hidden = true;
     note.innerHTML = "";
     return;
@@ -3752,7 +3753,10 @@ function renderRailSkill(shown, comparison) {
       const skill = obsSkillSeries(panel);
       const key = scoreProductKey(panel.state.dataset);
       if (!skill) {
-        if (isSurfaceCurrentVariable(panel.state.variable)) continue; // covered by the 15 m switch note
+        if (isSurfaceCurrentVariable(panel.state.variable)) {
+          notes.push(`${labelFor(panel.state.dataset)}: currents are scored against drifters at 15 m only, see the switch above`);
+          continue;
+        }
         const suffix = isCurrentsVariable(panel.state.variable)
           ? `currents at ${currentsDepthLabel(panel.state.variable)}`
           : "this variable";
