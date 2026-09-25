@@ -566,10 +566,16 @@ function renderLevelsStale() {
   });
 }
 
-function renderLevelForSlug(slug) {
-  const manifest = manifestFor(slug);
-  if (!manifest) return null;
-  return selectRenderLevel(manifest);
+// The partner of a difference is resampled onto the host's grid, so it is read at a cell
+// no coarser than the host's: a coarser partner repeats its rows on the finer grid and
+// the difference shows horizontal stripes.
+function compareLevelFor(slug, hostManifest, hostLevel) {
+  const hostCellSize = hostManifest.levels.find((entry) => entry.level === hostLevel).cell_size_deg;
+  const levels = [...manifestFor(slug).levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+  const screenLevel = selectRenderLevel(manifestFor(slug));
+  const screenCellSize = levels.find((entry) => entry.level === screenLevel).cell_size_deg;
+  if (screenCellSize <= hostCellSize) return screenLevel;
+  return levels.findLast((entry) => entry.cell_size_deg <= hostCellSize)?.level ?? levels[0].level;
 }
 
 // Whether a panel could draw this lead day without waiting on the network: every tile
@@ -600,8 +606,9 @@ function panelLeadCached(panel, leadDay) {
     const partnerManifest = manifestFor(panels[1].state.dataset);
     if (!partner || !partnerManifest) return false;
     const partnerSlice = { startIndex: storeStartIndex(partnerManifest), leadIndex: storeLeadIndex(partnerManifest, leadDay) };
+    const partnerLevel = compareLevelFor(panels[1].state.dataset, manifest, level);
     for (const variable of variables) {
-      if (!isLayerCached(partner, { variable, level, ...partnerSlice })) return false;
+      if (!isLayerCached(partner, { variable, level: partnerLevel, ...partnerSlice })) return false;
     }
   }
   return true;
@@ -847,7 +854,7 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, leadIndex);
   if (token !== panel.renderToken) return;
   await ensureStore(compareSlug);
-  const compareLevel = renderLevelForSlug(compareSlug);
+  const compareLevel = compareLevelFor(compareSlug, manifest, level);
   const compare = await readAlignedField(
     panel,
     compareSlug,
@@ -895,7 +902,7 @@ async function renderCurrentsDifferencePanel(panel, token, manifest, level, star
   if (token !== panel.renderToken) return;
   const vPrimary = await readAlignedField(panel, panel.state.dataset, variables.v, level, start, leadIndex);
   if (token !== panel.renderToken) return;
-  const compareLevel = renderLevelForSlug(compareSlug);
+  const compareLevel = compareLevelFor(compareSlug, manifest, level);
   const uCompare = await readAlignedField(panel, compareSlug, variables.u, compareLevel, start, leadIndex, uPrimary.latitudes, uPrimary.longitudes);
   if (token !== panel.renderToken) return;
   const vCompare = await readAlignedField(panel, compareSlug, variables.v, compareLevel, start, leadIndex, uPrimary.latitudes, uPrimary.longitudes);
