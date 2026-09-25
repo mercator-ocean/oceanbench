@@ -2497,6 +2497,9 @@ function refitOnGeometryChange() {
   const key = panelGeometryKey();
   if (key === fittedGeometry) return false;
   fittedGeometry = key;
+  // The clamp measures the canvases, which still have the old box's size until the
+  // next render: size them to the new box first.
+  for (let i = 0; i < shared.layout; i += 1) resizePanelCanvases(panels[i]);
   const centerNX = view.centerNX;
   fitRegionView();
   if (!REGION_BOUNDS[shared.region]) view.centerNX = centerNX;
