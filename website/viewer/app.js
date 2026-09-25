@@ -2479,6 +2479,31 @@ function shownDataRowsExtent() {
   return [Math.max(0, Math.min(...edges.map((edge) => edge.nyTop))), Math.min(1, Math.max(...edges.map((edge) => edge.nyBottom)))];
 }
 
+// The panels stack on phones in side-by-side (styles/responsive.css, same width).
+const STACKED_PANELS_QUERY = "(max-width: 800px)";
+let fittedGeometry = null;
+
+function panelGeometryKey() {
+  const mode = shared.layout === 2 ? shared.displayMode : "single";
+  const stacked = mode === DISPLAY_SIDE_BY_SIDE && window.matchMedia(STACKED_PANELS_QUERY).matches;
+  return `${shared.layout}|${mode}|${stacked}`;
+}
+
+// A layout, display mode or stacking change reshapes the map box, and a zoom chosen for
+// the old box leaves empty bands in the new one (stacked side-by-side to swipe on a
+// phone). Re-fit to the new box whenever that shape changes; plain resizes that keep
+// the arrangement keep the user's zoom. Returns whether the view was re-fitted.
+function refitOnGeometryChange() {
+  const key = panelGeometryKey();
+  if (key === fittedGeometry) return false;
+  fittedGeometry = key;
+  const centerNX = view.centerNX;
+  fitRegionView();
+  if (!REGION_BOUNDS[shared.region]) view.centerNX = centerNX;
+  clampView();
+  return true;
+}
+
 function fitRegionView() {
   const bounds = REGION_BOUNDS[shared.region];
   const panel = panels.find((candidate) => candidate && candidate.els && candidate.els.field.width > 0);
@@ -4895,6 +4920,7 @@ function wireGlobalControls() {
       }
       markLayoutButtons();
       syncPanelGrid();
+      refitOnGeometryChange();
       // The shared start and lead ranges follow the forecasts on screen, so they are rebuilt
       // once the stores behind the new layout are known.
       Promise.all(panels.slice(0, shared.layout).map((panel) => ensureStore(panel.state.dataset).catch(() => {})))
@@ -5003,6 +5029,7 @@ function wireGlobalControls() {
       setSharedDisplayMode(button.dataset.display);
       markDisplayButtons();
       syncPanelGrid();
+      refitOnGeometryChange();
       renderAllPanels().then(() => {
         redrawOverlaysAll();
         updateSharedColorbar();
@@ -5041,6 +5068,8 @@ function wireGlobalControls() {
   window.addEventListener("resize", () => {
     syncDrawerOverlayMode();
     applyLayout();
+    // Crossing the stacking width re-fits and may change the pyramid level, so re-render.
+    if (refitOnGeometryChange()) renderAllPanels().then(() => redrawOverlaysAll());
     clampView();
     scheduleLayoutRender();
   });
@@ -5653,6 +5682,8 @@ async function main() {
     await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
   }
   writeHash();
+  // The arrangement the first view was fitted (or deep-linked) for.
+  fittedGeometry = panelGeometryKey();
   hashHistoryReady = true;
 }
 
