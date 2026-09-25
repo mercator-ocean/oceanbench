@@ -332,17 +332,16 @@ CHALLENGERS = {
     ),
     "glowens": ChallengerSpec(
         name="glowens",
-        version="glowens_v5_ringA",
+        version="glowens_v5_ringC",
         member_dimension="member",
         member_count=16,
         variables=_glonet2_variables(),
         first_lead_day=1,
-        last_lead_day=10,
+        last_lead_day=9,
         lead_day_to_time_index=1,
         grid=GRID_REFERENCE,
-        store_layout=STORE_LOCAL_ROOT,
+        store_layout=STORE_ML_FORECAST_DEV,
         anonymous=False,
-        store_root="/mnt/data/glonet2/ifs21/forecasts/glowens_v5_ringA",
     ),
     "gloens-depth": ChallengerSpec(
         name="gloens",
@@ -359,17 +358,16 @@ CHALLENGERS = {
     ),
     "glowens-fill": ChallengerSpec(
         name="glowens",
-        version="glowens_v5_ringA",
+        version="glowens_v5_ringC",
         member_dimension="member",
         member_count=16,
         variables=_fill_variables(),
         first_lead_day=1,
-        last_lead_day=10,
+        last_lead_day=9,
         lead_day_to_time_index=1,
         grid=GRID_REFERENCE,
-        store_layout=STORE_LOCAL_ROOT,
+        store_layout=STORE_ML_FORECAST_DEV,
         anonymous=False,
-        store_root="/mnt/data/glonet2/ifs21/forecasts/glowens_v5_ringA",
     ),
     "glonet2-ens-icp-fill": ChallengerSpec(
         name="glonet2-ens-icp",
@@ -474,9 +472,9 @@ def _store_location(
 ) -> tuple[str, str | None]:
     """The store root of one forecast start, and the group inside it holding this variable."""
     if specification.store_layout == STORE_ML_FORECAST_DEV:
-        return f"{OCEANBENCH_BUCKET}/{ML_FORECAST_DEV_PREFIX}/{specification.name}/{start_date:%Y%m%d}.zarr", None
+        return f"{OCEANBENCH_BUCKET}/{ML_FORECAST_DEV_PREFIX}/{specification.version}/{start_date:%Y%m%d}.zarr", None
     if specification.store_layout == STORE_ML_FORECAST_PUBLIC:
-        return f"{OCEANBENCH_BUCKET}/{ML_FORECAST_PUBLIC_PREFIX}/{specification.name}/{start_date:%Y%m%d}.zarr", None
+        return f"{OCEANBENCH_BUCKET}/{ML_FORECAST_PUBLIC_PREFIX}/{specification.version}/{start_date:%Y%m%d}.zarr", None
     if specification.store_layout == STORE_GLO12_VARIABLE_GROUPS:
         bulletin_date = start_date + GLO12_BULLETIN_OFFSET
         root = f"{OCEANBENCH_BUCKET}/{GLO12_FORECAST_PREFIX}/glo12_rg_1d-m_fcst_R{bulletin_date:%Y%m%d}.zarr"

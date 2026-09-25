@@ -139,12 +139,11 @@ CHALLENGERS = {
     ),
     "glowens": ChallengerSpecification(
         name="glowens",
-        version="glowens_v5_ringA",
-        store_layout=STORE_LOCAL_ROOT,
+        version="glowens_v5_ringC",
+        store_layout=STORE_ML_FORECAST_DEV,
         member_dimension="member",
-        lead_days_count=10,
+        lead_days_count=9,
         declares_dataset_source=False,
-        store_root="/mnt/data/glonet2/ifs21/forecasts/glowens_v5_ringA",
     ),
 }
 
@@ -173,7 +172,7 @@ def _open_dev_prefix_week(specification: ChallengerSpecification, start_label: p
     the time axis becomes the lead day index with no offset.
     """
     filesystem = _filesystem()
-    root = f"{OCEANBENCH_BUCKET}/{ML_FORECAST_DEV_PREFIX}/{specification.name}/{start_label:%Y%m%d}.zarr"
+    root = f"{OCEANBENCH_BUCKET}/{ML_FORECAST_DEV_PREFIX}/{specification.version}/{start_label:%Y%m%d}.zarr"
     store = xarray.open_zarr(s3fs.S3Map(root=root, s3=filesystem, check=False), consolidated=True)
     ensemble_fields = [name for name in CHALLENGER_ENSEMBLE_VARIABLE_NAMES if name in store.data_vars]
     forecast_days = store[ensemble_fields].isel(time=slice(0, specification.lead_days_count))

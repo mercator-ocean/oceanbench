@@ -79,7 +79,10 @@ def test_the_class4_helper_reads_a_start_out_of_a_local_directory(class4_helper,
     start_date = pandas.Timestamp("2024-01-03")
     _tiny_forecast_store(tmp_path, start_date, member_count=2)
     specification = dataclasses.replace(
-        class4_helper.CHALLENGERS["glowens"], store_root=str(tmp_path), lead_days_count=2
+        class4_helper.CHALLENGERS["glowens"],
+        store_layout=class4_helper.STORE_LOCAL_ROOT,
+        store_root=str(tmp_path),
+        lead_days_count=2,
     )
 
     challenger, first_day = class4_helper._open_challenger_start(specification, start_date)
@@ -94,7 +97,9 @@ def test_the_class4_helper_reads_a_start_out_of_a_local_directory(class4_helper,
 def test_the_gridded_helper_reads_a_start_out_of_a_local_directory(gridded_helper, tmp_path):
     start_date = pandas.Timestamp("2024-01-03")
     store_path = _tiny_forecast_store(tmp_path, start_date, member_count=2)
-    specification = dataclasses.replace(gridded_helper.CHALLENGERS["glowens"], store_root=str(tmp_path))
+    specification = dataclasses.replace(
+        gridded_helper.CHALLENGERS["glowens"], store_layout=gridded_helper.STORE_LOCAL_ROOT, store_root=str(tmp_path)
+    )
 
     dataset, root = gridded_helper._open_challenger(specification, start_date, "thetao")
 
@@ -103,22 +108,36 @@ def test_the_gridded_helper_reads_a_start_out_of_a_local_directory(gridded_helpe
     assert float(dataset["zos"].max()) == 0.1
 
 
-def test_the_local_root_specification_names_the_directory_it_reads(class4_helper, gridded_helper):
-    store_root = "/mnt/data/glonet2/ifs21/forecasts/glowens_v5_ringA"
+def test_the_glowens_specification_reads_the_served_ringc_stores(class4_helper, gridded_helper):
+    for name in ("glowens", "glowens-fill"):
+        specification = gridded_helper.CHALLENGERS[name]
+        assert specification.name == "glowens"
+        assert specification.version == "glowens_v5_ringC"
+        assert specification.store_layout == gridded_helper.STORE_ML_FORECAST_DEV
+        assert specification.store_root is None
+        assert specification.member_count == 16
+        assert specification.last_lead_day == 9
+    assert class4_helper.CHALLENGERS["glowens"].name == "glowens"
+    assert class4_helper.CHALLENGERS["glowens"].version == "glowens_v5_ringC"
+    assert class4_helper.CHALLENGERS["glowens"].store_layout == class4_helper.STORE_ML_FORECAST_DEV
+    assert class4_helper.CHALLENGERS["glowens"].store_root is None
+    assert class4_helper.CHALLENGERS["glowens"].lead_days_count == 9
 
-    assert class4_helper.CHALLENGERS["glowens"].store_layout == class4_helper.STORE_LOCAL_ROOT
-    assert class4_helper.CHALLENGERS["glowens"].store_root == store_root
-    assert gridded_helper.CHALLENGERS["glowens"].store_layout == gridded_helper.STORE_LOCAL_ROOT
-    assert gridded_helper.CHALLENGERS["glowens"].store_root == store_root
-    assert gridded_helper.CHALLENGERS["glowens"].member_count == 16
-    assert gridded_helper.CHALLENGERS["glowens"].last_lead_day == 10
+    root, group = gridded_helper._store_location(
+        gridded_helper.CHALLENGERS["glowens"], pandas.Timestamp("2024-01-03"), "thetao", filesystem=None
+    )
+    assert root == "oceanbench-bucket/dev/ml-forecast-outputs/glowens_v5_ringC/20240103.zarr"
+    assert group is None
 
 
 def test_the_class4_helper_reads_a_store_that_names_its_axes_lat_and_lon(class4_helper, tmp_path):
     start_date = pandas.Timestamp("2024-01-03")
     _tiny_forecast_store(tmp_path, start_date, member_count=2, latitude_name="lat", longitude_name="lon")
     specification = dataclasses.replace(
-        class4_helper.CHALLENGERS["glowens"], store_root=str(tmp_path), lead_days_count=2
+        class4_helper.CHALLENGERS["glowens"],
+        store_layout=class4_helper.STORE_LOCAL_ROOT,
+        store_root=str(tmp_path),
+        lead_days_count=2,
     )
 
     challenger, _ = class4_helper._open_challenger_start(specification, start_date)
@@ -132,7 +151,9 @@ def test_the_class4_helper_reads_a_store_that_names_its_axes_lat_and_lon(class4_
 def test_the_gridded_helper_reads_a_store_that_names_its_axes_lat_and_lon(gridded_helper, tmp_path):
     start_date = pandas.Timestamp("2024-01-03")
     _tiny_forecast_store(tmp_path, start_date, member_count=2, latitude_name="lat", longitude_name="lon")
-    specification = dataclasses.replace(gridded_helper.CHALLENGERS["glowens"], store_root=str(tmp_path))
+    specification = dataclasses.replace(
+        gridded_helper.CHALLENGERS["glowens"], store_layout=gridded_helper.STORE_LOCAL_ROOT, store_root=str(tmp_path)
+    )
 
     dataset, _ = gridded_helper._open_challenger(specification, start_date, "thetao")
 
@@ -145,7 +166,9 @@ def test_the_gridded_helper_reads_a_store_that_names_its_axes_lat_and_lon(gridde
 def test_the_gridded_helper_refuses_an_ensemble_store_that_carries_no_member_axis(gridded_helper, tmp_path):
     start_date = pandas.Timestamp("2024-01-03")
     _tiny_forecast_store(tmp_path, start_date, member_count=1, with_member_dimension=False)
-    specification = dataclasses.replace(gridded_helper.CHALLENGERS["glowens"], store_root=str(tmp_path))
+    specification = dataclasses.replace(
+        gridded_helper.CHALLENGERS["glowens"], store_layout=gridded_helper.STORE_LOCAL_ROOT, store_root=str(tmp_path)
+    )
 
     with pytest.raises(ValueError, match="member"):
         gridded_helper._open_challenger(specification, start_date, "thetao")
@@ -154,7 +177,12 @@ def test_the_gridded_helper_refuses_an_ensemble_store_that_carries_no_member_axi
 def test_the_gridded_helper_gives_a_deterministic_store_a_member_axis_of_length_one(gridded_helper, tmp_path):
     start_date = pandas.Timestamp("2024-01-03")
     _tiny_forecast_store(tmp_path, start_date, member_count=1, with_member_dimension=False)
-    specification = dataclasses.replace(gridded_helper.CHALLENGERS["glowens"], store_root=str(tmp_path), member_count=1)
+    specification = dataclasses.replace(
+        gridded_helper.CHALLENGERS["glowens"],
+        store_layout=gridded_helper.STORE_LOCAL_ROOT,
+        store_root=str(tmp_path),
+        member_count=1,
+    )
 
     dataset, _ = gridded_helper._open_challenger(specification, start_date, "thetao")
 
