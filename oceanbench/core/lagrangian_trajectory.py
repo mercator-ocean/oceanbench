@@ -15,6 +15,7 @@ from parcels import (
     ParticleSet,
     JITParticle,
     AdvectionRK4,
+    FieldSetWarning,
     Variable as ParcelsVariable,
 )
 import xarray
@@ -67,7 +68,7 @@ def _delete_error_particle(particle, _fieldset, _time):
         particle.delete()
 
 
-def _wrap_particle_longitude(particle, fieldset, _time):
+def _wrap_particle_longitude(particle, fieldset, time):
     if particle.lon < fieldset.first_longitude:
         particle_dlon += 360  # noqa
     elif particle.lon >= fieldset.first_longitude + 360:
@@ -263,7 +264,9 @@ def _get_all_particles_positions(
     if is_global:
         # A global grid gets a periodic halo so a particle crosses the dateline instead of leaving the domain
         field_set.add_constant("first_longitude", float(dataset.longitude.values[0]))
-        field_set.add_periodic_halo(zonal=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FieldSetWarning)
+            field_set.add_periodic_halo(zonal=True)
 
     particle_set = ParticleSet.from_list(
         fieldset=field_set,
