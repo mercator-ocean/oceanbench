@@ -71,6 +71,14 @@ export function variableExists(manifest, key) {
   return Boolean(manifest && key in manifest.variables);
 }
 
+// What a panel shows when its variable is unknown to the dataset (a stale or hand-edited
+// link, or a dataset without it): temperature when the dataset has it, since the first
+// manifest key is an arbitrary one (often a velocity component).
+export function fallbackVariable(manifest) {
+  const keys = Object.keys(manifest.variables);
+  return keys.includes("sea_water_potential_temperature") ? "sea_water_potential_temperature" : keys[0];
+}
+
 // Currents variable options available for this manifest, gated on the u/v components.
 export function currentsVariableOptions(manifest) {
   if (!manifest || !manifest.variables) return [];

@@ -124,6 +124,7 @@ import {
   currentsVariableDepth,
   currentsVariableOptions,
   depthLabel,
+  fallbackVariable,
   isCurrentsVariable,
   isSurfaceCurrentVariable,
   isVelocityFamilyVariable,
@@ -432,7 +433,7 @@ function refreshPanelControls(panel) {
   const diffLocked = isDiffView() && panel.index === 1;
   if (diffLocked && panels[0]) panel.state.variable = panels[0].state.variable;
   if (manifest) {
-    if (!diffLocked && !variableExists(manifest, panel.state.variable)) panel.state.variable = Object.keys(manifest.variables)[0];
+    if (!diffLocked && !variableExists(manifest, panel.state.variable)) panel.state.variable = fallbackVariable(manifest);
     const options = Object.keys(manifest.variables).map((key) => ({ value: key, label: variableLabel(manifest, key) }));
     populateSelect(panel.els.variable, options.concat(currentsVariableOptions(manifest)), panel.state.variable);
   }
@@ -458,7 +459,7 @@ function wirePanel(panel) {
       let fallbackNote = "";
       if (!variableExists(manifest, panel.state.variable)) {
         const previousVariable = panel.state.variable;
-        const fallback = Object.keys(manifest.variables)[0];
+        const fallback = fallbackVariable(manifest);
         panel.state.variable = fallback;
         const fallbackLabel = manifest.variables[fallback] ? prettyName(manifest.variables[fallback].standard_name) : fallback;
         fallbackNote = `${prettyName(previousVariable)} is not available for ${labelFor(panel.state.dataset)}, showing ${fallbackLabel} instead`;
@@ -639,7 +640,7 @@ async function renderPanel(panel) {
   try {
     await ensureStore(panel.state.dataset);
     const manifest = manifestFor(panel.state.dataset);
-    if (!variableExists(manifest, panel.state.variable)) panel.state.variable = Object.keys(manifest.variables)[0];
+    if (!variableExists(manifest, panel.state.variable)) panel.state.variable = fallbackVariable(manifest);
     // A panel can be shown before its manifest is cached (e.g. switching to 2 forecasts
     // warms only the initially visible panels). refreshPanelControls only fills the
     // variable select when the manifest is present, so re-run it here, now that the
@@ -3642,26 +3643,29 @@ async function selectStartDate(index) {
   writeHash();
 }
 
+// The start date on or nearest to a YYYY-MM-DD date, or -1 when there are no start dates.
+function nearestStartIndex(dates, date) {
+  const exact = dates.findIndex((candidate) => String(candidate).slice(0, 10) === date);
+  if (exact >= 0 || !dates.length) return exact;
+  const target = Date.parse(date);
+  let best = 0;
+  let bestDelta = Infinity;
+  dates.forEach((candidate, i) => {
+    const delta = Math.abs(Date.parse(String(candidate).slice(0, 10)) - target);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = i;
+    }
+  });
+  return best;
+}
+
 // Switch from year scope to single-forecast scope, selecting the clicked start date
 // (matched against the start dates every visible forecast has; nearest if inexact). The
 // new start then loads through the start-date picker's own path, so the overlays, the
 // rail and the clicked column follow it exactly as they do after a pick in the drawer.
 async function drillDownToStartDate(date) {
-  const dates = sharedStartDates();
-  let index = dates.findIndex((candidate) => String(candidate).slice(0, 10) === date);
-  if (index < 0 && dates.length) {
-    const target = Date.parse(date);
-    let best = 0;
-    let bestDelta = Infinity;
-    dates.forEach((candidate, i) => {
-      const delta = Math.abs(Date.parse(String(candidate).slice(0, 10)) - target);
-      if (delta < bestDelta) {
-        bestDelta = delta;
-        best = i;
-      }
-    });
-    index = best;
-  }
+  const index = nearestStartIndex(sharedStartDates(), date);
   if (index < 0) return;
   elements["start-date"].value = String(index);
   if (setSharedScope(SCOPE_SINGLE_DATE)) applyScope();
@@ -5668,8 +5672,11 @@ function applyPanelHash(parameters) {
     // as "field") except the old "currents" mode, which migrates to the currents
     // variable. A trailing fourth token (old difference dataset) is simply dropped.
     const migratedCurrents = mode === "currents";
+    // An unknown dataset (a retired challenger, a typo) keeps the panel's default, and the
+    // hash written right after names that default instead of the dataset that failed.
+    const known = datasetCatalog.some((entry) => entry.slug === dataset);
     Object.assign(panels[i].state, {
-      dataset: dataset || panels[i].state.dataset,
+      dataset: known ? dataset : panels[i].state.dataset,
       variable: migratedCurrents ? CURRENTS_VARIABLE_SURFACE : variable || panels[i].state.variable,
     });
   }
@@ -5849,7 +5856,8 @@ async function main() {
   // Warm every visible panel's store so variable/start selectors populate on first paint.
   await Promise.all(panels.slice(0, shared.layout).map((panel) => ensureStore(panel.state.dataset).catch(() => {})));
   if (pendingStartDate) {
-    const index = sharedStartDates().findIndex((date) => String(date).slice(0, 10) === pendingStartDate);
+    // A date that is not a start (a hand-edited link) opens on the nearest start.
+    const index = nearestStartIndex(sharedStartDates(), pendingStartDate);
     if (index >= 0) shared.startIndex = index;
     pendingStartDate = null;
   }
