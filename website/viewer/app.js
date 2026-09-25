@@ -2648,7 +2648,18 @@ let fittedGeometry = null;
 function panelGeometryKey() {
   const mode = shared.layout === 2 ? shared.displayMode : "single";
   const stacked = mode === DISPLAY_SIDE_BY_SIDE && window.matchMedia(STACKED_PANELS_QUERY).matches;
-  return `${shared.layout}|${mode}|${stacked}`;
+  // The year raster and a one-date field cover different rows, so a scope change re-fits.
+  return `${shared.layout}|${mode}|${stacked}|${shared.scope}`;
+}
+
+// Scope changes are re-fitted after the render, since the fit measures the rows of the
+// field the new scope draws.
+async function refitAfterScopeChange() {
+  if (!refitOnGeometryChange()) return;
+  if (renderLevelsStale()) await renderAllPanels();
+  else redrawAllPanels();
+  redrawOverlaysAll();
+  writeHash();
 }
 
 // A layout, display mode or stacking change reshapes the map box, and a zoom chosen for
@@ -3655,6 +3666,7 @@ async function drillDownToStartDate(date) {
   elements["start-date"].value = String(index);
   if (setSharedScope(SCOPE_SINGLE_DATE)) applyScope();
   await selectStartDate(index);
+  await refitAfterScopeChange();
   updateCurrentsControlVisibility();
 }
 
@@ -4819,12 +4831,14 @@ function setScope(scope) {
   }
   clearTrajectories();
   applyScope();
-  renderAllPanels().then(() => {
-    redrawOverlaysAll();
-    updateSharedColorbar();
-    updateContextRail();
-    updateCurrentsControlVisibility();
-  });
+  renderAllPanels()
+    .then(() => refitAfterScopeChange())
+    .then(() => {
+      redrawOverlaysAll();
+      updateSharedColorbar();
+      updateContextRail();
+      updateCurrentsControlVisibility();
+    });
   writeHash();
 }
 
