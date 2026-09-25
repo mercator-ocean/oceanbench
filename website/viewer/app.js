@@ -5510,8 +5510,9 @@ function scheduleRailUpdate() {
 
 // Keys that move continuously (scrub, pan, zoom, drag). A change confined to these
 // replaces the current history entry; any other change pushes a new one, so Back steps
-// through choices rather than through every frame of a drag.
-const CONTINUOUS_HASH_KEYS = new Set(["l", "z", "cx", "cy", "rw", "cw", "spd", "psd", "col"]);
+// through choices rather than through every frame of a drag. The theme is a display
+// preference, not a view, so it replaces too and never costs a Forward entry.
+const CONTINUOUS_HASH_KEYS = new Set(["l", "z", "cx", "cy", "rw", "cw", "spd", "psd", "col", "theme"]);
 let lastWrittenHash = null;
 let hashHistoryReady = false;
 // A dated start (s=YYYY-MM-DD) can only become an index once the manifests are known.
