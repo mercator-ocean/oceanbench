@@ -33,6 +33,7 @@ import {
   fieldToImageData,
   landStencilImageData,
   areaWeightedMean,
+  areaWeightedQuantiles,
   differenceField,
   resampleOntoGrid,
   robustDifferenceMagnitude,
@@ -588,8 +589,10 @@ function panelLeadCached(panel, leadDay) {
   const variables = currents
     ? [currentDepthVariables(panel).u, currentDepthVariables(panel).v]
     : [panel.state.variable];
+  const statisticsLevelIndex = statisticsLevel(manifest).level;
   for (const variable of variables) {
     if (!isLayerCached(store, { variable, level, startIndex, leadIndex })) return false;
+    if (!isLayerCached(store, { variable, level: statisticsLevelIndex, startIndex, leadIndex })) return false;
   }
   // The difference view reads the partner forecast's field(s) on the same slice.
   if (isDiffHost(panel)) {
@@ -698,28 +701,120 @@ function shownPanelsShareVariable(panel) {
   return true;
 }
 
-// The value range a field panel is colorized with. Diverging maps are zero-centred (see
-// combineFieldRange). When several panels show the same variable, the range spans all of
-// them so identical physical values render as identical colours and the "(shared)" label
-// is truthful. ensureStore is memoised, so awaiting the sibling manifests is cheap and
-// makes the shared range deterministic regardless of which panel renders first.
-async function fieldColorRange(panel, colormap, defaultRange) {
-  const diverging = DIVERGING.has(colormap);
-  const ranges = [defaultRange];
-  if (shownPanelsShareVariable(panel)) {
-    for (let i = 0; i < shared.layout; i += 1) {
-      const candidate = panels[i];
-      if (!candidate || candidate === panel) continue;
-      await ensureStore(candidate.state.dataset);
-      const otherEntry = manifestFor(candidate.state.dataset).variables[candidate.state.variable];
-      if (otherEntry && otherEntry.default_range) ranges.push(otherEntry.default_range);
-    }
-  }
-  return combineFieldRange(ranges, diverging);
+// ---- panel statistics on a fixed level ----------------------------------------
+
+// The numbers a panel reports about its field (the area-weighted mean badge, the colour
+// limits and the difference scale) are measured on one fixed pyramid level per dataset,
+// the coarsest level at or finer than this cell size, never on the level the zoom happens
+// to draw, so one link reports the same numbers at every zoom and on every screen.
+const STATISTICS_CELL_DEG = 1;
+// Colour limits are area-weighted quantiles of the field, not its extremes: one outlier
+// cell (a -12.6 °C LANGYA cell, near-zero salinity at a river mouth) would otherwise
+// stretch the scale until the open ocean is a single colour.
+const COLOR_LIMIT_QUANTILES = [0.01, 0.99];
+const statisticsCache = new Map();
+
+function statisticsLevel(manifest) {
+  const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+  return levels.findLast((level) => level.cell_size_deg <= STATISTICS_CELL_DEG * 1.001) ?? levels[0];
 }
 
-function applyPanelField(panel, { field, latitudes, longitudes, colormap, range, units, label }) {
+// One variable of a dataset on its statistics level, optionally resampled onto another
+// grid (Forecast 1's, for a difference).
+async function readStatisticsLayer(slug, variable, leadDay, target = null) {
+  await ensureStore(slug);
+  const manifest = manifestFor(slug);
+  const level = statisticsLevel(manifest).level;
+  const layer = await readLayer(stores.get(slug), {
+    variable,
+    level,
+    startIndex: storeStartIndex(manifest),
+    leadIndex: storeLeadIndex(manifest, leadDay),
+  });
+  const { latitudes, longitudes } = await loadCoordinates(slug, level);
+  if (!target) return { field: layer, latitudes, longitudes };
+  return {
+    field: resampleOntoGrid(layer, latitudes, longitudes, target.latitudes, target.longitudes),
+    latitudes: target.latitudes,
+    longitudes: target.longitudes,
+  };
+}
+
+// Memoised per start date and lead day, so scrubbing back over a lead reads nothing.
+function memoisedStatistics(key, compute) {
+  const fullKey = `${key}|${sharedStartDate()}|${shared.leadDay}`;
+  if (!statisticsCache.has(fullKey)) {
+    const promise = compute(shared.leadDay);
+    statisticsCache.set(fullKey, promise);
+    promise.catch(() => statisticsCache.delete(fullKey));
+  }
+  return statisticsCache.get(fullKey);
+}
+
+function fieldStatisticsFor(slug, variable) {
+  return memoisedStatistics(`field|${slug}|${variable}`, async (leadDay) => {
+    const { field, latitudes } = await readStatisticsLayer(slug, variable, leadDay);
+    return {
+      mean: areaWeightedMean(field, latitudes),
+      range: areaWeightedQuantiles(field, latitudes, COLOR_LIMIT_QUANTILES),
+    };
+  });
+}
+
+function speedStatisticsFor(slug, variables) {
+  return memoisedStatistics(`speed|${slug}|${variables.u}`, async (leadDay) => {
+    const u = await readStatisticsLayer(slug, variables.u, leadDay);
+    const v = await readStatisticsLayer(slug, variables.v, leadDay);
+    return { mean: areaWeightedMean(speedMagnitudeField(u.field, v.field), u.latitudes) };
+  });
+}
+
+// Forecast 1 minus Forecast 2 on Forecast 1's statistics grid: a variable, or the current
+// speed when `variables` names a u/v pair.
+function differenceStatisticsFor(slug, compareSlug, variable, variables = null) {
+  return memoisedStatistics(`diff|${slug}|${compareSlug}|${variables ? variables.u : variable}`, async (leadDay) => {
+    let grid;
+    let difference;
+    if (variables) {
+      grid = await readStatisticsLayer(slug, variables.u, leadDay);
+      const v = await readStatisticsLayer(slug, variables.v, leadDay);
+      const uCompare = await readStatisticsLayer(compareSlug, variables.u, leadDay, grid);
+      const vCompare = await readStatisticsLayer(compareSlug, variables.v, leadDay, grid);
+      difference = differenceField(speedMagnitudeField(grid.field, v.field), speedMagnitudeField(uCompare.field, vCompare.field));
+    } else {
+      grid = await readStatisticsLayer(slug, variable, leadDay);
+      const compare = await readStatisticsLayer(compareSlug, variable, leadDay, grid);
+      difference = differenceField(grid.field, compare.field);
+    }
+    return {
+      mean: areaWeightedMean(difference, grid.latitudes),
+      magnitude: robustDifferenceMagnitude(difference, grid.latitudes),
+    };
+  });
+}
+
+function statisticsCellSize(slug) {
+  return statisticsLevel(manifestFor(slug)).cell_size_deg;
+}
+
+// The value range a field panel is colorized with: the panel's colour-limit quantiles.
+// Diverging maps are zero-centred (see combineFieldRange). When several panels show the
+// same variable, the range spans all of them so identical physical values render as
+// identical colours and the "(shared)" label is truthful. The quantiles move with the
+// lead, so the range is held grow-only for the selection like every other lead-dependent
+// scale (modules/stable-ranges.js): scrubbing never shrinks it under the user.
+async function fieldColorRange(panel, colormap) {
+  const diverging = DIVERGING.has(colormap);
+  const sharedScale = shownPanelsShareVariable(panel);
+  const members = sharedScale ? panels.slice(0, shared.layout) : [panel];
+  const statistics = await Promise.all(members.map((member) => fieldStatisticsFor(member.state.dataset, member.state.variable)));
+  const [low, high] = combineFieldRange(statistics.map((entry) => entry.range), diverging);
+  return stableInterval(`field|${sharedScale ? "shared" : panel.index}`, low, high) || [low, high];
+}
+
+function applyPanelField(panel, { field, latitudes, longitudes, colormap, range, units, label, statistics }) {
   panel.field = field;
+  panel.statistics = statistics;
   clearYearReadoutMetadata(panel);
   panel.latitudes = latitudes;
   panel.longitudes = longitudes;
@@ -737,10 +832,12 @@ async function renderFieldPanel(panel, token, manifest, level, start, leadIndex)
   const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, leadIndex);
   if (token !== panel.renderToken) return;
   const colormap = panel.state.colormap || entry.default_colormap;
-  const range = await fieldColorRange(panel, colormap, entry.default_range);
+  const range = await fieldColorRange(panel, colormap);
+  const { mean } = await fieldStatisticsFor(panel.state.dataset, panel.state.variable);
   if (token !== panel.renderToken) return;
   applyPanelField(panel, { field: primary.field, latitudes: primary.latitudes, longitudes: primary.longitudes, colormap, range,
-    units: entry.units, label: `${labelFor(panel.state.dataset)} · ${prettyName(entry.standard_name)}` });
+    units: entry.units, label: `${labelFor(panel.state.dataset)} · ${prettyName(entry.standard_name)}`,
+    statistics: { mean, cellSize: statisticsCellSize(panel.state.dataset) } });
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
 }
@@ -766,13 +863,16 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   // The difference field only exists for the lead on screen, so its symmetric range is
   // held grow-only for this selection: without that, a difference that doubles between
   // two leads is drawn in the same colours at both and the growth is invisible. The
-  // magnitude is a robust area-weighted p99, not the single largest cell.
-  const magnitude = robustDifferenceMagnitude(difference, primary.latitudes);
-  const bound = stableMax(`diff|${panel.index}|${compareSlug}`, magnitude) || magnitude;
+  // magnitude is a robust area-weighted p99, not the single largest cell, measured on the
+  // fixed statistics level so the zoom does not change it.
+  const statistics = await differenceStatisticsFor(panel.state.dataset, compareSlug, panel.state.variable);
+  if (token !== panel.renderToken) return;
+  const bound = stableMax(`diff|${panel.index}|${compareSlug}`, statistics.magnitude) || statistics.magnitude;
   const range = [-bound, bound];
   applyPanelField(panel, { field: difference, latitudes: primary.latitudes, longitudes: primary.longitudes,
     colormap: DIFFERENCE_COLORMAP, range, units: entry.units,
-    label: `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · ${prettyName(entry.standard_name)}` });
+    label: `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · ${prettyName(entry.standard_name)}`,
+    statistics: { mean: statistics.mean, cellSize: statisticsCellSize(panel.state.dataset) } });
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
 }
@@ -804,13 +904,15 @@ async function renderCurrentsDifferencePanel(panel, token, manifest, level, star
     speedMagnitudeField(uPrimary.field, vPrimary.field),
     speedMagnitudeField(uCompare.field, vCompare.field),
   );
-  const magnitude = robustDifferenceMagnitude(difference, uPrimary.latitudes);
-  const bound = stableMax(`diff|${panel.index}|${compareSlug}|currents`, magnitude) || magnitude;
+  const statistics = await differenceStatisticsFor(panel.state.dataset, compareSlug, null, variables);
+  if (token !== panel.renderToken) return;
+  const bound = stableMax(`diff|${panel.index}|${compareSlug}|currents`, statistics.magnitude) || statistics.magnitude;
   const range = [-bound, bound];
   applyPanelField(panel, { field: difference, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
     colormap: DIFFERENCE_COLORMAP, range,
     units: "m/s",
     label: `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})`,
+    statistics: { mean: statistics.mean, cellSize: statisticsCellSize(panel.state.dataset) },
   });
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
@@ -828,9 +930,12 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   if (token !== panel.renderToken) return;
   const speed = speedMagnitudeField(uPrimary.field, vPrimary.field);
   const range = [0, CURRENTS_MAX_SPEED];
+  const { mean } = await speedStatisticsFor(panel.state.dataset, variables);
+  if (token !== panel.renderToken) return;
   applyPanelField(panel, { field: speed, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
     colormap: SPEED_COLORMAP, range, units: "m/s",
-    label: `${labelFor(panel.state.dataset)} · currents (${currentsDepthLabel(panel.state.variable)})` });
+    label: `${labelFor(panel.state.dataset)} · currents (${currentsDepthLabel(panel.state.variable)})`,
+    statistics: { mean, cellSize: statisticsCellSize(panel.state.dataset) } });
   panel.landStencil = landStencil(speed, uPrimary.latitudes);
   panel.velocity = {
     sampler: makeVelocitySampler(uPrimary.field, vPrimary.field, uPrimary.latitudes, uPrimary.longitudes),
@@ -1022,15 +1127,19 @@ async function yearLandMask(panel, latitudes, longitudes) {
 function prefetchNeighbours(panel, level, start, leadIndex) {
   const manifest = manifestFor(panel.state.dataset);
   if (!manifest || !manifest.lead_days) return;
+  // The panel statistics read their own fixed level, so warm it beside the drawn one.
+  const levels = new Set([level, statisticsLevel(manifest).level]);
   for (const delta of [1, -1]) {
     const lead = shared.leadDay + delta;
     if (storeLeadIndex(manifest, lead) < 0) continue;
-    if (isCurrentsVariable(panel.state.variable)) {
-      const variables = currentDepthVariables(panel);
-      prefetchLayer(stores.get(panel.state.dataset), { variable: variables.u, level, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
-      prefetchLayer(stores.get(panel.state.dataset), { variable: variables.v, level, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
-    } else {
-      prefetchLayer(stores.get(panel.state.dataset), { variable: panel.state.variable, level, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
+    for (const prefetchLevel of levels) {
+      if (isCurrentsVariable(panel.state.variable)) {
+        const variables = currentDepthVariables(panel);
+        prefetchLayer(stores.get(panel.state.dataset), { variable: variables.u, level: prefetchLevel, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
+        prefetchLayer(stores.get(panel.state.dataset), { variable: variables.v, level: prefetchLevel, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
+      } else {
+        prefetchLayer(stores.get(panel.state.dataset), { variable: panel.state.variable, level: prefetchLevel, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
+      }
     }
   }
 }
@@ -1232,9 +1341,15 @@ function drawRasterBorder(context, edges, projection) {
   context.restore();
 }
 
+// One date's mean comes from the fixed statistics level (see STATISTICS_CELL_DEG), so it
+// does not move with the zoom. The year raster is one fixed grid already.
 function updatePanelBadge(panel) {
-  const mean = panel.field ? areaWeightedMean(panel.field, panel.latitudes) : NaN;
+  const statistics = shared.scope === SCOPE_WHOLE_YEAR ? null : panel.statistics;
+  const mean = statistics ? statistics.mean : panel.field ? areaWeightedMean(panel.field, panel.latitudes) : NaN;
   panel.els.badge.textContent = `area-weighted mean ${formatFixed(mean, 3)} ${panel.units}`;
+  panel.els.badge.title = statistics
+    ? `Mean over the whole field, weighted by cell area, computed on this dataset's ${Number(statistics.cellSize.toFixed(2))}° level so it is the same at every zoom and screen size.`
+    : "";
 }
 
 // ---- overlays ---------------------------------------------------------------

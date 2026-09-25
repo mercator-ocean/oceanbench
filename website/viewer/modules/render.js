@@ -168,6 +168,48 @@ export function areaWeightedMean({ data, width, height }, latitudes) {
 }
 
 /**
+ * cos(latitude)-weighted quantiles of the finite cells of a field, one value per requested
+ * fraction, read off a weighted histogram between the field's minimum and maximum (the same
+ * scheme as robustDifferenceMagnitude). A lower quantile is rounded down to its bin edge
+ * and an upper one up, so the pair always contains the cells it describes. `latitudes` are
+ * the field's row coordinates; without them every row weighs the same. NaN for an empty field.
+ */
+export function areaWeightedQuantiles({ data, width, height }, latitudes, fractions) {
+  let minimum = Infinity;
+  let maximum = -Infinity;
+  for (let i = 0; i < data.length; i += 1) {
+    const value = data[i];
+    if (value < minimum) minimum = value;
+    if (value > maximum) maximum = value;
+  }
+  if (!(maximum >= minimum)) return fractions.map(() => NaN);
+  if (maximum === minimum) return fractions.map(() => minimum);
+  const binCount = 4096;
+  const span = maximum - minimum;
+  const histogram = new Float64Array(binCount);
+  let weightTotal = 0;
+  for (let row = 0; row < height; row += 1) {
+    const weight = latitudes && latitudes.length === height ? Math.max(0, Math.cos((latitudes[row] * Math.PI) / 180)) : 1;
+    if (weight === 0) continue;
+    for (let column = 0; column < width; column += 1) {
+      const value = data[row * width + column];
+      if (Number.isNaN(value)) continue;
+      histogram[Math.min(binCount - 1, Math.floor(((value - minimum) / span) * binCount))] += weight;
+      weightTotal += weight;
+    }
+  }
+  return fractions.map((fraction) => {
+    const target = fraction * weightTotal;
+    let cumulative = 0;
+    for (let bin = 0; bin < binCount; bin += 1) {
+      cumulative += histogram[bin];
+      if (cumulative >= target) return minimum + ((fraction < 0.5 ? bin : bin + 1) / binCount) * span;
+    }
+    return maximum;
+  });
+}
+
+/**
  * Magnitude for a symmetric difference scale: the cos(latitude)-weighted 99th
  * percentile of |value| over the finite cells, so a few extreme cells (coastlines,
  * sea-ice edges, grid seams) do not wash the rest of the map out to white. Read off a
