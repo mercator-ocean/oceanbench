@@ -2474,7 +2474,9 @@ function clampView() {
 // Normalized [top, bottom] of the rows any shown field covers; the whole globe until a
 // field has loaded.
 function shownDataRowsExtent() {
-  const edges = panels.slice(0, shared.layout).map((panel) => panel && panel.edgesA).filter(Boolean);
+  // The difference view shows only its host panel's field (Forecast 1 minus Forecast 2).
+  const shown = isDiffView() ? panels.slice(0, 1) : panels.slice(0, shared.layout);
+  const edges = shown.map((panel) => panel && panel.edgesA).filter(Boolean);
   if (!edges.length) return [0, 1];
   return [Math.max(0, Math.min(...edges.map((edge) => edge.nyTop))), Math.min(1, Math.max(...edges.map((edge) => edge.nyBottom)))];
 }
