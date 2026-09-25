@@ -1381,6 +1381,23 @@ body.quarto-dark .version-select {
     width: 1px;
     background: var(--ob-border);
   }
+
+  /* With collapsed borders the frozen cell's left half-border belongs to the
+     table and scrolls away with it, leaving a hairline where the scrolled
+     cells show through. Redraw that edge on the cell, in its colour at rest. */
+  .score-table .model-col::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -1px;
+    width: 1px;
+    background: var(--bs-border-color, #dee2e6);
+  }
+
+  body.quarto-dark .score-table .model-col::before {
+    background: var(--ob-page-bg);
+  }
 }
 
 /* --- Floating header clone (narrow screens) --- */
