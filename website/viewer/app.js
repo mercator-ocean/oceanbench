@@ -528,11 +528,41 @@ function currentDepthVariables(panel) {
   };
 }
 
+// A pyramid cell may cover up to this many device pixels on screen before the next finer
+// level is read. Above one, a 1/4° field on a first screen of about four pixels per degree
+// still draws from its native level while the 1/12° fields stay one level up.
+const RENDER_CELL_DEVICE_PIXELS = 1.5;
+
+// Degrees of longitude per device pixel at the current zoom: the world is 360° across
+// the projection's displayWidth (see projectionFor), measured on the first laid-out map
+// box because the canvas backing store can still be at its default size before a render.
+function degreesPerDevicePixel() {
+  const panel = panels.slice(0, shared.layout).find((candidate) => candidate && candidate.els.wrap.getBoundingClientRect().width > 0);
+  if (!panel) return Infinity;
+  const ratio = window.devicePixelRatio || 1;
+  const rectangle = panel.els.wrap.getBoundingClientRect();
+  const fit = Math.min(rectangle.height, rectangle.width / 2) * ratio;
+  return 360 / (2 * fit * view.zoom);
+}
+
+// The level to draw is chosen from the screen, not from the dataset: the coarsest level
+// whose cells stay within RENDER_CELL_DEVICE_PIXELS, the same target in degrees for every
+// dataset, so a coarse and a fine forecast both draw at the detail the screen can show.
+// Zoomed in past the finest cell, the finest level is drawn.
 function selectRenderLevel(manifest) {
   const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
-  const finest = levels[0];
-  const targetCellSize = finest.cell_size_deg * Math.max(1, 24 / view.zoom);
-  return levels.findLast((level) => level.cell_size_deg <= targetCellSize)?.level ?? levels[levels.length - 1].level;
+  const targetCellSize = RENDER_CELL_DEVICE_PIXELS * degreesPerDevicePixel();
+  return levels.findLast((level) => level.cell_size_deg <= targetCellSize)?.level ?? levels[0].level;
+}
+
+// The level is chosen from the map box as well as the zoom, so a resize or a re-fit can
+// leave a drawn field on a level the screen no longer asks for.
+function renderLevelsStale() {
+  if (shared.scope === SCOPE_WHOLE_YEAR) return false;
+  return panels.slice(0, shared.layout).some((panel) => {
+    const manifest = panel && manifestFor(panel.state.dataset);
+    return manifest && panel.renderedLevel != null && panel.renderedLevel !== selectRenderLevel(manifest);
+  });
 }
 
 function renderLevelForSlug(slug) {
@@ -5182,7 +5212,8 @@ function scheduleLayoutRender() {
   clearTimeout(layoutRenderTimer);
   layoutRenderTimer = setTimeout(() => {
     clampView();
-    redrawAllPanels();
+    if (renderLevelsStale()) renderAllPanels().then(() => redrawOverlaysAll());
+    else redrawAllPanels();
     updateContextRail();
   }, 80);
 }
@@ -5676,7 +5707,8 @@ async function main() {
     const before = [view.zoom, view.centerNY];
     if (!parameters.has("z")) view.zoom = coverZoomFor(panels.find((candidate) => candidate.els.field.width > 0));
     clampView();
-    if (view.zoom !== before[0] || view.centerNY !== before[1]) redrawAllPanels();
+    if (renderLevelsStale()) await renderAllPanels();
+    else if (view.zoom !== before[0] || view.centerNY !== before[1]) redrawAllPanels();
   }
   if (leadClampNote) setStatus(leadClampNote);
   // A link that turns the spectrum on without carrying a box (psdOn=1 and no psd=) opened on
