@@ -321,6 +321,14 @@ function syncExampleNote() {
   elements["example-note"].hidden = !exampleViewActive;
 }
 
+// In swipe and difference display the bottom of the map is the Forecast 2 strip, so the
+// example note and the zoom reading sit above it instead of over its selectors. The strip
+// wraps with the width, so its height is measured rather than assumed.
+function syncHeadStripInset() {
+  const strip = panels.slice(0, shared.layout).find((panel) => panel.container.classList.contains("head-only"));
+  elements["panel-grid"].parentElement.style.setProperty("--head-strip-height", strip ? `${strip.container.offsetHeight}px` : "0px");
+}
+
 function defaultPanelState(index) {
   // Forecast 1's dataset when it already exists, so a 1 -> 2 switch pairs against what
   // is actually on screen rather than against the first catalog entry.
@@ -3020,6 +3028,7 @@ function syncPanelGrid() {
     grid.appendChild(panels[i].container);
     refreshPanelControls(panels[i]);
   }
+  syncHeadStripInset();
   for (let i = shared.layout; i < panels.length; i += 1) stopParticles(panels[i]);
   if (activePanelIndex >= shared.layout) activePanelIndex = 0;
   markActivePanel();
@@ -5337,6 +5346,7 @@ function scheduleLayoutRender() {
     if (renderLevelsStale()) renderAllPanels().then(() => redrawOverlaysAll());
     else redrawAllPanels();
     updateContextRail();
+    syncHeadStripInset();
   }, 80);
 }
 

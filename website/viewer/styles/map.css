@@ -402,7 +402,7 @@ SPDX-License-Identifier: EUPL-1.2
 .layer-info {
   position: absolute;
   right: 0.5rem;
-  bottom: 0.5rem;
+  bottom: calc(var(--head-strip-height, 0px) + 0.5rem);
   z-index: 5;
   margin: 0;
   padding: 0.3rem 0.5rem;
@@ -421,7 +421,7 @@ SPDX-License-Identifier: EUPL-1.2
 .example-note {
   position: absolute;
   left: 0.5rem;
-  bottom: 0.5rem;
+  bottom: calc(var(--head-strip-height, 0px) + 0.5rem);
   z-index: 5;
   max-width: min(34rem, calc(100% - 9rem));
   margin: 0;
