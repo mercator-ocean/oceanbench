@@ -114,19 +114,25 @@ sea-surface temperature is compared with the seasonally varying 90th-percentile 
 detected when this threshold is exceeded for at least five consecutive days. After events shorter than
 five days have been removed, internal gaps of at most two days between detected periods are filled.
 The same detection procedure and climatology are applied to the challenger and reference temperatures.
+Non-finite temperatures or thresholds interrupt event detection. These unknown days are not treated as
+observed days below the threshold and cannot be filled to join otherwise separate events.
 
 The daily climatological mean and 90th-percentile threshold are derived from the 1993--2022 GLORYS12V1
 reference period. OceanBench currently provides climatologies for the native 1/12 degree and 1/4 degree
 evaluation tracks. MHW diagnostics are not computed for the 1 degree track because no compatible
-climatology is currently available.
+climatology is currently available. Generated evaluation notebooks include both reference comparisons;
+unsupported resolutions return an explanatory message based on the dataset grid, regardless of the
+challenger file name.
 
-For forecast initializations after the first one in an evaluation collection, seven days of analysis
-history are prepended before detecting events. GLO12 analysis supplies the challenger history. The
+For every forecast initialization, including a collection's first or only initialization, seven days of
+analysis history are requested and prepended when available. GLO12 analysis supplies the challenger history. The
 reference history is supplied by GLORYS for the comparison with GLORYS reanalysis and by GLO12 for the
 comparison with GLO12 analysis. This context prevents an event already in progress at forecast
 initialization from being treated as a new short event. The history is used only for detection: reported
-scores are restricted to the original forecast lead days. The first initialization is retained and
-evaluated without preceding history when it is unavailable.
+scores are restricted to the original forecast lead days. A forecast is retained when its history store
+is unavailable, and any available history for the other product is still used. Missing history remains
+unknown rather than being replaced with cold observations. Authentication, transport, and other loading
+errors are propagated rather than silently interpreted as unavailable history.
 
 Detection scores
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -154,6 +160,10 @@ reference. The critical success index (CSI), also known as intersection over uni
 events and false alarms in a single score. A zero denominator produces a missing score rather than an
 arbitrary perfect or null value.
 
+Only grid points and dates with finite challenger temperature, reference temperature, and detection
+threshold contribute to the contingency table. Missing predictions or references do not count as
+missed events or false alarms. If no valid events remain, the corresponding score is missing.
+
 Intensity score
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -167,7 +177,8 @@ relative to the daily climatological mean, not merely the exceedance above the 9
 Intensity is set to zero outside each product's detected MHW mask. The intensity RMSE is evaluated over
 the union of the challenger and reference MHW masks and is reduced over forecast initializations and
 horizontal grid points using :math:`\cos(\mathrm{latitude})` area weights. It is reported independently
-for every forecast lead day:
+for every forecast lead day. This reduction requires the same valid temperature pairs and threshold as
+detection scoring, plus a finite climatological mean; a day with no valid events has missing RMSE:
 
 .. math::
 

@@ -51,6 +51,13 @@ oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reana
     region=region,
 )
 
+# #### Marine Heatwave diagnostics compared to GLORYS reanalysis
+
+oceanbench.metrics.marine_heatwave_diagnostics_compared_to_glorys_reanalysis(
+    challenger_dataset,
+    region=region,
+)
+
 # #### Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis
 
 oceanbench.metrics.rmsd_of_variables_compared_to_glo12_analysis(
@@ -75,6 +82,13 @@ oceanbench.metrics.rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
 # #### Deviation of Lagrangian trajectories compared to GLO12 analysis
 
 oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
+    challenger_dataset,
+    region=region,
+)
+
+# #### Marine Heatwave diagnostics compared to GLO12 analysis
+
+oceanbench.metrics.marine_heatwave_diagnostics_compared_to_glo12_analysis(
     challenger_dataset,
     region=region,
 )

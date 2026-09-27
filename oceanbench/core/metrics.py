@@ -4,6 +4,7 @@
 
 from collections.abc import Callable
 
+import numpy
 import pandas
 import xarray
 
@@ -17,6 +18,7 @@ from oceanbench.core.marine_heatwave_climatology import (
 from oceanbench.core.marine_heatwave_history import (
     glo12_analysis_history_dataset,
     glorys_reanalysis_history_dataset,
+    marine_heatwave_history_is_unavailable,
 )
 from oceanbench.core.marine_heatwaves import marine_heatwave_diagnostics
 from oceanbench.core.lagrangian_trajectory import (
@@ -256,6 +258,11 @@ def _marine_heatwave_diagnostics_against_reference(
     reference_history_dataset: xarray.Dataset | None,
     region: RegionLike,
 ) -> pandas.DataFrame:
+    if challenger_history_dataset is None and reference_history_dataset is not None:
+        challenger_history_dataset = _marine_heatwave_missing_history(challenger_dataset)
+    if reference_history_dataset is None and challenger_history_dataset is not None:
+        reference_history_dataset = _marine_heatwave_missing_history(reference_dataset)
+
     (
         climatology_mean,
         percentile_90,
@@ -295,15 +302,40 @@ def _marine_heatwave_history_dataset(
     region: RegionLike,
 ) -> xarray.Dataset | None:
     first_day_dimension = Dimension.FIRST_DAY_DATETIME.key()
-    if challenger_dataset.sizes[first_day_dimension] < 2:
-        return None
+    try:
+        available_history = history_loader(challenger_dataset, MARINE_HEATWAVE_HISTORY_DAYS)
+    except Exception as error:
+        if not marine_heatwave_history_is_unavailable(error):
+            raise
+        if challenger_dataset.sizes[first_day_dimension] == 1:
+            return None
 
-    available_history = history_loader(
-        challenger_dataset.isel({first_day_dimension: slice(1, None)}),
-        MARINE_HEATWAVE_HISTORY_DAYS,
-    )
+        available_histories = []
+        for index in range(challenger_dataset.sizes[first_day_dimension]):
+            try:
+                available_histories.append(
+                    history_loader(
+                        challenger_dataset.isel({first_day_dimension: slice(index, index + 1)}),
+                        MARINE_HEATWAVE_HISTORY_DAYS,
+                    )
+                )
+            except Exception as error:
+                if not marine_heatwave_history_is_unavailable(error):
+                    raise
+
+        if not available_histories:
+            return None
+        available_history = xarray.concat(available_histories, dim=first_day_dimension, join="exact")
+
     regional_history = subset_dataset_to_region(available_history, region)
     return regional_history.reindex({first_day_dimension: challenger_dataset[first_day_dimension]})
+
+
+def _marine_heatwave_missing_history(forecast_dataset: xarray.Dataset) -> xarray.Dataset:
+    lead_day_dimension = Dimension.LEAD_DAY_INDEX.key()
+    return forecast_dataset.isel({lead_day_dimension: slice(0, 0)}).reindex(
+        {lead_day_dimension: numpy.arange(-MARINE_HEATWAVE_HISTORY_DAYS, 0)}
+    )
 
 
 def _subset_dataarray_to_region(data: xarray.DataArray, region: RegionLike) -> xarray.DataArray:

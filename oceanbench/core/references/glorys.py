@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from datetime import datetime
+import weakref
 import numpy
 import pandas
 from xarray import Dataset, open_dataset, open_mfdataset, concat
@@ -21,7 +22,7 @@ from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_ref
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
-_GLORYS_REANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
+_GLORYS_REANALYSIS_DATASET_CACHE: dict[int, tuple[weakref.ReferenceType[Dataset], Dataset]] = {}
 
 
 def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
@@ -164,8 +165,8 @@ def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
 def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
     cache_key = id(challenger_dataset)
     cached_dataset = _GLORYS_REANALYSIS_DATASET_CACHE.get(cache_key)
-    if cached_dataset is not None:
-        return cached_dataset
+    if cached_dataset is not None and cached_dataset[0]() is challenger_dataset:
+        return cached_dataset[1]
 
     def open_dataset() -> Dataset:
         resolution = get_dataset_resolution(challenger_dataset)
@@ -180,5 +181,14 @@ def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
             raise ValueError(f"Unsupported resolution: {resolution}")
 
     reference_dataset = with_remote_http_retries("GLORYS reference dataset open", open_dataset)
-    _GLORYS_REANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
+
+    def _remove_cached_dataset(request_reference: weakref.ReferenceType[Dataset]) -> None:
+        cached_dataset = _GLORYS_REANALYSIS_DATASET_CACHE.get(cache_key)
+        if cached_dataset is not None and cached_dataset[0] is request_reference:
+            _GLORYS_REANALYSIS_DATASET_CACHE.pop(cache_key, None)
+
+    _GLORYS_REANALYSIS_DATASET_CACHE[cache_key] = (
+        weakref.ref(challenger_dataset, _remove_cached_dataset),
+        reference_dataset,
+    )
     return reference_dataset
