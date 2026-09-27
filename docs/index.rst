@@ -18,6 +18,7 @@ This documentation contains the definitions of the evaluation methods as well as
 
    shape-of-the-challenger-dataset
    evaluation-methods
+   observation-support
    input-datasets-for-oceanbench-challenger-evaluation
    one-degree-track
    source/oceanbench

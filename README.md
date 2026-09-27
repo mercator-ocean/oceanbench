@@ -203,6 +203,14 @@ Running OceanBench to evaluate systems with 1/12° resolution uses the [Copernic
 
 > If you're running OceanBench in a non-interactive way, please follow the [Copernicus Marine Toolbox documentation](https://toolbox-docs.marine.copernicus.eu) to login to the Copernicus Marine Service before running the bench.
 
+## Optional observation-support report
+
+The [observation-support guide](https://oceanbench.readthedocs.io/en/latest/observation-support.html)
+describes a companion temperature/salinity report with counts by forecast lead
+day, spatial and monthly coverage, and the quality-control policy recorded in
+each source store. Start with a small region and a short evaluation period.
+Observation independence remains unknown until model-specific evidence establishes it.
+
 ## Contribution
 
 Your help to improve OceanBench is welcome.

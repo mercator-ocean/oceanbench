@@ -34,6 +34,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 ### Added
 
 - The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- An optional temperature/salinity observation-support report adds per-lead counts, spatial and monthly coverage, and recorded daily QC/source provenance without changing official scores. Observation independence remains unknown.
 
 ## 0.5.1 - 2026-09-02
 

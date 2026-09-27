@@ -44,6 +44,11 @@ oceanbench.metrics.rmsd_of_variables_compared_to_observations(
     region=region,
 )
 
+# An optional [observation-support report](https://oceanbench.readthedocs.io/en/latest/observation-support.html)
+# adds temperature/salinity counts by lead day, coverage and recorded QC/source
+# provenance. Run it separately on a small region and period; it reads additional
+# observation audit fields. It does not establish observation independence.
+
 # #### Deviation of Lagrangian trajectories compared to GLORYS reanalysis
 
 oceanbench.metrics.deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(

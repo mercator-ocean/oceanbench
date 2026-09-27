@@ -2,11 +2,12 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import json
 from pathlib import Path
 
 import numpy
 import pandas
-from xarray import Dataset, open_dataset
+from xarray import Dataset, concat, decode_cf, open_dataset
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.datetime_utils import generate_dates
@@ -326,3 +327,119 @@ def observations(challenger_dataset: Dataset) -> Dataset:
         )
 
     return with_remote_http_retries("observation dataset open", open_selected_observations)
+
+
+def _selected_observation_audit_dataset(
+    observation_days: numpy.ndarray,
+    first_day_timestamps: pandas.DatetimeIndex,
+    first_day_datetimes: numpy.ndarray,
+    lead_days_count: int,
+) -> Dataset:
+    owned_day_datasets = []
+    day_datasets = []
+    provenance = []
+
+    def close_day_datasets() -> None:
+        for dataset in owned_day_datasets:
+            dataset.close()
+
+    try:
+        for day in observation_days:
+            source_url = observation_path(day)
+            day_dataset = open_remote_zarr(source_url, decode_cf=False, chunks="auto", consolidated=True)
+            owned_day_datasets.append(day_dataset)
+            _prepare_day_observations_dataset(day_dataset)
+            require_remote_dataset_dimensions(day_dataset, ["obs"], "observation audit dataset open")
+            provenance.append(
+                {
+                    **day_dataset.attrs,
+                    "date": pandas.Timestamp(day).strftime("%Y-%m-%d"),
+                    "source_url": source_url,
+                    "available_variables": sorted(day_dataset.variables),
+                    "source_attributes": dict(day_dataset.attrs),
+                }
+            )
+            day_datasets.append(
+                decode_cf(day_dataset, mask_and_scale=False).assign_coords(
+                    source_day=("obs", numpy.full(day_dataset.sizes["obs"], day))
+                )
+            )
+
+        audit_dataset = concat(day_datasets, dim="obs", combine_attrs="drop").rename({"obs": "observations"})
+        time_key = Dimension.TIME.key()
+        observation_datetimes = pandas.to_datetime(audit_dataset[time_key].values)
+        audit_dataset = audit_dataset.assign_coords({time_key: ("observations", observation_datetimes)})
+        selected_observation_indices, selected_run_indices = _forecast_observation_matches(
+            observation_datetimes, first_day_timestamps, lead_days_count
+        )
+        audit_dataset = audit_dataset.isel(observations=selected_observation_indices).assign_coords(
+            {
+                Dimension.FIRST_DAY_DATETIME.key(): (
+                    "observations",
+                    first_day_datetimes[selected_run_indices],
+                )
+            }
+        )
+        audit_dataset = _assign_standard_names(audit_dataset)
+        audit_dataset.attrs["observation_provenance"] = json.dumps(provenance)
+        audit_dataset.set_close(close_day_datasets)
+        return audit_dataset
+    except Exception:
+        close_day_datasets()
+        raise
+
+
+def observation_audit(challenger_dataset: Dataset) -> Dataset:
+    """Open daily observation evidence for the challenger's forecast windows.
+
+    Retain all stored identity, raw measurement and QC variables alongside the
+    scored variables. Missing audit variables remain absent, or null for days
+    where they are missing; they must be interpreted as unknown by consumers.
+    Every row carries ``source_day`` and ``first_day_datetime``, including rows
+    repeated across overlapping forecast windows. ``observation_provenance``
+    contains a JSON list of each day's stored attributes, source URL and available
+    variables. ``source_attributes`` preserves the exact original attributes,
+    including any names that collide with the reader's metadata. Only days inside
+    a forecast window are opened. This reader bypasses the scoring cache. Call
+    ``close()`` on the returned dataset after use to release its daily stores.
+    """
+    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
+    if first_day_datetimes.size == 0 or lead_days_count == 0:
+        raise ValueError("Observation audit requires at least one forecast start and one lead day.")
+    if numpy.isnat(first_day_datetimes).any():
+        raise ValueError("Observation audit forecast starts must contain valid datetimes.")
+    first_challenger_day = first_day_datetimes.astype("datetime64[D]").min()
+    if first_challenger_day < OBSERVATIONS_FIRST_AVAILABLE_DATE:
+        raise ObservationDataUnavailableError(
+            "Observation audit data is available from "
+            f"{pandas.Timestamp(OBSERVATIONS_FIRST_AVAILABLE_DATE):%Y-%m-%d}, "
+            "while challenger first_day_datetime starts on "
+            f"{pandas.Timestamp(first_challenger_day):%Y-%m-%d}."
+        )
+    first_day_timestamps = pandas.to_datetime(first_day_datetimes)
+    observation_days = numpy.unique(
+        numpy.concatenate(
+            [
+                numpy.array(
+                    generate_dates(
+                        first_day_timestamp.strftime("%Y-%m-%d"),
+                        (
+                            first_day_timestamp
+                            + pandas.Timedelta(days=lead_days_count)
+                            - pandas.Timedelta(nanoseconds=1)
+                        ).strftime("%Y-%m-%d"),
+                        1,
+                    ),
+                    dtype="datetime64[D]",
+                )
+                for first_day_timestamp in first_day_timestamps
+            ]
+        )
+    )
+    return with_remote_http_retries(
+        "observation audit dataset open",
+        lambda: _selected_observation_audit_dataset(
+            observation_days, first_day_timestamps, first_day_datetimes, lead_days_count
+        ),
+    )
