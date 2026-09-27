@@ -6,10 +6,27 @@ from collections.abc import Callable
 
 import numpy
 import xarray
+from zarr.errors import GroupNotFoundError
 
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
+
+
+def marine_heatwave_history_is_unavailable(error: Exception) -> bool:
+    if not isinstance(error, (FileNotFoundError, GroupNotFoundError)):
+        return False
+
+    seen_exceptions = set()
+    current_exception: Exception | None = error
+    while current_exception is not None and id(current_exception) not in seen_exceptions:
+        seen_exceptions.add(id(current_exception))
+        if not isinstance(current_exception, (FileNotFoundError, GroupNotFoundError)) and not (
+            isinstance(current_exception, KeyError) and current_exception.args == (".zmetadata",)
+        ):
+            return False
+        current_exception = current_exception.__cause__ or current_exception.__context__
+    return True
 
 
 def load_marine_heatwave_analysis_history(

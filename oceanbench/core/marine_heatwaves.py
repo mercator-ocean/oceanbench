@@ -127,13 +127,16 @@ def _detect_marine_heatwave_mask(
     allowed_gap: int = 2,
 ) -> xarray.DataArray:
     threshold_exceeded = temperature > percentile_90
+    valid_observations = numpy.isfinite(temperature) & numpy.isfinite(percentile_90)
     lead_day_dimension = Dimension.LEAD_DAY_INDEX.key()
     threshold_exceeded = threshold_exceeded.chunk({lead_day_dimension: -1})
+    valid_observations = valid_observations.chunk({lead_day_dimension: -1})
 
     mask = xarray.apply_ufunc(
-        _detect_marine_heatwave_events,
+        _detect_marine_heatwave_events_with_validity,
         threshold_exceeded,
-        input_core_dims=[[lead_day_dimension]],
+        valid_observations,
+        input_core_dims=[[lead_day_dimension], [lead_day_dimension]],
         output_core_dims=[[lead_day_dimension]],
         kwargs={
             "minimum_duration": minimum_duration,
@@ -153,7 +156,8 @@ def _marine_heatwave_intensity(
     marine_heatwave_mask: xarray.DataArray,
 ) -> xarray.DataArray:
     anomaly_above_climatology = temperature - climatology_mean
-    return anomaly_above_climatology.where(marine_heatwave_mask, 0.0).where(temperature.notnull())
+    valid_intensity = numpy.isfinite(temperature) & numpy.isfinite(climatology_mean)
+    return anomaly_above_climatology.where(marine_heatwave_mask, 0.0).where(valid_intensity)
 
 
 def _compute_marine_heatwave_scores(
@@ -180,6 +184,10 @@ def _compute_marine_heatwave_scores(
 
     challenger_intensity = _marine_heatwave_intensity(challenger_temperature, climatology_mean, challenger_mask)
     reference_intensity = _marine_heatwave_intensity(reference_temperature, climatology_mean, reference_mask)
+    valid_detection_pairs = (
+        numpy.isfinite(challenger_temperature) & numpy.isfinite(reference_temperature) & numpy.isfinite(percentile_90)
+    )
+    valid_intensity_pairs = valid_detection_pairs & numpy.isfinite(climatology_mean)
 
     if evaluation_lead_days is not None:
         lead_day_dimension = Dimension.LEAD_DAY_INDEX.key()
@@ -188,14 +196,16 @@ def _compute_marine_heatwave_scores(
         reference_mask = reference_mask.sel(selection)
         challenger_intensity = challenger_intensity.sel(selection)
         reference_intensity = reference_intensity.sel(selection)
+        valid_detection_pairs = valid_detection_pairs.sel(selection)
+        valid_intensity_pairs = valid_intensity_pairs.sel(selection)
 
     score_dataset = xarray.Dataset(
         {
-            **_event_detection_scores(challenger_mask, reference_mask),
+            **_event_detection_scores(challenger_mask, reference_mask, valid_detection_pairs),
             **_physical_scores(
                 challenger_intensity=challenger_intensity,
                 reference_intensity=reference_intensity,
-                evaluation_mask=challenger_mask | reference_mask,
+                evaluation_mask=(challenger_mask | reference_mask) & valid_intensity_pairs,
             ),
         }
     )
@@ -222,7 +232,10 @@ def marine_heatwave_diagnostics(
     ``allowed_gap`` days are filled. When a challenger and reference history are provided,
     they are prepended before detection so that an event already in progress at forecast
     initialization is not treated as a new short event; the history days are excluded from
-    the reported scores.
+    the reported scores. Nonfinite temperatures or thresholds are unknown days: they
+    interrupt events and are never filled as gaps. Detection scores exclude pairs with
+    an unknown challenger, reference, or threshold; intensity scores additionally require
+    a finite climatological mean. Scores with no eligible events are NaN.
 
     Parameters
     ----------
@@ -331,10 +344,25 @@ def _detect_marine_heatwave_events(
     threshold_exceeded: numpy.ndarray,
     minimum_duration: int,
     allowed_gap: int,
+    valid_observations: numpy.ndarray | None = None,
 ) -> numpy.ndarray:
     exceedance = numpy.asarray(threshold_exceeded, dtype=bool)
+    if valid_observations is None:
+        valid_observations = numpy.ones_like(exceedance, dtype=bool)
+    else:
+        valid_observations = numpy.asarray(valid_observations, dtype=bool)
+    exceedance = exceedance & valid_observations
     long_enough_events = _remove_short_true_runs(exceedance, minimum_duration)
-    return _fill_short_internal_false_runs(long_enough_events, allowed_gap)
+    return _fill_short_internal_false_runs(long_enough_events, allowed_gap, valid_observations)
+
+
+def _detect_marine_heatwave_events_with_validity(
+    threshold_exceeded: numpy.ndarray,
+    valid_observations: numpy.ndarray,
+    minimum_duration: int,
+    allowed_gap: int,
+) -> numpy.ndarray:
+    return _detect_marine_heatwave_events(threshold_exceeded, minimum_duration, allowed_gap, valid_observations)
 
 
 def _maximal_run_bounds(
@@ -361,12 +389,18 @@ def _remove_short_true_runs(
 def _fill_short_internal_false_runs(
     mask: numpy.ndarray,
     allowed_gap: int,
+    valid_observations: numpy.ndarray | None = None,
 ) -> numpy.ndarray:
     gaps = ~mask
     run_start, run_stop = _maximal_run_bounds(gaps)
     run_length = run_stop - run_start
     is_internal_gap = (run_start > 0) & (run_stop < mask.shape[-1])
     fillable_gap = gaps & is_internal_gap & (run_length <= allowed_gap)
+    if valid_observations is not None:
+        observed_run_start, observed_run_stop = _maximal_run_bounds(valid_observations)
+        fillable_gap = (
+            fillable_gap & valid_observations & (run_start >= observed_run_start) & (run_stop <= observed_run_stop)
+        )
     return mask | fillable_gap
 
 
@@ -386,10 +420,11 @@ def _leap_year_dayofyear(dates: xarray.DataArray) -> xarray.DataArray:
 def _event_detection_scores(
     challenger_mask: xarray.DataArray,
     reference_mask: xarray.DataArray,
+    valid_pairs: xarray.DataArray,
 ) -> dict[str, xarray.DataArray]:
-    true_positive = _weighted_sum(challenger_mask & reference_mask)
-    false_positive = _weighted_sum(challenger_mask & ~reference_mask)
-    false_negative = _weighted_sum(~challenger_mask & reference_mask)
+    true_positive = _weighted_sum(challenger_mask & reference_mask & valid_pairs)
+    false_positive = _weighted_sum(challenger_mask & ~reference_mask & valid_pairs)
+    false_negative = _weighted_sum(~challenger_mask & reference_mask & valid_pairs)
 
     return {
         "probability_of_detection": _safe_divide(true_positive, true_positive + false_negative),

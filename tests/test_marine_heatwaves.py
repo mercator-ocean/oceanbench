@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import numpy
+import pytest
 import xarray
 from numpy.testing import assert_allclose
 
@@ -241,3 +242,162 @@ def test_history_extends_detection_without_being_scored() -> None:
     assert result.shape[1] == FORECAST_LEAD_DAYS
     assert_allclose(_score(result, "probability_of_detection"), 1.0)
     assert_allclose(_score(result, "intensity_rmse"), 0.0)
+
+
+@pytest.mark.parametrize("missing_source", ["challenger", "reference", "threshold"])
+@pytest.mark.parametrize("missing_value", [numpy.nan, numpy.inf])
+def test_detection_and_intensity_exclude_nonfinite_pairs(missing_source: str, missing_value: float) -> None:
+    latitudes = [0.0]
+    challenger = _forecast_temperature_dataset([18.0, 18.0], latitudes)
+    reference = _forecast_temperature_dataset([18.0, 18.0], latitudes)
+    climatology_mean = _flat_climatology(15.0, latitudes, longitude_count=2)
+    percentile_90 = _flat_climatology(16.0, latitudes, longitude_count=2)
+
+    if missing_source == "challenger":
+        challenger = _forecast_temperature_dataset([18.0, missing_value], latitudes)
+    elif missing_source == "reference":
+        reference = _forecast_temperature_dataset([18.0, missing_value], latitudes)
+    else:
+        percentile_90.loc[{Dimension.LONGITUDE.key(): 1}] = missing_value
+
+    result = marine_heatwave_diagnostics(challenger, reference, climatology_mean, percentile_90)
+
+    for metric, expected in {
+        "probability_of_detection": 1.0,
+        "false_alarm_ratio": 0.0,
+        "critical_success_index": 1.0,
+        "intensity_rmse": 0.0,
+    }.items():
+        assert_allclose(result.loc[METRIC_LABELS[metric]], expected)
+
+
+@pytest.mark.parametrize("missing_value", [numpy.nan, numpy.inf])
+def test_missing_climatological_mean_excludes_intensity_but_preserves_detection(missing_value: float) -> None:
+    latitudes = [0.0]
+    challenger = _forecast_temperature_dataset([18.0, 18.0], latitudes)
+    reference = _forecast_temperature_dataset([18.0, 15.0], latitudes)
+    climatology_mean = _flat_climatology(15.0, latitudes, longitude_count=2)
+    climatology_mean.loc[{Dimension.LONGITUDE.key(): 1}] = missing_value
+    percentile_90 = _flat_climatology(16.0, latitudes, longitude_count=2)
+
+    result = marine_heatwave_diagnostics(challenger, reference, climatology_mean, percentile_90)
+
+    assert_allclose(result.loc[METRIC_LABELS["probability_of_detection"]], 1.0)
+    assert_allclose(result.loc[METRIC_LABELS["false_alarm_ratio"]], 0.5)
+    assert_allclose(result.loc[METRIC_LABELS["critical_success_index"]], 0.5)
+    assert_allclose(result.loc[METRIC_LABELS["intensity_rmse"]], 0.0)
+
+
+@pytest.mark.parametrize("missing_source", ["challenger", "reference", "threshold", "mean"])
+def test_all_invalid_pairs_produce_undefined_scores(missing_source: str) -> None:
+    latitudes = [0.0]
+    challenger = _forecast_temperature_dataset([18.0], latitudes)
+    reference = _forecast_temperature_dataset([18.0], latitudes)
+    climatology_mean = _flat_climatology(15.0, latitudes, longitude_count=1)
+    percentile_90 = _flat_climatology(16.0, latitudes, longitude_count=1)
+    if missing_source == "challenger":
+        challenger = _forecast_temperature_dataset([numpy.nan], latitudes)
+    elif missing_source == "reference":
+        reference = _forecast_temperature_dataset([numpy.nan], latitudes)
+    elif missing_source == "threshold":
+        percentile_90 = _flat_climatology(numpy.nan, latitudes, longitude_count=1)
+    else:
+        climatology_mean = _flat_climatology(numpy.nan, latitudes, longitude_count=1)
+
+    result = marine_heatwave_diagnostics(challenger, reference, climatology_mean, percentile_90)
+
+    assert result.loc[METRIC_LABELS["intensity_rmse"]].isna().all()
+    if missing_source != "mean":
+        assert result.isna().all().all()
+    else:
+        assert_allclose(result.loc[METRIC_LABELS["probability_of_detection"]], 1.0)
+        assert_allclose(result.loc[METRIC_LABELS["false_alarm_ratio"]], 0.0)
+        assert_allclose(result.loc[METRIC_LABELS["critical_success_index"]], 1.0)
+
+
+@pytest.mark.parametrize(
+    "challenger_temperature,reference_temperature,expected_scores",
+    [
+        (15.0, 15.0, [numpy.nan, numpy.nan, numpy.nan, numpy.nan]),
+        (18.0, 15.0, [numpy.nan, 1.0, 0.0, 3.0]),
+        (15.0, 18.0, [0.0, numpy.nan, 0.0, 3.0]),
+    ],
+)
+def test_zero_event_denominators_are_undefined(
+    challenger_temperature: float, reference_temperature: float, expected_scores: list[float]
+) -> None:
+    latitudes = [0.0]
+    challenger = _forecast_temperature_dataset([challenger_temperature], latitudes)
+    reference = _forecast_temperature_dataset([reference_temperature], latitudes)
+    climatology_mean = _flat_climatology(15.0, latitudes, longitude_count=1)
+    percentile_90 = _flat_climatology(16.0, latitudes, longitude_count=1)
+
+    result = marine_heatwave_diagnostics(challenger, reference, climatology_mean, percentile_90)
+
+    assert_allclose(result.values, numpy.broadcast_to(numpy.array(expected_scores)[:, None], result.shape))
+
+
+@pytest.mark.parametrize("missing_source", ["temperature", "threshold"])
+@pytest.mark.parametrize(
+    "temperatures,expected_mask",
+    [
+        ([18.0] * 5 + [numpy.nan] * 2 + [18.0] * 5, [True] * 5 + [False] * 2 + [True] * 5),
+        ([18.0] * 4 + [numpy.nan] + [18.0] * 4, [False] * 9),
+        ([18.0] * 5 + [15.0, numpy.nan] + [18.0] * 5, [True] * 5 + [False] * 2 + [True] * 5),
+        ([18.0] * 5 + [numpy.nan, 15.0] + [18.0] * 5, [True] * 5 + [False] * 2 + [True] * 5),
+        ([18.0] * 5 + [15.0] * 2 + [18.0] * 5, [True] * 12),
+    ],
+)
+def test_unknown_days_interrupt_events_and_are_not_gap_filled_with_dask(
+    missing_source: str, temperatures: list[float], expected_mask: list[bool]
+) -> None:
+    lead_day_dimension = Dimension.LEAD_DAY_INDEX.key()
+    temperature = xarray.DataArray(
+        temperatures,
+        dims=[lead_day_dimension],
+        coords={lead_day_dimension: numpy.arange(len(temperatures))},
+    )
+    percentile_90 = xarray.full_like(temperature, 16.0)
+    if missing_source == "threshold":
+        percentile_90 = percentile_90.where(temperature.notnull())
+        temperature = temperature.fillna(18.0)
+
+    detected = marine_heatwaves._detect_marine_heatwave_mask(
+        temperature.chunk({lead_day_dimension: 3}),
+        percentile_90.chunk({lead_day_dimension: 4}),
+    )
+
+    assert detected.chunks is not None
+    assert_allclose(detected.compute(), expected_mask)
+
+
+def test_missing_pair_scores_match_with_chunked_dask_inputs() -> None:
+    latitudes = [0.0]
+    challenger = _forecast_temperature_dataset([18.0, numpy.nan, 18.0, 15.0], latitudes)
+    reference = _forecast_temperature_dataset([18.0, 18.0, numpy.nan, 18.0], latitudes)
+    climatology_mean = _flat_climatology(15.0, latitudes, longitude_count=4)
+    percentile_90 = _flat_climatology(16.0, latitudes, longitude_count=4)
+    chunk_sizes = {Dimension.LEAD_DAY_INDEX.key(): 3, Dimension.LONGITUDE.key(): 2}
+
+    result = marine_heatwave_diagnostics(
+        challenger.chunk(chunk_sizes),
+        reference.chunk(chunk_sizes),
+        climatology_mean.chunk({"dayofyear": 30, Dimension.LONGITUDE.key(): 2}),
+        percentile_90.chunk({"dayofyear": 30, Dimension.LONGITUDE.key(): 2}),
+    )
+
+    for metric, expected in {
+        "probability_of_detection": 0.5,
+        "false_alarm_ratio": 0.0,
+        "critical_success_index": 0.5,
+        "intensity_rmse": numpy.sqrt(4.5),
+    }.items():
+        assert_allclose(result.loc[METRIC_LABELS[metric]], expected)
+
+
+def test_boolean_detector_preserves_positional_arguments() -> None:
+    exceedance = numpy.array([True] * 5 + [False] * 2 + [True] * 5)
+
+    detected = marine_heatwaves._detect_marine_heatwave_events(exceedance, 5, 2)
+
+    assert detected.all()

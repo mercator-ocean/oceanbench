@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from datetime import datetime
+import weakref
 import numpy
 import pandas
 from xarray import Dataset, open_dataset, open_mfdataset, merge, concat
@@ -21,7 +22,7 @@ from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_ref
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
-_GLO12_ANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
+_GLO12_ANALYSIS_DATASET_CACHE: dict[int, tuple[weakref.ReferenceType[Dataset], Dataset]] = {}
 
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
@@ -193,8 +194,8 @@ def _glo12_analysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
 def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
     cache_key = id(challenger_dataset)
     cached_dataset = _GLO12_ANALYSIS_DATASET_CACHE.get(cache_key)
-    if cached_dataset is not None:
-        return cached_dataset
+    if cached_dataset is not None and cached_dataset[0]() is challenger_dataset:
+        return cached_dataset[1]
 
     def open_dataset() -> Dataset:
         resolution = get_dataset_resolution(challenger_dataset)
@@ -209,5 +210,14 @@ def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
             raise ValueError(f"Unsupported resolution: {resolution}")
 
     reference_dataset = with_remote_http_retries("GLO12 reference dataset open", open_dataset)
-    _GLO12_ANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
+
+    def _remove_cached_dataset(request_reference: weakref.ReferenceType[Dataset]) -> None:
+        cached_dataset = _GLO12_ANALYSIS_DATASET_CACHE.get(cache_key)
+        if cached_dataset is not None and cached_dataset[0] is request_reference:
+            _GLO12_ANALYSIS_DATASET_CACHE.pop(cache_key, None)
+
+    _GLO12_ANALYSIS_DATASET_CACHE[cache_key] = (
+        weakref.ref(challenger_dataset, _remove_cached_dataset),
+        reference_dataset,
+    )
     return reference_dataset
