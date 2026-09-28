@@ -1212,13 +1212,10 @@ function renderRankHistograms() {
   const systems = rankHistogramSystems(panels);
   const densityMaximum = rankHistogramDensityMaximum(panels, activeRankHistogramBand);
 
-  const bandChips = buildSelectorRow("Day", buildSelectorChips(
-    (bandIndex) => leadDayBands[bandIndex],
-    leadDayBands.map((_, bandIndex) => bandIndex),
-    activeRankHistogramBand,
-    "data-rank-histogram-band",
-    "Lead day",
-  ));
+  const bandOptions = leadDayBands
+    .map((label, bandIndex) => `<option value="${bandIndex}"${bandIndex === activeRankHistogramBand ? " selected" : ""}>${label}</option>`)
+    .join("");
+  const bandSelect = `<label class="rank-histogram-day">Lead day: <select id="rank-histogram-day-select">${bandOptions}</select></label>`;
   const legend = systems
     .map((system) => `<span class="rank-histogram-legend-item"><span class="rank-histogram-swatch rank-histogram-swatch--${system}"></span>${displayName(system)}</span>`)
     .join("");
@@ -1227,15 +1224,13 @@ function renderRankHistograms() {
       + `${rankHistogramPanelSvg(panel, systems, activeRankHistogramBand, binCount, densityMaximum)}</figure>`)
     .join("");
 
-  container.innerHTML = `<div class="rank-histogram-controls">${bandChips}<span class="rank-histogram-legend">${legend}</span></div>`
+  container.innerHTML = `<div class="rank-histogram-controls">${bandSelect}<span class="rank-histogram-legend">${legend}</span></div>`
     + `<p class="rank-histogram-axes-note">Rank of the observation among the members, 1 to ${binCount}, against the density of observations in that rank, 1 for a flat histogram (dashed).</p>`
     + `<div class="rank-histogram-grid">${figures}</div>`;
 
-  container.querySelectorAll("[data-rank-histogram-band]").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      activeRankHistogramBand = Number(chip.dataset.rankHistogramBand);
-      renderRankHistograms();
-    });
+  document.getElementById("rank-histogram-day-select").addEventListener("change", (event) => {
+    activeRankHistogramBand = Number(event.target.value);
+    renderRankHistograms();
   });
 }
 
