@@ -33,6 +33,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 ### Added
 
 - The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- An ensemble evaluation view scores the GloEns and GLOW-ens ensembles against observations and GLORYS with the ensemble mean RMSD, the fair CRPS, the spread-skill ratio and rank histograms. Deterministic scores are unchanged.
 
 ## 0.5.1 - 2026-09-02
 

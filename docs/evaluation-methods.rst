@@ -110,3 +110,32 @@ Deviation of Lagrangian trajectories compared to GLO12 analysis
 The deviation in kilometers between the two sets of drifting particles computed over the challenger datasets and the GLO12 analysis dataset.
 
 The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)``-weighted probabilities, then simulated over the area.
+
+Ensemble (probabilistic) evaluation
+**********************************************************************************************
+
+Two ensembles are evaluated over 2024 on 52 weekly starts: GloEns, the Mercator Ocean physics ensemble with 50 members and lead days 1 to 10, and GLOW-ens, the GLOW machine learning ensemble with 16 members and lead days 1 to 9.
+They are compared against the version 2 observation basis of OceanBench and against the quarter degree `GLORYS reanalysis <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_.
+Two deterministic forecasts are kept next to the ensemble means as references: GLONET, the machine learning system, and GLO12, the physics system GloEns starts from.
+
+The following scores are reported, per variable, depth and lead day:
+
+- Ensemble mean RMSD: the root mean square deviation of the mean of the members. Against observations it is scored exactly as the deterministic forecasts are, so it reads directly against them. Lower is better.
+- Fair CRPS: the continuous ranked probability score with the finite ensemble correction of Ferro (2014), which compares the whole distribution of the members with the reference. It is in the unit of the variable, and lower is better.
+- Spread-error ratio: the ensemble spread divided by the RMSD of the ensemble mean. A value of 1 means the spread matches the error, and a value below 1 means the ensemble is too confident. Against GLORYS it carries no observation or analysis error, so it reads low: it measures agreement with the analysis, not calibration.
+- Rank histograms: for each observation, the rank of the observed value among the members. They are drawn against observations only.
+
+Against observations, every score uses the same Class IV matchup, one observation at a time, with each member matched to every observation.
+
+Observation error (sigma) is estimated from the observation data itself, as a map varying by month, depth and variable, from the sigma lookup artifact ``sigma-lookup-v3.1.0.zarr``.
+It is used in two places only.
+In the spread-error ratio against observations, the mean observation error variance is added to the ensemble variance before the ratio is taken.
+In the rank histograms, every member receives its own random draw of observation error before the ranking, and the histogram is averaged over 4 such draws.
+The CRPS and RMSD scores never use it.
+
+GloEns ranks fall into 51 bins and GLOW-ens ranks into 17, so the GloEns ranks are merged three at a time onto the same 17 bins.
+The "All days" histogram pools lead days 1 to 9, which both ensembles cover.
+A flat histogram is a calibrated ensemble, a U shape an under-dispersive one, a dome an over-dispersive one, and a slope a bias.
+
+Limitations: the scores do not have confidence intervals (for example from a bootstrap over starts) yet.
+The realism of individual members (for example their spatial spectra) is not checked yet.
