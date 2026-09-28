@@ -110,10 +110,12 @@ RANK_HISTOGRAM_ROW_KEY = ["challenger", "variable", "depth", "lead_day", "dressi
 # are merged three at a time onto the 17 bins of GLOW-ens, so both are drawn with the same bars.
 RANK_HISTOGRAM_BIN_COUNT = 17
 RANK_HISTOGRAM_SOURCE_BIN_COUNTS = {GLOENS: 51, GLOWENS: 17}
+# The histograms are offered pooled over lead days 1 to 9 and for each of those days alone. The
+# lead day 10 of GloEns is left out, so both ensembles are compared on the same days.
+RANK_HISTOGRAM_LEAD_DAYS = list(range(1, 10))
 RANK_HISTOGRAM_LEAD_DAY_BANDS = [
-    {"label": "Days 1-3", "lead_days": [1, 2, 3]},
-    {"label": "Days 4-6", "lead_days": [4, 5, 6]},
-    {"label": "Days 7-9", "lead_days": [7, 8, 9]},
+    {"label": "All days", "lead_days": RANK_HISTOGRAM_LEAD_DAYS},
+    *({"label": str(lead_day), "lead_days": [lead_day]} for lead_day in RANK_HISTOGRAM_LEAD_DAYS),
 ]
 
 STREAM_LABELS = {

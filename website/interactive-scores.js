@@ -50,7 +50,8 @@ let parsedData = null;
 let parsedDataByView = {};
 let ensembleSections = [];
 let ensembleRankHistograms = null;
-let activeRankHistogramBand = 0;
+// The rank histogram selector opens on lead day 1, the chip after the pooled all days one.
+let activeRankHistogramBand = 1;
 let challengerLabels = {};
 let challengerNotes = {};
 let challengerCategories = {};
@@ -1211,13 +1212,13 @@ function renderRankHistograms() {
   const systems = rankHistogramSystems(panels);
   const densityMaximum = rankHistogramDensityMaximum(panels, activeRankHistogramBand);
 
-  const bandChips = buildSelectorChips(
+  const bandChips = buildSelectorRow("Day", buildSelectorChips(
     (bandIndex) => leadDayBands[bandIndex],
     leadDayBands.map((_, bandIndex) => bandIndex),
     activeRankHistogramBand,
     "data-rank-histogram-band",
-    "Lead days pooled",
-  );
+    "Lead day",
+  ));
   const legend = systems
     .map((system) => `<span class="rank-histogram-legend-item"><span class="rank-histogram-swatch rank-histogram-swatch--${system}"></span>${displayName(system)}</span>`)
     .join("");

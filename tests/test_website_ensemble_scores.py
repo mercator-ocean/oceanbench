@@ -647,7 +647,7 @@ def test_merged_rank_bins_refuses_an_unexpected_bin_count() -> None:
         merged_rank_bins(_rank_histogram_frame("gloens", 17, [1]), "gloens")
 
 
-def test_rank_histograms_pool_the_lead_day_bands_as_densities_on_17_bins() -> None:
+def test_rank_histograms_pool_all_days_and_each_lead_day_as_densities_on_17_bins() -> None:
     histograms = rank_histograms(
         {
             "gloens": _rank_histogram_frame("gloens", 51, list(range(1, 11))),
@@ -655,11 +655,11 @@ def test_rank_histograms_pool_the_lead_day_bands_as_densities_on_17_bins() -> No
         }
     )
 
-    assert histograms["lead_day_bands"] == ["Days 1-3", "Days 4-6", "Days 7-9"]
+    assert histograms["lead_day_bands"] == ["All days", *(str(lead_day) for lead_day in range(1, 10))]
     [panel] = histograms["panels"]
     assert (panel["variable"], panel["depth_band"]) == ("Drifter SST", "Surface")
     for bands in panel["densities"].values():
-        assert len(bands) == 3
+        assert len(bands) == 10
         for densities in bands:
             assert len(densities) == 17
             assert sum(densities) == pytest.approx(17, rel=1e-3)

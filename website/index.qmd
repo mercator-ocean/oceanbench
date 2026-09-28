@@ -185,7 +185,7 @@ Two ensembles are evaluated over 2024 on 52 weekly starts, against the version 2
 <div class="depth-section">
 <h3>Rank histograms against observations</h3>
 <div id="ensemble-rank-histograms"></div>
-<p class="ensemble-table-note">GloEns has 50 members and GLOW-ens 16, so GloEns ranks are merged three at a time onto the same 17 bins. A flat histogram is a calibrated ensemble, a U shape an under-dispersive one, a dome an over-dispersive one, and a slope a bias.</p>
+<p class="ensemble-table-note">GloEns has 50 members and GLOW-ens 16, so GloEns ranks are merged three at a time onto the same 17 bins. A flat histogram is a calibrated ensemble, a U shape an under-dispersive one, a dome an over-dispersive one, and a slope a bias. All days pools lead days 1 to 9.</p>
 </div>
 ```
 
