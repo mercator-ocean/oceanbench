@@ -21,6 +21,7 @@ LOCAL_CHALLENGERS = {
     },
     "0.6.0": {
         "glow": ["global"],
+        "glow117m": ["global"],
     },
 }
 

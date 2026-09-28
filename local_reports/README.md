@@ -43,6 +43,28 @@ The earlier pre-remask report is kept under `local_reports/withdrawn/0.6.0/` for
 reference. The `tables/glowcascade_v4_nofilter.*.csv` files and their license
 sidecars belong to that withdrawn report.
 
+## glow117m
+
+`0.6.0/glow117m.global.report.ipynb` is a local evaluation of GLOW run
+`glowcascade117m_v5_ring`, the 117M parameter variant of the `glowcascade_v5_ring`
+cascade above. It is not an official submission.
+
+Same recipe and same steps as the 930M chain: pretrain plus anneal to step 87616,
+hot stage 2, ladder, then the ring penalty stage of 2400 steps. Lead 1 comes from
+the 117M annealed checkpoint, step 87616, md5 `bd84b8a687e2d387e3b80bce675ef84b`.
+Leads 2 to 9 come from the 117M ring checkpoint, step 2400, md5
+`cff4866fdd517aa9d81b3e5b06f00ce9`, switched in after lead 1. Both use EMA weights
+and the equatorial notch is off.
+
+Starts, initial conditions, IFS forcing, zos datum shift, 672x1440 grid with 21
+serve levels, and the combined GLO12 and GLORYS wet mask are the same as for
+`glowcascade_v5_ring`; the mask is applied at write time and matches the 930M
+stores cell for cell. The stores hold the nine scored lead days only. Harness:
+oceanbench `main` 7e5ec87, the pending 0.6.0, same venv and flags as the 930M run.
+
+`tables/glowcascade117m_v5_ring_060.*.csv` holds the nine metric tables read back
+out of that notebook, kept for provenance.
+
 ## hclimrep
 
 `0.5.0/hclimrep.global.report.ipynb` is a local evaluation of HClimRep, the ECMWF

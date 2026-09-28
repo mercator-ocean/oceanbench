@@ -117,6 +117,21 @@ CHALLENGERS = {
             "OceanBench 0.5.1 harness, not an official submission"
         ),
     },
+    "glow117m": {
+        "label": "GLOW 117M",
+        "url": "https://github.com/mercator-ocean/oceanbench",
+        "organisation": "Mercator Ocean",
+        "organisation_url": "https://mercator-ocean.eu",
+        "method": "ML-based",
+        "forecast_type": "Deterministic",
+        "initial_conditions": "GLO12 nowcast (as issued)",
+        "resolution": "1/4\u00b0",
+        "description": (
+            "local evaluation, 117M parameter variant of GLOW trained with the same recipe, 52 Wednesday starts 2024 "
+            "(Tuesday ICs), nine lead days, as-issued GLO12 nowcast ICs, OceanBench 0.6.0 harness, "
+            "not an official submission"
+        ),
+    },
     "hclimrep": {
         "label": "HClimRep",
         "url": "https://huggingface.co/datasets/kacpnowak/hclimrep-ocean-oceanbench",
