@@ -49,6 +49,8 @@ let showPercentDiff = false;
 let parsedData = null;
 let parsedDataByView = {};
 let ensembleSections = [];
+let ensembleRankHistograms = null;
+let activeRankHistogramBand = 0;
 let challengerLabels = {};
 let challengerNotes = {};
 let challengerCategories = {};
@@ -1133,6 +1135,107 @@ function renderEnsembleSections(challengers, challengerNames, regionId, baseline
       .map((metric) => renderEnsembleMetric(challengers, challengerNames, regionId, metric, baseline))
       .join("");
   }
+  renderRankHistograms();
+}
+
+const RANK_HISTOGRAM_WIDTH = 220;
+const RANK_HISTOGRAM_HEIGHT = 132;
+const RANK_HISTOGRAM_MARGIN = { top: 6, right: 6, bottom: 18, left: 22 };
+
+function rankHistogramSystems(panels) {
+  const systems = [];
+  for (const panel of panels) {
+    for (const system of Object.keys(panel.densities)) {
+      if (!systems.includes(system)) systems.push(system);
+    }
+  }
+  return systems;
+}
+
+function rankHistogramDensityMaximum(panels, bandIndex) {
+  const densities = panels.flatMap((panel) =>
+    Object.values(panel.densities).flatMap((bands) => bands[bandIndex] || []),
+  );
+  return Math.max(2, Math.ceil(Math.max(...densities)));
+}
+
+function rankHistogramStepPath(densities, xOfBin, yOfDensity) {
+  const baseline = yOfDensity(0);
+  const steps = densities
+    .map((density, bin) => `V${yOfDensity(density).toFixed(1)}H${xOfBin(bin + 1).toFixed(1)}`)
+    .join("");
+  return `M${xOfBin(0).toFixed(1)},${baseline.toFixed(1)}${steps}V${baseline.toFixed(1)}`;
+}
+
+function rankHistogramPanelSvg(panel, systems, bandIndex, binCount, densityMaximum) {
+  const plotLeft = RANK_HISTOGRAM_MARGIN.left;
+  const plotRight = RANK_HISTOGRAM_WIDTH - RANK_HISTOGRAM_MARGIN.right;
+  const plotTop = RANK_HISTOGRAM_MARGIN.top;
+  const plotBottom = RANK_HISTOGRAM_HEIGHT - RANK_HISTOGRAM_MARGIN.bottom;
+  const binWidth = (plotRight - plotLeft) / binCount;
+  const xOfBin = (bin) => plotLeft + bin * binWidth;
+  const yOfDensity = (density) => plotBottom - (density / densityMaximum) * (plotBottom - plotTop);
+  const shownSystems = systems.filter((system) => panel.densities[system]?.[bandIndex]);
+
+  const densityTicks = [0, 1, densityMaximum]
+    .map((density) => `<text class="rank-histogram-tick" x="${plotLeft - 4}" y="${yOfDensity(density) + 3.5}" text-anchor="end">${density}</text>`)
+    .join("");
+  const rankTicks = [1, Math.ceil(binCount / 2), binCount]
+    .map((rank) => `<text class="rank-histogram-tick" x="${xOfBin(rank - 0.5)}" y="${plotBottom + 13}" text-anchor="middle">${rank}</text>`)
+    .join("");
+  const hoverBands = Array.from({ length: binCount }, (_, bin) => {
+    const readout = shownSystems
+      .map((system) => `${displayName(system)} ${panel.densities[system][bandIndex][bin].toFixed(2)}`)
+      .join(", ");
+    return `<rect class="rank-histogram-hover" x="${xOfBin(bin)}" y="${plotTop}" width="${binWidth}" height="${plotBottom - plotTop}">`
+      + `<title>Rank ${bin + 1}: ${readout}</title></rect>`;
+  }).join("");
+  const lines = shownSystems
+    .map((system) => `<path class="rank-histogram-line rank-histogram-line--${system}" d="${rankHistogramStepPath(panel.densities[system][bandIndex], xOfBin, yOfDensity)}"/>`)
+    .join("");
+
+  return `<svg viewBox="0 0 ${RANK_HISTOGRAM_WIDTH} ${RANK_HISTOGRAM_HEIGHT}" role="img" aria-label="Rank histogram, ${panel.variable}, ${panel.depth_band}">`
+    + hoverBands
+    + `<line class="rank-histogram-axis" x1="${plotLeft}" x2="${plotRight}" y1="${plotBottom}" y2="${plotBottom}"/>`
+    + `<line class="rank-histogram-reference" x1="${plotLeft}" x2="${plotRight}" y1="${yOfDensity(1)}" y2="${yOfDensity(1)}"/>`
+    + lines
+    + densityTicks
+    + rankTicks
+    + "</svg>";
+}
+
+function renderRankHistograms() {
+  const container = document.getElementById("ensemble-rank-histograms");
+  if (!container || !ensembleRankHistograms) return;
+  const { panels, lead_day_bands: leadDayBands, bin_count: binCount } = ensembleRankHistograms;
+  const systems = rankHistogramSystems(panels);
+  const densityMaximum = rankHistogramDensityMaximum(panels, activeRankHistogramBand);
+
+  const bandChips = buildSelectorChips(
+    (bandIndex) => leadDayBands[bandIndex],
+    leadDayBands.map((_, bandIndex) => bandIndex),
+    activeRankHistogramBand,
+    "data-rank-histogram-band",
+    "Lead days pooled",
+  );
+  const legend = systems
+    .map((system) => `<span class="rank-histogram-legend-item"><span class="rank-histogram-swatch rank-histogram-swatch--${system}"></span>${displayName(system)}</span>`)
+    .join("");
+  const figures = panels
+    .map((panel) => `<figure class="rank-histogram-panel"><figcaption>${panel.variable}, ${panel.depth_band}</figcaption>`
+      + `${rankHistogramPanelSvg(panel, systems, activeRankHistogramBand, binCount, densityMaximum)}</figure>`)
+    .join("");
+
+  container.innerHTML = `<div class="rank-histogram-controls">${bandChips}<span class="rank-histogram-legend">${legend}</span></div>`
+    + `<p class="rank-histogram-axes-note">Rank of the observation among the members, 1 to ${binCount}, against the density of observations in that rank, 1 for a flat histogram (dashed).</p>`
+    + `<div class="rank-histogram-grid">${figures}</div>`;
+
+  container.querySelectorAll("[data-rank-histogram-band]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      activeRankHistogramBand = Number(chip.dataset.rankHistogramBand);
+      renderRankHistograms();
+    });
+  });
 }
 
 function renderActiveSections(data, challengers, challengerNames, baseline) {
@@ -1415,6 +1518,7 @@ function ensureParsedData() {
   if (parsedData !== viewData) {
     parsedData = viewData;
     ensembleSections = viewData.ensemble_sections || [];
+    ensembleRankHistograms = viewData.ensemble_rank_histograms || null;
     const versions = getVersions(parsedData);
     if (!activeVersion || !versions.includes(activeVersion)) {
       activeVersion = resolveDefaultVersion(parsedData);

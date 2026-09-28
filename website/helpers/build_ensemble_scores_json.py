@@ -102,6 +102,20 @@ SYSTEMS = {
 
 SYSTEM_ORDER = [*DETERMINISTIC_SYSTEMS, GLOENS, GLOWENS]
 
+# The rank histograms are read in the member dressing, the primary diagnostic of the class 4 helper,
+# where every member rather than the observation carries the observation error draw.
+RANK_HISTOGRAM_DRESSING_MODE = "member"
+RANK_HISTOGRAM_ROW_KEY = ["challenger", "variable", "depth", "lead_day", "dressing_mode"]
+# GloEns has 50 members and GLOW-ens 16, so their histograms have 51 and 17 bins. The GloEns ranks
+# are merged three at a time onto the 17 bins of GLOW-ens, so both are drawn with the same bars.
+RANK_HISTOGRAM_BIN_COUNT = 17
+RANK_HISTOGRAM_SOURCE_BIN_COUNTS = {GLOENS: 51, GLOWENS: 17}
+RANK_HISTOGRAM_LEAD_DAY_BANDS = [
+    {"label": "Days 1-3", "lead_days": [1, 2, 3]},
+    {"label": "Days 4-6", "lead_days": [4, 5, 6]},
+    {"label": "Days 7-9", "lead_days": [7, 8, 9]},
+]
+
 STREAM_LABELS = {
     "drifter_sst": "Drifter SST",
     "profiles_t": "Profile temperature",
@@ -508,6 +522,67 @@ def ensemble_gridded_rows(
     ]
 
 
+def with_rank_histogram_override(frame: pd.DataFrame, override: pd.DataFrame) -> pd.DataFrame:
+    """Replace the rows of a rank histogram frame by the rows of a later run carrying the same key."""
+    replaced_keys = override[RANK_HISTOGRAM_ROW_KEY].drop_duplicates()
+    kept = frame.merge(replaced_keys, on=RANK_HISTOGRAM_ROW_KEY, how="left", indicator=True)
+    kept = kept[kept["_merge"] == "left_only"].drop(columns="_merge")
+    return pd.concat([kept, override], ignore_index=True)
+
+
+def merged_rank_bins(frame: pd.DataFrame, system_key: str) -> pd.DataFrame:
+    """Sum the member dressed rank bins of one system onto the common 17 bins."""
+    source_bin_count = RANK_HISTOGRAM_SOURCE_BIN_COUNTS[system_key]
+    member = frame[frame["dressing_mode"] == RANK_HISTOGRAM_DRESSING_MODE]
+    bin_counts = member.groupby(["variable", "depth", "lead_day"])["rank_bin"].agg(["nunique", "min", "max"])
+    assert (
+        bin_counts["nunique"] == source_bin_count
+    ).all(), f"{system_key} histograms must have {source_bin_count} bins"
+    assert (bin_counts["min"] == 0).all() and (bin_counts["max"] == source_bin_count - 1).all()
+    merged = member.assign(rank_bin=member["rank_bin"] // (source_bin_count // RANK_HISTOGRAM_BIN_COUNT))
+    return merged.groupby(["variable", "depth", "lead_day", "rank_bin"], as_index=False)["frequency"].sum()
+
+
+def _rank_histogram_densities(merged: pd.DataFrame, variable: str, depth: str, lead_days: list[int]) -> list | None:
+    """The pooled histogram of some lead days as a density, one for a flat histogram."""
+    selected = merged[
+        (merged["variable"] == variable) & (merged["depth"] == depth) & merged["lead_day"].isin(lead_days)
+    ]
+    if selected.empty:
+        return None
+    frequencies = selected.groupby("rank_bin")["frequency"].sum().reindex(range(RANK_HISTOGRAM_BIN_COUNT), fill_value=0)
+    return [_rounded(frequency / frequencies.sum() * RANK_HISTOGRAM_BIN_COUNT) for frequency in frequencies]
+
+
+def rank_histograms(frames: dict[str, pd.DataFrame]) -> dict:
+    """The rank histograms of the ensembles, one panel per variable and depth, pooled over lead day bands."""
+    merged = {system_key: merged_rank_bins(frame, system_key) for system_key, frame in frames.items()}
+    panels = []
+    for (variable, depth), stream in DETERMINISTIC_STREAMS.items():
+        densities = {
+            system_key: [
+                _rank_histogram_densities(merged[system_key], variable, depth, band["lead_days"])
+                for band in RANK_HISTOGRAM_LEAD_DAY_BANDS
+            ]
+            for system_key in ENSEMBLE_SYSTEMS
+            if system_key in merged
+        }
+        if all(band is None for bands in densities.values() for band in bands):
+            continue
+        panels.append(
+            {
+                "variable": STREAM_LABELS[stream],
+                "depth_band": DEPTH_BAND_LABELS[depth],
+                "densities": densities,
+            }
+        )
+    return {
+        "bin_count": RANK_HISTOGRAM_BIN_COUNT,
+        "lead_day_bands": [band["label"] for band in RANK_HISTOGRAM_LEAD_DAY_BANDS],
+        "panels": panels,
+    }
+
+
 def build_ensemble_scores(
     gridded_gloens: pd.DataFrame,
     gridded_glonet: pd.DataFrame,
@@ -518,6 +593,7 @@ def build_ensemble_scores(
     observations_gloens: pd.DataFrame,
     helper_observations: dict[str, pd.DataFrame] = {},
     helper_gridded: dict[str, pd.DataFrame] = {},
+    rank_histogram_frames: dict[str, pd.DataFrame] = {},
 ) -> dict:
     campaign_class4_means = {GLOENS: class4_gloens_mean}
     campaign_observations = {GLOENS: observations_gloens}
@@ -596,6 +672,7 @@ def build_ensemble_scores(
         "systems": SYSTEMS,
         "system_order": SYSTEM_ORDER,
         "blocks": blocks,
+        "rank_histograms": rank_histograms(rank_histogram_frames),
     }
 
 
@@ -630,6 +707,14 @@ def _helper_frames(arguments: argparse.Namespace, prefix: str, read) -> dict[str
     return {system_key: read(path) for system_key, path in paths.items() if path is not None}
 
 
+def _rank_histogram_frames(arguments: argparse.Namespace) -> dict[str, pd.DataFrame]:
+    frames = _helper_frames(arguments, "helper-rank-histograms", pd.read_parquet)
+    if arguments.helper_rank_histograms_gloens_override is None:
+        return frames
+    override = pd.read_parquet(arguments.helper_rank_histograms_gloens_override)
+    return {**frames, GLOENS: with_rank_histogram_override(frames[GLOENS], override)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gridded-gloens", default=DEFAULT_GRIDDED_GLOENS_PATH)
@@ -642,6 +727,8 @@ def main() -> None:
     parser.add_argument("--observations-gloens", default=DEFAULT_OBSERVATIONS_GLOENS_PATH)
     _add_helper_arguments(parser, "helper-observations")
     _add_helper_arguments(parser, "helper-gridded")
+    _add_helper_arguments(parser, "helper-rank-histograms")
+    parser.add_argument("--helper-rank-histograms-gloens-override", default=None)
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
     arguments = parser.parse_args()
 
@@ -661,6 +748,7 @@ def main() -> None:
         read_observation_aggregate(arguments.observations_gloens),
         _helper_frames(arguments, "helper-observations", pd.read_parquet),
         _helper_frames(arguments, "helper-gridded", lambda path: helper_gridded_frame(pd.read_parquet(path))),
+        _rank_histogram_frames(arguments),
     )
 
     os.makedirs(os.path.dirname(arguments.output), exist_ok=True)

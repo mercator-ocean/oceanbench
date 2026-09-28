@@ -184,8 +184,8 @@ Two ensembles are evaluated over 2024 on 52 weekly starts, against the version 2
 ```{=html}
 <div class="depth-section">
 <h3>Rank histograms against observations</h3>
-<img class="ensemble-figure" src="images/ensemble/ens-cmp-06-rankhist.png" alt="Rank histograms of the two ensembles against observations, per observation stream">
-<p class="ensemble-table-note">Leads 1 to 3 pooled. A flat histogram is a calibrated ensemble, a U shape an under dispersive one.</p>
+<div id="ensemble-rank-histograms"></div>
+<p class="ensemble-table-note">GloEns has 50 members and GLOW-ens 16, so GloEns ranks are merged three at a time onto the same 17 bins. A flat histogram is a calibrated ensemble, a U shape an under-dispersive one, a dome an over-dispersive one, and a slope a bias.</p>
 </div>
 ```
 

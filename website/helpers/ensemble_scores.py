@@ -282,4 +282,5 @@ def ensemble_score_bundle(scores: dict | None = None) -> dict:
             }
             for section in SECTIONS
         ],
+        "ensemble_rank_histograms": resolved_scores.get("rank_histograms"),
     }

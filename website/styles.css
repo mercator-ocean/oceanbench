@@ -15,6 +15,8 @@
   --ob-surface: var(--bs-tertiary-bg, #f4f6f7);
   --ob-surface-raised: var(--bs-body-bg, #fafaf7);
   --ob-soft-shadow: 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06);
+  --ob-series-gloens: #2a78d6;
+  --ob-series-glowens: #eb6834;
 }
 
 body.quarto-dark {
@@ -25,6 +27,8 @@ body.quarto-dark {
   --ob-surface: #202032;
   --ob-surface-raised: var(--bs-body-bg, #1a1a2e);
   --ob-soft-shadow: none;
+  --ob-series-gloens: #3987e5;
+  --ob-series-glowens: #d95926;
 }
 
 /* --- Shared surfaces and markdown content --- */
@@ -1205,7 +1209,117 @@ body.quarto-dark .version-select {
   line-height: 1.5;
 }
 
-img.ensemble-figure {
-  max-width: 100%;
+.rank-histogram-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.rank-histogram-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  font-size: 0.85rem;
+}
+
+.rank-histogram-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.rank-histogram-swatch {
+  width: 1.25rem;
+  border-top: 2px solid;
+}
+
+.rank-histogram-swatch--gloens {
+  border-color: var(--ob-series-gloens);
+}
+
+.rank-histogram-swatch--glowens {
+  border-color: var(--ob-series-glowens);
+}
+
+.rank-histogram-axes-note {
+  margin: 0.25rem 0 0.75rem;
+  max-width: 60rem;
+  color: var(--ob-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.rank-histogram-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.9rem 1.25rem;
+  max-width: 72rem;
+}
+
+.rank-histogram-panel {
+  margin: 0;
+}
+
+.rank-histogram-panel figcaption {
+  margin-bottom: 0.15rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.rank-histogram-panel svg {
+  display: block;
+  width: 100%;
   height: auto;
+}
+
+.rank-histogram-axis {
+  stroke: var(--ob-border);
+  stroke-width: 1;
+}
+
+.rank-histogram-reference {
+  stroke: var(--ob-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.rank-histogram-tick {
+  fill: var(--ob-muted);
+  font-size: 10px;
+}
+
+.rank-histogram-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.rank-histogram-line--gloens {
+  stroke: var(--ob-series-gloens);
+}
+
+.rank-histogram-line--glowens {
+  stroke: var(--ob-series-glowens);
+}
+
+.rank-histogram-hover {
+  fill: transparent;
+}
+
+.rank-histogram-hover:hover {
+  fill: var(--ob-surface);
+}
+
+@media (max-width: 600px) {
+  .rank-histogram-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .rank-histogram-tick {
+    font-size: 12px;
+  }
 }

@@ -16,8 +16,11 @@ from helpers.build_ensemble_scores_json import (  # noqa: E402
     deterministic_gridded_frame,
     gridded_aggregate_frame,
     helper_gridded_frame,
+    merged_rank_bins,
+    rank_histograms,
     with_gloens_surface,
     with_observation_sidecar,
+    with_rank_histogram_override,
 )
 from helpers.ensemble_scores import ensemble_score_bundle, ensemble_scores  # noqa: E402
 
@@ -611,3 +614,63 @@ def test_helper_scores_leave_the_campaign_sourced_systems_alone() -> None:
 
     assert set(observation_systems) == {"glonet", "glo12", "gloens", "glowens"}
     assert set(gridded_systems) == {"glonet", "glo12", "gloens", "glowens"}
+
+
+def _rank_histogram_frame(challenger: str, bin_count: int, lead_days: list[int]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "challenger": challenger,
+                "variable": "sea_water_potential_temperature",
+                "depth": "surface",
+                "lead_day": lead_day,
+                "dressing_mode": dressing_mode,
+                "rank_bin": rank_bin,
+                "frequency": float(rank_bin + 1) if dressing_mode == "member" else 1000.0,
+            }
+            for lead_day in lead_days
+            for dressing_mode in ("member", "obs")
+            for rank_bin in range(bin_count)
+        ]
+    )
+
+
+def test_merged_rank_bins_sums_the_gloens_ranks_three_at_a_time_onto_17_bins() -> None:
+    merged = merged_rank_bins(_rank_histogram_frame("gloens", 51, [1]), "gloens")
+
+    assert list(merged["rank_bin"]) == list(range(17))
+    assert list(merged["frequency"]) == [float(9 * merged_bin + 6) for merged_bin in range(17)]
+
+
+def test_merged_rank_bins_refuses_an_unexpected_bin_count() -> None:
+    with pytest.raises(AssertionError):
+        merged_rank_bins(_rank_histogram_frame("gloens", 17, [1]), "gloens")
+
+
+def test_rank_histograms_pool_the_lead_day_bands_as_densities_on_17_bins() -> None:
+    histograms = rank_histograms(
+        {
+            "gloens": _rank_histogram_frame("gloens", 51, list(range(1, 11))),
+            "glowens": _rank_histogram_frame("glowens", 17, list(range(1, 10))),
+        }
+    )
+
+    assert histograms["lead_day_bands"] == ["Days 1-3", "Days 4-6", "Days 7-9"]
+    [panel] = histograms["panels"]
+    assert (panel["variable"], panel["depth_band"]) == ("Drifter SST", "Surface")
+    for bands in panel["densities"].values():
+        assert len(bands) == 3
+        for densities in bands:
+            assert len(densities) == 17
+            assert sum(densities) == pytest.approx(17, rel=1e-3)
+
+
+def test_with_rank_histogram_override_replaces_the_rows_of_the_same_key() -> None:
+    frame = _rank_histogram_frame("gloens", 51, [1, 2])
+    override = _rank_histogram_frame("gloens", 51, [2]).assign(frequency=7.0)
+
+    replaced = with_rank_histogram_override(frame, override)
+
+    assert len(replaced) == len(frame)
+    assert (replaced[replaced["lead_day"] == 2]["frequency"] == 7.0).all()
+    assert replaced[replaced["lead_day"] == 1]["frequency"].equals(frame[frame["lead_day"] == 1]["frequency"])
