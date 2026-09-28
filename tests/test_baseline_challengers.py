@@ -50,6 +50,8 @@ _OFFICIAL_SLUGS = [
     "xihe_1_degree",
     "langya",
     "langya_1_degree",
+    "glowcascade_v5_ring",
+    "glowcascade_v5_ring_1_degree",
 ]
 
 

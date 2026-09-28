@@ -1374,6 +1374,7 @@ let overlayData = {
   eddiesCensuses: [],
   eddiesMatch: null,
   eddiesPublishedStarts: null,
+  eddiesUnpublished: [],
   class4: null,
   class4BySlug: {},
   class4Error: null,
@@ -1418,6 +1419,7 @@ async function loadOverlayData() {
   overlayData.eddiesMatch = null;
   overlayData.eddiesPublishedStarts = null;
   overlayData.eddiesLeadMismatch = false;
+  overlayData.eddiesUnpublished = [];
   overlayData.class4 = null;
   overlayData.class4BySlug = {};
   overlayData.class4Error = null;
@@ -1428,13 +1430,12 @@ async function loadOverlayData() {
     // Load each visible forecast's own eddy artifact and reduce it to a census at the
     // start date and lead day on screen. The two forecasts come from the panel pickers;
     // no dataset is a hardcoded truth.
-    const eddiesByPanel = await Promise.all(
-      panels.slice(0, shared.layout).map((panel) => {
-        const panelUrls = insightsFor(insightIndex, panel.state.dataset, region);
-        return loadEddies(panelUrls.eddies || null);
-      }),
-    );
+    const eddyUrls = panels
+      .slice(0, shared.layout)
+      .map((panel) => insightsFor(insightIndex, panel.state.dataset, region).eddies || null);
+    const eddiesByPanel = await Promise.all(eddyUrls.map((url) => loadEddies(url)));
     if (superseded()) return false;
+    overlayData.eddiesUnpublished = eddyUrls.map((url) => !url);
     overlayData.eddiesPublishedStarts = eddyPublishedStartDates(eddiesByPanel.find(Boolean) || null);
     // Two forecasts are cross-matched only at a lead day BOTH publish: snap the requested
     // lead to the intersection of their available leads and read both censuses there, so a
@@ -1706,6 +1707,8 @@ function drawOverlays(panel) {
             devicePixelRatio: ratio,
           });
         }
+      } else if (overlayData.eddiesUnpublished[index]) {
+        drawPanelOverlayNote(panel, context, "No eddy census for this model");
       }
     }
   } else if (
@@ -1798,7 +1801,36 @@ function drawOverlays(panel) {
     panel.class4Matched = 0;
     panel.class4Scale = 0;
     panel.class4HoverPoint = null;
+    const class4Entry = overlayData.class4BySlug[panel.state.dataset];
+    if (shared.overlayMode === OVERLAY_CLASS4 && class4Entry && class4Entry.unpublished && overlayData.region === shared.region) {
+      drawPanelOverlayNote(panel, context, "No observation match-ups for this model");
+    }
   }
+}
+
+// A panel whose dataset publishes nothing for the overlay on screen says so in one quiet line
+// at the top of its map, just under the panel header that floats over the canvas, instead of
+// looking like a load that never finished.
+function drawPanelOverlayNote(panel, context, text) {
+  const ratio = window.devicePixelRatio || 1;
+  const canvas = context.canvas;
+  const head = panel.container.querySelector(".panel-head");
+  const headBottom = head ? Math.max(0, head.getBoundingClientRect().bottom - panel.els.wrap.getBoundingClientRect().top) : 0;
+  context.save();
+  context.font = `${12 * ratio}px system-ui, sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  const width = context.measureText(text).width + 16 * ratio;
+  const height = 22 * ratio;
+  const x = canvas.width / 2;
+  const y = (headBottom + 10) * ratio + height / 2;
+  context.fillStyle = themeToken("--ob-viewer-canvas-bg", shared.theme === THEME_LIGHT ? "#eef2f6" : "#080b11");
+  context.globalAlpha = 0.85;
+  context.fillRect(x - width / 2, y - height / 2, width, height);
+  context.globalAlpha = 1;
+  context.fillStyle = themeToken("--ob-viewer-canvas-note", shared.theme === THEME_LIGHT ? "#5b6675" : "#8b97a6");
+  context.fillText(text, x, y);
+  context.restore();
 }
 
 // Crosshair marker at the clicked water-column point, drawn on every visible world copy so
