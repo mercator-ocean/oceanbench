@@ -14,6 +14,7 @@ import pandas
 import pytest
 import xarray
 
+from oceanbench.core.challenger_datasets import _glo12_dataset_path
 from oceanbench.core.references import observations as observations_module
 
 HELPER_ROOT = Path(__file__).resolve().parent.parent / "helper_scripts"
@@ -187,6 +188,62 @@ def test_the_gridded_helper_gives_a_deterministic_store_a_member_axis_of_length_
     dataset, _ = gridded_helper._open_challenger(specification, start_date, "thetao")
 
     assert dataset.sizes["member"] == 1
+
+
+def test_the_class4_helper_gives_the_glonet_store_a_member_axis_of_length_one(class4_helper, tmp_path):
+    start_date = pandas.Timestamp("2024-01-03")
+    _tiny_forecast_store(tmp_path, start_date, member_count=1, with_member_dimension=False)
+    specification = dataclasses.replace(
+        class4_helper.CHALLENGERS["glonet"],
+        store_layout=class4_helper.STORE_LOCAL_ROOT,
+        store_root=str(tmp_path),
+        lead_days_count=2,
+    )
+
+    challenger, first_day = class4_helper._open_challenger_start(specification, start_date)
+
+    assert first_day == start_date
+    assert challenger.sizes[class4_helper.ENSEMBLE_DIMENSION] == 1
+    assert challenger.sizes["lead_day_index"] == 2
+    assert float(challenger["thetao"].max()) == 12.0
+
+
+def test_the_class4_helper_reads_glonet_from_the_published_forecasts(class4_helper):
+    specification = class4_helper.CHALLENGERS["glonet"]
+    start_date = pandas.Timestamp("2024-01-03")
+
+    root = class4_helper._ml_forecast_store_root(specification, start_date)
+    ensemble_root = class4_helper._ml_forecast_store_root(class4_helper.CHALLENGERS["glowens"], start_date)
+
+    assert root == "oceanbench-bucket/public/ml-forecast-outputs/glonet/20240103.zarr"
+    assert ensemble_root == "oceanbench-bucket/dev/ml-forecast-outputs/glowens_v5_ringC/20240103.zarr"
+    assert specification.member_dimension is None
+    assert specification.lead_days_count == 10
+
+
+def test_the_class4_helper_reads_glo12_through_the_library_opener(class4_helper, monkeypatch):
+    start_label = pandas.Timestamp("2024-01-03")
+    opened_first_days = []
+
+    def open_glo12_week(first_day):
+        opened_first_days.append(first_day)
+        return _tiny_gloens_week(10, member_count=1).isel(member=0, drop=True)
+
+    monkeypatch.setattr(class4_helper, "_open_glo12_forecast_week", open_glo12_week)
+
+    challenger, first_day = class4_helper._open_challenger_start(class4_helper.CHALLENGERS["glo12"], start_label)
+
+    assert opened_first_days == [start_label.to_pydatetime()]
+    assert first_day == start_label
+    assert challenger.sizes[class4_helper.ENSEMBLE_DIMENSION] == 1
+    assert challenger.sizes["lead_day_index"] == 10
+    assert list(challenger["first_day_datetime"].values) == [start_label.to_datetime64()]
+
+
+def test_the_glo12_bulletin_of_a_wednesday_start_is_the_one_issued_the_next_day():
+    bulletin_path = _glo12_dataset_path(pandas.Timestamp("2024-01-03").to_pydatetime())
+
+    assert bulletin_path.endswith("/glo12_rg_1d-m_fcst_R20240104.zarr")
 
 
 def _tiny_gloens_week(lead_days_count: int, member_count: int = 2) -> xarray.Dataset:

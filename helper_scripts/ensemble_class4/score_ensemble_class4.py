@@ -35,12 +35,13 @@ import xarray
 
 from oceanbench.core.challenger_datasets import (
     _GLOENS_INITIALISATION_TO_FIRST_DAY,
+    _open_glo12_forecast_week,
     _open_gloens_forecast_week,
     _prepared_challenger_week_dataset,
 )
 from oceanbench.core.curvilinear_staging import GLOENS_SOURCE_NAME
 from oceanbench.core.dataset_source import with_dataset_source
-from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT, Dimension, Variable
 from oceanbench.core.ensemble_class4 import (
     Class4EnsembleMatchup,
     SigmaLookup,
@@ -59,6 +60,7 @@ from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 CLOUDFERRO_ENDPOINT = "https://s3.waw3-1.cloudferro.com"
 OCEANBENCH_BUCKET = "oceanbench-bucket"
 ML_FORECAST_DEV_PREFIX = "dev/ml-forecast-outputs"
+ML_FORECAST_PUBLIC_PREFIX = "public/ml-forecast-outputs"
 
 REFERENCE_NAME = "class4"
 REGION_NAME = "global"
@@ -87,8 +89,15 @@ SCORED_VARIABLES = (
 CHALLENGER_ENSEMBLE_VARIABLE_NAMES = ("thetao", "so", "zos", "uo", "vo")
 
 STORE_ML_FORECAST_DEV = "ml-forecast-dev"
+STORE_ML_FORECAST_PUBLIC = "ml-forecast-public"
 STORE_GLOENS_WEEK = "gloens-week"
+STORE_GLO12_WEEK = "glo12-week"
 STORE_LOCAL_ROOT = "local-root"
+
+ML_FORECAST_PREFIXES = {
+    STORE_ML_FORECAST_DEV: ML_FORECAST_DEV_PREFIX,
+    STORE_ML_FORECAST_PUBLIC: ML_FORECAST_PUBLIC_PREFIX,
+}
 
 #: Horizontal axis names a local store may carry, and the names every path downstream asks for.
 HORIZONTAL_COORDINATE_ALIASES = {"lat": "latitude", "lon": "longitude"}
@@ -101,7 +110,10 @@ class ChallengerSpecification:
     name: str
     version: str
     store_layout: str
-    member_dimension: str
+    # The member axis of the store, or None for a deterministic store, which is given a member
+    # axis of length one so it takes the ensemble route unchanged. With one member the ensemble
+    # mean is the member itself, so of the records written only its ensemble mean RMSD is read.
+    member_dimension: str | None
     lead_days_count: int
     # Whether the challenger declares its own sea surface height basis to the Class IV seam. Only
     # GloEns does: it ships an inverse barometer and its own mean sea surface shift. A challenger
@@ -145,12 +157,32 @@ CHALLENGERS = {
         lead_days_count=9,
         declares_dataset_source=False,
     ),
+    # The two deterministic references of the observation table, read from the stores the
+    # deterministic benchmark scores and on its Wednesday starts, so their rows come from the same
+    # matchup and depth bins as the ensemble mean rows beside them.
+    "glonet": ChallengerSpecification(
+        name="glonet",
+        version="glonet",
+        store_layout=STORE_ML_FORECAST_PUBLIC,
+        member_dimension=None,
+        lead_days_count=LEAD_DAYS_COUNT,
+        declares_dataset_source=False,
+    ),
+    "glo12": ChallengerSpecification(
+        name="glo12",
+        version="glo12",
+        store_layout=STORE_GLO12_WEEK,
+        member_dimension=None,
+        lead_days_count=LEAD_DAYS_COUNT,
+        declares_dataset_source=False,
+    ),
 }
 
 # The start date on the command line is the label the gridded campaign uses, so a start of one axis
-# names the same forecast as the start of the other. For the glonet2 family that label is the first
-# day the forecast predicts. For GloEns it is the initialisation the store is named after, whose
-# first predicted day is the day after, which is the day the library reads the week from.
+# names the same forecast as the start of the other. For the glonet2 family, GLONET and GLO12 that
+# label is the first day the forecast predicts, which the library maps to the GLO12 bulletin itself.
+# For GloEns it is the initialisation the store is named after, whose first predicted day is the day
+# after, which is the day the library reads the week from.
 GLOENS_START_LABEL_TO_FIRST_DAY = _GLOENS_INITIALISATION_TO_FIRST_DAY
 
 
@@ -165,19 +197,31 @@ def _filesystem() -> s3fs.S3FileSystem:
     return s3fs.S3FileSystem(key=key, secret=secret, client_kwargs={"endpoint_url": CLOUDFERRO_ENDPOINT})
 
 
-def _open_dev_prefix_week(specification: ChallengerSpecification, start_label: pandas.Timestamp) -> xarray.Dataset:
-    """One forecast start of a glonet2 family store, as the library's weekly challenger dataset.
+def _with_ensemble_dimension(week: xarray.Dataset, specification: ChallengerSpecification) -> xarray.Dataset:
+    """The week with its member axis under the name the library reads, of length one if it has none."""
+    if specification.member_dimension is None:
+        return week.expand_dims({ENSEMBLE_DIMENSION: [0]})
+    return week.rename({specification.member_dimension: ENSEMBLE_DIMENSION})
+
+
+def _ml_forecast_store_root(specification: ChallengerSpecification, start_label: pandas.Timestamp) -> str:
+    prefix = ML_FORECAST_PREFIXES[specification.store_layout]
+    return f"{OCEANBENCH_BUCKET}/{prefix}/{specification.version}/{start_label:%Y%m%d}.zarr"
+
+
+def _open_ml_forecast_week(specification: ChallengerSpecification, start_label: pandas.Timestamp) -> xarray.Dataset:
+    """One forecast start of a machine learning forecast store, as the library's weekly dataset.
 
     The store is named after the first day it predicts and holds that day at time index zero, so
     the time axis becomes the lead day index with no offset.
     """
     filesystem = _filesystem()
-    root = f"{OCEANBENCH_BUCKET}/{ML_FORECAST_DEV_PREFIX}/{specification.version}/{start_label:%Y%m%d}.zarr"
+    root = _ml_forecast_store_root(specification, start_label)
     store = xarray.open_zarr(s3fs.S3Map(root=root, s3=filesystem, check=False), consolidated=True)
     ensemble_fields = [name for name in CHALLENGER_ENSEMBLE_VARIABLE_NAMES if name in store.data_vars]
     forecast_days = store[ensemble_fields].isel(time=slice(0, specification.lead_days_count))
     week = _prepared_challenger_week_dataset(forecast_days, f"{specification.name} challenger dataset open")
-    return week.rename({specification.member_dimension: ENSEMBLE_DIMENSION})
+    return _with_ensemble_dimension(week, specification)
 
 
 def _with_standard_horizontal_names(dataset: xarray.Dataset) -> xarray.Dataset:
@@ -200,7 +244,7 @@ def _open_local_root_week(specification: ChallengerSpecification, start_label: p
     ensemble_fields = [name for name in CHALLENGER_ENSEMBLE_VARIABLE_NAMES if name in store.data_vars]
     forecast_days = store[ensemble_fields].isel(time=slice(0, specification.lead_days_count))
     week = _prepared_challenger_week_dataset(forecast_days, f"{specification.name} challenger dataset open")
-    return week.rename({specification.member_dimension: ENSEMBLE_DIMENSION})
+    return _with_ensemble_dimension(week, specification)
 
 
 def _open_challenger_start(
@@ -215,12 +259,17 @@ def _open_challenger_start(
         week = _open_gloens_forecast_week(first_day.to_pydatetime()).isel(
             {Dimension.LEAD_DAY_INDEX.key(): slice(0, specification.lead_days_count)}
         )
+    elif specification.store_layout == STORE_GLO12_WEEK:
+        # The opener of the deterministic GLO12 challenger, which reads the bulletin issued the day
+        # after the first day and already cuts the week to the benchmark horizon.
+        first_day = start_label
+        week = _with_ensemble_dimension(_open_glo12_forecast_week(first_day.to_pydatetime()), specification)
     elif specification.store_layout == STORE_LOCAL_ROOT:
         first_day = start_label
         week = _open_local_root_week(specification, start_label)
     else:
         first_day = start_label
-        week = _open_dev_prefix_week(specification, start_label)
+        week = _open_ml_forecast_week(specification, start_label)
     challenger = week.expand_dims({Dimension.FIRST_DAY_DATETIME.key(): [first_day.to_datetime64()]})
     if specification.declares_dataset_source:
         challenger = with_dataset_source(challenger, kind="challenger", name=GLOENS_SOURCE_NAME)
