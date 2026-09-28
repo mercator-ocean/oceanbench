@@ -3405,9 +3405,12 @@ function renderEddyLegend(legend) {
       legendSwatch(forecastColor(0), `${forecast1} eddies · lead ${censuses[0].leadDay ?? "n/a"}`, censuses[0].detections.length) +
       legendSwatch(forecastColor(1), `${forecast2} eddies · lead ${censuses[1].leadDay ?? "n/a"}`, censuses[1].detections.length);
     caption = "no lead day in common, so each forecast is shown at its own nearest lead and never cross-matched";
-  } else if (censuses[0]) {
-    swatches = legendSwatch(forecastColor(0), `${labelFor(panels[0].state.dataset)} eddies`, censuses[0].detections.length);
-    caption = `single forecast census · lead ${censuses[0].leadDay ?? "n/a"} (nearest available)`;
+  } else if (censuses.some(Boolean)) {
+    // One census on screen, from whichever panel has it (panel 1 may be the one without).
+    const index = censuses.findIndex(Boolean);
+    const census = censuses[index];
+    swatches = legendSwatch(forecastColor(index), `${labelFor(panels[index].state.dataset)} eddies`, census.detections.length);
+    caption = `single forecast census · lead ${census.leadDay ?? "n/a"} (nearest available)`;
   } else {
     swatches = `<span class="legend-note">No eddy detections for this selection.</span>`;
     caption = "";
