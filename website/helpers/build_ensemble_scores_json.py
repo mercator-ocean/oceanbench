@@ -20,24 +20,24 @@ import os
 import pandas as pd
 
 # The aggregates live outside the repository, so the tree that holds them is read from the
-# environment and only falls back to the one they were built in.
-DEFAULT_AGGREGATE_ROOT = os.environ.get("OCEANBENCH_ENSEMBLE_AGGREGATE_ROOT", "/Users/jseillade/projects/probax-report")
-DEFAULT_GRIDDED_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gloens.parquet"
-DEFAULT_DETERMINISTIC_GLONET_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-glonet.parquet"
-DEFAULT_GRIDDED_GLONET_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gridded-glonet.parquet"
-DEFAULT_GRIDDED_GLO12_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-gridded-glo12.parquet"
-DEFAULT_DETERMINISTIC_GLO12_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-glo12.parquet"
-DEFAULT_OBSERVATIONS_GLOENS_PATH = f"{DEFAULT_AGGREGATE_ROOT}/01-observations/data-gloens/aggregate.parquet"
+# OCEANBENCH_ENSEMBLE_AGGREGATE_ROOT environment variable and the paths below are relative to it.
+DEFAULT_GRIDDED_GLOENS_PATH = "03-library-year/aggregate-gloens.parquet"
+DEFAULT_DETERMINISTIC_GLONET_PATH = "03-library-year/aggregate-det-glonet.parquet"
+DEFAULT_GRIDDED_GLONET_PATH = "03-library-year/aggregate-gridded-glonet.parquet"
+DEFAULT_GRIDDED_GLO12_PATH = "03-library-year/aggregate-gridded-glo12.parquet"
+DEFAULT_DETERMINISTIC_GLO12_PATH = "03-library-year/aggregate-det-glo12.parquet"
+DEFAULT_OBSERVATIONS_GLOENS_PATH = "01-observations/data-gloens/aggregate.parquet"
 
 # The ensemble means are also scored through the class 4 route the deterministic systems go through,
 # so the error against observations reads on one matchup and one set of depth bins for every system.
-# The superob aggregates above stay the source of the probabilistic scores, which need the members.
-DEFAULT_CLASS4_GLOENS_MEAN_PATH = f"{DEFAULT_AGGREGATE_ROOT}/03-library-year/aggregate-det-gloens-mean.parquet"
+# When helper scores are passed they supply every observation score, and the superob aggregates
+# above are only the fallback.
+DEFAULT_CLASS4_GLOENS_MEAN_PATH = "03-library-year/aggregate-det-gloens-mean.parquet"
 
 # The GloEns year on the depth axis was run subsurface only, because its surface fields had already
 # been scored by the earlier campaign and were deliberately not scored again. That frozen record is
 # read here so the surface band of the table is filled from it rather than left empty.
-DEFAULT_GLOENS_SURFACE_PATH = f"{DEFAULT_AGGREGATE_ROOT}/02-gridded-glorys/scores-gloens-surface.csv"
+DEFAULT_GLOENS_SURFACE_PATH = "02-gridded-glorys/scores-gloens-surface.csv"
 
 # A campaign wave that scored a stream after the fact writes it next to the aggregate instead of into
 # it, so an observation aggregate is read together with whatever sidecar sits beside it.
@@ -718,15 +718,16 @@ def _rank_histogram_frames(arguments: argparse.Namespace) -> dict[str, pd.DataFr
 
 
 def main() -> None:
+    aggregate_root = os.environ["OCEANBENCH_ENSEMBLE_AGGREGATE_ROOT"]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--gridded-gloens", default=DEFAULT_GRIDDED_GLOENS_PATH)
-    parser.add_argument("--gridded-glonet", default=DEFAULT_GRIDDED_GLONET_PATH)
-    parser.add_argument("--gridded-glo12", default=DEFAULT_GRIDDED_GLO12_PATH)
-    parser.add_argument("--deterministic-glonet", default=DEFAULT_DETERMINISTIC_GLONET_PATH)
-    parser.add_argument("--deterministic-glo12", default=DEFAULT_DETERMINISTIC_GLO12_PATH)
-    parser.add_argument("--class4-gloens-mean", default=DEFAULT_CLASS4_GLOENS_MEAN_PATH)
-    parser.add_argument("--gloens-surface", default=DEFAULT_GLOENS_SURFACE_PATH)
-    parser.add_argument("--observations-gloens", default=DEFAULT_OBSERVATIONS_GLOENS_PATH)
+    parser.add_argument("--gridded-gloens", default=f"{aggregate_root}/{DEFAULT_GRIDDED_GLOENS_PATH}")
+    parser.add_argument("--gridded-glonet", default=f"{aggregate_root}/{DEFAULT_GRIDDED_GLONET_PATH}")
+    parser.add_argument("--gridded-glo12", default=f"{aggregate_root}/{DEFAULT_GRIDDED_GLO12_PATH}")
+    parser.add_argument("--deterministic-glonet", default=f"{aggregate_root}/{DEFAULT_DETERMINISTIC_GLONET_PATH}")
+    parser.add_argument("--deterministic-glo12", default=f"{aggregate_root}/{DEFAULT_DETERMINISTIC_GLO12_PATH}")
+    parser.add_argument("--class4-gloens-mean", default=f"{aggregate_root}/{DEFAULT_CLASS4_GLOENS_MEAN_PATH}")
+    parser.add_argument("--gloens-surface", default=f"{aggregate_root}/{DEFAULT_GLOENS_SURFACE_PATH}")
+    parser.add_argument("--observations-gloens", default=f"{aggregate_root}/{DEFAULT_OBSERVATIONS_GLOENS_PATH}")
     _add_helper_arguments(parser, "helper-observations")
     _add_helper_arguments(parser, "helper-gridded")
     _add_helper_arguments(parser, "helper-rank-histograms")

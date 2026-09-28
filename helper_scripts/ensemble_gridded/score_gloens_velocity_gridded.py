@@ -27,7 +27,7 @@ the nearest-neighbour gather. Both halves land in one score file per forecast st
 schema and the record layout of every other gridded run, so the aggregation is the generic
 ``aggregate`` command of that same script and is not repeated here.
 
-    python score_gloens_velocity_gridded.py --output-root DIR score --start-date 2024-01-04
+    python score_gloens_velocity_gridded.py --output-root DIR score --start-date 2024-01-04 --stage-root DIR
     python score_ensemble_gridded_multi.py --output-root DIR aggregate
 """
 
@@ -432,7 +432,7 @@ def main() -> int:
     score_parser.add_argument(
         "--references", nargs="+", default=["glorys"], choices=sorted(multi.REFERENCE_STAGE_DIRECTORIES)
     )
-    score_parser.add_argument("--stage-root", default=str(multi.DEFAULT_STAGE_ROOT))
+    score_parser.add_argument("--stage-root", required=True)
     score_parser.add_argument("--first-lead-day", type=int, default=None)
     score_parser.add_argument("--last-lead-day", type=int, default=None)
     score_parser.add_argument("--force", action="store_true")

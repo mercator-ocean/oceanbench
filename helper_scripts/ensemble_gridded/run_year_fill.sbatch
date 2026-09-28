@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
 #SBATCH --time=24:00:00
-#SBATCH --output=/scratch/jseillade/ensemble-eval-fills/logs/%x-%A_%a.log
+#SBATCH --output=logs/%x-%A_%a.log
 
 # SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
 #
@@ -23,6 +23,7 @@ SRC=$WORK/src
 VENV=${ENSEMBLE_VENV:?export ENSEMBLE_VENV, the python environment that carries oceanbench}
 # The read only campaign tree supplies the pure python s3fs stack and the staged GLORYS weeks.
 PYLIBS=${ENSEMBLE_PYTHON_LIBRARIES:?export ENSEMBLE_PYTHON_LIBRARIES, the pure python s3fs stack}
+STAGE_ROOT=${ENSEMBLE_STAGE_ROOT:?export ENSEMBLE_STAGE_ROOT, the directory holding the staged references}
 OUT=$WORK/output/$CHALLENGER
 LOG=$WORK/logs/$CHALLENGER
 mkdir -p "$OUT" "$LOG"
@@ -61,7 +62,7 @@ cd "$SRC"
 time "$VENV/bin/python" -W ignore \
   helper_scripts/ensemble_gridded/score_ensemble_gridded_multi.py \
   --output-root "$OUT" \
-  score --challenger "$CHALLENGER" --start-date "$START" --references glorys
+  score --challenger "$CHALLENGER" --start-date "$START" --references glorys --stage-root "$STAGE_ROOT"
 RC=$?
 echo "EXIT=$RC" > "$MARKER"
 echo "=== $CHALLENGER $START rc=$RC ==="

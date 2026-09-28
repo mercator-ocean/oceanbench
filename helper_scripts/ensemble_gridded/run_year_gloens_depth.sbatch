@@ -11,7 +11,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=04:00:00
-#SBATCH --output=/scratch/jseillade/probax/gridded/logs-gloens-depth/task-%a.log
+#SBATCH --output=logs/%x-%A_%a.log
 
 # SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
 #
@@ -25,6 +25,7 @@ set -euo pipefail
 SRC=${ENSEMBLE_CAMPAIGN_ROOT:?export ENSEMBLE_CAMPAIGN_ROOT, the directory holding src, output and logs}/src
 VENV=${ENSEMBLE_VENV:?export ENSEMBLE_VENV, the python environment that carries oceanbench}
 PYLIBS=${ENSEMBLE_PYTHON_LIBRARIES:?export ENSEMBLE_PYTHON_LIBRARIES, the pure python s3fs stack}
+STAGE_ROOT=${ENSEMBLE_STAGE_ROOT:?export ENSEMBLE_STAGE_ROOT, the directory holding the staged references}
 OUTPUT_ROOT=${ENSEMBLE_CAMPAIGN_ROOT}
 
 START=$(date -u -d "2024-01-04 + $((SLURM_ARRAY_TASK_ID * 7)) days" +%Y-%m-%d)
@@ -37,4 +38,4 @@ export PYTHONPATH=$PYLIBS:$SRC
   helper_scripts/ensemble_gridded/score_ensemble_gridded_multi.py \
   --output-root $OUTPUT_ROOT/output-year-gloens-depth \
   score --challenger gloens-depth --start-date "${START}" --references glorys \
-  --first-lead-day 1 --last-lead-day 10
+  --first-lead-day 1 --last-lead-day 10 --stage-root "$STAGE_ROOT"

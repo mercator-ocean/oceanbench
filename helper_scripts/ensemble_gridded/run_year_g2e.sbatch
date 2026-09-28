@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
 #SBATCH --time=01:00:00
-#SBATCH --output=/scratch/jseillade/probax/gridded/logs-g2e/task-%a.log
+#SBATCH --output=logs/%x-%A_%a.log
 
 # SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
 #
@@ -22,6 +22,7 @@ set -euo pipefail
 SRC=${ENSEMBLE_CAMPAIGN_ROOT:?export ENSEMBLE_CAMPAIGN_ROOT, the directory holding src, output and logs}/src
 VENV=${ENSEMBLE_VENV:?export ENSEMBLE_VENV, the python environment that carries oceanbench}
 PYLIBS=${ENSEMBLE_PYTHON_LIBRARIES:?export ENSEMBLE_PYTHON_LIBRARIES, the pure python s3fs stack}
+STAGE_ROOT=${ENSEMBLE_STAGE_ROOT:?export ENSEMBLE_STAGE_ROOT, the directory holding the staged references}
 OUTPUT_ROOT=${ENSEMBLE_CAMPAIGN_ROOT}
 
 INDEX=${SLURM_ARRAY_TASK_ID}
@@ -46,4 +47,4 @@ export PYTHONPATH=$PYLIBS:$SRC
 "$VENV/bin/python" -W ignore \
   helper_scripts/ensemble_gridded/score_ensemble_gridded_multi.py \
   --output-root "${OUTPUT}" \
-  score --challenger "${CHALLENGER}" --start-date "${START}" --references glorys
+  score --challenger "${CHALLENGER}" --start-date "${START}" --references glorys --stage-root "$STAGE_ROOT"

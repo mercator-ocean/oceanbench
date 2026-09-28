@@ -37,6 +37,7 @@ export WORK=${ENSEMBLE_CAMPAIGN_ROOT:?export ENSEMBLE_CAMPAIGN_ROOT, the directo
 export SRC=$WORK/src
 export VENV=${ENSEMBLE_VENV:?export ENSEMBLE_VENV, the python environment that carries oceanbench}
 export PYLIBS=${ENSEMBLE_PYTHON_LIBRARIES:?export ENSEMBLE_PYTHON_LIBRARIES, the pure python s3fs stack}
+export STAGE_ROOT=${ENSEMBLE_STAGE_ROOT:?export ENSEMBLE_STAGE_ROOT, the directory holding the staged references}
 export CHALLENGER=${CHALLENGER:?export CHALLENGER, the entry of the scorer to run}
 export FIRST_START=${FIRST_START:?export FIRST_START, the first forecast start of the year}
 export SCORER=${SCORER:-score_ensemble_gridded_multi.py}
@@ -83,15 +84,17 @@ score_one_start() {
   if [ "$SCORER" = "score_ensemble_gridded.py" ]; then
     (cd "$SRC" && "$VENV/bin/python" -W ignore "helper_scripts/ensemble_gridded/$SCORER" \
       --output-root "$OUT" score --start-date "$start" --references $SCORE_REFERENCES \
-      --first-lead-day 1 --last-lead-day 10) \
+      --first-lead-day 1 --last-lead-day 10 --stage-root "$STAGE_ROOT") \
       > "$task_log" 2>&1
   elif [ "$SCORER" = "score_gloens_velocity_gridded.py" ]; then
     (cd "$SRC" && "$VENV/bin/python" -W ignore "helper_scripts/ensemble_gridded/$SCORER" \
-      --output-root "$OUT" score --start-date "$start" --references glorys --last-lead-day 10) \
+      --output-root "$OUT" score --start-date "$start" --references glorys --last-lead-day 10 \
+      --stage-root "$STAGE_ROOT") \
       > "$task_log" 2>&1
   else
     (cd "$SRC" && "$VENV/bin/python" -W ignore "helper_scripts/ensemble_gridded/$SCORER" \
-      --output-root "$OUT" score --challenger "$CHALLENGER" --start-date "$start" --references glorys) \
+      --output-root "$OUT" score --challenger "$CHALLENGER" --start-date "$start" --references glorys \
+      --stage-root "$STAGE_ROOT") \
       > "$task_log" 2>&1
   fi
   status=$?

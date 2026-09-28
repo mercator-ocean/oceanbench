@@ -12,8 +12,9 @@ One invocation scores one forecast start against one reference, so a campaign is
 of short resumable jobs rather than one long one. An existing output parquet is left alone
 unless ``--force`` is passed.
 
-    python score_ensemble_gridded.py score --start-date 2024-01-04 --reference glorys
-    python score_ensemble_gridded.py aggregate
+    python score_ensemble_gridded.py --output-root DIR score --start-date 2024-01-04 --reference glorys \\
+        --stage-root DIR
+    python score_ensemble_gridded.py --output-root DIR aggregate
 
 References follow the deterministic gridded tables, which score every challenger against both
 the GLORYS reanalysis (the primary reference) and the GLO12 analysis. Both are read from the
@@ -57,9 +58,6 @@ CHALLENGER_NAME = "gloens"
 CHALLENGER_VERSION = "glo4-ens50_ng"
 REGION_NAME = "global"
 SURFACE_DEPTH_LABEL = "surface"
-
-DEFAULT_STAGE_ROOT = Path("/scratch/jseillade/probax/stage-extract")
-DEFAULT_OUTPUT_ROOT = Path("/scratch/jseillade/probax/gridded/output")
 
 REFERENCE_STAGE_DIRECTORIES = {
     "glorys": "reference-glorys-quarter_degree-10d",
@@ -479,7 +477,7 @@ def _aggregate_over_start_dates(per_start: pandas.DataFrame) -> pandas.DataFrame
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
+    parser.add_argument("--output-root", required=True)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     score_parser = subparsers.add_parser("score", help="score one forecast start against one reference")
@@ -491,7 +489,7 @@ def main() -> int:
         choices=sorted(REFERENCE_STAGE_DIRECTORIES),
         help="gridded references to score against, all in one pass over the ensemble stream",
     )
-    score_parser.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
+    score_parser.add_argument("--stage-root", required=True)
     score_parser.add_argument("--members", type=int, default=50)
     score_parser.add_argument("--first-lead-day", type=int, default=1)
     score_parser.add_argument("--last-lead-day", type=int, default=10)

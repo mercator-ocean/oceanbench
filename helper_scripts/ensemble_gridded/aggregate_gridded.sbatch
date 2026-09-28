@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
 #SBATCH --time=00:30:00
-#SBATCH --output=/scratch/jseillade/probax/gridded/logs-aggregate/%x-%j.log
+#SBATCH --output=logs/%x-%j.log
 
 # SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
 #

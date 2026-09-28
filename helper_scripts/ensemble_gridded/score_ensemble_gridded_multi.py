@@ -18,7 +18,7 @@ The metrics, the records and the aggregation all come from ``oceanbench.core.ens
 unchanged, so a row written here is the same kind of row the surface run wrote.
 
     python score_ensemble_gridded_multi.py --output-root DIR score --challenger glonet2-ens \\
-        --start-date 2024-01-03
+        --start-date 2024-01-03 --stage-root DIR
     python score_ensemble_gridded_multi.py --output-root DIR aggregate
 """
 
@@ -51,8 +51,6 @@ from oceanbench.core.score_records import RunContext, records_to_dataframe
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 
 CLOUDFERRO_ENDPOINT = "https://s3.waw3-1.cloudferro.com"
-
-DEFAULT_STAGE_ROOT = Path("/scratch/jseillade/oceanbench-060/stage")
 
 REFERENCE_STAGE_DIRECTORIES = {
     "glorys": "reference-glorys-quarter_degree-10d",
@@ -1105,7 +1103,7 @@ def main() -> int:
     score_parser.add_argument(
         "--references", nargs="+", default=["glorys"], choices=sorted(REFERENCE_STAGE_DIRECTORIES)
     )
-    score_parser.add_argument("--stage-root", default=str(DEFAULT_STAGE_ROOT))
+    score_parser.add_argument("--stage-root", required=True)
     score_parser.add_argument("--first-lead-day", type=int, default=None)
     score_parser.add_argument("--last-lead-day", type=int, default=None)
     score_parser.add_argument("--write-maps", action="store_true")

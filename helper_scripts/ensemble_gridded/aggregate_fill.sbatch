@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16G
 #SBATCH --time=02:00:00
-#SBATCH --output=/scratch/jseillade/ensemble-eval-fills/logs/%x-%j.log
+#SBATCH --output=logs/%x-%j.log
 
 # SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
 #

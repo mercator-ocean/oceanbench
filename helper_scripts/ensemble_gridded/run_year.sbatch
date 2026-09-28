@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
 #SBATCH --time=02:00:00
-#SBATCH --output=/scratch/jseillade/probax/gridded/logs-year/start-%a.log
+#SBATCH --output=logs/%x-%A_%a.log
 
 # SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
 #
@@ -18,6 +18,7 @@ set -euo pipefail
 SRC=${ENSEMBLE_CAMPAIGN_ROOT:?export ENSEMBLE_CAMPAIGN_ROOT, the directory holding src, output and logs}/src
 VENV=${ENSEMBLE_VENV:?export ENSEMBLE_VENV, the python environment that carries oceanbench}
 PYLIBS=${ENSEMBLE_PYTHON_LIBRARIES:?export ENSEMBLE_PYTHON_LIBRARIES, the pure python s3fs stack}
+STAGE_ROOT=${ENSEMBLE_STAGE_ROOT:?export ENSEMBLE_STAGE_ROOT, the directory holding the staged references}
 OUTPUT_ROOT=${ENSEMBLE_CAMPAIGN_ROOT}
 # Task id 0..51 selects the 52 Thursday forecast starts of 2024, 2024-01-04 to 2024-12-26.
 START=$(date -u -d "2024-01-04 + $((SLURM_ARRAY_TASK_ID * 7)) days" +%Y-%m-%d)
@@ -29,4 +30,4 @@ export PYTHONPATH=$PYLIBS:$SRC
   helper_scripts/ensemble_gridded/score_ensemble_gridded.py \
   --output-root "$OUTPUT_ROOT/output-year" \
   score --start-date "$START" --references glorys glo12 \
-  --first-lead-day 1 --last-lead-day 10 --write-maps
+  --first-lead-day 1 --last-lead-day 10 --write-maps --stage-root "$STAGE_ROOT"
