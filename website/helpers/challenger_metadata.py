@@ -104,7 +104,7 @@ CHALLENGERS = {
         "resolution": "1°",
     },
     "glow": {
-        "label": "GLOW",
+        "label": "GLOW 930M",
         "url": "https://github.com/mercator-ocean/oceanbench",
         "organisation": "Mercator Ocean",
         "organisation_url": "https://mercator-ocean.eu",
@@ -114,7 +114,7 @@ CHALLENGERS = {
         "resolution": "1/4\u00b0",
         "description": (
             "local evaluation, 52 Wednesday starts 2024 (Tuesday ICs), nine lead days, as-issued GLO12 nowcast ICs, "
-            "OceanBench 0.5.1 harness, not an official submission"
+            "OceanBench 0.6.0 harness, not an official submission"
         ),
     },
     "glow117m": {
