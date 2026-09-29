@@ -143,6 +143,7 @@ export function leadCurveSVG(
     colors = new Map(),
     legend = true,
     emptyMessage = "no score rows for this variable/depth",
+    yLabel = unit ? `RMSE (${unit})` : "RMSE",
   } = {},
 ) {
   const references = [...series.keys()];
@@ -211,7 +212,7 @@ export function leadCurveSVG(
       )
     : "";
 
-  return svgOpen(title) + axes(area, "lead day", unit ? `RMSE (${unit})` : "RMSE") + body + legendMarkup + interactionLayer() + "</svg>";
+  return svgOpen(title) + axes(area, "lead day", yLabel) + body + legendMarkup + interactionLayer() + "</svg>";
 }
 
 /**
@@ -220,7 +221,7 @@ export function leadCurveSVG(
  * Wavelength axis in km (large scales left). Points carry per-series data attributes
  * so the cursor tooltip can report wavelength + power for the curve under the cursor.
  * `yLabel` names the y quantity and its units; `marker` is an optional
- * { wavelength (metres), label } vertical line, used for the effective resolution.
+ * { wavelength (metres), label } vertical line, used for the scale of disagreement.
  */
 export function psdSpectraSVG(
   curves,

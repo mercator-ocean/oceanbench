@@ -2,39 +2,34 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Live client-side power spectral density of the currently visible viewport box.
+// Live client-side power spectral density of a geographic box of a field.
 // The viewer already holds the decoded field for the selected variable/lead/level
-// as a Float32 grid; this module crops it to the visible geographic box, block-averages
-// it onto the square FFT grid, fills land (NaN) with the box mean, removes the mean,
-// applies a separable Hann window, runs a radix-2 2D FFT, and sums |F|² over annular
-// wavenumber rings into an isotropic power-vs-wavenumber curve. The wavenumber axis is
-// converted to physical wavelength in kilometres using a latitude-aware cell size at
-// the box centre, so the same routine works for every variable, model and region,
-// spectra from a 1° model simply stop at a coarser wavelength than a 1/12° one, which
-// is honest and expected.
+// as a Float32 grid; this module crops it to the box ON ITS NATIVE GRID, fills land
+// (NaN) with the box mean, removes the mean, applies a separable Hann window over the
+// native cells, zero-pads to a power of two per axis, runs a radix-2 2D FFT, and sums
+// |F|² over annular wavenumber rings into an isotropic power-vs-wavenumber curve.
+// No cell is resampled: the transform sees exactly the cells the model published.
 //
-// Method (surfaced in the chart caption/tooltip): Hann window + mean-fill of land,
-// mean removed. This is a pragmatic estimate for exploration, not a calibrated
-// realism metric.
+// Normalization: the ring sum is divided by the true cell count (nx·ny), the padded
+// transform size (Nx·Ny, the DFT's own Parseval factor), the window's mean square and
+// the ring width in wavenumber. The curve is then a one-dimensional isotropic spectral
+// density (field units² per cycle/km) whose integral over wavenumber is the variance of
+// the field in the box, less the modes beyond the last ring.
 //
-// The ring reduction is a SUM, not a mean, and the result is divided by the ring width
-// in wavenumber, so the curve is a one-dimensional isotropic spectral density whose
-// integral over wavenumber is the variance of the windowed field (Parseval). The Hann
-// window's own power loss is divided out, so that integral is the variance of the field
-// itself rather than the variance of the tapered copy. The ring MEAN this used to return
-// carried no such property and could not be integrated back to anything physical.
-// As with any annular binning, the corners of the rectangular mode grid (|k| beyond the
-// Nyquist ring) fall outside the last ring and are dropped: a fraction of a percent of
-// the variance for the red spectra of ocean fields, around a fifth for flat noise.
+// Rings are one cycle per SHORTER box side apart and stop at 1/(2·max(dx, dy)), the
+// Nyquist wavenumber of the coarser axis: past it a ring would hold modes along one
+// axis only and read low. dx and dy are kept apart and rings are binned by PHYSICAL
+// wavenumber, so a box that is square in degrees but not in kilometres (high latitude)
+// is still binned correctly.
 
-const MAX_SIDE = 512; // resample the box to a square power-of-two grid of at most this side
+const MAX_CELLS = 512; // at most this many native cells per axis enter the transform
 const EARTH_KM_PER_DEGREE = 111.32;
 
 /**
- * Isotropic (ring-summed) PSD of the visible box of `field` for the given
- * normalized-world viewport. Returns { wavelength: number[] (metres), power: number[]
- * (field-units² per cycle/km), samples, cellKm }, ordered from the longest wavelength
- * down, or null when the box is too small/empty.
+ * Isotropic (ring-summed) PSD of the box of `field` given as a normalized-world
+ * viewport. Returns { wavelength: number[] (metres), power: number[] (field-units² per
+ * cycle/km), samples, cellKm, oceanFraction }, ordered from the longest wavelength down,
+ * or null when the box is too small or mostly land.
  */
 export function boxPowerSpectrum(field, latitudes, longitudes, viewport) {
   if (!field || !latitudes || !longitudes) return null;
@@ -48,48 +43,32 @@ export function boxPowerSpectrum(field, latitudes, longitudes, viewport) {
   const rows = coordinateRange(latitudes, Math.min(latLow, latHigh), Math.max(latLow, latHigh));
   if (!columns || !rows) return null;
   if (columns.count < 8 || rows.count < 8) return null;
+  const nx = Math.min(MAX_CELLS, columns.count);
+  const ny = Math.min(MAX_CELLS, rows.count);
 
-  const side = powerOfTwoAtMost(Math.min(MAX_SIDE, columns.count, rows.count));
-  if (side < 8) return null;
-
-  const box = resampleBox(field, rows, columns, side);
+  const box = nativeBox(field, rows, columns, nx, ny);
   if (!box) return null;
 
   const centreLatitude = (latLow + latHigh) / 2;
-  const boxWidthKm = Math.abs(lonMax - lonMin) * EARTH_KM_PER_DEGREE * Math.cos((centreLatitude * Math.PI) / 180);
-  const boxHeightKm = Math.abs(latHigh - latLow) * EARTH_KM_PER_DEGREE;
-  // A box that is square in degrees is not square in kilometres away from the equator: at 60°N
-  // its cells are half as wide as they are tall. Averaging the two into one isotropic cell size
-  // and binning by integer mode number made a zonal ring and a meridional ring of the same
-  // number land in the same bin under one wavelength, and that wavelength was wrong by up to a
-  // factor of two at high latitude. Keep the two cell sizes apart, bin by the PHYSICAL
-  // wavenumber, and label the rings with the geometric-mean cell. At the equator dx equals dy,
-  // the binning collapses to the integer-radius one and every number is unchanged.
-  const dxKm = boxWidthKm / side;
-  const dyKm = boxHeightKm / side;
-  const cellKm = Math.sqrt(dxKm * dyKm);
-  if (!(cellKm > 0)) return null;
+  const lonStep = Math.abs(longitudes[1] - longitudes[0]);
+  const latStep = Math.abs(latitudes[1] - latitudes[0]);
+  const dxKm = lonStep * EARTH_KM_PER_DEGREE * Math.cos((centreLatitude * Math.PI) / 180);
+  const dyKm = latStep * EARTH_KM_PER_DEGREE;
+  if (!(dxKm > 0) || !(dyKm > 0)) return null;
 
-  const rings = ringSummedPower(box.data, side, dxKm, dyKm);
+  const ringWidth = 1 / Math.min(nx * dxKm, ny * dyKm); // cycles per km
+  const nyquist = 1 / (2 * Math.max(dxKm, dyKm));
+  const rings = ringSummedPower(box.data, box.paddedX, box.paddedY, dxKm, dyKm, ringWidth, nyquist);
+  const scale = 1 / (nx * ny * box.paddedX * box.paddedY * box.windowPower * ringWidth);
   const wavelength = [];
   const power = [];
-  // Rings are spaced one cycle-per-box apart, so the ring width in wavenumber is
-  // 1 / boxKm. Dividing the ring sum by it turns "variance in this ring" into a spectral
-  // density in field-units² per cycle/km, which is what the chart plots and what
-  // integrates back to the variance. The side⁴ divisor is the DFT's own Parseval factor
-  // (sum |F|² = N sum |f|² with N = side²), and windowPower undoes the Hann taper's
-  // power loss. Everything here is physical, so spectra from models of different grid
-  // size are directly comparable.
-  const boxKm = side * cellKm;
-  const scale = boxKm / (side * side * side * side * box.windowPower);
   for (let r = 1; r < rings.length; r += 1) {
     if (rings[r].count === 0) continue;
-    const wavelengthSamples = side / r; // one radial ring = r cycles across the box
-    wavelength.push(wavelengthSamples * cellKm * 1000); // metres, chart converts to km
+    wavelength.push((1 / (r * ringWidth)) * 1000); // metres, chart converts to km
     power.push(rings[r].sum * scale);
   }
   if (!wavelength.length) return null;
-  return { wavelength, power, samples: side * side, cellKm, oceanFraction: box.oceanFraction };
+  return { wavelength, power, samples: nx * ny, cellKm: Math.sqrt(dxKm * dyKm), oceanFraction: box.oceanFraction };
 }
 
 function coordinateRange(coordinates, lowValue, highValue) {
@@ -129,130 +108,107 @@ function longitudeRange(longitudes, lowValue, highValue) {
   };
 }
 
-function powerOfTwoAtMost(value) {
-  let power = 1;
-  while (power * 2 <= value) power *= 2;
-  return power;
-}
-
-// Block-average resample of the field sub-box into a square `side`×`side` grid,
-// mean-filling land (NaN), removing the mean, then applying a separable Hann window.
-// `side` never exceeds the number of source cells along either axis, so each output
-// sample covers one or more whole source cells and is their mean over the finite ones.
-// A block of one cell is the source cell itself, so a box the FFT grid already matches
-// is untouched. Nearest sampling threw away most of the cells of a large box and let
-// the discarded ones alias into the curve; averaging them keeps their variance where it
-// belongs and simply stops the curve at the coarser scale the averaging can carry.
-function resampleBox(field, rows, columns, side) {
-  const raw = new Float64Array(side * side);
-  const filled = new Uint8Array(side * side);
+// The native cells of the box, land (NaN) filled with the box mean, the mean removed,
+// a separable Hann window applied over the nx×ny native cells, then zero-padded to the
+// next power of two along each axis. A box with more than MAX_CELLS cells along an axis
+// keeps its first MAX_CELLS.
+function nativeBox(field, rows, columns, nx, ny) {
+  const paddedX = powerOfTwoAtLeast(nx);
+  const paddedY = powerOfTwoAtLeast(ny);
   const sourceColumnAt = columns.indexAt
     ? (ordinal) => columns.indexAt(ordinal / (columns.count - 1))
     : (ordinal) => columns.start + ordinal;
+  const raw = new Float64Array(nx * ny).fill(NaN);
   let sum = 0;
   let finiteCount = 0;
-  for (let y = 0; y < side; y += 1) {
-    const rowStart = Math.floor((y * rows.count) / side);
-    const rowEnd = Math.max(rowStart + 1, Math.floor(((y + 1) * rows.count) / side));
-    for (let x = 0; x < side; x += 1) {
-      const columnStart = Math.floor((x * columns.count) / side);
-      const columnEnd = Math.max(columnStart + 1, Math.floor(((x + 1) * columns.count) / side));
-      let blockSum = 0;
-      let blockCount = 0;
-      for (let rowOrdinal = rowStart; rowOrdinal < rowEnd; rowOrdinal += 1) {
-        const base = (rows.start + rowOrdinal) * field.width;
-        for (let ordinal = columnStart; ordinal < columnEnd; ordinal += 1) {
-          const value = field.data[base + sourceColumnAt(ordinal)];
-          if (Number.isNaN(value)) continue;
-          blockSum += value;
-          blockCount += 1;
-        }
-      }
-      const target = y * side + x;
-      if (blockCount === 0) {
-        filled[target] = 0;
-      } else {
-        const blockMean = blockSum / blockCount;
-        raw[target] = blockMean;
-        filled[target] = 1;
-        sum += blockMean;
-        finiteCount += 1;
-      }
+  for (let y = 0; y < ny; y += 1) {
+    const base = (rows.start + y) * field.width;
+    for (let x = 0; x < nx; x += 1) {
+      const value = field.data[base + sourceColumnAt(x)];
+      if (Number.isNaN(value)) continue;
+      raw[y * nx + x] = value;
+      sum += value;
+      finiteCount += 1;
     }
   }
-  const oceanFraction = finiteCount / (side * side);
+  const oceanFraction = finiteCount / (nx * ny);
   if (oceanFraction < 0.25) return null; // mostly land, no meaningful spectrum
   const mean = sum / finiteCount;
-  const hann = new Float64Array(side);
-  for (let i = 0; i < side; i += 1) hann[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (side - 1));
-  // Mean square of the separable window, the factor by which the taper lowers the
-  // variance of whatever it multiplies. Dividing the spectrum by it restores the
-  // untapered variance, so the curve integrates to the variance of the field.
+  const hannX = hannWindow(nx);
+  const hannY = hannWindow(ny);
+  // Mean square of the separable window over the true cells, the factor by which the
+  // taper lowers the variance of whatever it multiplies; dividing it out restores the
+  // untapered variance.
   let windowSquares = 0;
-  for (let y = 0; y < side; y += 1) {
-    for (let x = 0; x < side; x += 1) {
-      const target = y * side + x;
-      const detrended = (filled[target] ? raw[target] : mean) - mean;
-      const weight = hann[y] * hann[x];
-      raw[target] = detrended * weight;
+  const data = new Float64Array(paddedX * paddedY);
+  for (let y = 0; y < ny; y += 1) {
+    for (let x = 0; x < nx; x += 1) {
+      const value = raw[y * nx + x];
+      const detrended = Number.isNaN(value) ? 0 : value - mean;
+      const weight = hannY[y] * hannX[x];
+      data[y * paddedX + x] = detrended * weight;
       windowSquares += weight * weight;
     }
   }
-  return { data: raw, oceanFraction, windowPower: windowSquares / (side * side) };
+  return { data, paddedX, paddedY, oceanFraction, windowPower: windowSquares / (nx * ny) };
 }
 
-// 2D FFT (rows then columns) of a real box, summing |F|² into annular bins by the
-// wavenumber magnitude. Uses a shared in-place radix-2 FFT over rows/columns.
-function ringSummedPower(box, side, dxKm, dyKm) {
-  const real = Float64Array.from(box);
-  const imaginary = new Float64Array(side * side);
-  const rowReal = new Float64Array(side);
-  const rowImaginary = new Float64Array(side);
+function hannWindow(length) {
+  const window = new Float64Array(length);
+  for (let i = 0; i < length; i += 1) window[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (length - 1));
+  return window;
+}
 
-  for (let y = 0; y < side; y += 1) {
-    const base = y * side;
-    for (let x = 0; x < side; x += 1) {
+function powerOfTwoAtLeast(value) {
+  let power = 1;
+  while (power < value) power *= 2;
+  return power;
+}
+
+// 2D FFT (rows then columns) of the padded box, summing |F|² into annular bins of the
+// physical wavenumber magnitude, `ringWidth` cycles/km apart, up to `nyquist`.
+function ringSummedPower(box, paddedX, paddedY, dxKm, dyKm, ringWidth, nyquist) {
+  const real = Float64Array.from(box);
+  const imaginary = new Float64Array(paddedX * paddedY);
+  const rowReal = new Float64Array(paddedX);
+  const rowImaginary = new Float64Array(paddedX);
+  for (let y = 0; y < paddedY; y += 1) {
+    const base = y * paddedX;
+    for (let x = 0; x < paddedX; x += 1) {
       rowReal[x] = real[base + x];
       rowImaginary[x] = 0;
     }
     fastFourierTransform(rowReal, rowImaginary);
-    for (let x = 0; x < side; x += 1) {
+    for (let x = 0; x < paddedX; x += 1) {
       real[base + x] = rowReal[x];
       imaginary[base + x] = rowImaginary[x];
     }
   }
-  const columnReal = new Float64Array(side);
-  const columnImaginary = new Float64Array(side);
-  for (let x = 0; x < side; x += 1) {
-    for (let y = 0; y < side; y += 1) {
-      columnReal[y] = real[y * side + x];
-      columnImaginary[y] = imaginary[y * side + x];
+  const columnReal = new Float64Array(paddedY);
+  const columnImaginary = new Float64Array(paddedY);
+  for (let x = 0; x < paddedX; x += 1) {
+    for (let y = 0; y < paddedY; y += 1) {
+      columnReal[y] = real[y * paddedX + x];
+      columnImaginary[y] = imaginary[y * paddedX + x];
     }
     fastFourierTransform(columnReal, columnImaginary);
-    for (let y = 0; y < side; y += 1) {
-      real[y * side + x] = columnReal[y];
-      imaginary[y * side + x] = columnImaginary[y];
+    for (let y = 0; y < paddedY; y += 1) {
+      real[y * paddedX + x] = columnReal[y];
+      imaginary[y * paddedX + x] = columnImaginary[y];
     }
   }
 
-  const maxRadius = Math.floor(side / 2);
-  // Ring number in units of the reference cell: a mode's physical wavenumber (cycles per km)
-  // times the reference box size, so a zonal and a meridional mode land in the same ring only
-  // when they carry the same physical wavelength. With dx = dy this is Math.hypot(kx, ky).
-  const referenceKm = Math.sqrt(dxKm * dyKm);
-  const zonalWeight = referenceKm / dxKm;
-  const meridionalWeight = referenceKm / dyKm;
-  const bins = Array.from({ length: maxRadius + 1 }, () => ({ sum: 0, count: 0 }));
-  for (let y = 0; y < side; y += 1) {
-    const ky = y <= side / 2 ? y : y - side;
-    for (let x = 0; x < side; x += 1) {
-      const kx = x <= side / 2 ? x : x - side;
-      const radius = Math.round(Math.hypot(kx * zonalWeight, ky * meridionalWeight));
-      if (radius > maxRadius) continue;
-      const index = y * side + x;
-      const magnitude = real[index] * real[index] + imaginary[index] * imaginary[index];
-      bins[radius].sum += magnitude;
-      bins[radius].count += 1;
+  const maxRing = Math.floor(nyquist / ringWidth);
+  const bins = Array.from({ length: maxRing + 1 }, () => ({ sum: 0, count: 0 }));
+  for (let y = 0; y < paddedY; y += 1) {
+    const ky = (y <= paddedY / 2 ? y : y - paddedY) / (paddedY * dyKm);
+    for (let x = 0; x < paddedX; x += 1) {
+      const kx = (x <= paddedX / 2 ? x : x - paddedX) / (paddedX * dxKm);
+      const ring = Math.round(Math.hypot(kx, ky) / ringWidth);
+      if (ring > maxRing) continue;
+      const index = y * paddedX + x;
+      bins[ring].sum += real[index] * real[index] + imaginary[index] * imaginary[index];
+      bins[ring].count += 1;
     }
   }
   return bins;
@@ -300,8 +256,8 @@ function fastFourierTransform(real, imaginary) {
 
 /** Difference (error) spectrum of two boxes: PSD of (fieldA − fieldB) over the box. */
 export function differenceBoxSpectrum(fieldA, latitudesA, longitudesA, fieldB, viewport, resample) {
-  // fieldA/fieldB are already aligned onto the same grid by the caller (resample=true
-  // means B was resampled onto A's grid), so their difference is well defined.
+  // fieldA/fieldB are already aligned onto the same grid by the caller (B was
+  // block-averaged or nearest-sampled onto A's grid), so their difference is defined.
   void resample;
   const difference = { data: new Float32Array(fieldA.data.length), width: fieldA.width, height: fieldA.height };
   for (let i = 0; i < difference.data.length; i += 1) difference.data[i] = fieldA.data[i] - fieldB.data[i];

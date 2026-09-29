@@ -273,6 +273,46 @@ export function resampleOntoGrid(field, sourceLatitudes, sourceLongitudes, targe
   return { data, width: targetWidth, height: targetHeight };
 }
 
+/**
+ * Mean of the finer source cells falling inside each coarser target cell (NaN where the
+ * cell holds no ocean). Used instead of nearest sampling when a fine field is compared on
+ * a coarse grid, so fine scales average out rather than alias into the difference.
+ */
+export function blockAverageOntoGrid(field, sourceLatitudes, sourceLongitudes, targetLatitudes, targetLongitudes) {
+  const targetHeight = targetLatitudes.length;
+  const targetWidth = targetLongitudes.length;
+  const sums = new Float64Array(targetHeight * targetWidth);
+  const counts = new Uint32Array(targetHeight * targetWidth);
+  const targetLatitudeStep = targetLatitudes.length > 1 ? targetLatitudes[1] - targetLatitudes[0] : 1;
+  const targetLongitudeStep = targetLongitudes.length > 1 ? targetLongitudes[1] - targetLongitudes[0] : 1;
+  const rowOf = new Int32Array(sourceLatitudes.length);
+  for (let row = 0; row < sourceLatitudes.length; row += 1) {
+    const target = Math.round((sourceLatitudes[row] - targetLatitudes[0]) / targetLatitudeStep);
+    rowOf[row] = target >= 0 && target < targetHeight ? target : -1;
+  }
+  const columnOf = new Int32Array(sourceLongitudes.length);
+  for (let column = 0; column < sourceLongitudes.length; column += 1) {
+    const target = Math.round((sourceLongitudes[column] - targetLongitudes[0]) / targetLongitudeStep);
+    columnOf[column] = target >= 0 && target < targetWidth ? target : -1;
+  }
+  for (let row = 0; row < sourceLatitudes.length; row += 1) {
+    const targetRow = rowOf[row];
+    if (targetRow < 0) continue;
+    for (let column = 0; column < sourceLongitudes.length; column += 1) {
+      const targetColumn = columnOf[column];
+      if (targetColumn < 0) continue;
+      const value = field.data[row * field.width + column];
+      if (!Number.isFinite(value)) continue;
+      const index = targetRow * targetWidth + targetColumn;
+      sums[index] += value;
+      counts[index] += 1;
+    }
+  }
+  const data = new Float32Array(targetHeight * targetWidth);
+  for (let i = 0; i < data.length; i += 1) data[i] = counts[i] ? sums[i] / counts[i] : NaN;
+  return { data, width: targetWidth, height: targetHeight };
+}
+
 /** Elementwise A − B of two aligned fields (NaN where either is land). */
 export function differenceField(fieldA, fieldB) {
   const data = new Float32Array(fieldA.data.length);

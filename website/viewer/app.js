@@ -36,6 +36,7 @@ import {
   areaWeightedQuantiles,
   differenceField,
   resampleOntoGrid,
+  blockAverageOntoGrid,
   robustDifferenceMagnitude,
   drawColorbar,
   landColor,
@@ -3915,21 +3916,19 @@ function renderRailSkill(shown, comparison) {
 //
 // The spectrum is computed over an explicit rectangle drawn on the map, draggable,
 // resizable, shared between both forecasts in compare mode. Its size is HARD-CAPPED at
-// what the finest (native) pyramid grid honestly resolves with the 512-cell FFT budget
-// (≈ 512 × finest cell size per axis), so a box at the cap is transformed at native
-// resolution from a windowed tile-cropped read. A smaller box carries fewer cells than
-// the FFT grid can take, and the power-of-two side then covers whole blocks of source
-// cells, which are averaged rather than sampled.
+// 512 native cells of the finest model per axis, and the box is transformed on those
+// native cells from a windowed tile-cropped read (psd.js zero-pads, never resamples).
 
-const PSD_FFT_CELLS = 512; // matches psd.js MAX_SIDE
+const PSD_FFT_CELLS = 512; // matches psd.js MAX_CELLS
 const PSD_MIN_CELLS = 32; // minimum native cells across for a meaningful FFT
 const PSD_DEFAULT_WIDTH_DEG = 10;
 const PSD_FLASH_MILLISECONDS = 700;
+const PSD_LAND_WARNING_FRACTION = 0.02;
 
 // Current cap/min (degrees) for the visible forecasts; refreshed by ensurePsdBox so
 // resize gestures clamp against the latest model pair. A shared box must be valid for
 // BOTH models at their native grids, so:
-//   sharedMax = min over models of (256 × native cell size) , the FINER model's max,
+//   sharedMax = min over models of (512 × native cell size) , the FINER model's max,
 //               so the fine model is never decimated;
 //   sharedMin = max over models of (32 × native cell size)  , the COARSER model's min,
 //               so the coarse model still has ≥32 of its own native cells.
@@ -4158,7 +4157,9 @@ const psdWindowCache = new Map();
 // The spectrum's grow-only bounds are keyed by the box, so the previous box's bounds are
 // unreachable the moment the box moves. Remember which key is live and drop the last one.
 let psdBoundsKey = null;
-const PSD_WINDOW_CACHE_LIMIT = 8;
+// Large enough for every lead of two panels (currents read two components each), so
+// the disagreement-vs-lead sweep does not evict the lead on screen.
+const PSD_WINDOW_CACHE_LIMIT = 48;
 
 function psdWindowKey(slug, variable, level, start, leadIndex, boxRange) {
   const rounded = [boxRange.lonMin, boxRange.lonMax, boxRange.latMin, boxRange.latMax]
@@ -4199,14 +4200,15 @@ async function psdWindowRead(slug, variable, level, start, leadIndex, boxRange) 
 // spectrum can be the kinetic energy KE(k) = 0.5 (PSD_u + PSD_v): the spectrum of the
 // speed magnitude is the spectrum of a nonlinear function of the flow and is not the
 // energy at any scale. Returns { fields, latitudes, longitudes, cellDeg, kinetic } | null.
-async function psdSourceFor(panel, boxRange) {
+async function psdSourceFor(panel, boxRange, leadDay = shared.leadDay) {
   const manifest = manifestFor(panel.state.dataset);
   if (!manifest) return null;
   const cellDeg = finestCellDegFor(panel.state.dataset);
   const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
   const level = levels[0].level;
   const start = storeStartIndex(manifest);
-  const leadIndex = storeLeadIndex(manifest, shared.leadDay);
+  const leadIndex = storeLeadIndex(manifest, leadDay);
+  if (start < 0 || leadIndex < 0) return null;
   try {
     if (isCurrentsVariable(panel.state.variable)) {
       const components = currentDepthVariables(panel);
@@ -4264,19 +4266,21 @@ function panelSpectrum(source, viewport) {
   );
 }
 
-// The reanalysis the offline gridded scores are computed against. Effective resolution
+// The reanalysis the offline gridded scores are computed against. The disagreement scale
 // needs it in the other panel; two forecasts alone have no reference between them. The
 // GLO12 stores are forecasts (their lead 1 is the nowcast), so they do not count.
 function isReferenceDataset(slug) {
   return String(slug || "").startsWith("glorys");
 }
 
-// Effective resolution after Ballarotta et al. (2019, Ocean Science): the wavelength at
-// which the spectrum of the difference from a reference reaches half the reference's own
-// spectrum, i.e. the scale below which the field carries as much error as signal. Scan
+// Scale of disagreement with the reference, computed like the effective resolution of
+// Ballarotta et al. (2019, Ocean Science): the wavelength at which the spectrum of the
+// difference from GLORYS reaches half GLORYS's own spectrum. Against a reanalysis the
+// forecast started from, this measures disagreement (at short leads mostly the initial
+// state), not the model's own resolution, so it is not labelled as one. Scan
 // from the largest resolved wavelength down to the first crossing and interpolate the
 // wavelength on the log axis. Returns metres, or NaN when the ratio never crosses.
-function effectiveResolutionMetres(errorSpectrum, referenceSpectrum) {
+function disagreementScaleMetres(errorSpectrum, referenceSpectrum) {
   if (!errorSpectrum || !referenceSpectrum) return NaN;
   if (errorSpectrum.wavelength.length !== referenceSpectrum.wavelength.length) return NaN;
   const order = errorSpectrum.wavelength
@@ -4321,6 +4325,7 @@ async function renderRailPsd(shown, comparison) {
   if (!shared.psdEnabled || shared.scope === SCOPE_WHOLE_YEAR) {
     elements["rail-spectra"].innerHTML = "";
     elements["rail-psd-note"].textContent = "";
+    elements["rail-psd-lead"].innerHTML = "";
     return;
   }
   const box = ensurePsdBox(shown);
@@ -4329,6 +4334,7 @@ async function renderRailPsd(shown, comparison) {
     // model's 32-cell minimum is larger than the fine model's native-resolution cap.
     scheduleRedrawAllPanels(); // drop the now-hidden box from the map (psdBoxVisible is false)
     elements["rail-spectra"].innerHTML = "";
+    elements["rail-psd-lead"].innerHTML = "";
     const pair = psdBoxLimits.resolutionLabels.join(" vs ");
     elements["rail-psd-note"].textContent =
       `Resolutions too different to share a box${pair ? ` (${pair})` : ""}. ` +
@@ -4362,49 +4368,22 @@ async function renderRailPsd(shown, comparison) {
     sources.push({ panel, spectrum, source });
     if (curve) {
       curves.push({
-        label: comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}` : labelFor(panel.state.dataset),
+        label: comparison ? `F${panel.index + 1} · ${shortLabelFor(panel.state.dataset)}` : shortLabelFor(panel.state.dataset),
         color: forecastColor(panel.index),
         ...curve,
       });
     }
   }
-  let effectiveResolution = NaN;
-  let effectiveReferenceLabel = "";
-  if (comparison && sources.length === 2) {
-    // Effective resolution needs a reference on one side and a forecast on the other,
-    // and it is measured ON THE REFERENCE GRID: the difference and the reference
-    // spectrum are both computed there, so the number is a property of the pair and not
-    // of which panel the user happened to put the reference in. With no reference
-    // between the two panels the difference stays on Forecast 1's grid, as before.
-    const referenceIndex = sources.findIndex((entry) => isReferenceDataset(entry.panel.state.dataset));
-    const otherIndex = referenceIndex === 0 ? 1 : 0;
-    const hasReference = referenceIndex >= 0 && !isReferenceDataset(sources[otherIndex].panel.state.dataset);
-    const baseIndex = hasReference ? referenceIndex : 0;
-    const base = sources[baseIndex].source;
-    const other = sources[1 - baseIndex].source;
-    const cellDegrees = [base.cellDeg, other.cellDeg];
-    const alignedOther = other.fields.map((field) =>
-      resampleOntoGrid(field, other.latitudes, other.longitudes, base.latitudes, base.longitudes),
-    );
-    let errorSpectrum = combineComponentSpectra(
-      base.fields.map((field, index) =>
-        differenceBoxSpectrum(field, base.latitudes, base.longitudes, alignedOther[index], boxViewport, true),
-      ),
-    );
-    // A difference spectrum is only meaningful over the commonly-resolved scales: below
-    // 2× the COARSER model's native cell size the "difference" is interpolation artifact,
-    // not model disagreement, so the error curve is truncated there.
-    errorSpectrum = truncateToResolvedScales(errorSpectrum, cellDegrees, box.lat);
-    if (errorSpectrum) {
-      curves.push({ label: `error (F1−F2)`, color: SERIES_COLORS.error, dashed: true, ...errorSpectrum });
+  let disagreementScale = NaN;
+  let referenceLabel = "";
+  const pair = comparison && sources.length === 2 ? pairSpectra(sources, boxViewport, box.lat) : null;
+  if (pair) {
+    if (pair.errorSpectrum) {
+      curves.push({ label: "error (F1−F2)", color: SERIES_COLORS.error, dashed: true, ...pair.errorSpectrum });
     }
-    if (hasReference) {
-      // The reference's own spectrum on that same grid, cut to the same commonly
-      // resolved scales, so the ratio is defined ring by ring and the marker is searched
-      // only where both curves are real.
-      const referenceSpectrum = truncateToResolvedScales(sources[referenceIndex].spectrum, cellDegrees, box.lat);
-      effectiveResolution = effectiveResolutionMetres(errorSpectrum, referenceSpectrum);
-      effectiveReferenceLabel = labelFor(sources[referenceIndex].panel.state.dataset);
+    if (pair.hasReference) {
+      disagreementScale = disagreementScaleMetres(pair.errorSpectrum, pair.referenceSpectrum);
+      referenceLabel = shortLabelFor(sources[pair.referenceIndex].panel.state.dataset);
     }
   }
   if (token !== psdRenderToken) return;
@@ -4435,48 +4414,129 @@ async function renderRailPsd(shown, comparison) {
   const yBounds = stableInterval(`${boxKey}|y`, yLow, yHigh);
   const kinetic = isCurrentsVariable(shown[0].state.variable);
   const spectrumName = kinetic ? "Live kinetic energy spectrum" : "Live power spectrum";
-  const effectiveKm = Number.isFinite(effectiveResolution) ? Math.round(effectiveResolution / 1000) : NaN;
+  const scaleKm = Number.isFinite(disagreementScale) ? Math.round(disagreementScale / 1000) : NaN;
   elements["rail-spectra"].innerHTML = psdSpectraSVG(curves, {
     title: comparison ? `${spectrumName} (both forecasts)` : spectrumName,
     xBounds,
     yBounds,
     yLabel: psdAxisLabel(shown[0]),
-    marker: Number.isFinite(effectiveKm) ? { wavelength: effectiveResolution, label: `${effectiveKm} km` } : null,
+    marker: Number.isFinite(scaleKm) ? { wavelength: disagreementScale, label: `${scaleKm} km` } : null,
   });
-  // Caption: box dimensions + native grid spacing + resolved wavelength range.
   const gridLabels = [...new Set(sources.filter((entry) => entry.spectrum).map((entry) => cellDegreesLabel(entry.source.cellDeg)))];
-  let wavelengthMin = Infinity;
-  let wavelengthMax = 0;
-  for (const curve of curves) {
-    for (const metres of curve.wavelength) {
-      if (metres < wavelengthMin) wavelengthMin = metres;
-      if (metres > wavelengthMax) wavelengthMax = metres;
-    }
-  }
-  // With a reference in the other panel the honest number to print is the effective
-  // resolution (Ballarotta et al. 2019), the scale at which the difference from that
-  // reference reaches half its spectrum. Without one, fall back to the ends of the
-  // wavelength axis (two cells up to the box size), which are NOT scales the model
-  // resolves: effective resolution is several cells coarser.
-  const kmRange = Number.isFinite(effectiveKm)
-    ? `effective resolution ${effectiveKm} km vs ${effectiveReferenceLabel}`
-    : Number.isFinite(wavelengthMin) && wavelengthMax > 0
-      ? `axis spans ${Math.round(wavelengthMin / 1000)} to ${Math.round(wavelengthMax / 1000)} km`
-      : "";
   const oceanFractions = sources
     .filter((entry) => entry.spectrum && Number.isFinite(entry.spectrum.oceanFraction))
     .map((entry) => entry.spectrum.oceanFraction);
   const oceanFraction = oceanFractions.length ? Math.min(...oceanFractions) : NaN;
-  const oceanLabel = Number.isFinite(oceanFraction) ? `${Math.round(oceanFraction * 100)}% ocean · ` : "";
+  const oceanLabel = Number.isFinite(oceanFraction) ? ` · ${Math.round(oceanFraction * 100)}% ocean` : "";
   const landFraction = Number.isFinite(oceanFraction) ? 1 - oceanFraction : 0;
+  // Filled land cells put steps into the field whose power swamps the short scales from a
+  // few percent of land on, so the warning starts there.
   const landWarning =
-    landFraction > 0.25
-      ? `⚠ ${Math.round(landFraction * 100)}% land, so the spectrum is damped by mean-fill. Prefer an open-ocean box. `
+    landFraction >= PSD_LAND_WARNING_FRACTION
+      ? `⚠ ${Math.round(landFraction * 100)}% land: damped by fill; use an open-ocean box. `
       : "";
+  const scaleText = Number.isFinite(scaleKm) ? ` · scale of disagreement with ${referenceLabel}: ${scaleKm} km` : "";
   elements["rail-psd-note"].textContent = curves.length
-    ? `${landWarning}box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}° · ${oceanLabel}native ${gridLabels.join(" & ")} grid${kmRange ? " · " + kmRange : ""} · drag the box on the map, resize by its handles`
+    ? `${landWarning}Box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}°${oceanLabel} · ${gridLabels.join(" & ")} grid${scaleText}`
     : "Move the box over ocean to compute a spectrum (boxed area is mostly land).";
   wireCursorTooltip(elements["rail-spectra"]);
+  if (pair && pair.hasReference) {
+    renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, boxKey, referenceLabel);
+  } else {
+    elements["rail-psd-lead"].innerHTML = "";
+  }
+}
+
+// The difference spectrum of the two panels and, when one of them is a GLORYS reference
+// and the other a forecast, the reference's own spectrum. Both are measured ON THE
+// REFERENCE GRID, so the number is a property of the pair and not of which panel holds
+// the reference; with no reference the difference stays on Forecast 1's grid. A finer
+// field is block-averaged onto a coarser base grid (nearest sampling would alias its fine
+// scales into the difference); a coarser one is sampled by nearest cell, and the curves
+// are cut below two cells of the coarser grid either way.
+function pairSpectra(sources, boxViewport, centreLatitude) {
+  const referenceIndex = sources.findIndex((entry) => isReferenceDataset(entry.panel.state.dataset));
+  const otherIndex = referenceIndex === 0 ? 1 : 0;
+  const hasReference = referenceIndex >= 0 && !isReferenceDataset(sources[otherIndex].panel.state.dataset);
+  const baseIndex = hasReference ? referenceIndex : 0;
+  const base = sources[baseIndex].source;
+  const other = sources[1 - baseIndex].source;
+  const cellDegrees = [base.cellDeg, other.cellDeg];
+  const coarserBase = base.cellDeg > other.cellDeg * 1.5;
+  const alignedOther = other.fields.map((field) =>
+    coarserBase
+      ? blockAverageOntoGrid(field, other.latitudes, other.longitudes, base.latitudes, base.longitudes)
+      : resampleOntoGrid(field, other.latitudes, other.longitudes, base.latitudes, base.longitudes),
+  );
+  const errorSpectrum = truncateToResolvedScales(
+    combineComponentSpectra(
+      base.fields.map((field, index) =>
+        differenceBoxSpectrum(field, base.latitudes, base.longitudes, alignedOther[index], boxViewport, true),
+      ),
+    ),
+    cellDegrees,
+    centreLatitude,
+  );
+  const referenceSpectrum = hasReference
+    ? truncateToResolvedScales(sources[referenceIndex].spectrum, cellDegrees, centreLatitude)
+    : null;
+  return { errorSpectrum, referenceSpectrum, hasReference, referenceIndex };
+}
+
+// The disagreement scale at every shared lead, drawn under the spectrum. At lead 1 a
+// forecast started from an analysis sits close to it, so the lead dependence is what
+// separates the initial state from the model. Leads are computed one at a time after
+// the spectrum is on screen, and the chart fills in as they arrive.
+const psdLeadSweepCache = new Map();
+
+async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, boxKey, referenceLabel) {
+  const range = sharedLeadRange();
+  if (!range) return;
+  const panelsInPair = sources.map((entry) => entry.panel);
+  const key = [
+    boxKey,
+    sharedStartDate(),
+    ...panelsInPair.map((panel) => `${panel.state.dataset}:${panel.state.variable}`),
+  ].join("|");
+  if (!psdLeadSweepCache.has(key)) {
+    psdLeadSweepCache.clear();
+    psdLeadSweepCache.set(key, new Map());
+  }
+  const values = psdLeadSweepCache.get(key);
+  const draw = () => {
+    const rows = [...values.entries()]
+      .filter(([, metres]) => Number.isFinite(metres))
+      .map(([leadDay, metres]) => ({ lead_day: leadDay, mean: metres / 1000 }));
+    elements["rail-psd-lead"].innerHTML = rows.length
+      ? leadCurveSVG(new Map([["reference", rows]]), {
+          title: `Disagreement with ${referenceLabel} vs lead`,
+          unit: "km",
+          yLabel: `disagreement scale (km)`,
+          labels: new Map([["reference", `vs ${referenceLabel}`]]),
+          legend: false,
+        })
+      : "";
+    if (rows.length) wireCursorTooltip(elements["rail-psd-lead"]);
+  };
+  draw();
+  for (let leadDay = range.minimum; leadDay <= range.maximum; leadDay += 1) {
+    if (values.has(leadDay)) continue;
+    const leadSources = [];
+    for (const entry of sources) {
+      const source = await psdSourceFor(entry.panel, boxRange, leadDay);
+      if (token !== psdRenderToken) return;
+      if (!source) break;
+      leadSources.push({ panel: entry.panel, source, spectrum: panelSpectrum(source, boxViewport) });
+    }
+    let metres = NaN;
+    if (leadSources.length === 2) {
+      const pair = pairSpectra(leadSources, boxViewport, box.lat);
+      metres = disagreementScaleMetres(pair.errorSpectrum, pair.referenceSpectrum);
+    }
+    values.set(leadDay, metres);
+    if (token !== psdRenderToken) return;
+    draw();
+  }
 }
 
 function updatePsdToggle() {
@@ -5824,6 +5884,7 @@ function selectElements() {
     "psd-toggle",
     "rail-spectra",
     "rail-psd-note",
+    "rail-psd-lead",
     "rail-year-rmsd-section",
     "rail-year-rmsd",
     "rail-year-rmsd-note",

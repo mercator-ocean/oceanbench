@@ -124,3 +124,4 @@ SPDX-License-Identifier: EUPL-1.2
 .about-glossary { margin: 0.9rem 0 0; }
 .about-glossary dt { font-weight: 600; margin-top: 0.6rem; }
 .about-glossary dd { margin: 0.2rem 0 0; }
+#rail-psd-lead:not(:empty) { margin-top: 0.6rem; }
