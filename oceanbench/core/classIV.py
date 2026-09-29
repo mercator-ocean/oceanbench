@@ -9,6 +9,8 @@ from oceanbench.core.classIV_support import (
     compute_class4_rmsd_table,
     create_class4_observations_dataframe,
     format_class4_results,
+    class4_observations_in_shared_population,
+    class4_population_layers,
     interpolate_class4_model_to_observations,
     prepare_class4_model_variable,
 )
@@ -54,11 +56,13 @@ def _convert_forecast_ssh_to_sla(
 def rmsd_class4_validation(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
+    ocean_mask: xarray.DataArray,
     variables: list[Variable],
 ) -> pandas.DataFrame:
     challenger = rename_dataset_with_standard_names(challenger_dataset)
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
     observations = reference_dataset
+    population_layers = class4_population_layers(ocean_mask)
 
     all_results = []
     resolved_variables = [(variable.key(), variable.key(), variable.key()) for variable in variables]
@@ -73,7 +77,13 @@ def rmsd_class4_validation(
         if observations_dataframe.empty:
             continue
 
-        observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
+        observations_dataframe = class4_observations_in_shared_population(
+            observations_dataframe.dropna(subset=["observation_value"]),
+            population_layers,
+        )
+        if observations_dataframe.empty:
+            continue
+
         model_variable = _convert_forecast_ssh_to_sla(
             challenger[challenger_variable_key],
             standard_variable_key,

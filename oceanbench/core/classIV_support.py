@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from typing import NamedTuple
+
 import numpy
 import pandas
 import xarray
@@ -13,6 +15,7 @@ from oceanbench.core.dataset_utils import (
     Dimension,
     VARIABLE_DISPLAY_ORDER,
     VARIABLE_METADATA,
+    MISSING_COUNT_COLUMN,
     SPATIAL_COORDINATE_ALIGNMENT_ATOL,
     Variable,
     is_global_longitude_grid,
@@ -27,6 +30,17 @@ REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 VELOCITY_TARGET_DEPTH_METERS = 15.0
 OBSERVATION_COUNT_COLUMN = "Observations"
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
+
+# The quarter degree model grid, centred on every third point of the twelfth of a degree mask.
+CLASS4_COARSE_GRID_FACTOR = 3
+CLASS4_COARSE_GRID_STEP_DEGREES = 0.25
+
+
+class Class4PopulationLayers(NamedTuple):
+    depths: numpy.ndarray
+    latitude_origin: numpy.float64
+    longitude_origin: numpy.float64
+    coarse_cells_are_wet: numpy.ndarray
 
 
 def _compute_with_remote_retries(operation_name: str, data):
@@ -280,6 +294,18 @@ def prepare_class4_model_variable(
     return _convert_forecast_ssh_to_sla(model_variable, variable_key)
 
 
+def _bracketing_level_indices(
+    sorted_depths: numpy.ndarray,
+    target_depths: numpy.ndarray,
+) -> tuple[numpy.ndarray, numpy.ndarray]:
+    insertion_indices = numpy.searchsorted(sorted_depths, target_depths)
+    upper_indices = numpy.clip(insertion_indices, 0, len(sorted_depths) - 1)
+    lower_indices = numpy.clip(insertion_indices - 1, 0, len(sorted_depths) - 1)
+
+    exact_mask = sorted_depths[upper_indices] == target_depths
+    return numpy.where(exact_mask, upper_indices, lower_indices), upper_indices
+
+
 def _interpolate_vertically_bracket(
     profiles: numpy.ndarray,
     model_depths: numpy.ndarray,
@@ -293,12 +319,7 @@ def _interpolate_vertically_bracket(
     sorted_depths = model_depths[sort_order]
     sorted_profiles = profiles[sort_order, :]
 
-    insert_idx = numpy.searchsorted(sorted_depths, target_depths)
-    idx_upper = numpy.clip(insert_idx, 0, len(sorted_depths) - 1)
-    idx_lower = numpy.clip(insert_idx - 1, 0, len(sorted_depths) - 1)
-
-    exact_mask = sorted_depths[idx_upper] == target_depths
-    idx_lower = numpy.where(exact_mask, idx_upper, idx_lower)
+    idx_lower, idx_upper = _bracketing_level_indices(sorted_depths, target_depths)
 
     obs_indices = numpy.arange(observation_count)
     lower_values = sorted_profiles[idx_lower, obs_indices]
@@ -318,8 +339,8 @@ def _interpolate_vertically_bracket(
             upper_values[different] - lower_values[different]
         )
 
-    invalid = numpy.isnan(lower_values) | numpy.isnan(upper_values)
-    result[~invalid] = interpolated[~invalid]
+    bracket_is_valid = ~numpy.isnan(lower_values) & ~numpy.isnan(upper_values)
+    result[bracket_is_valid] = interpolated[bracket_is_valid]
     return result
 
 
@@ -465,24 +486,97 @@ def interpolate_class4_model_to_observations(
     return _interpolate_model_to_observations(model_data, observations_dataframe, variable_key)
 
 
+def _coarse_cells_are_wet(is_wet: numpy.ndarray) -> numpy.ndarray:
+    _, latitude_count, longitude_count = is_wet.shape
+    coarse_rows = numpy.arange(0, latitude_count, CLASS4_COARSE_GRID_FACTOR)
+    coarse_columns = numpy.arange(0, longitude_count, CLASS4_COARSE_GRID_FACTOR)
+    return numpy.logical_and.reduce(
+        [
+            is_wet[:, numpy.clip(coarse_rows + row_offset, 0, latitude_count - 1)][
+                :, :, numpy.mod(coarse_columns + column_offset, longitude_count)
+            ]
+            for row_offset in (-1, 0, 1)
+            for column_offset in (-1, 0, 1)
+        ]
+    )
+
+
+def class4_population_layers(ocean_mask: xarray.DataArray) -> Class4PopulationLayers:
+    sorted_mask = ocean_mask.sortby(Dimension.DEPTH.key())
+    return Class4PopulationLayers(
+        depths=sorted_mask[Dimension.DEPTH.key()].values,
+        latitude_origin=numpy.float64(sorted_mask[Dimension.LATITUDE.key()].values[0]),
+        longitude_origin=numpy.float64(sorted_mask[Dimension.LONGITUDE.key()].values[0]),
+        coarse_cells_are_wet=_coarse_cells_are_wet(sorted_mask.values.astype(bool)),
+    )
+
+
+def _surrounding_cells(
+    row_below: numpy.ndarray,
+    column_left: numpy.ndarray,
+    row_count: int,
+    column_count: int,
+) -> list[tuple[numpy.ndarray, numpy.ndarray]]:
+    first_row = numpy.clip(row_below, 0, row_count - 1)
+    rows = [first_row, numpy.clip(first_row + 1, 0, row_count - 1)]
+    columns = [numpy.mod(column_left, column_count), numpy.mod(column_left + 1, column_count)]
+    return [(row, column) for row in rows for column in columns]
+
+
+def class4_observations_in_shared_population(
+    observations_dataframe: pandas.DataFrame,
+    layers: Class4PopulationLayers,
+) -> pandas.DataFrame:
+    """
+    Keep only the observations of the OceanBench Class IV population, built from the ocean mask alone.
+
+    An observation is kept only when its four surrounding quarter degree cells are ocean at the first
+    mask depth at or below it, a quarter degree cell being ocean only when its nine twelfth of a degree
+    cells are. The population is therefore the same for every challenger and every reference,
+    whatever their grids.
+    """
+    observations_dataframe = observations_dataframe.reset_index(drop=True)
+    latitudes = observations_dataframe[Dimension.LATITUDE.key()].values
+    longitudes = observations_dataframe[Dimension.LONGITUDE.key()].values
+
+    _, coarse_row_count, coarse_column_count = layers.coarse_cells_are_wet.shape
+    coarse_cells = _surrounding_cells(
+        numpy.floor((latitudes - layers.latitude_origin) / CLASS4_COARSE_GRID_STEP_DEGREES).astype(numpy.int64),
+        numpy.floor((longitudes - layers.longitude_origin) / CLASS4_COARSE_GRID_STEP_DEGREES).astype(numpy.int64),
+        coarse_row_count,
+        coarse_column_count,
+    )
+    _, deeper_level = _bracketing_level_indices(
+        layers.depths,
+        observations_dataframe[Dimension.DEPTH.key()].values,
+    )
+    has_wet_coarse_cells = numpy.logical_and.reduce(
+        [layers.coarse_cells_are_wet[deeper_level, row, column] for row, column in coarse_cells]
+    )
+    return observations_dataframe.loc[has_wet_coarse_cells]
+
+
 def _compute_rmsd_table(
     dataframe: pandas.DataFrame,
     variable_key: str,
 ) -> pandas.DataFrame:
-    valid_dataframe = dataframe.dropna(subset=["model_value", "observation_value"])
+    eligible_dataframe = dataframe.dropna(subset=["observation_value"])
     grouped = (
-        valid_dataframe.assign(
-            squared_difference=(valid_dataframe["model_value"] - valid_dataframe["observation_value"]) ** 2
+        eligible_dataframe.assign(
+            squared_difference=(eligible_dataframe["model_value"] - eligible_dataframe["observation_value"]) ** 2,
+            missing=eligible_dataframe["model_value"].isna(),
         )
         .groupby(["depth_bin", "lead_day"], as_index=False)
         .agg(
             rmsd=("squared_difference", lambda values: numpy.sqrt(values.mean())),
             count=("squared_difference", "size"),
+            missing=("missing", "sum"),
         )
     )
     grouped["count"] = grouped["count"].astype(int)
+    grouped["missing"] = grouped["missing"].astype(int)
     grouped["variable"] = variable_key
-    return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
+    return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count", "missing"]]
 
 
 def compute_class4_rmsd_table(
@@ -501,15 +595,20 @@ def _observation_variable_depth_label(standard_name: str, depth_bin: str) -> str
 
 
 def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -> pandas.DataFrame:
-    pivot_table = results_dataframe.pivot_table(
-        values="rmsd",
-        index=["variable", "depth_bin"],
-        columns="lead_day",
-        aggfunc="first",
-    ).reset_index()
+    scored_pairs = pandas.MultiIndex.from_frame(results_dataframe[["variable", "depth_bin"]].drop_duplicates())
+    pivot_table = (
+        results_dataframe.pivot_table(
+            values="rmsd",
+            index=["variable", "depth_bin"],
+            columns="lead_day",
+            aggfunc="first",
+        )
+        .reindex(index=scored_pairs, columns=range(lead_days_count))
+        .reset_index()
+    )
     first_available_day = results_dataframe["lead_day"].min()
     observation_counts = results_dataframe[results_dataframe["lead_day"] == first_available_day][
-        ["variable", "depth_bin", "count"]
+        ["variable", "depth_bin", "count", "missing"]
     ]
     pivot_table = pivot_table.merge(observation_counts, on=["variable", "depth_bin"], how="left")
     pivot_table["variable_sort"] = pivot_table["variable"].map(VARIABLE_DISPLAY_ORDER).astype(float)
@@ -523,8 +622,8 @@ def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: 
     lead_columns = [column for column in pivot_table.columns if isinstance(column, (int, numpy.integer))]
     lead_labels = lead_day_labels(1, lead_days_count)
     column_rename = {column: lead_labels[column] for column in lead_columns}
-    result = pivot_table.set_index("label")[lead_columns + ["count"]].rename(
-        columns=column_rename | {"count": OBSERVATION_COUNT_COLUMN}
+    result = pivot_table.set_index("label")[lead_columns + ["count", "missing"]].rename(
+        columns=column_rename | {"count": OBSERVATION_COUNT_COLUMN, "missing": MISSING_COUNT_COLUMN}
     )
     result.index.name = None
     result.columns.name = None
