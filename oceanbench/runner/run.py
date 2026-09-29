@@ -153,6 +153,7 @@ def _class4_records(
 
 
 def _lagrangian_records(
+    challenger: xarray.Dataset,
     regional_challenger: xarray.Dataset,
     *,
     reference_name: str,
@@ -172,7 +173,7 @@ def _lagrangian_records(
     )
 
     reference = subset_dataset_to_region(reference_openers[reference_name](regional_challenger), region)
-    particle_count = lagrangian_particle_count_for_region(regional_challenger, regional_challenger)
+    particle_count = lagrangian_particle_count_for_region(challenger, regional_challenger)
     harmonised_challenger = _harmonise_dataset(regional_challenger)
     harmonised_reference = _harmonise_dataset(reference)
     lead_day_stop = harmonised_challenger.sizes[Dimension.LEAD_DAY_INDEX.key()] - 1
@@ -352,6 +353,7 @@ def run_challenger_scores(
             try:
                 all_records.extend(
                     _lagrangian_records(
+                        opened_dataset,
                         regional_challenger,
                         reference_name=reference_name,
                         reference_openers=resolved_reference_openers,
