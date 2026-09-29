@@ -441,12 +441,14 @@ SPDX-License-Identifier: EUPL-1.2
 .class4-tooltip {
   position: fixed;
   z-index: 20;
-  max-width: 22rem;
+  width: max-content;
+  max-width: min(22rem, calc(100vw - 1rem));
   padding: 0.3rem 0.5rem;
   color: var(--text);
   font-family: var(--mono);
   font-size: var(--text-readout);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   background: var(--readout-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

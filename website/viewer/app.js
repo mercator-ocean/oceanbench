@@ -858,7 +858,7 @@ async function renderFieldPanel(panel, token, manifest, level, start, leadIndex)
   const { mean } = await fieldStatisticsFor(panel.state.dataset, panel.state.variable);
   if (token !== panel.renderToken) return;
   applyPanelField(panel, { field: primary.field, latitudes: primary.latitudes, longitudes: primary.longitudes, colormap, range,
-    units: entry.units, label: `${labelFor(panel.state.dataset)} · ${prettyName(entry.standard_name)}`,
+    units: entry.units, label: `${shortLabelFor(panel.state.dataset)} · ${prettyName(entry.standard_name)}`,
     statistics: { mean, cellSize: statisticsCellSize(panel.state.dataset) } });
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
@@ -893,7 +893,7 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   const range = [-bound, bound];
   applyPanelField(panel, { field: difference, latitudes: primary.latitudes, longitudes: primary.longitudes,
     colormap: DIFFERENCE_COLORMAP, range, units: entry.units,
-    label: `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · ${prettyName(entry.standard_name)}`,
+    label: `${shortLabelFor(panel.state.dataset)} − ${shortLabelFor(compareSlug)} · ${prettyName(entry.standard_name)}`,
     statistics: { mean: statistics.mean, cellSize: statisticsCellSize(panel.state.dataset) } });
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
@@ -933,7 +933,7 @@ async function renderCurrentsDifferencePanel(panel, token, manifest, level, star
   applyPanelField(panel, { field: difference, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
     colormap: DIFFERENCE_COLORMAP, range,
     units: "m/s",
-    label: `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})${currentsLevelSuffix(manifest, level)}`,
+    label: `${shortLabelFor(panel.state.dataset)} − ${shortLabelFor(compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})${currentsLevelSuffix(manifest, level)}`,
     statistics: { mean: statistics.mean, cellSize: statisticsCellSize(panel.state.dataset) },
   });
   stopParticles(panel);
@@ -964,7 +964,7 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   if (token !== panel.renderToken) return;
   applyPanelField(panel, { field: speed, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
     colormap: SPEED_COLORMAP, range, units: "m/s",
-    label: `${labelFor(panel.state.dataset)} · currents (${currentsDepthLabel(panel.state.variable)})${currentsLevelSuffix(manifest, level)}`,
+    label: `${shortLabelFor(panel.state.dataset)} · currents (${currentsDepthLabel(panel.state.variable)})${currentsLevelSuffix(manifest, level)}`,
     statistics: { mean, cellSize: statisticsCellSize(panel.state.dataset) } });
   panel.landStencil = landStencil(speed, uPrimary.latitudes);
   panel.velocity = {
@@ -1111,7 +1111,7 @@ async function renderYearPanel(panel, token, manifest) {
   const entry = variableEntry(manifest, panel.state.variable);
   const varLabel = entry ? prettyName(entry.standard_name) : panel.state.variable;
   panel.label =
-    `${labelFor(panel.state.dataset)} · ${biasMode ? "bias" : "mean |obs − model|"} · ${varLabel}` +
+    `${shortLabelFor(panel.state.dataset)} · ${biasMode ? "bias" : "mean |obs − model|"} · ${varLabel}` +
     (mapping.component ? ` (${mapping.component})` : "");
 }
 
@@ -2962,8 +2962,11 @@ function updatePanelReadout(panel, lat, lon, suffix = "", source = panel, prefix
       source.yearBiasSE && source.yearBiasSE.width === source.field.width
         ? source.yearBiasSE.data[row * source.yearBiasSE.width + column]
         : null;
-    const valueText = fieldReadoutValue(source, value, count, standardError);
-    panel.els.readout.textContent = `${prefix}${formatLatLon(lon, lat)} · ${valueText}${suffix}`;
+    // A hovered observation lies in the ocean even where the drawn grid has no cell, so
+    // its match-up replaces the field value instead of sitting next to "land / no data".
+    const fieldMissing = Number.isNaN(value) && shared.scope !== SCOPE_WHOLE_YEAR;
+    const valueText = suffix && fieldMissing ? "" : ` · ${fieldReadoutValue(source, value, count, standardError)}`;
+    panel.els.readout.textContent = `${prefix}${formatLatLon(lon, lat)}${valueText}${suffix}`;
 }
 
 function fieldReadoutValue(panel, value, count, standardError) {
@@ -3254,7 +3257,8 @@ function updateSharedColorbar() {
       const biasMode = candidate.yearMetric === YEAR_METRIC_BIAS;
       canvases[index].hidden = false;
       drawColorbar(canvases[index], candidate.colormap, candidate.range, {
-        label: `${prefixFor(candidate)}${biasMode ? "mean (model − obs)" : "mean |obs − model|"} over ${nStarts || "?"} start dates · ${candidate.label}`,
+        // Dataset and variable are in the panel head; the bar says only what is averaged.
+        label: `${prefixFor(candidate)}${biasMode ? "model − obs" : "|obs − model|"}, mean of ${nStarts || "?"} starts`,
         units: candidate.units,
         textColor,
       });
@@ -4532,12 +4536,12 @@ function wireChartCursorTooltip(svg) {
     lines.forEach((text, index) => {
       const node = document.createElementNS("http://www.w3.org/2000/svg", "text");
       node.setAttribute("x", String(6 * scale));
-      node.setAttribute("y", String((13 + index * 12) * scale));
+      node.setAttribute("y", String((15 + index * 14) * scale));
       node.textContent = text;
       tooltip.appendChild(node);
     });
-    rect.setAttribute("height", String((8 + lines.length * 12) * scale));
-    rect.setAttribute("width", String(Math.max(96, 7 * Math.max(...lines.map((line) => line.length))) * scale));
+    rect.setAttribute("height", String((9 + lines.length * 14) * scale));
+    rect.setAttribute("width", String((12 + Math.max(96, 6.2 * Math.max(...lines.map((line) => line.length)))) * scale));
   };
   const move = (event) => {
     const svgPoint = svg.createSVGPoint();

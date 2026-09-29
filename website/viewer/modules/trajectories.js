@@ -46,8 +46,8 @@ export function trajectorySeparationSVG(rows, currentLead, typeScale = 1) {
     const mx = x(markerRow.lead_day);
     const my = y(markerRow.mean);
     const label = `day ${markerRow.lead_day} · ${markerRow.mean.toFixed(markerRow.mean < 10 ? 1 : 0)} km`;
-    const labelWidth = (8 + label.length * 4.6) * typeScale;
-    const labelHeight = 14 * typeScale;
+    const labelWidth = (10 + label.length * 6) * typeScale;
+    const labelHeight = 17 * typeScale;
     const labelRight = mx + 8 + labelWidth <= width - right;
     const labelX = labelRight ? mx + 8 : mx - 8 - labelWidth;
     const labelY = Math.max(top + 2, my - 6 - labelHeight);

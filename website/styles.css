@@ -142,6 +142,11 @@ div.sourceCode.cell-code pre.sourceCode {
 
 .score-table-wrapper {
   margin-bottom: 1.5rem;
+  max-width: 100%;
+}
+
+.depth-table-wrapper {
+  margin-bottom: 0;
 }
 
 
@@ -165,13 +170,10 @@ div.sourceCode.cell-code pre.sourceCode {
   font-variant-numeric: tabular-nums;
 }
 
-/* Keep table width stable when toggling Values / % diff mode */
+/* Keep table width stable when toggling Values / % diff mode. A wider value
+   such as >999% grows its own cell instead of being cut off. */
 .score-table td.score-value-cell {
-  width: 5ch;
   min-width: 5ch;
-  max-width: 5ch;
-  overflow: hidden;
-  text-overflow: clip;
   padding-left: 0.2rem;
   padding-right: 0.2rem;
 }
@@ -274,7 +276,7 @@ body.quarto-dark .score-table .standard-name {
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-md);
   box-shadow: var(--ob-soft-shadow);
-  min-width: max-content;
+  max-width: 100%;
   overflow: visible;
 }
 
@@ -957,12 +959,13 @@ body.quarto-dark #scale-input {
 .legend-bar-wrapper {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   margin-top: -4px;
 }
 
 .legend-bar {
   display: flex;
-  width: 300px;
+  width: clamp(120px, 26vw, 300px);
   height: 12px;
   border-radius: 3px;
   border: 1px solid var(--ob-border);
@@ -1041,7 +1044,8 @@ body.nav-hidden .depth-table thead {
 
 /* --- Spacing between sub-tables (e.g. observations depth groups) --- */
 
-.score-table + .score-table {
+.score-table + .score-table,
+.score-table-wrapper + .score-table-wrapper {
   margin-top: 3rem;
 }
 
@@ -1293,4 +1297,94 @@ body.quarto-dark .version-select {
 .scores-status-error {
   border-left-color: #b2182b;
   color: var(--ob-text);
+}
+
+/* --- Narrow screens: scroll the table inside its own box --- */
+
+/* Desktop keeps the bar on one line, so the header takes its natural width */
+@media (min-width: 1025px) {
+  #score-header {
+    min-width: max-content;
+  }
+}
+
+/* The sticky thead needs the page itself to scroll sideways, so it is kept on
+   wide screens only and the wrapper takes over the horizontal scrolling below. */
+@media (max-width: 1024px) {
+  html,
+  body {
+    overscroll-behavior-x: none;
+  }
+
+  .controls {
+    flex-wrap: wrap;
+  }
+
+  .score-table-wrapper {
+    overflow-x: auto;
+    overflow-y: visible;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+  }
+
+  .score-table-wrapper.at-right-end {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .depth-table thead {
+    position: static;
+  }
+}
+
+/* --- Floating header clone (narrow screens) --- */
+
+/* A copy of the table head, held under the page header while the table itself
+   is scrolled past it. It scrolls sideways with the table. */
+#floating-thead {
+  position: fixed;
+  top: calc(var(--navbar-full-height, 0px) + var(--controls-height, 0px));
+  transition: top 0.2s linear;
+  z-index: 9;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bs-body-bg, #fafaf7);
+}
+
+#floating-thead .score-table thead th {
+  background: var(--bs-body-bg, #fafaf7);
+}
+
+body.nav-hidden #floating-thead {
+  top: var(--controls-height, 0px);
+}
+
+#floating-thead.is-visible {
+  display: block;
+}
+
+/* --- Phone layout --- */
+
+@media (max-width: 600px) {
+  .score-table {
+    font-size: 0.72rem;
+  }
+
+  .score-table th,
+  .score-table td {
+    padding: 0.15rem 0.2rem;
+  }
+
+  /* The tick labels need the full 300px bar to stay apart */
+  .legend-ticks {
+    display: none;
+  }
+}
+
+body.quarto-dark #floating-thead,
+body.quarto-dark #floating-thead .score-table thead th {
+  background: var(--bs-body-bg, #1a1a2e);
 }

@@ -56,7 +56,7 @@ function svgOpen(title) {
 function interactionLayer() {
   return (
     `<line class="chart-crosshair" x1="0" y1="${PAD_TOP}" x2="0" y2="${VIEW_HEIGHT - PAD_BOTTOM}" hidden/>` +
-    `<g class="chart-tooltip" hidden><rect x="0" y="0" width="128" height="34" rx="4"/><text x="6" y="13"></text><text x="6" y="27"></text></g>`
+    `<g class="chart-tooltip" hidden><rect x="0" y="0" width="128" height="34" rx="4"/></g>`
   );
 }
 
@@ -88,15 +88,40 @@ function isDashedSeries(key) {
   return key === "northward" || String(key).endsWith(":northward");
 }
 
-function renderLegend(area, entries, columnStride = 0) {
+// Legend rows, in viewBox units. Label type is pinned at 10 px whatever the slot width,
+// so in viewBox units it grows as the rail narrows; these sizes hold down to a 288 px
+// slot (10 px text drawn at 12.5 units, about 7.2 units per character).
+const LEGEND_ROW = 15;
+const LEGEND_CHAR = 7.2;
+
+// Left-to-right flow for legend entries, wrapping to a new row when the next label would
+// run past the plot's right edge. Returns each entry's { dx, row } and the row count.
+function flowLegend(entries, width) {
+  let dx = 0;
+  let row = 0;
+  const positions = entries.map((entry) => {
+    const entryWidth = 12 + String(entry.label).length * LEGEND_CHAR + 10;
+    if (dx > 0 && dx + entryWidth > width) {
+      row += 1;
+      dx = 0;
+    }
+    const position = { dx, row };
+    dx += entryWidth;
+    return position;
+  });
+  return { positions, rows: row + 1 };
+}
+
+// Stacked one entry per row, or placed by a flowLegend() layout.
+function renderLegend(area, entries, layout = null) {
   return entries
     .map((entry, index) => {
-      const x = area.x0 + index * columnStride;
-      const y = 2 + index * (columnStride ? 0 : 14);
+      const x = area.x0 + (layout ? layout.positions[index].dx : 0);
+      const y = 2 + (layout ? layout.positions[index].row : index) * LEGEND_ROW;
       const swatch = entry.dashed
         ? `<line x1="${x}" y1="${y + 4.5}" x2="${x + 9}" y2="${y + 4.5}" stroke="${entry.color}" stroke-width="2" stroke-dasharray="${DASH_PATTERN_SHORT}"/>`
         : `<rect x="${x}" y="${y}" width="9" height="9" rx="2" fill="${entry.color}"/>`;
-      return swatch + `<text x="${x + 12}" y="${y + 8}" class="legend">${escapeText(entry.label)}</text>`;
+      return swatch + `<text x="${x + 12}" y="${y + 9}" class="legend">${escapeText(entry.label)}</text>`;
     })
     .join("");
 }
@@ -122,7 +147,7 @@ export function leadCurveSVG(
 ) {
   const references = [...series.keys()];
   if (!references.length) return emptyChart(title, emptyMessage);
-  const extraTop = legend && references.length > 1 ? (references.length - 1) * 14 : 0;
+  const extraTop = legend && references.length > 1 ? (references.length - 1) * LEGEND_ROW : 0;
   const area = plotArea(extraTop);
 
   let maxLead = 1;
@@ -201,8 +226,9 @@ export function psdSpectraSVG(
   curves,
   { title = "Live power spectrum", xBounds = null, yBounds = null, yLabel = "power", marker = null } = {},
 ) {
-  const area = plotArea();
   const usable = (curves || []).filter((curve) => curve && curve.wavelength && curve.wavelength.length);
+  const legendLayout = flowLegend(usable, VIEW_WIDTH - PAD_RIGHT - PAD_LEFT);
+  const area = plotArea((legendLayout.rows - 1) * LEGEND_ROW);
   if (!usable.length) return emptyChart(title, "no field in view for a spectrum");
 
   const positive = (list, pick) => {
@@ -276,7 +302,7 @@ export function psdSpectraSVG(
     }
   }
 
-  const legend = renderLegend(area, usable, 96);
+  const legend = renderLegend(area, usable, legendLayout);
 
   return svgOpen(title) + axes(area, "wavelength (km)", yLabel) + body + legend + interactionLayer() + "</svg>";
 }
@@ -296,7 +322,7 @@ export function psdSpectraSVG(
 export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = "", signed = false, yBound = 0 } = {}) {
   const usable = (series || []).filter((line) => line && line.dates && line.dates.length);
   if (!usable.length) return emptyChart(title, "no year RMSE for this variable");
-  const area = plotArea(usable.length > 1 ? (usable.length - 1) * 14 : 0);
+  const area = plotArea(usable.length > 1 ? (usable.length - 1) * LEGEND_ROW : 0);
 
   const allDates = [...new Set(usable.flatMap((line) => line.dates))].sort();
   const indexOfDate = new Map(allDates.map((date, index) => [date, index]));
@@ -397,7 +423,7 @@ export function rmsdByDepthSVG(
   // so this profile gets a roomier left gutter than the shared plotArea() default.
   const usable = (series || []).filter((line) => line && Array.isArray(line.bins) && line.bins.some((bin) => Number.isFinite(bin.rmsd)));
   if (!usable.length) return emptyChart(title, emptyMessage);
-  const base = plotArea(usable.length > 1 ? (usable.length - 1) * 14 : 0);
+  const base = plotArea(usable.length > 1 ? (usable.length - 1) * LEGEND_ROW : 0);
   const DEPTH_PAD_LEFT = 62;
   const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
 
@@ -480,7 +506,7 @@ export function columnProfileSVG(
     (line) => line && Array.isArray(line.points) && line.points.some((point) => Number.isFinite(point.value) && Number.isFinite(point.depth)),
   );
   if (!usable.length) return emptyChart(title, emptyMessage);
-  const base = plotArea(usable.length > 1 ? (usable.length - 1) * 14 : 0);
+  const base = plotArea(usable.length > 1 ? (usable.length - 1) * LEGEND_ROW : 0);
   const DEPTH_PAD_LEFT = 52;
   const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
 
@@ -515,7 +541,10 @@ export function columnProfileSVG(
     const value = xLo + ((xHi - xLo) * t) / 4;
     const x = xOf(value);
     body += `<line x1="${x.toFixed(1)}" y1="${area.y0}" x2="${x.toFixed(1)}" y2="${area.y1}" class="grid"/>`;
-    body += `<text x="${x.toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="middle">${formatTick(value)}</text>`;
+    // The last tick sits on the right edge of the plot, so it ends there instead of
+    // centring half its label outside the chart.
+    const anchor = t === 4 ? "end" : "middle";
+    body += `<text x="${x.toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="${anchor}">${formatTick(value)}</text>`;
   }
   for (let t = 0; t <= 4; t += 1) {
     const depth = (depthMax * t) / 4;

@@ -65,7 +65,7 @@ SPDX-License-Identifier: EUPL-1.2
    the slot measures, which scaled the labels along with the drawing. Type in the rail
    therefore grew and shrank as the window or the drawer was resized. The slot
    publishes its measured width and every label divides the design width back out, so
-   a label declared at 0.5rem renders at 8px whatever the slot measures. Chart
+   a label declared at 0.625rem renders at 10px whatever the slot measures. Chart
    geometry still flexes with the slot; only the type is pinned. */
 .rail-chart-slot {
   width: 100%;
@@ -77,7 +77,7 @@ SPDX-License-Identifier: EUPL-1.2
   height: auto;
   display: block;
   --chart-type-scale: calc(var(--chart-view-width) / var(--chart-slot-width));
-  --chart-text: 0.5rem;
+  --chart-text: 0.625rem;
 }
 .rail-chart .axis { stroke: var(--border); stroke-width: 1; }
 .rail-chart .grid { stroke: var(--grid-line); stroke-width: 1; }

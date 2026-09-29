@@ -82,8 +82,8 @@ SPDX-License-Identifier: EUPL-1.2
     font-size: 0.75rem;
   }
   /* Both selects and the label share one line on a 390px phone; the badge takes the second. */
-  .panel-head .panel-dataset { max-width: 7rem; }
-  .panel-head .panel-variable { max-width: 8.5rem; }
+  .panel-head .panel-dataset { max-width: 7.75rem; }
+  .panel-head .panel-variable { max-width: 10rem; }
   .panel-forecast-label { font-size: 0.75rem; }
   .panel-badge { font-size: 0.68rem; }
   /* The first-visit note takes its own line above the maps, since at this width any
