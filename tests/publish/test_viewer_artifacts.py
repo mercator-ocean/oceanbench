@@ -16,6 +16,7 @@ import pytest
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.regions import IBI, BoundingBox, padded_region
 from oceanbench.publish import viewer_artifacts
 
 _SEA_SURFACE_HEIGHT_KEY = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
@@ -366,9 +367,10 @@ def test_rmsd_by_depth_returns_none_when_no_multi_depth_variable(tmp_path) -> No
 
 
 def _sea_surface_height_dataset(start_dates: tuple[str, ...] = ("2024-01-03",)) -> xarray.Dataset:
-    latitudes = numpy.linspace(-10.0, 10.0, 41)
+    # Centred at 30 N, clear of the equatorial band the detector excludes.
+    latitudes = numpy.linspace(20.0, 40.0, 41)
     longitudes = numpy.linspace(-10.0, 10.0, 41)
-    grid_y, grid_x = numpy.meshgrid(latitudes, longitudes, indexing="ij")
+    grid_y, grid_x = numpy.meshgrid(latitudes - 30.0, longitudes, indexing="ij")
     field = 0.3 * numpy.exp(-((grid_y) ** 2 + (grid_x) ** 2) / 8.0)
     values = numpy.broadcast_to(field[None, None, :, :], (len(start_dates), 5, field.shape[0], field.shape[1])).copy()
     # Each start gets its own eddy, displaced with the start, so a per-start census is
@@ -604,3 +606,31 @@ def test_matchup_parquet_is_zstd_without_abs_error_and_readable(tmp_path) -> Non
     )
     assert numpy.all(numpy.isfinite(derived))
     assert table.num_rows > 0
+
+
+def test_padded_regional_census_keeps_only_the_eddies_centred_in_the_region() -> None:
+    # The census of a region is detected on a padded crop so the filter and contours see past
+    # the region edge; only eddies centred inside the region itself are published.
+    region = padded_region(IBI, 10.0)
+    assert region.bounds.minimum_latitude == IBI.bounds.minimum_latitude - 10.0
+    assert region.bounds.maximum_longitude == IBI.bounds.maximum_longitude + 10.0
+
+    dataset = _sea_surface_height_dataset()
+    everywhere = viewer_artifacts.dataset_eddy_census(dataset, dataset_slug="your_model", lead_days=(1,))
+    centres = [(eddy["latitude"], eddy["longitude"]) for eddy in everywhere["frames"][0]["detections"]]
+    assert centres
+
+    def clipped_centres(minimum_latitude: float, maximum_latitude: float) -> list:
+        bounds = BoundingBox(
+            minimum_latitude=minimum_latitude,
+            maximum_latitude=maximum_latitude,
+            minimum_longitude=-10.0,
+            maximum_longitude=10.0,
+        )
+        census = viewer_artifacts.dataset_eddy_census(
+            dataset, dataset_slug="your_model", lead_days=(1,), centre_bounds=bounds
+        )
+        return [(eddy["latitude"], eddy["longitude"]) for eddy in census["frames"][0]["detections"]]
+
+    assert clipped_centres(25.0, 35.0) == centres
+    assert clipped_centres(35.0, 40.0) == []

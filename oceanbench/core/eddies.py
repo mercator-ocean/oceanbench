@@ -9,6 +9,7 @@ from scipy.ndimage import gaussian_filter, label
 from scipy.optimize import linear_sum_assignment
 from skimage.feature import peak_local_max
 from skimage.measure import find_contours, regionprops
+from skimage.morphology import h_maxima
 import xarray
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
@@ -65,11 +66,33 @@ DEFAULT_MIN_PEAK_SEPARATION_KM = 100.0  # ~ one mesoscale eddy diameter
 # level clears it, so a broad plateau with a 1 cm bump on it no longer counts as an eddy.
 DEFAULT_AMPLITUDE_THRESHOLD_METERS = 0.01
 DEFAULT_MAX_ABS_LATITUDE_DEGREES = 70.0
+# Equatorial band left out of detection, where f vanishes and SSH is no longer a geostrophic
+# streamfunction. Chelton et al. (2011, section 3.3) restrict their eddy analyses to latitudes
+# above about 10 degrees because identification "performs less well" at low latitudes; the
+# META2.0 OSU product (Pegliasco et al. 2022, ESSD 14, 1087) detects nothing within 2.5 degrees
+# of the equator. Five degrees sits between the two.
+DEFAULT_MIN_ABS_LATITUDE_DEGREES = 5.0
+# A regional census detects on a crop this much wider than the region, so the background
+# filter (about 4 zonal sigmas at the reference latitude) and the outermost contours of eddies
+# near the region edge are not cut by the crop.
+REGIONAL_CENSUS_MARGIN_DEGREES = 10.0
 DEFAULT_MATCH_DISTANCE_KM = 200.0
 DEFAULT_CONTOUR_LEVEL_STEP_METERS = 0.01
-DEFAULT_MIN_EDDY_AREA_KM2 = 2000.0  # radius ~ 25 km (small mesoscale floor)
+# Chelton et al. (2011, appendix B.2) keep regions of at least 8 pixels of 1/4 degree, the area
+# of a circle of 0.4 degree (about 45 km) radius. Both floors apply: 8 pixels on every grid, and
+# a 45 km equivalent radius so that 1/12 and 1/4 degree grids count the same eddies. At 1/4
+# degree 8 pixels is at most 44 km of radius (at the 5 degree equatorial edge), so on every
+# native grid the radius floor is the one that binds.
+DEFAULT_MIN_EDDY_PIXEL_COUNT = 8
+DEFAULT_MIN_EDDY_RADIUS_KM = 45.0
+DEFAULT_MIN_EDDY_AREA_KM2 = numpy.pi * DEFAULT_MIN_EDDY_RADIUS_KM**2
 DEFAULT_MAX_EDDY_AREA_KM2 = 300_000.0  # radius ~ 300 km (Chelton-order upper bound on eddy size)
 DEFAULT_MIN_CONTOUR_CONVEXITY = 0.75
+# One-extremum rule (py-eddy-tracker, Mason et al. 2014): an eddy contour may enclose no other
+# same-sign extremum than its centre. Extrema are counted if they stand at least this high above
+# the saddle joining them to higher ground, so sub-centimetre flank wiggles, which could never
+# carry a 1 cm eddy of their own, do not veto a contour. ``None`` disables the rule.
+DEFAULT_EXTREMUM_PROMINENCE_METERS = 0.01
 DEFAULT_APPLY_CONTOUR_FILTERING = True
 GLOBAL_LONGITUDE_SPAN_THRESHOLD_DEGREES = 300.0
 GLOBAL_LONGITUDE_PERIOD_DEGREES = 360.0
@@ -196,11 +219,16 @@ def _kilometres_to_grid_sigma(
     return latitude_sigma_km / latitude_spacing_km, longitude_sigma_km / longitude_spacing_km
 
 
-def _valid_detection_mask(field: xarray.DataArray, max_abs_latitude_degrees: float) -> numpy.ndarray:
+def _valid_detection_mask(
+    field: xarray.DataArray,
+    max_abs_latitude_degrees: float,
+    min_abs_latitude_degrees: float = 0.0,
+) -> numpy.ndarray:
     latitude_values = field[LATITUDE_COLUMN].values
     longitude_count = field.sizes[LONGITUDE_COLUMN]
     finite_mask = numpy.isfinite(field.values)
-    latitude_mask = numpy.abs(latitude_values) <= max_abs_latitude_degrees
+    absolute_latitudes = numpy.abs(latitude_values)
+    latitude_mask = (absolute_latitudes <= max_abs_latitude_degrees) & (absolute_latitudes >= min_abs_latitude_degrees)
     return finite_mask & latitude_mask[:, None] & numpy.ones((1, longitude_count), dtype=bool)
 
 
@@ -281,6 +309,7 @@ def detect_mesoscale_eddies(
     min_peak_separation_km: float = DEFAULT_MIN_PEAK_SEPARATION_KM,
     amplitude_threshold_meters: float = DEFAULT_AMPLITUDE_THRESHOLD_METERS,
     max_abs_latitude_degrees: float = DEFAULT_MAX_ABS_LATITUDE_DEGREES,
+    min_abs_latitude_degrees: float = DEFAULT_MIN_ABS_LATITUDE_DEGREES,
 ) -> pandas.DataFrame:
     detection_rows: list[dict[str, float | int | str]] = []
     for lead_day_index in _lead_day_indices(dataset, lead_day_indices):
@@ -290,7 +319,11 @@ def detect_mesoscale_eddies(
             background_sigma_km=background_sigma_km,
             detection_sigma_km=detection_sigma_km,
         )
-        valid_mask = _valid_detection_mask(field, max_abs_latitude_degrees=max_abs_latitude_degrees)
+        valid_mask = _valid_detection_mask(
+            field,
+            max_abs_latitude_degrees=max_abs_latitude_degrees,
+            min_abs_latitude_degrees=min_abs_latitude_degrees,
+        )
         latitude_values = field[LATITUDE_COLUMN].values
         longitude_values = field[LONGITUDE_COLUMN].values
         for polarity in POLARITY_ORDER:
@@ -755,6 +788,74 @@ def _component_contour_info(
     }
 
 
+_EXTREMUM_LABELS_KEY = "_extremum_labels"
+
+
+def _open_boundary_mask(finite_mask: numpy.ndarray, periodic_longitude: bool) -> numpy.ndarray:
+    """Cells a closed contour may not contain: next to land, NaN or a latitude cut, or on the domain edge."""
+    invalid = ~finite_mask
+    touching = invalid.copy()
+    for latitude_shift in (-1, 0, 1):
+        for longitude_shift in (-1, 0, 1):
+            shifted = numpy.roll(invalid, (latitude_shift, longitude_shift), axis=(0, 1))
+            if latitude_shift == 1:
+                shifted[0, :] = False
+            elif latitude_shift == -1:
+                shifted[-1, :] = False
+            if not periodic_longitude:
+                if longitude_shift == 1:
+                    shifted[:, 0] = False
+                elif longitude_shift == -1:
+                    shifted[:, -1] = False
+            touching |= shifted
+    touching[0, :] = True
+    touching[-1, :] = True
+    if not periodic_longitude:
+        touching[:, 0] = True
+        touching[:, -1] = True
+    return touching
+
+
+def _significant_extremum_labels(
+    polarity_values: numpy.ndarray,
+    prominence_meters: float,
+    periodic_longitude: bool,
+    connectivity: numpy.ndarray,
+) -> numpy.ndarray:
+    """Label every same-sign extremum standing at least ``prominence_meters`` above its saddle."""
+    finite_mask = numpy.isfinite(polarity_values)
+    floor_value = float(numpy.nanmin(polarity_values)) - 1.0 if numpy.any(finite_mask) else 0.0
+    image = numpy.where(finite_mask, polarity_values, floor_value)
+    margin = image.shape[1] // 4 if periodic_longitude else 0
+    if margin:
+        image = numpy.pad(image, ((0, 0), (margin, margin)), mode="wrap")
+    maxima = h_maxima(image, prominence_meters).astype(bool)
+    if margin:
+        maxima = maxima[:, margin:-margin]
+    labels, _ = _connected_component_labels(maxima & finite_mask, connectivity, periodic_longitude)
+    return labels
+
+
+def _encloses_another_extremum(component_extremum_labels: numpy.ndarray, center_extremum_label: int) -> bool:
+    return bool(numpy.any((component_extremum_labels > 0) & (component_extremum_labels != center_extremum_label)))
+
+
+def _closed_component_contour_info(
+    open_boundary_mask: numpy.ndarray,
+    extremum_labels: numpy.ndarray | None,
+    component_rows: numpy.ndarray,
+    component_columns: numpy.ndarray,
+    **contour_arguments,
+) -> dict[str, object] | None:
+    if numpy.any(open_boundary_mask[component_rows, component_columns]):
+        return None
+    contour_info = _component_contour_info(component_rows, component_columns, **contour_arguments)
+    if contour_info is None or extremum_labels is None:
+        return contour_info
+    component_extremum_labels = numpy.unique(extremum_labels[component_rows, component_columns])
+    return {**contour_info, _EXTREMUM_LABELS_KEY: component_extremum_labels}
+
+
 def mesoscale_eddy_contours_from_detections(
     detections: pandas.DataFrame,
     dataset: xarray.Dataset,
@@ -767,6 +868,9 @@ def mesoscale_eddy_contours_from_detections(
     min_eddy_area_km2: float = DEFAULT_MIN_EDDY_AREA_KM2,
     max_eddy_area_km2: float = DEFAULT_MAX_EDDY_AREA_KM2,
     min_contour_convexity: float = DEFAULT_MIN_CONTOUR_CONVEXITY,
+    min_abs_latitude_degrees: float = DEFAULT_MIN_ABS_LATITUDE_DEGREES,
+    min_eddy_pixel_count: int = DEFAULT_MIN_EDDY_PIXEL_COUNT,
+    extremum_prominence_meters: float | None = DEFAULT_EXTREMUM_PROMINENCE_METERS,
 ) -> pandas.DataFrame:
     if contour_level_step_meters <= 0:
         raise ValueError("contour_level_step_meters must be positive")
@@ -783,6 +887,7 @@ def mesoscale_eddy_contours_from_detections(
             background_sigma_km=background_sigma_km,
             detection_sigma_km=detection_sigma_km,
             max_abs_latitude_degrees=max_abs_latitude_degrees,
+            min_abs_latitude_degrees=min_abs_latitude_degrees,
         )
         anomaly_values = numpy.asarray(anomaly_field.values, dtype=float)
         latitude_values = anomaly_field[LATITUDE_COLUMN].values
@@ -792,6 +897,7 @@ def mesoscale_eddy_contours_from_detections(
         # centre: the finite mask, the per-row cell area and the unwrapped longitudes of a
         # given roll all depend on the grid alone.
         finite_mask = numpy.isfinite(anomaly_values)
+        open_boundary_mask = _open_boundary_mask(finite_mask, periodic_longitude)
         cell_area_by_latitude_row = _cell_area_by_latitude_row(latitude_values, longitude_values)
         unwrapped_longitude_cache: dict[int, numpy.ndarray] = {}
         grid_shape = (latitude_values.size, longitude_values.size)
@@ -813,10 +919,22 @@ def mesoscale_eddy_contours_from_detections(
             if not numpy.isfinite(max_center_magnitude) or max_center_magnitude < amplitude_threshold_meters:
                 continue
 
-            level_values = numpy.arange(
-                amplitude_threshold_meters,
-                max_center_magnitude + contour_level_step_meters,
-                contour_level_step_meters,
+            polarity_values = anomaly_values if polarity == ANTICYCLONE else -anomaly_values
+            # Chelton et al. (2011) ladder: every level from the bottom of the field upwards, so an
+            # eddy riding on a background of the opposite sign still gets its outermost contour.
+            level_values = contour_level_step_meters * numpy.arange(
+                numpy.floor(numpy.nanmin(polarity_values) / contour_level_step_meters),
+                numpy.floor(max_center_magnitude / contour_level_step_meters) + 1,
+            )
+            extremum_labels = (
+                None
+                if extremum_prominence_meters is None
+                else _significant_extremum_labels(
+                    polarity_values, extremum_prominence_meters, periodic_longitude, connectivity
+                )
+            )
+            center_extremum_labels = (
+                None if extremum_labels is None else extremum_labels[center_latitude_indices, center_longitude_indices]
             )
             unresolved_mask = numpy.ones(len(subset), dtype=bool)
 
@@ -825,11 +943,7 @@ def mesoscale_eddy_contours_from_detections(
                 if not numpy.any(candidate_mask):
                     continue
 
-                if polarity == ANTICYCLONE:
-                    component_mask = anomaly_values >= level_value
-                else:
-                    component_mask = anomaly_values <= -level_value
-                component_mask &= finite_mask
+                component_mask = (polarity_values >= level_value) & finite_mask
                 labels, component_count = _connected_component_labels(
                     component_mask,
                     structure=connectivity,
@@ -861,10 +975,11 @@ def mesoscale_eddy_contours_from_detections(
                         continue
                     component_label = int(component_label)
 
-                    contour_info = component_cache.get(component_label)
-                    if contour_info is None:
+                    if component_label not in component_cache:
                         rows, columns = component_positions[component_label]
-                        contour_info = _component_contour_info(
+                        contour_info = _closed_component_contour_info(
+                            open_boundary_mask,
+                            extremum_labels,
                             rows,
                             columns,
                             grid_shape=grid_shape,
@@ -876,13 +991,20 @@ def mesoscale_eddy_contours_from_detections(
                             cell_area_by_latitude_row=cell_area_by_latitude_row,
                         )
                         component_cache[component_label] = contour_info
+                    contour_info = component_cache[component_label]
                     if contour_info is None:
+                        continue
+                    if contour_info[CONTOUR_PIXEL_COUNT_COLUMN] < min_eddy_pixel_count:
                         continue
                     if contour_info[CONTOUR_AREA_KM2_COLUMN] < min_eddy_area_km2:
                         continue
                     if contour_info[CONTOUR_AREA_KM2_COLUMN] > max_eddy_area_km2:
                         continue
                     if contour_info[CONTOUR_CONVEXITY_COLUMN] < min_contour_convexity:
+                        continue
+                    if center_extremum_labels is not None and _encloses_another_extremum(
+                        contour_info[_EXTREMUM_LABELS_KEY], int(center_extremum_labels[subset_index])
+                    ):
                         continue
 
                     # Chelton amplitude: height of the peak above the outermost closed
@@ -1083,11 +1205,15 @@ def default_eddy_detection_parameters() -> dict[str, float | int]:
         "min_peak_separation_km": DEFAULT_MIN_PEAK_SEPARATION_KM,
         "amplitude_threshold_meters": DEFAULT_AMPLITUDE_THRESHOLD_METERS,
         "max_abs_latitude_degrees": DEFAULT_MAX_ABS_LATITUDE_DEGREES,
+        "min_abs_latitude_degrees": DEFAULT_MIN_ABS_LATITUDE_DEGREES,
         "max_match_distance_km": DEFAULT_MATCH_DISTANCE_KM,
         "contour_level_step_meters": DEFAULT_CONTOUR_LEVEL_STEP_METERS,
         "min_eddy_area_km2": DEFAULT_MIN_EDDY_AREA_KM2,
+        "min_eddy_radius_km": DEFAULT_MIN_EDDY_RADIUS_KM,
+        "min_eddy_pixel_count": DEFAULT_MIN_EDDY_PIXEL_COUNT,
         "max_eddy_area_km2": DEFAULT_MAX_EDDY_AREA_KM2,
         "min_contour_convexity": DEFAULT_MIN_CONTOUR_CONVEXITY,
+        "extremum_prominence_meters": DEFAULT_EXTREMUM_PROMINENCE_METERS,
         "apply_contour_filtering": DEFAULT_APPLY_CONTOUR_FILTERING,
     }
 
@@ -1107,6 +1233,7 @@ def surface_ssh_anomaly_field(
     background_sigma_km: float | tuple[float, float] = DEFAULT_BACKGROUND_SIGMA_KM,
     detection_sigma_km: float | None = DEFAULT_DETECTION_SIGMA_KM,
     max_abs_latitude_degrees: float | None = None,
+    min_abs_latitude_degrees: float = 0.0,
 ) -> xarray.DataArray:
     field = _surface_ssh_field(dataset=dataset, first_day_index=first_day_index, lead_day_index=lead_day_index)
     anomaly_values = _ssh_anomaly(
@@ -1115,7 +1242,11 @@ def surface_ssh_anomaly_field(
         detection_sigma_km=detection_sigma_km,
     )
     if max_abs_latitude_degrees is not None:
-        valid_mask = _valid_detection_mask(field, max_abs_latitude_degrees=max_abs_latitude_degrees)
+        valid_mask = _valid_detection_mask(
+            field,
+            max_abs_latitude_degrees=max_abs_latitude_degrees,
+            min_abs_latitude_degrees=min_abs_latitude_degrees,
+        )
         anomaly_values = numpy.where(valid_mask, anomaly_values, numpy.nan)
     return xarray.DataArray(
         anomaly_values,
