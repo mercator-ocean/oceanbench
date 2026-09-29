@@ -3949,7 +3949,36 @@ function finestCellDegFor(slug) {
   return Math.min(...manifest.levels.map((level) => level.cell_size_deg));
 }
 
-// Create the box if absent (centred in the viewport) and clamp it to the current cap -
+// Open-ocean centres for the first box of a region, in order of preference: a box centred
+// in the view often lands on a coast, and filled land dominates the spectrum. Each 10° box
+// here is under 0.2% land on the GLORYS and GLOW grids.
+const PSD_OPEN_OCEAN_CENTRES = {
+  global: [
+    { lon: -50, lat: 38 }, // Gulf Stream
+    { lon: 22, lat: -41 }, // Agulhas
+    { lon: 155, lat: 35 }, // Kuroshio extension
+    { lon: -140, lat: 25 }, // subtropical North Pacific
+    { lon: 80, lat: -20 }, // south Indian Ocean
+    { lon: -120, lat: -30 }, // subtropical South Pacific
+  ],
+  ibi: [{ lon: -14, lat: 45 }], // west of Iberia and the Bay of Biscay
+};
+
+// The first open-ocean centre whose box fits in the view, else the view's centre.
+function defaultPsdCentre(viewport, width) {
+  const west = viewport.minX * 360 - 180;
+  const east = viewport.maxX * 360 - 180;
+  const north = 90 - viewport.minY * 180;
+  const south = 90 - viewport.maxY * 180;
+  const half = width / 2;
+  const fits = (centre) =>
+    centre.lon - half >= west && centre.lon + half <= east && centre.lat - half >= south && centre.lat + half <= north;
+  const candidate = (PSD_OPEN_OCEAN_CENTRES[shared.region] || []).find(fits);
+  if (candidate) return { lon: candidate.lon, lat: candidate.lat };
+  return { lon: (west + east) / 2, lat: (north + south) / 2 };
+}
+
+// Create the box if absent (at an open-ocean spot in the view, else centred in it) and clamp it to the current cap -
 // also handles switching to a coarser/finer model pair: the box persists, only its
 // limits move. Returns the box.
 function ensurePsdBox(shown) {
@@ -3964,11 +3993,8 @@ function ensurePsdBox(shown) {
     psdBoxLimits = { capDeg, minDeg, degenerate, resolutionLabels };
   }
   if (!shared.psdBox) {
-    const viewport = currentViewport();
-    const lon = ((viewport.minX + viewport.maxX) / 2) * 360 - 180;
-    const lat = 90 - ((viewport.minY + viewport.maxY) / 2) * 180;
     const width = Math.min(PSD_DEFAULT_WIDTH_DEG, psdBoxLimits.capDeg);
-    shared.psdBox = { lon, lat, w: width, h: width };
+    shared.psdBox = { ...defaultPsdCentre(currentViewport(), width), w: width, h: width };
     shared.psdBoxRequest = { w: PSD_DEFAULT_WIDTH_DEG, h: PSD_DEFAULT_WIDTH_DEG };
   }
   clampPsdBox(false);
@@ -3978,7 +4004,7 @@ function ensurePsdBox(shown) {
 // A region change moves the map to a different window, and the box was placed inside the
 // one it was created in: it ends up off screen, unreachable, while the rail keeps drawing
 // its spectrum under the new region's name. Drop it so ensurePsdBox re-seeds it at the
-// default size in the middle of the new viewport.
+// default size in the new viewport.
 function reseedPsdBox() {
   if (!shared.psdBox) return;
   shared.psdBox = null;
@@ -6034,7 +6060,7 @@ async function main() {
   // A link that turns the spectrum on without carrying a box (psdOn=1 and no psd=) opened on
   // an empty spectrum card and no rectangle on the map until something else nudged the rail.
   // The box is part of what "on" means, so it exists from the first frame. The panels have
-  // been laid out by now, so the default box centres on the viewport actually on screen.
+  // been laid out by now, so the default box is placed in the viewport actually on screen.
   if (shared.psdEnabled && !shared.psdBox) ensurePsdBox(panels.slice(0, shared.layout));
   updateCurrentsControlVisibility();
   updateSharedColorbar();
