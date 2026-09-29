@@ -11,12 +11,14 @@
 //
 // The published rows are already lead-time resolved (one row per challenger, region,
 // variable, depth, metric and lead day, with its bootstrap interval and its skill against
-// the 1 degree persistence baseline), so nothing is recomputed here.
+// the 1 degree persistence baseline), so the whole year is drawn as published. A shorter
+// period is recomputed in the browser from the per-start scores.parquet, fetched only then.
 //
 // The data root resolves exactly as it does for the viewer: window config, then `?data=`,
 // then the viewer-config.json side-car, then the published bucket prefix.
 
-import { initializeViewerConfig, viewerDataBaseUrl } from "./viewer/config.js";
+import { initializeViewerConfig, resolveViewerDataUrl, viewerDataBaseUrl } from "./viewer/config.js";
+import { aggregatePeriod, periodStartIndices, readPerStartScores } from "./viewer/modules/scores-periods.js";
 import {
   challengerFamily,
   challengerLabel,
@@ -44,6 +46,28 @@ const VERSION_KEY = "published";
 const FLAT_DEPTH = "flat";
 
 const state = { rows: [] };
+
+// scores.parquet sits at the benchmark root, two levels above the viewer data directory.
+const PER_START_SCORES_PATH = "../../scores.parquet";
+const WHOLE_YEAR = "year";
+const CUSTOM = "custom";
+const QUARTERS = [
+  { value: "jan-mar", label: "Jan-Mar", from: "01-01", to: "03-31" },
+  { value: "apr-jun", label: "Apr-Jun", from: "04-01", to: "06-30" },
+  { value: "jul-sep", label: "Jul-Sep", from: "07-01", to: "09-30" },
+  { value: "oct-dec", label: "Oct-Dec", from: "10-01", to: "12-31" },
+];
+
+const period = {
+  year: null,
+  active: WHOLE_YEAR,
+  from: null,
+  to: null,
+  note: "",
+  perStart: null,
+  results: new Map(),
+  request: 0,
+};
 
 function sectionFor(reference) {
   return REFERENCE_SECTIONS.find((entry) => entry.reference === reference) ?? null;
@@ -192,6 +216,132 @@ function buildBundle(rows) {
   };
 }
 
+/* -- period -------------------------------------------------------------------------- */
+
+function forecastCount(count) {
+  return `${count} forecast${count === 1 ? "" : "s"}`;
+}
+
+function setPeriodRange(value, from, to) {
+  const quarter = QUARTERS.find((entry) => entry.value === value);
+  period.active = value;
+  if (value === WHOLE_YEAR) {
+    period.from = `${period.year}-01-01`;
+    period.to = `${period.year}-12-31`;
+  } else if (quarter) {
+    period.from = `${period.year}-${quarter.from}`;
+    period.to = `${period.year}-${quarter.to}`;
+  } else {
+    period.from = from;
+    period.to = to;
+  }
+}
+
+function readPeriodFromUrl() {
+  const value = new URLSearchParams(window.location.search).get("period");
+  if (!value) return;
+  if (QUARTERS.some((entry) => entry.value === value)) {
+    setPeriodRange(value);
+    return;
+  }
+  const custom = /^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/.exec(value);
+  if (custom) setPeriodRange(CUSTOM, custom[1], custom[2]);
+}
+
+function periodControl() {
+  const urlValue = period.active === WHOLE_YEAR
+    ? null
+    : period.active === CUSTOM
+      ? `${period.from}_${period.to}`
+      : period.active;
+  return {
+    options: [
+      { value: WHOLE_YEAR, label: "Whole year" },
+      ...QUARTERS.map(({ value, label }) => ({ value, label })),
+      { value: CUSTOM, label: "Custom" },
+    ],
+    active: period.active,
+    from: period.from,
+    to: period.to,
+    min: `${period.year}-01-01`,
+    max: `${period.year}-12-31`,
+    note: period.note,
+    urlValue,
+    onSelect: selectPeriod,
+  };
+}
+
+async function loadPerStartScores() {
+  period.perStart ??= fetch(resolveViewerDataUrl(PER_START_SCORES_PATH))
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .then(readPerStartScores)
+    .catch((error) => {
+      period.perStart = null;
+      throw error;
+    });
+  return period.perStart;
+}
+
+// Rows for the current range, or null when no forecast starts inside it.
+async function periodRows() {
+  const key = `${period.from}_${period.to}`;
+  if (period.results.has(key)) return period.results.get(key);
+  const perStart = await loadPerStartScores();
+  const indices = periodStartIndices(perStart, period.from, period.to);
+  const result = indices.length === 0
+    ? null
+    : {
+        count: indices.length,
+        rows: aggregatePeriod(perStart, state.rows, indices).filter((row) => Number.isFinite(row.mean)),
+      };
+  period.results.set(key, result);
+  return result;
+}
+
+function wholeYearNote() {
+  return forecastCount(Math.max(0, ...state.rows.map((row) => row.n_starts ?? 0)));
+}
+
+// Resolves to the bundle to draw, or null when the tables should stay as they are.
+async function bundleForPeriod() {
+  if (period.active === WHOLE_YEAR) {
+    period.note = wholeYearNote();
+    return buildBundle(state.rows);
+  }
+  if (period.from > period.to) {
+    period.note = "Start is after end";
+    return null;
+  }
+  try {
+    const result = await periodRows();
+    if (!result) {
+      period.note = "No forecast starts in this range";
+      return null;
+    }
+    period.note = forecastCount(result.count);
+    return buildBundle(result.rows);
+  } catch (error) {
+    period.note = `Could not load (${error.message})`;
+    return null;
+  }
+}
+
+async function selectPeriod(value, from, to) {
+  if (value === period.active && value !== CUSTOM) return;
+  setPeriodRange(value, from, to);
+  const request = ++period.request;
+  period.note = value === WHOLE_YEAR ? wholeYearNote() : "Loading";
+  window.OceanBenchScores.update(null, { period: periodControl() });
+  // Let the loading note paint before the aggregation holds the main thread.
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const bundle = await bundleForPeriod();
+  if (request !== period.request) return;
+  window.OceanBenchScores.update(bundle, { period: periodControl() });
+}
+
 /* -- boot ------------------------------------------------------------------------------ */
 
 function reportStatus(message, isError) {
@@ -207,7 +357,11 @@ async function boot() {
     await initializeViewerConfig();
     state.rows = await loadScores();
     if (!state.rows.length) throw new Error(`no score rows were read from ${viewerDataBaseUrl()}`);
-    window.OceanBenchScores.render(buildBundle(state.rows), { reportLinks: false });
+    period.year = state.rows[0].year;
+    setPeriodRange(WHOLE_YEAR);
+    readPeriodFromUrl();
+    const bundle = (await bundleForPeriod()) ?? buildBundle(state.rows);
+    window.OceanBenchScores.render(bundle, { reportLinks: false, period: periodControl() });
 
     const status = document.getElementById("scores-status");
     if (status) status.hidden = true;

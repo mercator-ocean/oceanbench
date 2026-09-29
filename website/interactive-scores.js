@@ -64,6 +64,11 @@ let isScrollRefreshScheduled = false;
 let injectedData = null;
 let reportLinksEnabled = true;
 
+// Forecast period chips, owned by scores-summary.js: { options: [{ value, label }], active,
+// from, to, min, max, note, urlValue, onSelect(value, from, to) }. Null hides the row.
+let periodControl = null;
+const PERIOD_TOOLTIP = "A forecast counts when its start date is in the period.";
+
 let selectedBaseline = null;
 let defaultVersionValue = null;
 let defaultRegionValue = null;
@@ -649,9 +654,23 @@ function buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks) {
     controls += buildSelectorRow("Track", trackChips, TRACK_NOTES[activeTrack], "selector-description--track");
   }
 
+  if (periodControl) controls += buildPeriodRow(periodControl);
+
   let markup = '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
   markup += `<div class="region-selector-controls">${controls}</div>`;
   return markup;
+}
+
+function buildPeriodRow({ options, active, from, to, min, max, note }) {
+  const choices = options
+    .map(({ value, label }) => `<option value="${value}"${value === active ? " selected" : ""}>${label}</option>`)
+    .join("");
+  const select = `<select class="period-select" aria-label="Forecast period" title="${PERIOD_TOOLTIP}">${choices}</select>`;
+  const count = note ? `<span class="period-count" title="${PERIOD_TOOLTIP}" aria-live="polite">${note}</span>` : "";
+  const range = active === "custom"
+    ? `<span class="period-range"><input type="date" class="period-date" data-period-edge="from" value="${from}" min="${min}" max="${max}" aria-label="First start date"><span>to</span><input type="date" class="period-date" data-period-edge="to" value="${to}" min="${min}" max="${max}" aria-label="Last start date"></span>`
+    : "";
+  return `<div class="selector-row"><span class="selector-label">Period</span><div class="selector-chips period-controls">${select}${count}${range}</div></div>`;
 }
 
 function getVersionTracks(versionData) {
@@ -1212,6 +1231,17 @@ function attachSelectorListeners() {
       }
     });
   });
+  document.querySelector("#region-selector .period-select")?.addEventListener("change", (event) => {
+    if (periodControl) periodControl.onSelect(event.target.value, periodControl.from, periodControl.to);
+  });
+  document.querySelectorAll("#region-selector .period-date").forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!periodControl || !input.value) return;
+      const from = input.dataset.periodEdge === "from" ? input.value : periodControl.from;
+      const to = input.dataset.periodEdge === "to" ? input.value : periodControl.to;
+      periodControl.onSelect("custom", from, to);
+    });
+  });
 }
 
 function attachControlListeners() {
@@ -1654,6 +1684,9 @@ function writeUrlState() {
   if (maxScale !== 80) {
     parameters.set("scale", `${maxScale}`);
   }
+  if (periodControl?.urlValue) {
+    parameters.set("period", periodControl.urlValue);
+  }
 
   const queryString = parameters.toString();
   const newRelativeUrl =
@@ -1737,10 +1770,20 @@ if (document.readyState === "loading") {
 // `init` above is a no-op until one of the two data sources is present, so a page that
 // carries no `#scores-data` element simply waits for this call.
 window.OceanBenchScores = {
-  render(bundle, { reportLinks = true } = {}) {
+  render(bundle, { reportLinks = true, period = null } = {}) {
     injectedData = bundle;
     parsedData = null;
     reportLinksEnabled = reportLinks;
+    periodControl = period;
     init();
+  },
+  // Redraws after `render` without running `init` again, which would stack window listeners.
+  update(bundle, { period = periodControl } = {}) {
+    if (bundle) {
+      injectedData = bundle;
+      parsedData = null;
+    }
+    periodControl = period;
+    renderAllTables();
   },
 };

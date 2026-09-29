@@ -387,6 +387,49 @@ body.quarto-dark #region-selector {
   min-height: 2.3rem;
 }
 
+.period-controls {
+  flex: 1 1 0;
+  min-width: 0;
+  align-items: center;
+}
+
+.period-select {
+  pointer-events: auto;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-pill);
+  background: var(--ob-surface);
+  color: var(--bs-body-color, #333940);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.period-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ob-muted);
+  font-size: 0.82rem;
+}
+
+.period-date {
+  pointer-events: auto;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-pill);
+  background: var(--ob-surface);
+  color: var(--bs-body-color, #333940);
+  font-size: 0.82rem;
+}
+
+.period-count {
+  pointer-events: auto;
+  color: var(--ob-muted);
+  font-size: 0.82rem;
+  cursor: help;
+}
+
 body.quarto-dark .selector-chip {
   background: var(--ob-surface);
   color: var(--bs-body-color, #d4d4d8);

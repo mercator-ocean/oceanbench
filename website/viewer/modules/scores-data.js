@@ -17,7 +17,7 @@
 // variable, depth, metric and lead day, carrying the mean, its bootstrap confidence
 // interval and the skill against the persistence baseline of the same region and
 // track (native or 1 degree, named per row in skill_baseline). Nothing is
-// recomputed here, so the page never touches scores.parquet.
+// recomputed here; a shorter period is recomputed by scores-periods.js.
 
 import { loadInsightIndex, loadScoresSummary } from "./insights.js";
 import { resolveViewerDataUrl } from "../config.js";
