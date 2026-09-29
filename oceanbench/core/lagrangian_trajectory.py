@@ -60,7 +60,7 @@ class FreezeParticle(JITParticle):
     pid = ParcelsVariable("pid", dtype=numpy.int32)
 
 
-LEAD_DAY_START = 2
+LEAD_DAY_START = 1
 
 
 def _delete_error_particle(particle, _fieldset, _time):
@@ -135,7 +135,7 @@ def _deviation_of_lagrangian_trajectories(
             longitudes,
         )
     )
-    score_dataframe = pandas.DataFrame({LAGRANGIAN_ROW_LABEL: deviations[LEAD_DAY_START - 1 : lead_day_stop]})
+    score_dataframe = pandas.DataFrame({LAGRANGIAN_ROW_LABEL: deviations[LEAD_DAY_START : lead_day_stop + 1]})
     score_dataframe.index = lead_day_labels(LEAD_DAY_START, lead_day_stop)
     return score_dataframe.T
 
@@ -223,6 +223,7 @@ def _run_simulation(particle_set: ParticleSet, kernels, runtime_days: int):
         output_file=output_file,
         verbose_progress=False,
     )
+    output_file.write_latest_locations(particle_set, timedelta(days=runtime_days))
     return output_path
 
 

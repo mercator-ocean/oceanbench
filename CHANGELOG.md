@@ -19,7 +19,7 @@ and the affected reports are re-published (never silently overwritten).
 
 ## Unreleased
 
-**Scores:** Class IV and gridded tables change for every challenger, Lagrangian tables for global challengers. Class IV scores the same observations for every challenger on the rebuilt observation store, gridded RMSD uses a shared ocean mask, and several metrics are fixed (see Fixed).
+**Scores:** Class IV, gridded and Lagrangian tables change for every challenger. Class IV scores the same observations for every challenger on the rebuilt observation store, gridded RMSD uses a shared ocean mask, and several metrics are fixed (see Fixed).
 To be published as 0.6.0 once every challenger is rescored; the website shows the 0.5.0 reports until then.
 
 ### Challengers
@@ -41,6 +41,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 - On global grids, Lagrangian particles cross the dateline instead of being deleted, and the challenger to reference distance takes the shorter way across it ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 - On global grids, geostrophic currents use a centred zonal difference across the dateline, so the first and last longitude columns are computed like the interior ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 - The SSH to SLA conversion matches the MDT to the challenger grid by nearest neighbour. Exact coordinate matching kept only part of the LangYa grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- Lagrangian deviation scores every day of advection, and lead day N is the separation after N days. The last day was never written, and the other days were labelled one lead day later ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 
 ### Added
 

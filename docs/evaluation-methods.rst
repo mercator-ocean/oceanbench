@@ -77,6 +77,8 @@ The deviation in kilometers between the two sets of drifting particles computed 
 
 The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)``-weighted probabilities, then simulated over the area.
 
+The particles are released at the first forecast day, and lead day N is the mean separation after N days of advection.
+
 Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis
 **********************************************************************************************
 
@@ -114,3 +116,5 @@ Deviation of Lagrangian trajectories compared to GLO12 analysis
 The deviation in kilometers between the two sets of drifting particles computed over the challenger datasets and the GLO12 analysis dataset.
 
 The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)``-weighted probabilities, then simulated over the area.
+
+The particles are released at the first forecast day, and lead day N is the mean separation after N days of advection.

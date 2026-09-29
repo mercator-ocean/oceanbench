@@ -9,6 +9,7 @@ import xarray
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.lagrangian_trajectory import (
     _get_all_particles_positions,
+    deviation_of_lagrangian_trajectories,
     _get_random_ocean_points_from_file,
     euclidean_distance,
     lagrangian_particle_count_for_region,
@@ -141,8 +142,8 @@ def test_lagrangian_particle_crosses_the_dateline_on_a_global_grid() -> None:
     positions = _get_all_particles_positions(dataset, numpy.array([0.0, 0.0]), numpy.array([178.8, 0.0]))
 
     final_longitudes = positions["lon"].isel(time=-1).values
-    assert positions.sizes["time"] == 4
-    assert (final_longitudes + 180) % 360 - 180 == pytest.approx([-178.2, 3.0], abs=1e-3)
+    assert positions.sizes["time"] == 5
+    assert (final_longitudes + 180) % 360 - 180 == pytest.approx([-177.2, 4.0], abs=1e-3)
 
 
 def test_lagrangian_particle_leaving_a_regional_grid_is_deleted() -> None:
@@ -151,9 +152,9 @@ def test_lagrangian_particle_leaving_a_regional_grid_is_deleted() -> None:
     positions = _get_all_particles_positions(dataset, numpy.array([0.0, 0.0]), numpy.array([18.8, 0.0]))
 
     final_longitudes = positions["lon"].isel(time=-1).values
-    assert positions.sizes["time"] == 4
+    assert positions.sizes["time"] == 5
     assert numpy.isnan(final_longitudes[0])
-    assert final_longitudes[1] == pytest.approx(3.0, abs=1e-3)
+    assert final_longitudes[1] == pytest.approx(4.0, abs=1e-3)
 
 
 def test_euclidean_distance_takes_the_short_way_across_the_dateline() -> None:
@@ -166,3 +167,41 @@ def test_euclidean_distance_takes_the_short_way_across_the_dateline() -> None:
     distance = euclidean_distance(positions(179.9), positions(-179.9))
 
     assert distance[0] == pytest.approx(0.2 * 111)
+
+
+def _forecast_dataset(eastward_velocity: float, lead_days_count: int) -> xarray.Dataset:
+    latitudes = numpy.array([-0.5, 0.0, 0.5])
+    longitudes = numpy.arange(-20.0, 20.5, 0.5)
+    shape = (1, lead_days_count, latitudes.size, longitudes.size)
+    dimensions = [
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
+    ]
+    sea_surface_height = numpy.full(shape, numpy.nan)
+    sea_surface_height[:, :, 1, 40] = 0.0
+    return xarray.Dataset(
+        {
+            Variable.EASTWARD_SEA_WATER_VELOCITY.key(): (dimensions, numpy.full(shape, eastward_velocity)),
+            Variable.NORTHWARD_SEA_WATER_VELOCITY.key(): (dimensions, numpy.zeros(shape)),
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (dimensions, sea_surface_height),
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): [numpy.datetime64("2024-01-03")],
+            Dimension.LEAD_DAY_INDEX.key(): numpy.arange(lead_days_count),
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+
+def test_lagrangian_deviation_scores_every_day_of_advection_as_its_lead_day() -> None:
+    one_degree_a_day = 1852 * 60 / 86400
+    challenger_dataset = _forecast_dataset(one_degree_a_day, lead_days_count=5)
+    reference_dataset = _forecast_dataset(0.0, lead_days_count=5)
+
+    deviations = deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, particle_count=1)
+
+    assert deviations.columns.tolist() == ["Lead day 1", "Lead day 2", "Lead day 3", "Lead day 4"]
+    assert deviations.values[0] == pytest.approx([111.0, 222.0, 333.0, 444.0], rel=1e-3)
