@@ -75,7 +75,7 @@
     "lead_days": 7
   },
   "glowcascade_v5_ring": {
-    "display_name": "GLOW",
+    "display_name": "GLOW 930M",
     "organization": "Mercator Ocean",
     "nominal_resolution_deg": 0.25,
     "is_baseline": false,
@@ -83,7 +83,7 @@
     "source": "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/ml-forecast-outputs/glowcascade_v5_ring"
   },
   "glowcascade_v5_ring_1_degree": {
-    "display_name": "GLOW (1\u00b0)",
+    "display_name": "GLOW 930M (1\u00b0)",
     "organization": "Mercator Ocean",
     "nominal_resolution_deg": 1.0,
     "is_baseline": false,
