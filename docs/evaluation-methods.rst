@@ -76,7 +76,7 @@ The deviation in kilometers between the two sets of drifting particles computed 
 
 The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)``-weighted probabilities, then simulated over the area.
 
-The particles are released at the first forecast day, and lead day N is the mean separation after N days of advection.
+The particles are released on the first forecast day, and lead day N is the mean separation on forecast day N, so the scores start at lead day 2.
 
 Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis
 **********************************************************************************************
@@ -115,4 +115,4 @@ The deviation in kilometers between the two sets of drifting particles computed 
 
 The particles are seeded by sampling ocean grid points without replacement using ``cos(latitude)``-weighted probabilities, then simulated over the area.
 
-The particles are released at the first forecast day, and lead day N is the mean separation after N days of advection.
+The particles are released on the first forecast day, and lead day N is the mean separation on forecast day N, so the scores start at lead day 2.

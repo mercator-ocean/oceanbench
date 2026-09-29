@@ -196,12 +196,12 @@ def _forecast_dataset(eastward_velocity: float, lead_days_count: int) -> xarray.
     )
 
 
-def test_lagrangian_deviation_scores_every_day_of_advection_as_its_lead_day() -> None:
+def test_lagrangian_deviation_labels_each_separation_by_its_forecast_day() -> None:
     one_degree_a_day = 1852 * 60 / 86400
     challenger_dataset = _forecast_dataset(one_degree_a_day, lead_days_count=5)
     reference_dataset = _forecast_dataset(0.0, lead_days_count=5)
 
     deviations = deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, particle_count=1)
 
-    assert deviations.columns.tolist() == ["Lead day 1", "Lead day 2", "Lead day 3", "Lead day 4"]
+    assert deviations.columns.tolist() == ["Lead day 2", "Lead day 3", "Lead day 4", "Lead day 5"]
     assert deviations.values[0] == pytest.approx([111.0, 222.0, 333.0, 444.0], rel=1e-3)
