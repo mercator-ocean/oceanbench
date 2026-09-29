@@ -19,12 +19,13 @@ and the affected reports are re-published (never silently overwritten).
 
 ## Unreleased
 
-**Scores:** Class IV tables change for every challenger; Lagrangian and geostrophic current scores change for global challengers; other gridded scores are unchanged. Class IV reads the rebuilt observations2024-v2 store, the Class IV, Lagrangian and geostrophic current metrics handle the dateline on global grids, and the SSH to SLA conversion keeps the full challenger grid.
+**Scores:** Class IV and gridded tables change for every challenger, Lagrangian scores change for global challengers. Class IV reads the rebuilt observations2024-v2 store, gridded RMSD is restricted to the ocean mask cells, the Class IV, Lagrangian and geostrophic metrics handle the dateline on global grids, and the SSH to SLA conversion keeps the full challenger grid.
 To be published as 0.6.0 once every challenger is rescored; the website shows the 0.5.0 reports until then.
 
 ### Changed
 
 - Class IV observations come from the rebuilt `observations2024-v2` store: quality flag 1 only, drifter currents filtered with undrogued drifters dropped and wind slippage subtracted, code 211 dropped, SLA outliers beyond 2 m flagged. Currents RMSD drops by roughly a third, salinity by under 1 percent ([#316](https://github.com/mercator-ocean/oceanbench/pull/316)).
+- Gridded RMSD scores only the cells the ocean mask calls ocean ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
 
 ### Fixed
 
@@ -38,6 +39,8 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 ### Added
 
 - The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- The OceanBench ocean mask, wet where both the GLO12 and the GLORYS12 official static masks are wet at the six standard depths and at 643 m, the first native level below 600 m, built as a checksum pinned artefact ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
+- The gridded RMSD tables report the ocean cells where the reference has a value and the challenger has none in the `Missing` and `Missing fraction` columns, the fraction being taken over the ocean cells where the reference has a value ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
 
 ## 0.5.1 - 2026-09-02
 
