@@ -4446,7 +4446,9 @@ async function renderRailPsd(shown, comparison) {
     ? `${landWarning}Box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}°${oceanLabel} · ${gridLabels.join(" & ")} grid${scaleText}`
     : "Move the box over ocean to compute a spectrum (boxed area is mostly land).";
   wireCursorTooltip(elements["rail-spectra"]);
-  if (pair && pair.hasReference) {
+  // Over a land-filled box the fill steps move the crossing from lead to lead, so the
+  // lead chart is only drawn for boxes under the land warning threshold.
+  if (pair && pair.hasReference && landFraction < PSD_LAND_WARNING_FRACTION) {
     renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, boxKey, referenceLabel);
   } else {
     elements["rail-psd-lead"].innerHTML = "";

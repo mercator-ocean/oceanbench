@@ -98,7 +98,7 @@ export const METHOD_NOTES = {
       "GLORYS grid, a finer field being block-averaged onto a coarser one. GLORYS is not " +
       "independent: the ML models are trained on it and forecasts start from analyses close " +
       "to it, so at short leads this mostly measures the initial state, not the model's " +
-      "resolution. The chart below the spectrum shows it against lead. " +
+      "resolution. The chart below the spectrum shows it against lead (open-ocean boxes only). " +
       "Computed in the browser on each model's native cells, exploratory: Hann window, land " +
       "filled with the box mean (warned from 2% land), zero-padded, isotropic density " +
       "(units squared per cycle per km) up to the coarser axis's grid limit. Currents: " +
