@@ -4769,7 +4769,7 @@ function updateSharedTimeControls() {
     requested != null && requested !== shared.leadDay
       ? `Lead ${requested} out of range (${minimumLead}-${maximumLead}); showing ${shared.leadDay}.`
       : "";
-  leadRangeNote = range.limiting ? `Leads ${minimumLead}-${maximumLead} (${shortLabelFor(range.limiting)} horizon)` : "";
+  leadRangeNote = range.limiting ? `${shortLabelFor(range.limiting)}: leads ${minimumLead}-${maximumLead}` : "";
   elements["lead-day"].min = String(minimumLead);
   elements["lead-day"].max = String(maximumLead);
   elements["lead-day"].value = String(shared.leadDay);

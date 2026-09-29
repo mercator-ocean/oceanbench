@@ -60,7 +60,7 @@ export function trajectorySeparationSVG(rows, currentLead, typeScale = 1) {
     + `<line x1="${left}" y1="${height - bottom}" x2="${width - right}" y2="${height - bottom}" class="axis"/>`
     + `<line x1="${left}" y1="${top}" x2="${left}" y2="${height - bottom}" class="axis"/>`
     + `<text x="${(left + width - right) / 2}" y="${height - 6}" class="axis-label" text-anchor="middle">lead day</text>`
-    + `<text x="10" y="${(top + height - bottom) / 2}" class="axis-label" text-anchor="middle" transform="rotate(-90 10 ${(top + height - bottom) / 2})">km</text>`
+    + `<text x="12" y="${(top + height - bottom) / 2}" class="axis-label" text-anchor="middle" transform="rotate(-90 12 ${(top + height - bottom) / 2})">km</text>`
     + grid + `<path d="${path}" fill="none" stroke="${TRAJECTORY_COLORS[0]}" stroke-width="2"/>` + points + marker
     + `<line class="chart-crosshair" x1="0" y1="${top}" x2="0" y2="${height - bottom}" hidden/>`
     + `<g class="chart-tooltip" hidden><rect x="0" y="0" width="128" height="34" rx="4"/></g></svg>`;

@@ -65,7 +65,7 @@ function axes(area, xLabel, yLabel) {
     `<line x1="${area.x0}" y1="${area.y1}" x2="${area.x1}" y2="${area.y1}" class="axis"/>` +
     `<line x1="${area.x0}" y1="${area.y0}" x2="${area.x0}" y2="${area.y1}" class="axis"/>` +
     `<text x="${(area.x0 + area.x1) / 2}" y="${VIEW_HEIGHT - 6}" class="axis-label" text-anchor="middle">${escapeText(xLabel)}</text>` +
-    `<text x="10" y="${(area.y0 + area.y1) / 2}" class="axis-label" text-anchor="middle" transform="rotate(-90 10 ${(area.y0 + area.y1) / 2})">${escapeText(yLabel)}</text>`
+    `<text x="12" y="${(area.y0 + area.y1) / 2}" class="axis-label" text-anchor="middle" transform="rotate(-90 12 ${(area.y0 + area.y1) / 2})">${escapeText(yLabel)}</text>`
   );
 }
 
@@ -379,7 +379,10 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
   const tickStep = Math.max(1, Math.round(allDates.length / 6));
   for (let i = 0; i < allDates.length; i += tickStep) {
     const date = allDates[i];
-    body += `<text x="${xOf(date).toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="middle">${date.slice(5)}</text>`;
+    // The first date sits on the left edge, so it starts there instead of centring
+    // across the lowest y tick.
+    const anchor = i === 0 && xOf(date) - area.x0 < 12 ? "start" : "middle";
+    body += `<text x="${xOf(date).toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="${anchor}">${date.slice(5)}</text>`;
   }
 
   for (const line of usable) {
@@ -542,9 +545,9 @@ export function columnProfileSVG(
     const value = xLo + ((xHi - xLo) * t) / 4;
     const x = xOf(value);
     body += `<line x1="${x.toFixed(1)}" y1="${area.y0}" x2="${x.toFixed(1)}" y2="${area.y1}" class="grid"/>`;
-    // The last tick sits on the right edge of the plot, so it ends there instead of
-    // centring half its label outside the chart.
-    const anchor = t === 4 ? "end" : "middle";
+    // The end ticks sit on the plot edges, so they are aligned inward instead of
+    // centring half a label outside the chart or across the corner's y tick.
+    const anchor = t === 4 ? "end" : t === 0 ? "start" : "middle";
     body += `<text x="${x.toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="${anchor}">${formatTick(value)}</text>`;
   }
   for (let t = 0; t <= 4; t += 1) {
