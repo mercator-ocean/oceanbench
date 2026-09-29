@@ -16,7 +16,7 @@ import pytest
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.regions import IBI, BoundingBox, padded_region
+from oceanbench.core.regions import IBI, BoundingBox, padded_region, subset_dataset_to_region
 from oceanbench.publish import viewer_artifacts
 
 _SEA_SURFACE_HEIGHT_KEY = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
@@ -615,7 +615,7 @@ def test_padded_regional_census_keeps_only_the_eddies_centred_in_the_region() ->
     assert region.bounds.minimum_latitude == IBI.bounds.minimum_latitude - 10.0
     assert region.bounds.maximum_longitude == IBI.bounds.maximum_longitude + 10.0
 
-    dataset = _sea_surface_height_dataset()
+    dataset = subset_dataset_to_region(_sea_surface_height_dataset(), region)
     everywhere = viewer_artifacts.dataset_eddy_census(dataset, dataset_slug="your_model", lead_days=(1,))
     centres = [(eddy["latitude"], eddy["longitude"]) for eddy in everywhere["frames"][0]["detections"]]
     assert centres

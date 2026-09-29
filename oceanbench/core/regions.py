@@ -174,8 +174,8 @@ def padded_region(region: RegionLike, margin_degrees: float) -> RegionSpec:
         return resolved_region
     bounds = resolved_region.bounds
     return RegionSpec(
-        id=resolved_region.id,
-        display_name=resolved_region.display_name,
+        id=f"{resolved_region.id}-padded",
+        display_name=f"{resolved_region.display_name} padded",
         bounds=BoundingBox(
             minimum_latitude=max(bounds.minimum_latitude - margin_degrees, -90.0),
             maximum_latitude=min(bounds.maximum_latitude + margin_degrees, 90.0),
