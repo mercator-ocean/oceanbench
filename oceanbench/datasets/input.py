@@ -82,3 +82,40 @@ def ifs_forcings() -> xarray.Dataset:
     """
 
     return input_datasets.ifs_forcings()
+
+
+def ifs_nowcasts() -> xarray.Dataset:
+    """
+    Open 6-hourly IFS atmospheric nowcasts from 2024.
+
+    Returns
+    -------
+    Dataset
+        The Dataset containing IFS nowcasts.
+
+    >>> ifs_nowcasts() # doctest: +SKIP
+    <xarray.Dataset> Size: 164GB
+    Dimensions:             (time: 208, lat: 2560, lon: 5120)
+    Coordinates:
+      * time                (time) datetime64[ns] 2kB 2024-01-02 ... 2024-12-24T18:00:00
+      * lat                 (lat) float32 10kB 89.95 89.88 89.81 ... -89.81 -89.88 -89.95
+      * lon                 (lon) float64 41kB 0.0 0.07031 0.1406 ... 359.8 359.9 359.9
+    Data variables:
+        cp                  (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        ewss                (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        nsss                (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        skt                 (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sohumspe            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        somslpre            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sosnowfa            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sosudolw            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sosudosw            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sotemair            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sotemhum            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sowaprec            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sowinu10            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sowinv10            (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+        sp                  (time, lat, lon) float32 11GB dask.array<chunksize=(1, 640, 1280), meta=np.ndarray>
+    """
+
+    return input_datasets.ifs_nowcasts()
