@@ -40,7 +40,13 @@ import xarray
 
 from oceanbench.core import runtime_configuration as runtime_configuration_module
 from oceanbench.core.dataset_utils import Dimension
-from oceanbench.core.regions import GLOBAL_REGION_NAME, normalize_region_name, subset_dataset_to_region
+from oceanbench.core.eddies import REGIONAL_CENSUS_MARGIN_DEGREES
+from oceanbench.core.regions import (
+    GLOBAL_REGION_NAME,
+    normalize_region_name,
+    padded_region,
+    subset_dataset_to_region,
+)
 from oceanbench.core.remote_json import read_json_url
 from oceanbench.core.runtime_configuration import (
     RuntimeConfiguration,
@@ -629,6 +635,9 @@ def evaluate(
             oceanbench_version=OCEANBENCH_VERSION,
         )
         regional_forecast = subset_dataset_to_region(forecast_dataset, region)
+        eddy_forecast = subset_dataset_to_region(
+            forecast_dataset, padded_region(region, REGIONAL_CENSUS_MARGIN_DEGREES)
+        )
         try:
             with _sources_runtime_configuration(sources):
                 observation_dataset = subset_dataset_to_region(observation_opener(regional_forecast), region)
@@ -640,6 +649,7 @@ def evaluate(
                     output_directory=output_directory,
                     year=year,
                     matchups_context=matchups_context,
+                    eddy_forecast_dataset=eddy_forecast,
                 )
             flags.extend(viewer_artifacts_result.flags)
         except Exception as error:  # noqa: BLE001 - the map itself must still be buildable

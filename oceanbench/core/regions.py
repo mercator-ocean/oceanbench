@@ -167,6 +167,24 @@ def custom_region(
     )
 
 
+def padded_region(region: RegionLike, margin_degrees: float) -> RegionSpec:
+    """The region widened by ``margin_degrees`` on every side, for filters that need context past its edge."""
+    resolved_region = resolve_region(region)
+    if resolved_region.bounds is None:
+        return resolved_region
+    bounds = resolved_region.bounds
+    return RegionSpec(
+        id=resolved_region.id,
+        display_name=resolved_region.display_name,
+        bounds=BoundingBox(
+            minimum_latitude=max(bounds.minimum_latitude - margin_degrees, -90.0),
+            maximum_latitude=min(bounds.maximum_latitude + margin_degrees, 90.0),
+            minimum_longitude=bounds.minimum_longitude - margin_degrees,
+            maximum_longitude=bounds.maximum_longitude + margin_degrees,
+        ),
+    )
+
+
 def _bounds_to_dict(bounds: BoundingBox | None) -> dict[str, float] | None:
     if bounds is None:
         return None

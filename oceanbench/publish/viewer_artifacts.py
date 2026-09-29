@@ -30,6 +30,7 @@ import xarray
 
 from oceanbench.core import eddies as eddies_core
 from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.regions import BoundingBox, resolve_region
 from oceanbench.core.schema_validation import load_schema
 from oceanbench.core.version import __version__ as OCEANBENCH_VERSION
 from oceanbench.publish import class4_overlays
@@ -793,6 +794,17 @@ def _parallel_detections_and_contours(
     return detections, contours
 
 
+def _centres_inside(detections: pandas.DataFrame, bounds: BoundingBox) -> numpy.ndarray:
+    latitudes = detections[eddies_core.LATITUDE_COLUMN].to_numpy(dtype=float)
+    longitudes = (detections[eddies_core.LONGITUDE_COLUMN].to_numpy(dtype=float) + 180.0) % 360.0 - 180.0
+    return (
+        (latitudes >= bounds.minimum_latitude)
+        & (latitudes <= bounds.maximum_latitude)
+        & (longitudes >= bounds.minimum_longitude)
+        & (longitudes <= bounds.maximum_longitude)
+    )
+
+
 def dataset_eddy_census(
     dataset: xarray.Dataset,
     *,
@@ -800,13 +812,15 @@ def dataset_eddy_census(
     lead_days: tuple[int, ...] | None = None,
     start_index: int = 0,
     apply_contour_filtering: bool = eddies_core.DEFAULT_APPLY_CONTOUR_FILTERING,
+    centre_bounds: BoundingBox | None = None,
 ) -> dict:
     """Build one forecast start's own mesoscale-eddy detection census (census-only, no reference).
 
     One frame per lead day, each listing that dataset's own detections (centre, polarity and
     point-limited contour) with coordinates clamped to the served ranges and validated against the
     eddies schema ``eddy`` definition. ``lead_days`` defaults to every lead the dataset carries, so
-    the census resolves the same lead axis the viewer scrubs. The km-based literature detection
+    the census resolves the same lead axis the viewer scrubs. ``centre_bounds`` keeps only the eddies
+    centred inside a region when ``dataset`` is a padded crop around it. The km-based literature detection
     parameters are stamped, including ``apply_contour_filtering`` and the emitting
     ``oceanbench_version``.
     """
@@ -828,6 +842,9 @@ def dataset_eddy_census(
         contours = _contours(dataset, detections, start_index)
     if apply_contour_filtering:
         detections = eddies_core.filter_mesoscale_eddy_detections_by_contours(detections, contours)
+        contours = contours.loc[contours["detection_index"].isin(detections.index)]
+    if centre_bounds is not None:
+        detections = detections.loc[_centres_inside(detections, centre_bounds)]
         contours = contours.loc[contours["detection_index"].isin(detections.index)]
     contour_rows_by_detection_index = _contour_rows_by_detection_index(contours)
     parameters = {
@@ -1327,11 +1344,14 @@ def write_viewer_artifacts(
     enable_column_store: bool = True,
     enable_class4_overlays: bool = True,
     eddy_start_indices: tuple[int, ...] | None = _PUBLISHED_EDDY_START_INDICES,
+    eddy_forecast_dataset: xarray.Dataset | None = None,
 ) -> ViewerArtifactsResult:
     """Produce every viewer serving artifact for one evaluated dataset into ``output_directory``.
 
     ``eddy_start_indices`` selects the forecast starts whose eddy census is written (``None``
     writes every start); each selected start gets every lead day the dataset carries.
+    ``eddy_forecast_dataset``, when given, is a crop padded past the region so the eddy filter and
+    contours see context beyond its edge; only the eddies centred inside the region are kept.
 
     Writes the Class-4 match-up parquet, the eddy detection census and the year-mode error
     geography / per-start RMSD under ``insights/<dataset_slug>/<region>/``, and the field pyramid
@@ -1387,7 +1407,11 @@ def write_viewer_artifacts(
     eddy_census_path = str(insights_directory / EDDY_CENSUS_FILENAME)
     try:
         write_eddy_census(
-            forecast_dataset, eddy_census_path, dataset_slug=dataset_slug, start_indices=eddy_start_indices
+            forecast_dataset if eddy_forecast_dataset is None else eddy_forecast_dataset,
+            eddy_census_path,
+            dataset_slug=dataset_slug,
+            start_indices=eddy_start_indices,
+            centre_bounds=None if eddy_forecast_dataset is None else resolve_region(region).bounds,
         )
     except Exception as error:  # noqa: BLE001 - one artifact must not abort the others
         flags.append(f"eddy census skipped: {error}")
