@@ -18,71 +18,58 @@ export const METHOD_NOTES = {
   // Main map when showing a forecast field. {dataset} = the panel's dataset label.
   "field-map": {
     title: "Forecast field",
-    body:
-      "Forecast fields from {dataset}, streamed as compressed image tiles. Display only. " +
-      "All metrics are computed offline from the raw model outputs.",
+    body: "Fields from {dataset}, as compressed tiles. Display only; metrics use the raw outputs.",
   },
 
   // Difference display mode (Forecast 1 − Forecast 2).
   "diff-view": {
     title: "Difference view",
-    body:
-      "Forecast 1 minus Forecast 2, computed per pixel in the browser at display " +
-      "resolution. The color scale is centered at zero.",
+    body: "Forecast 1 minus Forecast 2 per pixel, at display resolution. Scale centered on zero.",
   },
 
   // Class-4 obs error overlay legend.
   "class4-legend": {
-    title: "Class-4 match-ups",
+    title: "Class IV match-ups",
     body:
-      "Each point is a real observation (altimetry SSH, Argo T/S profiles, drifter " +
-      "currents at 15 m) colored by |obs − model| for the selected start and lead. At " +
-      "low zoom only a sample of points is drawn; statistics always use all of them. The " +
-      "model is interpolated to each observation location. SSH is compared as sea level " +
-      "anomaly (GLO12 mean dynamic topography, datum shift −0.1148 m). Quality control " +
-      "comes from the upstream data products; OceanBench rejects no outliers.",
+      "Each point is a real observation (altimetry SSH, in-situ T/S, drifter currents at 15 m), " +
+      "colored by |obs − model| with the model interpolated to it. Low zoom draws a sample; " +
+      "statistics use all points. SSH as sea level anomaly: GLO12 mean dynamic topography, " +
+      "shift −0.1148 m (climatology −0.1329 m). QC is upstream; no outlier rejection here.",
   },
 
   // Skill vs lead day chart (rail-lead-curve).
   "lead-curve": {
     title: "RMSE vs lead day",
     body:
-      "Official Class-4 RMSE against observations for each lead day, pooled over the 52 " +
-      "start dates of 2024. The shaded band is a 95% bootstrap confidence interval. " +
-      "Computed offline by the oceanbench library.",
+      "Official Class IV RMSE per lead day, pooled over the 52 starts of 2024. Band: 95% " +
+      "bootstrap interval. Computed offline.",
   },
 
   // RMSE vs depth vertical profile chart (rail-depth-profile).
   "depth-profile": {
     title: "RMSE vs depth",
     body:
-      "Class-4 RMSE against observations per depth bin, pooled over all match-ups of the " +
-      "year at the selected lead day. Same observation set and method as the official " +
-      "scores. Hover a point for the observation count.",
+      "Class IV RMSE per depth bin at this lead, all 2024 match-ups, official method. " +
+      "Temperature's top metre is its own surface bin. Hover for the obs count.",
   },
 
   // RMSE / bias by start date chart (rail-year-rmsd).
   "year-rmsd": {
     title: "RMSE / bias by start date",
     body:
-      "Class-4 RMSE for each start date, pooled over all match-ups of that start, same " +
-      "method as the official scores. Bias mode shows the pooled mean of model minus obs. " +
-      "The shaded band is a 95% interval for each start. In RMSE mode it is a bootstrap " +
-      "over that start's match-ups, which treats them as independent; spatial and " +
-      "along-track correlation make the true uncertainty larger, so read it as a lower " +
-      "bound. In bias mode it is analytic, mean ± 1.96 sd/√n (normal approximation), with " +
-      "the same caveat. Click a point to open that start date.",
+      "Class IV RMSE per start date, pooled over its match-ups (official method). Bias mode: " +
+      "pooled mean of model minus obs. Band: 95% per start (bootstrap for RMSE, mean ± 1.96 " +
+      "sd/√n for bias); obs are spatially correlated, so read it as a lower bound. Click a " +
+      "point to open that date.",
   },
 
   // Year error geography map / its colorbar.
   "year-geography": {
     title: "Year error geography",
     body:
-      "Mean |obs − model| per grid cell over all 52 start dates (signed model − obs in " +
-      "bias mode), computed from the full match-up set on a 2° global grid (0.25° for " +
-      "IBI). Same observation set and interpolation as the Class-4 scores. SSH is " +
-      "compared as sea level anomaly (GLO12 mean dynamic topography, datum shift −0.1148 " +
-      "m). No outlier rejection.",
+      "Mean |obs − model| per cell over the 52 starts (model − obs in bias mode), on a 2° grid " +
+      "(0.25° for IBI). Same obs and interpolation as the Class IV scores; SSH as sea level " +
+      "anomaly (shift −0.1148 m, climatology −0.1329 m); no outlier rejection.",
   },
 
   // Eddies overlay legend. {params} is rendered as a live parameter list from the census
@@ -137,22 +124,20 @@ export const METHOD_NOTES = {
   trajectories: {
     title: "Illustrative trajectories",
     body:
-      "Particles seeded by clicking are advected in each forecast's displayed current " +
-      "field (RK2, 6-hour steps, on the model's finest published grid). Illustrative only; " +
-      "nothing here feeds a score. The official Lagrangian metric is computed offline: " +
-      "10,000 seeds advected hourly (OceanParcels RK4) in the forecast and in the GLO12 " +
-      "reference, scored as their mean separation per lead day. It measures agreement " +
-      "between models; drifter observations only enter the Class-4 currents diagnostic.",
+      "Click to seed particles advected in each forecast's displayed currents (RK2, 6 h steps). " +
+      "Illustrative only, not scored. The official Lagrangian metric runs offline: 10,000 seeds " +
+      "globally (IBI scaled by ocean area, min 2,000; OceanParcels RK4) in the forecast and in " +
+      "each reference (GLORYS, GLO12), " +
+      "mean separation scored at leads 2 to N−1 only. It measures agreement between models, not " +
+      "with drifters.",
   },
 
   // Water-column profile (profile-on-click) chart.
   "column-profile": {
     title: "Water column",
     body:
-      "Model temperature and salinity at the clicked point, read from a quantized copy of " +
-      "the native-resolution forecast (16-bit, error below half a display step). Values are " +
-      "the model's own water column at the selected start and lead. Display only; scores use " +
-      "the raw model outputs.",
+      "Model T and S near the clicked point, at this start and lead, from a 1° 16-bit copy of " +
+      "the forecast (not its native grid). Display only.",
   },
 
   // Currents particle animation overlay.
@@ -167,9 +152,8 @@ export const METHOD_NOTES = {
   "data-provenance": {
     title: "Data provenance",
     body:
-      "Version of the oceanbench pipeline that produced this dataset's artifacts and when. " +
-      "All artifacts for a challenger are generated together and verified by an automated " +
-      "reconciliation against the raw match-up data.",
+      "Pipeline version and date of this dataset's artifacts, generated together and " +
+      "reconciled against the raw match-ups.",
   },
 };
 

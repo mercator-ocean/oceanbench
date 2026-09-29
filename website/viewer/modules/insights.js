@@ -218,7 +218,7 @@ export async function loadScoresSummary(index) {
  * HEAD request, but callers should omit stale hints.
  */
 export async function loadClass4(url, { byteLength, startDate, leadDay, variables, onProgress, quiet } = {}) {
-  if (!url) throw new Error("Class-4 URL is missing");
+  if (!url) throw new Error("Class IV URL is missing");
   const key = class4CacheKey(url, { startDate, leadDay, variables });
   if (class4TargetedCache.has(key) && !quiet) promoteClass4Prefetch(key, onProgress);
   if (!class4TargetedCache.has(key)) {
@@ -321,7 +321,7 @@ function ensureClass4Worker() {
     // never settle and the panel would spin forever. Reject what is pending, drop the
     // dead worker and remember why, so subsequent requests fail fast with that reason
     // and the caller can render an error state instead of a spinner.
-    const reason = event.message || "Class-4 worker failed to start";
+    const reason = event.message || "Class IV worker failed to start";
     class4WorkerFailure = reason;
     class4Worker = null;
     for (const pending of class4Pending.values()) pending.reject(new Error(reason));

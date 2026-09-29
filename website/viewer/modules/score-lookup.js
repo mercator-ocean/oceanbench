@@ -55,7 +55,10 @@ export function scoreDepthKeys(entry) {
 // Human label for a published obs depth bin.
 export function depthBinLabel(entry, key) {
   if (key === "surface" && entry && entry.standard_name === "sea_water_potential_temperature") return "obs shallower than 1 m";
-  if (key === "0-5m") return "obs 0-5 m";
+  if (key === "0-5m") {
+    // Temperature has its own sub-1 m bin, so its "0-5m" bin holds obs from 1 to 5 m.
+    return entry && entry.standard_name === "sea_water_potential_temperature" ? "obs 1-5 m" : "obs 0-5 m";
+  }
   if (key === "15m") return "obs at 15 m";
   return key ? `obs ${key}` : "";
 }

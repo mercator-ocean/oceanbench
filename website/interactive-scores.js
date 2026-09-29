@@ -82,10 +82,19 @@ const TRACK_LABELS = {
   one_degree: "1 degree",
 };
 
+// Variable label scores-summary.js gives the Lagrangian separation rows (they carry no
+// variable). It is a mean separation, not an RMSE, so its header drops the RMSE prefix.
+const TRAJECTORY_VARIABLE_LABEL = "trajectory separation";
+
+// Class IV temperature has its own sub-1 m "surface" bin, so its "0-5m" bin holds obs from
+// 1 to 5 m while salinity's holds 0 to 5 m. Only the observations tables use this key.
+function depthSeparatorLabel(depth) {
+  return depth === "0-5m" ? "0-5m (T: 1-5m)" : depth;
+}
+
 const TRACK_NOTES = {
-  high_resolution: "Models evaluated at their native high resolution.",
-  one_degree:
-    "Non-one-degree base models whose forecasts are interpolated to the one degree resolution.",
+  high_resolution: "Native resolution.",
+  one_degree: "Finer models interpolated to 1°.",
 };
 
 function interpolateColor(startColor, endColor, ratio) {
@@ -208,7 +217,7 @@ const ROW_ACTION_ICONS = {
 };
 
 function buildRowActions(name, isBaseline) {
-  const pinTitle = isBaseline ? "Comparison reference" : "Set as comparison reference";
+  const pinTitle = isBaseline ? "Baseline" : "Set as baseline";
   const hideButton = isBaseline
     ? ""
     : `<button type="button" class="row-action hide-action" data-action="hide" data-challenger="${name}" title="Hide" aria-label="Hide ${displayName(name)}">${ROW_ACTION_ICONS.eye}</button>`;
@@ -254,14 +263,13 @@ function titleCase(text) {
   return text.replace(/(^|\s)\w/g, (character) => character.toUpperCase());
 }
 
+// The CF standard name rides in the header's tooltip rather than as a third header line.
 function formatVariableHeader(variable, unit, standardName, metricKey) {
   const displayName = titleCase(variable);
-  const metricLabel = metricKey.startsWith("rmsd") ? `RMSE (${unit})` : `(${unit})`;
-  let header = `${displayName}<br><span class="metric-label">${metricLabel}</span>`;
-  if (standardName && standardName !== "unknown") {
-    header += `<br><span class="standard-name">${standardName}</span>`;
-  }
-  return header;
+  const isTrajectory = variable === TRAJECTORY_VARIABLE_LABEL;
+  const metricLabel = metricKey.startsWith("rmsd") && !isTrajectory ? `RMSE (${unit})` : `(${unit})`;
+  const title = standardName && standardName !== "unknown" ? ` title="${standardName}"` : "";
+  return `<span${title}>${displayName}</span><br><span class="metric-label">${metricLabel}</span>`;
 }
 
 function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName, annotation) {
@@ -560,12 +568,12 @@ function buildModelPanel(trackChallengerNames, baseline) {
     if (isReferenceBaseline(name)) optionClasses.push("is-reference");
     markup += `<div class="${optionClasses.join(" ")}">`;
     if (isBaseline) {
-      markup += `<span class="model-option-vis model-option-vis--locked" title="The reference is always shown" aria-hidden="true">${ROW_ACTION_ICONS.eye}</span>`;
+      markup += `<span class="model-option-vis model-option-vis--locked" title="The baseline is always shown" aria-hidden="true">${ROW_ACTION_ICONS.eye}</span>`;
     } else {
       markup += `<button type="button" class="model-option-vis" data-action="${visible ? "hide" : "show"}" data-challenger="${name}" title="${visible ? "Hide" : "Show"}" aria-label="${visible ? "Hide" : "Show"} ${displayName(name)}">${visible ? ROW_ACTION_ICONS.eye : ROW_ACTION_ICONS.eyeOff}</button>`;
     }
     markup += `<span class="model-option-name">${displayName(name)}</span>`;
-    const pinTitle = isBaseline ? "Comparison reference" : "Set as comparison reference";
+    const pinTitle = isBaseline ? "Baseline" : "Set as baseline";
     markup += `<button type="button" class="model-option-pin pin-action${isBaseline ? " active" : ""}" data-action="pin" data-challenger="${name}" title="${pinTitle}" aria-label="${pinTitle}" aria-pressed="${isBaseline}">${ROW_ACTION_ICONS.pin}</button>`;
     markup += "</div>";
   }
@@ -873,7 +881,7 @@ function renderDepthGroup(
   let tbody = "<tbody>";
   for (const depth of depths) {
     if (depths.length > 1 || showDepthLabelForSingleDepth) {
-      tbody += `<tr class="depth-separator"><th class="depth-separator-cell">${depth}</th><td colspan="${totalColumns - 1}" style="border: none;"></td></tr>`;
+      tbody += `<tr class="depth-separator"><th class="depth-separator-cell">${depthSeparatorLabel(depth)}</th><td colspan="${totalColumns - 1}" style="border: none;"></td></tr>`;
     }
     const depthVariables = new Set(Object.keys(baselineScore.depths[depth]?.variables || {}));
     tbody += buildDataRows(
@@ -991,7 +999,7 @@ function renderMetricSection(
     baseline,
   );
   if (flatMarkup) {
-    markup += `<h3>Physically consistent diagnostic variables</h3>`;
+    markup += `<h3>Derived variables</h3>`;
     markup += flatMarkup;
   }
 

@@ -51,31 +51,24 @@ SPDX-License-Identifier: EUPL-1.2
         <button id="about-close" type="button" class="ghost-button" aria-label="Close">✕</button>
       </div>
       <p>
-        Fields explorer over OceanBench viewer pyramids (numeric zarr, uint16 scale/offset, DEFLATE tiles decoded
-        natively in the browser). Colormaps from <a href="https://matplotlib.org/cmocean/">cmocean</a> (MIT).
-        Class-4 match-ups read with <a href="https://github.com/hyparam/hyparquet">hyparquet</a> (MIT).
-        Generated using E.U. Copernicus Marine Service Information; https://doi.org/10.48670/moi-00021 ;
-        https://doi.org/10.48670/moi-00016. Derived product, OceanBench-generated; not the authoritative Copernicus
-        product. Provided "as is", without warranty of any kind.
+        Forecast fields, tiled for the browser. Contains E.U. Copernicus Marine Service information
+        (https://doi.org/10.48670/moi-00021, https://doi.org/10.48670/moi-00016); derived product, not the
+        authoritative Copernicus one. Provided as is, no warranty. Colormaps:
+        <a href="https://matplotlib.org/cmocean/">cmocean</a> (MIT). Parquet reader:
+        <a href="https://github.com/hyparam/hyparquet">hyparquet</a> (MIT).
       </p>
       <h3>Glossary</h3>
       <dl class="about-glossary">
         <dt>Lead day</dt>
-        <dd>How far ahead the forecast is looking. Lead day 1 is the first day
-        after the forecast start date, lead day 10 is ten days out. Forecasts
-        usually get less accurate as the lead day grows.</dd>
-        <dt>Class-4</dt>
-        <dd>A comparison made against real observations rather than against
-        another model. The forecast is interpolated to each observation's time and
-        place, so model and observation are compared at the same point.</dd>
+        <dd>Days since the forecast start. Lead 1 is the first day after the start date; lead 10 is ten days
+        out. Errors usually grow with lead.</dd>
+        <dt>Class IV</dt>
+        <dd>Scores against real observations: the forecast is interpolated to each observation's time and
+        place.</dd>
         <dt>RMSE</dt>
-        <dd>Root mean square error: the typical size of the gap between forecast
-        and observation, in the variable's own units. Lower is better, and large
-        errors weigh more heavily than small ones.</dd>
+        <dd>Root mean square error, in the variable's units. Lower is better; large errors weigh more.</dd>
         <dt>Bias</dt>
-        <dd>The average of forecast minus observation. It shows which way a
-        forecast leans overall: positive means it reads too high, negative too
-        low, and near zero means the errors cancel out.</dd>
+        <dd>Mean of forecast minus observation. Positive reads too high, negative too low.</dd>
       </dl>
     </dialog>
 
@@ -133,10 +126,10 @@ SPDX-License-Identifier: EUPL-1.2
           </fieldset>
 
           <div class="controls-footer">
-            <button id="reset-view" type="button" class="ghost-button">Reset zoom / pan</button>
+            <button id="reset-view" type="button" class="ghost-button">Reset view</button>
             <details class="hint-details">
               <summary>Navigation tips</summary>
-              <p class="hint">Scroll to zoom, drag to pan. All panels move together. Hover for the value in real units. With two forecasts, switch between side by side and swipe; in swipe, drag the divider.</p>
+              <p class="hint">Scroll to zoom, drag to pan; panels move together. Hover for values. In swipe, drag the divider.</p>
             </details>
           </div>
         </div>
@@ -172,7 +165,7 @@ SPDX-License-Identifier: EUPL-1.2
             </div>
             <div class="dock-playback">
               <button id="lead-play" type="button" class="ghost-button playback-play" aria-pressed="false"
-                      aria-label="Play lead days" title="Play the lead days (loops); touching any other control pauses">▶</button>
+                      aria-label="Play lead days" title="Play leads (any other control pauses)">▶</button>
               <div id="playback-speed" class="playback-speed segmented" role="group" aria-label="Playback speed">
                 <button type="button" data-speed="0.5" class="ghost-button" title="Half speed">0.5×</button>
                 <button type="button" data-speed="1" class="ghost-button active" title="Normal speed">1×</button>
@@ -236,7 +229,7 @@ SPDX-License-Identifier: EUPL-1.2
               <h3>Trajectory separation</h3>
               <button id="trajectory-clear" type="button" class="trajectory-clear" aria-label="Clear trajectories" title="Clear trajectories">✕</button>
             </div>
-            <p class="trajectory-label">Illustrative advection through forecast currents</p>
+            <p class="trajectory-label">Illustrative only</p>
             <div id="rail-trajectory-chart" class="rail-chart-slot"></div>
             <p id="rail-trajectory-note" class="rail-caption"></p>
           </section>

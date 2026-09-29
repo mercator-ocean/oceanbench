@@ -60,7 +60,7 @@ function metricKeyFor(row, suffix) {
 function metricTitles() {
   const titles = {};
   for (const { suffix } of REFERENCE_SECTIONS) {
-    titles[`rmsd_variables_${suffix}`] = "Forecasted variables";
+    titles[`rmsd_variables_${suffix}`] = "Forecast variables";
     titles[`rmsd_mld_${suffix}`] = "RMSD of Mixed Layer Depth";
     titles[`rmsd_geostrophic_${suffix}`] = "RMSD of Geostrophic Currents";
   }
@@ -111,11 +111,20 @@ function displayOrdered(rows) {
 function annotationFor(row) {
   const parts = [];
   if (Number.isFinite(row.ci_low) && Number.isFinite(row.ci_high)) {
-    parts.push(`95% CI half width: ${formatMean((row.ci_high - row.ci_low) / 2)}`);
+    parts.push(`±95% CI: ${formatMean((row.ci_high - row.ci_low) / 2)}`);
   }
+  // The published column is named after the 1 degree baseline, but each row carries its own
+  // baseline slug (native persistence on the native track).
   const skill = formatSkill(row.skill_vs_persistence_1_degree);
-  if (skill) parts.push(`Skill vs 1 degree persistence: ${skill}`);
+  if (skill && row.skill_baseline) parts.push(`Skill vs ${challengerLabel(row.skill_baseline)}: ${skill}`);
   return parts.join("\n");
+}
+
+// Lagrangian rows carry no variable; name their column so the header is not blank. Keep in
+// sync with TRAJECTORY_VARIABLE_LABEL in interactive-scores.js.
+function variableLabelFor(row) {
+  if (row.variable == null && String(row.metric).startsWith("lagrangian")) return "trajectory separation";
+  return variableLabel(row.variable);
 }
 
 function buildBundle(rows) {
@@ -132,7 +141,7 @@ function buildBundle(rows) {
     const challenger = (region.challengers[row.challenger] ??= {});
     const score = (challenger[metricKeyFor(row, section.suffix)] ??= { depths: {} });
     const depth = (score.depths[row.depth ?? FLAT_DEPTH] ??= { variables: {} });
-    const variable = (depth.variables[variableLabel(row.variable)] ??= {
+    const variable = (depth.variables[variableLabelFor(row)] ??= {
       unit: row.unit ?? "",
       standard_name: row.variable,
       data: {},

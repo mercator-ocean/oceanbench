@@ -258,6 +258,12 @@ function labelFor(slug) {
   return descriptor ? descriptor.label : slug;
 }
 
+// Catalog label without its resolution suffix ("GLOW 930M (1/4°)" -> "GLOW 930M"), for
+// one-line slots too narrow for the full label.
+function shortLabelFor(slug) {
+  return labelFor(slug).replace(/\s*\([^)]*\)\s*$/, "");
+}
+
 function scoreProductKey(slug) {
   if (slug === "glorys_one_degree") return "glorys";
   return slug;
@@ -299,7 +305,7 @@ const EXAMPLE_VIEW = {
   datasets: ["glonet", "glorys"],
   variable: "sea_water_potential_temperature",
   leadDay: 5,
-  note: "Example comparison: GLONET forecast vs GLORYS reanalysis, surface temperature. Change any selector to explore.",
+  note: "Example: GLONET vs GLORYS, surface temperature. Change any selector.",
 };
 let exampleViewActive = false;
 
@@ -904,7 +910,7 @@ async function renderCurrentsDifferencePanel(panel, token, manifest, level, star
   }
   await ensureStore(compareSlug);
   if (!(variables.u in manifestFor(compareSlug).variables)) {
-    setStatus(`${labelFor(compareSlug)} has no velocity fields, so a currents difference is unavailable`, true);
+    setStatus(`${labelFor(compareSlug)} has no currents to difference`, true);
     return;
   }
   const uPrimary = await readAlignedField(panel, panel.state.dataset, variables.u, level, start, leadIndex);
@@ -927,11 +933,19 @@ async function renderCurrentsDifferencePanel(panel, token, manifest, level, star
   applyPanelField(panel, { field: difference, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
     colormap: DIFFERENCE_COLORMAP, range,
     units: "m/s",
-    label: `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})`,
+    label: `${labelFor(panel.state.dataset)} − ${labelFor(compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})${currentsLevelSuffix(manifest, level)}`,
     statistics: { mean: statistics.mean, cellSize: statisticsCellSize(panel.state.dataset) },
   });
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
+}
+
+// Zoomed out, the drawn level block-averages u and v, so the map shows the speed of the
+// averaged flow rather than the native speed; the colour-bar title says so.
+function currentsLevelSuffix(manifest, level) {
+  const drawn = manifest.levels.find((entry) => entry.level === level);
+  const finest = Math.min(...manifest.levels.map((entry) => entry.cell_size_deg));
+  return drawn && drawn.cell_size_deg > finest * 1.001 ? " · block-mean u, v" : "";
 }
 
 async function renderCurrentsPanel(panel, token, manifest, level, start, leadIndex) {
@@ -950,7 +964,7 @@ async function renderCurrentsPanel(panel, token, manifest, level, start, leadInd
   if (token !== panel.renderToken) return;
   applyPanelField(panel, { field: speed, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
     colormap: SPEED_COLORMAP, range, units: "m/s",
-    label: `${labelFor(panel.state.dataset)} · currents (${currentsDepthLabel(panel.state.variable)})`,
+    label: `${labelFor(panel.state.dataset)} · currents (${currentsDepthLabel(panel.state.variable)})${currentsLevelSuffix(manifest, level)}`,
     statistics: { mean, cellSize: statisticsCellSize(panel.state.dataset) } });
   panel.landStencil = landStencil(speed, uPrimary.latitudes);
   panel.velocity = {
@@ -1031,7 +1045,7 @@ async function renderYearPanel(panel, token, manifest) {
   // The velocity error geography and RMSE-by-start are built from 15 m drifter obs.
   // A surface current selection cannot be honestly mapped onto them.
   if (isSurfaceCurrentVariable(panel.state.variable)) {
-    clearYearPanel(panel, "Current observations (drifters) are measured at 15 m depth. Switch to 15 m currents to compare against them.");
+    clearYearPanel(panel, "Drifters measure currents at 15 m. Use 15 m currents to compare.");
     return;
   }
   const urls = insightsFor(insightIndex, panel.state.dataset, shared.region);
@@ -1297,7 +1311,7 @@ function drawPanel(panel) {
     panel.els.swipeHandle.style.left = `${panel.swipeX * 100}%`;
     panel.els.swipeHandle.style.setProperty("--swipe-divider", dividerColor);
     panel.els.swipeHint.hidden = false;
-    panel.els.swipeHint.textContent = `◀ Forecast 1 · ${labelFor(panels[0].state.dataset)}  |  Forecast 2 · ${labelFor(panels[1].state.dataset)} ▶`;
+    panel.els.swipeHint.textContent = `◀ ${labelFor(panels[0].state.dataset)}  |  ${labelFor(panels[1].state.dataset)} ▶`;
   } else {
     context.filter = fieldFilter;
     drawImageWorld(context, panel.offscreenA, panel.edgesA, projection);
@@ -1362,9 +1376,14 @@ function drawRasterBorder(context, edges, projection) {
 function updatePanelBadge(panel) {
   const statistics = shared.scope === SCOPE_WHOLE_YEAR ? null : panel.statistics;
   const mean = statistics ? statistics.mean : panel.field ? areaWeightedMean(panel.field, panel.latitudes) : NaN;
-  panel.els.badge.textContent = `area-weighted mean ${formatFixed(mean, 3)} ${panel.units}`;
+  // Coarse levels block-average u and v before the browser takes the speed, so a currents
+  // mean is the speed of the averaged flow, lower than the mean native speed.
+  const currents = Boolean(statistics) && isCurrentsVariable(panel.state.variable);
+  panel.els.badge.textContent = `${currents ? "mean-flow speed" : "mean"} ${formatFixed(mean, 3)} ${panel.units}`;
   panel.els.badge.title = statistics
-    ? `Mean over the whole field, weighted by cell area, computed on this dataset's ${Number(statistics.cellSize.toFixed(2))}° level so it is the same at every zoom and screen size.`
+    ? currents
+      ? `Area-weighted speed of the block-averaged u, v on the ${Number(statistics.cellSize.toFixed(2))}° level (zoom-independent); below the mean native speed.`
+      : `Area-weighted mean of the whole field, from the ${Number(statistics.cellSize.toFixed(2))}° level (zoom-independent).`
     : "";
 }
 
@@ -1574,7 +1593,7 @@ function whenIdle(run) {
 // reserves (the bar is positioned out of flow), so a load moves nothing on screen. The label
 // is whatever the caller last announced, since a first load and a lead change say different
 // things. Any later `note.textContent =` clears the bar with the text it replaces.
-let class4ProgressLabel = "Loading Class-4 match-ups…";
+let class4ProgressLabel = "Loading Class IV match-ups…";
 
 function showClass4Progress(progress) {
   const note = elements["overlay-note"];
@@ -2040,7 +2059,7 @@ function renderTrajectoryRail() {
   elements["rail-trajectory-note"].textContent = trajectoryState.loading
     ? "Loading current fields and advecting 20 shared seeds…"
     : trajectoryState.separation.length
-      ? "Mean separation between corresponding Forecast 1 and Forecast 2 particles. A pair is dropped once either particle beaches or leaves the field."
+      ? "Mean F1-F2 particle separation; pairs drop out when a particle beaches or exits."
       : "Single-forecast trajectory fan.";
   wireCursorTooltip(elements["rail-trajectory-chart"]);
 }
@@ -2298,9 +2317,9 @@ function renderColumnProfileRail() {
     // starts than the maps; say so rather than show another date's profile unannounced.
     const clamped = (columnProfile ? columnProfile.forecasts : []).filter((forecast) => forecast.startClamped);
     const clampNote = clamped.length
-      ? ` ${clamped.map((forecast) => forecast.datasetLabel).join(" and ")}: the column store ends before this start, so the profile is from its last stored start.`
+      ? ` ${clamped.map((forecast) => forecast.datasetLabel).join(" and ")}: last stored start shown.`
       : "";
-    elements["rail-column-note"].textContent = `Model ${labels} profile at the selected start and lead day ${shared.leadDay}. Move the lead slider to re-read from the same download.${clampNote}`;
+    elements["rail-column-note"].textContent = `Profile at this start, lead ${shared.leadDay}.${clampNote}`;
   }
   const heading = section.querySelector("h3");
   if (heading) attachMethodNote(heading, "column-profile");
@@ -3360,17 +3379,17 @@ function renderClass4Legend(legend, scales) {
     sidePanels.length === 2 &&
     (sidePanels[0].state.dataset !== sidePanels[1].state.dataset || sidePanels[0].state.variable !== sidePanels[1].state.variable);
   const countText = perPanel
-    ? sidePanels.map((panel) => `Forecast ${panel.index + 1}: ${class4PanelCountText(panel)}`).join(" · ")
+    ? sidePanels.map((panel) => `F${panel.index + 1}: ${class4PanelCountText(panel)}`).join(" · ")
     : class4PanelCountText(hostPanel);
   legend.hidden = false;
   legend.innerHTML =
-    `<span class="legend-note">${countText} · scale ≈ ${scales.map(({ scale, units }) => `${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(units)}`).join(" / ")} · region ${escapeHtml(regionDisplayName())}${weak}${legendHelpAnchor()}</span>`;
+    `<span class="legend-note">${countText} · scale ${scales.map(({ scale, units }) => `${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(units)}`).join(" / ")}${weak}${legendHelpAnchor()}</span>`;
   attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
 }
 
 function class4PanelCountText(panel) {
   if (!panel) return "<strong>0 obs</strong>";
-  if (isReferenceDataset(panel.state.dataset)) return "no points (the reanalysis assimilates these obs)";
+  if (isReferenceDataset(panel.state.dataset)) return "none (assimilates these obs)";
   const shown = panel.class4Count || 0;
   const visibleTotal = panel.class4VisibleTotal || shown;
   return panel.class4Thinned
@@ -3404,13 +3423,13 @@ function renderEddyLegend(legend) {
     swatches =
       legendSwatch(forecastColor(0), `${forecast1} eddies · lead ${censuses[0].leadDay ?? "n/a"}`, censuses[0].detections.length) +
       legendSwatch(forecastColor(1), `${forecast2} eddies · lead ${censuses[1].leadDay ?? "n/a"}`, censuses[1].detections.length);
-    caption = "no lead day in common, so each forecast is shown at its own nearest lead and never cross-matched";
+    caption = "no shared lead: not matched";
   } else if (censuses.some(Boolean)) {
     // One census on screen, from whichever panel has it (panel 1 may be the one without).
     const index = censuses.findIndex(Boolean);
     const census = censuses[index];
     swatches = legendSwatch(forecastColor(index), `${labelFor(panels[index].state.dataset)} eddies`, census.detections.length);
-    caption = `single forecast census · lead ${census.leadDay ?? "n/a"} (nearest available)`;
+    caption = `census · lead ${census.leadDay ?? "n/a"}`;
   } else {
     swatches = `<span class="legend-note">No eddy detections for this selection.</span>`;
     caption = "";
@@ -3509,12 +3528,28 @@ function renderRailProvenance(shown) {
     const provenance = manifest && manifest.provenance;
     if (!provenance) continue;
     const line = formatProvenanceLine(provenance);
-    if (!entries.some((entry) => entry.line === line)) entries.push({ line, index: panel.index });
+    if (!entries.some((entry) => entry.line === line)) {
+      entries.push({
+        line,
+        index: panel.index,
+        version: provenance.oceanbench_version || "?",
+        date: String(provenance.generated_at || "").slice(0, 10),
+      });
+    }
   }
   element.textContent = "";
   if (!entries.length) {
     element.hidden = true;
     return;
+  }
+  // Same pipeline version, different dates: one line listing both dates.
+  const versions = new Set(entries.map((entry) => entry.version));
+  if (entries.length > 1 && versions.size === 1) {
+    const dates = entries.map((entry) => entry.date).filter(Boolean);
+    entries.splice(0, entries.length, {
+      line: `data: oceanbench ${[...versions][0]}${dates.length ? ` · ${dates.join(" / ")}` : ""}`,
+      index: 0,
+    });
   }
   const labelled = entries.length > 1;
   entries.forEach((entry, index) => {
@@ -3558,7 +3593,11 @@ async function renderRailDepthProfile(shown, comparison) {
     lines.push({
       label: comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}` : "RMSE vs depth",
       color: forecastColor(panel.index),
-      bins: profile.bins,
+      // Temperature's "0-5m" bin holds obs from 1 to 5 m (its own "surface" bin takes the top metre).
+      bins:
+        entry.standard_name === "sea_water_potential_temperature"
+          ? profile.bins.map((bin) => (bin.label === "0-5m" ? { ...bin, label: "1-5m" } : bin))
+          : profile.bins,
     });
   }
   if (!lines.length) {
@@ -3574,7 +3613,7 @@ async function renderRailDepthProfile(shown, comparison) {
     xBound,
   });
   if (note) {
-    note.textContent = `Class-4 RMSE per depth bin at lead day ${lead ?? shared.leadDay}, pooled over all match-ups of the year (same method as the official scores).`;
+    note.textContent = `Lead ${lead ?? shared.leadDay}, all 2024 match-ups.`;
   }
   wireCursorTooltip(slot);
 }
@@ -3637,12 +3676,10 @@ async function renderRailYearRmsd(shown) {
   const bandNote = !lines.some((line) => line.ciLow)
     ? ""
     : biasMode
-      ? " Band: analytic 95% interval, mean ± 1.96 sd/√n."
-      : " Band: 95% bootstrap over the match-ups, a lower bound since nearby obs are correlated.";
+      ? "Band: 95%, mean ± 1.96 sd/√n, a lower bound (obs are correlated). "
+      : "Band: 95%, a lower bound (obs are correlated). ";
   note.textContent = lines.length
-    ? biasMode
-      ? `Pooled mean(model − obs) per start date, same method as the official scores.${bandNote} Click a point to open that start date.`
-      : `Class-4 RMSE per start date, same method as the official scores (pooled over all match-ups for that start).${bandNote} Click a point to open that start date.`
+    ? `${bandNote}Click a point to open that date.`
     : biasMode
       ? "Bias by start not available for this dataset/region."
       : "Year RMSE-by-start not available for this dataset/region.";
@@ -3725,8 +3762,8 @@ function updateCurrentDepthGateNote(shown) {
   }
   note.hidden = false;
   note.innerHTML =
-    `<p>Current observations (drifters) are measured at 15&nbsp;m depth. Switch to 15&nbsp;m currents to compare against them.</p>` +
-    `<button type="button" class="ghost-button" id="rail-switch-15m-currents">Switch to 15&nbsp;m currents</button>`;
+    `<p>Drifters measure currents at 15&nbsp;m.</p>` +
+    `<button type="button" class="ghost-button" id="rail-switch-15m-currents">Use 15&nbsp;m currents</button>`;
   const button = note.querySelector("#rail-switch-15m-currents");
   if (button) button.addEventListener("click", () => switchShownPanelsTo15mCurrents(gated));
 }
@@ -3805,13 +3842,17 @@ function renderRailSkill(shown, comparison) {
       const key = scoreProductKey(panel.state.dataset);
       if (!skill) {
         if (isSurfaceCurrentVariable(panel.state.variable)) {
-          notes.push(`${labelFor(panel.state.dataset)}: currents are scored against drifters at 15 m only, see the switch above`);
+          notes.push(`${labelFor(panel.state.dataset)}: drifters are at 15 m only (switch above)`);
           continue;
         }
         const suffix = isCurrentsVariable(panel.state.variable)
           ? `currents at ${currentsDepthLabel(panel.state.variable)}`
           : "this variable";
-        notes.push(`${labelFor(panel.state.dataset)}: no scored observations for ${suffix}`);
+        notes.push(
+          isReferenceDataset(panel.state.dataset)
+            ? `${labelFor(panel.state.dataset)}: not scored (assimilates these obs)`
+            : `${labelFor(panel.state.dataset)}: no scored obs for ${suffix}`,
+        );
         continue;
       }
       unit = skill.unit || unit;
@@ -3839,11 +3880,9 @@ function renderRailSkill(shown, comparison) {
       // n_starts is available from the summary, so report the real number of start dates
       // behind the aggregate (item 5). TODO(pipeline): expose per-lead matchup counts too.
       notes.push(
-        `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}: n = ${skill.n} start dates${
-          skill.n < 10 ? " (low, weak statistic)" : ""
-        }`,
+        `${labelFor(panel.state.dataset)}: n = ${skill.n} starts${skill.n < 10 ? " (low, weak statistic)" : ""}`,
       );
-      if (isCurrentsVariable(panel.state.variable)) notes.push("Current speed map points are paired u/v speeds; curves show u/v component RMSE.");
+      if (isCurrentsVariable(panel.state.variable)) notes.push("Map: speed from paired u/v. Curves: u and v RMSE.");
     }
   } catch (error) {
     console.error("Cannot render observation-based skill", error);
@@ -4009,7 +4048,7 @@ function drawPsdBox(panel, context, projection) {
       context.fillStyle = border;
       context.textAlign = "center";
       context.textBaseline = "bottom";
-      context.fillText("max size for native-resolution spectrum", (topLeft.x + bottomRight.x) / 2, topLeft.y - 6 * ratio);
+      context.fillText("max native box", (topLeft.x + bottomRight.x) / 2, topLeft.y - 6 * ratio);
     }
   }
   context.restore();
@@ -4288,7 +4327,7 @@ async function renderRailPsd(shown, comparison) {
     elements["rail-spectra"].innerHTML = "";
     const pair = psdBoxLimits.resolutionLabels.join(" vs ");
     elements["rail-psd-note"].textContent =
-      `Resolutions too different for a shared-box spectrum${pair ? ` (${pair})` : ""}. ` +
+      `Resolutions too different to share a box${pair ? ` (${pair})` : ""}. ` +
       "Switch to a single forecast to inspect each.";
     return;
   }
@@ -4546,7 +4585,7 @@ function wireChartCursorTooltip(svg) {
 
 // Why a reference panel draws no Class-4 points: it is not missing data, the reanalysis
 // assimilates the same observations, so scoring it against them would not be independent.
-const CLASS4_REFERENCE_NOTE = "the reanalysis assimilates these observations, so it is not scored against them";
+const CLASS4_REFERENCE_NOTE = "it assimilates these obs";
 
 // The single sentence for every "nothing to draw" Class-4 state. One source, so the
 // sidebar note, the legend strip and the colorbar never state the same absence three
@@ -4555,18 +4594,18 @@ function class4EmptyMessage() {
   if (overlayData.class4Unpublished) {
     const active = panels[activePanelIndex];
     return active && isReferenceDataset(active.state.dataset)
-      ? `${labelFor(active.state.dataset)} has no Class-4 points: ${CLASS4_REFERENCE_NOTE}.`
-      : "No Class-4 match-ups are published for this dataset.";
+      ? `${labelFor(active.state.dataset)}: not scored (${CLASS4_REFERENCE_NOTE}).`
+      : "No Class IV match-ups are published for this dataset.";
   }
-  if (overlayData.class4Error) return `Class-4 match-ups failed to load (${overlayData.class4Error}).`;
-  if (!overlayData.class4) return "No Class-4 match-ups are available for this dataset and region.";
+  if (overlayData.class4Error) return `Class IV match-ups failed to load (${overlayData.class4Error}).`;
+  if (!overlayData.class4) return "No Class IV match-ups for this dataset and region.";
   if ((overlayData.class4.rows || []).length === 0) return class4SelectionNote();
   return "";
 }
 
 function class4SelectionNote() {
   const panel = panels[0];
-  if (!panel) return "No Class-4 match-ups for this selection.";
+  if (!panel) return "No Class IV match-ups for this selection.";
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && variableEntry(manifest, panel.state.variable);
   const variable = entry ? prettyName(entry.standard_name) : panel.state.variable;
@@ -4658,9 +4697,9 @@ function updateSharedTimeControls() {
   shared.leadDay = Math.min(Math.max(shared.leadDay, minimumLead), maximumLead);
   leadClampNote =
     requested != null && requested !== shared.leadDay
-      ? `Lead ${requested} is outside the shown forecasts' horizon (${minimumLead} to ${maximumLead}); showing lead ${shared.leadDay}.`
+      ? `Lead ${requested} out of range (${minimumLead}-${maximumLead}); showing ${shared.leadDay}.`
       : "";
-  leadRangeNote = range.limiting ? `Leads ${minimumLead} to ${maximumLead} only: the ${labelFor(range.limiting)} horizon.` : "";
+  leadRangeNote = range.limiting ? `Leads ${minimumLead}-${maximumLead} (${shortLabelFor(range.limiting)} horizon)` : "";
   elements["lead-day"].min = String(minimumLead);
   elements["lead-day"].max = String(maximumLead);
   elements["lead-day"].value = String(shared.leadDay);
@@ -4715,7 +4754,7 @@ async function applyOverlayMode() {
     else
       note.textContent = columnProfile
         ? "Click the map to read the model water column at another point."
-        : "Click the map to read the model temperature/salinity water column at that point.";
+        : "Click the map for a T/S profile.";
     for (let i = 0; i < shared.layout; i += 1) {
       drawPanel(panels[i]);
       drawOverlays(panels[i]);
@@ -4726,9 +4765,9 @@ async function applyOverlayMode() {
     return;
   }
   if (shared.overlayMode === OVERLAY_TRAJECTORIES) {
-    note.textContent = "Click the map to seed trajectories advected through both forecasts' currents.";
+    note.textContent = "Click the map to seed particles.";
   } else if (shared.overlayMode === OVERLAY_CLASS4) {
-    class4ProgressLabel = "Loading Class-4 match-ups…";
+    class4ProgressLabel = "Loading Class IV match-ups…";
     note.textContent = class4ProgressLabel;
   } else if (shared.overlayMode === OVERLAY_EDDIES) {
     note.textContent = "Loading eddy census…";
@@ -4739,7 +4778,7 @@ async function applyOverlayMode() {
   if (!current || superseded()) return;
   if (shared.overlayMode === OVERLAY_EDDIES) writeEddyOverlayNote();
   if (shared.overlayMode === OVERLAY_CLASS4) {
-    note.textContent = class4EmptyMessage() || "Class-4 match-ups for the selected start and lead. Hover a point for details.";
+    note.textContent = class4EmptyMessage() || "Hover a point for details.";
   }
   for (let i = 0; i < shared.layout; i += 1) {
     drawPanel(panels[i]);
@@ -4784,10 +4823,7 @@ async function reloadClass4Overlay() {
   if (!current) return;
   if (note) {
     note.textContent =
-      class4EmptyMessage() ||
-      (overlayData.class4 && overlayData.class4.targeted
-        ? "Class-4 match-ups for the selected start and lead. Hover a point for details."
-        : "Class-4 match-ups loaded. Hover a point for details.");
+      class4EmptyMessage() || "Hover a point for details.";
   }
   redrawOverlaysAll();
   await updateContextRail();
@@ -5049,7 +5085,7 @@ function markPlaybackButton() {
   button.textContent = playback.playing ? "❚❚" : "▶";
   button.setAttribute("aria-pressed", playback.playing ? "true" : "false");
   button.setAttribute("aria-label", playback.playing ? "Pause lead days" : "Play lead days");
-  button.title = playback.playing ? "Pause" : "Play the lead days (loops); touching any other control pauses";
+  button.title = playback.playing ? "Pause" : "Play leads (any other control pauses)";
 }
 
 function setPlaybackSpeed(speed) {
@@ -5288,7 +5324,7 @@ function wireGlobalControls() {
   elements["column-clear"].addEventListener("click", () => {
     clearColumnProfile();
     const note = elements["overlay-note"];
-    if (columnModeActive() && note) note.textContent = "Click the map to read the model temperature/salinity water column at that point.";
+    if (columnModeActive() && note) note.textContent = "Click the map for a T/S profile.";
     writeHash();
   });
   window.addEventListener("keydown", (event) => {
