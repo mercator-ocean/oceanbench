@@ -528,12 +528,11 @@ def class4_observations_in_shared_population(
     layers: Class4PopulationLayers,
 ) -> pandas.DataFrame:
     """
-    Keep only the observations of the OceanBench Class IV population, built from the ocean mask alone.
+    Keep the observations of the shared Class IV population, selected with the ocean mask alone.
 
-    An observation is kept only when its four surrounding quarter degree cells are ocean at the first
-    mask depth at or below it, a quarter degree cell being ocean only when its nine twelfth of a degree
-    cells are. The population is therefore the same for every challenger and every reference,
-    whatever their grids.
+    An observation is kept when the four quarter degree cells around it are ocean at the first mask
+    depth at or below it. A quarter degree cell is ocean when all nine twelfth of a degree cells
+    inside it are. The population is the same for every challenger, whatever its grid.
     """
     observations_dataframe = observations_dataframe.reset_index(drop=True)
     latitudes = observations_dataframe[Dimension.LATITUDE.key()].values
