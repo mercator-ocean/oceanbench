@@ -965,7 +965,7 @@ body.quarto-dark #scale-input {
 
 .legend-bar {
   display: flex;
-  width: clamp(120px, 26vw, 300px);
+  width: 300px;
   height: 12px;
   border-radius: 3px;
   border: 1px solid var(--ob-border);
@@ -1379,6 +1379,14 @@ body.nav-hidden #floating-thead {
   }
 
   /* The tick labels need the full 300px bar to stay apart */
+  .legend-bar {
+    width: clamp(120px, 40vw, 300px);
+  }
+
+  .controls-display {
+    flex-wrap: wrap;
+  }
+
   .legend-ticks {
     display: none;
   }
