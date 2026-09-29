@@ -42,8 +42,8 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 - On global grids, geostrophic currents use a centred zonal difference across the dateline, so the first and last longitude columns are computed like the interior ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 - The SSH to SLA conversion matches the MDT to the challenger grid by nearest neighbour. Exact coordinate matching kept only part of the LangYa grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 - Lagrangian deviation scores the last forecast day. The separation on lead day 10 was never written and is now scored ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
-- Mixed layer depth follows de Boyer Montégut et al. (2004): the 0.03 kg/m³ density threshold is taken from a 10 m reference level instead of the top model level, and the crossing depth is interpolated linearly instead of snapping to a model level, so it depends less on the vertical grid. Density is TEOS-10 potential density from conservative temperature, where potential temperature was used as in situ temperature and depth as pressure ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
-- Geostrophic currents exclude latitudes within 5 degrees of the equator instead of 0.5 degrees, where the Coriolis parameter vanishes ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
+- Mixed layer depth follows de Boyer Montégut et al. (2004): the 0.03 kg/m³ density threshold is taken from a 10 m reference level instead of the top model level, and the crossing depth is interpolated linearly instead of snapping to a model level, so it depends less on the vertical grid. Density is TEOS-10 potential density from conservative temperature, instead of treating potential temperature as in situ temperature and depth as pressure ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
+- Geostrophic currents exclude latitudes within 5 degrees of the equator, where the Coriolis parameter vanishes, instead of 0.5 degrees ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 
 ### Added
 
