@@ -44,7 +44,6 @@ def _compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     dy = numpy.gradient(latitude)[:, numpy.newaxis] * (numpy.pi / 180) * R
 
     if is_global_longitude_grid(longitude):
-        # A global grid wraps round, so the edge columns get a centred difference across the dateline
         eastern_neighbour = sea_surface_height.roll({Dimension.LONGITUDE.key(): -1})
         western_neighbour = sea_surface_height.roll({Dimension.LONGITUDE.key(): 1})
         dssh_dx = ((eastern_neighbour - western_neighbour) / 2).data / dx

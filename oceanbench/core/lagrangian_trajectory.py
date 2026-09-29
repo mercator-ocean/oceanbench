@@ -262,7 +262,6 @@ def _get_all_particles_positions(
     field_set = _set_domain_bounds(field_set, dataset)
     is_global = is_global_longitude_grid(dataset.longitude.values)
     if is_global:
-        # A global grid gets a periodic halo so a particle crosses the dateline instead of leaving the domain
         field_set.add_constant("first_longitude", float(dataset.longitude.values[0]))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FieldSetWarning)
