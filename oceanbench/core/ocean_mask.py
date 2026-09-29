@@ -5,16 +5,14 @@
 """
 The OceanBench ocean mask.
 
-The mask says, for each of the six OceanBench standard depths and for the first native level below
-600 metres, which cells of the twelfth of a degree grid are ocean for OceanBench. A cell is wet
-when it is wet in both official Copernicus Marine static masks, the GLO12 analysis and forecast one
-and the GLORYS12 reanalysis one, so the scored population never depends on which reference a metric
-happens to use. The two masks differ by a few thousand cells per depth, almost all of them in the
-Arctic.
+The mask says which cells of the twelfth of a degree grid are ocean, at the six OceanBench standard
+depths and at the first native level below 600 metres. A cell is ocean when it is wet in both the
+GLO12 and GLORYS12 official static masks, so every metric scores the same area whatever its
+reference.
 
 The artefact is built once from the two static datasets and pinned by the checksum of its array
-bytes, so a silent change of the upstream static files or of the stored file is an error rather
-than a quiet shift of the scores.
+bytes, so any change to the upstream static files or to the stored file raises an error instead of
+silently shifting the scores.
 """
 
 import argparse
@@ -42,8 +40,8 @@ OCEAN_MASK_STANDARD_DEPTHS = numpy.array(
     ]
 )
 
-# The first native level below 600 metres, the bottom of the deepest Class IV depth bin, so the Class
-# IV gate brackets every observation it scores. Only the Class IV gate uses it.
+# The first native level below 600 metres, the bottom of the deepest Class IV depth bin, so every
+# Class IV observation has a mask level at or below it. Gridded RMSD does not use it.
 OCEAN_MASK_CLASS4_BOTTOM_DEPTH = 643.56677
 
 OCEAN_MASK_DEPTHS = numpy.append(OCEAN_MASK_STANDARD_DEPTHS, OCEAN_MASK_CLASS4_BOTTOM_DEPTH)

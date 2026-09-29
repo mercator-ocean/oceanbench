@@ -302,13 +302,12 @@ def rmsd(
     ocean_mask: xarray.DataArray,
 ) -> pandas.DataFrame:
     """
-    Area weighted gridded RMSD, on the cells the OceanBench ocean mask calls ocean.
+    Area weighted gridded RMSD over the ocean cells of the OceanBench ocean mask.
 
-    A cell is scored when the mask is wet there and both the challenger and the reference have a
-    value, the reference having first been snapped to the challenger grid by nearest index. The
-    ocean cells where the reference has a value and the challenger has none are not scored but are
-    reported, as a count and as an area weighted fraction of the ocean cells where the reference has
-    a value, in the Missing columns.
+    The reference is first snapped to the challenger grid by nearest index. A cell is scored when it
+    is ocean and both the challenger and the reference have a value. Ocean cells where the reference
+    has a value and the challenger has none are not scored: they are reported in the Missing column
+    as a count and in the Missing fraction column as an area weighted share.
     """
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
     prepared_reference_dataset = _snap_reference_spatial_coordinates_to_challenger(
