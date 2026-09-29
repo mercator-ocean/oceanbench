@@ -77,11 +77,11 @@ export const METHOD_NOTES = {
   "eddies-legend": {
     title: "Eddy detection",
     body:
-      "{params}Eddies are detected as closed sea surface height anomaly contours (Chelton " +
-      "et al. 2011 family). With two forecasts, eddy centres of the same polarity are " +
-      "matched within 200 km. This measures agreement between the forecasts, not accuracy " +
-      "against observations. Detection runs on each dataset's own native grid, so counts " +
-      "are not comparable between a 1-degree and a 1/12-degree dataset.",
+      "{params}Eddies = closed contours of full SSH after a Gaussian high-pass (Chelton et " +
+      "al. 2011 family), not of a sea level anomaly. With two forecasts, same-polarity " +
+      "centres within the larger eddy radius (at least 50 km) are paired nearest first. " +
+      "Chance = the same pairing with F2 shifted 5° east and west, averaged. Agreement, " +
+      "not accuracy. No census for 1° products: their eddies span a few grid cells.",
   },
 
   // Live power spectrum (rail-psd, live FFT over the map rectangle).
@@ -150,10 +150,9 @@ const EDDY_PARAMETER_ROWS = [
   ["min_eddy_area_km2", "min area", (v) => `${Number(v).toLocaleString("en-US")} km²`],
   ["max_eddy_area_km2", "max area", (v) => `${Number(v).toLocaleString("en-US")} km²`],
   ["min_peak_separation_km", "min peak separation", (v) => `${v} km`],
-  ["max_match_distance_km", "max match distance", (v) => `${v} km`],
   // Background sigma is a (latitude, longitude) pair of Gaussian sigmas in km, applied in
   // degrees: converted at 5° N (the global grids' mean latitude) on every domain, IBI included.
-  // Half power sits near 7.5 sigma, compared with Chelton et al. (2011)'s 10° x 20° block.
+  // The high-pass 1 - exp(-k²σ²/2) reaches half power at kσ = 1.567, a wavelength of 4.01σ.
   ["background_sigma_km", "background sigma", backgroundSigmaLabel],
   ["contour_level_step_meters", "contour step", (v) => `${v} m`],
   ["min_contour_convexity", "min convexity", (v) => `${v}`],
@@ -162,14 +161,16 @@ const EDDY_PARAMETER_ROWS = [
   ["oceanbench_version", "oceanbench version", (v) => `${v}`],
 ];
 
+const HIGH_PASS_HALF_POWER_SIGMAS = 4.01;
+
 function backgroundSigmaLabel(value) {
   const [latitudeKm, longitudeKm] = Array.isArray(value) ? value : [value, value];
   const degreeKm = (Math.PI * 6371) / 180;
   const latitude = Number(latitudeKm) / degreeKm;
   const longitude = Number(longitudeKm) / (degreeKm * Math.cos((5 * Math.PI) / 180));
   return (
-    `sigma ${latitude.toFixed(2)}° lat × ${longitude.toFixed(2)}° lon, half power about ` +
-    `${(7.5 * latitude).toFixed(0)}° × ${(7.5 * longitude).toFixed(0)}° (Chelton et al. 2011: 10° × 20°)`
+    `sigma ${latitude.toFixed(2)}° × ${longitude.toFixed(2)}°, high-pass half power ` +
+    `~${(HIGH_PASS_HALF_POWER_SIGMAS * latitude).toFixed(2)}° × ${(HIGH_PASS_HALF_POWER_SIGMAS * longitude).toFixed(2)}°`
   );
 }
 

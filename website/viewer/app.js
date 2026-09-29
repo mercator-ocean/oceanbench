@@ -3414,12 +3414,14 @@ function renderEddyLegend(legend) {
     const forecast1 = labelFor(panels[0].state.dataset);
     const forecast2 = labelFor(panels[1].state.dataset);
     const lead = (censuses.find(Boolean) || {}).leadDay;
-    const meanText = Number.isFinite(match.meanDisplacementKm) ? `${formatFixed(match.meanDisplacementKm, 0)} km` : "n/a";
+    const percent = (share) => (Number.isFinite(share) ? `${Math.round(share * 100)}%` : "n/a");
     swatches =
       legendSwatch(EDDY_MATCHED_COLOR, "Matched pairs", match.matched.length) +
       legendSwatch(forecastColor(0), `Only in ${forecast1}`, match.onlyA.length) +
       legendSwatch(forecastColor(1), `Only in ${forecast2}`, match.onlyB.length);
-    caption = `mean centre displacement of matched pairs ${meanText} · lead ${lead ?? "n/a"} (nearest shared)`;
+    // The chance rate is the same rule against the other census shifted 5° in longitude:
+    // matched share minus chance is what the two forecasts actually agree on.
+    caption = `${percent(match.matchedShare)} of F1 matched, chance ${percent(match.chanceShare)} (F2 shifted ±5° lon) · lead ${lead ?? "n/a"}`;
   } else if (shared.layout === 2 && mismatch && censuses[0] && censuses[1]) {
     // No lead day in common between the two forecasts: never cross-match different leads -
     // show each forecast's own census at its own nearest lead, and say so.
@@ -3436,7 +3438,11 @@ function renderEddyLegend(legend) {
     swatches = legendSwatch(forecastColor(index), `${labelFor(panels[index].state.dataset)} eddies`, census.detections.length);
     caption = `census · lead ${census.leadDay ?? "n/a"}`;
   } else {
-    swatches = `<span class="legend-note">No eddy detections for this selection.</span>`;
+    const unpublished = (overlayData.eddiesUnpublished || []).slice(0, shared.layout);
+    const message = unpublished.length && unpublished.every(Boolean)
+      ? "No eddy census for this model."
+      : "No eddy detections for this selection.";
+    swatches = `<span class="legend-note">${message}</span>`;
     caption = "";
   }
   legend.hidden = false;
@@ -5216,30 +5222,26 @@ function wirePlaybackControls() {
 
 // The eddy note describes the census actually loaded, so every path that reloads the
 // overlay (mode switch, start date, region) writes it from the same place. A start with
-// no published census says so instead of leaving the previous start's sentence up.
-// Detection runs per dataset on that dataset's own grid, so a 1/12-degree field offers
-// far more candidate extrema than a 1-degree one and the raw counts are not a like-for-like
-// comparison. Said once here and once in the legend note.
-const NATIVE_GRID_EDDY_CAVEAT =
-  "Detection runs on each dataset's own native grid, so counts are not comparable between "
-  + "a 1-degree and a 1/12-degree dataset.";
-
+// no published census says so instead of leaving the previous start's sentence up. The
+// 1-degree products publish no census (their eddies are a few grid cells), so no grid
+// caveat is needed here.
 function writeEddyOverlayNote() {
   const note = elements["overlay-note"];
   if (!note) return;
   const censuses = overlayData.eddiesCensuses || [];
+  const unpublished = (overlayData.eddiesUnpublished || []).slice(0, shared.layout);
   if (!censuses.some(Boolean)) {
     const published = overlayData.eddiesPublishedStarts;
     note.textContent =
-      published && published.length && !published.includes(currentStartDate(panels[0].state.dataset))
-        ? `No eddy census is published for this start date. Published starts: ${published.join(", ")}.`
-        : "No eddy detections are available for this selection.";
+      unpublished.length && unpublished.every(Boolean)
+        ? "No eddy census for this model."
+        : published && published.length && !published.includes(currentStartDate(panels[0].state.dataset))
+          ? `No census for this date. Available: ${published.join(", ")}.`
+          : "No eddy detections are available for this selection.";
   } else if (shared.layout === 2 && overlayData.eddiesMatch) {
-    note.textContent =
-      "Eddy intercomparison between the two selected forecasts. This shows agreement, not ground truth. "
-      + NATIVE_GRID_EDDY_CAVEAT;
+    note.textContent = "Agreement between the two forecasts, not ground truth.";
   } else {
-    note.textContent = "Showing this forecast's own eddy census. " + NATIVE_GRID_EDDY_CAVEAT;
+    note.textContent = "This forecast's eddy census.";
   }
 }
 

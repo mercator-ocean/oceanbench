@@ -79,22 +79,85 @@ function haversineDistanceKm(a, b) {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/**
- * Symmetric in-browser pairing of two forecast eddy censuses. Mirrors the offline
- * matcher's rules (oceanbench/core/eddies.match_mesoscale_eddies): pairing is per
- * polarity only, on great-circle centre distance, capped at `maxDistanceKm` (200 km,
- * DEFAULT_MATCH_DISTANCE_KM). The offline matcher solves an optimal assignment; here a
- * greedy nearest-first pass (shortest candidate pairs consumed first) approximates it,
- * which is what the design calls for. Returns matched pairs plus the eddies only one
- * forecast produced, neither side is a reference.
- */
-export function matchCensuses(detectionsA, detectionsB, maxDistanceKm = 200) {
+// Equivalent radius of an eddy, sqrt(contour area / pi), from its published outline in a
+// local equirectangular projection at the eddy's latitude (longitudes unwrapped across
+// the dateline). Cached per detection object.
+const eddyRadii = new WeakMap();
+
+export function eddyRadiusKm(eddy) {
+  if (eddyRadii.has(eddy)) return eddyRadii.get(eddy);
+  const longitudes = eddy.contour_longitude || [];
+  const latitudes = eddy.contour_latitude || [];
+  const kmPerDegree = (Math.PI * EARTH_RADIUS_KM) / 180;
+  const cosine = Math.cos((eddy.latitude * Math.PI) / 180);
+  let area = 0;
+  let previousX = 0;
+  let previousY = 0;
+  let unwrapped = 0;
+  for (let i = 0; i <= longitudes.length; i += 1) {
+    const index = i % longitudes.length;
+    if (i > 0) {
+      let step = longitudes[index] - longitudes[(i - 1) % longitudes.length];
+      if (step > 180) step -= 360;
+      if (step < -180) step += 360;
+      unwrapped += step;
+    } else {
+      unwrapped = longitudes[0];
+    }
+    const x = unwrapped * kmPerDegree * cosine;
+    const y = latitudes[index] * kmPerDegree;
+    if (i > 0) area += previousX * y - x * previousY;
+    previousX = x;
+    previousY = y;
+  }
+  const radius = longitudes.length > 2 ? Math.sqrt(Math.abs(area) / 2 / Math.PI) : 0;
+  eddyRadii.set(eddy, radius);
+  return radius;
+}
+
+// An eddy pair counts as matched when the centres share a polarity and lie within the
+// larger of the two radii, never less than MATCH_FLOOR_KM. A fixed 200 km radius paired
+// about as many eddies with an unrelated date as with the same date.
+export const MATCH_FLOOR_KM = 50;
+// The chance rate repeats the match with the second census shifted this far east and west.
+export const CHANCE_SHIFT_DEGREES = 5;
+
+function wrapLongitude(longitude) {
+  return ((((longitude + 180) % 360) + 360) % 360) - 180;
+}
+
+// Greedy nearest-first pairing, per polarity. B is sorted by latitude and searched by
+// binary search within the largest possible threshold, so a global census pair costs a
+// few thousand short scans rather than an all-pairs product.
+function greedyPairs(detectionsA, detectionsB, shiftDegrees) {
+  const shiftedB = detectionsB.map((eddy) => ({
+    eddy,
+    latitude: eddy.latitude,
+    longitude: wrapLongitude(eddy.longitude + shiftDegrees),
+    radius: eddyRadiusKm(eddy),
+  }));
   const candidates = [];
-  for (const a of detectionsA) {
-    for (const b of detectionsB) {
-      if (a.polarity !== b.polarity) continue;
-      const distanceKm = haversineDistanceKm(a, b);
-      if (distanceKm <= maxDistanceKm) candidates.push({ a, b, distanceKm });
+  const kmPerDegree = (Math.PI * EARTH_RADIUS_KM) / 180;
+  for (const polarity of new Set(detectionsA.map((eddy) => eddy.polarity))) {
+    const pool = shiftedB.filter((entry) => entry.eddy.polarity === polarity).sort((x, y) => x.latitude - y.latitude);
+    if (!pool.length) continue;
+    const largestRadius = pool.reduce((largest, entry) => Math.max(largest, entry.radius), 0);
+    for (const a of detectionsA) {
+      if (a.polarity !== polarity) continue;
+      const radiusA = eddyRadiusKm(a);
+      const reachDegrees = Math.max(radiusA, largestRadius, MATCH_FLOOR_KM) / kmPerDegree;
+      let low = 0;
+      let high = pool.length;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        if (pool[middle].latitude < a.latitude - reachDegrees) low = middle + 1;
+        else high = middle;
+      }
+      for (let j = low; j < pool.length && pool[j].latitude <= a.latitude + reachDegrees; j += 1) {
+        const b = pool[j];
+        const distanceKm = haversineDistanceKm(a, b);
+        if (distanceKm <= Math.max(radiusA, b.radius, MATCH_FLOOR_KM)) candidates.push({ a, b: b.eddy, distanceKm });
+      }
     }
   }
   candidates.sort((first, second) => first.distanceKm - second.distanceKm);
@@ -107,12 +170,45 @@ export function matchCensuses(detectionsA, detectionsB, maxDistanceKm = 200) {
     usedB.add(candidate.b);
     matched.push(candidate);
   }
+  return { matched, usedA, usedB };
+}
+
+// Share of A's eddies matched when B is shifted in longitude. A regional census only
+// counts the A eddies whose partner longitude (A minus the shift) lies inside B's
+// longitude extent, so the shift never scores eddies against empty sea outside the box.
+function shiftedShare(detectionsA, detectionsB, shiftDegrees) {
+  if (!detectionsA.length || !detectionsB.length) return NaN;
+  let west = Infinity;
+  let east = -Infinity;
+  for (const eddy of detectionsB) {
+    if (eddy.longitude < west) west = eddy.longitude;
+    if (eddy.longitude > east) east = eddy.longitude;
+  }
+  const global = east - west > 300;
+  const counted = global
+    ? detectionsA
+    : detectionsA.filter((eddy) => eddy.longitude - shiftDegrees >= west && eddy.longitude - shiftDegrees <= east);
+  if (!counted.length) return NaN;
+  return greedyPairs(counted, detectionsB, shiftDegrees).matched.length / counted.length;
+}
+
+/**
+ * Symmetric in-browser pairing of two forecast eddy censuses: same polarity, centres
+ * within max(radius A, radius B, 50 km), greedy nearest-first. Returns the matched pairs,
+ * the eddies only one forecast produced (neither side is a reference), the share of A's
+ * eddies matched and the chance share, the mean of the same rule with B shifted 5° east
+ * and 5° west.
+ */
+export function matchCensuses(detectionsA, detectionsB) {
+  const { matched, usedA, usedB } = greedyPairs(detectionsA, detectionsB, 0);
   const onlyA = detectionsA.filter((eddy) => !usedA.has(eddy));
   const onlyB = detectionsB.filter((eddy) => !usedB.has(eddy));
-  const meanDisplacementKm = matched.length
-    ? matched.reduce((sum, pair) => sum + pair.distanceKm, 0) / matched.length
-    : NaN;
-  return { matched, onlyA, onlyB, meanDisplacementKm };
+  const matchedShare = detectionsA.length ? matched.length / detectionsA.length : NaN;
+  const chances = [CHANCE_SHIFT_DEGREES, -CHANCE_SHIFT_DEGREES]
+    .map((shift) => shiftedShare(detectionsA, detectionsB, shift))
+    .filter(Number.isFinite);
+  const chanceShare = chances.length ? chances.reduce((sum, value) => sum + value, 0) / chances.length : NaN;
+  return { matched, onlyA, onlyB, matchedShare, chanceShare };
 }
 
 /** Draw a set of eddy contours + centre dots in a single colour. */
