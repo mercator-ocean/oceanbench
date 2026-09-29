@@ -67,7 +67,7 @@ Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS rea
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `geostrophic current <https://en.wikipedia.org/wiki/Geostrophic_current>`_ computations over the challenger datasets and the GLORYS reanalysis dataset.
 
-The geostrophic currents are computed using sea surface height above geoid with Coriolis parameters Omega of 7.2921e-5, R of 6371000, and a gravity of 9.81 m/s². The Equator (latitude between -0.5° and 0.5°) is excluded.
+The geostrophic currents are computed using sea surface height above geoid with Coriolis parameters Omega of 7.2921e-5, R of 6371000, and a gravity of 9.81 m/s². Latitudes within 5° of the Equator, where the Coriolis parameter vanishes and altimetry products switch to an equatorial formulation (`Lagerloef et al., 1999 <https://doi.org/10.1029/1999JC900197>`_), are excluded.
 
 Deviation of Lagrangian trajectories compared to GLORYS reanalysis
 **********************************************************************************************
@@ -106,7 +106,7 @@ Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 anal
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `geostrophic current <https://en.wikipedia.org/wiki/Geostrophic_current>`_ computations over the challenger datasets and the GLO12 analysis dataset.
 
-The geostrophic currents are computed using sea surface height above geoid with Coriolis parameters Omega of 7.2921e-5, R of 6371000, and a gravity of 9.81 m/s². The Equator (latitude between -0.5° and 0.5°) is excluded.
+The geostrophic currents are computed using sea surface height above geoid with Coriolis parameters Omega of 7.2921e-5, R of 6371000, and a gravity of 9.81 m/s². Latitudes within 5° of the Equator, where the Coriolis parameter vanishes and altimetry products switch to an equatorial formulation (`Lagerloef et al., 1999 <https://doi.org/10.1029/1999JC900197>`_), are excluded.
 
 Deviation of Lagrangian trajectories compared to GLO12 analysis
 **********************************************************************************************

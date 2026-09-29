@@ -15,6 +15,8 @@ from oceanbench.core.dataset_utils import (
     is_global_longitude_grid,
 )
 
+EQUATORIAL_BAND_HALF_WIDTH_DEGREES = 5.0
+
 
 def compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     return _compute_geostrophic_currents(_harmonise_dataset(dataset))
@@ -82,5 +84,5 @@ def _compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
 
 def _exclude_equator(dataset: xarray.Dataset) -> xarray.Dataset:
     latitude = dataset[Dimension.LATITUDE.key()]
-    not_on_equator = (latitude < -0.5) | (latitude > 0.5)
+    not_on_equator = abs(latitude) >= EQUATORIAL_BAND_HALF_WIDTH_DEGREES
     return dataset.isel({Dimension.LATITUDE.key(): not_on_equator})

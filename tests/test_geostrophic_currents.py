@@ -14,8 +14,10 @@ EARTH_RADIUS = 6371000
 OMEGA = 7.2921e-5
 
 
-def _sea_surface_height_dataset(longitudes: numpy.ndarray) -> xarray.Dataset:
-    latitudes = numpy.arange(10.0, 31.0, 1.0)
+def _sea_surface_height_dataset(
+    longitudes: numpy.ndarray,
+    latitudes: numpy.ndarray = numpy.arange(10.0, 31.0, 1.0),
+) -> xarray.Dataset:
     # Shifted by 45 degrees so the field is curved at the dateline, where a one-sided difference shows
     sea_surface_height = numpy.broadcast_to(
         numpy.sin(numpy.deg2rad(longitudes + 45)), (1, 1, latitudes.size, longitudes.size)
@@ -72,3 +74,14 @@ def test_geostrophic_currents_on_a_regional_grid_keep_one_sided_edges() -> None:
     )
     expected_velocity = GRAVITY / coriolis[:, numpy.newaxis] * (dask.array.gradient(sea_surface_height, axis=-1) / dx)
     numpy.testing.assert_array_equal(northward_velocity, numpy.asarray(expected_velocity))
+
+
+def test_geostrophic_currents_exclude_the_five_degree_equatorial_band() -> None:
+    latitudes = numpy.arange(-10.0, 10.5, 0.5)
+    dataset = _sea_surface_height_dataset(numpy.arange(-20.0, 20.5, 0.5), latitudes)
+
+    geostrophic_latitudes = _compute_geostrophic_currents(dataset)[Dimension.LATITUDE.key()].values
+
+    assert 3.0 not in geostrophic_latitudes
+    assert -4.5 not in geostrophic_latitudes
+    assert geostrophic_latitudes.tolist() == latitudes[numpy.abs(latitudes) >= 5.0].tolist()
