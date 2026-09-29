@@ -12,6 +12,7 @@ from oceanbench.core.climate_forecast_standard_names import (
 from oceanbench.core.dataset_utils import (
     Dimension,
     Variable,
+    is_global_longitude_grid,
 )
 
 
@@ -42,7 +43,13 @@ def _compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     dx = numpy.gradient(longitude) * (numpy.pi / 180) * R * numpy.cos(latitude_radian[:, numpy.newaxis])
     dy = numpy.gradient(latitude)[:, numpy.newaxis] * (numpy.pi / 180) * R
 
-    dssh_dx = dask.array.gradient(sea_surface_height, axis=-1) / dx
+    if is_global_longitude_grid(longitude):
+        # A global grid wraps round, so the edge columns get a centred difference across the dateline
+        eastern_neighbour = sea_surface_height.roll({Dimension.LONGITUDE.key(): -1})
+        western_neighbour = sea_surface_height.roll({Dimension.LONGITUDE.key(): 1})
+        dssh_dx = ((eastern_neighbour - western_neighbour) / 2).data / dx
+    else:
+        dssh_dx = dask.array.gradient(sea_surface_height, axis=-1) / dx
     dssh_dy = dask.array.gradient(sea_surface_height, axis=-2) / dy
 
     g = 9.81  # gravity

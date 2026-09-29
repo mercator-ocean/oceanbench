@@ -19,7 +19,7 @@ and the affected reports are re-published (never silently overwritten).
 
 ## Unreleased
 
-**Scores:** Class IV tables change for every challenger; gridded and Lagrangian scores unchanged.
+**Scores:** Class IV tables change for every challenger, Lagrangian and geostrophic current scores change for global challengers, other gridded scores unchanged. Class IV reads the rebuilt observations2024-v2 store, the Class IV, Lagrangian and geostrophic metrics handle the dateline on global grids, and the SSH to SLA conversion keeps the full challenger grid.
 To be published as 0.6.0 once every challenger is rescored; the website shows the 0.5.0 reports until then.
 
 ### Changed
@@ -30,6 +30,10 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 
 - Local stage builds retry transient remote chunk failures, including blosc decompression errors from truncated chunk payloads.
 - Class IV salinity is vertically interpolated with the same two level linear bracket as the other variables. The cubic spline it used before needed four valid levels and silently dropped shallow profiles ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- Class IV interpolates the observations lying between the last longitude of a global grid and 180 degrees across the dateline instead of leaving them without a value ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- Lagrangian particles cross the dateline on global grids instead of being deleted, and the challenger to reference distance takes the short way across it ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- Geostrophic currents use a periodic zonal difference on global grids, so the first and last longitude columns get the same centred stencil as the interior ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- The SSH to SLA conversion puts the MDT on the challenger grid by nearest neighbour; exact coordinate matching kept only a subset of the LangYa grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 
 ### Added
 

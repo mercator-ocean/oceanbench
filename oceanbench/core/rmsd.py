@@ -13,6 +13,7 @@ from oceanbench.core.dataset_utils import (
     Variable,
     Dimension,
     DepthLevel,
+    SPATIAL_COORDINATE_ALIGNMENT_ATOL,
     VARIABLE_METADATA,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
@@ -26,7 +27,6 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.MINUS_500_METERS: "500m",
 }
 
-SPATIAL_COORDINATE_ALIGNMENT_ATOL = 1e-4
 SPATIAL_GRID_MINIMUM_MATCH_RATIO = 0.999
 SPATIAL_COORDINATE_NAMES = (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key())
 
