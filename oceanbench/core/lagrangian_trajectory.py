@@ -61,6 +61,7 @@ class FreezeParticle(JITParticle):
 
 
 LEAD_DAY_START = 2
+KILOMETERS_PER_DEGREE = 111
 
 
 def _delete_error_particle(particle, _fieldset, _time):
@@ -383,14 +384,14 @@ def euclidean_distance(model_set: xarray.Dataset, reference_set: xarray.Dataset)
     reference_set["time"] = reference_set["time"].dt.floor("D")
     latitude_reference_set_rad = numpy.deg2rad(reference_set["lat"])
 
-    dlatitude = (model_set["lat"] - reference_set["lat"]) * 111  # meters
+    dlatitude = (model_set["lat"] - reference_set["lat"]) * KILOMETERS_PER_DEGREE
     longitude_difference = model_set["lon"] - reference_set["lon"]
     longitude_difference = xarray.where(
         abs(longitude_difference) > 180,
         longitude_difference - 360 * numpy.sign(longitude_difference),
         longitude_difference,
     )
-    dlongitude = longitude_difference * 111 * numpy.cos(latitude_reference_set_rad)
+    dlongitude = longitude_difference * KILOMETERS_PER_DEGREE * numpy.cos(latitude_reference_set_rad)
 
     distance = numpy.sqrt(dlatitude**2 + dlongitude**2)  # shape: (particle, time)
     distance = distance.mean(axis=0)  # shape: (time,)

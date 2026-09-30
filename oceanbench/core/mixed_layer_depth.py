@@ -50,14 +50,14 @@ def _compute_potential_density_anomaly(
 def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     temperature = dataset[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()]
     depth = dataset[Dimension.DEPTH.key()]
-    potential_density = _compute_potential_density_anomaly(
+    potential_density_anomaly = _compute_potential_density_anomaly(
         dataset[Variable.SEA_WATER_SALINITY.key()],
         temperature,
         depth,
         dataset[Dimension.LONGITUDE.key()],
         dataset[Dimension.LATITUDE.key()],
     )
-    threshold_mixed_layer_depth = _threshold_crossing_depth(potential_density, depth)
+    threshold_mixed_layer_depth = _threshold_crossing_depth(potential_density_anomaly, depth)
     deepest_valid_depth = _depths_for_indices(depth, _deepest_valid_depth_index(temperature))
     mixed_layer_depth_depth = threshold_mixed_layer_depth.fillna(deepest_valid_depth).assign_attrs(
         {"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value}
@@ -72,10 +72,10 @@ def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     )
 
 
-def _threshold_crossing_depth(potential_density: xarray.DataArray, depth: xarray.DataArray) -> xarray.DataArray:
+def _threshold_crossing_depth(potential_density_anomaly: xarray.DataArray, depth: xarray.DataArray) -> xarray.DataArray:
     depth_dimension = Dimension.DEPTH.key()
-    reference_density = potential_density.interp({depth_dimension: REFERENCE_DEPTH}).drop_vars(depth_dimension)
-    delta_density = potential_density - reference_density
+    reference_density = potential_density_anomaly.interp({depth_dimension: REFERENCE_DEPTH}).drop_vars(depth_dimension)
+    delta_density = potential_density_anomaly - reference_density
     level_is_below_reference = depth > REFERENCE_DEPTH
     shallower_depth = depth.shift({depth_dimension: 1})
     shallower_level_is_below_reference = shallower_depth > REFERENCE_DEPTH

@@ -9,8 +9,8 @@ import xarray
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.lagrangian_trajectory import (
     _get_all_particles_positions,
-    deviation_of_lagrangian_trajectories,
     _get_random_ocean_points_from_file,
+    deviation_of_lagrangian_trajectories,
     euclidean_distance,
     lagrangian_particle_count_for_region,
 )
