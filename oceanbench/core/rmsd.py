@@ -13,7 +13,6 @@ from oceanbench.core.dataset_utils import (
     Variable,
     Dimension,
     DepthLevel,
-    MISSING_COUNT_COLUMN,
     SPATIAL_COORDINATE_ALIGNMENT_ATOL,
     VARIABLE_METADATA,
 )
@@ -162,46 +161,37 @@ def _masked_to_ocean(dataset: xarray.Dataset, ocean_mask: xarray.DataArray) -> x
     )
 
 
-def _missing_fraction_key(variable_name: str) -> str:
-    return f"{variable_name}_missing_fraction"
-
-
-def _missing_ocean_cells(
+def _missing_ocean_fraction(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     ocean_mask: xarray.DataArray,
     variable_name: str,
-) -> tuple[xarray.DataArray, xarray.DataArray]:
+) -> xarray.DataArray:
     spatial_dimensions = [Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
     forecast_dimensions = [Dimension.FIRST_DAY_DATETIME.key(), Dimension.LEAD_DAY_INDEX.key()]
     is_scorable = (
         _variable_ocean_mask(ocean_mask, challenger_dataset, variable_name) & reference_dataset[variable_name].notnull()
     )
     is_missing = is_scorable & challenger_dataset[variable_name].isnull()
-    missing_count = is_missing.sum(dim=spatial_dimensions).mean(dim=forecast_dimensions)
-    missing_fraction = (
+    return (
         is_missing.where(is_scorable)
         .weighted(_spatial_area_weights(challenger_dataset))
         .mean(dim=spatial_dimensions)
         .mean(dim=forecast_dimensions)
     )
-    return missing_count, missing_fraction
 
 
-def _missing_counts(
+def _missing_fractions(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     ocean_mask: xarray.DataArray,
 ) -> xarray.Dataset:
-    missing_by_variable = {
-        variable_name: _missing_ocean_cells(challenger_dataset, reference_dataset, ocean_mask, variable_name)
-        for variable_name in challenger_dataset.data_vars
-    }
-    missing_counts = {variable_name: count for variable_name, (count, _) in missing_by_variable.items()}
-    missing_fractions = {
-        _missing_fraction_key(variable_name): fraction for variable_name, (_, fraction) in missing_by_variable.items()
-    }
-    return xarray.Dataset(missing_counts | missing_fractions)
+    return xarray.Dataset(
+        {
+            variable_name: _missing_ocean_fraction(challenger_dataset, reference_dataset, ocean_mask, variable_name)
+            for variable_name in challenger_dataset.data_vars
+        }
+    )
 
 
 def _rmsd(
@@ -244,8 +234,8 @@ def _scored_variable_depth_pairs(dataset: xarray.Dataset, variables: list[Variab
     ]
 
 
-def _missing_value(missing_dataset: xarray.Dataset, missing_key: str, depth_level: str) -> float:
-    missing_array = missing_dataset[missing_key]
+def _missing_value(missing_dataset: xarray.Dataset, variable_name: str, depth_level: str) -> float:
+    missing_array = missing_dataset[variable_name]
     if Dimension.DEPTH.key() in missing_array.dims:
         return float(missing_array.sel({Dimension.DEPTH.key(): depth_level}))
     return float(missing_array)
@@ -266,12 +256,8 @@ def _to_pretty_dataframe(
     }
     lead_days_count = dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
     pretty_dataframe = pandas.DataFrame(values_2d).set_index([lead_day_labels(1, lead_days_count)]).T
-    pretty_dataframe[MISSING_COUNT_COLUMN] = [
-        round(_missing_value(missing_dataset, variable_key, depth_level)) for variable_key, depth_level in scored_pairs
-    ]
     pretty_dataframe[MISSING_FRACTION_COLUMN] = [
-        _missing_value(missing_dataset, _missing_fraction_key(variable_key), depth_level)
-        for variable_key, depth_level in scored_pairs
+        _missing_value(missing_dataset, variable_key, depth_level) for variable_key, depth_level in scored_pairs
     ]
     return pretty_dataframe
 
@@ -306,15 +292,15 @@ def rmsd(
 
     The reference is first snapped to the challenger grid by nearest index. A cell is scored when it
     is ocean and both the challenger and the reference have a value. Ocean cells where the reference
-    has a value and the challenger has none are not scored: they are reported in the Missing column
-    as a count and in the Missing fraction column as an area weighted share.
+    has a value and the challenger has none are not scored: the Missing fraction column reports their
+    area weighted share.
     """
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
     prepared_reference_dataset = _snap_reference_spatial_coordinates_to_challenger(
         prepared_challenger_dataset, _select_variables(_harmonise_dataset(reference_dataset), variables)
     )
     challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
-    missing_dataset = _missing_counts(
+    missing_dataset = _missing_fractions(
         prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
     ).compute()
     computed_rmsd_dataset = _rmsd(
