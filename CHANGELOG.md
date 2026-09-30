@@ -19,7 +19,7 @@ and the affected reports are re-published (never silently overwritten).
 
 ## Unreleased
 
-**Scores:** Class IV tables change for every challenger; gridded and Lagrangian scores unchanged.
+**Scores:** Class IV tables change for every challenger; Lagrangian and geostrophic current scores change for global challengers; other gridded scores are unchanged. Class IV reads the rebuilt observations2024-v2 store, the Class IV, Lagrangian and geostrophic current metrics handle the dateline on global grids, and the SSH to SLA conversion keeps the full challenger grid.
 To be published as 0.6.0 once every challenger is rescored; the website shows the 0.5.0 reports until then.
 
 ### Changed
@@ -30,6 +30,10 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 
 - Local stage builds retry transient remote chunk failures, including blosc decompression errors from truncated chunk payloads.
 - Class IV salinity is vertically interpolated with the same two level linear bracket as the other variables. The cubic spline it used before needed four valid levels and silently dropped shallow profiles ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- On global grids, Class IV interpolates across the dateline for observations between the last grid longitude and 180 degrees, which were left without a value before ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- On global grids, Lagrangian particles cross the dateline instead of being deleted, and the challenger to reference distance takes the shorter way across it ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- On global grids, geostrophic currents use a centred zonal difference across the dateline, so the first and last longitude columns are computed like the interior ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- The SSH to SLA conversion matches the MDT to the challenger grid by nearest neighbour. Exact coordinate matching kept only part of the LangYa grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 
 ### Added
 

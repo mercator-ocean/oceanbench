@@ -13,7 +13,9 @@ from oceanbench.core.dataset_utils import (
     Dimension,
     VARIABLE_DISPLAY_ORDER,
     VARIABLE_METADATA,
+    SPATIAL_COORDINATE_ALIGNMENT_ATOL,
     Variable,
+    is_global_longitude_grid,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.remote_http import with_remote_http_retries
@@ -239,8 +241,36 @@ def _convert_forecast_ssh_to_sla(
     model_dataset = rename_dataset_with_standard_names(model_variable.to_dataset(name=variable_key))
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
-    mean_dynamic_topography = load_mean_dynamic_topography(resolution)
+    mean_dynamic_topography = _mean_dynamic_topography_on_challenger_grid(
+        load_mean_dynamic_topography(resolution),
+        model_variable,
+    )
     return model_variable - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+
+
+def _mean_dynamic_topography_on_challenger_grid(
+    mean_dynamic_topography: xarray.DataArray,
+    model_variable: xarray.DataArray,
+) -> xarray.DataArray:
+    for coordinate_name in (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()):
+        challenger_values = model_variable[coordinate_name].values
+        mean_dynamic_topography_values = mean_dynamic_topography[coordinate_name].values
+        nearest_indexes = pandas.Index(mean_dynamic_topography_values).get_indexer(
+            challenger_values, method="nearest", tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL
+        )
+        is_inside = (challenger_values > mean_dynamic_topography_values.min() - SPATIAL_COORDINATE_ALIGNMENT_ATOL) & (
+            challenger_values < mean_dynamic_topography_values.max() + SPATIAL_COORDINATE_ALIGNMENT_ATOL
+        )
+        if (nearest_indexes[is_inside] < 0).any():
+            raise ValueError(
+                f"Challenger {coordinate_name} coordinates do not match the mean dynamic topography grid "
+                f"within tolerance {SPATIAL_COORDINATE_ALIGNMENT_ATOL}"
+            )
+        challenger_coordinate = {coordinate_name: model_variable[coordinate_name]}
+        mean_dynamic_topography = mean_dynamic_topography.reindex(
+            challenger_coordinate, method="nearest", tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL
+        ).assign_coords(challenger_coordinate)
+    return mean_dynamic_topography
 
 
 def prepare_class4_model_variable(
@@ -300,6 +330,21 @@ def _model_data_with_depth_dimension(model_data: xarray.DataArray) -> xarray.Dat
     return model_data.expand_dims({depth_key: [0.0]})
 
 
+def _linearly_interpolated_profiles(
+    data: xarray.DataArray,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+) -> numpy.ndarray:
+    interpolated_profiles = data.interp(
+        {
+            Dimension.LATITUDE.key(): xarray.DataArray(latitudes, dims="observation"),
+            Dimension.LONGITUDE.key(): xarray.DataArray(longitudes, dims="observation"),
+        },
+        method="linear",
+    )
+    return interpolated_profiles.compute().values
+
+
 def _horizontally_interpolated_profiles(
     time_slice: xarray.DataArray,
     observation_group: pandas.DataFrame,
@@ -308,14 +353,33 @@ def _horizontally_interpolated_profiles(
     longitude_key = Dimension.LONGITUDE.key()
     observation_latitudes = observation_group[latitude_key].values
     observation_longitudes = observation_group[longitude_key].values
-    interpolated_profiles = time_slice.interp(
-        {
-            latitude_key: xarray.DataArray(observation_latitudes, dims="observation"),
-            longitude_key: xarray.DataArray(observation_longitudes, dims="observation"),
-        },
-        method="linear",
+    grid_longitudes = time_slice[longitude_key].values
+    first_longitude, last_longitude = grid_longitudes[0], grid_longitudes[-1]
+    is_on_grid = (observation_longitudes >= first_longitude) & (observation_longitudes <= last_longitude)
+    if not is_global_longitude_grid(grid_longitudes) or is_on_grid.all():
+        return _linearly_interpolated_profiles(time_slice, observation_latitudes, observation_longitudes)
+
+    wrapped_longitudes = numpy.where(
+        is_on_grid,
+        observation_longitudes,
+        first_longitude + (observation_longitudes - first_longitude) % 360,
     )
-    return interpolated_profiles.compute().values
+    is_in_seam = wrapped_longitudes > last_longitude
+    seam_columns = time_slice.isel({longitude_key: [-1, 0]}).assign_coords(
+        {longitude_key: [last_longitude, first_longitude + 360]}
+    )
+    profile_shape = [
+        time_slice.sizes[dimension] for dimension in time_slice.dims if dimension not in (latitude_key, longitude_key)
+    ]
+    interpolated_profiles = numpy.full(profile_shape + [len(observation_group)], numpy.nan)
+    for data, is_selected in ((time_slice, ~is_in_seam), (seam_columns, is_in_seam)):
+        if is_selected.any():
+            interpolated_profiles[..., is_selected] = _linearly_interpolated_profiles(
+                data,
+                observation_latitudes[is_selected],
+                wrapped_longitudes[is_selected],
+            )
+    return interpolated_profiles
 
 
 def _interpolated_model_values_for_observation_group(
