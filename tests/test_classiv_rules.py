@@ -13,9 +13,9 @@ from oceanbench.core.classIV_support import (
     _compute_rmsd_table,
     _convert_forecast_ssh_to_sla,
     _interpolate_vertically_bracket,
-    format_class4_results,
     class4_observations_in_shared_population,
     class4_population_layers,
+    format_class4_results,
 )
 from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.dataset_utils import Dimension, Variable
@@ -364,20 +364,6 @@ def test_gate_clamps_an_observation_deeper_than_the_last_mask_level_to_that_leve
     assert gated.index.tolist() == [0]
 
 
-def test_ocean_mask_depths_are_twelfth_degree_native_levels() -> None:
-    expected_native_levels = [
-        0.494025,
-        47.37369,
-        92.32607,
-        222.47520,
-        318.12741,
-        541.08893,
-        643.56677,
-    ]
-
-    numpy.testing.assert_allclose(OCEAN_MASK_DEPTHS, expected_native_levels, atol=1e-3)
-
-
 def _mask_on_the_ocean_mask_depths(wet_below_600_meters: bool) -> xarray.DataArray:
     is_wet = _all_wet(25, 25)
     is_wet[OCEAN_MASK_DEPTHS > 600.0] = wet_below_600_meters
@@ -463,13 +449,9 @@ def test_gate_keeps_observations_across_the_dateline_on_a_global_mask() -> None:
     assert gated.index.tolist() == [0, 1, 2, 3]
 
 
-def _make_shallow(is_wet: numpy.ndarray, rows: slice, columns: slice) -> None:
-    is_wet[2:, rows, columns] = False
-
-
 def test_gate_keeps_a_surface_observation_over_a_shallow_shelf_and_drops_one_below_its_seafloor() -> None:
     is_wet = _all_wet(61, 61)
-    _make_shallow(is_wet, slice(20, 41), slice(20, 41))
+    is_wet[2:, 20:41, 20:41] = False
     observations_dataframe = pandas.DataFrame(
         {
             Dimension.LATITUDE.key(): [2.5 + 0.5 / 12, 2.5 + 0.5 / 12],

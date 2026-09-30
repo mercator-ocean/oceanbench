@@ -23,17 +23,17 @@ from oceanbench.core.dataset_utils import (
 from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.remote_http import with_remote_http_retries
 from oceanbench.core.references.observations import load_mean_dynamic_topography
-from oceanbench.core.resolution import get_dataset_resolution
+from oceanbench.core.resolution import (
+    QUARTER_DEGREE_SPACING,
+    TWELFTH_DEGREE_SPACING,
+    get_dataset_resolution,
+)
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 VELOCITY_TARGET_DEPTH_METERS = 15.0
 OBSERVATION_COUNT_COLUMN = "Observations"
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
-
-# The quarter degree model grid, centred on every third point of the twelfth of a degree mask.
-CLASS4_COARSE_GRID_FACTOR = 3
-CLASS4_COARSE_GRID_STEP_DEGREES = 0.25
 
 
 class Class4PopulationLayers(NamedTuple):
@@ -319,13 +319,13 @@ def _interpolate_vertically_bracket(
     sorted_depths = model_depths[sort_order]
     sorted_profiles = profiles[sort_order, :]
 
-    idx_lower, idx_upper = _bracketing_level_indices(sorted_depths, target_depths)
+    lower_indices, upper_indices = _bracketing_level_indices(sorted_depths, target_depths)
 
-    obs_indices = numpy.arange(observation_count)
-    lower_values = sorted_profiles[idx_lower, obs_indices]
-    upper_values = sorted_profiles[idx_upper, obs_indices]
-    lower_depths = sorted_depths[idx_lower]
-    upper_depths = sorted_depths[idx_upper]
+    observation_indices = numpy.arange(observation_count)
+    lower_values = sorted_profiles[lower_indices, observation_indices]
+    upper_values = sorted_profiles[upper_indices, observation_indices]
+    lower_depths = sorted_depths[lower_indices]
+    upper_depths = sorted_depths[upper_indices]
 
     same_depth = numpy.isclose(lower_depths, upper_depths)
     interpolated = numpy.empty(observation_count, dtype=float)
@@ -488,8 +488,9 @@ def interpolate_class4_model_to_observations(
 
 def _coarse_cells_are_wet(is_wet: numpy.ndarray) -> numpy.ndarray:
     _, latitude_count, longitude_count = is_wet.shape
-    coarse_rows = numpy.arange(0, latitude_count, CLASS4_COARSE_GRID_FACTOR)
-    coarse_columns = numpy.arange(0, longitude_count, CLASS4_COARSE_GRID_FACTOR)
+    coarse_grid_factor = round(QUARTER_DEGREE_SPACING / TWELFTH_DEGREE_SPACING)
+    coarse_rows = numpy.arange(0, latitude_count, coarse_grid_factor)
+    coarse_columns = numpy.arange(0, longitude_count, coarse_grid_factor)
     return numpy.logical_and.reduce(
         [
             is_wet[:, numpy.clip(coarse_rows + row_offset, 0, latitude_count - 1)][
@@ -534,25 +535,25 @@ def class4_observations_in_shared_population(
     depth at or below it. A quarter degree cell is ocean when all nine twelfth of a degree cells
     inside it are. The population is the same for every challenger, whatever its grid.
     """
-    observations_dataframe = observations_dataframe.reset_index(drop=True)
-    latitudes = observations_dataframe[Dimension.LATITUDE.key()].values
-    longitudes = observations_dataframe[Dimension.LONGITUDE.key()].values
+    indexed_observations = observations_dataframe.reset_index(drop=True)
+    latitudes = indexed_observations[Dimension.LATITUDE.key()].values
+    longitudes = indexed_observations[Dimension.LONGITUDE.key()].values
 
     _, coarse_row_count, coarse_column_count = layers.coarse_cells_are_wet.shape
     coarse_cells = _surrounding_cells(
-        numpy.floor((latitudes - layers.latitude_origin) / CLASS4_COARSE_GRID_STEP_DEGREES).astype(numpy.int64),
-        numpy.floor((longitudes - layers.longitude_origin) / CLASS4_COARSE_GRID_STEP_DEGREES).astype(numpy.int64),
+        numpy.floor((latitudes - layers.latitude_origin) / QUARTER_DEGREE_SPACING).astype(numpy.int64),
+        numpy.floor((longitudes - layers.longitude_origin) / QUARTER_DEGREE_SPACING).astype(numpy.int64),
         coarse_row_count,
         coarse_column_count,
     )
     _, deeper_level = _bracketing_level_indices(
         layers.depths,
-        observations_dataframe[Dimension.DEPTH.key()].values,
+        indexed_observations[Dimension.DEPTH.key()].values,
     )
     has_wet_coarse_cells = numpy.logical_and.reduce(
         [layers.coarse_cells_are_wet[deeper_level, row, column] for row, column in coarse_cells]
     )
-    return observations_dataframe.loc[has_wet_coarse_cells]
+    return indexed_observations.loc[has_wet_coarse_cells]
 
 
 def _compute_rmsd_table(

@@ -6,11 +6,11 @@ import pandas
 import xarray
 
 from oceanbench.core.classIV_support import (
+    class4_observations_in_shared_population,
+    class4_population_layers,
     compute_class4_rmsd_table,
     create_class4_observations_dataframe,
     format_class4_results,
-    class4_observations_in_shared_population,
-    class4_population_layers,
     interpolate_class4_model_to_observations,
     prepare_class4_model_variable,
 )
