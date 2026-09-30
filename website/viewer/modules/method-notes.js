@@ -77,9 +77,11 @@ export const METHOD_NOTES = {
   "eddies-legend": {
     title: "Eddy detection",
     body:
-      "{params}Eddies = closed contours of full SSH after a Gaussian high-pass (Chelton et " +
-      "al. 2011 family), not of a sea level anomaly. With two forecasts, same-polarity " +
-      "centres within the larger eddy radius (at least 50 km) are paired nearest first. " +
+      "{params}Eddy = outermost closed contour (1 cm steps) of full SSH after a Gaussian " +
+      "high-pass (Chelton et al. 2011), clear of land, the domain edge and the 70° cap. Kept " +
+      "with at least 8 pixels, radius ≥ 45 km, amplitude ≥ 1 cm and a single extremum; none " +
+      "within 5° of the Equator; IBI detected on a 10° padded crop. With two forecasts, " +
+      "same-polarity centres within the larger eddy radius (at least 50 km) are paired nearest first. " +
       "Chance = the same pairing with F2 shifted 5° east and west, averaged. Agreement, " +
       "not accuracy. No census for 1° products: their eddies span a few grid cells.",
   },
