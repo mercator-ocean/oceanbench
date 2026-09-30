@@ -26,7 +26,7 @@ import xarray
 from xarray import DataArray, Dataset
 
 from oceanbench.core.dataset_utils import Dimension
-from oceanbench.core.remote_http import open_remote_zarr, with_remote_http_retries
+from oceanbench.core.remote_http import open_remote_zarr
 
 # The six OceanBench standard depths, on the native twelfth of a degree levels.
 OCEAN_MASK_STANDARD_DEPTHS = numpy.array(
@@ -147,7 +147,7 @@ def write_ocean_mask(path: Path) -> str:
 
 def _open_ocean_mask_dataset(path: str) -> Dataset:
     if path.startswith("http://") or path.startswith("https://"):
-        return with_remote_http_retries("ocean mask open", lambda: open_remote_zarr(path))
+        return open_remote_zarr(path)
     return xarray.open_dataset(path, engine="zarr")
 
 
