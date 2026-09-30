@@ -47,6 +47,7 @@ def rmsd_of_variables_compared_to_observations(
     return rmsd_class4_validation(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
+        ocean_mask=ocean_mask(),
         variables=[
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
