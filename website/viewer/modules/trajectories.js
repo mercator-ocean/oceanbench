@@ -17,9 +17,10 @@ export function trajectorySeparationSVG(rows, currentLead, typeScale = 1) {
   const right = 12;
   const top = 14;
   const bottom = 30;
-  const maximumLead = Math.max(1, ...rows.map((row) => row.lead_day));
+  const minimumLead = Math.min(...rows.map((row) => row.lead_day));
+  const maximumLead = Math.max(minimumLead + 1, ...rows.map((row) => row.lead_day));
   const maximumValue = Math.max(1, ...rows.map((row) => row.mean));
-  const x = (lead) => left + lead / maximumLead * (width - left - right);
+  const x = (lead) => left + (lead - minimumLead) / (maximumLead - minimumLead) * (width - left - right);
   const y = (value) => height - bottom - value / maximumValue * (height - top - bottom);
   let grid = "";
   for (let tick = 0; tick <= 4; tick += 1) {

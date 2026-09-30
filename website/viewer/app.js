@@ -1893,7 +1893,8 @@ function drawTrajectoryFans(panel) {
   context.lineJoin = "round";
   trajectoryState.trajectories.forEach((fan, forecastIndex) => {
     for (const trajectory of fan) {
-      const points = trajectory.slice(0, shownLead + 1);
+      // Drift index k sits at lead k + 1: the seeds are released at the lead 1 date.
+      const points = trajectory.slice(0, shownLead);
       for (let segment = 1; segment < points.length; segment += 1) {
         const alpha = 0.2 + 0.65 * segment / Math.max(1, points.length - 1);
         context.strokeStyle = `${TRAJECTORY_COLORS[forecastIndex]}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
@@ -1973,7 +1974,8 @@ async function loadTrajectoryFields(panel, maximumLead, seedCentre) {
   };
   const store = stores.get(panel.state.dataset);
   const fields = [];
-  for (let lead = 1; lead <= maximumLead; lead += 1) {
+  // Leads 1..N-1 carry the particles from the lead 1 seeds to the lead N date.
+  for (let lead = 1; lead < maximumLead; lead += 1) {
     const leadIndex = storeLeadIndex(manifest, lead);
     const [u, v] = await Promise.all([
       readLayerWindow(store, { variable: variables.u, level, startIndex, leadIndex }, coordinates.latitudes, coordinates.longitudes, box),

@@ -83,7 +83,8 @@ self.onmessage = ({ data }) => {
   const trajectories = data.forecasts.map((forecast) => advect(data.seeds, forecast.fields));
   const separation = [];
   if (trajectories.length === 2) {
-    for (let lead = 0; lead <= data.maximumLead; lead += 1) {
+    // Drift index k is the lead k + 1 date: the seeds are released at lead 1.
+    for (let lead = 0; lead < data.maximumLead; lead += 1) {
       let total = 0;
       let count = 0;
       for (let particle = 0; particle < data.seeds.length; particle += 1) {
@@ -99,7 +100,7 @@ self.onmessage = ({ data }) => {
         count += 1;
       }
       // Leads where no pair survives are left out rather than plotted as zero.
-      if (count) separation.push({ lead_day: lead, mean: total / count, count });
+      if (count) separation.push({ lead_day: lead + 1, mean: total / count, count });
     }
   }
   self.postMessage({ requestId: data.requestId, trajectories, separation });
