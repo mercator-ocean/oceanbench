@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import gsw
+import numpy
 import xarray
 import dask
 
@@ -98,7 +99,8 @@ def _threshold_crossing_depth(
         segment_top_depth
         + (DENSITY_THRESHOLD - segment_top_delta_density) * (depth - segment_top_depth) / crossing_segment_delta_density
     )
-    return crossing_depth.min(dim=depth_dimension)
+    first_crossing_depth = crossing_depth.fillna(numpy.inf).min(dim=depth_dimension, skipna=False)
+    return first_crossing_depth.where(crosses_threshold.any(dim=depth_dimension))
 
 
 def _deepest_valid_depth_index(temperature: xarray.DataArray) -> xarray.DataArray:
