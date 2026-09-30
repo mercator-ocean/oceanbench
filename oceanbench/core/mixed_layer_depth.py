@@ -72,24 +72,33 @@ def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     )
 
 
-def _threshold_crossing_depth(potential_density_anomaly: xarray.DataArray, depth: xarray.DataArray) -> xarray.DataArray:
+def _threshold_crossing_depth(
+    potential_density_anomaly: xarray.DataArray, native_depth: xarray.DataArray
+) -> xarray.DataArray:
     depth_dimension = Dimension.DEPTH.key()
-    reference_density = potential_density_anomaly.interp({depth_dimension: REFERENCE_DEPTH}).drop_vars(depth_dimension)
+    depth = native_depth.astype("float64")
+    reference_density = (
+        potential_density_anomaly.assign_coords({depth_dimension: depth})
+        .interp({depth_dimension: REFERENCE_DEPTH})
+        .drop_vars(depth_dimension)
+    )
     delta_density = potential_density_anomaly - reference_density
     level_is_below_reference = depth > REFERENCE_DEPTH
     shallower_depth = depth.shift({depth_dimension: 1})
     shallower_level_is_below_reference = shallower_depth > REFERENCE_DEPTH
     segment_top_depth = shallower_depth.where(shallower_level_is_below_reference, REFERENCE_DEPTH)
     segment_top_delta_density = delta_density.shift({depth_dimension: 1}).where(shallower_level_is_below_reference, 0)
-    crossing_depth = segment_top_depth + (DENSITY_THRESHOLD - segment_top_delta_density) * (
-        depth - segment_top_depth
-    ) / (delta_density - segment_top_delta_density)
     crosses_threshold = (
         level_is_below_reference
         & (segment_top_delta_density < DENSITY_THRESHOLD)
         & (delta_density >= DENSITY_THRESHOLD)
     )
-    return crossing_depth.where(crosses_threshold).min(dim=depth_dimension)
+    crossing_segment_delta_density = (delta_density - segment_top_delta_density).where(crosses_threshold)
+    crossing_depth = (
+        segment_top_depth
+        + (DENSITY_THRESHOLD - segment_top_delta_density) * (depth - segment_top_depth) / crossing_segment_delta_density
+    )
+    return crossing_depth.min(dim=depth_dimension)
 
 
 def _deepest_valid_depth_index(temperature: xarray.DataArray) -> xarray.DataArray:
