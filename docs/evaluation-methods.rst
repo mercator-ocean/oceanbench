@@ -36,8 +36,8 @@ Class IV scores the same observations for every challenger, whatever its grid. A
 
 ``Observations`` gives the number of these observations at the first lead day, and ``Missing`` how many of them the challenger has no value for; those are left out of the RMSD.
 
-For gridded RMSD metrics, OceanBench computes an area-weighted spatial mean of squared errors using ``cos(latitude)`` weights, so each grid cell contributes in proportion to the ocean area it represents rather than counting equally, ignoring missing land values during the weighted reduction, then averages the daily RMSE over forecast initialization days.
-A cell is scored when it is ocean in the ocean mask and both the challenger and the reference have a value there. On a challenger grid other than the twelfth of a degree one, each cell takes the nearest mask cell. ``Missing`` counts, per variable and depth, the ocean cells where the reference has a value and the challenger has none, and ``Missing fraction`` gives their area weighted share. Both are averaged over initialization and lead days and do not change the RMSD.
+For gridded RMSD metrics, OceanBench takes the ``cos(latitude)`` area-weighted mean of squared errors over the scored cells, so each cell counts in proportion to its area, then averages the daily RMSD over forecast initialization days.
+A cell is scored when it is ocean in the ocean mask and both the challenger and the reference have a value there. On a challenger grid other than the twelfth of a degree one, each cell takes the nearest mask cell. ``Missing fraction`` gives, per variable and depth, the area-weighted share of ocean cells where the reference has a value and the challenger has none. It is averaged over initialization and lead days and does not change the RMSD.
 
 Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
 **********************************************************************************************
@@ -59,8 +59,8 @@ Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLORYS 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `Mixed Layer Depth (MLD) <https://en.wikipedia.org/wiki/Mixed_layer>`_ computations over the challenger dataset and the GLORYS reanalysis dataset.
 
 The mixed layer depth is computed in meters from each dataset's native vertical levels up to 600 meters, following `de Boyer Montégut et al., 2004 <https://doi.org/10.1029/2004JC002378>`_: it is the depth where potential density first exceeds its value at 10 m by 0.03 kg/m³, interpolated linearly between levels. Potential density is TEOS-10 ``sigma0`` from conservative temperature and absolute salinity.
-If the threshold is not reached within the capped profile, OceanBench reports the deepest finite level available within the cap; in deep-water columns, mixed layers deeper than 600 meters are therefore reported at the deepest level above 600 meters.
-This native-grid diagnostic preserves each system's represented vertical structure; the interpolated crossing depth makes it depend less on vertical resolution, but vertical resolution still affects cross-challenger comparability.
+When the threshold is not reached above 600 m, the deepest available level above 600 m is reported (the seafloor level in shallow water).
+Vertical resolution still affects how comparable the values are across challengers.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS reanalysis
 **********************************************************************************************
@@ -98,8 +98,8 @@ Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLO12 a
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `Mixed Layer Depth (MLD) <https://en.wikipedia.org/wiki/Mixed_layer>`_ computations over the challenger dataset and the GLO12 analysis dataset.
 
 The mixed layer depth is computed in meters from each dataset's native vertical levels up to 600 meters, following `de Boyer Montégut et al., 2004 <https://doi.org/10.1029/2004JC002378>`_: it is the depth where potential density first exceeds its value at 10 m by 0.03 kg/m³, interpolated linearly between levels. Potential density is TEOS-10 ``sigma0`` from conservative temperature and absolute salinity.
-If the threshold is not reached within the capped profile, OceanBench reports the deepest finite level available within the cap; in deep-water columns, mixed layers deeper than 600 meters are therefore reported at the deepest level above 600 meters.
-This native-grid diagnostic preserves each system's represented vertical structure; the interpolated crossing depth makes it depend less on vertical resolution, but vertical resolution still affects cross-challenger comparability.
+When the threshold is not reached above 600 m, the deepest available level above 600 m is reported (the seafloor level in shallow water).
+Vertical resolution still affects how comparable the values are across challengers.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis
 **********************************************************************************************

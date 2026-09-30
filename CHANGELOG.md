@@ -38,7 +38,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 - The SSH to SLA conversion no longer loses part of the LangYa grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 - Class IV salinity uses the same vertical interpolation as the other variables, so shallow profiles are no longer dropped ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
 - Class IV tables keep rows with no score instead of dropping them ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
-- Mixed layer depth follows de Boyer Montégut et al. (2004): 10 m reference, interpolated depth and TEOS-10 density ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
+- Mixed layer depth follows the de Boyer Montégut et al. (2004) definition ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Geostrophic currents exclude 5 degrees around the equator instead of 0.5 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Lagrangian deviation now scores lead day 10 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Local stage builds retry transient remote read failures.
@@ -46,7 +46,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 ### Added
 
 - The OceanBench ocean mask: a twelfth of a degree cell is ocean when it is wet in both GLO12 and GLORYS12 ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
-- `Observations` and `Missing` columns in the Class IV tables, `Missing` and `Missing fraction` columns in the gridded RMSD tables ([#321](https://github.com/mercator-ocean/oceanbench/pull/321), [#329](https://github.com/mercator-ocean/oceanbench/pull/329), [#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
+- `Observations` and `Missing` columns in the Class IV tables, and a `Missing fraction` column in the gridded RMSD tables ([#321](https://github.com/mercator-ocean/oceanbench/pull/321), [#329](https://github.com/mercator-ocean/oceanbench/pull/329), [#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
 
 ## 0.5.1 - 2026-09-02
 
