@@ -37,7 +37,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 - Class IV, Lagrangian and geostrophic currents handle the dateline on global grids; observations and particles next to it were lost before ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 - The SSH to SLA conversion no longer loses part of the LangYa grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 - Class IV salinity uses the same vertical interpolation as the other variables, so shallow profiles are no longer dropped ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
-- Class IV tables keep rows with no score instead of dropping them ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
+- Class IV tables keep a variable and depth row even when the challenger has no value there, and show it as missing instead of dropping it ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
 - Mixed layer depth follows the de Boyer Montégut et al. (2004) definition ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Geostrophic currents exclude 5 degrees around the equator instead of 0.5 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Lagrangian deviation now scores lead day 10 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
