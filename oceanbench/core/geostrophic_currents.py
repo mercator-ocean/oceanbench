@@ -42,12 +42,9 @@ def _compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     safe_coriolis_parameter = numpy.where(numpy.abs(coriolis_parameter) < 1e-10, numpy.nan, coriolis_parameter)
 
     zonal_grid_spacing = (
-        numpy.gradient(longitude)
-        * (numpy.pi / 180)
-        * EARTH_RADIUS_METERS
-        * numpy.cos(latitude_radian[:, numpy.newaxis])
+        numpy.deg2rad(numpy.gradient(longitude)) * EARTH_RADIUS_METERS * numpy.cos(latitude_radian[:, numpy.newaxis])
     )
-    meridional_grid_spacing = numpy.gradient(latitude)[:, numpy.newaxis] * (numpy.pi / 180) * EARTH_RADIUS_METERS
+    meridional_grid_spacing = numpy.deg2rad(numpy.gradient(latitude))[:, numpy.newaxis] * EARTH_RADIUS_METERS
 
     if is_global_longitude_grid(longitude):
         eastern_neighbour = sea_surface_height.roll({Dimension.LONGITUDE.key(): -1})

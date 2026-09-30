@@ -59,12 +59,12 @@ def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     )
     threshold_mixed_layer_depth = _threshold_crossing_depth(potential_density_anomaly, depth)
     deepest_valid_depth = _depths_for_indices(depth, _deepest_valid_depth_index(temperature))
-    mixed_layer_depth_depth = threshold_mixed_layer_depth.fillna(deepest_valid_depth).assign_attrs(
+    unmasked_mixed_layer_depth = threshold_mixed_layer_depth.fillna(deepest_valid_depth).assign_attrs(
         {"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value}
     )
     temperature_mask = xarray.ufuncs.isfinite(temperature.isel({Dimension.DEPTH.key(): 0}))
 
-    masked_mixed_layer_depth = mixed_layer_depth_depth.where(temperature_mask)
+    masked_mixed_layer_depth = unmasked_mixed_layer_depth.where(temperature_mask)
 
     return xarray.Dataset(
         data_vars={Variable.MIXED_LAYER_DEPTH.key(): masked_mixed_layer_depth},

@@ -234,17 +234,17 @@ def _scored_variable_depth_pairs(dataset: xarray.Dataset, variables: list[Variab
     ]
 
 
-def _missing_value(missing_dataset: xarray.Dataset, variable_name: str, depth_level: str) -> float:
-    missing_array = missing_dataset[variable_name]
-    if Dimension.DEPTH.key() in missing_array.dims:
-        return float(missing_array.sel({Dimension.DEPTH.key(): depth_level}))
-    return float(missing_array)
+def _missing_fraction_at_depth(missing_fraction_dataset: xarray.Dataset, variable_name: str, depth_level: str) -> float:
+    missing_fraction = missing_fraction_dataset[variable_name]
+    if Dimension.DEPTH.key() in missing_fraction.dims:
+        return float(missing_fraction.sel({Dimension.DEPTH.key(): depth_level}))
+    return float(missing_fraction)
 
 
 def _to_pretty_dataframe(
     dataset: xarray.Dataset,
     variables: list[Variable],
-    missing_dataset: xarray.Dataset,
+    missing_fraction_dataset: xarray.Dataset,
 ) -> pandas.DataFrame:
     dataset_with_depth = _assign_depth_dimension(dataset) if dataset.get(Dimension.DEPTH.key()) is None else dataset
     scored_pairs = _scored_variable_depth_pairs(dataset_with_depth, variables)
@@ -257,7 +257,8 @@ def _to_pretty_dataframe(
     lead_days_count = dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
     pretty_dataframe = pandas.DataFrame(values_2d).set_index([lead_day_labels(1, lead_days_count)]).T
     pretty_dataframe[MISSING_FRACTION_COLUMN] = [
-        _missing_value(missing_dataset, variable_key, depth_level) for variable_key, depth_level in scored_pairs
+        _missing_fraction_at_depth(missing_fraction_dataset, variable_key, depth_level)
+        for variable_key, depth_level in scored_pairs
     ]
     return pretty_dataframe
 
@@ -288,22 +289,22 @@ def rmsd(
     ocean_mask: xarray.DataArray,
 ) -> pandas.DataFrame:
     """
-    Area weighted gridded RMSD over the ocean cells of the OceanBench ocean mask.
+    Area-weighted gridded RMSD over the ocean cells of the OceanBench ocean mask.
 
     The reference is first snapped to the challenger grid by nearest index. A cell is scored when it
     is ocean and both the challenger and the reference have a value. Ocean cells where the reference
     has a value and the challenger has none are not scored: the Missing fraction column reports their
-    area weighted share.
+    area-weighted share.
     """
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
     prepared_reference_dataset = _snap_reference_spatial_coordinates_to_challenger(
         prepared_challenger_dataset, _select_variables(_harmonise_dataset(reference_dataset), variables)
     )
     challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
-    missing_dataset = _missing_fractions(
+    missing_fraction_dataset = _missing_fractions(
         prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
     ).compute()
     computed_rmsd_dataset = _rmsd(
         prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
     ).compute()
-    return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_dataset)
+    return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_fraction_dataset)

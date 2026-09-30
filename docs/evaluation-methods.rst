@@ -60,14 +60,14 @@ The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.
 
 The mixed layer depth is computed in meters from each dataset's native vertical levels up to 600 meters, following `de Boyer Montégut et al., 2004 <https://doi.org/10.1029/2004JC002378>`_: it is the depth where potential density first exceeds its value at 10 m by 0.03 kg/m³, interpolated linearly between levels. Potential density is TEOS-10 ``sigma0`` from conservative temperature and absolute salinity.
 When the threshold is not reached above 600 m, the deepest available level above 600 m is reported (the seafloor level in shallow water).
-Vertical resolution still affects how comparable the values are across challengers.
+Vertical resolution affects how comparable the values are across challengers.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS reanalysis
 **********************************************************************************************
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `geostrophic current <https://en.wikipedia.org/wiki/Geostrophic_current>`_ computations over the challenger datasets and the GLORYS reanalysis dataset.
 
-The geostrophic currents are computed using sea surface height above geoid with Coriolis parameters Omega of 7.2921e-5, R of 6371000, and a gravity of 9.81 m/s². Latitudes within 5° of the Equator, where the Coriolis parameter vanishes and altimetry products switch to an equatorial formulation (`Lagerloef et al., 1999 <https://doi.org/10.1029/1999JC900197>`_), are excluded.
+The geostrophic currents are computed using sea surface height above geoid with an Earth rotation rate of 7.2921e-5 s⁻¹, an Earth radius of 6371 km and a gravity of 9.81 m/s². Latitudes within 5° of the Equator are excluded, where the Coriolis parameter vanishes and altimetry products switch to an equatorial formulation (`Lagerloef et al., 1999 <https://doi.org/10.1029/1999JC900197>`_).
 
 Deviation of Lagrangian trajectories compared to GLORYS reanalysis
 **********************************************************************************************
@@ -99,14 +99,14 @@ The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.
 
 The mixed layer depth is computed in meters from each dataset's native vertical levels up to 600 meters, following `de Boyer Montégut et al., 2004 <https://doi.org/10.1029/2004JC002378>`_: it is the depth where potential density first exceeds its value at 10 m by 0.03 kg/m³, interpolated linearly between levels. Potential density is TEOS-10 ``sigma0`` from conservative temperature and absolute salinity.
 When the threshold is not reached above 600 m, the deepest available level above 600 m is reported (the seafloor level in shallow water).
-Vertical resolution still affects how comparable the values are across challengers.
+Vertical resolution affects how comparable the values are across challengers.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis
 **********************************************************************************************
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `geostrophic current <https://en.wikipedia.org/wiki/Geostrophic_current>`_ computations over the challenger datasets and the GLO12 analysis dataset.
 
-The geostrophic currents are computed using sea surface height above geoid with Coriolis parameters Omega of 7.2921e-5, R of 6371000, and a gravity of 9.81 m/s². Latitudes within 5° of the Equator, where the Coriolis parameter vanishes and altimetry products switch to an equatorial formulation (`Lagerloef et al., 1999 <https://doi.org/10.1029/1999JC900197>`_), are excluded.
+The geostrophic currents are computed using sea surface height above geoid with an Earth rotation rate of 7.2921e-5 s⁻¹, an Earth radius of 6371 km and a gravity of 9.81 m/s². Latitudes within 5° of the Equator are excluded, where the Coriolis parameter vanishes and altimetry products switch to an equatorial formulation (`Lagerloef et al., 1999 <https://doi.org/10.1029/1999JC900197>`_).
 
 Deviation of Lagrangian trajectories compared to GLO12 analysis
 **********************************************************************************************
