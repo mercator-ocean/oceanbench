@@ -19,7 +19,7 @@ and the affected reports are re-published (never silently overwritten).
 
 ## Unreleased
 
-**Scores:** Class IV, gridded and Lagrangian tables change for every challenger. Class IV scores the same observations for every challenger on the rebuilt observation store, gridded RMSD uses a shared ocean mask, and several metrics are fixed (see Fixed).
+**Scores:** every table changes for every challenger. Class IV scores the same observations for every challenger on the rebuilt observation store, gridded RMSD uses a shared ocean mask, and several metrics are fixed (see Fixed).
 To be published as 0.6.0 once every challenger is rescored; the website shows the 0.5.0 reports until then.
 
 ### Challengers
@@ -28,27 +28,25 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 
 ### Changed
 
-- Class IV observations come from the rebuilt `observations2024-v2` store: quality flag 1 only, drifter currents filtered with undrogued drifters dropped and wind slippage subtracted, code 211 dropped, SLA outliers beyond 2 m flagged. Currents RMSD drops by roughly a third, salinity by under 1 percent ([#316](https://github.com/mercator-ocean/oceanbench/pull/316)).
+- Class IV uses the rebuilt `observations2024-v2` store: quality flag 1 only, cleaned drifter currents and SLA outliers flagged ([#316](https://github.com/mercator-ocean/oceanbench/pull/316)).
 - Class IV scores the same observations for every challenger: observations too close to the coast for a quarter degree grid are dropped ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
-- Gridded RMSD scores only the ocean cells of the OceanBench ocean mask, so every reference scores the same area ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
+- Gridded RMSD scores only the cells that are ocean in the OceanBench ocean mask, the same for every reference ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
 
 ### Fixed
 
-- Local stage builds retry transient remote chunk failures, including blosc decompression errors from truncated chunk payloads.
-- Class IV salinity is vertically interpolated with the same two level linear bracket as the other variables. The cubic spline it used before needed four valid levels and silently dropped shallow profiles ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- Class IV, Lagrangian and geostrophic currents handle the dateline on global grids; observations and particles next to it were lost before ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- The SSH to SLA conversion no longer loses part of the LangYa grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- Class IV salinity uses the same vertical interpolation as the other variables, so shallow profiles are no longer dropped ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
 - Class IV tables keep rows with no score instead of dropping them ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
-- On global grids, Class IV interpolates across the dateline for observations between the last grid longitude and 180 degrees, which were left without a value before ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
-- On global grids, Lagrangian particles cross the dateline instead of being deleted, and the challenger to reference distance takes the shorter way across it ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
-- On global grids, geostrophic currents use a centred zonal difference across the dateline, so the first and last longitude columns are computed like the interior ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
-- The SSH to SLA conversion matches the MDT to the challenger grid by nearest neighbour. Exact coordinate matching kept only part of the LangYa grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
-- Lagrangian deviation scores the last forecast day. The separation on lead day 10 was never written and is now scored ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
-- Mixed layer depth follows de Boyer Montégut et al. (2004): the 0.03 kg/m³ density threshold is taken from a 10 m reference level instead of the top model level, and the crossing depth is interpolated linearly instead of snapping to a model level, so it depends less on the vertical grid. Density is TEOS-10 potential density from conservative temperature, instead of treating potential temperature as in situ temperature and depth as pressure ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
-- Geostrophic currents exclude latitudes within 5 degrees of the equator, where the Coriolis parameter vanishes, instead of 0.5 degrees ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
+- Mixed layer depth follows de Boyer Montégut et al. (2004): 10 m reference, interpolated depth and TEOS-10 density ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
+- Geostrophic currents exclude 5 degrees around the equator instead of 0.5 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
+- Lagrangian deviation now scores lead day 10 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
+- Local stage builds retry transient remote read failures.
 
 ### Added
 
-- The OceanBench ocean mask: a twelfth of a degree cell is ocean when it is wet in both the GLO12 and GLORYS12 official static masks. It is defined at the six standard depths and at 643.57 m, and pinned by a checksum ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
-- `Observations` and `Missing` columns in the Class IV tables, and `Missing` and `Missing fraction` columns in the gridded RMSD tables ([#321](https://github.com/mercator-ocean/oceanbench/pull/321), [#329](https://github.com/mercator-ocean/oceanbench/pull/329), [#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
+- The OceanBench ocean mask: a twelfth of a degree cell is ocean when it is wet in both GLO12 and GLORYS12 ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
+- `Observations` and `Missing` columns in the Class IV tables, `Missing` and `Missing fraction` columns in the gridded RMSD tables ([#321](https://github.com/mercator-ocean/oceanbench/pull/321), [#329](https://github.com/mercator-ocean/oceanbench/pull/329), [#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
 
 ## 0.5.1 - 2026-09-02
 

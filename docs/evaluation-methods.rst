@@ -28,7 +28,7 @@ OceanBench evaluates challengers against the following reference datasets:
 
 You can open and explore these datasets by using the :mod:`oceanbench.datasets.reference` module.
 
-The OceanBench ocean mask says which cells of the twelfth of a degree grid are ocean. A cell is ocean when it is wet in both the GLO12 and GLORYS12 official static masks, so every metric scores the same area whatever its reference. It is defined at the six standard depths and at 643.57 m, the first level below 600 m, and its checksum is verified every time it is loaded.
+The OceanBench ocean mask says which cells of the twelfth of a degree grid are ocean. A cell is ocean when it is wet in both the GLO12 and GLORYS12 official static masks, so every metric scores the same area whatever its reference. It is defined at the six standard depths and at 643.57 m, the first level below 600 m.
 
 Class IV scores follow the IV-TT CLASS-4 framework (`Hernandez et al., 2009 <https://doi.org/10.5670/oceanog.2009.71>`_, `Ryan et al., 2015 <https://doi.org/10.1080/1755876X.2015.1022330>`_, `Divakaran et al., 2015 <https://doi.org/10.1080/1755876X.2015.1022333>`_): each forecast is compared with the observations at the observation time, position and depth, and the RMSD is reported per variable, depth bin and lead day. The observation selection and quality control applied when building the observation store are documented in the README above. Temperature and salinity are scored in depth bins down to 600 m. A challenger whose deepest level is shallower than 600 m is still scored on the full range, with its deepest level standing in for the missing depths.
 
