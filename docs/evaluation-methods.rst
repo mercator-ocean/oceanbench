@@ -59,7 +59,7 @@ Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLORYS 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `Mixed Layer Depth (MLD) <https://en.wikipedia.org/wiki/Mixed_layer>`_ computations over the challenger dataset and the GLORYS reanalysis dataset.
 
 The mixed layer depth is computed in meters from each dataset's native vertical levels up to 600 meters, following `de Boyer Montégut et al., 2004 <https://doi.org/10.1029/2004JC002378>`_: it is the depth where potential density first exceeds its value at 10 m by 0.03 kg/m³, interpolated linearly between levels. Potential density is TEOS-10 ``sigma0`` from conservative temperature and absolute salinity.
-If the threshold is not reached within the capped profile, OceanBench reports the deepest finite level available within the cap; in deep-water columns, mixed layers deeper than 600 meters are therefore reported as 600 meters.
+If the threshold is not reached within the capped profile, OceanBench reports the deepest finite level available within the cap; in deep-water columns, mixed layers deeper than 600 meters are therefore reported at the deepest level above 600 meters.
 This native-grid diagnostic preserves each system's represented vertical structure; the interpolated crossing depth makes it depend less on vertical resolution, but vertical resolution still affects cross-challenger comparability.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS reanalysis
@@ -98,7 +98,7 @@ Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLO12 a
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `Mixed Layer Depth (MLD) <https://en.wikipedia.org/wiki/Mixed_layer>`_ computations over the challenger dataset and the GLO12 analysis dataset.
 
 The mixed layer depth is computed in meters from each dataset's native vertical levels up to 600 meters, following `de Boyer Montégut et al., 2004 <https://doi.org/10.1029/2004JC002378>`_: it is the depth where potential density first exceeds its value at 10 m by 0.03 kg/m³, interpolated linearly between levels. Potential density is TEOS-10 ``sigma0`` from conservative temperature and absolute salinity.
-If the threshold is not reached within the capped profile, OceanBench reports the deepest finite level available within the cap; in deep-water columns, mixed layers deeper than 600 meters are therefore reported as 600 meters.
+If the threshold is not reached within the capped profile, OceanBench reports the deepest finite level available within the cap; in deep-water columns, mixed layers deeper than 600 meters are therefore reported at the deepest level above 600 meters.
 This native-grid diagnostic preserves each system's represented vertical structure; the interpolated crossing depth makes it depend less on vertical resolution, but vertical resolution still affects cross-challenger comparability.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis
