@@ -142,6 +142,32 @@ def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
     )
 
 
+def marine_heatwave_diagnostics_compared_to_glorys_reanalysis(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = "global",
+) -> DataFrame:
+    """
+    Compute Marine Heatwave diagnostics compared to GLORYS reanalysis.
+
+    Parameters
+    ----------
+    challenger_dataset : xarray.Dataset
+        The challenger dataset.
+    region : str, optional
+        The OceanBench region to evaluate on.
+
+    Returns
+    -------
+    DataFrame
+        The DataFrame containing the Marine Heatwave scores.
+    """
+
+    return metrics.marine_heatwave_diagnostics_compared_to_glorys_reanalysis(
+        challenger_dataset=challenger_dataset,
+        region=region,
+    )
+
+
 def rmsd_of_variables_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = "global",
@@ -239,6 +265,35 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
         The DataFrame containing the scores.
     """
     return metrics.deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
+        challenger_dataset=challenger_dataset,
+        region=region,
+    )
+
+
+def marine_heatwave_diagnostics_compared_to_glo12_analysis(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = "global",
+) -> DataFrame:
+    """
+    Compute Marine Heatwave diagnostics compared to GLO12 analysis.
+
+    The Marine Heatwave climatological mean and 90th percentile threshold are loaded
+    from OceanBench public data.
+
+    Parameters
+    ----------
+    challenger_dataset : xarray.Dataset
+        The challenger dataset.
+    region : str, optional
+        The OceanBench region to evaluate on.
+
+    Returns
+    -------
+    DataFrame
+        The DataFrame containing the Marine Heatwave scores.
+    """
+
+    return metrics.marine_heatwave_diagnostics_compared_to_glo12_analysis(
         challenger_dataset=challenger_dataset,
         region=region,
     )
