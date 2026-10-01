@@ -234,13 +234,19 @@ function readDynamicTables(reader) {
   return { literals: lengths.slice(0, literalCount), distances: lengths.slice(literalCount) };
 }
 
-export async function loadStore(storeUrl) {
+// A store is republished in place under the same keys while its chunks are served as
+// immutable, so every request carries `version` (the manifest's generation stamp, published
+// together with the chunks) as a query token: a republish changes every URL and no stale
+// cached chunk or metadata can be mixed with the new manifest.
+export async function loadStore(storeUrl, version) {
   const base = storeUrl.replace(/\/$/, "");
-  const response = await fetch(`${base}/.zmetadata`);
+  const query = version ? `?v=${encodeURIComponent(version)}` : "";
+  const response = await fetch(`${base}/.zmetadata${query}`);
   if (!response.ok) throw new Error(`Cannot load ${base}/.zmetadata (${response.status})`);
   const consolidated = await response.json();
   return {
     baseUrl: base,
+    query,
     metadata: consolidated.metadata,
     chunkCache: new Map(),
     coordinateCache: new Map(),
@@ -410,7 +416,7 @@ export function isLayerCached(store, { variable, level, startIndex, leadIndex })
 }
 
 async function requestChunk(store, path, chunkKey, codecId, signal) {
-  const url = `${store.baseUrl}/${path}/${chunkKey}`;
+  const url = `${store.baseUrl}/${path}/${chunkKey}${store.query}`;
   const started = performance.now();
   // Name the resource (the variable/level path) rather than echoing the raw tile
   // URL, and turn a bare network failure ("Failed to fetch") into the same

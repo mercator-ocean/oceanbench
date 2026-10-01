@@ -44,6 +44,28 @@ def test_content_type_keeps_zarr_chunks_and_metadata_as_octet_stream(path):
     assert s3.content_type_for_path(path) == "application/octet-stream"
 
 
+@pytest.mark.parametrize(
+    ("path", "cache_control"),
+    [
+        ("viewer/data/glonet.zarr/level/0/sst/0.0.1.2", s3.IMMUTABLE_CACHE_CONTROL),
+        ("viewer/data/glonet.zarr/level/0/latitude/0", s3.IMMUTABLE_CACHE_CONTROL),
+        ("viewer/data/glonet.columns.zarr/sea_water_salinity/0.0.0.1.2", s3.IMMUTABLE_CACHE_CONTROL),
+        ("viewer/data/datasets.json", s3.MUTABLE_INDEX_CACHE_CONTROL),
+        ("viewer/data/scores-summary.json", s3.MUTABLE_INDEX_CACHE_CONTROL),
+        ("viewer/data/glonet.viewer-manifest.json", s3.MUTABLE_INDEX_CACHE_CONTROL),
+        ("scores.parquet", s3.REVALIDATE_CACHE_CONTROL),
+        ("insights/glonet/global/class4-matchups.parquet", s3.REVALIDATE_CACHE_CONTROL),
+        ("insights/glonet/global/eddies.json", s3.REVALIDATE_CACHE_CONTROL),
+        ("insights/glonet/global/year-error-geography.json", s3.REVALIDATE_CACHE_CONTROL),
+        ("viewer/data/insights.json", s3.REVALIDATE_CACHE_CONTROL),
+        ("viewer/data/glonet.zarr/.zmetadata", s3.REVALIDATE_CACHE_CONTROL),
+        ("viewer/app.js", s3.REVALIDATE_CACHE_CONTROL),
+    ],
+)
+def test_cache_control_keeps_only_zarr_chunks_immutable(path, cache_control):
+    assert s3.cache_control_for_path(path) == cache_control
+
+
 def _write(path, data=b"x"):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
@@ -187,6 +209,7 @@ def test_upload_one_gzips_json_with_content_encoding(tmp_path):
     assert call["ContentType"] == "application/json"
     assert call["ContentEncoding"] == "gzip"
     assert gzip.decompress(call["Body"]) == payload
+    assert call["CacheControl"] == "no-cache"
     assert stored_item.size == len(call["Body"])
     client.upload_file.assert_not_called()
 
@@ -202,6 +225,7 @@ def test_upload_one_leaves_non_json_untouched(tmp_path):
 
     client.put_object.assert_not_called()
     client.upload_file.assert_called_once()
+    assert client.upload_file.call_args.kwargs["ExtraArgs"]["CacheControl"] == "no-cache"
 
 
 def _missing_object():

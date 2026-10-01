@@ -43,6 +43,7 @@ _DEFAULT_CONTENT_TYPE = "application/octet-stream"
 
 IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 MUTABLE_INDEX_CACHE_CONTROL = "public, max-age=60"
+REVALIDATE_CACHE_CONTROL = "no-cache"
 _MUTABLE_INDEX_NAMES = frozenset({"datasets.json", "scores-summary.json"})
 _MUTABLE_INDEX_SUFFIX = ".viewer-manifest.json"
 _ZARR_CHUNK_NAME = re.compile(r"^\d+(\.\d+)*$")
@@ -57,20 +58,23 @@ def content_type_for_path(path: str | os.PathLike) -> str:
     return _CONTENT_TYPE_BY_SUFFIX.get(Path(path).suffix, _DEFAULT_CONTENT_TYPE)
 
 
-def cache_control_for_path(path: str | os.PathLike) -> str | None:
-    """Return the Cache-Control to store an object under, or ``None`` to omit the header.
+def cache_control_for_path(path: str | os.PathLike) -> str:
+    """Return the Cache-Control to store an object under.
 
-    Content-addressed artifacts the viewer never re-reads after a republish (zarr
-    pyramid chunks, parquet match-ups) are cached for a year and marked immutable.
-    The few fixed-name indexes the viewer polls to discover everything else get a
-    short max-age instead. Anything not in either class keeps the storage default.
+    Everything is republished in place under the same keys, so only zarr chunks may be
+    cached for a year and marked immutable: the viewer requests a store's chunks with the
+    generation stamp of the manifest published alongside them as a query token, so a
+    republish changes their URLs. The few fixed-name indexes the viewer polls to discover
+    everything else get a short max-age. Everything else (parquet, insight JSON, zarr
+    metadata, site assets) must revalidate on every use, which costs a conditional request
+    answered by a 304 while the object is unchanged.
     """
     name = Path(path).name
     if name in _MUTABLE_INDEX_NAMES or name.endswith(_MUTABLE_INDEX_SUFFIX):
         return MUTABLE_INDEX_CACHE_CONTROL
-    if Path(path).suffix == ".parquet" or _ZARR_CHUNK_NAME.match(name):
+    if _ZARR_CHUNK_NAME.match(name):
         return IMMUTABLE_CACHE_CONTROL
-    return None
+    return REVALIDATE_CACHE_CONTROL
 
 
 @dataclass(frozen=True)
@@ -316,14 +320,12 @@ def _upload_one(
             Body=body,
             ContentType="application/json",
             ContentEncoding="gzip",
-            **({"CacheControl": cache_control} if cache_control else {}),
+            CacheControl=cache_control,
         )
         return stored_item, True
     if should_skip_upload(s3_client, bucket, item, force=force):
         return item, False
-    extra_arguments = {"ContentType": content_type_for_path(item.local_path)}
-    if cache_control:
-        extra_arguments["CacheControl"] = cache_control
+    extra_arguments = {"ContentType": content_type_for_path(item.local_path), "CacheControl": cache_control}
     s3_client.upload_file(str(item.local_path), bucket, item.key, ExtraArgs=extra_arguments)
     return item, True
 

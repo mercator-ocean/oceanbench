@@ -167,6 +167,12 @@ async function runConfiguration(playwright, config, baseUrl, expectations) {
     // Let the forward scrub's tail (prefetch of neighbouring leads, lazy chart loads)
     // finish before arming the counter, and count only field-chunk reads: the invariant
     // is "a warm back-scrub re-reads no field data", not "the app goes silent".
+    // Arm only once the boot has finished: the boot's one-time loads (scores-summary.json,
+    // rmsd-by-depth.json, the class4 match-ups) used to land in the window whenever they
+    // took longer than the fixed wait.
+    await page.waitForFunction(() => window.oceanbenchViewerQaProbe && window.oceanbenchViewerQaProbe.booted, null, {
+      timeout: 120000,
+    });
     await page.waitForTimeout(4000);
     const warmScrubCounts = emptyRequestCounts();
     const warmScrubUrls = [];

@@ -403,7 +403,11 @@ artifacts.
   baselines so any pair can be differenced client-side.
 - Volume: ~40–50 GB per 1/12° dataset-year compressed (×1.33 pyramid
   overhead included); ~0.5 TB per benchmark year across all datasets.
-  Write-once paths, published with an immutable Cache-Control.
+  Republished in place under the same keys. Chunks are published with an
+  immutable Cache-Control and the viewer requests every chunk and metadata
+  file of a store with `?v=<manifest provenance.generated_at>` (a column store
+  takes the stamp of the manifest it is named after), so a republish changes
+  the URLs (§8 cache policy).
 
 ### Read path (what "fluid" means, testable)
 
@@ -509,6 +513,14 @@ bucket-wide, so browser
 range GETs against the published tree work without any per-publish setup. The
 current site and `public/evaluation-reports/` remain untouched until parity
 (see Phase gates). The earlier `benchmark-dev/` dev prefix is retired.
+
+Cache policy (`cache_control_for_path`): everything is republished in place
+under the same keys. Zarr chunks are `public, max-age=31536000, immutable`,
+safe only because the viewer versions their URLs (§6). The fixed-name indexes
+(`datasets.json`, `scores-summary.json`, `*.viewer-manifest.json`) are
+`public, max-age=60`. Everything else (`scores.parquet`, insight parquet and
+JSON, zarr metadata, viewer code) is `no-cache`: browsers revalidate with the
+ETag and get a 304 while the object is unchanged.
 
 ## 9. Port vs rebuild inventory
 

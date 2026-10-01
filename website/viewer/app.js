@@ -214,10 +214,9 @@ async function ensureStore(slug) {
   if (stores.has(slug)) return stores.get(slug);
   const descriptor = datasetCatalog.find((entry) => entry.slug === slug);
   if (!descriptor) throw new Error(`Unknown dataset ${slug}`);
-  const [store, manifest] = await Promise.all([
-    loadStore(resolveViewerDataUrl(descriptor.store)),
-    loadManifest(resolveViewerDataUrl(descriptor.manifest)),
-  ]);
+  // The manifest comes first: its generation stamp versions every request to the store.
+  const manifest = await loadManifest(resolveViewerDataUrl(descriptor.manifest));
+  const store = await loadStore(resolveViewerDataUrl(descriptor.store), storeVersion(manifest));
   stores.set(slug, store);
   manifests.set(slug, manifest);
   return store;
@@ -241,6 +240,12 @@ function releaseUnusedStores() {
 
 function manifestFor(slug) {
   return manifests.get(slug);
+}
+
+// The token that versions a store's requests: the generation stamp of the manifest published
+// together with that store. Null (no token) for a manifest that carries none.
+function storeVersion(manifest) {
+  return (manifest && manifest.provenance && manifest.provenance.generated_at) || null;
 }
 
 async function loadCoordinates(slug, level) {
@@ -2108,14 +2113,26 @@ async function ensureColumnStore(slug) {
   let store = false;
   try {
     const descriptor = datasetCatalog.find((entry) => entry.slug === slug);
-    store = await loadStore(
-      resolveColumnStoreUrl(slug, descriptor && descriptor.store, descriptor && descriptor.columns),
-    );
+    const columnsUrl = resolveColumnStoreUrl(slug, descriptor && descriptor.store, descriptor && descriptor.columns);
+    store = await loadStore(columnsUrl, await columnStoreVersion(slug, descriptor, columnsUrl));
   } catch {
     store = false;
   }
   columnStores.set(slug, store);
   return store;
+}
+
+// A column store is published with the manifest of the dataset it is named after
+// (<owner>.columns.zarr beside <owner>.viewer-manifest.json), which for a dataset reading its
+// twin's store is not its own manifest, so the token comes from that owner manifest.
+async function columnStoreVersion(slug, descriptor, columnsUrl) {
+  const ownerManifestUrl = columnsUrl.replace(/\.columns\.zarr$/, ".viewer-manifest.json");
+  if (descriptor && resolveViewerDataUrl(descriptor.manifest) === ownerManifestUrl) return storeVersion(manifestFor(slug));
+  try {
+    return storeVersion(await loadManifest(ownerManifestUrl));
+  } catch {
+    return null;
+  }
 }
 
 // Show/enable the "Water column (click)" overlay option only when at least one visible
@@ -6262,6 +6279,7 @@ async function main() {
   // The arrangement the first view was fitted (or deep-linked) for.
   fittedGeometry = panelGeometryKey();
   hashHistoryReady = true;
+  if (window.oceanbenchViewerQaProbe) window.oceanbenchViewerQaProbe.booted = true;
 }
 
 main();
