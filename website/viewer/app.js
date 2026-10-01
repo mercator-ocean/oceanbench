@@ -2755,10 +2755,35 @@ function refitOnGeometryChange() {
   return true;
 }
 
-// A display mode change keeps the user's zoom and centre: swipe and difference share
-// one map box, and side-by-side only needs them clamped to its new box. Records the
-// arrangement so the resize handler does not re-fit it afterwards.
-function keepViewOnDisplayModeChange() {
+// Whether the view still shows the region's fit for the current box (or is zoomed out
+// past it): the fit is computed on a copy and the view restored. Measured before a
+// display mode change reshapes the box.
+function viewAtRegionFit() {
+  const current = { zoom: view.zoom, centerNX: view.centerNX, centerNY: view.centerNY };
+  fitRegionView();
+  if (!REGION_BOUNDS[shared.region]) view.centerNX = current.centerNX;
+  clampView();
+  const fit = { zoom: view.zoom, centerNX: view.centerNX, centerNY: view.centerNY };
+  Object.assign(view, current);
+  // Zoomed out past the fit, the map does not fill the box and the centre is moot.
+  if (current.zoom < fit.zoom * 0.999) return true;
+  return (
+    current.zoom <= fit.zoom * 1.001 &&
+    Math.abs(current.centerNX - fit.centerNX) < 1e-3 &&
+    Math.abs(current.centerNY - fit.centerNY) < 1e-3
+  );
+}
+
+// A display mode change keeps the user's zoom and centre once they have zoomed or
+// panned away from the fit: swipe and difference share one map box, and side-by-side
+// only needs them clamped to its new box. A view still at the fit is re-fitted to the
+// new box instead, so the default view keeps filling it. Records the arrangement so
+// the resize handler does not re-fit it afterwards.
+function updateViewOnDisplayModeChange(wasAtFit) {
+  if (wasAtFit) {
+    refitOnGeometryChange();
+    return;
+  }
   fittedGeometry = panelGeometryKey();
   for (let i = 0; i < shared.layout; i += 1) resizePanelCanvases(panels[i]);
   clampView();
@@ -5604,10 +5629,11 @@ function wireGlobalControls() {
   }
   for (const button of document.querySelectorAll(".display-switch [data-display]")) {
     button.addEventListener("click", () => {
+      const wasAtFit = viewAtRegionFit();
       setSharedDisplayMode(button.dataset.display);
       markDisplayButtons();
       syncPanelGrid();
-      keepViewOnDisplayModeChange();
+      updateViewOnDisplayModeChange(wasAtFit);
       renderAllPanels().then(() => {
         redrawOverlaysAll();
         updateSharedColorbar();
