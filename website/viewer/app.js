@@ -3695,6 +3695,7 @@ async function renderRailYearRmsd(shown, range) {
     unit,
     signed: biasMode,
     yBound,
+    typeScale: chartTypeScale(slot),
   });
   const bandNote = !lines.some((line) => line.ciLow)
     ? ""

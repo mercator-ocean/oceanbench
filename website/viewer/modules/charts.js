@@ -18,8 +18,6 @@ const PAD_LEFT = 50;
 const PAD_RIGHT = 12;
 const PAD_TOP = 14;
 const PAD_BOTTOM = 30;
-// Smallest gap between two start-date ticks, in view units (a label is about 33 wide).
-const START_TICK_SPACING = 50;
 
 // Left gutter for a y axis whose tick labels are wider than the shared PAD_LEFT allows.
 // Tick type is pinned in px, so in view units it grows by typeScale as the slot narrows:
@@ -331,7 +329,7 @@ export function psdSpectraSVG(
  * when signed, so the axis stays STABLE across lead-day scrubs (the caller passes the
  * max across ALL leads). Without it the axis fits the plotted series, as before.
  */
-export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = "", signed = false, yBound = 0 } = {}) {
+export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = "", signed = false, yBound = 0, typeScale = 1 } = {}) {
   const usable = (series || []).filter((line) => line && line.dates && line.dates.length);
   if (!usable.length) return emptyChart(title, "no RMSE by start for this variable");
   const area = plotArea(usable.length > 1 ? (usable.length - 1) * LEGEND_ROW : 0);
@@ -386,9 +384,13 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
     }
   }
 
-  // Month-ish ticks: a handful of evenly spaced start dates, at least
-  // START_TICK_SPACING apart so a short series (a period) does not crowd its labels.
-  const tickStep = Math.max(1, Math.round(allDates.length / 6), Math.ceil(START_TICK_SPACING / (area.width / lastIndex)));
+  // Month-ish ticks: a handful of evenly spaced start dates, spaced by the rendered label
+  // width so a short series (a period) or a narrow slot does not crowd its labels. An
+  // "MM-DD" label is 5 monospace characters (see labelGutter); the first label starts at
+  // its tick and a right-edge one ends at it, so neighbours sit a label and a half plus
+  // one character apart.
+  const tickSpacing = (1.5 * 5 + 1) * 6 * typeScale;
+  const tickStep = Math.max(1, Math.round(allDates.length / 6), Math.ceil(tickSpacing / (area.width / lastIndex)));
   for (let i = 0; i < allDates.length; i += tickStep) {
     const date = allDates[i];
     // The first date sits on the left edge, so it starts there instead of centring
