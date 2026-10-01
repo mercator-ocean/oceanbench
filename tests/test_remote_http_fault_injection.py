@@ -5,6 +5,7 @@
 import asyncio
 import pickle
 import threading
+import time
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
@@ -48,6 +49,7 @@ class _FaultyZarrServer:
         self.directory = directory
         self.faults: dict[str, list[str]] = {}
         self.request_counts: Counter[str] = Counter()
+        self.client_ports: set[int] = set()
         self.url = ""
         self._loop = asyncio.new_event_loop()
         self._ready = threading.Event()
@@ -67,6 +69,7 @@ class _FaultyZarrServer:
     async def _handle(self, request: web.Request) -> web.StreamResponse:
         key = request.match_info["key"]
         self.request_counts[key] += 1
+        self.client_ports.add(request.transport.get_extra_info("peername")[1])
         pending_faults = self.faults.get(key, [])
         fault = pending_faults.pop(0) if pending_faults else None
         path = self.directory / key
@@ -168,6 +171,18 @@ def test_stage_build_with_faults_mid_write_matches_the_source_and_leaves_no_temp
     assert faulty_server.request_counts[TRUNCATED_CHUNK_KEY] == 2
     stage_week_directory = stage_directory / "challenger-forecast-10d"
     assert sorted(path.name for path in stage_week_directory.iterdir()) == ["20240103.zarr"]
+
+
+def test_idle_connection_older_than_the_timeout_is_not_reused(faulty_server, monkeypatch) -> None:
+    monkeypatch.setattr("oceanbench.core.remote_http.IDLE_CONNECTION_TIMEOUT_SECONDS", 0.2)
+    file_system = RetryingHTTPFileSystem(skip_instance_cache=True)
+
+    file_system.cat_file(f"{faulty_server.url}/zos/0.0")
+    file_system.cat_file(f"{faulty_server.url}/zos/1.0")
+    time.sleep(0.4)
+    file_system.cat_file(f"{faulty_server.url}/zos/2.0")
+
+    assert len(faulty_server.client_ports) == 2
 
 
 def _read_chunk_in_worker(pickled_store: bytes) -> list[float]:

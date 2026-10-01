@@ -19,6 +19,8 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 FIRST_RETRY_BACKOFF_SECONDS = 4
 MAXIMUM_RETRY_BACKOFF_SECONDS = 32
 RETRIABLE_REQUEST_ERRORS = (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError, TimeoutError, ConnectionError)
+# The CloudFerro object store closes idle connections after 10 s, so drop them before it does.
+IDLE_CONNECTION_TIMEOUT_SECONDS = 5
 
 # FSStore reads these as an absent chunk (fill value); fsspec raises KeyError for absent keys,
 # so download failures (OSError subclasses) propagate instead of being staged as fill values.
@@ -65,7 +67,17 @@ async def _request_with_retries(url: str, request: Callable[[], Awaitable[CALLBA
     return await request()
 
 
+async def _client_dropping_idle_connections(**client_keyword_arguments: Any) -> aiohttp.ClientSession:
+    return aiohttp.ClientSession(
+        connector=aiohttp.TCPConnector(keepalive_timeout=IDLE_CONNECTION_TIMEOUT_SECONDS),
+        **client_keyword_arguments,
+    )
+
+
 class RetryingHTTPFileSystem(HTTPFileSystem):
+    def __init__(self, *args, get_client=_client_dropping_idle_connections, **kwargs):
+        super().__init__(*args, get_client=get_client, **kwargs)
+
     async def _cat_file(self, url, start=None, end=None, **kwargs):
         return await _request_with_retries(url, partial(super()._cat_file, url, start=start, end=end, **kwargs))
 
