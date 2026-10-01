@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import gsw
-import numpy
 import xarray
 import dask
 
@@ -17,8 +16,6 @@ from oceanbench.core.dataset_utils import (
 )
 
 MAXIMUM_MIXED_LAYER_DEPTH = 600.0
-REFERENCE_DEPTH = 10.0
-DENSITY_THRESHOLD = 0.03
 
 
 def compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
@@ -35,72 +32,54 @@ def _cap_depth(dataset: xarray.Dataset) -> xarray.Dataset:
     return dataset.isel({depth_dimension: (depth <= MAXIMUM_MIXED_LAYER_DEPTH).values})
 
 
-def _compute_potential_density_anomaly(
-    practical_salinity: xarray.DataArray,
-    potential_temperature: xarray.DataArray,
+def _compute_absolute_salinity(
+    salinity: xarray.DataArray,
     depth: xarray.DataArray,
     longitude: xarray.DataArray,
     latitude: xarray.DataArray,
 ) -> xarray.DataArray:
-    pressure = gsw.p_from_z(-depth, latitude)
-    absolute_salinity = gsw.SA_from_SP(practical_salinity, pressure, longitude, latitude).clip(min=0)
-    conservative_temperature = gsw.CT_from_pt(absolute_salinity, potential_temperature)
-    return gsw.sigma0(absolute_salinity, conservative_temperature)
+    return gsw.SA_from_SP(salinity, depth, longitude, latitude)
+
+
+def _compute_potential_density(
+    absolute_salinity: xarray.DataArray,
+    temperature: xarray.DataArray,
+    depth: xarray.DataArray,
+) -> xarray.DataArray:
+    absolute_salinity = absolute_salinity.clip(min=0)  # filter out negative salinities
+
+    return gsw.pot_rho_t_exact(absolute_salinity, temperature, depth, 0)
 
 
 def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
+    density_threshold = 0.03  # kg/m^3 threshold for MLD definition
     temperature = dataset[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()]
+    salinity = dataset[Variable.SEA_WATER_SALINITY.key()]
     depth = dataset[Dimension.DEPTH.key()]
-    potential_density_anomaly = _compute_potential_density_anomaly(
-        dataset[Variable.SEA_WATER_SALINITY.key()],
-        temperature,
-        depth,
-        dataset[Dimension.LONGITUDE.key()],
-        dataset[Dimension.LATITUDE.key()],
-    )
-    threshold_mixed_layer_depth = _threshold_crossing_depth(potential_density_anomaly, depth)
-    deepest_valid_depth = _depths_for_indices(depth, _deepest_valid_depth_index(temperature))
-    unmasked_mixed_layer_depth = threshold_mixed_layer_depth.fillna(deepest_valid_depth).assign_attrs(
+    latitude = dataset[Dimension.LATITUDE.key()]
+    longitude = dataset[Dimension.LONGITUDE.key()]
+    absolute_salinity = _compute_absolute_salinity(salinity, depth, longitude, latitude)
+    potential_density = _compute_potential_density(absolute_salinity, temperature, depth)
+    surface_density = potential_density.isel({Dimension.DEPTH.key(): 0})
+
+    delta_density = potential_density - surface_density
+    mask = delta_density >= density_threshold
+    threshold_crossed = mask.any(dim=Dimension.DEPTH.key())
+
+    threshold_mixed_layer_depth_index = mask.argmax(dim=Dimension.DEPTH.key())
+    deepest_valid_depth_index = _deepest_valid_depth_index(temperature)
+    mixed_layer_depth_index = threshold_mixed_layer_depth_index.where(threshold_crossed, deepest_valid_depth_index)
+    mixed_layer_depth_depth = _depths_for_indices(depth, mixed_layer_depth_index).assign_attrs(
         {"standard_name": StandardVariable.MIXED_LAYER_THICKNESS.value}
     )
     temperature_mask = xarray.ufuncs.isfinite(temperature.isel({Dimension.DEPTH.key(): 0}))
 
-    masked_mixed_layer_depth = unmasked_mixed_layer_depth.where(temperature_mask)
+    masked_mixed_layer_depth = mixed_layer_depth_depth.where(temperature_mask)
 
     return xarray.Dataset(
         data_vars={Variable.MIXED_LAYER_DEPTH.key(): masked_mixed_layer_depth},
         coords=dataset.coords,
     )
-
-
-def _threshold_crossing_depth(
-    potential_density_anomaly: xarray.DataArray, native_depth: xarray.DataArray
-) -> xarray.DataArray:
-    depth_dimension = Dimension.DEPTH.key()
-    depth = native_depth.astype("float64")
-    reference_density = (
-        potential_density_anomaly.assign_coords({depth_dimension: depth})
-        .interp({depth_dimension: REFERENCE_DEPTH})
-        .drop_vars(depth_dimension)
-    )
-    delta_density = potential_density_anomaly - reference_density
-    level_is_below_reference = depth > REFERENCE_DEPTH
-    shallower_depth = depth.shift({depth_dimension: 1})
-    shallower_level_is_below_reference = shallower_depth > REFERENCE_DEPTH
-    segment_top_depth = shallower_depth.where(shallower_level_is_below_reference, REFERENCE_DEPTH)
-    segment_top_delta_density = delta_density.shift({depth_dimension: 1}).where(shallower_level_is_below_reference, 0)
-    crosses_threshold = (
-        level_is_below_reference
-        & (segment_top_delta_density < DENSITY_THRESHOLD)
-        & (delta_density >= DENSITY_THRESHOLD)
-    )
-    crossing_segment_delta_density = (delta_density - segment_top_delta_density).where(crosses_threshold)
-    crossing_depth = (
-        segment_top_depth
-        + (DENSITY_THRESHOLD - segment_top_delta_density) * (depth - segment_top_depth) / crossing_segment_delta_density
-    )
-    first_crossing_depth = crossing_depth.fillna(numpy.inf).min(dim=depth_dimension, skipna=False)
-    return first_crossing_depth.where(crosses_threshold.any(dim=depth_dimension))
 
 
 def _deepest_valid_depth_index(temperature: xarray.DataArray) -> xarray.DataArray:
