@@ -2755,6 +2755,15 @@ function refitOnGeometryChange() {
   return true;
 }
 
+// A display mode change keeps the user's zoom and centre: swipe and difference share
+// one map box, and side-by-side only needs them clamped to its new box. Records the
+// arrangement so the resize handler does not re-fit it afterwards.
+function keepViewOnDisplayModeChange() {
+  fittedGeometry = panelGeometryKey();
+  for (let i = 0; i < shared.layout; i += 1) resizePanelCanvases(panels[i]);
+  clampView();
+}
+
 function fitRegionView() {
   const bounds = REGION_BOUNDS[shared.region];
   const panel = panels.find((candidate) => candidate && candidate.els && candidate.els.field.width > 0);
@@ -5598,7 +5607,7 @@ function wireGlobalControls() {
       setSharedDisplayMode(button.dataset.display);
       markDisplayButtons();
       syncPanelGrid();
-      refitOnGeometryChange();
+      keepViewOnDisplayModeChange();
       renderAllPanels().then(() => {
         redrawOverlaysAll();
         updateSharedColorbar();
