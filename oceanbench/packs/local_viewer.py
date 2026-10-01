@@ -20,6 +20,7 @@ from oceanbench.publish.viewer_artifacts import (
     EDDY_CENSUS_FILENAME,
     MATCHUP_PARQUET_FILENAME,
     RMSD_BY_DEPTH_FILENAME,
+    YEAR_ERROR_GEOGRAPHY_BY_START_FILENAME,
     YEAR_ERROR_GEOGRAPHY_FILENAME,
     YEAR_RMSD_BY_START_FILENAME,
 )
@@ -38,6 +39,7 @@ _LOCAL_INSIGHT_FILENAMES = {
     "eddies": EDDY_CENSUS_FILENAME,
     "rmsd_by_depth": RMSD_BY_DEPTH_FILENAME,
     "year_error_geography": YEAR_ERROR_GEOGRAPHY_FILENAME,
+    "year_error_geography_by_start": YEAR_ERROR_GEOGRAPHY_BY_START_FILENAME,
     "year_rmsd_by_start": YEAR_RMSD_BY_START_FILENAME,
 }
 

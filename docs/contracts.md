@@ -321,6 +321,20 @@ evaluation by `oceanbench/publish/viewer_artifacts.py` (opt-in via
   lead_day, variable, depth_bin)`, and rows are still selected by
   `(variable, depth_bin)` within each group so a mixed group can never be
   misattributed.
+- `year-error-geography-by-start.parquet` (insights key
+  `year_error_geography_by_start`), same writer: the per-start sufficient
+  statistics of the error geography, so a reader can draw the map of any subset
+  of starts. Columns `variable` (SSH, T, S, u, v), `lead_day int16`,
+  `start_date`, `cell int32` (flat `lat_bin * nlon + lon_bin` index of the
+  geography grid), `n int32`, and float64 `absolute_error_sum`,
+  `signed_error_sum`, `squared_error_sum`, occupied cells only. One row group
+  per `(variable, lead_day, start_date)`, ordered that way, statistics on those
+  three columns only, ZSTD level 3; grid, depth bins, rounding decimals and
+  provenance sit in the `oceanbench_year_geography` key-value metadata. Summed
+  over a set of starts, `absolute_error_sum / n`, `signed_error_sum / n` and
+  `sqrt(max(squared_error_sum / n - bias ** 2, 0) / n)` (n >= 2) give the
+  `leads`, `bias` and `bias_se` of `year-error-geography.json` for those starts;
+  over all starts they reproduce that file exactly once rounded.
 - Skill aggregates — the per-challenger `class4_rmsd` (and the signed
   `class4_bias`, closer to zero is better) summary rows are derived by the
   existing `oceanbench/publish/aggregate.py` (1000-iteration start-date bootstrap

@@ -40,6 +40,7 @@ from oceanbench.pyramids import build_pyramid, viewer_layers
 MATCHUP_PARQUET_FILENAME = "class4-matchups.parquet"
 EDDY_CENSUS_FILENAME = "eddies.json"
 YEAR_ERROR_GEOGRAPHY_FILENAME = "year-error-geography.json"
+YEAR_ERROR_GEOGRAPHY_BY_START_FILENAME = "year-error-geography-by-start.parquet"
 YEAR_RMSD_BY_START_FILENAME = "year-rmsd-by-start.json"
 RMSD_BY_DEPTH_FILENAME = "rmsd-by-depth.json"
 
@@ -115,6 +116,25 @@ _YEAR_TARGETS = [
     ("northward_sea_water_velocity", "15m", "v"),
 ]
 _YEAR_GEOGRAPHY_DECIMALS = {"SSH": 4, "T": 3, "S": 4, "u": 4, "v": 4}
+
+# Per-start sufficient statistics of the error geography: summing them over any subset of starts
+# gives that subset's map with the same formulas as the whole-year file. One row group per
+# (variable, lead_day, start_date), ordered that way, so one variable and lead over a period of
+# consecutive starts is a single contiguous byte span.
+_YEAR_GEOGRAPHY_BY_START_SCHEMA = pyarrow.schema(
+    [
+        ("variable", pyarrow.string()),
+        ("lead_day", pyarrow.int16()),
+        ("start_date", pyarrow.string()),
+        ("cell", pyarrow.int32()),
+        ("n", pyarrow.int32()),
+        ("absolute_error_sum", pyarrow.float64()),
+        ("signed_error_sum", pyarrow.float64()),
+        ("squared_error_sum", pyarrow.float64()),
+    ]
+)
+_YEAR_GEOGRAPHY_BY_START_KEY_COLUMNS = ["variable", "lead_day", "start_date"]
+_YEAR_GEOGRAPHY_METADATA_KEY = b"oceanbench_year_geography"
 
 # Uncertainty on the per-start point estimates. The RMSD interval reuses the lead-curve method
 # (seeded percentile bootstrap, aggregate.py), same seed and 95% percentile interval, but
@@ -992,12 +1012,84 @@ def _analytic_bias_ci(signed_error: numpy.ndarray, bias: float) -> tuple[float |
     return (round(bias - half_width, 6), round(bias + half_width, 6))
 
 
+def _occupied_start_cells(
+    start_index: int,
+    count: numpy.ndarray,
+    absolute_error_sum: numpy.ndarray,
+    signed_error_sum: numpy.ndarray,
+    squared_error_sum: numpy.ndarray,
+) -> dict[str, numpy.ndarray]:
+    occupied = numpy.nonzero(count)
+    return {
+        "variable_index": occupied[0],
+        "lead_index": occupied[1],
+        "start_index": numpy.full(occupied[0].size, start_index),
+        "cell": occupied[2],
+        "n": count[occupied],
+        "absolute_error_sum": absolute_error_sum[occupied],
+        "signed_error_sum": signed_error_sum[occupied],
+        "squared_error_sum": squared_error_sum[occupied],
+    }
+
+
+def _write_year_geography_by_start(
+    start_cells: list[dict[str, numpy.ndarray]],
+    start_dates: list[str],
+    output_path: str,
+    grid: dict,
+    region: str,
+    source: str,
+) -> None:
+    empty = _occupied_start_cells(0, *([numpy.zeros((0, 0, 0), dtype=numpy.int64)] * 4))
+    columns = {name: numpy.concatenate([empty[name], *(cells[name] for cells in start_cells)]) for name in empty}
+    order = numpy.lexsort((columns["cell"], columns["start_index"], columns["lead_index"], columns["variable_index"]))
+    columns = {name: values[order] for name, values in columns.items()}
+    short_names = numpy.array([short for _, _, short in _YEAR_TARGETS], dtype=object)
+    table = pyarrow.table(
+        {
+            "variable": short_names[columns["variable_index"]],
+            "lead_day": columns["lead_index"] + 1,
+            "start_date": numpy.array(start_dates, dtype=object)[columns["start_index"]],
+            "cell": columns["cell"],
+            "n": columns["n"],
+            "absolute_error_sum": columns["absolute_error_sum"],
+            "signed_error_sum": columns["signed_error_sum"],
+            "squared_error_sum": columns["squared_error_sum"],
+        },
+        schema=_YEAR_GEOGRAPHY_BY_START_SCHEMA,
+    )
+    description = {
+        "grid": grid,
+        "depth_bin": {short: depth_bin for _, depth_bin, short in _YEAR_TARGETS},
+        "decimals": _YEAR_GEOGRAPHY_DECIMALS,
+        PROVENANCE_KEY: provenance_block(source=source, parameters={"grid": grid, "region": region}),
+    }
+    table = table.replace_schema_metadata({_YEAR_GEOGRAPHY_METADATA_KEY: json.dumps(description).encode("utf-8")})
+    group_starts = (
+        _group_boundaries([columns["variable_index"], columns["lead_index"], columns["start_index"]])
+        if table.num_rows
+        else numpy.zeros(0, numpy.int64)
+    )
+    group_ends = numpy.append(group_starts[1:], table.num_rows)
+    with pyarrow.parquet.ParquetWriter(
+        output_path,
+        table.schema,
+        compression="zstd",
+        compression_level=3,
+        write_statistics=_YEAR_GEOGRAPHY_BY_START_KEY_COLUMNS,
+    ) as writer:
+        for group_start, group_end in zip(group_starts.tolist(), group_ends.tolist()):
+            writer.write_table(table.slice(group_start, group_end - group_start))
+
+
 def _write_year_artifacts(
     matchup_parquet_path: str,
     region: str,
     geography_path: str,
     rmsd_path: str,
     source: str,
+    *,
+    geography_by_start_path: str,
 ) -> None:
     grid = _year_grid_for_region(region)
     cell_count = grid["nlat"] * grid["nlon"]
@@ -1008,6 +1100,11 @@ def _write_year_artifacts(
     error_square_sum = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count))
     bias_sum = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count))
     error_count = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count), dtype=numpy.int64)
+    start_error_sum = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count))
+    start_error_square_sum = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count))
+    start_bias_sum = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count))
+    start_error_count = numpy.zeros((variable_count, _YEAR_LEAD_DAY_COUNT, cell_count), dtype=numpy.int64)
+    start_cells: list[dict[str, numpy.ndarray]] = []
     rmsd_rows = {(variable, lead): [] for variable in range(variable_count) for lead in range(_YEAR_LEAD_DAY_COUNT)}
     start_dates: list[str] = []
     current_start = None
@@ -1031,6 +1128,13 @@ def _write_year_artifacts(
                 (start_date, root_mean_square, int(signed.size), bias, rmsd_low, rmsd_high, bias_low, bias_high)
             )
         start_accumulators.clear()
+        start_cells.append(
+            _occupied_start_cells(
+                len(start_dates) - 1, start_error_count, start_error_sum, start_bias_sum, start_error_square_sum
+            )
+        )
+        for accumulator in (start_error_count, start_error_sum, start_bias_sum, start_error_square_sum):
+            accumulator.fill(0)
 
     parquet_file = pyarrow.parquet.ParquetFile(matchup_parquet_path)
     columns = [
@@ -1099,6 +1203,12 @@ def _write_year_artifacts(
             numpy.add.at(error_square_sum[variable, lead], cell, valid_absolute_error * valid_absolute_error)
             numpy.add.at(bias_sum[variable, lead], cell, (model[valid] - observation[valid]))
             numpy.add.at(error_count[variable, lead], cell, 1)
+            start_error_count[variable, lead] += numpy.bincount(cell, minlength=cell_count)
+            start_error_sum[variable, lead] += numpy.bincount(cell, valid_absolute_error, cell_count)
+            start_error_square_sum[variable, lead] += numpy.bincount(
+                cell, valid_absolute_error * valid_absolute_error, cell_count
+            )
+            start_bias_sum[variable, lead] += numpy.bincount(cell, model[valid] - observation[valid], cell_count)
     if current_start is not None:
         flush(current_start)
 
@@ -1151,6 +1261,7 @@ def _write_year_artifacts(
         }
     Path(os.path.dirname(geography_path) or ".").mkdir(parents=True, exist_ok=True)
     Path(geography_path).write_text(json.dumps(geography), encoding="utf-8")
+    _write_year_geography_by_start(start_cells, start_dates, geography_by_start_path, grid, region, source)
 
     rmsd = {
         "variables": {},
@@ -1461,6 +1572,7 @@ def write_viewer_artifacts(
             year_error_geography_path,
             year_rmsd_by_start_path,
             source=f"{insights_relative}/{MATCHUP_PARQUET_FILENAME}",
+            geography_by_start_path=str(insights_directory / YEAR_ERROR_GEOGRAPHY_BY_START_FILENAME),
         )
     except Exception as error:  # noqa: BLE001
         flags.append(f"year artifacts skipped: {error}")

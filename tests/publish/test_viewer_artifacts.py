@@ -148,7 +148,14 @@ def test_year_artifacts_handle_a_mixed_variable_row_group(tmp_path) -> None:
 
     geography_path = str(tmp_path / "year-error-geography.json")
     rmsd_path = str(tmp_path / "year-rmsd-by-start.json")
-    viewer_artifacts._write_year_artifacts(matchup_path, "global", geography_path, rmsd_path, source="synthetic")
+    viewer_artifacts._write_year_artifacts(
+        matchup_path,
+        "global",
+        geography_path,
+        rmsd_path,
+        source="synthetic",
+        geography_by_start_path=str(tmp_path / "year-error-geography-by-start.parquet"),
+    )
 
     geography = json.loads(open(geography_path).read())
     ssh_cells = [value for value in geography["variables"]["SSH"]["leads"]["1"] if value is not None]
@@ -196,7 +203,14 @@ def _write_year_pair(tmp_path):
     viewer_artifacts.write_matchup_parquet(_year_ci_frame(), matchup_path)
     geography_path = str(tmp_path / "year-error-geography.json")
     rmsd_path = str(tmp_path / "year-rmsd-by-start.json")
-    viewer_artifacts._write_year_artifacts(matchup_path, "global", geography_path, rmsd_path, source="synthetic")
+    viewer_artifacts._write_year_artifacts(
+        matchup_path,
+        "global",
+        geography_path,
+        rmsd_path,
+        source="synthetic",
+        geography_by_start_path=str(tmp_path / "year-error-geography-by-start.parquet"),
+    )
     return (json.loads(open(geography_path).read()), json.loads(open(rmsd_path).read()))
 
 
@@ -225,7 +239,14 @@ def test_year_rmsd_by_start_is_the_pooled_reduction(tmp_path) -> None:
     viewer_artifacts.write_matchup_parquet(frame, matchup_path)
     geography_path = str(tmp_path / "year-error-geography.json")
     rmsd_path = str(tmp_path / "year-rmsd-by-start.json")
-    viewer_artifacts._write_year_artifacts(matchup_path, "global", geography_path, rmsd_path, source="synthetic")
+    viewer_artifacts._write_year_artifacts(
+        matchup_path,
+        "global",
+        geography_path,
+        rmsd_path,
+        source="synthetic",
+        geography_by_start_path=str(tmp_path / "year-error-geography-by-start.parquet"),
+    )
     series = json.loads(open(rmsd_path).read())["variables"]["SSH"]["leads"]["1"]
     for index, start_date in enumerate(series["dates"]):
         subset = frame[frame["start_date"] == numpy.datetime64(start_date)]
@@ -264,6 +285,182 @@ def test_year_geography_carries_shared_counts_and_bias_standard_error(tmp_path) 
             assert bias[cell] is not None
         else:
             assert bias_se[cell] is None
+
+
+_PERIOD_START_DATES = ("2024-01-03", "2024-01-10", "2024-01-17", "2024-01-24")
+
+
+def _period_matchup_frame(region: str) -> pandas.DataFrame:
+    """Every year target plus a non-target bin, NaN rows and points outside the regional grid."""
+    generator = numpy.random.default_rng(11)
+    latitude_range, longitude_range = {"global": ((-80, 80), (-180, 180)), "ibi": ((20, 60), (-25, 10))}[region]
+    targets = [(variable, depth_bin) for variable, depth_bin, _ in viewer_artifacts._YEAR_TARGETS]
+    blocks = []
+    for start_date in _PERIOD_START_DATES:
+        for lead_day in (1, 2, 10):
+            for variable, depth_bin in [*targets, ("sea_water_potential_temperature", "0-5m")]:
+                size = 300
+                observation_value = generator.normal(size=size)
+                observation_value[:3] = numpy.nan
+                blocks.append(
+                    pandas.DataFrame(
+                        {
+                            "variable": variable,
+                            "depth_bin": depth_bin,
+                            "lead_day": lead_day,
+                            "start_date": numpy.datetime64(start_date),
+                            "latitude": generator.uniform(*latitude_range, size=size),
+                            "longitude": generator.uniform(*longitude_range, size=size),
+                            "observation_value": observation_value,
+                            "model_value": observation_value + generator.normal(0.3, 0.5, size=size),
+                        }
+                    )
+                )
+    return pandas.concat(blocks, ignore_index=True)
+
+
+def _write_period_year_artifacts(frame: pandas.DataFrame, region: str, directory) -> tuple[dict, str]:
+    directory.mkdir(parents=True, exist_ok=True)
+    matchup_path = str(directory / "class4-matchups.parquet")
+    viewer_artifacts.write_matchup_parquet(frame, matchup_path)
+    geography_path = str(directory / "year-error-geography.json")
+    by_start_path = str(directory / viewer_artifacts.YEAR_ERROR_GEOGRAPHY_BY_START_FILENAME)
+    viewer_artifacts._write_year_artifacts(
+        matchup_path,
+        region,
+        geography_path,
+        str(directory / "year-rmsd-by-start.json"),
+        source="synthetic",
+        geography_by_start_path=by_start_path,
+    )
+    return json.loads(open(geography_path).read()), by_start_path
+
+
+def _summed_geography(by_start_path: str, start_dates: tuple[str, ...], cell_count: int) -> dict:
+    statistics = pyarrow.parquet.read_table(by_start_path).to_pandas()
+    statistics = statistics[statistics["start_date"].isin(start_dates)]
+    summed = statistics.groupby(["variable", "lead_day", "cell"])[
+        ["n", "absolute_error_sum", "signed_error_sum", "squared_error_sum"]
+    ].sum()
+    rasters = {}
+    for (short, lead_day), group in summed.groupby(level=["variable", "lead_day"]):
+        cell = group.index.get_level_values("cell").to_numpy()
+        count = numpy.zeros(cell_count, dtype=numpy.int64)
+        count[cell] = group["n"].to_numpy()
+        sums = {
+            name: numpy.zeros(cell_count) for name in ("absolute_error_sum", "signed_error_sum", "squared_error_sum")
+        }
+        for name, values in sums.items():
+            values[cell] = group[name].to_numpy()
+        rasters[(short, str(lead_day))] = (count, sums)
+    return rasters
+
+
+def _raster_values(count: numpy.ndarray, sums: dict) -> dict[str, numpy.ndarray]:
+    with numpy.errstate(invalid="ignore", divide="ignore"):
+        mean = sums["signed_error_sum"] / count
+        variance = numpy.maximum(sums["squared_error_sum"] / count - mean * mean, 0.0)
+        return {
+            "leads": sums["absolute_error_sum"] / count,
+            "bias": mean,
+            "bias_se": numpy.where(count >= 2, numpy.sqrt(variance / count), numpy.nan),
+        }
+
+
+def _rounded(values: numpy.ndarray, decimals: int) -> list:
+    return [None if not numpy.isfinite(value) else round(float(value), decimals) for value in values]
+
+
+def _reference_values(frame: pandas.DataFrame, region: str, short: str, lead_day: int, cell_count: int) -> dict:
+    variable, depth_bin = next(
+        (variable, depth_bin) for variable, depth_bin, name in viewer_artifacts._YEAR_TARGETS if name == short
+    )
+    selected = frame[
+        (frame["variable"] == variable) & (frame["depth_bin"] == depth_bin) & (frame["lead_day"] == lead_day)
+    ]
+    signed = selected["model_value"].to_numpy(numpy.float32) - selected["observation_value"].to_numpy(numpy.float32)
+    cell, valid = viewer_artifacts._grid_cells(
+        selected["latitude"].to_numpy(numpy.float32),
+        selected["longitude"].to_numpy(numpy.float32),
+        viewer_artifacts._year_grid_for_region(region),
+    )
+    keep = valid & numpy.isfinite(signed)
+    cell, signed = cell[keep], signed[keep]
+    count = numpy.bincount(cell, minlength=cell_count)
+    sums = {
+        "absolute_error_sum": numpy.bincount(cell, numpy.abs(signed), cell_count),
+        "signed_error_sum": numpy.bincount(cell, signed, cell_count),
+        # The writer squares the float32 error before accumulating in float64, and so does this reference.
+        "squared_error_sum": numpy.bincount(cell, signed * signed, cell_count),
+    }
+    return count, _raster_values(count, sums)
+
+
+@pytest.mark.parametrize("region", ["global", "ibi"])
+def test_summed_start_statistics_reproduce_the_year_geography(tmp_path, region) -> None:
+    frame = _period_matchup_frame(region)
+    geography, by_start_path = _write_period_year_artifacts(frame, region, tmp_path)
+    grid = geography["grid"]
+    cell_count = grid["nlat"] * grid["nlon"]
+    rasters = _summed_geography(by_start_path, _PERIOD_START_DATES, cell_count)
+
+    for short, payload in geography["variables"].items():
+        decimals = viewer_artifacts._YEAR_GEOGRAPHY_DECIMALS[short]
+        for lead_day in payload["n"]:
+            published_count = numpy.array(payload["n"][lead_day])
+            if not published_count.any():
+                assert (short, lead_day) not in rasters
+                continue
+            count, sums = rasters[(short, lead_day)]
+            assert count.tolist() == published_count.tolist()
+            values = _raster_values(count, sums)
+            reference_count, reference = _reference_values(frame, region, short, int(lead_day), cell_count)
+            assert count.tolist() == reference_count.tolist()
+            for key in ("leads", "bias", "bias_se"):
+                defined = numpy.isfinite(reference[key])
+                numpy.testing.assert_allclose(values[key][defined], reference[key][defined], rtol=1e-12, atol=0)
+                assert _rounded(values[key], decimals) == payload[key][lead_day]
+
+
+def test_start_statistics_layout_is_one_row_group_per_variable_lead_and_start(tmp_path) -> None:
+    _, by_start_path = _write_period_year_artifacts(_period_matchup_frame("global"), "global", tmp_path)
+    parquet_file = pyarrow.parquet.ParquetFile(by_start_path)
+    assert parquet_file.schema_arrow.names == viewer_artifacts._YEAR_GEOGRAPHY_BY_START_SCHEMA.names
+    variable_order = [short for _, _, short in viewer_artifacts._YEAR_TARGETS]
+    names = parquet_file.schema_arrow.names
+    keys = []
+    for group_index in range(parquet_file.metadata.num_row_groups):
+        row_group = parquet_file.metadata.row_group(group_index)
+        statistics = [
+            row_group.column(names.index(column)).statistics
+            for column in viewer_artifacts._YEAR_GEOGRAPHY_BY_START_KEY_COLUMNS
+        ]
+        assert all(column.min == column.max for column in statistics)
+        assert row_group.column(names.index("cell")).statistics is None
+        keys.append((variable_order.index(statistics[0].min), statistics[1].min, statistics[2].min))
+    assert keys == sorted(keys)
+    assert len(keys) == len(set(keys)) == len(variable_order) * 3 * len(_PERIOD_START_DATES)
+    description = json.loads(parquet_file.schema_arrow.metadata[viewer_artifacts._YEAR_GEOGRAPHY_METADATA_KEY])
+    assert description["grid"] == viewer_artifacts._YEAR_GRIDS["global"]
+    assert description["provenance"]["source"] == "synthetic"
+
+
+def test_a_subset_of_starts_reproduces_the_geography_of_that_period(tmp_path) -> None:
+    frame = _period_matchup_frame("ibi")
+    _, by_start_path = _write_period_year_artifacts(frame, "ibi", tmp_path / "year")
+    period = _PERIOD_START_DATES[1:3]
+    period_frame = frame[frame["start_date"].isin(numpy.array(period, dtype="datetime64[ns]"))]
+    period_geography, _ = _write_period_year_artifacts(period_frame, "ibi", tmp_path / "period")
+    grid = period_geography["grid"]
+    rasters = _summed_geography(by_start_path, period, grid["nlat"] * grid["nlon"])
+    for short, payload in period_geography["variables"].items():
+        decimals = viewer_artifacts._YEAR_GEOGRAPHY_DECIMALS[short]
+        for lead_day in ("1", "2", "10"):
+            count, sums = rasters[(short, lead_day)]
+            assert count.tolist() == payload["n"][lead_day]
+            values = _raster_values(count, sums)
+            for key in ("leads", "bias", "bias_se"):
+                assert _rounded(values[key], decimals) == payload[key][lead_day]
 
 
 def test_class4_bias_per_start_records_are_signed_means() -> None:
@@ -534,7 +731,14 @@ def test_year_artifacts_carry_provenance(tmp_path) -> None:
     geography_path = str(tmp_path / "year-error-geography.json")
     rmsd_path = str(tmp_path / "year-rmsd-by-start.json")
     source = "insights/model/global/class4-matchups.parquet"
-    viewer_artifacts._write_year_artifacts(matchup_path, "global", geography_path, rmsd_path, source=source)
+    viewer_artifacts._write_year_artifacts(
+        matchup_path,
+        "global",
+        geography_path,
+        rmsd_path,
+        source=source,
+        geography_by_start_path=str(tmp_path / "year-error-geography-by-start.parquet"),
+    )
 
     for path in (geography_path, rmsd_path):
         provenance = json.loads(open(path).read())["provenance"]
