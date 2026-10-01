@@ -7,32 +7,20 @@ import pytest
 from fsspec.implementations.http import HTTPFileSystem
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.remote_http import open_remote_zarr, with_remote_http_retries
+from oceanbench.core.remote_http import open_remote_zarr
 
 _ABSENT_CHUNK_KEY = "zos/2.0"
 
 
-def test_failed_chunk_download_raises_instead_of_staging_fill_values(fail_chunk_download, zarr_store_url) -> None:
-    fail_chunk_download(failure_count=1)
-
-    with pytest.raises(TimeoutError):
-        open_remote_zarr(zarr_store_url).zos.load()
-
-
-def test_with_remote_http_retries_retries_failed_chunk_download(
+def test_failed_chunk_download_raises_instead_of_staging_fill_values(
     monkeypatch, fail_chunk_download, zarr_store_url
 ) -> None:
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value, "2")
-    monkeypatch.setattr("oceanbench.core.remote_http.sleep", lambda _seconds: None)
-    remaining_failures = fail_chunk_download(failure_count=1)
+    monkeypatch.setattr("oceanbench.core.remote_http._retry_backoff_seconds", lambda _attempt: 0)
+    fail_chunk_download(failure_count=2)
 
-    dataset = with_remote_http_retries(
-        "remote chunk read",
-        lambda: open_remote_zarr(zarr_store_url).zos.load(),
-    )
-
-    assert remaining_failures[0] == 0
-    assert not numpy.isnan(dataset.values).any()
+    with pytest.raises(TimeoutError):
+        open_remote_zarr(zarr_store_url).zos.load()
 
 
 def test_absent_chunk_still_reads_as_fill_value(monkeypatch, zarr_store_url) -> None:

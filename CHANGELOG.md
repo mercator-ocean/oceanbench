@@ -34,7 +34,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 
 ### Fixed
 
-- Local stage builds retry transient remote chunk failures, including blosc decompression errors from truncated chunk payloads.
+- Remote reads made by OceanBench retry each failed request, in all metrics and run modes, and retries no longer show in the reports.
 - Class IV salinity is vertically interpolated with the same two level linear bracket as the other variables. The cubic spline it used before needed four valid levels and silently dropped shallow profiles ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
 - Class IV tables keep rows with no score instead of dropping them ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
 - On global grids, Class IV interpolates across the dateline for observations between the last grid longitude and 180 degrees, which were left without a value before ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).

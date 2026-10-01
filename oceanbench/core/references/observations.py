@@ -18,11 +18,10 @@ from oceanbench.core.local_stage import (
     write_dataset_to_local_stage,
 )
 from oceanbench.core.remote_http import (
-    RetriableRemoteDataError,
+    IncompleteRemoteDatasetError,
     open_remote_multizarr,
     open_remote_zarr,
     require_remote_dataset_dimensions,
-    with_remote_http_retries,
 )
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
@@ -92,7 +91,7 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
             ),
         )
 
-    dataset = with_remote_http_retries("mean dynamic topography open", open_mean_dynamic_topography_dataset)
+    dataset = open_mean_dynamic_topography_dataset()
     dataset = rename_dataset_with_standard_names(dataset)
     return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 
@@ -135,7 +134,7 @@ def _select_consumed_observation_variables(day_observations_dataset: Dataset) ->
         if variable_key not in day_observations_dataset.variables
     ]
     if missing_variable_keys:
-        raise RetriableRemoteDataError(
+        raise IncompleteRemoteDatasetError(
             f"Remote dataset opened without expected variables {missing_variable_keys} "
             "during observation dataset open. "
             f"Available variables: {sorted(day_observations_dataset.variables)}"
@@ -254,7 +253,7 @@ def _selected_observations_dataset(
         "observation dataset open",
     )
     if time_key not in observations_dataset.variables:
-        raise RetriableRemoteDataError(
+        raise IncompleteRemoteDatasetError(
             f"Remote dataset opened without expected variable {time_key!r} during observation dataset open. "
             f"Available variables: {sorted(observations_dataset.variables)}"
         )
@@ -325,4 +324,4 @@ def observations(challenger_dataset: Dataset) -> Dataset:
             ),
         )
 
-    return with_remote_http_retries("observation dataset open", open_selected_observations)
+    return open_selected_observations()

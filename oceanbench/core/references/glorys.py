@@ -15,7 +15,7 @@ from oceanbench.core.reference_depths import (
     reference_depth_grid_stage_variant,
     with_reference_depth_grid_metadata,
 )
-from oceanbench.core.remote_http import open_remote_multizarr, open_remote_zarr, with_remote_http_retries
+from oceanbench.core.remote_http import open_remote_multizarr, open_remote_zarr
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_reference_week_dataset
 
 logger = logging.getLogger("copernicusmarine")
@@ -177,6 +177,6 @@ def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
         else:
             raise ValueError(f"Unsupported resolution: {resolution}")
 
-    reference_dataset = with_remote_http_retries("GLORYS reference dataset open", open_dataset)
+    reference_dataset = open_dataset()
     _GLORYS_REANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
     return reference_dataset
