@@ -17,7 +17,6 @@ from oceanbench.core.remote_http import (
     open_remote_zarr,
     remote_zarr_store,
     require_remote_dataset_dimensions,
-    with_remote_http_retries,
 )
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
@@ -38,19 +37,16 @@ def _default_first_day_datetimes() -> list[datetime]:
 def glo12(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes)
 
-    def open_dataset() -> xarray.Dataset:
-        return maybe_stage_weekly_dataset(
-            stage_key="challenger",
-            dataset_kind="challenger",
-            dataset_name="glo12",
-            first_day_datetimes=first_day_datetimes,
-            lead_days_count=LEAD_DAYS_COUNT,
-            open_week_dataset=_open_glo12_forecast_week,
-            open_remote_dataset=lambda: _remote_glo12_dataset(first_day_datetimes),
-            attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
-        )
-
-    return with_remote_http_retries("glo12 challenger dataset open", open_dataset)
+    return maybe_stage_weekly_dataset(
+        stage_key="challenger",
+        dataset_kind="challenger",
+        dataset_name="glo12",
+        first_day_datetimes=first_day_datetimes,
+        lead_days_count=LEAD_DAYS_COUNT,
+        open_week_dataset=_open_glo12_forecast_week,
+        open_remote_dataset=lambda: _remote_glo12_dataset(first_day_datetimes),
+        attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
+    )
 
 
 def glo12_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
@@ -85,19 +81,16 @@ def glo36v1(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset
         first_day_datetimes if first_day_datetimes is not None else generate_dates("2023-01-04", "2023-12-27", 7)
     )
 
-    def open_dataset() -> xarray.Dataset:
-        return maybe_stage_weekly_dataset(
-            stage_key="challenger",
-            dataset_kind="challenger",
-            dataset_name="glo36v1",
-            first_day_datetimes=resolved_first_day_datetimes,
-            lead_days_count=_GLO36V1_LEAD_DAYS_COUNT,
-            open_week_dataset=_open_glo36v1_forecast_week,
-            open_remote_dataset=lambda: _remote_glo36v1_dataset(resolved_first_day_datetimes),
-            attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
-        )
-
-    return with_remote_http_retries("glo36v1 challenger dataset open", open_dataset)
+    return maybe_stage_weekly_dataset(
+        stage_key="challenger",
+        dataset_kind="challenger",
+        dataset_name="glo36v1",
+        first_day_datetimes=resolved_first_day_datetimes,
+        lead_days_count=_GLO36V1_LEAD_DAYS_COUNT,
+        open_week_dataset=_open_glo36v1_forecast_week,
+        open_remote_dataset=lambda: _remote_glo36v1_dataset(resolved_first_day_datetimes),
+        attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
+    )
 
 
 def _glo36v1_dataset_path(start_datetime: datetime) -> str:
@@ -270,28 +263,25 @@ def _open_multizarr_forecasts_as_challenger_dataset(
     resolved_first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes)
     dataset_name = _challenger_dataset_name(forecast_zarr_path_from_start_datetime)
 
-    def open_dataset() -> xarray.Dataset:
-        return maybe_stage_weekly_dataset(
-            stage_key="challenger",
-            dataset_kind="challenger",
-            dataset_name=dataset_name,
-            first_day_datetimes=resolved_first_day_datetimes,
-            lead_days_count=lead_days_count,
-            open_week_dataset=lambda first_day_datetime: _prepared_challenger_week_dataset(
-                _opened_challenger_week_dataset(
-                    forecast_zarr_path_from_start_datetime,
-                    preprocess_dataset,
-                    first_day_datetime,
-                ),
-                f"{dataset_name} challenger dataset open",
-            ),
-            open_remote_dataset=lambda: _remote_multizarr_forecasts_as_challenger_dataset(
-                dataset_name,
+    return maybe_stage_weekly_dataset(
+        stage_key="challenger",
+        dataset_kind="challenger",
+        dataset_name=dataset_name,
+        first_day_datetimes=resolved_first_day_datetimes,
+        lead_days_count=lead_days_count,
+        open_week_dataset=lambda first_day_datetime: _prepared_challenger_week_dataset(
+            _opened_challenger_week_dataset(
                 forecast_zarr_path_from_start_datetime,
-                resolved_first_day_datetimes,
                 preprocess_dataset,
+                first_day_datetime,
             ),
-            attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
-        )
-
-    return with_remote_http_retries("challenger dataset open", open_dataset)
+            f"{dataset_name} challenger dataset open",
+        ),
+        open_remote_dataset=lambda: _remote_multizarr_forecasts_as_challenger_dataset(
+            dataset_name,
+            forecast_zarr_path_from_start_datetime,
+            resolved_first_day_datetimes,
+            preprocess_dataset,
+        ),
+        attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
+    )

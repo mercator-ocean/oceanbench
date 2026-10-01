@@ -40,7 +40,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 - Class IV tables keep a variable and depth row even when the challenger has no value there, and show it as missing instead of dropping it ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
 - Geostrophic currents exclude 5 degrees around the equator instead of 0.5 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Lagrangian deviation now scores lead day 10 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
-- Local stage builds retry transient remote read failures.
+- Remote reads made by OceanBench retry each failed request, in all metrics and run modes, and retries no longer show in the reports ([#335](https://github.com/mercator-ocean/oceanbench/pull/335)).
 
 ### Added
 

@@ -20,6 +20,8 @@ website:
         text: Scores
       - challengers.qmd
       - about.qmd
+      - href: https://oceanbench.readthedocs.io
+        text: Documentation
   repo-url: https://github.com/mercator-ocean/oceanbench
   repo-actions: [edit, source, issue]
   repo-subdir: website
