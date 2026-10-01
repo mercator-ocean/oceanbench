@@ -3703,7 +3703,7 @@ async function renderRailYearRmsd(shown, range) {
     ? `${bandNote}Click a point to open that date.`
     : biasMode
       ? "Bias by start not available for this dataset/region."
-      : "Year RMSE-by-start not available for this dataset/region.";
+      : "RMSE by start not available for this dataset/region.";
   wireCursorTooltip(slot);
   wireYearRmsdDrilldown(slot, lines);
 }

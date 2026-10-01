@@ -324,7 +324,7 @@ export function psdSpectraSVG(
  */
 export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = "", signed = false, yBound = 0 } = {}) {
   const usable = (series || []).filter((line) => line && line.dates && line.dates.length);
-  if (!usable.length) return emptyChart(title, "no year RMSE for this variable");
+  if (!usable.length) return emptyChart(title, "no RMSE by start for this variable");
   const area = plotArea(usable.length > 1 ? (usable.length - 1) * LEGEND_ROW : 0);
 
   const allDates = [...new Set(usable.flatMap((line) => line.dates))].sort();

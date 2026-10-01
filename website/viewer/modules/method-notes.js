@@ -41,15 +41,15 @@ export const METHOD_NOTES = {
   "lead-curve": {
     title: "RMSE vs lead day",
     body:
-      "Official Class IV RMSE per lead day, pooled over the 52 starts of 2024. Band: 95% " +
-      "bootstrap interval. Computed offline.",
+      "Official Class IV RMSE per lead day, pooled over the starts of the selected period. " +
+      "Band: 95% bootstrap interval. Computed offline.",
   },
 
   // RMSE vs depth vertical profile chart (rail-depth-profile).
   "depth-profile": {
     title: "RMSE vs depth",
     body:
-      "Class IV RMSE per depth bin at this lead, all 2024 match-ups, official method. " +
+      "Class IV RMSE per depth bin at this lead, over the selected period, official method. " +
       "Temperature's top metre is its own surface bin. Hover for the obs count.",
   },
 
