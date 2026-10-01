@@ -15,7 +15,6 @@ from oceanbench.core.dataset_utils import (
     Dimension,
     VARIABLE_DISPLAY_ORDER,
     VARIABLE_METADATA,
-    MISSING_COUNT_COLUMN,
     SPATIAL_COORDINATE_ALIGNMENT_ATOL,
     Variable,
     is_global_longitude_grid,
@@ -32,6 +31,7 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
 VELOCITY_TARGET_DEPTH_METERS = 15.0
 OBSERVATION_COUNT_COLUMN = "Observations"
+MISSING_COUNT_COLUMN = "Missing"
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
 
 
