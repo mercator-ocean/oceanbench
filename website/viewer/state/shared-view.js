@@ -29,6 +29,7 @@ import {
   YEAR_METRICS,
   YEAR_METRIC_ABSOLUTE_ERROR,
 } from "./view-modes.js";
+import { PERIOD_WHOLE_YEAR, isPeriodValue } from "../modules/period-range.js";
 
 // The global default view is centred on the prime meridian (centerNX = (lon + 180) / 360,
 // so nx 0.5 ≡ lon 0°). A Pacific-centred default put the dateline down the middle of the
@@ -52,6 +53,9 @@ export const shared = {
   // Year-scope map metric: "error" = time-mean |obs − model| (sequential), "bias" =
   // time-mean signed model − obs (diverging, centred 0). Single-forecast scope ignores it.
   yearMetric: YEAR_METRIC_ABSOLUTE_ERROR,
+  // Forecast starts the scores cover: "year", a quarter ("apr-jun") or a custom
+  // "YYYY-MM-DD_YYYY-MM-DD" range, spelled as on the Scores page.
+  period: PERIOD_WHOLE_YEAR,
   // PSD rectangle tool: { lon, lat, w, h } in degrees (centre + size). Disabled by
   // default so the initial map stays clean; enabling creates a centred default box.
   psdEnabled: false,
@@ -99,6 +103,12 @@ export function setSharedOverlayMode(value) {
 
 export function setSharedYearMetric(value) {
   return assign("yearMetric", YEAR_METRICS, value);
+}
+
+export function setSharedPeriod(value) {
+  if (!isPeriodValue(value) || shared.period === value) return false;
+  shared.period = value;
+  return true;
 }
 
 export function setSharedRegion(value) {

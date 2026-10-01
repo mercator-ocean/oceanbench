@@ -348,6 +348,30 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
   gap: 0.5rem;
 }
 .controls input[type="range"] { accent-color: var(--accent); width: 100%; }
+/* Period: a custom range is two date fields under the menu, one row each so the pair
+   never overflows the narrow drawer. */
+.period-range {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.3rem 0.45rem;
+}
+.period-range[hidden] { display: none; }
+.controls .period-range label { display: block; }
+.controls .period-range input[type="date"] {
+  font: inherit;
+  font-size: var(--text-control);
+  height: var(--control-height);
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 0.3rem;
+  color: var(--text);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+:root[data-theme="dark"] .controls .period-range input[type="date"] { color-scheme: dark; }
 .control-group {
   border: 0;
   padding: 0;

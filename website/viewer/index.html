@@ -83,6 +83,26 @@ SPDX-License-Identifier: EUPL-1.2
             </div>
           </div>
 
+          <div class="field period-field">
+            <label class="period-label">Period
+              <select id="period-select">
+                <option value="year">Whole year</option>
+                <option value="jan-mar">Jan-Mar</option>
+                <option value="apr-jun">Apr-Jun</option>
+                <option value="jul-sep">Jul-Sep</option>
+                <option value="oct-dec">Oct-Dec</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <div id="period-range" class="period-range" hidden>
+              <label for="period-from">From</label>
+              <input type="date" id="period-from">
+              <label for="period-to">To</label>
+              <input type="date" id="period-to">
+            </div>
+            <p id="period-note" class="hint" hidden></p>
+          </div>
+
           <div class="metric-switch scope-switch segmented" id="metric-switch" role="group" aria-label="Year metric">
             <span class="metric-switch-label">Metric</span>
             <button type="button" data-metric="error" class="ghost-button">|error|</button>

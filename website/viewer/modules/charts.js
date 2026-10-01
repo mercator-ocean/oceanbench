@@ -18,6 +18,8 @@ const PAD_LEFT = 50;
 const PAD_RIGHT = 12;
 const PAD_TOP = 14;
 const PAD_BOTTOM = 30;
+// Smallest gap between two start-date ticks, in view units (a label is about 33 wide).
+const START_TICK_SPACING = 50;
 
 // Reference → hue, so the same source reads identically across both charts.
 export const SERIES_COLORS = {
@@ -375,13 +377,14 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
     }
   }
 
-  // Month-ish ticks: a handful of evenly spaced start dates.
-  const tickStep = Math.max(1, Math.round(allDates.length / 6));
+  // Month-ish ticks: a handful of evenly spaced start dates, at least
+  // START_TICK_SPACING apart so a short series (a period) does not crowd its labels.
+  const tickStep = Math.max(1, Math.round(allDates.length / 6), Math.ceil(START_TICK_SPACING / (area.width / lastIndex)));
   for (let i = 0; i < allDates.length; i += tickStep) {
     const date = allDates[i];
     // The first date sits on the left edge, so it starts there instead of centring
-    // across the lowest y tick.
-    const anchor = i === 0 && xOf(date) - area.x0 < 12 ? "start" : "middle";
+    // across the lowest y tick; a date on the right edge ends there instead of clipping.
+    const anchor = i === 0 && xOf(date) - area.x0 < 12 ? "start" : area.x1 - xOf(date) < 12 ? "end" : "middle";
     body += `<text x="${xOf(date).toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="${anchor}">${date.slice(5)}</text>`;
   }
 

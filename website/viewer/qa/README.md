@@ -28,6 +28,12 @@ node qa/period-parity.mjs [scores.parquet] [scores-summary.json]
 
 Checks the Scores page period aggregation (`modules/scores-periods.js`): run over every start, it must reproduce the published summary means and skills to 1e-9. Paths or URLs; the live preview by default.
 
+```sh
+node qa/period-viewer-parity.mjs [scores.parquet] [viewer data root]
+```
+
+Checks the viewer's Period control (`modules/period-view.js`): run over the whole year, it must reproduce the rail's RMSE vs lead day rows of `scores-summary.json` (1e-9, n exact) and every `rmsd-by-depth.json` (1e-6, n exact; the artifacts pool raw match-ups, the period pools per-start values). Same defaults.
+
 Requires `playwright` (with Chromium installed) and `python3` for the static file server. The server binds to a random free port on 127.0.0.1 and serves the `website/` directory; the page under test is `/viewer/index.html?qa=1`. The `qa` query parameter makes the app publish `window.oceanbenchViewerQaProbe`, which is how the colour-range probe reads the bounds the map was actually drawn with.
 
 The fingerprints depend on the published viewer data at the configured data root, so republishing that data moves them too.
