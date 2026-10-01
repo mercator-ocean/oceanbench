@@ -24,7 +24,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 
 ### Challengers
 
-- 2026-10-01: LangYa forecasts are read from corrected stores; rows north of 5N were one grid row too far south.
+- 2026-10-01: LangYa forecasts are read from corrected stores; rows north of 5N were one grid row too far south ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
 - 2026-09-11: GLO12 persistence added: a reference baseline holding the GLO12 nowcast constant over the 10-day horizon, listed in the baseline category ([#297](https://github.com/mercator-ocean/oceanbench/pull/297)).
 
 ### Changed
