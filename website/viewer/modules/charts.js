@@ -21,6 +21,15 @@ const PAD_BOTTOM = 30;
 // Smallest gap between two start-date ticks, in view units (a label is about 33 wide).
 const START_TICK_SPACING = 50;
 
+// Left gutter for a y axis whose tick labels are wider than the shared PAD_LEFT allows.
+// Tick type is pinned in px, so in view units it grows by typeScale as the slot narrows:
+// a monospace character is about 6 units at typeScale 1. The rotated axis title takes the
+// first 18 units and each label sits 4 units left of the axis.
+function labelGutter(labels, typeScale, minimum) {
+  const longest = Math.max(0, ...labels.map((label) => String(label).length));
+  return Math.max(minimum, 22 + longest * 6 * typeScale);
+}
+
 // Reference → hue, so the same source reads identically across both charts.
 export const SERIES_COLORS = {
   glorys: "#38bdf8",
@@ -424,19 +433,19 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
  */
 export function rmsdByDepthSVG(
   series,
-  { title = "RMSE vs depth", unit = "", emptyMessage = "no depth profile for this variable", xBound = 0 } = {},
+  { title = "RMSE vs depth", unit = "", emptyMessage = "no depth profile for this variable", xBound = 0, typeScale = 1 } = {},
 ) {
-  // Depth-bin labels ("1500-3000 m") are wider than the numeric ticks the other charts use,
-  // so this profile gets a roomier left gutter than the shared plotArea() default.
   const usable = (series || []).filter((line) => line && Array.isArray(line.bins) && line.bins.some((bin) => Number.isFinite(bin.rmsd)));
   if (!usable.length) return emptyChart(title, emptyMessage);
-  const base = plotArea(usable.length > 1 ? (usable.length - 1) * LEGEND_ROW : 0);
-  const DEPTH_PAD_LEFT = 62;
-  const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
-
   // Depth ordering (surface→deep) from the series with the most bins, so a shorter
   // profile still aligns onto the shared axis by label.
   const depthLabels = usable.reduce((best, line) => (line.bins.length > best.length ? line.bins : best), usable[0].bins).map((bin) => bin.label);
+  // Depth-bin labels ("1500-3000 m") are wider than the numeric ticks the other charts use,
+  // so this profile gets a gutter sized to its longest label at the rendered type size.
+  const base = plotArea(usable.length > 1 ? (usable.length - 1) * LEGEND_ROW : 0);
+  const DEPTH_PAD_LEFT = labelGutter(depthLabels, typeScale, 62);
+  const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
+
   const rowOfLabel = new Map(depthLabels.map((label, index) => [label, index]));
   const lastRow = Math.max(1, depthLabels.length - 1);
   const yOf = (index) => area.y0 + (index / lastRow) * area.height;
@@ -457,7 +466,10 @@ export function rmsdByDepthSVG(
     const value = (xMax * t) / 4;
     const x = xOf(value);
     body += `<line x1="${x.toFixed(1)}" y1="${area.y0}" x2="${x.toFixed(1)}" y2="${area.y1}" class="grid"/>`;
-    body += `<text x="${x.toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="middle">${formatTick(value)}</text>`;
+    // End ticks align inward, so the last one stays inside the chart and the first one
+    // clears the deepest bin's label.
+    const anchor = t === 4 ? "end" : t === 0 ? "start" : "middle";
+    body += `<text x="${x.toFixed(1)}" y="${area.y1 + 12}" class="tick" text-anchor="${anchor}">${formatTick(value)}</text>`;
   }
   // Horizontal gridlines + depth-bin labels (thinned when many bins).
   const labelStep = Math.max(1, Math.round(depthLabels.length / 8));
@@ -507,15 +519,12 @@ export function rmsdByDepthSVG(
  */
 export function columnProfileSVG(
   series,
-  { title = "Water column", unit = "", xLabel = "value", emptyMessage = "no water column at this point", valueBound = null, depthBound = 0 } = {},
+  { title = "Water column", unit = "", xLabel = "value", emptyMessage = "no water column at this point", valueBound = null, depthBound = 0, typeScale = 1 } = {},
 ) {
   const usable = (series || []).filter(
     (line) => line && Array.isArray(line.points) && line.points.some((point) => Number.isFinite(point.value) && Number.isFinite(point.depth)),
   );
   if (!usable.length) return emptyChart(title, emptyMessage);
-  const base = plotArea(usable.length > 1 ? (usable.length - 1) * LEGEND_ROW : 0);
-  const DEPTH_PAD_LEFT = 52;
-  const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
 
   let depthMax = 0;
   let valueMin = Infinity;
@@ -536,6 +545,10 @@ export function columnProfileSVG(
     valueMax = Math.max(valueMax, valueBound[1]);
   }
   if (Number.isFinite(depthBound)) depthMax = Math.max(depthMax, depthBound);
+  const depthTicks = [0, 1, 2, 3, 4].map((t) => Math.round((depthMax * t) / 4).toLocaleString("en-US"));
+  const base = plotArea(usable.length > 1 ? (usable.length - 1) * LEGEND_ROW : 0);
+  const DEPTH_PAD_LEFT = labelGutter(depthTicks, typeScale, 52);
+  const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
   if (!(valueMax > valueMin)) valueMax = valueMin + 1;
   const padding = (valueMax - valueMin) * 0.06 || 1;
   const xLo = valueMin - padding;
@@ -557,7 +570,7 @@ export function columnProfileSVG(
     const depth = (depthMax * t) / 4;
     const y = yOf(depth);
     body += `<line x1="${area.x0}" y1="${y.toFixed(1)}" x2="${area.x1}" y2="${y.toFixed(1)}" class="grid"/>`;
-    body += `<text x="${area.x0 - 4}" y="${(y + 3).toFixed(1)}" class="tick" text-anchor="end">${Math.round(depth).toLocaleString("en-US")}</text>`;
+    body += `<text x="${area.x0 - 4}" y="${(y + 3).toFixed(1)}" class="tick" text-anchor="end">${depthTicks[t]}</text>`;
   }
 
   for (const line of usable) {

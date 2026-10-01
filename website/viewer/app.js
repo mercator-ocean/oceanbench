@@ -2309,6 +2309,7 @@ function renderColumnProfileRail() {
         xLabel: group.label,
         valueBound,
         depthBound,
+        typeScale: chartTypeScale(elements["rail-column-chart"]),
       }),
     );
   }
@@ -3631,6 +3632,7 @@ async function renderRailDepthProfile(shown, comparison, periodScores) {
     title: comparison ? "RMSE vs depth (both forecasts)" : "RMSE vs depth",
     unit,
     xBound,
+    typeScale: chartTypeScale(slot),
   });
   if (note) {
     note.textContent = `Lead ${lead ?? shared.leadDay}, ${periodScores ? periodScores.range.label : "all 2024"} match-ups.`;
