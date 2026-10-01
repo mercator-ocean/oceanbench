@@ -41,6 +41,7 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 - Geostrophic currents exclude 5 degrees around the equator instead of 0.5 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Lagrangian deviation now scores lead day 10 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Remote reads made by OceanBench retry each failed request, in all metrics and run modes, and retries no longer show in the reports ([#335](https://github.com/mercator-ocean/oceanbench/pull/335)).
+- Remote reads drop idle connections before the server closes them ([#337](https://github.com/mercator-ocean/oceanbench/pull/337)).
 
 ### Added
 
