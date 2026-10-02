@@ -14,8 +14,6 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
       - uses: mamba-org/setup-micromamba@v1
         with:
           micromamba-version: '1.5.6-0'
@@ -29,7 +27,5 @@ jobs:
         run: pip install --editable .
         shell: micromamba-shell {0}
       - name: Run unit tests
-        env:
-          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.ref_name }}_${{ github.sha }}
-        run: poetry run pytest tests -n 8
+        run: pytest tests -n 8
         shell: micromamba-shell {0}
