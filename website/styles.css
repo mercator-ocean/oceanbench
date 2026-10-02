@@ -17,14 +17,45 @@
   --ob-soft-shadow: 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06);
 }
 
+/*
+ * Dark palette: blue-tinted neutrals and a single accent, the brand sky blue.
+ * Mirrors the variables at the top of theme-dark.scss, which feeds the same
+ * values to Bootstrap; keep the two in step. The scale is page -> panel ->
+ * raised chrome, so elevation reads as a step towards the viewer, and text
+ * stops at a soft white. The accent marks only what can be acted on or is
+ * selected; the score tiles carry the only other colour.
+ */
 body.quarto-dark {
-  --ob-accent: var(--bs-primary, #3aa6d3);
-  --ob-accent-contrast: #111827;
-  --ob-border: var(--bs-border-color, #495057);
-  --ob-muted: #adb5bd;
-  --ob-surface: #202032;
-  --ob-surface-raised: var(--bs-body-bg, #1a1a2e);
-  --ob-soft-shadow: none;
+  --ob-accent: #8fd0e8;
+  --ob-accent-hover: #b4e0f0;
+  --ob-accent-contrast: #1c2128;
+  --ob-accent-soft: rgba(143, 208, 232, 0.15);
+  --ob-accent-line: rgba(143, 208, 232, 0.45);
+  --ob-border: #444c56;
+  --ob-grid-border: rgba(240, 246, 252, 0.06);
+  --ob-heading: #cdd9e5;
+  --ob-muted: #909dab;
+  --ob-page-bg: #1c2128;
+  --ob-surface: #22272e;
+  --ob-surface-raised: #2d333b;
+  --ob-soft-shadow: 0 6px 20px rgba(1, 4, 9, 0.55);
+  --ob-table-text: #cdd9e5;
+  --ob-text: #adbac7;
+  background-color: var(--ob-page-bg);
+  color: var(--ob-text);
+}
+
+/* Prose links carry the accent (from the theme) and a faint underline that
+   firms up on hover. The selector has no more weight than a bare `a`, so any
+   component that styles its own links (tabs, chips, badges, the score table)
+   keeps its own decoration. */
+:where(body.quarto-dark main.content) a {
+  text-decoration: underline;
+  text-decoration-color: rgba(143, 208, 232, 0.35);
+}
+
+:where(body.quarto-dark main.content) a:hover {
+  text-decoration-color: currentColor;
 }
 
 /* --- Shared surfaces and markdown content --- */
@@ -98,6 +129,27 @@ div.sourceCode.cell-code pre.sourceCode {
   background: var(--ob-surface);
 }
 
+/* Dark tables drop the vertical grid and keep their row lines, like the
+   score table; links inside them are set apart by colour alone. */
+body.quarto-dark .content table:not(.score-table) th,
+body.quarto-dark .content table:not(.score-table) td {
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+
+body.quarto-dark .content table:not(.score-table) th {
+  background: var(--ob-surface-raised);
+  color: var(--ob-heading);
+}
+
+:where(body.quarto-dark main.content) table a {
+  text-decoration: none;
+}
+
+body.quarto-dark .challengers-table-wrap {
+  background: var(--ob-page-bg);
+}
+
 .challengers-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--ob-border);
@@ -141,9 +193,21 @@ div.sourceCode.cell-code pre.sourceCode {
   display: block;
 }
 
+/*
+ * Not a <sup>: the browser's superscript sizing shrank the asterisk to
+ * about three pixels of ink, which the fonts Linux and Android fall back
+ * to render as a horizontal smudge that reads as a dash. Keep it on the
+ * body font stack at a size that still resolves the glyph's arms.
+ */
 .challenger-note-marker {
-  color: var(--ob-muted);
-  font-weight: 400;
+  display: inline-block;
+  margin-left: 0.15em;
+  font-family: inherit;
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: super;
+  color: var(--ob-accent);
   cursor: help;
 }
 
@@ -177,6 +241,11 @@ div.sourceCode.cell-code pre.sourceCode {
 
 .score-table-wrapper {
   margin-bottom: 1.5rem;
+  max-width: 100%;
+}
+
+.depth-table-wrapper {
+  margin-bottom: 0;
 }
 
 
@@ -200,13 +269,11 @@ div.sourceCode.cell-code pre.sourceCode {
   font-variant-numeric: tabular-nums;
 }
 
-/* Keep table width stable when toggling Values / % diff mode */
+/* Keep table width stable when toggling Values / % diff mode. A clamped
+   percent like >999% is wider than 5ch and grows its own cell instead of
+   being cut off. */
 .score-table td.score-value-cell {
-  width: 5ch;
   min-width: 5ch;
-  max-width: 5ch;
-  overflow: hidden;
-  text-overflow: clip;
   padding-left: 0.2rem;
   padding-right: 0.2rem;
 }
@@ -287,15 +354,60 @@ div.sourceCode.cell-code pre.sourceCode {
 }
 
 /* Dark mode overrides */
+
+/* The table sits straight on the page, as it does in light mode, so an
+   empty or neutral cell is just page. There is no vertical grid: faint row
+   lines are enough to guide the eye along a row, and the tiles themselves
+   separate the columns. */
+body.quarto-dark .score-table {
+  background: var(--ob-page-bg);
+  box-shadow: 0 0 0 1px var(--ob-border);
+}
+
+body.quarto-dark .score-table th,
+body.quarto-dark .score-table td {
+  border-color: var(--ob-grid-border);
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+
+/* The frozen column and the head scroll over the coloured cells, so they need
+   an opaque fill: the page colour. */
 body.quarto-dark .score-table .model-col,
 body.quarto-dark .score-table thead th {
-  background: var(--bs-body-bg, #1a1a2e);
+  background: var(--ob-page-bg);
+}
+
+body.quarto-dark .score-table thead th {
+  color: var(--ob-heading);
 }
 
 body.quarto-dark .score-table .lead-day,
 body.quarto-dark .score-table .lead-day-label,
 body.quarto-dark .score-table .standard-name {
-  color: #adb5bd;
+  color: var(--ob-muted);
+}
+
+body.quarto-dark .score-table .model-col a {
+  color: var(--ob-accent);
+  text-decoration: none;
+}
+
+body.quarto-dark .score-table .model-col a:hover {
+  color: var(--ob-accent-hover);
+}
+
+/* A cell with no value carries no colour of its own: it is the page, like a
+   cell with no difference. The baseline-row wash further down is allowed to
+   win over it. */
+body.quarto-dark .score-table td.no-value-cell {
+  background: var(--ob-page-bg);
+}
+
+/* The row under the pointer lifts by a hair. Only the frozen cell can carry
+   it: every other cell in the row owns its own colour. */
+body.quarto-dark .score-table tbody tr:hover .model-col {
+  background-image: linear-gradient(rgba(240, 246, 252, 0.04), rgba(240, 246, 252, 0.04));
 }
 
 /* --- Two-row sticky header (tabs + controls) --- */
@@ -309,7 +421,7 @@ body.quarto-dark .score-table .standard-name {
   border: 1px solid var(--ob-border);
   border-radius: var(--ob-radius-md);
   box-shadow: var(--ob-soft-shadow);
-  min-width: max-content;
+  max-width: 100%;
   overflow: hidden;
 }
 
@@ -335,7 +447,7 @@ body.nav-hidden #score-header {
 }
 
 body.quarto-dark #region-selector {
-  background: var(--ob-surface-raised);
+  background: var(--ob-surface);
   border-color: var(--ob-border);
 }
 
@@ -422,7 +534,7 @@ body.quarto-dark #region-selector {
 
 body.quarto-dark .selector-chip {
   background: var(--ob-surface);
-  color: var(--bs-body-color, #d4d4d8);
+  color: var(--ob-text);
   border-color: var(--ob-border);
 }
 
@@ -432,9 +544,9 @@ body.quarto-dark .selector-chip:hover:not(.active):not(.disabled) {
 }
 
 body.quarto-dark .selector-chip.active {
-  background: var(--ob-accent);
-  border-color: var(--ob-accent);
-  color: var(--ob-accent-contrast);
+  background: var(--ob-accent-soft);
+  border-color: var(--ob-accent-line);
+  color: var(--ob-accent);
 }
 
 /* --- Region globe --- */
@@ -522,11 +634,11 @@ body.quarto-dark .selector-chip.active {
 }
 
 body.quarto-dark .region-globe-ocean-stop-highlight {
-  stop-color: #31566a;
+  stop-color: #2c4359;
 }
 
 body.quarto-dark .region-globe-ocean-stop {
-  stop-color: #112f40;
+  stop-color: #1f2e3e;
 }
 
 body.quarto-dark .region-globe-graticule {
@@ -534,16 +646,16 @@ body.quarto-dark .region-globe-graticule {
 }
 
 body.quarto-dark .region-globe-active-region {
-  fill: rgba(58, 166, 211, 0.34);
+  fill: rgba(143, 208, 232, 0.32);
 }
 
 body.quarto-dark .region-globe-active-region-outline-halo {
-  stroke: rgba(17, 47, 64, 0.9);
+  stroke: rgba(31, 46, 62, 0.9);
 }
 
 body.quarto-dark .region-globe-land {
-  fill: #5d564b;
-  stroke: rgba(245, 234, 217, 0.22);
+  fill: #434c57;
+  stroke: rgba(230, 237, 243, 0.2);
 }
 
 body.quarto-dark .region-globe-outline {
@@ -620,15 +732,15 @@ body.quarto-dark .region-globe-outline {
 }
 
 body.quarto-dark .score-tab {
-  color: var(--ob-muted);
+  color: var(--ob-text);
 }
 
 body.quarto-dark .score-tab:hover:not(.active) {
-  color: var(--bs-body-color, #d4d4d8);
+  color: var(--ob-heading);
 }
 
 body.quarto-dark .score-tab.active {
-  color: var(--ob-accent);
+  color: var(--ob-heading);
   border-bottom-color: var(--ob-accent);
 }
 
@@ -673,7 +785,7 @@ body.quarto-dark .controls {
 
 body.quarto-dark .controls select {
   background: var(--ob-surface-raised);
-  color: var(--bs-body-color, #d4d4d8);
+  color: var(--ob-text);
   border-color: var(--ob-border);
 }
 
@@ -739,9 +851,9 @@ body.quarto-dark .display-toggle-btn {
 
 body.quarto-dark .depth-toggle-btn.active,
 body.quarto-dark .display-toggle-btn.active {
-  background: var(--ob-accent);
-  color: var(--ob-accent-contrast);
-  border-color: var(--ob-accent);
+  background: var(--ob-accent-soft);
+  color: var(--ob-accent);
+  border-color: var(--ob-accent-line);
 }
 
 /* --- Display toggle (values / % diff) --- */
@@ -785,7 +897,7 @@ body.quarto-dark .display-toggle-btn.active {
 
 body.quarto-dark #scale-input {
   background: var(--ob-surface-raised);
-  color: var(--bs-body-color, #d4d4d8);
+  color: var(--ob-text);
   border-color: var(--ob-border);
 }
 
@@ -807,12 +919,13 @@ body.quarto-dark #scale-input {
 .legend-bar-wrapper {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   margin-top: -4px;
 }
 
 .legend-bar {
   display: flex;
-  width: 300px;
+  width: clamp(120px, 26vw, 300px);
   height: 12px;
   border-radius: 3px;
   border: 1px solid var(--ob-border);
@@ -891,7 +1004,8 @@ body.nav-hidden .depth-table thead {
 
 /* --- Spacing between sub-tables (e.g. observations depth groups) --- */
 
-.score-table + .score-table {
+.score-table + .score-table,
+.score-table-wrapper + .score-table-wrapper {
   margin-top: 3rem;
 }
 
@@ -921,7 +1035,7 @@ body.nav-hidden .depth-table thead {
 }
 
 body.quarto-dark .score-table .depth-separator-cell {
-  background: var(--ob-surface-raised);
+  background: var(--ob-page-bg);
   border-bottom-color: var(--ob-border) !important;
   color: var(--ob-muted);
 }
@@ -930,8 +1044,14 @@ body.quarto-dark .score-table .depth-separator-cell::before {
   background: var(--ob-border);
 }
 
+/* No vertical grid in the dark table, so the drawn head borders keep only
+   their bottom edge. */
+body.quarto-dark .depth-table thead th::before {
+  background: transparent;
+}
+
 body.quarto-dark .depth-table thead th:last-child {
-  box-shadow: inset -1px 0 0 var(--ob-border);
+  box-shadow: none;
 }
 
 /* Blank cells for variables not available at this depth */
@@ -958,6 +1078,17 @@ body.quarto-dark .depth-table thead th:last-child {
   color: white !important;
 }
 
+/* The hovered row and column labels take an accent tint rather than a slab
+   of it, so the hover never outshines the tile it points at. */
+body.quarto-dark .score-table th.highlight-label {
+  background: #303d46 !important;
+  color: var(--ob-heading) !important;
+}
+
+body.quarto-dark .score-table th.highlight-label a {
+  color: var(--ob-accent-hover) !important;
+}
+
 /* --- Baseline row --- */
 
 .score-table tr.baseline-row th {
@@ -968,8 +1099,10 @@ body.quarto-dark .depth-table thead th:last-child {
   background: var(--bs-tertiary-bg, #f0f0f0);
 }
 
+/* A wash of the accent rather than a grey slab, matched to the accent bar the
+   shared rule draws down the frozen cell. */
 body.quarto-dark .score-table tr.baseline-row td {
-  background: #2a2a2a;
+  background: rgba(143, 208, 232, 0.06);
 }
 
 /* --- Section headings --- */
@@ -983,7 +1116,7 @@ body.quarto-dark .score-table tr.baseline-row td {
 body.quarto-dark #comparison-to-reanalysis > h2,
 body.quarto-dark #comparison-to-analysis > h2,
 body.quarto-dark #comparison-to-observations > h2 {
-  border-bottom-color: var(--ob-accent) !important;
+  border-bottom-color: var(--ob-border) !important;
 }
 
 #reanalysis-scores h3,
@@ -1019,7 +1152,7 @@ body.quarto-dark #comparison-to-observations > h2 {
 /* --- Theme switching --- */
 
 body.quarto-dark .navbar-logo {
-  content: url('https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/favicon-dark.png');
+  content: url('https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/favicon-dark-blue.png');
 }
 
 body.quarto-light .navbar-logo {
@@ -1034,17 +1167,32 @@ body.quarto-dark .only-light {
   display: none !important;
 }
 
+/* --- Dark accent details --- */
+
+body.quarto-dark .score-tab:focus-visible,
+body.quarto-dark [data-tip-open] {
+  outline-color: var(--ob-accent);
+}
+
+body.quarto-dark .score-table tr.baseline-row th {
+  box-shadow: inset 3px 0 0 var(--ob-accent);
+}
+
+body.quarto-dark .challenger-note-marker {
+  color: var(--ob-accent);
+}
+
 /* --- xarray output dark mode (notebooks use different selectors) --- */
 
 body.quarto-dark {
-  --xr-font-color0: rgba(255, 255, 255, 1);
-  --xr-font-color2: rgba(255, 255, 255, 0.54);
-  --xr-font-color3: rgba(255, 255, 255, 0.38);
-  --xr-border-color: #1f1f1f;
-  --xr-disabled-color: #515151;
-  --xr-background-color: #111111;
-  --xr-background-color-row-even: #111111;
-  --xr-background-color-row-odd: #313131;
+  --xr-font-color0: var(--ob-text);
+  --xr-font-color2: var(--ob-muted);
+  --xr-font-color3: rgba(230, 237, 243, 0.45);
+  --xr-border-color: var(--ob-grid-border);
+  --xr-disabled-color: #6e7681;
+  --xr-background-color: var(--ob-surface);
+  --xr-background-color-row-even: var(--ob-surface);
+  --xr-background-color-row-odd: var(--ob-surface-raised);
 }
 
 /* --- Mobile tab responsiveness --- */
@@ -1094,8 +1242,13 @@ body.quarto-dark {
   border-color: var(--ob-accent);
 }
 
+/*
+ * Only the colour, never the shorthand: a `background` here outranks the
+ * chevron longhands further down and would reset the arrow to a tiled,
+ * full-size image sitting on top of the value.
+ */
 body.quarto-dark .version-select {
-  background: var(--ob-surface);
+  background-color: var(--ob-surface);
   border-color: var(--ob-border);
 }
 
@@ -1156,15 +1309,184 @@ body.quarto-dark .version-select {
 
 body.quarto-dark .version-select,
 body.quarto-dark #baseline-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23dee2e6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23adbac7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
   color-scheme: dark;
 }
 
 body.quarto-dark #baseline-select {
   background-color: var(--ob-surface);
-  color: var(--bs-body-color, #d4d4d8);
+  color: var(--ob-text);
 }
 
 body.quarto-dark .version-select {
   background-color: var(--ob-surface);
+}
+
+/* --- Narrow screens: scroll the table inside its own box --- */
+
+/* Desktop keeps the bar on one line, so the header takes its natural width */
+@media (min-width: 901px) {
+  #score-header {
+    min-width: max-content;
+  }
+}
+
+/* The sticky thead needs the page itself to scroll sideways, so it is kept on
+   wide screens only and the wrapper takes over the horizontal scrolling below. */
+@media (max-width: 900px) {
+  /*
+   * A sideways swipe rubber-bands the page while the fixed floating header
+   * stays put. Stop the page bouncing horizontally, and stop the end of the
+   * table's own sideways scroll from chaining into that bounce.
+   * iOS Safari honours overscroll-behavior from version 16.
+   */
+  html,
+  body {
+    overscroll-behavior-x: none;
+  }
+
+  .controls {
+    flex-wrap: wrap;
+  }
+
+  /* The table scrolls sideways in its own box, and never vertically: with no
+     height limit the box has nothing to scroll down, so a vertical swipe over
+     it (or over the empty space beside it) always moves the page. */
+  .score-table-wrapper {
+    overflow-x: auto;
+    overflow-y: visible;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+  }
+
+  .score-table-wrapper.at-right-end {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .depth-table thead {
+    position: static;
+  }
+
+  /* A drawn edge on the frozen column, as a pseudo-element so it survives
+     the baseline row marker, which owns the box-shadow of those cells. */
+  .score-table .model-col::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -1px;
+    width: 1px;
+    background: var(--ob-border);
+  }
+
+  /* With collapsed borders the frozen cell's left half-border belongs to the
+     table and scrolls away with it, leaving a hairline where the scrolled
+     cells show through. Redraw that edge on the cell, in its colour at rest. */
+  .score-table .model-col::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -1px;
+    width: 1px;
+    background: var(--bs-border-color, #dee2e6);
+  }
+
+  body.quarto-dark .score-table .model-col::before {
+    background: var(--ob-page-bg);
+  }
+}
+
+/* --- Floating header clone (narrow screens) --- */
+
+/* A copy of the table head, held under the page header while the table itself
+   is scrolled past it. It is a scroll box of its own so the model column can
+   stay frozen while the copy follows the table sideways. */
+#floating-thead {
+  position: fixed;
+  /* The same offset as #score-header plus its height, with its transition, so
+     the copy stays glued to it while the navbar slides in and out. */
+  top: calc(var(--navbar-full-height, 0px) + var(--controls-height, 0px));
+  transition: top 0.2s linear;
+  z-index: 9;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+  /* Opaque, and never masked: the fade belongs to the rows scrolling past
+     underneath, so a masked copy would let them show through its own text. */
+  background: var(--bs-body-bg, #fafaf7);
+}
+
+#floating-thead .score-table thead th {
+  background: var(--bs-body-bg, #fafaf7);
+}
+
+body.quarto-dark #floating-thead,
+body.quarto-dark #floating-thead .score-table thead th {
+  background: var(--ob-page-bg);
+}
+
+body.nav-hidden #floating-thead {
+  top: var(--controls-height, 0px);
+}
+
+#floating-thead.is-visible {
+  display: block;
+}
+
+/* --- Phone layout --- */
+
+@media (max-width: 600px) {
+  .controls {
+    padding: 0.35rem 0.4rem;
+    gap: 0.35rem 0.5rem;
+  }
+
+  .display-toggle {
+    margin-left: 0;
+  }
+
+  .score-table {
+    font-size: 0.72rem;
+  }
+
+  .score-table th,
+  .score-table td {
+    padding: 0.15rem 0.2rem;
+  }
+
+  /* The eleven tick labels need the full 300px bar to stay apart */
+  .legend-ticks {
+    display: none;
+  }
+}
+
+/* --- Tap-to-show tooltip (touch has no hover for title=) --- */
+
+#score-tip {
+  position: absolute;
+  z-index: 40;
+  display: none;
+  max-width: min(18rem, 80vw);
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-surface-raised);
+  box-shadow: var(--ob-soft-shadow);
+  color: var(--bs-body-color, #333940);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  white-space: pre-line;
+}
+
+#score-tip.is-open {
+  display: block;
+}
+
+[data-tip-open] {
+  outline: 2px solid var(--ob-accent);
+  outline-offset: -2px;
 }

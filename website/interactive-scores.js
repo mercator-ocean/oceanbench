@@ -29,16 +29,27 @@ const PALETTE = {
   blue: { end: [33, 102, 172], mid: [146, 197, 222] },
   red:  { mid: [244, 165, 130], end: [178, 24, 43] },
   light: [255, 255, 255],
-  dark: [40, 40, 40],
+  /*
+   * The dark scale steps in lightness as well as hue: the neutral end is the
+   * page colour the table sits on, so a zero-difference or missing cell reads
+   * as page, as white does in light mode, and each step away from it is
+   * lighter and more saturated, a blue better side and a red worse one at
+   * matched lightness. The extremes are the page blended 62% towards #388bfd
+   * and #f85149 and the middle steps 36%, which keeps one light text colour
+   * above 4.5:1 on every tile.
+   */
+  darkScale: [[45, 99, 172], [38, 71, 117], [28, 33, 40], [107, 50, 52], [164, 63, 60]],
 };
+
+const DARK_CELL_TEXT = "#e6edf3";
 
 function isDarkMode() {
   return document.body.classList.contains("quarto-dark");
 }
 
 function getPaletteColors() {
-  const neutral = isDarkMode() ? PALETTE.dark : PALETTE.light;
-  return [PALETTE.blue.end, PALETTE.blue.mid, neutral, PALETTE.red.mid, PALETTE.red.end];
+  if (isDarkMode()) return PALETTE.darkScale;
+  return [PALETTE.blue.end, PALETTE.blue.mid, PALETTE.light, PALETTE.red.mid, PALETTE.red.end];
 }
 
 let selectedDepths = new Set();
@@ -89,6 +100,12 @@ function interpolateColor(startColor, endColor, ratio) {
 }
 
 function textColorForBackground(rgb) {
+  /*
+   * Every colour on the dark scale is dark enough for one text colour, which
+   * is the point of that scale: no cell flips to dark text and fights the
+   * light text around it.
+   */
+  if (isDarkMode()) return DARK_CELL_TEXT;
   const luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
   return luminance > 140 ? "black" : "white";
 }
@@ -129,7 +146,7 @@ function formatPercentDiffForCell(referenceValue, comparedValue) {
   if (referenceValue === 0) return comparedValue === 0 ? "0%" : "N/A";
   const percent = ((comparedValue - referenceValue) / Math.abs(referenceValue)) * 100;
   if (percent > 999) return ">999%";
-  if (percent < -999) return "<-999%";
+  if (percent < -999) return "&lt;-999%";
   return `${Math.round(percent)}%`;
 }
 
@@ -192,7 +209,7 @@ function displayNameHtml(name) {
   if (!note) return displayName(name);
   return (
     `${displayName(name)}` +
-    `<sup class="challenger-note-marker" title="${escapeAttribute(note)}">*</sup>`
+    `<span class="challenger-note-marker" title="${escapeAttribute(note)}">*</span>`
   );
 }
 
@@ -322,7 +339,8 @@ function buildDataRows(
         const title = value !== null
           ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
           : "";
-        rows += `<td class="score-value-cell" style="${style}" title="${title}">${display}</td>`;
+        const emptyClass = value === null ? " no-value-cell" : "";
+        rows += `<td class="score-value-cell${emptyClass}" style="${style}" title="${title}">${display}</td>`;
       }
     }
     rows += "</tr>";
@@ -367,7 +385,8 @@ function buildCombinedDataRows(
           const title = value !== null
             ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
             : "";
-          rows += `<td class="score-value-cell" style="${style}" title="${title}">${display}</td>`;
+          const emptyClass = value === null ? " no-value-cell" : "";
+          rows += `<td class="score-value-cell${emptyClass}" style="${style}" title="${title}">${display}</td>`;
         }
       }
     }
@@ -462,6 +481,7 @@ function navigateToSection(
   if (!SECTION_ID_MAP[sectionKey]) return;
   scrollToSection(sectionKey);
   setActiveSection(sectionKey, { updateHash, replaceHistory });
+  updateFloatingHead();
 }
 
 function sectionInView() {
@@ -485,6 +505,7 @@ function refreshScrollSpy() {
   if (currentSection) {
     setActiveSection(currentSection, { updateHash: false });
   }
+  updateFloatingHead();
 }
 
 function scheduleScrollSpyRefresh() {
@@ -844,8 +865,12 @@ function renderDepthGroup(
   }
   tbody += "</tbody>";
 
-  const tableClass = depths.length > 1 ? "score-table depth-table" : "score-table";
-  return `<table class="${tableClass}">${thead}${tbody}</table>`;
+  const isDepthTable = depths.length > 1;
+  const tableClass = isDepthTable ? "score-table depth-table" : "score-table";
+  const wrapperClass = isDepthTable
+    ? "score-table-wrapper depth-table-wrapper"
+    : "score-table-wrapper";
+  return `<div class="${wrapperClass}"><table class="${tableClass}">${thead}${tbody}</table></div>`;
 }
 
 function renderCombinedFlatMetrics(
@@ -1024,6 +1049,121 @@ function updateStickyOffsets() {
     const headerHeight = header.getBoundingClientRect().height;
     document.documentElement.style.setProperty("--controls-height", headerHeight + "px");
   }
+}
+
+// --- Floating header clone (narrow screens) ---
+
+// Above this width the table head is read straight from the page.
+const FLOATING_HEAD_MAX_WIDTH = 900;
+
+// The table the current clone was built from, so it is only rebuilt when the
+// columns it copies can have changed.
+let floatingHeadSource = null;
+
+function getFloatingHeadHost() {
+  let host = document.getElementById("floating-thead");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "floating-thead";
+    host.setAttribute("aria-hidden", "true");
+    document.body.appendChild(host);
+  }
+  return host;
+}
+
+function hideFloatingHead() {
+  const host = document.getElementById("floating-thead");
+  if (host) host.classList.remove("is-visible");
+  floatingHeadSource = null;
+}
+
+// Force a rebuild, for when the column widths themselves have moved.
+function resetFloatingHead() {
+  hideFloatingHead();
+  const host = document.getElementById("floating-thead");
+  if (host) host.innerHTML = "";
+}
+
+function syncFloatingHeadScroll(wrapper) {
+  if (!floatingHeadSource || !wrapper.contains(floatingHeadSource)) return;
+  const host = document.getElementById("floating-thead");
+  if (!host) return;
+  host.scrollLeft = wrapper.scrollLeft;
+}
+
+// The table whose head has passed fully under the page header while the rest
+// of its rows are still on screen. Waiting for the whole head keeps the copy
+// from showing while a row of the real head is still visible beneath it.
+function findTableUnderHeader(headerBottom) {
+  let found = null;
+  for (const wrapper of document.querySelectorAll(".score-table-wrapper")) {
+    const table = wrapper.querySelector(".score-table");
+    if (!table || !table.tHead || table.offsetParent === null) continue;
+    const headRect = table.tHead.getBoundingClientRect();
+    const tableRect = table.getBoundingClientRect();
+    if (headRect.bottom <= headerBottom + 1 && tableRect.bottom > headerBottom + headRect.height) {
+      found = { wrapper, table };
+    }
+  }
+  return found;
+}
+
+// A deep copy of the head carrying the measured width of every live header
+// cell, so the copy lines up with the columns underneath it.
+function buildFloatingHead(host, table) {
+  host.innerHTML = "";
+  const clone = document.createElement("table");
+  clone.className = table.className;
+  clone.appendChild(table.tHead.cloneNode(true));
+  host.appendChild(clone);
+
+  const liveCells = table.tHead.querySelectorAll("th");
+  const cloneCells = clone.querySelectorAll("th");
+  liveCells.forEach((cell, index) => {
+    const target = cloneCells[index];
+    if (!target) return;
+    const width = cell.getBoundingClientRect().width;
+    target.style.width = `${width}px`;
+    target.style.minWidth = `${width}px`;
+    target.style.maxWidth = `${width}px`;
+  });
+  clone.style.width = `${table.getBoundingClientRect().width}px`;
+  floatingHeadSource = table;
+}
+
+function updateFloatingHead() {
+  if (window.innerWidth > FLOATING_HEAD_MAX_WIDTH) {
+    hideFloatingHead();
+    return;
+  }
+  const headerBottom = getStickyBottomOffset();
+  const target = findTableUnderHeader(headerBottom);
+  if (!target) {
+    hideFloatingHead();
+    return;
+  }
+  const host = getFloatingHeadHost();
+  if (floatingHeadSource !== target.table) buildFloatingHead(host, target.table);
+
+  const wrapperRect = target.wrapper.getBoundingClientRect();
+  host.style.left = `${wrapperRect.left}px`;
+  host.style.width = `${target.wrapper.clientWidth}px`;
+  host.classList.add("is-visible");
+  host.scrollLeft = target.wrapper.scrollLeft;
+}
+
+// Mark a scroll box that is already scrolled to its right edge so the fade
+// hinting at more columns can be hidden there.
+function setupScrollFade() {
+  document.querySelectorAll(".score-table-wrapper").forEach((wrapper) => {
+    const update = () => {
+      const atEnd = wrapper.scrollLeft + wrapper.clientWidth >= wrapper.scrollWidth - 1;
+      wrapper.classList.toggle("at-right-end", atEnd);
+      syncFloatingHeadScroll(wrapper);
+    };
+    wrapper.addEventListener("scroll", update, { passive: true });
+    update();
+  });
 }
 
 function attachSelectorListeners() {
@@ -1293,6 +1433,10 @@ function renderTablesOnly() {
   renderChallengerNotes(visibleChallengerNames);
   updateColorLegend();
   setupCellHighlight();
+  updateStickyOffsets();
+  setupScrollFade();
+  resetFloatingHead();
+  updateFloatingHead();
 
   selectedBaseline = baseline;
   writeUrlState();
@@ -1353,6 +1497,9 @@ function renderAllTables() {
   setActiveSection(activeSection);
   refreshScrollSpy();
   setupCellHighlight();
+  setupScrollFade();
+  resetFloatingHead();
+  updateFloatingHead();
 
   defaultVersionValue = resolveDefaultVersion(data);
   defaultRegionValue = regionIds[0] || null;
@@ -1433,6 +1580,84 @@ function writeUrlState() {
   window.history.replaceState(null, "", newRelativeUrl);
 }
 
+function ensureTipElement() {
+  let tip = document.getElementById("score-tip");
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.id = "score-tip";
+    document.body.appendChild(tip);
+  }
+  return tip;
+}
+
+function closeTapTooltip() {
+  const open = document.querySelector("[data-tip-open]");
+  if (open) open.removeAttribute("data-tip-open");
+  const tip = document.getElementById("score-tip");
+  if (tip) tip.classList.remove("is-open");
+}
+
+function openTapTooltip(element) {
+  const text = element.getAttribute("title");
+  if (!text) return;
+  const tip = ensureTipElement();
+  tip.textContent = text;
+  tip.classList.add("is-open");
+  element.setAttribute("data-tip-open", "");
+
+  const rect = element.getBoundingClientRect();
+  const width = tip.getBoundingClientRect().width;
+  const left = Math.max(
+    4,
+    Math.min(
+      rect.left + window.scrollX + rect.width / 2 - width / 2,
+      window.scrollX + document.documentElement.clientWidth - width - 4,
+    ),
+  );
+  tip.style.left = `${left}px`;
+  tip.style.top = `${rect.bottom + window.scrollY + 4}px`;
+}
+
+let tapTooltipClicksAttached = false;
+
+function attachTapTooltips() {
+  // Desktop clicks must not open the tooltip, so wait for a real touch unless the
+  // device reports that it has no hover at all.
+  if (!window.matchMedia("(hover: none)").matches) {
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.pointerType === "touch" || event.pointerType === "pen") {
+          attachTapTooltipClicks();
+        }
+      },
+      { capture: true },
+    );
+    return;
+  }
+  attachTapTooltipClicks();
+}
+
+function attachTapTooltipClicks() {
+  if (tapTooltipClicksAttached) return;
+  tapTooltipClicksAttached = true;
+  document.addEventListener("click", (event) => {
+    const target = event.target.closest(
+      ".score-table td.score-value-cell, .challenger-note-marker",
+    );
+    if (!target) {
+      closeTapTooltip();
+      return;
+    }
+    if (target.classList.contains("challenger-note-marker")) {
+      event.preventDefault();
+    }
+    const wasOpen = target.hasAttribute("data-tip-open");
+    closeTapTooltip();
+    if (!wasOpen) openTapTooltip(target);
+  });
+}
+
 function init() {
   if (!document.getElementById("scores-data")) return;
   const initialSection = readSectionFromHash();
@@ -1454,6 +1679,7 @@ function init() {
   });
 
   window.addEventListener("scroll", scheduleScrollSpyRefresh, { passive: true });
+  attachTapTooltips();
 
   let wasDark = document.body.classList.contains("quarto-dark");
   new MutationObserver(() => {
@@ -1486,11 +1712,13 @@ function init() {
 
     window.addEventListener("resize", () => {
       document.documentElement.style.setProperty("--navbar-full-height", `${navbar.offsetHeight}px`);
+      resetFloatingHead();
       syncHeaderState();
     });
   } else {
     window.addEventListener("resize", () => {
       updateStickyOffsets();
+      resetFloatingHead();
       refreshScrollSpy();
     });
   }

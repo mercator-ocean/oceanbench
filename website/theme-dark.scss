@@ -4,17 +4,85 @@
  * SPDX-License-Identifier: EUPL-1.2
  */
 
-$primary: #3aa6d3;
-$link-color: $primary;
-$body-bg: #1a1a2e;
-$body-color: #d4d4d8;
+/*-- scss:defaults --*/
+
+/*
+ * Dark palette: blue-tinted neutrals with one accent, the brand sky blue of
+ * the logo. The same values are mirrored in the `body.quarto-dark` token
+ * block of styles.css, which is what the hand-written components read; keep
+ * the two in step.
+ *
+ * The neutrals step up towards the viewer: the page is the darkest large
+ * area and carries the tables directly, panels (cards) sit one step above
+ * it and raised chrome (the controls bar, dropdowns) one more. Text stops at a soft white
+ * so nothing large blooms, and the accent is kept for what can be acted on:
+ * links, the active tab and chip, focus rings and the baseline marker.
+ */
+$ob-page-bg: #1c2128;
+$ob-surface: #22272e;
+$ob-surface-raised: #2d333b;
+$ob-navbar-bg: #1a2740;
+$ob-border: #444c56;
+$ob-grid-border: rgba(240, 246, 252, 0.06);
+$ob-text: #adbac7;
+$ob-heading: #cdd9e5;
+$ob-muted: #909dab;
+$ob-accent: #8fd0e8;
+$ob-accent-hover: #b4e0f0;
+$ob-table-text: #cdd9e5;
+
+$primary: $ob-accent;
+$secondary: $ob-muted;
+$link-color: $ob-accent;
+$link-hover-color: $ob-accent-hover;
+$link-decoration: none;
+
+$body-bg: $ob-page-bg;
+$body-color: $ob-text;
+$body-secondary-color: $ob-muted;
+$body-tertiary-bg: $ob-surface;
+$headings-color: $ob-heading;
+$border-color: $ob-border;
+
+$card-bg: $ob-surface;
+$card-border-color: $ob-border;
+
+$input-bg: $ob-surface-raised;
+$input-color: $ob-text;
+$input-border-color: $ob-border;
+$input-placeholder-color: $ob-muted;
+
+$dropdown-bg: $ob-surface-raised;
+$dropdown-border-color: $ob-border;
+$dropdown-link-color: $ob-text;
+$dropdown-link-hover-bg: rgba(143, 208, 232, 0.1);
+$dropdown-link-hover-color: $ob-heading;
+
+$table-color: $ob-text;
+$table-bg: transparent;
+$table-border-color: $ob-border;
+$table-striped-bg: rgba(240, 246, 252, 0.03);
+$table-striped-color: $ob-text;
+$table-hover-bg: rgba(240, 246, 252, 0.04);
+$table-hover-color: $ob-text;
+
+$navbar-bg: $ob-navbar-bg;
+$navbar-dark-bg: $ob-navbar-bg;
+$navbar-fg: $ob-text;
+$navbar-hl: $ob-heading;
+
+$footer-bg: $ob-page-bg;
+$footer-fg: $ob-muted;
+
+$box-shadow: 0 6px 20px rgba(1, 4, 9, 0.55);
+$box-shadow-sm: 0 3px 10px rgba(1, 4, 9, 0.5);
 
 /*-- scss:rules --*/
 
 .navbar {
-  background-color: #16213e !important;
+  border-bottom: 1px solid #2a3d5e;
 }
 
-body {
-  background-color: #1a1a2e !important;
+.nav-footer {
+  border-top: 1px solid $ob-border;
 }
