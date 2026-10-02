@@ -168,3 +168,13 @@ Finally, run the tests:
 ```sh
 make run-tests
 ```
+
+It evaluates and compares every sample, then runs the unit tests and the dataset doctests.
+To evaluate and compare a single sample, as the CI does:
+
+```sh
+make evaluate-sample SAMPLE=assets/glonet_sample.py
+make compare-sample SAMPLE=assets/glonet_sample.py
+```
+
+The unit tests alone run with `pytest tests -n 8`.

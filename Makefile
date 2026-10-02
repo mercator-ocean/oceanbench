@@ -54,12 +54,6 @@ evaluate-challenger:
 	pip install --editable .
 	oceanbench evaluate $(CHALLENGER_PYTHON_FILE_PATH)
 
-evaluate-samples: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
-evaluate-samples:
-	${ACTIVATE_ENVIRONMENT}
-	oceanbench evaluate --max-workers 1 $(SAMPLE_FILES)
-	oceanbench evaluate ${IBI_SAMPLE_FILE} --region ibi
-
 evaluate-sample: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-sample:
 	${ACTIVATE_ENVIRONMENT}
@@ -69,15 +63,6 @@ evaluate-ibi-region: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-ibi-region:
 	${ACTIVATE_ENVIRONMENT}
 	oceanbench evaluate ${IBI_SAMPLE_FILE} --region ibi
-
-compare-notebooks: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
-compare-notebooks:
-	${ACTIVATE_ENVIRONMENT}
-	@for f in $(SAMPLE_FILES); do \
-		name=$$(basename $$f .py); \
-		python tests/compare_notebook.py assets/$$name.global.report.ipynb $$name.global.report.ipynb; \
-	done
-	python tests/compare_notebook.py assets/$(IBI_NOTEBOOK) $(IBI_NOTEBOOK)
 
 compare-sample: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-sample:
@@ -99,10 +84,14 @@ run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
-	$(MAKE) evaluate-samples
-	$(MAKE) compare-notebooks
+	for sample in $(SAMPLE_FILES); do
+		$(MAKE) evaluate-sample SAMPLE=$$sample
+		$(MAKE) compare-sample SAMPLE=$$sample
+	done
+	$(MAKE) evaluate-ibi-region
+	$(MAKE) compare-ibi
 	poetry run pytest tests -n 8
-	poetry run pytest --doctest-modules oceanbench/datasets/*
+	$(MAKE) doctest
 
 _release: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
 _release:
