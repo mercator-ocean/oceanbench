@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import numpy
 import pandas
 import xarray
 
@@ -35,7 +36,7 @@ def _create_observations_dataframe(
 def _interpolate_model_to_observations(
     model_data: xarray.DataArray,
     observations_dataframe: pandas.DataFrame,
-) -> xarray.DataArray:
+) -> numpy.ndarray:
     return interpolate_class4_model_to_observations(model_data, observations_dataframe)
 
 
