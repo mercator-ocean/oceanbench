@@ -174,7 +174,7 @@ def langya_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
 
 def _langya_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/langya/{start_datetime_string}.zarr"
+    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/langya/v2/{start_datetime_string}.zarr"
 
 
 def glo12_persistence() -> xarray.Dataset:
