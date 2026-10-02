@@ -13,6 +13,7 @@ from oceanbench.core.dataset_utils import (
     Variable,
     Dimension,
     DepthLevel,
+    SPATIAL_COORDINATE_ALIGNMENT_ATOL,
     VARIABLE_METADATA,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
@@ -26,7 +27,8 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.MINUS_500_METERS: "500m",
 }
 
-SPATIAL_COORDINATE_ALIGNMENT_ATOL = 1e-4
+MISSING_FRACTION_COLUMN = "Missing fraction"
+
 SPATIAL_GRID_MINIMUM_MATCH_RATIO = 0.999
 SPATIAL_COORDINATE_NAMES = (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key())
 
@@ -36,7 +38,6 @@ def _assign_depth_dimension(dataset: xarray.Dataset) -> xarray.Dataset:
 
 
 def spatial_area_weights(dataset: xarray.Dataset) -> xarray.DataArray:
-    """Cosine-of-latitude weights, the area weighting every gridded metric shares."""
     return numpy.cos(numpy.deg2rad(dataset[Dimension.LATITUDE.key()]))
 
 
@@ -116,25 +117,95 @@ def _snap_reference_spatial_coordinates_to_challenger(
     return reference_dataset.isel(reference_indexes_by_coordinate).assign_coords(challenger_coordinates)
 
 
-def _root_mean_squared_error_per_start(
+def _ocean_mask_on_challenger_grid(
+    ocean_mask: xarray.DataArray,
+    challenger_dataset: xarray.Dataset,
+) -> xarray.DataArray:
+    latitude_key = Dimension.LATITUDE.key()
+    longitude_key = Dimension.LONGITUDE.key()
+    regridded_mask = ocean_mask.sel(
+        {Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel]}, method="nearest"
+    ).sel(
+        {
+            latitude_key: challenger_dataset[latitude_key],
+            longitude_key: challenger_dataset[longitude_key],
+        },
+        method="nearest",
+    )
+    return regridded_mask.assign_coords(
+        {
+            Dimension.DEPTH.key(): [DEPTH_LABELS[level] for level in DepthLevel],
+            latitude_key: challenger_dataset[latitude_key],
+            longitude_key: challenger_dataset[longitude_key],
+        }
+    )
+
+
+def _variable_ocean_mask(
+    ocean_mask: xarray.DataArray,
+    dataset: xarray.Dataset,
+    variable_name: str,
+) -> xarray.DataArray:
+    if Dimension.DEPTH.key() in dataset[variable_name].dims:
+        return ocean_mask
+    surface_mask = ocean_mask.sel({Dimension.DEPTH.key(): DEPTH_LABELS[DepthLevel.SURFACE]})
+    return surface_mask.drop_vars(Dimension.DEPTH.key())
+
+
+def _masked_to_ocean(dataset: xarray.Dataset, ocean_mask: xarray.DataArray) -> xarray.Dataset:
+    return dataset.assign(
+        {
+            variable_name: dataset[variable_name].where(_variable_ocean_mask(ocean_mask, dataset, variable_name))
+            for variable_name in dataset.data_vars
+        }
+    )
+
+
+def _missing_ocean_fraction(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
-) -> xarray.Dataset:
-    reference_dataset = _snap_reference_spatial_coordinates_to_challenger(challenger_dataset, reference_dataset)
-    squared_error = (challenger_dataset - reference_dataset) ** 2
-    area_weighted_mean_squared_error = squared_error.weighted(spatial_area_weights(squared_error)).mean(
-        dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
+    ocean_mask: xarray.DataArray,
+    variable_name: str,
+) -> xarray.DataArray:
+    spatial_dimensions = [Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
+    forecast_dimensions = [Dimension.FIRST_DAY_DATETIME.key(), Dimension.LEAD_DAY_INDEX.key()]
+    is_scorable = (
+        _variable_ocean_mask(ocean_mask, challenger_dataset, variable_name) & reference_dataset[variable_name].notnull()
     )
-    return numpy.sqrt(area_weighted_mean_squared_error)
+    is_missing = is_scorable & challenger_dataset[variable_name].isnull()
+    return (
+        is_missing.where(is_scorable)
+        .weighted(spatial_area_weights(challenger_dataset))
+        .mean(dim=spatial_dimensions)
+        .mean(dim=forecast_dimensions)
+    )
+
+
+def _missing_fractions(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    ocean_mask: xarray.DataArray,
+) -> xarray.Dataset:
+    return xarray.Dataset(
+        {
+            variable_name: _missing_ocean_fraction(challenger_dataset, reference_dataset, ocean_mask, variable_name)
+            for variable_name in challenger_dataset.data_vars
+        }
+    )
 
 
 def _rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
+    ocean_mask: xarray.DataArray,
 ) -> xarray.Dataset:
-    return _root_mean_squared_error_per_start(challenger_dataset, reference_dataset).mean(
-        dim=Dimension.FIRST_DAY_DATETIME.key()
+    challenger_dataset = _masked_to_ocean(challenger_dataset, ocean_mask)
+    reference_dataset = _masked_to_ocean(reference_dataset, ocean_mask)
+    squared_error = (challenger_dataset - reference_dataset) ** 2
+    area_weighted_mean_squared_error = squared_error.weighted(spatial_area_weights(squared_error)).mean(
+        dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
     )
+    return numpy.sqrt(area_weighted_mean_squared_error).mean(dim=Dimension.FIRST_DAY_DATETIME.key())
 
 
 def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
@@ -154,18 +225,42 @@ def _select_dataset_variable_and_depth(dataset: xarray.Dataset, variable_name: s
     )
 
 
-def _to_pretty_dataframe(dataset: xarray.Dataset, variables: list[Variable]) -> pandas.DataFrame:
-    dataset_with_depth = _assign_depth_dimension(dataset) if dataset.get(Dimension.DEPTH.key()) is None else dataset
-    values_2d: dict[str, numpy.ndarray] = {
-        _variable_depth_label(dataset_with_depth, variable.key(), depth_level): _select_dataset_variable_and_depth(
-            dataset_with_depth, variable.key(), depth_level
-        )
+def _scored_variable_depth_pairs(dataset: xarray.Dataset, variables: list[Variable]) -> list[tuple[str, str]]:
+    return [
+        (variable.key(), depth_level)
         for depth_level in DEPTH_LABELS.values()
         for variable in variables
-        if depth_level == DEPTH_LABELS[DepthLevel.SURFACE] or _has_depths(dataset_with_depth, variable.key())
+        if depth_level == DEPTH_LABELS[DepthLevel.SURFACE] or _has_depths(dataset, variable.key())
+    ]
+
+
+def _missing_fraction_at_depth(missing_fraction_dataset: xarray.Dataset, variable_name: str, depth_level: str) -> float:
+    missing_fraction = missing_fraction_dataset[variable_name]
+    if Dimension.DEPTH.key() in missing_fraction.dims:
+        return float(missing_fraction.sel({Dimension.DEPTH.key(): depth_level}))
+    return float(missing_fraction)
+
+
+def _to_pretty_dataframe(
+    dataset: xarray.Dataset,
+    variables: list[Variable],
+    missing_fraction_dataset: xarray.Dataset,
+) -> pandas.DataFrame:
+    dataset_with_depth = _assign_depth_dimension(dataset) if dataset.get(Dimension.DEPTH.key()) is None else dataset
+    scored_pairs = _scored_variable_depth_pairs(dataset_with_depth, variables)
+    values_2d: dict[str, numpy.ndarray] = {
+        _variable_depth_label(dataset_with_depth, variable_key, depth_level): _select_dataset_variable_and_depth(
+            dataset_with_depth, variable_key, depth_level
+        )
+        for variable_key, depth_level in scored_pairs
     }
     lead_days_count = dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
-    return pandas.DataFrame(values_2d).set_index([lead_day_labels(1, lead_days_count)]).T
+    pretty_dataframe = pandas.DataFrame(values_2d).set_index([lead_day_labels(1, lead_days_count)]).T
+    pretty_dataframe[MISSING_FRACTION_COLUMN] = [
+        _missing_fraction_at_depth(missing_fraction_dataset, variable_key, depth_level)
+        for variable_key, depth_level in scored_pairs
+    ]
+    return pretty_dataframe
 
 
 def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
@@ -191,40 +286,25 @@ def rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
+    ocean_mask: xarray.DataArray,
 ) -> pandas.DataFrame:
-    prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
-    prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
-    rmsd_dataset = _rmsd(prepared_challenger_dataset, prepared_reference_dataset)
-    computed_rmsd_dataset = rmsd_dataset.compute()
-    return _to_pretty_dataframe(computed_rmsd_dataset, variables)
+    """
+    Area-weighted gridded RMSD over the ocean cells of the OceanBench ocean mask.
 
-
-def rmsd_per_start_date(
-    challenger_dataset: xarray.Dataset,
-    reference_dataset: xarray.Dataset,
-    variables: list[Variable],
-) -> dict[numpy.datetime64, pandas.DataFrame]:
-    """Return one pretty RMSD dataframe per forecast start date.
-
-    ``rmsd`` averages over ``first_day_datetime`` skipping missing values, and it does so
-    cell by cell: a start missing one lead day at one depth is dropped from that cell alone,
-    while its other cells still count. Reproducing the published number therefore means an
-    element-wise mean across all the returned frames that skips the missing cells, that is
-    ``pandas.concat(frames).groupby(level=0).mean()`` reindexed on the published row order.
-    Dropping whole frames instead is only equivalent when every missing frame is missing in
-    full, and it is wrong by several percent as soon as one is partially missing. A start
-    that is missing in full contributes nothing to any cell, so it falls out of the
-    element-wise mean on its own. The reference grid is snapped to the challenger grid
-    first, exactly as ``rmsd`` does, so a per-start score and the published score are
-    computed over the same cells.
+    The reference is first snapped to the challenger grid by nearest index. A cell is scored when it
+    is ocean and both the challenger and the reference have a value. Ocean cells where the reference
+    has a value and the challenger has none are not scored: the Missing fraction column reports their
+    area-weighted share.
     """
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
-    prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
-    per_start_dataset = _root_mean_squared_error_per_start(
-        prepared_challenger_dataset, prepared_reference_dataset
+    prepared_reference_dataset = _snap_reference_spatial_coordinates_to_challenger(
+        prepared_challenger_dataset, _select_variables(_harmonise_dataset(reference_dataset), variables)
+    )
+    challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
+    missing_fraction_dataset = _missing_fractions(
+        prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
     ).compute()
-    first_day_key = Dimension.FIRST_DAY_DATETIME.key()
-    return {
-        first_day_value: _to_pretty_dataframe(per_start_dataset.sel({first_day_key: first_day_value}), variables)
-        for first_day_value in per_start_dataset[first_day_key].values
-    }
+    computed_rmsd_dataset = _rmsd(
+        prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
+    ).compute()
+    return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_fraction_dataset)

@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from typing import NamedTuple
 import weakref
 
 import numpy
@@ -17,12 +18,17 @@ from oceanbench.core.dataset_utils import (
     Dimension,
     VARIABLE_DISPLAY_ORDER,
     VARIABLE_METADATA,
+    SPATIAL_COORDINATE_ALIGNMENT_ATOL,
     Variable,
+    is_global_longitude_grid,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
-from oceanbench.core.remote_http import with_remote_http_retries
 from oceanbench.core.references.observations import load_mean_dynamic_topography
-from oceanbench.core.resolution import get_dataset_resolution
+from oceanbench.core.resolution import (
+    QUARTER_DEGREE_SPACING,
+    TWELFTH_DEGREE_SPACING,
+    get_dataset_resolution,
+)
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
 #: Sea surface height shift of a challenger that declares no shift of its own.
@@ -70,6 +76,7 @@ CHALLENGER_INVERSE_BAROMETER_VARIABLES: dict[str, str] = {
 }
 VELOCITY_TARGET_DEPTH_METERS = 15.0
 OBSERVATION_COUNT_COLUMN = "Observations"
+MISSING_COUNT_COLUMN = "Missing"
 #: Cached Class IV observation context, keyed on the identity of the observation dataset.
 #:
 #: The identity number of a dataset is only unique while that dataset is alive, and Python
@@ -80,8 +87,11 @@ _CLASS4_OBSERVATIONS_CACHE: dict[
 ] = {}
 
 
-def _compute_with_remote_retries(operation_name: str, data):
-    return with_remote_http_retries(operation_name, data.compute)
+class Class4PopulationLayers(NamedTuple):
+    depths: numpy.ndarray
+    latitude_origin: numpy.float64
+    longitude_origin: numpy.float64
+    coarse_cells_are_wet: numpy.ndarray
 
 
 def _assign_depth_bins(
@@ -193,20 +203,10 @@ def _prepared_class4_observations(
     )
     lead_day = ((base_subset[time_key] - base_subset["first_day"]) / numpy.timedelta64(1, "D")).astype("int64")
     base_subset = base_subset.assign(lead_day=lead_day)
-    valid_observation_mask = _compute_with_remote_retries(
-        "Class IV observation lead-day mask read",
-        (base_subset["lead_day"] >= 0) & (base_subset["lead_day"] < lead_days_count),
-    )
+    valid_observation_mask = ((base_subset["lead_day"] >= 0) & (base_subset["lead_day"] < lead_days_count)).compute()
     selected_observation_indices = numpy.flatnonzero(valid_observation_mask.values)
     base_subset = base_subset.isel({observation_dimension_key: selected_observation_indices})
-    base_dataframe = (
-        _compute_with_remote_retries(
-            "Class IV observation coordinate read",
-            base_subset,
-        )
-        .to_dataframe()
-        .reset_index()
-    )
+    base_dataframe = base_subset.compute().to_dataframe().reset_index()
     base_dataframe = base_dataframe.drop(columns=[observation_dimension_key], errors="ignore")
     base_dataframe = base_dataframe[[time_key, latitude_key, longitude_key, "first_day", depth_key, "lead_day"]]
     context = (base_dataframe, selected_observation_indices, observation_dimension_key)
@@ -226,10 +226,12 @@ def _create_observations_dataframe(
     latitude_key = Dimension.LATITUDE.key()
     longitude_key = Dimension.LONGITUDE.key()
     depth_key = Dimension.DEPTH.key()
-    observation_values = _compute_with_remote_retries(
-        f"Class IV observation {standard_variable_key} read",
-        observations_dataset[observation_variable_key].isel({observation_dimension_key: selected_observation_indices}),
-    ).values
+    observation_values = (
+        observations_dataset[observation_variable_key]
+        .isel({observation_dimension_key: selected_observation_indices})
+        .compute()
+        .values
+    )
     valid_observation_mask = ~numpy.isnan(observation_values)
     observations_dataframe = base_observations_dataframe.loc[valid_observation_mask].copy()
     observations_dataframe["observation_value"] = observation_values[valid_observation_mask]
@@ -337,9 +339,37 @@ def _convert_forecast_ssh_to_sla(
     model_dataset = rename_dataset_with_standard_names(model_variable.to_dataset(name=variable_key))
     model_variable = model_dataset[variable_key]
     resolution = get_dataset_resolution(model_variable.to_dataset(name="__resolution__"))
-    mean_dynamic_topography = load_mean_dynamic_topography(resolution)
+    mean_dynamic_topography = _mean_dynamic_topography_on_challenger_grid(
+        load_mean_dynamic_topography(resolution),
+        model_variable,
+    )
     sea_surface_height = _without_inverse_barometer(model_variable, challenger_dataset)
     return sea_surface_height - mean_dynamic_topography - shift
+
+
+def _mean_dynamic_topography_on_challenger_grid(
+    mean_dynamic_topography: xarray.DataArray,
+    model_variable: xarray.DataArray,
+) -> xarray.DataArray:
+    for coordinate_name in (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()):
+        challenger_values = model_variable[coordinate_name].values
+        mean_dynamic_topography_values = mean_dynamic_topography[coordinate_name].values
+        nearest_indexes = pandas.Index(mean_dynamic_topography_values).get_indexer(
+            challenger_values, method="nearest", tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL
+        )
+        is_inside = (challenger_values > mean_dynamic_topography_values.min() - SPATIAL_COORDINATE_ALIGNMENT_ATOL) & (
+            challenger_values < mean_dynamic_topography_values.max() + SPATIAL_COORDINATE_ALIGNMENT_ATOL
+        )
+        if (nearest_indexes[is_inside] < 0).any():
+            raise ValueError(
+                f"Challenger {coordinate_name} coordinates do not match the mean dynamic topography grid "
+                f"within tolerance {SPATIAL_COORDINATE_ALIGNMENT_ATOL}"
+            )
+        challenger_coordinate = {coordinate_name: model_variable[coordinate_name]}
+        mean_dynamic_topography = mean_dynamic_topography.reindex(
+            challenger_coordinate, method="nearest", tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL
+        ).assign_coords(challenger_coordinate)
+    return mean_dynamic_topography
 
 
 def prepare_class4_model_variable(
@@ -348,6 +378,18 @@ def prepare_class4_model_variable(
     challenger_dataset: xarray.Dataset,
 ) -> xarray.DataArray:
     return _convert_forecast_ssh_to_sla(model_variable, variable_key, challenger_dataset)
+
+
+def _bracketing_level_indices(
+    sorted_depths: numpy.ndarray,
+    target_depths: numpy.ndarray,
+) -> tuple[numpy.ndarray, numpy.ndarray]:
+    insertion_indices = numpy.searchsorted(sorted_depths, target_depths)
+    upper_indices = numpy.clip(insertion_indices, 0, len(sorted_depths) - 1)
+    lower_indices = numpy.clip(insertion_indices - 1, 0, len(sorted_depths) - 1)
+
+    exact_mask = sorted_depths[upper_indices] == target_depths
+    return numpy.where(exact_mask, upper_indices, lower_indices), upper_indices
 
 
 def _interpolate_vertically_bracket(
@@ -363,18 +405,13 @@ def _interpolate_vertically_bracket(
     sorted_depths = model_depths[sort_order]
     sorted_profiles = profiles[sort_order, :]
 
-    insert_idx = numpy.searchsorted(sorted_depths, target_depths)
-    idx_upper = numpy.clip(insert_idx, 0, len(sorted_depths) - 1)
-    idx_lower = numpy.clip(insert_idx - 1, 0, len(sorted_depths) - 1)
+    lower_indices, upper_indices = _bracketing_level_indices(sorted_depths, target_depths)
 
-    exact_mask = sorted_depths[idx_upper] == target_depths
-    idx_lower = numpy.where(exact_mask, idx_upper, idx_lower)
-
-    obs_indices = numpy.arange(observation_count)
-    lower_values = sorted_profiles[idx_lower, obs_indices]
-    upper_values = sorted_profiles[idx_upper, obs_indices]
-    lower_depths = sorted_depths[idx_lower]
-    upper_depths = sorted_depths[idx_upper]
+    observation_indices = numpy.arange(observation_count)
+    lower_values = sorted_profiles[lower_indices, observation_indices]
+    upper_values = sorted_profiles[upper_indices, observation_indices]
+    lower_depths = sorted_depths[lower_indices]
+    upper_depths = sorted_depths[upper_indices]
 
     same_depth = numpy.isclose(lower_depths, upper_depths)
     interpolated = numpy.empty(observation_count, dtype=float)
@@ -388,8 +425,8 @@ def _interpolate_vertically_bracket(
             upper_values[different] - lower_values[different]
         )
 
-    invalid = numpy.isnan(lower_values) | numpy.isnan(upper_values)
-    result[~invalid] = interpolated[~invalid]
+    bracket_is_valid = ~numpy.isnan(lower_values) & ~numpy.isnan(upper_values)
+    result[bracket_is_valid] = interpolated[bracket_is_valid]
     return result
 
 
@@ -401,6 +438,21 @@ def class4_model_data_with_depth_dimension(model_data: xarray.DataArray) -> xarr
     return model_data.expand_dims({depth_key: [0.0]})
 
 
+def _linearly_interpolated_profiles(
+    data: xarray.DataArray,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+) -> numpy.ndarray:
+    interpolated_profiles = data.interp(
+        {
+            Dimension.LATITUDE.key(): xarray.DataArray(latitudes, dims="observation"),
+            Dimension.LONGITUDE.key(): xarray.DataArray(longitudes, dims="observation"),
+        },
+        method="linear",
+    )
+    return interpolated_profiles.compute().values
+
+
 def _horizontally_interpolated_profiles(
     time_slice: xarray.DataArray,
     observation_group: pandas.DataFrame,
@@ -409,14 +461,33 @@ def _horizontally_interpolated_profiles(
     longitude_key = Dimension.LONGITUDE.key()
     observation_latitudes = observation_group[latitude_key].values
     observation_longitudes = observation_group[longitude_key].values
-    interpolated_profiles = time_slice.interp(
-        {
-            latitude_key: xarray.DataArray(observation_latitudes, dims="observation"),
-            longitude_key: xarray.DataArray(observation_longitudes, dims="observation"),
-        },
-        method="linear",
+    grid_longitudes = time_slice[longitude_key].values
+    first_longitude, last_longitude = grid_longitudes[0], grid_longitudes[-1]
+    is_on_grid = (observation_longitudes >= first_longitude) & (observation_longitudes <= last_longitude)
+    if not is_global_longitude_grid(grid_longitudes) or is_on_grid.all():
+        return _linearly_interpolated_profiles(time_slice, observation_latitudes, observation_longitudes)
+
+    wrapped_longitudes = numpy.where(
+        is_on_grid,
+        observation_longitudes,
+        first_longitude + (observation_longitudes - first_longitude) % 360,
     )
-    return interpolated_profiles.compute().values
+    is_in_seam = wrapped_longitudes > last_longitude
+    seam_columns = time_slice.isel({longitude_key: [-1, 0]}).assign_coords(
+        {longitude_key: [last_longitude, first_longitude + 360]}
+    )
+    profile_shape = [
+        time_slice.sizes[dimension] for dimension in time_slice.dims if dimension not in (latitude_key, longitude_key)
+    ]
+    interpolated_profiles = numpy.full(profile_shape + [len(observation_group)], numpy.nan)
+    for data, is_selected in ((time_slice, ~is_in_seam), (seam_columns, is_in_seam)):
+        if is_selected.any():
+            interpolated_profiles[..., is_selected] = _linearly_interpolated_profiles(
+                data,
+                observation_latitudes[is_selected],
+                wrapped_longitudes[is_selected],
+            )
+    return interpolated_profiles
 
 
 def vertically_interpolate_class4_profiles(
@@ -464,7 +535,6 @@ def _assign_model_values_for_first_day(
     first_day_index: int,
     lead_day_to_index: dict[object, int],
     model_depths: numpy.ndarray,
-    variable_key: str,
 ) -> None:
     first_day_block = (
         model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index}).compute()
@@ -475,15 +545,12 @@ def _assign_model_values_for_first_day(
         time_slice = (
             first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
             if first_day_block is not None
-            else _compute_with_remote_retries(
-                f"Class IV model {variable_key} read for lead day {lead_day}",
-                model_data.isel(
-                    {
-                        Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
-                        Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
-                    }
-                ),
-            )
+            else model_data.isel(
+                {
+                    Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
+                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+                }
+            ).compute()
         )
         model_values[observation_group.index.values] = interpolate_class4_model_values_for_observation_group(
             time_slice,
@@ -495,7 +562,6 @@ def _assign_model_values_for_first_day(
 def _interpolate_model_to_observations(
     model_data: xarray.DataArray,
     observations_dataframe: pandas.DataFrame,
-    variable_key: str,
 ) -> numpy.ndarray:
     observations_dataframe = observations_dataframe.reset_index(drop=True)
     model_data = class4_model_data_with_depth_dimension(model_data)
@@ -513,7 +579,6 @@ def _interpolate_model_to_observations(
             first_day_to_index[first_day],
             lead_day_to_index,
             model_depths,
-            variable_key,
         )
     return model_values
 
@@ -522,28 +587,100 @@ def interpolate_class4_model_to_observations(
     model_data: xarray.DataArray,
     observations_dataframe: pandas.DataFrame,
 ) -> numpy.ndarray:
-    variable_key = str(model_data.name)
-    return _interpolate_model_to_observations(model_data, observations_dataframe, variable_key)
+    return _interpolate_model_to_observations(model_data, observations_dataframe)
+
+
+def _coarse_cells_are_wet(is_wet: numpy.ndarray) -> numpy.ndarray:
+    _, latitude_count, longitude_count = is_wet.shape
+    coarse_grid_factor = round(QUARTER_DEGREE_SPACING / TWELFTH_DEGREE_SPACING)
+    coarse_rows = numpy.arange(0, latitude_count, coarse_grid_factor)
+    coarse_columns = numpy.arange(0, longitude_count, coarse_grid_factor)
+    return numpy.logical_and.reduce(
+        [
+            is_wet[:, numpy.clip(coarse_rows + row_offset, 0, latitude_count - 1)][
+                :, :, numpy.mod(coarse_columns + column_offset, longitude_count)
+            ]
+            for row_offset in (-1, 0, 1)
+            for column_offset in (-1, 0, 1)
+        ]
+    )
+
+
+def class4_population_layers(ocean_mask: xarray.DataArray) -> Class4PopulationLayers:
+    sorted_mask = ocean_mask.sortby(Dimension.DEPTH.key())
+    return Class4PopulationLayers(
+        depths=sorted_mask[Dimension.DEPTH.key()].values,
+        latitude_origin=numpy.float64(sorted_mask[Dimension.LATITUDE.key()].values[0]),
+        longitude_origin=numpy.float64(sorted_mask[Dimension.LONGITUDE.key()].values[0]),
+        coarse_cells_are_wet=_coarse_cells_are_wet(sorted_mask.values.astype(bool)),
+    )
+
+
+def _surrounding_cells(
+    row_below: numpy.ndarray,
+    column_left: numpy.ndarray,
+    row_count: int,
+    column_count: int,
+) -> list[tuple[numpy.ndarray, numpy.ndarray]]:
+    first_row = numpy.clip(row_below, 0, row_count - 1)
+    rows = [first_row, numpy.clip(first_row + 1, 0, row_count - 1)]
+    columns = [numpy.mod(column_left, column_count), numpy.mod(column_left + 1, column_count)]
+    return [(row, column) for row in rows for column in columns]
+
+
+def class4_observations_in_shared_population(
+    observations_dataframe: pandas.DataFrame,
+    layers: Class4PopulationLayers,
+) -> pandas.DataFrame:
+    """
+    Keep the observations of the shared Class IV population, selected with the ocean mask alone.
+
+    An observation is kept when the four quarter degree cells around it are ocean at the first mask
+    depth at or below it. A quarter degree cell is ocean when all nine twelfth of a degree cells
+    inside it are. The population is the same for every challenger, whatever its grid.
+    """
+    indexed_observations = observations_dataframe.reset_index(drop=True)
+    latitudes = indexed_observations[Dimension.LATITUDE.key()].values
+    longitudes = indexed_observations[Dimension.LONGITUDE.key()].values
+
+    _, coarse_row_count, coarse_column_count = layers.coarse_cells_are_wet.shape
+    coarse_cells = _surrounding_cells(
+        numpy.floor((latitudes - layers.latitude_origin) / QUARTER_DEGREE_SPACING).astype(numpy.int64),
+        numpy.floor((longitudes - layers.longitude_origin) / QUARTER_DEGREE_SPACING).astype(numpy.int64),
+        coarse_row_count,
+        coarse_column_count,
+    )
+    _, deeper_level = _bracketing_level_indices(
+        layers.depths,
+        indexed_observations[Dimension.DEPTH.key()].values,
+    )
+    has_wet_coarse_cells = numpy.logical_and.reduce(
+        [layers.coarse_cells_are_wet[deeper_level, row, column] for row, column in coarse_cells]
+    )
+    return indexed_observations.loc[has_wet_coarse_cells]
 
 
 def _compute_rmsd_table(
     dataframe: pandas.DataFrame,
     variable_key: str,
 ) -> pandas.DataFrame:
-    valid_dataframe = dataframe.dropna(subset=["model_value", "observation_value"])
+    eligible_dataframe = dataframe.dropna(subset=["observation_value"])
     grouped = (
-        valid_dataframe.assign(
-            squared_difference=(valid_dataframe["model_value"] - valid_dataframe["observation_value"]) ** 2
+        eligible_dataframe.assign(
+            squared_difference=(eligible_dataframe["model_value"] - eligible_dataframe["observation_value"]) ** 2,
+            missing=eligible_dataframe["model_value"].isna(),
         )
         .groupby(["depth_bin", "lead_day"], as_index=False)
         .agg(
             rmsd=("squared_difference", lambda values: numpy.sqrt(values.mean())),
             count=("squared_difference", "size"),
+            missing=("missing", "sum"),
         )
     )
     grouped["count"] = grouped["count"].astype(int)
+    grouped["missing"] = grouped["missing"].astype(int)
     grouped["variable"] = variable_key
-    return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count"]]
+    return grouped[["variable", "depth_bin", "lead_day", "rmsd", "count", "missing"]]
 
 
 def compute_class4_rmsd_table(
@@ -562,15 +699,20 @@ def _observation_variable_depth_label(standard_name: str, depth_bin: str) -> str
 
 
 def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: int) -> pandas.DataFrame:
-    pivot_table = results_dataframe.pivot_table(
-        values="rmsd",
-        index=["variable", "depth_bin"],
-        columns="lead_day",
-        aggfunc="first",
-    ).reset_index()
+    scored_pairs = pandas.MultiIndex.from_frame(results_dataframe[["variable", "depth_bin"]].drop_duplicates())
+    pivot_table = (
+        results_dataframe.pivot_table(
+            values="rmsd",
+            index=["variable", "depth_bin"],
+            columns="lead_day",
+            aggfunc="first",
+        )
+        .reindex(index=scored_pairs, columns=range(lead_days_count))
+        .reset_index()
+    )
     first_available_day = results_dataframe["lead_day"].min()
     observation_counts = results_dataframe[results_dataframe["lead_day"] == first_available_day][
-        ["variable", "depth_bin", "count"]
+        ["variable", "depth_bin", "count", "missing"]
     ]
     pivot_table = pivot_table.merge(observation_counts, on=["variable", "depth_bin"], how="left")
     pivot_table["variable_sort"] = pivot_table["variable"].map(VARIABLE_DISPLAY_ORDER).astype(float)
@@ -584,8 +726,8 @@ def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: 
     lead_columns = [column for column in pivot_table.columns if isinstance(column, (int, numpy.integer))]
     lead_labels = lead_day_labels(1, lead_days_count)
     column_rename = {column: lead_labels[column] for column in lead_columns}
-    result = pivot_table.set_index("label")[lead_columns + ["count"]].rename(
-        columns=column_rename | {"count": OBSERVATION_COUNT_COLUMN}
+    result = pivot_table.set_index("label")[lead_columns + ["count", "missing"]].rename(
+        columns=column_rename | {"count": OBSERVATION_COUNT_COLUMN, "missing": MISSING_COUNT_COLUMN}
     )
     result.index.name = None
     result.columns.name = None
@@ -623,7 +765,6 @@ def class4_variable_results(
         model_value=_interpolate_model_to_observations(
             model_variable,
             observations_dataframe,
-            standard_variable_key,
         )
     )
     return _compute_rmsd_table(observations_dataframe, standard_variable_key)

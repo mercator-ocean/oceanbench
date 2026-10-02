@@ -9,9 +9,7 @@ import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.classIV import _create_observations_dataframe
-from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.references import observations
-from oceanbench.core.remote_http import with_remote_http_retries
 
 
 def _observation_source() -> xarray.Dataset:
@@ -150,22 +148,20 @@ def test_unexpected_observation_basis_version_raises_with_found_version(tmp_path
     assert observations.EXPECTED_OBSERVATIONS_BASIS_VERSION in str(raised_error.value)
 
 
-def test_a_day_store_missing_a_consumed_variable_is_not_retried(monkeypatch) -> None:
-    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value, "3")
-    monkeypatch.setattr("oceanbench.core.remote_http.sleep", lambda _seconds: None)
-    missing_variable_key = Variable.SEA_WATER_SALINITY.key()
-    day_store = _observation_source().drop_vars(missing_variable_key)
-    day_store.attrs[observations.OBSERVATIONS_DAY_ATTRIBUTE] = "2024-01-03"
-    attempts = 0
+def test_observation_basis_version_is_required_on_every_day_store(tmp_path, monkeypatch) -> None:
+    _write_observation_day_store(tmp_path / "20240103.zarr", observations.EXPECTED_OBSERVATIONS_BASIS_VERSION)
+    _write_observation_day_store(tmp_path / "20240104.zarr", "2024-v2.0.1")
+    monkeypatch.setattr(
+        observations,
+        "observation_path",
+        lambda day: str(tmp_path / f"{pandas.Timestamp(day):%Y%m%d}.zarr"),
+    )
+    first_day_datetimes = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
 
-    def open_day_store() -> xarray.Dataset:
-        nonlocal attempts
-        attempts += 1
-        return observations._select_consumed_observation_variables(day_store)
-
-    with pytest.raises(observations.ObservationVariablesMissingError) as raised_error:
-        with_remote_http_retries("observation dataset open", open_day_store)
-
-    assert attempts == 1
-    assert missing_variable_key in str(raised_error.value)
-    assert "2024-01-03" in str(raised_error.value)
+    with pytest.raises(observations.ObservationBasisVersionError, match="2024-v2.0.1"):
+        observations._selected_observations_dataset(
+            observation_days=numpy.array(["2024-01-03", "2024-01-04"], dtype="datetime64[D]"),
+            first_day_timestamps=pandas.to_datetime(first_day_datetimes),
+            first_day_datetimes=first_day_datetimes,
+            lead_days_count=10,
+        )

@@ -2,25 +2,12 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Open GLONET forecast sample with xarray
+# Open GLO36V1 forecasts with oceanbench, for a single first day
 from datetime import datetime
 import xarray
+import oceanbench
 
-challenger_dataset: xarray.Dataset = (
-    xarray.open_mfdataset(
-        [
-            "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glo36v1/20230104.zarr",
-        ],
-        engine="zarr",
-        combine="nested",
-        concat_dim="first_day_datetime",
-        parallel=True,
-    )
-    .rename({"lat": "latitude", "lon": "longitude"})
-    .unify_chunks()
-    .assign({"first_day_datetime": [datetime.fromisoformat("2023-01-04")]})
-)
-
+challenger_dataset: xarray.Dataset = oceanbench.datasets.challenger.glo36v1([datetime.fromisoformat("2023-01-04")])
 
 challenger_dataset["zos"].attrs["standard_name"] = "sea_surface_height_above_geoid"
 challenger_dataset["thetao"].attrs["standard_name"] = "sea_water_potential_temperature"
@@ -31,5 +18,3 @@ challenger_dataset["latitude"].attrs["standard_name"] = "latitude"
 challenger_dataset["longitude"].attrs["standard_name"] = "longitude"
 
 challenger_dataset
-
-print(challenger_dataset)

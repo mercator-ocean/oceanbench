@@ -12,6 +12,7 @@ from oceanbench.core.lagrangian_trajectory import (
     deviation_of_lagrangian_trajectories,
     lagrangian_particle_count_for_region,
 )
+from oceanbench.core.ocean_mask import ocean_mask
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
@@ -46,6 +47,7 @@ def rmsd_of_variables_compared_to_observations(
     return rmsd_class4_validation(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
+        ocean_mask=ocean_mask(),
         variables=[
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
@@ -71,6 +73,7 @@ def rmsd_of_variables_compared_to_glorys_reanalysis(
             Variable.NORTHWARD_SEA_WATER_VELOCITY,
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
+        ocean_mask=ocean_mask(),
     )
 
 
@@ -87,6 +90,7 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
         variables=[
             Variable.MIXED_LAYER_DEPTH,
         ],
+        ocean_mask=ocean_mask(),
     )
 
 
@@ -104,6 +108,7 @@ def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
             Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
             Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
         ],
+        ocean_mask=ocean_mask(),
     )
 
 
@@ -134,6 +139,7 @@ def rmsd_of_variables_compared_to_glo12_analysis(
             Variable.NORTHWARD_SEA_WATER_VELOCITY,
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
+        ocean_mask=ocean_mask(),
     )
 
 
@@ -150,6 +156,7 @@ def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
         variables=[
             Variable.MIXED_LAYER_DEPTH,
         ],
+        ocean_mask=ocean_mask(),
     )
 
 
@@ -167,6 +174,7 @@ def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
             Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
             Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
         ],
+        ocean_mask=ocean_mask(),
     )
 
 

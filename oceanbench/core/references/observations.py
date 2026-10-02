@@ -20,18 +20,16 @@ from oceanbench.core.local_stage import (
     write_dataset_to_local_stage,
 )
 from oceanbench.core.remote_http import (
-    RetriableRemoteDataError,
+    IncompleteRemoteDatasetError,
     open_remote_multizarr,
     open_remote_zarr,
     require_remote_dataset_dimensions,
-    with_remote_http_retries,
 )
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
 OBSERVATIONS_STAGE_VERSION = "v4"
 OBSERVATIONS_BASIS_VERSION_ATTRIBUTE = "obs_basis_version"
-OBSERVATIONS_DAY_ATTRIBUTE = "date"
 EXPECTED_OBSERVATIONS_BASIS_VERSION = "2024-v2.1.0"
 
 
@@ -40,10 +38,6 @@ class ObservationDataUnavailableError(ValueError):
 
 
 class ObservationBasisVersionError(ValueError):
-    pass
-
-
-class ObservationVariablesMissingError(ValueError):
     pass
 
 
@@ -99,14 +93,14 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
             ),
         )
 
-    dataset = with_remote_http_retries("mean dynamic topography open", open_mean_dynamic_topography_dataset)
+    dataset = open_mean_dynamic_topography_dataset()
     dataset = rename_dataset_with_standard_names(dataset)
     return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 
 
 def observation_path(day_datetime: numpy.datetime64) -> str:
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
-    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/observations2024-v2/{day_string}.zarr"
+    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/observations2024-v2/{day_string}.zarr"
 
 
 def observation_day_is_published(day_datetime: numpy.datetime64) -> bool:
@@ -163,10 +157,9 @@ def _select_consumed_observation_variables(day_observations_dataset: Dataset) ->
         if variable_key not in day_observations_dataset.variables
     ]
     if missing_variable_keys:
-        store_day = day_observations_dataset.attrs.get(OBSERVATIONS_DAY_ATTRIBUTE, "unknown")
-        raise ObservationVariablesMissingError(
-            f"Observation day store for {store_day} does not hold the expected variables "
-            f"{missing_variable_keys}. "
+        raise IncompleteRemoteDatasetError(
+            f"Remote dataset opened without expected variables {missing_variable_keys} "
+            "during observation dataset open. "
             f"Available variables: {sorted(day_observations_dataset.variables)}"
         )
     return day_observations_dataset[consumed_variable_keys]
@@ -283,7 +276,7 @@ def _selected_observations_dataset(
         "observation dataset open",
     )
     if time_key not in observations_dataset.variables:
-        raise RetriableRemoteDataError(
+        raise IncompleteRemoteDatasetError(
             f"Remote dataset opened without expected variable {time_key!r} during observation dataset open. "
             f"Available variables: {sorted(observations_dataset.variables)}"
         )
@@ -354,4 +347,4 @@ def observations(challenger_dataset: Dataset) -> Dataset:
             ),
         )
 
-    return with_remote_http_retries("observation dataset open", open_selected_observations)
+    return open_selected_observations()

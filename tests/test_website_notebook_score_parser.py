@@ -116,26 +116,30 @@ def test_parser_extracts_scores_from_local_report_notebook(tmp_path):
     assert lagrangian_variable.data == {"1": 2.1, "2": 2.2}
 
 
-def _score_table_with_observation_count(rows: list[tuple[str, float, float, int]]) -> str:
+def _score_table_with_count_columns(rows: list[tuple[str, float, float, int, int, float]]) -> str:
     body = "\n".join(
-        f"<tr><th>{label}</th><td>{lead_day_1}</td><td>{lead_day_2}</td><td>{count}</td></tr>"
-        for label, lead_day_1, lead_day_2, count in rows
+        f"<tr><th>{label}</th><td>{lead_day_1}</td><td>{lead_day_2}</td>"
+        f"<td>{count}</td><td>{missing}</td><td>{missing_fraction}</td></tr>"
+        for label, lead_day_1, lead_day_2, count, missing, missing_fraction in rows
     )
     return (
         "<table>"
-        "<thead><tr><th></th><th>Lead day 1</th><th>Lead day 2</th><th>Observations</th></tr></thead>"
+        "<thead><tr><th></th><th>Lead day 1</th><th>Lead day 2</th>"
+        "<th>Observations</th><th>Missing</th><th>Missing fraction</th></tr></thead>"
         f"<tbody>{body}</tbody>"
         "</table>"
     )
 
 
-def test_parser_ignores_the_observation_count_column(tmp_path):
+def test_parser_ignores_the_count_columns(tmp_path):
     notebook_path = tmp_path / "glo12.observations.report.ipynb"
     notebook = {
         "cells": [
             _metric_cell(
                 "oceanbench.metrics.rmsd_of_variables_compared_to_observations",
-                _score_table_with_observation_count([("Salinity (PSU) [sea_water_salinity]{0-5m}", 0.3, 0.4, 1234)]),
+                _score_table_with_count_columns(
+                    [("Salinity (PSU) [sea_water_salinity]{0-5m}", 0.3, 0.4, 1234, 56, 0.0123)]
+                ),
             )
         ]
     }

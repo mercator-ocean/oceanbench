@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import pytest
+
 from oceanbench.cli import _build_parser, _runtime_configuration_from_args
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.runtime_configuration import runtime_configuration_from_environment
@@ -42,12 +44,8 @@ def test_runtime_configuration_rejects_invalid_class4_fast_interpolation(monkeyp
     _clear_runtime_environment(monkeypatch)
     monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_CLASS4_FAST_INTERPOLATION.value, "true")
 
-    try:
+    with pytest.raises(ValueError, match="OCEANBENCH_CLASS4_FAST_INTERPOLATION must be '0' or '1'"):
         runtime_configuration_from_environment()
-    except ValueError as error:
-        assert "OCEANBENCH_CLASS4_FAST_INTERPOLATION must be '0' or '1'." == str(error)
-    else:
-        raise AssertionError("Expected invalid class4 fast interpolation value to fail.")
 
 
 def test_evaluate_cli_runtime_arguments_override_environment(monkeypatch):

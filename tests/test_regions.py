@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import dask.array
+import numpy
 import nbformat
 import pytest
 import xarray
@@ -16,6 +17,12 @@ from oceanbench.core.regions import region_from_dict, region_to_dict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WESTERN_MED_REGION_FILE = PROJECT_ROOT / "assets" / "western_med_region.json"
+
+
+def _region_cell(notebook: nbformat.NotebookNode) -> nbformat.NotebookNode:
+    region_cells = [cell for cell in notebook.cells if cell.source.startswith("region = ")]
+    assert len(region_cells) == 1
+    return region_cells[0]
 
 
 def test_custom_region_roundtrip_and_subset() -> None:
@@ -139,10 +146,11 @@ def test_example_custom_region_file_generates_custom_region_notebook(tmp_path) -
     )
 
     notebook = nbformat.read(output_path, as_version=4)
+    region_cell = _region_cell(notebook)
 
-    assert "region = oceanbench.regions.custom(" in notebook.cells[4].source
-    assert "identifier='western_med'" in notebook.cells[4].source
-    assert "display_name='Western Mediterranean'" in notebook.cells[4].source
+    assert "region = oceanbench.regions.custom(" in region_cell.source
+    assert "identifier='western_med'" in region_cell.source
+    assert "display_name='Western Mediterranean'" in region_cell.source
     assert notebook.metadata["oceanbench"]["region"]["id"] == "western_med"
     assert notebook.metadata["oceanbench"]["region"]["display_name"] == "Western Mediterranean"
     assert notebook.metadata["oceanbench"]["region"]["official"] is False
@@ -164,6 +172,28 @@ def test_generate_evaluation_notebook_keeps_official_region_string(tmp_path) -> 
 
     notebook = nbformat.read(output_path, as_version=4)
 
-    assert notebook.cells[4].source == "region = 'ibi'"
+    assert _region_cell(notebook).source == "region = 'ibi'"
     assert notebook.metadata["oceanbench"]["region"]["id"] == "ibi"
     assert notebook.metadata["oceanbench"]["region"]["official"] is True
+
+
+def _global_grid(longitudes: numpy.ndarray) -> xarray.Dataset:
+    return xarray.Dataset(coords={"latitude": [0.0], "longitude": longitudes})
+
+
+def test_region_longitude_box_spanning_greenwich_selects_the_same_cells_on_a_0_360_grid() -> None:
+    region = oceanbench.regions.custom("greenwich", "Greenwich", -1.0, 1.0, -10.0, 10.0)
+
+    subset = oceanbench.regions.subset(_global_grid(numpy.arange(0.0, 360.0)), region)
+
+    assert subset["longitude"].values.tolist() == list(range(0, 11)) + list(range(350, 360))
+
+
+def test_region_longitude_box_crossing_the_dateline_selects_cells_on_both_grid_conventions() -> None:
+    region = oceanbench.regions.custom("dateline", "Dateline", -1.0, 1.0, 170.0, -170.0)
+
+    positive_subset = oceanbench.regions.subset(_global_grid(numpy.arange(0.0, 360.0)), region)
+    signed_subset = oceanbench.regions.subset(_global_grid(numpy.arange(-180.0, 180.0)), region)
+
+    assert positive_subset["longitude"].values.tolist() == list(range(170, 191))
+    assert signed_subset["longitude"].values.tolist() == list(range(-180, -169)) + list(range(170, 180))

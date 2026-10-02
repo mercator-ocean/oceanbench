@@ -94,7 +94,6 @@ from oceanbench.core.ensemble_gridded import (
     continuous_ranked_probability_score,
     finite_ensemble_correction,
 )
-from oceanbench.core.remote_http import with_remote_http_retries
 from oceanbench.core.score_records import RunContext, score_record
 
 METRIC_SSR_ADD = "ssr_add"
@@ -637,15 +636,12 @@ def interpolate_class4_ensemble_to_observations(
     for (first_day, lead_day), observation_group in observations_dataframe.groupby(
         ["first_day", "lead_day"], sort=False
     ):
-        block = with_remote_http_retries(
-            f"Class IV ensemble {model_data.name} read for lead day {lead_day}",
-            model_data.isel(
-                {
-                    Dimension.FIRST_DAY_DATETIME.key(): first_day_to_index[first_day],
-                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
-                }
-            ).compute,
-        )
+        block = model_data.isel(
+            {
+                Dimension.FIRST_DAY_DATETIME.key(): first_day_to_index[first_day],
+                Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+            }
+        ).compute()
         for member_index in range(member_count):
             member_values[observation_group.index.values, member_index] = (
                 interpolate_class4_model_values_for_observation_group(

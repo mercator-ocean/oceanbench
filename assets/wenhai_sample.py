@@ -1,21 +1,8 @@
-# Open WENHAI forecast sample with xarray
+# Open WENHAI forecasts with oceanbench, for a single first day
 from datetime import datetime
 import xarray
+import oceanbench
 
-challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
-    [
-        "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/wenhai/v2/20240103.zarr",
-    ],
-    engine="zarr",
-    preprocess=lambda dataset: dataset.rename({"time": "lead_day_index"}).assign({"lead_day_index": range(10)}),
-    combine="nested",
-    concat_dim="first_day_datetime",
-    parallel=True,
-).assign(
-    {
-        "first_day_datetime": [
-            datetime.fromisoformat("2024-01-03"),
-        ]
-    }
-)
+challenger_dataset: xarray.Dataset = oceanbench.datasets.challenger.wenhai([datetime.fromisoformat("2024-01-03")])
+
 challenger_dataset

@@ -19,20 +19,33 @@ and the affected reports are re-published (never silently overwritten).
 
 ## Unreleased
 
-**Scores:** Class IV tables change for every challenger; gridded and Lagrangian scores unchanged.
+**Scores:** every table changes for every challenger. Class IV scores the same observations for every challenger on the rebuilt observation store, gridded RMSD uses a shared ocean mask, and several metrics are fixed (see Fixed).
 To be published as 0.6.0 once every challenger is rescored; the website shows the 0.5.0 reports until then.
+
+### Challengers
+
+- 2026-09-11: GLO12 persistence added: a reference baseline holding the GLO12 nowcast constant over the 10-day horizon, listed in the baseline category ([#297](https://github.com/mercator-ocean/oceanbench/pull/297)).
 
 ### Changed
 
-- Class IV observations come from the rebuilt `observations2024-v2` store: quality flag 1 only, drifter currents filtered with undrogued drifters dropped and wind slippage subtracted, code 211 dropped, SLA outliers beyond 2 m flagged. Currents RMSD drops by roughly a third, salinity by under 1 percent ([#316](https://github.com/mercator-ocean/oceanbench/pull/316)).
+- Class IV uses the rebuilt `observations2024-v2` store: quality flag 1 only, cleaned drifter currents and SLA outliers flagged ([#316](https://github.com/mercator-ocean/oceanbench/pull/316)).
+- Class IV scores the same observations for every challenger: observations too close to the coast for a quarter degree grid are dropped ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
+- Gridded RMSD scores only the cells that are ocean in the OceanBench ocean mask, the same for every reference ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
 
 ### Fixed
 
-- Class IV salinity is vertically interpolated with the same two level linear bracket as the other variables. The cubic spline it used before needed four valid levels and silently dropped shallow profiles ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- Class IV, Lagrangian and geostrophic currents handle the dateline on global grids; observations and particles next to it were lost before ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- The SSH to SLA conversion no longer loses part of the LangYa grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- Class IV salinity uses the same vertical interpolation as the other variables, so shallow profiles are no longer dropped ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- Class IV tables keep a variable and depth row even when the challenger has no value there, and show it as missing instead of dropping it ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
+- Geostrophic currents exclude 5 degrees around the equator instead of 0.5 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
+- Lagrangian deviation now scores lead day 10 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
+- Remote reads made by OceanBench retry each failed request, in all metrics and run modes, and retries no longer show in the reports ([#335](https://github.com/mercator-ocean/oceanbench/pull/335)).
 
 ### Added
 
-- The Class IV table shows the number of matched observations in an `Observations` column ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- The OceanBench ocean mask: a twelfth of a degree cell is ocean when it is wet in both GLO12 and GLORYS12 ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
+- `Observations` and `Missing` columns in the Class IV tables, and a `Missing fraction` column in the gridded RMSD tables ([#321](https://github.com/mercator-ocean/oceanbench/pull/321), [#329](https://github.com/mercator-ocean/oceanbench/pull/329), [#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
 - An ensemble evaluation view scores the GloEns and GLOW-ens ensembles against observations and GLORYS with the ensemble mean RMSD, the fair CRPS, the spread-skill ratio and rank histograms. Deterministic scores are unchanged.
 
 ## 0.5.1 - 2026-09-02
@@ -41,8 +54,6 @@ To be published as 0.6.0 once every challenger is rescored; the website shows th
 
 ### Challengers
 
-- 2026-09-11: GLO12 persistence added: a reference baseline holding the GLO12 nowcast constant
-  over the 10-day horizon, listed in the baseline category on the website ([#297](https://github.com/mercator-ocean/oceanbench/pull/297)).
 - 2026-09-15: HClimRep added: a machine-learning model from AWI (WeatherGenerator fine-tuned on
   GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts and ERA5 atmospheric fields.
 

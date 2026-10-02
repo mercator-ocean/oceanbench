@@ -3,12 +3,19 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import numpy
-import pandas
 import pytest
 import xarray
 
-from oceanbench.core.dataset_utils import DepthLevel, Dimension, Variable
-from oceanbench.core.rmsd import _rmsd, rmsd, rmsd_per_start_date
+from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.ocean_mask import OCEAN_MASK_DEPTHS, OCEAN_MASK_STANDARD_DEPTHS
+from oceanbench.core.rmsd import (
+    MISSING_FRACTION_COLUMN,
+    DEPTH_LABELS,
+    _ocean_mask_on_challenger_grid,
+    _rmsd,
+    _snap_reference_spatial_coordinates_to_challenger,
+    rmsd,
+)
 
 
 def _dataset_with_spatial_coordinates(
@@ -32,6 +39,23 @@ def _dataset_with_spatial_coordinates(
         coords={
             Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
             Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+
+def _all_wet_mask(dataset: xarray.Dataset) -> xarray.DataArray:
+    depths = (
+        dataset[Dimension.DEPTH.key()].values if Dimension.DEPTH.key() in dataset.dims else list(DEPTH_LABELS.values())
+    )
+    latitudes = dataset[Dimension.LATITUDE.key()].values
+    longitudes = dataset[Dimension.LONGITUDE.key()].values
+    return xarray.DataArray(
+        numpy.ones((len(depths), len(latitudes), len(longitudes)), dtype=bool),
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): depths,
             Dimension.LATITUDE.key(): latitudes,
             Dimension.LONGITUDE.key(): longitudes,
         },
@@ -78,7 +102,7 @@ def test_rmsd_uses_area_weights_without_land_in_denominator() -> None:
     )
     reference_dataset = xarray.zeros_like(challenger_dataset)
 
-    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset)
+    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset, _all_wet_mask(challenger_dataset))
 
     expected_first_day_rmsd = numpy.sqrt((1.0**2 * 1.0 + 3.0**2 * 0.5 + 5.0**2 * 0.5) / (1.0 + 0.5 + 0.5))
     expected_second_day_rmsd = numpy.sqrt((2.0**2 * 1.0 + 4.0**2 * 1.0 + 6.0**2 * 0.5) / (1.0 + 1.0 + 0.5))
@@ -144,7 +168,11 @@ def test_rmsd_snaps_nearly_matching_spatial_coordinates_before_xarray_alignment(
         },
     )
 
-    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset)
+    rmsd_dataset = _rmsd(
+        challenger_dataset,
+        _snap_reference_spatial_coordinates_to_challenger(challenger_dataset, reference_dataset),
+        _all_wet_mask(challenger_dataset),
+    )
 
     latitude_weights = numpy.cos(numpy.deg2rad(challenger_latitudes))[:, numpy.newaxis]
     expected_rmsd = numpy.sqrt(
@@ -226,7 +254,11 @@ def test_rmsd_snaps_reference_to_challenger_when_challenger_has_one_extra_coordi
         },
     )
 
-    rmsd_dataset = _rmsd(challenger_dataset, reference_dataset)
+    rmsd_dataset = _rmsd(
+        challenger_dataset,
+        _snap_reference_spatial_coordinates_to_challenger(challenger_dataset, reference_dataset),
+        _all_wet_mask(challenger_dataset),
+    )
 
     latitude_weights = numpy.cos(numpy.deg2rad(matched_challenger_latitudes))[:, numpy.newaxis]
     matched_challenger_values = challenger_values[0, 0, : matched_challenger_latitudes.size]
@@ -255,7 +287,7 @@ def test_rmsd_raises_when_spatial_coordinate_alignment_is_ambiguous() -> None:
     )
 
     with pytest.raises(ValueError, match="latitude coordinates: multiple challenger coordinates match"):
-        _rmsd(challenger_dataset, reference_dataset)
+        _snap_reference_spatial_coordinates_to_challenger(challenger_dataset, reference_dataset)
 
 
 def test_rmsd_raises_when_too_much_spatial_grid_is_unmatched() -> None:
@@ -277,11 +309,52 @@ def test_rmsd_raises_when_too_much_spatial_grid_is_unmatched() -> None:
         ValueError,
         match="matched 99.8000%.*required at least 99.9000%.*latitude=99.8000%.*longitude=100.0000%",
     ):
-        _rmsd(challenger_dataset, reference_dataset)
+        _snap_reference_spatial_coordinates_to_challenger(challenger_dataset, reference_dataset)
 
 
-def _depth_resolved_dataset(values: numpy.ndarray, first_days: numpy.ndarray) -> xarray.Dataset:
+def test_rmsd_takes_the_square_root_per_first_day_and_depth_before_averaging_over_first_days() -> None:
     variable_key = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
+    dimension_names = [
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        Dimension.DEPTH.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
+    ]
+    # Latitude weights are cos(0) = 1 and cos(60) = 0.5, so a column [a, b] has weighted mean square
+    # (a^2 + b^2 / 2) / 1.5: [1, 5] -> 9, [2, 10] -> 36, [a, a] -> a^2.
+    values = numpy.array(
+        [
+            [[[[1.0], [5.0]], [[1.0], [1.0]]], [[[2.0], [2.0]], [[2.0], [10.0]]]],
+            [[[[2.0], [10.0]], [[1.0], [5.0]]], [[[4.0], [4.0]], [[6.0], [6.0]]]],
+        ]
+    )
+    coordinates = {
+        Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]"),
+        Dimension.LEAD_DAY_INDEX.key(): [0, 1],
+        Dimension.DEPTH.key(): [0.5, 50.0],
+        Dimension.LATITUDE.key(): [0.0, 60.0],
+        Dimension.LONGITUDE.key(): [10.0],
+    }
+    challenger_dataset = xarray.Dataset({variable_key: (dimension_names, values)}, coords=coordinates)
+
+    rmsd_dataset = _rmsd(challenger_dataset, xarray.zeros_like(challenger_dataset), _all_wet_mask(challenger_dataset))
+
+    numpy.testing.assert_allclose(
+        rmsd_dataset[variable_key].transpose(Dimension.LEAD_DAY_INDEX.key(), Dimension.DEPTH.key()).values,
+        [[(3.0 + 6.0) / 2, (1.0 + 3.0) / 2], [(2.0 + 4.0) / 2, (6.0 + 6.0) / 2]],
+    )
+
+
+MASK_TEST_LATITUDES = numpy.array([0.0, 30.0, 60.0])
+MASK_TEST_LONGITUDES = numpy.array([10.0])
+
+
+def _temperature_dataset(surface_values: list[float], deep_value: float) -> xarray.Dataset:
+    variable_key = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
+    depths = OCEAN_MASK_STANDARD_DEPTHS
+    values = numpy.full((1, 1, len(depths), len(MASK_TEST_LATITUDES), len(MASK_TEST_LONGITUDES)), deep_value)
+    values[0, 0, 0, :, 0] = surface_values
     return xarray.Dataset(
         {
             variable_key: (
@@ -296,55 +369,218 @@ def _depth_resolved_dataset(values: numpy.ndarray, first_days: numpy.ndarray) ->
             )
         },
         coords={
-            Dimension.FIRST_DAY_DATETIME.key(): first_days,
-            Dimension.LEAD_DAY_INDEX.key(): list(range(values.shape[1])),
-            Dimension.DEPTH.key(): [depth_level.value for depth_level in DepthLevel],
-            Dimension.LATITUDE.key(): numpy.array([0.0, 30.0, 60.0], dtype=numpy.float32),
-            Dimension.LONGITUDE.key(): numpy.array([10.0, 11.0], dtype=numpy.float32),
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.DEPTH.key(): depths,
+            Dimension.LATITUDE.key(): MASK_TEST_LATITUDES,
+            Dimension.LONGITUDE.key(): MASK_TEST_LONGITUDES,
         },
     )
 
 
-def test_rmsd_per_start_date_frames_average_back_to_the_published_rmsd() -> None:
-    first_days = numpy.array(["2024-01-03", "2024-01-10", "2024-01-17"], dtype="datetime64[ns]")
-    generator = numpy.random.default_rng(19)
-    shape = (first_days.size, 2, len(DepthLevel), 3, 2)
-    challenger_dataset = _depth_resolved_dataset(generator.normal(size=shape), first_days)
-    reference_dataset = _depth_resolved_dataset(generator.normal(size=shape), first_days)
-    variables = [Variable.SEA_WATER_POTENTIAL_TEMPERATURE]
+def _surface_dry_at_sixty_degrees_mask() -> xarray.DataArray:
+    values = numpy.ones(
+        (len(OCEAN_MASK_DEPTHS), len(MASK_TEST_LATITUDES), len(MASK_TEST_LONGITUDES)),
+        dtype=bool,
+    )
+    values[0, 2, 0] = False
+    return xarray.DataArray(
+        values,
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): OCEAN_MASK_DEPTHS,
+            Dimension.LATITUDE.key(): MASK_TEST_LATITUDES,
+            Dimension.LONGITUDE.key(): MASK_TEST_LONGITUDES,
+        },
+    )
 
-    per_start_frames = rmsd_per_start_date(challenger_dataset, reference_dataset, variables)
-    published_frame = rmsd(challenger_dataset, reference_dataset, variables)
 
-    assert list(per_start_frames) == list(first_days)
-    averaged_frame = sum(per_start_frames.values()) / len(per_start_frames)
-    pandas.testing.assert_frame_equal(averaged_frame, published_frame)
+def test_gridded_rmsd_puts_only_the_six_standard_depths_of_the_mask_on_the_challenger_grid() -> None:
+    challenger_mask = _ocean_mask_on_challenger_grid(
+        _surface_dry_at_sixty_degrees_mask(),
+        _temperature_dataset(surface_values=[4.0, 4.0, 4.0], deep_value=1.0),
+    )
+
+    assert len(OCEAN_MASK_DEPTHS) == 7
+    assert challenger_mask[Dimension.DEPTH.key()].values.tolist() == list(DEPTH_LABELS.values())
 
 
-def test_missing_starts_average_back_to_the_published_rmsd_cell_by_cell() -> None:
-    first_days = numpy.array(["2024-01-03", "2024-01-10", "2024-01-17"], dtype="datetime64[ns]")
-    generator = numpy.random.default_rng(19)
-    shape = (first_days.size, 2, len(DepthLevel), 3, 2)
-    challenger_values = generator.normal(size=shape)
-    challenger_values[1] = numpy.nan
-    challenger_values[0, 1] = numpy.nan
-    challenger_dataset = _depth_resolved_dataset(challenger_values, first_days)
-    reference_dataset = _depth_resolved_dataset(generator.normal(size=shape), first_days)
-    variables = [Variable.SEA_WATER_POTENTIAL_TEMPERATURE]
+SURFACE_TEMPERATURE_LABEL = "Temperature (°C) [sea_water_potential_temperature]{surface}"
+FIFTY_METERS_TEMPERATURE_LABEL = "Temperature (°C) [sea_water_potential_temperature]{50m}"
 
-    per_start_frames = rmsd_per_start_date(challenger_dataset, reference_dataset, variables)
-    published_frame = rmsd(challenger_dataset, reference_dataset, variables)
 
-    assert per_start_frames[first_days[1]].isna().all().all()
-    assert per_start_frames[first_days[0]].iloc[:, 1].isna().all()
-    assert per_start_frames[first_days[0]].iloc[:, 0].notna().all()
+def test_rmsd_scores_only_the_mask_wet_cells_and_reports_the_missing_ones() -> None:
+    challenger_dataset = _temperature_dataset(surface_values=[numpy.nan, 4.0, 100.0], deep_value=1.0)
+    reference_dataset = xarray.zeros_like(challenger_dataset)
 
-    element_wise_mean = pandas.concat(per_start_frames.values()).groupby(level=0).mean().loc[published_frame.index]
-    pandas.testing.assert_frame_equal(element_wise_mean, published_frame)
+    table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+    )
 
-    frames_that_are_not_entirely_missing = [
-        frame for frame in per_start_frames.values() if not frame.isna().all().all()
+    assert table.columns.tolist() == ["Lead day 1", MISSING_FRACTION_COLUMN]
+    assert table.loc[SURFACE_TEMPERATURE_LABEL, "Lead day 1"] == 4.0
+    assert numpy.isclose(
+        table.loc[SURFACE_TEMPERATURE_LABEL, MISSING_FRACTION_COLUMN],
+        1.0 / (1.0 + numpy.cos(numpy.deg2rad(30.0))),
+    )
+    assert table.loc[FIFTY_METERS_TEMPERATURE_LABEL, "Lead day 1"] == 1.0
+    assert table.loc[FIFTY_METERS_TEMPERATURE_LABEL, MISSING_FRACTION_COLUMN] == 0.0
+
+
+def test_rmsd_excludes_a_mask_dry_cell_even_when_both_sides_are_finite() -> None:
+    challenger_dataset = _temperature_dataset(surface_values=[4.0, 4.0, 100.0], deep_value=1.0)
+    reference_dataset = xarray.zeros_like(challenger_dataset)
+
+    masked_table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+    )
+    fully_wet_mask = _surface_dry_at_sixty_degrees_mask()
+    fully_wet_mask.values[0, 2, 0] = True
+    unmasked_table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+        ocean_mask=fully_wet_mask,
+    )
+
+    assert masked_table.loc[SURFACE_TEMPERATURE_LABEL, "Lead day 1"] == 4.0
+    assert masked_table.loc[SURFACE_TEMPERATURE_LABEL, MISSING_FRACTION_COLUMN] == 0.0
+    assert unmasked_table.loc[SURFACE_TEMPERATURE_LABEL, "Lead day 1"] > 40.0
+
+
+def _depth_free_dataset(variable_values: dict[str, list[float]]) -> xarray.Dataset:
+    dimensions = [
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
     ]
-    assert len(frames_that_are_not_entirely_missing) == 2
-    averaged_over_whole_frames = sum(frames_that_are_not_entirely_missing) / len(frames_that_are_not_entirely_missing)
-    assert not averaged_over_whole_frames.equals(published_frame)
+    return xarray.Dataset(
+        {
+            variable_key: (
+                dimensions,
+                numpy.array(values).reshape(1, 1, len(MASK_TEST_LATITUDES), len(MASK_TEST_LONGITUDES)),
+            )
+            for variable_key, values in variable_values.items()
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.DEPTH.key(): OCEAN_MASK_STANDARD_DEPTHS,
+            Dimension.LATITUDE.key(): MASK_TEST_LATITUDES,
+            Dimension.LONGITUDE.key(): MASK_TEST_LONGITUDES,
+        },
+    )
+
+
+MIXED_LAYER_DEPTH_LABEL = "Mixed layer depth (m) [ocean_mixed_layer_thickness]{surface}"
+MERIDIONAL_GEOSTROPHIC_LABEL = (
+    "Meridional geostrophic current (m/s) [geostrophic_northward_sea_water_velocity]{surface}"
+)
+ZONAL_GEOSTROPHIC_LABEL = "Zonal geostrophic current (m/s) [geostrophic_eastward_sea_water_velocity]{surface}"
+
+
+def test_rmsd_scores_a_dataset_whose_only_variable_has_no_depth() -> None:
+    variable_key = Variable.MIXED_LAYER_DEPTH.key()
+    challenger_dataset = _depth_free_dataset({variable_key: [numpy.nan, 4.0, 100.0]})
+    reference_dataset = xarray.zeros_like(challenger_dataset)
+
+    table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.MIXED_LAYER_DEPTH],
+        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+    )
+
+    assert list(table.index) == [MIXED_LAYER_DEPTH_LABEL]
+    assert table.loc[MIXED_LAYER_DEPTH_LABEL, "Lead day 1"] == 4.0
+    assert numpy.isclose(
+        table.loc[MIXED_LAYER_DEPTH_LABEL, MISSING_FRACTION_COLUMN],
+        1.0 / (1.0 + numpy.cos(numpy.deg2rad(30.0))),
+    )
+
+
+def test_rmsd_scores_a_dataset_whose_two_variables_have_no_depth() -> None:
+    northward_key = Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY.key()
+    eastward_key = Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY.key()
+    challenger_dataset = _depth_free_dataset(
+        {
+            northward_key: [0.0, 4.0, 100.0],
+            eastward_key: [0.0, 4.0, 100.0],
+        }
+    )
+    reference_dataset = xarray.zeros_like(challenger_dataset)
+
+    table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[
+            Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
+        ],
+        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+    )
+
+    assert sorted(table.index) == sorted([MERIDIONAL_GEOSTROPHIC_LABEL, ZONAL_GEOSTROPHIC_LABEL])
+    for label in (MERIDIONAL_GEOSTROPHIC_LABEL, ZONAL_GEOSTROPHIC_LABEL):
+        assert numpy.isfinite(table.loc[label, "Lead day 1"])
+        assert table.loc[label, MISSING_FRACTION_COLUMN] == 0.0
+
+
+def test_rmsd_regrids_a_finer_offset_mask_onto_the_challenger_grid() -> None:
+    variable_key = Variable.MIXED_LAYER_DEPTH.key()
+    challenger_dataset = _depth_free_dataset({variable_key: [numpy.nan, 4.0, 100.0]})
+    reference_dataset = xarray.zeros_like(challenger_dataset)
+    fine_latitudes = numpy.arange(-1.0, 62.0, 0.5) + 0.125
+    fine_longitudes = numpy.array([9.625, 10.125, 10.625])
+    values = numpy.ones((len(OCEAN_MASK_DEPTHS), len(fine_latitudes), len(fine_longitudes)), dtype=bool)
+    values[0, numpy.abs(fine_latitudes - 60.0).argmin(), 1] = False
+    fine_mask = xarray.DataArray(
+        values,
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): OCEAN_MASK_DEPTHS,
+            Dimension.LATITUDE.key(): fine_latitudes,
+            Dimension.LONGITUDE.key(): fine_longitudes,
+        },
+    )
+
+    table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.MIXED_LAYER_DEPTH],
+        ocean_mask=fine_mask,
+    )
+
+    assert table.loc[MIXED_LAYER_DEPTH_LABEL, "Lead day 1"] == 4.0
+    assert numpy.isclose(
+        table.loc[MIXED_LAYER_DEPTH_LABEL, MISSING_FRACTION_COLUMN],
+        1.0 / (1.0 + numpy.cos(numpy.deg2rad(30.0))),
+    )
+
+
+def test_rmsd_reports_as_missing_only_the_ocean_cells_where_the_reference_has_a_value() -> None:
+    variable_key = Variable.MIXED_LAYER_DEPTH.key()
+    challenger_dataset = _depth_free_dataset({variable_key: [numpy.nan, numpy.nan, 4.0]})
+    reference_dataset = _depth_free_dataset({variable_key: [numpy.nan, 0.0, 0.0]})
+    fully_wet_mask = _surface_dry_at_sixty_degrees_mask()
+    fully_wet_mask.values[0, 2, 0] = True
+
+    table = rmsd(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=reference_dataset,
+        variables=[Variable.MIXED_LAYER_DEPTH],
+        ocean_mask=fully_wet_mask,
+    )
+
+    assert table.loc[MIXED_LAYER_DEPTH_LABEL, "Lead day 1"] == 4.0
+    assert numpy.isclose(
+        table.loc[MIXED_LAYER_DEPTH_LABEL, MISSING_FRACTION_COLUMN],
+        numpy.cos(numpy.deg2rad(30.0)) / (numpy.cos(numpy.deg2rad(30.0)) + numpy.cos(numpy.deg2rad(60.0))),
+    )

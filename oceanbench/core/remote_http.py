@@ -2,28 +2,23 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from collections.abc import Callable, Iterable, Sequence
-from time import sleep
+from collections.abc import Awaitable, Callable, Iterable, Sequence
+from functools import partial
+from http import HTTPStatus
 from typing import Any, TypeVar
+import asyncio
 import logging
 
+import aiohttp
 import xarray
 import zarr
+from fsspec.implementations.http import HTTPFileSystem
 
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
-DEFAULT_RETRY_BACKOFF_SECONDS = 2
-RETRIABLE_HTTP_ERROR_TOKENS = (
-    "Server disconnected",
-    "Connection reset by peer",
-    "Not enough data to satisfy content length header",
-    "Response payload is not completed",
-)
-RETRIABLE_REMOTE_BACKEND_MODULE_PREFIXES = (
-    "aiohttp",
-    "botocore",
-)
-RETRIABLE_REMOTE_TRANSPORT_ERRORS = (TimeoutError, ConnectionError)
+FIRST_RETRY_BACKOFF_SECONDS = 4
+MAXIMUM_RETRY_BACKOFF_SECONDS = 32
+RETRIABLE_REQUEST_ERRORS = (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError, TimeoutError, ConnectionError)
 
 # FSStore reads these as an absent chunk (fill value); fsspec raises KeyError for absent keys,
 # so download failures (OSError subclasses) propagate instead of being staged as fill values.
@@ -35,30 +30,44 @@ CALLBACK_RESULT = TypeVar("CALLBACK_RESULT")
 DATASET = TypeVar("DATASET")
 
 
-class RetriableRemoteDataError(RuntimeError):
+class IncompleteRemoteDatasetError(RuntimeError):
     pass
 
 
-def _exception_chain(error: Exception):
-    seen_exceptions = set()
-    current_exception: Exception | None = error
-    while current_exception is not None and id(current_exception) not in seen_exceptions:
-        yield current_exception
-        seen_exceptions.add(id(current_exception))
-        current_exception = current_exception.__cause__ or current_exception.__context__
+def _is_retriable_request_error(error: BaseException) -> bool:
+    if isinstance(error, aiohttp.ClientResponseError):
+        return error.status == HTTPStatus.TOO_MANY_REQUESTS or error.status >= HTTPStatus.INTERNAL_SERVER_ERROR
+    return isinstance(error, RETRIABLE_REQUEST_ERRORS)
 
 
-def _originates_from_retriable_remote_backend(exception: Exception) -> bool:
-    return exception.__class__.__module__.startswith(RETRIABLE_REMOTE_BACKEND_MODULE_PREFIXES)
+def _retry_backoff_seconds(attempt: int) -> int:
+    return min(MAXIMUM_RETRY_BACKOFF_SECONDS, FIRST_RETRY_BACKOFF_SECONDS * 2 ** (attempt - 1))
 
 
-def _is_retriable_remote_data_error(error: Exception) -> bool:
-    return any(
-        isinstance(exception, (RetriableRemoteDataError, *RETRIABLE_REMOTE_TRANSPORT_ERRORS))
-        or _originates_from_retriable_remote_backend(exception)
-        or any(token in str(exception) for token in RETRIABLE_HTTP_ERROR_TOKENS)
-        for exception in _exception_chain(error)
-    )
+async def _request_with_retries(url: str, request: Callable[[], Awaitable[CALLBACK_RESULT]]) -> CALLBACK_RESULT:
+    attempts_count = current_runtime_configuration().remote_retries
+    for attempt in range(1, attempts_count):
+        try:
+            return await request()
+        except Exception as error:
+            if not _is_retriable_request_error(error):
+                raise
+            backoff_seconds = _retry_backoff_seconds(attempt)
+            REMOTE_ZARR_LOGGER.info(
+                "Remote request for %s failed (%s/%s): %r. Retrying in %ss.",
+                url,
+                attempt,
+                attempts_count,
+                error,
+                backoff_seconds,
+            )
+        await asyncio.sleep(backoff_seconds)
+    return await request()
+
+
+class RetryingHTTPFileSystem(HTTPFileSystem):
+    async def _cat_file(self, url, start=None, end=None, **kwargs):
+        return await _request_with_retries(url, partial(super()._cat_file, url, start=start, end=end, **kwargs))
 
 
 def require_remote_dataset_dimensions(
@@ -68,37 +77,17 @@ def require_remote_dataset_dimensions(
 ) -> DATASET:
     missing_dimensions = sorted(set(expected_dimensions) - set(dataset.dims))
     if missing_dimensions:
-        raise RetriableRemoteDataError(
+        raise IncompleteRemoteDatasetError(
             f"Remote dataset opened without expected dimensions {missing_dimensions} during {operation_name}. "
             f"Available dimensions: {sorted(dataset.dims)}"
         )
     return dataset
 
 
-def with_remote_http_retries(
-    operation_name: str,
-    callback: Callable[[], CALLBACK_RESULT],
-) -> CALLBACK_RESULT:
-    retry_count = current_runtime_configuration().remote_retries
-    for attempt in range(1, retry_count + 1):
-        try:
-            return callback()
-        except Exception as error:
-            is_retriable_error = _is_retriable_remote_data_error(error)
-            if not is_retriable_error or attempt == retry_count:
-                raise
-            backoff_seconds = DEFAULT_RETRY_BACKOFF_SECONDS * attempt
-            REMOTE_ZARR_LOGGER.warning(
-                "Remote data read failed during %s (%s/%s): %s. Retrying in %ss.",
-                operation_name,
-                attempt,
-                retry_count,
-                error,
-                backoff_seconds,
-            )
-            sleep(backoff_seconds)
-
-    raise RuntimeError(f"Remote data retries exhausted for {operation_name}")
+def _file_system_arguments(url: str, storage_options: dict[str, Any] | None) -> dict[str, Any]:
+    if url.startswith(("http://", "https://")):
+        return {"fs": RetryingHTTPFileSystem(**(storage_options or {}))}
+    return storage_options or {}
 
 
 def remote_zarr_store(
@@ -109,7 +98,7 @@ def remote_zarr_store(
         url,
         mode="r",
         exceptions=REMOTE_ZARR_STORE_MISSING_KEY_EXCEPTIONS,
-        **(storage_options or {}),
+        **_file_system_arguments(url, storage_options),
     )
 
 

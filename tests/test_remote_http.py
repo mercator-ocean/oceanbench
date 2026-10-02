@@ -2,52 +2,127 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from oceanbench.core.classIV_support import _compute_with_remote_retries
+import logging
+from http import HTTPStatus
+
+import aiohttp
+import multidict
+import pytest
+import yarl
+from fsspec.implementations.http import HTTPFileSystem
+
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.remote_http import with_remote_http_retries
+from oceanbench.core.remote_http import RetryingHTTPFileSystem, _retry_backoff_seconds
+from oceanbench.core.runtime_configuration import DEFAULT_REMOTE_HTTP_RETRIES
+
+URL = "http://remote.test/store.zarr/zos/0.0"
+PAYLOAD = b"chunk bytes"
 
 
-class FakeAiohttpPayloadError(Exception):
-    pass
+def _response_error(status: int) -> aiohttp.ClientResponseError:
+    request_info = aiohttp.RequestInfo(
+        yarl.URL(URL), "GET", multidict.CIMultiDictProxy(multidict.CIMultiDict()), yarl.URL(URL)
+    )
+    return aiohttp.ClientResponseError(request_info, (), status=status, message="simulated")
 
 
-FakeAiohttpPayloadError.__module__ = "aiohttp.client_exceptions"
+def _payload_error() -> aiohttp.ClientPayloadError:
+    return aiohttp.ClientPayloadError("Response payload is not completed: Not enough data to satisfy content length")
 
 
-def _configure_fast_retries(monkeypatch) -> None:
-    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value, "2")
-    monkeypatch.setattr("oceanbench.core.remote_http.sleep", lambda _seconds: None)
+@pytest.fixture
+def attempts_count(monkeypatch) -> int:
+    configured_attempts_count = 4
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REMOTE_RETRIES.value, str(configured_attempts_count))
+    monkeypatch.setattr("oceanbench.core.remote_http._retry_backoff_seconds", lambda _attempt: 0)
+    return configured_attempts_count
 
 
-def test_with_remote_http_retries_retries_incomplete_payload_messages(monkeypatch) -> None:
-    _configure_fast_retries(monkeypatch)
-    attempts = 0
+@pytest.fixture
+def parent_request(monkeypatch):
+    def install(method_name: str, errors: list[BaseException], result: object) -> list[str]:
+        calls: list[str] = []
 
-    def callback() -> str:
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise RuntimeError("Response payload is not completed")
-        return "loaded"
+        async def request(self, url, *arguments, **keyword_arguments):
+            calls.append(url)
+            if len(calls) <= len(errors):
+                raise errors[len(calls) - 1]
+            return result
 
-    assert with_remote_http_retries("remote read", callback) == "loaded"
-    assert attempts == 2
+        monkeypatch.setattr(HTTPFileSystem, method_name, request)
+        return calls
+
+    return install
 
 
-def test_class4_compute_uses_remote_http_retries(monkeypatch) -> None:
-    _configure_fast_retries(monkeypatch)
+@pytest.mark.parametrize(
+    "transient_error",
+    [
+        aiohttp.ServerDisconnectedError(),
+        aiohttp.ClientConnectorError(None, OSError(111, "Connection refused")),
+        aiohttp.ServerTimeoutError("simulated timeout"),
+        TimeoutError("simulated timeout"),
+        ConnectionResetError(104, "Connection reset by peer"),
+        _payload_error(),
+        _response_error(HTTPStatus.INTERNAL_SERVER_ERROR),
+        _response_error(HTTPStatus.BAD_GATEWAY),
+        _response_error(HTTPStatus.SERVICE_UNAVAILABLE),
+        _response_error(HTTPStatus.TOO_MANY_REQUESTS),
+    ],
+    ids=lambda error: type(error).__name__,
+)
+def test_transient_failures_are_retried_until_the_request_succeeds(
+    attempts_count, parent_request, transient_error
+) -> None:
+    transient_failures_count = attempts_count - 1
+    calls = parent_request("_cat_file", [transient_error] * transient_failures_count, PAYLOAD)
 
-    class RemoteBackedArray:
-        def __init__(self) -> None:
-            self.calls = 0
+    assert RetryingHTTPFileSystem().cat_file(URL) == PAYLOAD
+    assert len(calls) == transient_failures_count + 1
 
-        def compute(self) -> str:
-            self.calls += 1
-            if self.calls == 1:
-                raise FakeAiohttpPayloadError("Not enough data to satisfy content length header")
-            return "loaded"
 
-    remote_backed_array = RemoteBackedArray()
+def test_not_found_raises_after_one_request(attempts_count, parent_request) -> None:
+    calls = parent_request("_cat_file", [FileNotFoundError(URL)], PAYLOAD)
 
-    assert _compute_with_remote_retries("Class IV model read", remote_backed_array) == "loaded"
-    assert remote_backed_array.calls == 2
+    with pytest.raises(FileNotFoundError):
+        RetryingHTTPFileSystem().cat_file(URL)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("status", [HTTPStatus.BAD_REQUEST, HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN])
+def test_client_errors_raise_after_one_request(attempts_count, parent_request, status) -> None:
+    calls = parent_request("_cat_file", [_response_error(status)], PAYLOAD)
+
+    with pytest.raises(aiohttp.ClientResponseError) as raised:
+        RetryingHTTPFileSystem().cat_file(URL)
+    assert raised.value.status == status
+    assert len(calls) == 1
+
+
+def test_exhausted_retries_reraise_the_original_error(attempts_count, parent_request) -> None:
+    errors = [aiohttp.ServerDisconnectedError() for _ in range(attempts_count)]
+    calls = parent_request("_cat_file", errors, PAYLOAD)
+
+    with pytest.raises(aiohttp.ServerDisconnectedError) as raised:
+        RetryingHTTPFileSystem().cat_file(URL)
+    assert raised.value is errors[-1]
+    assert len(calls) == attempts_count
+
+
+def test_retries_log_at_info_and_never_at_warning(attempts_count, parent_request, caplog) -> None:
+    caplog.set_level(logging.DEBUG)
+    parent_request(
+        "_cat_file", [_response_error(HTTPStatus.SERVICE_UNAVAILABLE), aiohttp.ServerDisconnectedError()], PAYLOAD
+    )
+
+    RetryingHTTPFileSystem().cat_file(URL)
+
+    retry_records = [record for record in caplog.records if record.name == "oceanbench.core.remote_http"]
+    assert [record.levelno for record in retry_records] == [logging.INFO, logging.INFO]
+    assert all(URL in record.getMessage() for record in retry_records)
+    assert [record for record in caplog.records if record.levelno >= logging.WARNING] == []
+
+
+def test_backoff_doubles_and_is_capped_so_default_retries_ride_out_a_minute() -> None:
+    assert [_retry_backoff_seconds(attempt) for attempt in range(1, 7)] == [4, 8, 16, 32, 32, 32]
+    assert sum(_retry_backoff_seconds(attempt) for attempt in range(1, DEFAULT_REMOTE_HTTP_RETRIES)) == 60

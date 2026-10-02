@@ -54,7 +54,13 @@ def _challenger_dataset(with_inverse_barometer: bool, source_name: str | None = 
 
 @pytest.fixture(autouse=True)
 def _without_mean_dynamic_topography(monkeypatch):
-    monkeypatch.setattr(classIV_support, "load_mean_dynamic_topography", lambda _resolution: 0.0)
+    mean_dynamic_topography = xarray.DataArray(
+        numpy.zeros((len(LATITUDES), len(LONGITUDES))),
+        dims=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={Dimension.LATITUDE.key(): LATITUDES, Dimension.LONGITUDE.key(): LONGITUDES},
+        name=SEA_SURFACE_HEIGHT_KEY,
+    )
+    monkeypatch.setattr(classIV_support, "load_mean_dynamic_topography", lambda _resolution: mean_dynamic_topography)
 
 
 def _registered(monkeypatch) -> None:

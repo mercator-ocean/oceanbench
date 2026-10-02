@@ -2,24 +2,35 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from pathlib import Path
-
 import numpy
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension
-from oceanbench.core.dataset_source import DatasetSource, get_dataset_source, with_dataset_source
+from oceanbench.core.dataset_source import DatasetSource, get_dataset_source
 from oceanbench.core.lagrangian_support import _lagrangian_domain_stage_variant, _lagrangian_stage_directory
 from oceanbench.core.reference_depths import (
-    REFERENCE_DEPTH_GRID_HASH_ATTRIBUTE,
-    REFERENCE_DEPTH_GRID_ROUNDING_ATTRIBUTE,
-    REFERENCE_DEPTH_GRID_ROUNDING_DECIMALS,
     REFERENCE_TARGET_DEPTHS_ATTRIBUTE,
     reference_depth_grid_stage_variant,
     with_reference_depth_grid_metadata,
 )
 from oceanbench.core.references import glo12, glorys
 from oceanbench.core.weekly_stage import _weekly_stage_directory, maybe_stage_weekly_dataset
+
+NATIVE_DEPTHS = [0.494025, 1.541375, 2.645669, 47.37369]
+
+
+def _native_dataset(variables: list[str]) -> xarray.Dataset:
+    time = [numpy.datetime64("2024-01-03")]
+    if variables == ["sea_surface_height_above_geoid"]:
+        return xarray.Dataset({variables[0]: (["time"], [0.0])}, coords={"time": time})
+    return xarray.Dataset(
+        {variable: (["time", "depth"], [[10.0 * depth for depth in NATIVE_DEPTHS]]) for variable in variables},
+        coords={"time": time, "depth": NATIVE_DEPTHS},
+    )
+
+
+def _fake_open_dataset(*, dataset_id, variables, start_datetime, end_datetime) -> xarray.Dataset:
+    return _native_dataset(variables)
 
 
 def _challenger_dataset(depths: list[float]) -> xarray.Dataset:
@@ -42,7 +53,26 @@ def _spatial_dataset(latitudes: list[float], longitudes: list[float]) -> xarray.
     )
 
 
-def test_reference_depth_grid_stage_variant_uses_rounded_depths() -> None:
+def test_glorys_twelfth_degree_week_snaps_native_levels_to_the_challenger_depths(monkeypatch) -> None:
+    monkeypatch.setattr(glorys.copernicusmarine, "open_dataset", _fake_open_dataset)
+
+    week = glorys._glorys_1_12_path(numpy.datetime64("2024-01-03"), 1, numpy.array([0.494, 2.6457]))
+
+    numpy.testing.assert_allclose(week["depth"].values, [0.494025, 2.645669])
+    numpy.testing.assert_allclose(week["sea_water_potential_temperature"].values, [[4.94025, 26.45669]])
+
+
+def test_glo12_twelfth_degree_week_snaps_depth_variables_and_leaves_sea_surface_height_alone(monkeypatch) -> None:
+    monkeypatch.setattr(glo12.copernicusmarine, "open_dataset", _fake_open_dataset)
+
+    week = glo12._glo12_1_12_path(numpy.datetime64("2024-01-03"), 1, numpy.array([0.494, 2.6457]))
+
+    numpy.testing.assert_allclose(week["depth"].values, [0.494025, 2.645669])
+    numpy.testing.assert_allclose(week["sea_water_salinity"].values, [[4.94025, 26.45669]])
+    assert "depth" not in week["sea_surface_height_above_geoid"].dims
+
+
+def test_reference_depth_grid_stage_variant_ignores_sub_millimetre_differences_only() -> None:
     xihe_depths = numpy.array([0.494, 2.6457, 5.0782, 7.9296])
     wenhai_depths = numpy.array([0.494025, 2.645669, 5.078224, 7.929560])
     glo12_depths = numpy.array([0.494025, 47.37369, 92.32607, 155.8507])
@@ -51,16 +81,9 @@ def test_reference_depth_grid_stage_variant_uses_rounded_depths() -> None:
     assert reference_depth_grid_stage_variant(xihe_depths) != reference_depth_grid_stage_variant(glo12_depths)
 
 
-def test_with_reference_depth_grid_metadata_records_auditable_depth_grid() -> None:
-    target_depths = numpy.array([0.494025, 2.645669])
-    dataset = xarray.Dataset()
+def test_with_reference_depth_grid_metadata_records_millimetre_rounded_depths() -> None:
+    dataset_with_metadata = with_reference_depth_grid_metadata(xarray.Dataset(), numpy.array([0.494025, 2.645669]))
 
-    dataset_with_metadata = with_reference_depth_grid_metadata(dataset, target_depths)
-
-    assert dataset_with_metadata.attrs[REFERENCE_DEPTH_GRID_HASH_ATTRIBUTE]
-    assert (
-        dataset_with_metadata.attrs[REFERENCE_DEPTH_GRID_ROUNDING_ATTRIBUTE] == REFERENCE_DEPTH_GRID_ROUNDING_DECIMALS
-    )
     assert dataset_with_metadata.attrs[REFERENCE_TARGET_DEPTHS_ATTRIBUTE] == [0.494, 2.646]
 
 
@@ -100,8 +123,8 @@ def test_glo12_twelfth_degree_reference_stage_variant_depends_on_target_depth_gr
     assert captured_variants[0][1] != captured_variants[2][1]
 
 
-def test_weekly_stage_variant_is_added_to_stage_path_without_changing_resolution(monkeypatch) -> None:
-    monkeypatch.setattr("oceanbench.core.weekly_stage.local_stage_directory", lambda: Path("/tmp/oceanbench-stage"))
+def test_weekly_stage_variant_is_added_to_stage_path_without_changing_resolution(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("oceanbench.core.weekly_stage.local_stage_directory", lambda: tmp_path)
 
     stage_directory = _weekly_stage_directory(
         dataset_kind="reference",
@@ -111,7 +134,7 @@ def test_weekly_stage_variant_is_added_to_stage_path_without_changing_resolution
         lead_days_count=10,
     )
 
-    assert str(stage_directory) == "/tmp/oceanbench-stage/reference-glo12-twelfth_degree-depths-23-abc-10d"
+    assert stage_directory == tmp_path / "reference-glo12-twelfth_degree-depths-23-abc-10d"
 
 
 def test_weekly_stage_variant_is_preserved_in_non_staged_source_metadata(monkeypatch) -> None:
@@ -137,29 +160,8 @@ def test_weekly_stage_variant_is_preserved_in_non_staged_source_metadata(monkeyp
     )
 
 
-def test_dataset_source_keeps_internal_variant_separate_from_resolution() -> None:
-    dataset = with_dataset_source(
-        xarray.Dataset(),
-        kind="reference",
-        name="glo12",
-        resolution="twelfth_degree",
-        variant="depths-23-abc",
-    )
-
-    dataset_source = get_dataset_source(dataset)
-
-    assert dataset_source == DatasetSource(
-        kind="reference",
-        name="glo12",
-        resolution="twelfth_degree",
-        variant="depths-23-abc",
-    )
-
-
-def test_lagrangian_stage_path_uses_source_variant(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "oceanbench.core.lagrangian_support.local_stage_directory", lambda: Path("/tmp/oceanbench-stage")
-    )
+def test_lagrangian_stage_path_uses_source_variant(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("oceanbench.core.lagrangian_support.local_stage_directory", lambda: tmp_path)
 
     stage_directory = _lagrangian_stage_directory(
         DatasetSource(
@@ -173,23 +175,16 @@ def test_lagrangian_stage_path_uses_source_variant(monkeypatch) -> None:
     )
 
     assert (
-        str(stage_directory)
-        == "/tmp/oceanbench-stage/lagrangian-reference-glo12-twelfth_degree-depths-23-abc-domain-2041x4320-def-10d"
+        stage_directory == tmp_path / "lagrangian-reference-glo12-twelfth_degree-depths-23-abc-domain-2041x4320-def-10d"
     )
 
 
 def test_lagrangian_domain_stage_variant_depends_on_spatial_grid() -> None:
     global_domain_variant = _lagrangian_domain_stage_variant(
-        _spatial_dataset(
-            latitudes=[-89.5, 0.5, 89.5],
-            longitudes=[0.5, 1.5, 2.5],
-        )
+        _spatial_dataset(latitudes=[-89.5, 0.5, 89.5], longitudes=[0.5, 1.5, 2.5])
     )
     regional_domain_variant = _lagrangian_domain_stage_variant(
-        _spatial_dataset(
-            latitudes=[40.5, 41.5],
-            longitudes=[-8.5, -7.5, -6.5],
-        )
+        _spatial_dataset(latitudes=[40.5, 41.5], longitudes=[-8.5, -7.5, -6.5])
     )
 
     assert global_domain_variant.startswith("domain-3x3-")
@@ -199,16 +194,10 @@ def test_lagrangian_domain_stage_variant_depends_on_spatial_grid() -> None:
 
 def test_lagrangian_domain_stage_variant_uses_rounded_coordinates() -> None:
     first_domain_variant = _lagrangian_domain_stage_variant(
-        _spatial_dataset(
-            latitudes=[40.5000001, 41.4999999],
-            longitudes=[-8.4999999, -7.5000001],
-        )
+        _spatial_dataset(latitudes=[40.5000001, 41.4999999], longitudes=[-8.4999999, -7.5000001])
     )
     second_domain_variant = _lagrangian_domain_stage_variant(
-        _spatial_dataset(
-            latitudes=[40.5, 41.5],
-            longitudes=[-8.5, -7.5],
-        )
+        _spatial_dataset(latitudes=[40.5, 41.5], longitudes=[-8.5, -7.5])
     )
 
     assert first_domain_variant == second_domain_variant

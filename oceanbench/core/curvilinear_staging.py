@@ -85,6 +85,7 @@ from oceanbench.core.curvilinear_grid import (
     nearest_neighbour_mapping,
 )
 from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.remote_http import remote_zarr_store
 
 #: The regular quarter-degree grid every curvilinear challenger is sampled onto.
 #:
@@ -287,7 +288,7 @@ def gloens_companion_grid_store(first_day_datetime: datetime) -> str:
 
 def open_gloens_store(store_url: str) -> xarray.Dataset:
     """Open one GloEns store, which is published anonymously readable."""
-    return xarray.open_zarr(store_url, consolidated=True)
+    return xarray.open_zarr(remote_zarr_store(store_url), consolidated=True)
 
 
 def _gloens_described_grid(dataset: xarray.Dataset) -> tuple[numpy.ndarray, numpy.ndarray] | None:
