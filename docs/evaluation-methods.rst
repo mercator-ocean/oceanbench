@@ -9,7 +9,7 @@ Definitions of evaluation methods
 ===================================================
 
 Several methods are used to evaluate forecasting systems in OceanBench.
-Each of them is applied to a dataset grouping 52 forecasts in the year 2024.
+Each of them is applied to a dataset grouping 52 forecasts (2024, or 2023 for GLO36v1).
 
 The following figure provides an overview of the evaluation methodology, illustrating the multifaceted evaluation strategy that captures different aspects of model performance.
 This includes (i) observation-based intercomparison, (ii) reference-model benchmarking, and (iii) process-oriented diagnostics derived from physically meaningful variables.
@@ -24,20 +24,23 @@ OceanBench evaluates challengers against the following reference datasets:
 
 - `2024 GLORYS reanalysis <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_
 - `2024 GLO12 analysis <https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024>`_
-- 2024 in situ and satellite observations (Argo profiles, surface drifters, along track altimetry) from the Copernicus Marine Service, prepared as described in ``helper_scripts/observations2024_v2/README.md``
+- 2024 in situ and satellite observations (Argo profiles, surface drifters, along track altimetry) from the Copernicus Marine Service, prepared as described in the `observations README <https://github.com/mercator-ocean/oceanbench/blob/main/helper_scripts/observations2024_v2/README.md>`_
 
 You can open and explore these datasets by using the :mod:`oceanbench.datasets.reference` module.
 
-The OceanBench ocean mask says which cells of the twelfth of a degree grid are ocean. A cell is ocean when it is wet in both the GLO12 and GLORYS12 official static masks, so every metric scores the same area whatever its reference. It is defined at the six standard depths and at 643.57 m, the first level below 600 m.
+The OceanBench ocean mask says which cells of the twelfth of a degree grid are ocean. A cell is ocean when it is wet in both the GLO12 and GLORYS12 official static masks. The gridded scores use it, so they cover the same area whatever the reference. Class IV uses it to select its observations. The Lagrangian trajectories do not use it. It is defined at the six standard depths and at 643.57 m, the first level below 600 m.
+
+For gridded RMSD metrics, OceanBench takes the ``cos(latitude)`` area-weighted mean of squared errors over the scored cells, so each cell counts in proportion to its area, then averages the daily RMSD over forecast initialization days.
+A cell is scored when it is ocean in the ocean mask and both the challenger and the reference have a value there. On a challenger grid other than the twelfth of a degree one, each cell takes the nearest mask cell. ``Missing fraction`` gives, per variable and depth, the area-weighted share of ocean cells where the reference has a value and the challenger has none. It is averaged over initialization and lead days and does not change the RMSD.
+
+Class IV observations
+**********************************************
 
 Class IV scores follow the IV-TT CLASS-4 framework (`Hernandez et al., 2009 <https://doi.org/10.5670/oceanog.2009.71>`_, `Ryan et al., 2015 <https://doi.org/10.1080/1755876X.2015.1022330>`_, `Divakaran et al., 2015 <https://doi.org/10.1080/1755876X.2015.1022333>`_): each forecast is compared with the observations at the observation time, position and depth, and the RMSD is reported per variable, depth bin and lead day. The observation selection and quality control applied when building the observation store are documented in the README above. Temperature and salinity are scored in depth bins down to 600 m. A challenger whose deepest level is shallower than 600 m is still scored on the full range, with its deepest level standing in for the missing depths.
 
 Class IV scores the same observations for every challenger, whatever its grid. An observation is kept only when the four quarter degree cells around it are entirely ocean in the ocean mask, at the first mask depth at or below it. This drops observations right at the coast, in narrow straits and below the mask seafloor.
 
 ``Observations`` gives the number of these observations at the first lead day, and ``Missing`` how many of them the challenger has no value for; those are left out of the RMSD.
-
-For gridded RMSD metrics, OceanBench takes the ``cos(latitude)`` area-weighted mean of squared errors over the scored cells, so each cell counts in proportion to its area, then averages the daily RMSD over forecast initialization days.
-A cell is scored when it is ocean in the ocean mask and both the challenger and the reference have a value there. On a challenger grid other than the twelfth of a degree one, each cell takes the nearest mask cell. ``Missing fraction`` gives, per variable and depth, the area-weighted share of ocean cells where the reference has a value and the challenger has none. It is averaged over initialization and lead days and does not change the RMSD.
 
 Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
 **********************************************************************************************
