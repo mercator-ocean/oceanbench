@@ -608,38 +608,3 @@ def format_class4_results(results_dataframe: pandas.DataFrame, lead_days_count: 
     result.index.name = None
     result.columns.name = None
     return result
-
-
-def class4_variable_results(
-    challenger: xarray.Dataset,
-    observations: xarray.Dataset,
-    base_observations_dataframe: pandas.DataFrame,
-    selected_observation_indices: numpy.ndarray,
-    observation_dimension_key: str,
-    observation_variable_key: str,
-    challenger_variable_key: str,
-    standard_variable_key: str,
-) -> pandas.DataFrame:
-    observations_dataframe = _create_observations_dataframe(
-        base_observations_dataframe,
-        selected_observation_indices,
-        observation_dimension_key,
-        observations,
-        observation_variable_key,
-        standard_variable_key,
-    )
-    if observations_dataframe.empty:
-        return pandas.DataFrame()
-
-    observations_dataframe = observations_dataframe.dropna(subset=["observation_value"])
-    model_variable = _convert_forecast_ssh_to_sla(
-        challenger[challenger_variable_key],
-        standard_variable_key,
-    )
-    observations_dataframe = observations_dataframe.assign(
-        model_value=_interpolate_model_to_observations(
-            model_variable,
-            observations_dataframe,
-        )
-    )
-    return _compute_rmsd_table(observations_dataframe, standard_variable_key)
