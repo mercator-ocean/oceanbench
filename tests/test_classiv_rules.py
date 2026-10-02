@@ -9,7 +9,6 @@ import xarray
 
 import oceanbench.core.classIV_support as classIV_support
 from oceanbench.core.classIV_support import (
-    REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
     _compute_rmsd_table,
     _convert_forecast_ssh_to_sla,
     _interpolate_vertically_bracket,
@@ -70,7 +69,7 @@ def test_bracket_interpolation_returns_nan_when_the_whole_column_is_missing() ->
     assert numpy.isnan(interpolated).all()
 
 
-def test_bracket_interpolation_keeps_the_deep_and_top_clamps_unchanged() -> None:
+def test_bracket_interpolation_clamped_to_a_missing_deepest_level_returns_nan() -> None:
     interpolated = _interpolate_vertically_bracket(
         _profiles([1.0, 2.0, numpy.nan], [1.0, 2.0, 3.0]),
         MODEL_DEPTHS,
@@ -82,16 +81,17 @@ def test_bracket_interpolation_keeps_the_deep_and_top_clamps_unchanged() -> None
 
 
 def test_bracket_interpolation_is_invariant_under_model_level_order() -> None:
-    target_depths = numpy.array([15.0, 25.0])
-    sorted_result = _interpolate_vertically_bracket(_profiles([1.0, 2.0, 3.0]), MODEL_DEPTHS, target_depths[:1])
-    permuted = _interpolate_vertically_bracket(
-        _profiles([3.0, 1.0, 2.0], [3.0, 1.0, 2.0]),
+    # Values that are not linear in depth, so a wrong pair of bracketing levels changes the result.
+    target_depths = numpy.array([5.0, 15.0, 25.0, 35.0])
+    sorted_result = _interpolate_vertically_bracket(_profiles(*[[1.0, 4.0, 2.0]] * 4), MODEL_DEPTHS, target_depths)
+    permuted_result = _interpolate_vertically_bracket(
+        _profiles(*[[2.0, 1.0, 4.0]] * 4),
         numpy.array([30.0, 10.0, 20.0]),
         target_depths,
     )
 
-    numpy.testing.assert_array_equal(sorted_result, [1.5])
-    numpy.testing.assert_array_equal(permuted, [1.5, 2.5])
+    numpy.testing.assert_array_equal(sorted_result, [1.0, 2.5, 3.0, 2.0])
+    numpy.testing.assert_array_equal(permuted_result, sorted_result)
 
 
 def test_formatted_results_report_the_first_lead_day_count_per_variable_and_depth_bin() -> None:
@@ -153,7 +153,6 @@ def test_forecast_sea_surface_height_becomes_sla_by_removing_mdt_and_the_reanaly
 
     sla = _convert_forecast_ssh_to_sla(zos, Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key())
 
-    assert REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT == -0.1148
     numpy.testing.assert_allclose(sla.values[0, 0], [[0.8148, 0.8148], [0.6148, 0.6148]])
 
 
