@@ -16,6 +16,7 @@ from oceanbench.core.dataset_utils import (
     VARIABLE_METADATA,
 )
 from oceanbench.core.lead_day_utils import lead_day_labels
+from oceanbench.core.remote_http import with_remote_http_retries
 
 DEPTH_LABELS: dict[DepthLevel, str] = {
     DepthLevel.SURFACE: "surface",
@@ -185,5 +186,5 @@ def rmsd(
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
     prepared_reference_dataset = _select_variables(_harmonise_dataset(reference_dataset), variables)
     rmsd_dataset = _rmsd(prepared_challenger_dataset, prepared_reference_dataset)
-    computed_rmsd_dataset = rmsd_dataset.compute()
+    computed_rmsd_dataset = with_remote_http_retries("RMSD computation", rmsd_dataset.compute)
     return _to_pretty_dataframe(computed_rmsd_dataset, variables)
