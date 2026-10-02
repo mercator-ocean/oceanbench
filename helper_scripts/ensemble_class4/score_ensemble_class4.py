@@ -50,6 +50,7 @@ from oceanbench.core.ensemble_class4 import (
     ensemble_class4_records,
 )
 from oceanbench.core.ensemble_gridded import ENSEMBLE_DIMENSION
+from oceanbench.core.ocean_mask import ocean_mask
 from oceanbench.core.references.observations import (
     available_observation_days,
     observations as reference_observations,
@@ -388,7 +389,7 @@ def _score_command(arguments: argparse.Namespace) -> None:
 
     challenger = _cut_to_observed_lead_days(challenger, first_day)
     observations_dataset = reference_observations(challenger)
-    matchups = ensemble_class4_matchup(challenger, observations_dataset, SCORED_VARIABLES)
+    matchups = ensemble_class4_matchup(challenger, observations_dataset, ocean_mask(), SCORED_VARIABLES)
     print(f"matched variables={[matchup.variable for matchup in matchups]}")
 
     for matchup in matchups:

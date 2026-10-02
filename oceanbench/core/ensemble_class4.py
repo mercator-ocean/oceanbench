@@ -72,7 +72,10 @@ import pandas
 import xarray
 
 from oceanbench.core.classIV_support import (
+    Class4PopulationLayers,
     class4_model_data_with_depth_dimension,
+    class4_observations_in_shared_population,
+    class4_population_layers,
     create_class4_observations_dataframe,
     interpolate_class4_model_values_for_observation_group,
     prepare_class4_model_variable,
@@ -711,8 +714,12 @@ def _class4_observation_requests(
     observations_dataset: xarray.Dataset,
     variables: Sequence[Variable],
     lead_days_count: int,
+    population_layers: Class4PopulationLayers,
 ) -> list[tuple[str, pandas.DataFrame]]:
-    """Each variable that has observations to answer for, with the rows it has to answer."""
+    """Each variable that has observations to answer for, with the rows it has to answer.
+
+    The rows are the shared Class IV population, the same observations a deterministic run scores.
+    """
     requests = []
     for variable in variables:
         variable_key = variable.key()
@@ -724,7 +731,10 @@ def _class4_observation_requests(
         )
         if observations_dataframe.empty:
             continue
-        observations_dataframe = observations_dataframe.dropna(subset=["observation_value"]).reset_index(drop=True)
+        observations_dataframe = class4_observations_in_shared_population(
+            observations_dataframe.dropna(subset=["observation_value"]),
+            population_layers,
+        ).reset_index(drop=True)
         if observations_dataframe.empty:
             continue
         requests.append((variable_key, observations_dataframe))
@@ -734,6 +744,7 @@ def _class4_observation_requests(
 def ensemble_class4_matchup(
     challenger_dataset: xarray.Dataset,
     observations_dataset: xarray.Dataset,
+    ocean_mask: xarray.DataArray,
     variables: Sequence[Variable],
     *,
     ensemble_dimension: str = ENSEMBLE_DIMENSION,
@@ -742,8 +753,8 @@ def ensemble_class4_matchup(
 
     Step for step this is :func:`oceanbench.core.classIV.rmsd_class4_validation` up to the
     point where it computes an RMSD: the same standard-name rename, the same observation
-    dataframe, the same SSH to SLA conversion and the same interpolation. The only extension
-    is the member loop.
+    dataframe restricted to the same shared population, the same SSH to SLA conversion and
+    the same interpolation. The only extension is the member loop.
 
     A challenger still on its native curvilinear grid takes the horizontal step of
     :mod:`oceanbench.core.curvilinear_class4` instead, which reads the native cell of each
@@ -760,7 +771,12 @@ def ensemble_class4_matchup(
         )
     )
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
-    requests = _class4_observation_requests(observations_dataset, variables, lead_days_count)
+    requests = _class4_observation_requests(
+        observations_dataset,
+        variables,
+        lead_days_count,
+        class4_population_layers(ocean_mask),
+    )
 
     if native_grid is None:
         member_values_per_variable = [

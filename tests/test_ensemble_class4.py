@@ -12,11 +12,15 @@ import pytest
 import xarray
 
 from oceanbench.core import curvilinear_class4
+from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.classIV_support import (
     _CLASS4_OBSERVATIONS_CACHE,
     GLOENS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
     REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
     _prepared_class4_observations,
+    class4_observations_in_shared_population,
+    class4_population_layers,
+    create_class4_observations_dataframe,
     interpolate_class4_model_to_observations,
 )
 from oceanbench.core.curvilinear_staging import CurvilinearChallenger, GLOENS_SOURCE_NAME
@@ -46,6 +50,7 @@ from oceanbench.core.ensemble_class4 import (
     ranks_with_random_ties,
     spread_error_ratio_additive,
 )
+from oceanbench.core.ocean_mask import OCEAN_MASK_DEPTHS
 from oceanbench.core.score_records import RunContext, records_to_dataframe
 from test_classiv_interpolation import _model_data, _observations_dataframe
 
@@ -572,12 +577,66 @@ def _observations_dataset() -> xarray.Dataset:
     )
 
 
+def _twelfth_degree_ocean_mask(is_wet: numpy.ndarray) -> xarray.DataArray:
+    """A twelfth of a degree ocean mask from 1 S and 9 E, covering every test observation."""
+    _, latitude_count, longitude_count = is_wet.shape
+    return xarray.DataArray(
+        is_wet,
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): OCEAN_MASK_DEPTHS,
+            Dimension.LATITUDE.key(): -1.0 + numpy.arange(latitude_count) / 12.0,
+            Dimension.LONGITUDE.key(): 9.0 + numpy.arange(longitude_count) / 12.0,
+        },
+    )
+
+
+def _all_wet_ocean_mask() -> xarray.DataArray:
+    return _twelfth_degree_ocean_mask(numpy.full((len(OCEAN_MASK_DEPTHS), 540, 60), True))
+
+
+def test_the_ensemble_matchup_scores_the_deterministic_class4_population():
+    # The dry twelfth of a degree cell sits in the quarter degree cell (6, 6) of the mask, which
+    # is one of the four around the observations at (0.25, 10.25) and (0.5, 10.5).
+    is_wet = numpy.full((len(OCEAN_MASK_DEPTHS), 540, 60), True)
+    is_wet[:, 18, 18] = False
+    ocean_mask = _twelfth_degree_ocean_mask(is_wet)
+    challenger = _ensemble_model_data().to_dataset()
+    observations_dataset = _observations_dataset()
+    variable_key = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
+
+    matchups = ensemble_class4_matchup(
+        challenger,
+        observations_dataset,
+        ocean_mask,
+        [Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+    )
+    deterministic_population = class4_observations_in_shared_population(
+        create_class4_observations_dataframe(
+            observations_dataset, variable_key, variable_key, challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
+        ).dropna(subset=["observation_value"]),
+        class4_population_layers(ocean_mask),
+    )
+    deterministic_table = rmsd_class4_validation(
+        challenger.isel({ENSEMBLE_DIMENSION: 0}),
+        observations_dataset,
+        ocean_mask,
+        [Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+    )
+
+    kept = matchups[0].observations
+    assert len(kept) == len(_observations_dataframe()) - 2
+    pandas.testing.assert_frame_equal(kept, deterministic_population.reset_index(drop=True))
+    assert deterministic_table["Observations"].tolist() == [int((kept["lead_day"] == 0).sum())]
+
+
 def test_ensemble_matchup_runs_mains_pipeline_once_per_member():
     challenger = _ensemble_model_data().to_dataset()
 
     matchups = ensemble_class4_matchup(
         challenger,
         _observations_dataset(),
+        _all_wet_ocean_mask(),
         [Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
     )
 
@@ -605,6 +664,7 @@ def test_a_member_axis_labelled_realization_reaches_the_matchup():
     matchups = ensemble_class4_matchup(
         challenger,
         _observations_dataset(),
+        _all_wet_ocean_mask(),
         [Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
     )
 
@@ -702,6 +762,7 @@ def test_a_store_that_describes_its_cells_twice_reaches_the_native_matchup(monke
     matchups = ensemble_class4_matchup(
         challenger,
         _native_observations_dataset(),
+        _all_wet_ocean_mask(),
         [Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
     )
 
@@ -730,6 +791,7 @@ def test_sea_level_is_matched_up_on_the_native_grid_beside_the_other_variables(m
     matchups = ensemble_class4_matchup(
         challenger,
         _native_observations_dataset(depth=15.0),
+        _all_wet_ocean_mask(),
         [
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
             Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
@@ -828,6 +890,7 @@ def test_a_store_named_as_gloens_names_its_fields_matches_up_every_variable(monk
     matchups = ensemble_class4_matchup(
         challenger,
         _native_observations_dataset(depth=15.0),
+        _all_wet_ocean_mask(),
         [
             Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
             Variable.SEA_WATER_SALINITY,
