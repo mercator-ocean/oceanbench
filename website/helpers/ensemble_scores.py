@@ -28,13 +28,12 @@ CLOSENESS_TO_ONE_BLOCKS = {"observations_spread_error_ratio", "gridded_spread_er
 
 DATUM_NOTE = "The sea surface height of GloEns is datum aligned to the reference before it is scored."
 SHORT_HORIZON_NOTE = "GLOW-ens stops at lead day 9."
-# GloEns starts on Thursdays and every other system on Wednesdays, so a lead day of GloEns falls on
-# a different calendar day, and the observations that day carries are not the same ones.
+# GloEns is initialised on a Thursday, so its first forecast day is a Friday, while every other
+# system has its first forecast day on a Wednesday. A lead day of GloEns is two days later.
 UNPAIRED_SAMPLE_NOTE = (
-    "GloEns starts on Thursdays and the other systems on Wednesdays, so at a given lead day they "
-    "are scored against different observations: a year of both is a fair comparison of the two "
-    "years, not a paired comparison of the same matchups, and a small difference between two rows "
-    "can be the sample rather than the system."
+    "The first forecast day is a Friday for GloEns and a Wednesday for the other systems, so at a "
+    "given lead day GloEns is scored two days later. Over a year this is a fair comparison, but not "
+    "a paired one: a small difference between two rows can come from the dates rather than the system."
 )
 CLOSENESS_TO_ONE_NOTE = (
     "Cells are shaded by closeness to one, the target of the ratio: a cell reads better than the "

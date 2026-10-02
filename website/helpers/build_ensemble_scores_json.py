@@ -2,14 +2,13 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-"""Turn the ensemble evaluation aggregates into the JSON the ensemble page bakes in.
+"""Turn the scores of the ensemble helper scripts into the JSON the ensemble page bakes in.
 
-The aggregates are produced once by the evaluation campaigns and are not readable from the website
-build, so this converter is run by hand and its output is committed next to the page.
-
-A system scored by the helper scripts of this branch rather than by a campaign passes its
-``scores.parquet`` instead, on ``--helper-observations-<system>`` and ``--helper-gridded-<system>``,
-and those rows replace the campaign rows of that system.
+Every score comes from the ``scores.parquet`` a helper script of this branch writes, the class 4
+scorer of ``helper_scripts/ensemble_class4`` on the observation axis and the gridded scorers of
+``helper_scripts/ensemble_gridded`` against GLORYS. Those outputs are not readable from the website
+build, so this converter is run by hand, with one explicit path per input, and its output is
+committed next to the page.
 """
 
 import argparse
@@ -19,41 +18,13 @@ import os
 
 import pandas as pd
 
-# The aggregates live outside the repository, so the tree that holds them is read from the
-# OCEANBENCH_ENSEMBLE_AGGREGATE_ROOT environment variable and the paths below are relative to it.
-DEFAULT_GRIDDED_GLOENS_PATH = "03-library-year/aggregate-gloens.parquet"
-DEFAULT_DETERMINISTIC_GLONET_PATH = "03-library-year/aggregate-det-glonet.parquet"
-DEFAULT_GRIDDED_GLONET_PATH = "03-library-year/aggregate-gridded-glonet.parquet"
-DEFAULT_GRIDDED_GLO12_PATH = "03-library-year/aggregate-gridded-glo12.parquet"
-DEFAULT_DETERMINISTIC_GLO12_PATH = "03-library-year/aggregate-det-glo12.parquet"
-DEFAULT_OBSERVATIONS_GLOENS_PATH = "01-observations/data-gloens/aggregate.parquet"
-
-# The ensemble means are also scored through the class 4 route the deterministic systems go through,
-# so the error against observations reads on one matchup and one set of depth bins for every system.
-# When helper scores are passed they supply every observation score, and the superob aggregates
-# above are only the fallback.
-DEFAULT_CLASS4_GLOENS_MEAN_PATH = "03-library-year/aggregate-det-gloens-mean.parquet"
-
-# The GloEns year on the depth axis was run subsurface only, because its surface fields had already
-# been scored by the earlier campaign and were deliberately not scored again. That frozen record is
-# read here so the surface band of the table is filled from it rather than left empty.
-DEFAULT_GLOENS_SURFACE_PATH = "02-gridded-glorys/scores-gloens-surface.csv"
-
-# A campaign wave that scored a stream after the fact writes it next to the aggregate instead of into
-# it, so an observation aggregate is read together with whatever sidecar sits beside it.
-OBSERVATION_SIDECAR_NAME = "aggregate_currents.parquet"
-OBSERVATION_ROW_KEY = ["stream", "region", "depth_band", "lead_day"]
-
-# The gridded fill waves scored the cells the first waves left empty, the two velocity components on
-# every level and salinity at the surface, and they follow the same rule as the observation sidecar:
-# the fill is written beside the aggregate it completes rather than into it, so the aggregate stays
-# the frozen artifact its campaign produced and the fill stays separately auditable.
-GRIDDED_FILL_SUFFIX = "-fill.parquet"
+# The GloEns year on the depth axis was scored in three runs: the subsurface levels, a fill with the
+# two velocity components on every level and salinity at the surface, and the surface temperature
+# and sea level. The three are joined here, and a run repeating the rows of another is refused.
 GRIDDED_ROW_KEY = ["variable", "depth", "lead_day", "metric"]
 
 # The helper scores of both axes carry every region and, on the gridded axis, every reference they
-# were run against. The page reads the global rows against GLORYS alone, as the campaign aggregates
-# it replaces already did.
+# were run against. The page reads the global rows against GLORYS alone.
 HELPER_REGION = "global"
 
 
@@ -127,13 +98,11 @@ STREAM_LABELS = {
     "currents_v": "Northward current",
 }
 
-STREAM_ORDER = list(STREAM_LABELS)
-
 # The digits a stored value keeps, which is a storage choice alone: see :func:`_rounded`.
 STORED_SIGNIFICANT_DIGITS = 4
 
-# The temperature streams are scored in kelvin and the deterministic class 4 aggregate in degrees
-# Celsius: an error is a difference, so both are numerically the same.
+# The temperature streams are labelled in kelvin whatever unit the class 4 helper writes: an error
+# is a difference, so kelvin and degrees Celsius are numerically the same.
 STREAM_UNITS = {
     "drifter_sst": "K",
     "profiles_t": "K",
@@ -174,10 +143,6 @@ DETERMINISTIC_STREAMS = {
     ("northward_sea_water_velocity", "15m"): "currents_v",
 }
 
-DETERMINISTIC_DEPTH_BIN_LABELS = DEPTH_BAND_LABELS
-
-DETERMINISTIC_DEPTH_BIN_ORDER = DEPTH_BAND_ORDER
-
 GRIDDED_VARIABLE_LABELS = {
     "sea_water_potential_temperature": "Temperature",
     "sea_water_salinity": "Salinity",
@@ -188,16 +153,16 @@ GRIDDED_VARIABLE_LABELS = {
 
 GRIDDED_VARIABLE_ORDER = list(GRIDDED_VARIABLE_LABELS)
 
-# The frozen surface record holds both references and both sea level bases. Only the GLORYS rows
-# belong next to the depth aggregate, and of the two sea level bases only the datum aligned one is
+# The GloEns surface scores hold both sea level bases. Only the GLORYS rows belong next to the
+# depth scores, and of the two sea level bases only the datum aligned one is
 # comparable: GloEns carries a sea level datum of its own, while the other system and the reference
 # share theirs, so the raw basis would show a constant offset instead of a forecast error.
 GRIDDED_REFERENCE = "glorys"
 GLOENS_SURFACE_DEPTH = "surface"
 GLOENS_DATUM_ALIGNED_DEPTH = "surface-datum-aligned"
-# The biased CRPS the frozen record also carries is left out: it is the fair estimator without its
+# The biased CRPS the ensemble scores also carry is left out: it is the fair estimator without its
 # finite-ensemble correction, so it rewards a small ensemble, and no table on the page reads it.
-FROZEN_METRIC_COLUMNS = [
+ENSEMBLE_METRIC_COLUMNS = [
     "crps_fair",
     "ensemble_mean_rmsd",
     "ensemble_spread",
@@ -205,12 +170,11 @@ FROZEN_METRIC_COLUMNS = [
     "spread_error_ratio",
 ]
 # A deterministic system is scored on this axis as an ensemble of one, and an ensemble of one has
-# no spread and no fair CRPS, so its aggregate carries the root mean square difference alone.
+# no spread and no fair CRPS, so its scores carry the root mean square difference alone.
 DETERMINISTIC_METRIC_COLUMNS = ["ensemble_mean_rmsd"]
 RATIO_METRIC = "spread_error_ratio"
 RATIO_UNIT = "1"
-# Neither the frozen surface record nor a fill sidecar carries a unit column, so the units of the
-# variables they carry are restated here, exactly as the depth aggregate spells them.
+# The gridded helper scores carry no unit column, so the units of their variables are restated here.
 GRIDDED_VARIABLE_UNITS = {
     "sea_water_potential_temperature": "°C",
     "sea_surface_height_above_geoid": "m",
@@ -299,7 +263,7 @@ def gridded_rows(frame: pd.DataFrame, system_key: str, metric: str, is_ratio: bo
 
 
 def gridded_long_frame(wide: pd.DataFrame, metric_columns: list[str]) -> pd.DataFrame:
-    """Shape a wide gridded record, one column per metric, like a year mean slice of an aggregate."""
+    """Shape wide gridded scores, one column per metric, into one year mean row per metric."""
     long = wide.melt(
         id_vars=["variable", "depth", "lead_day", "start_count"],
         value_vars=metric_columns,
@@ -314,73 +278,44 @@ def gridded_long_frame(wide: pd.DataFrame, metric_columns: list[str]) -> pd.Data
     return long
 
 
-def gloens_surface_frame(frozen: pd.DataFrame) -> pd.DataFrame:
-    """Shape the frozen GloEns surface record like a year mean slice of the depth aggregate."""
-    against_reference = frozen[frozen["reference"] == GRIDDED_REFERENCE]
+def _against_glorys(scores: pd.DataFrame) -> pd.DataFrame:
+    return scores[(scores["reference"] == GRIDDED_REFERENCE) & (scores["region"] == HELPER_REGION)]
+
+
+def helper_gridded_frame(scores: pd.DataFrame) -> pd.DataFrame:
+    """Read the gridded helper scores of an ensemble against GLORYS."""
+    return gridded_long_frame(_against_glorys(scores), ENSEMBLE_METRIC_COLUMNS)
+
+
+def deterministic_gridded_frame(scores: pd.DataFrame) -> pd.DataFrame:
+    """Read the gridded helper scores of a one-member system against GLORYS."""
+    return gridded_long_frame(_against_glorys(scores), DETERMINISTIC_METRIC_COLUMNS)
+
+
+def gloens_surface_frame(scores: pd.DataFrame) -> pd.DataFrame:
+    """Read the GloEns surface helper scores, keeping the datum aligned sea level alone."""
+    against_reference = _against_glorys(scores)
     sea_level = against_reference["variable"] == "sea_surface_height_above_geoid"
     datum_aligned = against_reference["depth"] == GLOENS_DATUM_ALIGNED_DEPTH
     kept = against_reference[(sea_level & datum_aligned) | (~sea_level & ~datum_aligned)].copy()
     kept["depth"] = GLOENS_SURFACE_DEPTH
-    return gridded_long_frame(kept, FROZEN_METRIC_COLUMNS)
+    return gridded_long_frame(kept, ENSEMBLE_METRIC_COLUMNS)
 
 
-def deterministic_gridded_frame(aggregate: pd.DataFrame) -> pd.DataFrame:
-    """Shape the aggregate of a one-member gridded campaign like the ensemble aggregates."""
-    return gridded_long_frame(aggregate, DETERMINISTIC_METRIC_COLUMNS)
-
-
-def with_gloens_surface(depth_frame: pd.DataFrame, frozen: pd.DataFrame) -> pd.DataFrame:
-    """Add the frozen surface band to the subsurface only GloEns aggregate."""
-    if GLOENS_SURFACE_DEPTH in set(depth_frame["depth"]):
-        raise ValueError("the GloEns depth aggregate already carries a surface band, so the frozen record is stale")
-    return pd.concat([depth_frame, gloens_surface_frame(frozen)], ignore_index=True)
-
-
-def gridded_aggregate_frame(aggregate: pd.DataFrame) -> pd.DataFrame:
-    """Read a gridded ensemble aggregate in either shape a campaign has written it.
-
-    The retired producer wrote one row per metric, holding the year mean and every start it was
-    taken over. The producer that runs now writes one row per lead day with a column per metric,
-    the shape a fill already carries. Both are read here, so the aggregate a campaign produced is
-    the artifact this reads rather than a copy someone reshaped by hand.
-    """
-    if "aggregation" in aggregate.columns:
-        return aggregate
-    return gridded_long_frame(aggregate, FROZEN_METRIC_COLUMNS)
-
-
-def gridded_fill_frame(fill: pd.DataFrame) -> pd.DataFrame:
-    """Shape a wide gridded fill record like a year mean slice of the depth aggregate."""
-    return gridded_long_frame(fill, FROZEN_METRIC_COLUMNS)
-
-
-def with_gridded_fill(frame: pd.DataFrame, fill: pd.DataFrame) -> pd.DataFrame:
-    """Append the rows of a fill, refusing a fill that repeats rows of the aggregate it completes."""
-    shaped = gridded_fill_frame(fill)
-    year_mean = frame[frame["aggregation"] == "year_mean"]
-    repeated = year_mean.merge(shaped[GRIDDED_ROW_KEY].drop_duplicates(), on=GRIDDED_ROW_KEY)
+def with_gridded_scores(frame: pd.DataFrame, added: pd.DataFrame) -> pd.DataFrame:
+    """Append gridded rows, refusing rows that repeat rows of the frame they complete."""
+    repeated = frame.merge(added[GRIDDED_ROW_KEY].drop_duplicates(), on=GRIDDED_ROW_KEY)
     if not repeated.empty:
-        raise ValueError("the gridded fill repeats rows of the aggregate it completes, so they cannot be concatenated")
-    return pd.concat([frame, shaped], ignore_index=True)
+        raise ValueError("the gridded scores repeat rows of the scores they complete, so they cannot be concatenated")
+    return pd.concat([frame, added], ignore_index=True)
 
 
-def with_gridded_fill_beside(aggregate_path: str, frame: pd.DataFrame) -> pd.DataFrame:
-    """Add the fill a later campaign wave may have written beside this aggregate.
-
-    The frame is passed in rather than read here because the GloEns aggregate has its frozen
-    surface band added first: that step refuses a frame which already carries a surface band, and
-    the fill carries one, so the two have to be applied in this order.
-    """
-    fill_path = aggregate_path.removesuffix(".parquet") + GRIDDED_FILL_SUFFIX
-    if not os.path.exists(fill_path):
-        return frame
-    return with_gridded_fill(frame, pd.read_parquet(fill_path))
-
-
-def helper_gridded_frame(scores: pd.DataFrame) -> pd.DataFrame:
-    """Read the gridded helper scores, which are the wide shape the aggregate reader already takes."""
-    kept = scores[(scores["reference"] == GRIDDED_REFERENCE) & (scores["region"] == HELPER_REGION)]
-    return gridded_aggregate_frame(kept)
+def gloens_gridded_frame(depth: pd.DataFrame, depth_fill: pd.DataFrame, surface: pd.DataFrame) -> pd.DataFrame:
+    """Join the GloEns subsurface, fill and surface helper scores into one frame."""
+    return with_gridded_scores(
+        with_gridded_scores(helper_gridded_frame(depth), helper_gridded_frame(depth_fill)),
+        gloens_surface_frame(surface),
+    )
 
 
 def helper_start_counts(scores: pd.DataFrame) -> dict[tuple, int]:
@@ -427,73 +362,6 @@ def helper_observation_rows(scores: pd.DataFrame, system_key: str, metric: str, 
     return rows
 
 
-def observation_rows(frame: pd.DataFrame, system_key: str, column: str, is_ratio: bool) -> list[dict]:
-    """Read the global rows of one observation space aggregate for one metric column."""
-    selected = frame[frame["region"] == "global"]
-    rows = []
-    for stream in STREAM_ORDER:
-        stream_frame = selected[selected["stream"] == stream]
-        if stream_frame.empty:
-            continue
-        available_bands = [band for band in DEPTH_BAND_ORDER if band in set(stream_frame["depth_band"])]
-        for band in available_bands:
-            band_frame = stream_frame[stream_frame["depth_band"] == band].set_index("lead_day")
-            values = []
-            reduced_start_counts = {}
-            for lead_day in OBSERVATION_LEAD_DAYS:
-                if lead_day not in band_frame.index:
-                    values.append(None)
-                    continue
-                entry = band_frame.loc[lead_day]
-                values.append(_rounded(entry[column]))
-                if int(entry["n_inits"]) < FULL_START_COUNT:
-                    reduced_start_counts[str(lead_day)] = int(entry["n_inits"])
-            unit = "" if is_ratio else STREAM_UNITS[stream]
-            depth_label = DEPTH_BAND_LABELS[band]
-            rows.append(
-                _row(
-                    system_key,
-                    STREAM_LABELS[stream],
-                    depth_label,
-                    unit,
-                    values,
-                    reduced_start_counts,
-                )
-            )
-    return rows
-
-
-def class4_rows(frame: pd.DataFrame, system_key: str) -> list[dict]:
-    """Read one class 4 aggregate, of a deterministic system or of an ensemble mean, with its own depth bins."""
-    rows = []
-    for (variable, depth_bin), stream in DETERMINISTIC_STREAMS.items():
-        bin_frame = frame[(frame["variable"] == variable) & (frame["depth_bin"] == depth_bin)]
-        if bin_frame.empty:
-            continue
-        bin_frame = bin_frame.set_index("lead_day_number")
-        values = []
-        reduced_start_counts = {}
-        for lead_day in OBSERVATION_LEAD_DAYS:
-            if lead_day not in bin_frame.index:
-                values.append(None)
-                continue
-            entry = bin_frame.loc[lead_day]
-            values.append(_rounded(entry["rmsd"]))
-            if int(entry["start_count"]) < FULL_START_COUNT:
-                reduced_start_counts[str(lead_day)] = int(entry["start_count"])
-        rows.append(
-            _row(
-                system_key,
-                STREAM_LABELS[stream],
-                DETERMINISTIC_DEPTH_BIN_LABELS[depth_bin],
-                STREAM_UNITS[stream],
-                values,
-                reduced_start_counts,
-            )
-        )
-    return rows
-
-
 def _sorted_observation_rows(rows: list[dict]) -> list[dict]:
     stream_labels = list(STREAM_LABELS.values())
     depth_labels = [DEPTH_BAND_LABELS[band] for band in DEPTH_BAND_ORDER]
@@ -507,20 +375,17 @@ def _sorted_observation_rows(rows: list[dict]) -> list[dict]:
     )
 
 
-def ensemble_gridded_rows(
-    campaign_gridded: dict[str, pd.DataFrame],
+def systems_gridded_rows(
     helper_gridded: dict[str, pd.DataFrame],
+    system_keys: list[str],
     metric: str,
     is_ratio: bool,
 ) -> list[dict]:
-    """Read one gridded metric for every ensemble system, from its helper scores when it has them."""
+    """Read one gridded metric for every listed system."""
     return [
         row
-        for system_key in ENSEMBLE_SYSTEMS
-        if system_key in helper_gridded or system_key in campaign_gridded
-        for row in gridded_rows(
-            helper_gridded.get(system_key, campaign_gridded.get(system_key)), system_key, metric, is_ratio
-        )
+        for system_key in system_keys
+        for row in gridded_rows(helper_gridded[system_key], system_key, metric, is_ratio)
     ]
 
 
@@ -586,35 +451,27 @@ def rank_histograms(frames: dict[str, pd.DataFrame]) -> dict:
 
 
 def build_ensemble_scores(
-    gridded_gloens: pd.DataFrame,
-    gridded_glonet: pd.DataFrame,
-    gridded_glo12: pd.DataFrame,
-    deterministic_glonet: pd.DataFrame,
-    deterministic_glo12: pd.DataFrame,
-    class4_gloens_mean: pd.DataFrame,
-    observations_gloens: pd.DataFrame,
-    helper_observations: dict[str, pd.DataFrame] = {},
-    helper_gridded: dict[str, pd.DataFrame] = {},
+    helper_observations: dict[str, pd.DataFrame],
+    helper_gridded: dict[str, pd.DataFrame],
     rank_histogram_frames: dict[str, pd.DataFrame] = {},
 ) -> dict:
-    campaign_class4_means = {GLOENS: class4_gloens_mean}
-    campaign_observations = {GLOENS: observations_gloens}
-    campaign_gridded = {GLOENS: gridded_gloens}
-
-    observation_rmsd = class4_rows(deterministic_glonet, GLONET)
-    observation_rmsd += class4_rows(deterministic_glo12, GLO12)
-    observation_crps = []
-    observation_ratio = []
-    for system_key in ENSEMBLE_SYSTEMS:
-        helper_scores = helper_observations.get(system_key)
-        if helper_scores is not None:
-            observation_rmsd += helper_observation_rows(helper_scores, system_key, "ensemble_mean_rmsd", is_ratio=False)
-            observation_crps += helper_observation_rows(helper_scores, system_key, "crps_fair", is_ratio=False)
-            observation_ratio += helper_observation_rows(helper_scores, system_key, "ssr_add", is_ratio=True)
-        elif system_key in campaign_observations:
-            observation_rmsd += class4_rows(campaign_class4_means[system_key], system_key)
-            observation_crps += observation_rows(campaign_observations[system_key], system_key, "crps_fair", False)
-            observation_ratio += observation_rows(campaign_observations[system_key], system_key, "ssr_add", True)
+    observation_rmsd = [
+        row
+        for system_key in SYSTEM_ORDER
+        for row in helper_observation_rows(
+            helper_observations[system_key], system_key, "ensemble_mean_rmsd", is_ratio=False
+        )
+    ]
+    observation_crps = [
+        row
+        for system_key in ENSEMBLE_SYSTEMS
+        for row in helper_observation_rows(helper_observations[system_key], system_key, "crps_fair", is_ratio=False)
+    ]
+    observation_ratio = [
+        row
+        for system_key in ENSEMBLE_SYSTEMS
+        for row in helper_observation_rows(helper_observations[system_key], system_key, "ssr_add", is_ratio=True)
+    ]
 
     blocks = {
         "observations_rmsd": {
@@ -635,15 +492,15 @@ def build_ensemble_scores(
                 "reference; weight the observation tables."
             ),
             "lead_days": GRIDDED_LEAD_DAYS,
-            "rows": ensemble_gridded_rows(campaign_gridded, helper_gridded, "ensemble_mean_rmsd", is_ratio=False)
-            + gridded_rows(gridded_glonet, GLONET, "ensemble_mean_rmsd", is_ratio=False)
-            + gridded_rows(gridded_glo12, GLO12, "ensemble_mean_rmsd", is_ratio=False),
+            "rows": systems_gridded_rows(
+                helper_gridded, [*ENSEMBLE_SYSTEMS, *DETERMINISTIC_SYSTEMS], "ensemble_mean_rmsd", is_ratio=False
+            ),
         },
         "gridded_crps": {
             "title": "Fair continuous ranked probability score against GLORYS",
             "note": "Lower is better, in the unit of the variable.",
             "lead_days": GRIDDED_LEAD_DAYS,
-            "rows": ensemble_gridded_rows(campaign_gridded, helper_gridded, "crps_fair", is_ratio=False),
+            "rows": systems_gridded_rows(helper_gridded, ENSEMBLE_SYSTEMS, "crps_fair", is_ratio=False),
         },
         "gridded_spread_error_ratio": {
             "title": "Spread error ratio against GLORYS",
@@ -652,7 +509,7 @@ def build_ensemble_scores(
                 "analysis error, so it reads low; agreement with the analysis, not a calibration test."
             ),
             "lead_days": GRIDDED_LEAD_DAYS,
-            "rows": ensemble_gridded_rows(campaign_gridded, helper_gridded, "spread_error_ratio", is_ratio=True),
+            "rows": systems_gridded_rows(helper_gridded, ENSEMBLE_SYSTEMS, "spread_error_ratio", is_ratio=True),
         },
         "observations_crps": {
             "title": "Fair continuous ranked probability score against observations",
@@ -678,39 +535,38 @@ def build_ensemble_scores(
     }
 
 
-def with_observation_sidecar(frame: pd.DataFrame, sidecar: pd.DataFrame) -> pd.DataFrame:
-    """Append the streams of a sidecar aggregate, refusing a sidecar that repeats rows of the main aggregate."""
-    repeated = frame.merge(sidecar[OBSERVATION_ROW_KEY].drop_duplicates(), on=OBSERVATION_ROW_KEY)
-    if not repeated.empty:
-        raise ValueError("the sidecar aggregate repeats rows of the main aggregate, so the two cannot be concatenated")
-    return pd.concat([frame, sidecar], ignore_index=True)
-
-
-def read_observation_aggregate(path: str) -> pd.DataFrame:
-    """Read one observation space aggregate, plus the sidecar a later campaign wave may have written next to it."""
-    frame = pd.read_parquet(path)
-    sidecar_path = os.path.join(os.path.dirname(path), OBSERVATION_SIDECAR_NAME)
-    if not os.path.exists(sidecar_path):
-        return frame
-    return with_observation_sidecar(frame, pd.read_parquet(sidecar_path))
-
-
 def _helper_destination(prefix: str, system_key: str) -> str:
     return f"{prefix}-{system_key}".replace("-", "_")
 
 
-def _add_helper_arguments(parser: argparse.ArgumentParser, prefix: str) -> None:
-    for system_key in ENSEMBLE_SYSTEMS:
-        parser.add_argument(f"--{prefix}-{system_key}", dest=_helper_destination(prefix, system_key), default=None)
+def _add_helper_arguments(parser: argparse.ArgumentParser, prefix: str, system_keys: list[str]) -> None:
+    for system_key in system_keys:
+        parser.add_argument(f"--{prefix}-{system_key}", dest=_helper_destination(prefix, system_key), required=True)
 
 
-def _helper_frames(arguments: argparse.Namespace, prefix: str, read) -> dict[str, pd.DataFrame]:
-    paths = {system_key: getattr(arguments, _helper_destination(prefix, system_key)) for system_key in ENSEMBLE_SYSTEMS}
-    return {system_key: read(path) for system_key, path in paths.items() if path is not None}
+def _helper_frames(arguments: argparse.Namespace, prefix: str, system_keys: list[str], read) -> dict[str, pd.DataFrame]:
+    return {system_key: read(getattr(arguments, _helper_destination(prefix, system_key))) for system_key in system_keys}
+
+
+def _helper_gridded_frames(arguments: argparse.Namespace) -> dict[str, pd.DataFrame]:
+    return {
+        GLOENS: gloens_gridded_frame(
+            pd.read_parquet(arguments.helper_gridded_gloens_depth),
+            pd.read_parquet(arguments.helper_gridded_gloens_depth_fill),
+            pd.read_parquet(arguments.helper_gridded_gloens_surface),
+        ),
+        GLOWENS: helper_gridded_frame(pd.read_parquet(arguments.helper_gridded_glowens)),
+        **_helper_frames(
+            arguments,
+            "helper-gridded",
+            DETERMINISTIC_SYSTEMS,
+            lambda path: deterministic_gridded_frame(pd.read_parquet(path)),
+        ),
+    }
 
 
 def _rank_histogram_frames(arguments: argparse.Namespace) -> dict[str, pd.DataFrame]:
-    frames = _helper_frames(arguments, "helper-rank-histograms", pd.read_parquet)
+    frames = _helper_frames(arguments, "helper-rank-histograms", ENSEMBLE_SYSTEMS, pd.read_parquet)
     if arguments.helper_rank_histograms_gloens_override is None:
         return frames
     override = pd.read_parquet(arguments.helper_rank_histograms_gloens_override)
@@ -718,39 +574,21 @@ def _rank_histogram_frames(arguments: argparse.Namespace) -> dict[str, pd.DataFr
 
 
 def main() -> None:
-    aggregate_root = os.environ["OCEANBENCH_ENSEMBLE_AGGREGATE_ROOT"]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--gridded-gloens", default=f"{aggregate_root}/{DEFAULT_GRIDDED_GLOENS_PATH}")
-    parser.add_argument("--gridded-glonet", default=f"{aggregate_root}/{DEFAULT_GRIDDED_GLONET_PATH}")
-    parser.add_argument("--gridded-glo12", default=f"{aggregate_root}/{DEFAULT_GRIDDED_GLO12_PATH}")
-    parser.add_argument("--deterministic-glonet", default=f"{aggregate_root}/{DEFAULT_DETERMINISTIC_GLONET_PATH}")
-    parser.add_argument("--deterministic-glo12", default=f"{aggregate_root}/{DEFAULT_DETERMINISTIC_GLO12_PATH}")
-    parser.add_argument("--class4-gloens-mean", default=f"{aggregate_root}/{DEFAULT_CLASS4_GLOENS_MEAN_PATH}")
-    parser.add_argument("--gloens-surface", default=f"{aggregate_root}/{DEFAULT_GLOENS_SURFACE_PATH}")
-    parser.add_argument("--observations-gloens", default=f"{aggregate_root}/{DEFAULT_OBSERVATIONS_GLOENS_PATH}")
-    _add_helper_arguments(parser, "helper-observations")
-    _add_helper_arguments(parser, "helper-gridded")
-    _add_helper_arguments(parser, "helper-rank-histograms")
+    _add_helper_arguments(parser, "helper-observations", SYSTEM_ORDER)
+    _add_helper_arguments(
+        parser,
+        "helper-gridded",
+        [*DETERMINISTIC_SYSTEMS, "gloens-depth", "gloens-depth-fill", "gloens-surface", GLOWENS],
+    )
+    _add_helper_arguments(parser, "helper-rank-histograms", ENSEMBLE_SYSTEMS)
     parser.add_argument("--helper-rank-histograms-gloens-override", default=None)
     parser.add_argument("--output", default=DEFAULT_OUTPUT_PATH)
     arguments = parser.parse_args()
 
     scores = build_ensemble_scores(
-        with_gridded_fill_beside(
-            arguments.gridded_gloens,
-            with_gloens_surface(
-                gridded_aggregate_frame(pd.read_parquet(arguments.gridded_gloens)),
-                pd.read_csv(arguments.gloens_surface),
-            ),
-        ),
-        deterministic_gridded_frame(pd.read_parquet(arguments.gridded_glonet)),
-        deterministic_gridded_frame(pd.read_parquet(arguments.gridded_glo12)),
-        pd.read_parquet(arguments.deterministic_glonet),
-        pd.read_parquet(arguments.deterministic_glo12),
-        pd.read_parquet(arguments.class4_gloens_mean),
-        read_observation_aggregate(arguments.observations_gloens),
-        _helper_frames(arguments, "helper-observations", pd.read_parquet),
-        _helper_frames(arguments, "helper-gridded", lambda path: helper_gridded_frame(pd.read_parquet(path))),
+        _helper_frames(arguments, "helper-observations", SYSTEM_ORDER, pd.read_parquet),
+        _helper_gridded_frames(arguments),
         _rank_histogram_frames(arguments),
     )
 

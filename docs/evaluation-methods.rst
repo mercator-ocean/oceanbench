@@ -115,6 +115,7 @@ Ensemble (probabilistic) evaluation
 **********************************************************************************************
 
 Two ensembles are evaluated over 2024 on 52 weekly starts: GloEns, the Mercator Ocean physics ensemble with 50 members and lead days 1 to 10, and GLOW-ens, the GLOW machine learning ensemble with 16 members and lead days 1 to 9.
+GloEns is initialised on a Thursday, so its first forecast day is a Friday, while the other systems have their first forecast day on a Wednesday: at a given lead day, GloEns is scored two days later.
 They are compared against the version 2 observation basis of OceanBench and against the quarter degree `GLORYS reanalysis <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_.
 Two deterministic forecasts are kept next to the ensemble means as references: GLONET, the machine learning system, and GLO12, the physics system GloEns starts from.
 

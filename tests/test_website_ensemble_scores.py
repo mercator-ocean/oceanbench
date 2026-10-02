@@ -14,12 +14,10 @@ sys.path.insert(0, str(WEBSITE_DIRECTORY))
 from helpers.build_ensemble_scores_json import (  # noqa: E402
     build_ensemble_scores,
     deterministic_gridded_frame,
-    gridded_aggregate_frame,
+    gloens_gridded_frame,
     helper_gridded_frame,
     merged_rank_bins,
     rank_histograms,
-    with_gloens_surface,
-    with_observation_sidecar,
     with_rank_histogram_override,
 )
 from helpers.ensemble_scores import ensemble_score_bundle, ensemble_scores  # noqa: E402
@@ -28,54 +26,65 @@ GRIDDED_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
 OBSERVATION_LEAD_DAYS = [1, 3, 5, 7, 9, 10]
 
 
-def _gridded_frame(challenger: str, lead_days: list[int], start_counts: dict[int, int]) -> pd.DataFrame:
+def _gloens_depth_scores_frame(lead_days: list[int], start_counts: dict[int, int]) -> pd.DataFrame:
+    """The GloEns subsurface helper scores, wide over the metrics and holding both references."""
     return pd.DataFrame(
         [
             {
-                "aggregation": "year_mean",
-                "challenger": challenger,
+                "challenger": "gloens",
+                "challenger_version": "gloens-depth",
                 "region": "global",
-                "reference": "glorys",
+                "reference": reference,
                 "variable": "sea_water_potential_temperature",
                 "depth": "47.374m",
                 "lead_day": lead_day,
-                "metric": metric,
-                "value": value,
-                "unit": "°C",
+                "crps_biased": 0.5,
+                "crps_fair": 0.4481234,
+                "ensemble_mean_rmsd": 0.8812345,
+                "ensemble_spread": 0.4,
+                "member_rmsd": 1.0,
+                "spread_error_ratio": 0.4812345,
                 "start_count": start_counts.get(lead_day, 52),
+                "scored_cells": 675217,
             }
+            for reference in ("glorys", "glo12")
             for lead_day in lead_days
-            for metric, value in (
-                ("ensemble_mean_rmsd", 0.8812345),
-                ("crps_fair", 0.4481234),
-                ("spread_error_ratio", 0.4812345),
-            )
         ]
     )
 
 
-def _observation_frame(lead_days: list[int], streams: list[str], depth_bands: tuple[str, ...] = ("surface",)):
+def _gloens_depth_fill_scores_frame(lead_days: list[int], start_counts: dict[int, int]) -> pd.DataFrame:
+    """The GloEns fill helper scores, one velocity component on a subsurface level and salinity at the surface."""
     return pd.DataFrame(
         [
             {
-                "stream": stream,
-                "region": region,
-                "depth_band": depth_band,
+                "challenger": "gloens",
+                "challenger_version": "gloens-depth-fill",
+                "region": "global",
+                "reference": "glorys",
+                "variable": variable,
+                "depth": depth,
                 "lead_day": lead_day,
-                "n_inits": 52,
-                "crps_fair": 0.3211234,
-                "ssr_add": 0.3412345,
-                "rmsd_ensemble_mean": 0.8521234,
+                "crps_biased": 0.05,
+                "crps_fair": 0.04,
+                "ensemble_mean_rmsd": 0.09,
+                "ensemble_spread": 0.03,
+                "member_rmsd": 0.1,
+                "spread_error_ratio": 0.33,
+                "start_count": start_counts.get(lead_day, 52),
+                "scored_cells": 675217,
             }
-            for stream in streams
-            for region in ("global", "tropics")
-            for depth_band in depth_bands
+            for variable, depth in (
+                ("eastward_sea_water_velocity", "47.374m"),
+                ("sea_water_salinity", "surface"),
+            )
             for lead_day in lead_days
         ]
     )
 
 
-def _frozen_surface_frame(lead_days: list[int]) -> pd.DataFrame:
+def _gloens_surface_scores_frame(lead_days: list[int], start_counts: dict[int, int]) -> pd.DataFrame:
+    """The GloEns surface helper scores, holding both references and both sea level bases."""
     return pd.DataFrame(
         [
             {
@@ -92,7 +101,7 @@ def _frozen_surface_frame(lead_days: list[int]) -> pd.DataFrame:
                 "ensemble_spread": 0.02,
                 "member_rmsd": 0.16,
                 "spread_error_ratio": 0.13,
-                "start_count": 52,
+                "start_count": start_counts.get(lead_day, 52),
                 "scored_cells": 673289,
             }
             for reference in ("glorys", "glo12")
@@ -106,24 +115,16 @@ def _frozen_surface_frame(lead_days: list[int]) -> pd.DataFrame:
     )
 
 
-def _class4_frame(lead_days: list[int], rmsd: float = 0.8221234) -> pd.DataFrame:
-    return pd.DataFrame(
-        [
-            {
-                "variable": "sea_water_potential_temperature",
-                "depth_bin": "surface",
-                "lead_day": lead_day - 1,
-                "lead_day_number": lead_day,
-                "rmsd": rmsd,
-                "observation_count": 1000,
-                "start_count": 52,
-            }
-            for lead_day in lead_days
-        ]
+def _gloens_gridded(lead_days: list[int], start_counts: dict[int, int]) -> pd.DataFrame:
+    return gloens_gridded_frame(
+        _gloens_depth_scores_frame(lead_days, start_counts),
+        _gloens_depth_fill_scores_frame(lead_days, start_counts),
+        _gloens_surface_scores_frame(lead_days, start_counts),
     )
 
 
-def _deterministic_gridded_frame(challenger: str, rmsd: float) -> pd.DataFrame:
+def _deterministic_gridded_scores_frame(challenger: str, rmsd: float) -> pd.DataFrame:
+    """The gridded helper scores of a one-member system, which carry the root mean square difference alone."""
     return pd.DataFrame(
         [
             {
@@ -163,6 +164,7 @@ def _helper_class4_frame(
     start_dates: list[pd.Timestamp],
     reduced_lead_days: tuple[int, ...] = (),
     groups: tuple[tuple[str, str], ...] = HELPER_OBSERVATION_GROUPS,
+    values: dict[str, float] = HELPER_OBSERVATION_VALUES,
 ) -> pd.DataFrame:
     """A class 4 helper scores frame, holding the pooled rows and the per-start rows beside them."""
     pooled = [
@@ -185,7 +187,7 @@ def _helper_class4_frame(
         for region in ("global", "tropics")
         for variable, depth in groups
         for lead_day in lead_days
-        for metric, value in HELPER_OBSERVATION_VALUES.items()
+        for metric, value in values.items()
     ]
     per_start = [
         {**row, "start_date": pd.Timestamp(start_date), "value": row["value"] + 0.01, "n": 20}
@@ -221,19 +223,46 @@ def _helper_gridded_scores_frame(challenger: str, lead_days: list[int]) -> pd.Da
     )
 
 
+START_DATES = list(pd.date_range("2024-01-03", periods=52, freq="7D"))
+SURFACE_TEMPERATURE = (("sea_water_potential_temperature", "surface"),)
+
+
+def _one_member_class4_frame(challenger: str, rmsd: float, groups=SURFACE_TEMPERATURE) -> pd.DataFrame:
+    return _helper_class4_frame(
+        challenger, list(range(1, 11)), START_DATES, groups=groups, values={"ensemble_mean_rmsd": rmsd}
+    )
+
+
+def _helper_observations(glowens_frame: pd.DataFrame, gloens_groups=SURFACE_TEMPERATURE) -> dict:
+    return {
+        "glonet": _one_member_class4_frame("glonet", 0.8221234),
+        "glo12": _one_member_class4_frame("glo12", 0.7331234),
+        "gloens": _helper_class4_frame(
+            "gloens",
+            list(range(1, 11)),
+            START_DATES,
+            groups=gloens_groups,
+            values={**HELPER_OBSERVATION_VALUES, "ensemble_mean_rmsd": 0.9441234},
+        ),
+        "glowens": glowens_frame,
+    }
+
+
+def _helper_gridded(gloens_start_counts: dict[int, int], glowens_lead_days: list[int]) -> dict:
+    return {
+        "gloens": _gloens_gridded(list(range(1, 11)), gloens_start_counts),
+        "glowens": helper_gridded_frame(_helper_gridded_scores_frame("glowens", glowens_lead_days)),
+        "glonet": deterministic_gridded_frame(_deterministic_gridded_scores_frame("glonet", 0.6661234)),
+        "glo12": deterministic_gridded_frame(_deterministic_gridded_scores_frame("glo12", 0.5551234)),
+    }
+
+
 def _built_scores() -> dict:
-    start_dates = list(pd.date_range("2024-01-03", periods=52, freq="7D"))
-    surface_temperature = (("sea_water_potential_temperature", "surface"),)
     return build_ensemble_scores(
-        _gridded_frame("gloens", list(range(1, 11)), {9: 51, 10: 51}),
-        deterministic_gridded_frame(_deterministic_gridded_frame("glonet", 0.6661234)),
-        deterministic_gridded_frame(_deterministic_gridded_frame("glo12", 0.5551234)),
-        _class4_frame(list(range(1, 11))),
-        _class4_frame(list(range(1, 11)), rmsd=0.7331234),
-        _class4_frame(list(range(1, 11)), rmsd=0.9441234),
-        _observation_frame(list(range(1, 11)), ["drifter_sst"]),
-        {"glowens": _helper_class4_frame("glowens", list(range(1, 10)), start_dates, groups=surface_temperature)},
-        {"glowens": helper_gridded_frame(_helper_gridded_scores_frame("glowens", list(range(1, 10))))},
+        _helper_observations(
+            _helper_class4_frame("glowens", list(range(1, 10)), START_DATES, groups=SURFACE_TEMPERATURE)
+        ),
+        _helper_gridded({9: 51, 10: 51}, list(range(1, 10))),
     )
 
 
@@ -258,14 +287,14 @@ def test_build_ensemble_scores_exposes_every_block_on_the_expected_lead_days() -
 def test_build_ensemble_scores_rounds_and_labels_each_row() -> None:
     scores = _built_scores()
 
-    temperature_row = scores["blocks"]["gridded_rmsd"]["rows"][0]
+    temperature_row = scores["blocks"]["gridded_rmsd"]["rows"][1]
     assert temperature_row["system"] == "gloens"
     assert temperature_row["variable"] == "Temperature"
     assert temperature_row["depth_band"] == "47.374 m"
     assert temperature_row["unit"] == "°C"
     assert temperature_row["values"] == [0.8812] * len(GRIDDED_LEAD_DAYS)
 
-    ratio_row = scores["blocks"]["gridded_spread_error_ratio"]["rows"][0]
+    ratio_row = scores["blocks"]["gridded_spread_error_ratio"]["rows"][1]
     assert ratio_row["unit"] == ""
     assert ratio_row["values"] == [0.4812] * len(GRIDDED_LEAD_DAYS)
 
@@ -284,6 +313,7 @@ def test_build_ensemble_scores_marks_the_reduced_start_lead_days_of_gloens() -> 
     gloens_rows = [row for row in scores["blocks"]["gridded_rmsd"]["rows"] if row["system"] == "gloens"]
     glowens_rows = [row for row in scores["blocks"]["gridded_rmsd"]["rows"] if row["system"] == "glowens"]
 
+    assert len(gloens_rows) == 5
     assert all(row["reduced_start_counts"] == {"9": 51, "10": 51} for row in gloens_rows)
     assert all(row["reduced_start_counts"] == {} for row in glowens_rows)
     assert all(row["values"][-1] is None for row in glowens_rows)
@@ -300,6 +330,14 @@ def test_build_ensemble_scores_keeps_both_deterministic_references_next_to_the_e
     assert rows[0]["values"] == [0.8221] * len(OBSERVATION_LEAD_DAYS)
     assert rows[1]["values"] == [0.7331] * len(OBSERVATION_LEAD_DAYS)
     assert rows[2]["values"] == [0.9441] * len(OBSERVATION_LEAD_DAYS)
+
+
+def test_build_ensemble_scores_publishes_no_observation_probabilistic_score_for_a_one_member_system() -> None:
+    scores = _built_scores()
+
+    for block_key in ("observations_crps", "observations_spread_error_ratio"):
+        systems = {row["system"] for row in scores["blocks"][block_key]["rows"]}
+        assert systems == {"gloens", "glowens"}
 
 
 def test_build_ensemble_scores_takes_the_ensemble_mean_error_from_the_class4_route() -> None:
@@ -344,16 +382,14 @@ def test_build_ensemble_scores_names_no_glonet2_deterministic_system() -> None:
         assert all(row["system"] != "glonet2" for row in block["rows"])
 
 
-def test_with_gloens_surface_keeps_only_the_reference_and_the_datum_aligned_sea_level() -> None:
-    frame = with_gloens_surface(
-        _gridded_frame("gloens", [1, 3], {}),
-        _frozen_surface_frame([1, 3]),
-    )
+def test_gloens_gridded_frame_keeps_only_the_reference_and_the_datum_aligned_sea_level() -> None:
+    frame = _gloens_gridded([1, 3], {})
     surface = frame[frame["depth"] == "surface"]
 
     assert sorted(surface["variable"].unique()) == [
         "sea_surface_height_above_geoid",
         "sea_water_potential_temperature",
+        "sea_water_salinity",
     ]
     assert set(surface["aggregation"]) == {"year_mean"}
     sea_level = surface[(surface["variable"] == "sea_surface_height_above_geoid") & (surface["metric"] == "crps_fair")]
@@ -361,13 +397,22 @@ def test_with_gloens_surface_keeps_only_the_reference_and_the_datum_aligned_sea_
     assert set(sea_level["unit"]) == {"m"}
     ratio = surface[surface["metric"] == "spread_error_ratio"]
     assert set(ratio["unit"]) == {"1"}
+    assert set(frame["metric"]) == {
+        "crps_fair",
+        "ensemble_mean_rmsd",
+        "ensemble_spread",
+        "member_rmsd",
+        "spread_error_ratio",
+    }
 
 
-def test_with_gloens_surface_refuses_an_aggregate_that_already_carries_a_surface_band() -> None:
-    already = with_gloens_surface(_gridded_frame("gloens", [1, 3], {}), _frozen_surface_frame([1, 3]))
-
+def test_gloens_gridded_frame_refuses_runs_repeating_each_other() -> None:
     with pytest.raises(ValueError):
-        with_gloens_surface(already, _frozen_surface_frame([1, 3]))
+        gloens_gridded_frame(
+            _gloens_depth_scores_frame([1, 3], {}),
+            _gloens_depth_scores_frame([1, 3], {}),
+            _gloens_surface_scores_frame([1, 3], {}),
+        )
 
 
 def test_ensemble_metrics_lay_the_tables_out_like_the_deterministic_view() -> None:
@@ -389,24 +434,6 @@ def test_ensemble_metrics_lay_the_tables_out_like_the_deterministic_view() -> No
     probabilistic = sections["ensemble-probabilistic"]["metrics"]
     assert [metric["unify_variables"] for metric in probabilistic] == [False, False, True, True]
     assert all(metric["depth_groups"] is None for metric in probabilistic)
-
-
-def test_with_observation_sidecar_adds_the_streams_of_a_later_campaign_wave() -> None:
-    frame = with_observation_sidecar(
-        _observation_frame([1, 3], ["drifter_sst"]),
-        _observation_frame([1, 3], ["currents_u"]),
-    )
-
-    assert sorted(frame["stream"].unique()) == ["currents_u", "drifter_sst"]
-    assert len(frame) == 8
-
-
-def test_with_observation_sidecar_refuses_a_sidecar_repeating_the_aggregate() -> None:
-    with pytest.raises(ValueError):
-        with_observation_sidecar(
-            _observation_frame([1, 3], ["drifter_sst", "currents_u"]),
-            _observation_frame([1, 3], ["currents_u"]),
-        )
 
 
 def test_build_ensemble_scores_reads_the_global_region_only() -> None:
@@ -487,72 +514,36 @@ def test_ensemble_score_bundle_reads_its_reduced_start_caveat_from_the_rows() ->
     assert "Lead day 10 of GloEns averages 50 starts instead of 52." in observations_note
 
 
-def test_gridded_aggregate_frame_reads_both_shapes_a_campaign_has_written() -> None:
-    wide = pd.DataFrame(
-        [
-            {
-                "challenger": "gloens",
-                "region": "global",
-                "reference": "glorys",
-                "variable": "sea_water_salinity",
-                "depth": "47.374m",
-                "lead_day": 1,
-                "crps_biased": 0.1,
-                "crps_fair": 0.09,
-                "ensemble_mean_rmsd": 0.2,
-                "ensemble_spread": 0.08,
-                "member_rmsd": 0.22,
-                "spread_error_ratio": 0.4,
-                "start_count": 52,
-                "scored_cells": 619676,
-            }
-        ]
-    )
-    read = gridded_aggregate_frame(wide)
+def test_helper_gridded_frame_reads_the_wide_helper_scores_with_their_units() -> None:
+    read = helper_gridded_frame(_helper_gridded_scores_frame("glowens", [1]))
     ratio = read[read["metric"] == "spread_error_ratio"]
+
     assert list(read["aggregation"].unique()) == ["year_mean"]
-    assert float(ratio["value"].iloc[0]) == pytest.approx(0.4)
+    assert len(read) == 5
+    assert float(ratio["value"].iloc[0]) == pytest.approx(0.4001234)
     assert str(ratio["unit"].iloc[0]) == "1"
     assert str(read[read["metric"] == "ensemble_mean_rmsd"]["unit"].iloc[0]) == "PSU"
 
-    already_long = _gridded_frame("gloens", GRIDDED_LEAD_DAYS, {})
-    assert gridded_aggregate_frame(already_long) is already_long
 
-
-def test_the_observation_rows_read_the_default_depth_bins_and_not_the_campaign_bands() -> None:
-    bands = ("0-5m", "5-100m", "100-300m", "300-600m", "100-500")
+def test_the_observation_rows_read_the_default_depth_bins_only() -> None:
+    groups = tuple(
+        ("sea_water_potential_temperature", depth) for depth in ("0-5m", "5-100m", "100-300m", "300-600m", "100-500")
+    )
     scores = build_ensemble_scores(
-        _gridded_frame("gloens", list(range(1, 11)), {}),
-        deterministic_gridded_frame(_deterministic_gridded_frame("glonet", 0.6661234)),
-        deterministic_gridded_frame(_deterministic_gridded_frame("glo12", 0.5551234)),
-        _class4_frame(list(range(1, 11))),
-        _class4_frame(list(range(1, 11)), rmsd=0.7331234),
-        _class4_frame(list(range(1, 11)), rmsd=0.9441234),
-        _observation_frame(list(range(1, 11)), ["profiles_t"], bands),
+        _helper_observations(_helper_class4_frame("glowens", list(range(1, 10)), START_DATES), gloens_groups=groups),
+        _helper_gridded({}, list(range(1, 10))),
     )
 
     gloens_rows = [row for row in scores["blocks"]["observations_crps"]["rows"] if row["system"] == "gloens"]
 
-    # The four default bins in their depth order, and the campaign band beside them is not read.
+    # The four default bins in their depth order, and the band outside them is not read.
     assert [row["depth_band"] for row in gloens_rows] == ["0-5 m", "5-100 m", "100-300 m", "300-600 m"]
 
 
 def _built_scores_from_helpers() -> dict:
-    start_dates = list(pd.date_range("2024-01-03", periods=52, freq="7D"))
     return build_ensemble_scores(
-        _gridded_frame("gloens", list(range(1, 11)), {}),
-        deterministic_gridded_frame(_deterministic_gridded_frame("glonet", 0.6661234)),
-        deterministic_gridded_frame(_deterministic_gridded_frame("glo12", 0.5551234)),
-        _class4_frame(list(range(1, 11))),
-        _class4_frame(list(range(1, 11)), rmsd=0.7331234),
-        _class4_frame(list(range(1, 11)), rmsd=0.9441234),
-        _observation_frame(list(range(1, 11)), ["drifter_sst"]),
-        {
-            "glowens": _helper_class4_frame("glowens", list(range(1, 11)), start_dates, reduced_lead_days=(10,)),
-        },
-        {
-            "glowens": helper_gridded_frame(_helper_gridded_scores_frame("glowens", list(range(1, 11)))),
-        },
+        _helper_observations(_helper_class4_frame("glowens", list(range(1, 11)), START_DATES, reduced_lead_days=(10,))),
+        _helper_gridded({}, list(range(1, 11))),
     )
 
 
@@ -604,16 +595,6 @@ def test_helper_gridded_rows_read_the_glorys_reference_only() -> None:
     assert rows[0]["values"] == [0.2001] * len(GRIDDED_LEAD_DAYS)
     assert ratio["values"] == [0.4001] * len(GRIDDED_LEAD_DAYS)
     assert ratio["unit"] == ""
-
-
-def test_helper_scores_leave_the_campaign_sourced_systems_alone() -> None:
-    scores = _built_scores_from_helpers()
-
-    observation_systems = [row["system"] for row in scores["blocks"]["observations_rmsd"]["rows"]]
-    gridded_systems = [row["system"] for row in scores["blocks"]["gridded_rmsd"]["rows"]]
-
-    assert set(observation_systems) == {"glonet", "glo12", "gloens", "glowens"}
-    assert set(gridded_systems) == {"glonet", "glo12", "gloens", "glowens"}
 
 
 def _rank_histogram_frame(challenger: str, bin_count: int, lead_days: list[int]) -> pd.DataFrame:
