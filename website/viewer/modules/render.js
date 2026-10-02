@@ -246,31 +246,60 @@ export function robustDifferenceMagnitude({ data, width, height }, latitudes) {
 }
 
 /**
- * Resample a field onto a target regular lat/lon grid by nearest cell, leaving
- * NaN where the target lies outside the source. The viewer's datasets share the
- * 1° spacing but not the same origin (GLONET spans 168 rows, GLORYS/GLO12 170),
- * so differencing must register on coordinates, never on raw array index.
+ * Resample a field onto a target lat/lon grid by nearest cell, leaving NaN where the
+ * target lies outside the source. The viewer's datasets share neither origin nor
+ * spacing (GLONET spans 168 rows at 1°, GLORYS/GLO12 170), so differencing must
+ * register on coordinates, never on raw array index.
  */
 export function resampleOntoGrid(field, sourceLatitudes, sourceLongitudes, targetLatitudes, targetLongitudes) {
   const targetHeight = targetLatitudes.length;
   const targetWidth = targetLongitudes.length;
   const data = new Float32Array(targetHeight * targetWidth).fill(NaN);
-  const latitudeStep = sourceLatitudes.length > 1 ? sourceLatitudes[1] - sourceLatitudes[0] : 1;
-  const longitudeStep = sourceLongitudes.length > 1 ? sourceLongitudes[1] - sourceLongitudes[0] : 1;
-  const latitudeOrigin = sourceLatitudes[0];
-  const longitudeOrigin = sourceLongitudes[0];
+  const sourceRows = nearestIndices(sourceLatitudes, targetLatitudes);
+  const sourceColumns = nearestIndices(sourceLongitudes, targetLongitudes);
   for (let row = 0; row < targetHeight; row += 1) {
-    const sourceRow = Math.round((targetLatitudes[row] - latitudeOrigin) / latitudeStep);
-    if (sourceRow < 0 || sourceRow >= sourceLatitudes.length) continue;
-    if (Math.abs(sourceLatitudes[sourceRow] - targetLatitudes[row]) > Math.abs(latitudeStep) * 0.5) continue;
+    const sourceRow = sourceRows[row];
+    if (sourceRow < 0) continue;
     for (let column = 0; column < targetWidth; column += 1) {
-      const sourceColumn = Math.round((targetLongitudes[column] - longitudeOrigin) / longitudeStep);
-      if (sourceColumn < 0 || sourceColumn >= sourceLongitudes.length) continue;
-      if (Math.abs(sourceLongitudes[sourceColumn] - targetLongitudes[column]) > Math.abs(longitudeStep) * 0.5) continue;
+      const sourceColumn = sourceColumns[column];
+      if (sourceColumn < 0) continue;
       data[row * targetWidth + column] = field.data[sourceRow * field.width + sourceColumn];
     }
   }
   return { data, width: targetWidth, height: targetHeight };
+}
+
+// For each target coordinate, the index of the nearest source coordinate on a monotonic
+// axis, or -1 when the target lies more than half a source cell outside it. The search is
+// on the stored values, not on an origin plus the first spacing: float32 axes (GLORYS,
+// GLO12) round that spacing, so origin-plus-step drifts by a quarter cell across the
+// globe, and a coarsened pyramid's last row is a partial cell. Either made the nearest
+// test fail on every other column of whole longitude bands, drawn as stripes.
+function nearestIndices(source, target) {
+  const size = source.length;
+  const indices = new Int32Array(target.length).fill(-1);
+  if (size === 0) return indices;
+  const sign = size > 1 && source[size - 1] < source[0] ? -1 : 1;
+  for (let i = 0; i < target.length; i += 1) {
+    const value = sign * target[i];
+    let low = 0;
+    let high = size - 1;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (sign * source[middle] < value) low = middle + 1;
+      else high = middle;
+    }
+    let nearest = low;
+    if (low > 0 && Math.abs(source[low - 1] - target[i]) <= Math.abs(source[low] - target[i])) nearest = low - 1;
+    // Half the wider neighbouring gap, with slack so a target exactly halfway between two
+    // cells is never dropped over float rounding.
+    const gap = size > 1
+      ? Math.max(nearest > 0 ? Math.abs(source[nearest] - source[nearest - 1]) : 0,
+        nearest < size - 1 ? Math.abs(source[nearest + 1] - source[nearest]) : 0)
+      : 1;
+    if (Math.abs(source[nearest] - target[i]) <= gap * 0.5 * 1.001) indices[i] = nearest;
+  }
+  return indices;
 }
 
 /**
