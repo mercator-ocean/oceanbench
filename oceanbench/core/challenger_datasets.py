@@ -177,12 +177,14 @@ def _langya_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/langya/{start_datetime_string}.zarr"
 
 
-def glo12_persistence() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_glo12_persistence_dataset_path)
+def glo12_persistence(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _glo12_persistence_dataset_path, first_day_datetimes=first_day_datetimes
+    )
 
 
-def glo12_persistence_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(glo12_persistence())
+def glo12_persistence_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(glo12_persistence(first_day_datetimes))
 
 
 def _glo12_persistence_dataset_path(start_datetime: datetime) -> str:
@@ -190,12 +192,14 @@ def _glo12_persistence_dataset_path(start_datetime: datetime) -> str:
     return f"{_CLOUDFERRO_BASELINE_FORECASTS_URL}/persistence/{start_datetime_string}.zarr"
 
 
-def hclimrep() -> xarray.Dataset:
-    return _open_multizarr_forecasts_as_challenger_dataset(_hclimrep_dataset_path)
+def hclimrep(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return _open_multizarr_forecasts_as_challenger_dataset(
+        _hclimrep_dataset_path, first_day_datetimes=first_day_datetimes
+    )
 
 
-def hclimrep_1_degree() -> xarray.Dataset:
-    return interpolate_1_degree(hclimrep())
+def hclimrep_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return interpolate_1_degree(hclimrep(first_day_datetimes))
 
 
 def _hclimrep_dataset_path(start_datetime: datetime) -> str:
@@ -224,26 +228,23 @@ def _prepared_challenger_week_dataset(
 
 def _opened_challenger_week_dataset(
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
-    preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None,
     first_day_datetime: datetime,
 ) -> xarray.Dataset:
-    opened_dataset = open_remote_zarr(
+    return open_remote_zarr(
         forecast_zarr_path_from_start_datetime(first_day_datetime),
         chunks="auto",
     )
-    return preprocess_dataset(opened_dataset) if preprocess_dataset is not None else opened_dataset
 
 
 def _remote_multizarr_forecasts_as_challenger_dataset(
     dataset_name: str,
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
     first_day_datetimes: list[datetime],
-    preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None,
 ) -> xarray.Dataset:
     challenger_dataset: xarray.Dataset = open_remote_multizarr(
         list(map(forecast_zarr_path_from_start_datetime, first_day_datetimes)),
         preprocess=lambda dataset: _prepared_challenger_week_dataset(
-            preprocess_dataset(dataset) if preprocess_dataset is not None else dataset,
+            dataset,
             f"{dataset_name} challenger dataset open",
         ),
         combine="nested",
@@ -257,7 +258,6 @@ def _open_multizarr_forecasts_as_challenger_dataset(
     forecast_zarr_path_from_start_datetime: Callable[[datetime], str],
     *,
     first_day_datetimes: list[datetime] | None = None,
-    preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None = None,
     lead_days_count: int = LEAD_DAYS_COUNT,
 ) -> xarray.Dataset:
     resolved_first_day_datetimes = _resolved_first_day_datetimes(first_day_datetimes)
@@ -272,7 +272,6 @@ def _open_multizarr_forecasts_as_challenger_dataset(
         open_week_dataset=lambda first_day_datetime: _prepared_challenger_week_dataset(
             _opened_challenger_week_dataset(
                 forecast_zarr_path_from_start_datetime,
-                preprocess_dataset,
                 first_day_datetime,
             ),
             f"{dataset_name} challenger dataset open",
@@ -281,7 +280,6 @@ def _open_multizarr_forecasts_as_challenger_dataset(
             dataset_name,
             forecast_zarr_path_from_start_datetime,
             resolved_first_day_datetimes,
-            preprocess_dataset,
         ),
         attach_source_metadata_when_not_staged=current_runtime_configuration().has_local_stage(),
     )

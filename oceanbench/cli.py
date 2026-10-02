@@ -232,7 +232,7 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--remote-retries",
         type=int,
         default=None,
-        help="Number of retries for transient remote data read failures",
+        help="Number of attempts for each remote data read, retrying transient failures",
     )
     evaluate_parser.add_argument(
         "--keep-stage",
