@@ -117,9 +117,7 @@ def test_rmsd_uses_area_weights_without_land_in_denominator() -> None:
 def test_rmsd_snaps_nearly_matching_spatial_coordinates_before_xarray_alignment() -> None:
     variable_key = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
     challenger_latitudes = numpy.array([0.0, 1.00001, 2.0], dtype=numpy.float32)
-    challenger_longitudes = numpy.array([10.0, 11.00001, 12.0], dtype=numpy.float32)
     reference_latitudes = numpy.array([0.0, 1.0, 2.0], dtype=numpy.float32)
-    reference_longitudes = numpy.array([10.0, 11.0, 12.0], dtype=numpy.float32)
     challenger_values = numpy.array(
         [
             [
@@ -131,41 +129,15 @@ def test_rmsd_snaps_nearly_matching_spatial_coordinates_before_xarray_alignment(
             ]
         ]
     )
-    dimension_names = [
-        Dimension.FIRST_DAY_DATETIME.key(),
-        Dimension.LEAD_DAY_INDEX.key(),
-        Dimension.LATITUDE.key(),
-        Dimension.LONGITUDE.key(),
-    ]
-    base_coordinates = {
-        Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
-        Dimension.LEAD_DAY_INDEX.key(): [0],
-    }
-    challenger_dataset = xarray.Dataset(
-        {
-            variable_key: (
-                dimension_names,
-                challenger_values,
-            )
-        },
-        coords={
-            **base_coordinates,
-            Dimension.LATITUDE.key(): challenger_latitudes,
-            Dimension.LONGITUDE.key(): challenger_longitudes,
-        },
+    challenger_dataset = _dataset_with_spatial_coordinates(
+        latitudes=challenger_latitudes,
+        longitudes=numpy.array([10.0, 11.00001, 12.0], dtype=numpy.float32),
+        values=challenger_values,
     )
-    reference_dataset = xarray.Dataset(
-        {
-            variable_key: (
-                dimension_names,
-                numpy.zeros_like(challenger_values),
-            )
-        },
-        coords={
-            **base_coordinates,
-            Dimension.LATITUDE.key(): reference_latitudes,
-            Dimension.LONGITUDE.key(): reference_longitudes,
-        },
+    reference_dataset = _dataset_with_spatial_coordinates(
+        latitudes=reference_latitudes,
+        longitudes=numpy.array([10.0, 11.0, 12.0], dtype=numpy.float32),
+        values=numpy.zeros_like(challenger_values),
     )
 
     rmsd_dataset = _rmsd(
@@ -179,17 +151,16 @@ def test_rmsd_snaps_nearly_matching_spatial_coordinates_before_xarray_alignment(
         numpy.sum(challenger_values[0, 0] ** 2 * latitude_weights)
         / numpy.sum(numpy.ones_like(challenger_values[0, 0]) * latitude_weights)
     )
-    legacy_inner_join_values = challenger_values[0, 0][[0, 2]][:, [0, 2]]
-    legacy_inner_join_latitudes = reference_latitudes[[0, 2]]
-    legacy_latitude_weights = numpy.cos(numpy.deg2rad(legacy_inner_join_latitudes))[:, numpy.newaxis]
-    legacy_inner_join_rmsd = numpy.sqrt(
-        numpy.sum(legacy_inner_join_values**2 * legacy_latitude_weights)
-        / numpy.sum(numpy.ones_like(legacy_inner_join_values) * legacy_latitude_weights)
+    exactly_matching_values = challenger_values[0, 0][[0, 2]][:, [0, 2]]
+    exactly_matching_latitude_weights = numpy.cos(numpy.deg2rad(reference_latitudes[[0, 2]]))[:, numpy.newaxis]
+    unsnapped_rmsd = numpy.sqrt(
+        numpy.sum(exactly_matching_values**2 * exactly_matching_latitude_weights)
+        / numpy.sum(numpy.ones_like(exactly_matching_values) * exactly_matching_latitude_weights)
     )
     actual_rmsd = float(rmsd_dataset[variable_key].sel({Dimension.LEAD_DAY_INDEX.key(): 0}))
 
     assert numpy.isclose(actual_rmsd, expected_rmsd)
-    assert not numpy.isclose(actual_rmsd, legacy_inner_join_rmsd)
+    assert not numpy.isclose(actual_rmsd, unsnapped_rmsd)
 
 
 def test_rmsd_snaps_reference_to_challenger_when_challenger_has_one_extra_coordinate() -> None:
@@ -210,48 +181,15 @@ def test_rmsd_snaps_reference_to_challenger_when_challenger_has_one_extra_coordi
         challenger_latitudes.size,
         challenger_longitudes.size,
     )
-    dimension_names = [
-        Dimension.FIRST_DAY_DATETIME.key(),
-        Dimension.LEAD_DAY_INDEX.key(),
-        Dimension.LATITUDE.key(),
-        Dimension.LONGITUDE.key(),
-    ]
-    base_coordinates = {
-        Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
-        Dimension.LEAD_DAY_INDEX.key(): [0],
-    }
-    challenger_dataset = xarray.Dataset(
-        {
-            variable_key: (
-                dimension_names,
-                challenger_values,
-            )
-        },
-        coords={
-            **base_coordinates,
-            Dimension.LATITUDE.key(): challenger_latitudes,
-            Dimension.LONGITUDE.key(): challenger_longitudes,
-        },
+    challenger_dataset = _dataset_with_spatial_coordinates(
+        latitudes=challenger_latitudes,
+        longitudes=challenger_longitudes,
+        values=challenger_values,
     )
-    reference_dataset = xarray.Dataset(
-        {
-            variable_key: (
-                dimension_names,
-                numpy.zeros(
-                    (
-                        1,
-                        1,
-                        reference_latitudes.size,
-                        reference_longitudes.size,
-                    )
-                ),
-            )
-        },
-        coords={
-            **base_coordinates,
-            Dimension.LATITUDE.key(): reference_latitudes,
-            Dimension.LONGITUDE.key(): reference_longitudes,
-        },
+    reference_dataset = _dataset_with_spatial_coordinates(
+        latitudes=reference_latitudes,
+        longitudes=reference_longitudes,
+        values=numpy.zeros((1, 1, reference_latitudes.size, reference_longitudes.size)),
     )
 
     rmsd_dataset = _rmsd(
@@ -266,11 +204,11 @@ def test_rmsd_snaps_reference_to_challenger_when_challenger_has_one_extra_coordi
         numpy.sum(matched_challenger_values**2 * latitude_weights)
         / numpy.sum(numpy.ones_like(matched_challenger_values) * latitude_weights)
     )
-    legacy_inner_join_squared_error = (challenger_dataset - reference_dataset) ** 2
+    unsnapped_squared_error = (challenger_dataset - reference_dataset) ** 2
     actual_rmsd = float(rmsd_dataset[variable_key].sel({Dimension.LEAD_DAY_INDEX.key(): 0}))
 
-    assert legacy_inner_join_squared_error.sizes[Dimension.LATITUDE.key()] == 0
-    assert legacy_inner_join_squared_error.sizes[Dimension.LONGITUDE.key()] == 0
+    assert unsnapped_squared_error.sizes[Dimension.LATITUDE.key()] == 0
+    assert unsnapped_squared_error.sizes[Dimension.LONGITUDE.key()] == 0
     assert numpy.isclose(actual_rmsd, expected_rmsd)
 
 
@@ -378,12 +316,12 @@ def _temperature_dataset(surface_values: list[float], deep_value: float) -> xarr
     )
 
 
-def _surface_dry_at_sixty_degrees_mask() -> xarray.DataArray:
+def _surface_mask(dry_latitudes: list[float]) -> xarray.DataArray:
     values = numpy.ones(
         (len(OCEAN_MASK_DEPTHS), len(MASK_TEST_LATITUDES), len(MASK_TEST_LONGITUDES)),
         dtype=bool,
     )
-    values[0, 2, 0] = False
+    values[0, numpy.isin(MASK_TEST_LATITUDES, dry_latitudes), :] = False
     return xarray.DataArray(
         values,
         dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
@@ -397,11 +335,10 @@ def _surface_dry_at_sixty_degrees_mask() -> xarray.DataArray:
 
 def test_gridded_rmsd_puts_only_the_six_standard_depths_of_the_mask_on_the_challenger_grid() -> None:
     challenger_mask = _ocean_mask_on_challenger_grid(
-        _surface_dry_at_sixty_degrees_mask(),
+        _surface_mask(dry_latitudes=[60.0]),
         _temperature_dataset(surface_values=[4.0, 4.0, 4.0], deep_value=1.0),
     )
 
-    assert len(OCEAN_MASK_DEPTHS) == 7
     assert challenger_mask[Dimension.DEPTH.key()].values.tolist() == list(DEPTH_LABELS.values())
 
 
@@ -417,7 +354,7 @@ def test_rmsd_scores_only_the_mask_wet_cells_and_reports_the_missing_ones() -> N
         challenger_dataset=challenger_dataset,
         reference_dataset=reference_dataset,
         variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
-        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+        ocean_mask=_surface_mask(dry_latitudes=[60.0]),
     )
 
     assert table.columns.tolist() == ["Lead day 1", MISSING_FRACTION_COLUMN]
@@ -438,15 +375,13 @@ def test_rmsd_excludes_a_mask_dry_cell_even_when_both_sides_are_finite() -> None
         challenger_dataset=challenger_dataset,
         reference_dataset=reference_dataset,
         variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
-        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+        ocean_mask=_surface_mask(dry_latitudes=[60.0]),
     )
-    fully_wet_mask = _surface_dry_at_sixty_degrees_mask()
-    fully_wet_mask.values[0, 2, 0] = True
     unmasked_table = rmsd(
         challenger_dataset=challenger_dataset,
         reference_dataset=reference_dataset,
         variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
-        ocean_mask=fully_wet_mask,
+        ocean_mask=_surface_mask(dry_latitudes=[]),
     )
 
     assert masked_table.loc[SURFACE_TEMPERATURE_LABEL, "Lead day 1"] == 4.0
@@ -495,7 +430,7 @@ def test_rmsd_scores_a_dataset_whose_only_variable_has_no_depth() -> None:
         challenger_dataset=challenger_dataset,
         reference_dataset=reference_dataset,
         variables=[Variable.MIXED_LAYER_DEPTH],
-        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+        ocean_mask=_surface_mask(dry_latitudes=[60.0]),
     )
 
     assert list(table.index) == [MIXED_LAYER_DEPTH_LABEL]
@@ -524,7 +459,7 @@ def test_rmsd_scores_a_dataset_whose_two_variables_have_no_depth() -> None:
             Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
             Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
         ],
-        ocean_mask=_surface_dry_at_sixty_degrees_mask(),
+        ocean_mask=_surface_mask(dry_latitudes=[60.0]),
     )
 
     assert sorted(table.index) == sorted([MERIDIONAL_GEOSTROPHIC_LABEL, ZONAL_GEOSTROPHIC_LABEL])
@@ -569,14 +504,12 @@ def test_rmsd_reports_as_missing_only_the_ocean_cells_where_the_reference_has_a_
     variable_key = Variable.MIXED_LAYER_DEPTH.key()
     challenger_dataset = _depth_free_dataset({variable_key: [numpy.nan, numpy.nan, 4.0]})
     reference_dataset = _depth_free_dataset({variable_key: [numpy.nan, 0.0, 0.0]})
-    fully_wet_mask = _surface_dry_at_sixty_degrees_mask()
-    fully_wet_mask.values[0, 2, 0] = True
 
     table = rmsd(
         challenger_dataset=challenger_dataset,
         reference_dataset=reference_dataset,
         variables=[Variable.MIXED_LAYER_DEPTH],
-        ocean_mask=fully_wet_mask,
+        ocean_mask=_surface_mask(dry_latitudes=[]),
     )
 
     assert table.loc[MIXED_LAYER_DEPTH_LABEL, "Lead day 1"] == 4.0
