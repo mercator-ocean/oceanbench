@@ -24,7 +24,7 @@ and the affected reports are re-published (never silently overwritten).
 ### Challengers
 
 - 2026-10-05: GLO12 persistence added: a baseline that repeats the GLO12 nowcast for every lead day ([#297](https://github.com/mercator-ocean/oceanbench/pull/297)).
-- 2026-10-05: LangYa forecasts are read from corrected stores; in the old ones, every row north of 5°N sat one grid row too far south ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
+- 2026-10-05: LangYa forecasts are read from corrected stores. In the old ones, every row north of 5°N sat one grid row too far south ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
 
 ### Changed
 
@@ -61,7 +61,7 @@ and the affected reports are re-published (never silently overwritten).
 
 - 2026-09-15: HClimRep added: a machine-learning model from AWI (WeatherGenerator fine-tuned on
   GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts and ERA5 atmospheric fields. The `hclimrep` function ships in 0.6.0 ([#319](https://github.com/mercator-ocean/oceanbench/pull/319)).
-- 2026-10-05: LangYa 0.5.0 reports re-published from the corrected stores; the package reads them from 0.6.0 ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
+- 2026-10-05: LangYa 0.5.0 reports re-published from the corrected stores, which the package reads from 0.6.0 ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
 
 ### Changed
 
@@ -86,7 +86,7 @@ every challenger. See the
 
 - Reference latitude and longitude coordinates are snapped to the challenger grid with a 1e-4 degree nearest-neighbour tolerance before grid-averaged RMSD is computed, instead of relying on exact coordinate equality ([#308](https://github.com/mercator-ocean/oceanbench/issues/308), [#305](https://github.com/mercator-ocean/oceanbench/issues/305)).
 - Spatial alignment now raises an explicit error when it is ambiguous, or when fewer than 99.9% of the challenger grid points can be matched, instead of silently producing a misaligned comparison.
-- Class IV vertical interpolation supports up to 128 depth levels instead of 64; the depth level count is no longer encoded in a fixed-width integer ([#307](https://github.com/mercator-ocean/oceanbench/issues/307)).
+- Class IV vertical interpolation supports up to 128 depth levels instead of 64. The depth level count is no longer encoded in a fixed-width integer ([#307](https://github.com/mercator-ocean/oceanbench/issues/307)).
 
 ### Reports
 
@@ -131,7 +131,7 @@ IBI SLA and all other scores are unchanged.
 
 **Scores:** GLO12, GLONET, XiHe and WenHai change vs 0.2.0. The GLONET, XiHe and WenHai
 forecasts were recomputed with updated GLO12 nowcast initial conditions and IFS atmospheric
-forcings (WenHai substantially, correcting the surface forcing in #269; GLONET and XiHe
+forcings (WenHai substantially, correcting the surface forcing in #269, and GLONET and XiHe
 slightly). GLO12 now uses the full GLO12 operational forecast (50 depth levels). Methodology
 is unchanged from 0.2.0.
 
@@ -158,7 +158,7 @@ observation realignment change computed scores. 1-degree challenger scores added
 ### Added
 
 - 1-degree evaluation track with 1-degree challenger and reference datasets (`glo12_1_degree`, `glonet_1_degree`, `wenhai_1_degree`, `xihe_1_degree`).
-- Weekly GLO12 nowcast and IFS forcing input datasets covering 2023-2025, exposed via `oceanbench.datasets.input`; see the [input datasets documentation](https://oceanbench.readthedocs.io/en/latest/input-datasets-for-oceanbench-challenger-evaluation.html).
+- Weekly GLO12 nowcast and IFS forcing input datasets covering 2023-2025, exposed via `oceanbench.datasets.input`. See the [input datasets documentation](https://oceanbench.readthedocs.io/en/latest/input-datasets-for-oceanbench-challenger-evaluation.html).
 - Historical version selector on the scores website, with report discovery driven by a published version index.
 
 ### Changed
