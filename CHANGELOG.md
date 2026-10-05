@@ -17,6 +17,10 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
+Forecast stores are never overwritten: refreshed forecasts go to new stores. A patch release
+that reads the refreshed or added challenger follows, so every published report can be
+reproduced with a released version.
+
 ## 0.6.0 - 2026-10-05
 
 **Scores:** every table changes for every challenger (see Changed and Fixed).
@@ -36,7 +40,7 @@ and the affected reports are re-published (never silently overwritten).
 
 - Class IV, Lagrangian and geostrophic currents handle the dateline on global grids ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 - LangYa sea level anomalies used only part of its grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
-- Class IV salinity no longer drops observations in shallow water ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- Class IV salinity is interpolated linearly between the two model levels around each observation, like the other variables, so observations in shallow water are no longer dropped ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
 - Class IV tables show missing challenger values instead of dropping them ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
 - Geostrophic currents exclude 5 degrees around the equator instead of 0.5 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Lagrangian deviation scores the last lead day ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
@@ -60,8 +64,8 @@ and the affected reports are re-published (never silently overwritten).
 ### Challengers
 
 - 2026-09-15: HClimRep added: a machine-learning model from AWI (WeatherGenerator fine-tuned on
-  GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts and ERA5 atmospheric fields.
-- 2026-10-05: LangYa 0.5.0 reports re-published from the corrected stores ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
+  GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts and ERA5 atmospheric fields. The `hclimrep` function ships in 0.6.0 ([#319](https://github.com/mercator-ocean/oceanbench/pull/319)).
+- 2026-10-05: LangYa 0.5.0 reports re-published from the corrected stores; the package reads them from 0.6.0 ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
 
 ### Changed
 
