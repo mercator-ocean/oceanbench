@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
 import uuid
@@ -34,7 +33,6 @@ from oceanbench.core.lagrangian_support import (
 from oceanbench.core.lead_day_utils import lead_day_labels
 import logging
 
-VARIABLE = Variable
 logger = logging.getLogger("parcels.tools.loggers")
 logger.setLevel(level=logging.WARNING)
 import warnings
@@ -45,18 +43,7 @@ warnings.filterwarnings(
 )
 
 
-@dataclass
-class ZoneCoordinates:
-    minimum_latitude: float
-    maximum_latitude: float
-    minimum_longitude: float
-    maximum_longitude: float
-
-
-class FreezeParticle(JITParticle):
-    frozen = ParcelsVariable("frozen", dtype=numpy.int32, initial=0)
-    lat0 = ParcelsVariable("lat0", dtype=numpy.float32, to_write=False)
-    lon0 = ParcelsVariable("lon0", dtype=numpy.float32, to_write=False)
+class NumberedParticle(JITParticle):
     pid = ParcelsVariable("pid", dtype=numpy.int32)
 
 
@@ -70,6 +57,7 @@ def _delete_error_particle(particle, _fieldset, _time):
 
 
 def _wrap_particle_longitude(particle, fieldset, time):
+    # particle_dlon is defined by parcels in the kernel scope and added to particle.lon after the kernels run
     if particle.lon < fieldset.first_longitude:
         particle_dlon += 360  # noqa
     elif particle.lon >= fieldset.first_longitude + 360:
@@ -103,11 +91,11 @@ def lagrangian_particle_count_for_region(
     harmonised_regional_dataset = _harmonise_dataset(regional_challenger_dataset)
     global_ocean_point_count = _available_ocean_point_count(
         harmonised_global_dataset,
-        VARIABLE.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
     )
     regional_ocean_point_count = _available_ocean_point_count(
         harmonised_regional_dataset,
-        VARIABLE.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
     )
     scaled_particle_count = int(round(global_particle_count * regional_ocean_point_count / global_ocean_point_count))
     return min(
@@ -189,13 +177,13 @@ def _one_deviation_of_lagrangian_trajectories(
     latitudes: numpy.ndarray,
     longitudes: numpy.ndarray,
 ):
-    challenger_trajectories = _get_particle_dataset(
+    challenger_trajectories = _get_all_particles_positions(
         dataset=surface_current_dataset(challenger_dataset),
         latitudes=latitudes,
         longitudes=longitudes,
     )
 
-    reference_trajectories = _get_particle_dataset(
+    reference_trajectories = _get_all_particles_positions(
         dataset=surface_current_dataset(reference_dataset),
         latitudes=latitudes,
         longitudes=longitudes,
@@ -203,14 +191,6 @@ def _one_deviation_of_lagrangian_trajectories(
 
     euclideandistance = euclidean_distance(challenger_trajectories, reference_trajectories)
     return euclideandistance
-
-
-def _set_domain_bounds(field_set: FieldSet, dataset: xarray.Dataset):
-    field_set.add_constant("lon_min", float(dataset.longitude.values.min()))
-    field_set.add_constant("lon_max", float(dataset.longitude.values.max()))
-    field_set.add_constant("lat_min", float(dataset.latitude.values.min()))
-    field_set.add_constant("lat_max", float(dataset.latitude.values.max()))
-    return field_set
 
 
 def _run_simulation(particle_set: ParticleSet, kernels, runtime_days: int):
@@ -256,12 +236,11 @@ def _get_all_particles_positions(
 ) -> xarray.Dataset:
     assert latitudes.shape == longitudes.shape, "latitudes and longitudes must be the same shape"
     variables = {
-        "U": VARIABLE.EASTWARD_SEA_WATER_VELOCITY.key(),
-        "V": VARIABLE.NORTHWARD_SEA_WATER_VELOCITY.key(),
+        "U": Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        "V": Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
     }
     dimensions = {"lat": "latitude", "lon": "longitude", "time": "time"}
     field_set = FieldSet.from_xarray_dataset(dataset, variables, dimensions)
-    field_set = _set_domain_bounds(field_set, dataset)
     is_global = is_global_longitude_grid(dataset.longitude.values)
     if is_global:
         field_set.add_constant("first_longitude", float(dataset.longitude.values[0]))
@@ -271,7 +250,7 @@ def _get_all_particles_positions(
 
     particle_set = ParticleSet.from_list(
         fieldset=field_set,
-        pclass=FreezeParticle,
+        pclass=NumberedParticle,
         lon=longitudes,
         lat=latitudes,
         time=dataset.time[0],
@@ -282,7 +261,7 @@ def _get_all_particles_positions(
         AdvectionRK4,
         *([_wrap_particle_longitude] if is_global else []),
         _delete_error_particle,
-    ]  # Keep your original kernel setup
+    ]
 
     runtime_days = len(dataset.time) - 1
     output_path = _run_simulation(particle_set, kernels, runtime_days)
@@ -307,21 +286,6 @@ def _get_all_particles_positions(
             "lat0": ("particle", latitudes),
             "lon0": ("particle", longitudes),
         },
-    )
-
-
-def _get_particle_dataset(
-    dataset: xarray.Dataset,
-    latitudes: numpy.ndarray,
-    longitudes: numpy.ndarray,
-) -> xarray.Dataset:
-    particle_initial_latitudes = latitudes
-    particle_initial_longitudes = longitudes
-
-    return _get_all_particles_positions(
-        dataset,
-        particle_initial_latitudes,
-        particle_initial_longitudes,
     )
 
 

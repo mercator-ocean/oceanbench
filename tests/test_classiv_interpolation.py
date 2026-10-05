@@ -8,8 +8,6 @@ import pandas
 import xarray
 
 from oceanbench.core.classIV_support import (
-    _interpolate_vertically_bracket,
-    format_class4_results,
     interpolate_class4_model_to_observations,
 )
 from oceanbench.core.dataset_utils import Dimension, Variable
@@ -109,19 +107,6 @@ def test_class4_fast_interpolation_materializes_each_first_day_block_once(monkey
     assert first_day_block_compute_calls == [(0, 1, 2), (0, 1, 2)]
 
 
-def test_class4_vertical_interpolation_supports_128_depth_levels() -> None:
-    model_depths = numpy.arange(128, dtype=float)
-    target_depths = numpy.array([10.5, 70.25, 64.5])
-    offsets = numpy.array([0.0, 100.0, -20.0])
-    profiles = model_depths[:, numpy.newaxis] + offsets[numpy.newaxis, :]
-    profiles[0, 1] = numpy.nan
-    profiles[-1, 2] = numpy.nan
-
-    model_values = _interpolate_vertically_bracket(profiles, model_depths, target_depths)
-
-    numpy.testing.assert_allclose(model_values, target_depths + offsets)
-
-
 def _salinity_model_data() -> xarray.DataArray:
     first_days = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
     lead_days = numpy.array([0])
@@ -167,7 +152,7 @@ def _salinity_observations_dataframe() -> pandas.DataFrame:
     )
 
 
-def test_class4_salinity_uses_bracket_interpolation_on_a_shallow_column() -> None:
+def test_class4_salinity_is_interpolated_between_bracketing_levels_and_clamped_below_the_deepest_one() -> None:
     model_values = interpolate_class4_model_to_observations(
         _salinity_model_data(),
         _salinity_observations_dataframe(),
@@ -175,25 +160,6 @@ def test_class4_salinity_uses_bracket_interpolation_on_a_shallow_column() -> Non
 
     assert not numpy.isnan(model_values).any()
     numpy.testing.assert_allclose(model_values, [35.5, 36.5, 37.0])
-
-
-def test_class4_formatted_results_keep_the_observation_count_column() -> None:
-    results_dataframe = pandas.DataFrame(
-        {
-            "variable": [Variable.SEA_WATER_SALINITY.key()] * 2,
-            "depth_bin": ["0-5m"] * 2,
-            "lead_day": [0, 1],
-            "rmsd": [0.1, 0.2],
-            "count": [1234, 1200],
-            "missing": [4, 2],
-        }
-    )
-
-    formatted = format_class4_results(results_dataframe, 2)
-
-    assert list(formatted.columns) == ["Lead day 1", "Lead day 2", "Observations", "Missing"]
-    assert formatted["Observations"].tolist() == [1234]
-    assert formatted["Missing"].tolist() == [4]
 
 
 def _surface_model_data(longitudes: numpy.ndarray) -> xarray.DataArray:

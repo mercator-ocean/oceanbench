@@ -34,15 +34,23 @@ def _observation_source() -> xarray.Dataset:
     return xarray.Dataset(variables)
 
 
-def test_selected_observations_dataset_preserves_overlapping_forecast_windows(monkeypatch) -> None:
-    source = _observation_source()
+def test_selected_observations_dataset_preserves_overlapping_forecast_windows(tmp_path, monkeypatch) -> None:
+    observation_days = numpy.array(["2024-01-03", "2024-01-10", "2024-01-12", "2024-01-14"], dtype="datetime64[D]")
+    for observation_index, observation_day in enumerate(observation_days):
+        _write_observation_day_store(
+            tmp_path / f"{pandas.Timestamp(observation_day):%Y%m%d}.zarr",
+            observations.EXPECTED_OBSERVATIONS_BASIS_VERSION,
+            observation_indices=[observation_index],
+        )
+    monkeypatch.setattr(
+        observations,
+        "observation_path",
+        lambda day: str(tmp_path / f"{pandas.Timestamp(day):%Y%m%d}.zarr"),
+    )
     first_day_datetimes = numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]")
 
-    monkeypatch.setattr(observations, "open_remote_multizarr", lambda *_, **__: source)
-    monkeypatch.setattr(observations, "require_remote_dataset_dimensions", lambda dataset, *_: dataset)
-
     selected = observations._selected_observations_dataset(
-        observation_days=numpy.array(["2024-01-03", "2024-01-10", "2024-01-12", "2024-01-14"], dtype="datetime64[D]"),
+        observation_days=observation_days,
         first_day_timestamps=pandas.to_datetime(first_day_datetimes),
         first_day_datetimes=first_day_datetimes,
         lead_days_count=10,
@@ -89,15 +97,19 @@ def test_observations_stage_path_uses_overlap_safe_version() -> None:
     )
 
 
-def _write_observation_day_store(store_path, basis_version: str) -> None:
-    source = _observation_source()
+def _write_observation_day_store(
+    store_path,
+    basis_version: str,
+    observation_indices: slice | list[int] = slice(None),
+) -> None:
+    source = _observation_source().isel(obs=observation_indices)
     day_store = source.assign(
         {
             Dimension.TIME.key(): (
                 "obs",
                 source[Dimension.TIME.key()].values.astype("datetime64[ns]").astype("int64"),
             ),
-            "obs_id": ("obs", numpy.array(["a", "b", "c", "d"], dtype="<U96")),
+            "obs_id": ("obs", numpy.array(["a", "b", "c", "d"], dtype="<U96")[observation_indices]),
         }
     )
     day_store.attrs[observations.OBSERVATIONS_BASIS_VERSION_ATTRIBUTE] = basis_version

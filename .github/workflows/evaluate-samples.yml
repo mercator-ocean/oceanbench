@@ -17,6 +17,10 @@ on:
   # contributors. That is accepted for now.
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'website/**'
+      - 'CHANGELOG.md'
 concurrency:
   group: evaluate-samples-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -50,6 +54,8 @@ jobs:
     needs: select-samples
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.select-samples.outputs.matrix) }}
@@ -59,11 +65,6 @@ jobs:
       - name: Free disk space for staging
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/.ghcup
-          df -h / /mnt || true
-      - name: Record host resources
-        run: |
-          echo "cpus: $(nproc)"
-          free -h
           df -h / /mnt || true
       - uses: mamba-org/setup-micromamba@v1
         with:
@@ -85,32 +86,11 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
           OCEANBENCH_STAGE: ${{ matrix.stage }}
           OCEANBENCH_STAGE_MAX_WORKERS: '8'
-        run: |
-          # Sample memory straight into the step log every 30 seconds. A runner
-          # killed mid step takes any post step report with it, so the numbers
-          # have to be streamed as they are measured.
-          (
-            while true; do
-              echo "MEMWATCH $(date -u +%H:%M:%S) used=$(free -m | awk '/^Mem:/{print $3}')MB available=$(free -m | awk '/^Mem:/{print $7}')MB swap=$(free -m | awk '/^Swap:/{print $3}')MB"
-              sleep 30
-            done
-          ) &
-          memory_sampler_pid=$!
-          trap 'kill "$memory_sampler_pid" 2>/dev/null || true' EXIT
-          /usr/bin/time -v make evaluate-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
+        run: make evaluate-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
         shell: micromamba-shell {0}
-      - name: Report disk and kernel state
-        if: always()
-        run: |
-          df -h / || true
-          echo "=== kernel out of memory kills, if any ==="
-          sudo dmesg | grep -iE "out of memory|oom-kill|killed process" || echo "none"
       - name: Compare generated notebook against reference
-        env:
-          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
         run: make compare-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
         shell: micromamba-shell {0}
       - name: Archive generated notebooks
@@ -128,11 +108,11 @@ jobs:
     if: ${{ !github.event.inputs.samples }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
-      - name: Record host resources
-        run: nproc && free -h
       - uses: mamba-org/setup-micromamba@v1
         with:
           micromamba-version: '1.5.6-0'
@@ -153,12 +133,9 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
         run: make evaluate-ibi-region
         shell: micromamba-shell {0}
       - name: Compare IBI notebook against reference
-        env:
-          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
         run: make compare-ibi
         shell: micromamba-shell {0}
       - name: Run dataset doctests
@@ -169,7 +146,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          TEST_ENVIRONMENT_NAME: oceanbench_test_${{ github.sha }}
         run: make doctest
         shell: micromamba-shell {0}
       - name: Archive generated notebooks
