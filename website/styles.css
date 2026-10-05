@@ -358,10 +358,10 @@ body.quarto-dark .challengers-table-wrap {
 /* The table sits straight on the page, as it does in light mode, so an
    empty or neutral cell is just page. There is no vertical grid: faint row
    lines are enough to guide the eye along a row, and the tiles themselves
-   separate the columns. */
+   separate the columns. There is no outer frame either: where a variable has
+   no value at a depth there are no cells, and so nothing is drawn. */
 body.quarto-dark .score-table {
   background: var(--ob-page-bg);
-  box-shadow: 0 0 0 1px var(--ob-border);
 }
 
 body.quarto-dark .score-table th,
