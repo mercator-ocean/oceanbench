@@ -43,7 +43,7 @@ warnings.filterwarnings(
 )
 
 
-class FreezeParticle(JITParticle):
+class NumberedParticle(JITParticle):
     pid = ParcelsVariable("pid", dtype=numpy.int32)
 
 
@@ -250,7 +250,7 @@ def _get_all_particles_positions(
 
     particle_set = ParticleSet.from_list(
         fieldset=field_set,
-        pclass=FreezeParticle,
+        pclass=NumberedParticle,
         lon=longitudes,
         lat=latitudes,
         time=dataset.time[0],
