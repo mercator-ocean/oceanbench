@@ -40,7 +40,7 @@ and the affected reports are re-published (never silently overwritten).
 - Class IV tables show missing challenger values instead of dropping them ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
 - Geostrophic currents exclude 5 degrees around the equator instead of 0.5 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Lagrangian deviation scores the last lead day ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
-- A failed remote download raises an error instead of reading missing values ([#318](https://github.com/mercator-ocean/oceanbench/pull/318)).
+- A failed remote download raises an error instead of returning missing values ([#318](https://github.com/mercator-ocean/oceanbench/pull/318)).
 - Remote reads retry each failed request ([#335](https://github.com/mercator-ocean/oceanbench/pull/335)).
 
 ### Added
