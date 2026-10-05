@@ -4,10 +4,13 @@
 
 // Windy-style advected-particle current animation over a (uo, vo) velocity field
 // (contracts.md §6: "animation only for motion, GPU current particles"). Runs on
-// the 2D canvas with the classic fading-trail technique: every frame the whole
+// the 2D canvas with the classic fading-trail technique: every step the whole
 // overlay is dimmed by a translucent fill, then each live particle is advected by a
 // bilinear sample of the vector field and drawn as a short glowing segment. Trails
 // therefore fade over ~1 s, giving the streaming-flow look without storing history.
+// The simulation advances in fixed 60 Hz steps whatever the display refresh rate, so
+// every "per step" or "_FRAMES" count below is in 1/60 s units and a 120 Hz screen
+// shows the same speed and trail length as the 60 Hz one the look was tuned on.
 //
 // The engine is projection- and data-agnostic: the panel hands it a small context
 // object it reads afresh every frame (sampler, projection, viewport, theme, speed),
@@ -18,10 +21,10 @@
 
 import { sample as sampleColormap } from "../vendor/cmocean/colormaps.js";
 
-// Advection gain: normalized-world units travelled per (m/s) per frame at speed 1,
-// before the per-frame zoom scaling. Tuned low so flow reads: a strong ~0.5 m/s
+// Advection gain: normalized-world units travelled per (m/s) per step at speed 1,
+// before the per-step zoom scaling. Tuned low so flow reads: a strong ~0.5 m/s
 // current takes several seconds to cross a visible eddy at 1×, comprehensible, not a
-// blur. Multiplied by the user speed factor and by the visible world width each frame,
+// blur. Multiplied by the user speed factor and by the visible world width each step,
 // so screen speed stays roughly constant as the user zooms (physically slower world
 // step when zoomed in). Longer fade keeps trails on-screen so direction reads.
 const ADVECTION_GAIN = 0.0016;
@@ -30,8 +33,15 @@ const MIN_PARTICLES = 500;
 const MAX_PARTICLES = 6000;
 const MAX_AGE_FRAMES = 170;
 const TRAIL_FADE_ALPHA = 0.055;
-// A trail is drawn at alpha 0.72 to 0.80 and dimmed by TRAIL_FADE_ALPHA every frame, so
-// it is below one 8-bit level after about 102 frames. Nothing older than that contributes
+// One simulation step in ms. A display callback runs as many whole steps as the elapsed
+// time holds and carries the remainder, so 120 Hz steps on about every other callback.
+// The tolerance keeps a jittery 60 Hz callback at exactly one step, and the cap drops
+// the backlog after a stall instead of racing to catch up.
+const STEP_MS = 1000 / 60;
+const STEP_TOLERANCE_MS = 1;
+const MAX_STEPS_PER_CALLBACK = 3;
+// A trail is drawn at alpha 0.72 to 0.80 and dimmed by TRAIL_FADE_ALPHA every step, so
+// it is below one 8-bit level after about 102 steps. Nothing older than that contributes
 // anything a viewer can see.
 const TRAIL_VISIBLE_FRAMES = 102;
 // The canvas keeps premultiplied 8-bit alpha and "destination-out" rounds a*(1-alpha)
@@ -90,7 +100,11 @@ export function startParticleField(canvas, context) {
   let displayedBuffer = 0;
   let framesSinceSwap = 0;
   let projectionKey = "";
-  // Segments of the current frame, replayed into both buffers so their histories match.
+  // Time not yet spent on whole steps, and the previous callback's timestamp (null when
+  // the loop has just started or resumed, which runs one step straight away).
+  let pendingMs = 0;
+  let lastTimestamp = null;
+  // Segments of the current step, replayed into both buffers so their histories match.
   const segmentPoints = new Float32Array(MAX_PARTICLES * 4);
   const segmentStyles = new Array(MAX_PARTICLES);
 
@@ -150,7 +164,7 @@ export function startParticleField(canvas, context) {
   }
 
   function fadeTrails(buffer) {
-    // Translucent fill dims previous frame, the trail memory. Composite mode
+    // Translucent fill dims previous step, the trail memory. Composite mode
     // "destination-out" erases toward transparent so the field colour shows through.
     buffer.globalCompositeOperation = "destination-out";
     buffer.fillStyle = `rgba(0, 0, 0, ${TRAIL_FADE_ALPHA})`;
@@ -170,13 +184,16 @@ export function startParticleField(canvas, context) {
     }
   }
 
-  function frame() {
+  function frame(timestamp) {
     // Park the loop instead of burning a frame on nothing: a paused layer or a
     // backgrounded tab lets go of the rAF entirely, and resume() picks it back up.
     if (!context.playing || document.hidden) {
       animationHandle = null;
+      lastTimestamp = null;
       return;
     }
+    pendingMs += lastTimestamp === null ? STEP_MS : timestamp - lastTimestamp;
+    lastTimestamp = timestamp;
     const desired = targetCount();
     if (Math.abs(desired - seededForArea) > seededForArea * 0.25) reseed();
 
@@ -189,6 +206,24 @@ export function startParticleField(canvas, context) {
       projectionKey = key;
       clearTrails();
     }
+    let steps = 0;
+    while (pendingMs >= STEP_MS - STEP_TOLERANCE_MS && steps < MAX_STEPS_PER_CALLBACK) {
+      step();
+      pendingMs -= STEP_MS;
+      steps += 1;
+    }
+    if (pendingMs >= STEP_MS - STEP_TOLERANCE_MS) pendingMs = 0;
+    // A callback between steps leaves the last image on screen untouched.
+    if (steps > 0) {
+      drawing.clearRect(0, 0, canvas.width, canvas.height);
+      drawing.drawImage(trailBuffers[displayedBuffer].canvas, 0, 0);
+      // The panel knows where it drew land; let it erase anything the flow put there.
+      if (context.punchLand) context.punchLand(drawing);
+    }
+    animationHandle = requestAnimationFrame(frame);
+  }
+
+  function step() {
     for (const buffer of trailBuffers) fadeTrails(buffer);
     const view = context.viewport;
     // Scale the world step by the visible width so a particle crosses the viewport in
@@ -260,16 +295,12 @@ export function startParticleField(canvas, context) {
       trailBuffers[retiring].clearRect(0, 0, canvas.width, canvas.height);
       framesSinceSwap = 0;
     }
-
-    drawing.clearRect(0, 0, canvas.width, canvas.height);
-    drawing.drawImage(trailBuffers[displayedBuffer].canvas, 0, 0);
-    // The panel knows where it drew land; let it erase anything the flow put there.
-    if (context.punchLand) context.punchLand(drawing);
-    animationHandle = requestAnimationFrame(frame);
   }
 
   function resume() {
     if (stopped || animationHandle !== null) return;
+    lastTimestamp = null;
+    pendingMs = 0;
     animationHandle = requestAnimationFrame(frame);
   }
 
