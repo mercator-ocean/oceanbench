@@ -19,34 +19,34 @@ and the affected reports are re-published (never silently overwritten).
 
 ## Unreleased
 
-**Scores:** every table changes for every challenger. Class IV scores the same observations for every challenger on the rebuilt observation store, gridded RMSD uses a shared ocean mask, and several metrics are fixed (see Fixed).
-To be published as 0.6.0 once every challenger is rescored; the website shows the 0.5.0 reports until then.
+**Scores:** every table changes for every challenger (see Changed and Fixed).
 
 ### Challengers
 
-- 2026-10-01: LangYa forecasts are read from corrected stores; rows north of 5N were one grid row too far south ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
-- 2026-09-11: GLO12 persistence added: a reference baseline holding the GLO12 nowcast constant over the 10-day horizon, listed in the baseline category ([#297](https://github.com/mercator-ocean/oceanbench/pull/297)).
+- 2026-09-11: GLO12 persistence, which repeats the GLO12 nowcast for every lead day ([#297](https://github.com/mercator-ocean/oceanbench/pull/297)).
+- 2026-10-01: LangYa forecasts are read from corrected stores ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
 
 ### Changed
 
-- Class IV uses the rebuilt `observations2024-v2` store: quality flag 1 only, cleaned drifter currents and SLA outliers flagged ([#316](https://github.com/mercator-ocean/oceanbench/pull/316)).
-- Class IV scores the same observations for every challenger: observations too close to the coast for a quarter degree grid are dropped ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
-- Gridded RMSD scores only the cells that are ocean in the OceanBench ocean mask, the same for every reference ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
+- Class IV uses the rebuilt `observations2024-v2` store ([#316](https://github.com/mercator-ocean/oceanbench/pull/316)).
+- Class IV scores the same observations for every challenger ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
+- Gridded scores use the same ocean mask for every challenger ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
 
 ### Fixed
 
-- Class IV, Lagrangian and geostrophic currents handle the dateline on global grids; observations and particles next to it were lost before ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
-- The SSH to SLA conversion no longer loses part of the LangYa grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
-- Class IV salinity uses the same vertical interpolation as the other variables, so shallow profiles are no longer dropped ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
-- Class IV tables keep a variable and depth row even when the challenger has no value there, and show it as missing instead of dropping it ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
+- Class IV, Lagrangian and geostrophic currents handle the dateline on global grids ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- LangYa sea level anomalies used only part of its grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
+- Class IV salinity no longer drops observations in shallow water ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- Class IV tables show missing challenger values instead of dropping them ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
 - Geostrophic currents exclude 5 degrees around the equator instead of 0.5 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
-- Lagrangian deviation now scores lead day 10 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
-- Remote reads made by OceanBench retry each failed request, in all metrics and run modes, and retries no longer show in the reports ([#335](https://github.com/mercator-ocean/oceanbench/pull/335)).
+- Lagrangian deviation scores the last lead day ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
+- A failed remote download raises an error instead of returning missing values ([#318](https://github.com/mercator-ocean/oceanbench/pull/318)).
+- Remote reads retry each failed request ([#335](https://github.com/mercator-ocean/oceanbench/pull/335)).
 
 ### Added
 
-- The OceanBench ocean mask: a twelfth of a degree cell is ocean when it is wet in both GLO12 and GLORYS12 ([#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
-- `Observations` and `Missing` columns in the Class IV tables, and a `Missing fraction` column in the gridded RMSD tables ([#321](https://github.com/mercator-ocean/oceanbench/pull/321), [#329](https://github.com/mercator-ocean/oceanbench/pull/329), [#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
+- `Observations` and `Missing` columns in the Class IV tables and a `Missing fraction` column in the gridded tables ([#321](https://github.com/mercator-ocean/oceanbench/pull/321), [#329](https://github.com/mercator-ocean/oceanbench/pull/329), [#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
+- Challenger functions take an optional list of forecast start dates ([#303](https://github.com/mercator-ocean/oceanbench/pull/303)).
 
 ## 0.5.1 - 2026-09-02
 

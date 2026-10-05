@@ -7,8 +7,11 @@ The OceanBench ocean mask.
 
 The mask says which cells of the twelfth of a degree grid are ocean, at the six OceanBench standard
 depths and at the first native level below 600 metres. A cell is ocean when it is wet in both the
-GLO12 and GLORYS12 official static masks, so every metric scores the same area whatever its
-reference.
+GLO12 and GLORYS12 official static masks.
+
+The mask covers the gridded scores against GLO12 and GLORYS, including mixed layer depth and
+geostrophic currents, so they score the same area whatever the reference. Class IV also uses it to
+select the observations it scores. The Lagrangian trajectories do not use it.
 
 The artefact is built once from the two static datasets and pinned by the checksum of its array
 bytes, so any change to the upstream static files or to the stored file raises an error instead of
