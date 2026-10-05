@@ -9,7 +9,7 @@ Definitions of evaluation methods
 ===================================================
 
 Several methods are used to evaluate forecasting systems in OceanBench.
-Each of them is applied to a dataset grouping 52 forecasts (2024, or 2023 for GLO36v1).
+Each of them is applied to a dataset grouping 52 weekly forecasts covering one year.
 
 The following figure provides an overview of the evaluation methodology, illustrating the multifaceted evaluation strategy that captures different aspects of model performance.
 This includes (i) observation-based intercomparison, (ii) reference-model benchmarking, and (iii) process-oriented diagnostics derived from physically meaningful variables.
