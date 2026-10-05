@@ -33,8 +33,13 @@ The OceanBench ocean mask says which cells of the twelfth of a degree grid are o
 For gridded RMSD metrics, OceanBench takes the ``cos(latitude)`` area-weighted mean of squared errors over the scored cells, so each cell counts in proportion to its area, then averages the daily RMSD over forecast initialization days.
 A cell is scored when it is ocean in the ocean mask and both the challenger and the reference have a value there. On a challenger grid other than the twelfth of a degree one, each cell takes the nearest mask cell. ``Missing fraction`` gives, per variable and depth, the area-weighted share of ocean cells where the reference has a value and the challenger has none. It is averaged over initialization and lead days and does not change the RMSD.
 
+.. _evaluation-methods-observations:
+
+Comparison to observations
+**********************************************
+
 Root Mean Square Deviation (RMSD) of variables compared to observations
-**********************************************************************************************
+----------------------------------------------------------------------------------------------
 
 The `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ (Class IV) between the challenger dataset and the 2024 in situ and satellite observations, for the sea level anomaly, sea water potential temperature, sea water salinity, and the eastward and northward sea water velocity: `along-track altimetry <https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L3_MY_008_062>`_ for the sea level anomaly, and `Argo profiles and surface drifters <https://data.marine.copernicus.eu/product/INSITU_GLO_PHY_UV_DISCRETE_NRT_013_048>`_ for the temperature, salinity and velocity.
 
@@ -44,8 +49,13 @@ Class IV scores the same observations for every challenger, whatever its grid. A
 
 ``Observations`` gives the number of these observations at the first lead day, and ``Missing`` how many of them the challenger has no value for; those are left out of the RMSD.
 
+.. _evaluation-methods-reanalysis:
+
+Comparison to reanalysis
+**********************************************
+
 Root Mean Square Deviation (RMSD) of variables compared to GLORYS reanalysis
-**********************************************************************************************
+----------------------------------------------------------------------------------------------
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the challenger dataset and the `GLORYS reanalysis dataset <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_, i.e., over all dataset variables.
 
@@ -59,7 +69,7 @@ Only 6 depths are used:
 - 500 m (~541 meters)
 
 Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLORYS reanalysis
-**********************************************************************************************
+----------------------------------------------------------------------------------------------
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `Mixed Layer Depth (MLD) <https://en.wikipedia.org/wiki/Mixed_layer>`_ computations over the challenger dataset and the `GLORYS reanalysis dataset <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_.
 
@@ -69,14 +79,14 @@ If the threshold is not reached within the capped profile, OceanBench reports th
 This native-grid diagnostic preserves each system's represented vertical structure; vertical resolution therefore affects cross-challenger comparability.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS reanalysis
-**********************************************************************************************
+----------------------------------------------------------------------------------------------
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `geostrophic current <https://en.wikipedia.org/wiki/Geostrophic_current>`_ computations over the challenger datasets and the `GLORYS reanalysis dataset <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_.
 
 The geostrophic currents are computed using sea surface height above geoid with an Earth rotation rate of 7.2921e-5 s⁻¹, an Earth radius of 6371 km and a gravity of 9.81 m/s². Latitudes within 5° of the Equator are excluded, where the Coriolis parameter vanishes and altimetry products switch to an equatorial formulation (`Lagerloef et al., 1999 <https://doi.org/10.1029/1999JC900197>`_).
 
 Deviation of Lagrangian trajectories compared to GLORYS reanalysis
-**********************************************************************************************
+----------------------------------------------------------------------------------------------
 
 The deviation in kilometers between the two sets of drifting particles computed over the challenger datasets and the `GLORYS reanalysis dataset <https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030>`_.
 
@@ -84,8 +94,13 @@ The particles are seeded by sampling ocean grid points without replacement using
 
 The particles are released on the first forecast day, and lead day N is the mean separation on forecast day N, so the scores start at lead day 2.
 
+.. _evaluation-methods-analysis:
+
+Comparison to analysis
+**********************************************
+
 Root Mean Square Deviation (RMSD) of variables compared to GLO12 analysis
-**********************************************************************************************
+----------------------------------------------------------------------------------------------
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the challenger dataset and the `GLO12 analysis dataset <https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024>`_, i.e., over all dataset variables.
 
@@ -99,7 +114,7 @@ Only 6 depths are used:
 - 500 m (~541 meters)
 
 Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLO12 analysis
-**********************************************************************************************
+----------------------------------------------------------------------------------------------
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `Mixed Layer Depth (MLD) <https://en.wikipedia.org/wiki/Mixed_layer>`_ computations over the challenger dataset and the `GLO12 analysis dataset <https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024>`_.
 
@@ -109,14 +124,14 @@ If the threshold is not reached within the capped profile, OceanBench reports th
 This native-grid diagnostic preserves each system's represented vertical structure; vertical resolution therefore affects cross-challenger comparability.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis
-**********************************************************************************************
+----------------------------------------------------------------------------------------------
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `geostrophic current <https://en.wikipedia.org/wiki/Geostrophic_current>`_ computations over the challenger datasets and the `GLO12 analysis dataset <https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024>`_.
 
 The geostrophic currents are computed using sea surface height above geoid with an Earth rotation rate of 7.2921e-5 s⁻¹, an Earth radius of 6371 km and a gravity of 9.81 m/s². Latitudes within 5° of the Equator are excluded, where the Coriolis parameter vanishes and altimetry products switch to an equatorial formulation (`Lagerloef et al., 1999 <https://doi.org/10.1029/1999JC900197>`_).
 
 Deviation of Lagrangian trajectories compared to GLO12 analysis
-**********************************************************************************************
+----------------------------------------------------------------------------------------------
 
 The deviation in kilometers between the two sets of drifting particles computed over the challenger datasets and the `GLO12 analysis dataset <https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024>`_.
 
