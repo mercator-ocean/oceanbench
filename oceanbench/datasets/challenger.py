@@ -19,7 +19,10 @@ def glo12(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the GLO12 challenger dataset.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -51,7 +54,10 @@ def glo12_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.
     """
     Open the GLO12 challenger dataset interpolated to the 1 degree resolution.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -84,7 +90,10 @@ def glo36v1(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset
     """
     Open the GLO36V1 challenger dataset.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -116,7 +125,10 @@ def glonet(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the GLONET challenger dataset.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -158,7 +170,10 @@ def glonet_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
     """
     Open the GLONET challenger dataset interpolated to the 1 degree resolution.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -201,7 +216,10 @@ def xihe(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the XiHe challenger dataset.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -237,7 +255,10 @@ def xihe_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.D
     """
     Open the XiHe challenger dataset interpolated to the 1 degree resolution.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -274,7 +295,10 @@ def wenhai(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the WenHai challenger dataset.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -310,7 +334,10 @@ def wenhai_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
     """
     Open the WenHai challenger dataset interpolated to the 1 degree resolution.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -347,7 +374,10 @@ def langya(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the LangYa challenger dataset.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -383,7 +413,10 @@ def langya_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
     """
     Open the LangYa challenger dataset interpolated to the 1 degree resolution.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -422,7 +455,10 @@ def glo12_persistence(first_day_datetimes: list[datetime] | None = None) -> xarr
 
     Repeats the GLO12 nowcast for every lead day. Any useful forecast should beat it.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -468,7 +504,10 @@ def glo12_persistence_1_degree(first_day_datetimes: list[datetime] | None = None
     """
     Open the GLO12 persistence baseline challenger dataset interpolated to 1 degree.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -516,7 +555,10 @@ def hclimrep(first_day_datetimes: list[datetime] | None = None) -> xarray.Datase
     """
     Open the HClimRep challenger dataset.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -553,7 +595,10 @@ def hclimrep_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarr
     """
     Open the HClimRep challenger dataset interpolated to the 1 degree resolution.
 
-    ``first_day_datetimes`` restricts it to those forecast start dates (all benchmark start dates by default).
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
