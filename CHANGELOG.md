@@ -17,10 +17,6 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
-Forecast stores are never overwritten: refreshed forecasts go to new stores. A patch release
-that reads the refreshed or added challenger follows, so every published report can be
-reproduced with a released version.
-
 ## 0.6.0 - 2026-10-05
 
 **Scores:** every table changes for every challenger (see Changed and Fixed).
