@@ -17,14 +17,14 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
-## Unreleased
+## 0.6.0 - 2026-10-05
 
 **Scores:** every table changes for every challenger (see Changed and Fixed).
 
 ### Challengers
 
-- 2026-09-11: GLO12 persistence, which repeats the GLO12 nowcast for every lead day ([#297](https://github.com/mercator-ocean/oceanbench/pull/297)).
-- 2026-10-01: LangYa forecasts are read from corrected stores ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
+- 2026-10-05: GLO12 persistence added: a baseline that repeats the GLO12 nowcast for every lead day ([#297](https://github.com/mercator-ocean/oceanbench/pull/297)).
+- 2026-10-05: LangYa forecasts are read from corrected stores. In the old ones, every row north of 5°N sat one grid row too far south ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
 
 ### Changed
 
@@ -36,7 +36,7 @@ and the affected reports are re-published (never silently overwritten).
 
 - Class IV, Lagrangian and geostrophic currents handle the dateline on global grids ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
 - LangYa sea level anomalies used only part of its grid ([#332](https://github.com/mercator-ocean/oceanbench/pull/332)).
-- Class IV salinity no longer drops observations in shallow water ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
+- Class IV salinity is interpolated linearly between the two model levels around each observation, like the other variables, so observations in shallow water are no longer dropped ([#321](https://github.com/mercator-ocean/oceanbench/pull/321)).
 - Class IV tables show missing challenger values instead of dropping them ([#329](https://github.com/mercator-ocean/oceanbench/pull/329)).
 - Geostrophic currents exclude 5 degrees around the equator instead of 0.5 ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
 - Lagrangian deviation scores the last lead day ([#334](https://github.com/mercator-ocean/oceanbench/pull/334)).
@@ -46,16 +46,22 @@ and the affected reports are re-published (never silently overwritten).
 ### Added
 
 - `Observations` and `Missing` columns in the Class IV tables and a `Missing fraction` column in the gridded tables ([#321](https://github.com/mercator-ocean/oceanbench/pull/321), [#329](https://github.com/mercator-ocean/oceanbench/pull/329), [#333](https://github.com/mercator-ocean/oceanbench/pull/333)).
-- Challenger functions take an optional list of forecast start dates ([#303](https://github.com/mercator-ocean/oceanbench/pull/303)).
+- Challenger functions take an optional list of first forecast days, to open only some weeks ([#303](https://github.com/mercator-ocean/oceanbench/pull/303)).
+- `hclimrep` and `glo12_persistence` challenger functions, each with a 1 degree version ([#297](https://github.com/mercator-ocean/oceanbench/pull/297), [#319](https://github.com/mercator-ocean/oceanbench/pull/319)).
 
-## 0.5.1 - 2026-09-02
+### Reports
+
+- Official reports: `public/evaluation-reports/0.6.0/`
+
+## 0.5.1 - 2026-09-07
 
 **Scores:** unchanged vs 0.5.0. Data paths only.
 
 ### Challengers
 
 - 2026-09-15: HClimRep added: a machine-learning model from AWI (WeatherGenerator fine-tuned on
-  GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts and ERA5 atmospheric fields.
+  GLORYS) producing 10-day global ocean forecasts initialized from GLO12 nowcasts and ERA5 atmospheric fields. The `hclimrep` function ships in 0.6.0 ([#319](https://github.com/mercator-ocean/oceanbench/pull/319)).
+- 2026-10-05: LangYa 0.5.0 reports re-published from the corrected stores, which the package reads from 0.6.0 ([#339](https://github.com/mercator-ocean/oceanbench/pull/339)).
 
 ### Changed
 
@@ -80,7 +86,7 @@ every challenger. See the
 
 - Reference latitude and longitude coordinates are snapped to the challenger grid with a 1e-4 degree nearest-neighbour tolerance before grid-averaged RMSD is computed, instead of relying on exact coordinate equality ([#308](https://github.com/mercator-ocean/oceanbench/issues/308), [#305](https://github.com/mercator-ocean/oceanbench/issues/305)).
 - Spatial alignment now raises an explicit error when it is ambiguous, or when fewer than 99.9% of the challenger grid points can be matched, instead of silently producing a misaligned comparison.
-- Class IV vertical interpolation supports up to 128 depth levels instead of 64; the depth level count is no longer encoded in a fixed-width integer ([#307](https://github.com/mercator-ocean/oceanbench/issues/307)).
+- Class IV vertical interpolation supports up to 128 depth levels instead of 64. The depth level count is no longer encoded in a fixed-width integer ([#307](https://github.com/mercator-ocean/oceanbench/issues/307)).
 
 ### Reports
 
@@ -125,7 +131,7 @@ IBI SLA and all other scores are unchanged.
 
 **Scores:** GLO12, GLONET, XiHe and WenHai change vs 0.2.0. The GLONET, XiHe and WenHai
 forecasts were recomputed with updated GLO12 nowcast initial conditions and IFS atmospheric
-forcings (WenHai substantially, correcting the surface forcing in #269; GLONET and XiHe
+forcings (WenHai substantially, correcting the surface forcing in #269, and GLONET and XiHe
 slightly). GLO12 now uses the full GLO12 operational forecast (50 depth levels). Methodology
 is unchanged from 0.2.0.
 
@@ -152,7 +158,7 @@ observation realignment change computed scores. 1-degree challenger scores added
 ### Added
 
 - 1-degree evaluation track with 1-degree challenger and reference datasets (`glo12_1_degree`, `glonet_1_degree`, `wenhai_1_degree`, `xihe_1_degree`).
-- Weekly GLO12 nowcast and IFS forcing input datasets covering 2023-2025, exposed via `oceanbench.datasets.input`; see the [input datasets documentation](https://oceanbench.readthedocs.io/en/latest/input-datasets-for-oceanbench-challenger-evaluation.html).
+- Weekly GLO12 nowcast and IFS forcing input datasets covering 2023-2025, exposed via `oceanbench.datasets.input`. See the [input datasets documentation](https://oceanbench.readthedocs.io/en/latest/input-datasets-for-oceanbench-challenger-evaluation.html).
 - Historical version selector on the scores website, with report discovery driven by a published version index.
 
 ### Changed
