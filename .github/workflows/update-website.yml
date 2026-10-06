@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       expectedContent:
-        description: 'Text the deployed website must contain to be healthy. Empty only checks that it answers.'
+        description: 'Text the deployed website must contain to be healthy. Empty checks that it contains "OceanBench".'
         required: false
         default: ''
         type: string
