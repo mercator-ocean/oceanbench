@@ -118,3 +118,6 @@ deploy-documentation-locally:
 
 deploy-website-locally:
 	quarto preview website
+
+deploy-website-on-edito:
+	./edito/deploy-website.sh
