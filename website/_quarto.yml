@@ -5,7 +5,9 @@
 project:
   type: website
   pre-render: python download_reports.py
-  post-render: python generate_report_redirects.py
+  post-render:
+    - python generate_report_redirects.py
+    - python publish_scores.py
   resources:
     - assets/land-110m.json
     - assets/argo-profiler.svg

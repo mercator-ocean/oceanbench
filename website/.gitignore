@@ -7,5 +7,6 @@
 # /_result_tables/
 /index_files/
 /reports/
+/scores/
 
 **/*.quarto_ipynb

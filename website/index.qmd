@@ -39,12 +39,12 @@ For the 1 degree track, the interpolation method used for challengers, the corre
 ```{python}
 #| output: false
 
-import json
 import os
 from helpers.s3_discovery import available_versions, default_version, discover_downloaded_reports
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
 from helpers.challenger_metadata import challenger_label, challenger_note, challenger_category
 from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
+from helpers.scores_payload import SCORES_DIRECTORY, scores_file_path, scores_payload
 
 def _load_scores(version, challenger_name, region_id, strict):
     local_path = os.path.join("reports", version, f"{challenger_name}.{region_id}.report.ipynb")
@@ -112,19 +112,21 @@ version_bundles = {
 if resolved_default_version not in version_bundles:
     resolved_default_version = next(iter(version_bundles), "")
 
-scores_json = json.dumps({
-    "versions": version_bundles,
-    "version_order": list(version_bundles.keys()),
-    "default_version": resolved_default_version,
-    "metric_titles": METRIC_TITLES,
-    "sections": SECTIONS,
-})
+payload = scores_payload(version_bundles, resolved_default_version, METRIC_TITLES, SECTIONS)
+
+def _write_scores_file(version, serialized_scores):
+    with open(scores_file_path(version), "w", encoding="utf-8") as file:
+        file.write(serialized_scores)
+
+os.makedirs(SCORES_DIRECTORY, exist_ok=True)
+for version, serialized_scores in payload.deferred.items():
+    _write_scores_file(version, serialized_scores)
 ```
 
 ```{python}
 #| output: asis
 
-print(f'<script type="application/json" id="scores-data">{scores_json}</script>')
+print(f'<script type="application/json" id="scores-data">{payload.embedded}</script>')
 ```
 
 ::: {#all-scores}
