@@ -9,9 +9,27 @@ on:
       - main
     paths:
       - website/**
+  workflow_dispatch:
+    inputs:
+      expectedContent:
+        description: 'Text the deployed website must contain to be healthy. Empty only checks that it answers.'
+        required: false
+        default: ''
+        type: string
+concurrency:
+  group: update-website-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   update-website:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - name: curl /update
-        run: curl -fsS --max-time 10 https://oceanbench.lab.dive.edito.eu/update || true
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Deploy website on EDITO
+        env:
+          BRANCH: ${{ github.ref_name }}
+          EXPECTED_CONTENT: ${{ inputs.expectedContent }}
+          EDITO_ACCESS_TOKEN: ${{ secrets.EDITO_ACCESS_TOKEN }}
+          EDITO_OFFLINE_TOKEN: ${{ secrets.EDITO_OFFLINE_TOKEN }}
+        run: make deploy-website-on-edito

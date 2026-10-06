@@ -131,7 +131,7 @@ print(f'<script type="application/json" id="scores-data">{scores_json}</script>'
 
 ## Comparison to observations
 
-Absolute RMSD scores against in-situ and satellite observations (Class IV validation). The colors denote % difference to the selected baseline. See the [evaluation method](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html#evaluation-methods-observations).
+Absolute RMSD scores against 2024 [Argo profiles and surface drifters](https://data.marine.copernicus.eu/product/INSITU_GLO_PHY_UV_DISCRETE_NRT_013_048) (temperature, salinity, velocity) and [along-track altimetry](https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L3_MY_008_062) (sea level anomaly) observations (Class IV validation). The colors denote % difference to the selected baseline. See the [evaluation method](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html#evaluation-methods-observations).
 
 <div id="observations-scores"></div>
 
