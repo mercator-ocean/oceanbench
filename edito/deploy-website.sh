@@ -28,7 +28,7 @@ readonly GIT_REPOSITORY="${GIT_REPOSITORY:-https://github.com/mercator-ocean/oce
 readonly GIT_TOKEN="${GIT_TOKEN:-}"
 readonly EDITO_ACCESS_TOKEN="${EDITO_ACCESS_TOKEN:-}"
 readonly EDITO_OFFLINE_TOKEN="${EDITO_OFFLINE_TOKEN:-}"
-readonly EXPECTED_CONTENT="${EXPECTED_CONTENT:-}"
+readonly EXPECTED_CONTENT="${EXPECTED_CONTENT:-OceanBench}"
 readonly CPU_REQUEST="${CPU_REQUEST:-100m}"
 readonly MEMORY_REQUEST="${MEMORY_REQUEST:-1Gi}"
 readonly CPU_LIMIT="${CPU_LIMIT:-1000m}"
@@ -143,7 +143,8 @@ create_or_update_service() {
 }
 
 serves_expected_content() {
-    curl -fsS --max-time 10 "${SERVICE_URL}/" 2> /dev/null | grep -q "${EXPECTED_CONTENT}"
+    local page
+    page="$(curl -fsS --max-time 10 "${SERVICE_URL}/" 2> /dev/null)" && grep -qF -- "${EXPECTED_CONTENT}" <<< "${page}"
 }
 
 wait_until_healthy() {
