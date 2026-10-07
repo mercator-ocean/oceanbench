@@ -271,8 +271,12 @@ function titleCase(text) {
   return text.replace(/(^|\s)\w/g, (character) => character.toUpperCase());
 }
 
-function formatVariableHeader(variable, unit, standardName, metricKey) {
-  const displayName = titleCase(variable);
+function sensorIconHtml(sensor) {
+  return sensor ? `<span class="source-icon ${sensor}" role="img" aria-label="${SENSOR_LABELS[sensor]}" title="${SENSOR_LABELS[sensor]}"></span>` : "";
+}
+
+function formatVariableHeader(variable, unit, standardName, metricKey, sensor) {
+  const displayName = `${titleCase(variable)}${sensorIconHtml(sensor)}`;
   const metricLabel = metricKey.startsWith("rmsd") ? `RMSE (${unit})` : `(${unit})`;
   let header = `${displayName}<br><span class="metric-label">${metricLabel}</span>`;
   if (standardName && standardName !== "unknown") {
@@ -517,11 +521,31 @@ function scheduleScrollSpyRefresh() {
   });
 }
 
+const SENSOR_LABELS = {
+  "argo-profiler": "Argo profiler",
+  "drifter-buoy": "Surface drifter",
+  satellite: "Satellite altimetry",
+  "model-grid-globe": "Model",
+};
+
+const OBSERVATION_SENSORS = ["argo-profiler", "drifter-buoy", "satellite"];
+const MODEL_SENSORS = ["model-grid-globe"];
+
+function sensorIconsHtml(sensors) {
+  return `<span class="source-icons" aria-hidden="true">${sensors.map((sensor) => `<span class="source-icon ${sensor}"></span>`).join("")}</span>`;
+}
+
+const SECTION_ICONS_HTML = {
+  observations: sensorIconsHtml(OBSERVATION_SENSORS),
+  reanalysis: sensorIconsHtml(MODEL_SENSORS),
+  analysis: sensorIconsHtml(MODEL_SENSORS),
+};
+
 function buildTabsInnerHtml(sections) {
   let markup = "";
   for (const sectionKey of orderedSectionKeys(sections)) {
     const isActive = sectionKey === activeSection;
-    markup += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${titleCase(sectionKey)}</a>`;
+    markup += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${titleCase(sectionKey)}${SECTION_ICONS_HTML[sectionKey] || ""}</a>`;
   }
   return markup;
 }
@@ -808,6 +832,7 @@ function renderDepthMetric(
         groupVariables,
         baseline,
         group.show_depth_label || false,
+        group.variable_sensors || {},
       );
     }).join("");
   }
@@ -819,7 +844,7 @@ function renderDepthMetric(
 }
 
 function renderDepthGroup(
-  baselineScore, orderedNames, challengers, regionId, metricKey, depths, variables, baseline, showDepthLabelForSingleDepth = false,
+  baselineScore, orderedNames, challengers, regionId, metricKey, depths, variables, baseline, showDepthLabelForSingleDepth = false, variableSensors = {},
 ) {
   if (variables.length === 0 || depths.length === 0) return "";
 
@@ -835,7 +860,7 @@ function renderDepthGroup(
     ) || referenceDepth;
     const unit = getUnit(baselineScore, sourceDepth, variable);
     const standardName = getStandardName(baselineScore, sourceDepth, variable);
-    thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, standardName, metricKey)}</th>`;
+    thead += `<th class="var-header" colspan="${leadDays.length}">${formatVariableHeader(variable, unit, standardName, metricKey, variableSensors[variable])}</th>`;
   }
   thead += `</tr><tr><th class="model-col lead-day-label">Lead days</th>`;
   for (const variable of variables) {

@@ -89,9 +89,23 @@ SECTIONS = {
         "depth_metric": _OBSERVATIONS_METRIC_KEY,
         "flat_metrics": [],
         "depth_groups": [
-            {"depths": ["0-5m", "5-100m", "100-300m", "300-600m"], "variables": ["temperature", "salinity"]},
-            {"depths": ["Surface"], "variables": ["temperature", "sea level anomaly"], "show_depth_label": True},
-            {"depths": ["15m"], "variables": ["zonal current", "meridional current"], "show_depth_label": True},
+            {
+                "depths": ["0-5m", "5-100m", "100-300m", "300-600m"],
+                "variables": ["temperature", "salinity"],
+                "variable_sensors": {"temperature": "argo-profiler", "salinity": "argo-profiler"},
+            },
+            {
+                "depths": ["Surface"],
+                "variables": ["temperature", "sea level anomaly"],
+                "variable_sensors": {"temperature": "drifter-buoy", "sea level anomaly": "satellite"},
+                "show_depth_label": True,
+            },
+            {
+                "depths": ["15m"],
+                "variables": ["zonal current", "meridional current"],
+                "variable_sensors": {"zonal current": "drifter-buoy", "meridional current": "drifter-buoy"},
+                "show_depth_label": True,
+            },
         ],
     }
 }
