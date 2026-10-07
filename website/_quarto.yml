@@ -18,6 +18,7 @@ project:
     - assets/github.svg
     - assets/copernicus-marine.svg
     - external-links.js
+    - edito-widget.js
 website:
   title: "OceanBench"
   favicon: favicon-light.png
@@ -50,4 +51,5 @@ format:
       dark: [darkly, theme-dark.scss]
     css: styles.css
     include-after-body:
-      text: <script src="external-links.js"></script>
+      - text: <script src="external-links.js"></script>
+      - text: <script src="edito-widget.js"></script>
