@@ -1214,9 +1214,17 @@ function attachControlListeners() {
     versionSelect.addEventListener("change", () => {
       const selectedVersion = versionSelect.value;
       if (!selectedVersion || selectedVersion === activeVersion) return;
+      const previousVersion = activeVersion;
       activeVersion = selectedVersion;
-      applyActiveVersion();
-      renderAllTables();
+      ensureActiveVersionLoaded()
+        .catch((error) => {
+          console.error(error);
+          activeVersion = previousVersion;
+        })
+        .then(() => {
+          applyActiveVersion();
+          renderAllTables();
+        });
     });
   }
 
@@ -1362,8 +1370,26 @@ function getActiveVersionData(data) {
   return data.versions[activeVersion] || null;
 }
 
+function loadVersionData(data, version) {
+  return fetch(`${data.scores_directory}/${encodeURIComponent(version)}.json`)
+    .then((response) => {
+      if (!response.ok) throw new Error(`Scores of version ${version} unavailable: HTTP ${response.status}`);
+      return response.json();
+    })
+    .then((versionData) => {
+      data.versions[version] = versionData;
+    });
+}
+
+function ensureActiveVersionLoaded() {
+  const data = ensureParsedData();
+  if (!data || !activeVersion || data.versions[activeVersion]) return Promise.resolve();
+  return loadVersionData(data, activeVersion);
+}
+
 function applyActiveVersion() {
-  const versionData = getActiveVersionData(parsedData) || {};
+  const versionData = getActiveVersionData(parsedData);
+  if (!versionData) return;
   challengerLabels = versionData.challenger_labels || {};
   challengerNotes = versionData.challenger_notes || {};
   challengerCategories = versionData.challenger_categories || {};
@@ -1690,11 +1716,18 @@ function init() {
     activeSection = initialSection;
   }
   applyUrlStateFromLocation();
-  renderAllTables();
-
-  if (initialSection) {
-    navigateToSection(initialSection, { replaceHistory: true, updateHash: true });
-  }
+  ensureActiveVersionLoaded()
+    .catch((error) => {
+      console.error(error);
+      activeVersion = resolveDefaultVersion(parsedData);
+    })
+    .then(() => {
+      applyActiveVersion();
+      renderAllTables();
+      if (initialSection) {
+        navigateToSection(initialSection, { replaceHistory: true, updateHash: true });
+      }
+    });
 
   window.addEventListener("hashchange", () => {
     const newSection = readSectionFromHash();

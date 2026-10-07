@@ -14,7 +14,7 @@ if ! command -v quarto > /dev/null; then
     dpkg -i /tmp/quarto.deb
 fi
 
-rm -rf reports _site
+rm -rf reports scores _site
 
 pip install -r requirements.txt
 quarto render --to html
