@@ -8,6 +8,14 @@ project:
   post-render: python generate_report_redirects.py
   resources:
     - assets/land-110m.json
+    - assets/argo-profiler.svg
+    - assets/drifter-buoy.svg
+    - assets/satellite.svg
+    - assets/model-grid-globe.svg
+    - assets/external-link-arrow.svg
+    - assets/github.svg
+    - assets/copernicus-marine.svg
+    - external-links.js
 website:
   title: "OceanBench"
   favicon: favicon-light.png
@@ -39,3 +47,5 @@ format:
       light: [flatly, theme-light.scss]
       dark: [darkly, theme-dark.scss]
     css: styles.css
+    include-after-body:
+      text: <script src="external-links.js"></script>
