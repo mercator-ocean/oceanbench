@@ -64,7 +64,7 @@ _GLO12_PERSISTENCE = {
     "organisation_url": "https://mercator-ocean.eu",
     "method": "Baseline",
     "forecast_type": "Deterministic",
-    "initial_conditions": "GLO12 nowcast",
+    "initial_conditions": "GLO12",
     "resolution": "1/12°",
 }
 
