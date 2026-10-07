@@ -129,6 +129,12 @@ for version, serialized_scores in payload.deferred.items():
 print(f'<script type="application/json" id="scores-data">{payload.embedded}</script>')
 ```
 
+```{python}
+#| output: asis
+
+print(f'<script type="application/json" id="cf-standard-name-definitions">{open("cf_standard_name_definitions.json", encoding="utf-8").read()}</script>')
+```
+
 ::: {#all-scores}
 
 ## Comparison to observations <span class="source-icons"><span class="source-icon argo-profiler" role="img" aria-label="Argo profiler" title="Argo profiler"></span><span class="source-icon drifter-buoy" role="img" aria-label="Surface drifter" title="Surface drifter"></span><span class="source-icon satellite" role="img" aria-label="Satellite altimetry" title="Satellite altimetry"></span></span> {#comparison-to-observations}

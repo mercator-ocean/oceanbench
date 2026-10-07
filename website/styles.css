@@ -1557,3 +1557,8 @@ a.external-link[href*="github.com"]::after {
 a.external-link[href*="marine.copernicus.eu"]::after {
   --link-icon-url: url("assets/copernicus-marine.svg");
 }
+
+.score-table .standard-name[title] {
+  cursor: help;
+  text-decoration: underline dotted;
+}
