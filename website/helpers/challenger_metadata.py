@@ -59,9 +59,9 @@ _LANGYA = {
 
 _GLO12_PERSISTENCE = {
     "label": "GLO12 persistence",
-    "url": "https://github.com/mercator-ocean/oceanbench",
-    "organisation": "OceanBench",
-    "organisation_url": "https://github.com/mercator-ocean/oceanbench",
+    "url": "https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024",
+    "organisation": "Mercator Ocean",
+    "organisation_url": "https://mercator-ocean.eu",
     "method": "Baseline",
     "forecast_type": "Deterministic",
     "initial_conditions": "GLO12 nowcast",
