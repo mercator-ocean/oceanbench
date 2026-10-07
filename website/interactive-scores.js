@@ -275,12 +275,27 @@ function sensorIconHtml(sensor) {
   return sensor ? `<span class="source-icon ${sensor}" role="img" aria-label="${SENSOR_LABELS[sensor]}" title="${SENSOR_LABELS[sensor]}"></span>` : "";
 }
 
+let standardNameDefinitions = null;
+
+function standardNameDefinition(standardName) {
+  standardNameDefinitions ??= JSON.parse(
+    document.getElementById("cf-standard-name-definitions")?.textContent || "{}",
+  );
+  return standardNameDefinitions[standardName] || "";
+}
+
+function standardNameHtml(standardName) {
+  const definition = standardNameDefinition(standardName);
+  const titleAttribute = definition ? ` title="${escapeAttribute(definition)}"` : "";
+  return `<span class="standard-name"${titleAttribute}>${standardName}</span>`;
+}
+
 function formatVariableHeader(variable, unit, standardName, metricKey, sensor) {
   const displayName = `${titleCase(variable)}${sensorIconHtml(sensor)}`;
   const metricLabel = metricKey.startsWith("rmsd") ? `RMSE (${unit})` : `(${unit})`;
   let header = `${displayName}<br><span class="metric-label">${metricLabel}</span>`;
   if (standardName && standardName !== "unknown") {
-    header += `<br><span class="standard-name">${standardName}</span>`;
+    header += `<br>${standardNameHtml(standardName)}`;
   }
   return header;
 }
@@ -1694,7 +1709,7 @@ function attachTapTooltipClicks() {
   tapTooltipClicksAttached = true;
   document.addEventListener("click", (event) => {
     const target = event.target.closest(
-      ".score-table td.score-value-cell, .challenger-note-marker",
+      ".score-table td.score-value-cell, .challenger-note-marker, .score-table .standard-name[title]",
     );
     if (!target) {
       closeTapTooltip();
