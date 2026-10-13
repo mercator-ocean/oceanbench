@@ -165,6 +165,7 @@ def _evaluate_one_target(
             published_challengers_path=published_base_url() + "challengers.json",
             metrics=args.metrics,
             viewer_artifacts=args.viewer_artifacts,
+            viewer_only=args.viewer_only,
             s3_bucket=s3_bucket,
             s3_prefix=s3_prefix,
             s3_endpoint=args.s3_endpoint,
@@ -272,6 +273,14 @@ def _add_evaluate_parser(subparsers: "argparse._SubParsersAction") -> None:
         help=(
             "Also build the map viewer: its serving artifacts (Class-4 match-up parquet, eddy census, "
             "field pyramid, year-mode JSON) and a local viewer site you can open. Off by default"
+        ),
+    )
+    parser.add_argument(
+        "--viewer-only",
+        action="store_true",
+        help=(
+            "Build the map viewer without scoring, for a forecast you already scored. Writes no scores, "
+            "so your model gets no line in the viewer's score panel"
         ),
     )
     parser.add_argument(

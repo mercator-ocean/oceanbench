@@ -491,6 +491,77 @@ def per_start_agreement(local_scores: pandas.DataFrame, published_scores: pandas
     return merged
 
 
+def _build_viewer(
+    forecast_dataset: xarray.Dataset,
+    sources: EvaluationSources,
+    *,
+    challenger_slug: str,
+    challenger_version: str,
+    output_directory: str,
+):
+    from oceanbench.packs.local_viewer import build_local_viewer
+    from oceanbench.publish.viewer_artifacts import write_viewer_artifacts
+
+    matchups_context = records.RunContext(
+        challenger=challenger_slug,
+        challenger_version=challenger_version,
+        year=sources.year,
+        region=sources.region,
+        oceanbench_version=OCEANBENCH_VERSION,
+    )
+    regional_forecast = subset_dataset_to_region(forecast_dataset, sources.region)
+    eddy_forecast = subset_dataset_to_region(
+        forecast_dataset, padded_region(sources.region, REGIONAL_CENSUS_MARGIN_DEGREES)
+    )
+    try:
+        with _sources_runtime_configuration(sources):
+            observation_dataset = subset_dataset_to_region(
+                sources.observation_opener(regional_forecast), sources.region
+            )
+            viewer_artifacts_result = write_viewer_artifacts(
+                forecast_dataset=regional_forecast,
+                observation_dataset=observation_dataset,
+                region=sources.region,
+                dataset_slug=challenger_slug,
+                output_directory=output_directory,
+                year=sources.year,
+                matchups_context=matchups_context,
+                eddy_forecast_dataset=eddy_forecast,
+            )
+        flags = list(viewer_artifacts_result.flags)
+    except Exception as error:  # noqa: BLE001 - the map itself must still be buildable
+        viewer_artifacts_result = None
+        flags = [f"viewer serving artifacts skipped: {error}"]
+
+    # The serving artifacts already wrote the field pyramid under viewer/data/; the local site
+    # adopts it rather than rebuilding the same tiles, and builds its own if they were skipped.
+    viewer_result = build_local_viewer(
+        forecast_dataset,
+        output_directory=output_directory,
+        year=sources.year,
+        dataset_slug=challenger_slug,
+        label=YOUR_MODEL_DISPLAY_NAME + " (local)" if challenger_slug == YOUR_MODEL_SLUG else challenger_slug,
+        pyramid_zarr_path=viewer_artifacts_result.pyramid_zarr_path if viewer_artifacts_result else None,
+        pyramid_manifest_path=viewer_artifacts_result.pyramid_manifest_path if viewer_artifacts_result else None,
+    )
+    return viewer_artifacts_result, viewer_result, flags
+
+
+def _viewer_result_fields(viewer_artifacts_result, viewer_result) -> dict:
+    return dict(
+        matchup_parquet_path=viewer_artifacts_result.matchup_parquet_path if viewer_artifacts_result else None,
+        eddy_census_path=viewer_artifacts_result.eddy_census_path if viewer_artifacts_result else None,
+        year_error_geography_path=(
+            viewer_artifacts_result.year_error_geography_path if viewer_artifacts_result else None
+        ),
+        year_rmsd_by_start_path=viewer_artifacts_result.year_rmsd_by_start_path if viewer_artifacts_result else None,
+        viewer_directory=viewer_result.viewer_directory if viewer_result else None,
+        viewer_datasets_path=viewer_result.datasets_path if viewer_result else None,
+        viewer_zarr_path=viewer_result.zarr_path if viewer_result else None,
+        viewer_manifest_path=viewer_result.manifest_path if viewer_result else None,
+    )
+
+
 def evaluate(
     target: str,
     *,
@@ -502,6 +573,7 @@ def evaluate(
     published_challengers_path: str | None = None,
     metrics: tuple[str, ...] | list[str] | None = None,
     viewer_artifacts: bool = False,
+    viewer_only: bool = False,
     s3_bucket: str | None = None,
     s3_prefix: str | None = None,
     s3_endpoint: str | None = None,
@@ -518,10 +590,16 @@ def evaluate(
 
     Scores are the only default output. ``viewer_artifacts`` additionally builds everything the map
     needs (Class-4 match-up parquet, eddy census, field pyramid, year-mode JSON) plus a local
-    viewer site that opens over a plain file server. When ``s3_bucket`` is set the whole
-    ``output_directory`` tree is uploaded to ``s3://<s3_bucket>/<s3_prefix>/`` using the existing
-    publish machinery.
+    viewer site that opens over a plain file server. ``viewer_only`` builds the same viewer and
+    skips scoring entirely, for a forecast already scored: no scores, summary or scorecard are
+    written, and the viewer's score panel shows only the published challengers. When
+    ``s3_bucket`` is set the whole ``output_directory`` tree is uploaded to
+    ``s3://<s3_bucket>/<s3_prefix>/`` using the existing publish machinery.
     """
+    if viewer_only and metrics is not None:
+        raise ValueError("--viewer-only skips scoring, so it takes no --metrics")
+    if viewer_only and s3_bucket is not None:
+        raise ValueError("--viewer-only builds a local viewer, it cannot be combined with --s3-bucket")
     sources = _resolve_sources(offline_references_directory, region, year)
     kind = sources.kind
     year = sources.year
@@ -545,6 +623,16 @@ def evaluate(
         if not len(selected_start_indices):
             raise ValueError("the forecast and the offline reference bundle have no start dates in common")
         forecast_dataset = forecast_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): selected_start_indices})
+
+    if viewer_only:
+        viewer_artifacts_result, viewer_result, viewer_flags = _build_viewer(
+            forecast_dataset,
+            sources,
+            challenger_slug=challenger_slug,
+            challenger_version=challenger_version,
+            output_directory=output_directory,
+        )
+        return EvaluateLocalResult(flags=viewer_flags, **_viewer_result_fields(viewer_artifacts_result, viewer_result))
 
     reference_openers = sources.reference_openers
     observation_opener = sources.observation_opener
@@ -624,48 +712,14 @@ def evaluate(
     viewer_result = None
     viewer_artifacts_result = None
     if viewer_artifacts:
-        from oceanbench.packs.local_viewer import build_local_viewer
-        from oceanbench.publish.viewer_artifacts import write_viewer_artifacts
-
-        matchups_context = records.RunContext(
-            challenger=challenger_slug,
-            challenger_version=challenger_version,
-            year=year,
-            region=region,
-            oceanbench_version=OCEANBENCH_VERSION,
-        )
-        regional_forecast = subset_dataset_to_region(forecast_dataset, region)
-        eddy_forecast = subset_dataset_to_region(
-            forecast_dataset, padded_region(region, REGIONAL_CENSUS_MARGIN_DEGREES)
-        )
-        try:
-            with _sources_runtime_configuration(sources):
-                observation_dataset = subset_dataset_to_region(observation_opener(regional_forecast), region)
-                viewer_artifacts_result = write_viewer_artifacts(
-                    forecast_dataset=regional_forecast,
-                    observation_dataset=observation_dataset,
-                    region=region,
-                    dataset_slug=challenger_slug,
-                    output_directory=output_directory,
-                    year=year,
-                    matchups_context=matchups_context,
-                    eddy_forecast_dataset=eddy_forecast,
-                )
-            flags.extend(viewer_artifacts_result.flags)
-        except Exception as error:  # noqa: BLE001 - the map itself must still be buildable
-            flags.append(f"viewer serving artifacts skipped: {error}")
-
-        # The serving artifacts already wrote the field pyramid under viewer/data/; the local site
-        # adopts it rather than rebuilding the same tiles, and builds its own if they were skipped.
-        viewer_result = build_local_viewer(
+        viewer_artifacts_result, viewer_result, viewer_flags = _build_viewer(
             forecast_dataset,
+            sources,
+            challenger_slug=challenger_slug,
+            challenger_version=challenger_version,
             output_directory=output_directory,
-            year=year,
-            dataset_slug=challenger_slug,
-            label=YOUR_MODEL_DISPLAY_NAME + " (local)" if challenger_slug == YOUR_MODEL_SLUG else challenger_slug,
-            pyramid_zarr_path=viewer_artifacts_result.pyramid_zarr_path if viewer_artifacts_result else None,
-            pyramid_manifest_path=viewer_artifacts_result.pyramid_manifest_path if viewer_artifacts_result else None,
         )
+        flags.extend(viewer_flags)
 
         if viewer_artifacts_result and viewer_artifacts_result.class4_bias_records:
             bias_frame = records.records_to_dataframe(viewer_artifacts_result.class4_bias_records)
@@ -717,15 +771,6 @@ def evaluate(
         baseline_scores=baseline_scores,
         skill_baseline=skill_baseline,
         flags=flags,
-        matchup_parquet_path=viewer_artifacts_result.matchup_parquet_path if viewer_artifacts_result else None,
-        eddy_census_path=viewer_artifacts_result.eddy_census_path if viewer_artifacts_result else None,
-        year_error_geography_path=(
-            viewer_artifacts_result.year_error_geography_path if viewer_artifacts_result else None
-        ),
-        year_rmsd_by_start_path=viewer_artifacts_result.year_rmsd_by_start_path if viewer_artifacts_result else None,
         published_prefix=published_prefix,
-        viewer_directory=viewer_result.viewer_directory if viewer_result else None,
-        viewer_datasets_path=viewer_result.datasets_path if viewer_result else None,
-        viewer_zarr_path=viewer_result.zarr_path if viewer_result else None,
-        viewer_manifest_path=viewer_result.manifest_path if viewer_result else None,
+        **_viewer_result_fields(viewer_artifacts_result, viewer_result),
     )

@@ -58,6 +58,7 @@ def test_evaluate_cli_has_only_the_approved_surface():
         "--year",
         "--metrics",
         "--viewer-artifacts",
+        "--viewer-only",
         "--offline-references",
         "--s3-bucket",
         "--s3-prefix",
@@ -549,6 +550,46 @@ def test_the_map_still_builds_when_the_serving_artifacts_fail(local_evaluation_f
 
     assert any("viewer serving artifacts skipped" in flag for flag in result.flags)
     assert Path(result.viewer_zarr_path, ".zmetadata").exists()
+
+
+def test_viewer_only_builds_the_whole_viewer_without_scoring(local_evaluation_fixture, tmp_path, monkeypatch):
+    from oceanbench.publish.viewer_artifacts import ViewerArtifactsResult
+
+    monkeypatch.setattr("oceanbench.packs.local_viewer._official_datasets", lambda: [])
+
+    def _refuse_to_score(*_args, **_keywords):
+        raise AssertionError("viewer-only must not score")
+
+    monkeypatch.setattr("oceanbench.packs.evaluate.run_challenger_scores", _refuse_to_score)
+    serving_calls = []
+    served = ViewerArtifactsResult(matchup_parquet_path="class4-matchups.parquet", eddy_census_path="eddies.json")
+
+    def _serve(**keywords):
+        serving_calls.append(keywords)
+        return served
+
+    monkeypatch.setattr("oceanbench.publish.viewer_artifacts.write_viewer_artifacts", _serve)
+
+    result = _run(local_evaluation_fixture, tmp_path, metrics=None, viewer_only=True)
+
+    output = tmp_path / "out"
+    assert result.scores_path is None
+    assert result.scorecard_path is None
+    assert not (output / "scores.parquet").exists()
+    assert not (output / "scores-summary.json").exists()
+    assert len(serving_calls) == 1
+    assert result.matchup_parquet_path == served.matchup_parquet_path
+    assert result.eddy_census_path == served.eddy_census_path
+    assert Path(result.viewer_zarr_path, ".zmetadata").exists()
+    assert Path(result.viewer_directory, "index.html").exists()
+    assert Path(result.viewer_directory, "data", "insights.json").exists()
+
+
+def test_viewer_only_rejects_metrics_and_upload(local_evaluation_fixture, tmp_path):
+    with pytest.raises(ValueError, match="no --metrics"):
+        _run(local_evaluation_fixture, tmp_path, viewer_only=True)
+    with pytest.raises(ValueError, match="--s3-bucket"):
+        _run(local_evaluation_fixture, tmp_path, metrics=None, viewer_only=True, s3_bucket="bucket")
 
 
 def test_scoring_a_published_challenger_needs_no_forecast_path(local_evaluation_fixture, tmp_path, monkeypatch):

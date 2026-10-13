@@ -58,6 +58,19 @@ Building it reads the current official viewer catalog, so `--viewer-artifacts` n
 Your own pyramid, scores and scorecard are then fully local; the official comparison layers
 are fetched from the public CloudFerro objects named by `datasets.json` as you browse them.
 
+### Viewer only, for a forecast you already scored
+
+`--viewer-only` builds the same viewer and skips scoring entirely:
+
+```sh
+oceanbench evaluate ./my-forecasts.zarr --viewer-only --output ./my-evaluation
+oceanbench view ./my-evaluation/viewer/data
+```
+
+The map, the differences, the Class-4 match-ups, the eddies and the error charts are all there,
+since the viewer builds its own match-ups. Only the viewer's score panel lacks a line for your
+model, because no scores are written. `--viewer-only` takes no `--metrics` and no `--s3-bucket`.
+
 ## Running without network: `--offline-references`
 
 `evaluate` reads its references and observations live from the bucket by default, and that is
@@ -144,6 +157,7 @@ sibling files nor load an ES module — both are blocked by the browser same-ori
 | `--year YEAR` | evaluation year (default: `2024`) |
 | `--metrics M [M ...]` | select metric families: `rmsd`, `mld`, `geostrophic`, `class4`, `lagrangian` (default: all) |
 | `--viewer-artifacts` | also build the map viewer and its serving artifacts (off by default) |
+| `--viewer-only` | build the map viewer without scoring, for a forecast already scored |
 | `--offline-references DIR` | read references and observations from a local directory instead of the live bucket |
 
 Published scores, challenger metadata, and viewer datasets use the official CloudFerro release.
