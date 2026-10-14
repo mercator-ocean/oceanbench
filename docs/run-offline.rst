@@ -16,24 +16,29 @@ Two steps
 
 The two nodes must share a file system, for example a scratch or work directory.
 
-1. On a node with internet access, run the evaluation once and keep the downloaded data:
+1. On a node with internet access, such as a login node, download the data the evaluation needs:
+
+   .. code-block:: bash
+
+      oceanbench stage path/to/challenger.py --stage-dir /shared/oceanbench-stage
+
+   This command only downloads data. It computes no score, so it is light enough for a login node.
+
+2. On the offline compute node, run the evaluation from the downloaded data:
 
    .. code-block:: bash
 
       oceanbench evaluate path/to/challenger.py --stage all --stage-dir /shared/oceanbench-stage --keep-stage
 
-2. On the offline node, run the same command:
+The evaluation finds everything in ``/shared/oceanbench-stage`` and does not download anything.
+It also writes a few small working files there, so the directory must be writable from the compute node.
 
-   .. code-block:: bash
-
-      oceanbench evaluate path/to/challenger.py --stage all --stage-dir /shared/oceanbench-stage --keep-stage
-
-The second run finds everything in ``/shared/oceanbench-stage`` and does not download anything.
+To evaluate a region, pass the same ``--region`` or ``--region-file`` option to both commands.
 
 What gets cached
 ****************
 
-With ``--stage all``, OceanBench writes these datasets to the stage directory:
+``oceanbench stage`` writes these datasets to the stage directory:
 
 * the reference datasets, GLORYS reanalysis and GLO12 analysis
 * the observations used by the Class IV scores
@@ -53,22 +58,23 @@ The cache belongs to one challenger
 The cached data depends on the challenger: its forecast dates, its number of lead days and its depths.
 Step 1 must use the same challenger file as step 2.
 If the challenger changes, run step 1 again so that the missing data gets downloaded.
+Data already in the stage directory is not downloaded again.
 
 Keep the cache
 **************
 
-``--keep-stage`` is required in step 1.
-Without it, a successful ``oceanbench evaluate`` deletes the stage directory at the end of the run, and the offline node finds nothing.
-Keep it in step 2 as well if you plan to run the evaluation again.
+``oceanbench stage`` never deletes the stage directory.
+A successful ``oceanbench evaluate`` deletes it at the end of the run unless ``--keep-stage`` is given.
+Keep ``--keep-stage`` in step 2 if you plan to evaluate the same challenger again without downloading everything again.
 
 Environment variables
 *********************
 
 The same settings can be given as environment variables, for example in a batch script:
 
-* ``OCEANBENCH_STAGE=all`` is the same as ``--stage all``. Several values can be separated by commas.
+* ``OCEANBENCH_STAGE=all`` is the same as ``--stage all`` for ``oceanbench evaluate``. Several values can be separated by commas. ``oceanbench stage`` always stages everything.
 * ``OCEANBENCH_STAGE_DIR=/shared/oceanbench-stage`` is the same as ``--stage-dir``.
-* ``OCEANBENCH_STAGE_MAX_WORKERS`` is the same as ``--stage-max-workers``, the number of parallel downloads in step 1.
+* ``OCEANBENCH_STAGE_MAX_WORKERS`` is the same as ``--stage-max-workers``, the number of parallel downloads.
 * ``OCEANBENCH_REMOTE_RETRIES`` is the same as ``--remote-retries``, the number of attempts for each remote read.
 
 Command line options take precedence over environment variables.
