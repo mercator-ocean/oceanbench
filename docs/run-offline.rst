@@ -33,7 +33,7 @@ The two nodes must share a file system, for example a scratch or work directory.
 The evaluation finds everything in ``/shared/oceanbench-stage`` and does not download anything.
 It also writes a few small working files there, so the directory must be writable from the compute node.
 
-To evaluate a region, pass the same ``--region`` or ``--region-file`` option to both commands.
+To evaluate a region, give both commands the same region, with ``--region``, ``--region-file`` or the ``OCEANBENCH_REGION`` environment variable.
 
 What gets cached
 ****************
@@ -76,6 +76,7 @@ The same settings can be given as environment variables, for example in a batch 
 * ``OCEANBENCH_STAGE_DIR=/shared/oceanbench-stage`` is the same as ``--stage-dir``.
 * ``OCEANBENCH_STAGE_MAX_WORKERS`` is the same as ``--stage-max-workers``, the number of parallel downloads.
 * ``OCEANBENCH_REMOTE_RETRIES`` is the same as ``--remote-retries``, the number of attempts for each remote read.
+* ``OCEANBENCH_REGION`` is the same as ``--region``.
 
 Command line options take precedence over environment variables.
 ``--keep-stage`` has no environment variable and must be passed on the command line.

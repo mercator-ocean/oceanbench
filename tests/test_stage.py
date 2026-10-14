@@ -12,6 +12,8 @@ import oceanbench.core.metrics as core_metrics
 import oceanbench.core.runtime_configuration as runtime_configuration
 import oceanbench.core.stage as stage
 from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
+from oceanbench.core.regions import resolve_region
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.runtime_configuration import STAGE_ALL_KEY, current_runtime_configuration
 
@@ -20,6 +22,8 @@ import numpy
 import xarray
 
 from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
+from oceanbench.core.regions import resolve_region
 
 challenger_dataset = xarray.Dataset(
     coords={
@@ -129,3 +133,22 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
 
     assert len(metric_functions) == 9
     assert metric_assets == staged_assets
+
+
+def test_stage_command_reads_the_region_from_the_environment_like_evaluate(challenger_file, monkeypatch) -> None:
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_REGION.value, "ibi")
+    _record_asset_openers(monkeypatch, stage, set())
+    monkeypatch.setattr(stage, "load_mean_dynamic_topography", lambda resolution: None)
+    subset_regions = []
+    monkeypatch.setattr(
+        stage,
+        "subset_dataset_to_region",
+        lambda dataset, region: subset_regions.append(region) or dataset,
+    )
+
+    stage.stage_challenger_assets(
+        str(challenger_file),
+        runtime_configuration.RuntimeConfiguration(staged_components=(STAGE_ALL_KEY,)),
+    )
+
+    assert subset_regions == [resolve_region("ibi")]

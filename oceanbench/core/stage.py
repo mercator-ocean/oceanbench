@@ -9,6 +9,7 @@ Every asset is opened through the same function the metrics call, so the stage b
 the entries a later ``oceanbench evaluate --stage all`` run finds.
 """
 
+from oceanbench.core.evaluate import resolve_evaluation_region
 from oceanbench.core.ocean_mask import ocean_mask
 from oceanbench.core.python2jupyter import _parse_challenger_python_code
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
@@ -31,7 +32,10 @@ def stage_challenger_assets(
     set_runtime_configuration(runtime_configuration)
     challenger_namespace: dict = {}
     exec(_parse_challenger_python_code(challenger_python_code_uri_or_local_path), challenger_namespace)
-    challenger_dataset = subset_dataset_to_region(challenger_namespace["challenger_dataset"], region)
+    challenger_dataset = subset_dataset_to_region(
+        challenger_namespace["challenger_dataset"],
+        resolve_evaluation_region(region),
+    )
 
     glorys_reanalysis_dataset(challenger_dataset)
     glo12_analysis_dataset(challenger_dataset)
