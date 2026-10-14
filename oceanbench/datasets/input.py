@@ -79,6 +79,8 @@ def ifs_forcings() -> xarray.Dataset:
         sowinu10            (first_day_datetime, lead_day_index, lat, lon) float32 82GB dask.array<chunksize=(1, 1, 640, 1280), meta=np.ndarray>
         sowinv10            (first_day_datetime, lead_day_index, lat, lon) float32 82GB dask.array<chunksize=(1, 1, 640, 1280), meta=np.ndarray>
         sp                  (first_day_datetime, lead_day_index, lat, lon) float32 82GB dask.array<chunksize=(1, 1, 640, 1280), meta=np.ndarray>
+        ssr                 (first_day_datetime, lead_day_index, lat, lon) float32 82GB dask.array<chunksize=(1, 1, 640, 1280), meta=np.ndarray>
+        strd                (first_day_datetime, lead_day_index, lat, lon) float32 82GB dask.array<chunksize=(1, 1, 640, 1280), meta=np.ndarray>
     """
 
     return input_datasets.ifs_forcings()
