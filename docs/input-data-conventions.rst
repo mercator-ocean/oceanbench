@@ -65,9 +65,9 @@ Whether the forecast is sampled hourly or every 6 hours is not established.
      - K
      - 2 m dewpoint temperature, daily mean. This is a temperature, not a humidity.
    * - ``sohumspe``
-     - ``2sh`` (174096)
+     - derived from ``2d`` and ``msl``
      - kg kg-1
-     - 2 m specific humidity, daily mean.
+     - 2 m specific humidity, computed from the 2 m dewpoint temperature and the mean sea level pressure, daily mean.
    * - ``skt``
      - ``skt`` (235)
      - K
