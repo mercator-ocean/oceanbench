@@ -15,7 +15,6 @@ from oceanbench.core.reference_depths import (
     reference_depth_grid_stage_variant,
     with_reference_depth_grid_metadata,
 )
-from oceanbench.core.references.mixed_layer_depth_reference import mixed_layer_depth_reference_dataset
 from oceanbench.core.remote_http import open_remote_multizarr, open_remote_zarr
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_reference_week_dataset
 
@@ -82,19 +81,6 @@ def _glorys_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.
     dataset = dataset.sel(depth=target_depths, method="nearest")
 
     return dataset
-
-
-def _glorys_1_12_temperature_and_salinity(first_day_datetime, days_count: int) -> Dataset:
-    first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
-    return copernicusmarine.open_dataset(
-        dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",
-        variables=[
-            StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value,
-            StandardVariable.SEA_WATER_SALINITY.value,
-        ],
-        start_datetime=first_day.strftime("%Y-%m-%dT00:00:00"),
-        end_datetime=(first_day + pandas.Timedelta(days=days_count - 1)).strftime("%Y-%m-%dT00:00:00"),
-    )
 
 
 def _prepare_glorys_1_12_week_dataset(
@@ -194,16 +180,3 @@ def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
     reference_dataset = open_dataset()
     _GLORYS_REANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
     return reference_dataset
-
-
-def glorys_reanalysis_mixed_layer_depth_dataset(challenger_dataset: Dataset) -> Dataset:
-    resolution = get_dataset_resolution(challenger_dataset)
-    if resolution == "one_degree":
-        return glorys_reanalysis_dataset(challenger_dataset)
-    return mixed_layer_depth_reference_dataset(
-        challenger_dataset,
-        dataset_name="glorys",
-        resolution=resolution,
-        open_twelfth_degree_week=_glorys_1_12_temperature_and_salinity,
-        open_quarter_degree_grid=lambda first_day_datetime: open_remote_zarr(_glorys_1_4_path(first_day_datetime)),
-    )

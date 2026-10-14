@@ -15,7 +15,6 @@ from oceanbench.core.reference_depths import (
     reference_depth_grid_stage_variant,
     with_reference_depth_grid_metadata,
 )
-from oceanbench.core.references.mixed_layer_depth_reference import mixed_layer_depth_reference_dataset
 from oceanbench.core.remote_http import open_remote_multizarr, open_remote_zarr
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_reference_week_dataset
 
@@ -111,25 +110,6 @@ def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.n
     dataset = merge([dataset_temperature, dataset_salinity, dataset_current, dataset_sea_surface_height])
 
     return dataset
-
-
-def _glo12_1_12_temperature_and_salinity(first_day_datetime, days_count: int) -> Dataset:
-    first_day = pandas.Timestamp(first_day_datetime).to_pydatetime()
-    start_datetime = first_day.strftime("%Y-%m-%dT00:00:00")
-    end_datetime = (first_day + pandas.Timedelta(days=days_count - 1)).strftime("%Y-%m-%dT00:00:00")
-    dataset_temperature = copernicusmarine.open_dataset(
-        dataset_id="cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m",
-        variables=[StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value],
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
-    )
-    dataset_salinity = copernicusmarine.open_dataset(
-        dataset_id="cmems_mod_glo_phy-so_anfc_0.083deg_P1D-m",
-        variables=[StandardVariable.SEA_WATER_SALINITY.value],
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
-    )
-    return merge([dataset_temperature, dataset_salinity])
 
 
 def _prepare_glo12_1_12_week_dataset(
@@ -229,16 +209,3 @@ def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
     reference_dataset = open_dataset()
     _GLO12_ANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
     return reference_dataset
-
-
-def glo12_analysis_mixed_layer_depth_dataset(challenger_dataset: Dataset) -> Dataset:
-    resolution = get_dataset_resolution(challenger_dataset)
-    if resolution == "one_degree":
-        return glo12_analysis_dataset(challenger_dataset)
-    return mixed_layer_depth_reference_dataset(
-        challenger_dataset,
-        dataset_name="glo12",
-        resolution=resolution,
-        open_twelfth_degree_week=_glo12_1_12_temperature_and_salinity,
-        open_quarter_degree_grid=lambda first_day_datetime: open_remote_zarr(_glo12_1_4_path(first_day_datetime)),
-    )

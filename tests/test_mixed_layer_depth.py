@@ -7,9 +7,11 @@ import numpy
 import pytest
 import xarray
 
+import oceanbench.core.runtime_configuration as runtime_configuration
 from oceanbench.core import mixed_layer_depth
 from oceanbench.core.dataset_utils import Dimension, Variable
-from oceanbench.core.references import glorys, mixed_layer_depth_reference
+from oceanbench.core.references import mixed_layer_depth_reference
+from oceanbench.core.runtime_configuration import RuntimeConfiguration
 
 GLORYS_DEPTHS = [
     0.494, 1.541, 2.646, 3.819, 5.078, 6.441, 7.93, 9.573, 11.405, 13.467, 15.81, 18.496, 21.599, 25.211, 29.445,
@@ -153,24 +155,20 @@ def test_potential_density_anomaly_uses_conservative_temperature_from_potential_
     numpy.testing.assert_allclose(sigma0.values, expected, rtol=0, atol=1e-10)
 
 
-def _native_week(first_day_datetime, days_count: int, points_count: int = 3) -> xarray.Dataset:
+def _native_week(first_day_datetime, days_count: int, points_count: int = 4) -> xarray.Dataset:
     depths = numpy.array(GLORYS_DEPTHS)
     latitudes = numpy.arange(points_count) * TWELFTH_DEGREE
     longitudes = numpy.arange(points_count) * TWELFTH_DEGREE
     shape = (days_count, depths.size, latitudes.size, longitudes.size)
-    temperature = numpy.broadcast_to((20.0 - 0.02 * depths)[None, :, None, None], shape)
+    gradients = 0.0005 * (1 + numpy.arange(points_count * points_count)).reshape(points_count, points_count)
+    temperature = numpy.broadcast_to(20.0 - depths[None, :, None, None] * gradients[None, None], shape).copy()
+    temperature[:, :, 0, 0] = numpy.nan
+    salinity = numpy.where(numpy.isnan(temperature), numpy.nan, 35.0)
+    dimensions = ["time", "depth", "latitude", "longitude"]
     return xarray.Dataset(
         {
-            "thetao": (
-                ["time", "depth", "latitude", "longitude"],
-                temperature.copy(),
-                {"standard_name": Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()},
-            ),
-            "so": (
-                ["time", "depth", "latitude", "longitude"],
-                numpy.full(shape, 35.0),
-                {"standard_name": Variable.SEA_WATER_SALINITY.key()},
-            ),
+            "thetao": (dimensions, temperature, {"standard_name": Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()}),
+            "so": (dimensions, salinity, {"standard_name": Variable.SEA_WATER_SALINITY.key()}),
         },
         coords={
             "time": numpy.datetime64(first_day_datetime, "D") + numpy.arange(days_count),
@@ -181,58 +179,125 @@ def _native_week(first_day_datetime, days_count: int, points_count: int = 3) -> 
     )
 
 
-def _challenger(depths: list[float]) -> xarray.Dataset:
+def _quarter_degree_grid() -> xarray.Dataset:
     return xarray.Dataset(
-        coords={
-            Dimension.FIRST_DAY_DATETIME.key(): [numpy.datetime64("2024-01-03")],
-            Dimension.LEAD_DAY_INDEX.key(): [0, 1],
-            Dimension.DEPTH.key(): depths,
-            Dimension.LATITUDE.key(): numpy.arange(3) * TWELFTH_DEGREE,
-            Dimension.LONGITUDE.key(): numpy.arange(3) * TWELFTH_DEGREE,
-        }
-    )
-
-
-def test_reference_mixed_layer_depth_does_not_depend_on_the_challenger_depth_levels(monkeypatch) -> None:
-    captured_variants = []
-
-    def fake_maybe_stage_weekly_dataset(**kwargs):
-        captured_variants.append(kwargs["stage_variant"])
-        return kwargs["open_remote_dataset"]()
-
-    monkeypatch.setattr(glorys, "_glorys_1_12_temperature_and_salinity", _native_week)
-    monkeypatch.setattr(mixed_layer_depth_reference, "maybe_stage_weekly_dataset", fake_maybe_stage_weekly_dataset)
-
-    references = [
-        glorys.glorys_reanalysis_mixed_layer_depth_dataset(_challenger(depths))
-        for depths in (COARSE_DEPTHS, GLORYS_DEPTHS)
-    ]
-    reference_mixed_layer_depths = [
-        mixed_layer_depth.compute_mixed_layer_depth(reference)[Variable.MIXED_LAYER_DEPTH.key()].values
-        for reference in references
-    ]
-
-    assert captured_variants[0] == captured_variants[1]
-    assert [reference.sizes[Dimension.DEPTH.key()] for reference in references] == [33, 33]
-    numpy.testing.assert_array_equal(reference_mixed_layer_depths[0], reference_mixed_layer_depths[1])
-    assert numpy.all(numpy.isfinite(reference_mixed_layer_depths[0]))
-
-
-def test_quarter_degree_reference_takes_the_coincident_twelfth_degree_points() -> None:
-    native = _native_week(numpy.datetime64("2024-01-03"), 1, points_count=4)
-    native = native.assign(thetao=native["thetao"] + native["longitude"] * 100.0 + native["latitude"] * 10.0)
-    quarter_grid = xarray.Dataset(
         coords={
             "lat": ("lat", [0.0, 0.25], {"standard_name": "latitude"}),
             "lon": ("lon", [0.0, 0.25], {"standard_name": "longitude"}),
         }
     )
 
-    subsampled = mixed_layer_depth_reference.on_horizontal_grid(native, quarter_grid)
 
-    assert subsampled["latitude"].values.tolist() == [0.0, 0.25]
-    assert subsampled["longitude"].values.tolist() == [0.0, 0.25]
+def _challenger(depths: list[float], lead_days_count: int = 2) -> xarray.Dataset:
+    return xarray.Dataset(
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): [numpy.datetime64("2024-01-03")],
+            Dimension.LEAD_DAY_INDEX.key(): range(lead_days_count),
+            Dimension.DEPTH.key(): depths,
+            Dimension.LATITUDE.key(): numpy.arange(4) * TWELFTH_DEGREE,
+            Dimension.LONGITUDE.key(): numpy.arange(4) * TWELFTH_DEGREE,
+        }
+    )
+
+
+def _use_runtime_configuration(monkeypatch, **configuration) -> None:
+    monkeypatch.setattr(runtime_configuration, "_runtime_configuration", RuntimeConfiguration(**configuration))
+
+
+def _write_reference_store(root, resolution: str = "twelfth_degree") -> xarray.Dataset:
+    store = mixed_layer_depth_reference.build_reference_mixed_layer_depth_week(
+        _native_week(numpy.datetime64("2024-01-03"), 3)
+    )
+    store_name = mixed_layer_depth_reference.REFERENCE_MIXED_LAYER_DEPTH_STORE_NAME.format(
+        dataset_name="glorys", resolution=resolution
+    )
+    store.to_zarr(root / store_name / "20240103.zarr")
+    return store
+
+
+def _forbid_remote_reads(monkeypatch) -> None:
+    def fail_remote_read(*_args, **_kwargs):
+        raise AssertionError("The reference mixed layer depth must not be read remotely when it is staged.")
+
+    monkeypatch.setattr(mixed_layer_depth_reference, "REFERENCE_MIXED_LAYER_DEPTH_ROOT_URL", "https://example.invalid")
+    monkeypatch.setattr(mixed_layer_depth_reference, "open_remote_zarr", fail_remote_read)
+    monkeypatch.setattr(mixed_layer_depth_reference, "open_remote_multizarr", fail_remote_read)
+
+
+def test_reference_builder_matches_the_on_the_fly_mixed_layer_depth() -> None:
+    native = _native_week(numpy.datetime64("2024-01-03"), 2)
+    on_the_fly = mixed_layer_depth.compute_mixed_layer_depth(native)[Variable.MIXED_LAYER_DEPTH.key()]
+
+    built = mixed_layer_depth_reference.build_reference_mixed_layer_depth_week(native)[Variable.MIXED_LAYER_DEPTH.key()]
+
+    assert built.dtype == numpy.float32
+    assert numpy.isnan(built.values[:, 0, 0]).all()
+    assert numpy.isfinite(built.values[:, 1:, 1:]).all()
+    numpy.testing.assert_allclose(built.values, on_the_fly.values, rtol=1e-6)
+
+
+def test_quarter_degree_reference_takes_the_coincident_twelfth_degree_points() -> None:
+    native = _native_week(numpy.datetime64("2024-01-03"), 1)
+    on_the_fly = mixed_layer_depth.compute_mixed_layer_depth(native)[Variable.MIXED_LAYER_DEPTH.key()]
+
+    built = mixed_layer_depth_reference.build_reference_mixed_layer_depth_week(native, _quarter_degree_grid())
+
+    assert built["latitude"].values.tolist() == [0.0, 0.25]
+    assert built["longitude"].values.tolist() == [0.0, 0.25]
+    numpy.testing.assert_allclose(
+        built[Variable.MIXED_LAYER_DEPTH.key()].values,
+        on_the_fly.isel(latitude=[0, 3], longitude=[0, 3]).values,
+        rtol=1e-6,
+    )
+
+
+def test_reference_mixed_layer_depth_is_read_from_the_precomputed_store(monkeypatch, tmp_path) -> None:
+    _use_runtime_configuration(monkeypatch)
+    monkeypatch.setattr(mixed_layer_depth_reference, "REFERENCE_MIXED_LAYER_DEPTH_ROOT_URL", str(tmp_path))
+    store = _write_reference_store(tmp_path)
+
+    reference = mixed_layer_depth_reference.glorys_reanalysis_mixed_layer_depth_dataset(_challenger(COARSE_DEPTHS))
+
+    assert reference[Variable.MIXED_LAYER_DEPTH.key()].dims == (
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
+    )
     numpy.testing.assert_array_equal(
-        subsampled["thetao"].values,
-        native["thetao"].isel(latitude=[0, 3], longitude=[0, 3]).values,
+        reference[Variable.MIXED_LAYER_DEPTH.key()].values[0],
+        store[Variable.MIXED_LAYER_DEPTH.key()].values[:2],
+    )
+
+
+def test_reference_mixed_layer_depth_does_not_depend_on_the_challenger_depth_levels(monkeypatch, tmp_path) -> None:
+    _use_runtime_configuration(monkeypatch)
+    monkeypatch.setattr(mixed_layer_depth_reference, "REFERENCE_MIXED_LAYER_DEPTH_ROOT_URL", str(tmp_path))
+    _write_reference_store(tmp_path)
+
+    references = [
+        mixed_layer_depth_reference.glorys_reanalysis_mixed_layer_depth_dataset(_challenger(depths))
+        for depths in (COARSE_DEPTHS, GLORYS_DEPTHS)
+    ]
+
+    xarray.testing.assert_identical(references[0], references[1])
+
+
+def test_reference_mixed_layer_depth_is_staged_once_then_read_without_network(monkeypatch, tmp_path) -> None:
+    stage_directory = tmp_path / "stage"
+    _use_runtime_configuration(monkeypatch, staged_components=("all",), stage_directory=str(stage_directory))
+    monkeypatch.setattr(mixed_layer_depth_reference, "REFERENCE_MIXED_LAYER_DEPTH_ROOT_URL", str(tmp_path / "remote"))
+    store = _write_reference_store(tmp_path / "remote")
+
+    staged = mixed_layer_depth_reference.glorys_reanalysis_mixed_layer_depth_dataset(_challenger(COARSE_DEPTHS))
+
+    assert (stage_directory / "reference-glorys-twelfth_degree-mixed-layer-depth-2d" / "20240103.zarr").is_dir()
+    _forbid_remote_reads(monkeypatch)
+
+    reused = mixed_layer_depth_reference.glorys_reanalysis_mixed_layer_depth_dataset(_challenger(COARSE_DEPTHS))
+
+    xarray.testing.assert_equal(reused, staged)
+    numpy.testing.assert_array_equal(
+        reused[Variable.MIXED_LAYER_DEPTH.key()].values[0],
+        store[Variable.MIXED_LAYER_DEPTH.key()].values[:2],
     )
