@@ -13,8 +13,8 @@ from oceanbench.core.lagrangian_trajectory import (
     lagrangian_particle_count_for_region,
 )
 from oceanbench.core.ocean_mask import ocean_mask
-from oceanbench.core.references.glo12 import glo12_analysis_dataset
-from oceanbench.core.references.glorys import glorys_reanalysis_dataset
+from oceanbench.core.references.glo12 import glo12_analysis_dataset, glo12_analysis_mixed_layer_depth_dataset
+from oceanbench.core.references.glorys import glorys_reanalysis_dataset, glorys_reanalysis_mixed_layer_depth_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
 from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, subset_dataset_to_region
 from oceanbench.core.rmsd import rmsd
@@ -85,7 +85,7 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     return rmsd(
         challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
         reference_dataset=compute_mixed_layer_depth(
-            subset_dataset_to_region(glorys_reanalysis_dataset(challenger_dataset), region)
+            subset_dataset_to_region(glorys_reanalysis_mixed_layer_depth_dataset(challenger_dataset), region)
         ),
         variables=[
             Variable.MIXED_LAYER_DEPTH,
@@ -151,7 +151,7 @@ def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     return rmsd(
         challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
         reference_dataset=compute_mixed_layer_depth(
-            subset_dataset_to_region(glo12_analysis_dataset(challenger_dataset), region)
+            subset_dataset_to_region(glo12_analysis_mixed_layer_depth_dataset(challenger_dataset), region)
         ),
         variables=[
             Variable.MIXED_LAYER_DEPTH,
