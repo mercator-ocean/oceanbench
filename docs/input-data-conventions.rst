@@ -37,8 +37,7 @@ The grid is the ECMWF F1280 regular Gaussian grid.
 Latitudes go from 89.95 to -89.95 (north to south) and longitudes from 0 to 359.93.
 
 Each value is a mean over its UTC day, except ``cp``, ``ewss`` and ``nsss`` (see the table).
-For the instantaneous variables, the daily mean is consistent with an average of the forecast over the day.
-Whether the forecast is sampled hourly or every 6 hours is not established.
+For the instantaneous variables, the daily mean is consistent with an average of the hourly forecast output.
 
 .. list-table::
    :header-rows: 1
@@ -110,17 +109,20 @@ Whether the forecast is sampled hourly or every 6 hours is not established.
      - Convective precipitation, accumulated since 00:00 UTC of day R. Not a rate: it grows with the lead day. The values are consistent with metres of water.
    * - ``ewss``
      - ``ewss`` (180)
-     - unknown
-     - Eastward surface stress. Do not use, under investigation.
+     - N m-2 s
+     - Eastward turbulent surface stress, accumulated over each hour. Not usable: each hourly value was clipped to the range 0 to 1e4 before the daily mean, so negative stress is lost. Do not use.
    * - ``nsss``
      - ``nsss`` (181)
-     - unknown
-     - Northward surface stress. Do not use, under investigation.
+     - N m-2 s
+     - Northward turbulent surface stress, accumulated over each hour. Not usable: each hourly value was clipped to the range 0 to 1e4 before the daily mean, so negative stress is lost. Do not use.
 
 The fluxes do not all come from the same forecast runs.
 On the first lead day, ``sosudosw``, ``sosudolw``, ``sowaprec`` and ``sosnowfa`` match fluxes taken 6 hours at a time from the 00:00 and 12:00 UTC runs of that day.
 ``ssr`` and ``strd`` come from the 00:00 UTC run alone.
 This is why ``strd`` and ``sosudolw`` differ slightly, by about 3 W m-2.
+
+Dividing a valid hourly stress accumulation by 3600 gives a stress in N m-2.
+This cannot be done with ``ewss`` and ``nsss`` because of the clipping.
 
 GLO12 nowcast packages
 **********************
