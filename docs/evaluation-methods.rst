@@ -75,40 +75,14 @@ The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.
 
 .. _mixed-layer-depth-method:
 
-The mixed layer depth is the depth where the potential density anomaly (σ₀, computed with TEOS-10) exceeds its value at 10 meters by 0.03 kg/m³, following de Boyer Montégut et al. (2004).
-Both the 10 meter reference density and the crossing depth are found by linear interpolation between the two model levels around them.
-When the threshold is never reached in the water column, the deepest valid level stands in for the mixed layer depth.
-This is the centre of the deepest wet level, not the sea floor.
-Every value is then capped at 600 meters for the challenger and the reference alike.
-The reference mixed layer depth is computed once on the reference's own full vertical levels, so it is the same for every challenger on a given grid.
-
-The challenger mixed layer depth is computed on the challenger's own depth levels.
-Coarse levels near the surface therefore add an error that even a perfect forecast cannot avoid.
-The table below gives this floor, measured by sampling GLORYS 1/12° profiles at each set of levels on 4 days of 2024 (area-weighted, global).
-
-.. list-table::
-   :header-rows: 1
-
-   * - Depth levels
-     - Floor RMSD
-     - Floor bias
-   * - 21 levels (glonet)
-     - 13 to 17 m
-     - about -10 m
-   * - 9 levels (hclimrep)
-     - 13 to 18 m
-     - about -10 m
-   * - 23 levels (xihe, wenhai)
-     - 2 to 3 m
-     - about -1 m
-   * - 32 levels (langya)
-     - 1 to 2.5 m
-     - about 0 m
-
-Level sets that stop at 541 meters (9 and 32 levels) also report 541 meters, not 600 meters, where the threshold is never reached.
-
-The Copernicus Marine ``mlotst`` variable of GLORYS and GLO12 uses a 0.01 kg/m³ threshold relative to 10 meters.
-With 0.03 kg/m³, the OceanBench mixed layer depth is about 15 to 20% deeper, so the two must not be compared directly.
+This is a diagnostic of how consistent the challenger temperature and salinity are, not an accuracy score for the mixed layer depth itself.
+The reference is taken at the challenger's own depth levels.
+On each dataset, the density is the potential density anomaly σ₀ from TEOS-10, computed from the absolute salinity and the conservative temperature.
+The mixed layer depth is the first level whose density exceeds the density of the first level by 0.03 kg/m³, with no interpolation between levels.
+Only levels down to 600 meters are used.
+If the threshold is never reached, the mixed layer depth is the deepest valid level within 600 meters, which is 541 meters in the open ocean for every current challenger.
+Challengers with different depth levels are compared with different references, so their mixed layer depth scores are not directly comparable.
+The Copernicus Marine ``mlotst`` variable uses a 0.01 kg/m³ threshold relative to 10 meters, so it should not be compared directly with this diagnostic.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLORYS reanalysis
 ----------------------------------------------------------------------------------------------
@@ -150,7 +124,7 @@ Root Mean Square Deviation (RMSD) of Mixed Layer Depth (MLD) compared to GLO12 a
 
 The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.wikipedia.org/wiki/Root_mean_square_deviation>`_ between the two `Mixed Layer Depth (MLD) <https://en.wikipedia.org/wiki/Mixed_layer>`_ computations over the challenger dataset and the `GLO12 analysis dataset <https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024>`_.
 
-The mixed layer depth and its limits are described in the :ref:`GLORYS section <mixed-layer-depth-method>`.
+The mixed layer depth diagnostic is described in the :ref:`GLORYS section <mixed-layer-depth-method>`.
 
 Root Mean Square Deviation (RMSD) of geostrophic currents compared to GLO12 analysis
 ----------------------------------------------------------------------------------------------
