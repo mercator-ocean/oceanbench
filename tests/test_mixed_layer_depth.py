@@ -134,6 +134,14 @@ def test_mixed_layer_depth_of_a_challenger_ending_at_541_meters_is_not_extended(
     assert _mld_value(dataset, monkeypatch) == pytest.approx(541.089)
 
 
+def test_mixed_layer_depth_of_a_step_profile_on_coarse_levels_is_shallow(monkeypatch) -> None:
+    # Mixed down to 30 m, then 1 kg/m3 denser. With nothing between 0.494 m and 47.374 m the 10 m density
+    # is interpolated across the step, and the crossing lands at 10 + 0.03 * (47.374 - 0.494) / 1, about 11 m.
+    sigma0 = [25.0 if depth <= 30.0 else 26.0 for depth in COARSE_DEPTHS]
+
+    assert _mld_value(_profile_dataset(COARSE_DEPTHS, sigma0), monkeypatch) == pytest.approx(10.0 + 0.03 * 46.88)
+
+
 def test_potential_density_anomaly_uses_conservative_temperature_from_potential_temperature() -> None:
     depths = numpy.array([0.494, 47.374, 222.475, 541.089, 1245.291])
     potential_temperature = numpy.array([18.0, 15.0, 10.0, 6.0, 3.5])

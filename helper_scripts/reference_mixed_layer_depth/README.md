@@ -44,3 +44,6 @@ python build_reference_mixed_layer_depth.py --reference glorys --output out \
 
 Each store is written to a temporary path and renamed on success, and existing stores are skipped, so a
 run can be resumed. The stores carry the script hash in `builder_script_sha256`.
+
+The published GLO12 stores were built from the as-issued GLO12 data of the OceanBench bucket (the 0.6.0
+stage), while the default Copernicus Marine source for GLO12 is the revised analysis.
