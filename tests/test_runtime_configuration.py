@@ -6,7 +6,7 @@ import pytest
 
 from oceanbench.cli import _build_parser, _runtime_configuration_from_args
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.runtime_configuration import runtime_configuration_from_environment
+from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 
 
 RUNTIME_ENVIRONMENT_VARIABLES = [
@@ -162,3 +162,11 @@ def test_empty_stage_directory_is_treated_as_unset(command, monkeypatch):
     assert unset_configuration.stage_directory is None
     assert empty_option_configuration == unset_configuration
     assert empty_environment_configuration == unset_configuration
+
+
+def test_empty_stage_directory_in_the_python_api_is_treated_as_unset():
+    empty_directory_configuration = RuntimeConfiguration(stage_directory="")
+
+    assert empty_directory_configuration.stage_directory is None
+    assert empty_directory_configuration == RuntimeConfiguration()
+    assert not empty_directory_configuration.has_local_stage()
