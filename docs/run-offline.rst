@@ -28,7 +28,7 @@ The two nodes must share a file system, for example a scratch or work directory.
 
    .. code-block:: bash
 
-      oceanbench evaluate path/to/challenger.py --stage all --stage-dir /shared/oceanbench-stage --keep-stage
+      oceanbench evaluate path/to/challenger.py --stage-dir /shared/oceanbench-stage
 
 The evaluation finds everything in ``/shared/oceanbench-stage`` and does not download anything.
 It also writes a few small working files there, so the directory must be writable from the compute node.
@@ -63,17 +63,18 @@ Data already in the stage directory is not downloaded again.
 Keep the stage directory
 ************************
 
-``oceanbench stage`` never deletes the stage directory.
-A successful ``oceanbench evaluate`` deletes it at the end of the run unless ``--keep-stage`` is given.
-Keep ``--keep-stage`` in step 2 if you plan to evaluate the same challenger again without downloading everything again.
+A folder given with ``--stage-dir`` or ``OCEANBENCH_STAGE_DIR`` is kept.
+You can evaluate the same challenger again without downloading everything again.
+OceanBench only deletes its default temporary folder, used when no folder is given.
+It deletes that folder after a successful ``oceanbench evaluate``, unless ``--keep-stage`` is given.
 
 Environment variables
 *********************
 
 The same settings can be given as environment variables, for example in a batch script:
 
-* ``OCEANBENCH_STAGE=all`` is the same as ``--stage all`` for ``oceanbench evaluate``. Several values can be separated by commas. ``oceanbench stage`` always stages everything.
-* ``OCEANBENCH_STAGE_DIR=/shared/oceanbench-stage`` is the same as ``--stage-dir``.
+* ``OCEANBENCH_STAGE_DIR=/shared/oceanbench-stage`` is the same as ``--stage-dir``. On its own, it stages everything.
+* ``OCEANBENCH_STAGE`` selects only some datasets for ``oceanbench evaluate``, like ``--stage``. Several values can be separated by commas, for example ``references,observations``. ``oceanbench stage`` always stages everything.
 * ``OCEANBENCH_STAGE_MAX_WORKERS`` is the same as ``--stage-max-workers``, the number of parallel downloads.
 * ``OCEANBENCH_REMOTE_RETRIES`` is the same as ``--remote-retries``, the number of attempts for each remote read.
 * ``OCEANBENCH_REGION`` is the same as ``--region``.

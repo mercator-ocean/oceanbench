@@ -26,6 +26,8 @@ class RuntimeConfiguration:
 
     def __post_init__(self):
         normalized_components = tuple(dict.fromkeys(component.strip().lower() for component in self.staged_components))
+        if not normalized_components and self.stage_directory is not None:
+            normalized_components = (STAGE_ALL_KEY,)
         if self.stage_max_workers < 1:
             raise ValueError("stage_max_workers must be greater than or equal to 1.")
         if self.remote_retries < 1:

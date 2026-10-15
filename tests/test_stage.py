@@ -152,3 +152,36 @@ def test_stage_command_reads_the_region_from_the_environment_like_evaluate(chall
     )
 
     assert subset_regions == [resolve_region("ibi")]
+
+
+def _run_successful_evaluate(monkeypatch, arguments: list[str]) -> list:
+    for environment_variable in (
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE,
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR,
+    ):
+        monkeypatch.delenv(environment_variable.value, raising=False)
+    monkeypatch.setattr(
+        cli,
+        "_evaluate_all",
+        lambda challengers, *_args: [cli.EvaluationResult(challenger=challenger) for challenger in challengers],
+    )
+    deleted_directories = []
+    monkeypatch.setattr(cli, "cleanup_local_stage_directory", deleted_directories.append)
+    args = cli._build_parser()[0].parse_args(["evaluate", "challenger.py", *arguments])
+
+    assert cli._run_evaluate(args) == 0
+    return deleted_directories
+
+
+def test_evaluate_keeps_a_named_stage_directory(tmp_path, monkeypatch) -> None:
+    assert _run_successful_evaluate(monkeypatch, ["--stage-dir", str(tmp_path / "stage")]) == []
+
+
+def test_evaluate_deletes_the_default_stage_directory(monkeypatch) -> None:
+    deleted_directories = _run_successful_evaluate(monkeypatch, ["--stage", STAGE_ALL_KEY])
+
+    assert deleted_directories == [runtime_configuration.RuntimeConfiguration().resolved_stage_directory()]
+
+
+def test_evaluate_keep_stage_keeps_the_default_stage_directory(monkeypatch) -> None:
+    assert _run_successful_evaluate(monkeypatch, ["--stage", STAGE_ALL_KEY, "--keep-stage"]) == []

@@ -97,3 +97,52 @@ def test_evaluate_cli_uses_environment_runtime_configuration_by_default(monkeypa
     assert runtime_configuration.stage_directory == "/tmp/oceanbench-stage-env"
     assert runtime_configuration.stage_max_workers == 2
     assert runtime_configuration.remote_retries == 7
+
+
+def _evaluate_runtime_configuration(arguments: list[str]):
+    parser, _evaluate_parser = _build_parser()
+    return _runtime_configuration_from_args(parser.parse_args(["evaluate", "challenger.py", *arguments]))
+
+
+def test_evaluate_cli_stage_directory_alone_stages_all(monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+
+    runtime_configuration = _evaluate_runtime_configuration(["--stage-dir", "/tmp/oceanbench-stage-cli"])
+
+    assert runtime_configuration.staged_components == ("all",)
+
+
+def test_environment_stage_directory_alone_stages_all(monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value, "/tmp/oceanbench-stage-env")
+
+    assert runtime_configuration_from_environment().staged_components == ("all",)
+    assert _evaluate_runtime_configuration([]).staged_components == ("all",)
+
+
+def test_evaluate_cli_explicit_stage_components_win_over_stage_directory(monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+
+    runtime_configuration = _evaluate_runtime_configuration(
+        ["--stage", "references", "--stage-dir", "/tmp/oceanbench-stage-cli"]
+    )
+
+    assert runtime_configuration.staged_components == ("references",)
+
+
+def test_environment_stage_components_win_over_stage_directory(monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value, "references")
+
+    runtime_configuration = _evaluate_runtime_configuration(["--stage-dir", "/tmp/oceanbench-stage-cli"])
+
+    assert runtime_configuration.staged_components == ("references",)
+
+
+def test_evaluate_cli_without_stage_components_or_directory_does_not_stage(monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+
+    runtime_configuration = _evaluate_runtime_configuration([])
+
+    assert runtime_configuration.staged_components == ()
+    assert not runtime_configuration.has_local_stage()

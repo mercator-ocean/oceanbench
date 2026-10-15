@@ -6,7 +6,7 @@
 Fill the local stage directory with the data an evaluation reads, without computing any score.
 
 Every asset is opened through the same function the metrics call, so the stage builders write exactly
-the entries a later ``oceanbench evaluate --stage all`` run finds.
+the entries a later ``oceanbench evaluate --stage-dir`` run finds.
 """
 
 from oceanbench.core.evaluate import resolve_evaluation_region
