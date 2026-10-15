@@ -1,0 +1,6320 @@
+// SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
+// OceanBench viewer, comparison-first field explorer (contracts.md §6).
+//
+// Comparison is the primitive: 1 or 2 synchronized panels (Forecast 1 / Forecast 2)
+// sharing viewport, lead day and start date; each panel is {dataset, variable}.
+// With two forecasts the shared display mode is side by side, swipe (one map, a
+// draggable divider) or first-class difference (A − B in a diverging colormap centred on
+// 0). Currents are a variable (speed magnitude √(u²+v²)) with an optional particle
+// animation. Insight overlays (eddy census, Class-4 obs error, trajectories, water
+// column) attach as purpose-modes, never all at once. A context rail carries
+// the quantitative curves (skill vs lead, PSD spectrum) for the active view. Every bit
+// of view state lives in the URL hash.
+//
+// Invariants this file owns, each also flagged at the call site that is easiest to get
+// wrong:
+//   I1 selectionSignature() deliberately excludes the lead day, and the particle field's
+//      own signature deliberately includes it. Changing either without the other either
+//      freezes the particles on a stale field or resets every stable axis on every step.
+//   I2 Stable ranges are grow-only within one selection signature (modules/stable-ranges.js).
+//      Clearing a bound to fix a flicker destroys the property the whole registry exists for.
+//   I3 The swipe geometry on a panel object has exactly one producer, drawPanel, and is
+//      read much later by the hover and drag handlers.
+//   I4 The <html> data-scope / data-theme attributes and the panel grid's
+//      data-layout / data-display are a contract with styles/: the CSS hides and
+//      relays out on those values, so writing a new mode name means updating both.
+
+import { loadStore, loadManifest, readLayer, readLayerWindow, readCoordinate, readRootCoordinate, readColumn, prefetchLayer, isLayerCached } from "./modules/zarr.js";
+import { COLORMAP_NAMES, DIVERGING } from "./vendor/cmocean/colormaps.js";
+import {
+  fieldToImageData,
+  landStencilImageData,
+  areaWeightedMean,
+  areaWeightedQuantiles,
+  differenceField,
+  resampleOntoGrid,
+  blockAverageOntoGrid,
+  robustDifferenceMagnitude,
+  drawColorbar,
+  landColor,
+  noObsColor,
+  formatFixed,
+  landStencil,
+  rasterCanvas,
+  combineFieldRange,
+} from "./modules/render.js";
+import { startParticleField, makeVelocitySampler, speedMagnitudeField } from "./modules/particles.js";
+import {
+  loadInsightIndex,
+  loadEddies,
+  loadScoresSummary,
+  loadRmsdByDepth,
+  rmsdDepthProfile,
+  rmsdDepthProfileMax,
+  loadClass4,
+  prefetchClass4,
+  cancelClass4Prefetches,
+  insightsFor,
+  eddyCensus,
+  eddyPublishedStartDates,
+  alignedEddyCensuses,
+  class4Points,
+  class4ParquetVariable,
+} from "./modules/insights.js";
+import {
+  drawEddyDetections,
+  matchCensuses,
+  drawClass4Points,
+  drawClass4Screen,
+  class4AbsoluteError,
+  class4ErrorScale,
+  drawClass4HoverRing,
+  numericOrNaN,
+  EDDY_MATCHED_COLOR,
+  CLASS4_COLORMAP,
+  CLASS4_RAMP_START,
+  CLASS4_RAMP_END,
+} from "./modules/overlays.js";
+import { leadCurveSVG, psdSpectraSVG, rmsdByStartSVG, rmsdByDepthSVG, columnProfileSVG, SERIES_COLORS } from "./modules/charts.js";
+import { syncStableRanges, stableMax, stableInterval, forgetStableRanges } from "./modules/stable-ranges.js";
+import {
+  loadYearGeography,
+  loadYearRmsd,
+  yearVariableMapping,
+  buildYearGeographyField,
+  buildYearBiasField,
+  buildYearObservationCounts,
+  buildYearBiasStandardError,
+  yearGeographyMaxAllLeads,
+  yearBiasMaxAllLeads,
+  yearRmsdSeries,
+  yearRmsdSeriesMax,
+} from "./modules/year.js";
+import { attachMethodNote, attachEddyMethodNote } from "./modules/method-popover.js";
+import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
+import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
+import { forecastColor } from "./modules/forecast-colors.js";
+import {
+  DISPLAY_DIFFERENCE,
+  DISPLAY_SIDE_BY_SIDE,
+  DISPLAY_SWIPE,
+  EDDY_REFERENCE_GLORYS,
+  OVERLAY_CLASS4,
+  OVERLAY_EDDIES,
+  OVERLAY_NONE,
+  OVERLAY_TRAJECTORIES,
+  OVERLAY_WATER_COLUMN,
+  REGION_GLOBAL,
+  SCOPE_SINGLE_DATE,
+  SCOPE_WHOLE_YEAR,
+  THEME_DARK,
+  THEME_LIGHT,
+  YEAR_METRIC_ABSOLUTE_ERROR,
+  YEAR_METRIC_BIAS,
+} from "./state/view-modes.js";
+import { resolveViewerDataUrl, resolveColumnStoreUrl, initializeViewerConfig } from "./config.js";
+import {
+  CURRENTS_MAX_SPEED,
+  CURRENTS_VARIABLE_15M,
+  CURRENTS_VARIABLE_SURFACE,
+  SPEED_COLORMAP,
+  currentsDepthLabel,
+  currentsVariableDepth,
+  currentsVariableOptions,
+  depthLabel,
+  fallbackVariable,
+  isCurrentsVariable,
+  isSurfaceCurrentVariable,
+  isVelocityFamilyVariable,
+  matching15mCurrentVariable,
+  prettyName,
+  variableEntry,
+  variableExists,
+  variableLabel,
+} from "./modules/variables.js";
+import { nearestCoordinateIndex, nearestIndex, visibleViewport, worldEdges } from "./modules/geometry.js";
+import { cellDegreesLabel, escapeHtml, formatCount, formatLatLon, megabytes, rgbCss } from "./modules/format.js";
+import {
+  buildClass4Index,
+  class4DepthBin,
+  class4DepthLabel,
+  countClass4Matches,
+  drawClass4Frame,
+} from "./modules/class4-index.js";
+import { aggregateLeadSeries, depthBinLabel, scoreDepthKeys } from "./modules/score-lookup.js";
+import { populateSelect } from "./modules/select-options.js";
+import { PERIOD_CUSTOM, PERIOD_WHOLE_YEAR, customPeriodValue, periodRange, startInRange } from "./modules/period-range.js";
+import {
+  DEFAULT_LAYOUT,
+  GLOBAL_DEFAULT_CENTER_NX,
+  setSharedDisplayMode,
+  setSharedEddyReference,
+  setSharedOverlayMode,
+  setSharedPeriod,
+  setSharedRegion,
+  setSharedScope,
+  setSharedTheme,
+  setSharedYearMetric,
+  shared,
+  view,
+} from "./state/shared-view.js";
+
+// Resolved lazily: the data root is only final after initializeViewerConfig() has had a
+// chance to apply an optional viewer-config.json.
+const DATASETS_PATH = "./data/datasets.json";
+const DIFFERENCE_COLORMAP = "balance";
+const YEAR_ERROR_COLORMAP = "dense"; // sequential map for time-mean |obs − model|
+const REGION_BOUNDS = {
+  ibi: { west: -19.08, east: 5.08, south: 26.17, north: 56.08 },
+};
+// Particles saturate where the colour bar says they do: the bar is drawn over
+// [0, CURRENTS_MAX_SPEED], so a flow line reaching the top of the speed ramp has to mean
+// the same speed the bar's right-hand end is labelled with.
+const PARTICLE_MAGNITUDE_SCALE = CURRENTS_MAX_SPEED;
+
+const stores = new Map();
+const manifests = new Map();
+const coordinatesByLevel = new Map();
+let datasetCatalog = [];
+let insightIndex = null;
+let scoresSummary = [];
+// scores-summary.json is a multi-megabyte aggregate that only the context rail reads,
+// so it stays off the boot path: the map paints first and the rail pulls it in on its
+// first update. Memoised, so later rail updates cost nothing.
+let scoresSummaryPromise = null;
+function ensureScoresSummary() {
+  if (!scoresSummaryPromise) {
+    scoresSummaryPromise = loadScoresSummary(insightIndex).then((rows) => {
+      scoresSummary = rows;
+      return rows;
+    });
+  }
+  return scoresSummaryPromise;
+}
+const panels = [];
+let activePanelIndex = 0;
+const elements = {};
+const trajectoryWorker = new Worker(new URL("./modules/trajectory-worker.js", import.meta.url), { type: "module" });
+let trajectoryState = null;
+let trajectoryRequestId = 0;
+// Water-column stores: slug -> store handle, or false when none is published (404 on
+// .zmetadata) so the profile-on-click mode degrades gracefully to "not offered".
+const columnStores = new Map();
+// Decoded water column at the last clicked point: all leads/depths held in memory so
+// the lead slider re-renders the profile with NO new fetch. Null when nothing is shown.
+let columnProfile = null;
+let columnRequestId = 0;
+
+// ---- store / manifest / coordinate helpers (shared cache) -------------------
+
+async function ensureStore(slug) {
+  if (stores.has(slug)) return stores.get(slug);
+  const descriptor = datasetCatalog.find((entry) => entry.slug === slug);
+  if (!descriptor) throw new Error(`Unknown dataset ${slug}`);
+  // The manifest comes first: its generation stamp versions every request to the store.
+  const manifest = await loadManifest(resolveViewerDataUrl(descriptor.manifest));
+  const store = await loadStore(resolveViewerDataUrl(descriptor.store), storeVersion(manifest));
+  stores.set(slug, store);
+  manifests.set(slug, manifest);
+  return store;
+}
+
+// Every open store holds its decoded chunks, so keeping a store for each dataset ever
+// selected keeps each of those caches alive for the whole session. Once a dataset is on
+// no panel, drop its store (and the coordinates read through it); the manifest stays, so
+// coming back reopens the store and refetches only the chunks that get drawn.
+function releaseUnusedStores() {
+  const inUse = new Set(panels.filter(Boolean).map((panel) => panel.state.dataset));
+  for (const slug of [...stores.keys()]) {
+    if (inUse.has(slug)) continue;
+    stores.delete(slug);
+    columnStores.delete(slug);
+    for (const key of [...coordinatesByLevel.keys()]) {
+      if (key.startsWith(`${slug}/`)) coordinatesByLevel.delete(key);
+    }
+  }
+}
+
+function manifestFor(slug) {
+  return manifests.get(slug);
+}
+
+// The token that versions a store's requests: the generation stamp of the manifest published
+// together with that store. Null (no token) for a manifest that carries none.
+function storeVersion(manifest) {
+  return (manifest && manifest.provenance && manifest.provenance.generated_at) || null;
+}
+
+async function loadCoordinates(slug, level) {
+  const key = `${slug}/${level}`;
+  if (coordinatesByLevel.has(key)) return coordinatesByLevel.get(key);
+  const store = stores.get(slug);
+  const [latitudes, longitudes] = await Promise.all([
+    readCoordinate(store, level, "latitude"),
+    readCoordinate(store, level, "longitude"),
+  ]);
+  const record = { latitudes, longitudes };
+  coordinatesByLevel.set(key, record);
+  return record;
+}
+
+function labelFor(slug) {
+  const descriptor = datasetCatalog.find((entry) => entry.slug === slug);
+  return descriptor ? descriptor.label : slug;
+}
+
+// Catalog label without its resolution suffix ("GLOW 930M (1/4°)" -> "GLOW 930M"), for
+// one-line slots too narrow for the full label.
+function shortLabelFor(slug) {
+  return labelFor(slug).replace(/\s*\([^)]*\)\s*$/, "");
+}
+
+function scoreProductKey(slug) {
+  if (slug === "glorys_one_degree") return "glorys";
+  return slug;
+}
+
+// ---- panel construction -----------------------------------------------------
+
+// Model + resolution of a catalog entry. The catalog carries no explicit resolution
+// field, but every label is "MODEL (resolution)" (e.g. "GLO12 (1/12°)"), so read the
+// pair from there and fall back to the slug when a label does not follow that shape.
+function datasetIdentity(entry) {
+  const match = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(entry.label || "");
+  if (match) return { model: match[1].trim().toLowerCase(), resolution: match[2].trim() };
+  const model = entry.slug.replace(/_(one|1)_degree$/, "");
+  return { model, resolution: model === entry.slug ? "native" : "1°" };
+}
+
+// Default partner for a forecast panel. Prefer a DIFFERENT model at the SAME resolution:
+// the same model's 1-degree twin compares a model with itself, and the mixed resolutions
+// make the shared PSD box degenerate ("Resolutions too different"). Fall back to any
+// different model, then to the first different slug.
+function otherSlug(slug) {
+  const self = datasetCatalog.find((entry) => entry.slug === slug);
+  const candidates = self
+    ? datasetCatalog.filter((entry) => entry.slug !== slug && datasetIdentity(entry).model !== datasetIdentity(self).model)
+    : [];
+  const sameResolution = candidates.find(
+    (entry) => datasetIdentity(entry).resolution === datasetIdentity(self).resolution,
+  );
+  return (
+    sameResolution?.slug || candidates[0]?.slug || datasetCatalog.find((entry) => entry.slug !== slug)?.slug || slug
+  );
+}
+
+// A first visit (no hash at all) opens on one worked comparison instead of a lone field:
+// a forecast against the independent reanalysis, same variable, mid-horizon lead. Both
+// sit at their native resolution; the 1-degree pair loaded no faster (about 0.1 s).
+const EXAMPLE_VIEW = {
+  datasets: ["glonet", "glorys"],
+  variable: "sea_water_potential_temperature",
+  leadDay: 5,
+  note: "Example: GLONET vs GLORYS, surface temperature. Change any selector.",
+};
+let exampleViewActive = false;
+
+function exampleViewAvailable() {
+  return EXAMPLE_VIEW.datasets.every((slug) => datasetCatalog.some((entry) => entry.slug === slug));
+}
+
+// The note names what is on screen, so it goes the moment the screen stops being that
+// example (another dataset, variable or layout) and does not come back.
+function syncExampleNote() {
+  if (
+    exampleViewActive &&
+    (shared.layout !== 2 ||
+      panels.slice(0, 2).some(
+        (panel, index) => !panel || panel.state.dataset !== EXAMPLE_VIEW.datasets[index] || panel.state.variable !== EXAMPLE_VIEW.variable,
+      ))
+  ) {
+    exampleViewActive = false;
+  }
+  elements["example-note"].hidden = !exampleViewActive;
+}
+
+// In swipe and difference display the bottom of the map is the Forecast 2 strip, so the
+// example note and the zoom reading sit above it instead of over its selectors. The strip
+// wraps with the width, so its height is measured rather than assumed.
+function syncHeadStripInset() {
+  const strip = panels.slice(0, shared.layout).find((panel) => panel.container.classList.contains("head-only"));
+  elements["panel-grid"].parentElement.style.setProperty("--head-strip-height", strip ? `${strip.container.offsetHeight}px` : "0px");
+}
+
+function defaultPanelState(index) {
+  // Forecast 1's dataset when it already exists, so a 1 -> 2 switch pairs against what
+  // is actually on screen rather than against the first catalog entry.
+  const first = panels[0]?.state?.dataset || datasetCatalog[0].slug;
+  const second = otherSlug(first);
+  const dataset = index === 1 ? second : first;
+  return {
+    dataset,
+    variable: "sea_surface_height_above_geoid",
+    colormap: null,
+  };
+}
+
+function buildPanel(index) {
+  const container = document.createElement("div");
+  container.className = "panel";
+  container.dataset.index = String(index);
+  container.style.setProperty("--forecast-color", forecastColor(index));
+  container.innerHTML = `
+    <div class="panel-head">
+      <span class="panel-forecast-label">Forecast ${index + 1}</span>
+      <select class="panel-dataset" aria-label="Panel dataset"></select>
+      <select class="panel-variable" aria-label="Panel variable"></select>
+      <span class="spacer"></span>
+      <span class="panel-badge"></span>
+    </div>
+    <div class="panel-canvas-wrap">
+      <canvas class="panel-field"></canvas>
+      <canvas class="panel-particles"></canvas>
+      <canvas class="panel-overlay"></canvas>
+      <div class="panel-readout" role="status"></div>
+      <div class="panel-ghost-cursor" aria-hidden="true" hidden></div>
+      <div class="panel-loading" hidden>Loading dataset…</div>
+      <div class="panel-swipe-hint" hidden></div>
+      <div class="panel-swipe-handle" aria-hidden="true" hidden>↔</div>
+    </div>`;
+  const panel = {
+    index,
+    container,
+    state: defaultPanelState(index),
+    els: {
+      dataset: container.querySelector(".panel-dataset"),
+      variable: container.querySelector(".panel-variable"),
+      badge: container.querySelector(".panel-badge"),
+      wrap: container.querySelector(".panel-canvas-wrap"),
+      field: container.querySelector(".panel-field"),
+      particles: container.querySelector(".panel-particles"),
+      overlay: container.querySelector(".panel-overlay"),
+      readout: container.querySelector(".panel-readout"),
+      ghostCursor: container.querySelector(".panel-ghost-cursor"),
+      loading: container.querySelector(".panel-loading"),
+      swipeHint: container.querySelector(".panel-swipe-hint"),
+      swipeHandle: container.querySelector(".panel-swipe-handle"),
+    },
+    offscreenA: null,
+    offscreenB: null,
+    landStencil: null,
+    edgesA: null,
+    edgesB: null,
+    field: null,
+    latitudes: null,
+    longitudes: null,
+    range: null,
+    colormap: null,
+    units: "",
+    label: "",
+    particleHandle: null,
+    particleContext: null,
+    particleSignature: "",
+    swipeX: 0.5,
+    renderToken: 0,
+    renderAbort: null,
+    loadingTimer: null,
+    dragging: null,
+    draggingSwipe: false,
+  };
+  wirePanel(panel);
+  return panel;
+}
+
+function refreshPanelControls(panel) {
+  // The reference reanalysis is listed apart from the forecasts; GLO12, climatology and
+  // persistence are all forecasts here.
+  const datasetOption = (entry) => ({
+    value: entry.slug,
+    label: entry.label,
+    group: isReferenceDataset(entry.slug) ? "Reference" : "Forecasts",
+  });
+  populateSelect(
+    panel.els.dataset,
+    [
+      ...datasetCatalog.filter((entry) => isReferenceDataset(entry.slug)),
+      ...datasetCatalog.filter((entry) => !isReferenceDataset(entry.slug)),
+    ].map(datasetOption),
+    panel.state.dataset,
+  );
+  const manifest = manifestFor(panel.state.dataset);
+  // The difference map is Forecast 1 − Forecast 2 on Forecast 1's variable; panel 2's
+  // own picker is mirrored and locked so it can never suggest a cross-variable
+  // difference that is not what is computed (p1 read "temperature − salinity" off it).
+  const diffLocked = isDiffView() && panel.index === 1;
+  if (diffLocked && panels[0]) panel.state.variable = panels[0].state.variable;
+  if (manifest) {
+    if (!diffLocked && !variableExists(manifest, panel.state.variable)) panel.state.variable = fallbackVariable(manifest);
+    const options = Object.keys(manifest.variables).map((key) => ({ value: key, label: variableLabel(manifest, key) }));
+    populateSelect(panel.els.variable, options.concat(currentsVariableOptions(manifest)), panel.state.variable);
+  }
+  panel.els.variable.disabled = diffLocked;
+  panel.els.variable.title = diffLocked ? "In difference mode both forecasts show Forecast 1's variable" : "";
+}
+
+function wirePanel(panel) {
+  panel.container.addEventListener("mousedown", () => setActivePanel(panel.index), true);
+    panel.els.dataset.addEventListener("change", async (event) => {
+    clearTrajectories();
+    panel.state.dataset = event.target.value;
+    setPanelLoading(panel, true);
+    releaseUnusedStores();
+    try {
+      await ensureStore(panel.state.dataset);
+      const manifest = manifestFor(panel.state.dataset);
+      // Preserve the current selection across a dataset switch: variables are keyed by
+      // standard name + depth, so the same channel (incl. derived currents) carries over
+      // when the new dataset has it. Only fall back, with a brief note, when it does not.
+      // Lead day, zoom/pan, purpose mode, region and scope live in shared/view state and
+      // are untouched here, so they are preserved automatically.
+      let fallbackNote = "";
+      if (!variableExists(manifest, panel.state.variable)) {
+        const previousVariable = panel.state.variable;
+        const fallback = fallbackVariable(manifest);
+        panel.state.variable = fallback;
+        const fallbackLabel = manifest.variables[fallback] ? prettyName(manifest.variables[fallback].standard_name) : fallback;
+        fallbackNote = `${prettyName(previousVariable)} is not available for ${labelFor(panel.state.dataset)}, showing ${fallbackLabel} instead`;
+      }
+      const timeMoved = updateSharedTimeControls();
+      refreshPanelControls(panel);
+      setActivePanel(panel.index);
+      // A shorter horizon can pull the shared lead back; every panel then redraws at it.
+      if (timeMoved) await renderAllPanels();
+      else {
+        await renderPanel(panel);
+        if (isDiffView() && panel.index === 1) await renderPanel(panels[0]);
+      }
+      // Reload overlays through applyOverlayMode so the overlay note is refreshed too:
+      // switching to a dataset without published match-ups must flip the note to the
+      // quiet "not published" message instead of leaving the previous dataset's note.
+      await applyOverlayMode();
+      // A different challenger may or may not publish a column store; re-probe, then
+      // re-read the clicked column against the new challenger if the mode stays active.
+      await updateColumnModeAvailability();
+      if (columnModeActive() && shared.columnPoint) await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
+      // renderPanel clears the status on success, so surface the fallback note afterwards.
+      if (fallbackNote) setStatus(fallbackNote);
+      writeHash();
+    } catch (error) {
+      setStatus(String(error.message || error), true);
+      console.error(error);
+    } finally {
+      setPanelLoading(panel, false);
+    }
+  });
+  panel.els.variable.addEventListener("change", async (event) => {
+    // Trajectories are advected from u/v, not from the displayed variable, so they stay.
+    panel.state.variable = event.target.value;
+    setActivePanel(panel.index);
+    refreshPanelControls(panel);
+    // Panel 2's locked picker mirrors this panel's variable in difference mode.
+    if (isDiffView() && panel.index === 0 && panels[1]) refreshPanelControls(panels[1]);
+    await renderPanel(panel);
+    if (isDiffView() && panel.index === 1) await renderPanel(panels[0]);
+    await updateContextRail();
+    updateCurrentsControlVisibility();
+    // The column variable follows the panel variable (temperature/salinity); re-read.
+    if (columnModeActive() && shared.columnPoint) await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
+    writeHash();
+  });
+  const field = panel.els.field;
+  field.addEventListener("pointerdown", (event) => beginPanelDrag(panel, event));
+  field.addEventListener("wheel", (event) => onPanelWheel(panel, event), { passive: false });
+  field.addEventListener("mouseleave", () => {
+    lastHoverPoint = null;
+    panel.els.readout.textContent = "";
+    panel.els.field.style.cursor = "";
+    hideClass4Tooltip();
+    for (const other of panels) {
+      if (other && other.els.ghostCursor) other.els.ghostCursor.hidden = true;
+    }
+  });
+  // Tap/click also populates the consolidated readout pill (touch has no hover).
+  field.addEventListener("click", (event) => updateHover(event));
+  // Double-click resets zoom/pan, like the drawer splitters reset their width. The
+  // browser fires the click gestures first, so a double-click in trajectories or column
+  // mode re-seeds or re-reads the same point before the reset: the same work twice at
+  // the same coordinates, which is idempotent, so it is left undebounced.
+  field.addEventListener("dblclick", () => resetZoomPan());
+}
+
+// ---- rendering a single panel ----------------------------------------------
+
+function currentDepthVariables(panel) {
+  const is15m = panel.state.variable.endsWith("_15m");
+  return {
+    u: is15m ? "eastward_sea_water_velocity_15m" : "eastward_sea_water_velocity",
+    v: is15m ? "northward_sea_water_velocity_15m" : "northward_sea_water_velocity",
+    depth: is15m ? "15m" : "surface",
+  };
+}
+
+// A pyramid cell may cover up to this many device pixels on screen before the next finer
+// level is read. Above one, a 1/4° field on a first screen of about four pixels per degree
+// still draws from its native level while the 1/12° fields stay one level up.
+const RENDER_CELL_DEVICE_PIXELS = 1.5;
+
+// Degrees of longitude per device pixel at the current zoom: the world is 360° across
+// the projection's displayWidth (see projectionFor), measured on the first laid-out map
+// box because the canvas backing store can still be at its default size before a render.
+function degreesPerDevicePixel() {
+  const panel = panels.slice(0, shared.layout).find((candidate) => candidate && candidate.els.wrap.getBoundingClientRect().width > 0);
+  if (!panel) return Infinity;
+  const ratio = window.devicePixelRatio || 1;
+  const rectangle = panel.els.wrap.getBoundingClientRect();
+  const fit = Math.min(rectangle.height, rectangle.width / 2) * ratio;
+  return 360 / (2 * fit * view.zoom);
+}
+
+// The level to draw is chosen from the screen, not from the dataset: the coarsest level
+// whose cells stay within RENDER_CELL_DEVICE_PIXELS, the same target in degrees for every
+// dataset, so a coarse and a fine forecast both draw at the detail the screen can show.
+// Zoomed in past the finest cell, the finest level is drawn.
+function selectRenderLevel(manifest) {
+  const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+  const targetCellSize = RENDER_CELL_DEVICE_PIXELS * degreesPerDevicePixel();
+  return levels.findLast((level) => level.cell_size_deg <= targetCellSize)?.level ?? levels[0].level;
+}
+
+// The level is chosen from the map box as well as the zoom, so a resize or a re-fit can
+// leave a drawn field on a level the screen no longer asks for.
+function renderLevelsStale() {
+  if (shared.scope === SCOPE_WHOLE_YEAR) return false;
+  return panels.slice(0, shared.layout).some((panel) => {
+    const manifest = panel && manifestFor(panel.state.dataset);
+    return manifest && panel.renderedLevel != null && panel.renderedLevel !== selectRenderLevel(manifest);
+  });
+}
+
+// The partner of a difference is resampled onto the host's grid, so it is read at a cell
+// no coarser than the host's: a coarser partner repeats its rows on the finer grid and
+// the difference shows horizontal stripes.
+function compareLevelFor(slug, hostManifest, hostLevel) {
+  const hostCellSize = hostManifest.levels.find((entry) => entry.level === hostLevel).cell_size_deg;
+  const levels = [...manifestFor(slug).levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+  const screenLevel = selectRenderLevel(manifestFor(slug));
+  const screenCellSize = levels.find((entry) => entry.level === screenLevel).cell_size_deg;
+  if (screenCellSize <= hostCellSize) return screenLevel;
+  return levels.findLast((entry) => entry.cell_size_deg <= hostCellSize)?.level ?? levels[0].level;
+}
+
+// Whether a panel could draw this lead day without waiting on the network: every tile
+// the render would read is already decoded in the store's chunk cache, either from an
+// earlier render or from the neighbour prefetch. The lead slider asks this to decide
+// between painting inside the frame and waiting for the fetch debounce.
+function panelLeadCached(panel, leadDay) {
+  // Year scope reads the memoised insight artifacts, never a lead tile.
+  if (shared.scope === SCOPE_WHOLE_YEAR) return true;
+  const manifest = manifestFor(panel.state.dataset);
+  const store = stores.get(panel.state.dataset);
+  if (!manifest || !store) return false;
+  const level = selectRenderLevel(manifest);
+  const startIndex = storeStartIndex(manifest);
+  const leadIndex = storeLeadIndex(manifest, leadDay);
+  const currents = isCurrentsVariable(panel.state.variable);
+  const variables = currents
+    ? [currentDepthVariables(panel).u, currentDepthVariables(panel).v]
+    : [panel.state.variable];
+  const statisticsLevelIndex = statisticsLevel(manifest).level;
+  for (const variable of variables) {
+    if (!isLayerCached(store, { variable, level, startIndex, leadIndex })) return false;
+    if (!isLayerCached(store, { variable, level: statisticsLevelIndex, startIndex, leadIndex })) return false;
+  }
+  // The difference view reads the partner forecast's field(s) on the same slice.
+  if (isDiffHost(panel)) {
+    const partner = stores.get(panels[1].state.dataset);
+    const partnerManifest = manifestFor(panels[1].state.dataset);
+    if (!partner || !partnerManifest) return false;
+    const partnerSlice = { startIndex: storeStartIndex(partnerManifest), leadIndex: storeLeadIndex(partnerManifest, leadDay) };
+    const partnerLevel = compareLevelFor(panels[1].state.dataset, manifest, level);
+    for (const variable of variables) {
+      if (!isLayerCached(partner, { variable, level: partnerLevel, ...partnerSlice })) return false;
+    }
+  }
+  return true;
+}
+
+function leadFramesCached(leadDay) {
+  for (let i = 0; i < shared.layout; i += 1) {
+    if (!panelLeadCached(panels[i], leadDay)) return false;
+  }
+  return true;
+}
+
+async function renderPanel(panel) {
+  const token = ++panel.renderToken;
+  // A superseded render must stop paying for tiles it will never draw: abort the
+  // previous render's in-flight chunk fetches before starting this one.
+  if (panel.renderAbort) panel.renderAbort.abort();
+  panel.renderAbort = new AbortController();
+  setPanelLoading(panel, true);
+  try {
+    await ensureStore(panel.state.dataset);
+    const manifest = manifestFor(panel.state.dataset);
+    if (!variableExists(manifest, panel.state.variable)) panel.state.variable = fallbackVariable(manifest);
+    // A panel can be shown before its manifest is cached (e.g. switching to 2 forecasts
+    // warms only the initially visible panels). refreshPanelControls only fills the
+    // variable select when the manifest is present, so re-run it here, now that the
+    // store is loaded, to populate the (otherwise empty) select. Idempotent and cheap.
+    refreshPanelControls(panel);
+
+    if (shared.scope === SCOPE_WHOLE_YEAR) {
+      await renderYearPanel(panel, token, manifest);
+      if (token !== panel.renderToken) return;
+      resizePanelCanvases(panel);
+      drawPanel(panel);
+      updateSharedColorbar();
+      refreshHoverReadout();
+      setPanelError(panel, "");
+      return;
+    }
+
+    const level = selectRenderLevel(manifest);
+    panel.renderedLevel = level; // the pyramid level the displayed field came from
+    const start = storeStartIndex(manifest);
+    const leadIndex = storeLeadIndex(manifest, shared.leadDay);
+
+    if (isDiffHost(panel) && isCurrentsVariable(panel.state.variable)) {
+      await renderCurrentsDifferencePanel(panel, token, manifest, level, start, leadIndex, panels[1].state.dataset);
+    } else if (isDiffHost(panel)) {
+      await renderDifferencePanel(panel, token, manifest, level, start, leadIndex, panels[1].state.dataset);
+    } else if (isCurrentsVariable(panel.state.variable)) {
+      await renderCurrentsPanel(panel, token, manifest, level, start, leadIndex);
+    } else {
+      await renderFieldPanel(panel, token, manifest, level, start, leadIndex);
+    }
+    if (token !== panel.renderToken) return;
+    resizePanelCanvases(panel);
+    drawPanel(panel);
+    drawOverlays(panel);
+    drawTrajectoryFans(panel);
+    updateSharedColorbar();
+    refreshHoverReadout();
+    setPanelError(panel, "");
+  } catch (error) {
+    if (error && error.name === "AbortError") return;
+    if (token === panel.renderToken) setPanelError(panel, String(error.message || error));
+    console.error(error);
+  } finally {
+    if (token === panel.renderToken) setPanelLoading(panel, false);
+  }
+}
+
+async function readAlignedField(panel, sourceSlug, variable, level, start, leadIndex, targetLat, targetLon) {
+  await ensureStore(sourceSlug);
+  // The indices arrive in the host panel's store; a partner store is indexed by the same
+  // start date and lead day, which can sit at other positions on its own axes.
+  if (sourceSlug !== panel.state.dataset) {
+    const sourceManifest = manifestFor(sourceSlug);
+    start = storeStartIndex(sourceManifest);
+    leadIndex = storeLeadIndex(sourceManifest, shared.leadDay);
+  }
+  const signal = panel.renderAbort ? panel.renderAbort.signal : undefined;
+  const layer = await readLayer(stores.get(sourceSlug), { variable, level, startIndex: start, leadIndex, signal });
+  const coordinates = await loadCoordinates(sourceSlug, level);
+  if (!targetLat) return { field: layer, latitudes: coordinates.latitudes, longitudes: coordinates.longitudes };
+  const aligned = resampleOntoGrid(layer, coordinates.latitudes, coordinates.longitudes, targetLat, targetLon);
+  return { field: aligned, latitudes: targetLat, longitudes: targetLon, compressedBytes: layer.compressedBytes };
+}
+
+// True when more than one panel is shown and every shown panel holds this panel's
+// variable, the condition under which same-variable panels share one colour scale (and
+// the field colorbar is labelled "(shared)"). Mirrors the colorbar's `sameVariable` test.
+function shownPanelsShareVariable(panel) {
+  if (shared.layout <= 1) return false;
+  for (let i = 0; i < shared.layout; i += 1) {
+    if (!panels[i] || panels[i].state.variable !== panel.state.variable) return false;
+  }
+  return true;
+}
+
+// ---- panel statistics on a fixed level ----------------------------------------
+
+// The numbers a panel reports about its field (the area-weighted mean badge, the colour
+// limits and the difference scale) are measured on one fixed pyramid level per dataset,
+// the coarsest level at or finer than this cell size, never on the level the zoom happens
+// to draw, so one link reports the same numbers at every zoom and on every screen.
+const STATISTICS_CELL_DEG = 1;
+// Colour limits are area-weighted quantiles of the field, not its extremes: one outlier
+// cell (a -12.6 °C LANGYA cell, near-zero salinity at a river mouth) would otherwise
+// stretch the scale until the open ocean is a single colour.
+const COLOR_LIMIT_QUANTILES = [0.01, 0.99];
+const statisticsCache = new Map();
+
+function statisticsLevel(manifest) {
+  const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+  return levels.findLast((level) => level.cell_size_deg <= STATISTICS_CELL_DEG * 1.001) ?? levels[0];
+}
+
+// One variable of a dataset on its statistics level, optionally resampled onto another
+// grid (Forecast 1's, for a difference).
+async function readStatisticsLayer(slug, variable, leadDay, target = null) {
+  await ensureStore(slug);
+  const manifest = manifestFor(slug);
+  const level = statisticsLevel(manifest).level;
+  const layer = await readLayer(stores.get(slug), {
+    variable,
+    level,
+    startIndex: storeStartIndex(manifest),
+    leadIndex: storeLeadIndex(manifest, leadDay),
+  });
+  const { latitudes, longitudes } = await loadCoordinates(slug, level);
+  if (!target) return { field: layer, latitudes, longitudes };
+  return {
+    field: resampleOntoGrid(layer, latitudes, longitudes, target.latitudes, target.longitudes),
+    latitudes: target.latitudes,
+    longitudes: target.longitudes,
+  };
+}
+
+// Memoised per start date and lead day, so scrubbing back over a lead reads nothing.
+function memoisedStatistics(key, compute) {
+  const fullKey = `${key}|${sharedStartDate()}|${shared.leadDay}`;
+  if (!statisticsCache.has(fullKey)) {
+    const promise = compute(shared.leadDay);
+    statisticsCache.set(fullKey, promise);
+    promise.catch(() => statisticsCache.delete(fullKey));
+  }
+  return statisticsCache.get(fullKey);
+}
+
+function fieldStatisticsFor(slug, variable) {
+  return memoisedStatistics(`field|${slug}|${variable}`, async (leadDay) => {
+    const { field, latitudes } = await readStatisticsLayer(slug, variable, leadDay);
+    return {
+      mean: areaWeightedMean(field, latitudes),
+      range: areaWeightedQuantiles(field, latitudes, COLOR_LIMIT_QUANTILES),
+    };
+  });
+}
+
+function speedStatisticsFor(slug, variables) {
+  return memoisedStatistics(`speed|${slug}|${variables.u}`, async (leadDay) => {
+    const u = await readStatisticsLayer(slug, variables.u, leadDay);
+    const v = await readStatisticsLayer(slug, variables.v, leadDay);
+    return { mean: areaWeightedMean(speedMagnitudeField(u.field, v.field), u.latitudes) };
+  });
+}
+
+// Forecast 1 minus Forecast 2 on Forecast 1's statistics grid: a variable, or the current
+// speed when `variables` names a u/v pair.
+function differenceStatisticsFor(slug, compareSlug, variable, variables = null) {
+  return memoisedStatistics(`diff|${slug}|${compareSlug}|${variables ? variables.u : variable}`, async (leadDay) => {
+    let grid;
+    let difference;
+    if (variables) {
+      grid = await readStatisticsLayer(slug, variables.u, leadDay);
+      const v = await readStatisticsLayer(slug, variables.v, leadDay);
+      const uCompare = await readStatisticsLayer(compareSlug, variables.u, leadDay, grid);
+      const vCompare = await readStatisticsLayer(compareSlug, variables.v, leadDay, grid);
+      difference = differenceField(speedMagnitudeField(grid.field, v.field), speedMagnitudeField(uCompare.field, vCompare.field));
+    } else {
+      grid = await readStatisticsLayer(slug, variable, leadDay);
+      const compare = await readStatisticsLayer(compareSlug, variable, leadDay, grid);
+      difference = differenceField(grid.field, compare.field);
+    }
+    return {
+      mean: areaWeightedMean(difference, grid.latitudes),
+      magnitude: robustDifferenceMagnitude(difference, grid.latitudes),
+    };
+  });
+}
+
+function statisticsCellSize(slug) {
+  return statisticsLevel(manifestFor(slug)).cell_size_deg;
+}
+
+// The value range a field panel is colorized with: the panel's colour-limit quantiles.
+// Diverging maps are zero-centred (see combineFieldRange). When several panels show the
+// same variable, the range spans all of them so identical physical values render as
+// identical colours and the "(shared)" label is truthful. The quantiles move with the
+// lead, so the range is held grow-only for the selection like every other lead-dependent
+// scale (modules/stable-ranges.js): scrubbing never shrinks it under the user.
+async function fieldColorRange(panel, colormap) {
+  const diverging = DIVERGING.has(colormap);
+  const sharedScale = shownPanelsShareVariable(panel);
+  const members = sharedScale ? panels.slice(0, shared.layout) : [panel];
+  const statistics = await Promise.all(members.map((member) => fieldStatisticsFor(member.state.dataset, member.state.variable)));
+  const [low, high] = combineFieldRange(statistics.map((entry) => entry.range), diverging);
+  return stableInterval(`field|${sharedScale ? "shared" : panel.index}`, low, high) || [low, high];
+}
+
+function applyPanelField(panel, { field, latitudes, longitudes, colormap, range, units, label, statistics }) {
+  panel.field = field;
+  panel.statistics = statistics;
+  clearYearReadoutMetadata(panel);
+  panel.latitudes = latitudes;
+  panel.longitudes = longitudes;
+  panel.edgesA = worldEdges(latitudes, longitudes);
+  panel.offscreenA = colorize(field, latitudes, colormap, range);
+  panel.offscreenB = null;
+  panel.range = range;
+  panel.colormap = colormap;
+  panel.units = units;
+  panel.label = label;
+}
+
+async function renderFieldPanel(panel, token, manifest, level, start, leadIndex) {
+  const entry = manifest.variables[panel.state.variable];
+  const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, leadIndex);
+  if (token !== panel.renderToken) return;
+  const colormap = panel.state.colormap || entry.default_colormap;
+  const range = await fieldColorRange(panel, colormap);
+  const { mean } = await fieldStatisticsFor(panel.state.dataset, panel.state.variable);
+  if (token !== panel.renderToken) return;
+  applyPanelField(panel, { field: primary.field, latitudes: primary.latitudes, longitudes: primary.longitudes, colormap, range,
+    units: entry.units, label: `${shortLabelFor(panel.state.dataset)} · ${prettyName(entry.standard_name)}`,
+    statistics: { mean, cellSize: statisticsCellSize(panel.state.dataset) } });
+  stopParticles(panel);
+  prefetchNeighbours(panel, level, start, leadIndex);
+}
+
+async function renderDifferencePanel(panel, token, manifest, level, start, leadIndex, compareSlug) {
+  const entry = manifest.variables[panel.state.variable];
+  const primary = await readAlignedField(panel, panel.state.dataset, panel.state.variable, level, start, leadIndex);
+  if (token !== panel.renderToken) return;
+  await ensureStore(compareSlug);
+  const compareLevel = compareLevelFor(compareSlug, manifest, level);
+  const compare = await readAlignedField(
+    panel,
+    compareSlug,
+    panel.state.variable,
+    compareLevel,
+    start,
+    leadIndex,
+    primary.latitudes,
+    primary.longitudes,
+  );
+  if (token !== panel.renderToken) return;
+  const difference = differenceField(primary.field, compare.field);
+  // The difference field only exists for the lead on screen, so its symmetric range is
+  // held grow-only for this selection: without that, a difference that doubles between
+  // two leads is drawn in the same colours at both and the growth is invisible. The
+  // magnitude is a robust area-weighted p99, not the single largest cell, measured on the
+  // fixed statistics level so the zoom does not change it.
+  const statistics = await differenceStatisticsFor(panel.state.dataset, compareSlug, panel.state.variable);
+  if (token !== panel.renderToken) return;
+  const bound = stableMax(`diff|${panel.index}|${compareSlug}`, statistics.magnitude) || statistics.magnitude;
+  const range = [-bound, bound];
+  applyPanelField(panel, { field: difference, latitudes: primary.latitudes, longitudes: primary.longitudes,
+    colormap: DIFFERENCE_COLORMAP, range, units: entry.units,
+    label: `${shortLabelFor(panel.state.dataset)} − ${shortLabelFor(compareSlug)} · ${prettyName(entry.standard_name)}`,
+    statistics: { mean: statistics.mean, cellSize: statisticsCellSize(panel.state.dataset) } });
+  stopParticles(panel);
+  prefetchNeighbours(panel, level, start, leadIndex);
+}
+
+// Difference for the derived currents variable: speed magnitude is computed for both
+// forecasts on the primary grid, then differenced, so the panel shows faster/slower
+// rather than silently falling back to forecast 1's plain field.
+async function renderCurrentsDifferencePanel(panel, token, manifest, level, start, leadIndex, compareSlug) {
+  const variables = currentDepthVariables(panel);
+  if (!(variables.u in manifest.variables)) {
+    setStatus(`${labelFor(panel.state.dataset)} has no velocity fields for currents`, true);
+    return;
+  }
+  await ensureStore(compareSlug);
+  if (!(variables.u in manifestFor(compareSlug).variables)) {
+    setStatus(`${labelFor(compareSlug)} has no currents to difference`, true);
+    return;
+  }
+  const uPrimary = await readAlignedField(panel, panel.state.dataset, variables.u, level, start, leadIndex);
+  if (token !== panel.renderToken) return;
+  const vPrimary = await readAlignedField(panel, panel.state.dataset, variables.v, level, start, leadIndex);
+  if (token !== panel.renderToken) return;
+  const compareLevel = compareLevelFor(compareSlug, manifest, level);
+  const uCompare = await readAlignedField(panel, compareSlug, variables.u, compareLevel, start, leadIndex, uPrimary.latitudes, uPrimary.longitudes);
+  if (token !== panel.renderToken) return;
+  const vCompare = await readAlignedField(panel, compareSlug, variables.v, compareLevel, start, leadIndex, uPrimary.latitudes, uPrimary.longitudes);
+  if (token !== panel.renderToken) return;
+  const difference = differenceField(
+    speedMagnitudeField(uPrimary.field, vPrimary.field),
+    speedMagnitudeField(uCompare.field, vCompare.field),
+  );
+  const statistics = await differenceStatisticsFor(panel.state.dataset, compareSlug, null, variables);
+  if (token !== panel.renderToken) return;
+  const bound = stableMax(`diff|${panel.index}|${compareSlug}|currents`, statistics.magnitude) || statistics.magnitude;
+  const range = [-bound, bound];
+  applyPanelField(panel, { field: difference, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
+    colormap: DIFFERENCE_COLORMAP, range,
+    units: "m/s",
+    label: `${shortLabelFor(panel.state.dataset)} − ${shortLabelFor(compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})${currentsLevelSuffix(manifest, level)}`,
+    statistics: { mean: statistics.mean, cellSize: statisticsCellSize(panel.state.dataset) },
+  });
+  stopParticles(panel);
+  prefetchNeighbours(panel, level, start, leadIndex);
+}
+
+// Zoomed out, the drawn level block-averages u and v, so the map shows the speed of the
+// averaged flow rather than the native speed; the colour-bar title says so.
+function currentsLevelSuffix(manifest, level) {
+  const drawn = manifest.levels.find((entry) => entry.level === level);
+  const finest = Math.min(...manifest.levels.map((entry) => entry.cell_size_deg));
+  return drawn && drawn.cell_size_deg > finest * 1.001 ? " · block-mean u, v" : "";
+}
+
+async function renderCurrentsPanel(panel, token, manifest, level, start, leadIndex) {
+  const variables = currentDepthVariables(panel);
+  if (!(variables.u in manifest.variables)) {
+    setStatus(`${labelFor(panel.state.dataset)} has no velocity fields for currents`, true);
+    return;
+  }
+  const uPrimary = await readAlignedField(panel, panel.state.dataset, variables.u, level, start, leadIndex);
+  if (token !== panel.renderToken) return;
+  const vPrimary = await readAlignedField(panel, panel.state.dataset, variables.v, level, start, leadIndex);
+  if (token !== panel.renderToken) return;
+  const speed = speedMagnitudeField(uPrimary.field, vPrimary.field);
+  const range = [0, CURRENTS_MAX_SPEED];
+  const { mean } = await speedStatisticsFor(panel.state.dataset, variables);
+  if (token !== panel.renderToken) return;
+  applyPanelField(panel, { field: speed, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
+    colormap: SPEED_COLORMAP, range, units: "m/s",
+    label: `${shortLabelFor(panel.state.dataset)} · currents (${currentsDepthLabel(panel.state.variable)})${currentsLevelSuffix(manifest, level)}`,
+    statistics: { mean, cellSize: statisticsCellSize(panel.state.dataset) } });
+  panel.landStencil = landStencil(speed, uPrimary.latitudes);
+  panel.velocity = {
+    sampler: makeVelocitySampler(uPrimary.field, vPrimary.field, uPrimary.latitudes, uPrimary.longitudes),
+  };
+  if (shared.showParticles) ensurePanelParticles(panel);
+  else stopParticles(panel);
+  prefetchNeighbours(panel, level, start, leadIndex);
+}
+
+function colorize(field, latitudes, colormap, range, transparentNaN = false, landMask = null) {
+  const flip = latitudes[0] < latitudes[latitudes.length - 1];
+  const image = fieldToImageData(field, colormap, range, {
+    flipVertical: flip,
+    theme: shared.theme,
+    transparentNaN,
+    landMask,
+  });
+  const canvas = rasterCanvas(field.width, field.height);
+  canvas.getContext("2d", { willReadFrequently: true }).putImageData(image, 0, 0);
+  return canvas;
+}
+
+// ---- entire-year scope: precomputed error geography raster ------------------
+
+function clearYearPanel(panel, note) {
+  panel.field = null;
+  panel.offscreenA = null;
+  panel.offscreenB = null;
+  panel.range = null;
+  panel.units = "";
+  panel.label = "";
+  panel.yearMeta = null;
+  panel.yearCounts = null;
+  panel.yearBiasSE = null;
+  panel.yearMissing = note;
+}
+
+function clearYearReadoutMetadata(panel) {
+  panel.yearMeta = null;
+  panel.yearCounts = null;
+  panel.yearBiasSE = null;
+  panel.yearMetric = null;
+}
+
+// Shared scale across the visible panels that show the same year variable, so two-forecast
+// rasters stay directly comparable. The maximum spans every lead of the artifact, so the
+// scale is the same at every lead and the slider shows the error growing instead of the
+// colour scale following it. The signed-bias raster uses the symmetric [-M, +M] form so the
+// diverging (balance) colormap stays centred on 0.
+async function sharedYearMaximum(shortName, maximumOverLeads) {
+  let maximum = 0;
+  for (let i = 0; i < shared.layout; i += 1) {
+    const candidate = panels[i];
+    if (!candidate) continue;
+    const mapping = yearVariableMapping(candidate.state.variable);
+    if (!mapping || mapping.short !== shortName) continue;
+    const url = insightsFor(insightIndex, candidate.state.dataset, shared.region).year_error_geography;
+    if (!url) continue;
+    const geography = await loadYearGeography(url);
+    if (!geography) continue;
+    maximum = Math.max(maximum, maximumOverLeads(geography, shortName));
+  }
+  return maximum || 1;
+}
+
+async function sharedYearRange(shortName) {
+  return [0, await sharedYearMaximum(shortName, yearGeographyMaxAllLeads)];
+}
+
+async function sharedYearBiasRange(shortName) {
+  const bound = await sharedYearMaximum(shortName, yearBiasMaxAllLeads);
+  return [-bound, bound];
+}
+
+async function renderYearPanel(panel, token, manifest) {
+  stopParticles(panel);
+  // The velocity error geography and RMSE-by-start are built from 15 m drifter obs.
+  // A surface current selection cannot be honestly mapped onto them.
+  if (isSurfaceCurrentVariable(panel.state.variable)) {
+    clearYearPanel(panel, "Drifters measure currents at 15 m. Use 15 m currents to compare.");
+    return;
+  }
+  const urls = insightsFor(insightIndex, panel.state.dataset, shared.region);
+  const geoUrl = urls.year_error_geography;
+  if (!geoUrl) {
+    clearYearPanel(panel, "Year diagnostics not available for this dataset/region.");
+    return;
+  }
+  const geography = await loadYearGeography(geoUrl);
+  if (token !== panel.renderToken) return;
+  const biasMode = shared.yearMetric === YEAR_METRIC_BIAS;
+  const mapping = geography ? yearVariableMapping(panel.state.variable) : null;
+  const built = mapping
+    ? biasMode
+      ? buildYearBiasField(geography, mapping.short, shared.leadDay)
+      : buildYearGeographyField(geography, mapping.short, shared.leadDay)
+    : null;
+  if (!geography || !mapping || !built) {
+    // |error| must still work when bias is absent: the bias-specific note fires only when
+    // the geography and variable/lead exist but carry no bias field for this selection.
+    const biasAbsent = biasMode && geography && mapping && buildYearGeographyField(geography, mapping.short, shared.leadDay);
+    clearYearPanel(
+      panel,
+      !geography
+        ? "Year diagnostics not available for this dataset/region."
+        : biasAbsent
+          ? "Bias is not available for this dataset. A republish is pending."
+          : biasMode
+            ? "Bias not available for this variable at this lead."
+            : "Year diagnostics not available for this variable at this lead.",
+    );
+    return;
+  }
+  const range = biasMode
+    ? await sharedYearBiasRange(mapping.short)
+    : await sharedYearRange(mapping.short);
+  if (token !== panel.renderToken) return;
+  // Separate land from unobserved ocean: both are NaN in the error raster, so derive a
+  // land mask from the dataset's own coarsest pyramid level (tiny) and resample it onto
+  // the raster grid. Land then renders in the field land colour, ocean-without-obs in a
+  // faint tint, consistent with single-forecast rendering. A failed fetch degrades to
+  // the previous transparent-NaN behaviour.
+  const landMask = await yearLandMask(panel, built.latitudes, built.longitudes);
+  if (token !== panel.renderToken) return;
+  panel.field = built.field;
+  panel.yearCounts = buildYearObservationCounts(geography, mapping.short, shared.leadDay, { bias: biasMode });
+  // Per-cell bias standard error for the hover readout (bias mode only; null on old artifacts).
+  panel.yearBiasSE = biasMode ? buildYearBiasStandardError(geography, mapping.short, shared.leadDay) : null;
+  panel.latitudes = built.latitudes;
+  panel.longitudes = built.longitudes;
+  panel.edgesA = worldEdges(built.latitudes, built.longitudes);
+  const colormap = biasMode ? DIFFERENCE_COLORMAP : YEAR_ERROR_COLORMAP;
+  panel.offscreenA = landMask
+    ? colorize(built.field, built.latitudes, colormap, range, false, landMask)
+    : colorize(built.field, built.latitudes, colormap, range, true);
+  panel.offscreenB = null;
+  panel.range = range;
+  panel.colormap = colormap;
+  panel.units = mapping.unit;
+  panel.yearMissing = null;
+  panel.yearMetric = shared.yearMetric;
+  panel.yearMeta = { nStarts: geography.meta && geography.meta.n_starts, component: mapping.component };
+  const entry = variableEntry(manifest, panel.state.variable);
+  const varLabel = entry ? prettyName(entry.standard_name) : panel.state.variable;
+  panel.label =
+    `${shortLabelFor(panel.state.dataset)} · ${biasMode ? "bias" : "mean |obs − model|"} · ${varLabel}` +
+    (mapping.component ? ` (${mapping.component})` : "");
+}
+
+const yearLandMaskCache = new Map();
+
+// The raw variable whose land/ocean pattern defines the mask. Derived current speed
+// has no store variable of its own, so borrow its eastward component.
+function landMaskVariable(panel) {
+  if (panel.state.variable === "current_speed" || panel.state.variable === "current_speed_15m") {
+    return currentDepthVariables(panel).u;
+  }
+  return panel.state.variable;
+}
+
+async function yearLandMask(panel, latitudes, longitudes) {
+  const slug = panel.state.dataset;
+  const variable = landMaskVariable(panel);
+  const key = `${slug}/${variable}/${shared.region}/${latitudes.length}x${longitudes.length}`;
+  if (yearLandMaskCache.has(key)) return yearLandMaskCache.get(key);
+  const promise = (async () => {
+    try {
+      await ensureStore(slug);
+      const manifest = manifestFor(slug);
+      if (!manifest || !Array.isArray(manifest.levels) || !manifest.levels.length) return null;
+      if (!variableExists(manifest, variable)) return null;
+      const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+      const coarsest = levels[levels.length - 1].level;
+      const layer = await readLayer(stores.get(slug), { variable, level: coarsest, startIndex: 0, leadIndex: 0 });
+      const coordinates = await loadCoordinates(slug, coarsest);
+      const resampled = resampleOntoGrid(layer, coordinates.latitudes, coordinates.longitudes, latitudes, longitudes);
+      const mask = new Uint8Array(resampled.data.length);
+      for (let i = 0; i < mask.length; i += 1) mask[i] = Number.isNaN(resampled.data[i]) ? 1 : 0;
+      return mask;
+    } catch (error) {
+      console.warn("year land mask unavailable", error);
+      return null;
+    }
+  })();
+  yearLandMaskCache.set(key, promise);
+  return promise;
+}
+
+function prefetchNeighbours(panel, level, start, leadIndex) {
+  const manifest = manifestFor(panel.state.dataset);
+  if (!manifest || !manifest.lead_days) return;
+  // The panel statistics read their own fixed level, so warm it beside the drawn one.
+  const levels = new Set([level, statisticsLevel(manifest).level]);
+  for (const delta of [1, -1]) {
+    const lead = shared.leadDay + delta;
+    if (storeLeadIndex(manifest, lead) < 0) continue;
+    for (const prefetchLevel of levels) {
+      if (isCurrentsVariable(panel.state.variable)) {
+        const variables = currentDepthVariables(panel);
+        prefetchLayer(stores.get(panel.state.dataset), { variable: variables.u, level: prefetchLevel, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
+        prefetchLayer(stores.get(panel.state.dataset), { variable: variables.v, level: prefetchLevel, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
+      } else {
+        prefetchLayer(stores.get(panel.state.dataset), { variable: panel.state.variable, level: prefetchLevel, startIndex: start, leadIndex: storeLeadIndex(manifest, lead) });
+      }
+    }
+  }
+}
+
+// ---- projection + drawing ---------------------------------------------------
+
+function projectionFor(panel) {
+  const canvas = panel.els.field;
+  const width = canvas.width;
+  const height = canvas.height;
+  const fit = Math.min(height, width / 2);
+  const displayHeight = fit * view.zoom;
+  const displayWidth = 2 * displayHeight;
+  const originX = width / 2 - view.centerNX * displayWidth;
+  const originY = height / 2 - view.centerNY * displayHeight;
+  return {
+    width,
+    height,
+    displayWidth,
+    displayHeight,
+    originX,
+    originY,
+    project: (nx, ny) => ({ x: originX + nx * displayWidth, y: originY + ny * displayHeight }),
+    unproject: (x, y) => ({ nx: (x - originX) / displayWidth, ny: (y - originY) / displayHeight }),
+  };
+}
+
+function drawImageWorld(context, offscreen, edges, projection) {
+  const visibleLeft = projection.unproject(0, 0).nx;
+  const visibleRight = projection.unproject(projection.width, 0).nx;
+  const firstCopy = shared.region === REGION_GLOBAL ? Math.floor(visibleLeft - edges.nx1) : 0;
+  const lastCopy = shared.region === REGION_GLOBAL ? Math.ceil(visibleRight - edges.nx0) : 0;
+  // Snap every copy to whole device pixels. Copy k's right edge and copy k+1's left
+  // edge are the same world coordinate, so rounding hands them the same integer and
+  // the copies abut exactly. Drawn at fractional coordinates instead, each copy gets
+  // an antialiased edge, and where the two meet the backdrop shows through as a
+  // one-pixel column: the black line at the dateline in the default Pacific-centred
+  // view. The blit alone is snapped; projection, hit-testing and overlays are
+  // untouched, so nothing moves by more than the sub-pixel the rounding absorbs.
+  const top = Math.round(projection.project(edges.nx0, edges.nyTop).y);
+  const bottom = Math.round(projection.project(edges.nx0, edges.nyBottom).y);
+  for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+    const left = Math.round(projection.project(edges.nx0 + copy, edges.nyTop).x);
+    const right = Math.round(projection.project(edges.nx1 + copy, edges.nyTop).x);
+    context.drawImage(offscreen, left, top, right - left, bottom - top);
+  }
+}
+
+function isSwipeHost(panel) {
+  return shared.layout === 2 && shared.displayMode === DISPLAY_SWIPE && panel.index === 0;
+}
+
+// The Difference comparison view exists only with two forecasts; it collapses to a
+// single map (hosted by Forecast 1) showing Forecast 1 − Forecast 2.
+function isDiffView() {
+  return shared.layout === 2 && shared.displayMode === DISPLAY_DIFFERENCE;
+}
+
+function isDiffHost(panel) {
+  return isDiffView() && panel.index === 0;
+}
+
+// The background forecast field is desaturated while a colored purpose overlay is active
+// (class-4 obs, eddy census, trajectories) so the overlay colors stay legible. Field mode,
+// the difference view, and the year raster keep their full-color scale.
+function fieldMutedUnderOverlay() {
+  if (shared.scope === SCOPE_WHOLE_YEAR) return false;
+  if (isDiffView()) return false;
+  return shared.overlayMode === OVERLAY_CLASS4 || shared.overlayMode === OVERLAY_EDDIES || shared.overlayMode === OVERLAY_TRAJECTORIES;
+}
+
+// Theme colors drawn on canvas come from the shared design tokens (tokens.css,
+// --ob-viewer-*, themed by data-theme on <html>); the per-theme literal is a
+// fallback kept in sync with that file.
+function themeToken(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function drawPanel(panel) {
+  const canvas = panel.els.field;
+  const context = canvas.getContext("2d");
+  context.fillStyle = themeToken("--ob-viewer-canvas-bg", shared.theme === THEME_LIGHT ? "#eef2f6" : "#080b11");
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  if (!panel.offscreenA) {
+    if (shared.scope === SCOPE_WHOLE_YEAR && panel.yearMissing) {
+      context.fillStyle = themeToken("--ob-viewer-canvas-note", shared.theme === THEME_LIGHT ? "#5b6675" : "#8b97a6");
+      context.font = `${14 * (window.devicePixelRatio || 1)}px system-ui, sans-serif`;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(panel.yearMissing, canvas.width / 2, canvas.height / 2);
+      panel.els.swipeHint.hidden = true;
+      panel.els.swipeHandle.hidden = true;
+    }
+    updatePanelMethodNote(panel);
+    return;
+  }
+  const projection = projectionFor(panel);
+  context.imageSmoothingEnabled = false;
+
+  // Under a colored purpose overlay (class-4 obs, eddies, trajectories) desaturate the
+  // background field so the overlay owns the color channel and its points/contours read
+  // clearly. Field mode and the difference view keep full color. Applied as a cheap
+  // canvas filter on the field blit only, no re-colorize, no tile refetch; the hover
+  // readout still reads the raw field values.
+  const fieldFilter = fieldMutedUnderOverlay() ? "grayscale(1) contrast(0.9)" : "none";
+
+  // In swipe display the single host panel (Forecast 1) overlays Forecast 2 on its
+  // right side; take Forecast 2's coloured field straight from the second panel.
+  // INVARIANT I3: this is the single producer of panel.offscreenB / panel.edgesB. The
+  // hover readout and the divider drag both key off offscreenB being non-null to decide
+  // that a swipe composite is on screen, so nothing else may set or clear it here.
+  if (isSwipeHost(panel)) {
+    panel.offscreenB = panels[1] ? panels[1].offscreenA : null;
+    panel.edgesB = panels[1] ? panels[1].edgesA : null;
+  }
+
+  if (isSwipeHost(panel) && panel.offscreenB) {
+    context.filter = fieldFilter;
+    drawImageWorld(context, panel.offscreenA, panel.edgesA, projection);
+    const dividerX = panel.swipeX * canvas.width;
+    context.save();
+    context.beginPath();
+    context.rect(dividerX, 0, canvas.width - dividerX, canvas.height);
+    context.clip();
+    drawImageWorld(context, panel.offscreenB, panel.edgesB, projection);
+    context.restore();
+    context.filter = "none";
+    const dividerColor = themeToken("--ob-viewer-swipe-divider", shared.theme === THEME_LIGHT ? "#1f6feb" : "#38bdf8");
+    context.strokeStyle = dividerColor;
+    context.lineWidth = 2 * (window.devicePixelRatio || 1);
+    context.beginPath();
+    context.moveTo(dividerX, 0);
+    context.lineTo(dividerX, canvas.height);
+    context.stroke();
+    // The grab handle is a visual cue only (pointer-events: none); the 12 px grab zone
+    // around the divider in beginPanelDrag does the dragging, so the handle sits inside it.
+    panel.els.swipeHandle.hidden = false;
+    panel.els.swipeHandle.style.left = `${panel.swipeX * 100}%`;
+    panel.els.swipeHandle.style.setProperty("--swipe-divider", dividerColor);
+    panel.els.swipeHint.hidden = false;
+    panel.els.swipeHint.textContent = `◀ ${labelFor(panels[0].state.dataset)}  |  ${labelFor(panels[1].state.dataset)} ▶`;
+  } else {
+    context.filter = fieldFilter;
+    drawImageWorld(context, panel.offscreenA, panel.edgesA, projection);
+    context.filter = "none";
+    panel.els.swipeHint.hidden = true;
+    panel.els.swipeHandle.hidden = true;
+  }
+  // In year scope outline the raster extent so the map's data limits are legible at
+  // zoom 1, especially the regional (ibi) domain against the empty page outside it.
+  if (shared.scope === SCOPE_WHOLE_YEAR && panel.edgesA) drawRasterBorder(context, panel.edgesA, projection);
+  updateParticleProjection(panel, projection);
+  updatePanelBadge(panel);
+  updatePanelMethodNote(panel);
+}
+
+// Attach the right "?" method note to a panel's header: the difference-view note on the
+// diff host, the year error-geography note in year scope, otherwise the field-map note
+// (with the panel's dataset label). Cleared and re-attached each draw so it tracks state.
+function updatePanelMethodNote(panel) {
+  const head = panel.container.querySelector(".panel-head");
+  if (!head) return;
+  head.querySelectorAll(".method-note-btn").forEach((button) => button.remove());
+  if (shared.scope === SCOPE_WHOLE_YEAR) {
+    if (!panel.yearMissing) attachMethodNote(head, "year-geography");
+  } else if (isDiffHost(panel)) {
+    attachMethodNote(head, "diff-view");
+  } else {
+    attachMethodNote(head, "field-map", { dataset: labelFor(panel.state.dataset) });
+  }
+}
+
+function drawRasterBorder(context, edges, projection) {
+  const ratio = window.devicePixelRatio || 1;
+  const visibleLeft = projection.unproject(0, 0).nx;
+  const visibleRight = projection.unproject(projection.width, 0).nx;
+  const firstCopy = shared.region === REGION_GLOBAL ? Math.floor(visibleLeft - edges.nx1) : 0;
+  const lastCopy = shared.region === REGION_GLOBAL ? Math.ceil(visibleRight - edges.nx0) : 0;
+  context.save();
+  context.strokeStyle = themeToken("--ob-viewer-raster-border", shared.theme === THEME_LIGHT ? "rgba(40, 52, 72, 0.5)" : "rgba(184, 200, 224, 0.5)");
+  context.lineWidth = 1.5 * ratio;
+  for (let copy = firstCopy; copy <= lastCopy; copy += 1) {
+    const topLeft = projection.project(edges.nx0 + copy, edges.nyTop);
+    const bottomRight = projection.project(edges.nx1 + copy, edges.nyBottom);
+    if (shared.region === REGION_GLOBAL) {
+      // Longitude wraps, so vertical edges would draw a spurious seam mid-ocean; only
+      // the top/bottom latitude limits are real boundaries of the raster.
+      context.beginPath();
+      context.moveTo(topLeft.x, topLeft.y);
+      context.lineTo(bottomRight.x, topLeft.y);
+      context.moveTo(topLeft.x, bottomRight.y);
+      context.lineTo(bottomRight.x, bottomRight.y);
+      context.stroke();
+    } else {
+      context.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+    }
+  }
+  context.restore();
+}
+
+// One date's mean comes from the fixed statistics level (see STATISTICS_CELL_DEG), so it
+// does not move with the zoom. The year raster is one fixed grid already.
+function updatePanelBadge(panel) {
+  const statistics = shared.scope === SCOPE_WHOLE_YEAR ? null : panel.statistics;
+  const mean = statistics ? statistics.mean : panel.field ? areaWeightedMean(panel.field, panel.latitudes) : NaN;
+  // Coarse levels block-average u and v before the browser takes the speed, so a currents
+  // mean is the speed of the averaged flow, lower than the mean native speed.
+  const currents = Boolean(statistics) && isCurrentsVariable(panel.state.variable);
+  panel.els.badge.textContent = `${currents ? "mean-flow speed" : "mean"} ${formatFixed(mean, 3)} ${panel.units}`;
+  panel.els.badge.title = statistics
+    ? currents
+      ? `Area-weighted speed of the block-averaged u, v on the ${Number(statistics.cellSize.toFixed(2))}° level (zoom-independent); below the mean native speed.`
+      : `Area-weighted mean of the whole field, from the ${Number(statistics.cellSize.toFixed(2))}° level (zoom-independent).`
+    : "";
+}
+
+// ---- overlays ---------------------------------------------------------------
+
+let overlayData = {
+  eddiesCensuses: [],
+  eddiesMatch: null,
+  eddiesPublishedStarts: null,
+  eddiesUnpublished: [],
+  class4: null,
+  class4BySlug: {},
+  class4Error: null,
+  region: null,
+};
+let redrawAllPanelsFrame = 0;
+// The lead day a shared link asked for, until the horizon of the loaded forecast is known,
+// and the one line that says so when the two differ. Panel renders clear the status line as
+// they finish, so the note is written once the first frame is up rather than before it.
+let requestedLeadDay = null;
+let leadClampNote = "";
+// Which forecast limits the shared lead range when the visible forecasts reach different
+// horizons. It is what the status line shows while nothing else needs saying.
+let leadRangeNote = "";
+
+async function loadInsightManifest(url) {
+  if (!url) return null;
+  try {
+    const response = await fetch(resolveViewerDataUrl(url), { cache: "no-cache" });
+    if (!response.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
+}
+
+// Overlay loads are long (a match-up read is seconds to a minute) and they all write to the
+// one shared `overlayData`. Region switches and lead scrubs start new ones freely, so without
+// a token the slowest reply wins whatever it happens to answer: the map showed one lead's obs
+// under another lead's note, or "0 obs" under a note that said the load had succeeded. Each
+// load takes the next token and writes nothing once a newer load has taken one.
+let overlayGeneration = 0;
+
+// False when a newer load superseded this one: the caller must not draw or narrate its result.
+async function loadOverlayData() {
+  const generation = (overlayGeneration += 1);
+  const superseded = () => generation !== overlayGeneration;
+  const slug = panels[activePanelIndex] ? panels[activePanelIndex].state.dataset : datasetCatalog[0].slug;
+  const region = shared.region;
+  overlayData.region = region;
+  overlayData.eddiesCensuses = [];
+  overlayData.eddiesMatch = null;
+  overlayData.eddiesPublishedStarts = null;
+  overlayData.eddiesLeadMismatch = false;
+  overlayData.eddiesUnpublished = [];
+  overlayData.class4 = null;
+  overlayData.class4BySlug = {};
+  overlayData.class4Error = null;
+  overlayData.class4Unpublished = false;
+  // Nothing may prefetch match-ups for an overlay that is no longer showing them.
+  if (shared.overlayMode !== OVERLAY_CLASS4) stopClass4Prefetch(null);
+  if (shared.overlayMode === OVERLAY_EDDIES) {
+    // Load each visible forecast's own eddy artifact and reduce it to a census at the
+    // start date and lead day on screen. The two forecasts come from the panel pickers;
+    // no dataset is a hardcoded truth.
+    const eddyUrls = panels
+      .slice(0, shared.layout)
+      .map((panel) => insightsFor(insightIndex, panel.state.dataset, region).eddies || null);
+    const eddiesByPanel = await Promise.all(eddyUrls.map((url) => loadEddies(url)));
+    if (superseded()) return false;
+    overlayData.eddiesUnpublished = eddyUrls.map((url) => !url);
+    overlayData.eddiesPublishedStarts = eddyPublishedStartDates(eddiesByPanel.find(Boolean) || null);
+    // Two forecasts are cross-matched only at a lead day BOTH publish: snap the requested
+    // lead to the intersection of their available leads and read both censuses there, so a
+    // wave challenger with a different lead set can never silently match different leads.
+    // No shared lead → suppress the match and report both leads (see renderEddyLegend).
+    if (shared.layout === 2 && eddiesByPanel[0] && eddiesByPanel[1]) {
+      const aligned = await alignedEddyCensuses(
+        eddiesByPanel[0],
+        eddiesByPanel[1],
+        shared.leadDay,
+        currentStartDate(panels[0].state.dataset),
+      );
+      if (superseded()) return false;
+      overlayData.eddiesCensuses = aligned.censuses;
+      overlayData.eddiesLeadMismatch = aligned.mismatch;
+      overlayData.eddiesMatch =
+        !aligned.mismatch && aligned.censuses[0] && aligned.censuses[1]
+          ? matchCensuses(aligned.censuses[0].detections, aligned.censuses[1].detections)
+          : null;
+    } else {
+      const censuses = await Promise.all(
+        eddiesByPanel.map((eddies, index) =>
+          eddyCensus(eddies, shared.leadDay, currentStartDate(panels[index].state.dataset)),
+        ),
+      );
+      if (superseded()) return false;
+      overlayData.eddiesCensuses = censuses;
+      overlayData.eddiesMatch = null;
+    }
+  } else if (shared.overlayMode === OVERLAY_CLASS4) {
+    // Every visible panel draws its OWN forecast's match-ups, so each shown dataset gets its
+    // own read (two panels on one dataset share it). The notes and the rail describe the
+    // active panel's entry, mirrored into overlayData.class4 below.
+    const slugs = [...new Set(panels.slice(0, shared.layout).map((panel) => panel.state.dataset))];
+    const requests = await Promise.all(slugs.map((panelSlug) => class4RequestFor(panelSlug, region)));
+    if (superseded()) return false;
+    // The user is waiting now: stop any prefetch of another lead from holding connections
+    // these reads need. A prefetch of one of these very pairs is kept, it is the read we want.
+    stopClass4Prefetch(requests.filter(Boolean));
+    const entries = await Promise.all(
+      requests.map(async (request, index) => {
+        // Reference datasets (and any dataset without published match-ups) carry an
+        // explicit null class4_matchups in insights.json. That is a legitimate absence,
+        // not a failure: the panel paints no points. We never substitute another model's
+        // obs, which would paint provenance-mismatched points under this dataset's name.
+        if (!request) return { data: null, error: null, unpublished: true, request: null };
+        const isActive = slugs[index] === slug;
+        try {
+          const data = await loadClass4(request.url, { ...request, ...(isActive ? { onProgress: showClass4Progress } : {}) });
+          return { data, error: null, unpublished: false, request };
+        } catch (error) {
+          return { data: null, error: error instanceof Error ? error.message : String(error), unpublished: false, request };
+        }
+      }),
+    );
+    if (superseded()) return false;
+    overlayData.class4BySlug = Object.fromEntries(slugs.map((panelSlug, index) => [panelSlug, entries[index]]));
+    mirrorActiveClass4(slug);
+    for (let index = 0; index < slugs.length; index += 1) {
+      if (entries[index].data) scheduleClass4Prefetch(entries[index].request, slugs[index]);
+    }
+  }
+  return true;
+}
+
+// The notes, legend and rail speak for the active panel: point the single-dataset slots at
+// its entry (or the first shown dataset's when the active one has none).
+function mirrorActiveClass4(slug) {
+  const entries = Object.values(overlayData.class4BySlug);
+  const active = overlayData.class4BySlug[slug] || entries[0];
+  if (!active) return;
+  overlayData.class4 = active.data;
+  overlayData.class4Error = active.error;
+  overlayData.class4Unpublished = active.unpublished;
+}
+
+// The targeted match-up read for one dataset at the start and lead on screen, or null when
+// that dataset publishes no match-ups for this region.
+async function class4RequestFor(slug, region) {
+  const urls = insightsFor(insightIndex, slug, region);
+  const class4Url = urls.class4_matchups;
+  if (!class4Url) return null;
+  const manifest = await loadInsightManifest(urls.manifest);
+  const class4Manifest = manifest && manifest["class4-matchups"];
+  return {
+    url: class4Url,
+    byteLength: class4ByteLengthHint(class4Url, class4Manifest),
+    startDate: currentStartDate(slug),
+    leadDay: shared.leadDay,
+    variables: class4RequestVariables(),
+  };
+}
+
+// Scrubbing the lead slider is the common move, and each lead is its own download. Once the
+// lead the user asked for has landed, read the neighbouring leads into the same worker cache
+// while the connection is idle, so the next step of the scrub is already there. Two leads
+// only: the pipe is shared with the map tiles and the origins throttle per connection.
+const CLASS4_PREFETCH_LEADS = 2;
+let class4PrefetchGeneration = 0;
+
+function stopClass4Prefetch(keep) {
+  class4PrefetchGeneration += 1;
+  cancelClass4Prefetches(keep || null);
+}
+
+function scheduleClass4Prefetch(request, slug) {
+  const leads = neighbouringLeads(request.leadDay, slug).slice(0, CLASS4_PREFETCH_LEADS);
+  if (!leads.length) return;
+  const generation = class4PrefetchGeneration;
+  const stale = () => generation !== class4PrefetchGeneration || shared.overlayMode !== OVERLAY_CLASS4;
+  whenIdle(async () => {
+    for (const leadDay of leads) {
+      if (stale()) return;
+      await prefetchClass4(request.url, { ...request, leadDay });
+    }
+  });
+}
+
+// Next lead first: a scrub goes forward far more often than back.
+function neighbouringLeads(leadDay, slug) {
+  const manifest = manifestFor(slug);
+  if (!manifest || !Array.isArray(manifest.lead_days) || !manifest.lead_days.length) return [];
+  const range = sharedLeadRange();
+  return [leadDay + 1, leadDay - 1].filter(
+    (lead) => manifest.lead_days.includes(lead) && (!range || (lead >= range.minimum && lead <= range.maximum)),
+  );
+}
+
+function whenIdle(run) {
+  if (typeof self.requestIdleCallback === "function") self.requestIdleCallback(() => run(), { timeout: 2000 });
+  else setTimeout(run, 400);
+}
+
+// Bucket latency on the match-up parquet ranges from a second to well over a minute, so the
+// wait carries its own byte counter and bar. Both ride inside the note box the layout already
+// reserves (the bar is positioned out of flow), so a load moves nothing on screen. The label
+// is whatever the caller last announced, since a first load and a lead change say different
+// things. Any later `note.textContent =` clears the bar with the text it replaces.
+let class4ProgressLabel = "Loading Class IV match-ups…";
+
+function showClass4Progress(progress) {
+  const note = elements["overlay-note"];
+  if (!note) return;
+  const done = megabytes(progress.bytesDone);
+  const total = progress.bytesTotal > 0 ? megabytes(progress.bytesTotal) : null;
+  note.textContent = total ? `${class4ProgressLabel} ${done} of ${total} MB` : `${class4ProgressLabel} ${done} MB`;
+  const bar = document.createElement("span");
+  bar.className = "note-progress";
+  const fill = document.createElement("span");
+  fill.className = "note-progress-fill";
+  if (total) fill.style.width = `${Math.min(100, (progress.bytesDone / progress.bytesTotal) * 100).toFixed(1)}%`;
+  else bar.classList.add("indeterminate");
+  bar.appendChild(fill);
+  note.appendChild(bar);
+}
+
+// The parquet variable name(s) needed to draw the class-4 overlay for every visible
+// panel. Derived current speed needs both velocity components. Used to skip row groups
+// that provably hold no requested variable (rows sorted start,lead,variable).
+function class4RequestVariables() {
+  const set = new Set();
+  for (let i = 0; i < shared.layout; i += 1) {
+    const variable = panels[i] && panels[i].state.variable;
+    if (!variable) continue;
+    if (isCurrentsVariable(variable)) {
+      set.add("eastward_sea_water_velocity");
+      set.add("northward_sea_water_velocity");
+    } else {
+      set.add(class4ParquetVariable(variable));
+    }
+  }
+  return [...set];
+}
+
+function class4ByteLengthHint(class4Url, class4Manifest) {
+  const byteLength = Number(class4Manifest && class4Manifest.bytes);
+  if (!Number.isFinite(byteLength) || byteLength <= 0) return undefined;
+  const manifestUrl = class4Manifest.url || class4Manifest.href || class4Manifest.path;
+  if (!manifestUrl) return byteLength;
+  try {
+    const expected = new URL(resolveViewerDataUrl(class4Url), window.location.href).href;
+    const hinted = new URL(resolveViewerDataUrl(manifestUrl), window.location.href).href;
+    return expected === hinted ? byteLength : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// The forecast start date currently selected, as the YYYY-MM-DD string the
+// match-up parquet's start_date column and row-group statistics use.
+function currentStartDate() {
+  return sharedStartDate();
+}
+
+// ONE obs-error ramp per variable, not one per panel: two forecasts of the same variable
+// share a ramp, since two ramps would make the same colour mean two different errors. Two
+// different variables are errors in different units, so each keeps its own ramp and bar.
+const CLASS4_SCALE_ID = "class4";
+
+function class4ScaleId(panel) {
+  return `${CLASS4_SCALE_ID}|${panel.state.variable}`;
+}
+
+// The ramp as it stands, without offering a measurement (stableMax ignores a candidate of 0).
+function class4CurrentScale(panel) {
+  return stableMax(class4ScaleId(panel), 0);
+}
+
+// Widen the shared ramp with this lead's measurement. A non-finite measurement means the set
+// measured nothing (no points, or none with a finite error): it must not enter the grow-only
+// bound, because any placeholder is a plausible error in the units being plotted and would
+// pin the ramp there for the rest of the selection.
+// INVARIANT I2: grow-only within the selection. A lead whose points happen to be calm
+// must keep the ramp the earlier leads established, or the colours mean a different
+// number at every step of the slider.
+function class4StableScale(measure, panel) {
+  const previous = class4CurrentScale(panel);
+  const scale = stableMax(class4ScaleId(panel), measure);
+  if (scale > previous) {
+    // The colorbar and legend read the ramp at render time, which can run before the
+    // first widening draw; refresh them so "scale ≈ n/a" never outlives the first
+    // painted point (p8).
+    updateSharedColorbar();
+    // A panel that widens the bound after the other has already painted leaves the two on
+    // different ramps for that frame. The bound only grows, so one more frame settles them.
+    if (shared.layout > 1) scheduleRedrawAllPanels();
+  }
+  return scale;
+}
+
+function drawOverlays(panel) {
+  const canvas = panel.els.overlay;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  if (shared.scope === SCOPE_WHOLE_YEAR) return;
+  const projection = projectionFor(panel);
+  // The PSD rectangle is a spectrum tool, not a purpose overlay: it draws in every
+  // single-forecast display (incl. swipe and difference, one shared box, both spectra).
+  if (psdBoxVisible()) drawPsdBox(panel, context, projection);
+  // Class-4 points and eddies are per-forecast; the difference view has no single
+  // forecast to attach them to, so it stays overlay-free (see the quiet note).
+  if (isDiffView()) return;
+  if (shared.overlayMode === OVERLAY_NONE) return;
+  const ratio = window.devicePixelRatio || 1;
+  // Points/contours belong to the periodic world too: draw them on every visible
+  // wrapped copy so they stay on the field when panning across the dateline.
+  const copyOffsets = visibleCopyOffsets(projection, canvas);
+  const projectOnCopy = (offset) => (nx, ny) => projection.project(nx + offset, ny);
+
+  if (shared.overlayMode === OVERLAY_WATER_COLUMN) {
+    if (shared.columnPoint) drawColumnMarker(panel, context, projection, copyOffsets);
+    return;
+  }
+  if (shared.overlayMode === OVERLAY_EDDIES) {
+    const index = panel.index;
+    const match = overlayData.eddiesMatch;
+    if (shared.layout === 2 && match) {
+      const own = index === 0 ? match.matched.map((pair) => pair.a) : match.matched.map((pair) => pair.b);
+      const only = index === 0 ? match.onlyA : match.onlyB;
+      for (const offset of copyOffsets) {
+        drawEddyDetections(context, projectOnCopy(offset), own, EDDY_MATCHED_COLOR, { devicePixelRatio: ratio });
+        drawEddyDetections(context, projectOnCopy(offset), only, forecastColor(index), { devicePixelRatio: ratio });
+      }
+    } else {
+      const census = overlayData.eddiesCensuses[index];
+      if (census) {
+        for (const offset of copyOffsets) {
+          drawEddyDetections(context, projectOnCopy(offset), census.detections, forecastColor(index), {
+            devicePixelRatio: ratio,
+          });
+        }
+      } else if (overlayData.eddiesUnpublished[index]) {
+        drawPanelOverlayNote(panel, context, "No eddy census for this model");
+      }
+    }
+  } else if (
+    shared.overlayMode === OVERLAY_CLASS4 &&
+    overlayData.class4BySlug[panel.state.dataset] &&
+    overlayData.class4BySlug[panel.state.dataset].data &&
+    // A redraw can fire between a region switch and the overlay reload nulling the slot;
+    // painting the old region's rows would also widen the fresh ramp with their p90,
+    // silently carrying one region's scale into another (p8).
+    overlayData.region === shared.region &&
+    !isSurfaceCurrentVariable(panel.state.variable)
+  ) {
+    const manifest = manifestFor(panel.state.dataset);
+    const entry = manifest && manifest.variables[panel.state.variable];
+    const depthBin = class4DepthBin(entry);
+    const startDate = sharedStartDate();
+    // This panel's own forecast's match-ups, never the active panel's.
+    const class4 = overlayData.class4BySlug[panel.state.dataset].data;
+    const rows = class4.rows || [];
+    const targeted = class4.targeted;
+    const selector = {
+      variable: panel.state.variable,
+      depthBin,
+      leadDay: shared.leadDay,
+      startDate,
+    };
+    // Row-scan (filtering + error scale + match count) depends only on the selector and
+    // the loaded rows, not the viewport, cache it so pan/zoom rAF redraws only reproject
+    // the already-filtered points instead of rescanning every row again (perf).
+    const cacheKey = `${panel.state.dataset}|${panel.state.variable}|${depthBin || ""}|${shared.leadDay}|${startDate || ""}|${rows.length}|${targeted}`;
+    let prepared = panel.class4Prepared;
+    if (!prepared || prepared.key !== cacheKey) {
+      const preparedPoints = class4Points(rows, selector);
+      prepared = {
+        key: cacheKey,
+        points: preparedPoints,
+        matchedTotal: countClass4Matches(rows, selector),
+        // Raw p90 of this lead's errors, or NaN when the set measures nothing. The
+        // grow-only ramp is derived from it at draw time, not cached here, so a panel
+        // always paints with the bound as it stands in the frame being drawn.
+        measure: class4ErrorScale(preparedPoints),
+        // Parallel typed arrays + coarse lon/lat bucket grid, built once per point set so
+        // pan/zoom frames only project the buckets overlapping the viewport (perf).
+        ...buildClass4Index(preparedPoints),
+      };
+      panel.class4Prepared = prepared;
+    }
+    const matchedTotal = prepared.matchedTotal;
+    // Grow-only obs-error ramp: the |obs − model| scale is read off the obs of the lead on
+    // screen, so left alone it renormalises on every lead step and a growing error keeps
+    // rendering the same colours. Held to the widest ramp this selection has needed, the
+    // points visibly redden as the forecast ages.
+    const scale = class4StableScale(prepared.measure, panel);
+    // Larger points at high zoom so individual obs are distinguishable from a line.
+    const radius = 2.2 + 2.6 * Math.min(1, (view.zoom - 1) / 20);
+    const display = drawClass4Frame(context, projection, prepared, copyOffsets, canvas, {
+      devicePixelRatio: ratio,
+      errorScale: scale,
+      radius,
+      zoom: view.zoom,
+    });
+    // The hovered obs is named in the readout and in the cursor tooltip; ring it on the map so
+    // the reader can see WHICH dot those numbers belong to.
+    if (panel.class4HoverPoint) {
+      const ringColor = themeToken("--ob-viewer-canvas-note", shared.theme === THEME_LIGHT ? "#1f2937" : "#e5edf5");
+      for (const offset of copyOffsets) {
+        drawClass4HoverRing(context, projectOnCopy(offset), panel.class4HoverPoint, {
+          devicePixelRatio: ratio,
+          radius,
+          color: ringColor,
+        });
+      }
+    }
+    panel.class4Scale = scale;
+    panel.class4Count = display.drawnVisible;
+    panel.class4VisibleTotal = display.visibleTotal;
+    panel.class4Stride = display.stride;
+    panel.class4Thinned = display.thinned;
+    panel.class4Matched = matchedTotal;
+    panel.class4Targeted = targeted;
+    panel.class4HitPoints = prepared.points;
+    panel.class4HitSelected = display.selectedMask;
+    panel.class4PointRadius = radius;
+  } else {
+    panel.class4HitPoints = null;
+    panel.class4HitSelected = null;
+    panel.class4Thinned = false;
+    panel.class4Count = 0;
+    panel.class4VisibleTotal = 0;
+    panel.class4Matched = 0;
+    panel.class4Scale = 0;
+    panel.class4HoverPoint = null;
+    const class4Entry = overlayData.class4BySlug[panel.state.dataset];
+    if (shared.overlayMode === OVERLAY_CLASS4 && class4Entry && class4Entry.unpublished && overlayData.region === shared.region) {
+      drawPanelOverlayNote(panel, context, "No observation match-ups for this model");
+    }
+  }
+}
+
+// A panel whose dataset publishes nothing for the overlay on screen says so in one quiet line
+// at the top of its map, just under the panel header that floats over the canvas, instead of
+// looking like a load that never finished.
+function drawPanelOverlayNote(panel, context, text) {
+  const ratio = window.devicePixelRatio || 1;
+  const canvas = context.canvas;
+  const head = panel.container.querySelector(".panel-head");
+  const headBottom = head ? Math.max(0, head.getBoundingClientRect().bottom - panel.els.wrap.getBoundingClientRect().top) : 0;
+  context.save();
+  context.font = `${12 * ratio}px system-ui, sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  const width = context.measureText(text).width + 16 * ratio;
+  const height = 22 * ratio;
+  const x = canvas.width / 2;
+  const y = (headBottom + 10) * ratio + height / 2;
+  context.fillStyle = themeToken("--ob-viewer-canvas-bg", shared.theme === THEME_LIGHT ? "#eef2f6" : "#080b11");
+  context.globalAlpha = 0.85;
+  context.fillRect(x - width / 2, y - height / 2, width, height);
+  context.globalAlpha = 1;
+  context.fillStyle = themeToken("--ob-viewer-canvas-note", shared.theme === THEME_LIGHT ? "#5b6675" : "#8b97a6");
+  context.fillText(text, x, y);
+  context.restore();
+}
+
+// Crosshair marker at the clicked water-column point, drawn on every visible world copy so
+// it stays on the field when panning across the dateline.
+function drawColumnMarker(panel, context, projection, copyOffsets) {
+  const ratio = window.devicePixelRatio || 1;
+  const nx = (shared.columnPoint.lon + 180) / 360;
+  const ny = (90 - shared.columnPoint.lat) / 180;
+  context.save();
+  context.strokeStyle = themeToken("--ob-viewer-canvas-note", shared.theme === THEME_LIGHT ? "#1f2937" : "#e5edf5");
+  context.lineWidth = 1.6 * ratio;
+  const arm = 9 * ratio;
+  for (const offset of copyOffsets) {
+    const point = projection.project(nx + offset, ny);
+    context.beginPath();
+    context.arc(point.x, point.y, 6 * ratio, 0, Math.PI * 2);
+    context.moveTo(point.x - arm, point.y);
+    context.lineTo(point.x - 3 * ratio, point.y);
+    context.moveTo(point.x + 3 * ratio, point.y);
+    context.lineTo(point.x + arm, point.y);
+    context.moveTo(point.x, point.y - arm);
+    context.lineTo(point.x, point.y - 3 * ratio);
+    context.moveTo(point.x, point.y + 3 * ratio);
+    context.lineTo(point.x, point.y + arm);
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawTrajectoryFans(panel) {
+  if (isDiffView()) return;
+  if (!trajectoryState || !trajectoryState.trajectories) return;
+  const context = panel.els.overlay.getContext("2d");
+  const projection = projectionFor(panel);
+  const ratio = window.devicePixelRatio || 1;
+  const shownLead = Math.min(shared.leadDay, trajectoryState.maximumLead);
+  const copyOffsets = visibleCopyOffsets(projection, panel.els.overlay);
+  context.save();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  trajectoryState.trajectories.forEach((fan, forecastIndex) => {
+    for (const trajectory of fan) {
+      // Drift index k sits at lead k + 1: the seeds are released at the lead 1 date.
+      const points = trajectory.slice(0, shownLead);
+      for (let segment = 1; segment < points.length; segment += 1) {
+        const alpha = 0.2 + 0.65 * segment / Math.max(1, points.length - 1);
+        context.strokeStyle = `${TRAJECTORY_COLORS[forecastIndex]}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
+        context.lineWidth = (forecastIndex === 0 ? 1.7 : 1.4) * ratio;
+        for (const offset of copyOffsets) {
+          const from = projection.project((points[segment - 1].longitude + 180) / 360 + offset, (90 - points[segment - 1].latitude) / 180);
+          const to = projection.project((points[segment].longitude + 180) / 360 + offset, (90 - points[segment].latitude) / 180);
+          context.beginPath();
+          context.moveTo(from.x, from.y);
+          context.lineTo(to.x, to.y);
+          context.stroke();
+        }
+      }
+    }
+  });
+  context.restore();
+}
+
+function trajectoryModeActive() {
+  return shared.overlayMode === OVERLAY_TRAJECTORIES;
+}
+
+// In trajectory purpose-mode, any visible panel is eligible whatever variable it
+// renders (SSH, salinity, currents…): the worker fetches that forecast's u/v current
+// fields directly, so eligibility only needs the panel drawn and its manifest to carry
+// velocity components.
+function trajectoryEligiblePanels() {
+  if (!trajectoryModeActive()) return [];
+  return panels.slice(0, shared.layout).filter((panel) => {
+    if (!panel || !panel.longitudes) return false;
+    const manifest = manifestFor(panel.state.dataset);
+    return manifest && currentDepthVariables(panel).u in manifest.variables;
+  });
+}
+
+function makeSeedCluster(longitude, latitude, radiusDegrees) {
+  const seeds = [];
+  const count = 20;
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  for (let index = 0; index < count; index += 1) {
+    const radius = radiusDegrees * Math.sqrt((index + 0.5) / count);
+    const angle = index * goldenAngle;
+    seeds.push({
+      longitude: longitude + radius * Math.cos(angle) / Math.max(0.2, Math.cos(latitude * Math.PI / 180)),
+      latitude: latitude + radius * Math.sin(angle),
+    });
+  }
+  return seeds;
+}
+
+// Trajectory advection always runs on the model's FINEST published pyramid level,
+// whatever the display zoom, coarse levels smooth the currents and change the physics
+// of the fan. A whole-domain finest read (10 leads × u,v at 1/12°) would be far too
+// heavy, so only the tiles covering the seed cluster plus a generous drift margin are
+// fetched (readLayerWindow). Particles that outrun the margin stop, exactly as they
+// would at a domain edge; the margin scales with the lead range so that stays rare.
+const TRAJECTORY_MARGIN_BASE_DEG = 8;
+const TRAJECTORY_MARGIN_PER_LEAD_DEG = 0.5;
+
+function finestLevel(manifest) {
+  const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+  return levels[0].level;
+}
+
+async function loadTrajectoryFields(panel, maximumLead, seedCentre) {
+  const manifest = manifestFor(panel.state.dataset);
+  const level = finestLevel(manifest);
+  const coordinates = await loadCoordinates(panel.state.dataset, level);
+  const variables = currentDepthVariables(panel);
+  const startIndex = storeStartIndex(manifest);
+  const margin = TRAJECTORY_MARGIN_BASE_DEG + TRAJECTORY_MARGIN_PER_LEAD_DEG * maximumLead;
+  const box = {
+    latMin: seedCentre.latitude - margin,
+    latMax: seedCentre.latitude + margin,
+    lonMin: seedCentre.longitude - margin,
+    lonMax: seedCentre.longitude + margin,
+  };
+  const store = stores.get(panel.state.dataset);
+  const fields = [];
+  // Leads 1..N-1 carry the particles from the lead 1 seeds to the lead N date.
+  for (let lead = 1; lead < maximumLead; lead += 1) {
+    const leadIndex = storeLeadIndex(manifest, lead);
+    const [u, v] = await Promise.all([
+      readLayerWindow(store, { variable: variables.u, level, startIndex, leadIndex }, coordinates.latitudes, coordinates.longitudes, box),
+      readLayerWindow(store, { variable: variables.v, level, startIndex, leadIndex }, coordinates.latitudes, coordinates.longitudes, box),
+    ]);
+    if (!u || !v) throw new Error("Seed point is outside this forecast's domain");
+    fields.push({
+      u: u.data,
+      v: v.data,
+      width: u.width,
+      height: u.height,
+      lon0: u.lon0,
+      lat0: u.lat0,
+      lonStep: u.lonStep,
+      latStep: u.latStep,
+      // The window is a regional cut-out with a continuous longitude axis: never
+      // periodic, even on a global grid (the margin absorbs dateline crossings).
+      periodic: false,
+    });
+  }
+  return { fields };
+}
+
+async function seedTrajectories(panel, event) {
+  if (!trajectoryModeActive()) return;
+  const eligible = trajectoryEligiblePanels();
+  if (!eligible.length || (shared.layout === 2 && eligible.length !== 2)) return;
+  const [longitude, latitude] = pointerLonLat(panel, event);
+  // Seed-cluster radius from the model's FINEST grid (the grid the particles advect
+  // on), not the zoom-dependent display grid, so the same click yields the same fan
+  // at any zoom. Falls back to the display spacing if the manifest lacks levels.
+  const finestCellDeg =
+    finestCellDegFor(panel.state.dataset) ??
+    Math.max(Math.abs(panel.longitudes[1] - panel.longitudes[0]), Math.abs(panel.latitudes[1] - panel.latitudes[0]));
+  const seeds = makeSeedCluster(longitude, latitude, Math.max(0.75, finestCellDeg * 1.5));
+  const maximumLead = Math.min(...eligible.map((candidate) => Math.max(...manifestFor(candidate.state.dataset).lead_days)));
+  const requestId = ++trajectoryRequestId;
+  trajectoryState = { requestId, maximumLead, loading: true };
+  renderTrajectoryRail();
+  setStatus("Computing illustrative trajectories…");
+  try {
+    const forecasts = await Promise.all(
+      eligible.map((candidate) => loadTrajectoryFields(candidate, maximumLead, { longitude, latitude })),
+    );
+    if (requestId !== trajectoryRequestId) return;
+    trajectoryWorker.postMessage({ requestId, seeds, forecasts, maximumLead });
+  } catch (error) {
+    if (requestId === trajectoryRequestId) {
+      clearTrajectories();
+      setStatus(`Trajectory computation failed: ${error.message}`, true);
+    }
+  }
+}
+
+trajectoryWorker.addEventListener("message", ({ data }) => {
+  if (!trajectoryState || data.requestId !== trajectoryState.requestId) return;
+  Object.assign(trajectoryState, data, { loading: false });
+  // Debug/verification surface (like __oceanbenchViewerDataBaseUrl): lets tooling assert
+  // that the same seed yields identical trajectories regardless of display zoom.
+  window.__oceanbenchTrajectories = trajectoryState;
+  setStatus("");
+  redrawOverlaysAll();
+  renderTrajectoryRail();
+});
+
+function clearTrajectories() {
+  trajectoryRequestId += 1;
+  trajectoryState = null;
+  // renderTrajectoryRail only rewrites the caption while a fan exists, so blank it here
+  // rather than leave the previous fan's sentence under a hidden section.
+  if (elements["rail-trajectory-note"]) elements["rail-trajectory-note"].textContent = "";
+  if (elements["rail-trajectory-section"]) renderTrajectoryRail();
+  if (panels.length) redrawOverlaysAll();
+}
+
+function renderTrajectoryRail() {
+  const section = elements["rail-trajectory-section"];
+  if (!section) return;
+  section.hidden = !trajectoryState;
+  if (!trajectoryState) return;
+  elements["rail-trajectory-chart"].innerHTML = trajectoryState.separation
+    ? trajectorySeparationSVG(trajectoryState.separation, shared.leadDay, chartTypeScale(elements["rail-trajectory-chart"]))
+    : "";
+  elements["rail-trajectory-note"].textContent = trajectoryState.loading
+    ? "Loading current fields and advecting 20 shared seeds…"
+    : trajectoryState.separation.length
+      ? "Mean F1-F2 particle separation; pairs drop out when a particle beaches or exits."
+      : "Single-forecast trajectory fan.";
+  wireCursorTooltip(elements["rail-trajectory-chart"]);
+}
+
+// ---- water-column profile on click ------------------------------------------
+
+const COLUMN_STORE_VARIABLES = ["sea_water_potential_temperature", "sea_water_salinity"];
+
+// The one sentence for "this dataset has no column store", mirroring class4EmptyMessage:
+// the carried datasets publish no <slug>.columns.zarr, and a click that reads nothing must
+// say so rather than look like a dead map.
+const COLUMN_UNPUBLISHED_MESSAGE = "No water-column data is published for this dataset.";
+// True while column mode is on and no visible forecast has a store to read.
+let columnUnpublished = false;
+
+// Whether any visible forecast publishes a column store; also refreshes `columnUnpublished`
+// so the rail and the overlay note state the same thing.
+async function anyVisibleColumnStore() {
+  const visible = panels.slice(0, shared.layout).filter(Boolean);
+  const stores = await Promise.all(visible.map((panel) => ensureColumnStore(panel.state.dataset)));
+  const available = stores.some(Boolean);
+  columnUnpublished = !available;
+  return available;
+}
+
+function columnModeActive() {
+  return shared.overlayMode === OVERLAY_WATER_COLUMN && !isDiffView();
+}
+
+// Resolve (once, cached) whether a challenger publishes a water-column store. The manifest
+// says so outright with `has_columns`; manifests written before that key existed do not, and
+// for those a missing store 404s on its .zmetadata, loadStore rejects and we remember `false`
+// so the feature is simply not offered for that challenger. No retries, no console noise.
+async function ensureColumnStore(slug) {
+  if (columnStores.has(slug)) return columnStores.get(slug);
+  const manifest = manifestFor(slug);
+  if (manifest && manifest.has_columns === false) {
+    columnStores.set(slug, false);
+    return false;
+  }
+  let store = false;
+  try {
+    const descriptor = datasetCatalog.find((entry) => entry.slug === slug);
+    const columnsUrl = resolveColumnStoreUrl(slug, descriptor && descriptor.store, descriptor && descriptor.columns);
+    store = await loadStore(columnsUrl, await columnStoreVersion(slug, descriptor, columnsUrl));
+  } catch {
+    store = false;
+  }
+  columnStores.set(slug, store);
+  return store;
+}
+
+// A column store is published with the manifest of the dataset it is named after
+// (<owner>.columns.zarr beside <owner>.viewer-manifest.json), which for a dataset reading its
+// twin's store is not its own manifest, so the token comes from that owner manifest.
+async function columnStoreVersion(slug, descriptor, columnsUrl) {
+  const ownerManifestUrl = columnsUrl.replace(/\.columns\.zarr$/, ".viewer-manifest.json");
+  if (descriptor && resolveViewerDataUrl(descriptor.manifest) === ownerManifestUrl) return storeVersion(manifestFor(slug));
+  try {
+    return storeVersion(await loadManifest(ownerManifestUrl));
+  } catch {
+    return null;
+  }
+}
+
+// Show/enable the "Water column (click)" overlay option only when at least one visible
+// challenger has a column store, so a mode with nothing behind it is not offered. The one
+// exception is a mode already active: switching to a challenger without a store must not
+// silently drop the user out of the mode, it must keep the option and say why the map
+// reads nothing (COLUMN_UNPUBLISHED_MESSAGE, rendered by applyOverlayMode and the rail).
+async function updateColumnModeAvailability() {
+  const option = elements["overlay-mode"] && elements["overlay-mode"].querySelector('option[value="column"]');
+  if (!option) return;
+  const available = await anyVisibleColumnStore();
+  const active = shared.overlayMode === OVERLAY_WATER_COLUMN;
+  option.hidden = !available && !active;
+  option.disabled = option.hidden;
+  if (!available && active) {
+    clearColumnProfile();
+    const note = elements["overlay-note"];
+    if (note) note.textContent = COLUMN_UNPUBLISHED_MESSAGE;
+  }
+}
+
+// Which column-store variable a panel maps to: its own variable when that is temperature
+// or salinity, otherwise temperature (the sensible default for a non-T/S panel).
+function columnVariableFor(panel) {
+  const entry = variableEntry(manifestFor(panel.state.dataset), panel.state.variable);
+  const standardName = entry && entry.standard_name;
+  if (standardName === "sea_water_salinity") return { name: standardName, unit: entry.units || "", label: "Salinity" };
+  if (standardName === "sea_water_potential_temperature") return { name: standardName, unit: entry.units || "°C", label: "Temperature" };
+  return { name: "sea_water_potential_temperature", unit: "°C", label: "Temperature" };
+}
+
+function clearColumnProfile() {
+  columnRequestId += 1;
+  columnProfile = null;
+  shared.columnPoint = null;
+  window.__oceanbenchColumnProfile = null;
+  renderColumnProfileRail();
+  if (panels.length) redrawOverlaysAll();
+}
+
+// Read the full water column (all leads + all depths) at a clicked lon/lat for every
+// visible challenger that has a store. One chunk per challenger, held in memory so the
+// lead slider re-renders with no refetch (renderColumnProfileRail slices in-memory).
+async function readColumnProfileAt(longitude, latitude) {
+  const eligiblePanels = [];
+  for (const panel of panels.slice(0, shared.layout).filter(Boolean)) {
+    const store = await ensureColumnStore(panel.state.dataset);
+    if (store) eligiblePanels.push({ panel, store });
+  }
+  // No store to read: say so once, in the note and the rail, instead of swallowing the click.
+  if (!eligiblePanels.length) {
+    columnUnpublished = true;
+    const emptyNote = elements["overlay-note"];
+    if (emptyNote) emptyNote.textContent = COLUMN_UNPUBLISHED_MESSAGE;
+    renderColumnProfileRail();
+    return;
+  }
+  columnUnpublished = false;
+  shared.columnPoint = { lon: longitude, lat: latitude };
+  const requestId = ++columnRequestId;
+  const forecasts = [];
+  for (const { panel, store } of eligiblePanels) {
+    const choice = columnVariableFor(panel);
+    const arrayMeta = store.metadata[`${choice.name}/.zarray`];
+    if (!arrayMeta) continue;
+    // The column store may hold fewer starts than the pyramid it sits beside; clamp so a
+    // high start index never requests a chunk past the store's start axis.
+    const startIndex = Math.min(shared.startIndex, arrayMeta.shape[0] - 1);
+    const [depths, latitudes, longitudes] = await Promise.all([
+      readRootCoordinate(store, "depth"),
+      readRootCoordinate(store, "latitude"),
+      readRootCoordinate(store, "longitude"),
+    ]);
+    const latIndex = nearestCoordinateIndex(latitudes, latitude);
+    const lonIndex = nearestCoordinateIndex(longitudes, longitude);
+    const column = await readColumn(store, { variable: choice.name, startIndex, latIndex, lonIndex });
+    if (requestId !== columnRequestId) return;
+    forecasts.push({
+      panelIndex: panel.index,
+      slug: panel.state.dataset,
+      variable: choice.name,
+      startIndex,
+      startClamped: startIndex !== shared.startIndex,
+      latIndex,
+      lonIndex,
+      color: forecastColor(panel.index),
+      datasetLabel: labelFor(panel.state.dataset),
+      variableLabel: choice.label,
+      unit: choice.unit,
+      depths: Array.from(depths),
+      values: column.values,
+      leads: column.leads,
+      depthSize: column.depths,
+      allNaN: !column.values.some((value) => Number.isFinite(value)),
+    });
+  }
+  if (requestId !== columnRequestId) return;
+  columnProfile = { lon: longitude, lat: latitude, forecasts };
+  // Deterministic hook for tests: the decoded values at the clicked point.
+  window.__oceanbenchColumnProfile = columnProfile;
+  const note = elements["overlay-note"];
+  if (note) note.textContent = "Click the map to read the model water column at another point.";
+  renderColumnProfileRail();
+  if (panels.length) redrawOverlaysAll();
+  writeHash();
+}
+
+// Value and depth extent of the clicked column over EVERY lead day it holds, not just the
+// one on screen. The clicked chunk already carries all leads (this is the design win), so
+// the profile axis can be fixed exactly: sliding the lead then swings the profile inside a
+// still frame, which is the whole point of scrubbing it. Returns [[low, high], depthMax].
+// The caller passes the forecasts sharing one chart, so a chart never takes its bounds
+// from a quantity plotted somewhere else.
+function columnProfileBounds(forecasts) {
+  let valueMin = Infinity;
+  let valueMax = -Infinity;
+  let depthMax = 0;
+  for (const forecast of forecasts) {
+    if (forecast.allNaN) continue;
+    for (let index = 0; index < forecast.values.length; index += 1) {
+      const value = forecast.values[index];
+      if (!Number.isFinite(value)) continue;
+      const depth = forecast.depths[index % forecast.depthSize];
+      if (Number.isFinite(depth) && depth > depthMax) depthMax = depth;
+      if (value < valueMin) valueMin = value;
+      if (value > valueMax) valueMax = value;
+    }
+  }
+  return [Number.isFinite(valueMin) && Number.isFinite(valueMax) ? [valueMin, valueMax] : null, depthMax];
+}
+
+// Render the profile chart for the CURRENT lead day from the in-memory column (no fetch).
+// Both forecasts are drawn in their panel accent colours; a point over land/missing (all
+// fill values) yields the honest "no water column" note.
+function renderColumnProfileRail() {
+  const section = elements["rail-column-section"];
+  if (!section) return;
+  if (!columnProfile || !columnModeActive()) {
+    // Nothing published for the visible forecasts is a fact worth showing: keep the section
+    // up with the empty-state sentence instead of hiding the feature and looking broken.
+    const unpublished = columnModeActive() && columnUnpublished;
+    section.hidden = !unpublished;
+    elements["rail-column-chart"].innerHTML = "";
+    elements["rail-column-point"].textContent = "";
+    elements["rail-column-note"].textContent = unpublished ? COLUMN_UNPUBLISHED_MESSAGE : "";
+    return;
+  }
+  section.hidden = false;
+  elements["rail-column-point"].textContent = formatLatLon(columnProfile.lon, columnProfile.lat);
+  const comparison = columnProfile.forecasts.length === 2;
+  const leadIndex = Math.max(0, shared.leadDay - 1);
+  // columnVariableFor maps each panel to its own column variable, so the two panels can
+  // hold different quantities. Those do not belong on one axis, so group by variable and
+  // draw one chart per group, each with its own unit, label and value bound.
+  const groups = new Map();
+  for (const forecast of columnProfile.forecasts) {
+    if (forecast.allNaN) continue;
+    const lead = Math.min(leadIndex, forecast.leads - 1);
+    const points = [];
+    for (let depth = 0; depth < forecast.depthSize; depth += 1) {
+      const value = forecast.values[lead * forecast.depthSize + depth];
+      if (Number.isFinite(value)) points.push({ depth: forecast.depths[depth], value });
+    }
+    if (!points.length) continue;
+    const key = `${forecast.variableLabel}|${forecast.unit}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { label: forecast.variableLabel, unit: forecast.unit, lines: [], forecasts: [] };
+      groups.set(key, group);
+    }
+    group.lines.push({
+      label: comparison ? `F${forecast.panelIndex + 1} · ${forecast.variableLabel}` : forecast.variableLabel,
+      color: forecast.color,
+      points,
+    });
+    group.forecasts.push(forecast);
+  }
+  const charts = [];
+  for (const group of groups.values()) {
+    const [valueBound, depthBound] = columnProfileBounds(group.forecasts);
+    const title =
+      groups.size > 1
+        ? `Water column · ${group.label}`
+        : comparison && group.lines.length === 2
+          ? "Water column (both forecasts)"
+          : "Water column";
+    charts.push(
+      columnProfileSVG(group.lines, {
+        title,
+        unit: group.unit,
+        xLabel: group.label,
+        valueBound,
+        depthBound,
+        typeScale: chartTypeScale(elements["rail-column-chart"]),
+      }),
+    );
+  }
+  if (!charts.length) charts.push(columnProfileSVG([], { title: "Water column" }));
+  elements["rail-column-chart"].innerHTML = charts.join("");
+  if (!groups.size) {
+    elements["rail-column-note"].textContent = "No water column at this point.";
+  } else {
+    const labels = [...groups.values()].map((group) => group.label.toLowerCase()).join(" and ");
+    // readColumnProfileAt clamps to the column store's last start when it holds fewer
+    // starts than the maps; say so rather than show another date's profile unannounced.
+    const clamped = (columnProfile ? columnProfile.forecasts : []).filter((forecast) => forecast.startClamped);
+    const clampNote = clamped.length
+      ? ` ${clamped.map((forecast) => forecast.datasetLabel).join(" and ")}: last stored start shown.`
+      : "";
+    elements["rail-column-note"].textContent = `Profile at this start, lead ${shared.leadDay}.${clampNote}`;
+  }
+  const heading = section.querySelector("h3");
+  if (heading) attachMethodNote(heading, "column-profile");
+  wireCursorTooltip(elements["rail-column-chart"]);
+}
+
+
+// Integer world-copy offsets whose earth copy is currently visible (periodic wrap).
+function visibleCopyOffsets(projection, canvas) {
+  if (shared.region !== REGION_GLOBAL) return [0];
+  const left = projection.unproject(0, 0).nx;
+  const right = projection.unproject(canvas.width, 0).nx;
+  const offsets = [];
+  for (let k = Math.floor(Math.min(left, right)); k <= Math.ceil(Math.max(left, right)); k += 1) offsets.push(k);
+  return offsets.length ? offsets : [0];
+}
+
+// ---- particles --------------------------------------------------------------
+
+// What a swarm belongs to. The lead day is deliberately absent: stepping the lead swaps
+// the velocity field under the same particles (the context samples through the panel, so
+// it is already the new field), and the flow keeps streaming instead of being reborn on
+// every step. Everything on this list changes what the flow is, so the swarm starts over.
+function particleSelectionSignature(panel) {
+  return [
+    panel.state.dataset,
+    panel.state.variable,
+    shared.region,
+    shared.startIndex,
+    shared.displayMode,
+    shared.layout,
+  ].join("|");
+}
+
+// Keep the running swarm when only the lead moved, restart it when the selection changed.
+function ensurePanelParticles(panel) {
+  if (panel.particleHandle && panel.particleSignature === particleSelectionSignature(panel)) {
+    updateParticleProjection(panel, projectionFor(panel));
+    return;
+  }
+  startPanelParticles(panel);
+}
+
+function startPanelParticles(panel) {
+  stopParticles(panel);
+  resizePanelCanvases(panel);
+  panel.particleSignature = particleSelectionSignature(panel);
+  const projection = projectionFor(panel);
+  panel.particleContext = {
+    sampleVelocity: (nx, ny) => panel.velocity.sampler(nx, ny),
+    project: projection.project,
+    viewport: visibleViewport(projection, panel.els.particles),
+    magnitudeScale: PARTICLE_MAGNITUDE_SCALE,
+    theme: shared.theme,
+    muted: fieldMutedUnderOverlay(),
+    speed: shared.particleSpeed,
+    devicePixelRatio: window.devicePixelRatio || 1,
+    playing: true,
+    punchLand: makeLandPunch(panel, projection),
+  };
+  panel.particleHandle = startParticleField(panel.els.particles, panel.particleContext);
+}
+
+function stopParticles(panel) {
+  if (panel.particleHandle) {
+    panel.particleHandle.stop();
+    panel.particleHandle = null;
+    panel.particleContext = null;
+    panel.particleSignature = "";
+  }
+}
+
+// Start or stop the particle overlay on every visible panel to match the checkbox.
+function applyParticleVisibility() {
+  for (let i = 0; i < shared.layout; i += 1) {
+    const panel = panels[i];
+    if (isCurrentsVariable(panel.state.variable) && shared.showParticles && panel.velocity) startPanelParticles(panel);
+    else stopParticles(panel);
+  }
+}
+
+function updateParticleProjection(panel, projection) {
+  if (!panel.particleContext) return;
+  panel.particleContext.project = projection.project;
+  panel.particleContext.viewport = visibleViewport(projection, panel.els.particles);
+  panel.particleContext.theme = shared.theme;
+  panel.particleContext.muted = fieldMutedUnderOverlay();
+  panel.particleContext.speed = shared.particleSpeed;
+  panel.particleContext.devicePixelRatio = window.devicePixelRatio || 1;
+  panel.particleContext.punchLand = makeLandPunch(panel, projection);
+}
+
+// Erasing the particle layer wherever the field blit drew land. The velocity sampler
+// already refuses to advect into a land cell, but it works on a 1 degree grid whose
+// cells are many screen pixels wide, so a legal segment can still overhang the coastline
+// it is drawn beside. The stencil is the same raster, blitted through the same snapped
+// world path with the same nearest-neighbour scaling, so the particle layer cannot
+// disagree with the map about where the coast is.
+function makeLandPunch(panel, projection) {
+  const stencil = panel.landStencil;
+  if (!stencil) return null;
+  return (target) => {
+    target.save();
+    target.imageSmoothingEnabled = false;
+    target.globalCompositeOperation = "destination-out";
+    drawImageWorld(target, stencil, panel.edgesA, projection);
+    target.restore();
+  };
+}
+
+// ---- pointer interaction (pan / zoom shared, hover per panel) ---------------
+
+function capturePanelDrag(panel, event) {
+  panel.els.field.setPointerCapture(event.pointerId);
+  panel.els.field.addEventListener("pointermove", onPanelPointerMove);
+  panel.els.field.addEventListener("pointerup", endPanelDrag, { once: true });
+  panel.els.field.addEventListener("pointercancel", endPanelDrag, { once: true });
+}
+
+// INVARIANT I3: panel.offscreenB and panel.swipeX are written by drawPanel; this reads
+// them to place the divider grab zone.
+function beginPanelDrag(panel, event) {
+  if (event.button !== 0) return;
+  const projection = projectionFor(panel);
+  // PSD rectangle grabs take priority over map panning: a pointerdown on the box
+  // interior moves it, on a handle/edge resizes it.
+  if (psdBoxVisible()) {
+    const ratio = window.devicePixelRatio || 1;
+    const rectangle = panel.els.field.getBoundingClientRect();
+    const hit = psdBoxHitTest(
+      panel,
+      (event.clientX - rectangle.left) * ratio,
+      (event.clientY - rectangle.top) * ratio,
+      projection,
+    );
+    if (hit) {
+      panel.draggingPsd = { hit, startBox: { ...shared.psdBox }, x: event.clientX, y: event.clientY, projection };
+      capturePanelDrag(panel, event);
+      event.preventDefault();
+      return;
+    }
+  }
+  if (isSwipeHost(panel) && panel.offscreenB) {
+    const ratio = window.devicePixelRatio || 1;
+    const rectangle = panel.els.field.getBoundingClientRect();
+    const localX = (event.clientX - rectangle.left) * ratio;
+    if (Math.abs(localX - panel.swipeX * panel.els.field.width) < 12 * ratio) {
+      panel.draggingSwipe = true;
+      panel.els.field.style.cursor = "col-resize";
+      capturePanelDrag(panel, event);
+      return;
+    }
+  }
+  panel.dragging = { x: event.clientX, y: event.clientY, centerNX: view.centerNX, centerNY: view.centerNY, projection };
+  panel.els.field.style.cursor = "grabbing";
+  capturePanelDrag(panel, event);
+  event.preventDefault();
+}
+
+function onPanelPointerMove(event) {
+  const panel = panels.find((candidate) => candidate.els.field === event.currentTarget);
+  if (panel.draggingPsd) {
+    const ratio = window.devicePixelRatio || 1;
+    applyPsdBoxDrag(
+      panel.draggingPsd,
+      (event.clientX - panel.draggingPsd.x) * ratio,
+      (event.clientY - panel.draggingPsd.y) * ratio,
+    );
+    scheduleRedrawAllPanels();
+    scheduleRailUpdate();
+    scheduleHashWrite();
+  } else if (panel.draggingSwipe) {
+    const ratio = window.devicePixelRatio || 1;
+    const rectangle = panel.els.field.getBoundingClientRect();
+    panel.swipeX = Math.min(0.98, Math.max(0.02, ((event.clientX - rectangle.left) * ratio) / panel.els.field.width));
+    drawPanel(panel);
+  } else if (panel.dragging) {
+    if (Math.hypot(event.clientX - panel.dragging.x, event.clientY - panel.dragging.y) > 4) panel.dragging.moved = true;
+    const ratio = window.devicePixelRatio || 1;
+    view.centerNX = panel.dragging.centerNX - ((event.clientX - panel.dragging.x) * ratio) / panel.dragging.projection.displayWidth;
+    view.centerNY = panel.dragging.centerNY - ((event.clientY - panel.dragging.y) * ratio) / panel.dragging.projection.displayHeight;
+    clampView();
+    scheduleRedrawAllPanels();
+    scheduleHashWrite();
+    scheduleRailUpdate();
+    // The world point under the pointer changes as the view pans, so the mirrored
+    // companion cursor and both bottom-left readouts must keep tracking during the
+    // drag, not only on plain mouse moves. updateHover would clear the "grabbing"
+    // pointer style, so restore it afterwards.
+    updateHover(event);
+    panel.els.field.style.cursor = "grabbing";
+  } else {
+    updateHover(event);
+  }
+}
+
+function endPanelDrag(event) {
+  const panel = panels.find((candidate) => candidate.els.field === event.currentTarget);
+  const shouldSeed = panel.dragging && !panel.dragging.moved;
+  panel.els.field.removeEventListener("pointermove", onPanelPointerMove);
+  if (shared.region === REGION_GLOBAL) view.centerNX = ((view.centerNX % 1) + 1) % 1;
+  panel.dragging = null;
+  panel.draggingSwipe = false;
+  panel.draggingPsd = null;
+  panel.els.field.style.cursor = "";
+  if (shouldSeed) seedTrajectories(panel, event);
+  if (shouldSeed && columnModeActive()) readColumnProfileAt(...pointerLonLat(panel, event));
+  writeHash();
+}
+
+// Geographic lon/lat under a pointer event on a panel (longitude wrapped to ±180 on the
+// periodic global grid), shared by the trajectory and water-column click handlers.
+function pointerLonLat(panel, event) {
+  const rectangle = panel.els.field.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  const world = projectionFor(panel).unproject((event.clientX - rectangle.left) * ratio, (event.clientY - rectangle.top) * ratio);
+  let longitude = world.nx * 360 - 180;
+  if (shared.region === REGION_GLOBAL) longitude = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  return [longitude, 90 - world.ny * 180];
+}
+
+// A trackpad emits wheel events far faster than the display refreshes, and each one
+// used to drive a full projection + redraw pass. Accumulate the deltas instead and
+// apply them once per frame, so a fast pinch costs one render per frame, not ten.
+let wheelFrame = 0;
+let pendingWheel = null;
+
+function onPanelWheel(panel, event) {
+  event.preventDefault();
+  if (pendingWheel && pendingWheel.panel === panel) {
+    pendingWheel.deltaY += event.deltaY;
+    pendingWheel.event = event;
+  } else {
+    pendingWheel = { panel, deltaY: event.deltaY, event };
+  }
+  if (wheelFrame) return;
+  wheelFrame = requestAnimationFrame(() => {
+    wheelFrame = 0;
+    const pending = pendingWheel;
+    pendingWheel = null;
+    if (pending) applyWheelZoom(pending.panel, pending.event, pending.deltaY);
+  });
+}
+
+function applyWheelZoom(panel, event, deltaY) {
+  const projection = projectionFor(panel);
+  const previousLevels = panels.slice(0, shared.layout).map((candidate) => {
+    const manifest = manifests.get(candidate.state.dataset);
+    return manifest ? selectRenderLevel(manifest) : null;
+  });
+  const ratio = window.devicePixelRatio || 1;
+  const rectangle = panel.els.field.getBoundingClientRect();
+  const cursorX = (event.clientX - rectangle.left) * ratio;
+  const cursorY = (event.clientY - rectangle.top) * ratio;
+  const before = projection.unproject(cursorX, cursorY);
+  const factor = Math.exp(-deltaY * 0.0015);
+  const previousZoom = view.zoom;
+  view.zoom = Math.min(60, Math.max(minimumZoomFor(panel), view.zoom * factor));
+  if (view.zoom === previousZoom) return;
+  // Keep the world point under the cursor fixed.
+  const after = projectionFor(panel).unproject(cursorX, cursorY);
+  view.centerNX += before.nx - after.nx;
+  view.centerNY += before.ny - after.ny;
+  clampView();
+  refreshZoomBadge();
+  const needsRerender = panels.slice(0, shared.layout).some((candidate, index) => {
+    const manifest = manifests.get(candidate.state.dataset);
+    return manifest && previousLevels[index] !== selectRenderLevel(manifest);
+  });
+  if (needsRerender) {
+    renderAllPanels().then(() => {
+      redrawOverlaysAll();
+      updateContextRail();
+    });
+  } else {
+    scheduleRedrawAllPanels();
+  }
+  scheduleHashWrite();
+  scheduleRailUpdate();
+  // Zooming moves the world point under a stationary pointer, so refresh the
+  // companion cursor and readouts for the new projection while hovering.
+  updateHover(event);
+}
+
+function minimumZoomFor(panel) {
+  const bounds = REGION_BOUNDS[shared.region];
+  if (!bounds || !panel) return 1;
+  const width = panel.els.field.width;
+  const height = panel.els.field.height;
+  const fit = Math.min(height, width / 2);
+  const longitudeSpan = (bounds.east - bounds.west) / 360;
+  const latitudeSpan = (bounds.north - bounds.south) / 180;
+  const horizontalZoom = width / (2 * fit * longitudeSpan);
+  const verticalZoom = height / (fit * latitudeSpan);
+  return Math.min(60, Math.max(1, Math.min(horizontalZoom, verticalZoom)));
+}
+
+// Smallest zoom whose raster covers the panel box instead of fitting inside it.
+// The world is a fixed 2:1 strip and common window shapes leave the box wider than
+// that, so contain-fit (zoom 1) letterboxes it with dead bands above and below;
+// cover-fit spends that space on map. Longitude crops symmetrically, the zoom-out
+// floor stays 1 so the whole globe remains one wheel away, and global rendering
+// already wraps copies, so the flanks fill themselves. Measured on the wrap's CSS
+// box, not the canvas backing store, which can still be at its 300x150 default
+// before the first resize pass.
+// Cover the panel with the rows the fields have, not with the whole globe: no grid
+// reaches 90°S, so a globe-sized cover left an empty band under the Southern Ocean.
+function coverZoomFor(panel) {
+  const rectangle = panel && panel.els.wrap ? panel.els.wrap.getBoundingClientRect() : null;
+  if (!rectangle || !rectangle.width || !rectangle.height) return 1;
+  const [dataTop, dataBottom] = shownDataRowsExtent();
+  const fit = Math.min(rectangle.height, rectangle.width / 2);
+  return Math.max(1, rectangle.height / (fit * (dataBottom - dataTop)));
+}
+
+function clampView() {
+  // Backstop for any non-finite view value that slipped past readHash (a stale
+  // localStorage entry, a manual assignment, arithmetic underflow): a NaN zoom or
+  // centre otherwise propagates into projection maths and blanks the map.
+  if (!Number.isFinite(view.zoom)) view.zoom = 1;
+  if (!Number.isFinite(view.centerNX)) view.centerNX = GLOBAL_DEFAULT_CENTER_NX;
+  if (!Number.isFinite(view.centerNY)) view.centerNY = 0.5;
+  const panel = panels.find((candidate) => candidate && candidate.els && candidate.els.field.width > 0);
+  if (!panel) {
+    view.centerNY = Math.min(1, Math.max(0, view.centerNY));
+    return;
+  }
+  view.zoom = Math.min(60, Math.max(minimumZoomFor(panel), view.zoom));
+  const projection = projectionFor(panel);
+  const bounds = REGION_BOUNDS[shared.region];
+  if (bounds) {
+    const minimumNX = (bounds.west + 180) / 360;
+    const maximumNX = (bounds.east + 180) / 360;
+    const minimumNY = (90 - bounds.north) / 180;
+    const maximumNY = (90 - bounds.south) / 180;
+    const halfWidth = projection.width / (2 * projection.displayWidth);
+    const halfHeight = projection.height / (2 * projection.displayHeight);
+    view.centerNX =
+      halfWidth * 2 >= maximumNX - minimumNX
+        ? (minimumNX + maximumNX) / 2
+        : Math.min(maximumNX - halfWidth, Math.max(minimumNX + halfWidth, view.centerNX));
+    view.centerNY =
+      halfHeight * 2 >= maximumNY - minimumNY
+        ? (minimumNY + maximumNY) / 2
+        : Math.min(maximumNY - halfHeight, Math.max(minimumNY + halfHeight, view.centerNY));
+    return;
+  }
+  if (projection.displayHeight <= projection.height) {
+    view.centerNY = 0.5;
+    return;
+  }
+  // Clamp to the rows the shown fields actually have, not to the poles: no model grid
+  // reaches 90°S, so a pole-bounded clamp left an empty band under the Southern Ocean.
+  const halfViewport = projection.height / (2 * projection.displayHeight);
+  const [dataTop, dataBottom] = shownDataRowsExtent();
+  const low = dataTop + halfViewport;
+  const high = dataBottom - halfViewport;
+  view.centerNY =
+    low <= high
+      ? Math.min(high, Math.max(low, view.centerNY))
+      : Math.min(1 - halfViewport, Math.max(halfViewport, (dataTop + dataBottom) / 2));
+}
+
+// Normalized [top, bottom] of the rows any shown field covers; the whole globe until a
+// field has loaded.
+function shownDataRowsExtent() {
+  // The difference view shows only its host panel's field (Forecast 1 minus Forecast 2).
+  const shown = isDiffView() ? panels.slice(0, 1) : panels.slice(0, shared.layout);
+  const edges = shown.map((panel) => panel && panel.edgesA).filter(Boolean);
+  if (!edges.length) return [0, 1];
+  return [Math.max(0, Math.min(...edges.map((edge) => edge.nyTop))), Math.min(1, Math.max(...edges.map((edge) => edge.nyBottom)))];
+}
+
+// The panels stack on phones in side-by-side (styles/responsive.css, same width).
+const STACKED_PANELS_QUERY = "(max-width: 800px)";
+let fittedGeometry = null;
+
+function panelGeometryKey() {
+  const mode = shared.layout === 2 ? shared.displayMode : "single";
+  const stacked = mode === DISPLAY_SIDE_BY_SIDE && window.matchMedia(STACKED_PANELS_QUERY).matches;
+  // The year raster and a one-date field cover different rows, so a scope change re-fits.
+  return `${shared.layout}|${mode}|${stacked}|${shared.scope}`;
+}
+
+// Scope changes are re-fitted after the render, since the fit measures the rows of the
+// field the new scope draws.
+async function refitAfterScopeChange() {
+  if (!refitOnGeometryChange()) return;
+  if (renderLevelsStale()) await renderAllPanels();
+  else redrawAllPanels();
+  redrawOverlaysAll();
+  writeHash();
+}
+
+// A layout, display mode or stacking change reshapes the map box, and a zoom chosen for
+// the old box leaves empty bands in the new one (stacked side-by-side to swipe on a
+// phone). Re-fit to the new box whenever that shape changes; plain resizes that keep
+// the arrangement keep the user's zoom. Returns whether the view was re-fitted.
+function refitOnGeometryChange() {
+  const key = panelGeometryKey();
+  if (key === fittedGeometry) return false;
+  fittedGeometry = key;
+  // The clamp measures the canvases, which still have the old box's size until the
+  // next render: size them to the new box first.
+  for (let i = 0; i < shared.layout; i += 1) resizePanelCanvases(panels[i]);
+  const centerNX = view.centerNX;
+  fitRegionView();
+  if (!REGION_BOUNDS[shared.region]) view.centerNX = centerNX;
+  clampView();
+  return true;
+}
+
+// Whether the view still shows the region's fit for the current box (or is zoomed out
+// past it): the fit is computed on a copy and the view restored. Measured before a
+// display mode change reshapes the box.
+function viewAtRegionFit() {
+  const current = { zoom: view.zoom, centerNX: view.centerNX, centerNY: view.centerNY };
+  fitRegionView();
+  if (!REGION_BOUNDS[shared.region]) view.centerNX = current.centerNX;
+  clampView();
+  const fit = { zoom: view.zoom, centerNX: view.centerNX, centerNY: view.centerNY };
+  Object.assign(view, current);
+  // Zoomed out past the fit, the map does not fill the box and the centre is moot.
+  if (current.zoom < fit.zoom * 0.999) return true;
+  return (
+    current.zoom <= fit.zoom * 1.001 &&
+    Math.abs(current.centerNX - fit.centerNX) < 1e-3 &&
+    Math.abs(current.centerNY - fit.centerNY) < 1e-3
+  );
+}
+
+// A display mode change keeps the user's zoom and centre once they have zoomed or
+// panned away from the fit: swipe and difference share one map box, and side-by-side
+// only needs them clamped to its new box. A view still at the fit is re-fitted to the
+// new box instead, so the default view keeps filling it. Records the arrangement so
+// the resize handler does not re-fit it afterwards.
+function updateViewOnDisplayModeChange(wasAtFit) {
+  if (wasAtFit) {
+    refitOnGeometryChange();
+    return;
+  }
+  fittedGeometry = panelGeometryKey();
+  for (let i = 0; i < shared.layout; i += 1) resizePanelCanvases(panels[i]);
+  clampView();
+}
+
+function fitRegionView() {
+  const bounds = REGION_BOUNDS[shared.region];
+  const panel = panels.find((candidate) => candidate && candidate.els && candidate.els.field.width > 0);
+  if (!bounds) {
+    // Reset on the global region re-arms the cover fit, so the map keeps using the
+    // whole box after a user zoomed or the window changed shape underneath it.
+    view.zoom = coverZoomFor(panel);
+    view.centerNX = GLOBAL_DEFAULT_CENTER_NX;
+    view.centerNY = 0.5;
+    return;
+  }
+  view.centerNX = ((bounds.west + bounds.east) / 2 + 180) / 360;
+  view.centerNY = (90 - (bounds.south + bounds.north) / 2) / 180;
+  if (!panel) return;
+  view.zoom = minimumZoomFor(panel);
+  clampView();
+}
+
+// Back to the region's default zoom/pan, redrawing (or re-rendering, when the pyramid
+// level changes with the zoom). Shared by the "Reset zoom / pan" button and the
+// double-click on a map.
+function resetZoomPan() {
+  // A panel whose manifest has not arrived yet has no pyramid to pick a level from: reading
+  // one throws, and a reset (button or double-click) fired in the seconds after Forecast 2 is
+  // opened took the whole viewer down with it. No manifest simply means no level to compare.
+  const previousLevels = panels.slice(0, shared.layout).map((panel) => {
+    const manifest = manifestFor(panel.state.dataset);
+    return manifest ? selectRenderLevel(manifest) : null;
+  });
+  fitRegionView();
+  const needsRerender = panels.slice(0, shared.layout).some((panel, index) => {
+    const manifest = manifestFor(panel.state.dataset);
+    return manifest && previousLevels[index] !== selectRenderLevel(manifest);
+  });
+  if (needsRerender) renderAllPanels().then(() => redrawOverlaysAll());
+  else redrawAllPanels();
+  writeHash();
+}
+
+// Where the pointer last was over the page, until it leaves a map. A readout names the
+// value under the cursor in the field on screen, so every redrawn field re-samples it
+// there, or clears it once the pointer has left: a new dataset, variable, start or lead
+// must never keep the previous field's number under the cursor.
+let lastHoverPoint = null;
+
+function refreshHoverReadout() {
+  if (lastHoverPoint) updateHover(lastHoverPoint);
+  else for (const panel of panels.slice(0, shared.layout)) panel.els.readout.textContent = "";
+}
+
+// INVARIANT I3: the swipe branches below read panel.offscreenB / panel.swipeX, both
+// produced by drawPanel, to decide which forecast the cursor is over.
+function updateHover(event) {
+  lastHoverPoint = { clientX: event.clientX, clientY: event.clientY };
+  let hoverPanel = null;
+  let hoverRectangle = null;
+  for (const panel of panels.slice(0, shared.layout)) {
+    if (panel.els.ghostCursor) panel.els.ghostCursor.hidden = true;
+  }
+  for (const panel of panels.slice(0, shared.layout)) {
+    const rectangle = panel.els.field.getBoundingClientRect();
+    if (
+      event.clientX < rectangle.left ||
+      event.clientX > rectangle.right ||
+      event.clientY < rectangle.top ||
+      event.clientY > rectangle.bottom
+    ) {
+      panel.els.readout.textContent = "";
+      continue;
+    }
+    if (!panel.field) continue;
+    hoverPanel = panel;
+    hoverRectangle = rectangle;
+    break;
+  }
+  if (!hoverPanel || !hoverRectangle) {
+    hideClass4Tooltip();
+    return;
+  }
+  const ratio = window.devicePixelRatio || 1;
+  const projection = projectionFor(hoverPanel);
+  // Hoisted above the cursor chain so the obs hit-test can drive both the readout
+  // and the pointer affordance from a single nearest-point lookup.
+  const obsRecord = nearestClass4Record(hoverPanel, event, hoverRectangle);
+  // Cursor affordance for the PSD rectangle (move over the interior, resize on edges).
+  if (psdBoxVisible()) {
+    const hit = psdBoxHitTest(
+      hoverPanel,
+      (event.clientX - hoverRectangle.left) * ratio,
+      (event.clientY - hoverRectangle.top) * ratio,
+      projection,
+    );
+    hoverPanel.els.field.style.cursor = psdCursorFor(hit);
+  } else if (columnModeActive()) {
+    hoverPanel.els.field.style.cursor = "crosshair";
+  } else if (obsRecord) {
+    hoverPanel.els.field.style.cursor = "pointer";
+  } else if (
+    isSwipeHost(hoverPanel) &&
+    hoverPanel.offscreenB &&
+    Math.abs((event.clientX - hoverRectangle.left) * ratio - hoverPanel.swipeX * hoverPanel.els.field.width) < 12 * ratio
+  ) {
+    // Same grab zone as beginPanelDrag, same cursor as the drawer resizer.
+    hoverPanel.els.field.style.cursor = "col-resize";
+  } else if (hoverPanel.els.field.style.cursor) {
+    hoverPanel.els.field.style.cursor = "";
+  }
+  const point = projection.unproject((event.clientX - hoverRectangle.left) * ratio, (event.clientY - hoverRectangle.top) * ratio);
+  const wrappedNX = ((point.nx % 1) + 1) % 1;
+  const lon = wrappedNX * 360 - 180;
+  const lat = 90 - point.ny * 180;
+  const readoutPanels = shared.layout === 2 ? panels.slice(0, 2) : [hoverPanel];
+  for (const panel of panels.slice(0, shared.layout)) {
+    if (!readoutPanels.includes(panel)) panel.els.readout.textContent = "";
+  }
+  // Hover information goes to the fixed bottom-left pill AND, for an obs point, to a small
+  // tooltip at the cursor: the pill sits in the far corner of the map, so on a dense scatter
+  // the reader had to look away from the dot to read it and could not tell which dot answered.
+  // The swipe host paints panel 2's field right of the divider on its own canvas, so the
+  // pill must sample whichever field is visible under the cursor and say which one it is.
+  const swipeSecondVisible =
+    isSwipeHost(hoverPanel) &&
+    hoverPanel.offscreenB &&
+    panels[1] &&
+    panels[1].field &&
+    (event.clientX - hoverRectangle.left) * ratio > hoverPanel.swipeX * hoverPanel.els.field.width;
+  for (const panel of readoutPanels) {
+    if (!panel.field) {
+      panel.els.readout.textContent = "";
+      continue;
+    }
+    const source = panel === hoverPanel && swipeSecondVisible ? panels[1] : panel;
+    // In difference mode the host pill shows the subtracted value while panel 2's pill
+    // echoes its raw field; unlabeled, the echo reads as a second data sample (p8).
+    let prefix = "";
+    if (panel === hoverPanel && isSwipeHost(panel) && panel.offscreenB) {
+      prefix = source === panels[1] ? "Forecast 2 · " : "Forecast 1 · ";
+    } else if (isDiffView() && shared.layout === 2) {
+      prefix = panel.index === 0 ? "Difference · " : "Forecast 2 · ";
+    }
+    updatePanelReadout(panel, lat, lon, panel === hoverPanel && obsRecord ? class4ReadoutSuffix(obsRecord, source.units) : "", source, prefix);
+  }
+  showClass4Tooltip(hoverPanel, obsRecord, event);
+  updateGhostCursor(hoverPanel, wrappedNX, point.ny);
+}
+
+// The obs under the cursor, ringed on the map and spelled out beside it. Redrawing the overlay
+// costs a frame, so it only happens when the hovered obs actually changes, not on every mouse
+// move over the map.
+function showClass4Tooltip(hoverPanel, record, event) {
+  const tooltip = elements["class4-tooltip"];
+  for (const panel of panels.slice(0, shared.layout)) {
+    const next = panel === hoverPanel ? record || null : null;
+    if (panel.class4HoverPoint === next) continue;
+    panel.class4HoverPoint = next;
+    drawOverlays(panel);
+  }
+  if (!tooltip) return;
+  if (!record) {
+    tooltip.hidden = true;
+    tooltip.textContent = "";
+    return;
+  }
+  tooltip.textContent = class4ReadoutSuffix(record, hoverPanel.units).replace(/^ · /, "");
+  tooltip.hidden = false;
+  // Anchored to the cursor, flipped away from the window edges so it is never clipped.
+  const box = tooltip.getBoundingClientRect();
+  const gap = 14;
+  const left = event.clientX + gap + box.width > window.innerWidth ? event.clientX - gap - box.width : event.clientX + gap;
+  const top = event.clientY + gap + box.height > window.innerHeight ? event.clientY - gap - box.height : event.clientY + gap;
+  tooltip.style.left = `${Math.max(4, left)}px`;
+  tooltip.style.top = `${Math.max(4, top)}px`;
+}
+
+function hideClass4Tooltip() {
+  const tooltip = elements["class4-tooltip"];
+  if (tooltip) {
+    tooltip.hidden = true;
+    tooltip.textContent = "";
+  }
+  for (const panel of panels.slice(0, shared.layout)) {
+    if (!panel.class4HoverPoint) continue;
+    panel.class4HoverPoint = null;
+    drawOverlays(panel);
+  }
+}
+
+// Companion cursor: in side-by-side 2-forecast mode, mark the mirrored geographic
+// position on the panel the user is NOT hovering with the exact same custom crosshair
+// as the real cursor (at reduced opacity), so the same spot is visible on both forecasts.
+function updateGhostCursor(hoverPanel, wrappedNX, ny) {
+  if (shared.layout !== 2 || shared.displayMode !== DISPLAY_SIDE_BY_SIDE) return;
+  const other = panels[1 - hoverPanel.index];
+  const ghost = other && other.els.ghostCursor;
+  if (!ghost || !other.field) return;
+  const projection = projectionFor(other);
+  const ratio = window.devicePixelRatio || 1;
+  // Pick the world copy of the longitude closest to the visible view.
+  let best = null;
+  for (const offset of visibleCopyOffsets(projection, other.els.field)) {
+    const screen = projection.project(wrappedNX + offset, ny);
+    if (screen.x >= 0 && screen.x <= projection.width && screen.y >= 0 && screen.y <= projection.height) {
+      best = screen;
+      break;
+    }
+    if (!best) best = screen;
+  }
+  if (!best) return;
+  const x = best.x / ratio;
+  const y = best.y / ratio;
+  const wrap = other.els.wrap.getBoundingClientRect();
+  const field = other.els.field.getBoundingClientRect();
+  if (x < 0 || x > field.width || y < 0 || y > field.height) return;
+  ghost.style.transform = `translate(${(x + field.left - wrap.left).toFixed(1)}px, ${(y + field.top - wrap.top).toFixed(1)}px)`;
+  ghost.hidden = false;
+}
+
+function updatePanelReadout(panel, lat, lon, suffix = "", source = panel, prefix = "") {
+    const column = nearestIndex(source.longitudes, lon);
+    const row = nearestIndex(source.latitudes, lat);
+    if (column < 0 || row < 0) {
+      panel.els.readout.textContent = suffix ? `${prefix}${formatLatLon(lon, lat)}${suffix}` : "";
+      return;
+    }
+    const value = source.field.data[row * source.field.width + column];
+    const count = source.yearCounts && source.yearCounts.width === source.field.width ? source.yearCounts.data[row * source.yearCounts.width + column] : null;
+    const standardError =
+      source.yearBiasSE && source.yearBiasSE.width === source.field.width
+        ? source.yearBiasSE.data[row * source.yearBiasSE.width + column]
+        : null;
+    // A hovered observation lies in the ocean even where the drawn grid has no cell, so
+    // its match-up replaces the field value instead of sitting next to "land / no data".
+    const fieldMissing = Number.isNaN(value) && shared.scope !== SCOPE_WHOLE_YEAR;
+    const valueText = suffix && fieldMissing ? "" : ` · ${fieldReadoutValue(source, value, count, standardError)}`;
+    panel.els.readout.textContent = `${prefix}${formatLatLon(lon, lat)}${valueText}${suffix}`;
+}
+
+function fieldReadoutValue(panel, value, count, standardError) {
+  if (shared.scope === SCOPE_WHOLE_YEAR) {
+    if (!Number.isFinite(value) || count === 0) return "no observations";
+    const biasMode = panel.yearMetric === YEAR_METRIC_BIAS;
+    // Non-bias year cells are the time-mean |obs − model| (MAE), matching the panel title
+    // and method note, not RMSE. Label it "|error|" so the hover does not misname it.
+    const metric = biasMode ? "bias" : "|error|";
+    const sign = biasMode && value > 0 ? "+" : "";
+    // Bias cells carry a ±1 standard error (std(model − obs)/sqrt(n)); absent on old artifacts.
+    const errorText = biasMode && Number.isFinite(standardError) ? ` ± ${formatFixed(standardError, 3)}` : "";
+    const countText = Number.isFinite(count) && count > 0 ? ` · n = ${count.toLocaleString("en-US")}` : "";
+    return `${metric} ${sign}${formatFixed(value, 3)}${errorText} ${panel.units}${countText}`;
+  }
+  return Number.isNaN(value) ? "land / no data" : `${formatFixed(value, 3)} ${panel.units}`;
+}
+
+// Nearest-point hit-test over the Class-4 obs drawn on this panel (canvas points
+// have no DOM nodes, so we project the small filtered set and pick the closest to
+// the cursor). The details render inside the panel's fixed readout pill, nothing
+// floats with the cursor.
+function nearestClass4Record(panel, event, rectangle) {
+  if (shared.overlayMode !== OVERLAY_CLASS4 || !panel.class4HitPoints || !panel.class4HitPoints.length) return null;
+  const prepared = panel.class4Prepared;
+  if (!prepared || !prepared.spatialIndex) return null;
+  const selectedMask = panel.class4HitSelected; // null → whole display set is hittable
+  const ratio = window.devicePixelRatio || 1;
+  const cursorX = (event.clientX - rectangle.left) * ratio;
+  const cursorY = (event.clientY - rectangle.top) * ratio;
+  const projection = projectionFor(panel);
+  const copyOffsets = visibleCopyOffsets(projection, panel.els.overlay);
+  const threshold = Math.max((panel.class4PointRadius || 2.2) * ratio + 6 * ratio, 11 * ratio);
+  const { cols, rows, start, order } = prepared.spatialIndex;
+  const normalizedLongitude = prepared.normalizedLongitude;
+  const normalizedLatitude = prepared.normalizedLatitude;
+  const { originX, originY, displayWidth, displayHeight } = projection;
+  // Threshold radius expressed in normalized coordinates → cursor bucket neighbourhood.
+  const deltaColumns = threshold / displayWidth;
+  const deltaRows = threshold / displayHeight;
+  let nearest = null;
+  let nearestDistance = threshold;
+  const cursorNy = (cursorY - originY) / displayHeight;
+  for (const offset of copyOffsets) {
+    const cursorNx = (cursorX - originX) / displayWidth - offset;
+    let columnLow = Math.floor((cursorNx - deltaColumns) * cols) - 1;
+    let columnHigh = Math.floor((cursorNx + deltaColumns) * cols) + 1;
+    let rowLow = Math.floor((cursorNy - deltaRows) * rows) - 1;
+    let rowHigh = Math.floor((cursorNy + deltaRows) * rows) + 1;
+    columnLow = Math.max(0, columnLow);
+    columnHigh = Math.min(cols - 1, columnHigh);
+    rowLow = Math.max(0, rowLow);
+    rowHigh = Math.min(rows - 1, rowHigh);
+    if (columnLow > columnHigh || rowLow > rowHigh) continue;
+    for (let row = rowLow; row <= rowHigh; row += 1) {
+      const rowBase = row * cols;
+      for (let column = columnLow; column <= columnHigh; column += 1) {
+        const bucket = rowBase + column;
+        for (let s = start[bucket]; s < start[bucket + 1]; s += 1) {
+          const id = order[s];
+          if (selectedMask && !selectedMask[id]) continue;
+          const x = originX + (normalizedLongitude[id] + offset) * displayWidth;
+          const y = originY + normalizedLatitude[id] * displayHeight;
+          const distance = Math.hypot(x - cursorX, y - cursorY);
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearest = prepared.points[id];
+          }
+        }
+      }
+    }
+  }
+  return nearest;
+}
+
+const CLASS4_PLATFORM_KEYS = ["platform", "satellite", "platform_id", "source", "wmo_platform_code", "sensor"];
+
+// Compact one-line obs details appended to the readout pill, e.g.
+// " · obs 0.402 · fcst 0.451 · err 0.049 · argo".
+function class4ReadoutSuffix(record, units) {
+  const obs = numericOrNaN(record.observation_value);
+  const model = numericOrNaN(record.model_value);
+  const hasObs = Number.isFinite(obs);
+  const hasModel = Number.isFinite(model);
+  const error = Number.isFinite(numericOrNaN(record.abs_error))
+    ? numericOrNaN(record.abs_error)
+    : hasObs && hasModel
+      ? Math.abs(model - obs)
+      : NaN;
+  const parts = [
+    `obs ${formatFixed(obs, 3)}`,
+    `fcst ${formatFixed(model, 3)}`,
+    `err ${formatFixed(error, 3)}${units ? ` ${units}` : ""}`,
+  ];
+  const platformKey = CLASS4_PLATFORM_KEYS.find((key) => record[key] != null && record[key] !== "");
+  if (platformKey) parts.push(String(record[platformKey]));
+  else if (record.depth_bin) parts.push(String(record.depth_bin));
+  return ` · ${parts.join(" · ")}`;
+}
+
+// ---- layout + redraw --------------------------------------------------------
+
+function syncPanelGrid() {
+  const grid = elements["panel-grid"];
+  // Both swipe and difference collapse to a single shared map hosted by Forecast 1;
+  // CSS lays it out as one column and reduces Forecast 2's panel to its picker strip.
+  const single = shared.layout === 2 && (shared.displayMode === DISPLAY_SWIPE || shared.displayMode === DISPLAY_DIFFERENCE);
+  // INVARIANT I4: styles/map.css lays the grid out from data-layout and data-display.
+  grid.dataset.layout = String(single ? 1 : shared.layout);
+  grid.dataset.display = shared.displayMode;
+  while (panels.length < shared.layout) {
+    const panel = buildPanel(panels.length);
+    panels.push(panel);
+  }
+  grid.innerHTML = "";
+  for (let i = 0; i < shared.layout; i += 1) {
+    panels[i].container.classList.toggle("head-only", single && i === 1);
+    // The shared map paints Forecast 1 − Forecast 2 in difference mode, so keeping the
+    // "Forecast 1" head label over it misreads as a plain field (p8).
+    const headLabel = panels[i].container.querySelector(".panel-forecast-label");
+    if (headLabel) {
+      headLabel.textContent =
+        shared.displayMode === DISPLAY_DIFFERENCE && shared.layout === 2 && i === 0 ? "Difference · Forecast 1" : `Forecast ${i + 1}`;
+    }
+    grid.appendChild(panels[i].container);
+    refreshPanelControls(panels[i]);
+  }
+  syncHeadStripInset();
+  for (let i = shared.layout; i < panels.length; i += 1) stopParticles(panels[i]);
+  if (activePanelIndex >= shared.layout) activePanelIndex = 0;
+  markActivePanel();
+}
+
+function markActivePanel() {
+  panels.forEach((panel, index) => panel.container.classList.toggle("active", index === activePanelIndex && shared.layout > 1));
+}
+
+function setActivePanel(index) {
+  if (index >= shared.layout) return;
+  activePanelIndex = index;
+  markActivePanel();
+  if (shared.overlayMode === OVERLAY_CLASS4) mirrorActiveClass4(panels[index].state.dataset);
+  updateContextRail();
+  updateSharedColorbar();
+}
+
+// A cached render completes in tens of milliseconds, so showing the scrim straight
+// away only produces a flash. Arm a short timer instead and let a fast render cancel
+// it, so the scrim appears solely when the wait is long enough to read as a freeze.
+// The dataset/variable selects are never disabled: the user must always be able to
+// change their mind mid-load.
+const LOADING_SCRIM_DELAY_MILLISECONDS = 180;
+
+function setPanelLoading(panel, loading) {
+  if (panel.loadingTimer) {
+    clearTimeout(panel.loadingTimer);
+    panel.loadingTimer = null;
+  }
+  if (!loading) {
+    panel.container.classList.remove("loading");
+    panel.els.loading.hidden = true;
+    return;
+  }
+  panel.loadingTimer = setTimeout(() => {
+    panel.loadingTimer = null;
+    panel.container.classList.add("loading");
+    panel.els.loading.hidden = false;
+  }, LOADING_SCRIM_DELAY_MILLISECONDS);
+}
+
+function resizePanelCanvases(panel) {
+  const ratio = window.devicePixelRatio || 1;
+  const rectangle = panel.els.wrap.getBoundingClientRect();
+  for (const key of ["field", "particles", "overlay"]) {
+    const canvas = panel.els[key];
+    const width = Math.max(1, Math.round(rectangle.width * ratio));
+    const height = Math.max(1, Math.round(rectangle.height * ratio));
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+    canvas.style.width = `${rectangle.width}px`;
+    canvas.style.height = `${rectangle.height}px`;
+  }
+}
+
+function redrawAllPanels() {
+  redrawAllPanelsFrame = 0;
+  refreshZoomBadge();
+  for (let i = 0; i < shared.layout; i += 1) {
+    resizePanelCanvases(panels[i]);
+    drawPanel(panels[i]);
+    drawOverlays(panels[i]);
+    drawTrajectoryFans(panels[i]);
+  }
+}
+
+function scheduleRedrawAllPanels() {
+  if (redrawAllPanelsFrame) return;
+  redrawAllPanelsFrame = requestAnimationFrame(redrawAllPanels);
+}
+
+// Everything a diagnostic's frame is allowed to depend on EXCEPT the lead day. While this
+// string is unchanged the axes of the map-side diagnostics hold still, so moving the lead
+// slider shows the forecast changing rather than the axes changing; when it changes, every
+// remembered bound is dropped and the new selection is framed on its own data.
+// INVARIANT I1: the particle field's signature (particleSelectionSignature) is the
+// deliberate opposite of this one and DOES include the lead day. Change them together.
+function selectionSignature() {
+  const shownPanels = panels
+    .slice(0, shared.layout)
+    .map((panel) => (panel ? `${panel.state.dataset}:${panel.state.variable}:${panel.state.colormap || ""}` : ""));
+  return [
+    shared.scope,
+    shared.yearMetric,
+    shared.region,
+    shared.startIndex,
+    shared.layout,
+    shared.displayMode,
+    shared.overlayMode,
+    ...shownPanels,
+  ].join("|");
+}
+
+function syncSelectionRanges() {
+  // INVARIANT I2: this is the ONLY place the grow-only bounds are allowed to reset.
+  syncStableRanges(selectionSignature());
+}
+
+async function renderAllPanels() {
+  syncSelectionRanges();
+  const jobs = [];
+  for (let i = 0; i < shared.layout; i += 1) jobs.push(renderPanel(panels[i]));
+  await Promise.all(jobs);
+  // Panels render concurrently, so the swipe host may have drawn before Forecast 2's
+  // field existed; redraw it now that both are ready so the divider composite appears.
+  if (isSwipeHost(panels[0])) drawPanel(panels[0]);
+}
+
+// ---- shared colorbar --------------------------------------------------------
+
+function updateYearLegend(visible) {
+  const legend = elements["year-legend"];
+  if (!legend) return;
+  legend.hidden = !visible;
+  if (!visible) return;
+  legend.innerHTML =
+    `<span class="item"><span class="swatch" style="background:${rgbCss(landColor(shared.theme))}"></span>land</span>` +
+    `<span class="item"><span class="swatch" style="background:${rgbCss(noObsColor(shared.theme))}"></span>ocean, no observations</span>` +
+    (activePeriodRange() ? `<span class="item">Whole year; period not applied</span>` : "");
+  // Colorbar-adjacent method note for the year raster (the colorbar itself is a canvas).
+  attachMethodNote(legend, "year-geography");
+}
+
+// The single bottom legend strip always describes the PRIMARY layer actually drawn:
+// the field colorbar with no overlay, or the overlay's own key (obs-error ramp,
+// eddy/trajectory swatches) while a purpose overlay mutes the field. The right rail
+// carries no legend block any more, all legend information lives here.
+function updateSharedColorbar() {
+  const panel = isDiffView() ? panels[0] : panels[activePanelIndex];
+  updateYearLegend(shared.scope === SCOPE_WHOLE_YEAR);
+  const colorbar = elements.colorbar;
+  const secondColorbar = elements["colorbar-2"];
+  const legend = elements["map-legend"];
+  const textColor = themeToken("--ob-viewer-colorbar-text", shared.theme === THEME_LIGHT ? "#14181d" : "#e6edf3");
+  // Two panels showing different variables (or units) are on two scales, and both are
+  // drawn: a reader should not have to click a panel to learn what its colours mean.
+  const shownPanels = panels.slice(0, shared.layout).filter(Boolean);
+  const split =
+    !isDiffView() &&
+    shownPanels.length > 1 &&
+    shownPanels.some((candidate) => candidate.state.variable !== shownPanels[0].state.variable || candidate.units !== shownPanels[0].units);
+  const scalePanels = split ? shownPanels : [panel];
+  const canvases = [colorbar, secondColorbar];
+  const prefixFor = (candidate) => (split ? `Forecast ${candidate.index + 1} · ` : "");
+  secondColorbar.hidden = true;
+
+  // Year scope keeps its own colorbar untouched (design: don't touch year legend).
+  if (shared.scope === SCOPE_WHOLE_YEAR) {
+    colorbar.hidden = false;
+    hideMapLegend(legend);
+    if (!panel || !panel.colormap || !panel.range) {
+      elements["layer-info"].textContent = `entire year · zoom ${view.zoom.toFixed(1)}×`;
+      return;
+    }
+    scalePanels.forEach((candidate, index) => {
+      if (!candidate.colormap || !candidate.range) return;
+      const nStarts = candidate.yearMeta && candidate.yearMeta.nStarts;
+      const biasMode = candidate.yearMetric === YEAR_METRIC_BIAS;
+      canvases[index].hidden = false;
+      drawColorbar(canvases[index], candidate.colormap, candidate.range, {
+        // Dataset and variable are in the panel head; the bar says only what is averaged.
+        label: `${prefixFor(candidate)}${biasMode ? "model − obs" : "|obs − model|"}, mean of ${nStarts || "?"} starts`,
+        units: candidate.units,
+        textColor,
+      });
+    });
+    // The start-date count is already on the colorbar caption above; do not repeat it.
+    elements["layer-info"].textContent = `entire year · zoom ${view.zoom.toFixed(1)}×`;
+    return;
+  }
+  if (!panel || !panel.colormap || !panel.range) return;
+
+  const mode = isDiffView() ? OVERLAY_NONE : shared.overlayMode;
+  if (mode === OVERLAY_CLASS4) {
+    // Nothing drawn means an obs-error ramp would be a scale over no data: drop the
+    // colorbar and the legend strip and let the overlay note carry the one sentence.
+    if (class4EmptyMessage()) {
+      colorbar.hidden = true;
+      hideMapLegend(legend);
+      setLayerInfo(panel);
+      return;
+    }
+    // The bound each panel's dots were painted with, so the number under a bar is the
+    // number its dots mean: one bar for one variable, one per panel for two.
+    const scales = scalePanels.map((candidate, index) => {
+      const scale = class4CurrentScale(candidate);
+      canvases[index].hidden = false;
+      drawColorbar(canvases[index], CLASS4_COLORMAP, [0, scale || 1], {
+        label: `${prefixFor(candidate)}|obs − model|`,
+        units: candidate.units,
+        textColor,
+        // The dots skip the darkest sliver of the colormap; the bar has to skip it too, or the
+        // key names colours that are nowhere on the map.
+        ramp: [CLASS4_RAMP_START, CLASS4_RAMP_END],
+      });
+      return { scale, units: candidate.units };
+    });
+    renderClass4Legend(legend, scales);
+  } else if (mode === OVERLAY_EDDIES) {
+    colorbar.hidden = true;
+    renderEddyLegend(legend);
+  } else if (mode === OVERLAY_TRAJECTORIES) {
+    colorbar.hidden = true;
+    renderTrajectoryLegend(legend);
+  } else {
+    hideMapLegend(legend);
+    // Which forecast the scale describes leads the caption rather than trailing it: a
+    // long caption is ellipsized on the right, and that qualifier is the part a reader
+    // with two panels in front of them cannot do without. One bar under two panels of
+    // the same variable describes both, so it names the variable and no dataset.
+    const sharedBar = !isDiffView() && shared.layout > 1 && !split;
+    scalePanels.forEach((candidate, index) => {
+      if (!candidate.colormap || !candidate.range) return;
+      canvases[index].hidden = false;
+      drawColorbar(canvases[index], candidate.colormap, candidate.range, {
+        label: sharedBar ? prettyVariable(candidate) : `${prefixFor(candidate)}${candidate.label}`,
+        units: candidate.units,
+        textColor,
+      });
+    });
+  }
+  setLayerInfo(panel);
+}
+
+function setLayerInfo(panel) {
+  elements["layer-info"].textContent = zoomBadgeText(panel);
+}
+
+// The start date is the drawer's own field and the lead day is spelled out beside the
+// scrubber a few centimetres to the left, so the readout carries neither.
+function zoomBadgeText(panel) {
+  const yearPrefix = shared.scope === SCOPE_WHOLE_YEAR ? "entire year · " : "";
+  const manifest = panel ? manifestFor(panel.state.dataset) : null;
+  const loading = shared.scope !== SCOPE_WHOLE_YEAR && (!manifest || !Array.isArray(manifest.start_dates) || !manifest.start_dates.length);
+  return `${yearPrefix}zoom ${view.zoom.toFixed(1)}×${loading ? " · loading metadata" : ""}`;
+}
+
+// The badge describes the view, so the redraw of the view writes it. Hanging it off the
+// colorbar update alone left it frozen whenever a zoom stayed inside one pyramid level, which
+// is most wheel notches: the map moved under a number that no longer described it.
+function refreshZoomBadge() {
+  const panel = isDiffView() ? panels[0] : panels[activePanelIndex];
+  if (!elements["layer-info"]) return;
+  elements["layer-info"].textContent = zoomBadgeText(panel);
+}
+
+function hideMapLegend(legend) {
+  legend.hidden = true;
+  legend.innerHTML = "";
+}
+
+function legendHelpAnchor() {
+  return `<span class="legend-help"></span>`;
+}
+
+// The legend names the region with the picker's own label ("Global", "IBI"), never the
+// lowercase internal value (p8 read "region ibi" as sloppy output).
+function regionDisplayName() {
+  const select = elements["overlay-region"];
+  const option = select && select.selectedOptions && select.selectedOptions[0];
+  return option ? option.textContent : shared.region;
+}
+
+function legendSwatch(color, label, count) {
+  const countText = count == null ? "" : ` · <strong>${formatCount(count)}</strong>`;
+  return `<span class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escapeHtml(label)}${countText}</span>`;
+}
+
+function legendLine(color, label) {
+  return `<span class="legend-item"><span class="legend-line" style="background:${color}"></span>${escapeHtml(label)}</span>`;
+}
+
+// Class-4 obs mode: the obs-error ramp is the primary key (drawn on the colorbar
+// canvas). This strip carries the density note (moved out of the right rail), the
+// muted-background note and the "?" helper.
+function renderClass4Legend(legend, scales) {
+  const hostPanel = panels[0];
+  const matched = hostPanel ? hostPanel.class4Matched || 0 : 0;
+  const weak = matched > 0 && matched < 30 ? " · low count, statistic is weak" : "";
+  // Side by side, two panels on different datasets or variables draw different points, so
+  // each gets its own count; one count would describe only Forecast 1's dots.
+  const sidePanels = shared.layout === 2 && shared.displayMode === DISPLAY_SIDE_BY_SIDE ? panels.slice(0, 2).filter(Boolean) : [];
+  const perPanel =
+    sidePanels.length === 2 &&
+    (sidePanels[0].state.dataset !== sidePanels[1].state.dataset || sidePanels[0].state.variable !== sidePanels[1].state.variable);
+  const countText = perPanel
+    ? sidePanels.map((panel) => `F${panel.index + 1}: ${class4PanelCountText(panel)}`).join(" · ")
+    : class4PanelCountText(hostPanel);
+  legend.hidden = false;
+  legend.innerHTML =
+    `<span class="legend-note">${countText} · scale ${scales.map(({ scale, units }) => `${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(units)}`).join(" / ")}${weak}${legendHelpAnchor()}</span>`;
+  attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
+}
+
+function class4PanelCountText(panel) {
+  if (!panel) return "<strong>0 obs</strong>";
+  if (isReferenceDataset(panel.state.dataset)) return "none (assimilates these obs)";
+  const shown = panel.class4Count || 0;
+  const visibleTotal = panel.class4VisibleTotal || shown;
+  return panel.class4Thinned
+    ? `<strong>showing ${formatCount(shown)} of ${formatCount(visibleTotal)} obs</strong> · zoom in for full density`
+    : `<strong>${formatCount(panel.class4Matched || 0)} obs</strong>`;
+}
+
+// Eddies mode: categorical swatch row faithful to what is drawn, matched pairs (the
+// intercomparison neutral colour) and each forecast's only-eddies, or a single census.
+function renderEddyLegend(legend) {
+  const censuses = overlayData.eddiesCensuses || [];
+  const match = overlayData.eddiesMatch;
+  const mismatch = Boolean(overlayData.eddiesLeadMismatch);
+  let swatches;
+  let caption;
+  if (shared.layout === 2 && match) {
+    const forecast1 = labelFor(panels[0].state.dataset);
+    const forecast2 = labelFor(panels[1].state.dataset);
+    const lead = (censuses.find(Boolean) || {}).leadDay;
+    const percent = (share) => (Number.isFinite(share) ? `${Math.round(share * 100)}%` : "n/a");
+    swatches =
+      legendSwatch(EDDY_MATCHED_COLOR, "Matched pairs", match.matched.length) +
+      legendSwatch(forecastColor(0), `Only in ${forecast1}`, match.onlyA.length) +
+      legendSwatch(forecastColor(1), `Only in ${forecast2}`, match.onlyB.length);
+    // The chance rate is the same rule against the other census shifted 5° in longitude:
+    // matched share minus chance is what the two forecasts actually agree on.
+    caption = `${percent(match.matchedShare)} of F1 matched, chance ${percent(match.chanceShare)} (F2 shifted ±5° lon) · lead ${lead ?? "n/a"}`;
+  } else if (shared.layout === 2 && mismatch && censuses[0] && censuses[1]) {
+    // No lead day in common between the two forecasts: never cross-match different leads -
+    // show each forecast's own census at its own nearest lead, and say so.
+    const forecast1 = labelFor(panels[0].state.dataset);
+    const forecast2 = labelFor(panels[1].state.dataset);
+    swatches =
+      legendSwatch(forecastColor(0), `${forecast1} eddies · lead ${censuses[0].leadDay ?? "n/a"}`, censuses[0].detections.length) +
+      legendSwatch(forecastColor(1), `${forecast2} eddies · lead ${censuses[1].leadDay ?? "n/a"}`, censuses[1].detections.length);
+    caption = "no shared lead: not matched";
+  } else if (censuses.some(Boolean)) {
+    // One census on screen, from whichever panel has it (panel 1 may be the one without).
+    const index = censuses.findIndex(Boolean);
+    const census = censuses[index];
+    swatches = legendSwatch(forecastColor(index), `${labelFor(panels[index].state.dataset)} eddies`, census.detections.length);
+    caption = `census · lead ${census.leadDay ?? "n/a"}`;
+  } else {
+    const unpublished = (overlayData.eddiesUnpublished || []).slice(0, shared.layout);
+    const message = unpublished.length && unpublished.every(Boolean)
+      ? "No eddy census for this model."
+      : "No eddy detections for this selection.";
+    swatches = `<span class="legend-note">${message}</span>`;
+    caption = "";
+  }
+  legend.hidden = false;
+  legend.innerHTML =
+    `<span class="legend-row">${swatches}</span>` +
+    `<span class="legend-note dim">${escapeHtml(caption)}${legendHelpAnchor()}</span>`;
+  const census = censuses.find(Boolean);
+  attachEddyMethodNote(legend.querySelector(".legend-help"), census && census.parameters);
+}
+
+// Trajectories mode: the two forecast colours the fans are drawn in, plus the seed note.
+function renderTrajectoryLegend(legend) {
+  const forecast1 = labelFor(panels[0].state.dataset);
+  let swatches = legendLine(TRAJECTORY_COLORS[0], `${forecast1} drift`);
+  if (shared.layout === 2) swatches += legendLine(TRAJECTORY_COLORS[1], `${labelFor(panels[1].state.dataset)} drift`);
+  swatches += `<span class="legend-item"><span class="legend-seed">◦</span>seed cluster</span>`;
+  const seeded = trajectoryState && trajectoryState.trajectories;
+  const caption = seeded
+    ? "20 shared seeds advected through each forecast's currents"
+    : "click the map to seed a 20-particle cluster";
+  legend.hidden = false;
+  legend.innerHTML =
+    `<span class="legend-row">${swatches}</span>` +
+    `<span class="legend-note dim">${escapeHtml(caption)}${legendHelpAnchor()}</span>`;
+  attachMethodNote(legend.querySelector(".legend-help"), "trajectories");
+}
+
+// ---- context rail -----------------------------------------------------------
+
+// The rail is derived entirely from the Forecast 1 / Forecast 2 pickers (the panels),
+// never from its own selectors (item 2). One forecast → its diagnostics. Two with the
+// SAME variable → an overlaid comparison (Forecast 2 is the reference for the error
+// spectrum). Two with DIFFERENT variables → a small F1/F2 toggle, one forecast at a time.
+async function updateContextRail() {
+  syncSelectionRanges();
+  const forecasts = railForecasts();
+  if (!forecasts.length) return;
+  await ensureScoresSummary();
+  const comparison = forecasts.length === 2 && sameForecastVariable(forecasts[0], forecasts[1]);
+  const toggleForecasts = forecasts.length === 2 && !comparison;
+
+  const toggle = elements["rail-forecast-toggle"];
+  toggle.hidden = !toggleForecasts;
+  if (toggleForecasts) {
+    if (shared.railForecast > 1) shared.railForecast = 0;
+    for (const button of toggle.querySelectorAll("button")) {
+      const index = Number(button.dataset.forecast);
+      const selected = index === shared.railForecast;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-pressed", String(selected));
+      button.textContent = `F${index + 1}`;
+      button.title = `Forecast ${index + 1} · ${labelFor(forecasts[index].state.dataset)}`;
+    }
+  }
+
+  const shown = comparison ? forecasts : [forecasts[toggleForecasts ? shared.railForecast : 0]];
+  elements["rail-subtitle"].textContent = comparison
+    ? `${shown.map((p) => labelFor(p.state.dataset)).join(" vs ")} · ${prettyVariable(shown[0])} · ${regionDisplayName()}`
+    : `${shown[0].label} · ${regionDisplayName()}`;
+
+  updateCurrentDepthGateNote(shown);
+  const periodScores = await periodScoresForRail();
+  renderRailSkill(shown, comparison, periodScores);
+  await renderRailDepthProfile(shown, comparison, periodScores);
+  const yearSection = elements["rail-year-rmsd-section"];
+  if (shared.scope === SCOPE_WHOLE_YEAR) {
+    if (yearSection) yearSection.hidden = false;
+    renderRailYearRmsd(shown, periodScores && periodScores.range);
+    return;
+  }
+  if (yearSection) yearSection.hidden = true;
+  renderRailPsd(shown, comparison);
+  renderTrajectoryRail();
+  renderRailProvenance(shown);
+}
+
+// Data-provenance line(s) at the foot of the rail: which oceanbench pipeline version
+// produced the shown forecast(s)' artifacts and when. Manifests published before this
+// block existed carry no `provenance`, so nothing is shown for them (the line stays
+// hidden). In 2-forecast mode a shared stamp collapses to one line; distinct stamps
+// show one line each, prefixed with their forecast label.
+function formatProvenanceLine(provenance) {
+  const version = provenance.oceanbench_version || "?";
+  const generatedDate = String(provenance.generated_at || "").slice(0, 10);
+  const suffix = generatedDate ? ` · generated ${generatedDate}` : "";
+  return `data: oceanbench ${version}${suffix}`;
+}
+
+function renderRailProvenance(shown) {
+  const element = elements["rail-provenance"];
+  if (!element) return;
+  const entries = [];
+  for (const panel of shown) {
+    const manifest = manifestFor(panel.state.dataset);
+    const provenance = manifest && manifest.provenance;
+    if (!provenance) continue;
+    const line = formatProvenanceLine(provenance);
+    if (!entries.some((entry) => entry.line === line)) {
+      entries.push({
+        line,
+        index: panel.index,
+        version: provenance.oceanbench_version || "?",
+        date: String(provenance.generated_at || "").slice(0, 10),
+      });
+    }
+  }
+  element.textContent = "";
+  if (!entries.length) {
+    element.hidden = true;
+    return;
+  }
+  // Same pipeline version, different dates: one line listing both dates.
+  const versions = new Set(entries.map((entry) => entry.version));
+  if (entries.length > 1 && versions.size === 1) {
+    const dates = entries.map((entry) => entry.date).filter(Boolean);
+    entries.splice(0, entries.length, {
+      line: `data: oceanbench ${[...versions][0]}${dates.length ? ` · ${dates.join(" / ")}` : ""}`,
+      index: 0,
+    });
+  }
+  const labelled = entries.length > 1;
+  entries.forEach((entry, index) => {
+    if (index > 0) element.appendChild(document.createElement("br"));
+    const span = document.createElement("span");
+    span.textContent = labelled ? `Forecast ${entry.index + 1} · ${entry.line}` : entry.line;
+    element.appendChild(span);
+  });
+  element.hidden = false;
+  attachMethodNote(element, "data-provenance");
+}
+
+// RMSE vertical profile (RMSE vs depth) for the shown forecast(s) at the selected lead
+// day, so the rail answers "where in the water column is the model wrong at this lead".
+// Only 3D variables (temperature, salinity) carry a depth profile: the artifact keys its
+// `variables` by the observation standard name, so surface-only channels (SSH, currents)
+// simply find no entry and the section stays hidden. The artifact may be absent while the
+// backfill is in flight, a missing file resolves to null and hides the section too.
+async function renderRailDepthProfile(shown, comparison, periodScores) {
+  const section = elements["rail-depth-profile-section"];
+  const slot = elements["rail-depth-profile"];
+  const note = elements["rail-depth-profile-note"];
+  if (!section || !slot) return;
+  const lines = [];
+  let unit = "";
+  let lead = null;
+  // Lead-independent RMSE bound (max over every lead and depth bin of the shown
+  // artifacts): the profile axis stays fixed while the lead slider scrubs, so the
+  // profile visibly grows within a constant frame instead of being renormalised.
+  let xBound = 0;
+  for (const panel of shown) {
+    const entry = variableEntry(manifestFor(panel.state.dataset), panel.state.variable);
+    if (!entry || isVelocityFamilyVariable(panel.state.variable)) continue;
+    const url = insightsFor(insightIndex, panel.state.dataset, shared.region).rmsd_by_depth;
+    const yearData = url ? await loadRmsdByDepth(url) : null;
+    // A period keeps the year artifact's bins and leads and recomputes every cell.
+    const data = yearData && periodScores ? periodDepthData(periodScores, yearData) : yearData;
+    const profile = data ? rmsdDepthProfile(data, entry.standard_name, shared.leadDay) : null;
+    if (!profile) continue;
+    // The year bound stays in, so switching periods does not rescale the axis.
+    xBound = Math.max(xBound, rmsdDepthProfileMax(yearData, entry.standard_name), rmsdDepthProfileMax(data, entry.standard_name));
+    lead = lead == null ? profile.lead : lead;
+    unit = unit || entry.units || "";
+    lines.push({
+      label: comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}` : "RMSE vs depth",
+      color: forecastColor(panel.index),
+      // Temperature's "0-5m" bin holds obs from 1 to 5 m (its own "surface" bin takes the top metre).
+      bins:
+        entry.standard_name === "sea_water_potential_temperature"
+          ? profile.bins.map((bin) => (bin.label === "0-5m" ? { ...bin, label: "1-5m" } : bin))
+          : profile.bins,
+    });
+  }
+  if (!lines.length) {
+    section.hidden = true;
+    slot.innerHTML = "";
+    if (note) note.textContent = "";
+    return;
+  }
+  section.hidden = false;
+  slot.innerHTML = rmsdByDepthSVG(lines, {
+    title: comparison ? "RMSE vs depth (both forecasts)" : "RMSE vs depth",
+    unit,
+    xBound,
+    typeScale: chartTypeScale(slot),
+  });
+  if (note) {
+    note.textContent = `Lead ${lead ?? shared.leadDay}, ${periodScores ? periodScores.range.label : "all 2024"} match-ups.`;
+  }
+  wireCursorTooltip(slot);
+}
+
+// RMSE by start date, one line per visible forecast at the selected lead day. Clicking
+// a point drills down into single-forecast scope with that start date selected.
+async function renderRailYearRmsd(shown, range) {
+  const slot = elements["rail-year-rmsd"];
+  const note = elements["rail-year-rmsd-note"];
+  const biasMode = shared.yearMetric === YEAR_METRIC_BIAS;
+  // Keep the section title in step with the metric (the "?" button is a later child,
+  // so only the leading text node is retitled).
+  const yearHeading = elements["rail-year-rmsd-section"].querySelector("h3");
+  if (yearHeading && yearHeading.firstChild) {
+    yearHeading.firstChild.textContent = biasMode ? "Bias by start date" : "RMSE by start date";
+  }
+  const lines = [];
+  let unit = "";
+  let missing = 0;
+  // Lead-independent y-bound (max across ALL leads, over the shown datasets): the axis
+  // stays fixed while the lead slider scrubs, so the curve visibly grows/shifts within a
+  // constant frame. yearRmsdSeriesMax is a pure function of the loaded artifact, so this
+  // effectively only changes with the dataset/variable/region/metric selection.
+  let yBound = 0;
+  const yearBins = new Set();
+  for (const panel of shown) {
+    if (isSurfaceCurrentVariable(panel.state.variable)) continue; // 15 m obs only; covered by switch note
+    const url = insightsFor(insightIndex, panel.state.dataset, shared.region).year_rmsd_by_start;
+    const mapping = url ? yearVariableMapping(panel.state.variable) : null;
+    const rmsd = url ? await loadYearRmsd(url) : null;
+    const yearEntry = rmsd && mapping ? yearRmsdSeries(rmsd, mapping.short, shared.leadDay) : null;
+    const entry = yearEntry && range ? seriesInPeriod(yearEntry, range) : yearEntry;
+    // In bias mode a series without a parallel bias array degrades gracefully (skipped,
+    // counted as missing), the |error| path is unaffected.
+    if (!entry || (biasMode && !entry.bias)) {
+      missing += 1;
+      continue;
+    }
+    yBound = Math.max(yBound, yearRmsdSeriesMax(rmsd, mapping.short, { signed: biasMode }));
+    unit = unit || (mapping.unit ? mapping.unit : "");
+    const yearManifest = manifestFor(panel.state.dataset);
+    const yearBin = depthBinLabel(yearManifest && variableEntry(yearManifest, panel.state.variable), entry.depthBin);
+    if (yearBin) yearBins.add(yearBin);
+    lines.push({
+      label: `${labelFor(panel.state.dataset)}${mapping.component ? " · u" : ""}`,
+      color: forecastColor(panel.index),
+      panelIndex: panel.index,
+      dates: entry.dates,
+      rmsd: biasMode ? entry.bias : entry.rmsd,
+      // Parallel 95% CI edges for the active metric; null on old artifacts (chart draws no band).
+      ciLow: biasMode ? entry.biasCiLow : entry.ciLow,
+      ciHigh: biasMode ? entry.biasCiHigh : entry.ciHigh,
+    });
+  }
+  slot.innerHTML = rmsdByStartSVG(lines, {
+    title: `${biasMode ? "Bias by start date" : "RMSE by start date"}${yearBins.size ? ` · ${[...yearBins].join(" / ")}` : ""}`,
+    unit,
+    signed: biasMode,
+    yBound,
+    typeScale: chartTypeScale(slot),
+  });
+  const bandNote = !lines.some((line) => line.ciLow)
+    ? ""
+    : biasMode
+      ? "Band: 95%, mean ± 1.96 sd/√n, a lower bound (obs are correlated). "
+      : "Band: 95%, a lower bound (obs are correlated). ";
+  note.textContent = lines.length
+    ? `${bandNote}Click a point to open that date.`
+    : biasMode
+      ? "Bias by start not available for this dataset/region."
+      : "RMSE by start not available for this dataset/region.";
+  wireCursorTooltip(slot);
+  wireYearRmsdDrilldown(slot, lines);
+}
+
+function wireYearRmsdDrilldown(slot, lines) {
+  const svg = slot.querySelector("svg");
+  if (!svg) return;
+  svg.querySelectorAll(".year-point").forEach((point) => {
+    point.style.cursor = "pointer";
+    point.addEventListener("click", () => {
+      const date = point.getAttribute("data-date");
+      if (date) drillDownToStartDate(date);
+    });
+  });
+}
+
+// A new start date, from the drawer's picker or from a drill-down in the year chart.
+async function selectStartDate(index) {
+  clearTrajectories();
+  shared.startIndex = index;
+  await renderAllPanels();
+  // A newer start date (or region, or lead) already owns the overlay: leave the redraw and
+  // the rail to the load that answers the selection actually on screen.
+  if (!(await loadOverlayData())) return;
+  if (shared.overlayMode === OVERLAY_EDDIES) writeEddyOverlayNote();
+  redrawOverlaysAll();
+  await updateContextRail();
+  // The clicked column is start-specific; re-read it at the same point for the new start.
+  if (columnModeActive() && shared.columnPoint) await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
+  writeHash();
+}
+
+// The start date on or nearest to a YYYY-MM-DD date, or -1 when there are no start dates.
+function nearestStartIndex(dates, date) {
+  const exact = dates.findIndex((candidate) => String(candidate).slice(0, 10) === date);
+  if (exact >= 0 || !dates.length) return exact;
+  const target = Date.parse(date);
+  let best = 0;
+  let bestDelta = Infinity;
+  dates.forEach((candidate, i) => {
+    const delta = Math.abs(Date.parse(String(candidate).slice(0, 10)) - target);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = i;
+    }
+  });
+  return best;
+}
+
+// Switch from year scope to single-forecast scope, selecting the clicked start date
+// (matched against the start dates every visible forecast has; nearest if inexact). The
+// new start then loads through the start-date picker's own path, so the overlays, the
+// rail and the clicked column follow it exactly as they do after a pick in the drawer.
+async function drillDownToStartDate(date) {
+  const index = nearestStartIndex(sharedStartDates(), date);
+  if (index < 0) return;
+  elements["start-date"].value = String(index);
+  if (setSharedScope(SCOPE_SINGLE_DATE)) applyScope();
+  await selectStartDate(index);
+  await refitAfterScopeChange();
+  updateCurrentsControlVisibility();
+}
+
+// When a surface current variable is selected there are no honest surface observations
+// to compare against: the drifter obs sit at 15 m. Explain this and offer a one-click
+// switch to the 15 m field.
+function updateCurrentDepthGateNote(shown) {
+  const note = elements["rail-current-depth-note"];
+  if (!note) return;
+  // Shown whatever the overlay: the RMSE vs lead chart is empty for surface currents in
+  // every mode, and this is the note that says why.
+  const gated = shown.filter((panel) => isSurfaceCurrentVariable(panel.state.variable));
+  if (!gated.length) {
+    note.hidden = true;
+    note.innerHTML = "";
+    return;
+  }
+  note.hidden = false;
+  note.innerHTML =
+    `<p>Drifters measure currents at 15&nbsp;m.</p>` +
+    `<button type="button" class="ghost-button" id="rail-switch-15m-currents">Use 15&nbsp;m currents</button>`;
+  const button = note.querySelector("#rail-switch-15m-currents");
+  if (button) button.addEventListener("click", () => switchShownPanelsTo15mCurrents(gated));
+}
+
+async function switchShownPanelsTo15mCurrents(gatedPanels) {
+  const targets = gatedPanels && gatedPanels.length ? gatedPanels : panels.slice(0, shared.layout);
+  for (const panel of targets) {
+    if (!isSurfaceCurrentVariable(panel.state.variable)) continue;
+    panel.state.variable = matching15mCurrentVariable(panel.state.variable);
+    refreshPanelControls(panel);
+    await renderPanel(panel);
+  }
+  await updateContextRail();
+  updateCurrentsControlVisibility();
+  writeHash();
+}
+
+function railForecasts() {
+  const scope = shared.layout === 2 ? panels.slice(0, 2) : panels.slice(0, 1);
+  return scope.filter(Boolean);
+}
+
+function sameForecastVariable(a, b) {
+  return a.state.variable === b.state.variable;
+}
+
+function prettyVariable(panel) {
+  const manifest = manifestFor(panel.state.dataset);
+  const entry = manifest && variableEntry(manifest, panel.state.variable);
+  if (isCurrentsVariable(panel.state.variable)) return `currents (${currentsDepthLabel(panel.state.variable)})`;
+  return entry ? `${prettyName(entry.standard_name)} · ${depthLabel(entry.depth)}` : panel.state.variable;
+}
+
+// Obs-based skill (Class-4 RMSE vs observations) for a forecast's selected variable.
+// Returns { rows, unit, n } or null when no observation-based metric exists (item 4).
+function obsSkillSeries(panel, periodScores) {
+  // Surface currents have no 15 m drifter obs to compare against, the switch note
+  // handles this case, so emit no skill curve for them.
+  if (isSurfaceCurrentVariable(panel.state.variable)) return null;
+  const manifest = manifestFor(panel.state.dataset);
+  const entry = manifest && variableEntry(manifest, panel.state.variable);
+  if (!entry) return null;
+  const depthKeys = scoreDepthKeys(entry);
+  const scoreVariables = isCurrentsVariable(panel.state.variable)
+    ? ["eastward_sea_water_velocity", "northward_sea_water_velocity"]
+    : [entry.standard_name];
+  const challenger = scoreProductKey(panel.state.dataset);
+  const rowsByVariable = new Map(scoreVariables.map((variable) => [variable, []]));
+  let unit = "";
+  let starts = 0;
+  for (const row of scoresSummary) {
+    if (row.metric !== "class4_rmsd") continue;
+    if (!rowsByVariable.has(row.variable)) continue;
+    if (row.reference !== "observations") continue; // observation-based only, no gridded fallback
+    if (depthKeys.length && !depthKeys.includes(row.depth)) continue;
+    if (row.challenger !== challenger) continue;
+    if (shared.region && row.region && row.region !== shared.region) continue;
+    unit = row.unit || unit;
+    rowsByVariable.get(row.variable).push(row);
+  }
+  if (periodScores) {
+    for (const [variable, rows] of rowsByVariable) {
+      if (rows.length) rowsByVariable.set(variable, periodScores.period.periodLeadRows(periodScores.perStart, rows, periodScores.starts));
+    }
+  }
+  for (const rows of rowsByVariable.values()) for (const row of rows) starts = Math.max(starts, Number(row.n_starts) || 0);
+  if (![...rowsByVariable.values()].some((rows) => rows.length)) return null;
+  return { rowsByVariable, unit, n: starts, binLabel: depthBinLabel(entry, depthKeys[0]) };
+}
+
+function renderRailSkill(shown, comparison, periodScores) {
+  const series = new Map();
+  const labels = new Map();
+  const colors = new Map();
+  let unit = "";
+  const notes = [];
+  const binLabels = new Set();
+  try {
+    for (const panel of shown) {
+      const skill = obsSkillSeries(panel, periodScores);
+      const key = scoreProductKey(panel.state.dataset);
+      if (!skill) {
+        if (isSurfaceCurrentVariable(panel.state.variable)) {
+          notes.push(`${labelFor(panel.state.dataset)}: drifters are at 15 m only (switch above)`);
+          continue;
+        }
+        const suffix = isCurrentsVariable(panel.state.variable)
+          ? `currents at ${currentsDepthLabel(panel.state.variable)}`
+          : "this variable";
+        notes.push(
+          isReferenceDataset(panel.state.dataset)
+            ? `${labelFor(panel.state.dataset)}: not scored (assimilates these obs)`
+            : `${labelFor(panel.state.dataset)}: no scored obs for ${suffix}`,
+        );
+        continue;
+      }
+      unit = skill.unit || unit;
+      if (skill.binLabel) binLabels.add(skill.binLabel);
+      for (const [variable, rows] of skill.rowsByVariable) {
+        if (!rows.length) continue;
+        const component = variable === "eastward_sea_water_velocity" ? "eastward" : "northward";
+        const seriesKey = isCurrentsVariable(panel.state.variable)
+          ? `forecast-${panel.index}:${key}:${component}`
+          : `forecast-${panel.index}:${key}`;
+        const aggregated = aggregateLeadSeries(new Map([[seriesKey, rows]]));
+        if (aggregated.has(seriesKey)) series.set(seriesKey, aggregated.get(seriesKey));
+        colors.set(seriesKey, forecastColor(panel.index));
+        labels.set(
+          seriesKey,
+          isCurrentsVariable(panel.state.variable)
+            ? `${comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)} · ` : ""}${
+                component === "eastward" ? "u (eastward)" : "v (northward)"
+              }`
+            : comparison
+              ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}`
+              : "RMSE vs observations",
+        );
+      }
+      // n_starts is available from the summary, so report the real number of start dates
+      // behind the aggregate (item 5). TODO(pipeline): expose per-lead matchup counts too.
+      notes.push(
+        `${labelFor(panel.state.dataset)}: n = ${skill.n} starts${skill.n < 10 ? " (low, weak statistic)" : ""}`,
+      );
+      if (isCurrentsVariable(panel.state.variable)) notes.push("Map: speed from paired u/v. Curves: u and v RMSE.");
+    }
+  } catch (error) {
+    console.error("Cannot render observation-based skill", error);
+    notes.length = 0;
+    notes.push("No scored observations for this variable/product");
+  }
+  // With nothing to plot the caption below already says so, and it says which
+  // product it is saying it about. Drawing an empty chart whose only content is a
+  // shorter version of that same sentence stated the fact twice.
+  elements["rail-lead-curve"].innerHTML = series.size || !notes.length
+    ? leadCurveSVG(series, {
+        unit,
+        labels,
+        colors,
+        title: `${comparison ? "RMSE vs lead day (both forecasts)" : "RMSE vs lead day"}${
+          binLabels.size ? ` · ${[...binLabels].join(" / ")}` : ""
+        }`,
+        emptyMessage: "no scored observations for this variable/product",
+      })
+    : "";
+  elements["rail-skill-note"].textContent = notes.join(" · ");
+  wireCursorTooltip(elements["rail-lead-curve"]);
+}
+
+// ---- live PSD: explicit size-capped rectangle at the model's native grid -----
+//
+// The spectrum is computed over an explicit rectangle drawn on the map, draggable,
+// resizable, shared between both forecasts in compare mode. Its size is HARD-CAPPED at
+// 512 native cells of the finest model per axis, and the box is transformed on those
+// native cells from a windowed tile-cropped read (psd.js zero-pads, never resamples).
+
+const PSD_FFT_CELLS = 512; // matches psd.js MAX_CELLS
+const PSD_MIN_CELLS = 32; // minimum native cells across for a meaningful FFT
+const PSD_DEFAULT_WIDTH_DEG = 10;
+const PSD_FLASH_MILLISECONDS = 700;
+const PSD_LAND_WARNING_FRACTION = 0.02;
+
+// Current cap/min (degrees) for the visible forecasts; refreshed by ensurePsdBox so
+// resize gestures clamp against the latest model pair. A shared box must be valid for
+// BOTH models at their native grids, so:
+//   sharedMax = min over models of (512 × native cell size) , the FINER model's max,
+//               so the fine model is never decimated;
+//   sharedMin = max over models of (32 × native cell size)  , the COARSER model's min,
+//               so the coarse model still has ≥32 of its own native cells.
+// For very disparate pairs sharedMin > sharedMax: no box is fair to both. Then the box
+// is degenerate (psdBoxLimits.degenerate) and PSD-compare is disabled with a note.
+let psdBoxLimits = { capDeg: PSD_FFT_CELLS, minDeg: 0.5, degenerate: false, resolutionLabels: [] };
+let psdBoxFlashUntil = 0;
+
+function finestCellDegFor(slug) {
+  const manifest = manifestFor(slug);
+  if (!manifest || !Array.isArray(manifest.levels) || !manifest.levels.length) return null;
+  return Math.min(...manifest.levels.map((level) => level.cell_size_deg));
+}
+
+// Open-ocean centres for the first box of a region, in order of preference: a box centred
+// in the view often lands on a coast, and filled land dominates the spectrum. Each 10° box
+// here is under 0.2% land on the GLORYS and GLOW grids.
+const PSD_OPEN_OCEAN_CENTRES = {
+  global: [
+    { lon: -50, lat: 38 }, // Gulf Stream
+    { lon: 22, lat: -41 }, // Agulhas
+    { lon: 155, lat: 35 }, // Kuroshio extension
+    { lon: -140, lat: 25 }, // subtropical North Pacific
+    { lon: 80, lat: -20 }, // south Indian Ocean
+    { lon: -120, lat: -30 }, // subtropical South Pacific
+  ],
+  ibi: [{ lon: -14, lat: 45 }], // west of Iberia and the Bay of Biscay
+};
+
+// The first open-ocean centre whose box fits in the view, else the view's centre.
+function defaultPsdCentre(viewport, width) {
+  const west = viewport.minX * 360 - 180;
+  const east = viewport.maxX * 360 - 180;
+  const north = 90 - viewport.minY * 180;
+  const south = 90 - viewport.maxY * 180;
+  const half = width / 2;
+  const fits = (centre) =>
+    centre.lon - half >= west && centre.lon + half <= east && centre.lat - half >= south && centre.lat + half <= north;
+  const candidate = (PSD_OPEN_OCEAN_CENTRES[shared.region] || []).find(fits);
+  if (candidate) return { lon: candidate.lon, lat: candidate.lat };
+  return { lon: (west + east) / 2, lat: (north + south) / 2 };
+}
+
+// Create the box if absent (at an open-ocean spot in the view, else centred in it) and clamp it to the current cap -
+// also handles switching to a coarser/finer model pair: the box persists, only its
+// limits move. Returns the box.
+function ensurePsdBox(shown) {
+  const cells = (shown || panels.slice(0, shared.layout))
+    .map((panel) => finestCellDegFor(panel.state.dataset))
+    .filter((value) => value != null);
+  if (cells.length) {
+    const capDeg = PSD_FFT_CELLS * Math.min(...cells); // finer model's max (smaller in degrees)
+    const minDeg = PSD_MIN_CELLS * Math.max(...cells); // coarser model's min (larger in degrees)
+    const degenerate = minDeg > capDeg + 1e-9;
+    const resolutionLabels = [...new Set(cells.map((cell) => cellDegreesLabel(cell)))];
+    psdBoxLimits = { capDeg, minDeg, degenerate, resolutionLabels };
+  }
+  if (!shared.psdBox) {
+    const width = Math.min(PSD_DEFAULT_WIDTH_DEG, psdBoxLimits.capDeg);
+    shared.psdBox = { ...defaultPsdCentre(currentViewport(), width), w: width, h: width };
+    shared.psdBoxRequest = { w: PSD_DEFAULT_WIDTH_DEG, h: PSD_DEFAULT_WIDTH_DEG };
+  }
+  clampPsdBox(false);
+  return shared.psdBox;
+}
+
+// A region change moves the map to a different window, and the box was placed inside the
+// one it was created in: it ends up off screen, unreachable, while the rail keeps drawing
+// its spectrum under the new region's name. Drop it so ensurePsdBox re-seeds it at the
+// default size in the new viewport.
+function reseedPsdBox() {
+  if (!shared.psdBox) return;
+  shared.psdBox = null;
+  shared.psdBoxRequest = null;
+  ensurePsdBox(panels.slice(0, shared.layout));
+}
+
+// Clamp size to [min, cap] and keep the box on the globe. Returns true when the SIZE
+// was reduced by the cap (used to trigger the "max size" flash during a resize).
+function clampPsdBox(fromResize) {
+  const box = shared.psdBox;
+  if (!box) return false;
+  // A resize IS the request; anything else re-applies the last request first, so a box
+  // pushed up by a stricter minimum returns to its requested size when that minimum drops.
+  if (fromResize || !shared.psdBoxRequest) shared.psdBoxRequest = { w: box.w, h: box.h };
+  else {
+    box.w = shared.psdBoxRequest.w;
+    box.h = shared.psdBoxRequest.h;
+  }
+  const capped = box.w > psdBoxLimits.capDeg + 1e-9 || box.h > psdBoxLimits.capDeg + 1e-9;
+  box.w = Math.min(psdBoxLimits.capDeg, Math.max(psdBoxLimits.minDeg, box.w));
+  box.h = Math.min(psdBoxLimits.capDeg, Math.max(psdBoxLimits.minDeg, box.h));
+  box.lon = ((box.lon + 180) % 360 + 360) % 360 - 180;
+  box.lat = Math.min(90 - box.h / 2, Math.max(-90 + box.h / 2, box.lat));
+  if (capped && fromResize) psdBoxFlashUntil = performance.now() + PSD_FLASH_MILLISECONDS;
+  return capped;
+}
+
+function psdBoxWorldRect() {
+  const box = shared.psdBox;
+  if (!box) return null;
+  return {
+    nx0: (box.lon - box.w / 2 + 180) / 360,
+    nx1: (box.lon + box.w / 2 + 180) / 360,
+    nyTop: (90 - (box.lat + box.h / 2)) / 180,
+    nyBottom: (90 - (box.lat - box.h / 2)) / 180,
+  };
+}
+
+// The rectangle is a spectrum tool, not an overlay mode: it shows on every panel in
+// single-forecast scope (incl. swipe/difference, one shared box drives both spectra).
+function psdBoxVisible() {
+  return shared.psdEnabled && shared.scope !== SCOPE_WHOLE_YEAR && Boolean(shared.psdBox) && !psdBoxLimits.degenerate;
+}
+
+function drawPsdBox(panel, context, projection) {
+  const rect = psdBoxWorldRect();
+  if (!rect) return;
+  const ratio = window.devicePixelRatio || 1;
+  const accent = shared.theme === THEME_LIGHT ? "#046293" : "#38bdf8";
+  const flashing = performance.now() < psdBoxFlashUntil;
+  const border = flashing ? "#ff6b6b" : accent;
+  const copyOffsets = visibleCopyOffsets(projection, panel.els.overlay);
+  context.save();
+  for (const offset of copyOffsets) {
+    const topLeft = projection.project(rect.nx0 + offset, rect.nyTop);
+    const bottomRight = projection.project(rect.nx1 + offset, rect.nyBottom);
+    const width = bottomRight.x - topLeft.x;
+    const height = bottomRight.y - topLeft.y;
+    context.fillStyle = shared.theme === THEME_LIGHT ? "rgba(4, 98, 147, 0.07)" : "rgba(56, 189, 248, 0.08)";
+    context.fillRect(topLeft.x, topLeft.y, width, height);
+    context.strokeStyle = border;
+    context.lineWidth = (flashing ? 2.4 : 1.5) * ratio;
+    context.setLineDash(flashing ? [] : [6 * ratio, 4 * ratio]);
+    context.strokeRect(topLeft.x, topLeft.y, width, height);
+    // Handles: corners + edge midpoints.
+    context.setLineDash([]);
+    const half = 3.5 * ratio;
+    context.fillStyle = shared.theme === THEME_LIGHT ? "#ffffff" : "#10151f";
+    for (const [hx, hy] of psdHandlePoints(topLeft, bottomRight)) {
+      context.fillRect(hx - half, hy - half, 2 * half, 2 * half);
+      context.strokeRect(hx - half, hy - half, 2 * half, 2 * half);
+    }
+    if (flashing) {
+      context.font = `${11 * ratio}px system-ui, sans-serif`;
+      context.fillStyle = border;
+      context.textAlign = "center";
+      context.textBaseline = "bottom";
+      context.fillText("max native box", (topLeft.x + bottomRight.x) / 2, topLeft.y - 6 * ratio);
+    }
+  }
+  context.restore();
+  if (flashing) setTimeout(() => scheduleRedrawAllPanels(), PSD_FLASH_MILLISECONDS + 30);
+}
+
+function psdHandlePoints(topLeft, bottomRight) {
+  const midX = (topLeft.x + bottomRight.x) / 2;
+  const midY = (topLeft.y + bottomRight.y) / 2;
+  return [
+    [topLeft.x, topLeft.y], [bottomRight.x, topLeft.y], [topLeft.x, bottomRight.y], [bottomRight.x, bottomRight.y],
+    [midX, topLeft.y], [midX, bottomRight.y], [topLeft.x, midY], [bottomRight.x, midY],
+  ];
+}
+
+// Hit test in canvas pixels: corner/edge handles (resize) first, then interior (move).
+// Returns { type: "resize", left, right, top, bottom } | { type: "move" } | null.
+function psdBoxHitTest(panel, cursorX, cursorY, projection) {
+  if (!psdBoxVisible()) return null;
+  const rect = psdBoxWorldRect();
+  const ratio = window.devicePixelRatio || 1;
+  const grab = 9 * ratio;
+  const copyOffsets = visibleCopyOffsets(projection, panel.els.overlay);
+  for (const offset of copyOffsets) {
+    const topLeft = projection.project(rect.nx0 + offset, rect.nyTop);
+    const bottomRight = projection.project(rect.nx1 + offset, rect.nyBottom);
+    const nearLeft = Math.abs(cursorX - topLeft.x) <= grab;
+    const nearRight = Math.abs(cursorX - bottomRight.x) <= grab;
+    const nearTop = Math.abs(cursorY - topLeft.y) <= grab;
+    const nearBottom = Math.abs(cursorY - bottomRight.y) <= grab;
+    const withinX = cursorX >= topLeft.x - grab && cursorX <= bottomRight.x + grab;
+    const withinY = cursorY >= topLeft.y - grab && cursorY <= bottomRight.y + grab;
+    if (withinX && withinY && (nearLeft || nearRight || nearTop || nearBottom)) {
+      return { type: "resize", left: nearLeft, right: nearRight && !nearLeft, top: nearTop, bottom: nearBottom && !nearTop };
+    }
+    if (cursorX > topLeft.x && cursorX < bottomRight.x && cursorY > topLeft.y && cursorY < bottomRight.y) {
+      return { type: "move" };
+    }
+  }
+  return null;
+}
+
+function psdCursorFor(hit) {
+  if (!hit) return "";
+  if (hit.type === "move") return "move";
+  const horizontal = hit.left || hit.right;
+  const vertical = hit.top || hit.bottom;
+  if (horizontal && vertical) return (hit.left && hit.top) || (hit.right && hit.bottom) ? "nwse-resize" : "nesw-resize";
+  return horizontal ? "ew-resize" : "ns-resize";
+}
+
+// Apply a drag delta (canvas px) to the box for the gesture captured at pointerdown.
+function applyPsdBoxDrag(drag, deltaX, deltaY) {
+  const dLon = (deltaX / drag.projection.displayWidth) * 360;
+  const dLat = -(deltaY / drag.projection.displayHeight) * 180;
+  const start = drag.startBox;
+  const box = shared.psdBox;
+  if (drag.hit.type === "move") {
+    box.lon = start.lon + dLon;
+    box.lat = start.lat + dLat;
+    clampPsdBox(false);
+    return;
+  }
+  // Resize: the grabbed edges follow the cursor; opposite edges stay fixed.
+  let west = start.lon - start.w / 2;
+  let east = start.lon + start.w / 2;
+  let south = start.lat - start.h / 2;
+  let north = start.lat + start.h / 2;
+  if (drag.hit.left) west += dLon;
+  if (drag.hit.right) east += dLon;
+  if (drag.hit.top) north += dLat;
+  if (drag.hit.bottom) south += dLat;
+  if (east - west < psdBoxLimits.minDeg) {
+    if (drag.hit.left) west = east - psdBoxLimits.minDeg;
+    else east = west + psdBoxLimits.minDeg;
+  }
+  if (north - south < psdBoxLimits.minDeg) {
+    if (drag.hit.bottom) south = north - psdBoxLimits.minDeg;
+    else north = south + psdBoxLimits.minDeg;
+  }
+  // Cap: clamp the grabbed edge so the fixed edge stays put, and flash the hint.
+  if (east - west > psdBoxLimits.capDeg) {
+    if (drag.hit.left) west = east - psdBoxLimits.capDeg;
+    else east = west + psdBoxLimits.capDeg;
+    psdBoxFlashUntil = performance.now() + PSD_FLASH_MILLISECONDS;
+  }
+  if (north - south > psdBoxLimits.capDeg) {
+    if (drag.hit.bottom) south = north - psdBoxLimits.capDeg;
+    else north = south + psdBoxLimits.capDeg;
+    psdBoxFlashUntil = performance.now() + PSD_FLASH_MILLISECONDS;
+  }
+  box.w = east - west;
+  box.h = north - south;
+  box.lon = (east + west) / 2;
+  box.lat = (north + south) / 2;
+  clampPsdBox(true);
+}
+
+// Windowed finest-level reads for the PSD rectangle (shares readLayerWindow with the
+// trajectory regional fetch). Memoised with a small LRU keyed by dataset/variable/
+// lead/box; the underlying compressed tiles are cached by the zarr store anyway.
+const psdWindowCache = new Map();
+// The spectrum's grow-only bounds are keyed by the box, so the previous box's bounds are
+// unreachable the moment the box moves. Remember which key is live and drop the last one.
+let psdBoundsKey = null;
+// Large enough for every lead of two panels (currents read two components each), so
+// the disagreement-vs-lead sweep does not evict the lead on screen.
+const PSD_WINDOW_CACHE_LIMIT = 48;
+
+function psdWindowKey(slug, variable, level, start, leadIndex, boxRange) {
+  const rounded = [boxRange.lonMin, boxRange.lonMax, boxRange.latMin, boxRange.latMax]
+    .map((value) => value.toFixed(2))
+    .join(",");
+  return `${slug}|${variable}|${level}|${start}|${leadIndex}|${rounded}`;
+}
+
+async function psdWindowRead(slug, variable, level, start, leadIndex, boxRange) {
+  const key = psdWindowKey(slug, variable, level, start, leadIndex, boxRange);
+  if (psdWindowCache.has(key)) {
+    const hit = psdWindowCache.get(key);
+    psdWindowCache.delete(key);
+    psdWindowCache.set(key, hit);
+    return hit;
+  }
+  const promise = (async () => {
+    const coordinates = await loadCoordinates(slug, level);
+    const window = await readLayerWindow(
+      stores.get(slug),
+      { variable, level, startIndex: start, leadIndex },
+      coordinates.latitudes,
+      coordinates.longitudes,
+      boxRange,
+    );
+    if (!window) return null;
+    const latitudes = Array.from({ length: window.height }, (_, i) => window.lat0 + i * window.latStep);
+    const longitudes = Array.from({ length: window.width }, (_, j) => window.lon0 + j * window.lonStep);
+    return { field: { data: window.data, width: window.width, height: window.height }, latitudes, longitudes };
+  })();
+  psdWindowCache.set(key, promise);
+  while (psdWindowCache.size > PSD_WINDOW_CACHE_LIMIT) psdWindowCache.delete(psdWindowCache.keys().next().value);
+  return promise;
+}
+
+// Native-grid field(s) for one panel over the PSD rectangle. The derived currents
+// variables return their two velocity components rather than a speed magnitude, so the
+// spectrum can be the kinetic energy KE(k) = 0.5 (PSD_u + PSD_v): the spectrum of the
+// speed magnitude is the spectrum of a nonlinear function of the flow and is not the
+// energy at any scale. Returns { fields, latitudes, longitudes, cellDeg, kinetic } | null.
+async function psdSourceFor(panel, boxRange, leadDay = shared.leadDay) {
+  const manifest = manifestFor(panel.state.dataset);
+  if (!manifest) return null;
+  const cellDeg = finestCellDegFor(panel.state.dataset);
+  const levels = [...manifest.levels].sort((a, b) => a.cell_size_deg - b.cell_size_deg);
+  const level = levels[0].level;
+  const start = storeStartIndex(manifest);
+  const leadIndex = storeLeadIndex(manifest, leadDay);
+  if (start < 0 || leadIndex < 0) return null;
+  try {
+    if (isCurrentsVariable(panel.state.variable)) {
+      const components = currentDepthVariables(panel);
+      if (!(components.u in manifest.variables)) return null;
+      const [u, v] = await Promise.all([
+        psdWindowRead(panel.state.dataset, components.u, level, start, leadIndex, boxRange),
+        psdWindowRead(panel.state.dataset, components.v, level, start, leadIndex, boxRange),
+      ]);
+      if (!u || !v) return null;
+      return { fields: [u.field, v.field], latitudes: u.latitudes, longitudes: u.longitudes, cellDeg, kinetic: true };
+    }
+    if (!variableExists(manifest, panel.state.variable)) return null;
+    const record = await psdWindowRead(panel.state.dataset, panel.state.variable, level, start, leadIndex, boxRange);
+    if (!record) return null;
+    return { fields: [record.field], latitudes: record.latitudes, longitudes: record.longitudes, cellDeg, kinetic: false };
+  } catch {
+    return null;
+  }
+}
+
+// Drop the spectrum points below a resolution limit: wavelengths shorter than 2× the
+// coarsest listed native cell size (km at the box centre latitude, zonal/meridional
+// mean, the same convention as the spectrum's cellKm). One cell size for a model's own
+// curve, both for the difference curve, which is only as good as the coarser grid.
+function truncateToResolvedScales(spectrum, cellDegrees, centreLatitudeDegrees) {
+  if (!spectrum) return null;
+  const coarsest = Math.max(...cellDegrees.filter(Number.isFinite));
+  if (!Number.isFinite(coarsest) || coarsest <= 0) return spectrum;
+  const kmPerDegree = 111.32 * (1 + Math.cos((centreLatitudeDegrees * Math.PI) / 180)) / 2;
+  const cutoffMetres = 2 * coarsest * kmPerDegree * 1000;
+  const wavelength = [];
+  const power = [];
+  for (let i = 0; i < spectrum.wavelength.length; i += 1) {
+    if (spectrum.wavelength[i] >= cutoffMetres) {
+      wavelength.push(spectrum.wavelength[i]);
+      power.push(spectrum.power[i]);
+    }
+  }
+  if (!wavelength.length) return null;
+  return { ...spectrum, wavelength, power };
+}
+
+// One curve from a source's component spectra. A scalar variable has a single component;
+// currents have two, combined into the kinetic energy spectrum KE(k) = 0.5 (PSD_u + PSD_v).
+// Components share a grid and a box, so their rings line up index by index.
+function combineComponentSpectra(spectra) {
+  if (!spectra.length || spectra.some((spectrum) => !spectrum)) return null;
+  if (spectra.length === 1) return spectra[0];
+  return { ...spectra[0], power: spectra[0].power.map((value, index) => 0.5 * (value + spectra[1].power[index])) };
+}
+
+function panelSpectrum(source, viewport) {
+  return combineComponentSpectra(
+    source.fields.map((field) => boxPowerSpectrum(field, source.latitudes, source.longitudes, viewport)),
+  );
+}
+
+// The reanalysis the offline gridded scores are computed against. The disagreement scale
+// needs it in the other panel; two forecasts alone have no reference between them. The
+// GLO12 stores are forecasts (their lead 1 is the nowcast), so they do not count.
+function isReferenceDataset(slug) {
+  return String(slug || "").startsWith("glorys");
+}
+
+// Scale of disagreement with the reference, computed like the effective resolution of
+// Ballarotta et al. (2019, Ocean Science): the wavelength at which the spectrum of the
+// difference from GLORYS reaches half GLORYS's own spectrum. Against a reanalysis the
+// forecast started from, this measures disagreement (at short leads mostly the initial
+// state), not the model's own resolution, so it is not labelled as one. Scan
+// from the largest resolved wavelength down to the first crossing and interpolate the
+// wavelength on the log axis. Returns metres, or NaN when the ratio never crosses.
+function disagreementScaleMetres(errorSpectrum, referenceSpectrum) {
+  if (!errorSpectrum || !referenceSpectrum) return NaN;
+  if (errorSpectrum.wavelength.length !== referenceSpectrum.wavelength.length) return NaN;
+  const order = errorSpectrum.wavelength
+    .map((_, index) => index)
+    .sort((first, second) => errorSpectrum.wavelength[second] - errorSpectrum.wavelength[first]);
+  const ratioAt = (index) => {
+    const reference = referenceSpectrum.power[index];
+    return reference > 0 ? errorSpectrum.power[index] / reference : NaN;
+  };
+  for (let step = 1; step < order.length; step += 1) {
+    const longer = order[step - 1];
+    const shorter = order[step];
+    const longerRatio = ratioAt(longer);
+    const shorterRatio = ratioAt(shorter);
+    if (!(longerRatio > 0 && longerRatio < 0.5) || !(shorterRatio >= 0.5)) continue;
+    const span = Math.log10(shorterRatio) - Math.log10(longerRatio);
+    const fraction = span === 0 ? 0 : (Math.log10(0.5) - Math.log10(longerRatio)) / span;
+    const logWavelength =
+      Math.log10(errorSpectrum.wavelength[longer]) +
+      fraction * (Math.log10(errorSpectrum.wavelength[shorter]) - Math.log10(errorSpectrum.wavelength[longer]));
+    return Math.pow(10, logWavelength);
+  }
+  return NaN;
+}
+
+// y-axis label for the spectrum: a spectral density, so the units carry a per-wavenumber
+// factor. Currents are shown as kinetic energy, everything else as the variable's own
+// squared units.
+function psdAxisLabel(panel) {
+  if (isCurrentsVariable(panel.state.variable)) return "KE (m²/s² per cy/km)";
+  const manifest = manifestFor(panel.state.dataset);
+  const entry = manifest && variableEntry(manifest, panel.state.variable);
+  const units = entry && entry.units ? entry.units : "";
+  return units ? `power (${units}² per cy/km)` : "power (per cy/km)";
+}
+
+let psdRenderToken = 0;
+
+async function renderRailPsd(shown, comparison) {
+  const token = ++psdRenderToken;
+  updatePsdToggle();
+  if (!shared.psdEnabled || shared.scope === SCOPE_WHOLE_YEAR) {
+    elements["rail-spectra"].innerHTML = "";
+    elements["rail-psd-note"].textContent = "";
+    elements["rail-psd-lead"].innerHTML = "";
+    return;
+  }
+  const box = ensurePsdBox(shown);
+  if (psdBoxLimits.degenerate) {
+    // No box size is fair to both models simultaneously (e.g. 1° vs 1/12°): the coarse
+    // model's 32-cell minimum is larger than the fine model's native-resolution cap.
+    scheduleRedrawAllPanels(); // drop the now-hidden box from the map (psdBoxVisible is false)
+    elements["rail-spectra"].innerHTML = "";
+    elements["rail-psd-lead"].innerHTML = "";
+    const pair = psdBoxLimits.resolutionLabels.join(" vs ");
+    elements["rail-psd-note"].textContent =
+      `Resolutions too different to share a box${pair ? ` (${pair})` : ""}. ` +
+      "Switch to a single forecast to inspect each.";
+    return;
+  }
+  const boxRange = {
+    latMin: box.lat - box.h / 2,
+    latMax: box.lat + box.h / 2,
+    lonMin: box.lon - box.w / 2,
+    lonMax: box.lon + box.w / 2,
+  };
+  // The box expressed as the normalized-world viewport psd.js already consumes; its
+  // longitude frame matches the continuous axis readLayerWindow returns.
+  const boxViewport = {
+    minX: (boxRange.lonMin + 180) / 360,
+    maxX: (boxRange.lonMax + 180) / 360,
+    minY: (90 - boxRange.latMax) / 180,
+    maxY: (90 - boxRange.latMin) / 180,
+  };
+  const curves = [];
+  const sources = [];
+  for (const panel of shown) {
+    const source = await psdSourceFor(panel, boxRange);
+    if (token !== psdRenderToken) return; // stale (box moved / view changed again)
+    if (!source) continue;
+    const spectrum = panelSpectrum(source, boxViewport);
+    // Each curve stops at its own grid's limit, so no model is drawn into scales its
+    // grid cannot carry and the two curves are only ever compared where both are real.
+    const curve = truncateToResolvedScales(spectrum, [source.cellDeg], box.lat);
+    sources.push({ panel, spectrum, source });
+    if (curve) {
+      curves.push({
+        label: comparison ? `F${panel.index + 1} · ${shortLabelFor(panel.state.dataset)}` : shortLabelFor(panel.state.dataset),
+        color: forecastColor(panel.index),
+        ...curve,
+      });
+    }
+  }
+  let disagreementScale = NaN;
+  let referenceLabel = "";
+  const pair = comparison && sources.length === 2 ? pairSpectra(sources, boxViewport, box.lat) : null;
+  if (pair) {
+    if (pair.errorSpectrum) {
+      curves.push({ label: "error (F1−F2)", color: SERIES_COLORS.error, dashed: true, ...pair.errorSpectrum });
+    }
+    if (pair.hasReference) {
+      disagreementScale = disagreementScaleMetres(pair.errorSpectrum, pair.referenceSpectrum);
+      referenceLabel = shortLabelFor(sources[pair.referenceIndex].panel.state.dataset);
+    }
+  }
+  if (token !== psdRenderToken) return;
+  // The spectrum is recomputed from whichever lead is on screen, so its extent cannot be
+  // known ahead of time: the decade window is kept grow-only per box, widening to fit a
+  // new lead and never narrowing again while the selection and the box are unchanged.
+  const boxKey = `psd|${box.lat.toFixed(3)},${box.lon.toFixed(3)},${box.w.toFixed(3)},${box.h.toFixed(3)}`;
+  let xLow = Infinity;
+  let xHigh = -Infinity;
+  let yLow = Infinity;
+  let yHigh = -Infinity;
+  for (const curve of curves) {
+    for (let i = 0; i < curve.wavelength.length; i += 1) {
+      const wavelength = curve.wavelength[i];
+      const power = curve.power[i];
+      if (!(wavelength > 0) || !(power > 0)) continue;
+      const x = Math.log10(wavelength);
+      const y = Math.log10(power);
+      if (x < xLow) xLow = x;
+      if (x > xHigh) xHigh = x;
+      if (y < yLow) yLow = y;
+      if (y > yHigh) yHigh = y;
+    }
+  }
+  if (psdBoundsKey && psdBoundsKey !== boxKey) forgetStableRanges(psdBoundsKey);
+  psdBoundsKey = boxKey;
+  const xBounds = stableInterval(`${boxKey}|x`, xLow, xHigh);
+  const yBounds = stableInterval(`${boxKey}|y`, yLow, yHigh);
+  const kinetic = isCurrentsVariable(shown[0].state.variable);
+  const spectrumName = kinetic ? "Live kinetic energy spectrum" : "Live power spectrum";
+  const scaleKm = Number.isFinite(disagreementScale) ? Math.round(disagreementScale / 1000) : NaN;
+  elements["rail-spectra"].innerHTML = psdSpectraSVG(curves, {
+    title: comparison ? `${spectrumName} (both forecasts)` : spectrumName,
+    xBounds,
+    yBounds,
+    yLabel: psdAxisLabel(shown[0]),
+    marker: Number.isFinite(scaleKm) ? { wavelength: disagreementScale, label: `${scaleKm} km` } : null,
+  });
+  const gridLabels = [...new Set(sources.filter((entry) => entry.spectrum).map((entry) => cellDegreesLabel(entry.source.cellDeg)))];
+  const oceanFractions = sources
+    .filter((entry) => entry.spectrum && Number.isFinite(entry.spectrum.oceanFraction))
+    .map((entry) => entry.spectrum.oceanFraction);
+  const oceanFraction = oceanFractions.length ? Math.min(...oceanFractions) : NaN;
+  const oceanLabel = Number.isFinite(oceanFraction) ? ` · ${Math.round(oceanFraction * 100)}% ocean` : "";
+  const landFraction = Number.isFinite(oceanFraction) ? 1 - oceanFraction : 0;
+  // Filled land cells put steps into the field whose power swamps the short scales from a
+  // few percent of land on, so the warning starts there.
+  const landWarning =
+    landFraction >= PSD_LAND_WARNING_FRACTION
+      ? `⚠ ${Math.round(landFraction * 100)}% land: damped by fill; use an open-ocean box. `
+      : "";
+  const scaleText = Number.isFinite(scaleKm) ? ` · scale of disagreement with ${referenceLabel}: ${scaleKm} km` : "";
+  elements["rail-psd-note"].textContent = curves.length
+    ? `${landWarning}Box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}°${oceanLabel} · ${gridLabels.join(" & ")} grid${scaleText}`
+    : "Move the box over ocean to compute a spectrum (boxed area is mostly land).";
+  wireCursorTooltip(elements["rail-spectra"]);
+  // Over a land-filled box the fill steps move the crossing from lead to lead, so the
+  // lead chart is only drawn for boxes under the land warning threshold.
+  if (pair && pair.hasReference && landFraction < PSD_LAND_WARNING_FRACTION) {
+    renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, boxKey, referenceLabel);
+  } else {
+    elements["rail-psd-lead"].innerHTML = "";
+  }
+}
+
+// The difference spectrum of the two panels and, when one of them is a GLORYS reference
+// and the other a forecast, the reference's own spectrum. Both are measured ON THE
+// REFERENCE GRID, so the number is a property of the pair and not of which panel holds
+// the reference; with no reference the difference stays on Forecast 1's grid. A finer
+// field is block-averaged onto a coarser base grid (nearest sampling would alias its fine
+// scales into the difference); a coarser one is sampled by nearest cell, and the curves
+// are cut below two cells of the coarser grid either way.
+function pairSpectra(sources, boxViewport, centreLatitude) {
+  const referenceIndex = sources.findIndex((entry) => isReferenceDataset(entry.panel.state.dataset));
+  const otherIndex = referenceIndex === 0 ? 1 : 0;
+  const hasReference = referenceIndex >= 0 && !isReferenceDataset(sources[otherIndex].panel.state.dataset);
+  const baseIndex = hasReference ? referenceIndex : 0;
+  const base = sources[baseIndex].source;
+  const other = sources[1 - baseIndex].source;
+  const cellDegrees = [base.cellDeg, other.cellDeg];
+  const coarserBase = base.cellDeg > other.cellDeg * 1.5;
+  const alignedOther = other.fields.map((field) =>
+    coarserBase
+      ? blockAverageOntoGrid(field, other.latitudes, other.longitudes, base.latitudes, base.longitudes)
+      : resampleOntoGrid(field, other.latitudes, other.longitudes, base.latitudes, base.longitudes),
+  );
+  const errorSpectrum = truncateToResolvedScales(
+    combineComponentSpectra(
+      base.fields.map((field, index) =>
+        differenceBoxSpectrum(field, base.latitudes, base.longitudes, alignedOther[index], boxViewport, true),
+      ),
+    ),
+    cellDegrees,
+    centreLatitude,
+  );
+  const referenceSpectrum = hasReference
+    ? truncateToResolvedScales(sources[referenceIndex].spectrum, cellDegrees, centreLatitude)
+    : null;
+  return { errorSpectrum, referenceSpectrum, hasReference, referenceIndex };
+}
+
+// The disagreement scale at every shared lead, drawn under the spectrum. At lead 1 a
+// forecast started from an analysis sits close to it, so the lead dependence is what
+// separates the initial state from the model. Leads are computed one at a time after
+// the spectrum is on screen, and the chart fills in as they arrive.
+const psdLeadSweepCache = new Map();
+
+async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, boxKey, referenceLabel) {
+  const range = sharedLeadRange();
+  if (!range) return;
+  const panelsInPair = sources.map((entry) => entry.panel);
+  const key = [
+    boxKey,
+    sharedStartDate(),
+    ...panelsInPair.map((panel) => `${panel.state.dataset}:${panel.state.variable}`),
+  ].join("|");
+  if (!psdLeadSweepCache.has(key)) {
+    psdLeadSweepCache.clear();
+    psdLeadSweepCache.set(key, new Map());
+  }
+  const values = psdLeadSweepCache.get(key);
+  const draw = () => {
+    const rows = [...values.entries()]
+      .filter(([, metres]) => Number.isFinite(metres))
+      .map(([leadDay, metres]) => ({ lead_day: leadDay, mean: metres / 1000 }));
+    elements["rail-psd-lead"].innerHTML = rows.length
+      ? leadCurveSVG(new Map([["reference", rows]]), {
+          title: `Disagreement with ${referenceLabel} vs lead`,
+          unit: "km",
+          yLabel: `disagreement scale (km)`,
+          labels: new Map([["reference", `vs ${referenceLabel}`]]),
+          legend: false,
+        })
+      : "";
+    if (rows.length) wireCursorTooltip(elements["rail-psd-lead"]);
+  };
+  draw();
+  for (let leadDay = range.minimum; leadDay <= range.maximum; leadDay += 1) {
+    if (values.has(leadDay)) continue;
+    const leadSources = [];
+    for (const entry of sources) {
+      const source = await psdSourceFor(entry.panel, boxRange, leadDay);
+      if (token !== psdRenderToken) return;
+      if (!source) break;
+      leadSources.push({ panel: entry.panel, source, spectrum: panelSpectrum(source, boxViewport) });
+    }
+    let metres = NaN;
+    if (leadSources.length === 2) {
+      const pair = pairSpectra(leadSources, boxViewport, box.lat);
+      metres = disagreementScaleMetres(pair.errorSpectrum, pair.referenceSpectrum);
+    }
+    values.set(leadDay, metres);
+    if (token !== psdRenderToken) return;
+    draw();
+  }
+}
+
+function updatePsdToggle() {
+  const section = document.getElementById("rail-spectra-section");
+  const button = elements["psd-toggle"];
+  if (!section || !button) return;
+  const enabled = shared.psdEnabled && shared.scope !== SCOPE_WHOLE_YEAR;
+  section.classList.toggle("psd-disabled", !enabled);
+  button.setAttribute("aria-pressed", enabled ? "true" : "false");
+  button.setAttribute("aria-label", enabled ? "Hide live power spectrum" : "Show live power spectrum");
+  button.title = enabled ? "Hide live power spectrum" : "Show live power spectrum";
+  button.textContent = enabled ? "Hide" : "Show";
+}
+
+function setPsdEnabled(enabled) {
+  if (shared.psdEnabled === enabled) return;
+  shared.psdEnabled = enabled;
+  if (enabled) ensurePsdBox(panels.slice(0, shared.layout));
+  updatePsdToggle();
+  redrawOverlaysAll();
+  updateContextRail();
+  writeHash();
+}
+
+function currentViewport() {
+  const host = panels[0];
+  const projection = projectionFor(host);
+  return visibleViewport(projection, host.els.field);
+}
+
+// Cursor-following tooltip: snap the crosshair to the nearest data x, list the value
+// for each series under the cursor, and place the tooltip right next to the pointer -
+// no delay, no fixed corner (rail chart interaction requirement).
+function wireCursorTooltip(container) {
+  // The water column rail can hold one chart per variable, so wire each of them.
+  for (const svg of container.querySelectorAll("svg")) wireChartCursorTooltip(svg);
+}
+
+function wireChartCursorTooltip(svg) {
+  const crosshair = svg.querySelector(".chart-crosshair");
+  const tooltip = svg.querySelector(".chart-tooltip");
+  const rect = tooltip ? tooltip.querySelector("rect") : null;
+  const points = [...svg.querySelectorAll(".chart-point")];
+  if (!crosshair || !tooltip || !rect || !points.length) return;
+  const bySeries = new Map();
+  for (const point of points) {
+    const line = point.dataset.line || "";
+    if (!bySeries.has(line)) bySeries.set(line, []);
+    bySeries.get(line).push(point);
+  }
+  const setText = (lines) => {
+    for (const old of [...tooltip.querySelectorAll("text")]) old.remove();
+    // The label text no longer scales with the slot, so the box around it cannot be
+    // laid out in bare user units either: every measurement here is in units of the
+    // text's own size, inflated by the same factor the stylesheet applies.
+    const scale = chartTypeScale(svg);
+    lines.forEach((text, index) => {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      node.setAttribute("x", String(6 * scale));
+      node.setAttribute("y", String((15 + index * 14) * scale));
+      node.textContent = text;
+      tooltip.appendChild(node);
+    });
+    rect.setAttribute("height", String((9 + lines.length * 14) * scale));
+    rect.setAttribute("width", String((12 + Math.max(96, 6.2 * Math.max(...lines.map((line) => line.length)))) * scale));
+  };
+  const move = (event) => {
+    const svgPoint = svg.createSVGPoint();
+    svgPoint.x = event.clientX;
+    svgPoint.y = event.clientY;
+    const local = svgPoint.matrixTransform(svg.getScreenCTM().inverse());
+    let nearestX = null;
+    let nearestDistance = Infinity;
+    const lines = [];
+    for (const [, seriesPoints] of bySeries) {
+      let best = null;
+      let bestDistance = Infinity;
+      for (const point of seriesPoints) {
+        const distance = Math.abs(Number(point.getAttribute("cx")) - local.x);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = point;
+        }
+      }
+      if (!best) continue;
+      lines.push(`${best.dataset.line}: ${best.dataset.yLabel} @ ${best.dataset.xLabel}`);
+      if (bestDistance < nearestDistance) {
+        nearestDistance = bestDistance;
+        nearestX = Number(best.getAttribute("cx"));
+      }
+    }
+    if (nearestX === null) return;
+    crosshair.setAttribute("x1", String(nearestX));
+    crosshair.setAttribute("x2", String(nearestX));
+    crosshair.removeAttribute("hidden");
+    setText(lines);
+    // Anchored readout: the tooltip sits in a fixed top corner (opposite the crosshair
+    // so it never covers the hovered points) instead of floating with the cursor.
+    const width = Number(rect.getAttribute("width"));
+    const x = nearestX < 180 ? 360 - width - 4 : 44;
+    tooltip.setAttribute("transform", `translate(${x.toFixed(1)} 16)`);
+    tooltip.removeAttribute("hidden");
+  };
+  svg.addEventListener("mousemove", move);
+  svg.addEventListener("mouseleave", () => {
+    crosshair.setAttribute("hidden", "");
+    tooltip.setAttribute("hidden", "");
+  });
+}
+
+// Why a reference panel draws no Class-4 points: it is not missing data, the reanalysis
+// assimilates the same observations, so scoring it against them would not be independent.
+const CLASS4_REFERENCE_NOTE = "it assimilates these obs";
+
+// The single sentence for every "nothing to draw" Class-4 state. One source, so the
+// sidebar note, the legend strip and the colorbar never state the same absence three
+// different ways. Empty string means there are match-ups to show.
+function class4EmptyMessage() {
+  if (overlayData.class4Unpublished) {
+    const active = panels[activePanelIndex];
+    return active && isReferenceDataset(active.state.dataset)
+      ? `${labelFor(active.state.dataset)}: not scored (${CLASS4_REFERENCE_NOTE}).`
+      : "No Class IV match-ups are published for this dataset.";
+  }
+  if (overlayData.class4Error) return `Class IV match-ups failed to load (${overlayData.class4Error}).`;
+  if (!overlayData.class4) return "No Class IV match-ups for this dataset and region.";
+  if ((overlayData.class4.rows || []).length === 0) return class4SelectionNote();
+  return "";
+}
+
+function class4SelectionNote() {
+  const panel = panels[0];
+  if (!panel) return "No Class IV match-ups for this selection.";
+  const manifest = manifestFor(panel.state.dataset);
+  const entry = manifest && variableEntry(manifest, panel.state.variable);
+  const variable = entry ? prettyName(entry.standard_name) : panel.state.variable;
+  return `No ${variable} match-ups at ${class4DepthLabel(entry, class4DepthBin(entry))} for this start/lead.`;
+}
+
+// ---- global controls --------------------------------------------------------
+
+function updateCurrentsControlVisibility() {
+  const anyCurrents = panels.slice(0, shared.layout).some((panel) => isCurrentsVariable(panel.state.variable));
+  elements["currents-group"].hidden = !anyCurrents;
+  const eligible = trajectoryEligiblePanels();
+  const ready = eligible.length > 0 && (shared.layout === 1 || eligible.length === 2);
+  for (let index = 0; index < shared.layout; index += 1) {
+    panels[index].els.wrap.classList.toggle("trajectory-ready", ready);
+  }
+}
+
+// The forecasts on screen share one start date and one lead day. The difference view's
+// partner is panels[1], which is on screen whenever it is used.
+function visibleManifests() {
+  return panels
+    .slice(0, shared.layout)
+    .filter(Boolean)
+    .map((panel) => ({ slug: panel.state.dataset, manifest: manifestFor(panel.state.dataset) }))
+    .filter(({ manifest }) => manifest && Array.isArray(manifest.start_dates) && Array.isArray(manifest.lead_days));
+}
+
+// ---- period -----------------------------------------------------------------
+//
+// The Period control narrows the rail scores and the start-date list to the forecasts
+// starting in a range. The whole year keeps the published year artifacts untouched; a
+// period recomputes its scores from the per-start rows of scores.parquet, read once and
+// only when a period is first chosen (modules/period-view.js).
+
+// scores.parquet sits at the benchmark root, two levels above the viewer data directory.
+const PER_START_SCORES_PATH = "../../scores.parquet";
+let periodScoresPromise = null;
+let periodLoadError = "";
+
+function loadPeriodScores() {
+  if (!periodScoresPromise) {
+    periodScoresPromise = import("./modules/period-view.js").then(async (period) => {
+      const response = await fetch(resolveViewerDataUrl(PER_START_SCORES_PATH));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return { period, perStart: await period.readPerStartScores(await response.arrayBuffer()) };
+    });
+    // A failed read is not remembered: the next period choice tries again.
+    periodScoresPromise.catch(() => {
+      periodScoresPromise = null;
+    });
+  }
+  return periodScoresPromise;
+}
+
+// The evaluation year, read from the start dates on screen.
+function periodYear() {
+  const dates = sharedStartDates();
+  return dates.length ? String(dates[0]).slice(0, 4) : null;
+}
+
+// The range of the chosen period, or null for the whole year and for a range that holds
+// no start on screen (which then reads as the whole year, and the control says so).
+function activePeriodRange() {
+  const range = periodRange(shared.period, periodYear());
+  if (!range || range.from > range.to) return null;
+  return sharedStartDates().some((date) => startInRange(date, range)) ? range : null;
+}
+
+// What the rail needs to draw a period: the loaded scores, the range and its starts on the
+// parquet's start axis. Null for the whole year, or when the scores cannot be read.
+async function periodScoresForRail() {
+  const range = activePeriodRange();
+  if (!range) return null;
+  if (!periodScoresPromise) setPeriodNote("Loading scores…");
+  try {
+    const loaded = await loadPeriodScores();
+    periodLoadError = "";
+    syncPeriodControl();
+    return { ...loaded, range, starts: loaded.period.periodStartIndices(loaded.perStart, range.from, range.to) };
+  } catch (error) {
+    console.error("Cannot read the per-start scores", error);
+    periodLoadError = `Could not load scores (${error.message}); showing the whole year.`;
+    syncPeriodControl();
+    return null;
+  }
+}
+
+function periodDepthData(periodScores, yearData) {
+  return periodScores.period.periodDepthArtifact(
+    periodScores.perStart,
+    yearData,
+    { challenger: yearData.challenger, year: periodYear(), region: yearData.region },
+    periodScores.starts,
+  );
+}
+
+// A year-rmsd-by-start series cut to the starts inside a range, parallel arrays and all.
+function seriesInPeriod(entry, range) {
+  const keep = entry.dates.map((date) => startInRange(date, range));
+  const cut = (values) => (Array.isArray(values) ? values.filter((_, index) => keep[index]) : values);
+  return {
+    ...entry,
+    dates: cut(entry.dates),
+    rmsd: cut(entry.rmsd),
+    bias: cut(entry.bias),
+    counts: cut(entry.counts),
+    ciLow: cut(entry.ciLow),
+    ciHigh: cut(entry.ciHigh),
+    biasCiLow: cut(entry.biasCiLow),
+    biasCiHigh: cut(entry.biasCiHigh),
+  };
+}
+
+function setPeriodNote(text) {
+  elements["period-note"].textContent = text;
+  elements["period-note"].hidden = !text;
+}
+
+function periodNote() {
+  if (shared.period === PERIOD_WHOLE_YEAR) return "";
+  const range = periodRange(shared.period, periodYear());
+  if (!range) return "";
+  if (range.from > range.to) return "Start is after end; showing the whole year.";
+  const count = sharedStartDates().filter((date) => startInRange(date, range)).length;
+  if (!count) return "No starts in this range; showing the whole year.";
+  return periodLoadError || `${count} start${count === 1 ? "" : "s"}`;
+}
+
+function syncPeriodControl() {
+  const year = periodYear();
+  const range = periodRange(shared.period, year);
+  const custom = Boolean(range && range.custom);
+  elements["period-select"].value = custom ? PERIOD_CUSTOM : shared.period;
+  elements["period-range"].hidden = !custom;
+  for (const id of ["period-from", "period-to"]) {
+    elements[id].min = year ? `${year}-01-01` : "";
+    elements[id].max = year ? `${year}-12-31` : "";
+  }
+  if (custom) {
+    elements["period-from"].value = range.from;
+    elements["period-to"].value = range.to;
+  }
+  setPeriodNote(periodNote());
+}
+
+// A new period: the start list follows it (the start on screen moves to the nearest start
+// inside when it falls outside), then the rail and the year legend caption.
+async function selectPeriod(value) {
+  if (!setSharedPeriod(value)) return;
+  periodLoadError = "";
+  syncPeriodControl();
+  const previousDate = sharedStartDate();
+  updateSharedTimeControls();
+  updateSharedColorbar();
+  if (sharedStartDate() !== previousDate) {
+    await selectStartDate(shared.startIndex);
+    return;
+  }
+  await updateContextRail();
+  writeHash();
+}
+
+// Start dates every visible forecast has, matched by date; shared.startIndex indexes this list.
+function sharedStartDates() {
+  const visible = visibleManifests();
+  if (!visible.length) return [];
+  return visible[0].manifest.start_dates.filter((date) => visible.every(({ manifest }) => manifest.start_dates.includes(date)));
+}
+
+function sharedStartDate() {
+  const dates = sharedStartDates();
+  return dates.length ? dates[Math.min(shared.startIndex, dates.length - 1)] : null;
+}
+
+// Where the shared start date and a lead day sit on one store's own axes.
+function storeStartIndex(manifest) {
+  return manifest.start_dates.indexOf(sharedStartDate());
+}
+
+function storeLeadIndex(manifest, leadDay) {
+  return manifest.lead_days.indexOf(leadDay);
+}
+
+// The leads every visible forecast reaches, and the forecast that stops the range short of
+// the others (null when all reach the same lead). Clamping each panel to its own horizon
+// would put lead 10 beside lead 7 under one "Lead day" label.
+function sharedLeadRange() {
+  const visible = visibleManifests().filter(({ manifest }) => manifest.lead_days.length);
+  if (!visible.length) return null;
+  let minimum = -Infinity;
+  let maximum = Infinity;
+  let limiting = null;
+  for (const { slug, manifest } of visible) {
+    minimum = Math.max(minimum, Math.min(...manifest.lead_days));
+    const horizon = Math.max(...manifest.lead_days);
+    if (horizon < maximum) {
+      maximum = horizon;
+      limiting = slug;
+    }
+  }
+  const longest = Math.max(...visible.map(({ manifest }) => Math.max(...manifest.lead_days)));
+  return { minimum, maximum, limiting: maximum < longest ? limiting : null };
+}
+
+// Rebuild the start and lead controls from the visible forecasts. Returns whether the
+// shared start date or lead day moved, so a caller can redraw the panels it did not touch.
+function updateSharedTimeControls() {
+  const dates = sharedStartDates();
+  if (!dates.length) return false;
+  const previousDate = sharedStartDate();
+  const previousLead = shared.leadDay;
+  shared.startIndex = Math.min(shared.startIndex, dates.length - 1);
+  let startChoices = dates.map((date, index) => ({ value: index, label: date }));
+  // A period lists only its own starts (values stay indices into the full list) and moves a
+  // start outside it to the nearest start inside.
+  const period = activePeriodRange();
+  if (period) {
+    startChoices = startChoices.filter((choice) => startInRange(choice.label, period));
+    if (!startChoices.some((choice) => choice.value === shared.startIndex)) {
+      const nearest = nearestStartIndex(startChoices.map((choice) => choice.label), String(dates[shared.startIndex]).slice(0, 10));
+      shared.startIndex = startChoices[nearest].value;
+    }
+  }
+  populateSelect(elements["start-date"], startChoices, shared.startIndex);
+  const range = sharedLeadRange();
+  if (!range) return sharedStartDate() !== previousDate;
+  const { minimum: minimumLead, maximum: maximumLead } = range;
+  const requested = requestedLeadDay;
+  requestedLeadDay = null;
+  shared.leadDay = Math.min(Math.max(shared.leadDay, minimumLead), maximumLead);
+  leadClampNote =
+    requested != null && requested !== shared.leadDay
+      ? `Lead ${requested} out of range (${minimumLead}-${maximumLead}); showing ${shared.leadDay}.`
+      : "";
+  leadRangeNote = range.limiting ? `${shortLabelFor(range.limiting)}: leads ${minimumLead}-${maximumLead}` : "";
+  elements["lead-day"].min = String(minimumLead);
+  elements["lead-day"].max = String(maximumLead);
+  elements["lead-day"].value = String(shared.leadDay);
+  elements["lead-value"].textContent = `Lead day ${shared.leadDay}`;
+  fillLeadTicks(minimumLead, maximumLead);
+  return sharedStartDate() !== previousDate || shared.leadDay !== previousLead;
+}
+
+// One tick per available lead day. The marks are drawn in CSS across the thumb's
+// travel, so all the stylesheet needs is how many gaps to divide that travel into.
+function fillLeadTicks(minimumLead, maximumLead) {
+  const ticks = elements["lead-ticks"];
+  if (!ticks) return;
+  ticks.style.setProperty("--lead-steps", String(Math.max(1, maximumLead - minimumLead)));
+}
+
+async function applyOverlayMode() {
+  const region = shared.region;
+  const mode = shared.overlayMode;
+  // The overlay mode is part of the stable-range signature. Sync before any draw, or the
+  // obs-error ramp widened by the first class-4 paint is cleared moments later by the
+  // updateContextRail sync and the legend reads "scale ≈ n/a" until the next redraw (p8).
+  syncSelectionRanges();
+  // The selection this call is answering. Its awaits are long enough for the user to pick
+  // another region or another overlay in the meantime, and a reply that lands after that
+  // would narrate the old selection over the new map.
+  const superseded = () => shared.region !== region || shared.overlayMode !== mode;
+  // The two forecasts are chosen from the panel pickers; there is no separate truth
+  // selector any more, so the legacy eddy-reference control stays hidden.
+  elements["eddy-reference-field"].hidden = true;
+  const note = elements["overlay-note"];
+  // Overlays are per-forecast; the difference view has no forecast to host them, so
+  // leave the map clean and nudge the user back to a per-forecast view.
+  if (isDiffView()) {
+    clearTrajectories();
+    note.textContent = shared.overlayMode === OVERLAY_NONE ? "" : "Switch to side-by-side to see overlays.";
+    for (let i = 0; i < shared.layout; i += 1) {
+      drawPanel(panels[i]);
+      drawOverlays(panels[i]);
+    }
+    updateCurrentsControlVisibility();
+    updateContextRail();
+    return;
+  }
+  if (shared.overlayMode !== OVERLAY_TRAJECTORIES) clearTrajectories();
+  if (shared.overlayMode !== OVERLAY_WATER_COLUMN) clearColumnProfile();
+  if (shared.overlayMode === OVERLAY_WATER_COLUMN) {
+    // Probe up front so the note promises a click only when there is a store behind it.
+    const columnAvailable = await anyVisibleColumnStore();
+    if (superseded()) return;
+    if (!columnAvailable) note.textContent = COLUMN_UNPUBLISHED_MESSAGE;
+    else
+      note.textContent = columnProfile
+        ? "Click the map to read the model water column at another point."
+        : "Click the map for a T/S profile.";
+    for (let i = 0; i < shared.layout; i += 1) {
+      drawPanel(panels[i]);
+      drawOverlays(panels[i]);
+    }
+    renderColumnProfileRail();
+    updateCurrentsControlVisibility();
+    updateContextRail();
+    return;
+  }
+  if (shared.overlayMode === OVERLAY_TRAJECTORIES) {
+    note.textContent = "Click the map to seed particles.";
+  } else if (shared.overlayMode === OVERLAY_CLASS4) {
+    class4ProgressLabel = "Loading Class IV match-ups…";
+    note.textContent = class4ProgressLabel;
+  } else if (shared.overlayMode === OVERLAY_EDDIES) {
+    note.textContent = "Loading eddy census…";
+  } else {
+    note.textContent = "";
+  }
+  const current = await loadOverlayData();
+  if (!current || superseded()) return;
+  if (shared.overlayMode === OVERLAY_EDDIES) writeEddyOverlayNote();
+  if (shared.overlayMode === OVERLAY_CLASS4) {
+    note.textContent = class4EmptyMessage() || "Hover a point for details.";
+  }
+  for (let i = 0; i < shared.layout; i += 1) {
+    drawPanel(panels[i]);
+    drawOverlays(panels[i]);
+  }
+  updateSharedColorbar();
+  updateCurrentsControlVisibility();
+  updateContextRail();
+}
+
+// When the parquet is targeted (one pair per row group), a start/lead change means
+// a different set of obs must be fetched, reload just the overlay and redraw. Small
+// (~1-2MB) row groups keep this sub-second; a short debounce avoids a fetch storm
+// while the lead slider is dragged. Legacy files hold all pairs, so this is a no-op.
+let class4ReloadTimer = null;
+
+// Lead the armed or in-flight reload will answer. Scheduling may not infer this from
+// overlayData.class4: an in-flight reload nulls that slot first, so a lead input landing
+// inside that window would see "nothing pending" and never schedule the reload the user
+// landed on. Writes stay arbitrated by the generation tokens; this only decides when a
+// request is created.
+let class4ReloadLead = null;
+
+// True when the obs overlay owes the current start/lead a fetch of its own: the result
+// slot says the parquet is targeted, or a reload is already armed/in flight for some lead.
+function class4ReloadPending() {
+  if (shared.overlayMode !== OVERLAY_CLASS4) return false;
+  return Boolean(overlayData.class4 && overlayData.class4.targeted) || class4ReloadLead !== null;
+}
+
+function cancelClass4ReloadTimer() {
+  if (!class4ReloadTimer) return;
+  clearTimeout(class4ReloadTimer);
+  class4ReloadTimer = null;
+}
+
+async function reloadClass4Overlay() {
+  const note = elements["overlay-note"];
+  // A newer reload (the next step of a lead scrub, a region change) already owns the overlay:
+  // this one's note and redraw would describe obs that are no longer the ones loaded.
+  const current = await loadOverlayData();
+  if (!current) return;
+  if (note) {
+    note.textContent =
+      class4EmptyMessage() || "Hover a point for details.";
+  }
+  redrawOverlaysAll();
+  await updateContextRail();
+}
+
+function scheduleClass4Reload() {
+  if (!class4ReloadPending()) return;
+  // Same lead with its debounce timer still armed: re-arming would only restart the
+  // wait, not change what will be fetched. A changed lead always re-arms.
+  if (class4ReloadTimer && class4ReloadLead === shared.leadDay) return;
+  const note = elements["overlay-note"];
+  class4ProgressLabel = `Loading obs for lead ${shared.leadDay}…`;
+  if (note) note.textContent = class4ProgressLabel;
+  cancelClass4ReloadTimer();
+  class4ReloadLead = shared.leadDay;
+  class4ReloadTimer = setTimeout(() => {
+    class4ReloadTimer = null;
+    const requestedLead = class4ReloadLead;
+    reloadClass4Overlay().finally(() => {
+      // Retire the claim only if this is still the newest reload; a newer step has
+      // either re-armed the timer or already taken over the lead while this ran.
+      if (class4ReloadLead === requestedLead) class4ReloadLead = null;
+    });
+  }, 120);
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = shared.theme;
+  elements["theme-toggle"].textContent = shared.theme === THEME_LIGHT ? "Dark theme" : "Light theme";
+}
+
+// Single entry point for a theme change, shared by the in-app toggle and, when the
+// viewer is embedded in the Quarto site, the parent page's theme switch (postMessage).
+function setViewerTheme(theme) {
+  if (!setSharedTheme(theme)) return;
+  applyTheme();
+  renderAllPanels().then(() => redrawOverlaysAll());
+  writeHash();
+}
+
+// The viewer runs standalone (its own Dark theme button) and embedded inside the
+// Quarto site (?embed=1): there the button is hidden and the host page drives the
+// theme so the site's single toggle controls everything.
+const VIEWER_EMBEDDED = new URLSearchParams(location.search).has("embed");
+
+function wireEmbeddedTheme() {
+  if (!VIEWER_EMBEDDED) return;
+  document.body.classList.add("viewer-embedded");
+  elements["theme-toggle"].hidden = true;
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (data && data.type === "oceanbench-theme") setViewerTheme(data.theme);
+  });
+  if (window.parent !== window) window.parent.postMessage({ type: "oceanbench-viewer-ready" }, "*");
+}
+
+function markScopeButtons() {
+  for (const button of document.querySelectorAll(".scope-switch [data-scope]")) {
+    const selected = button.dataset.scope === shared.scope;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  }
+}
+
+function applyScope() {
+  // INVARIANT I4: styles/shell.css keys a hide list off :root[data-scope="year"]. A new scope
+  // name is a CSS change as much as a JS one.
+  document.documentElement.dataset.scope = shared.scope;
+  markScopeButtons();
+}
+
+function setScope(scope) {
+  if (!setSharedScope(scope)) return;
+  // The year raster is a per-forecast view; the difference comparison has no meaning
+  // there, so entering year scope while in difference falls back to side-by-side.
+  if (scope === SCOPE_WHOLE_YEAR && isDiffView()) {
+    setSharedDisplayMode(DISPLAY_SIDE_BY_SIDE);
+    markDisplayButtons();
+    syncPanelGrid();
+  }
+  clearTrajectories();
+  applyScope();
+  renderAllPanels()
+    .then(() => refitAfterScopeChange())
+    .then(() => {
+      redrawOverlaysAll();
+      updateSharedColorbar();
+      updateContextRail();
+      updateCurrentsControlVisibility();
+    });
+  writeHash();
+}
+
+function markMetricButtons() {
+  for (const button of document.querySelectorAll(".metric-switch [data-metric]")) {
+    const selected = button.dataset.metric === shared.yearMetric;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  }
+}
+
+// One-time "?" method notes on the fixed rail-chart headings and the currents control,
+// whose anchor elements persist for the app lifetime (unlike the per-render legends).
+function wireStaticMethodNotes() {
+  const skillHeading = elements["rail-lead-curve"] && elements["rail-lead-curve"].closest(".rail-section")?.querySelector("h3");
+  if (skillHeading) attachMethodNote(skillHeading, "lead-curve");
+  const depthHeading = elements["rail-depth-profile-section"] && elements["rail-depth-profile-section"].querySelector("h3");
+  if (depthHeading) attachMethodNote(depthHeading, "depth-profile");
+  const yearHeading = elements["rail-year-rmsd-section"] && elements["rail-year-rmsd-section"].querySelector("h3");
+  if (yearHeading) attachMethodNote(yearHeading, "year-rmsd");
+  const psdHeading = document.getElementById("rail-spectra-section")?.querySelector("h3");
+  if (psdHeading) attachMethodNote(psdHeading, "psd");
+  const trajectoryHeading = elements["rail-trajectory-section"] && elements["rail-trajectory-section"].querySelector("h3");
+  if (trajectoryHeading) attachMethodNote(trajectoryHeading, "trajectories");
+  const currentsLegend = elements["currents-group"] && elements["currents-group"].querySelector("legend");
+  if (currentsLegend) attachMethodNote(currentsLegend, "currents");
+}
+
+// Switch the year-scope map + rail between |error| and signed bias. Re-renders the
+// panels (which pick the field/colormap/range per metric), the rail, and the colorbar.
+function setYearMetric(metric) {
+  if (!setSharedYearMetric(metric)) return;
+  markMetricButtons();
+  renderAllPanels().then(() => {
+    redrawOverlaysAll();
+    updateSharedColorbar();
+    updateContextRail();
+  });
+  writeHash();
+}
+
+// Scrubbing the lead slider is how the sequence is watched, so paint must track the
+// handle: a lead every shown panel has already drawn is redrawn on the next animation
+// frame, which plays the leads the slider crosses one frame at a time. Only a lead
+// that still needs tiles off the network waits, so a fast drag over cold leads issues
+// one set of fetches instead of one per step.
+const LEAD_FETCH_DEBOUNCE_MILLISECONDS = 150;
+let leadFetchTimer = null;
+let leadRenderFrame = 0;
+
+function scheduleLeadRender() {
+  if (leadRenderFrame) return;
+  leadRenderFrame = requestAnimationFrame(() => {
+    leadRenderFrame = 0;
+    if (leadFramesCached(shared.leadDay)) {
+      cancelLeadFetchTimer();
+      runLeadRender();
+      return;
+    }
+    cancelLeadFetchTimer();
+    leadFetchTimer = setTimeout(() => {
+      leadFetchTimer = null;
+      runLeadRender();
+    }, LEAD_FETCH_DEBOUNCE_MILLISECONDS);
+  });
+}
+
+function cancelLeadFetchTimer() {
+  if (!leadFetchTimer) return;
+  clearTimeout(leadFetchTimer);
+  leadFetchTimer = null;
+}
+
+function runLeadRender() {
+  renderAllPanels().then(async () => {
+    // The eddy census is published one file per lead day, so a lead change must re-read it
+    // before the redraw; without this the map keeps painting the lead the overlay was first
+    // loaded at. The per-lead frames are cached in insights.js, so a warm scrub refetches
+    // nothing and a lead with no published census still snaps to its nearest neighbour.
+    if (shared.overlayMode === OVERLAY_EDDIES) await loadOverlayData();
+    redrawOverlaysAll();
+    updateContextRail();
+  });
+  // Re-render the water-column profile from the in-memory column. No refetch: the
+  // clicked chunk already holds every lead day (this is the design win).
+  renderColumnProfileRail();
+}
+
+// ---- lead-day playback ------------------------------------------------------
+//
+// Playing the leads is the same act as dragging the slider, done by a timer, so it goes
+// through the same path: one lead at a time, each awaited before the next is asked for.
+// A lead whose frames are already cached repaints in a couple of milliseconds and the
+// step costs nothing but the interval; a lead that still needs tiles is WAITED for, not
+// skipped, so playback never has more than one lead's fetches in flight and never races
+// the class-4 prefetch. At the end it wraps to the first lead and keeps going.
+const PLAYBACK_STEP_MILLISECONDS = 700;
+const playback = { playing: false, speed: 1, timer: null, run: 0 };
+
+function playbackStepDelay() {
+  return Math.max(60, Math.round(PLAYBACK_STEP_MILLISECONDS / playback.speed));
+}
+
+function leadBounds() {
+  const minimum = Number(elements["lead-day"].min) || 1;
+  const maximum = Number(elements["lead-day"].max) || minimum;
+  return [minimum, maximum];
+}
+
+function applyLeadDay(leadDay) {
+  shared.leadDay = leadDay;
+  elements["lead-day"].value = String(leadDay);
+  elements["lead-value"].textContent = `Lead day ${leadDay}`;
+}
+
+// Paint the lead now and resolve when the whole strip agrees with it. Playback awaits
+// this, which is what keeps one step from overlapping the next.
+async function renderLeadNow() {
+  cancelLeadFetchTimer();
+  cancelClass4ReloadTimer();
+  await renderAllPanels();
+  renderColumnProfileRail();
+  if (class4ReloadPending()) {
+    await reloadClass4Overlay();
+    return;
+  }
+  if (shared.overlayMode === OVERLAY_EDDIES) await loadOverlayData();
+  redrawOverlaysAll();
+  await updateContextRail();
+}
+
+async function playbackStep() {
+  const run = playback.run;
+  const [minimum, maximum] = leadBounds();
+  applyLeadDay(shared.leadDay >= maximum ? minimum : shared.leadDay + 1);
+  scheduleHashWrite();
+  await renderLeadNow();
+  if (!playback.playing || run !== playback.run) return;
+  playback.timer = setTimeout(playbackStep, playbackStepDelay());
+}
+
+function startPlayback() {
+  if (playback.playing) return;
+  playback.playing = true;
+  playback.run += 1;
+  markPlaybackButton();
+  playback.timer = setTimeout(playbackStep, playbackStepDelay());
+}
+
+// Every manual lead interaction lands here: a slider the user is holding must not be
+// fighting a timer for the same value.
+function pausePlayback() {
+  if (!playback.playing) return;
+  playback.playing = false;
+  playback.run += 1;
+  if (playback.timer) clearTimeout(playback.timer);
+  playback.timer = null;
+  markPlaybackButton();
+}
+
+function togglePlayback() {
+  if (playback.playing) pausePlayback();
+  else startPlayback();
+}
+
+function markPlaybackButton() {
+  const button = elements["lead-play"];
+  if (!button) return;
+  button.textContent = playback.playing ? "❚❚" : "▶";
+  button.setAttribute("aria-pressed", playback.playing ? "true" : "false");
+  button.setAttribute("aria-label", playback.playing ? "Pause lead days" : "Play lead days");
+  button.title = playback.playing ? "Pause" : "Play leads (any other control pauses)";
+}
+
+function setPlaybackSpeed(speed) {
+  playback.speed = speed;
+  for (const button of elements["playback-speed"].querySelectorAll("button")) {
+    button.classList.toggle("active", Number(button.dataset.speed) === speed);
+  }
+  // Live: a speed picked mid-play re-times the step already waiting rather than taking
+  // effect only after the current one has run out.
+  if (playback.playing && playback.timer) {
+    clearTimeout(playback.timer);
+    playback.timer = setTimeout(playbackStep, playbackStepDelay());
+  }
+}
+
+// Playing the leads is a background motion, so the instant the user reaches for anything
+// else the timer gives way and the interaction proceeds normally. One capture-phase
+// listener per event kind, on the document, is the whole policy: every control is covered
+// by construction, including ones added later, with no pause call in any handler.
+// The play button, the speed picker and the scrubber's own space shortcut are the only
+// exemptions, because they are the playback controls themselves.
+const PLAYBACK_CONTROLS_SELECTOR = ".dock-playback";
+const PAUSING_EVENTS = ["pointerdown", "keydown", "wheel", "change", "input"];
+
+function isPlaybackControl(target) {
+  return Boolean(target && target.closest && target.closest(PLAYBACK_CONTROLS_SELECTOR));
+}
+
+// Only the keys that work a playback control are exempt. Being focused on the play
+// button is not itself a reason to keep playing: pressing Escape there, or any other key,
+// is the user turning to something else.
+function isPlaybackKey(event) {
+  const space = event.key === " " || event.code === "Space";
+  if (space) return event.target === elements["lead-day"] || isPlaybackControl(event.target);
+  return event.key === "Enter" && isPlaybackControl(event.target);
+}
+
+function wirePauseOnInteraction() {
+  const pauseUnlessPlaybackControl = (event) => {
+    if (event.type === "keydown" ? isPlaybackKey(event) : isPlaybackControl(event.target)) return;
+    pausePlayback();
+  };
+  for (const type of PAUSING_EVENTS) {
+    document.addEventListener(type, pauseUnlessPlaybackControl, true);
+  }
+}
+
+function wirePlaybackControls() {
+  elements["lead-play"].addEventListener("click", togglePlayback);
+  for (const button of elements["playback-speed"].querySelectorAll("button")) {
+    button.addEventListener("click", () => setPlaybackSpeed(Number(button.dataset.speed)));
+  }
+  // Space on the focused scrubber is the shortcut a scrubber earns; the key would
+  // otherwise scroll the page behind the viewer.
+  elements["lead-day"].addEventListener("keydown", (event) => {
+    if (event.key !== " " && event.code !== "Space") return;
+    event.preventDefault();
+    togglePlayback();
+  });
+  wirePauseOnInteraction();
+  markPlaybackButton();
+  setPlaybackSpeed(playback.speed);
+}
+
+// The eddy note describes the census actually loaded, so every path that reloads the
+// overlay (mode switch, start date, region) writes it from the same place. A start with
+// no published census says so instead of leaving the previous start's sentence up. The
+// 1-degree products publish no census (their eddies are a few grid cells), so no grid
+// caveat is needed here.
+function writeEddyOverlayNote() {
+  const note = elements["overlay-note"];
+  if (!note) return;
+  const censuses = overlayData.eddiesCensuses || [];
+  const unpublished = (overlayData.eddiesUnpublished || []).slice(0, shared.layout);
+  if (!censuses.some(Boolean)) {
+    const published = overlayData.eddiesPublishedStarts;
+    note.textContent =
+      unpublished.length && unpublished.every(Boolean)
+        ? "No eddy census for this model."
+        : published && published.length && !published.includes(currentStartDate(panels[0].state.dataset))
+          ? `No census for this date. Available: ${published.join(", ")}.`
+          : "No eddy detections are available for this selection.";
+  } else if (shared.layout === 2 && overlayData.eddiesMatch) {
+    note.textContent = "Agreement between the two forecasts, not ground truth.";
+  } else {
+    note.textContent = "This forecast's eddy census.";
+  }
+}
+
+function wireGlobalControls() {
+  for (const button of document.querySelectorAll(".scope-switch [data-scope]")) {
+    button.addEventListener("click", () => setScope(button.dataset.scope));
+  }
+  for (const button of document.querySelectorAll(".metric-switch [data-metric]")) {
+    button.addEventListener("click", () => setYearMetric(button.dataset.metric));
+  }
+  for (const button of document.querySelectorAll(".layout-switch [data-layout]")) {
+    button.addEventListener("click", () => {
+      const previousLayout = shared.layout;
+      shared.layout = Number(button.dataset.layout);
+      // Opening Forecast 2 starts it on the variable Forecast 1 is showing (the key
+      // carries the depth variant, so 15m currents carry over too), so the comparison
+      // begins like with like. A default only: the picker changes it right afterwards,
+      // and renderPanel falls back if the second dataset lacks that variable.
+      if (shared.layout === 2 && previousLayout === 1) {
+        if (!panels[1]) panels[1] = buildPanel(1);
+        panels[1].state.variable = panels[0].state.variable;
+      }
+      markLayoutButtons();
+      syncPanelGrid();
+      refitOnGeometryChange();
+      // The shared start and lead ranges follow the forecasts on screen, so they are rebuilt
+      // once the stores behind the new layout are known.
+      Promise.all(panels.slice(0, shared.layout).map((panel) => ensureStore(panel.state.dataset).catch(() => {})))
+        .then(() => {
+          updateSharedTimeControls();
+          return renderAllPanels();
+        })
+        .then(() => {
+        updateSharedColorbar();
+        updateContextRail();
+        updateCurrentsControlVisibility();
+        // A second forecast may add/remove a column store; re-probe and re-read the point.
+        updateColumnModeAvailability().then(() => {
+          if (columnModeActive() && shared.columnPoint) readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
+        });
+      });
+      writeHash();
+    });
+  }
+  elements["start-date"].addEventListener("change", (event) => selectStartDate(Number(event.target.value)));
+  elements["period-select"].addEventListener("change", (event) => {
+    const value = event.target.value;
+    if (value !== PERIOD_CUSTOM) {
+      selectPeriod(value);
+      return;
+    }
+    // Custom opens on the range in force, which the two date fields then narrow.
+    const year = periodYear();
+    const current = periodRange(shared.period, year);
+    selectPeriod(current ? customPeriodValue(current.from, current.to) : customPeriodValue(`${year}-01-01`, `${year}-12-31`));
+  });
+  for (const id of ["period-from", "period-to"]) {
+    elements[id].addEventListener("change", () => {
+      const from = elements["period-from"].value;
+      const to = elements["period-to"].value;
+      if (from && to) selectPeriod(customPeriodValue(from, to));
+    });
+  }
+  elements["lead-day"].addEventListener("input", (event) => {
+    // A programmatic step sets `.value` without firing `input`, so reaching here means
+    // the user took the slider; the pause-on-interaction listener has already stopped
+    // the timer fighting them for the same value.
+    shared.leadDay = Number(event.target.value);
+    elements["lead-value"].textContent = `Lead day ${shared.leadDay}`;
+    scheduleLeadRender();
+    scheduleClass4Reload();
+    scheduleHashWrite();
+  });
+  elements["overlay-mode"].addEventListener("change", (event) => {
+    setSharedOverlayMode(event.target.value);
+    applyOverlayMode();
+    writeHash();
+  });
+  elements["overlay-region"].addEventListener("change", (event) => {
+    clearTrajectories();
+    clearColumnProfile();
+    setSharedRegion(event.target.value);
+    fitRegionView();
+    reseedPsdBox();
+    renderAllPanels().then(() => {
+      redrawOverlaysAll();
+      updateContextRail();
+    });
+    applyOverlayMode();
+    writeHash();
+  });
+  elements["eddy-reference"].addEventListener("change", (event) => {
+    setSharedEddyReference(event.target.value);
+    redrawOverlaysAll();
+    updateContextRail();
+    writeHash();
+  });
+  elements["particles-play"].addEventListener("change", (event) => {
+    shared.showParticles = event.target.checked;
+    applyParticleVisibility();
+    writeHash();
+  });
+  elements["particle-speed"].addEventListener("input", (event) => {
+    shared.particleSpeed = Number(event.target.value);
+    elements["speed-value"].textContent = `${shared.particleSpeed.toFixed(1)}×`;
+    for (const panel of panels) if (panel.particleContext) panel.particleContext.speed = shared.particleSpeed;
+    scheduleHashWrite();
+  });
+  elements["theme-toggle"].addEventListener("click", () => {
+    setViewerTheme(shared.theme === THEME_LIGHT ? THEME_DARK : THEME_LIGHT);
+  });
+  elements["psd-toggle"].addEventListener("click", () => {
+    setPsdEnabled(!shared.psdEnabled);
+  });
+  elements["about-toggle"].addEventListener("click", () => {
+    const dialog = elements["about-dialog"];
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  });
+  elements["about-close"].addEventListener("click", () => elements["about-dialog"].close());
+  elements["about-dialog"].addEventListener("click", (event) => {
+    if (event.target === elements["about-dialog"]) elements["about-dialog"].close();
+  });
+  elements["rail-collapse"].addEventListener("click", () => {
+    shared.railCollapsed = !shared.railCollapsed;
+    if (!drawersOverlaying()) localStorage.setItem("oceanbench.viewer.railCollapsed", shared.railCollapsed ? "1" : "0");
+    applyRailCollapsed();
+    redrawAllPanels();
+    if (!shared.railCollapsed) updateContextRail();
+    writeHash();
+  });
+  elements["left-collapse"].addEventListener("click", () => {
+    shared.controlsCollapsed = !shared.controlsCollapsed;
+    if (!drawersOverlaying()) localStorage.setItem("oceanbench.viewer.controlsCollapsed", shared.controlsCollapsed ? "1" : "0");
+    applyRailCollapsed();
+    redrawAllPanels();
+    writeHash();
+  });
+  wireLayoutSplitters();
+  for (const button of elements["rail-forecast-toggle"].querySelectorAll("button")) {
+    button.addEventListener("click", () => {
+      shared.railForecast = Number(button.dataset.forecast);
+      updateContextRail();
+      writeHash();
+    });
+  }
+  for (const button of document.querySelectorAll(".display-switch [data-display]")) {
+    button.addEventListener("click", () => {
+      const wasAtFit = viewAtRegionFit();
+      setSharedDisplayMode(button.dataset.display);
+      markDisplayButtons();
+      syncPanelGrid();
+      updateViewOnDisplayModeChange(wasAtFit);
+      renderAllPanels().then(() => {
+        redrawOverlaysAll();
+        updateSharedColorbar();
+        updateContextRail();
+        if (shared.overlayMode !== OVERLAY_NONE) applyOverlayMode();
+      });
+      writeHash();
+    });
+  }
+  elements["reset-view"].addEventListener("click", resetZoomPan);
+  elements["trajectory-clear"].addEventListener("click", clearTrajectories);
+  elements["column-clear"].addEventListener("click", () => {
+    clearColumnProfile();
+    const note = elements["overlay-note"];
+    if (columnModeActive() && note) note.textContent = "Click the map for a T/S profile.";
+    writeHash();
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      clearTrajectories();
+      clearColumnProfile();
+      // The overlay picker must not keep reading "trajectories"/"column" once the thing
+      // it names is gone, so drop it back to none along with its note.
+      if (shared.overlayMode === OVERLAY_TRAJECTORIES || shared.overlayMode === OVERLAY_WATER_COLUMN) {
+        setSharedOverlayMode(OVERLAY_NONE);
+        elements["overlay-mode"].value = OVERLAY_NONE;
+        applyOverlayMode();
+        writeHash();
+      }
+    }
+  });
+
+  window.addEventListener("pointermove", (event) => {
+    if (!panels.some((panel) => panel.dragging || panel.draggingSwipe)) updateHover(event);
+  });
+  window.addEventListener("resize", () => {
+    syncDrawerOverlayMode();
+    applyLayout();
+    // Crossing the stacking width re-fits and may change the pyramid level, so re-render.
+    if (refitOnGeometryChange()) renderAllPanels().then(() => redrawOverlaysAll());
+    clampView();
+    scheduleLayoutRender();
+  });
+
+  // The colour scale is drawn to the pixels it is displayed at, so every change of
+  // that box (window, drawer drag, the strip's own container queries) has to redraw
+  // it. Nothing inside the redraw changes the box, so this cannot loop.
+  if (elements.colorbar && window.ResizeObserver) {
+    new ResizeObserver(() => updateSharedColorbar()).observe(elements.colorbar);
+  }
+}
+
+let layoutRenderTimer = null;
+
+function layoutLimits() {
+  const workspace = document.querySelector(".workspace").getBoundingClientRect();
+  // A floating drawer takes no map width, so its only bound is the window: open, it may
+  // cover all but a tab's width of map on each side. The fractions below are for docked
+  // drawers, which share the row with the map; applied to a phone they left a 125 px
+  // controls sheet and a 163 px rail.
+  if (window.matchMedia(DRAWER_OVERLAY_QUERY).matches) {
+    const room = Math.max(0, workspace.width - 2 * DRAWER_TAB_WIDTH);
+    return {
+      controlsWidth: [Math.min(208, room), Math.min(380, room)],
+      railWidth: [Math.min(280, room), Math.min(620, room)],
+    };
+  }
+  return {
+    controlsWidth: [208, Math.min(380, workspace.width * 0.32)],
+    railWidth: [280, Math.min(620, workspace.width * 0.42)],
+  };
+}
+
+function clampLayoutValue(name, value) {
+  const [minimum, maximum] = layoutLimits()[name];
+  // A non-finite width would collapse the workspace grid (NaNpx track); fall back
+  // to the default column size rather than clamping NaN into the layout.
+  const safe = Number.isFinite(value) ? value : DEFAULT_LAYOUT[name];
+  return Math.round(Math.min(maximum, Math.max(minimum, safe)));
+}
+
+// Width of a drawer collapsed down to its edge tab. Mirrors --drawer-tab-width in
+// styles/shell.css; the grid track is written from JS so the two must agree.
+const DRAWER_TAB_WIDTH = 26;
+
+// Below this width the drawers stop taking a grid track and float over the map, so
+// the map keeps a usable width instead of being squeezed to nothing.
+const DRAWER_OVERLAY_QUERY = "(max-width: 1100px)";
+
+function applyLayout() {
+  const workspace = document.querySelector(".workspace");
+  if (!workspace) return;
+  const overlaying = window.matchMedia(DRAWER_OVERLAY_QUERY).matches;
+  shared.controlsWidth = clampLayoutValue("controlsWidth", shared.controlsWidth);
+  shared.railWidth = clampLayoutValue("railWidth", shared.railWidth);
+  if (!overlaying && shared.controlsWidth + shared.railWidth > workspace.clientWidth - 420) {
+    shared.railWidth = Math.max(280, workspace.clientWidth - 420 - shared.controlsWidth);
+  }
+  workspace.style.setProperty("--controls-width", `${shared.controlsCollapsed ? DRAWER_TAB_WIDTH : shared.controlsWidth}px`);
+  workspace.style.setProperty("--rail-width", `${shared.railCollapsed ? DRAWER_TAB_WIDTH : shared.railWidth}px`);
+  workspace.style.setProperty("--controls-open-width", `${shared.controlsWidth}px`);
+  workspace.style.setProperty("--rail-open-width", `${shared.railWidth}px`);
+}
+
+// Design width of every rail chart's viewBox. The SVG is stretched to the slot, so
+// this over the slot's measured width is the factor the browser applies to user
+// units, and the factor label sizes have to divide back out to stay put.
+const CHART_VIEW_WIDTH = 360;
+
+// How much a length declared in user units has to be inflated to render at its
+// declared size in the slot as it is measured right now.
+function chartTypeScale(node) {
+  const slot = node && node.closest ? node.closest(".rail-chart-slot") : null;
+  const width = slot ? slot.getBoundingClientRect().width : 0;
+  return width > 0 ? CHART_VIEW_WIDTH / width : 1;
+}
+
+// Publish each slot's measured width so the stylesheet can pin label sizes. Charts
+// are re-rendered into these slots constantly; observing the slots rather than the
+// SVGs means the value survives every re-render.
+function watchChartSlots() {
+  const slots = [...document.querySelectorAll(".rail-chart-slot")];
+  if (!slots.length || typeof ResizeObserver === "undefined") return;
+  const publish = (slot) => {
+    const width = slot.getBoundingClientRect().width;
+    slot.style.setProperty("--chart-slot-width", String(Math.max(1, width)));
+  };
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) publish(entry.target);
+  });
+  for (const slot of slots) {
+    publish(slot);
+    observer.observe(slot);
+  }
+}
+
+function persistLayout() {
+  localStorage.setItem("oceanbench.viewer.layout", JSON.stringify({
+    controlsWidth: shared.controlsWidth,
+    railWidth: shared.railWidth,
+  }));
+}
+
+function scheduleLayoutRender() {
+  clearTimeout(layoutRenderTimer);
+  layoutRenderTimer = setTimeout(() => {
+    clampView();
+    if (renderLevelsStale()) renderAllPanels().then(() => redrawOverlaysAll());
+    else redrawAllPanels();
+    updateContextRail();
+    syncHeadStripInset();
+  }, 80);
+}
+
+function wireSplitter(element, name, axis, direction) {
+  element.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    element.setPointerCapture(event.pointerId);
+    element.classList.add("active");
+    document.body.classList.add("resizing-layout");
+    document.body.classList.toggle("row", axis === "y");
+    const start = axis === "x" ? event.clientX : event.clientY;
+    const startValue = shared[name];
+    const move = (moveEvent) => {
+      const coordinate = axis === "x" ? moveEvent.clientX : moveEvent.clientY;
+      shared[name] = clampLayoutValue(name, startValue + direction * (coordinate - start));
+      applyLayout();
+      scheduleLayoutRender();
+    };
+    const end = () => {
+      element.removeEventListener("pointermove", move);
+      element.classList.remove("active");
+      document.body.classList.remove("resizing-layout", "row");
+      persistLayout();
+      writeHash();
+    };
+    element.addEventListener("pointermove", move);
+    element.addEventListener("pointerup", end, { once: true });
+    element.addEventListener("pointercancel", end, { once: true });
+  });
+  element.addEventListener("dblclick", () => {
+    shared[name] = DEFAULT_LAYOUT[name];
+    applyLayout();
+    persistLayout();
+    scheduleLayoutRender();
+    writeHash();
+  });
+}
+
+function wireLayoutSplitters() {
+  wireSplitter(elements["controls-map-splitter"], "controlsWidth", "x", 1);
+  wireSplitter(elements["map-rail-splitter"], "railWidth", "x", -1);
+}
+
+// Collapse a drawer to its edge tab, restoring the previous width on expand. The
+// collapsed state persists like the width.
+function applyDrawerCollapsed(drawer, toggle, collapsed, label) {
+  if (!drawer || !toggle) return;
+  drawer.classList.toggle("collapsed", collapsed);
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${label}`);
+}
+
+function applyRailCollapsed() {
+  applyDrawerCollapsed(elements["context-rail"], elements["rail-collapse"], shared.railCollapsed, "context rail");
+  applyDrawerCollapsed(elements["left-drawer"], elements["left-collapse"], shared.controlsCollapsed, "controls");
+  applyLayout();
+}
+
+// Below the overlay breakpoint an open drawer floats over the map instead of taking a
+// track beside it, so leaving both open would bury the field. Fold them on the way in
+// and hand back the wide-viewport state on the way out; the user can still open either
+// one by hand while narrow.
+let preOverlayCollapse = null;
+
+function drawersOverlaying() {
+  return window.matchMedia(DRAWER_OVERLAY_QUERY).matches;
+}
+
+function syncDrawerOverlayMode() {
+  const overlaying = drawersOverlaying();
+  if (overlaying === (preOverlayCollapse !== null)) return;
+  if (overlaying) {
+    preOverlayCollapse = { controls: shared.controlsCollapsed, rail: shared.railCollapsed };
+    shared.controlsCollapsed = true;
+    shared.railCollapsed = true;
+  } else {
+    shared.controlsCollapsed = preOverlayCollapse.controls;
+    shared.railCollapsed = preOverlayCollapse.rail;
+    preOverlayCollapse = null;
+  }
+  applyRailCollapsed();
+}
+
+function redrawOverlaysAll() {
+  for (let i = 0; i < shared.layout; i += 1) {
+    drawOverlays(panels[i]);
+    drawTrajectoryFans(panels[i]);
+  }
+  updateSharedColorbar();
+}
+
+function markLayoutButtons() {
+  for (const button of document.querySelectorAll(".layout-switch [data-layout]")) {
+    const selected = Number(button.dataset.layout) === shared.layout;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  }
+  // The side-by-side / swipe display switch is meaningful only with two forecasts.
+  const displaySwitch = document.querySelector(".display-switch");
+  if (displaySwitch) displaySwitch.hidden = shared.layout !== 2;
+  markDisplayButtons();
+}
+
+function markDisplayButtons() {
+  for (const button of document.querySelectorAll(".display-switch [data-display]")) {
+    const selected = button.dataset.display === shared.displayMode;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  }
+}
+
+// PSD of the boxed region is fetch+CPU work; recompute the rail on a short debounce when the
+// user pans / zooms / scrubs lead so the spectra track the viewport without jank.
+let railUpdateTimer = null;
+function scheduleRailUpdate() {
+  clearTimeout(railUpdateTimer);
+  railUpdateTimer = setTimeout(() => updateContextRail(), 220);
+}
+
+// ---- URL hash (every view state is a URL, §6) ------------------------------
+
+// Keys that move continuously (scrub, pan, zoom, drag). A change confined to these
+// replaces the current history entry; any other change pushes a new one, so Back steps
+// through choices rather than through every frame of a drag. The theme is a display
+// preference, not a view, so it replaces too and never costs a Forward entry.
+const CONTINUOUS_HASH_KEYS = new Set(["l", "z", "cx", "cy", "rw", "cw", "spd", "psd", "col", "theme"]);
+let lastWrittenHash = null;
+let hashHistoryReady = false;
+// A dated start (s=YYYY-MM-DD) can only become an index once the manifests are known.
+let pendingStartDate = null;
+
+function hashChangeIsContinuous(previous, next) {
+  const before = new URLSearchParams(previous.slice(1));
+  const after = new URLSearchParams(next.slice(1));
+  const keys = new Set([...before.keys(), ...after.keys()]);
+  return [...keys].every((key) => CONTINUOUS_HASH_KEYS.has(key) || before.get(key) === after.get(key));
+}
+
+// Back / forward or a hand-edited hash names a view we did not write. Every view is a
+// deep link, so the page reopens on it exactly as a shared link would.
+function onNavigatedHash() {
+  if (location.hash === lastWrittenHash) return;
+  location.reload();
+}
+
+let hashWriteTimer = null;
+function scheduleHashWrite() {
+  clearTimeout(hashWriteTimer);
+  hashWriteTimer = setTimeout(writeHash, 250);
+}
+
+// The third token is the legacy per-panel display mode. It no longer exists, the
+// comparison view is a shared dm choice now, but we keep writing a stable "field"
+// so old parsers and roundtrips stay happy; readers tolerate any value (see below).
+function encodePanel(panel) {
+  return [panel.state.dataset, panel.state.variable, "field"].join(",");
+}
+
+function writeHash() {
+  const parameters = new URLSearchParams();
+  parameters.set("layout", String(shared.layout));
+  const startDate = sharedStartDate();
+  parameters.set("s", startDate ? String(startDate).slice(0, 10) : pendingStartDate || String(shared.startIndex));
+  parameters.set("l", String(shared.leadDay));
+  parameters.set("z", view.zoom.toFixed(3));
+  parameters.set("cx", view.centerNX.toFixed(4));
+  parameters.set("cy", view.centerNY.toFixed(4));
+  parameters.set("theme", shared.theme);
+  if (shared.scope !== SCOPE_SINGLE_DATE) parameters.set("scope", shared.scope);
+  if (shared.yearMetric !== YEAR_METRIC_ABSOLUTE_ERROR) parameters.set("metric", shared.yearMetric);
+  if (shared.period !== PERIOD_WHOLE_YEAR) parameters.set("period", shared.period);
+  if (shared.psdEnabled) {
+    parameters.set("psdOn", "1");
+  }
+  if (shared.psdEnabled && shared.psdBox) {
+    // The requested size travels in the link, so a shared URL reopens at the size the
+    // user chose rather than at whatever a transient constraint clamped it to.
+    const size = shared.psdBoxRequest || shared.psdBox;
+    parameters.set("psd", [shared.psdBox.lon, shared.psdBox.lat, size.w, size.h].map((v) => v.toFixed(2)).join(","));
+  }
+  if (shared.overlayMode !== OVERLAY_NONE) parameters.set("ov", shared.overlayMode);
+  if (shared.overlayMode === OVERLAY_WATER_COLUMN && shared.columnPoint) {
+    parameters.set("col", `${shared.columnPoint.lon.toFixed(3)},${shared.columnPoint.lat.toFixed(3)}`);
+  }
+  parameters.set("region", shared.region);
+  if (shared.overlayMode === OVERLAY_EDDIES) parameters.set("eref", shared.eddyReference);
+  // Explicit 0/1 so a link overrides the drawer state this browser remembers. While the
+  // drawers overlay the map they are folded by the viewport, not by choice: leave them out.
+  if (!drawersOverlaying()) {
+    parameters.set("rail", shared.railCollapsed ? "0" : "1");
+    parameters.set("ctrl", shared.controlsCollapsed ? "0" : "1");
+  }
+  if (shared.layout === 2 && shared.railForecast === 1) parameters.set("rf", "F2");
+  parameters.set("rw", String(shared.railWidth));
+  parameters.set("cw", String(shared.controlsWidth));
+  if (shared.layout === 2) parameters.set("dm", shared.displayMode);
+  parameters.set("play", shared.showParticles ? "1" : "0");
+  parameters.set("spd", shared.particleSpeed.toFixed(1));
+  for (let i = 0; i < shared.layout; i += 1) parameters.set(`p${i}`, encodePanel(panels[i]));
+  const encoded = `#${parameters.toString()}`;
+  if (encoded !== location.hash) {
+    const replace = !hashHistoryReady || !location.hash || hashChangeIsContinuous(location.hash, encoded);
+    if (window.parent === window) {
+      history[replace ? "replaceState" : "pushState"](null, "", encoded);
+    } else {
+      // Embedded, the host page owns the address bar and the history: it applies the
+      // push or replace to its own URL, and navigates this frame back on Back/Forward.
+      // Pushing here too would add a second joint-history entry per change.
+      history.replaceState(null, "", encoded);
+      window.parent.postMessage({ type: "oceanbench-viewer-hash", hash: encoded, replace }, location.origin);
+    }
+  }
+  lastWrittenHash = encoded;
+  syncExampleNote();
+}
+
+function readHash() {
+  const parameters = new URLSearchParams(location.hash.slice(1));
+  // Only accept FINITE numbers from the hash; a malformed value (e.g. #z=abc)
+  // must fall back to the current default rather than poisoning view/layout math
+  // with NaN, which otherwise blanks the map ("zoom NaN×"), issues a 0.NaN.0.0
+  // chunk fetch (404 + uncaught rejection), or sets grid tracks to NaNpx.
+  const number = (key, fallback) => {
+    if (!parameters.has(key)) return fallback;
+    const value = Number(parameters.get(key));
+    return Number.isFinite(value) ? value : fallback;
+  };
+  shared.layout = number("layout", shared.layout);
+  // s is a start date (YYYY-MM-DD); older links carry an index into the shared dates.
+  const startParameter = parameters.get("s");
+  if (startParameter && /^\d{4}-\d{2}-\d{2}$/.test(startParameter)) pendingStartDate = startParameter;
+  else shared.startIndex = number("s", shared.startIndex);
+  shared.leadDay = number("l", shared.leadDay);
+  // A shared link can name a lead this forecast does not reach. The slider is clamped to the
+  // horizon either way; remember what was asked for so the clamp can be said out loud instead
+  // of silently showing a different lead than the link promised.
+  requestedLeadDay = parameters.has("l") ? shared.leadDay : null;
+  view.zoom = number("z", view.zoom);
+  view.centerNX = number("cx", view.centerNX);
+  view.centerNY = number("cy", view.centerNY);
+  if (parameters.has("theme")) setSharedTheme(parameters.get("theme"));
+  if (parameters.get("scope") === SCOPE_WHOLE_YEAR) setSharedScope(SCOPE_WHOLE_YEAR);
+  if (parameters.get("metric") === YEAR_METRIC_BIAS) setSharedYearMetric(YEAR_METRIC_BIAS);
+  if (parameters.has("period")) setSharedPeriod(parameters.get("period"));
+  shared.psdEnabled = parameters.get("psdOn") === "1";
+  if (parameters.has("psd")) {
+    const [lon, lat, w, h] = parameters.get("psd").split(",").map(Number);
+    if ([lon, lat, w, h].every(Number.isFinite) && w > 0 && h > 0) {
+      shared.psdBox = { lon, lat, w, h };
+      shared.psdBoxRequest = { w, h };
+      if (!parameters.has("psdOn")) shared.psdEnabled = true;
+    }
+  }
+  if (parameters.has("ov")) setSharedOverlayMode(parameters.get("ov"));
+  if (parameters.has("col")) {
+    const [lon, lat] = parameters.get("col").split(",").map(Number);
+    if (Number.isFinite(lon) && Number.isFinite(lat)) shared.columnPoint = { lon, lat };
+  }
+  if (parameters.has("region")) setSharedRegion(parameters.get("region"));
+  if (parameters.has("eref")) setSharedEddyReference(parameters.get("eref"));
+  // "collapsed" is the older spelling of 0.
+  if (parameters.has("rail")) shared.railCollapsed = ["0", "collapsed"].includes(parameters.get("rail"));
+  if (parameters.has("ctrl")) shared.controlsCollapsed = ["0", "collapsed"].includes(parameters.get("ctrl"));
+  if (parameters.has("rf")) shared.railForecast = parameters.get("rf") === "F2" ? 1 : 0;
+  const railWidth = number("rw", null);
+  if (railWidth !== null) shared.railWidth = Math.min(620, Math.max(280, railWidth));
+  shared.controlsWidth = number("cw", shared.controlsWidth);
+  if (parameters.has("dm")) setSharedDisplayMode(parameters.get("dm"));
+  if (parameters.has("play")) shared.showParticles = parameters.get("play") === "1";
+  shared.particleSpeed = number("spd", shared.particleSpeed);
+  return parameters;
+}
+
+function applyPanelHash(parameters) {
+  for (let i = 0; i < shared.layout; i += 1) {
+    const encoded = parameters.get(`p${i}`);
+    if (!encoded) continue;
+    const [dataset, variable, mode] = encoded.split(",");
+    if (!panels[i]) panels[i] = buildPanel(i);
+    // The third token is the legacy per-panel mode; it is ignored now (any value reads
+    // as "field") except the old "currents" mode, which migrates to the currents
+    // variable. A trailing fourth token (old difference dataset) is simply dropped.
+    const migratedCurrents = mode === "currents";
+    // An unknown dataset (a retired challenger, a typo) keeps the panel's default, and the
+    // hash written right after names that default instead of the dataset that failed.
+    const known = datasetCatalog.some((entry) => entry.slug === dataset);
+    Object.assign(panels[i].state, {
+      dataset: known ? dataset : panels[i].state.dataset,
+      variable: migratedCurrents ? CURRENTS_VARIABLE_SURFACE : variable || panels[i].state.variable,
+    });
+  }
+}
+
+// ---- status -----------------------------------------------------------------
+
+function setStatus(message, isError = false) {
+  if (!message) message = leadRangeNote;
+  elements.status.textContent = message;
+  elements.status.classList.toggle("error", isError);
+  elements.status.hidden = !message;
+}
+
+// Each panel owns its render error. A panel that renders fine clears only its own, so the
+// status line keeps naming a failure in the other panel.
+function setPanelError(panel, message) {
+  panel.renderError = message;
+  const failing = panels.slice(0, shared.layout).filter((candidate) => candidate && candidate.renderError);
+  const text = failing
+    .map((candidate) => (shared.layout > 1 ? `Forecast ${candidate.index + 1}: ${candidate.renderError}` : candidate.renderError))
+    .join(" ");
+  setStatus(text, failing.length > 0);
+}
+
+function selectElements() {
+  for (const id of [
+    "start-date",
+    "period-select",
+    "period-range",
+    "period-from",
+    "period-to",
+    "period-note",
+    "lead-day",
+    "lead-ticks",
+    "example-note",
+    "lead-value",
+    "overlay-mode",
+    "overlay-region",
+    "eddy-reference",
+    "eddy-reference-field",
+    "overlay-note",
+    "currents-group",
+    "particles-play",
+    "particle-speed",
+    "speed-value",
+    "reset-view",
+    "theme-toggle",
+    "about-toggle",
+    "about-dialog",
+    "about-close",
+    "rail-collapse",
+    "left-drawer",
+    "left-collapse",
+    "panel-grid",
+    "lead-play",
+    "playback-speed",
+    "colorbar",
+    "colorbar-2",
+    "map-legend",
+    "year-legend",
+    "layer-info",
+    "status",
+    "context-rail",
+    "controls-map-splitter",
+    "map-rail-splitter",
+    "rail-subtitle",
+    "rail-current-depth-note",
+    "rail-forecast-toggle",
+    "rail-lead-curve",
+    "rail-skill-note",
+    "rail-depth-profile-section",
+    "rail-depth-profile",
+    "rail-depth-profile-note",
+    "psd-toggle",
+    "rail-spectra",
+    "rail-psd-note",
+    "rail-psd-lead",
+    "rail-year-rmsd-section",
+    "rail-year-rmsd",
+    "rail-year-rmsd-note",
+    "rail-trajectory-section",
+    "rail-trajectory-chart",
+    "rail-trajectory-note",
+    "trajectory-clear",
+    "rail-column-section",
+    "rail-column-chart",
+    "rail-column-point",
+    "rail-column-note",
+    "column-clear",
+    "rail-provenance",
+    "class4-tooltip",
+  ]) {
+    elements[id] = document.getElementById(id);
+  }
+}
+
+// ---- boot -------------------------------------------------------------------
+
+// The QA harness needs two numbers that exist only in module scope: the bounds the colour
+// scale was actually drawn with, and the selection signature that decides when those
+// bounds are allowed to reset. Published only under ?qa=1, so the shipped page carries no
+// extra global and no probe can be mistaken for an API.
+if (new URLSearchParams(location.search).has("qa")) {
+  window.oceanbenchViewerQaProbe = {
+    colorRanges: () => panels.slice(0, shared.layout).map((panel) => (panel && panel.range ? [...panel.range] : null)),
+    selectionSignature,
+  };
+}
+
+async function main() {
+  selectElements();
+  // Optional viewer-config.json (404 tolerated) can repoint the data root before the
+  // first fetch; a ?data= query parameter still wins over it.
+  await initializeViewerConfig();
+  setStatus("Loading catalog…");
+  const datasetsUrl = resolveViewerDataUrl(DATASETS_PATH);
+  try {
+    const response = await fetch(datasetsUrl, { cache: "no-cache" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    datasetCatalog = (await response.json()).datasets;
+  } catch (error) {
+    // Name the resource that failed and what it means, rather than surfacing a raw
+    // exception string the reader cannot act on.
+    setStatus(
+      `The viewer could not read its dataset catalog at ${datasetsUrl} (${error.message}), so there is nothing to show yet.`,
+      true,
+    );
+    return;
+  }
+  if (!datasetCatalog.length) {
+    setStatus("No datasets in ./data/datasets.json.", true);
+    return;
+  }
+
+  const parameters = readHash();
+  window.addEventListener("popstate", onNavigatedHash);
+  window.addEventListener("hashchange", onNavigatedHash);
+  // The site shell always hands its theme over in the hash, so a hash naming nothing but
+  // the theme is still a first visit.
+  const namesAView = [...parameters.keys()].some((key) => key !== "theme");
+  if (!namesAView && exampleViewAvailable()) {
+    exampleViewActive = true;
+    shared.layout = 2;
+    shared.leadDay = EXAMPLE_VIEW.leadDay;
+    setSharedDisplayMode(DISPLAY_SIDE_BY_SIDE);
+  }
+  // Only 1 or 2 panels are supported; old 4-panel hashes degrade to 2.
+  if (!Number.isFinite(shared.layout) || shared.layout < 1) shared.layout = 1;
+  else if (shared.layout > 2) shared.layout = 2;
+  // The difference view has no meaning in the year raster scope; a deep link that
+  // asks for both falls back to side-by-side (mirrors the runtime scope switch).
+  if (shared.scope === SCOPE_WHOLE_YEAR && shared.displayMode === DISPLAY_DIFFERENCE) setSharedDisplayMode(DISPLAY_SIDE_BY_SIDE);
+  applyTheme();
+  applyScope();
+  markMetricButtons();
+  syncDrawerOverlayMode();
+  applyRailCollapsed();
+  applyLayout();
+  watchChartSlots();
+  elements["lead-value"].textContent = `Lead day ${shared.leadDay}`;
+  elements["speed-value"].textContent = `${shared.particleSpeed.toFixed(1)}×`;
+  elements["particles-play"].checked = shared.showParticles;
+  elements["particle-speed"].value = String(shared.particleSpeed);
+  elements["overlay-mode"].value = shared.overlayMode;
+  elements["overlay-region"].value = shared.region;
+  elements["eddy-reference"].value = shared.eddyReference;
+
+  for (let i = 0; i < shared.layout; i += 1) if (!panels[i]) panels[i] = buildPanel(i);
+  if (exampleViewActive) {
+    EXAMPLE_VIEW.datasets.forEach((dataset, index) => Object.assign(panels[index].state, { dataset, variable: EXAMPLE_VIEW.variable }));
+    elements["example-note"].textContent = EXAMPLE_VIEW.note;
+  }
+  applyPanelHash(parameters);
+  clampView();
+  writeHash();
+
+  // Insight index loads before the overlays that key off it. The score summary is not
+  // awaited here: ensureScoresSummary fetches it when the rail first needs it.
+  insightIndex = await loadInsightIndex();
+
+  // Ensure the primary dataset store so start-date / lead options are known.
+  // Warm every visible panel's store so variable/start selectors populate on first paint.
+  await Promise.all(panels.slice(0, shared.layout).map((panel) => ensureStore(panel.state.dataset).catch(() => {})));
+  if (pendingStartDate) {
+    // A date that is not a start (a hand-edited link) opens on the nearest start.
+    const index = nearestStartIndex(sharedStartDates(), pendingStartDate);
+    if (index >= 0) shared.startIndex = index;
+    pendingStartDate = null;
+  }
+  updateSharedTimeControls();
+  syncPeriodControl();
+
+  markLayoutButtons();
+  syncPanelGrid();
+  wireGlobalControls();
+  wirePlaybackControls();
+  wireStaticMethodNotes();
+  wireEmbeddedTheme();
+
+  clampView();
+  // A link that names no zoom opens covered: contain-fit leaves vertical dead bands
+  // around the 2:1 raster in every common window shape. Deep links keep their zoom,
+  // so a shared view still reproduces exactly what was shared. The panels are laid
+  // out by now, which is what makes the cover zoom computable.
+  if (!parameters.has("z")) {
+    view.zoom = coverZoomFor(panels.find((candidate) => candidate.els.field.width > 0));
+    clampView();
+  }
+  writeHash();
+  await renderAllPanels();
+  // The first cover and clamp ran before any field existed, so they could only use the
+  // poles; now the fields' own rows are known.
+  if (!parameters.has("z") || !parameters.has("cy")) {
+    const before = [view.zoom, view.centerNY];
+    if (!parameters.has("z")) view.zoom = coverZoomFor(panels.find((candidate) => candidate.els.field.width > 0));
+    clampView();
+    if (renderLevelsStale()) await renderAllPanels();
+    else if (view.zoom !== before[0] || view.centerNY !== before[1]) redrawAllPanels();
+  }
+  if (leadClampNote) setStatus(leadClampNote);
+  // A link that turns the spectrum on without carrying a box (psdOn=1 and no psd=) opened on
+  // an empty spectrum card and no rectangle on the map until something else nudged the rail.
+  // The box is part of what "on" means, so it exists from the first frame. The panels have
+  // been laid out by now, so the default box is placed in the viewport actually on screen.
+  if (shared.psdEnabled && !shared.psdBox) ensurePsdBox(panels.slice(0, shared.layout));
+  updateCurrentsControlVisibility();
+  updateSharedColorbar();
+  await applyOverlayMode();
+  await updateContextRail();
+  // Probe column-store availability (shows/hides the "Water column (click)" option) and
+  // replay a deep-linked clicked point once stores are known.
+  await updateColumnModeAvailability();
+  if (columnModeActive() && shared.columnPoint) {
+    await readColumnProfileAt(shared.columnPoint.lon, shared.columnPoint.lat);
+  }
+  writeHash();
+  // The arrangement the first view was fitted (or deep-linked) for.
+  fittedGeometry = panelGeometryKey();
+  hashHistoryReady = true;
+  if (window.oceanbenchViewerQaProbe) window.oceanbenchViewerQaProbe.booted = true;
+}
+
+main();

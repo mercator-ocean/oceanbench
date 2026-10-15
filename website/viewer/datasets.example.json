@@ -1,0 +1,22 @@
+{
+  "datasets": [
+    {
+      "slug": "glonet_1_degree",
+      "label": "GLONET (1\u00b0)",
+      "store": "./data/glonet_1_degree.zarr",
+      "manifest": "./data/glonet_1_degree.viewer-manifest.json"
+    },
+    {
+      "slug": "glorys_one_degree",
+      "label": "GLORYS (1\u00b0)",
+      "store": "./data/glorys_one_degree.zarr",
+      "manifest": "./data/glorys_one_degree.viewer-manifest.json"
+    },
+    {
+      "slug": "glo12_one_degree",
+      "label": "GLO12 (1\u00b0)",
+      "store": "./data/glo12_one_degree.zarr",
+      "manifest": "./data/glo12_one_degree.viewer-manifest.json"
+    }
+  ]
+}

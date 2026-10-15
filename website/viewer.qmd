@@ -1,0 +1,129 @@
+<!--
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+pagetitle: "Viewer"
+description: "Interactive explorer of OceanBench forecast fields: synchronized panels, currents and insight overlays."
+format:
+  html:
+    page-layout: custom
+    toc: false
+---
+
+::: {#viewer-embed}
+<iframe id="viewer-frame" title="OceanBench fields explorer" src="viewer/index.html?embed=1"></iframe>
+:::
+
+```{=html}
+<style>
+/* Full-bleed app page: the viewer fills the viewport exactly, minus the site
+   navbar. No title block, no content margins, no letterbox. The site footer with
+   the EDITO credit stays in normal flow directly below the app, so it costs no
+   viewport height and is reached by scrolling past the bottom of the map.
+   Every rule is scoped to this page's body class so other pages are untouched. */
+body.viewer-page {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  /* The app owns the viewport width; only the footer may extend the page height. */
+  overflow-x: hidden;
+}
+body.viewer-page #quarto-header { flex: 0 0 auto; }
+body.viewer-page #quarto-content,
+body.viewer-page main.content,
+body.viewer-page .page-columns,
+body.viewer-page #quarto-document-content {
+  flex: 1 1 auto;
+  display: block;
+  min-height: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+  width: 100% !important;
+  grid-template-columns: 1fr !important;
+}
+body.viewer-page #quarto-content > * { grid-column: 1 / -1 !important; }
+/* The article header (title block) belongs to a document page, not to an app shell:
+   it says nothing here and it would push the map down into a letterbox. The site
+   footer is kept, just moved below the fold. */
+body.viewer-page #title-block-header,
+body.viewer-page header#title-block-header,
+body.viewer-page .quarto-title-block,
+body.viewer-page #quarto-margin-sidebar,
+body.viewer-page .quarto-title-banner { display: none !important; }
+body.viewer-page .nav-footer { flex: 0 0 auto; }
+#viewer-embed {
+  height: calc(100dvh - var(--viewer-chrome, 0px));
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+#viewer-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  resize: none;
+}
+</style>
+<script>
+(function () {
+  document.body.classList.add("viewer-page");
+  var frame = document.getElementById("viewer-frame");
+
+  // Size the app to the space left under the navbar. Measuring instead of assuming
+  // keeps the fit exact when the navbar wraps or the theme changes its height.
+  function chromeHeight() {
+    var header = document.getElementById("quarto-header");
+    return header ? header.getBoundingClientRect().height : 0;
+  }
+  function sizeApp() {
+    document.documentElement.style.setProperty("--viewer-chrome", chromeHeight() + "px");
+  }
+  window.addEventListener("resize", sizeApp);
+  if (window.ResizeObserver) {
+    var header = document.getElementById("quarto-header");
+    if (header) new ResizeObserver(sizeApp).observe(header);
+  }
+  sizeApp();
+
+  // Theme: the site's toggle stamps quarto-dark / quarto-light on <body>; forward it.
+  function currentTheme() {
+    return document.body.classList.contains("quarto-dark") ? "dark" : "light";
+  }
+  function sendTheme() {
+    if (frame.contentWindow) frame.contentWindow.postMessage({ type: "oceanbench-theme", theme: currentTheme() }, "*");
+  }
+  new MutationObserver(sendTheme).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  window.addEventListener("message", function (event) {
+    if (event.data && event.data.type === "oceanbench-viewer-ready") sendTheme();
+  });
+
+  // Deep links: seed the iframe from this page's hash. The app reports every hash it
+  // writes (with its push or replace choice) so this page's URL and history follow the
+  // view; Back/Forward here navigate the app to the restored hash.
+  var base = "viewer/index.html?embed=1&theme=" + currentTheme();
+  frame.src = base + (location.hash || "#theme=" + currentTheme());
+  frame.addEventListener("load", function () {
+    sizeApp();
+    sendTheme();
+  });
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (event.origin !== location.origin || event.source !== frame.contentWindow) return;
+    if (!data || data.type !== "oceanbench-viewer-hash" || data.hash === location.hash) return;
+    history[data.replace ? "replaceState" : "pushState"](null, "", location.pathname + location.search + data.hash);
+  });
+  window.addEventListener("popstate", function () {
+    var app = frame.contentWindow.location;
+    var hash = location.hash || "#theme=" + currentTheme();
+    if (hash !== app.hash) app.replace(app.href.split("#")[0] + hash);
+  });
+})();
+</script>
+```

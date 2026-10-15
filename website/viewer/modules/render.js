@@ -1,0 +1,491 @@
+// SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
+// Field colorization and colorbar drawing for the viewer. Rendering stays on the
+// 2D canvas: a decoded Float32 field becomes an ImageData at native grid
+// resolution (pixel = grid cell), which the map view blits with a pan/zoom
+// transform (nearest-neighbour, so the native zoom is pixel-faithful, §6).
+
+import { lookupTable } from "../vendor/cmocean/colormaps.js";
+
+// Land is a flat unsaturated grey, the oceanographic convention: it sits far from both
+// ends of every field palette in both themes, so a continent never reads as an extreme
+// value. "Sea but unobserved" in the entire-year error raster keeps a faint blue tint,
+// clearly bluer than land, so land, no-obs ocean and scored ocean each read distinctly
+// (year scope only; single-forecast fields keep land ↔ ocean as before).
+// The live values come from the shared design tokens (tokens.css, --ob-viewer-land and
+// --ob-viewer-no-obs, themed by data-theme on <html>); the per-theme literals below are
+// the fallback kept in sync with that file.
+const LAND_LIGHT = [190, 184, 174];
+const LAND_DARK = [132, 130, 126];
+export const NO_OBS_LIGHT = [222, 231, 243];
+export const NO_OBS_DARK = [42, 54, 72];
+
+// getComputedStyle flushes style, so resolve each token once per theme rather than on
+// every colorize call (the lead scrub recolorizes a field per frame).
+const tokenCache = new Map();
+
+function themeColor(name, fallback) {
+  // Key on the theme the document is actually wearing, since that is what
+  // getComputedStyle resolves against.
+  const key = `${name}|${document.documentElement.dataset.theme}`;
+  const cached = tokenCache.get(key);
+  if (cached) return cached;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const parsed = parseHexColor(value) || fallback;
+  tokenCache.set(key, parsed);
+  return parsed;
+}
+
+function parseHexColor(text) {
+  const match = /^#([0-9a-f]{6})$/i.exec(text);
+  if (!match) return null;
+  const value = parseInt(match[1], 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
+export function landColor(theme) {
+  return themeColor("--ob-viewer-land", theme === "light" ? LAND_LIGHT : LAND_DARK);
+}
+
+export function noObsColor(theme) {
+  return themeColor("--ob-viewer-no-obs", theme === "light" ? NO_OBS_LIGHT : NO_OBS_DARK);
+}
+
+/**
+ * Colorize a field into an ImageData sized to the grid.
+ * `range` is [minimum, maximum] in real units; values are clamped.
+ * `flipVertical` flips rows so ascending-latitude data renders north-up.
+ */
+/**
+ * Opaque where the field has no data, transparent everywhere else: the same cells
+ * fieldToImageData paints with the land colour, in the same layout, so blitting this
+ * through the field's own world path lands exactly on the drawn coastline. Used to erase
+ * the particle layer over land.
+ */
+export function landStencilImageData({ data, width, height }, options = {}) {
+  const { flipVertical = false } = options;
+  const image = new ImageData(width, height);
+  const pixels = image.data;
+  for (let row = 0; row < height; row += 1) {
+    const sourceRow = flipVertical ? height - 1 - row : row;
+    for (let column = 0; column < width; column += 1) {
+      if (!Number.isNaN(data[sourceRow * width + column])) continue;
+      pixels[(row * width + column) * 4 + 3] = 255;
+    }
+  }
+  return image;
+}
+
+export function fieldToImageData({ data, width, height }, colormapName, range, options = {}) {
+  const { flipVertical = false, theme = "dark", transparentNaN = false, landMask = null } = options;
+  const lut = lookupTable(colormapName);
+  const [minimum, maximum] = range;
+  const span = maximum - minimum || 1;
+  const land = landColor(theme);
+  const noObs = noObsColor(theme);
+  const image = new ImageData(width, height);
+  const pixels = image.data;
+  for (let row = 0; row < height; row += 1) {
+    const sourceRow = flipVertical ? height - 1 - row : row;
+    for (let column = 0; column < width; column += 1) {
+      const sourceIndex = sourceRow * width + column;
+      const value = data[sourceIndex];
+      const destination = (row * width + column) * 4;
+      if (Number.isNaN(value)) {
+        // With a land mask (year scope): land renders opaque; NaN over ocean is
+        // "sea but unobserved" and gets the faint no-obs tint. Without a mask,
+        // transparentNaN drops the cell; otherwise NaN is land as before.
+        if (landMask) {
+          const fill = landMask[sourceIndex] ? land : noObs;
+          pixels[destination] = fill[0];
+          pixels[destination + 1] = fill[1];
+          pixels[destination + 2] = fill[2];
+          pixels[destination + 3] = 255;
+          continue;
+        }
+        if (transparentNaN) {
+          pixels[destination + 3] = 0;
+          continue;
+        }
+        pixels[destination] = land[0];
+        pixels[destination + 1] = land[1];
+        pixels[destination + 2] = land[2];
+        pixels[destination + 3] = 255;
+        continue;
+      }
+      let normalized = (value - minimum) / span;
+      normalized = normalized <= 0 ? 0 : normalized >= 1 ? 1 : normalized;
+      const lutIndex = Math.round(normalized * 255) * 3;
+      pixels[destination] = lut[lutIndex];
+      pixels[destination + 1] = lut[lutIndex + 1];
+      pixels[destination + 2] = lut[lutIndex + 2];
+      pixels[destination + 3] = 255;
+    }
+  }
+  return image;
+}
+
+/** Statistics over the finite entries of a field. */
+export function fieldStatistics({ data }) {
+  let minimum = Infinity;
+  let maximum = -Infinity;
+  let sum = 0;
+  let count = 0;
+  for (let i = 0; i < data.length; i += 1) {
+    const value = data[i];
+    if (Number.isNaN(value)) continue;
+    if (value < minimum) minimum = value;
+    if (value > maximum) maximum = value;
+    sum += value;
+    count += 1;
+  }
+  if (count === 0) return { minimum: NaN, maximum: NaN, mean: NaN, count: 0 };
+  return { minimum, maximum, mean: sum / count, count };
+}
+
+/**
+ * cos(latitude)-weighted mean over the finite cells of a field, a true area-weighted
+ * spatial mean, since equal-area on a lat/lon grid shrinks with cos(latitude) toward the
+ * poles. `latitudes` are the field's row coordinates (length === height). Falls back to
+ * the unweighted mean when no latitudes are supplied.
+ */
+export function areaWeightedMean({ data, width, height }, latitudes) {
+  if (!latitudes || latitudes.length !== height) return fieldStatistics({ data }).mean;
+  let weightedSum = 0;
+  let weightTotal = 0;
+  for (let row = 0; row < height; row += 1) {
+    const weight = Math.max(0, Math.cos((latitudes[row] * Math.PI) / 180));
+    for (let column = 0; column < width; column += 1) {
+      const value = data[row * width + column];
+      if (Number.isNaN(value)) continue;
+      weightedSum += value * weight;
+      weightTotal += weight;
+    }
+  }
+  return weightTotal === 0 ? NaN : weightedSum / weightTotal;
+}
+
+/**
+ * cos(latitude)-weighted quantiles of the finite cells of a field, one value per requested
+ * fraction, read off a weighted histogram between the field's minimum and maximum (the same
+ * scheme as robustDifferenceMagnitude). A lower quantile is rounded down to its bin edge
+ * and an upper one up, so the pair always contains the cells it describes. `latitudes` are
+ * the field's row coordinates; without them every row weighs the same. NaN for an empty field.
+ */
+export function areaWeightedQuantiles({ data, width, height }, latitudes, fractions) {
+  let minimum = Infinity;
+  let maximum = -Infinity;
+  for (let i = 0; i < data.length; i += 1) {
+    const value = data[i];
+    if (value < minimum) minimum = value;
+    if (value > maximum) maximum = value;
+  }
+  if (!(maximum >= minimum)) return fractions.map(() => NaN);
+  if (maximum === minimum) return fractions.map(() => minimum);
+  const binCount = 4096;
+  const span = maximum - minimum;
+  const histogram = new Float64Array(binCount);
+  let weightTotal = 0;
+  for (let row = 0; row < height; row += 1) {
+    const weight = latitudes && latitudes.length === height ? Math.max(0, Math.cos((latitudes[row] * Math.PI) / 180)) : 1;
+    if (weight === 0) continue;
+    for (let column = 0; column < width; column += 1) {
+      const value = data[row * width + column];
+      if (Number.isNaN(value)) continue;
+      histogram[Math.min(binCount - 1, Math.floor(((value - minimum) / span) * binCount))] += weight;
+      weightTotal += weight;
+    }
+  }
+  return fractions.map((fraction) => {
+    const target = fraction * weightTotal;
+    let cumulative = 0;
+    for (let bin = 0; bin < binCount; bin += 1) {
+      cumulative += histogram[bin];
+      if (cumulative >= target) return minimum + ((fraction < 0.5 ? bin : bin + 1) / binCount) * span;
+    }
+    return maximum;
+  });
+}
+
+/**
+ * Magnitude for a symmetric difference scale: the cos(latitude)-weighted 99th
+ * percentile of |value| over the finite cells, so a few extreme cells (coastlines,
+ * sea-ice edges, grid seams) do not wash the rest of the map out to white. Read off a
+ * weighted histogram of |value| rather than a sort. `latitudes` are the field's row
+ * coordinates; without them every row weighs the same. Returns 1 for an empty field.
+ */
+export function robustDifferenceMagnitude({ data, width, height }, latitudes) {
+  let maximum = 0;
+  for (let i = 0; i < data.length; i += 1) {
+    const absolute = Math.abs(data[i]);
+    if (absolute > maximum) maximum = absolute;
+  }
+  if (!(maximum > 0)) return 1;
+  const binCount = 2048;
+  const histogram = new Float64Array(binCount);
+  let weightTotal = 0;
+  for (let row = 0; row < height; row += 1) {
+    const weight = latitudes && latitudes.length === height ? Math.max(0, Math.cos((latitudes[row] * Math.PI) / 180)) : 1;
+    if (weight === 0) continue;
+    for (let column = 0; column < width; column += 1) {
+      const value = data[row * width + column];
+      if (Number.isNaN(value)) continue;
+      histogram[Math.min(binCount - 1, Math.floor((Math.abs(value) / maximum) * binCount))] += weight;
+      weightTotal += weight;
+    }
+  }
+  const target = 0.99 * weightTotal;
+  let cumulative = 0;
+  for (let bin = 0; bin < binCount; bin += 1) {
+    cumulative += histogram[bin];
+    if (cumulative >= target) return ((bin + 1) / binCount) * maximum;
+  }
+  return maximum;
+}
+
+/**
+ * Resample a field onto a target lat/lon grid by nearest cell, leaving NaN where the
+ * target lies outside the source. The viewer's datasets share neither origin nor
+ * spacing (GLONET spans 168 rows at 1°, GLORYS/GLO12 170), so differencing must
+ * register on coordinates, never on raw array index.
+ */
+export function resampleOntoGrid(field, sourceLatitudes, sourceLongitudes, targetLatitudes, targetLongitudes) {
+  const targetHeight = targetLatitudes.length;
+  const targetWidth = targetLongitudes.length;
+  const data = new Float32Array(targetHeight * targetWidth).fill(NaN);
+  const sourceRows = nearestIndices(sourceLatitudes, targetLatitudes);
+  const sourceColumns = nearestIndices(sourceLongitudes, targetLongitudes);
+  for (let row = 0; row < targetHeight; row += 1) {
+    const sourceRow = sourceRows[row];
+    if (sourceRow < 0) continue;
+    for (let column = 0; column < targetWidth; column += 1) {
+      const sourceColumn = sourceColumns[column];
+      if (sourceColumn < 0) continue;
+      data[row * targetWidth + column] = field.data[sourceRow * field.width + sourceColumn];
+    }
+  }
+  return { data, width: targetWidth, height: targetHeight };
+}
+
+// For each target coordinate, the index of the nearest source coordinate on a monotonic
+// axis, or -1 when the target lies more than half a source cell outside it. The search is
+// on the stored values, not on an origin plus the first spacing: float32 axes (GLORYS,
+// GLO12) round that spacing, so origin-plus-step drifts by a quarter cell across the
+// globe, and a coarsened pyramid's last row is a partial cell. Either made the nearest
+// test fail on every other column of whole longitude bands, drawn as stripes.
+function nearestIndices(source, target) {
+  const size = source.length;
+  const indices = new Int32Array(target.length).fill(-1);
+  if (size === 0) return indices;
+  const sign = size > 1 && source[size - 1] < source[0] ? -1 : 1;
+  for (let i = 0; i < target.length; i += 1) {
+    const value = sign * target[i];
+    let low = 0;
+    let high = size - 1;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (sign * source[middle] < value) low = middle + 1;
+      else high = middle;
+    }
+    let nearest = low;
+    if (low > 0 && Math.abs(source[low - 1] - target[i]) <= Math.abs(source[low] - target[i])) nearest = low - 1;
+    // Half the wider neighbouring gap, with slack so a target exactly halfway between two
+    // cells is never dropped over float rounding.
+    const gap = size > 1
+      ? Math.max(nearest > 0 ? Math.abs(source[nearest] - source[nearest - 1]) : 0,
+        nearest < size - 1 ? Math.abs(source[nearest + 1] - source[nearest]) : 0)
+      : 1;
+    if (Math.abs(source[nearest] - target[i]) <= gap * 0.5 * 1.001) indices[i] = nearest;
+  }
+  return indices;
+}
+
+/**
+ * Mean of the finer source cells falling inside each coarser target cell (NaN where the
+ * cell holds no ocean). Used instead of nearest sampling when a fine field is compared on
+ * a coarse grid, so fine scales average out rather than alias into the difference.
+ */
+export function blockAverageOntoGrid(field, sourceLatitudes, sourceLongitudes, targetLatitudes, targetLongitudes) {
+  const targetHeight = targetLatitudes.length;
+  const targetWidth = targetLongitudes.length;
+  const sums = new Float64Array(targetHeight * targetWidth);
+  const counts = new Uint32Array(targetHeight * targetWidth);
+  const targetLatitudeStep = targetLatitudes.length > 1 ? targetLatitudes[1] - targetLatitudes[0] : 1;
+  const targetLongitudeStep = targetLongitudes.length > 1 ? targetLongitudes[1] - targetLongitudes[0] : 1;
+  const rowOf = new Int32Array(sourceLatitudes.length);
+  for (let row = 0; row < sourceLatitudes.length; row += 1) {
+    const target = Math.round((sourceLatitudes[row] - targetLatitudes[0]) / targetLatitudeStep);
+    rowOf[row] = target >= 0 && target < targetHeight ? target : -1;
+  }
+  const columnOf = new Int32Array(sourceLongitudes.length);
+  for (let column = 0; column < sourceLongitudes.length; column += 1) {
+    const target = Math.round((sourceLongitudes[column] - targetLongitudes[0]) / targetLongitudeStep);
+    columnOf[column] = target >= 0 && target < targetWidth ? target : -1;
+  }
+  for (let row = 0; row < sourceLatitudes.length; row += 1) {
+    const targetRow = rowOf[row];
+    if (targetRow < 0) continue;
+    for (let column = 0; column < sourceLongitudes.length; column += 1) {
+      const targetColumn = columnOf[column];
+      if (targetColumn < 0) continue;
+      const value = field.data[row * field.width + column];
+      if (!Number.isFinite(value)) continue;
+      const index = targetRow * targetWidth + targetColumn;
+      sums[index] += value;
+      counts[index] += 1;
+    }
+  }
+  const data = new Float32Array(targetHeight * targetWidth);
+  for (let i = 0; i < data.length; i += 1) data[i] = counts[i] ? sums[i] / counts[i] : NaN;
+  return { data, width: targetWidth, height: targetHeight };
+}
+
+/** Elementwise A − B of two aligned fields (NaN where either is land). */
+export function differenceField(fieldA, fieldB) {
+  const data = new Float32Array(fieldA.data.length);
+  for (let i = 0; i < data.length; i += 1) data[i] = fieldA.data[i] - fieldB.data[i];
+  return { data, width: fieldA.width, height: fieldA.height };
+}
+
+/**
+ * Draw a horizontal colorbar with min/max labels into a canvas.
+ *
+ * CSS lays the canvas out; only its backing store is ours to size. It is sized here
+ * to the displayed box times the device pixel ratio, and everything is drawn in CSS
+ * pixels through a scale transform. A fixed backing store would be rendered at one
+ * size and stretched to another by the browser, which is what made the bar and its
+ * tick labels look like a resized image rather than something drawn.
+ */
+// `ramp` is the segment of the colormap the bar draws, [start, end] in 0..1. It defaults
+// to the whole colormap; a caller whose marks only use part of it (the Class-4 obs points
+// skip the darkest sliver) passes that same segment so the key shows the colours actually
+// on the map.
+export function drawColorbar(canvas, colormapName, range, { label = "", units = "", textColor = "#e6edf3", ramp = [0, 1] } = {}) {
+  const context = canvas.getContext("2d");
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.max(1, Math.round(canvas.clientWidth || canvas.width));
+  const height = Math.max(1, Math.round(canvas.clientHeight || canvas.height));
+  const backingWidth = Math.round(width * ratio);
+  const backingHeight = Math.round(height * ratio);
+  if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+    canvas.width = backingWidth;
+    canvas.height = backingHeight;
+  }
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, backingWidth, backingHeight);
+  const lut = lookupTable(colormapName);
+  // The caption and the tick row are 11px text: 15 above and 14 below is what they
+  // need, and every pixel not reserved here is a pixel of actual colour ramp.
+  const labelHeight = label ? 15 : 0;
+  const barTop = labelHeight;
+  const barHeight = Math.min(14, height - labelHeight - 14);
+  // The gradient is written straight into the backing store, since image data ignores
+  // the transform: one device pixel per column, so the ramp is as smooth as the screen.
+  const barTopDevice = Math.round(barTop * ratio);
+  const barHeightDevice = Math.max(1, Math.round(barHeight * ratio));
+  const gradient = context.createImageData(backingWidth, barHeightDevice);
+  const rampStart = Number.isFinite(ramp[0]) ? ramp[0] : 0;
+  const rampEnd = Number.isFinite(ramp[1]) ? ramp[1] : 1;
+  for (let column = 0; column < backingWidth; column += 1) {
+    const fraction = column / Math.max(1, backingWidth - 1);
+    const lutIndex = Math.round((rampStart + fraction * (rampEnd - rampStart)) * 255) * 3;
+    for (let row = 0; row < barHeightDevice; row += 1) {
+      const destination = (row * backingWidth + column) * 4;
+      gradient.data[destination] = lut[lutIndex];
+      gradient.data[destination + 1] = lut[lutIndex + 1];
+      gradient.data[destination + 2] = lut[lutIndex + 2];
+      gradient.data[destination + 3] = 255;
+    }
+  }
+  context.putImageData(gradient, 0, barTopDevice);
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.fillStyle = textColor;
+  context.font = "11px system-ui, sans-serif";
+  context.textBaseline = "top";
+  if (label) {
+    // Left-align and ellipsize on the right so the leading, most meaningful part of
+    // a long label ("mean |obs − model| …") stays readable instead of overflowing
+    // and being clipped on the left by centre alignment.
+    context.textAlign = "left";
+    context.fillText(fitLabel(context, label, width), 0, 1);
+  }
+  // The units ride on the end ticks, not the caption, so a long caption that has to be
+  // ellipsized never loses them.
+  const tickText = (value) => (units ? `${formatTick(value)} ${units}` : formatTick(value));
+  context.textAlign = "left";
+  context.fillText(tickText(range[0]), 0, barTop + barHeight + 2);
+  context.textAlign = "right";
+  context.fillText(tickText(range[1]), width, barTop + barHeight + 2);
+}
+
+function fitLabel(context, label, maxWidth) {
+  if (context.measureText(label).width <= maxWidth) return label;
+  const ellipsis = "…";
+  let truncated = label;
+  while (truncated.length > 1 && context.measureText(truncated + ellipsis).width > maxWidth) {
+    truncated = truncated.slice(0, -1);
+  }
+  return truncated + ellipsis;
+}
+
+/** The one minus sign the viewer prints, matching the "model − obs" captions. */
+export const MINUS_SIGN = "−";
+
+/**
+ * The one numeric convention every readout uses: a fixed number of decimals, no
+ * signed zero ("−0.000" is just "0.000"), one minus sign character, and "n/a" for
+ * anything that is not a finite number.
+ */
+export function formatFixed(value, decimals) {
+  if (!Number.isFinite(value)) return "n/a";
+  const rounded = Number(value.toFixed(decimals));
+  return (rounded === 0 ? 0 : rounded).toFixed(decimals).replace("-", MINUS_SIGN);
+}
+
+function formatTick(value) {
+  if (!Number.isFinite(value)) return "n/a";
+  const absolute = Math.abs(value);
+  if (absolute !== 0 && (absolute < 0.01 || absolute >= 10000)) return value.toExponential(1).replace("-", MINUS_SIGN);
+  return formatFixed(value, absolute < 1 ? 3 : 2);
+}
+
+export function landStencil(field, latitudes) {
+  const flip = latitudes[0] < latitudes[latitudes.length - 1];
+  const image = landStencilImageData(field, { flipVertical: flip });
+  const canvas = rasterCanvas(field.width, field.height);
+  canvas.getContext("2d").putImageData(image, 0, 0);
+  return canvas;
+}
+
+// These rasters are only ever blitted through drawImage, which takes a DOM canvas
+// exactly like an OffscreenCanvas, so browsers without OffscreenCanvas get a detached
+// HTMLCanvasElement instead.
+export function rasterCanvas(width, height) {
+  if (typeof OffscreenCanvas === "function") return new OffscreenCanvas(width, height);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+// Combine one or more [low, high] variable ranges into the range a field is colorized
+// with. A diverging colormap (balance/delta) is centred on physical zero, [-M, +M],
+// M = max|bound|, so its neutral colour reads as 0; a sequential map keeps the data
+// bounds ([min low, max high]).
+export function combineFieldRange(ranges, diverging) {
+  if (diverging) {
+    let magnitude = 0;
+    for (const [low, high] of ranges) magnitude = Math.max(magnitude, Math.abs(low), Math.abs(high));
+    const bound = magnitude || 1;
+    return [-bound, bound];
+  }
+  let low = Infinity;
+  let high = -Infinity;
+  for (const [rangeLow, rangeHigh] of ranges) {
+    if (rangeLow < low) low = rangeLow;
+    if (rangeHigh > high) high = rangeHigh;
+  }
+  return [Number.isFinite(low) ? low : 0, Number.isFinite(high) ? high : 1];
+}
