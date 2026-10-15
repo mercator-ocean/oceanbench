@@ -25,7 +25,7 @@ _CLOUDFERRO_STORAGE_OPTIONS = {
     },
 }
 
-_IFS_NOWCAST_DATASET_ROOT = "s3://oceanbench-bucket/public/ifs-nowcast"
+_IFS_NOWCAST_DATASET_ROOT = "s3://oceanbench-bucket/public/ifs-nowcast-corrected"
 
 _IFS_NOWCAST_ANALYSIS_VARIABLES = (
     "sotemair",
