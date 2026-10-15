@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// CROSS-PAGE CONTRACT: website/scores-summary.js imports initializeViewerConfig and
-// viewerDataBaseUrl from here, so the data-root precedence below is the scores page's as
-// much as the viewer's. Keep the two in one place; do not fork it. The file stays under
+// CROSS-PAGE CONTRACT: the viewer and the scores page (website/interactive-scores.js, which
+// imports resolveViewerDataUrl) both read the data root from here, so the data-root
+// precedence below is the scores page's as much as the viewer's. Keep the two in one place; do not fork it. The file stays under
 // website/viewer/ because that directory is also published on its own.
 
 const DEFAULT_REMOTE_DATA_BASE_URL =

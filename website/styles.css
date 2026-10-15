@@ -298,9 +298,12 @@ body.quarto-dark .challengers-table-wrap {
    cells that open their own view there, marked by a faint dotted underline. */
 .score-table .model-col a.viewer-model-link {
   display: inline-block;
+  box-sizing: content-box;
   width: 0.85em;
   height: 0.85em;
-  margin-left: 0.3em;
+  /* A padded hit area, taken back by the margins so the column and row keep their size. */
+  padding: 0.4em;
+  margin: -0.4em -0.4em -0.4em -0.1em;
   vertical-align: -0.05em;
   color: var(--bs-secondary, #6c757d);
   text-decoration: none;

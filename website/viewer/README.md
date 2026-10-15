@@ -206,3 +206,39 @@ classified network budget for a warm back-scrub, em dashes in rendered text, the
 fast-scrub render-token race, colour-range grow-only stability, particle liveness and
 the software DEFLATE decode path. `qa/README.md` documents each probe, how to reseed the
 two baselines, and what is deliberately not covered.
+
+## Status and hand-off
+
+- **Dev page**: https://oceanbench-viewer-dev.lab.dive.edito.eu/viewer.html. Branch
+  `viewer-dev` is main plus this viewer plus links from the score tables. Redeploy with
+  Actions > "Update website" > branch `viewer-dev`. The service exists, so updating it
+  needs no secret; creating a service for a new branch needs `EDITO_OFFLINE_TOKEN`.
+- **How it works**: a static page that reads pre-made display files from CloudFerro
+  `dev/benchmark/rebuild-preview/viewer/data/`. They are made by
+  `oceanbench evaluate --viewer-artifacts`, which exists only on branch `pipeline-rebuild`:
+  surface maps and 15 m currents at native resolution, 1 degree full-depth columns,
+  observation match-ups equal to the official Class IV ones, and eddies. Spectra and
+  particles are computed in the browser.
+- **Cost per model for one year (52 starts)**, on one large node (120-180 GB RAM):
+  1/12 degree about 3 h of compute once inputs are downloaded (about 20 h in practice),
+  60-70 GB; 1/4 degree (GLONET) about 3 h; 1 degree 2 to 10 h, about 6.5 GB; IBI 20 min
+  to 2 h. All current viewer data is 262 GB.
+- **Keeping it up to date**: a new model means running the command and adding it to the
+  viewer index files (`datasets.json`, `insights.json`) by hand. A new year means a rerun
+  plus a year selector (the UI assumes 2024). The published data is not the 0.6.0 scoring:
+  every manifest and insight file records `oceanbench_version` 0.5.0 (generated August to
+  October 2026, no git commit), and `scores-summary.json` records no version. Numbers can
+  differ from the site table: GLONET 15 m zonal current lead 1 is 0.12 there and 0.204
+  here. Score links only show on the newest table version.
+- **Moving the builder to main**: about 4,000-4,500 lines plus about 2,300 test lines in
+  about 15 files. Match-ups must be rebuilt on main's 0.6.0 Class IV code: the branch
+  version uses a per-challenger SLA shift and skips the shared Class IV population filter,
+  so its numbers differ from the official ones. It needs `oceanbench/core/classIV.py`
+  refactored to expose the filtered per-observation table, a reset of the Class IV
+  observation cache, the JSON schemas packaged inside `oceanbench/`, and the pyarrow and
+  scikit-image dependencies. Side-panel confidence bands, skill and period mode cannot be
+  derived from main's reports (the viewer falls back to means). Validate by matching
+  match-up RMSD, count and missing values with main's Class IV table for one global and
+  one IBI model.
+- **Known issues**: the score tables redraw once the viewer index loads, which resets
+  horizontal scroll on phones; cell links add many Tab stops.

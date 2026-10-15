@@ -328,7 +328,10 @@ const VIEWER_ICON =
 let viewerCatalog = null;
 let resolveViewerUrl = null;
 
+// The viewer holds one year of data, scored as the newest table version, so only that
+// version (the default one) links there.
 function viewerDatasetFor(name) {
+  if (activeVersion !== resolveDefaultVersion(parsedData)) return null;
   const slug = VIEWER_DATASET_NAMES[name] || name;
   return viewerCatalog?.datasets.has(slug) ? slug : null;
 }
@@ -337,17 +340,19 @@ function viewerHref(parameters) {
   return `viewer.html#${new URLSearchParams(parameters).toString()}`;
 }
 
-function viewerModelLinkHtml(name) {
+function viewerModelLinkHtml(name, regionId) {
   const slug = viewerDatasetFor(name);
   if (!slug) return "";
-  const href = viewerHref({ layout: "1", p0: `${slug},sea_water_potential_temperature,field` });
+  const href = viewerHref({ layout: "1", region: regionId, p0: `${slug},sea_water_potential_temperature,field` });
   const label = `Open ${escapeAttribute(displayName(name))} in the viewer`;
   return `<a class="viewer-model-link" href="${href}" title="${label}" aria-label="${label}">${VIEWER_ICON}</a>`;
 }
 
-// The viewer state that shows exactly what an observation score cell measures: that model,
-// variable, depth bin, lead day and region, with the Class IV match-ups on the map. Null
-// when the viewer has no such view, or the cell is not an observation score.
+// The viewer state closest to what an observation score cell measures: that model, variable,
+// depth bin, lead day and region over all start dates ("All dates"), which maps the mean
+// |obs - model| of the Class IV match-ups pooled over every start. The Class IV points show
+// once a single date is picked. Null when the viewer has no such view, or the cell is not an
+// observation score.
 function viewerCellHref(name, regionId, metricKey, depth, variable, day) {
   if (metricKey !== parsedData.sections.observations?.depth_metric) return null;
   const variableKey = VIEWER_OBSERVATION_VARIABLES[depth]?.[variable];
@@ -356,7 +361,7 @@ function viewerCellHref(name, regionId, metricKey, depth, variable, day) {
   if (!variableKey || !manifest || !(variableKey in manifest.variables)) return null;
   if (!manifest.lead_days.includes(Number(day))) return null;
   if (!viewerCatalog.insights?.datasets?.[slug]?.[regionId]?.class4_matchups) return null;
-  return viewerHref({ layout: "1", l: day, ov: "class4", region: regionId, p0: `${slug},${variableKey},field` });
+  return viewerHref({ layout: "1", scope: "year", l: day, ov: "class4", region: regionId, p0: `${slug},${variableKey},field` });
 }
 
 function fetchViewerJson(path) {
@@ -429,7 +434,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name)}</th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name, regionId)}</th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -462,7 +467,10 @@ function buildDataRows(
           : "";
         const emptyClass = value === null ? " no-value-cell" : "";
         const href = value !== null ? viewerCellHref(name, regionId, metricKey, depth, variable, day) : null;
-        if (href) display = `<a class="viewer-cell-link" href="${href}">${display}</a>`;
+        if (href) {
+          const label = `Open ${escapeAttribute(displayName(name))} ${variable}, lead ${day}, in the viewer`;
+          display = `<a class="viewer-cell-link" href="${href}" aria-label="${label}">${display}</a>`;
+        }
         rows += `<td class="score-value-cell${emptyClass}" style="${style}" title="${title}">${display}</td>`;
       }
     }
@@ -482,7 +490,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name)}</th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name, regionId)}</th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -1800,8 +1808,10 @@ function openTapTooltip(element) {
 }
 
 let tapTooltipClicksAttached = false;
+let lastPointerType = "";
 
 function attachTapTooltips() {
+  document.addEventListener("pointerdown", (event) => (lastPointerType = event.pointerType), { capture: true });
   // Desktop clicks must not open the tooltip, so wait for a real touch unless the
   // device reports that it has no hover at all.
   if (!window.matchMedia("(hover: none)").matches) {
@@ -1830,7 +1840,11 @@ function attachTapTooltipClicks() {
       closeTapTooltip();
       return;
     }
-    if (target.classList.contains("challenger-note-marker") || event.target.closest("a.viewer-cell-link")) {
+    // On a device with both touch and a mouse, only a touch or pen tap trades a cell's
+    // viewer link for the tooltip; a mouse click or the keyboard (detail 0) follows it.
+    const viewerLink = event.target.closest("a.viewer-cell-link");
+    if (viewerLink && (event.detail === 0 || !["touch", "pen"].includes(lastPointerType))) return;
+    if (target.classList.contains("challenger-note-marker") || viewerLink) {
       event.preventDefault();
     }
     const wasOpen = target.hasAttribute("data-tip-open");
