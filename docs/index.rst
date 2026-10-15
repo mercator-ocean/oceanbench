@@ -19,6 +19,7 @@ This documentation contains the definitions of the evaluation methods as well as
    shape-of-the-challenger-dataset
    evaluation-methods
    input-datasets-for-oceanbench-challenger-evaluation
+   input-data-conventions
    one-degree-track
    run-offline
    source/oceanbench

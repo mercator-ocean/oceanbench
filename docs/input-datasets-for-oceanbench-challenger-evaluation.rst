@@ -24,3 +24,5 @@ Available Datasets
     Weekly IFS forcings from January 3, 2023 to December 30, 2025.
 
     see more at: `ifs_forcings() <source/oceanbench.datasets.html#oceanbench.datasets.input.ifs_forcings>`_.
+
+The units and time conventions of both datasets are described in :ref:`input-data-conventions-page`.
