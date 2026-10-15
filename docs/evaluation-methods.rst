@@ -76,11 +76,12 @@ The area-weighted (cos latitude) `Root Mean Square Deviation (RMSD) <https://en.
 .. _mixed-layer-depth-method:
 
 This is a diagnostic of how consistent the challenger temperature and salinity are, not an accuracy score for the mixed layer depth itself.
-The reference is taken at the challenger's own depth levels.
+At every resolution, the reference profile is first taken at the challenger's own depth levels, using the nearest reference level.
 On each dataset, the density is the potential density anomaly σ₀ from TEOS-10, computed from the absolute salinity and the conservative temperature.
 The mixed layer depth is the first level whose density exceeds the density of the first level by 0.03 kg/m³, with no interpolation between levels.
 Only levels down to 600 meters are used.
-If the threshold is never reached, the mixed layer depth is the deepest valid level within 600 meters, which is 541 meters in the open ocean for every current challenger.
+If the threshold is never reached, the mixed layer depth is the deepest valid level within 600 meters.
+In the open ocean, this is 541 meters for every current challenger and for its reference.
 Challengers with different depth levels are compared with different references, so their mixed layer depth scores are not directly comparable.
 The Copernicus Marine ``mlotst`` variable uses a 0.01 kg/m³ threshold relative to 10 meters, so it should not be compared directly with this diagnostic.
 

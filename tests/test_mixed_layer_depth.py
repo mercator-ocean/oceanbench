@@ -4,9 +4,10 @@
 
 import gsw
 import numpy
+import pytest
 import xarray
 
-from oceanbench.core import mixed_layer_depth
+from oceanbench.core import metrics, mixed_layer_depth
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 
@@ -226,3 +227,75 @@ def test_mixed_layer_depth_keeps_the_crossing_level_of_the_previous_density() ->
 
     assert previous_crossing_depth == 47.374
     assert float(mixed_layer_depth_dataset[Variable.MIXED_LAYER_DEPTH.key()].values.squeeze()) == 47.374
+
+
+STANDARD_50_DEPTHS = [
+    0.494, 1.541, 2.646, 3.819, 5.078, 6.441, 7.93, 9.573, 11.405, 13.467,
+    15.81, 18.496, 21.599, 25.211, 29.445, 34.434, 40.344, 47.374, 55.764, 65.807,
+    77.854, 92.326, 109.729, 130.666, 155.851, 186.126, 222.475, 266.04, 318.127, 380.213,
+    453.938, 541.089, 643.567, 763.333, 902.339, 1062.44, 1245.291, 1452.251, 1684.284, 1941.893,
+    2225.078, 2533.336, 2865.703, 3220.82, 3597.032, 3992.484, 4405.224, 4833.291, 5274.784, 5727.917,
+]  # fmt: skip
+NINE_CHALLENGER_DEPTHS = [0.494, 47.374, 92.326, 155.851, 222.475, 318.127, 380.213, 453.938, 541.089]
+
+
+def _stratified_dataset(depths: list[float]) -> xarray.Dataset:
+    dimension_names = [
+        Dimension.FIRST_DAY_DATETIME.key(),
+        Dimension.LEAD_DAY_INDEX.key(),
+        Dimension.DEPTH.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
+    ]
+    depth_values = numpy.array(depths)
+    shape = (1, 1, len(depths), 1, 1)
+    return xarray.Dataset(
+        data_vars={
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(): (
+                dimension_names,
+                (20.0 - 0.02 * depth_values).reshape(shape),
+            ),
+            Variable.SEA_WATER_SALINITY.key(): (dimension_names, numpy.full(shape, 35.0)),
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): [numpy.datetime64("2024-01-03")],
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.DEPTH.key(): depths,
+            Dimension.LATITUDE.key(): [PROFILE_LATITUDE],
+            Dimension.LONGITUDE.key(): [PROFILE_LONGITUDE],
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("metric", "reference_loader_name"),
+    [
+        (metrics.rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis, "glorys_reanalysis_dataset"),
+        (metrics.rmsd_of_mixed_layer_depth_compared_to_glo12_analysis, "glo12_analysis_dataset"),
+    ],
+)
+def test_reference_mixed_layer_depth_is_computed_at_the_challenger_depth_levels(
+    monkeypatch, metric, reference_loader_name
+) -> None:
+    reference_dataset = _stratified_dataset(STANDARD_50_DEPTHS)
+    challenger_dataset = _stratified_dataset(NINE_CHALLENGER_DEPTHS)
+    captured = {}
+
+    def fake_rmsd(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(metrics, reference_loader_name, lambda _challenger_dataset: reference_dataset)
+    monkeypatch.setattr(metrics, "ocean_mask", lambda: None)
+    monkeypatch.setattr(metrics, "rmsd", fake_rmsd)
+
+    metric(challenger_dataset)
+
+    mixed_layer_depth_key = Variable.MIXED_LAYER_DEPTH.key()
+    reference_mixed_layer_depth = captured["reference_dataset"][mixed_layer_depth_key]
+    restricted_reference = reference_dataset.sel({Dimension.DEPTH.key(): NINE_CHALLENGER_DEPTHS})
+    expected = mixed_layer_depth.compute_mixed_layer_depth(restricted_reference)[mixed_layer_depth_key]
+    full_reference = mixed_layer_depth.compute_mixed_layer_depth(reference_dataset)[mixed_layer_depth_key]
+
+    assert float(full_reference.values.squeeze()) == 6.441
+    assert float(expected.values.squeeze()) == 47.374
+    xarray.testing.assert_identical(reference_mixed_layer_depth.compute(), expected.compute())
