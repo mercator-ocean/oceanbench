@@ -444,7 +444,7 @@ def _interpolate_model_to_observations(
     model_depths = model_data[Dimension.DEPTH.key()].values
     first_days = model_data[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days = model_data[Dimension.LEAD_DAY_INDEX.key()].values
-    first_day_to_index = {first_day: index for index, first_day in enumerate(first_days)}
+    first_day_to_index = {pandas.Timestamp(first_day): index for index, first_day in enumerate(first_days)}
     lead_day_to_index = {lead_day: index for index, lead_day in enumerate(lead_days)}
     model_values = numpy.full(len(observations_dataframe), numpy.nan)
     for first_day, first_day_group in observations_dataframe.groupby("first_day", sort=False):
@@ -452,7 +452,7 @@ def _interpolate_model_to_observations(
             model_values,
             model_data,
             first_day_group,
-            first_day_to_index[first_day],
+            first_day_to_index[pandas.Timestamp(first_day)],
             lead_day_to_index,
             model_depths,
         )

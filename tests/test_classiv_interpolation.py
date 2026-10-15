@@ -5,6 +5,7 @@
 import dask.array
 import numpy
 import pandas
+import pytest
 import xarray
 
 from oceanbench.core.classIV_support import (
@@ -15,8 +16,8 @@ from oceanbench.core.runtime_configuration import RuntimeConfiguration
 import oceanbench.core.runtime_configuration as runtime_configuration
 
 
-def _model_data() -> xarray.DataArray:
-    first_days = numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]")
+def _model_data(first_day_unit: str = "ns") -> xarray.DataArray:
+    first_days = numpy.array(["2024-01-03", "2024-01-10"], dtype=f"datetime64[{first_day_unit}]")
     lead_days = numpy.array([0, 1, 2])
     depths = numpy.array([0.0])
     latitudes = numpy.array([0.0, 1.0])
@@ -105,6 +106,22 @@ def test_class4_fast_interpolation_materializes_each_first_day_block_once(monkey
 
     numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0, 100.75, 122.25])
     assert first_day_block_compute_calls == [(0, 1, 2), (0, 1, 2)]
+
+
+@pytest.mark.parametrize("first_day_unit", ["D", "s", "ns"])
+def test_class4_interpolation_matches_first_days_whatever_their_datetime_unit(first_day_unit: str) -> None:
+    model_values = interpolate_class4_model_to_observations(_model_data(first_day_unit), _observations_dataframe())
+
+    numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0, 100.75, 122.25])
+
+
+@pytest.mark.parametrize("first_day_unit", ["D", "s", "ns"])
+def test_class4_interpolation_matches_a_single_first_day_whatever_its_datetime_unit(first_day_unit: str) -> None:
+    model_data = _model_data(first_day_unit).isel({Dimension.FIRST_DAY_DATETIME.key(): [0]})
+
+    model_values = interpolate_class4_model_to_observations(model_data, _observations_dataframe().iloc[:3])
+
+    numpy.testing.assert_allclose(model_values, [0.0, 11.5, 23.0])
 
 
 def _salinity_model_data() -> xarray.DataArray:
