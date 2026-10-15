@@ -17,12 +17,7 @@ from oceanbench.core.datetime_utils import generate_dates
 from oceanbench.core.remote_http import open_remote_zarr, remote_zarr_store
 
 
-_CLOUDFERRO_STORAGE_OPTIONS = {
-    "anon": True,
-    "client_kwargs": {
-        "endpoint_url": "https://s3.waw3-1.cloudferro.com",
-    },
-}
+_ADDITIONAL_DATA_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data"
 
 
 def _glo12_nowcast_datetimes() -> list[datetime]:
@@ -43,7 +38,7 @@ def glo12_nowcasts() -> xarray.Dataset:
 
 def _glo12_nowcast_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"s3://oceanbench-bucket/dev/additionnal-data/GLO12/glo12_rg_1d-m_nwct_R{start_datetime_string}.zarr"
+    return f"{_ADDITIONAL_DATA_URL}/GLO12/glo12_rg_1d-m_nwct_R{start_datetime_string}.zarr"
 
 
 def ifs_forcings() -> xarray.Dataset:
@@ -56,7 +51,7 @@ def ifs_forcings() -> xarray.Dataset:
 
 def _ifs_forcing_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"s3://oceanbench-bucket/dev/additionnal-data/IFS/ifs_forcing_rg_forecasts_R{start_datetime_string}.zarr"
+    return f"{_ADDITIONAL_DATA_URL}/IFS/ifs_forcing_rg_forecasts_R{start_datetime_string}.zarr"
 
 
 def _open_weekly_zarr_datasets(
@@ -71,7 +66,7 @@ def _open_weekly_zarr_datasets(
 
 
 def _open_grouped_zarr_dataset(dataset_path: str) -> xarray.Dataset:
-    groups = tuple(zarr.open_group(remote_zarr_store(dataset_path, _CLOUDFERRO_STORAGE_OPTIONS), mode="r").group_keys())
+    groups = tuple(zarr.open_consolidated(remote_zarr_store(dataset_path), mode="r").group_keys())
     datasets = [_open_zarr_group_dataset(dataset_path, group) for group in groups]
     return xarray.merge(datasets, compat="override", combine_attrs="override", join="override")
 
@@ -79,7 +74,6 @@ def _open_grouped_zarr_dataset(dataset_path: str) -> xarray.Dataset:
 def _open_zarr_group_dataset(dataset_path: str, group: str) -> xarray.Dataset:
     dataset = open_remote_zarr(
         dataset_path,
-        _CLOUDFERRO_STORAGE_OPTIONS,
         group=group,
         chunks={},
     )
