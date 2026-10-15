@@ -35,7 +35,7 @@ It also writes a few small working files there, so the directory must be writabl
 
 To evaluate a region, give both commands the same region, with ``--region``, ``--region-file`` or the ``OCEANBENCH_REGION`` environment variable.
 
-What gets cached
+What gets staged
 ****************
 
 ``oceanbench stage`` writes these datasets to the stage directory:
@@ -52,16 +52,16 @@ The native 1/12 degree references are read with the Copernicus Marine Toolbox.
 The node that runs step 1 therefore needs Copernicus Marine Service credentials, as described in the README.
 The offline node does not need them.
 
-The cache belongs to one challenger
-***********************************
+The stage directory belongs to one challenger
+*********************************************
 
-The cached data depends on the challenger: its forecast dates, its number of lead days and its depths.
+The staged data depends on the challenger: its forecast dates, its number of lead days and its depths.
 Step 1 must use the same challenger file as step 2.
 If the challenger changes, run step 1 again so that the missing data gets downloaded.
 Data already in the stage directory is not downloaded again.
 
-Keep the cache
-**************
+Keep the stage directory
+************************
 
 ``oceanbench stage`` never deletes the stage directory.
 A successful ``oceanbench evaluate`` deletes it at the end of the run unless ``--keep-stage`` is given.
