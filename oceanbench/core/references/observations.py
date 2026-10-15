@@ -25,14 +25,17 @@ from oceanbench.core.local_stage import (
     write_dataset_to_local_stage,
 )
 from oceanbench.core.remote_http import (
-    RetriableRemoteDataError,
+    IncompleteRemoteDatasetError,
+    open_remote_multizarr,
+    open_remote_zarr,
     require_remote_dataset_dimensions,
-    with_remote_http_retries,
 )
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2023-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
-OBSERVATIONS_STAGE_VERSION = "v3"
+OBSERVATIONS_STAGE_VERSION = "v4"
+OBSERVATIONS_BASIS_VERSION_ATTRIBUTE = "obs_basis_version"
+EXPECTED_OBSERVATIONS_BASIS_VERSION = "2024-v2.1.0"
 _CLOUDFERRO_OBSERVATION_YEARS = (2023, 2025)
 
 
@@ -42,11 +45,11 @@ class ObservationDataUnavailableError(ValueError):
 
 def _mean_dynamic_topography_zarr_url(resolution: str) -> str:
     if resolution == "twelfth_degree":
-        return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt.zarr"
+        return "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/GLO12_MDT/GLO-MFC_001_024_mdt.zarr"
     if resolution == "quarter_degree":
-        return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt_025deg.zarr"
+        return "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/GLO12_MDT/GLO-MFC_001_024_mdt_025deg.zarr"
     if resolution == "one_degree":
-        return "https://minio.dive.edito.eu/project-oceanbench/public/GLO12_MDT/" "GLO-MFC_001_024_mdt_1_deg.zarr"
+        return "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/GLO12_MDT/GLO-MFC_001_024_mdt_1_deg.zarr"
     raise ValueError(f"Unsupported resolution : {resolution}.")
 
 
@@ -62,9 +65,8 @@ def _build_staged_mean_dynamic_topography_dataset(
     mean_dynamic_topography_url: str,
     stage_path: Path,
 ) -> None:
-    mean_dynamic_topography_dataset = open_dataset(
+    mean_dynamic_topography_dataset = open_remote_zarr(
         mean_dynamic_topography_url,
-        engine="zarr",
         chunks="auto",
         consolidated=True,
     )
@@ -78,9 +80,8 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
     def open_mean_dynamic_topography_dataset() -> Dataset:
         mean_dynamic_topography_url = _mean_dynamic_topography_zarr_url(resolution)
         if not should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY):
-            return open_dataset(
+            return open_remote_zarr(
                 mean_dynamic_topography_url,
-                engine="zarr",
                 chunks="auto",
                 consolidated=True,
             )
@@ -94,7 +95,7 @@ def load_mean_dynamic_topography(resolution: str) -> Dataset:
             ),
         )
 
-    dataset = with_remote_http_retries("mean dynamic topography open", open_mean_dynamic_topography_dataset)
+    dataset = open_mean_dynamic_topography_dataset()
     dataset = rename_dataset_with_standard_names(dataset)
     return dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()]
 
@@ -104,10 +105,58 @@ def observation_path(day_datetime: numpy.datetime64, evaluation_year: int = DEFA
     day_string = pandas.Timestamp(day_datetime).strftime("%Y%m%d")
     if resolved_evaluation_year in _CLOUDFERRO_OBSERVATION_YEARS:
         return cloudferro_public_url(f"observations{resolved_evaluation_year}", f"{day_string}.zarr")
-    return (
-        "https://minio.dive.edito.eu/project-oceanbench/public/"
-        f"observations{resolved_evaluation_year}/{day_string}.zarr"
-    )
+    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/observations2024-v2/{day_string}.zarr"
+
+
+class ObservationBasisVersionError(ValueError):
+    pass
+
+
+def _require_observation_basis_version(day_observations_dataset: Dataset) -> Dataset:
+    found_basis_version = day_observations_dataset.attrs.get(OBSERVATIONS_BASIS_VERSION_ATTRIBUTE)
+    if found_basis_version != EXPECTED_OBSERVATIONS_BASIS_VERSION:
+        raise ObservationBasisVersionError(
+            "Observation day store was built on an unexpected basis version. "
+            f"Expected {OBSERVATIONS_BASIS_VERSION_ATTRIBUTE}={EXPECTED_OBSERVATIONS_BASIS_VERSION!r}, "
+            f"found {found_basis_version!r}."
+        )
+    return day_observations_dataset
+
+
+def _consumed_observation_variable_keys() -> list[str]:
+    return [
+        Dimension.TIME.key(),
+        Dimension.DEPTH.key(),
+        Dimension.LATITUDE.key(),
+        Dimension.LONGITUDE.key(),
+        Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(),
+        Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key(),
+        Variable.SEA_WATER_SALINITY.key(),
+        Variable.EASTWARD_SEA_WATER_VELOCITY.key(),
+        Variable.NORTHWARD_SEA_WATER_VELOCITY.key(),
+    ]
+
+
+def _select_consumed_observation_variables(
+    day_observations_dataset: Dataset,
+) -> Dataset:
+    consumed_variable_keys = _consumed_observation_variable_keys()
+    missing_variable_keys = [
+        variable_key
+        for variable_key in consumed_variable_keys
+        if variable_key not in day_observations_dataset.variables
+    ]
+    if missing_variable_keys:
+        raise IncompleteRemoteDatasetError(
+            "Remote dataset opened without expected variables "
+            f"{missing_variable_keys} during observation dataset open. "
+            f"Available variables: {sorted(day_observations_dataset.variables)}"
+        )
+    return day_observations_dataset[consumed_variable_keys]
+
+
+def _prepare_day_observations_dataset(day_observations_dataset: Dataset) -> Dataset:
+    return _select_consumed_observation_variables(_require_observation_basis_version(day_observations_dataset))
 
 
 def _assign_standard_names(observations_dataset: Dataset) -> Dataset:
@@ -205,22 +254,33 @@ def _selected_observations_dataset(
     first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
 
     observation_paths = [observation_path(observation_day, evaluation_year) for observation_day in observation_days]
-    observations_dataset = open_mfdataset(
-        observation_paths,
-        engine="zarr",
-        decode_cf=False,
-        parallel=False,
-        concat_dim=source_observation_dimension_key,
-        combine="nested",
-        **zarr_open_kwargs(observation_paths[0]),
-    )
+    preprocess = _prepare_day_observations_dataset if evaluation_year == 2024 else None
+    if evaluation_year == 2024:
+        observations_dataset = open_remote_multizarr(
+            observation_paths,
+            preprocess=preprocess,
+            decode_cf=False,
+            parallel=False,
+            concat_dim=source_observation_dimension_key,
+            combine="nested",
+        )
+    else:
+        observations_dataset = open_mfdataset(
+            observation_paths,
+            engine="zarr",
+            decode_cf=False,
+            parallel=False,
+            concat_dim=source_observation_dimension_key,
+            combine="nested",
+            **zarr_open_kwargs(observation_paths[0]),
+        )
     observations_dataset = require_remote_dataset_dimensions(
         observations_dataset,
         [source_observation_dimension_key],
         "observation dataset open",
     )
     if time_key not in observations_dataset.variables:
-        raise RetriableRemoteDataError(
+        raise IncompleteRemoteDatasetError(
             f"Remote dataset opened without expected variable {time_key!r} during observation dataset open. "
             f"Available variables: {sorted(observations_dataset.variables)}"
         )
@@ -294,4 +354,4 @@ def observations(challenger_dataset: Dataset) -> Dataset:
             ),
         )
 
-    return with_remote_http_retries("observation dataset open", open_selected_observations)
+    return open_selected_observations()

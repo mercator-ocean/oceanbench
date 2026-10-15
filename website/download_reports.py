@@ -20,10 +20,6 @@ REPORTS_DIRECTORY = os.path.join(SCRIPT_DIRECTORY, "reports")
 QUARTO_METADATA_FILE_PATH = os.path.join(REPORTS_DIRECTORY, "_metadata.yml")
 
 
-def _version_already_downloaded(version: str) -> bool:
-    return any(discover_downloaded_reports(REPORTS_DIRECTORY, version).values())
-
-
 def _clear_version_report_notebooks(version_directory: str) -> None:
     if not os.path.isdir(version_directory):
         return
@@ -36,10 +32,12 @@ def _download_version_reports(version: str) -> bool:
     version_directory = os.path.join(REPORTS_DIRECTORY, version)
     published_reports = discover_official_reports(version)
     print(f"[{version}] discovered reports: {published_reports}")
+    downloaded_reports = discover_downloaded_reports(REPORTS_DIRECTORY, version)
     pending_reports = [
         (challenger_name, region_id)
         for region_id, challenger_names in published_reports.items()
         for challenger_name in challenger_names
+        if challenger_name not in downloaded_reports.get(region_id, [])
     ]
 
     def download(report: tuple[str, str]) -> str | None:
@@ -65,13 +63,9 @@ def main() -> None:
 
     has_reports = False
     for version in report_versions:
-        if version != active_version and _version_already_downloaded(version):
-            print(f"[{version}] already downloaded, keeping")
-            has_reports = True
-            continue
         if version == active_version:
             _clear_version_report_notebooks(os.path.join(REPORTS_DIRECTORY, version))
-        if _download_version_reports(version):
+        if _download_version_reports(version) or any(discover_downloaded_reports(REPORTS_DIRECTORY, version).values()):
             has_reports = True
 
     if not has_reports:

@@ -8,10 +8,14 @@ from os import environ
 from pathlib import PurePosixPath
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.evaluation_year import DEFAULT_EVALUATION_YEAR, validate_evaluation_year
+from oceanbench.core.evaluation_timings import format_evaluation_timings
+from oceanbench.core.evaluation_year import validate_evaluation_year
 from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
 from oceanbench.core.regions import RegionLike, resolve_region
-from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
+from oceanbench.core.runtime_configuration import (
+    RuntimeConfiguration,
+    runtime_configuration_from_environment,
+)
 from papermill import execute_notebook
 
 
@@ -52,6 +56,10 @@ def _resolve_region_input(region: RegionLike) -> RegionLike:
     )
 
 
+def resolve_evaluation_region(region: RegionLike):
+    return resolve_region(_resolve_region_input(region))
+
+
 def _derive_output_notebook_file_name(
     challenger_path: str,
     region: RegionLike,
@@ -59,9 +67,7 @@ def _derive_output_notebook_file_name(
 ) -> str:
     resolved_region = resolve_region(region)
     stem = PurePosixPath(challenger_path).stem
-    if evaluation_year != DEFAULT_EVALUATION_YEAR:
-        return f"{stem}.{evaluation_year}.{resolved_region.id}.report.ipynb"
-    return f"{stem}.{resolved_region.id}.report.ipynb"
+    return f"{stem}.{evaluation_year}.{resolved_region.id}.report.ipynb"
 
 
 @contextmanager
@@ -107,8 +113,7 @@ def evaluate_challenger(
     This function is used for official evaluation.
 
     The output notebook file name is automatically derived from the challenger file name:
-    ``glonet.py`` becomes ``glonet.global.report.ipynb`` for the default 2024 evaluation year,
-    and ``glonet.2023.global.report.ipynb`` for the 2023 evaluation year.
+    ``glonet.py`` becomes ``glonet.2024.global.report.ipynb`` for a global evaluation in 2024.
 
     Parameters
     ----------
@@ -129,7 +134,7 @@ def evaluate_challenger(
         challenger_python_code_uri_or_local_path,
         OceanbenchEnvironmentVariable.OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH,
     )
-    resolved_region = resolve_region(_resolve_region_input(region))
+    resolved_region = resolve_evaluation_region(region)
     resolved_output_bucket = _parse_input_non_manadatory(
         output_bucket,
         OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_BUCKET,
@@ -172,10 +177,11 @@ def _execute_evaluation_notebook_file(
     else:
         output_path = output_notebook_file_name
     with _runtime_configuration_environment(runtime_configuration):
-        execute_notebook(
+        executed_notebook = execute_notebook(
             output_notebook_file_name,
             output_path,
         )
+    print(format_evaluation_timings(executed_notebook, output_name))
 
 
 def _evaluate_challenger(

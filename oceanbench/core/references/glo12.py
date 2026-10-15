@@ -16,7 +16,6 @@ from oceanbench.core.reference_depths import (
     reference_depth_grid_stage_variant,
     with_reference_depth_grid_metadata,
 )
-from oceanbench.core.remote_http import with_remote_http_retries
 from oceanbench.core.weekly_stage import (
     maybe_stage_weekly_dataset,
     prepare_reference_week_dataset,
@@ -46,7 +45,7 @@ def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
     if _use_cloudferro_reference(first_day_datetime):
         return _cloudferro_reference_path("glo14", first_day_datetime)
     first_day = datetime.fromisoformat(str(first_day_datetime)).strftime("%Y%m%d")
-    return f"https://minio.dive.edito.eu/project-oceanbench/public/glo14/{first_day}.zarr"
+    return f"https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/glo14/{first_day}.zarr"
 
 
 def _glo12_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
@@ -55,7 +54,7 @@ def _glo12_1_degree_path(first_day_datetime: numpy.datetime64) -> str:
     first_day_datetime = datetime.fromisoformat(str(first_day_datetime))
     first_day = first_day_datetime.strftime("%Y%m%d")
     return (
-        "https://minio.dive.edito.eu/project-oceanbench/public/"
+        "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/"
         f"glo12_1degree_{first_day_datetime.year}_V2/{first_day}.zarr"
     )
 
@@ -151,7 +150,11 @@ def _prepare_glo12_1_12_week_dataset(
 ) -> Dataset:
     return with_reference_depth_grid_metadata(
         prepare_reference_week_dataset(
-            _glo12_1_12_path(first_day_datetime, days_count=lead_days_count, target_depths=target_depths),
+            _glo12_1_12_path(
+                first_day_datetime,
+                days_count=lead_days_count,
+                target_depths=target_depths,
+            ),
             lead_days_count=lead_days_count,
             operation_name="GLO12 twelfth-degree dataset open",
         ),
@@ -258,6 +261,6 @@ def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
         else:
             raise ValueError(f"Unsupported resolution: {resolution}")
 
-    reference_dataset = with_remote_http_retries("GLO12 reference dataset open", open_dataset)
+    reference_dataset = open_dataset()
     _GLO12_ANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
     return reference_dataset

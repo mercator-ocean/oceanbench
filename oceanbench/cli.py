@@ -11,8 +11,15 @@ from urllib.request import Request, urlopen
 
 from oceanbench.core.local_stage import cleanup_local_stage_directory
 from oceanbench.core.evaluation_year import SUPPORTED_EVALUATION_YEARS
-from oceanbench.core.regions import RegionLike, get_pre_defined_region_names, load_region_file
-from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
+from oceanbench.core.regions import (
+    RegionLike,
+    get_pre_defined_region_names,
+    load_region_file,
+)
+from oceanbench.core.runtime_configuration import (
+    RuntimeConfiguration,
+    runtime_configuration_from_environment,
+)
 from oceanbench.core.version import __version__
 
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/mercator-ocean/oceanbench"
@@ -125,7 +132,7 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
         staged_components=(
             tuple(args.stage) if args.stage is not None else environment_configuration.staged_components
         ),
-        stage_directory=args.stage_dir if args.stage_dir is not None else environment_configuration.stage_directory,
+        stage_directory=(args.stage_dir if args.stage_dir is not None else environment_configuration.stage_directory),
         stage_max_workers=(
             args.stage_max_workers
             if args.stage_max_workers is not None
@@ -133,6 +140,9 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
         ),
         remote_retries=(
             args.remote_retries if args.remote_retries is not None else environment_configuration.remote_retries
+        ),
+        evaluation_year=(
+            args.evaluation_year if args.evaluation_year is not None else environment_configuration.evaluation_year
         ),
         class4_fast_interpolation=environment_configuration.class4_fast_interpolation,
     )

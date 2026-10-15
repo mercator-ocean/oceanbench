@@ -4,6 +4,7 @@
 
 import pytest
 
+from oceanbench.core.evaluate import _derive_output_notebook_file_name
 from oceanbench.core.evaluation_year import (
     evaluation_year_first_day_datetimes,
     validate_evaluation_year,
@@ -39,6 +40,11 @@ def test_validate_evaluation_year_rejects_unsupported_year() -> None:
         validate_evaluation_year(2022)
 
 
+def test_evaluation_report_output_names_include_the_evaluation_year() -> None:
+    assert _derive_output_notebook_file_name("glonet.py", "global", 2024) == ("glonet.2024.global.report.ipynb")
+    assert _derive_output_notebook_file_name("glonet.py", "ibi", 2025) == ("glonet.2025.ibi.report.ipynb")
+
+
 def test_ml_forecast_output_paths_use_true_evaluation_dates() -> None:
     first_day_datetimes_2023 = evaluation_year_first_day_datetimes(2023)
     first_day_datetimes_2025 = evaluation_year_first_day_datetimes(2025)
@@ -57,7 +63,7 @@ def test_ml_forecast_output_paths_use_true_evaluation_dates() -> None:
 def test_observation_path_uses_evaluation_year_bucket() -> None:
     assert observation_path("2023-01-04", 2023) == "s3://oceanbench-bucket/public/observations2023/20230104.zarr"
     assert observation_path("2025-01-04", 2025) == "s3://oceanbench-bucket/public/observations2025/20250104.zarr"
-    assert observation_path("2024-01-04", 2024).endswith("/observations2024/20240104.zarr")
+    assert observation_path("2024-01-04", 2024).endswith("/observations2024-v2/20240104.zarr")
 
 
 def test_reference_paths_use_cloudferro_for_true_2023_and_2025_evaluations() -> None:
