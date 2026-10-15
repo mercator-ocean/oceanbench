@@ -6,7 +6,7 @@ import pandas
 import xarray
 
 from oceanbench.core.classIV import rmsd_class4_validation
-from oceanbench.core.dataset_utils import Variable
+from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.lagrangian_trajectory import (
     deviation_of_lagrangian_trajectories,
@@ -33,6 +33,14 @@ def _lagrangian_particle_count(
         global_particle_count=GLOBAL_LAGRANGIAN_PARTICLE_COUNT,
         minimum_particle_count=MINIMUM_LAGRANGIAN_PARTICLE_COUNT,
     )
+
+
+def _reference_at_challenger_depths(
+    reference_dataset: xarray.Dataset,
+    challenger_dataset: xarray.Dataset,
+) -> xarray.Dataset:
+    depth_dimension = Dimension.DEPTH.key()
+    return reference_dataset.sel({depth_dimension: challenger_dataset[depth_dimension].values}, method="nearest")
 
 
 def rmsd_of_variables_compared_to_observations(
@@ -85,7 +93,10 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     return rmsd(
         challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
         reference_dataset=compute_mixed_layer_depth(
-            subset_dataset_to_region(glorys_reanalysis_dataset(challenger_dataset), region)
+            _reference_at_challenger_depths(
+                subset_dataset_to_region(glorys_reanalysis_dataset(challenger_dataset), region),
+                challenger_dataset,
+            )
         ),
         variables=[
             Variable.MIXED_LAYER_DEPTH,
@@ -151,7 +162,10 @@ def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     return rmsd(
         challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
         reference_dataset=compute_mixed_layer_depth(
-            subset_dataset_to_region(glo12_analysis_dataset(challenger_dataset), region)
+            _reference_at_challenger_depths(
+                subset_dataset_to_region(glo12_analysis_dataset(challenger_dataset), region),
+                challenger_dataset,
+            )
         ),
         variables=[
             Variable.MIXED_LAYER_DEPTH,

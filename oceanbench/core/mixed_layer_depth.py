@@ -38,7 +38,8 @@ def _compute_absolute_salinity(
     longitude: xarray.DataArray,
     latitude: xarray.DataArray,
 ) -> xarray.DataArray:
-    return gsw.SA_from_SP(salinity, depth, longitude, latitude)
+    pressure = gsw.p_from_z(-depth, latitude)
+    return gsw.SA_from_SP(salinity, pressure, longitude, latitude)
 
 
 def _compute_potential_density(
@@ -48,7 +49,8 @@ def _compute_potential_density(
 ) -> xarray.DataArray:
     absolute_salinity = absolute_salinity.clip(min=0)  # filter out negative salinities
 
-    return gsw.pot_rho_t_exact(absolute_salinity, temperature, depth, 0)
+    conservative_temperature = gsw.CT_from_pt(absolute_salinity, temperature)  # temperature is potential
+    return gsw.sigma0(absolute_salinity, conservative_temperature)
 
 
 def _compute_mixed_layer_depth(dataset: xarray.Dataset) -> xarray.Dataset:
