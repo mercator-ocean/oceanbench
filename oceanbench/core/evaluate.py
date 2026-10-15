@@ -56,10 +56,6 @@ def _resolve_region_input(region: RegionLike) -> RegionLike:
     )
 
 
-def resolve_evaluation_region(region: RegionLike):
-    return resolve_region(_resolve_region_input(region))
-
-
 def _derive_output_notebook_file_name(
     challenger_path: str,
     region: RegionLike,
@@ -134,7 +130,7 @@ def evaluate_challenger(
         challenger_python_code_uri_or_local_path,
         OceanbenchEnvironmentVariable.OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH,
     )
-    resolved_region = resolve_evaluation_region(region)
+    resolved_region = resolve_region(_resolve_region_input(region))
     resolved_output_bucket = _parse_input_non_manadatory(
         output_bucket,
         OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_BUCKET,

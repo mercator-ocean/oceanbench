@@ -21,6 +21,13 @@ def glo12(
     """
     Open the GLO12 challenger dataset.
 
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+    evaluation_year : int or str, optional
+        Evaluation year used when ``first_day_datetimes`` is not provided.
+
     Returns
     -------
     Dataset
@@ -54,6 +61,13 @@ def glo12_1_degree(
     """
     Open the GLO12 challenger dataset interpolated to the 1 degree resolution.
 
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+    evaluation_year : int or str, optional
+        Evaluation year used when ``first_day_datetimes`` is not provided.
+
     Returns
     -------
     Dataset
@@ -84,6 +98,11 @@ def glo12_1_degree(
 def glo36v1(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     """
     Open the GLO36V1 challenger dataset.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
 
     Returns
     -------
@@ -117,6 +136,13 @@ def glonet(
 ) -> xarray.Dataset:
     """
     Open the GLONET challenger dataset.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+    evaluation_year : int or str, optional
+        Evaluation year used when ``first_day_datetimes`` is not provided.
 
     Returns
     -------
@@ -160,6 +186,13 @@ def glonet_1_degree(
 ) -> xarray.Dataset:
     """
     Open the GLONET challenger dataset interpolated to the 1 degree resolution.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+    evaluation_year : int or str, optional
+        Evaluation year used when ``first_day_datetimes`` is not provided.
 
     Returns
     -------
@@ -205,6 +238,13 @@ def langya(
     """
     Open the LangYa challenger dataset.
 
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+    evaluation_year : int or str, optional
+        Evaluation year used when ``first_day_datetimes`` is not provided.
+
     Returns
     -------
     Dataset
@@ -221,6 +261,13 @@ def langya_1_degree(
     """
     Open the LangYa challenger dataset interpolated to the 1 degree resolution.
 
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+    evaluation_year : int or str, optional
+        Evaluation year used when ``first_day_datetimes`` is not provided.
+
     Returns
     -------
     Dataset
@@ -236,6 +283,13 @@ def xihe(
 ) -> xarray.Dataset:
     """
     Open the XiHe challenger dataset.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+    evaluation_year : int or str, optional
+        Evaluation year used when ``first_day_datetimes`` is not provided.
 
     Returns
     -------
@@ -273,6 +327,13 @@ def xihe_1_degree(
 ) -> xarray.Dataset:
     """
     Open the XiHe challenger dataset interpolated to the 1 degree resolution.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+    evaluation_year : int or str, optional
+        Evaluation year used when ``first_day_datetimes`` is not provided.
 
     Returns
     -------
@@ -312,6 +373,13 @@ def wenhai(
     """
     Open the WenHai challenger dataset.
 
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+    evaluation_year : int or str, optional
+        Evaluation year used when ``first_day_datetimes`` is not provided.
+
     Returns
     -------
     Dataset
@@ -348,6 +416,13 @@ def wenhai_1_degree(
 ) -> xarray.Dataset:
     """
     Open the WenHai challenger dataset interpolated to the 1 degree resolution.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+    evaluation_year : int or str, optional
+        Evaluation year used when ``first_day_datetimes`` is not provided.
 
     Returns
     -------
