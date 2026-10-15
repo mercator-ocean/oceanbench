@@ -25,4 +25,9 @@ Available Datasets
 
     see more at: `ifs_forcings() <source/oceanbench.datasets.html#oceanbench.datasets.input.ifs_forcings>`_.
 
-The units and time conventions of both datasets are described in :ref:`input-data-conventions-page`.
+``oceanbench.datasets.input.ifs_nowcasts()``
+    6-hourly IFS atmospheric nowcasts from January 2 to December 24, 2024.
+
+    see more at: `ifs_nowcasts() <source/oceanbench.datasets.html#oceanbench.datasets.input.ifs_nowcasts>`_.
+
+The units and time conventions of the GLO12 nowcasts and the IFS forcings are described in :ref:`input-data-conventions-page`.
