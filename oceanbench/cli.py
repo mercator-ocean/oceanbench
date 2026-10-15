@@ -128,7 +128,7 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
         staged_components=(
             tuple(args.stage) if args.stage is not None else environment_configuration.staged_components
         ),
-        stage_directory=args.stage_dir if args.stage_dir is not None else environment_configuration.stage_directory,
+        stage_directory=args.stage_dir or environment_configuration.stage_directory,
         stage_max_workers=(
             args.stage_max_workers
             if args.stage_max_workers is not None
@@ -170,7 +170,12 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         runtime_configuration,
         region,
     )
-    if runtime_configuration.has_local_stage() and not args.keep_stage and all(result.success for result in results):
+    if (
+        runtime_configuration.has_local_stage()
+        and runtime_configuration.stage_directory is None
+        and not args.keep_stage
+        and all(result.success for result in results)
+    ):
         cleanup_local_stage_directory(runtime_configuration.resolved_stage_directory())
     _print_results(results)
     return 0 if all(result.success for result in results) else 1
@@ -234,20 +239,23 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--stage",
         action="append",
         choices=["challenger", "references", "observations", "all"],
-        help="Stage selected datasets locally before evaluation. Repeat the flag to enable multiple staging targets.",
+        help=(
+            "Stage selected datasets locally before evaluation. Repeat the flag to enable multiple staging targets."
+            " Without it, --stage-dir stages all datasets."
+        ),
     )
     _add_stage_arguments(evaluate_parser)
     evaluate_parser.add_argument(
         "--keep-stage",
         action="store_true",
-        help="Keep staged data after a successful evaluate command",
+        help="Keep the default temporary stage directory after a successful evaluate command",
     )
     _add_region_arguments(evaluate_parser)
 
     stage_parser = subparsers.add_parser(
         "stage",
         help="Download the data a challenger evaluation needs, without computing any score",
-        description="Fill the stage directory so that a later evaluate run with --stage all needs no network.",
+        description="Fill the stage directory so that a later evaluate run with the same --stage-dir needs no network.",
     )
     stage_parser.add_argument(
         "challenger",
@@ -263,7 +271,7 @@ def _add_stage_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--stage-dir",
         default=None,
-        help="Directory used for local staging when --stage is enabled",
+        help="Directory used for local staging. Setting it turns staging on. OceanBench never deletes it",
     )
     parser.add_argument(
         "--stage-max-workers",

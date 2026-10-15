@@ -7,11 +7,12 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
+import logging
 import os
 import shutil
 import socket
 from pathlib import Path
-from time import sleep
+from time import monotonic, sleep
 from typing import Iterator, TypeVar
 
 import xarray
@@ -20,6 +21,8 @@ from oceanbench.core.runtime_configuration import current_runtime_configuration
 
 DEFAULT_LOCAL_STAGE_LOCK_TIMEOUT_SECONDS = 24 * 60 * 60
 DEFAULT_LOCAL_STAGE_LOCK_POLL_SECONDS = 5.0
+LOCAL_STAGE_LOCK_WAIT_WARNING_SECONDS = 10 * 60
+LOCAL_STAGE_LOGGER = logging.getLogger(__name__)
 ITEM = TypeVar("ITEM")
 RESULT = TypeVar("RESULT")
 DATASET = TypeVar("DATASET")
@@ -120,6 +123,18 @@ def _write_local_stage_lock_metadata(lock_path: Path) -> None:
     )
 
 
+def _log_local_stage_lock_wait(lock_path: Path) -> None:
+    try:
+        owner = (lock_path / "owner.json").read_text(encoding="utf-8")
+    except OSError:
+        owner = "unknown"
+    LOCAL_STAGE_LOGGER.warning(
+        "Waiting for the stage lock %s held by %s. If that job was killed, delete the lock directory.",
+        lock_path,
+        owner,
+    )
+
+
 def _is_stale_local_stage_lock(lock_path: Path) -> bool:
     if not lock_path.exists():
         return False
@@ -131,6 +146,8 @@ def _is_stale_local_stage_lock(lock_path: Path) -> bool:
 def local_stage_build_guard(stage_path: Path) -> Iterator[bool]:
     stage_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = _local_stage_lock_path(stage_path)
+    waiting_started_at = None
+    waiting_logged = False
     while True:
         if stage_path.exists():
             yield False
@@ -144,6 +161,11 @@ def local_stage_build_guard(stage_path: Path) -> Iterator[bool]:
             if _is_stale_local_stage_lock(lock_path):
                 shutil.rmtree(lock_path, ignore_errors=True)
                 continue
+            if waiting_started_at is None:
+                waiting_started_at = monotonic()
+            if not waiting_logged and monotonic() - waiting_started_at >= LOCAL_STAGE_LOCK_WAIT_WARNING_SECONDS:
+                _log_local_stage_lock_wait(lock_path)
+                waiting_logged = True
             sleep(_local_stage_lock_poll_seconds())
             continue
         try:

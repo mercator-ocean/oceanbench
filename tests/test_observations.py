@@ -9,6 +9,7 @@ import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.classIV import _create_observations_dataframe
+from oceanbench.core import runtime_configuration
 from oceanbench.core.references import observations
 
 
@@ -92,9 +93,33 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(tm
 
 def test_observations_stage_path_uses_overlap_safe_version() -> None:
     assert (
-        observations._observations_stage_path("2024-01-03", "2025-01-03", 10).name
-        == "observations-v4-20240103-20250103-10d.zarr"
+        observations._observations_stage_path(
+            pandas.to_datetime(["2024-12-25", "2024-01-03"]), "2024-01-03", "2025-01-03", 10
+        ).name
+        == "observations-v5-20240103-20250103-10d-2starts-4fb144071950.zarr"
     )
+
+
+def test_staged_observations_match_the_start_dates_of_each_challenger(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        runtime_configuration,
+        "_runtime_configuration",
+        runtime_configuration.RuntimeConfiguration(stage_directory=str(tmp_path / "stage")),
+    )
+    monkeypatch.setattr(observations, "open_remote_multizarr", lambda *_args, **_kwargs: _observation_source())
+    every_start = numpy.array(["2024-01-03", "2024-01-05", "2024-01-10"], dtype="datetime64[ns]")
+    same_span_fewer_starts = numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]")
+
+    for first_day_datetimes in (every_start, same_span_fewer_starts):
+        challenger_dataset = xarray.Dataset(
+            coords={
+                Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes,
+                Dimension.LEAD_DAY_INDEX.key(): numpy.arange(10),
+            }
+        )
+        selected = observations.observations(challenger_dataset)
+
+        assert set(numpy.unique(selected[Dimension.FIRST_DAY_DATETIME.key()].values)) == set(first_day_datetimes)
 
 
 def _write_observation_day_store(

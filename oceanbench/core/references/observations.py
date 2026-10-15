@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import hashlib
 from pathlib import Path
 
 import numpy
@@ -26,7 +27,7 @@ from oceanbench.core.remote_http import (
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
-OBSERVATIONS_STAGE_VERSION = "v4"
+OBSERVATIONS_STAGE_VERSION = "v5"
 OBSERVATIONS_BASIS_VERSION_ATTRIBUTE = "obs_basis_version"
 EXPECTED_OBSERVATIONS_BASIS_VERSION = "2024-v2.1.0"
 
@@ -169,10 +170,18 @@ def _should_stage_observations_locally() -> bool:
     return should_stage_locally(LOCAL_STAGE_OBSERVATIONS_KEY)
 
 
-def _observations_stage_path(first_day_start: str, last_day_end: str, lead_days_count: int) -> Path:
+def _observations_stage_path(
+    first_day_timestamps: pandas.DatetimeIndex,
+    first_day_start: str,
+    last_day_end: str,
+    lead_days_count: int,
+) -> Path:
+    first_day_payload = ",".join(first_day_timestamps.sort_values().strftime("%Y-%m-%dT%H:%M:%S"))
+    first_day_hash = hashlib.sha256(first_day_payload.encode("ascii")).hexdigest()[:12]
     return local_stage_directory() / (
         f"observations-{OBSERVATIONS_STAGE_VERSION}-"
-        f"{first_day_start.replace('-', '')}-{last_day_end.replace('-', '')}-{lead_days_count}d.zarr"
+        f"{first_day_start.replace('-', '')}-{last_day_end.replace('-', '')}-{lead_days_count}d-"
+        f"{len(first_day_timestamps)}starts-{first_day_hash}.zarr"
     )
 
 
@@ -302,7 +311,7 @@ def observations(challenger_dataset: Dataset) -> Dataset:
     first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
     last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count - 1)).strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
-    local_stage_path = _observations_stage_path(first_day_start, last_day_end, lead_days_count)
+    local_stage_path = _observations_stage_path(first_day_timestamps, first_day_start, last_day_end, lead_days_count)
 
     def open_selected_observations() -> Dataset:
         if not _should_stage_observations_locally():

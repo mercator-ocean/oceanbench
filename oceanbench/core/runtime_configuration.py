@@ -25,7 +25,11 @@ class RuntimeConfiguration:
     class4_fast_interpolation: bool = False
 
     def __post_init__(self):
+        if self.stage_directory == "":
+            object.__setattr__(self, "stage_directory", None)
         normalized_components = tuple(dict.fromkeys(component.strip().lower() for component in self.staged_components))
+        if not normalized_components and self.stage_directory is not None:
+            normalized_components = (STAGE_ALL_KEY,)
         if self.stage_max_workers < 1:
             raise ValueError("stage_max_workers must be greater than or equal to 1.")
         if self.remote_retries < 1:
@@ -60,7 +64,7 @@ def _parse_runtime_configuration_from_environment() -> RuntimeConfiguration:
         for component in os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value, "").split(",")
         if component.strip()
     )
-    stage_directory = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value) or None
+    stage_directory = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value)
     stage_max_workers = int(
         os.environ.get(
             OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_MAX_WORKERS.value,

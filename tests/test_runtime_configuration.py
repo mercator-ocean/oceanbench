@@ -6,7 +6,7 @@ import pytest
 
 from oceanbench.cli import _build_parser, _runtime_configuration_from_args
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
-from oceanbench.core.runtime_configuration import runtime_configuration_from_environment
+from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 
 
 RUNTIME_ENVIRONMENT_VARIABLES = [
@@ -97,3 +97,76 @@ def test_evaluate_cli_uses_environment_runtime_configuration_by_default(monkeypa
     assert runtime_configuration.stage_directory == "/tmp/oceanbench-stage-env"
     assert runtime_configuration.stage_max_workers == 2
     assert runtime_configuration.remote_retries == 7
+
+
+def _evaluate_runtime_configuration(arguments: list[str]):
+    parser, _evaluate_parser = _build_parser()
+    return _runtime_configuration_from_args(parser.parse_args(["evaluate", "challenger.py", *arguments]))
+
+
+def test_evaluate_cli_stage_directory_alone_stages_all(monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+
+    runtime_configuration = _evaluate_runtime_configuration(["--stage-dir", "/tmp/oceanbench-stage-cli"])
+
+    assert runtime_configuration.staged_components == ("all",)
+
+
+def test_environment_stage_directory_alone_stages_all(monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value, "/tmp/oceanbench-stage-env")
+
+    assert runtime_configuration_from_environment().staged_components == ("all",)
+    assert _evaluate_runtime_configuration([]).staged_components == ("all",)
+
+
+def test_evaluate_cli_explicit_stage_components_win_over_stage_directory(monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+
+    runtime_configuration = _evaluate_runtime_configuration(
+        ["--stage", "references", "--stage-dir", "/tmp/oceanbench-stage-cli"]
+    )
+
+    assert runtime_configuration.staged_components == ("references",)
+
+
+def test_environment_stage_components_win_over_stage_directory(monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE.value, "references")
+
+    runtime_configuration = _evaluate_runtime_configuration(["--stage-dir", "/tmp/oceanbench-stage-cli"])
+
+    assert runtime_configuration.staged_components == ("references",)
+
+
+def test_evaluate_cli_without_stage_components_or_directory_does_not_stage(monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+
+    runtime_configuration = _evaluate_runtime_configuration([])
+
+    assert runtime_configuration.staged_components == ()
+    assert not runtime_configuration.has_local_stage()
+
+
+@pytest.mark.parametrize("command", ["evaluate", "stage"])
+def test_empty_stage_directory_is_treated_as_unset(command, monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+    parser, _evaluate_parser = _build_parser()
+    unset_configuration = _runtime_configuration_from_args(parser.parse_args([command, "challenger.py"]))
+    empty_option_configuration = _runtime_configuration_from_args(
+        parser.parse_args([command, "challenger.py", "--stage-dir", ""])
+    )
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value, "")
+    empty_environment_configuration = _runtime_configuration_from_args(parser.parse_args([command, "challenger.py"]))
+
+    assert unset_configuration.stage_directory is None
+    assert empty_option_configuration == unset_configuration
+    assert empty_environment_configuration == unset_configuration
+
+
+def test_empty_stage_directory_in_the_python_api_is_treated_as_unset():
+    empty_directory_configuration = RuntimeConfiguration(stage_directory="")
+
+    assert empty_directory_configuration.stage_directory is None
+    assert empty_directory_configuration == RuntimeConfiguration()
+    assert not empty_directory_configuration.has_local_stage()
