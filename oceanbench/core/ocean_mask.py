@@ -29,7 +29,9 @@ import xarray
 from xarray import DataArray, Dataset
 
 from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.local_stage import ensure_local_stage, local_stage_directory, write_dataset_to_local_stage
 from oceanbench.core.remote_http import open_remote_zarr
+from oceanbench.core.runtime_configuration import current_runtime_configuration
 
 # The six OceanBench standard depths, on the native twelfth of a degree levels.
 OCEAN_MASK_STANDARD_DEPTHS = numpy.array(
@@ -64,6 +66,9 @@ OCEAN_MASK_VARIABLE = "ocean_mask"
 
 # Public copy of the ocean mask artefact.
 OCEAN_MASK_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ocean_mask/oceanbench-ocean-mask-v2.zarr"
+
+# Name of the local copy of the artefact in the stage directory.
+OCEAN_MASK_STAGE_NAME = "oceanbench-ocean-mask-v2.zarr"
 
 # SHA256 of the boolean array bytes, C order, depth then latitude then longitude.
 OCEAN_MASK_SHA256 = "9aa92afe12a1d35f35b9ce0ad6631d835cbd85f783075beea07d4188e869c52d"
@@ -173,13 +178,25 @@ def _ocean_mask(path: str) -> DataArray:
     return _verified_ocean_mask(mask, path)
 
 
+def _build_staged_ocean_mask(stage_path: Path) -> None:
+    mask_dataset = _open_ocean_mask_dataset(OCEAN_MASK_URL)
+    try:
+        write_dataset_to_local_stage(mask_dataset, stage_path)
+    finally:
+        mask_dataset.close()
+
+
 def ocean_mask() -> DataArray:
     """
     Load the OceanBench ocean mask, boolean, with depth, latitude and longitude coordinates.
 
     The artefact is read from OCEAN_MASK_URL and its checksum is verified against OCEAN_MASK_SHA256.
+    When a local stage is in use, the artefact is copied once into the stage directory and read from there.
     """
-    return _ocean_mask(OCEAN_MASK_URL)
+    if not current_runtime_configuration().has_local_stage():
+        return _ocean_mask(OCEAN_MASK_URL)
+    stage_path = ensure_local_stage(local_stage_directory() / OCEAN_MASK_STAGE_NAME, _build_staged_ocean_mask)
+    return _ocean_mask(str(stage_path))
 
 
 def main() -> None:

@@ -11,7 +11,11 @@ from urllib.request import Request, urlopen
 
 from oceanbench.core.local_stage import cleanup_local_stage_directory
 from oceanbench.core.regions import RegionLike, get_pre_defined_region_names, load_region_file
-from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
+from oceanbench.core.runtime_configuration import (
+    STAGE_ALL_KEY,
+    RuntimeConfiguration,
+    runtime_configuration_from_environment,
+)
 from oceanbench.core.version import __version__
 
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/mercator-ocean/oceanbench"
@@ -172,6 +176,21 @@ def _run_evaluate(args: argparse.Namespace) -> int:
     return 0 if all(result.success for result in results) else 1
 
 
+def _run_stage(args: argparse.Namespace) -> int:
+    try:
+        runtime_configuration = _runtime_configuration_from_args(args)
+        region = _resolve_region_argument(args)
+    except ValueError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+    from oceanbench.core.stage import stage_challenger_assets
+
+    stage_challenger_assets(args.challenger, runtime_configuration, region)
+    print(f"Staged data for {args.challenger} in {runtime_configuration.resolved_stage_directory()}")
+    return 0
+
+
 def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     parser = argparse.ArgumentParser(
         prog="oceanbench",
@@ -217,29 +236,51 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         choices=["challenger", "references", "observations", "all"],
         help="Stage selected datasets locally before evaluation. Repeat the flag to enable multiple staging targets.",
     )
-    evaluate_parser.add_argument(
-        "--stage-dir",
-        default=None,
-        help="Directory used for local staging when --stage is enabled",
-    )
-    evaluate_parser.add_argument(
-        "--stage-max-workers",
-        type=int,
-        default=None,
-        help="Maximum number of worker threads used to build local stage data",
-    )
-    evaluate_parser.add_argument(
-        "--remote-retries",
-        type=int,
-        default=None,
-        help="Number of attempts for each remote data read, retrying transient failures",
-    )
+    _add_stage_arguments(evaluate_parser)
     evaluate_parser.add_argument(
         "--keep-stage",
         action="store_true",
         help="Keep staged data after a successful evaluate command",
     )
-    region_group = evaluate_parser.add_mutually_exclusive_group()
+    _add_region_arguments(evaluate_parser)
+
+    stage_parser = subparsers.add_parser(
+        "stage",
+        help="Download the data a challenger evaluation needs, without computing any score",
+        description="Fill the stage directory so that a later evaluate run with --stage all needs no network.",
+    )
+    stage_parser.add_argument(
+        "challenger",
+        help="Challenger file path or URL to stage the data for",
+    )
+    _add_stage_arguments(stage_parser)
+    _add_region_arguments(stage_parser)
+    stage_parser.set_defaults(stage=[STAGE_ALL_KEY])
+    return parser, evaluate_parser
+
+
+def _add_stage_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--stage-dir",
+        default=None,
+        help="Directory used for local staging when --stage is enabled",
+    )
+    parser.add_argument(
+        "--stage-max-workers",
+        type=int,
+        default=None,
+        help="Maximum number of worker threads used to build local stage data",
+    )
+    parser.add_argument(
+        "--remote-retries",
+        type=int,
+        default=None,
+        help="Number of attempts for each remote data read, retrying transient failures",
+    )
+
+
+def _add_region_arguments(parser: argparse.ArgumentParser) -> None:
+    region_group = parser.add_mutually_exclusive_group()
     region_group.add_argument(
         "--region",
         choices=get_pre_defined_region_names(),
@@ -251,7 +292,6 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         default=None,
         help="Path to a JSON file describing a custom evaluation region",
     )
-    return parser, evaluate_parser
 
 
 def main():
@@ -266,6 +306,9 @@ def main():
         if args.all_challengers and args.challengers:
             evaluate_parser.error("--all-challengers cannot be used with positional challenger arguments")
         sys.exit(_run_evaluate(args))
+
+    if args.command == "stage":
+        sys.exit(_run_stage(args))
 
 
 if __name__ == "__main__":
