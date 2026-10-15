@@ -214,6 +214,12 @@ SPDX-License-Identifier: EUPL-1.2
           </div>
           <section class="rail-section">
             <h3>RMSE vs lead day</h3>
+            <div id="rail-skill-reference" class="rail-skill-reference segmented" role="group" aria-label="Scored against">
+              <button type="button" data-skill-reference="observations" class="ghost-button">Obs</button>
+              <button type="button" data-skill-reference="glorys" class="ghost-button">GLORYS</button>
+              <button type="button" data-skill-reference="glo12" class="ghost-button">GLO12</button>
+            </div>
+            <p id="rail-skill-reference-note" class="rail-caption" hidden>Official whole-region score, not from this map.</p>
             <div id="rail-lead-curve" class="rail-chart-slot"></div>
             <p id="rail-skill-note" class="rail-caption"></p>
           </section>

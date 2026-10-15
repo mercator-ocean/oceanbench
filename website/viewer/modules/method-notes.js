@@ -41,7 +41,8 @@ export const METHOD_NOTES = {
   "lead-curve": {
     title: "RMSE vs lead day",
     body:
-      "Official Class IV RMSE per lead day, pooled over the starts of the selected period. " +
+      "Official RMSE per lead day over the starts of the selected period: Class IV against " +
+      "observations, or gridded over the whole region against GLORYS or GLO12. " +
       "Band: 95% bootstrap interval. Computed offline.",
   },
 

@@ -24,6 +24,8 @@ import {
   REGION_GLOBAL,
   SCOPES,
   SCOPE_SINGLE_DATE,
+  SKILL_REFERENCES,
+  SKILL_REFERENCE_OBSERVATIONS,
   THEMES,
   THEME_LIGHT,
   YEAR_METRICS,
@@ -70,6 +72,7 @@ export const shared = {
   columnPoint: null,
   region: REGION_GLOBAL,
   eddyReference: EDDY_REFERENCE_GLORYS,
+  skillReference: SKILL_REFERENCE_OBSERVATIONS,
   showParticles: true,
   particleSpeed: 1,
   railCollapsed: localStorage.getItem("oceanbench.viewer.railCollapsed") === "1",
@@ -117,6 +120,10 @@ export function setSharedRegion(value) {
 
 export function setSharedEddyReference(value) {
   return assign("eddyReference", EDDY_REFERENCES, value);
+}
+
+export function setSharedSkillReference(value) {
+  return assign("skillReference", SKILL_REFERENCES, value);
 }
 
 export function setSharedTheme(value) {

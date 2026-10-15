@@ -294,6 +294,40 @@ body.quarto-dark .challengers-table-wrap {
   text-decoration: underline;
 }
 
+/* Map viewer links: a small map icon after a model name, and observation score
+   cells that open their own view there, marked by a faint dotted underline. */
+.score-table .model-col a.viewer-model-link {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-left: 0.3em;
+  vertical-align: -0.05em;
+  color: var(--bs-secondary, #6c757d);
+  text-decoration: none;
+}
+
+.score-table .model-col a.viewer-model-link svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.score-table .model-col a.viewer-model-link:hover {
+  color: var(--bs-primary, #046293);
+}
+
+.score-table td a.viewer-cell-link {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+#score-tip .score-tip-link {
+  display: block;
+  margin-top: 0.2rem;
+}
+
 /* Header cells on top of sticky column */
 .score-table thead .model-col {
   z-index: 4;
@@ -394,6 +428,14 @@ body.quarto-dark .score-table .model-col a {
 }
 
 body.quarto-dark .score-table .model-col a:hover {
+  color: var(--ob-accent-hover);
+}
+
+body.quarto-dark .score-table .model-col a.viewer-model-link {
+  color: var(--ob-muted);
+}
+
+body.quarto-dark .score-table .model-col a.viewer-model-link:hover {
   color: var(--ob-accent-hover);
 }
 

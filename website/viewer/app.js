@@ -110,6 +110,9 @@ import {
   REGION_GLOBAL,
   SCOPE_SINGLE_DATE,
   SCOPE_WHOLE_YEAR,
+  SKILL_REFERENCE_GLO12,
+  SKILL_REFERENCE_GLORYS,
+  SKILL_REFERENCE_OBSERVATIONS,
   THEME_DARK,
   THEME_LIGHT,
   YEAR_METRIC_ABSOLUTE_ERROR,
@@ -156,6 +159,7 @@ import {
   setSharedPeriod,
   setSharedRegion,
   setSharedScope,
+  setSharedSkillReference,
   setSharedTheme,
   setSharedYearMetric,
   shared,
@@ -3827,9 +3831,11 @@ async function drillDownToStartDate(date) {
 function updateCurrentDepthGateNote(shown) {
   const note = elements["rail-current-depth-note"];
   if (!note) return;
-  // Shown whatever the overlay: the RMSE vs lead chart is empty for surface currents in
-  // every mode, and this is the note that says why.
-  const gated = shown.filter((panel) => isSurfaceCurrentVariable(panel.state.variable));
+  // Shown whatever the overlay: scored against observations, the RMSE vs lead chart is
+  // empty for surface currents in every mode, and this is the note that says why.
+  const gated = shared.skillReference === SKILL_REFERENCE_OBSERVATIONS
+    ? shown.filter((panel) => isSurfaceCurrentVariable(panel.state.variable))
+    : [];
   if (!gated.length) {
     note.hidden = true;
     note.innerHTML = "";
@@ -3872,16 +3878,26 @@ function prettyVariable(panel) {
   return entry ? `${prettyName(entry.standard_name)} · ${depthLabel(entry.depth)}` : panel.state.variable;
 }
 
-// Obs-based skill (Class-4 RMSE vs observations) for a forecast's selected variable.
-// Returns { rows, unit, n } or null when no observation-based metric exists (item 4).
-function obsSkillSeries(panel, periodScores) {
+// Display names of the rail's score references.
+const SKILL_REFERENCE_LABELS = {
+  [SKILL_REFERENCE_OBSERVATIONS]: "observations",
+  [SKILL_REFERENCE_GLORYS]: "GLORYS",
+  [SKILL_REFERENCE_GLO12]: "GLO12",
+};
+
+// Published skill for a forecast's selected variable against the chosen reference: the
+// Class-4 RMSE vs observations by default, or the official gridded RMSE vs GLORYS / GLO12
+// at the variable's own depth level. Returns { rows, unit, n } or null when the summary has
+// no such score.
+function skillSeries(panel, periodScores) {
+  const observations = shared.skillReference === SKILL_REFERENCE_OBSERVATIONS;
   // Surface currents have no 15 m drifter obs to compare against, the switch note
   // handles this case, so emit no skill curve for them.
-  if (isSurfaceCurrentVariable(panel.state.variable)) return null;
+  if (observations && isSurfaceCurrentVariable(panel.state.variable)) return null;
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && variableEntry(manifest, panel.state.variable);
   if (!entry) return null;
-  const depthKeys = scoreDepthKeys(entry);
+  const depthKeys = observations ? scoreDepthKeys(entry) : [entry.depth];
   const scoreVariables = isCurrentsVariable(panel.state.variable)
     ? ["eastward_sea_water_velocity", "northward_sea_water_velocity"]
     : [entry.standard_name];
@@ -3890,9 +3906,9 @@ function obsSkillSeries(panel, periodScores) {
   let unit = "";
   let starts = 0;
   for (const row of scoresSummary) {
-    if (row.metric !== "class4_rmsd") continue;
+    if (row.metric !== (observations ? "class4_rmsd" : "rmsd")) continue;
     if (!rowsByVariable.has(row.variable)) continue;
-    if (row.reference !== "observations") continue; // observation-based only, no gridded fallback
+    if (row.reference !== shared.skillReference) continue;
     if (depthKeys.length && !depthKeys.includes(row.depth)) continue;
     if (row.challenger !== challenger) continue;
     if (shared.region && row.region && row.region !== shared.region) continue;
@@ -3906,10 +3922,13 @@ function obsSkillSeries(panel, periodScores) {
   }
   for (const rows of rowsByVariable.values()) for (const row of rows) starts = Math.max(starts, Number(row.n_starts) || 0);
   if (![...rowsByVariable.values()].some((rows) => rows.length)) return null;
-  return { rowsByVariable, unit, n: starts, binLabel: depthBinLabel(entry, depthKeys[0]) };
+  return { rowsByVariable, unit, n: starts, binLabel: observations ? depthBinLabel(entry, depthKeys[0]) : "" };
 }
 
 function renderRailSkill(shown, comparison, periodScores) {
+  const observations = shared.skillReference === SKILL_REFERENCE_OBSERVATIONS;
+  const referenceLabel = SKILL_REFERENCE_LABELS[shared.skillReference];
+  elements["rail-skill-reference-note"].hidden = observations;
   const series = new Map();
   const labels = new Map();
   const colors = new Map();
@@ -3918,10 +3937,10 @@ function renderRailSkill(shown, comparison, periodScores) {
   const binLabels = new Set();
   try {
     for (const panel of shown) {
-      const skill = obsSkillSeries(panel, periodScores);
+      const skill = skillSeries(panel, periodScores);
       const key = scoreProductKey(panel.state.dataset);
       if (!skill) {
-        if (isSurfaceCurrentVariable(panel.state.variable)) {
+        if (observations && isSurfaceCurrentVariable(panel.state.variable)) {
           notes.push(`${labelFor(panel.state.dataset)}: drifters are at 15 m only (switch above)`);
           continue;
         }
@@ -3929,9 +3948,11 @@ function renderRailSkill(shown, comparison, periodScores) {
           ? `currents at ${currentsDepthLabel(panel.state.variable)}`
           : "this variable";
         notes.push(
-          isReferenceDataset(panel.state.dataset)
-            ? `${labelFor(panel.state.dataset)}: not scored (assimilates these obs)`
-            : `${labelFor(panel.state.dataset)}: no scored obs for ${suffix}`,
+          !observations
+            ? `${labelFor(panel.state.dataset)}: no ${referenceLabel} score for ${suffix}`
+            : isReferenceDataset(panel.state.dataset)
+              ? `${labelFor(panel.state.dataset)}: not scored (assimilates these obs)`
+              : `${labelFor(panel.state.dataset)}: no scored obs for ${suffix}`,
         );
         continue;
       }
@@ -3954,7 +3975,7 @@ function renderRailSkill(shown, comparison, periodScores) {
               }`
             : comparison
               ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}`
-              : "RMSE vs observations",
+              : `RMSE vs ${referenceLabel}`,
         );
       }
       // n_starts is available from the summary, so report the real number of start dates
@@ -3965,9 +3986,9 @@ function renderRailSkill(shown, comparison, periodScores) {
       if (isCurrentsVariable(panel.state.variable)) notes.push("Map: speed from paired u/v. Curves: u and v RMSE.");
     }
   } catch (error) {
-    console.error("Cannot render observation-based skill", error);
+    console.error("Cannot render the RMSE vs lead day skill", error);
     notes.length = 0;
-    notes.push("No scored observations for this variable/product");
+    notes.push(`No ${referenceLabel} score for this variable/product`);
   }
   // With nothing to plot the caption below already says so, and it says which
   // product it is saying it about. Drawing an empty chart whose only content is a
@@ -3980,7 +4001,7 @@ function renderRailSkill(shown, comparison, periodScores) {
         title: `${comparison ? "RMSE vs lead day (both forecasts)" : "RMSE vs lead day"}${
           binLabels.size ? ` · ${[...binLabels].join(" / ")}` : ""
         }`,
-        emptyMessage: "no scored observations for this variable/product",
+        emptyMessage: `no ${referenceLabel} score for this variable/product`,
       })
     : "";
   elements["rail-skill-note"].textContent = notes.join(" · ");
@@ -5226,6 +5247,14 @@ function setScope(scope) {
   writeHash();
 }
 
+function markSkillReferenceButtons() {
+  for (const button of elements["rail-skill-reference"].querySelectorAll("[data-skill-reference]")) {
+    const selected = button.dataset.skillReference === shared.skillReference;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  }
+}
+
 function markMetricButtons() {
   for (const button of document.querySelectorAll(".metric-switch [data-metric]")) {
     const selected = button.dataset.metric === shared.yearMetric;
@@ -5620,6 +5649,14 @@ function wireGlobalControls() {
     writeHash();
   });
   wireLayoutSplitters();
+  for (const button of elements["rail-skill-reference"].querySelectorAll("[data-skill-reference]")) {
+    button.addEventListener("click", () => {
+      if (!setSharedSkillReference(button.dataset.skillReference)) return;
+      markSkillReferenceButtons();
+      updateContextRail();
+      writeHash();
+    });
+  }
   for (const button of elements["rail-forecast-toggle"].querySelectorAll("button")) {
     button.addEventListener("click", () => {
       shared.railForecast = Number(button.dataset.forecast);
@@ -5972,6 +6009,7 @@ function writeHash() {
   }
   parameters.set("region", shared.region);
   if (shared.overlayMode === OVERLAY_EDDIES) parameters.set("eref", shared.eddyReference);
+  if (shared.skillReference !== SKILL_REFERENCE_OBSERVATIONS) parameters.set("sref", shared.skillReference);
   // Explicit 0/1 so a link overrides the drawer state this browser remembers. While the
   // drawers overlay the map they are folded by the viewport, not by choice: leave them out.
   if (!drawersOverlaying()) {
@@ -6046,6 +6084,7 @@ function readHash() {
   }
   if (parameters.has("region")) setSharedRegion(parameters.get("region"));
   if (parameters.has("eref")) setSharedEddyReference(parameters.get("eref"));
+  if (parameters.has("sref")) setSharedSkillReference(parameters.get("sref"));
   // "collapsed" is the older spelling of 0.
   if (parameters.has("rail")) shared.railCollapsed = ["0", "collapsed"].includes(parameters.get("rail"));
   if (parameters.has("ctrl")) shared.controlsCollapsed = ["0", "collapsed"].includes(parameters.get("ctrl"));
@@ -6143,6 +6182,8 @@ function selectElements() {
     "rail-subtitle",
     "rail-current-depth-note",
     "rail-forecast-toggle",
+    "rail-skill-reference",
+    "rail-skill-reference-note",
     "rail-lead-curve",
     "rail-skill-note",
     "rail-depth-profile-section",
@@ -6230,6 +6271,7 @@ async function main() {
   applyTheme();
   applyScope();
   markMetricButtons();
+  markSkillReferenceButtons();
   syncDrawerOverlayMode();
   applyRailCollapsed();
   applyLayout();

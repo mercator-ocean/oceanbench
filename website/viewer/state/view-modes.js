@@ -49,6 +49,14 @@ export const EDDY_REFERENCE_GLORYS = "glorys";
 export const EDDY_REFERENCE_GLO12 = "glo12";
 export const EDDY_REFERENCES = Object.freeze([EDDY_REFERENCE_GLORYS, EDDY_REFERENCE_GLO12]);
 
+// What the rail's RMSE vs lead day curve is scored against: the Class IV observations, or
+// one of the gridded references of the published scores. The values are the `reference`
+// column of scores-summary.json.
+export const SKILL_REFERENCE_OBSERVATIONS = "observations";
+export const SKILL_REFERENCE_GLORYS = "glorys";
+export const SKILL_REFERENCE_GLO12 = "glo12";
+export const SKILL_REFERENCES = Object.freeze([SKILL_REFERENCE_OBSERVATIONS, SKILL_REFERENCE_GLORYS, SKILL_REFERENCE_GLO12]);
+
 export const THEME_LIGHT = "light";
 export const THEME_DARK = "dark";
 export const THEMES = Object.freeze([THEME_LIGHT, THEME_DARK]);

@@ -57,6 +57,8 @@ SPDX-License-Identifier: EUPL-1.2
 .trajectory-clear:hover { color: var(--accent); }
 .rail-forecast-toggle { display: inline-flex; margin: 0 0 0.9rem; }
 .rail-forecast-toggle[hidden] { display: none; }
+.rail-skill-reference { margin: 0 0 0.5rem; }
+#rail-skill-reference-note { margin: 0 0 0.35rem; }
 
 .rail-caption { font-size: var(--text-caption); color: var(--muted); margin: 0.35rem 0 0; line-height: 1.35; }
 .rail-provenance { font-size: var(--text-caption); color: var(--muted); margin: 1rem 0 0; padding-top: 0.6rem; border-top: 1px solid var(--border); line-height: 1.4; }
