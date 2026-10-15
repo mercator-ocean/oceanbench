@@ -21,6 +21,10 @@ from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_ref
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
+GLORYS_TWELFTH_DEGREE_DATASET_IDENTIFIER = "cmems_mod_glo_phy_my_0.083deg_P1D-m"
+BENCHMARK_FIRST_DAY = "2024-01-01"
+BENCHMARK_LAST_DAY = "2024-12-31"
+
 _GLORYS_REANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
 
 
@@ -180,3 +184,22 @@ def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
     reference_dataset = open_dataset()
     _GLORYS_REANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
     return reference_dataset
+
+
+def open_glorys_twelfth_degree_reanalysis(first_day: str, last_day: str) -> Dataset:
+    return copernicusmarine.open_dataset(
+        dataset_id=GLORYS_TWELFTH_DEGREE_DATASET_IDENTIFIER,
+        variables=[
+            StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value,
+            StandardVariable.SEA_WATER_SALINITY.value,
+            StandardVariable.EASTWARD_SEA_WATER_VELOCITY.value,
+            StandardVariable.NORTHWARD_SEA_WATER_VELOCITY.value,
+            StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.value,
+        ],
+        start_datetime=f"{first_day}T00:00:00",
+        end_datetime=f"{last_day}T00:00:00",
+    )
+
+
+def glorys_reanalysis() -> Dataset:
+    return open_glorys_twelfth_degree_reanalysis(BENCHMARK_FIRST_DAY, BENCHMARK_LAST_DAY)

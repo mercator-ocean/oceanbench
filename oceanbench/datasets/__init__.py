@@ -8,10 +8,12 @@ This module exposes the package python API to evaluate a challenger.
 
 from . import reference
 from . import input
+from . import training
 from . import challenger
 
 __all__ = [
     "reference",
     "input",
+    "training",
     "challenger",
 ]

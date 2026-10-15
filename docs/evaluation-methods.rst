@@ -30,7 +30,7 @@ You can open and explore these datasets by using the :mod:`oceanbench.datasets.r
 
 The OceanBench ocean mask says which cells of the twelfth of a degree grid are ocean. A cell is ocean when it is wet in both the GLO12 and GLORYS12 official static masks. The gridded scores use it, so they cover the same area whatever the reference. Class IV uses it to select its observations. The Lagrangian trajectories do not use it. It is defined at the six standard depths and at 643.57 m, the first level below 600 m.
 
-For gridded RMSD metrics, OceanBench takes the ``cos(latitude)`` area-weighted mean of squared errors over the scored cells, so each cell counts in proportion to its area, then averages the daily RMSD over forecast initialization days.
+For gridded RMSD metrics, OceanBench takes the ``cos(latitude)`` area-weighted mean of squared deviations over the scored cells, so each cell counts in proportion to its area, then averages the daily RMSD over forecast initialization days.
 A cell is scored when it is ocean in the ocean mask and both the challenger and the reference have a value there. On a challenger grid other than the twelfth of a degree one, each cell takes the nearest mask cell. ``Missing fraction`` gives, per variable and depth, the area-weighted share of ocean cells where the reference has a value and the challenger has none. It is averaged over initialization and lead days and does not change the RMSD.
 
 .. _evaluation-methods-observations:

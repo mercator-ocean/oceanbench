@@ -1,0 +1,195 @@
+<!--
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+title: "FAQ"
+---
+
+## Why OceanBench
+
+### 1. What is OceanBench?
+
+OceanBench is an open-source benchmark to evaluate ocean forecasting systems against reference datasets (GLORYS reanalysis, GLO12 analysis) and in situ and satellite observations.
+It is developed by [Mercator Ocean International](https://mercator-ocean.eu) with academic partners and published at [NeurIPS 2025](https://openreview.net/forum?id=wZGe1Kqs8G).
+
+### 2. What does it add compared to evaluating my model on my own?
+
+Every system is scored with the same references, period, masks and metric definitions, so scores are comparable across physics-based, machine-learning and hybrid systems.
+Evaluations are executable notebooks, so any score can be reproduced.
+
+### 3. Who is it for?
+
+- System developers who want an independent, standard evaluation.
+- Users choosing a forecast for a given need (currents, sea level, temperature, salinity).
+- Researchers who need reference training and evaluation datasets.
+
+### 4. Does one score say which system is best?
+
+No. Users have different priorities, so OceanBench reports many metrics per variable, depth and lead day.
+They capture key aspects of forecast quality, not the complete picture.
+
+## How it works
+
+### 5. How is a system evaluated?
+
+OceanBench executes a Python notebook that opens the challenger dataset (the forecasts of the system) as an `xarray.Dataset` and runs every evaluation method on it.
+The executed notebook is the evaluation report, and its content fills the score table.
+
+### 6. What forecasts must a challenger provide?
+
+All 10-day forecasts starting on the 52 Wednesdays of 2024.
+Resolutions of 1/12°, 1/4° and 1° are supported.
+
+### 7. Which regions are covered?
+
+The global ocean by default, and official regions such as IBI (`--region ibi`).
+Custom regions are defined with a bounding box in a JSON file (`--region-file`).
+
+### 8. What is the 1 degree track?
+
+A track for systems running at 1° resolution.
+It uses dedicated 1° GLORYS and GLO12 references, and interpolates higher-resolution challengers to a regular 1° grid for comparison.
+See the [documentation](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html).
+
+### 9. How often are scores updated?
+
+All official challengers are re-evaluated with each new OceanBench version, and versioned reports are stored on [EDITO](https://datalab.dive.edito.eu/my-files/oceanbench-bucket/public/evaluation-reports/).
+
+## The science
+
+### 10. Which references are used?
+
+- [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030) (2024)
+- [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024) (2024)
+- Argo profiles and surface drifters ([in situ](https://data.marine.copernicus.eu/product/INSITU_GLO_PHY_UV_DISCRETE_NRT_013_048)) and along-track altimetry ([satellite](https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L3_MY_008_062))
+
+### 11. Which metrics are computed?
+
+Against each reference:
+
+- RMSD of sea surface height, temperature, salinity and currents at 6 depths (surface, 50, 100, 200, 300 and 500 m).
+- RMSD of mixed layer depth.
+- RMSD of geostrophic currents.
+- Deviation in kilometers of Lagrangian trajectories.
+
+Against observations: Class IV RMSD per variable, depth bin and lead day.
+
+Definitions are in the [documentation](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
+
+### 12. How is the RMSD computed?
+
+The mean of squared deviations is weighted by `cos(latitude)` so each cell counts in proportion to its area.
+Only ocean cells where both challenger and reference have a value are scored.
+Daily RMSD is then averaged over forecast initialization days.
+
+### 13. What is Class IV?
+
+The IV-TT CLASS-4 framework compares each forecast with observations at the observation time, position and depth.
+It is applied to the same observations for every challenger, whatever its grid.
+
+### 14. Why compare to reanalysis, analysis and observations?
+
+Each answers a different question:
+
+- Observations: is the forecast close to what was measured?
+- Reanalysis: does it reproduce the best available reconstruction of the ocean state?
+- Analysis: does it match near-real time analysis?
+
+Process-oriented diagnostics (mixed layer depth, geostrophic currents, Lagrangian trajectories) check that the physics is consistent, beyond fitting fields.
+
+## For challenger providers
+
+### 15. How do I submit my system?
+
+Open an issue on the [GitHub repository](https://github.com/mercator-ocean/oceanbench/issues) with one of:
+
+1. Access to the system output (Zarr, NetCDF).
+2. Access to the system code or container with run instructions, so that the maintainers can reproduce the output.
+
+Optionally, attach the executed notebook of an interactive or programmatic evaluation.
+
+Add the organization, reference paper, method (physics-based, ML-based, hybrid), type (deterministic, ensemble), initial conditions and approximate resolution.
+
+### 16. What format must my forecasts have?
+
+An `xarray.Dataset` following [CF conventions](https://cfconventions.org) with:
+
+- Dimensions: `latitude`, `longitude`, `depth`, `lead_day_index` (0 to 9), `first_day_datetime`.
+- Variables: sea surface height above geoid, sea water potential temperature, salinity, and eastward and northward sea water velocity.
+
+Names must follow CF standard names, or carry a `standard_name` attribute.
+Open it with explicit dask chunks.
+See the [documentation](https://oceanbench.readthedocs.io/en/latest/shape-of-the-challenger-dataset.html).
+
+### 17. Which data can I use to train and initialize my system?
+
+```python
+import oceanbench
+
+oceanbench.datasets.training.glorys_reanalysis()
+oceanbench.datasets.training.glorys_reanalysis_1_degree()
+oceanbench.datasets.input.glo12_nowcasts()
+oceanbench.datasets.input.ifs_forcings()
+```
+
+GLORYS reanalysis is for training, GLO12 nowcasts and IFS forcings are the inputs for initial conditions and atmospheric forcing.
+The GLORYS training datasets cover 1993 to 2019 (included). Exclude the years covered by the benchmark, from any training data.
+
+## Run it yourself
+
+### 18. How do I install OceanBench and what do I need?
+
+```bash
+pip install oceanbench
+```
+
+Evaluating 1/12° systems requires a [Copernicus Marine Service](https://marine.copernicus.eu) account.
+For non-interactive runs, log in beforehand as described in the [Copernicus Marine Toolbox documentation](https://toolbox-docs.marine.copernicus.eu).
+
+### 19. How do I evaluate a model end-to-end from the command line?
+
+Write a Python file that defines a `challenger_dataset` variable, for example [this sample](https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.py):
+
+```python
+from datetime import datetime
+import xarray
+
+challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
+    ["https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/glonet/20240103.zarr"],
+    engine="zarr",
+    preprocess=lambda dataset: dataset.rename({"time": "lead_day_index"}).assign({"lead_day_index": range(10)}),
+    combine="nested",
+    concat_dim="first_day_datetime",
+    parallel=True,
+).assign({"first_day_datetime": [datetime.fromisoformat("2024-01-03")]})
+```
+
+Then run:
+
+```bash
+oceanbench evaluate challenger.py
+oceanbench evaluate challenger.py --region ibi
+```
+
+The executed report is written as `challenger.global.report.ipynb` (or `challenger.ibi.report.ipynb`).
+
+### 20. How do I evaluate from Python, or compute a single metric?
+
+```python
+import oceanbench
+
+oceanbench.evaluate_challenger("challenger.py")
+```
+
+```python
+import oceanbench
+from challenger import challenger_dataset
+
+oceanbench.metrics.rmsd_of_variables_compared_to_glorys_reanalysis(challenger_dataset)
+```
+
+Metrics return a `pandas.DataFrame`.
+You can also run the sample notebook without installing anything, in a Jupyter Lab on EDITO set up for evaluation: [Open in EDITO](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-python-ocean-science?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.global.report.ipynb»)

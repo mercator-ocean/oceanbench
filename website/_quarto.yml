@@ -23,6 +23,8 @@ project:
     - assets/edito-digital-twin-ocean-banner-light.png
     - assets/edito-digital-twin-ocean-banner-dark.png
     - assets/copernicus-marine.svg
+    - assets/edito.png
+    - assets/mercator-ocean.png
     - external-links.js
 website:
   title: "OceanBench"
@@ -40,6 +42,7 @@ website:
         menu:
           - href: https://oceanbench.readthedocs.io
             text: Reference documentation
+          - faq/index.qmd
           - href: https://openreview.net/forum?id=wZGe1Kqs8G
             text: Paper
       - href: https://github.com/mercator-ocean/oceanbench
@@ -64,4 +67,4 @@ format:
       dark: [darkly, theme-dark.scss]
     css: styles.css
     include-after-body:
-      text: <script src="external-links.js"></script>
+      text: <script src="/external-links.js"></script>

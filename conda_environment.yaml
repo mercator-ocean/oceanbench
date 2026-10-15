@@ -9,6 +9,7 @@ dependencies:
   - poetry=2.0.*
   - gh=2.66.*
   - jupyter==1.1.*
+  - jq==1.7.1
   - pip:
       - reuse==5.0.2
       - sphinx==8.2.3

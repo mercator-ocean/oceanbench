@@ -39,45 +39,39 @@ The official score table is available on the [OceanBench website](https://oceanb
 
 ## Open GLORYS dataset to train your ocean forecasting system
 
-You can train your model with [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030).
+You can train your model with [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030) from 1993 to 2019 (included).
+The years covered by the benchmark must not be used for training.
 From an environment with OceanBench installed, run:
-
-```
-import oceanbench
-oceanbench.datasets.reference.glorys_reanalysis()
-```
-
-to open GLORYS dataset as a [`xarray.Dataset`](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html):
-```
-<xarray.Dataset> Size: 5TB
-Dimensions:    (depth: 50, latitude: 2041, longitude: 4320, time: 366)
-Coordinates:
-  * depth      (depth) float32 200B 0.494 1.541 2.646 ... 5.275e+03 5.728e+03
-  * latitude   (latitude) float32 8kB -80.0 -79.92 -79.83 ... 89.83 89.92 90.0
-  * longitude  (longitude) float32 17kB -180.0 -179.9 -179.8 ... 179.8 179.9
-  * time       (time) datetime64[ns] 3kB 2024-01-01 2024-01-02 ... 2024-12-31
-Data variables:
-    thetao     (time, depth, latitude, longitude) float64 1TB dask.array<chunksize=(28, 1, 512, 2048), meta=np.ndarray>
-    so         (time, depth, latitude, longitude) float64 1TB dask.array<chunksize=(28, 1, 512, 2048), meta=np.ndarray>
-    uo         (time, depth, latitude, longitude) float64 1TB dask.array<chunksize=(28, 1, 512, 2048), meta=np.ndarray>
-    vo         (time, depth, latitude, longitude) float64 1TB dask.array<chunksize=(28, 1, 512, 2048), meta=np.ndarray>
-    zos        (time, latitude, longitude) float64 26GB dask.array<chunksize=(28, 512, 2048), meta=np.ndarray>
-Attributes:
-    source:       MERCATOR GLORYS12V1
-    institution:  MERCATOR OCEAN
-    comment:      CMEMS product
-    title:        daily mean fields from Global Ocean Physics Analysis and Fo...
-    references:   http://www.mercator-ocean.fr
-    history:      2023/06/01 16:20:05 MERCATOR OCEAN Netcdf creation
-    Conventions:  CF-1.4
-```
-
-For training on the [1 degree track](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html), OceanBench also exposes the 1 degree GLORYS dataset:
 
 ```python
 import oceanbench
 
-oceanbench.datasets.reference.glorys_reanalysis_1_degree()
+oceanbench.datasets.training.glorys_reanalysis()
+```
+
+to open the 1/12° GLORYS dataset as a lazy [`xarray.Dataset`](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html), through the Copernicus Marine Toolbox (see [Dependency on the Copernicus Marine Service](#dependency-on-the-copernicus-marine-service)):
+```
+<xarray.Dataset> Size: 140TB
+Dimensions:    (depth: 50, latitude: 2041, longitude: 4320, time: 9861)
+Coordinates:
+  * depth      (depth) float32 200B 0.494 1.541 2.646 ... 5.275e+03 5.728e+03
+  * latitude   (latitude) float32 8kB -80.0 -79.92 -79.83 ... 89.83 89.92 90.0
+  * longitude  (longitude) float32 17kB -180.0 -179.9 -179.8 ... 179.8 179.9
+  * time       (time) datetime64[ns] 79kB 1993-01-01 1993-01-02 ... 2019-12-31
+Data variables:
+    thetao     (time, depth, latitude, longitude) float64 35TB dask.array<chunksize=(50, 1, 512, 2048), meta=np.ndarray>
+    so         (time, depth, latitude, longitude) float64 35TB dask.array<chunksize=(50, 1, 512, 2048), meta=np.ndarray>
+    uo         (time, depth, latitude, longitude) float64 35TB dask.array<chunksize=(50, 1, 512, 2048), meta=np.ndarray>
+    vo         (time, depth, latitude, longitude) float64 35TB dask.array<chunksize=(50, 1, 512, 2048), meta=np.ndarray>
+    zos        (time, latitude, longitude) float64 696GB dask.array<chunksize=(50, 512, 2048), meta=np.ndarray>
+```
+
+For training on the [1 degree track](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html), OceanBench also exposes the 1 degree GLORYS dataset, covering the same years:
+
+```python
+import oceanbench
+
+oceanbench.datasets.training.glorys_reanalysis_1_degree()
 ```
 
 ## Evaluate your system with OceanBench
@@ -92,9 +86,10 @@ All official challenger notebooks are maintained and remain executable in order 
 
 To officially submit your system to OceanBench, please open an issue on this repository attaching one of the following:
 
-1. The executed notebook resulting from an [interactive](#interactive-evaluation) or [programmatic](#programmatic-evaluation) evaluation.
-2. A way to access the system output data in a standard format (e.g. Zarr or NetCDF).
-3. A way to execute the system code or container along with clear instructions for how to run it (e.g., input/output format, required dependencies, etc.).
+1. A way to access the system output data in a standard format (e.g. Zarr or NetCDF).
+2. A way to execute the system code or container, so that the maintainers can reproduce the output, along with clear instructions for how to run it (e.g., input/output format, required dependencies, etc.).
+
+Optionally, attach the executed notebook resulting from an [interactive](#interactive-evaluation) or [programmatic](#programmatic-evaluation) evaluation.
 
 In addition, please provide the following metadata:
 - The organization that leads the construction or operation of the system.

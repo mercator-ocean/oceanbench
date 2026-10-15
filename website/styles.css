@@ -66,6 +66,24 @@ body.quarto-dark {
   background: var(--ob-surface);
 }
 
+.content div.sourceCode:not(.cell-code) {
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface);
+  overflow-x: auto;
+}
+
+.content div.sourceCode:not(.cell-code) > pre {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  width: max-content;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+
 .content a {
   text-underline-offset: 0.16em;
 }
@@ -1567,6 +1585,8 @@ a.external-link::after {
 }
 
 a.external-link[href*="github.com"]::after,
+a.external-link[href*="edito.eu"]::after,
+a.external-link[href*="mercator-ocean.eu"]::after,
 a.external-link[href*="marine.copernicus.eu"]::after {
   width: 0.8em;
   height: 0.8em;
@@ -1576,6 +1596,18 @@ a.external-link[href*="marine.copernicus.eu"]::after {
 
 a.external-link[href*="github.com"]::after {
   --link-icon-url: url("assets/github.svg");
+}
+
+a.external-link[href*="edito.eu"]::after {
+  background: url("assets/edito.png") center / contain no-repeat;
+  -webkit-mask: none;
+  mask: none;
+}
+
+a.external-link[href*="mercator-ocean.eu"]::after {
+  background: url("assets/mercator-ocean.png") center / contain no-repeat;
+  -webkit-mask: none;
+  mask: none;
 }
 
 a.external-link[href*="marine.copernicus.eu"]::after {
