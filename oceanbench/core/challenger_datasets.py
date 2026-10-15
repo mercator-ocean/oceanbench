@@ -310,7 +310,11 @@ def _opened_challenger_week_dataset(
     first_day_datetime: datetime,
 ) -> xarray.Dataset:
     dataset_path = forecast_zarr_path_from_start_datetime(first_day_datetime)
-    opened_dataset = open_remote_zarr(dataset_path, **zarr_open_kwargs(dataset_path))
+    opened_dataset = open_remote_zarr(
+        dataset_path,
+        chunks="auto",
+        **zarr_open_kwargs(dataset_path),
+    )
     return preprocess_dataset(opened_dataset) if preprocess_dataset is not None else opened_dataset
 
 
