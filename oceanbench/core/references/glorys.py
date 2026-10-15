@@ -5,7 +5,7 @@
 from datetime import datetime
 import numpy
 import pandas
-from xarray import Dataset, open_dataset, open_mfdataset, concat
+from xarray import Dataset, concat
 import logging
 import copernicusmarine
 from oceanbench.core.cloudferro import cloudferro_public_url, zarr_open_kwargs
@@ -16,6 +16,7 @@ from oceanbench.core.reference_depths import (
     reference_depth_grid_stage_variant,
     with_reference_depth_grid_metadata,
 )
+from oceanbench.core.remote_http import open_remote_multizarr, open_remote_zarr
 from oceanbench.core.weekly_stage import (
     maybe_stage_weekly_dataset,
     prepare_reference_week_dataset,
@@ -183,7 +184,7 @@ def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
 
 
 def _open_zarr_dataset(dataset_path: str) -> Dataset:
-    return open_dataset(dataset_path, engine="zarr", **zarr_open_kwargs(dataset_path))
+    return open_remote_zarr(dataset_path, **zarr_open_kwargs(dataset_path))
 
 
 def _open_weekly_reference_dataset(
@@ -192,9 +193,8 @@ def _open_weekly_reference_dataset(
     lead_days_count: int,
     operation_name: str,
 ) -> Dataset:
-    return open_mfdataset(
+    return open_remote_multizarr(
         dataset_paths,
-        engine="zarr",
         preprocess=lambda dataset: prepare_reference_week_dataset(
             dataset,
             lead_days_count=lead_days_count,

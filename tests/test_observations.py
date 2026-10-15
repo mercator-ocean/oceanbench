@@ -45,7 +45,7 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(tm
     monkeypatch.setattr(
         observations,
         "observation_path",
-        lambda day: str(tmp_path / f"{pandas.Timestamp(day):%Y%m%d}.zarr"),
+        lambda day, evaluation_year=2024: str(tmp_path / f"{pandas.Timestamp(day):%Y%m%d}.zarr"),
     )
     first_day_datetimes = numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]")
 
@@ -54,6 +54,7 @@ def test_selected_observations_dataset_preserves_overlapping_forecast_windows(tm
         first_day_timestamps=pandas.to_datetime(first_day_datetimes),
         first_day_datetimes=first_day_datetimes,
         lead_days_count=10,
+        evaluation_year=2024,
     )
 
     result = pandas.DataFrame(
@@ -119,7 +120,7 @@ def _write_observation_day_store(
 def test_expected_observation_basis_version_opens_and_drops_extra_columns(tmp_path, monkeypatch) -> None:
     store_path = tmp_path / "20240103.zarr"
     _write_observation_day_store(store_path, observations.EXPECTED_OBSERVATIONS_BASIS_VERSION)
-    monkeypatch.setattr(observations, "observation_path", lambda _day: str(store_path))
+    monkeypatch.setattr(observations, "observation_path", lambda _day, evaluation_year=2024: str(store_path))
     first_day_datetimes = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
 
     selected = observations._selected_observations_dataset(
@@ -127,6 +128,7 @@ def test_expected_observation_basis_version_opens_and_drops_extra_columns(tmp_pa
         first_day_timestamps=pandas.to_datetime(first_day_datetimes),
         first_day_datetimes=first_day_datetimes,
         lead_days_count=10,
+        evaluation_year=2024,
     )
 
     assert "obs_id" not in selected.variables
@@ -136,7 +138,7 @@ def test_expected_observation_basis_version_opens_and_drops_extra_columns(tmp_pa
 def test_unexpected_observation_basis_version_raises_with_found_version(tmp_path, monkeypatch) -> None:
     store_path = tmp_path / "20240103.zarr"
     _write_observation_day_store(store_path, "2024-v2.0.1")
-    monkeypatch.setattr(observations, "observation_path", lambda _day: str(store_path))
+    monkeypatch.setattr(observations, "observation_path", lambda _day, evaluation_year=2024: str(store_path))
     first_day_datetimes = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
 
     with pytest.raises(observations.ObservationBasisVersionError) as raised_error:
@@ -145,6 +147,7 @@ def test_unexpected_observation_basis_version_raises_with_found_version(tmp_path
             first_day_timestamps=pandas.to_datetime(first_day_datetimes),
             first_day_datetimes=first_day_datetimes,
             lead_days_count=10,
+            evaluation_year=2024,
         )
 
     assert "2024-v2.0.1" in str(raised_error.value)
@@ -157,7 +160,7 @@ def test_observation_basis_version_is_required_on_every_day_store(tmp_path, monk
     monkeypatch.setattr(
         observations,
         "observation_path",
-        lambda day: str(tmp_path / f"{pandas.Timestamp(day):%Y%m%d}.zarr"),
+        lambda day, evaluation_year=2024: str(tmp_path / f"{pandas.Timestamp(day):%Y%m%d}.zarr"),
     )
     first_day_datetimes = numpy.array(["2024-01-03"], dtype="datetime64[ns]")
 
@@ -167,4 +170,5 @@ def test_observation_basis_version_is_required_on_every_day_store(tmp_path, monk
             first_day_timestamps=pandas.to_datetime(first_day_datetimes),
             first_day_datetimes=first_day_datetimes,
             lead_days_count=10,
+            evaluation_year=2024,
         )

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy
 import pandas
-from xarray import Dataset, open_dataset, open_mfdataset
+from xarray import Dataset, open_dataset
 
 from oceanbench.core.climate_forecast_standard_names import (
     rename_dataset_with_standard_names,
@@ -265,9 +265,8 @@ def _selected_observations_dataset(
             combine="nested",
         )
     else:
-        observations_dataset = open_mfdataset(
+        observations_dataset = open_remote_multizarr(
             observation_paths,
-            engine="zarr",
             decode_cf=False,
             parallel=False,
             concat_dim=source_observation_dimension_key,

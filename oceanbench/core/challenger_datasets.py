@@ -310,11 +310,7 @@ def _opened_challenger_week_dataset(
     first_day_datetime: datetime,
 ) -> xarray.Dataset:
     dataset_path = forecast_zarr_path_from_start_datetime(first_day_datetime)
-    opened_dataset = xarray.open_dataset(
-        dataset_path,
-        engine="zarr",
-        **zarr_open_kwargs(dataset_path),
-    )
+    opened_dataset = open_remote_zarr(dataset_path, **zarr_open_kwargs(dataset_path))
     return preprocess_dataset(opened_dataset) if preprocess_dataset is not None else opened_dataset
 
 
@@ -325,9 +321,8 @@ def _remote_multizarr_forecasts_as_challenger_dataset(
     preprocess_dataset: Callable[[xarray.Dataset], xarray.Dataset] | None,
 ) -> xarray.Dataset:
     dataset_paths = list(map(forecast_zarr_path_from_start_datetime, first_day_datetimes))
-    challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
+    challenger_dataset: xarray.Dataset = open_remote_multizarr(
         dataset_paths,
-        engine="zarr",
         preprocess=lambda dataset: _prepared_challenger_week_dataset(
             preprocess_dataset(dataset) if preprocess_dataset is not None else dataset,
             f"{dataset_name} challenger dataset open",
