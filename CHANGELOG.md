@@ -17,6 +17,35 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
+## 0.6.1 - 2026-10-16
+
+**Scores:** unchanged vs 0.6.0. Fixes, offline staging and documentation only.
+
+### Changed
+
+- `--stage-dir` or `OCEANBENCH_STAGE_DIR` on its own stages every dataset. `--stage` and `OCEANBENCH_STAGE` still select only some ([#361](https://github.com/mercator-ocean/oceanbench/pull/361)).
+- OceanBench never deletes a stage folder given with `--stage-dir` or `OCEANBENCH_STAGE_DIR`. It only deletes its default temporary folder, after a successful `oceanbench evaluate` without `--keep-stage` ([#361](https://github.com/mercator-ocean/oceanbench/pull/361)).
+- A run that waits 10 minutes on a stage lock logs once which job holds it ([#361](https://github.com/mercator-ocean/oceanbench/pull/361)).
+
+### Fixed
+
+- Class IV scoring against observations crashed with a `KeyError` on NumPy older than 2.2 ([#354](https://github.com/mercator-ocean/oceanbench/pull/354)).
+- With `--stage`, an empty `--stage-dir` made a successful `oceanbench evaluate` delete the current directory. An empty stage directory now counts as unset ([#361](https://github.com/mercator-ocean/oceanbench/pull/361)).
+- Staged observations are keyed by the forecast start dates, so two challengers covering the same period with different start dates no longer share one entry. Observations staged with 0.6.0 are downloaded again once ([#361](https://github.com/mercator-ocean/oceanbench/pull/361)).
+- `oceanbench stage` runs the challenger file like `oceanbench evaluate`: as `__main__`, with the current directory importable ([#361](https://github.com/mercator-ocean/oceanbench/pull/361)).
+- `oceanbench.datasets.input.glo12_nowcasts()` and `ifs_forcings()` failed on a clean install because they needed s3fs. They now read the same stores over https ([#364](https://github.com/mercator-ocean/oceanbench/pull/364)).
+
+### Added
+
+- `oceanbench stage` command, which downloads the data a challenger evaluation needs, ocean mask included, without computing any score. A later `oceanbench evaluate` with the same stage directory then needs no network ([#355](https://github.com/mercator-ocean/oceanbench/pull/355)).
+- [Run OceanBench offline](https://oceanbench.readthedocs.io/en/latest/run-offline.html) documentation page, for HPC compute nodes without internet access ([#355](https://github.com/mercator-ocean/oceanbench/pull/355)).
+- [Units and time conventions of the input data](https://oceanbench.readthedocs.io/en/latest/input-data-conventions.html) documentation page for the IFS and GLO12 input datasets ([#357](https://github.com/mercator-ocean/oceanbench/pull/357)).
+- `oceanbench evaluate` prints how long each evaluation step takes ([#358](https://github.com/mercator-ocean/oceanbench/pull/358)).
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.6.0/` (unchanged)
+
 ## 0.6.0 - 2026-10-05
 
 **Scores:** every table changes for every challenger (see Changed and Fixed).
