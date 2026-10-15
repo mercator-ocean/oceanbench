@@ -21,7 +21,7 @@ def test_ifs_nowcast_datetimes_cover_2024_weekly() -> None:
 
 def test_ifs_nowcast_dataset_path_uses_published_cloudferro_public_location() -> None:
     assert input_datasets._ifs_nowcast_dataset_path(datetime(2024, 1, 2)) == (
-        f"{input_datasets._IFS_NOWCAST_DATASET_ROOT}/20240102.zarr"
+        "s3://oceanbench-bucket/public/ifs-nowcast-corrected/20240102.zarr"
     )
 
 

@@ -20,7 +20,7 @@ from oceanbench.core.remote_http import open_remote_zarr, remote_zarr_store
 
 _ADDITIONAL_DATA_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data"
 
-_IFS_NOWCAST_DATASET_ROOT = "s3://oceanbench-bucket/public/ifs-nowcast"
+_IFS_NOWCAST_DATASET_ROOT = "s3://oceanbench-bucket/public/ifs-nowcast-corrected"
 
 _IFS_NOWCAST_ANALYSIS_VARIABLES = (
     "sotemair",
