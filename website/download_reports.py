@@ -5,6 +5,7 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
 
+from helpers.published_versions import DISPLAYED_YEAR_VERSIONS
 from helpers.s3_discovery import (
     MAXIMUM_PARALLEL_REQUESTS,
     available_versions,
@@ -57,10 +58,13 @@ def _download_version_reports(version: str) -> bool:
 
 def main() -> None:
     os.makedirs(REPORTS_DIRECTORY, exist_ok=True)
-    active_version = default_version()
+    available_version_set = set(available_versions())
+    report_versions = [version for version in DISPLAYED_YEAR_VERSIONS if version in available_version_set]
+    declared_default = default_version()
+    active_version = declared_default if declared_default in report_versions else next(iter(report_versions), "")
 
     has_reports = False
-    for version in available_versions():
+    for version in report_versions:
         if version != active_version and _version_already_downloaded(version):
             print(f"[{version}] already downloaded, keeping")
             has_reports = True
