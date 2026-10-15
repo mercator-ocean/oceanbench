@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import inspect
+import os
+import sys
+import textwrap
 
 import numpy
 import pytest
@@ -68,6 +71,7 @@ def _forbid(*_args, **_kwargs):
 @pytest.fixture
 def challenger_file(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime_configuration, "_runtime_configuration", None)
+    monkeypatch.setattr(sys, "path", list(sys.path))
     path = tmp_path / "challenger.py"
     path.write_text(CHALLENGER_CODE, encoding="utf8")
     return path
@@ -154,6 +158,41 @@ def test_stage_command_reads_the_region_from_the_environment_like_evaluate(chall
     assert subset_regions == [resolve_region("ibi")]
 
 
+def _stage_challenger_from_its_directory(challenger_file, monkeypatch) -> set:
+    staged_assets: set = set()
+    _record_asset_openers(monkeypatch, stage, staged_assets)
+    monkeypatch.setattr(stage, "load_mean_dynamic_topography", lambda resolution: None)
+    monkeypatch.chdir(challenger_file.parent)
+    monkeypatch.setattr(sys, "path", [path for path in sys.path if path not in ("", os.getcwd())])
+    stage.stage_challenger_assets(
+        challenger_file.name,
+        runtime_configuration.RuntimeConfiguration(staged_components=(STAGE_ALL_KEY,)),
+    )
+    return staged_assets
+
+
+def test_stage_command_runs_the_challenger_file_as_main_like_evaluate(challenger_file, monkeypatch) -> None:
+    challenger_file.write_text(
+        'if __name__ == "__main__":\n' + textwrap.indent(CHALLENGER_CODE, "    "), encoding="utf8"
+    )
+
+    assert ("ocean_mask",) in _stage_challenger_from_its_directory(challenger_file, monkeypatch)
+
+
+def test_stage_command_imports_a_module_next_to_the_challenger_file_like_evaluate(challenger_file, monkeypatch) -> None:
+    (challenger_file.parent / "stage_test_challenger_utils.py").write_text(CHALLENGER_CODE, encoding="utf8")
+    challenger_file.write_text(
+        "from stage_test_challenger_utils import challenger_dataset\n",
+        encoding="utf8",
+    )
+    monkeypatch.delitem(sys.modules, "stage_test_challenger_utils", raising=False)
+
+    try:
+        assert ("ocean_mask",) in _stage_challenger_from_its_directory(challenger_file, monkeypatch)
+    finally:
+        sys.modules.pop("stage_test_challenger_utils", None)
+
+
 def _run_successful_evaluate(monkeypatch, arguments: list[str]) -> list:
     for environment_variable in (
         OceanbenchEnvironmentVariable.OCEANBENCH_STAGE,
@@ -185,3 +224,26 @@ def test_evaluate_deletes_the_default_stage_directory(monkeypatch) -> None:
 
 def test_evaluate_keep_stage_keeps_the_default_stage_directory(monkeypatch) -> None:
     assert _run_successful_evaluate(monkeypatch, ["--stage", STAGE_ALL_KEY, "--keep-stage"]) == []
+
+
+def test_evaluate_with_an_empty_stage_directory_deletes_nothing_in_the_current_directory(tmp_path, monkeypatch) -> None:
+    for environment_variable in (
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE,
+        OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR,
+    ):
+        monkeypatch.delenv(environment_variable.value, raising=False)
+    monkeypatch.setattr(runtime_configuration.tempfile, "gettempdir", lambda: str(tmp_path / "tmp"))
+    monkeypatch.setattr(
+        cli,
+        "_evaluate_all",
+        lambda challengers, *_args: [cli.EvaluationResult(challenger=challenger) for challenger in challengers],
+    )
+    working_directory = tmp_path / "work"
+    (working_directory / "results").mkdir(parents=True)
+    (working_directory / "challenger.py").write_text(CHALLENGER_CODE, encoding="utf8")
+    monkeypatch.chdir(working_directory)
+    args = cli._build_parser()[0].parse_args(["evaluate", "challenger.py", "--stage", STAGE_ALL_KEY, "--stage-dir", ""])
+
+    assert cli._run_evaluate(args) == 0
+
+    assert sorted(path.name for path in working_directory.iterdir()) == ["challenger.py", "results"]

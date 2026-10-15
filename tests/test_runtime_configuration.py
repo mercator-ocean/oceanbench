@@ -146,3 +146,19 @@ def test_evaluate_cli_without_stage_components_or_directory_does_not_stage(monke
 
     assert runtime_configuration.staged_components == ()
     assert not runtime_configuration.has_local_stage()
+
+
+@pytest.mark.parametrize("command", ["evaluate", "stage"])
+def test_empty_stage_directory_is_treated_as_unset(command, monkeypatch):
+    _clear_runtime_environment(monkeypatch)
+    parser, _evaluate_parser = _build_parser()
+    unset_configuration = _runtime_configuration_from_args(parser.parse_args([command, "challenger.py"]))
+    empty_option_configuration = _runtime_configuration_from_args(
+        parser.parse_args([command, "challenger.py", "--stage-dir", ""])
+    )
+    monkeypatch.setenv(OceanbenchEnvironmentVariable.OCEANBENCH_STAGE_DIR.value, "")
+    empty_environment_configuration = _runtime_configuration_from_args(parser.parse_args([command, "challenger.py"]))
+
+    assert unset_configuration.stage_directory is None
+    assert empty_option_configuration == unset_configuration
+    assert empty_environment_configuration == unset_configuration

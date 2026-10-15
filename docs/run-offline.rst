@@ -30,8 +30,15 @@ The two nodes must share a file system, for example a scratch or work directory.
 
       oceanbench evaluate path/to/challenger.py --stage-dir /shared/oceanbench-stage
 
+   Step 2 needs the challenger file on a local disk.
+   A challenger given as a URL is downloaded, and ``--all-challengers`` asks the GitHub API for the challenger list, so neither works offline.
+
 The evaluation finds everything in ``/shared/oceanbench-stage`` and does not download anything.
-It also writes a few small working files there, so the directory must be writable from the compute node.
+The directory must be writable from the compute node.
+For a challenger that uses one of the challenger datasets provided by OceanBench (``oceanbench.datasets.challenger``), step 2 also writes there the surface currents used by the Lagrangian scores.
+They take about 0.1 GB per forecast week at 1/4 degree.
+For example, one GLONET week took 4.8 GB after step 1 and 4.9 GB after step 2.
+A challenger file that opens its forecasts with plain xarray writes no such files.
 
 To evaluate a region, give both commands the same region, with ``--region``, ``--region-file`` or the ``OCEANBENCH_REGION`` environment variable.
 
@@ -56,8 +63,10 @@ The stage directory belongs to one challenger
 *********************************************
 
 The staged data depends on the challenger: its forecast dates, its number of lead days and its depths.
-Step 1 must use the same challenger file as step 2.
-If the challenger changes, run step 1 again so that the missing data gets downloaded.
+Use one stage directory per challenger, and give step 1 the same challenger file as step 2.
+A challenger built on top of one provided by OceanBench, for example a bias correction of GLONET, needs its own stage directory.
+Otherwise it reads the surface currents staged for the original challenger.
+If you change the forecast dates, the lead days, the depths or the region of a challenger, run step 1 again so that the missing data gets downloaded.
 Data already in the stage directory is not downloaded again.
 
 Keep the stage directory
@@ -67,6 +76,8 @@ A folder given with ``--stage-dir`` or ``OCEANBENCH_STAGE_DIR`` is kept.
 You can evaluate the same challenger again without downloading everything again.
 OceanBench only deletes its default temporary folder, used when no folder is given.
 It deletes that folder after a successful ``oceanbench evaluate``, unless ``--keep-stage`` is given.
+
+A job killed while it writes to the stage directory can leave a ``*.lock`` directory behind, and the next run waits for it. Delete that ``*.lock`` directory before running again.
 
 Environment variables
 *********************

@@ -128,7 +128,7 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
         staged_components=(
             tuple(args.stage) if args.stage is not None else environment_configuration.staged_components
         ),
-        stage_directory=args.stage_dir if args.stage_dir is not None else environment_configuration.stage_directory,
+        stage_directory=args.stage_dir or environment_configuration.stage_directory,
         stage_max_workers=(
             args.stage_max_workers
             if args.stage_max_workers is not None
