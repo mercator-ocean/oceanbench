@@ -186,6 +186,8 @@ oceanbench evaluate path/to/challenger.py --output-bucket my-bucket --output-pre
 
 The output notebook name is automatically derived from the challenger file name and region (e.g. `challenger.py` produces `challenger.global.report.ipynb` for the global benchmark and `challenger.ibi.report.ipynb` for the IBI benchmark).
 
+To run OceanBench on an HPC compute node without internet access, see [Run OceanBench offline](https://oceanbench.readthedocs.io/en/latest/run-offline.html).
+
 #### Python
 
 

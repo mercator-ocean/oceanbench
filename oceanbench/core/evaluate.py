@@ -7,8 +7,9 @@ from os import environ
 from pathlib import PurePosixPath
 
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
+from oceanbench.core.evaluation_timings import format_evaluation_timings
 from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
-from oceanbench.core.regions import RegionLike, resolve_region
+from oceanbench.core.regions import RegionLike, RegionSpec, resolve_region
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, runtime_configuration_from_environment
 from papermill import execute_notebook
 
@@ -48,6 +49,10 @@ def _resolve_region_input(region: RegionLike) -> RegionLike:
         None,
         OceanbenchEnvironmentVariable.OCEANBENCH_REGION,
     )
+
+
+def resolve_evaluation_region(region: RegionLike) -> RegionSpec:
+    return resolve_region(_resolve_region_input(region))
 
 
 def _derive_output_notebook_file_name(
@@ -119,7 +124,7 @@ def evaluate_challenger(
         challenger_python_code_uri_or_local_path,
         OceanbenchEnvironmentVariable.OCEANBENCH_CHALLENGER_PYTHON_CODE_URI_OR_LOCAL_PATH,
     )
-    resolved_region = resolve_region(_resolve_region_input(region))
+    resolved_region = resolve_evaluation_region(region)
     resolved_output_bucket = _parse_input_non_manadatory(
         output_bucket,
         OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_BUCKET,
@@ -156,10 +161,11 @@ def _execute_evaluation_notebook_file(
     else:
         output_path = output_notebook_file_name
     with _runtime_configuration_environment(runtime_configuration):
-        execute_notebook(
+        executed_notebook = execute_notebook(
             output_notebook_file_name,
             output_path,
         )
+    print(format_evaluation_timings(executed_notebook, output_name))
 
 
 def _evaluate_challenger(
