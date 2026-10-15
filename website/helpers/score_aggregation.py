@@ -74,6 +74,7 @@ def averaged_version_bundle(bundles: dict[str, dict], versions: tuple[str, ...],
     if not regions:
         return None
     region_order = list(regions)
+    challenger_names = {name for region in regions.values() for name in region["challenger_names"]}
     return {
         "display_name": label,
         "source_versions": list(versions),
@@ -86,5 +87,17 @@ def averaged_version_bundle(bundles: dict[str, dict], versions: tuple[str, ...],
             name: sources[0]["challenger_labels"].get(name, name)
             for region in regions.values()
             for name in region["challenger_names"]
+        },
+        "challenger_notes": {
+            name: notes
+            for source in sources
+            for name, notes in source.get("challenger_notes", {}).items()
+            if name in challenger_names
+        },
+        "challenger_categories": {
+            name: category
+            for source in sources
+            for name, category in source.get("challenger_categories", {}).items()
+            if name in challenger_names
         },
     }

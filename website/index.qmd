@@ -40,15 +40,17 @@ For the 1 degree track, the interpolation method used for challengers, the corre
 #| output: false
 
 import os
-from helpers.s3_discovery import available_versions, default_version, discover_downloaded_reports
+from helpers.s3_discovery import available_versions, default_version, discover_downloaded_reports, downloaded_report_path
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
 from helpers.challenger_metadata import challenger_label, challenger_note, challenger_category
 from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
 from helpers.scores_payload import SCORES_DIRECTORY, scores_file_path, scores_payload
+from helpers.published_versions import COMBINED_VERSION, COMBINED_VERSION_LABEL, DISPLAYED_YEAR_VERSIONS
+from helpers.score_aggregation import averaged_version_bundle
 
 def _load_scores(version, challenger_name, region_id, strict):
-    local_path = os.path.join("reports", version, f"{challenger_name}.{region_id}.report.ipynb")
-    if not os.path.exists(local_path):
+    local_path = downloaded_report_path("reports", version, challenger_name, region_id)
+    if not local_path:
         return None
     try:
         scores = get_all_model_scores_from_notebook(local_path, challenger_name)
@@ -81,6 +83,10 @@ def _version_bundle(version, strict):
         }
     region_ids = list(regions.keys())
     return {
+        "display_name": version,
+        "source_versions": [version],
+        "has_report_links": True,
+        "report_version": version,
         "regions": regions,
         "region_order": region_ids,
         "region_labels": {region_id: published_region_label(region_id) for region_id in region_ids},
@@ -103,14 +109,20 @@ def _version_bundle(version, strict):
         },
     }
 
-resolved_default_version = default_version()
-version_bundles = {
+source_default_version = default_version()
+available_version_set = set(available_versions())
+year_bundles = {
     version: bundle
-    for version in available_versions()
-    if (bundle := _version_bundle(version, strict=version == resolved_default_version))["region_order"]
+    for version in DISPLAYED_YEAR_VERSIONS
+    if version in available_version_set
+    if (bundle := _version_bundle(version, strict=version == source_default_version))["region_order"]
 }
-if resolved_default_version not in version_bundles:
-    resolved_default_version = next(iter(version_bundles), "")
+combined_bundle = averaged_version_bundle(year_bundles, DISPLAYED_YEAR_VERSIONS, COMBINED_VERSION_LABEL)
+version_bundles = {}
+if combined_bundle:
+    version_bundles[COMBINED_VERSION] = combined_bundle
+version_bundles.update(year_bundles)
+resolved_default_version = COMBINED_VERSION if combined_bundle else next(iter(version_bundles), "")
 
 payload = scores_payload(version_bundles, resolved_default_version, METRIC_TITLES, SECTIONS)
 

@@ -12,6 +12,8 @@ REPORTS_DIRECTORY = os.path.join(OUTPUT_DIRECTORY, "reports")
 
 
 def _report_file_names(version_directory: str) -> list[str]:
+    if not os.path.isdir(version_directory):
+        return []
     return sorted(file_name for file_name in os.listdir(version_directory) if file_name.endswith(".report.html"))
 
 

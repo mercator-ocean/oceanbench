@@ -192,6 +192,39 @@ function displayName(name) {
   return challengerLabels[name] || name;
 }
 
+function isEvaluationYearVersion(version) {
+  return /^\d{4}$/.test(version || "");
+}
+
+function isEvaluationYearSelection(version) {
+  return isEvaluationYearVersion(version) || /^\d{4}-\d{4}$/.test(version || "");
+}
+
+function versionDisplayName(version) {
+  return parsedData?.versions?.[version]?.display_name || version;
+}
+
+function reportHtmlFileName(challengerName, regionId, version = activeVersion) {
+  if (isEvaluationYearVersion(version)) {
+    return `${challengerName}.${version}.${regionId}.report.html`;
+  }
+  return `${challengerName}.${regionId}.report.html`;
+}
+
+function reportHref(challengerName, regionId) {
+  const versionData = getActiveVersionData(parsedData) || {};
+  if (versionData.has_report_links === false) return null;
+  const reportVersion = versionData.report_version || activeVersion;
+  if (!reportVersion) return null;
+  return `reports/${reportVersion}/${reportHtmlFileName(challengerName, regionId, reportVersion)}`;
+}
+
+function modelCellHtml(challengerName, regionId) {
+  const href = reportHref(challengerName, regionId);
+  const label = displayNameHtml(challengerName);
+  return href ? `<a href="${href}">${label}</a>` : label;
+}
+
 function challengerNote(name) {
   return challengerNotes[name] || null;
 }
@@ -327,7 +360,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col">${modelCellHtml(name, regionId)}</th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -378,7 +411,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col">${modelCellHtml(name, regionId)}</th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -694,11 +727,12 @@ function getVersionTracks(versionData) {
 }
 
 function buildVersionSelectorInnerHtml(versions) {
-  let markup = '<span class="version-selector-label">Evaluation version</span>';
-  markup += '<select id="version-select" class="version-select" aria-label="Evaluation report version">';
+  const label = versions.every(isEvaluationYearSelection) ? "Evaluation years" : "Evaluation version";
+  let markup = `<span class="version-selector-label">${label}</span>`;
+  markup += `<select id="version-select" class="version-select" aria-label="${label}">`;
   for (const version of versions) {
     const selected = version === activeVersion ? " selected" : "";
-    markup += `<option value="${version}"${selected}>${version}</option>`;
+    markup += `<option value="${version}"${selected}>${versionDisplayName(version)}</option>`;
   }
   markup += "</select>";
   markup += '<a class="version-changelog-link" href="https://github.com/mercator-ocean/oceanbench/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>';
