@@ -92,12 +92,9 @@ def test_published_region_ids_with_reports_filters_empty_regions() -> None:
 def test_discover_downloaded_reports_reads_local_report_files(tmp_path, monkeypatch) -> None:
     _set_report_index(monkeypatch, ["glonet"])
     version_directory = tmp_path / TEST_VERSION
-    version_directory.mkdir()
-    (version_directory / "glonet.global.report.ipynb").write_text("{}", encoding="utf-8")
-    (version_directory / "glonet.ibi.report.ipynb").write_text("{}", encoding="utf-8")
-    (version_directory / "glonet.custom_box.report.ipynb").write_text("{}", encoding="utf-8")
-    (version_directory / "glonet.report.ipynb").write_text("{}", encoding="utf-8")
-    (version_directory / "unknown.ibi.report.ipynb").write_text("{}", encoding="utf-8")
+    for report_name in ["glonet.global", "glonet.ibi", "glonet.custom_box", "unknown.ibi"]:
+        (version_directory / report_name).mkdir(parents=True)
+        (version_directory / report_name / "index.ipynb").write_text("{}", encoding="utf-8")
 
     reports = discover_downloaded_reports(str(tmp_path), TEST_VERSION)
 
@@ -118,8 +115,8 @@ def test_download_notebook_uses_only_explicit_region_name(monkeypatch, tmp_path)
 
     destination = download_notebook(TEST_VERSION, "glonet", "global", str(tmp_path))
 
-    assert destination == str(tmp_path / "glonet.global.report.ipynb")
-    assert (tmp_path / "glonet.global.report.ipynb").read_bytes() == b"{}"
+    assert destination == str(tmp_path / "glonet.global" / "index.ipynb")
+    assert (tmp_path / "glonet.global" / "index.ipynb").read_bytes() == b"{}"
     assert requests_seen == [
         (
             _official_report_url(TEST_VERSION, "glonet", "global"),

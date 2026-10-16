@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import os
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 
 from helpers.s3_discovery import (
@@ -24,11 +25,7 @@ def _version_already_downloaded(version: str) -> bool:
 
 
 def _clear_version_report_notebooks(version_directory: str) -> None:
-    if not os.path.isdir(version_directory):
-        return
-    for file_name in os.listdir(version_directory):
-        if file_name.endswith(".report.ipynb"):
-            os.remove(os.path.join(version_directory, file_name))
+    shutil.rmtree(version_directory, ignore_errors=True)
 
 
 def _download_version_reports(version: str) -> bool:

@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import os
-import re
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
@@ -13,7 +12,7 @@ from helpers.published_regions import published_region_ids
 S3_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
 REPORTS_ROOT_PREFIX = "public/evaluation-reports"
 REPORT_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
-REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)\.report\.ipynb$")
+REPORT_NOTEBOOK_FILE_NAME = "index.ipynb"
 
 # The report discovery and download steps each issue one HTTP request per challenger and region.
 # Running them concurrently keeps the website rebuild well under the gateway timeout as the number
@@ -93,33 +92,25 @@ def discover_official_reports(version: str) -> dict[str, list[str]]:
     }
 
 
+def report_notebook_path(version_directory: str, challenger_name: str, region_id: str) -> str:
+    return os.path.join(version_directory, f"{challenger_name}.{region_id}", REPORT_NOTEBOOK_FILE_NAME)
+
+
 def discover_downloaded_reports(reports_directory: str, version: str) -> dict[str, list[str]]:
     version_directory = os.path.join(reports_directory, version)
-    known_challengers = challengers_for_version(version)
-    discovered_reports = {region_id: set() for region_id in published_region_ids()}
-    if not os.path.isdir(version_directory):
-        return {region_id: [] for region_id in published_region_ids()}
-
-    for file_name in os.listdir(version_directory):
-        report_match = REPORT_FILE_PATTERN.match(file_name)
-        if report_match is None:
-            continue
-        challenger_name = report_match.group("challenger")
-        region_id = report_match.group("region")
-        if region_id in discovered_reports and challenger_name in known_challengers:
-            discovered_reports[region_id].add(challenger_name)
-
     return {
         region_id: [
-            challenger_name for challenger_name in known_challengers if challenger_name in discovered_reports[region_id]
+            challenger_name
+            for challenger_name in challengers_for_version(version)
+            if os.path.isfile(report_notebook_path(version_directory, challenger_name, region_id))
         ]
         for region_id in published_region_ids()
     }
 
 
 def download_notebook(version: str, challenger_name: str, region_id: str, destination_directory: str) -> str | None:
-    os.makedirs(destination_directory, exist_ok=True)
-    destination_path = os.path.join(destination_directory, f"{challenger_name}.{region_id}.report.ipynb")
+    destination_path = report_notebook_path(destination_directory, challenger_name, region_id)
+    os.makedirs(os.path.dirname(destination_path), exist_ok=True)
     url = _notebook_url(version, challenger_name, region_id)
 
     try:

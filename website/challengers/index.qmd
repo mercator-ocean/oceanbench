@@ -39,7 +39,7 @@ header = (
 def format_row(challenger_name):
     challenger_metadata = CHALLENGERS.get(challenger_name)
     report_links = "".join(
-        f'<a class="region-report-badge" href="reports/{report_version}/{challenger_name}.{region_id}.report.html">'
+        f'<a class="region-report-badge" href="../reports/{report_version}/{challenger_name}.{region_id}/">'
         f"{region_labels[region_id]}</a>"
         for region_id, region_challengers in published_reports.items()
         if challenger_name in region_challengers
