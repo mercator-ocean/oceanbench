@@ -3723,6 +3723,9 @@ async function renderRailYearRmsd(shown) {
       panelIndex: panel.index,
       dates: entry.dates,
       rmsd: biasMode ? entry.bias : entry.rmsd,
+      // Parallel 95% CI edges for the active metric; null on old artifacts (chart draws no band).
+      ciLow: biasMode ? entry.biasCiLow : entry.ciLow,
+      ciHigh: biasMode ? entry.biasCiHigh : entry.ciHigh,
     });
   }
   slot.innerHTML = rmsdByStartSVG(lines, {
@@ -3732,8 +3735,13 @@ async function renderRailYearRmsd(shown) {
     yBound,
     typeScale: chartTypeScale(slot),
   });
+  const bandNote = !lines.some((line) => line.ciLow)
+    ? ""
+    : biasMode
+      ? "Band: 95%, mean ± 1.96 sd/√n, a lower bound (obs are correlated). "
+      : "Band: 95%, a lower bound (obs are correlated). ";
   note.textContent = lines.length
-    ? "Click a point to open that date."
+    ? `${bandNote}Click a point to open that date.`
     : biasMode
       ? "Bias by start not available for this dataset/region."
       : "RMSE by start not available for this dataset/region.";

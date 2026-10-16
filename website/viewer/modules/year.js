@@ -222,7 +222,15 @@ export function yearRmsdSeriesMax(rmsd, shortName, { signed = false } = {}) {
   };
   for (const entry of Object.values(variable.leads)) {
     if (!entry) continue;
-    consider(signed ? entry.bias : entry.rmsd);
+    // Include the CI band edges so the fixed axis never clips the shaded interval.
+    if (signed) {
+      consider(entry.bias);
+      consider(entry.bias_ci_low);
+      consider(entry.bias_ci_high);
+    } else {
+      consider(entry.rmsd);
+      consider(entry.rmsd_ci_high);
+    }
   }
   return maximum;
 }
@@ -237,11 +245,21 @@ export function yearRmsdSeries(rmsd, shortName, leadDay) {
   if (!variable || !variable.leads) return null;
   const entry = variable.leads[String(leadDay)];
   if (!entry || !Array.isArray(entry.dates)) return null;
+  const ciLow = Array.isArray(entry.rmsd_ci_low) ? entry.rmsd_ci_low : null;
+  const ciHigh = Array.isArray(entry.rmsd_ci_high) ? entry.rmsd_ci_high : null;
+  const biasCiLow = Array.isArray(entry.bias_ci_low) ? entry.bias_ci_low : null;
+  const biasCiHigh = Array.isArray(entry.bias_ci_high) ? entry.bias_ci_high : null;
   return {
     dates: entry.dates,
     rmsd: entry.rmsd || [],
     bias: Array.isArray(entry.bias) ? entry.bias : null,
     counts: entry.n || [],
+    // Parallel 95% CI arrays when the artifact carries them (old artifacts omit them → null,
+    // and the chart degrades to a plain line with no band).
+    ciLow,
+    ciHigh,
+    biasCiLow,
+    biasCiHigh,
     depthBin: variable.depth_bin,
   };
 }

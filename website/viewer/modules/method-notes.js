@@ -42,7 +42,8 @@ export const METHOD_NOTES = {
     title: "RMSE vs lead day",
     body:
       "Official RMSE per lead day over all starts: Class IV against observations, or " +
-      "gridded over the whole region against GLORYS or GLO12. Computed offline.",
+      "gridded over the whole region against GLORYS or GLO12. " +
+      "Band: 95% bootstrap interval. Computed offline.",
   },
 
   // RMSE vs depth vertical profile chart (rail-depth-profile).
@@ -58,7 +59,9 @@ export const METHOD_NOTES = {
     title: "RMSE / bias by start date",
     body:
       "Class IV RMSE per start date, pooled over its match-ups (official method). Bias mode: " +
-      "pooled mean of model minus obs. Click a point to open that date.",
+      "pooled mean of model minus obs. Band: 95% per start (bootstrap for RMSE, mean ± 1.96 " +
+      "sd/√n for bias); obs are spatially correlated, so read it as a lower bound. Click a " +
+      "point to open that date.",
   },
 
   // Year error geography map / its colorbar.

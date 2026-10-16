@@ -4,7 +4,7 @@
 
 // Tiny dependency-free SVG charts for the viewer context rail (contracts.md §6:
 // "quantitative curves for the current view … linked to the map state"), starting
-// with the RMSE-vs-lead curve (from scores-summary.json).
+// with the RMSE-vs-lead curve with bootstrap CI band (from scores-summary.json).
 // Styling references the page CSS variables so both themes stay consistent; no
 // chart library is vendored.
 
@@ -136,8 +136,8 @@ function renderLegend(area, entries, layout = null) {
 }
 
 /**
- * RMSE / Class-4 RMSE vs lead day, one series per reference present.
- * `series` is a Map(reference -> [{lead_day, mean}]).
+ * RMSE / Class-4 RMSE vs lead day, one series per reference present, each with its
+ * bootstrap-CI band. `series` is a Map(reference -> [{lead_day, mean, ci_low, ci_high}]).
  *
  * The in-SVG legend lays entries out on a single row sized for the rail's two or three
  * series. `legend: false` suppresses it for a caller that renders its own legend in HTML;
@@ -165,7 +165,7 @@ export function leadCurveSVG(
   for (const rows of series.values()) {
     for (const row of rows) {
       maxLead = Math.max(maxLead, row.lead_day);
-      maxValue = Math.max(maxValue, row.mean);
+      maxValue = Math.max(maxValue, row.ci_high ?? row.mean, row.mean);
     }
   }
   const yMax = niceMax(maxValue);
@@ -193,6 +193,12 @@ export function leadCurveSVG(
   for (const reference of references) {
     const rows = [...series.get(reference)].sort((a, b) => a.lead_day - b.lead_day);
     const color = seriesColor(reference);
+    const bandTop = rows.map((row) => `${xOf(row.lead_day).toFixed(1)},${yOf(row.ci_high ?? row.mean).toFixed(1)}`);
+    const bandBottom = rows
+      .slice()
+      .reverse()
+      .map((row) => `${xOf(row.lead_day).toFixed(1)},${yOf(row.ci_low ?? row.mean).toFixed(1)}`);
+    body += `<polygon points="${bandTop.concat(bandBottom).join(" ")}" fill="${color}" fill-opacity="0.16" stroke="none"/>`;
     const line = rows.map((row, index) => `${index === 0 ? "M" : "L"}${xOf(row.lead_day).toFixed(1)} ${yOf(row.mean).toFixed(1)}`);
     const dash = isDashedSeries(reference) ? ` stroke-dasharray="${DASH_PATTERN}"` : "";
     body += `<path d="${line.join(" ")}" fill="none" stroke="${color}" stroke-width="1.8"${dash}/>`;
@@ -336,14 +342,16 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
   let body = "";
   // Signed (bias) mode: symmetric y-axis centred on 0, with negative values plotted
   // below a zero baseline. |error|/RMSE mode keeps the original [0, niceMax] scale.
-  // Only the y scale and its gridlines differ between the two; the start-date ticks and the
-  // lines are one piece of code reading whichever `yOf` was built.
+  // Only the y scale and its gridlines differ between the two; the start-date ticks, the
+  // lines and their CI bands are one piece of code reading whichever `yOf` was built.
   let yOf;
   if (signed) {
     let magnitude = yBound > 0 ? yBound : 0;
     if (!magnitude) {
+      // The band is drawn, so the axis has to hold it: sizing on the line alone clipped the
+      // CI at the top of the plot and showed a confident interval where the data is wide.
       for (const line of usable) {
-        for (const value of line.rmsd) {
+        for (const value of seriesExtentValues(line)) {
           if (Number.isFinite(value) && Math.abs(value) > magnitude) magnitude = Math.abs(value);
         }
       }
@@ -361,8 +369,9 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
   } else {
     let maxValue = yBound > 0 ? yBound : 0;
     if (!maxValue) {
+      // Same as the signed branch: the axis is sized on everything that gets drawn, band included.
       for (const line of usable) {
-        for (const value of line.rmsd) if (Number.isFinite(value) && value > maxValue) maxValue = value;
+        for (const value of seriesExtentValues(line)) if (Number.isFinite(value) && value > maxValue) maxValue = value;
       }
     }
     const yMax = niceMax(maxValue);
@@ -391,6 +400,8 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
   }
 
   for (const line of usable) {
+    const band = ciBandPolygon(line, xOf, yOf);
+    if (band) body += `<polygon points="${band}" fill="${line.color}" fill-opacity="0.16" stroke="none"/>`;
     const points = line.dates
       .map((date, index) => ({ date, value: line.rmsd[index] }))
       .filter((point) => Number.isFinite(point.value));
@@ -585,6 +596,37 @@ export function columnProfileSVG(
   const legend = renderLegend(area, usable);
 
   return svgOpen(title) + axes(area, unit ? `${xLabel} (${unit})` : xLabel, "depth (m)") + body + legend + interactionLayer() + "</svg>";
+}
+
+// Everything of a start-date line that is drawn inside the plot area: the line itself and,
+// when the artifact carries them, the CI edges the band is shaded between.
+function seriesExtentValues(line) {
+  const values = Array.isArray(line.rmsd) ? line.rmsd.slice() : [];
+  if (Array.isArray(line.ciHigh)) values.push(...line.ciHigh);
+  if (Array.isArray(line.ciLow)) values.push(...line.ciLow);
+  return values;
+}
+
+// 95% CI band polygon for a start-date line, in the same visual idiom as the lead-curve band.
+// `line.ciLow`/`line.ciHigh` are parallel to `line.dates` (the caller selects the RMSE or bias
+// pair for the active metric). Returns null when the arrays are absent (old artifacts) or too
+// sparse to shade, so the chart degrades to a plain line.
+function ciBandPolygon(line, xOf, yOf) {
+  const low = line.ciLow;
+  const high = line.ciHigh;
+  if (!Array.isArray(low) || !Array.isArray(high)) return null;
+  const top = [];
+  const bottom = [];
+  for (let index = 0; index < line.dates.length; index += 1) {
+    const lo = low[index];
+    const hi = high[index];
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) continue;
+    const x = xOf(line.dates[index]).toFixed(1);
+    top.push(`${x},${yOf(hi).toFixed(1)}`);
+    bottom.push(`${x},${yOf(lo).toFixed(1)}`);
+  }
+  if (top.length < 2) return null;
+  return top.concat(bottom.reverse()).join(" ");
 }
 
 // An empty section is worth one line of explanation, not a full-height blank chart
