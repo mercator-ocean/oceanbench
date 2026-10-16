@@ -11,9 +11,8 @@ const DEFAULT_REMOTE_DATA_BASE_URL =
   "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/benchmark/rebuild-preview/viewer/data/";
 
 // Optional side-car file, fetched once at startup and 404-tolerated, so a static deployment
-// can pin a data root without editing this file: drop it beside index.html. `oceanbench view`
-// writes no such file, it mounts the artifacts directory and points the viewer at it with
-// `?data=/data/`. Query parameters still win over the side-car, and with neither present the
+// can pin a data root without editing this file: drop it beside index.html. Query parameters
+// still win over the side-car, and with neither present the
 // default stays the published bucket prefix above. The published CloudFerro copy ships such a
 // side-car beside its index.html, which is why that deployment reads data from its own host
 // even when this built-in default changes.

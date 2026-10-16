@@ -124,6 +124,12 @@ You will need to install OceanBench manually in your environment.
 pip install oceanbench
 ```
 
+The example notebook also needs Jupyter:
+
+```bash
+pip install jupyter
+```
+
 ###### From sources
 
 ```bash

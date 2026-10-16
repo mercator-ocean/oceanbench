@@ -30,7 +30,11 @@ and the affected reports are re-published (never silently overwritten).
 
 ### Removed
 
-- The `jupyter` and `papermill` dependencies.
+- The `jupyter` and `papermill` dependencies. Install `jupyter` yourself to run the example notebook.
+
+### Added
+
+- The `boto3`, `pyarrow`, `scikit-image` and `jsonschema` dependencies, now required by every install.
 
 ## 0.6.0 - 2026-10-05
 

@@ -18,7 +18,8 @@ Comparable scores
 *****************
 
 Two scores files are comparable when they have the same ``oceanbench_version``, the same ``region`` and the same ``start_dates``.
-The scores of the OceanBench leaderboard are published as scores files, so a challenger evaluated with the same OceanBench version, on the same region and forecast start dates, can be compared with them row by row.
+Starting with the next release, the scores of the OceanBench leaderboard are published as scores files, so a challenger evaluated with the same OceanBench version, on the same region and forecast start dates, can be compared with them row by row.
+The leaderboard of version 0.6.0 and older versions stays published as report notebooks.
 A different OceanBench version can change the metrics or the reference data, see the changelog.
 
 Fields
@@ -95,10 +96,12 @@ Rows of the gridded scores, compared to ``glorys_reanalysis`` or ``glo12_analysi
 Rows compared to ``observations`` (Class IV) also have:
 
 ``observations`` (integer or null)
-    The number of observations scored for this variable and depth.
+    The number of observations of this variable and depth at the first lead day of the Class IV table, the earliest lead day with data for any variable.
+    The same count is repeated on every lead-day row of this variable and depth.
+    ``null`` when this variable and depth has no observation at that lead day.
 
 ``missing`` (integer or null)
-    The number of those observations where the challenger has no value.
+    The number of those observations where the challenger has no value, repeated and ``null`` in the same way.
 
 A metric that could not be computed, for example Class IV scores for dates without observations, has no rows.
 The printed table gives the reason.
