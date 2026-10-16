@@ -4,241 +4,97 @@ SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-
 SPDX-License-Identifier: EUPL-1.2
 -->
 
-# OceanBench fields explorer (viewer)
+# OceanBench viewer
 
-Static single-page app that reads the OceanBench viewer pyramids (contracts.md §6)
-directly in the browser: no server-side rendering, no build step, no framework.
-It is the comparison-first "fields explorer" half of the viewer: snapshot maps,
-differences, animated currents and insight overlays of forecast fields. It carries
-no ranking or score content (the score page is separate; bad-score cells deep-link
-into this viewer).
+A map viewer for OceanBench forecasts. Pick a model, a variable, a start date and a lead
+day to see the forecast map. You can compare two models (side by side, swipe or
+difference), show errors against observations, animate currents and click for a depth
+profile. Every view is saved in the URL, so a link reopens the same view.
 
-## What it does
+It is a static page in plain JavaScript, with no build step and no server. It computes no
+scores: it only displays files prepared in advance.
 
-- **1 or 2 synchronized forecasts.** Each panel is `{dataset, variable}`; panels share
-  one viewport (pan/zoom), lead day and start date. Same-variable panels share a fixed
-  colorbar (§6). All view state lives in the URL hash (`layout`, `l`, `s`, `z`, `cx`,
-  `cy`, `ov`, `region`, `dm`, per-panel `p0`/`p1`, and the rest listed under
-  [URL state](#url-state)).
-- **Two map scopes.**
-  - *One date* is the default: the selected variable for one start date and lead day.
-  - *Whole year* swaps the map for a precomputed error-geography raster over every start
-    date, with `|error|` and signed `bias` metrics, plus an RMSE-by-start-date chart in
-    the rail whose points drill back down into the one-date scope.
-- **Three two-forecast displays.** *Side by side*, *Swipe* (one map, Forecast 1 left of a
-  draggable divider and Forecast 2 right of it), and *Difference* (first-class A minus B
-  on the diverging `balance` map centred at 0, coordinate-registered so different grids,
-  GLONET 168 rows against references 170, align).
-- **Currents as a variable.** Selecting *Currents* (surface or 15 m) draws a
-  speed-magnitude background under windy-style advected particles over `uo`/`vo`, with
-  fading trails and dark-theme glow. Play/pause and a speed multiplier live in the
-  controls drawer; particle count adapts to the viewport.
-- **Lead-day playback.** A play button and 0.5x/1x/2x speeds step the lead slider and
-  loop; touching any other control pauses.
-- **Insight overlays, one at a time**: eddy census (matched / spurious / missed contours
-  against GLORYS or GLO12), Class-4 observation errors (points coloured by
-  `|obs - model|`, read from the decimated match-up parquet with the vendored hyparquet
-  and density-managed by zoom), illustrative trajectory fans seeded by clicking the map,
-  and a water-column profile on click where a column store is published.
-- **Context rail** for the active view: RMSE vs lead day with bootstrap CI band (from
-  `scores-summary.json`, one series per reference), RMSE vs depth, RMSE by start date in
-  the year scope, the clicked water-column profile, trajectory separation, and a live
-  power spectrum computed in the browser from an explicit rectangle you drag on the map.
-  Plain SVG, no chart library.
-- **Light default theme** with a dark theme toggle, a hover readout in real units, and an
-  about/glossary dialog.
+## Where to see it
 
-## URL state
+- Dev page: https://oceanbench-viewer-dev.lab.dive.edito.eu/viewer.html
+- Branch `viewer-dev` is main plus this viewer plus links from the score tables to it.
+- The page updates itself about 20 minutes after a push to `viewer-dev`. To force an
+  update: GitHub Actions > "Update website" > branch `viewer-dev`.
 
-`writeHash` serializes the whole view and `readHash` parses it back, so any view can be
-shared as a link:
+## Where the data comes from
 
-| Key | Meaning |
-| --- | --- |
-| `layout` | 1 or 2 forecasts (older 4-panel links degrade to 2) |
-| `s`, `l` | start-date index and lead day |
-| `z`, `cx`, `cy` | zoom and normalized viewport centre |
-| `p0`, `p1` | per-panel `dataset,variable,field` |
-| `dm` | two-forecast display: `side`, `swipe`, `diff` |
-| `scope`, `metric` | `year` scope and its `bias` metric (omitted at their defaults) |
-| `ov`, `eref`, `col` | overlay mode, eddy reference, clicked water-column point |
-| `region` | `global` or `ibi` |
-| `psdOn`, `psd` | live-spectrum toggle and rectangle |
-| `theme`, `play`, `spd` | theme, particle playback, particle speed |
-| `rail`, `ctrl`, `rw`, `cw` | drawer collapse state and widths |
+- Files on CloudFerro, under `dev/benchmark/rebuild-preview/viewer/data/` (262 GB).
+- Made with `oceanbench evaluate --viewer-artifacts`, which exists only on branch
+  `pipeline-rebuild`, not on main.
+- Made with OceanBench 0.5.0, not 0.6.0, so some numbers differ from the score tables.
+  Example: GLONET 15 m zonal current at lead 1 is 0.12 in the table and 0.204 here.
+- Only the year 2024.
 
-## Data path
+## Adding a model
 
-The zarr reader (`modules/zarr.js`) is hand-rolled for our fixed layout: it reads
-the consolidated `.zmetadata`, fetches the spatial tiles for one
-`(start_date, lead_day)` slice, and decodes `uint16` to real units. Tiles are
-**DEFLATE**-compressed and inflated natively with `DecompressionStream('deflate')`, with
-a software inflater for browsers that lack it. Decoded chunks sit in an LRU cache bounded
-by decoded bytes, and in-flight chunk requests are shared and refcounted so a fast scrub
-never fetches the same tile twice. The fetch layer is driven by each array's `.zarray`
-chunk grid and the manifest `levels` array, so multi-level pyramids work without code
-change.
+Run the command above for the model, then add it by hand to `datasets.json` and
+`insights.json` in the data folder. Cost for one year (52 start dates) on one node with
+120-180 GB of RAM:
 
-Insight artifacts (`modules/insights.js`) are read lazily and memoised: the eddy
-census JSON by `fetch`, the Class-4 match-up parquet with the vendored **hyparquet** (MIT,
-snappy codec) in a worker, with a prefetch of neighbouring lead days that is promoted
-rather than refetched when the user arrives. Colormaps (`vendor/cmocean/`) are cmocean
-LUTs (MIT), byte-packed and base64-encoded so nothing is fetched from a CDN.
+| Model grid  | Time                                          | Storage      |
+| ----------- | --------------------------------------------- | ------------ |
+| 1/12 degree | about 3 h, about 20 h in practice (downloads) | 60-70 GB     |
+| 1/4 degree  | about 3 h                                     |              |
+| 1 degree    | 2 to 10 h                                     | about 6.5 GB |
+| IBI         | 20 min to 2 h                                 |              |
 
-## Running locally
+A new year means rerunning every model and adding a year selector (the page assumes 2024).
 
-The `data/` directory is generated (git-ignored). Populate it with viewer pyramids,
-a `datasets.json`, and, for overlays and the rail, the insight artifacts:
+## Moving the data builder to main
 
-```
-data/
-  <slug>.zarr  <slug>.viewer-manifest.json     # viewer pyramids (per dataset)
-  datasets.json                                # [{slug,label,store,manifest,columns?}, …]
-  insights.json                                # index: per (slug, region) URLs + region bounds
-  scores-summary.json                          # aggregated mean ± CI (publish artifact)
-  insights/<slug>/<region>/eddies.json         # eddy census (contracts.md §4)
-  insights/<slug>/ibi/class4-matchups.parquet  # decimated Class-4 (snappy, for hyparquet)
-```
+About 4,000 to 4,500 lines of code and 2,300 lines of tests, in about 15 files. The main
+point: the observation match-ups must use main's 0.6.0 Class IV code. The branch version
+gives different numbers. Steps:
 
-`insights.json` maps `datasets[slug][region] → {eddies, class4_matchups,
-rmsd_by_depth, year_error_geography, year_rmsd_by_start}` and carries `regions[id]`
-lat/lon bounds and the `scores_summary` URL. The Class-4 parquet is a decimated copy of
-the published match-up artifact (deterministic stride + snappy so hyparquet can read it
-in-browser).
+- change `oceanbench/core/classIV.py` so it returns the per-observation table after its
+  filtering, and reset the Class IV observation cache between runs;
+- put the JSON schemas inside `oceanbench/` so they ship with the package;
+- add the `pyarrow` and `scikit-image` dependencies.
 
-The website-integrated viewer defaults to the CloudFerro rebuild-preview data
-base. To force local generated data while developing this static app, open it with
-`?data_base=local` or set `window.OCEANBENCH_VIEWER_CONFIG.dataBaseUrl` before the
-module script. Then serve and open:
+Check: match-up RMSE, count and missing values equal main's Class IV table, for one
+global and one IBI model. Confidence bands, skill and period mode cannot be rebuilt from
+main's reports; the viewer then shows plain means.
+
+## Running it locally
 
 ```sh
 python -m http.server -d website/viewer 8799
-# open http://127.0.0.1:8799/?data_base=local
+# open http://127.0.0.1:8799/
 ```
 
-#### Overriding the data root without editing `config.js`
+It reads the CloudFerro data by default. Add `?data=<url>` to use other data, or
+`?data=local` for `website/viewer/data/`.
 
-The data root is resolved at startup in this priority order:
+On the website, `website/viewer.qmd` shows the viewer in an iframe. Quarto copies this
+folder only on `quarto render`, so `quarto preview` does not pick up viewer edits.
 
-1. `window.OCEANBENCH_VIEWER_CONFIG.dataBaseUrl`, set by an inline script before the
-   module (unchanged escape hatch for the Quarto integration).
-2. the `?data=` query parameter (`?data_base=` and `?dataBaseUrl=` remain accepted,
-   and the value `local` still means `./data/`).
-3. an optional `viewer-config.json` fetched from beside `index.html`; a 404 is the
-   normal case and is ignored silently.
-4. the built-in CloudFerro rebuild-preview prefix.
+## Files
 
-`viewer-config.example.json` shows the file's shape (`dataBaseUrl`, and optionally
-`columnsBaseUrl` for the separately published `<slug>.columns.zarr` stores). Copy it
-to `viewer-config.json` (git-ignored) to pin a root for a local checkout; an offline
-`oceanbench view <dir>` mode would write the same file next to the copied viewer.
+- `index.html` and `app.js`: the page and most of the logic.
+- `config.js`: where the data is read from. The score page (`website/interactive-scores.js`)
+  uses it too, to know which models get a viewer link.
+- `modules/`: data reading, charts, overlays and other helpers.
+- `state/`, `styles/`: shared view state and CSS.
+- `vendor/`: third-party code. `qa/`: tests.
 
-A dataset that names a `columns` url in `datasets.json` reads that store instead of the
-`<slug>.columns.zarr` convention, which is how the 1 degree products share the water column
-of the native dataset they were coarsened from rather than duplicating it.
+## Tests
 
 ```sh
-# both data roots exercised against the live, anonymously readable bucket
-python -m http.server -d website/viewer 8765
-# default (bucket): http://127.0.0.1:8765/index.html
-# override:         http://127.0.0.1:8765/index.html?data=https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/benchmark/rebuild-preview/viewer/data/
+cd website/viewer && node qa/run.mjs
 ```
 
-In the Quarto website, `store`/`manifest`/insight URLs resolve against the
-CloudFerro rebuild-preview viewer data prefix by default (CORS-enabled, §6).
+Opens the page in a headless browser (Playwright) and checks behaviour, layout and drawn
+pixels against saved references. Update the references only when the drawing changed on
+purpose (see `qa/README.md`).
 
-### Developing the viewer inside the Quarto site (one command)
+## Known issues
 
-Quarto ships the viewer via `resources:` in `website/_quarto.yml`, but it only copies
-resources into `_site/` on a full **render**: `quarto preview` never picks up viewer
-edits on its own. Instead of manually copying changed files into `_site/viewer/`
-(the old, cache-confusing workflow), run once per checkout:
-
-```sh
-website/scripts/dev-viewer-sync.sh
-```
-
-This replaces `website/_site/viewer/` with a symlink to `../viewer`, so every edit to
-a viewer file is served live: no re-copy, no stale-cache guesswork. Then serve the
-site as usual (`quarto preview`, or `python -m http.server -d website/_site`) and edit
-viewer files freely.
-
-`_site/` is a build output (git-ignored). `quarto render` wipes and regenerates it
-with real file copies for production, so the symlink is a dev-only convenience: just
-re-run the one-liner (it is idempotent) after any full render.
-
-## File layout
-
-- `app.js` is the application: panels, rendering, overlays, controls, rail and URL state.
-- `state/` holds what the panels agree on: `view-modes.js` names the closed vocabularies
-  (scope, display, overlay, year metric, region, eddy reference, theme), `shared-view.js`
-  owns the shared view state and the setters that validate those values.
-- `modules/` holds the pieces app.js reads rather than contains: the zarr reader, the
-  insight loaders, the charts, the overlay draws, the Class-4 point index, the colour and
-  raster helpers, grid arithmetic, readout formatting and the variable vocabulary.
-- `styles/` is the stylesheet in load order: `shell.css` (theme, app shell, bars, drawers,
-  controls), `map.css` (map, panels, strip, colour scale, legends), `rail.css` (the context
-  rail and its charts) and `responsive.css` (viewport and container queries, last so it
-  wins). `tokens.css` carries the design primitives and is loaded first.
-- `qa/` is the harness. `vendor/` is third-party code, vendored.
-
-## Shared with the scores page
-
-`website/scores-summary.js` imports `config.js` and `modules/scores-data.js` from here.
-Those two files are a cross-page contract; everything else under `modules/` is
-viewer-private. Their module headers say so. `tokens.css` is shared the other way round:
-the Quarto site loads it site-wide through `_quarto.yml`, so the design primitives are one
-file rather than a viewer copy and a site copy.
-
-## Verification
-
-One harness, shipped, in `qa/`:
-
-```sh
-node qa/run.mjs
-```
-
-It boots a static server, drives the real page in headless Chromium under Playwright
-across eight configurations, and then runs a behavioural pass that compares the drawn
-pixels of twelve viewer states against frozen fingerprints. It checks page and console
-errors, keyboard lead scrubbing, layout box sizes against `qa/expectations.json`, a
-classified network budget for a warm back-scrub, em dashes in rendered text, the
-fast-scrub render-token race, colour-range grow-only stability, particle liveness and
-the software DEFLATE decode path. `qa/README.md` documents each probe, how to reseed the
-two baselines, and what is deliberately not covered.
-
-## Status and hand-off
-
-- **Dev page**: https://oceanbench-viewer-dev.lab.dive.edito.eu/viewer.html. Branch
-  `viewer-dev` is main plus this viewer plus links from the score tables. Redeploy with
-  Actions > "Update website" > branch `viewer-dev`. The service exists, so updating it
-  needs no secret; creating a service for a new branch needs `EDITO_OFFLINE_TOKEN`.
-- **How it works**: a static page that reads pre-made display files from CloudFerro
-  `dev/benchmark/rebuild-preview/viewer/data/`. They are made by
-  `oceanbench evaluate --viewer-artifacts`, which exists only on branch `pipeline-rebuild`:
-  surface maps and 15 m currents at native resolution, 1 degree full-depth columns,
-  observation match-ups equal to the official Class IV ones, and eddies. Spectra and
-  particles are computed in the browser.
-- **Cost per model for one year (52 starts)**, on one large node (120-180 GB RAM):
-  1/12 degree about 3 h of compute once inputs are downloaded (about 20 h in practice),
-  60-70 GB; 1/4 degree (GLONET) about 3 h; 1 degree 2 to 10 h, about 6.5 GB; IBI 20 min
-  to 2 h. All current viewer data is 262 GB.
-- **Keeping it up to date**: a new model means running the command and adding it to the
-  viewer index files (`datasets.json`, `insights.json`) by hand. A new year means a rerun
-  plus a year selector (the UI assumes 2024). The published data is not the 0.6.0 scoring:
-  every manifest and insight file records `oceanbench_version` 0.5.0 (generated August to
-  October 2026, no git commit), and `scores-summary.json` records no version. Numbers can
-  differ from the site table: GLONET 15 m zonal current lead 1 is 0.12 there and 0.204
-  here. Score links only show on the newest table version.
-- **Moving the builder to main**: about 4,000-4,500 lines plus about 2,300 test lines in
-  about 15 files. Match-ups must be rebuilt on main's 0.6.0 Class IV code: the branch
-  version uses a per-challenger SLA shift and skips the shared Class IV population filter,
-  so its numbers differ from the official ones. It needs `oceanbench/core/classIV.py`
-  refactored to expose the filtered per-observation table, a reset of the Class IV
-  observation cache, the JSON schemas packaged inside `oceanbench/`, and the pyarrow and
-  scikit-image dependencies. Side-panel confidence bands, skill and period mode cannot be
-  derived from main's reports (the viewer falls back to means). Validate by matching
-  match-up RMSD, count and missing values with main's Class IV table for one global and
-  one IBI model.
-- **Known issues**: the score tables redraw once the viewer index loads, which resets
-  horizontal scroll on phones; cell links add many Tab stops.
+- The score tables redraw once the viewer list loads, which resets horizontal scroll on
+  phones.
+- Score cell links add many Tab stops for keyboard users.
+- The thin line at 180 degrees on GLONET maps is in GLONET's data, not a viewer bug.
