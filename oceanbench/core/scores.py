@@ -26,11 +26,12 @@ from oceanbench.core.regions import RegionSpec, region_to_dict
 from oceanbench.core.rmsd import MISSING_FRACTION_COLUMN
 from oceanbench.core.version import __version__
 
+CLASS4_METRIC_FUNCTION_NAME = "rmsd_of_variables_compared_to_observations"
 METRIC_FUNCTION_NAMES = [
     "rmsd_of_variables_compared_to_glorys_reanalysis",
     "rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis",
     "rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis",
-    "rmsd_of_variables_compared_to_observations",
+    CLASS4_METRIC_FUNCTION_NAME,
     "deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis",
     "rmsd_of_variables_compared_to_glo12_analysis",
     "rmsd_of_mixed_layer_depth_compared_to_glo12_analysis",
