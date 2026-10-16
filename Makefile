@@ -107,15 +107,6 @@ release-minor: _release
 release-major: BUMP_TYPE = major
 release-major: _release
 
-update-documentation: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
-update-documentation:
-	${ACTIVATE_ENVIRONMENT}
-	cd docs; $(MAKE) html;
-
-deploy-documentation-locally:
-	${ACTIVATE_ENVIRONMENT}
-	cd docs/_build/html/; python -m http.server 4000
-
 deploy-website-locally:
 	quarto preview website
 

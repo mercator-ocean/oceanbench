@@ -9,6 +9,7 @@ on:
       - main
     paths:
       - website/**
+      - oceanbench/**
   workflow_dispatch:
     inputs:
       expectedContent:

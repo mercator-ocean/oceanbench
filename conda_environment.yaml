@@ -12,9 +12,7 @@ dependencies:
   - jq==1.7.1
   - pip:
       - reuse==5.0.2
-      - sphinx==8.2.3
       - toml==0.10.2
-      - sphinx-copybutton==0.5.2
       - furo==2024.8.6
       - jupyter==1.1.1
       - pandas==2.2.3

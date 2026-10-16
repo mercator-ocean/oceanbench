@@ -1,0 +1,30 @@
+<!--
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+title: "Technical documentation"
+---
+
+OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis datasets (such as [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030) and [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024)) as well as observations.
+
+This documentation describes how to prepare and evaluate a challenger with the Python package `oceanbench`. The [definitions of the evaluation methods](/evaluation-methods/index.qmd) have their own page.
+
+## Guides
+
+- [Shape of the challenger dataset](shape-of-the-challenger-dataset/index.qmd)
+- [Input datasets for OceanBench challenger evaluation](input-datasets-for-oceanbench-challenger-evaluation/index.qmd)
+- [Units and time conventions of the input data](input-data-conventions/index.qmd)
+- [1 degree track](one-degree-track/index.qmd)
+- [Run OceanBench offline](run-offline/index.qmd)
+
+## API reference
+
+The [API reference](api/index.qmd) documents the public Python API of the `oceanbench` package, generated from its docstrings:
+
+- [Evaluate a challenger](api/evaluation/index.qmd)
+- [Metrics](api/metrics/index.qmd)
+- [Regions](api/regions/index.qmd)
+- Datasets: [challenger](api/datasets/challenger/index.qmd), [input](api/datasets/input/index.qmd), [reference](api/datasets/reference/index.qmd) and [training](api/datasets/training/index.qmd)

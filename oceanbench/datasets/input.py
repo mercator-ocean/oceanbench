@@ -22,6 +22,8 @@ def glo12_nowcasts() -> xarray.Dataset:
     Dataset
         The Dataset containing GLO12 nowcasts.
 
+    Examples
+    --------
     >>> glo12_nowcasts() # doctest: +SKIP
     <xarray.Dataset> Size: 8TB
     Dimensions:    (time: 1099, latitude: 2041, longitude: 4320, depth: 50)
@@ -54,6 +56,8 @@ def ifs_forcings() -> xarray.Dataset:
     Dataset
         The Dataset containing IFS forcings.
 
+    Examples
+    --------
     >>> ifs_forcings() # doctest: +SKIP
     <xarray.Dataset> Size: 1TB
     Dimensions:             (first_day_datetime: 157, lead_day_index: 10,

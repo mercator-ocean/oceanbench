@@ -5,7 +5,9 @@
 project:
   type: website
   execute-dir: project
-  pre-render: python download_reports.py
+  pre-render:
+    - python download_reports.py
+    - python -m quartodoc build
   post-render:
     - python generate_report_redirects.py
     - python publish_scores.py
@@ -30,6 +32,26 @@ website:
   title: "OceanBench"
   favicon: favicon-light.png
   open-graph: true
+  sidebar:
+    - id: documentation
+      title: Technical documentation
+      contents:
+        - documentation/index.qmd
+        - documentation/shape-of-the-challenger-dataset/index.qmd
+        - documentation/input-datasets-for-oceanbench-challenger-evaluation/index.qmd
+        - documentation/input-data-conventions/index.qmd
+        - documentation/one-degree-track/index.qmd
+        - documentation/run-offline/index.qmd
+        - section: API reference
+          href: documentation/api/index.qmd
+          contents:
+            - documentation/api/evaluation/index.qmd
+            - documentation/api/metrics/index.qmd
+            - documentation/api/regions/index.qmd
+            - documentation/api/datasets/challenger/index.qmd
+            - documentation/api/datasets/input/index.qmd
+            - documentation/api/datasets/reference/index.qmd
+            - documentation/api/datasets/training/index.qmd
   navbar:
     logo: https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/favicon-light.png
     logo-alt: "OceanBench logo."
@@ -40,8 +62,10 @@ website:
       - about/index.qmd
       - text: Documentation
         menu:
-          - href: https://oceanbench.readthedocs.io
-            text: Reference documentation
+          - href: evaluation-methods/index.qmd
+            text: Evaluation methods
+          - href: documentation/index.qmd
+            text: Technical documentation
           - faq/index.qmd
           - href: https://openreview.net/forum?id=wZGe1Kqs8G
             text: Paper
@@ -58,6 +82,64 @@ website:
       <img class="only-light edito-banner" src="/assets/edito-digital-twin-ocean-banner-light.png" alt="EDITO, the European Digital Twin Ocean" />
       <img class="only-dark edito-banner" src="/assets/edito-digital-twin-ocean-banner-dark.png" alt="EDITO, the European Digital Twin Ocean" />
     </a>
+quartodoc:
+  package: oceanbench
+  source_dir: ..
+  dir: documentation/api
+  title: API reference
+  parser: numpy
+  sections:
+    - title: Python API
+      desc: The OceanBench Python package, grouped by module.
+      contents:
+        - kind: page
+          path: evaluation/index
+          summary:
+            name: Evaluate a challenger
+          contents:
+            - evaluate_challenger
+        - kind: page
+          path: metrics/index
+          summary:
+            name: Metrics
+          contents:
+            - name: metrics
+              children: embedded
+        - kind: page
+          path: regions/index
+          summary:
+            name: Regions
+          contents:
+            - name: regions
+              children: embedded
+        - kind: page
+          path: datasets/challenger/index
+          summary:
+            name: Challenger datasets
+          contents:
+            - name: datasets.challenger
+              children: embedded
+        - kind: page
+          path: datasets/input/index
+          summary:
+            name: Input datasets
+          contents:
+            - name: datasets.input
+              children: embedded
+        - kind: page
+          path: datasets/reference/index
+          summary:
+            name: Reference datasets
+          contents:
+            - name: datasets.reference
+              children: embedded
+        - kind: page
+          path: datasets/training/index
+          summary:
+            name: Training datasets
+          contents:
+            - name: datasets.training
+              children: embedded
 execute:
   cache: false
 format:

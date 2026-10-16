@@ -15,7 +15,6 @@ SPDX-License-Identifier: EUPL-1.2
 [![Information on what kind of operating systems OceanBench can be installed on.](https://img.shields.io/badge/platform-linux-lightgrey)](https://en.wikipedia.org/wiki/Linux)
 [![Information on the OceanBench licence.](https://img.shields.io/badge/licence-EUPL-lightblue)](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12)
 [![REUSE status](https://api.reuse.software/badge/github.com/mercator-ocean/oceanbench/)](https://api.reuse.software/info/github.com/mercator-ocean/oceanbench/)
-[![Documentation](https://img.shields.io/readthedocs/oceanbench/latest?logo=readthedocs)](https://oceanbench.readthedocs.io)
 
 OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis datasets (such as 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030) and [GLO12 analysis](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024)) as well as observations.
 
@@ -66,7 +65,7 @@ Data variables:
     zos        (time, latitude, longitude) float64 696GB dask.array<chunksize=(50, 512, 2048), meta=np.ndarray>
 ```
 
-For training on the [1 degree track](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html), OceanBench also exposes the 1 degree GLORYS dataset, covering the same years:
+For training on the [1 degree track](https://oceanbench.edito.eu/documentation/one-degree-track/), OceanBench also exposes the 1 degree GLORYS dataset, covering the same years:
 
 ```python
 import oceanbench
@@ -78,7 +77,7 @@ oceanbench.datasets.training.glorys_reanalysis_1_degree()
 
 The evaluation of a system consists of the sequential execution of a Python notebook that runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).
 
-The OceanBench documentation describes [the shape a challenger dataset](https://oceanbench.readthedocs.io/en/latest/shape-of-the-challenger-dataset.html) must have, as well as [the definitions of the methods used to evaluate systems](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
+The OceanBench documentation describes [the shape a challenger dataset](https://oceanbench.edito.eu/documentation/shape-of-the-challenger-dataset/) must have, as well as [the definitions of the methods used to evaluate systems](https://oceanbench.edito.eu/evaluation-methods/).
 
 ### Official evaluation
 
@@ -181,7 +180,7 @@ oceanbench evaluate path/to/challenger.py --output-bucket my-bucket --output-pre
 
 The output notebook name is automatically derived from the challenger file name and region (e.g. `challenger.py` produces `challenger.global.report.ipynb` for the global benchmark and `challenger.ibi.report.ipynb` for the IBI benchmark).
 
-To run OceanBench on an HPC compute node without internet access, see [Run OceanBench offline](https://oceanbench.readthedocs.io/en/latest/run-offline.html).
+To run OceanBench on an HPC compute node without internet access, see [Run OceanBench offline](https://oceanbench.edito.eu/documentation/run-offline/).
 
 #### Python
 
@@ -192,7 +191,7 @@ import oceanbench
 oceanbench.evaluate_challenger("path/to/file/opening/the/challenger/datasets.py")
 ```
 
-More details in the [documentation](https://oceanbench.readthedocs.io/en/latest/source/oceanbench.html#oceanbench.evaluate_challenger).
+More details in the [documentation](https://oceanbench.edito.eu/documentation/api/evaluation/).
 
 ### Dependency on the Copernicus Marine Service
 

@@ -52,7 +52,7 @@ Custom regions are defined with a bounding box in a JSON file (`--region-file`).
 
 A track for systems running at 1° resolution.
 It uses dedicated 1° GLORYS and GLO12 references, and interpolates higher-resolution challengers to a regular 1° grid for comparison.
-See the [documentation](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html).
+See the [documentation](/documentation/one-degree-track/index.qmd).
 
 ### 9. How often are scores updated?
 
@@ -77,7 +77,7 @@ Against each reference:
 
 Against observations: Class IV RMSD per variable, depth bin and lead day.
 
-Definitions are in the [documentation](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
+Definitions are in the [documentation](/evaluation-methods/index.qmd).
 
 ### 12. How is the RMSD computed?
 
@@ -122,7 +122,7 @@ An `xarray.Dataset` following [CF conventions](https://cfconventions.org) with:
 
 Names must follow CF standard names, or carry a `standard_name` attribute.
 Open it with explicit dask chunks.
-See the [documentation](https://oceanbench.readthedocs.io/en/latest/shape-of-the-challenger-dataset.html).
+See the [documentation](/documentation/shape-of-the-challenger-dataset/index.qmd).
 
 ### 17. Which data can I use to train and initialize my system?
 
