@@ -4,10 +4,12 @@
 
 project:
   type: website
+  execute-dir: project
   pre-render: python download_reports.py
   post-render:
     - python generate_report_redirects.py
     - python publish_scores.py
+    - python strip_index_from_links.py
   resources:
     - assets/land-110m.json
     - assets/argo-profiler.svg
@@ -28,8 +30,8 @@ website:
     left:
       - href: index.qmd
         text: Scores
-      - challengers.qmd
-      - about.qmd
+      - challengers/index.qmd
+      - about/index.qmd
       - text: Documentation
         menu:
           - href: https://oceanbench.readthedocs.io
