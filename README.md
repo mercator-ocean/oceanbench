@@ -218,7 +218,7 @@ Licensed under the [EUPL-1.2](https://joinup.ec.europa.eu/collection/eupl/eupl-t
 
 Implemented by:
 
-<a href="https://mercator-ocean.eu"><img src="https://www.nemo-ocean.eu/wp-content/uploads/MOI.png" alt="Mercator Ocean logo" height="100"/></a>
+<a href="https://www.mercator-ocean.eu/"><img src="https://www.nemo-ocean.eu/wp-content/uploads/MOI.png" alt="Mercator Ocean International logo" height="100"/></a>
 
 As part of a fruitful collaboration with:
 

@@ -18,6 +18,10 @@ project:
     - assets/model-grid-globe.svg
     - assets/external-link-arrow.svg
     - assets/github.svg
+    - assets/edito-eu-flag-light.png
+    - assets/edito-eu-flag-dark.png
+    - assets/edito-digital-twin-ocean-banner-light.png
+    - assets/edito-digital-twin-ocean-banner-dark.png
     - assets/copernicus-marine.svg
     - external-links.js
 website:
@@ -40,11 +44,16 @@ website:
             text: Paper
       - href: https://github.com/mercator-ocean/oceanbench
         text: Source code
+    right:
+      - href: https://edito.eu
+        text: |
+          <span class="edito-credit"><span class="edito-credit-label">Powered by</span>
+          <img class="only-light" src="/assets/edito-eu-flag-light.png" alt="EDITO logo and EU flag" />
+          <img class="only-dark" src="/assets/edito-eu-flag-dark.png" alt="EDITO logo and EU flag" /></span>
   page-footer: |
-    Powered by:
     <a href="https://edito.eu">
-      <img class="only-light" src="https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/EDITO_A1%20Version.png" alt="EDITO logo" height="65" />
-      <img class="only-dark" src="https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/EDITO_A1%20Version%20Negative.png" alt="EDITO logo" height="65" />
+      <img class="only-light edito-banner" src="/assets/edito-digital-twin-ocean-banner-light.png" alt="EDITO, the European Digital Twin Ocean" />
+      <img class="only-dark edito-banner" src="/assets/edito-digital-twin-ocean-banner-dark.png" alt="EDITO, the European Digital Twin Ocean" />
     </a>
 execute:
   cache: false

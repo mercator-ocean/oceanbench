@@ -7,7 +7,9 @@ SPDX-License-Identifier: EUPL-1.2
 ---
 description: "OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean datasets and observations."
 hide-description: true
-author: "Mercator Ocean"
+author:
+  - name: "Mercator Ocean International"
+    url: "https://www.mercator-ocean.eu/"
 jupyter: python3
 format:
   html:
@@ -32,7 +34,7 @@ Please keep in mind that these metrics capture key aspects of forecast quality r
 
 Want to evaluate your system or get involved in OceanBench? Check out the [GitHub project](https://github.com/mercator-ocean/oceanbench/)!
 
-Most challenger forecasts are produced by running each system at Mercator Ocean; the [Challengers](challengers/index.qmd) page shows who ran each forecast.
+Most challenger forecasts are produced by running each system at [Mercator Ocean International](https://www.mercator-ocean.eu/); the [Challengers](challengers/index.qmd) page shows who ran each forecast.
 
 For the 1 degree track, the interpolation method used for challengers, the corresponding reference datasets, and the exact implementation paths are documented [here](https://oceanbench.readthedocs.io/en/latest/one-degree-track.html).
 
@@ -159,9 +161,9 @@ Absolute RMSD scores against 2024 [GLO12 analysis](https://data.marine.copernicu
 
 :::
 
-Implemented by [Mercator Ocean](https://mercator-ocean.eu).
+Implemented by [Mercator Ocean International](https://www.mercator-ocean.eu/).
 
-<a href="https://mercator-ocean.eu"><img src="https://www.nemo-ocean.eu/wp-content/uploads/MOI.png" alt="Mercator Ocean logo" height="100"/></a>
+<a href="https://www.mercator-ocean.eu/"><img src="https://www.nemo-ocean.eu/wp-content/uploads/MOI.png" alt="Mercator Ocean International logo" height="100"/></a>
 
 ```{=html}
 <script src="vendor/d3-array.v3.min.js"></script>

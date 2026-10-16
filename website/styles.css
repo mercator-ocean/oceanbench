@@ -1149,6 +1149,30 @@ body.quarto-dark #comparison-to-observations > h2 {
   min-height: 55px !important;
 }
 
+/* --- EDITO credit --- */
+
+.edito-credit {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1;
+}
+
+.edito-credit-label {
+  font-size: 0.65rem;
+  margin-bottom: 2px;
+}
+
+.edito-credit img {
+  height: 20px;
+  width: auto;
+}
+
+.edito-banner {
+  height: 130px;
+  width: auto;
+}
+
 /* --- Theme switching --- */
 
 body.quarto-dark .navbar-logo {
