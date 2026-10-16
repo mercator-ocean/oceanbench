@@ -10,13 +10,12 @@ import pyarrow.parquet
 import pytest
 import xarray
 
-from oceanbench.core.classIV import class4_rmsd_table
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.regions import custom_region, padded_region, subset_dataset_to_region
 from oceanbench.publish import viewer_artifacts
 from tests import synthetic_class4
-from tests.test_classiv_matchups import _matchups
+from tests.test_classiv_matchups import _class4_table, _matchups
 
 _SEA_SURFACE_HEIGHT_KEY = Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()
 _TEMPERATURE_KEY = Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()
@@ -106,7 +105,7 @@ def test_matchup_parquet_pooled_scores_equal_the_class4_score_rows(tmp_path) -> 
 
     served = pyarrow.parquet.read_table(path).to_pandas()
     assert len(served) == len(matchups)
-    table = class4_rmsd_table(matchups, synthetic_class4.LEAD_DAYS_COUNT)
+    table = _class4_table()
     labels = lead_day_labels(1, synthetic_class4.LEAD_DAYS_COUNT)
     first_lead_day = served["lead_day"].min()
     for (variable, depth_bin), block in served.groupby(["variable", "depth_bin"]):

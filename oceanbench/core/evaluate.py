@@ -29,7 +29,6 @@ from oceanbench.core.scores import (
     scores_file_name,
     write_scores_file,
 )
-from oceanbench.publish.viewer_data import build_viewer_data
 
 
 def _parse_variable_environment(
@@ -231,6 +230,9 @@ def _evaluate_challenger(
         _upload_scores_file(output_file_name, output_bucket, output_name)
     print(format_evaluation_timings(timings, output_name))
     if viewer_artifacts_directory:
+        # Imported here so that scoring alone does not load the viewer builder and its dependencies.
+        from oceanbench.publish.viewer_data import build_viewer_data
+
         viewer_start = perf_counter()
         build_viewer_data(
             viewer_artifacts_directory, challenger_name, challenger_dataset, region, matchups, document["rows"]

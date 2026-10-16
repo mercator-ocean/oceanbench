@@ -11,14 +11,13 @@ import xarray
 
 import oceanbench
 import oceanbench.core.evaluate as evaluate
-from oceanbench.core.classIV import class4_rmsd_table
 from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.regions import GLOBAL, IBI
 from oceanbench.core.scores import CLASS4_METRIC_FUNCTION_NAME, METRIC_FUNCTION_NAMES, score_rows
 from oceanbench.publish import viewer_data
 from oceanbench.publish.viewer_artifacts import ViewerArtifacts, class4_rmsd_rows_by_start
 from tests import synthetic_class4
-from tests.test_classiv_matchups import _matchups
+from tests.test_classiv_matchups import _class4_table, _matchups
 from tests.test_evaluate import evaluated_metrics  # noqa: F401
 from tests.test_viewer_artifacts import _frame, _sea_surface_height_dataset
 
@@ -27,9 +26,7 @@ _START_DATES = [pandas.Timestamp(first_day) for first_day in synthetic_class4.FI
 
 def _class4_summary_rows() -> tuple[list[dict], list[dict]]:
     matchups = _matchups()
-    document_rows = score_rows(
-        CLASS4_METRIC_FUNCTION_NAME, class4_rmsd_table(matchups, synthetic_class4.LEAD_DAYS_COUNT)
-    )
+    document_rows = score_rows(CLASS4_METRIC_FUNCTION_NAME, _class4_table())
     class4_by_start = viewer_data.class4_scores_by_start(class4_rmsd_rows_by_start(matchups), _START_DATES)
     return document_rows, viewer_data.scores_summary_rows(
         "your_model", GLOBAL, document_rows, _START_DATES, {}, class4_by_start
@@ -243,7 +240,7 @@ def test_evaluate_builds_the_viewer_data_from_the_class4_matchups_of_the_scores(
     monkeypatch.setattr(
         evaluate.core_metrics, "class4_rmsd_and_matchups_compared_to_observations", class4_rmsd_and_matchups
     )
-    monkeypatch.setattr(evaluate, "build_viewer_data", lambda *arguments: builds.append(arguments))
+    monkeypatch.setattr(viewer_data, "build_viewer_data", lambda *arguments: builds.append(arguments))
 
     oceanbench.evaluate_challenger("challenger.py", region="ibi", viewer_artifacts_directory=str(tmp_path / "viewer"))
 
@@ -269,7 +266,7 @@ def test_evaluate_reads_the_viewer_data_directory_from_the_environment(
         ),
     )
     builds = []
-    monkeypatch.setattr(evaluate, "build_viewer_data", lambda *arguments: builds.append(arguments))
+    monkeypatch.setattr(viewer_data, "build_viewer_data", lambda *arguments: builds.append(arguments))
 
     oceanbench.evaluate_challenger("challenger.py")
 
