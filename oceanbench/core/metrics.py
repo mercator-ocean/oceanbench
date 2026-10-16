@@ -5,8 +5,8 @@
 import pandas
 import xarray
 
-from oceanbench.core.classIV import rmsd_class4_validation
-from oceanbench.core.dataset_utils import Variable
+from oceanbench.core.classIV import class4_matchups, class4_rmsd_table
+from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.lagrangian_trajectory import (
     deviation_of_lagrangian_trajectories,
@@ -36,16 +36,16 @@ def _lagrangian_particle_count(
     )
 
 
-def rmsd_of_variables_compared_to_observations(
+def class4_rmsd_and_matchups_compared_to_observations(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
-) -> pandas.DataFrame:
+) -> tuple[pandas.DataFrame, pandas.DataFrame | None]:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     try:
         observation_dataset = subset_dataset_to_region(observations(challenger_dataset), region)
     except ObservationDataUnavailableError as error:
-        return pandas.DataFrame({MESSAGE_COLUMN: [str(error)]})
-    return rmsd_class4_validation(
+        return pandas.DataFrame({MESSAGE_COLUMN: [str(error)]}), None
+    matchups = class4_matchups(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
         ocean_mask=ocean_mask(),
@@ -57,6 +57,14 @@ def rmsd_of_variables_compared_to_observations(
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
     )
+    return class4_rmsd_table(matchups, challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]), matchups
+
+
+def rmsd_of_variables_compared_to_observations(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = GLOBAL_REGION_NAME,
+) -> pandas.DataFrame:
+    return class4_rmsd_and_matchups_compared_to_observations(challenger_dataset, region)[0]
 
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(

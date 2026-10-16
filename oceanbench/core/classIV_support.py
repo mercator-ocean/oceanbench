@@ -129,6 +129,11 @@ def _interpolate_observations_to_target_depth(
     return result[target_columns]
 
 
+def reset_class4_observations_cache() -> None:
+    # The cache is keyed on the id of the observation dataset, which Python reuses once a dataset is freed.
+    _CLASS4_OBSERVATIONS_CACHE.clear()
+
+
 def _prepared_class4_observations(
     observations_dataset: xarray.Dataset,
     lead_days_count: int,

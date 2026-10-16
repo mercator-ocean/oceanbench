@@ -85,7 +85,7 @@ def test_stage_command_stages_every_asset_and_computes_nothing(challenger_file, 
         "load_mean_dynamic_topography",
         lambda resolution: staged_assets.add(("mean_dynamic_topography", resolution)),
     )
-    for metric_computation in ("rmsd", "rmsd_class4_validation", "deviation_of_lagrangian_trajectories"):
+    for metric_computation in ("rmsd", "class4_matchups", "deviation_of_lagrangian_trajectories"):
         monkeypatch.setattr(core_metrics, metric_computation, _forbid)
     monkeypatch.setattr(cli, "cleanup_local_stage_directory", _forbid)
     stage_directory = tmp_path / "stage"
@@ -118,7 +118,8 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
     _record_asset_openers(monkeypatch, core_metrics, metric_assets)
     for computation in (
         "rmsd",
-        "rmsd_class4_validation",
+        "class4_matchups",
+        "class4_rmsd_table",
         "deviation_of_lagrangian_trajectories",
         "compute_mixed_layer_depth",
         "compute_geostrophic_currents",
@@ -135,7 +136,7 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
     for metric_function in metric_functions:
         metric_function(challenger_namespace["challenger_dataset"])
 
-    assert len(metric_functions) == 9
+    assert len(metric_functions) == 10
     assert metric_assets == staged_assets
 
 
