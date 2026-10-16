@@ -17,7 +17,8 @@ scores: it only displays files prepared in advance.
 ## Where to see it
 
 - Dev page: https://oceanbench-viewer-dev.lab.dive.edito.eu/viewer.html
-- Branch `viewer-dev` is main plus this viewer plus links from the score tables to it.
+- Branch `viewer-dev` (PR #367) is main plus scoring without notebooks, this viewer, its
+  data builder and links from the score tables to it.
 - The page updates itself about 20 minutes after a push to `viewer-dev`. To force an
   update: GitHub Actions > "Update website" > branch `viewer-dev`.
 
@@ -27,6 +28,7 @@ scores: it only displays files prepared in advance.
 - Made with OceanBench 0.5.0, not 0.6.0, so some numbers differ from the score tables.
   Example: GLONET 15 m zonal current at lead 1 is 0.12 in the table and 0.204 here.
 - Only the year 2024.
+- To rebuild with the release that merges this branch.
 
 ## Adding a model
 
