@@ -24,8 +24,8 @@ scores: it only displays files prepared in advance.
 ## Where the data comes from
 
 - Files on CloudFerro, under `dev/benchmark/rebuild-preview/viewer/data/` (262 GB).
-- Made with `oceanbench evaluate --viewer-artifacts`, which exists only on branch
-  `pipeline-rebuild`, not on main.
+- Made with `oceanbench evaluate --viewer-artifacts`, which is not on main yet. Its code is
+  in the archived branch `pipeline-rebuild` (tag `archive/pipeline-rebuild`).
 - Made with OceanBench 0.5.0, not 0.6.0, so some numbers differ from the score tables.
   Example: GLONET 15 m zonal current at lead 1 is 0.12 in the table and 0.204 here.
 - Only the year 2024.
@@ -45,11 +45,12 @@ Run the command above for the model, then add it by hand to `datasets.json` and
 
 A new year means rerunning every model and adding a year selector (the page assumes 2024).
 
-## Moving the data builder to main
+## Next step: add the data builder to this branch
 
-About 4,000 to 4,500 lines of code and 2,300 lines of tests, in about 15 files. The main
-point: the observation match-ups must use main's 0.6.0 Class IV code. The branch version
-gives different numbers. Steps:
+The viewer and the code that makes its data go to main together, in one PR. Copy the
+builder from tag `archive/pipeline-rebuild`: about 4,000 to 4,500 lines of code and 2,300
+lines of tests, in about 15 files. The main point: the observation match-ups must use
+main's 0.6.0 Class IV code. The archived version gives different numbers. Steps:
 
 - change `oceanbench/core/classIV.py` so it returns the per-observation table after its
   filtering, and reset the Class IV observation cache between runs;
@@ -58,7 +59,8 @@ gives different numbers. Steps:
 
 Check: match-up RMSE, count and missing values equal main's Class IV table, for one
 global and one IBI model. Confidence bands, skill and period mode cannot be rebuilt from
-main's reports; the viewer then shows plain means.
+main's reports; the viewer then shows plain means. Then rebuild the viewer data with the
+release version, so the viewer and the score tables agree.
 
 ## Running it locally
 
