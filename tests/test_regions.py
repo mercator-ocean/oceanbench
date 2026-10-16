@@ -11,7 +11,7 @@ import pytest
 import xarray
 
 import oceanbench
-from oceanbench.core.regions import region_from_dict, region_to_dict
+from oceanbench.core.regions import IBI, padded_region, region_from_dict, region_to_dict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WESTERN_MED_REGION_FILE = PROJECT_ROOT / "assets" / "western_med_region.json"
@@ -150,3 +150,13 @@ def test_region_longitude_box_crossing_the_dateline_selects_cells_on_both_grid_c
 
     assert positive_subset["longitude"].values.tolist() == list(range(170, 191))
     assert signed_subset["longitude"].values.tolist() == list(range(-180, -169)) + list(range(170, 180))
+
+
+def test_padded_region_widens_every_side_and_keeps_global_unbounded() -> None:
+    padded = padded_region(IBI, 10.0)
+
+    assert padded.bounds.minimum_latitude == IBI.bounds.minimum_latitude - 10.0
+    assert padded.bounds.maximum_latitude == IBI.bounds.maximum_latitude + 10.0
+    assert padded.bounds.minimum_longitude == IBI.bounds.minimum_longitude - 10.0
+    assert padded.bounds.maximum_longitude == IBI.bounds.maximum_longitude + 10.0
+    assert padded_region("global", 10.0).bounds is None
