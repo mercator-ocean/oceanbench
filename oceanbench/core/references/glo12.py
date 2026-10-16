@@ -209,3 +209,30 @@ def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
     reference_dataset = open_dataset()
     _GLO12_ANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
     return reference_dataset
+
+
+_GLO12_ANALYSIS_VARIABLES_BY_DATASET_IDENTIFIER = {
+    "cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m": [StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value],
+    "cmems_mod_glo_phy-so_anfc_0.083deg_P1D-m": [StandardVariable.SEA_WATER_SALINITY.value],
+    "cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m": [
+        StandardVariable.EASTWARD_SEA_WATER_VELOCITY.value,
+        StandardVariable.NORTHWARD_SEA_WATER_VELOCITY.value,
+    ],
+    "cmems_mod_glo_phy_anfc_0.083deg_P1D-m": [StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.value],
+}
+_BENCHMARK_FIRST_DAY = "2024-01-01"
+_BENCHMARK_LAST_DAY = "2024-12-31"
+
+
+def glo12_analysis() -> Dataset:
+    return merge(
+        [
+            copernicusmarine.open_dataset(
+                dataset_id=dataset_identifier,
+                variables=variables,
+                start_datetime=f"{_BENCHMARK_FIRST_DAY}T00:00:00",
+                end_datetime=f"{_BENCHMARK_LAST_DAY}T00:00:00",
+            )
+            for dataset_identifier, variables in _GLO12_ANALYSIS_VARIABLES_BY_DATASET_IDENTIFIER.items()
+        ]
+    )

@@ -24,7 +24,6 @@ For the 1 degree track, OceanBench uses dedicated 1 degree reference datasets fo
 Then, when the challenger resolution is "1_degree", OceanBench opens the precomputed 1 degree references.
 The related public dataset helpers are:
 
-* :func:`oceanbench.datasets.reference.glorys_reanalysis_1_degree`
 * :func:`oceanbench.datasets.reference.glo12_analysis`
 
 1 degree GLORYS dataset for training
@@ -32,11 +31,11 @@ The related public dataset helpers are:
 
 For training outside the official evaluation workflow, OceanBench also exposes the 1 degree GLORYS dataset through:
 
-* ``oceanbench.datasets.reference.glorys_reanalysis_1_degree()``
+* ``oceanbench.datasets.training.glorys_reanalysis_1_degree()``, covering 1993 to 2019 (included)
 
 This public API is documented in:
 
-* :mod:`oceanbench.datasets.reference`
+* :mod:`oceanbench.datasets.training`
 
 
 How challenger datasets are interpolated

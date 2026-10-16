@@ -292,7 +292,7 @@ function standardNameHtml(standardName) {
 
 function formatVariableHeader(variable, unit, standardName, metricKey, sensor) {
   const displayName = `${titleCase(variable)}${sensorIconHtml(sensor)}`;
-  const metricLabel = metricKey.startsWith("rmsd") ? `RMSE (${unit})` : `(${unit})`;
+  const metricLabel = metricKey.startsWith("rmsd") ? `RMSD (${unit})` : `(${unit})`;
   let header = `${displayName}<br><span class="metric-label">${metricLabel}</span>`;
   if (standardName && standardName !== "unknown") {
     header += `<br>${standardNameHtml(standardName)}`;
