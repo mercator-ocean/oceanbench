@@ -5,7 +5,7 @@
 import pandas
 import xarray
 
-from oceanbench.core.classIV import rmsd_class4_validation
+from oceanbench.core.classIV import class4_rmsd_and_matchups
 from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.lagrangian_trajectory import (
@@ -21,6 +21,7 @@ from oceanbench.core.rmsd import rmsd
 
 GLOBAL_LAGRANGIAN_PARTICLE_COUNT = 10000
 MINIMUM_LAGRANGIAN_PARTICLE_COUNT = 2000
+MESSAGE_COLUMN = "Message"
 
 
 def _lagrangian_particle_count(
@@ -35,16 +36,17 @@ def _lagrangian_particle_count(
     )
 
 
-def rmsd_of_variables_compared_to_observations(
+def _class4_compared_to_observations(
     challenger_dataset: xarray.Dataset,
-    region: RegionLike = GLOBAL_REGION_NAME,
-) -> pandas.DataFrame:
+    region: RegionLike,
+    keep_matchups: bool,
+) -> tuple[pandas.DataFrame, pandas.DataFrame | None]:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     try:
         observation_dataset = subset_dataset_to_region(observations(challenger_dataset), region)
     except ObservationDataUnavailableError as error:
-        return pandas.DataFrame({"Message": [str(error)]})
-    return rmsd_class4_validation(
+        return pandas.DataFrame({MESSAGE_COLUMN: [str(error)]}), None
+    return class4_rmsd_and_matchups(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
         ocean_mask=ocean_mask(),
@@ -55,7 +57,22 @@ def rmsd_of_variables_compared_to_observations(
             Variable.NORTHWARD_SEA_WATER_VELOCITY,
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
+        keep_matchups=keep_matchups,
     )
+
+
+def class4_rmsd_and_matchups_compared_to_observations(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = GLOBAL_REGION_NAME,
+) -> tuple[pandas.DataFrame, pandas.DataFrame | None]:
+    return _class4_compared_to_observations(challenger_dataset, region, keep_matchups=True)
+
+
+def rmsd_of_variables_compared_to_observations(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = GLOBAL_REGION_NAME,
+) -> pandas.DataFrame:
+    return _class4_compared_to_observations(challenger_dataset, region, keep_matchups=False)[0]
 
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(

@@ -61,6 +61,7 @@ let challengerNotes = {};
 let challengerCategories = {};
 let regionLabels = {};
 let regionMetadata = {};
+let reportLinks = {};
 let activeTrack = "high_resolution";
 let activeSection = "observations";
 let activeRegion = null;
@@ -300,6 +301,113 @@ function formatVariableHeader(variable, unit, standardName, metricKey, sensor) {
   return header;
 }
 
+// --- Links to the map viewer (viewer.html) ---
+
+// The viewer's own dataset catalog decides which rows link there, so a model gets a link
+// exactly when the viewer can open it. Challengers whose viewer dataset has another name:
+const VIEWER_DATASET_NAMES = {
+  glo12_persistence: "persistence",
+  glo12_persistence_1_degree: "persistence_1_degree",
+};
+
+// Observation columns the viewer can show as a map with their Class IV match-ups, by table
+// depth and variable. The viewer draws the surface field, against the obs shallower than
+// 1 m for temperature and the 0-5 m obs for salinity, so the 0-5m temperature column and
+// the deeper Argo bins have no matching view.
+const VIEWER_OBSERVATION_VARIABLES = {
+  Surface: { temperature: "sea_water_potential_temperature", "sea level anomaly": "sea_surface_height_above_geoid" },
+  "0-5m": { salinity: "sea_water_salinity" },
+  "15m": { "zonal current": "eastward_sea_water_velocity_15m", "meridional current": "northward_sea_water_velocity_15m" },
+};
+
+const VIEWER_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5l4-1.5 5 1.5 4-1.5v10.5l-4 1.5-5-1.5-4 1.5z' +
+  'M5.5 2v10.5M10.5 3.5V14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+
+// { datasets: Map(slug -> catalog entry), insights, manifests: Map(slug -> manifest) },
+// null until the catalog has loaded; without it the table simply carries no viewer links.
+let viewerCatalog = null;
+let resolveViewerUrl = null;
+
+// The viewer holds one year of data, scored as the newest table version, so only that
+// version (the default one) links there.
+function viewerDatasetFor(name) {
+  if (activeVersion !== resolveDefaultVersion(parsedData)) return null;
+  const slug = VIEWER_DATASET_NAMES[name] || name;
+  return viewerCatalog?.datasets.has(slug) ? slug : null;
+}
+
+function viewerHref(parameters) {
+  return `viewer.html#${new URLSearchParams(parameters).toString()}`;
+}
+
+function viewerModelLinkHtml(name, regionId) {
+  const slug = viewerDatasetFor(name);
+  if (!slug) return "";
+  const href = viewerHref({ layout: "1", region: regionId, p0: `${slug},sea_water_potential_temperature,field` });
+  const label = `Open ${escapeAttribute(displayName(name))} in the viewer`;
+  return `<a class="viewer-model-link" href="${href}" title="${label}" aria-label="${label}">${VIEWER_ICON}</a>`;
+}
+
+// The viewer state closest to what an observation score cell measures: that model, variable,
+// depth bin, lead day and region over all start dates ("All dates"), which maps the mean
+// |obs - model| of the Class IV match-ups pooled over every start. The Class IV points show
+// once a single date is picked. Null when the viewer has no such view, or the cell is not an
+// observation score.
+function viewerCellHref(name, regionId, metricKey, depth, variable, day) {
+  if (metricKey !== parsedData.sections.observations?.depth_metric) return null;
+  const variableKey = VIEWER_OBSERVATION_VARIABLES[depth]?.[variable];
+  const slug = viewerDatasetFor(name);
+  const manifest = slug && viewerCatalog.manifests.get(slug);
+  if (!variableKey || !manifest || !(variableKey in manifest.variables)) return null;
+  if (!manifest.lead_days.includes(Number(day))) return null;
+  if (!viewerCatalog.insights?.datasets?.[slug]?.[regionId]?.class4_matchups) return null;
+  return viewerHref({ layout: "1", scope: "year", l: day, ov: "class4", region: regionId, p0: `${slug},${variableKey},field` });
+}
+
+function fetchViewerJson(path) {
+  return fetch(resolveViewerUrl(path)).then((response) => {
+    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+    return response.json();
+  });
+}
+
+// The data root comes from the viewer's own config, so both pages read one catalog. Its
+// optional viewer-config.json side-car is not read here: it sits beside viewer/index.html,
+// and the config module would look for it beside this page instead.
+function loadViewerCatalog() {
+  import("./viewer/config.js")
+    .then((config) => {
+      resolveViewerUrl = config.resolveViewerDataUrl;
+      return Promise.all([fetchViewerJson("./data/datasets.json"), fetchViewerJson("./data/insights.json")]);
+    })
+    .then(([catalog, insights]) => {
+      viewerCatalog = {
+        datasets: new Map(catalog.datasets.map((entry) => [entry.slug, entry])),
+        insights,
+        manifests: new Map(),
+      };
+      renderTablesOnly();
+    })
+    .catch((error) => console.error("Viewer links unavailable", error));
+}
+
+// A cell link needs the dataset's manifest (its variables and lead days), read once per
+// dataset for the rows on screen. The tables are redrawn when they arrive.
+function requestViewerManifests(names) {
+  if (!viewerCatalog) return;
+  const missing = [...new Set(names.map(viewerDatasetFor))].filter((slug) => slug && !viewerCatalog.manifests.has(slug));
+  if (missing.length === 0) return;
+  for (const slug of missing) viewerCatalog.manifests.set(slug, null);
+  Promise.all(
+    missing.map((slug) =>
+      fetchViewerJson(viewerCatalog.datasets.get(slug).manifest)
+        .then((manifest) => viewerCatalog.manifests.set(slug, manifest))
+        .catch((error) => console.error(`Viewer manifest of ${slug} unavailable`, error)),
+    ),
+  ).then(renderTablesOnly);
+}
+
 function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName) {
   const unitSuffix = unit ? ` ${unit}` : "";
   let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${value.toFixed(2)}${unitSuffix}`;
@@ -307,6 +415,11 @@ function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, bas
     tooltip += `\nvs ${displayName(baselineName)}: ${formatPercentDiff(referenceValue, value)}`;
   }
   return tooltip;
+}
+
+// A challenger published as a scores file links to that file, one published as a notebook to its report page.
+function reportHref(name, regionId) {
+  return reportLinks[regionId][name];
 }
 
 function buildDataRows(
@@ -327,7 +440,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="${reportHref(name, regionId)}">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name, regionId)}</th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -359,6 +472,11 @@ function buildDataRows(
           ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
           : "";
         const emptyClass = value === null ? " no-value-cell" : "";
+        const href = value !== null ? viewerCellHref(name, regionId, metricKey, depth, variable, day) : null;
+        if (href) {
+          const label = `Open ${escapeAttribute(displayName(name))} ${variable}, lead ${day}, in the viewer`;
+          display = `<a class="viewer-cell-link" href="${href}" aria-label="${label}">${display}</a>`;
+        }
         rows += `<td class="score-value-cell${emptyClass}" style="${style}" title="${title}">${display}</td>`;
       }
     }
@@ -378,7 +496,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="${reportHref(name, regionId)}">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name, regionId)}</th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -1410,6 +1528,7 @@ function applyActiveVersion() {
   challengerCategories = versionData.challenger_categories || {};
   regionLabels = versionData.region_labels || {};
   regionMetadata = versionData.region_metadata || {};
+  reportLinks = versionData.report_links || {};
   const regionIds = versionData.region_order || Object.keys(versionData.regions || {});
   if (!activeRegion || !regionIds.includes(activeRegion)) {
     activeRegion = regionIds[0] || null;
@@ -1480,6 +1599,7 @@ function renderTablesOnly() {
   const baseline = resolveBaselineSelectionForTrack(trackChallengerNames, existingSelect?.value ?? selectedBaseline);
   if (!baseline) return;
   const visibleChallengerNames = visibleRowNames(trackChallengerNames, baseline);
+  requestViewerManifests(visibleChallengerNames);
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
     renderMetricSection(
@@ -1524,6 +1644,7 @@ function renderAllTables() {
   const baseline = resolveBaselineSelectionForTrack(trackChallengerNames, existingSelect?.value ?? selectedBaseline);
   if (!baseline) return;
   const visibleChallengerNames = visibleRowNames(trackChallengerNames, baseline);
+  requestViewerManifests(visibleChallengerNames);
   const availableDepths = getAvailableDepths(challengers, baseline, sections);
 
   for (const [sectionKey, sectionConfig] of Object.entries(sections)) {
@@ -1668,6 +1789,15 @@ function openTapTooltip(element) {
   if (!text) return;
   const tip = ensureTipElement();
   tip.textContent = text;
+  // A tap shows the score; the viewer link of a cell moves into the tooltip.
+  const viewerLink = element.querySelector("a.viewer-cell-link");
+  if (viewerLink) {
+    const link = document.createElement("a");
+    link.className = "score-tip-link";
+    link.href = viewerLink.getAttribute("href");
+    link.textContent = "Open in viewer";
+    tip.appendChild(link);
+  }
   tip.classList.add("is-open");
   element.setAttribute("data-tip-open", "");
 
@@ -1685,8 +1815,10 @@ function openTapTooltip(element) {
 }
 
 let tapTooltipClicksAttached = false;
+let lastPointerType = "";
 
 function attachTapTooltips() {
+  document.addEventListener("pointerdown", (event) => (lastPointerType = event.pointerType), { capture: true });
   // Desktop clicks must not open the tooltip, so wait for a real touch unless the
   // device reports that it has no hover at all.
   if (!window.matchMedia("(hover: none)").matches) {
@@ -1715,7 +1847,11 @@ function attachTapTooltipClicks() {
       closeTapTooltip();
       return;
     }
-    if (target.classList.contains("challenger-note-marker")) {
+    // On a device with both touch and a mouse, only a touch or pen tap trades a cell's
+    // viewer link for the tooltip; a mouse click or the keyboard (detail 0) follows it.
+    const viewerLink = event.target.closest("a.viewer-cell-link");
+    if (viewerLink && (event.detail === 0 || !["touch", "pen"].includes(lastPointerType))) return;
+    if (target.classList.contains("challenger-note-marker") || viewerLink) {
       event.preventDefault();
     }
     const wasOpen = target.hasAttribute("data-tip-open");
@@ -1753,6 +1889,7 @@ function init() {
 
   window.addEventListener("scroll", scheduleScrollSpyRefresh, { passive: true });
   attachTapTooltips();
+  loadViewerCatalog();
 
   let wasDark = document.body.classList.contains("quarto-dark");
   new MutationObserver(() => {

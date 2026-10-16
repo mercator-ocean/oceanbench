@@ -18,6 +18,8 @@ project:
     - assets/github.svg
     - assets/copernicus-marine.svg
     - external-links.js
+    - viewer/
+    - "!viewer/qa/"
 website:
   title: "OceanBench"
   favicon: favicon-light.png
@@ -28,6 +30,8 @@ website:
     left:
       - href: index.qmd
         text: Scores
+      - href: viewer.qmd
+        text: Viewer
       - challengers.qmd
       - about.qmd
       - href: https://oceanbench.readthedocs.io

@@ -44,9 +44,9 @@ Check out the [Makefile](Makefile) and CI/Actions to discover what is done autom
 
 ## Library life cycle
 
-The main objective of the library is to be used as part of a notebook whose execution serves as an evaluation report.
+The main objective of the library is to evaluate challengers with `oceanbench evaluate`, which writes one scores file per challenger and region.
 On each new version release, the participating models are re-evaluated.
-The OceanBench maintainers store the versioned evaluation reports of all participating models on [EDITO](https://datalab.dive.edito.eu/my-files/oceanbench-bucket/public/evaluation-reports/).
+The OceanBench maintainers store the versioned evaluation results of all participating models on [EDITO](https://datalab.dive.edito.eu/my-files/oceanbench-bucket/public/evaluation-reports/).
 
 The library source code is under the `oceanbench` directory:
 
@@ -96,7 +96,7 @@ make release-patch
 The website source code is under the `website` directory.
 The `main` branch is automatically deployed to the OceanBench website.
 To deploy or update a branch on EDITO, run the "Update website" GitHub workflow on it, or `make deploy-website-on-edito` (creating a service needs `EDITO_ACCESS_TOKEN` or `EDITO_OFFLINE_TOKEN`).
-The website parses and displays a given version of the evaluation reports stored on [EDITO](https://datalab.dive.edito.eu/my-files/oceanbench-bucket/public/evaluation-reports/).
+The website displays the scores files of each version stored on [EDITO](https://datalab.dive.edito.eu/my-files/oceanbench-bucket/public/evaluation-reports/), and parses the report notebooks of the versions published before scores files (0.1.0 to 0.6.0).
 
 ## Development guidelines and conventions
 

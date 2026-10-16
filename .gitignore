@@ -186,4 +186,6 @@ scripts/*
 
 # Docs
 docs/source/
-glonet_sample.report.ipynb
+
+# Evaluation outputs
+/*.scores.json

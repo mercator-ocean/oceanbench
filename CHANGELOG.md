@@ -17,6 +17,25 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
+## Unreleased
+
+**Scores:** unchanged vs 0.6.0. The evaluation output changes from a report notebook to a scores file.
+
+### Changed
+
+- `oceanbench evaluate` and `oceanbench.evaluate_challenger` no longer generate and execute a notebook. They run the challenger file in process, print each score table and step timing, and write `{challenger}.{region}.scores.json`, one row per score ([scores file documentation](https://oceanbench.readthedocs.io/en/latest/scores-file.html)). `--output-bucket` uploads that file.
+- `oceanbench evaluate --viewer-artifacts-dir <directory>` also writes the viewer data of each challenger: maps, water column, Class IV match-ups, eddies and score summaries ([viewer data documentation](https://oceanbench.readthedocs.io/en/latest/viewer-data.html)).
+- The sample references in `assets/` are scores files converted from the 0.6.0 report notebooks, and one example notebook remains as documentation.
+- The website reads the scores files of a version when they are published, and the report notebooks otherwise, so versions 0.1.0 to 0.6.0 are unchanged. A challenger published as a scores file links to that file instead of a report page.
+
+### Removed
+
+- The `jupyter` and `papermill` dependencies. Install `jupyter` yourself to run the example notebook.
+
+### Added
+
+- The `boto3`, `pyarrow`, `scikit-image` and `jsonschema` dependencies, now required by every install.
+
 ## 0.6.0 - 2026-10-05
 
 **Scores:** every table changes for every challenger (see Changed and Fixed).

@@ -1,0 +1,436 @@
+/*
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+
+/* JS-CONTROLLED SELECTORS: app.js writes data-theme and data-scope on <html>, and
+   data-layout / data-display on .panel-grid; the rules below hide, show and lay out from
+   those values. A new scope, layout or display mode is a change here as well as in the
+   JS that names it. The classes app.js toggles are .active, .collapsed, .loading,
+   .head-only, .psd-disabled, .trajectory-ready and .resizing-layout: those carry
+   behaviour, not decoration, and are not safe to delete as unused. */
+
+/* Page chrome: theme variables, the app shell grid, the app bar, the two drawers and
+   the controls inside the left one. Loaded first, so map.css, rail.css and
+   responsive.css can override anything here by source order. */
+
+/* Default theme follows the OceanBench Quarto site. Dark remains available from
+   the in-viewer toggle for field inspection.
+   Palette values are single-sourced from the shared design tokens in
+   ./tokens.css (--ob-viewer-*, themed via data-theme on <html>); the literals
+   below are fallbacks only, kept in sync with that file. */
+:root {
+  --background: var(--ob-viewer-bg, #fafaf7);
+  --canvas-void: var(--ob-viewer-canvas-void, #eef2f5);
+  --surface: var(--ob-viewer-surface, #ffffff);
+  --surface-strong: var(--ob-viewer-surface-strong, #f4f6f7);
+  --border: var(--ob-viewer-border, #dee2e6);
+  --text: var(--ob-viewer-text, #333940);
+  --muted: var(--ob-viewer-muted, #6c757d);
+  --accent: var(--ob-viewer-accent, #046293);
+  --accent-glow: var(--ob-viewer-accent-glow, rgba(4, 98, 147, 0.18));
+  --readout-bg: var(--ob-viewer-readout-bg, rgba(255, 255, 255, 0.88));
+  --grid-line: var(--ob-viewer-grid-line, rgba(108, 117, 125, 0.18));
+  --mono: var(--ob-font-mono, ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace);
+  /* The whole interface is written in four type sizes and one control size. Every
+     rule below picks from these; none of them invents its own value. See the
+     rationale on the tokens themselves in tokens.css. */
+  --text-control: var(--ob-text-control, 0.8125rem);
+  --text-caption: var(--ob-text-caption, 0.6875rem);
+  --text-readout: var(--ob-text-readout, 0.75rem);
+  --control-height: var(--ob-control-height, 2rem);
+  /* One corner radius for every rectangular surface, from a select to the About
+     dialog. Circles (the "?" affordance, legend dots) keep 50%. */
+  --radius-sm: var(--ob-radius-sm, 0.35rem);
+  --radius-md: var(--ob-radius-sm, 0.35rem);
+  /* How far every region holds its content off the shell's edges: the app bar, both
+     drawers, the panel head and the map strip all measure from the same rule. */
+  --inset: 1rem;
+  --shadow: var(--ob-viewer-shadow, 0 0.35rem 1.2rem rgba(15, 23, 42, 0.06));
+  /* Single custom crosshair shared by the real CSS cursor and the mirrored
+     companion marker so both are pixel-identical across OSes/machines: a plus
+     with a center gap, a 3px white halo under a 1.4px dark core, so it stays
+     legible on any field colormap in both light and dark themes. */
+  --field-cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2221%22%20height%3D%2221%22%20viewBox%3D%220%200%2021%2021%22%3E%3Cg%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M10.5%201.5V8M10.5%2013V19.5M1.5%2010.5H8M13%2010.5H19.5%22%20stroke%3D%22%23fff%22%20stroke-width%3D%223%22%2F%3E%3Cpath%20d%3D%22M10.5%201.5V8M10.5%2013V19.5M1.5%2010.5H8M13%2010.5H19.5%22%20stroke%3D%22%23111%22%20stroke-width%3D%221.4%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+}
+
+/* Nudge muted text a touch darker in the light theme so small muted text
+   (e.g. .layer-info, rail captions) clears WCAG AA 4.5:1 on the light surfaces;
+   the shared #6c757d sat at ~4.33 to 4.48 against them. Dark theme is unaffected. */
+:root[data-theme="light"] { --muted: #676d75; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+/* App shell: a full-viewport column of [slim app bar] [workspace]. The workspace is
+   the only flexible row, so the app never scrolls as a page and the map owns every
+   pixel below the bar. */
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--ob-font-sans, Lato, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+  color: var(--text);
+  background: var(--background);
+  /* Match the site's body metrics so viewer and scores read as one product. The
+     control sizes below stay in rem off the 16px root, which is where the site's
+     own small text (table cells, form labels) already sits. */
+  font-size: var(--ob-body-size, 1.0625rem);
+  line-height: var(--ob-body-line, 1.5);
+}
+
+.app-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  padding: 0.35rem var(--inset);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.brand-title { display: flex; align-items: center; gap: 1.1rem; min-width: 0; }
+.site-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.site-brand:hover { color: var(--accent); text-decoration: none; }
+.site-brand img { width: 1.45rem; height: 1.45rem; }
+.title { min-width: 0; }
+.title h1 { font-size: inherit; margin: 0; font-weight: 500; }
+/* The bar reads left to right as: what you are looking at, then how you are
+   comparing it, then, pushed away to the far end, the things you touch once a
+   session. The actions block takes the whole free width so the utilities land on
+   the right edge in both the embedded and the standalone bar. */
+/* Below roughly 700px the three groups no longer fit on one line, so the bar drops
+   the utilities to a second row rather than pushing them past its own right edge. */
+.header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 0.75rem; flex: 1 1 auto; min-width: 0; }
+.header-utility { display: flex; align-items: center; gap: 0.15rem; margin-left: auto; }
+/* Quiet by construction: no border, no fill, no competition with the two control
+   groups on the left. They come forward on hover, which is when they matter. */
+.header-utility .ghost-button {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.header-utility .ghost-button:hover { color: var(--accent); border-color: transparent; }
+.site-link { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* Embedded in the Quarto site: the parent navbar already carries the OceanBench
+   logo, the page title and the Scores link, so the app's own brand block and its
+   Scores button are duplicate navigation. Hide both and keep the bar as a slim
+   strip of functional controls only. Standalone mode keeps them. */
+.viewer-embedded .brand-title,
+.viewer-embedded .site-link { display: none; }
+/* With the brand block gone the actions are the only child left, so the bar packs
+   them flush left against its own padding instead of leaving a dead band there. */
+.viewer-embedded .app-bar { justify-content: flex-start; }
+.layout-switch .ghost-button { font-variant-numeric: tabular-nums; }
+.ghost-button.active { border-color: var(--accent); color: var(--accent); }
+
+.ghost-button {
+  font: inherit;
+  font-size: var(--text-control);
+  height: var(--control-height);
+  padding: 0 0.75rem;
+  color: var(--text);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ghost-button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Segmented control: one object made of parts, not several buttons that happen to
+   sit together. Shared edges, rounded ends only, and the active segment lifted
+   above its neighbours so its accent border is not clipped by theirs. Every mutually
+   exclusive choice in the app uses it, which is why the layout switch, the display
+   switch, the scope switch and the forecast picker all read the same way. */
+.segmented { display: inline-flex; }
+.segmented .ghost-button { border-radius: 0; margin-left: -1px; position: relative; }
+.segmented .ghost-button:first-of-type { border-radius: var(--radius-sm) 0 0 var(--radius-sm); margin-left: 0; }
+.segmented .ghost-button:last-of-type { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.segmented .ghost-button:hover,
+.segmented .ghost-button.active { z-index: 1; }
+
+.workspace {
+  --controls-width: 16rem;
+  --rail-width: 22rem;
+  --controls-open-width: 16rem;
+  --rail-open-width: 22rem;
+  --drawer-tab-width: 26px;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--controls-width) minmax(0, 1fr) var(--rail-width);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Retractable drawers. One surface with the map: no card, no radius, no shadow,
+   just a hairline against the map and an edge tab to fold them away. */
+.drawer {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  background: var(--surface);
+}
+/* Explicit tracks: below 1100px the drawers leave the grid flow (position: absolute),
+   and without this the map would auto-place itself into the vacated first column. */
+.drawer-left { grid-column: 1; border-right: 1px solid var(--border); }
+.map-area { grid-column: 2; }
+.drawer-right { grid-column: 3; border-left: 1px solid var(--border); }
+.drawer-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.drawer.collapsed > .drawer-body,
+.drawer.collapsed > .drawer-resizer { display: none; }
+
+/* Drag handle on the drawer's inner edge: a hairline that lights up on hover and
+   widens its hit area with a transparent pseudo-element. */
+.drawer-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  z-index: 8;
+  touch-action: none;
+  cursor: col-resize;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+.drawer-left .drawer-resizer { right: -1px; }
+.drawer-right .drawer-resizer { left: -1px; }
+.drawer-resizer::before { content: ""; position: absolute; inset: 0 -5px; }
+.drawer-resizer:hover,
+.drawer-resizer.active { background: var(--accent); }
+body.resizing-layout { cursor: col-resize; user-select: none; }
+
+/* Edge tab: a small pill on the inner edge while the drawer is open; the whole
+   thin strip once it is collapsed, so the closed drawer is one big click target. */
+.drawer-tab {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 13px;
+  height: 46px;
+  z-index: 9;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: var(--text-control);
+  line-height: 1;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.drawer-tab:hover { color: var(--accent); border-color: var(--accent); }
+.drawer-left .drawer-tab { right: -1px; border-right: 0; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.drawer-right .drawer-tab { left: -1px; border-left: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.drawer.collapsed > .drawer-tab {
+  inset: 0;
+  width: auto;
+  height: auto;
+  transform: none;
+  border: 0;
+  border-radius: 0;
+}
+.drawer-left .drawer-tab::before { content: "\2039"; }
+.drawer-right .drawer-tab::before { content: "\203A"; }
+.drawer-left.collapsed .drawer-tab::before { content: "\203A"; }
+.drawer-right.collapsed .drawer-tab::before { content: "\2039"; }
+
+/* The drawer carries a 1px border on its map-facing edge, which lives inside its
+   own width. Padding that edge by a pixel less puts the content the same 16px from
+   both visible edges instead of 16 and 17. */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: var(--inset) calc(var(--inset) - 1px) 1.5rem var(--inset);
+}
+.scope-switch { display: inline-flex; }
+.scope-switch .ghost-button { flex: 1; padding: 0 0.5rem; }
+
+/* The note is one or two lines depending on the overlay, and it sits above the rest of
+   the drawer: reserve both lines always so switching overlay does not shunt every
+   control below it up and down. */
+#overlay-note { min-height: 2lh; position: relative; }
+
+/* Class-4 loading bar. It sits out of flow at the foot of the note box, whose height is
+   already reserved, so a load never resizes anything. Phases whose size is unknown until
+   the footer is parsed slide instead of filling. */
+.note-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+.note-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+.note-progress.indeterminate .note-progress-fill {
+  width: 35%;
+  animation: note-progress-slide 1.1s linear infinite;
+}
+@keyframes note-progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+/* Entire-year scope hides single-forecast-only controls; the lead slider and the
+   Region view control stay. The standalone Overlay field and its dependent
+   eddy-reference/note are hidden. */
+:root[data-scope="year"] .start-date-field,
+:root[data-scope="year"] #currents-group,
+:root[data-scope="year"] .controls label:has(#overlay-mode),
+:root[data-scope="year"] #eddy-reference-field,
+:root[data-scope="year"] #overlay-note,
+:root[data-scope="year"] #rail-spectra-section,
+:root[data-scope="year"] #rail-trajectory-section { display: none !important; }
+
+.controls label,
+.controls .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: var(--text-control);
+  color: var(--muted);
+}
+.controls label.toggle { flex-direction: row; align-items: center; gap: 0.5rem; color: var(--text); }
+.controls select,
+.panel-head select {
+  font: inherit;
+  font-size: var(--text-control);
+  height: var(--control-height);
+  padding: 0 0.4rem;
+  color: var(--text);
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+/* Tertiary by definition: reset and the tips are things you reach for after
+   something went wrong, so they sit at the foot of the drawer behind a rule
+   instead of in the middle of the fields that change what you see. */
+.controls-footer {
+  margin-top: auto;
+  padding-top: var(--inset);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.controls input[type="range"] { accent-color: var(--accent); width: 100%; }
+.control-group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.control-group legend { font-size: var(--text-control); color: var(--muted); padding: 0; }
+.lead-value { color: var(--accent); font-family: var(--mono); font-size: var(--text-readout); }
+.hint { color: var(--muted); font-size: var(--text-caption); margin: 0.15rem 0 0; }
+kbd { font-family: var(--mono); font-size: var(--text-caption); background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 0.25rem; }
+
+/* ---- year metric switch (|error| / bias), year scope only ------------------ */
+.metric-switch { display: none; align-items: center; }
+:root[data-scope="year"] .metric-switch { display: inline-flex; }
+.metric-switch-label {
+  font-size: var(--text-control);
+  color: var(--muted);
+  margin-right: 0.35rem;
+  align-self: center;
+}
+
+/* ---- transparent-science method notes ("?" affordance + popover) ----------- */
+.method-note-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin-left: 0.3rem;
+  padding: 0;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: help;
+  vertical-align: middle;
+  flex: 0 0 auto;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.method-note-btn:hover,
+.method-note-btn:focus-visible,
+.method-note-btn[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  outline: none;
+}
+h3 .method-note-btn { margin-left: 0.35rem; }
+
+.method-popover {
+  position: fixed;
+  z-index: 60;
+  max-width: 320px;
+  padding: 0.6rem 0.7rem;
+  font-size: var(--text-control);
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0.5rem 1.5rem rgba(15, 23, 42, 0.18);
+}
+.method-popover-title {
+  font-weight: 600;
+  font-size: var(--text-control);
+  margin-bottom: 0.3rem;
+  color: var(--text);
+}
+.method-popover-body { color: var(--muted); }
+.method-params {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.1rem 0.6rem;
+  margin: 0 0 0.45rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: var(--text-readout);
+}
+.method-param { display: contents; }
+.method-param span { color: var(--muted); }
+.method-param strong { color: var(--text); font-weight: 600; text-align: right; }
