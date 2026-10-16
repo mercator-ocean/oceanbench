@@ -34,6 +34,7 @@ The two nodes must share a file system, for example a scratch or work directory.
    A challenger given as a URL is downloaded, and ``--all-challengers`` asks the GitHub API for the challenger list, so neither works offline.
 
 The evaluation finds everything in ``/shared/oceanbench-stage`` and does not download anything.
+It prints the score tables in the job log and writes them to ``challenger.global.scores.json``, described in :ref:`scores-file-page`.
 The directory must be writable from the compute node.
 For a challenger that uses one of the challenger datasets provided by OceanBench (``oceanbench.datasets.challenger``), step 2 also writes there the surface currents used by the Lagrangian scores.
 They take about 0.1 GB per forecast week at 1/4 degree.

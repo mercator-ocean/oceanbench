@@ -82,17 +82,18 @@ oceanbench.datasets.reference.glorys_reanalysis_1_degree()
 
 ## Evaluate your system with OceanBench
 
-The evaluation of a system consists of the sequential execution of a Python notebook that runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).
+The evaluation of a system runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html) by a Python file, the _challenger file_.
+It prints the score tables and writes them to a [scores file](https://oceanbench.readthedocs.io/en/latest/scores-file.html), `<challenger>.<region>.scores.json`.
 
 The OceanBench documentation describes [the shape a challenger dataset](https://oceanbench.readthedocs.io/en/latest/shape-of-the-challenger-dataset.html) must have, as well as [the definitions of the methods used to evaluate systems](https://oceanbench.readthedocs.io/en/latest/evaluation-methods.html).
 
 ### Official evaluation
 
-All official challenger notebooks are maintained and remain executable in order to update the scores with new OceanBench versions (all official challengers are re-evaluated with each new version).
+All official challenger files are maintained and remain executable in order to update the scores with new OceanBench versions (all official challengers are re-evaluated with each new version).
 
 To officially submit your system to OceanBench, please open an issue on this repository attaching one of the following:
 
-1. The executed notebook resulting from an [interactive](#interactive-evaluation) or [programmatic](#programmatic-evaluation) evaluation.
+1. The challenger file and the scores file resulting from an [interactive](#interactive-evaluation) or [programmatic](#programmatic-evaluation) evaluation.
 2. A way to access the system output data in a standard format (e.g. Zarr or NetCDF).
 3. A way to execute the system code or container along with clear instructions for how to run it (e.g., input/output format, required dependencies, etc.).
 
@@ -106,10 +107,10 @@ In addition, please provide the following metadata:
 
 ### Interactive evaluation
 
-Checkout [this notebook](https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.global.report.ipynb) that evaluates a sample (two forecasts) of the GLONET system on OceanBench.
-The resulting executed notebook is used as the evaluation report of the system, and its content is used to fulfill the OceanBench score table.
+Checkout [this notebook](https://github.com/mercator-ocean/oceanbench/blob/main/assets/evaluate_challenger_example.ipynb) that evaluates a sample (one forecast) of the GLONET system on OceanBench.
+It writes the challenger file, evaluates it and displays scores read from the resulting scores file.
 
-You can replace the cell that opens the challenger datasets with your code and execute the notebook.
+You can replace the cell that writes the challenger file with your code and execute the notebook.
 
 #### Execute on your own resources
 
@@ -132,7 +133,7 @@ git clone git@github.com:mercator-ocean/oceanbench.git && cd oceanbench/ && pip 
 #### Execute on EDITO
 
 You can open and manually execute the example notebook in EDITO datalab by clicking here:
-[![Link to open resource in EDITO](https://dive.edito.eu/badges/Open-in-EDITO.svg)](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-python-ocean-science?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.global.report.ipynb»)
+[![Link to open resource in EDITO](https://dive.edito.eu/badges/Open-in-EDITO.svg)](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-python-ocean-science?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fevaluate_challenger_example.ipynb»)
 
 ### Programmatic evaluation
 
@@ -178,13 +179,15 @@ Then pass it to the CLI:
 oceanbench evaluate path/to/challenger.py --region-file path/to/region.json
 ```
 
-To upload the resulting notebooks to an S3 bucket:
+Each evaluation prints the score tables and the duration of each step, and writes a scores file in the current directory.
+Its name is derived from the challenger file name and region (e.g. `challenger.py` produces `challenger.global.scores.json` for the global benchmark and `challenger.ibi.scores.json` for the IBI benchmark).
+The [scores file documentation](https://oceanbench.readthedocs.io/en/latest/scores-file.html) describes its content and when two scores files are comparable.
+
+To also upload the scores files to an S3 bucket:
 
 ```bash
-oceanbench evaluate path/to/challenger.py --output-bucket my-bucket --output-prefix results/
+oceanbench evaluate path/to/challenger.py --output-bucket my-bucket --output-prefix results
 ```
-
-The output notebook name is automatically derived from the challenger file name and region (e.g. `challenger.py` produces `challenger.global.report.ipynb` for the global benchmark and `challenger.ibi.report.ipynb` for the IBI benchmark).
 
 To run OceanBench on an HPC compute node without internet access, see [Run OceanBench offline](https://oceanbench.readthedocs.io/en/latest/run-offline.html).
 
@@ -196,6 +199,8 @@ import oceanbench
 
 oceanbench.evaluate_challenger("path/to/file/opening/the/challenger/datasets.py")
 ```
+
+It prints the score tables and writes the same scores file as the CLI.
 
 More details in the [documentation](https://oceanbench.readthedocs.io/en/latest/source/oceanbench.html#oceanbench.evaluate_challenger).
 
