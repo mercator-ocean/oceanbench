@@ -61,6 +61,7 @@ let challengerNotes = {};
 let challengerCategories = {};
 let regionLabels = {};
 let regionMetadata = {};
+let reportLinks = {};
 let activeTrack = "high_resolution";
 let activeSection = "observations";
 let activeRegion = null;
@@ -416,6 +417,11 @@ function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, bas
   return tooltip;
 }
 
+// A challenger published as a scores file links to that file, one published as a notebook to its report page.
+function reportHref(name, regionId) {
+  return reportLinks[regionId][name];
+}
+
 function buildDataRows(
   orderedNames,
   challengers,
@@ -434,7 +440,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name, regionId)}</th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="${reportHref(name, regionId)}">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name, regionId)}</th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -490,7 +496,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}.report.html">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name, regionId)}</th>`;
+    rows += `<tr${rowClass}><th class="model-col"><a href="${reportHref(name, regionId)}">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name, regionId)}</th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -1522,6 +1528,7 @@ function applyActiveVersion() {
   challengerCategories = versionData.challenger_categories || {};
   regionLabels = versionData.region_labels || {};
   regionMetadata = versionData.region_metadata || {};
+  reportLinks = versionData.report_links || {};
   const regionIds = versionData.region_order || Object.keys(versionData.regions || {});
   if (!activeRegion || !regionIds.includes(activeRegion)) {
     activeRegion = regionIds[0] || null;

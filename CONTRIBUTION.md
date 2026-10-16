@@ -96,7 +96,7 @@ make release-patch
 The website source code is under the `website` directory.
 The `main` branch is automatically deployed to the OceanBench website.
 To deploy or update a branch on EDITO, run the "Update website" GitHub workflow on it, or `make deploy-website-on-edito` (creating a service needs `EDITO_ACCESS_TOKEN` or `EDITO_OFFLINE_TOKEN`).
-The website parses and displays a given version of the evaluation reports stored on [EDITO](https://datalab.dive.edito.eu/my-files/oceanbench-bucket/public/evaluation-reports/).
+The website displays the scores files of each version stored on [EDITO](https://datalab.dive.edito.eu/my-files/oceanbench-bucket/public/evaluation-reports/), and parses the report notebooks of the versions published before scores files (0.1.0 to 0.6.0).
 
 ## Development guidelines and conventions
 

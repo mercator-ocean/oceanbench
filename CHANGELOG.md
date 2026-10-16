@@ -25,6 +25,7 @@ and the affected reports are re-published (never silently overwritten).
 
 - `oceanbench evaluate` and `oceanbench.evaluate_challenger` no longer generate and execute a notebook. They run the challenger file in process, print each score table and step timing, and write `{challenger}.{region}.scores.json`, one row per score ([scores file documentation](https://oceanbench.readthedocs.io/en/latest/scores-file.html)). `--output-bucket` uploads that file.
 - The sample references in `assets/` are scores files converted from the 0.6.0 report notebooks, and one example notebook remains as documentation.
+- The website reads the scores files of a version when they are published, and the report notebooks otherwise, so versions 0.1.0 to 0.6.0 are unchanged. A challenger published as a scores file links to that file instead of a report page.
 
 ### Removed
 

@@ -40,18 +40,31 @@ For the 1 degree track, the interpolation method used for challengers, the corre
 #| output: false
 
 import os
-from helpers.s3_discovery import available_versions, default_version, discover_downloaded_reports
+from helpers.s3_discovery import (
+    SCORES_FILE_SUFFIX,
+    available_versions,
+    default_version,
+    discover_downloaded_reports,
+    downloaded_report_path,
+    report_href,
+)
 from helpers.notebook_score_parser import get_all_model_scores_from_notebook, METRIC_TITLES, SECTIONS
+from helpers.scores_file_reader import get_all_model_scores_from_scores_file
 from helpers.challenger_metadata import challenger_label, challenger_note, challenger_category
 from helpers.published_regions import published_region_ids_with_reports, published_region_label, published_region_metadata
 from helpers.scores_payload import SCORES_DIRECTORY, scores_file_path, scores_payload
 
 def _load_scores(version, challenger_name, region_id, strict):
-    local_path = os.path.join("reports", version, f"{challenger_name}.{region_id}.report.ipynb")
-    if not os.path.exists(local_path):
+    local_path = downloaded_report_path("reports", version, challenger_name, region_id)
+    if local_path is None:
         return None
+    read_scores = (
+        get_all_model_scores_from_scores_file
+        if local_path.endswith(SCORES_FILE_SUFFIX)
+        else get_all_model_scores_from_notebook
+    )
     try:
-        scores = get_all_model_scores_from_notebook(local_path, challenger_name)
+        scores = read_scores(local_path, challenger_name)
     except Exception as error:
         if strict:
             raise
@@ -100,6 +113,13 @@ def _version_bundle(version, strict):
             challenger_name: challenger_category(challenger_name)
             for region in regions.values()
             for challenger_name in region["challenger_names"]
+        },
+        "report_links": {
+            region_id: {
+                challenger_name: report_href("reports", version, challenger_name, region_id)
+                for challenger_name in region["challenger_names"]
+            }
+            for region_id, region in regions.items()
         },
     }
 

@@ -16,7 +16,7 @@ format:
 #| output: asis
 
 from helpers.challenger_metadata import CHALLENGERS, challenger_forecasts_run_by
-from helpers.s3_discovery import default_version, discover_downloaded_reports
+from helpers.s3_discovery import default_version, discover_downloaded_reports, report_href
 from helpers.published_regions import published_region_ids, published_region_label
 
 report_version = default_version()
@@ -39,7 +39,7 @@ header = (
 def format_row(challenger_name):
     challenger_metadata = CHALLENGERS.get(challenger_name)
     report_links = "".join(
-        f'<a class="region-report-badge" href="reports/{report_version}/{challenger_name}.{region_id}.report.html">'
+        f'<a class="region-report-badge" href="{report_href("reports", report_version, challenger_name, region_id)}">'
         f"{region_labels[region_id]}</a>"
         for region_id, region_challengers in published_reports.items()
         if challenger_name in region_challengers

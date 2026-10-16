@@ -9,9 +9,10 @@ WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
 
 import helpers.s3_discovery as s3_discovery  # noqa: E402
-from helpers.s3_discovery import download_notebook  # noqa: E402
+from helpers.s3_discovery import download_report  # noqa: E402
 from helpers.s3_discovery import discover_downloaded_reports  # noqa: E402
 from helpers.s3_discovery import discover_official_reports  # noqa: E402
+from helpers.s3_discovery import report_href  # noqa: E402
 from helpers.s3_discovery import REPORTS_ROOT_PREFIX  # noqa: E402
 from helpers.s3_discovery import S3_BASE_URL  # noqa: E402
 from helpers.published_regions import published_region_ids  # noqa: E402
@@ -36,13 +37,14 @@ def _set_report_index(monkeypatch, challengers: list[str]) -> None:
     )
 
 
-def _official_report_url(version: str, challenger_name: str, region_id: str) -> str:
-    return f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{challenger_name}.{region_id}.report.ipynb"
+def _official_report_url(version: str, challenger_name: str, region_id: str, suffix: str = ".report.ipynb") -> str:
+    return f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{challenger_name}.{region_id}{suffix}"
 
 
 def test_discover_official_reports_probes_only_official_region_report_names(monkeypatch) -> None:
     _set_report_index(monkeypatch, ["glo12", "wenhai", "xihe"])
     existing_report_urls = {
+        _official_report_url(TEST_VERSION, "glo12", "global", ".scores.json"),
         _official_report_url(TEST_VERSION, "glo12", "global"),
         _official_report_url(TEST_VERSION, "glo12", "ibi"),
         _official_report_url(TEST_VERSION, "wenhai", "global"),
@@ -59,10 +61,13 @@ def test_discover_official_reports_probes_only_official_region_report_names(monk
     reports = discover_official_reports(TEST_VERSION)
 
     assert list(reports) == published_region_ids()
-    assert reports["global"] == ["glo12", "wenhai"]
-    assert reports["ibi"] == ["glo12"]
+    assert reports["global"] == {"glo12": "glo12.global.scores.json", "wenhai": "wenhai.global.report.ipynb"}
+    assert reports["ibi"] == {"glo12": "glo12.ibi.report.ipynb"}
     assert all(f"/{TEST_VERSION}/" in url for url in requested_urls)
-    assert all(".global.report.ipynb" in url or ".ibi.report.ipynb" in url for url in requested_urls)
+    assert all(
+        url.endswith((".global.scores.json", ".global.report.ipynb", ".ibi.scores.json", ".ibi.report.ipynb"))
+        for url in requested_urls
+    )
 
 
 def test_published_regions_have_stable_order_and_metadata() -> None:
@@ -105,7 +110,24 @@ def test_discover_downloaded_reports_reads_local_report_files(tmp_path, monkeypa
     assert reports["ibi"] == ["glonet"]
 
 
-def test_download_notebook_uses_only_explicit_region_name(monkeypatch, tmp_path) -> None:
+def test_report_href_links_scores_files_to_the_bucket_and_notebooks_to_report_pages(tmp_path, monkeypatch) -> None:
+    _set_report_index(monkeypatch, ["glonet", "glo12"])
+    version_directory = tmp_path / TEST_VERSION
+    version_directory.mkdir()
+    (version_directory / "glonet.global.scores.json").write_text("{}", encoding="utf-8")
+    (version_directory / "glo12.global.report.ipynb").write_text("{}", encoding="utf-8")
+
+    assert discover_downloaded_reports(str(tmp_path), TEST_VERSION)["global"] == ["glonet", "glo12"]
+    assert report_href(str(tmp_path), TEST_VERSION, "glonet", "global") == _official_report_url(
+        TEST_VERSION, "glonet", "global", ".scores.json"
+    )
+    assert (
+        report_href(str(tmp_path), TEST_VERSION, "glo12", "global")
+        == f"reports/{TEST_VERSION}/glo12.global.report.html"
+    )
+
+
+def test_download_report_uses_only_explicit_region_name(monkeypatch, tmp_path) -> None:
     requests_seen = []
 
     def fake_get(url: str, timeout: int):
@@ -116,7 +138,7 @@ def test_download_notebook_uses_only_explicit_region_name(monkeypatch, tmp_path)
 
     monkeypatch.setattr("helpers.s3_discovery.requests.get", fake_get)
 
-    destination = download_notebook(TEST_VERSION, "glonet", "global", str(tmp_path))
+    destination = download_report(TEST_VERSION, "glonet.global.report.ipynb", str(tmp_path))
 
     assert destination == str(tmp_path / "glonet.global.report.ipynb")
     assert (tmp_path / "glonet.global.report.ipynb").read_bytes() == b"{}"
