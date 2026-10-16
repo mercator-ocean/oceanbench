@@ -23,4 +23,5 @@ This documentation contains the definitions of the evaluation methods as well as
    one-degree-track
    run-offline
    scores-file
+   viewer-data
    source/oceanbench
