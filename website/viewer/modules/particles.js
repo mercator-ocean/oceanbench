@@ -74,10 +74,6 @@ function streakInk(background) {
   return `${mix(r)}, ${mix(g)}, ${mix(b)}`;
 }
 
-function createParticle(random) {
-  return { x: random(), y: random(), age: Math.floor(random() * MAX_AGE_FRAMES) };
-}
-
 /**
  * Start a particle animation writing into `canvas` (an overlay canvas sized in
  * device pixels). `context` is a live object the panel mutates; the engine reads:

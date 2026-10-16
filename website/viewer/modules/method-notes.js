@@ -41,16 +41,15 @@ export const METHOD_NOTES = {
   "lead-curve": {
     title: "RMSE vs lead day",
     body:
-      "Official RMSE per lead day over the starts of the selected period: Class IV against " +
-      "observations, or gridded over the whole region against GLORYS or GLO12. " +
-      "Band: 95% bootstrap interval. Computed offline.",
+      "Official RMSE per lead day over all starts: Class IV against observations, or " +
+      "gridded over the whole region against GLORYS or GLO12. Computed offline.",
   },
 
   // RMSE vs depth vertical profile chart (rail-depth-profile).
   "depth-profile": {
     title: "RMSE vs depth",
     body:
-      "Class IV RMSE per depth bin at this lead, over the selected period, official method. " +
+      "Class IV RMSE per depth bin at this lead, over all starts, official method. " +
       "Temperature's top metre is its own surface bin. Hover for the obs count.",
   },
 
@@ -59,9 +58,7 @@ export const METHOD_NOTES = {
     title: "RMSE / bias by start date",
     body:
       "Class IV RMSE per start date, pooled over its match-ups (official method). Bias mode: " +
-      "pooled mean of model minus obs. Band: 95% per start (bootstrap for RMSE, mean ± 1.96 " +
-      "sd/√n for bias); obs are spatially correlated, so read it as a lower bound. Click a " +
-      "point to open that date.",
+      "pooled mean of model minus obs. Click a point to open that date.",
   },
 
   // Year error geography map / its colorbar.

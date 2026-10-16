@@ -8,8 +8,7 @@
 
 import { class4DepthBin } from "./class4-index.js";
 
-// One published row per lead day: its mean and bootstrap CI are used as published. Rows are
-// never averaged here, and a CI is never recomputed in the browser.
+// One published row per lead day: its mean is used as published. Rows are never averaged here.
 export function aggregateLeadSeries(grouped) {
   const series = new Map();
   for (const [key, rows] of grouped) {
@@ -18,12 +17,7 @@ export function aggregateLeadSeries(grouped) {
       const leadDay = Number(row.lead_day);
       const value = scoreValue(row);
       if (!Number.isFinite(leadDay) || !Number.isFinite(value) || byLead.has(leadDay)) continue;
-      byLead.set(leadDay, {
-        lead_day: leadDay,
-        mean: value,
-        ci_low: Number.isFinite(row.ci_low) ? row.ci_low : value,
-        ci_high: Number.isFinite(row.ci_high) ? row.ci_high : value,
-      });
+      byLead.set(leadDay, { lead_day: leadDay, mean: value });
     }
     const aggregated = [...byLead.values()];
     if (aggregated.length) series.set(key, aggregated.sort((a, b) => a.lead_day - b.lead_day));

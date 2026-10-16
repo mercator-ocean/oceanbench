@@ -73,14 +73,6 @@ function publishResolvedBase() {
 
 publishResolvedBase();
 
-export function viewerDataBaseUrl() {
-  return dataBaseUrl;
-}
-
-export function viewerColumnsBaseUrl() {
-  return columnsBaseUrl;
-}
-
 /**
  * Load the optional viewer-config.json and recompute the data roots from it.
  * A missing file, a non-JSON body or a network failure all leave the roots exactly as

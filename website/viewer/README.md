@@ -59,7 +59,7 @@ main's 0.6.0 Class IV code. The archived version gives different numbers. Steps:
 
 Check: match-up RMSE, count and missing values equal main's Class IV table, for one
 global and one IBI model. Confidence bands, skill and period mode cannot be rebuilt from
-main's reports; the viewer then shows plain means. Then rebuild the viewer data with the
+main's reports, so the viewer shows plain means only. Then rebuild the viewer data with the
 release version, so the viewer and the score tables agree.
 
 ## Running it locally
