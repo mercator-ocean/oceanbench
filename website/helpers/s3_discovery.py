@@ -15,8 +15,9 @@ REPORTS_ROOT_PREFIX = "public/evaluation-reports"
 REPORT_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
 SCORES_FILE_SUFFIX = ".scores.json"
 NOTEBOOK_SUFFIX = ".report.ipynb"
-# Versions evaluated without notebooks publish one scores file per challenger and region, earlier versions
-# a report notebook. A scores file is preferred when both exist.
+# Versions up to LAST_NOTEBOOK_VERSION publish a report notebook per challenger and region, newer versions
+# a scores file. A downloaded scores file is preferred when both exist.
+LAST_NOTEBOOK_VERSION = "0.6.0"
 REPORT_FILE_SUFFIXES = (SCORES_FILE_SUFFIX, NOTEBOOK_SUFFIX)
 REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)(?:\.scores\.json|\.report\.ipynb)$")
 
@@ -78,11 +79,12 @@ def _report_exists(version: str, file_name: str) -> bool:
 
 
 def _published_report_file_name(version: str, challenger_name: str, region_id: str) -> str | None:
-    for suffix in REPORT_FILE_SUFFIXES:
-        file_name = f"{challenger_name}.{region_id}{suffix}"
-        if _report_exists(version, file_name):
-            return file_name
-    return None
+    if _version_sort_key(version) <= _version_sort_key(LAST_NOTEBOOK_VERSION):
+        suffix = NOTEBOOK_SUFFIX
+    else:
+        suffix = SCORES_FILE_SUFFIX
+    file_name = f"{challenger_name}.{region_id}{suffix}"
+    return file_name if _report_exists(version, file_name) else None
 
 
 def discover_official_reports(version: str) -> dict[str, dict[str, str]]:

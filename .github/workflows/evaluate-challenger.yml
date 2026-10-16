@@ -37,7 +37,6 @@ jobs:
           AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           CHALLENGER_PYTHON_FILE_PATH: challenger_datasets/${{ inputs.challengerPythonFileName  }}.py
-          CHALLENGER_SCORES_NAME: ${{ inputs.challengerPythonFileName }}.global.scores.json
           OCEANBENCH_OUTPUT_BUCKET: oceanbench-bucket
           OCEANBENCH_OUTPUT_PREFIX: dev/evaluation-reports/${{ github.head_ref || github.ref_name }}
           TEST_ENVIRONMENT_NAME: oceanbench_evaluate_challenger_${{ github.ref_name }}_${{ github.sha }}

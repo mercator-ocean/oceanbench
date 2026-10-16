@@ -29,11 +29,11 @@ class MockResponse:
         self.content = content
 
 
-def _set_report_index(monkeypatch, challengers: list[str]) -> None:
+def _set_report_index(monkeypatch, challengers: list[str], version: str = TEST_VERSION) -> None:
     monkeypatch.setattr(
         s3_discovery,
         "_report_index_cache",
-        {"default": TEST_VERSION, "versions": {TEST_VERSION: {"challengers": list(challengers)}}},
+        {"default": version, "versions": {version: {"challengers": list(challengers)}}},
     )
 
 
@@ -41,14 +41,7 @@ def _official_report_url(version: str, challenger_name: str, region_id: str, suf
     return f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{challenger_name}.{region_id}{suffix}"
 
 
-def test_discover_official_reports_probes_only_official_region_report_names(monkeypatch) -> None:
-    _set_report_index(monkeypatch, ["glo12", "wenhai", "xihe"])
-    existing_report_urls = {
-        _official_report_url(TEST_VERSION, "glo12", "global", ".scores.json"),
-        _official_report_url(TEST_VERSION, "glo12", "global"),
-        _official_report_url(TEST_VERSION, "glo12", "ibi"),
-        _official_report_url(TEST_VERSION, "wenhai", "global"),
-    }
+def _discover_with_existing_reports(monkeypatch, version: str, existing_report_urls: set[str]) -> tuple[dict, list]:
     requested_urls = []
 
     def fake_head(url: str, timeout: int):
@@ -57,17 +50,49 @@ def test_discover_official_reports_probes_only_official_region_report_names(monk
         return MockResponse(status_code=200 if url in existing_report_urls else 404)
 
     monkeypatch.setattr("helpers.s3_discovery.requests.head", fake_head)
+    return discover_official_reports(version), requested_urls
 
-    reports = discover_official_reports(TEST_VERSION)
+
+def test_discover_official_reports_probes_only_the_notebooks_up_to_0_6_0(monkeypatch) -> None:
+    version = "0.6.0"
+    _set_report_index(monkeypatch, ["glo12", "wenhai", "xihe"], version)
+
+    reports, requested_urls = _discover_with_existing_reports(
+        monkeypatch,
+        version,
+        {
+            _official_report_url(version, "glo12", "global", ".scores.json"),
+            _official_report_url(version, "glo12", "global"),
+            _official_report_url(version, "glo12", "ibi"),
+            _official_report_url(version, "wenhai", "global"),
+        },
+    )
 
     assert list(reports) == published_region_ids()
-    assert reports["global"] == {"glo12": "glo12.global.scores.json", "wenhai": "wenhai.global.report.ipynb"}
+    assert reports["global"] == {"glo12": "glo12.global.report.ipynb", "wenhai": "wenhai.global.report.ipynb"}
     assert reports["ibi"] == {"glo12": "glo12.ibi.report.ipynb"}
-    assert all(f"/{TEST_VERSION}/" in url for url in requested_urls)
-    assert all(
-        url.endswith((".global.scores.json", ".global.report.ipynb", ".ibi.scores.json", ".ibi.report.ipynb"))
-        for url in requested_urls
+    assert len(requested_urls) == 3 * len(published_region_ids())
+    assert all(f"/{version}/" in url for url in requested_urls)
+    assert all(url.endswith((".global.report.ipynb", ".ibi.report.ipynb")) for url in requested_urls)
+
+
+def test_discover_official_reports_probes_only_the_scores_files_after_0_6_0(monkeypatch) -> None:
+    version = "0.7.0"
+    _set_report_index(monkeypatch, ["glo12", "wenhai"], version)
+
+    reports, requested_urls = _discover_with_existing_reports(
+        monkeypatch,
+        version,
+        {
+            _official_report_url(version, "glo12", "global", ".scores.json"),
+            _official_report_url(version, "wenhai", "global"),
+        },
     )
+
+    assert reports["global"] == {"glo12": "glo12.global.scores.json"}
+    assert reports["ibi"] == {}
+    assert len(requested_urls) == 2 * len(published_region_ids())
+    assert all(url.endswith((".global.scores.json", ".ibi.scores.json")) for url in requested_urls)
 
 
 def test_published_regions_have_stable_order_and_metadata() -> None:
