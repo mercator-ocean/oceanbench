@@ -37,8 +37,8 @@ and the affected reports are re-published (never silently overwritten).
 ### Added
 
 - `oceanbench stage` command, which downloads the data a challenger evaluation needs, ocean mask included, without computing any score. It runs the challenger file like `oceanbench evaluate`, as `__main__` with the current directory importable. For a local challenger file, a later `oceanbench evaluate` with the same stage directory then needs no network ([#355](https://github.com/mercator-ocean/oceanbench/pull/355), [#361](https://github.com/mercator-ocean/oceanbench/pull/361)).
-- [Run OceanBench offline](https://oceanbench.readthedocs.io/en/latest/run-offline.html) documentation page, for HPC compute nodes without internet access ([#355](https://github.com/mercator-ocean/oceanbench/pull/355)).
-- [Units and time conventions of the input data](https://oceanbench.readthedocs.io/en/latest/input-data-conventions.html) documentation page for the IFS and GLO12 input datasets ([#357](https://github.com/mercator-ocean/oceanbench/pull/357)).
+- [Run OceanBench offline](https://oceanbench.edito.eu/documentation/run-offline/) documentation page, for HPC compute nodes without internet access ([#355](https://github.com/mercator-ocean/oceanbench/pull/355)).
+- [Units and time conventions of the input data](https://oceanbench.edito.eu/documentation/input-data-conventions/) documentation page for the IFS and GLO12 input datasets ([#357](https://github.com/mercator-ocean/oceanbench/pull/357)).
 - Each evaluation prints how long each step takes ([#358](https://github.com/mercator-ocean/oceanbench/pull/358)).
 - A run that waits more than 10 minutes for a stage lock logs a warning, once per lock, with the host and process ID that hold it ([#361](https://github.com/mercator-ocean/oceanbench/pull/361)).
 

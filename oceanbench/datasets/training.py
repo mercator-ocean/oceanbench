@@ -25,6 +25,8 @@ def glorys_reanalysis() -> xarray.Dataset:
     Dataset
         The Dataset containing the GLORYS reanalysis from 1993-01-01 to 2019-12-31.
 
+    Examples
+    --------
     >>> glorys_reanalysis() # doctest: +SKIP
     <xarray.Dataset> Size: 140TB
     Dimensions:    (depth: 50, latitude: 2041, longitude: 4320, time: 9861)
@@ -59,6 +61,8 @@ def glorys_reanalysis_1_degree() -> xarray.Dataset:
     Dataset
         The Dataset containing the 1 degree GLORYS reanalysis from 1993-01-01 to 2019-12-31.
 
+    Examples
+    --------
     >>> glorys_reanalysis_1_degree() # doctest: +SKIP
     <xarray.Dataset> Size: 970GB
     Dimensions:                          (time: 9861, depth: 50, latitude: 170,

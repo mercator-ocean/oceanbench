@@ -29,6 +29,8 @@ def glo12(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     Dataset
         The Dataset containing GLO12 forecasts.
 
+    Examples
+    --------
     >>> glo12() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 4TB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 50,
@@ -64,6 +66,8 @@ def glo12_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.
     Dataset
         The Dataset containing GLO12 forecasts interpolated to 1 degree resolution.
 
+    Examples
+    --------
     >>> glo12_1_degree() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 26GB
     Dimensions:                          (first_day_datetime: 52,
@@ -100,6 +104,8 @@ def glo36v1(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset
     Dataset
         The Dataset containing GLO36V1 forecasts.
 
+    Examples
+    --------
     >>> glo36v1() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 3TB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 7, depth: 50,
@@ -135,6 +141,8 @@ def glonet(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     Dataset
         The Dataset containing GLONET forecasts.
 
+    Examples
+    --------
     >>> glonet() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 342GB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 21,
@@ -180,6 +188,8 @@ def glonet_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
     Dataset
         The Dataset containing GLONET forecasts interpolated to 1 degree resolution.
 
+    Examples
+    --------
     >>> glonet_1_degree() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 21GB
     Dimensions:                          (first_day_datetime: 52,
@@ -226,6 +236,8 @@ def xihe(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     Dataset
         The Dataset containing XiHe forecasts.
 
+    Examples
+    --------
     >>> xihe() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 2TB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 23,
@@ -265,6 +277,8 @@ def xihe_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.D
     Dataset
         The Dataset containing XiHe forecasts interpolated to 1 degree resolution.
 
+    Examples
+    --------
     >>> xihe_1_degree() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 12GB
     Dimensions:                          (first_day_datetime: 52,
@@ -305,6 +319,8 @@ def wenhai(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     Dataset
         The Dataset containing WenHai forecasts.
 
+    Examples
+    --------
     >>> wenhai() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 2TB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 23,
@@ -344,6 +360,8 @@ def wenhai_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
     Dataset
         The Dataset containing WenHai forecasts interpolated to 1 degree resolution.
 
+    Examples
+    --------
     >>> wenhai_1_degree() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 12GB
     Dimensions:                          (first_day_datetime: 52,
@@ -384,6 +402,8 @@ def langya(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     Dataset
         The Dataset containing LangYa forecasts.
 
+    Examples
+    --------
     >>> langya() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 2TB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 7, depth: 32,
@@ -423,6 +443,8 @@ def langya_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
     Dataset
         The Dataset containing LangYa forecasts interpolated to 1 degree resolution.
 
+    Examples
+    --------
     >>> langya_1_degree() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 11GB
     Dimensions:                          (first_day_datetime: 52,
@@ -465,6 +487,8 @@ def glo12_persistence(first_day_datetimes: list[datetime] | None = None) -> xarr
     Dataset
         The Dataset containing GLO12 persistence baseline forecasts.
 
+    Examples
+    --------
     >>> glo12_persistence() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 4TB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 50,
@@ -515,6 +539,8 @@ def glo12_persistence_1_degree(first_day_datetimes: list[datetime] | None = None
         The Dataset containing GLO12 persistence baseline forecasts interpolated to 1
         degree resolution.
 
+    Examples
+    --------
     >>> glo12_persistence_1_degree() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 26GB
     Dimensions:                          (first_day_datetime: 52,
@@ -565,6 +591,8 @@ def hclimrep(first_day_datetimes: list[datetime] | None = None) -> xarray.Datase
     Dataset
         The Dataset containing HClimRep forecasts.
 
+    Examples
+    --------
     >>> hclimrep() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 74GB
     Dimensions:             (first_day_datetime: 52, lead_day_index: 10, depth: 9,
@@ -605,6 +633,8 @@ def hclimrep_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarr
     Dataset
         The Dataset containing HClimRep forecasts interpolated to 1 degree resolution.
 
+    Examples
+    --------
     >>> hclimrep_1_degree() # doctest: +ELLIPSIS
     <xarray.Dataset> Size: 5GB
     Dimensions:                          (first_day_datetime: 52,
