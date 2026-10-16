@@ -30,11 +30,14 @@ website:
         text: Scores
       - challengers.qmd
       - about.qmd
-      - href: https://oceanbench.readthedocs.io
-        text: Documentation
-  repo-url: https://github.com/mercator-ocean/oceanbench
-  repo-actions: [edit, source, issue]
-  repo-subdir: website
+      - text: Documentation
+        menu:
+          - href: https://oceanbench.readthedocs.io
+            text: Reference documentation
+          - href: https://openreview.net/forum?id=wZGe1Kqs8G
+            text: Paper
+      - href: https://github.com/mercator-ocean/oceanbench
+        text: Source code
   page-footer: |
     Powered by:
     <a href="https://edito.eu">
