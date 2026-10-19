@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from collections.abc import Callable
+
 import pandas
 import xarray
 
@@ -12,6 +14,7 @@ from oceanbench.core.lagrangian_trajectory import (
     deviation_of_lagrangian_trajectories,
     lagrangian_particle_count_for_region,
 )
+from oceanbench.core.marine_heatwaves import marine_heatwave_diagnostics, reference_history_dataset
 from oceanbench.core.ocean_mask import ocean_mask
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
@@ -187,4 +190,46 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
         challenger_dataset=regional_challenger_dataset,
         reference_dataset=subset_dataset_to_region(glo12_analysis_dataset(regional_challenger_dataset), region),
         particle_count=_lagrangian_particle_count(challenger_dataset, regional_challenger_dataset),
+    )
+
+
+def marine_heatwave_diagnostics_compared_to_glorys_reanalysis(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = GLOBAL_REGION_NAME,
+    climatology_path: str | None = None,
+) -> pandas.DataFrame:
+    return _marine_heatwave_diagnostics_compared_to_reference(
+        challenger_dataset, glorys_reanalysis_dataset, region, climatology_path
+    )
+
+
+def marine_heatwave_diagnostics_compared_to_glo12_analysis(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = GLOBAL_REGION_NAME,
+    climatology_path: str | None = None,
+) -> pandas.DataFrame:
+    return _marine_heatwave_diagnostics_compared_to_reference(
+        challenger_dataset, glo12_analysis_dataset, region, climatology_path
+    )
+
+
+def _marine_heatwave_diagnostics_compared_to_reference(
+    challenger_dataset: xarray.Dataset,
+    reference_loader: Callable[[xarray.Dataset], xarray.Dataset],
+    region: RegionLike,
+    climatology_path: str | None,
+) -> pandas.DataFrame:
+    if climatology_path is None:
+        raise ValueError(
+            "No global marine heatwave climatology is published yet: "
+            "pass climatology_path, a heatwave3 ts2clm3 climatology covering the region."
+        )
+    regional_challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
+    return marine_heatwave_diagnostics(
+        challenger_dataset=regional_challenger_dataset,
+        reference_dataset=subset_dataset_to_region(reference_loader(regional_challenger_dataset), region),
+        history_dataset=subset_dataset_to_region(
+            reference_history_dataset(regional_challenger_dataset, reference_loader), region
+        ),
+        climatology_path=climatology_path,
     )

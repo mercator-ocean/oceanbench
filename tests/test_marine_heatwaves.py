@@ -4,11 +4,14 @@
 
 import numpy
 import pandas
+import pytest
 import xarray
 
+from oceanbench.core import metrics
 from oceanbench.core.dataset_utils import DepthLevel, Dimension
 from oceanbench.core.marine_heatwaves import (
     _leap_year_day_of_year,
+    _scores_with_history,
     detect_marine_heatwaves,
     marine_heatwave_diagnostics,
     marine_heatwave_scores,
@@ -169,7 +172,7 @@ def test_event_and_category_scores_are_area_weighted():
     numpy.testing.assert_allclose(scores.category_accuracy, 0.5)
 
 
-def test_temperature_difference_rmse_by_event_agreement_and_bias():
+def test_temperature_rmsd_by_event_agreement_and_bias():
     latitudes = [0.0]
     differences = numpy.array([[[1.0, 2.0, 3.0, 4.0, 9.0]], [[-1.0, -2.0, -3.0, -4.0, 9.0]]])
     challenger_temperature = _field(differences, latitudes).where(lambda field: field != 9.0)
@@ -180,7 +183,7 @@ def test_temperature_difference_rmse_by_event_agreement_and_bias():
     scores = marine_heatwave_scores(challenger_temperature, reference_temperature, challenger, reference)
 
     assert scores.event_agreement.values.tolist() == ["both", "challenger_only", "reference_only", "neither"]
-    numpy.testing.assert_allclose(scores.temperature_difference_rmse.squeeze().values, [[1, 2, 3, 4]] * 2)
+    numpy.testing.assert_allclose(scores.temperature_rmsd.squeeze().values, [[1, 2, 3, 4]] * 2)
     numpy.testing.assert_allclose(scores.temperature_bias.squeeze().values, [2.5, -2.5])
     numpy.testing.assert_allclose(scores.probability_of_detection.squeeze().values, [0.5, 0.5])
 
@@ -250,13 +253,75 @@ def test_history_lets_an_event_in_progress_count_from_lead_day_0_and_is_not_scor
     history_lead_days = numpy.arange(-7, 0)
 
     warm_history = _window(numpy.full((1, 7), 2.0), first_days, history_lead_days)
-    scores = marine_heatwave_diagnostics(forecast, forecast, warm_history, climatology)
+    scores = _scores_with_history(forecast, forecast, warm_history, climatology)
 
     assert scores[Dimension.LEAD_DAY_INDEX.key()].values.tolist() == forecast_lead_days.tolist()
     assert scores.probability_of_detection.values[:3].tolist() == [1.0, 1.0, 1.0]
     assert bool(scores.probability_of_detection[3:].isnull().all())
 
     cool_history = _window(numpy.zeros((1, 7)), first_days, history_lead_days)
-    scores_without_event = marine_heatwave_diagnostics(forecast, forecast, cool_history, climatology)
+    scores_without_event = _scores_with_history(forecast, forecast, cool_history, climatology)
 
     assert bool(scores_without_event.probability_of_detection.isnull().all())
+
+
+def _temperature_dataset(value: float, lead_days: numpy.ndarray, latitude_offset: float = 0.0) -> xarray.Dataset:
+    window = _window(numpy.full((1, lead_days.size), value), ["2024-06-01"], lead_days)
+    grid = window.isel(latitude=0, longitude=0, drop=True).expand_dims(
+        {
+            Dimension.DEPTH.key(): [DepthLevel.SURFACE.value, 47.37],
+            Dimension.LATITUDE.key(): [-35.0 + latitude_offset, -34.9 + latitude_offset],
+            Dimension.LONGITUDE.key(): [20.0, 20.1],
+        },
+        axis=[2, 3, 4],
+    )
+    return xarray.Dataset({"thetao": grid.assign_attrs(standard_name="sea_water_potential_temperature")})
+
+
+def test_marine_heatwave_diagnostics_table_from_datasets_and_a_heatwave3_climatology_file(tmp_path):
+    forecast_lead_days = numpy.arange(10)
+    climatology_path = tmp_path / "agulhas_clim.nc"
+    xarray.Dataset(
+        {
+            "seas": (("lon", "lat", "doy"), numpy.zeros((2, 2, 366))),
+            "thresh": (("lon", "lat", "doy"), numpy.ones((2, 2, 366))),
+        },
+        coords={"lon": [20.0, 20.1], "lat": [-35.0, -34.9], "doy": numpy.arange(1, 367)},
+    ).to_netcdf(climatology_path)
+
+    table = marine_heatwave_diagnostics(
+        challenger_dataset=_temperature_dataset(2.0, forecast_lead_days),
+        reference_dataset=_temperature_dataset(2.0, forecast_lead_days, latitude_offset=1e-6),
+        history_dataset=_temperature_dataset(2.0, numpy.arange(-7, 0)),
+        climatology_path=str(climatology_path),
+    )
+
+    assert table.shape == (18, 10)
+    assert table.columns.tolist() == [f"Lead day {day}" for day in range(1, 11)]
+    assert table.loc["Marine heatwave critical success index (-) []{surface}"].tolist() == [1.0] * 10
+    assert table.loc["Marine heatwave category accuracy (-) []{surface}"].tolist() == [1.0] * 10
+    assert table.loc["Temperature RMSD on both marine heatwave days (°C) []{surface}"].tolist() == [0.0] * 10
+    assert table.loc["Temperature RMSD on neither marine heatwave days (°C) []{surface}"].isnull().all()
+    assert table.loc["Temperature bias (°C) []{surface}"].tolist() == [0.0] * 10
+
+
+def test_marine_heatwave_metric_requires_a_climatology_until_a_global_one_exists():
+    with pytest.raises(ValueError, match="climatology_path"):
+        metrics.marine_heatwave_diagnostics_compared_to_glorys_reanalysis(xarray.Dataset())
+
+
+def test_marine_heatwave_diagnostics_fails_clearly_when_the_climatology_does_not_cover_the_grid(tmp_path):
+    climatology_path = tmp_path / "elsewhere_clim.nc"
+    xarray.Dataset(
+        {
+            "seas": (("lon", "lat", "doy"), numpy.zeros((2, 2, 366))),
+            "thresh": (("lon", "lat", "doy"), numpy.ones((2, 2, 366))),
+        },
+        coords={"lon": [40.0, 40.1], "lat": [-35.0, -34.9], "doy": numpy.arange(1, 367)},
+    ).to_netcdf(climatology_path)
+    forecast = _temperature_dataset(2.0, numpy.arange(10))
+
+    with pytest.raises(ValueError, match="longitude coordinates do not cover the challenger grid"):
+        marine_heatwave_diagnostics(
+            forecast, forecast, _temperature_dataset(2.0, numpy.arange(-7, 0)), str(climatology_path)
+        )

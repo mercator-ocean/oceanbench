@@ -6,9 +6,12 @@ from collections.abc import Callable
 
 import heatwave3
 import numpy
+import pandas
 import xarray
 
-from oceanbench.core.dataset_utils import DepthLevel, Dimension
+from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
+from oceanbench.core.dataset_utils import SPATIAL_COORDINATE_ALIGNMENT_ATOL, DepthLevel, Dimension, Variable
+from oceanbench.core.lead_day_utils import lead_day_labels
 
 HISTORY_DAYS = 7
 CLIMATOLOGY_DAY_OF_YEAR_DIMENSION = "doy"
@@ -21,33 +24,135 @@ _DAYS_BEFORE_MONTH_IN_LEAP_YEAR = numpy.array([0, 31, 60, 91, 121, 152, 182, 213
 
 
 def marine_heatwave_diagnostics(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    history_dataset: xarray.Dataset,
+    climatology_path: str,
+) -> pandas.DataFrame:
+    """
+    Detect marine heatwaves in challenger and reference forecast windows and score them.
+
+    Surface temperature is taken from each dataset; the reference, the history and the
+    climatology are snapped to the challenger grid by nearest index. The same reference history
+    days are prepended to both windows before detection, so that an event already in progress
+    at the forecast start is recognised on both sides; they are removed before scoring.
+
+    Parameters
+    ----------
+    challenger_dataset, reference_dataset : xarray.Dataset
+        Challenger and reference datasets with the same forecast starts and lead days.
+    history_dataset : xarray.Dataset
+        Reference history before each forecast start, from :func:`reference_history_dataset`.
+    climatology_path : str
+        Path or URL of a heatwave3 ``ts2clm3`` climatology (``seas``, ``thresh`` on ``doy``)
+        covering the challenger grid.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per score and one column per lead day.
+    """
+    challenger_temperature = _surface_temperature(challenger_dataset)
+    reference_temperature = _snapped_to_challenger_grid(_surface_temperature(reference_dataset), challenger_temperature)
+    history_temperature = _snapped_to_challenger_grid(
+        _surface_temperature(history_dataset, lead_days=history_dataset[Dimension.LEAD_DAY_INDEX.key()].values),
+        challenger_temperature,
+    )
+    climatology = _snapped_to_challenger_grid(_open_climatology(climatology_path), challenger_temperature)
+    scores = _scores_with_history(challenger_temperature, reference_temperature, history_temperature, climatology)
+    return _scores_to_dataframe(scores.compute())
+
+
+def _surface_temperature(dataset: xarray.Dataset, lead_days: numpy.ndarray | None = None) -> xarray.DataArray:
+    temperature = rename_dataset_with_standard_names(dataset)[Variable.SEA_WATER_POTENTIAL_TEMPERATURE.key()]
+    lead_day_dimension = Dimension.LEAD_DAY_INDEX.key()
+    surface_temperature = (
+        temperature.sel({Dimension.DEPTH.key(): DepthLevel.SURFACE.value}, method="nearest", drop=True)
+        if Dimension.DEPTH.key() in temperature.dims
+        else temperature
+    )
+    return surface_temperature.assign_coords(
+        {lead_day_dimension: numpy.arange(temperature.sizes[lead_day_dimension]) if lead_days is None else lead_days}
+    )
+
+
+def _snapped_to_challenger_grid(
+    source: xarray.DataArray | xarray.Dataset,
+    challenger_temperature: xarray.DataArray,
+) -> xarray.DataArray | xarray.Dataset:
+    spatial_coordinate_names = (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key())
+    return source.isel(
+        {
+            name: _nearest_indexes(source[name].values, challenger_temperature[name].values, name)
+            for name in spatial_coordinate_names
+        }
+    ).assign_coords({name: challenger_temperature[name] for name in spatial_coordinate_names})
+
+
+def _nearest_indexes(
+    source_coordinate: numpy.ndarray,
+    challenger_coordinate: numpy.ndarray,
+    coordinate_name: str,
+) -> numpy.ndarray:
+    indexes = pandas.Index(source_coordinate).get_indexer(
+        challenger_coordinate, method="nearest", tolerance=SPATIAL_COORDINATE_ALIGNMENT_ATOL
+    )
+    if (indexes < 0).any():
+        raise ValueError(
+            f"The {coordinate_name} coordinates do not cover the challenger grid within "
+            f"{SPATIAL_COORDINATE_ALIGNMENT_ATOL} degrees: {int((indexes < 0).sum())} challenger points unmatched."
+        )
+    return indexes
+
+
+def _open_climatology(climatology_path: str) -> xarray.Dataset:
+    climatology = xarray.open_dataset(climatology_path, chunks={})
+    return climatology.rename(
+        {
+            name: standard_name
+            for name, standard_name in (("lat", Dimension.LATITUDE.key()), ("lon", Dimension.LONGITUDE.key()))
+            if name in climatology.dims
+        }
+    )
+
+
+def _scores_to_dataframe(scores: xarray.Dataset) -> pandas.DataFrame:
+    rows = {
+        "Marine heatwave probability of detection (-) []{surface}": scores.probability_of_detection,
+        "Marine heatwave false alarm ratio (-) []{surface}": scores.false_alarm_ratio,
+        "Marine heatwave critical success index (-) []{surface}": scores.critical_success_index,
+        **{
+            f"Marine heatwave category {roman} or above {name} (-) []{{surface}}": scores[f"category_{variable}"].sel(
+                minimum_category=minimum_category
+            )
+            for minimum_category, roman in zip(MINIMUM_CATEGORIES, ["II", "III", "IV"])
+            for variable, name in (
+                ("probability_of_detection", "probability of detection"),
+                ("false_alarm_ratio", "false alarm ratio"),
+                ("critical_success_index", "critical success index"),
+            )
+        },
+        "Marine heatwave category accuracy (-) []{surface}": scores.category_accuracy,
+        **{
+            f"Temperature RMSD on {group.replace('_', ' ')} marine heatwave days (°C) []{{surface}}": (
+                scores.temperature_rmsd.sel(event_agreement=group)
+            )
+            for group in EVENT_AGREEMENT_GROUPS
+        },
+        "Temperature bias (°C) []{surface}": scores.temperature_bias,
+    }
+    lead_days_count = scores.sizes[Dimension.LEAD_DAY_INDEX.key()]
+    return pandas.DataFrame({label: values.values for label, values in rows.items()}).set_index(
+        [lead_day_labels(1, lead_days_count)]
+    ).T
+
+
+def _scores_with_history(
     challenger_temperature: xarray.DataArray,
     reference_temperature: xarray.DataArray,
     history_temperature: xarray.DataArray,
     climatology: xarray.Dataset,
 ) -> xarray.Dataset:
-    """
-    Detect marine heatwaves in challenger and reference forecast windows and score them.
-
-    The same history days are prepended to both windows before detection, so that an event
-    already in progress at the forecast start is recognised on both sides; they are removed
-    before scoring.
-
-    Parameters
-    ----------
-    challenger_temperature, reference_temperature : xarray.DataArray
-        Daily surface temperature on the same grid, forecast starts and lead days (from 0).
-    history_temperature : xarray.DataArray
-        Reference surface temperature on negative lead days before each forecast start, from
-        :func:`reference_history_dataset`.
-    climatology : xarray.Dataset
-        heatwave3 climatology (``seas``, ``thresh`` on ``doy``) on the same grid.
-
-    Returns
-    -------
-    xarray.Dataset
-        The scores of :func:`marine_heatwave_scores` for the forecast lead days.
-    """
     forecast_lead_days = challenger_temperature[Dimension.LEAD_DAY_INDEX.key()]
     challenger_detection = detect_marine_heatwaves(
         _prepend_history(challenger_temperature, history_temperature), climatology
@@ -208,7 +313,7 @@ def marine_heatwave_scores(
         ``probability_of_detection``, ``false_alarm_ratio`` and ``critical_success_index`` of
         event days; the same three for days of at least each category in ``minimum_category``
         (2, 3, 4); ``category_accuracy`` over days where either side has an event;
-        ``temperature_difference_rmse`` per ``event_agreement`` group (both, challenger only,
+        ``temperature_rmsd`` per ``event_agreement`` group (both, challenger only,
         reference only, neither), where the intensity difference reduces to the temperature
         difference; and ``temperature_bias`` (challenger minus reference).
     """
@@ -230,7 +335,7 @@ def marine_heatwave_scores(
             "category_accuracy": _category_accuracy(
                 challenger_detection.category, reference_detection.category, challenger_event | reference_event
             ),
-            "temperature_difference_rmse": _root_mean_square_by_event_agreement(
+            "temperature_rmsd": _root_mean_square_by_event_agreement(
                 temperature_difference, challenger_event, reference_event, valid
             ),
             "temperature_bias": _weighted_mean(temperature_difference),

@@ -130,7 +130,9 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
     metric_functions = [
         function
         for name, function in inspect.getmembers(core_metrics, inspect.isfunction)
-        if function.__module__ == core_metrics.__name__ and not name.startswith("_")
+        if function.__module__ == core_metrics.__name__
+        and not name.startswith("_")
+        and not name.startswith("marine_heatwave_diagnostics_")
     ]
     for metric_function in metric_functions:
         metric_function(challenger_namespace["challenger_dataset"])
