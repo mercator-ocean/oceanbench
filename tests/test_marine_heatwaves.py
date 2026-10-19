@@ -10,6 +10,7 @@ from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.marine_heatwaves import (
     _leap_year_day_of_year,
     detect_marine_heatwaves,
+    marine_heatwave_scores,
 )
 
 LEAD_DAYS = 17
@@ -111,3 +112,85 @@ def test_dask_chunked_input_gives_the_same_detection():
 
     assert lazy.event.chunks is not None
     xarray.testing.assert_identical(eager, lazy.compute())
+    reference_temperature = temperature + 0.5
+    reference = detect_marine_heatwaves(reference_temperature, climatology)
+    xarray.testing.assert_allclose(
+        marine_heatwave_scores(temperature, reference_temperature, eager, reference),
+        marine_heatwave_scores(
+            temperature.chunk({Dimension.LONGITUDE.key(): 2}), reference_temperature, lazy, reference
+        ).compute(),
+    )
+
+
+def _field(values, latitudes: list[float]) -> xarray.DataArray:
+    grid = numpy.asarray(values, dtype=float)
+    lead_days = grid.shape[0]
+    return xarray.DataArray(
+        grid.reshape(1, lead_days, len(latitudes), -1),
+        dims=[
+            Dimension.FIRST_DAY_DATETIME.key(),
+            Dimension.LEAD_DAY_INDEX.key(),
+            Dimension.LATITUDE.key(),
+            Dimension.LONGITUDE.key(),
+        ],
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): [numpy.datetime64("2024-06-01")],
+            Dimension.LEAD_DAY_INDEX.key(): numpy.arange(lead_days),
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): numpy.arange(grid.shape[-1], dtype=float),
+        },
+    )
+
+
+def _detection(category, latitudes: list[float]) -> xarray.Dataset:
+    category_field = _field(category, latitudes).astype(numpy.int8)
+    return xarray.Dataset(
+        {"event": category_field > 0, "intensity": category_field.astype(numpy.float32), "category": category_field}
+    )
+
+
+def test_event_and_category_scores_are_area_weighted():
+    latitudes = [0.0, 60.0]
+    temperature = _field(numpy.zeros((1, 2, 2)), latitudes)
+    challenger = _detection([[[2, 3], [0, 4]]], latitudes)
+    reference = _detection([[[2, 1], [3, 4]]], latitudes)
+
+    scores = marine_heatwave_scores(temperature, temperature, challenger, reference).squeeze()
+
+    numpy.testing.assert_allclose(
+        [scores.probability_of_detection, scores.false_alarm_ratio, scores.critical_success_index],
+        [5 / 6, 0.0, 5 / 6],
+    )
+    numpy.testing.assert_allclose(scores.category_probability_of_detection, [0.75, 0.5, 1.0])
+    numpy.testing.assert_allclose(scores.category_false_alarm_ratio, [0.4, 2 / 3, 0.0])
+    numpy.testing.assert_allclose(scores.category_critical_success_index, [0.5, 0.25, 1.0])
+    numpy.testing.assert_allclose(scores.category_accuracy, 0.5)
+
+
+def test_temperature_difference_rmse_by_event_agreement_and_bias():
+    latitudes = [0.0]
+    differences = numpy.array([[[1.0, 2.0, 3.0, 4.0, 9.0]], [[-1.0, -2.0, -3.0, -4.0, 9.0]]])
+    challenger_temperature = _field(differences, latitudes).where(lambda field: field != 9.0)
+    reference_temperature = _field(numpy.zeros((2, 1, 5)), latitudes)
+    challenger = _detection([[[1, 1, 0, 0, 1]], [[1, 1, 0, 0, 1]]], latitudes)
+    reference = _detection([[[1, 0, 1, 0, 1]], [[1, 0, 1, 0, 1]]], latitudes)
+
+    scores = marine_heatwave_scores(challenger_temperature, reference_temperature, challenger, reference)
+
+    assert scores.event_agreement.values.tolist() == ["both", "challenger_only", "reference_only", "neither"]
+    numpy.testing.assert_allclose(scores.temperature_difference_rmse.squeeze().values, [[1, 2, 3, 4]] * 2)
+    numpy.testing.assert_allclose(scores.temperature_bias.squeeze().values, [2.5, -2.5])
+    numpy.testing.assert_allclose(scores.probability_of_detection.squeeze().values, [0.5, 0.5])
+
+
+def test_scores_without_reference_events_are_missing():
+    latitudes = [0.0]
+    temperature = _field(numpy.zeros((1, 1, 2)), latitudes)
+    challenger = _detection([[[1, 0]]], latitudes)
+    reference = _detection([[[0, 0]]], latitudes)
+
+    scores = marine_heatwave_scores(temperature, temperature, challenger, reference).squeeze()
+
+    assert bool(scores.probability_of_detection.isnull())
+    assert float(scores.false_alarm_ratio) == 1.0
+    assert float(scores.critical_success_index) == 0.0
