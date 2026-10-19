@@ -2,12 +2,15 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from collections.abc import Callable
+
 import heatwave3
 import numpy
 import xarray
 
-from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.dataset_utils import DepthLevel, Dimension
 
+HISTORY_DAYS = 7
 CLIMATOLOGY_DAY_OF_YEAR_DIMENSION = "doy"
 CLIMATOLOGY_MEAN_VARIABLE = "seas"
 CLIMATOLOGY_THRESHOLD_VARIABLE = "thresh"
@@ -15,6 +18,102 @@ MINIMUM_CATEGORIES = [2, 3, 4]
 EVENT_AGREEMENT_GROUPS = ["both", "challenger_only", "reference_only", "neither"]
 
 _DAYS_BEFORE_MONTH_IN_LEAP_YEAR = numpy.array([0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335])
+
+
+def marine_heatwave_diagnostics(
+    challenger_temperature: xarray.DataArray,
+    reference_temperature: xarray.DataArray,
+    history_temperature: xarray.DataArray,
+    climatology: xarray.Dataset,
+) -> xarray.Dataset:
+    """
+    Detect marine heatwaves in challenger and reference forecast windows and score them.
+
+    The same history days are prepended to both windows before detection, so that an event
+    already in progress at the forecast start is recognised on both sides; they are removed
+    before scoring.
+
+    Parameters
+    ----------
+    challenger_temperature, reference_temperature : xarray.DataArray
+        Daily surface temperature on the same grid, forecast starts and lead days (from 0).
+    history_temperature : xarray.DataArray
+        Reference surface temperature on negative lead days before each forecast start, from
+        :func:`reference_history_dataset`.
+    climatology : xarray.Dataset
+        heatwave3 climatology (``seas``, ``thresh`` on ``doy``) on the same grid.
+
+    Returns
+    -------
+    xarray.Dataset
+        The scores of :func:`marine_heatwave_scores` for the forecast lead days.
+    """
+    forecast_lead_days = challenger_temperature[Dimension.LEAD_DAY_INDEX.key()]
+    challenger_detection = detect_marine_heatwaves(
+        _prepend_history(challenger_temperature, history_temperature), climatology
+    )
+    reference_detection = detect_marine_heatwaves(
+        _prepend_history(reference_temperature, history_temperature), climatology
+    )
+    return marine_heatwave_scores(
+        challenger_temperature,
+        reference_temperature,
+        challenger_detection.sel({Dimension.LEAD_DAY_INDEX.key(): forecast_lead_days}),
+        reference_detection.sel({Dimension.LEAD_DAY_INDEX.key(): forecast_lead_days}),
+    )
+
+
+def reference_history_dataset(
+    challenger_dataset: xarray.Dataset,
+    reference_loader: Callable[[xarray.Dataset], xarray.Dataset],
+    history_days: int = HISTORY_DAYS,
+) -> xarray.Dataset:
+    """
+    Load the reference surface fields of the days before every forecast start.
+
+    The reference loader is asked for a window of ``history_days`` days ending the day before
+    each forecast start, at the surface only, and the result is relabelled to the forecast
+    starts with lead days ``-history_days`` to ``-1``.
+
+    Parameters
+    ----------
+    challenger_dataset : xarray.Dataset
+        The challenger dataset, for its forecast starts, grid and depth coordinate.
+    reference_loader : Callable[[xarray.Dataset], xarray.Dataset]
+        A reference opener taking a challenger-like dataset, such as the GLORYS or GLO12 one.
+    history_days : int, optional
+        Number of days before each forecast start.
+
+    Returns
+    -------
+    xarray.Dataset
+        The reference history with the challenger's forecast starts and negative lead days.
+    """
+    first_day_dimension = Dimension.FIRST_DAY_DATETIME.key()
+    lead_day_dimension = Dimension.LEAD_DAY_INDEX.key()
+    forecast_first_days = challenger_dataset[first_day_dimension]
+    history_request = (
+        challenger_dataset.isel({lead_day_dimension: slice(0, 1)})
+        .sel({Dimension.DEPTH.key(): [DepthLevel.SURFACE.value]}, method="nearest")
+        .reindex({lead_day_dimension: numpy.arange(history_days)})
+        .assign_coords({first_day_dimension: forecast_first_days - numpy.timedelta64(history_days, "D")})
+    )
+    return reference_loader(history_request).assign_coords(
+        {
+            first_day_dimension: forecast_first_days.values,
+            lead_day_dimension: numpy.arange(-history_days, 0),
+        }
+    )
+
+
+def _prepend_history(temperature: xarray.DataArray, history_temperature: xarray.DataArray) -> xarray.DataArray:
+    return xarray.concat(
+        [history_temperature, temperature],
+        dim=Dimension.LEAD_DAY_INDEX.key(),
+        join="exact",
+        coords="minimal",
+        compat="override",
+    )
 
 
 def detect_marine_heatwaves(

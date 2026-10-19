@@ -6,11 +6,13 @@ import numpy
 import pandas
 import xarray
 
-from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.dataset_utils import DepthLevel, Dimension
 from oceanbench.core.marine_heatwaves import (
     _leap_year_day_of_year,
     detect_marine_heatwaves,
+    marine_heatwave_diagnostics,
     marine_heatwave_scores,
+    reference_history_dataset,
 )
 
 LEAD_DAYS = 17
@@ -194,3 +196,67 @@ def test_scores_without_reference_events_are_missing():
     assert bool(scores.probability_of_detection.isnull())
     assert float(scores.false_alarm_ratio) == 1.0
     assert float(scores.critical_success_index) == 0.0
+
+
+def _window(values, first_days: list[str], lead_days: numpy.ndarray) -> xarray.DataArray:
+    return xarray.DataArray(
+        numpy.asarray(values, dtype=numpy.float32).reshape(len(first_days), len(lead_days), 1, 1),
+        dims=[
+            Dimension.FIRST_DAY_DATETIME.key(),
+            Dimension.LEAD_DAY_INDEX.key(),
+            Dimension.LATITUDE.key(),
+            Dimension.LONGITUDE.key(),
+        ],
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(first_days, dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): lead_days,
+            Dimension.LATITUDE.key(): [0.0],
+            Dimension.LONGITUDE.key(): [0.0],
+        },
+    )
+
+
+def test_reference_history_covers_the_days_before_every_start_including_the_first():
+    first_days = ["2024-01-03", "2024-01-10"]
+    challenger = _window(numpy.zeros((2, 10)), first_days, numpy.arange(10)).expand_dims(
+        {Dimension.DEPTH.key(): [DepthLevel.SURFACE.value, 47.37]}, axis=2
+    )
+    requests = []
+
+    def day_number_loader(request: xarray.Dataset) -> xarray.Dataset:
+        requests.append(request)
+        dates = request[Dimension.FIRST_DAY_DATETIME.key()] + request[Dimension.LEAD_DAY_INDEX.key()].astype(
+            "timedelta64[D]"
+        )
+        day_number = (dates - numpy.datetime64("2024-01-01")).dt.days
+        return xarray.Dataset({"thetao": day_number.astype(float)})
+
+    history = reference_history_dataset(challenger.to_dataset(name="thetao"), day_number_loader)
+
+    assert requests[0][Dimension.DEPTH.key()].values.tolist() == [DepthLevel.SURFACE.value]
+    assert history[Dimension.LEAD_DAY_INDEX.key()].values.tolist() == list(range(-7, 0))
+    numpy.testing.assert_array_equal(
+        history[Dimension.FIRST_DAY_DATETIME.key()].values, numpy.array(first_days, dtype="datetime64[ns]")
+    )
+    assert history.thetao.sel(first_day_datetime="2024-01-03").values.tolist() == [-5, -4, -3, -2, -1, 0, 1]
+    assert history.thetao.sel(first_day_datetime="2024-01-10").values.tolist() == [2, 3, 4, 5, 6, 7, 8]
+
+
+def test_history_lets_an_event_in_progress_count_from_lead_day_0_and_is_not_scored():
+    first_days = ["2024-06-01"]
+    forecast_lead_days = numpy.arange(10)
+    forecast = _window([[2.0, 2.0, 2.0] + [0.0] * 7], first_days, forecast_lead_days)
+    climatology = _climatology(numpy.array([0.0]))
+    history_lead_days = numpy.arange(-7, 0)
+
+    warm_history = _window(numpy.full((1, 7), 2.0), first_days, history_lead_days)
+    scores = marine_heatwave_diagnostics(forecast, forecast, warm_history, climatology)
+
+    assert scores[Dimension.LEAD_DAY_INDEX.key()].values.tolist() == forecast_lead_days.tolist()
+    assert scores.probability_of_detection.values[:3].tolist() == [1.0, 1.0, 1.0]
+    assert bool(scores.probability_of_detection[3:].isnull().all())
+
+    cool_history = _window(numpy.zeros((1, 7)), first_days, history_lead_days)
+    scores_without_event = marine_heatwave_diagnostics(forecast, forecast, cool_history, climatology)
+
+    assert bool(scores_without_event.probability_of_detection.isnull().all())
