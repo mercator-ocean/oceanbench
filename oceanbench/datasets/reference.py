@@ -13,6 +13,12 @@ import xarray
 from oceanbench.core.references import glorys
 from oceanbench.core.remote_http import open_remote_multizarr
 from oceanbench.core.references import glo12
+from oceanbench.core.references import ibi36
+
+
+def ibi36_reference(start_date: str, end_date: str) -> xarray.Dataset:
+    """Open daily IBIRYS reanalysis from Copernicus Marine as an xarray Dataset."""
+    return ibi36.ibi36_reference(start_date, end_date)
 
 
 def glorys_reanalysis() -> xarray.Dataset:

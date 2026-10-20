@@ -48,3 +48,28 @@ def interpolate_1_degree(data: xarray.Dataset) -> xarray.Dataset:
         name=dataset_source.name,
         resolution="one_degree",
     )
+
+
+def interpolate_ibi36_to_1_12(data: xarray.Dataset, grid_1_12: xarray.Dataset) -> xarray.Dataset:
+    """Interpolate native IBI36 fields linearly to the exact coordinates of a 1/12 degree grid."""
+    data = rename_dataset_with_standard_names(data)
+
+    chunk_dimensions = {StandardDimension.LATITUDE.value: -1, StandardDimension.LONGITUDE.value: -1}
+    if StandardDimension.TIME.value in data.dims:
+        chunk_dimensions[StandardDimension.TIME.value] = 1
+    if StandardDimension.DEPTH.value in data.dims:
+        chunk_dimensions[StandardDimension.DEPTH.value] = 1
+
+    data = data.chunk(chunk_dimensions)
+    interpolated = data.interp(latitude=grid_1_12.latitude, longitude=grid_1_12.longitude)
+
+    dataset_source = get_dataset_source(data)
+    if dataset_source is None:
+        return interpolated
+
+    return with_dataset_source(
+        interpolated,
+        kind=dataset_source.kind,
+        name=dataset_source.name,
+        resolution="twelfth_degree",
+    )
