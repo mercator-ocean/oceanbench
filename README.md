@@ -126,7 +126,7 @@ git clone git@github.com:mercator-ocean/oceanbench.git && cd oceanbench/ && pip 
 #### Execute on EDITO
 
 You can open and manually execute the example notebook in EDITO datalab by clicking here:
-[![Link to open resource in EDITO](https://dive.edito.eu/badges/Open-in-EDITO.svg)](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-python-ocean-science?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.global.report.ipynb»)
+[![Link to open resource in EDITO](https://dive.edito.eu/badges/Open-in-EDITO.svg)](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-notebook?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&advanced.init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&advanced.init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.global.report.ipynb»)
 
 ### Programmatic evaluation
 
@@ -175,7 +175,7 @@ oceanbench evaluate path/to/challenger.py --region-file path/to/region.json
 To upload the resulting notebooks to an S3 bucket:
 
 ```bash
-oceanbench evaluate path/to/challenger.py --output-bucket my-bucket --output-prefix results/
+oceanbench evaluate path/to/challenger.py --output-bucket my-bucket --output-prefix results
 ```
 
 The output notebook name is automatically derived from the challenger file name and region (e.g. `challenger.py` produces `challenger.global.report.ipynb` for the global benchmark and `challenger.ibi.report.ipynb` for the IBI benchmark).
