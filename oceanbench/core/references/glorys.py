@@ -5,6 +5,7 @@
 from datetime import datetime
 import numpy
 import pandas
+import weakref
 from xarray import Dataset, concat
 import logging
 import copernicusmarine
@@ -25,7 +26,7 @@ GLORYS_TWELFTH_DEGREE_DATASET_IDENTIFIER = "cmems_mod_glo_phy_my_0.083deg_P1D-m"
 BENCHMARK_FIRST_DAY = "2024-01-01"
 BENCHMARK_LAST_DAY = "2024-12-31"
 
-_GLORYS_REANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
+_GLORYS_REANALYSIS_DATASET_CACHE: dict[int, tuple[weakref.ref, Dataset]] = {}
 
 
 def _glorys_1_4_path(first_day_datetime: numpy.datetime64) -> str:
@@ -165,9 +166,9 @@ def _glorys_reanalysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
 
 def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
     cache_key = id(challenger_dataset)
-    cached_dataset = _GLORYS_REANALYSIS_DATASET_CACHE.get(cache_key)
-    if cached_dataset is not None:
-        return cached_dataset
+    cached_entry = _GLORYS_REANALYSIS_DATASET_CACHE.get(cache_key)
+    if cached_entry is not None and cached_entry[0]() is challenger_dataset:
+        return cached_entry[1]
 
     def open_dataset() -> Dataset:
         resolution = get_dataset_resolution(challenger_dataset)
@@ -182,7 +183,7 @@ def glorys_reanalysis_dataset(challenger_dataset: Dataset) -> Dataset:
             raise ValueError(f"Unsupported resolution: {resolution}")
 
     reference_dataset = open_dataset()
-    _GLORYS_REANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
+    _GLORYS_REANALYSIS_DATASET_CACHE[cache_key] = weakref.ref(challenger_dataset), reference_dataset
     return reference_dataset
 
 
