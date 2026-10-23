@@ -70,7 +70,7 @@ _GLO12_PERSISTENCE = {
 
 _HCLIMREP = {
     "label": "HClimRep",
-    "url": "https://hclimrep-project.de/",
+    "url": "https://arxiv.org/abs/2609.28601",
     "organisation": "AWI",
     "organisation_url": "https://www.awi.de/en/science/climate-sciences/climate-dynamics/team.html",
     "note": "Initialised with ERA5 reanalysis atmosphere, which is not available in real time.",
