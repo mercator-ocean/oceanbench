@@ -1353,6 +1353,46 @@ files = [
 numpy = ">=1.19.3"
 
 [[package]]
+name = "heatwave3"
+version = "1.4.0"
+description = "Detect marine heatwaves and cold-spells directly in gridded NetCDF data"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "heatwave3-1.4.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:0347266382e4f0ecdc75c8f8e4f435a0639fa9db736d9af570f9e57f7f655a08"},
+    {file = "heatwave3-1.4.0-cp310-cp310-macosx_11_0_x86_64.whl", hash = "sha256:e647d2cb0717bdf46299372b761e4b0c8564eb256f96a7febab94a2c345a9f52"},
+    {file = "heatwave3-1.4.0-cp310-cp310-manylinux_2_28_aarch64.whl", hash = "sha256:55ca74292b5f1886bbc71c20a0fd88e34e3f8e5aa1623894915472e3a13b7a96"},
+    {file = "heatwave3-1.4.0-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:2cf91eb0b49bc70a90571b67acb5e3f9ec6a458cfe58470bbd068c93df5a837a"},
+    {file = "heatwave3-1.4.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:84d59c8d4e99ffc1a23c4df9f7512ead6c217fd03b9cb5040aab42bb243767c5"},
+    {file = "heatwave3-1.4.0-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:f953f8446c46a93dfd70969b48e67ebc70ea1227c80159a0d8543c8e3631105e"},
+    {file = "heatwave3-1.4.0-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:0d4389b308951346b2353d8216ad9e01e78849d8a00d584b9641ce222161b7c6"},
+    {file = "heatwave3-1.4.0-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:2befa0f2eeae7798f1f10251d8beb83f33576341a42f426ece2860567cf458f4"},
+    {file = "heatwave3-1.4.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:b0d2e791c2ae35fde18bb76a59fe7930ec78e522762e8d9be7291490ecde4118"},
+    {file = "heatwave3-1.4.0-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:1431b5f30562f9fe555b90b4d9eada6239156266b5e5533522025faa226738eb"},
+    {file = "heatwave3-1.4.0-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:afef7859df34586331fc112030dbd1330bd0405a34eadba13c9d6d86bf9a765e"},
+    {file = "heatwave3-1.4.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:bf0e3b50db8019070e6bc2fa049d3ddc8824a7f146d1cdb3937b7fb7a7cd6076"},
+    {file = "heatwave3-1.4.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:28e79d86818a8da32a61c342f8c70d3ab12faa85f10f32235fdf582149848ec2"},
+    {file = "heatwave3-1.4.0-cp313-cp313-macosx_11_0_x86_64.whl", hash = "sha256:39a0db203007cd12b004a7de075e33c7dc9edcc1b6f180ed4d3a9d2ab3eccb25"},
+    {file = "heatwave3-1.4.0-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:8fdf78c2b232614480440cb1c1f1e098cc483fec5123890793e584d5bc346505"},
+    {file = "heatwave3-1.4.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:38cbcede60ca32a44cbad29752cbb4ef9da888c3b80434cad00bc4447a830fb4"},
+    {file = "heatwave3-1.4.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:2c46013ea8e86b5a02c3f81819d16eb2417925b9191bd2b750c03f78bdaccb4f"},
+    {file = "heatwave3-1.4.0-cp314-cp314-macosx_11_0_x86_64.whl", hash = "sha256:e1ef6dd519f4fb5becd5378b230b91dbcdf723370fcbfd638ad14b5cc6cd176f"},
+    {file = "heatwave3-1.4.0-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:8a1d584ea687cfd381574cd9352c51115b66d3d63dd644842b2c6ff84a167ec4"},
+    {file = "heatwave3-1.4.0-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:4899c088ba41bf9d33746d42a64a5ae050b788e28d1c87daaeaabb8d43110107"},
+    {file = "heatwave3-1.4.0.tar.gz", hash = "sha256:3b681d5092228ac3526e2a4479606f05e54a8cad9a90d620ea6608b91cf46f76"},
+]
+
+[package.dependencies]
+numpy = ">=1.23"
+pandas = ">=1.5"
+
+[package.extras]
+parquet = ["pyarrow (>=10)"]
+plot = ["matplotlib (>=3.6)"]
+test = ["matplotlib (>=3.6)", "pyarrow (>=10)", "pytest (>=7)"]
+
+[[package]]
 name = "httpcore"
 version = "1.0.9"
 description = "A minimal low-level HTTP client."
@@ -2596,6 +2636,16 @@ files = [
     {file = "netCDF4-1.7.2-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:572f71459ef4b30e8554dcc4e1e6f55de515acc82a50968b48fe622244a64548"},
     {file = "netCDF4-1.7.2-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7f77e72281acc5f331f82271e5f7f014d46f5ca9bcaa5aafe3e46d66cee21320"},
     {file = "netCDF4-1.7.2-cp39-cp39-win_amd64.whl", hash = "sha256:d0fa7a9674fae8ae4877e813173c3ff7a6beee166b8730bdc847f517b282ed31"},
+    {file = "netcdf4-1.7.2-cp310-cp310-macosx_13_0_x86_64.whl", hash = "sha256:16c3ba053930ed990e58827de6ab03184e407549004fb77438b98e5777e8cf3b"},
+    {file = "netcdf4-1.7.2-cp310-cp310-macosx_14_0_arm64.whl", hash = "sha256:142c9ed2db8a87a15ae0530c8a99f4f045435b0f495df733e9f111995e389d4f"},
+    {file = "netcdf4-1.7.2-cp310-cp310-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:76cb3bbbbe4cd5fca612578eb105c16217380f7f93af2b549e8f38296bc906bb"},
+    {file = "netcdf4-1.7.2-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:835ae7bcef666c967241baeeee9bef9376ddb7527297b24735597131f6f628e2"},
+    {file = "netcdf4-1.7.2-cp310-cp310-win_amd64.whl", hash = "sha256:73bd7eda3cefb04c4076e76911f652f5ed56bf434e0a3958e367932953437557"},
+    {file = "netcdf4-1.7.2-cp311-abi3-macosx_13_0_x86_64.whl", hash = "sha256:7e81c3c47f2772eab0b93fba8bb05b17b58dce17720e1bed25e9d76551deecd0"},
+    {file = "netcdf4-1.7.2-cp311-abi3-macosx_14_0_arm64.whl", hash = "sha256:cb2791dba37fc98fd1ac4e236c97822909f54efbcdf7f1415c9777810e0a28f4"},
+    {file = "netcdf4-1.7.2-cp311-abi3-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bf11480f6b8a5b246818ffff6b4d90481e51f8b9555b41af0c372eb0aaf8b65f"},
+    {file = "netcdf4-1.7.2-cp311-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:1ccc05328a8ff31921b539821791aeb20b054879f3fdf6d1d505bf6422824fec"},
+    {file = "netcdf4-1.7.2-cp311-abi3-win_amd64.whl", hash = "sha256:999bfc4acebf400ed724d5e7329e2e768accc7ee1fa1d82d505da782f730301b"},
     {file = "netcdf4-1.7.2.tar.gz", hash = "sha256:a4c6375540b19989896136943abb6d44850ff6f1fa7d3f063253b1ad3f8b7fce"},
 ]
 
@@ -4721,4 +4771,4 @@ jupyter = ["ipytree (>=0.2.2)", "ipywidgets (>=8.0.0)", "notebook"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12.9"
-content-hash = "4551940bbca1fba97933525b29119d38acead0d72f76311338ee67074113f570"
+content-hash = "45e9c7ceb55c94c4ffbeb56617f7766f58fda88bbbc8b5f3fe104e0d7ce4d1d7"
