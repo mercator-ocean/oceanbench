@@ -28,6 +28,9 @@ dependencies = [
     "papermill[s3] (>=2.6.0)"
 ]
 
+[project.optional-dependencies]
+maps = ["cartopy (>=0.24.0,<1.0.0)"]
+
 [project.scripts]
 oceanbench = "oceanbench.cli:main"
 

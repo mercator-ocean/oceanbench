@@ -17,6 +17,17 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
+## Unreleased
+
+**Scores:** new SWOT Class IV scores added; every existing score unchanged.
+
+### Added
+
+- `oceanbench swot-validate` validates model forecasts against SWOT L3 observations (Class IV scheme): RMSD table over the 2024 runs, pointwise error NetCDF and one error map per day for a requested period.
+- SWOT L3 daily zarr stores (CloudFerro `oceanbench-bucket`) as a new observation reference, with reproducible per-day Bernoulli subsampling and local staging.
+- `remote_store_exists` tells an absent store (404) from a network failure, so a transient error never silently skips a day of observations.
+- `clear_class4_observations_cache` empties the Class IV observation cache between models.
+
 ## 0.6.1 - 2026-10-16
 
 **Scores:** unchanged vs 0.6.0. Fixes, offline staging and documentation only.
