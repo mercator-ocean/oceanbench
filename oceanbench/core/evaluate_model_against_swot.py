@@ -11,10 +11,10 @@ Entry point : run_swot_validation(), called by "oceanbench swot-validate".
 
 The RMSD Class IV table is computed for ALL the weekly runs of 2024 (52 runs,
 Wednesdays 2024-01-03 -> 2024-12-25) on the shared Class IV population
-(ocean_mask, identical for every challenger). 
+(ocean_mask, identical for every challenger).
 
-The pointwise outputs (error NetCDF + one error map per calendar day) 
-are produced ONLY for the requested period : the runs covering the period are 
+The pointwise outputs (error NetCDF + one error map per calendar day)
+are produced ONLY for the requested period : the runs covering the period are
 loaded separately, so the map mode never downloads the whole year of SWOT observations.
 
 Logging is left to the caller (the CLI configures it) and every exception
@@ -24,7 +24,7 @@ RMSD table to the CSV.
 """
 
 
-#==============================================================================
+# ==============================================================================
 import logging
 import os
 from collections.abc import Callable
@@ -75,8 +75,7 @@ from oceanbench.core.references.swot_observations_zarr import (
 from oceanbench.core.regions import resolve_region, subset_dataset_to_region
 from oceanbench.core.remote_http import RetryingHTTPFileSystem, remote_store_exists
 
-#==============================================================================
-
+# ==============================================================================
 
 
 logger = logging.getLogger(__name__)
@@ -116,7 +115,7 @@ SWOT_RUN_LOOKBACK_DAYS = 10
 _RUN_CHECK_FILE_SYSTEM = RetryingHTTPFileSystem(**SWOT_STORAGE_OPTIONS)
 
 
-#==============================================================================
+# ==============================================================================
 # HELPERS
 
 
@@ -158,14 +157,10 @@ def _run_dates_for_error_dates(start_error_date: str, end_error_date: str | None
     start = pandas.Timestamp(start_error_date).normalize()
     end = pandas.Timestamp(end_error_date or start_error_date).normalize()
     if end < start:
-        raise ValueError(
-            f"end_error_date ({end:%Y-%m-%d}) is BEFORE start_error_date ({start:%Y-%m-%d})"
-        )
+        raise ValueError(f"end_error_date ({end:%Y-%m-%d}) is BEFORE start_error_date ({start:%Y-%m-%d})")
     weekly_runs = pandas.to_datetime(generate_dates(DEFAULT_START_DATE, DEFAULT_RUNS_END_DATE, 7))
     return [
-        run_date
-        for run_date in weekly_runs
-        if start - pandas.Timedelta(days=SWOT_RUN_LOOKBACK_DAYS) < run_date <= end
+        run_date for run_date in weekly_runs if start - pandas.Timedelta(days=SWOT_RUN_LOOKBACK_DAYS) < run_date <= end
     ]
 
 
@@ -174,14 +169,10 @@ def _resolve_output_dir(output_dir: str) -> str:
 
 
 def _find_lead_day_columns(dataframe: pandas.DataFrame) -> list:
-    return [
-        column
-        for column in dataframe.columns
-        if isinstance(column, str) and column.startswith("Lead day")
-    ]
+    return [column for column in dataframe.columns if isinstance(column, str) and column.startswith("Lead day")]
 
 
-#==============================================================================
+# ==============================================================================
 def _compute_pointwise_error(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
@@ -235,12 +226,8 @@ def _compute_pointwise_error(
     lead_day = observations_dataframe["lead_day"].to_numpy(dtype="int64")
     latitude = observations_dataframe[LATITUDE_KEY].to_numpy(dtype="float64")
     longitude = observations_dataframe[LONGITUDE_KEY].to_numpy(dtype="float64")
-    observation_datetimes = pandas.DatetimeIndex(
-        pandas.to_datetime(observations_dataframe[TIME_KEY].to_numpy())
-    )
-    first_days_observation = pandas.DatetimeIndex(
-        pandas.to_datetime(observations_dataframe["first_day"].to_numpy())
-    )
+    observation_datetimes = pandas.DatetimeIndex(pandas.to_datetime(observations_dataframe[TIME_KEY].to_numpy()))
+    first_days_observation = pandas.DatetimeIndex(pandas.to_datetime(observations_dataframe["first_day"].to_numpy()))
 
     valid = numpy.isfinite(error) & (lead_day >= 0) & (lead_day < lead_days_count)
     total_count, valid_count = error.size, int(valid.sum())
@@ -279,8 +266,7 @@ def _compute_pointwise_error(
             "lead_day": (("observations",), lead_day),
         },
         attrs={
-            "title": "Pointwise error of model SLA against SWOT L3 SLA, "
-            "one line per (observation, run) match",
+            "title": "Pointwise error of model SLA against SWOT L3 SLA, " "one line per (observation, run) match",
             "model": model_name,
             "first_day_datetimes": ", ".join(first_days.strftime("%Y-%m-%d")),
             "n_observations": int(valid_count),
@@ -577,9 +563,7 @@ def run_swot_validation(
         try:
             import cartopy  # noqa: F401
         except ImportError as error:
-            raise RuntimeError(
-                "plot_maps requires cartopy : install oceanbench[maps] (or cartopy)."
-            ) from error
+            raise RuntimeError("plot_maps requires cartopy : install oceanbench[maps] (or cartopy).") from error
 
     first_day_datetimes = pandas.to_datetime(generate_dates(DEFAULT_START_DATE, DEFAULT_RUNS_END_DATE, 7))
     logger.info(
@@ -610,9 +594,7 @@ def run_swot_validation(
             # The availability check is unconditional : the results never depend
             # on whether the pointwise outputs are requested.
             candidate_run_dates = first_day_datetimes
-        model_run_dates = [
-            run_date for run_date in candidate_run_dates if _run_zarr_exists(model_name, run_date)
-        ]
+        model_run_dates = [run_date for run_date in candidate_run_dates if _run_zarr_exists(model_name, run_date)]
         if not model_run_dates:
             suggestions = _nearest_available_run_dates(model_name, candidate_run_dates[0])
             suggestion_text = ", ".join(f"{run_date:%Y-%m-%d}" for run_date in suggestions) or "none within ±10 weeks"

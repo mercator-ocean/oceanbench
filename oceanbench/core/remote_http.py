@@ -101,6 +101,7 @@ def remote_zarr_store(
         **_file_system_arguments(url, storage_options),
     )
 
+
 def remote_store_exists(file_system: RetryingHTTPFileSystem, url: str) -> bool:
     # FileNotFoundError only when the store is absent ; every other error
     # propagates after the filesystem retries.

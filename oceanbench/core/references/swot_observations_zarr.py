@@ -7,9 +7,9 @@ SWOT l3 observations (zarr files - OceanBench bucket) as Class IV
 observations, in the 1D format of the other altimetry references.
 
 Same design as oceanbench.core.references.observations : only the acquisition
-days matching the challenger runs are opened (one zarr store per day, every 
-observation point is tagged with the first_day_datetime of the run(s) it matches, 
-and the selected observations can be staged locally so that challengers with 
+days matching the challenger runs are opened (one zarr store per day, every
+observation point is tagged with the first_day_datetime of the run(s) it matches,
+and the selected observations can be staged locally so that challengers with
 the same runs share one download.)
 
 Remote access reuses oceanbench.core.remote_http : transient errors are retried
@@ -19,7 +19,7 @@ SEA_SURFACE_HEIGHT_ABOVE_GEOID_KEY is fed by the SWOT L3 variable stored by the
 pre-processing script (conversion_swot_netcdf_to_zarr_bucketCF.py).
 """
 
-#==============================================================================
+# ==============================================================================
 
 import hashlib
 import logging
@@ -45,7 +45,7 @@ from oceanbench.core.remote_http import (
     remote_store_exists,
 )
 
-#==============================================================================
+# ==============================================================================
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +75,9 @@ SWOT_STORAGE_OPTIONS = {
 _HTTP_FILE_SYSTEM = RetryingHTTPFileSystem(**SWOT_STORAGE_OPTIONS)
 
 
-#==============================================================================
+# ==============================================================================
 # HELPERS
+
 
 def _swot_day_url(day_string: str) -> str | None:
     # First existing zarr url for that day (reproc has priority over forward).
@@ -150,8 +151,8 @@ def _swot_stage_path(
     )
 
 
+# ==============================================================================
 
-#==============================================================================
 
 def swot_observations(
     challenger_dataset: xarray.Dataset,
@@ -194,9 +195,7 @@ def swot_observations(
         day_full = day_full[[SEA_SURFACE_HEIGHT_ABOVE_GEOID_KEY, TIME_KEY, LATITUDE_KEY, LONGITUDE_KEY]].load()
         day_datetimes = pandas.to_datetime(day_full[TIME_KEY].values)
         if not bool((day_datetimes.normalize() == day.normalize()).all()):
-            raise ValueError(
-                f"SWOT day store {day:%Y-%m-%d} contains times outside that day : inconsistent zarr."
-            )
+            raise ValueError(f"SWOT day store {day:%Y-%m-%d} contains times outside that day : inconsistent zarr.")
         spacing_day = _median_along_track_spacing_degrees(
             numpy.asarray(day_full[LATITUDE_KEY].values, dtype="float64"),
             numpy.asarray(day_full[LONGITUDE_KEY].values, dtype="float64"),

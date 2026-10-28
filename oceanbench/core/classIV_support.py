@@ -40,6 +40,7 @@ def clear_class4_observations_cache() -> None:
     # memory between challengers, a year of runs is heavy.
     _CLASS4_OBSERVATIONS_CACHE.clear()
 
+
 class Class4PopulationLayers(NamedTuple):
     depths: numpy.ndarray
     latitude_origin: numpy.float64

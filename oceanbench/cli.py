@@ -99,9 +99,7 @@ def _evaluate_all(
     # Notebook evaluations are heavy and can leave substantial state behind in a
     # worker process. Recycle the worker after each challenger to avoid
     # cross-challenger memory growth during `oceanbench evaluate a.py b.py ...`.
-    with ProcessPoolExecutor(
-        max_workers=max_workers, max_tasks_per_child=1
-    ) as executor:
+    with ProcessPoolExecutor(max_workers=max_workers, max_tasks_per_child=1) as executor:
         futures = {
             executor.submit(
                 _evaluate_one,
@@ -132,9 +130,7 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
     environment_configuration = runtime_configuration_from_environment()
     return RuntimeConfiguration(
         staged_components=(
-            tuple(args.stage)
-            if args.stage is not None
-            else environment_configuration.staged_components
+            tuple(args.stage) if args.stage is not None else environment_configuration.staged_components
         ),
         stage_directory=args.stage_dir or environment_configuration.stage_directory,
         stage_max_workers=(
@@ -143,9 +139,7 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
             else environment_configuration.stage_max_workers
         ),
         remote_retries=(
-            args.remote_retries
-            if args.remote_retries is not None
-            else environment_configuration.remote_retries
+            args.remote_retries if args.remote_retries is not None else environment_configuration.remote_retries
         ),
         class4_fast_interpolation=environment_configuration.class4_fast_interpolation,
     )
@@ -203,6 +197,7 @@ def _run_stage(args: argparse.Namespace) -> int:
 
     stage_challenger_assets(args.challenger, runtime_configuration, region)
     print(f"Staged data for {args.challenger} in {runtime_configuration.resolved_stage_directory()}")
+    return 0
 
 
 def _validated_swot_error_dates(
@@ -219,9 +214,7 @@ def _validated_swot_error_dates(
         return None, None
     try:
         start = datetime.strptime(args.start_error_date, "%Y-%m-%d")
-        end = datetime.strptime(
-            args.end_error_date or args.start_error_date, "%Y-%m-%d"
-        )
+        end = datetime.strptime(args.end_error_date or args.start_error_date, "%Y-%m-%d")
     except ValueError:
         parser.error("--start-error-date / --end-error-date must be dates (YYYY-MM-DD)")
     if end < start:
@@ -239,9 +232,7 @@ def _validated_swot_error_dates(
     return args.start_error_date, args.end_error_date
 
 
-def _run_swot_validate(
-    args: argparse.Namespace, parser: argparse.ArgumentParser
-) -> int:
+def _run_swot_validate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     from oceanbench.core.evaluate_model_against_swot import (
         DEFAULT_RUNS_YEAR,
         DEFAULT_START_DATE,
@@ -262,9 +253,7 @@ def _run_swot_validate(
     if args.vmax is not None and args.vmax <= 0:
         parser.error("--vmax must be > 0")
 
-    start_error_date, end_error_date = _validated_swot_error_dates(
-        args, parser, DEFAULT_START_DATE, DEFAULT_RUNS_YEAR
-    )
+    start_error_date, end_error_date = _validated_swot_error_dates(args, parser, DEFAULT_START_DATE, DEFAULT_RUNS_YEAR)
 
     try:
         runtime_configuration = _runtime_configuration_from_args(args)
@@ -320,9 +309,7 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         prog="oceanbench",
         description="OceanBench CLI",
     )
-    parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command")
 
     evaluate_parser = subparsers.add_parser(
@@ -530,9 +517,7 @@ def main():
 
     if args.command == "evaluate":
         if args.all_challengers and args.challengers:
-            evaluate_parser.error(
-                "--all-challengers cannot be used with positional challenger arguments"
-            )
+            evaluate_parser.error("--all-challengers cannot be used with positional challenger arguments")
         sys.exit(_run_evaluate(args))
 
     if args.command == "stage":
