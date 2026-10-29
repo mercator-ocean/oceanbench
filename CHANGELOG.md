@@ -17,6 +17,21 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
+## 0.6.2 - 2026-10-29
+
+**Scores:** unchanged vs 0.6.1. Data access, packaging and documentation only.
+
+### Changed
+
+- Input datasets use a shared dataset convention for locating public stores, including the
+  corrected IFS nowcast collection.
+- Documentation is hosted on the OceanBench website, including the input-data conventions and
+  offline-evaluation pages.
+
+### Reports
+
+- Official reports: `public/evaluation-reports/0.6.1/` (unchanged)
+
 ## 0.6.1 - 2026-10-16
 
 **Scores:** unchanged vs 0.6.0. Fixes, offline staging and documentation only.
