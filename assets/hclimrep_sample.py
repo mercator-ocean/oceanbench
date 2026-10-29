@@ -4,7 +4,7 @@ import xarray
 
 challenger_dataset: xarray.Dataset = xarray.open_mfdataset(
     [
-        "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/hclimrep/20240103.zarr",
+        "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs/hclimrep/v2/20240103.zarr",
     ],
     engine="zarr",
     preprocess=lambda dataset: dataset.rename({"time": "lead_day_index"}).assign({"lead_day_index": range(10)}),
