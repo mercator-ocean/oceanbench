@@ -180,7 +180,9 @@ cython_debug/
 # Data
 data/*
 scripts/*
+outputs/
 
 # Docs
 docs/source/
 glonet_sample.report.ipynb
+outputs/

@@ -35,6 +35,12 @@ MISSING_COUNT_COLUMN = "Missing"
 _CLASS4_OBSERVATIONS_CACHE: dict[tuple[int, int], tuple[pandas.DataFrame, numpy.ndarray, str]] = {}
 
 
+def clear_class4_observations_cache() -> None:
+    # Free the cached observation dataframes : pointwise keeps them in
+    # memory between challengers, a year of runs is heavy.
+    _CLASS4_OBSERVATIONS_CACHE.clear()
+
+
 class Class4PopulationLayers(NamedTuple):
     depths: numpy.ndarray
     latitude_origin: numpy.float64

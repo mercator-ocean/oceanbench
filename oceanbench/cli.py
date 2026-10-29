@@ -4,9 +4,12 @@
 
 import argparse
 import json
+import logging
+import os
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import datetime
 from urllib.request import Request, urlopen
 
 from oceanbench.core.local_stage import cleanup_local_stage_directory
@@ -15,6 +18,7 @@ from oceanbench.core.runtime_configuration import (
     STAGE_ALL_KEY,
     RuntimeConfiguration,
     runtime_configuration_from_environment,
+    set_runtime_configuration,
 )
 from oceanbench.core.version import __version__
 
@@ -196,6 +200,110 @@ def _run_stage(args: argparse.Namespace) -> int:
     return 0
 
 
+def _validated_swot_error_dates(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    runs_start_date: str,
+    runs_year: int,
+) -> tuple[str | None, str | None]:
+    if args.start_error_date is None:
+        if args.end_error_date is not None:
+            parser.error("--end-error-date requires --start-error-date")
+        if args.plot_maps or args.maps_only:
+            parser.error("--plot-maps / --maps-only require --start-error-date")
+        return None, None
+    try:
+        start = datetime.strptime(args.start_error_date, "%Y-%m-%d")
+        end = datetime.strptime(args.end_error_date or args.start_error_date, "%Y-%m-%d")
+    except ValueError:
+        parser.error("--start-error-date / --end-error-date must be dates (YYYY-MM-DD)")
+    if end < start:
+        parser.error("--end-error-date must not be before --start-error-date")
+    # Every day from the first run to the end of the runs year has a run
+    # started at or before it ; the end of the period is checked precisely
+    # against the lead days of the model by run_swot_validation.
+    covered_start = datetime.strptime(runs_start_date, "%Y-%m-%d")
+    covered_end = datetime(runs_year, 12, 31)
+    if not covered_start <= start <= covered_end:
+        parser.error(
+            f"--start-error-date must be a day covered by a {runs_year} run "
+            f"({runs_start_date} -> {covered_end:%Y-%m-%d})"
+        )
+    return args.start_error_date, args.end_error_date
+
+
+def _run_swot_validate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    from oceanbench.core.evaluate_model_against_swot import (
+        DEFAULT_RUNS_YEAR,
+        DEFAULT_START_DATE,
+        MODELS,
+        run_swot_validation,
+    )
+
+    unknown_models = [model for model in args.models if model not in MODELS]
+    if unknown_models:
+        print(
+            f"Error: unknown model(s) {unknown_models}, available: {sorted(MODELS)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.subsample < 1:
+        parser.error("--subsample must be >= 1")
+    if args.vmax is not None and args.vmax <= 0:
+        parser.error("--vmax must be > 0")
+
+    start_error_date, end_error_date = _validated_swot_error_dates(args, parser, DEFAULT_START_DATE, DEFAULT_RUNS_YEAR)
+
+    try:
+        runtime_configuration = _runtime_configuration_from_args(args)
+        region = _resolve_region_argument(args) or "global"
+    except ValueError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+    # The log file is created only once the arguments are validated.
+    output_directory = args.output_dir
+    os.makedirs(output_directory, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(os.path.join(output_directory, "validation.log")),
+        ],
+        force=True,
+    )
+
+    set_runtime_configuration(runtime_configuration)
+    try:
+        run_swot_validation(
+            models=args.models,
+            region=region,
+            subsample=args.subsample,
+            output_dir=output_directory,
+            output=args.output,
+            start_error_date=start_error_date,
+            end_error_date=end_error_date,
+            plot_maps=args.plot_maps,
+            maps_only=args.maps_only,
+            vmax=args.vmax,
+        )
+    except Exception as error:
+        print(f"Error: swot-validate failed: {error}", file=sys.stderr)
+        return 1
+
+    # OceanBench never deletes a stage directory provided by the user
+    # (--stage-dir) : only the default temporary one is cleaned up.
+    if (
+        runtime_configuration.has_local_stage()
+        and runtime_configuration.stage_directory is None
+        and not args.keep_stage
+    ):
+        cleanup_local_stage_directory(runtime_configuration.resolved_stage_directory())
+    return 0
+
+
 def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     parser = argparse.ArgumentParser(
         prog="oceanbench",
@@ -264,6 +372,103 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     _add_stage_arguments(stage_parser)
     _add_region_arguments(stage_parser)
     stage_parser.set_defaults(stage=[STAGE_ALL_KEY])
+
+    # ==============================================================================
+
+    swot_parser = subparsers.add_parser(
+        "swot-validate",
+        help="Validate models against SWOT L3 observations",
+        description=(
+            "Compute the RMSD Class IV table per lead day (CSV) between challenger models "
+            "(glonet, glo12, xihe, wenhai, langya, hclimrep) and SWOT L3 observations, and "
+            "optionally pointwise error outputs (error NetCDF + one error map per calendar day) "
+            "for a requested period."
+        ),
+    )
+    swot_parser.add_argument(
+        "--models",
+        nargs="+",
+        default=["glo12"],
+        help="Models to validate - available: glonet, glo12, xihe, wenhai, langya, hclimrep",
+    )
+    swot_parser.add_argument(
+        "--subsample",
+        type=int,
+        default=10,
+        help="Take 1 SWOT point over N",
+    )
+    swot_parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="outputs",
+        help=(
+            "Directory for all outputs (CSV, error NetCDF, maps, log), "
+            "relative to the current directory (default: outputs)"
+        ),
+    )
+    swot_parser.add_argument(
+        "--output",
+        type=str,
+        default="rmsd_swot_results.csv",
+        help="Name of the output CSV file (written inside --output-dir)",
+    )
+    swot_parser.add_argument(
+        "--start-error-date",
+        type=str,
+        default=None,
+        help=(
+            "Calendar date (YYYY-MM-DD) from which pointwise error outputs are produced: "
+            "error NetCDF + (with --plot-maps) one error map per calendar day. Without this "
+            "option, only the RMSD table is computed. The RMSD table always covers all the "
+            "weekly runs of 2024, independently of this option."
+        ),
+    )
+    swot_parser.add_argument(
+        "--end-error-date",
+        type=str,
+        default=None,
+        help=(
+            "Last calendar date of the pointwise error outputs, inclusive (YYYY-MM-DD). "
+            "Defaults to --start-error-date."
+        ),
+    )
+    swot_parser.add_argument(
+        "--plot-maps",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Save one PNG error map per calendar day (requires cartopy : install oceanbench[maps])",
+    )
+    swot_parser.add_argument(
+        "--maps-only",
+        action="store_true",
+        help="Skip the RMSD table and produce only the pointwise error outputs of the requested period",
+    )
+    swot_parser.add_argument(
+        "--vmax",
+        type=float,
+        default=None,
+        help=(
+            "Fixed upper bound of the |error| color scale, so maps of different models are "
+            "comparable (default: 99th percentile of the period)"
+        ),
+    )
+    swot_parser.add_argument(
+        "--stage",
+        action="append",
+        choices=["swot-observations", "all"],
+        help=(
+            "Stage the SWOT observations locally so that models with the same runs share one "
+            "download. Repeat the flag to enable multiple staging targets."
+        ),
+    )
+    _add_stage_arguments(swot_parser)
+    swot_parser.add_argument(
+        "--keep-stage",
+        action="store_true",
+        help="Keep staged data after a successful swot-validate command",
+    )
+    _add_region_arguments(swot_parser)
+
     return parser, evaluate_parser
 
 
@@ -317,6 +522,9 @@ def main():
 
     if args.command == "stage":
         sys.exit(_run_stage(args))
+
+    if args.command == "swot-validate":
+        sys.exit(_run_swot_validate(args, parser))
 
 
 if __name__ == "__main__":
