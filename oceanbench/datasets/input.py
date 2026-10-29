@@ -88,7 +88,10 @@ def ifs_forcings() -> xarray.Dataset:
 
 def ifs_nowcasts() -> xarray.Dataset:
     """
-    Open 6-hourly IFS atmospheric nowcasts from 2024.
+    Open weekly IFS atmospheric nowcasts from 2024.
+
+    There is one store per Tuesday, from January 2 to December 24, 2024.
+    Each store contains the 00, 06, 12 and 18 UTC nowcasts for that Tuesday.
 
     Returns
     -------
