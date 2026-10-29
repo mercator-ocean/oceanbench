@@ -68,6 +68,16 @@ The fluxes do not all come from the same forecast runs. On the first lead day, `
 
 Dividing a valid hourly stress accumulation by 3600 gives a stress in N m-2. This cannot be done with `ewss` and `nsss` because of the clipping.
 
+## IFS nowcast packages
+
+`oceanbench.datasets.input.ifs_nowcasts()` opens one package per Tuesday, from January 2 to December 24, 2024. Each package contains the four 6-hourly nowcasts at 00, 06, 12 and 18 UTC for that Tuesday.
+
+``` text
+https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ifs-nowcast-corrected/{YYYYMMDD}.zarr
+```
+
+A package has dimensions `time` (4), `lat` (2560) and `lon` (5120) on the ECMWF F1280 regular Gaussian grid. The instantaneous variables are analyses at their valid time. `cp` is a precipitation rate in `kg m-2 s-1`; `ewss` and `nsss` are eastward and northward surface stresses in `N m-2`.
+
 ## GLO12 nowcast packages
 
 `oceanbench.datasets.input.glo12_nowcasts()` opens one package per week, from January 4, 2023 to December 31, 2025, and joins them along `time`. Each package is a Zarr store with one group per variable:
