@@ -2,7 +2,9 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import logging
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from itertools import chain, groupby
@@ -18,6 +20,7 @@ from dataset_metadata import (
 from datasets import VARIANT_GROUP, BucketObjects, CopernicusMarineDatasets, DatasetDescription
 
 MAXIMUM_PARALLEL_METADATA_READS = 8
+LOGGER = logging.getLogger("oceanbench-catalog")
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,13 @@ def resolved_datasets(descriptions: tuple[DatasetDescription, ...]) -> tuple[Res
 
 
 def _resolved_description_datasets(description: DatasetDescription) -> tuple[ResolvedDataset, ...]:
+    start = time.monotonic()
+    datasets = _resolved_source_datasets(description)
+    LOGGER.info("Resolved %s in %.1f s", description.identifier, time.monotonic() - start)
+    return datasets
+
+
+def _resolved_source_datasets(description: DatasetDescription) -> tuple[ResolvedDataset, ...]:
     match description.source:
         case BucketObjects():
             return tuple(map(_bucket_dataset, _matched_bucket_objects(description)))

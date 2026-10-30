@@ -17,6 +17,7 @@ This documentation describes how to prepare and evaluate a challenger with the P
 - [Shape of the challenger dataset](shape-of-the-challenger-dataset/index.qmd)
 - [Input datasets for OceanBench challenger evaluation](input-datasets-for-oceanbench-challenger-evaluation/index.qmd)
 - [Units and time conventions of the input data](input-data-conventions/index.qmd)
+- [Data catalog](data-catalog/index.qmd)
 - [1 degree track](one-degree-track/index.qmd)
 - [Run OceanBench offline](run-offline/index.qmd)
 

@@ -40,6 +40,7 @@ website:
         - documentation/shape-of-the-challenger-dataset/index.qmd
         - documentation/input-datasets-for-oceanbench-challenger-evaluation/index.qmd
         - documentation/input-data-conventions/index.qmd
+        - documentation/data-catalog/index.qmd
         - documentation/one-degree-track/index.qmd
         - documentation/run-offline/index.qmd
         - section: API reference

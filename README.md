@@ -73,6 +73,13 @@ import oceanbench
 oceanbench.datasets.training.glorys_reanalysis_1_degree()
 ```
 
+## Browse the OceanBench data catalog
+
+Every dataset used or produced by OceanBench (challenger forecasts, references, observations, inputs, training data and evaluation artifacts) is described in the [OceanBench catalog on EDITO](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench).
+Each dataset comes with its spatial and temporal extent, its variables, links to its files, and Python examples to open it.
+The catalog is updated every hour from the OceanBench bucket and is also available as a [STAC API](https://api.dive.edito.eu/data/catalogs/projects/oceanbench).
+More details in the [data catalog documentation](https://oceanbench.edito.eu/documentation/data-catalog/).
+
 ## Evaluate your system with OceanBench
 
 The evaluation of a system consists of the sequential execution of a Python notebook that runs several evaluation methods against a set of forecasts (produced by the system), namely the _challenger dataset_, opened as an [xarray Dataset](https://xarray.pydata.org/en/v2023.11.0/generated/xarray.Dataset.html).

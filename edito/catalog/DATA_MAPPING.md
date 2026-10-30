@@ -95,6 +95,10 @@ Decision pending: **integrate** (I) or **drop** (D). Proposals in the last colum
 | `dev/artifacts/`, `dev/ensemble/` | `sigma-lookup-v3.{0,1}.0.zarr` | 1 / 2 | D from catalog (internal) |
 | `dev/ml-forecast-outputs/**` | experimental challengers: glonet2(-ens*), glowcascade*, smoke tests | many | Keep out of catalog until promoted to `public/` |
 | `dev/evaluation-reports/`, `dev/benchmark/` | preview reports | small | out of scope |
+| `public/references/<name>_<year>/` | 2023 and 2025 GLO12 and GLORYS references at 1/12°, 1/4° and 1° (appeared 2026-10-30) | 1-53 each | I for other evaluation years |
+| `public/evaluation-inputs/challenger-forecasts/` | GLO12, GLONET and LangYa forecasts staged for evaluation (appeared 2026-10-30) | 42-71 each | to clarify |
+| `public/mhw/climatology/` | GLORYS12 1993-2022 marine heatwave climatologies (appeared 2026-10-30) | 2 | to clarify |
+| `dev/obs-raw-archive/` | raw Copernicus Marine observations per product, dataset and day, with an index (appeared 2026-10-30) | thousands | catalogued as one item on its index |
 
 Not catalogued, as they are not datasets: `public/evaluation-reports*/`, `public/logo/`, `dev/evaluation-reports/`, `dev/benchmark/`, scripts, `provenance.json`, `summary.json`, `availability.json`.
 
@@ -109,3 +113,25 @@ Run `make update-edito-catalog CATALOG_OUTPUT_DIRECTORY=<directory>` to write th
 or `make update-edito-catalog` with `EDITO_OFFLINE_TOKEN` to publish it.
 `OCEANBENCH_CATALOG_ENVIRONMENT=<name>` publishes a private copy suffixed by `<name>`.
 The [Update EDITO catalog](../../.github/workflows/update-edito-catalog.yml) workflow launches it hourly as an EDITO generic process.
+
+## Health monitoring
+
+Each publication ends by writing `oceanbench:health` at the root of the catalog (`https://api.dive.edito.eu/data/catalogs/projects/oceanbench`):
+
+| Field | Meaning |
+|---|---|
+| `status` | `healthy`, or `needs_attention` when one of the lists below is not empty |
+| `updated` | Time of the last successful publication |
+| `item_count` | Number of published items |
+| `added_items`, `deleted_items` | Items added or deleted by the last publication |
+| `withheld_deletions` | Vanished items kept because more than `maximum_deletions_per_collection` vanished from one collection: check the bucket, then remove them by hand or raise the limit |
+| `unreadable_datasets` | Datasets whose metadata could not be read |
+| `unmapped_prefixes` | Bucket directories not covered by [`datasets.py`](datasets.py): add them to `DATASET_DESCRIPTIONS` or `NOT_DATASET_PREFIXES` |
+
+Uptime Kuma checks it with an *HTTP(s) - Json Query* monitor on that URL, every 10 minutes, with expected value `true` and the query:
+
+```
+`oceanbench:health`.status = "healthy" and $toMillis(`oceanbench:health`.updated) > $toMillis($now()) - 3 * 3600 * 1000
+```
+
+A failed or stalled publication leaves `updated` behind and turns the monitor down too.

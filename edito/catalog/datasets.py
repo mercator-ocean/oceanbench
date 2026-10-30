@@ -221,6 +221,14 @@ CHALLENGER_DATASETS = (
         BucketObjects("public/XIHE/", DAILY_STORES),
     ),
     _challenger(
+        "evaluation-input-{variant}",
+        "Evaluation input forecasts {variant}",
+        "Challenger forecasts staged as evaluation inputs, one Zarr store per forecast.",
+        BucketObjects(
+            "public/evaluation-inputs/challenger-forecasts/", rf"(?P<{VARIANT_GROUP}>[^/]+)/[^/]+\.zarr", depth=1
+        ),
+    ),
+    _challenger(
         "development-{variant}",
         "Development forecasts {variant}",
         "Experimental forecasts under development, not part of the benchmark.",
@@ -307,6 +315,26 @@ REFERENCE_DATASETS = (
         "(cmems_mod_glo_phy_anfc_0.083deg_static, cmems_mod_glo_phy_my_0.083deg_static).",
         BucketObjects("public/ocean_mask/", r"oceanbench-ocean-mask-v2\.zarr"),
         LibraryUsage.USED,
+    ),
+    _reference(
+        "reference-{variant}",
+        "Reference {variant}",
+        "Reference analyses and reanalyses for other evaluation years, one Zarr store per forecast first day.",
+        BucketObjects("public/references/", rf"(?P<{VARIANT_GROUP}>[^/]+)/\d{{8}}\.zarr", depth=1),
+    ),
+    _reference(
+        "marine-heatwave-climatology",
+        "Marine heatwave climatology",
+        "GLORYS12 1993-2022 daily climatologies used to detect marine heatwaves.",
+        BucketObjects("public/mhw/climatology/", r".*\.zarr"),
+    ),
+    _reference(
+        "raw-observation-archive",
+        "Raw observation archive",
+        "Archive of raw Copernicus Marine in situ and sea level observations, stored as "
+        "`<product>/<dataset>/<YYYYMMDD>/<file>.nc` with a JSON metadata file per NetCDF file. "
+        "The objects of this item are the archive index files.",
+        BucketObjects("dev/obs-raw-archive/", r"index/[^/]+\.jsonl", depth=1),
     ),
     _reference(
         "glo12-analysis-2024-legacy",
@@ -619,6 +647,16 @@ EVALUATION_DATASETS = (
         "Class 4 and gridded scores and rank histograms of an ensemble experiment.",
         BucketObjects("dev/ensemble/", rf"(?P<{VARIANT_GROUP}>[^/]+)/(class4|gridded)/[^/]+\.parquet", depth=2),
     ),
+)
+
+NOT_DATASET_PREFIXES = (
+    "public/evaluation-reports/",
+    "public/evaluation-reports-multi-year/",
+    "public/logo/",
+    "public/ifs-nowcasts/",
+    "dev/evaluation-reports/",
+    "dev/benchmark/",
+    "dev/ml-forecast-assets/",
 )
 
 DATASET_DESCRIPTIONS = (

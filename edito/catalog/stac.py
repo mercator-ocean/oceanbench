@@ -24,6 +24,7 @@ from dataset_resolution import BucketDataset, CopernicusMarineCatalogDataset, Re
 from datasets import CollectionKind, LibraryUsage
 
 STAC_VERSION = "1.0.0"
+HEALTH_PROPERTY = "oceanbench:health"
 CATALOG_BASE_IDENTIFIER = "oceanbench"
 PROJECT_GROUP = "oceanbench"
 DEFAULT_GROUP = "default"
@@ -47,6 +48,7 @@ MEDIA_TYPES = {
     ".parquet": "application/vnd.apache.parquet",
     ".tar": "application/x-tar",
     ".dat": "text/plain",
+    ".jsonl": "application/x-ndjson",
 }
 DEFAULT_MEDIA_TYPE = "application/octet-stream"
 PYTHON_MEDIA_TYPE = "text/x-python"
@@ -126,7 +128,7 @@ def item_identifier(dataset: ResolvedDataset, environment: CatalogEnvironment) -
     return environment.identifier(f"{CATALOG_BASE_IDENTIFIER}-{dataset.description.identifier}")
 
 
-def stac_catalog(environment: CatalogEnvironment) -> dict:
+def stac_catalog(environment: CatalogEnvironment, health: dict | None = None) -> dict:
     return {
         "id": catalog_identifier(environment),
         "type": "Catalog",
@@ -135,6 +137,7 @@ def stac_catalog(environment: CatalogEnvironment) -> dict:
         "description": CATALOG_DESCRIPTION,
         "assets": {"thumbnail": {"href": LOGO_URL, "title": "Logo", "type": "image/png", "roles": ["thumbnail"]}},
         "visibility": list(Visibility.PROJECT.value),
+        **({HEALTH_PROPERTY: health} if health is not None else {}),
     }
 
 

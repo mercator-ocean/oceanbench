@@ -14,6 +14,7 @@ CATALOG_DIRECTORY = Path(__file__).resolve().parents[1] / "edito" / "catalog"
 sys.path.insert(0, str(CATALOG_DIRECTORY))
 
 from bucket import BucketObject, ObjectKind  # noqa: E402
+from catalog_health import MAXIMUM_DELETIONS_PER_COLLECTION, collection_changes  # noqa: E402
 from dataset_metadata import dataset_metadata, merged_metadata  # noqa: E402
 from dataset_resolution import BucketDataset  # noqa: E402
 from datasets import BucketObjects, CollectionKind, DatasetDescription, LibraryUsage  # noqa: E402
@@ -85,3 +86,20 @@ def test_collection_extent_covers_all_its_items():
 
     assert collection["extent"]["spatial"]["bbox"] == [[-180.0, -10.0, 179.75, 10.0]]
     assert collection["extent"]["temporal"]["interval"] == [["2023-01-04T00:00:00+00:00", "2024-12-31T00:00:00+00:00"]]
+
+
+def test_few_vanished_datasets_are_deleted_from_the_catalog():
+    changes = collection_changes("challengers", ("glonet", "xihe", "wenhai"), ("glonet", "xihe", "langya"))
+
+    assert changes.added_items == ("wenhai",)
+    assert changes.deleted_items == ("langya",)
+    assert changes.withheld_deletions == ()
+
+
+def test_mass_disappearance_is_withheld_instead_of_deleted():
+    published = tuple(f"dataset-{index}" for index in range(MAXIMUM_DELETIONS_PER_COLLECTION + 2))
+
+    changes = collection_changes("challengers", published[:1], published)
+
+    assert changes.deleted_items == ()
+    assert changes.withheld_deletions == published[1:]

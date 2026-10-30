@@ -1,0 +1,55 @@
+<!--
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+title: "Data catalog"
+---
+
+Every dataset used or produced by OceanBench is described in the [OceanBench catalog on EDITO](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench).
+The catalog follows the [STAC](https://stacspec.org) specification and is updated every hour from the OceanBench bucket and Copernicus Marine.
+
+## Collections
+
+Challengers
+
+:   Forecasts of the evaluated ocean forecasting systems, and baselines.
+
+References
+
+:   Analyses, reanalyses, observations and static fields that challengers are compared against.
+
+Inputs
+
+:   Initial states and forcings that challengers use to produce their forecasts, see [input datasets](/documentation/input-datasets-for-oceanbench-challenger-evaluation/index.qmd).
+
+Training
+
+:   Datasets to train ocean forecasting systems on, without overlapping the evaluation period.
+
+Evaluations
+
+:   Scores, matchups and evaluation artifacts.
+
+## Datasets
+
+Each dataset is described by a STAC item with:
+
+- its spatial and temporal extent, dimensions and variables (with CF standard names and units),
+- links to its first and latest files in the OceanBench bucket,
+- Python examples to open it, with the [`oceanbench` datasets API](/documentation/api/index.qmd) when available, otherwise with `xarray` or the Copernicus Marine Toolbox,
+- the `oceanbench:library_usage` property, telling whether the `oceanbench` library uses it.
+
+## Programmatic access
+
+The catalog is also served by the EDITO STAC API, for example with [`pystac`](https://pystac.readthedocs.io):
+
+```python
+import pystac
+
+catalog = pystac.Catalog.from_file("https://api.dive.edito.eu/data/catalogs/projects/oceanbench")
+for collection in catalog.get_children():
+    print(collection.id, collection.title)
+```
