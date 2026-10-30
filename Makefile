@@ -112,3 +112,11 @@ deploy-website-locally:
 
 deploy-website-on-edito:
 	./edito/deploy-website.sh
+
+update-edito-catalog: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+update-edito-catalog:
+	${ACTIVATE_ENVIRONMENT}
+	python edito/catalog/update_catalog.py $(if ${CATALOG_OUTPUT_DIRECTORY},--output-directory ${CATALOG_OUTPUT_DIRECTORY},)
+
+launch-edito-catalog-update:
+	./edito/catalog/launch-catalog-update.sh
