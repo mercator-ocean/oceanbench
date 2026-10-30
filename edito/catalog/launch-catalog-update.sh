@@ -40,17 +40,23 @@ normalized_branch() {
         | tr -c 'a-z0-9\n' '-'
 }
 
-catalog_environment() {
+default_catalog_environment() {
     case "${BRANCH}" in
         "${MAIN_BRANCH}") echo "" ;;
         *) normalized_branch ;;
     esac
 }
 
+readonly CATALOG_ENVIRONMENT="${OCEANBENCH_CATALOG_ENVIRONMENT:-$(default_catalog_environment)}"
+
+catalog_environment() {
+    echo "${CATALOG_ENVIRONMENT}"
+}
+
 process_name() {
-    case "${BRANCH}" in
-        "${MAIN_BRANCH}") echo "${MAIN_PROCESS_NAME}" ;;
-        *) echo "${MAIN_PROCESS_NAME}-$(normalized_branch)" | cut -c1-"${PROCESS_NAME_MAXIMUM_LENGTH}" | sed 's/-*$//' ;;
+    case "${CATALOG_ENVIRONMENT}" in
+        "") echo "${MAIN_PROCESS_NAME}" ;;
+        *) echo "${MAIN_PROCESS_NAME}-${CATALOG_ENVIRONMENT}" | cut -c1-"${PROCESS_NAME_MAXIMUM_LENGTH}" | sed 's/-*$//' ;;
     esac
 }
 
