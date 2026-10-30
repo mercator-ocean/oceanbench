@@ -9,7 +9,7 @@ set -euo pipefail
 readonly API_URL="https://datalab.dive.edito.eu/api"
 readonly CATALOG_ID="data-visualization"
 readonly PACKAGE_NAME="static-pages"
-readonly PACKAGE_VERSION="1.0.9"
+readonly PACKAGE_VERSION="1.2.1"
 readonly BUILD_SCRIPT_PATH="website/build-website.sh"
 readonly MAIN_BRANCH="main"
 readonly MAIN_SERVICE_NAME="oceanbench"
@@ -98,6 +98,7 @@ launch_request_body() {
                 resources: {requests: {cpu: $cpuRequest, memory: $memoryRequest}, limits: {cpu: $cpuLimit, memory: $memoryLimit}},
                 git: {enabled: true, cache: "0", token: $token, repository: $repository, branch: $branch},
                 website: {source: ""},
+                automated_update: {enabled: true},
                 ingress: {enabled: true, hostname: $hostname},
                 environment_variables: [],
                 build: {scriptPath: $buildScriptPath, args: ""},
