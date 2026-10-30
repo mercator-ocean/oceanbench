@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Update EDITO catalog
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+concurrency:
+  group: update-edito-catalog-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  launch-catalog-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Launch the catalog update process on EDITO
+        env:
+          BRANCH: ${{ github.ref_name }}
+          EDITO_OFFLINE_TOKEN: ${{ secrets.EDITO_OFFLINE_TOKEN }}
+        run: make launch-edito-catalog-update
