@@ -65,6 +65,13 @@ def upsert_item(session: EditoSession, collection_identifier: str, item: dict) -
         raise EditoDataApiError(f"Create item {item['id']} failed: {creation_response.json().get('errors')}")
 
 
+def ensure_project_catalog(session: EditoSession, catalog: dict) -> None:
+    catalog_url = f"{PROJECT_CATALOGS_URL}/{catalog['id']}"
+    if _request(session, "GET", catalog_url).status_code != HTTPStatus.NOT_FOUND:
+        return
+    _raise_for_failure(_request(session, "POST", PROJECT_CATALOGS_URL, json=catalog), f"Create {catalog_url}")
+
+
 def upsert_project_catalog(session: EditoSession, catalog: dict, visibility: tuple[str, ...]) -> None:
     catalog_url = f"{PROJECT_CATALOGS_URL}/{catalog['id']}"
     _upsert(session, catalog_url, PROJECT_CATALOGS_URL, catalog)

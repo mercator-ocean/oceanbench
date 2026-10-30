@@ -79,6 +79,15 @@ def list_bucket_objects(prefix: str, depth: int) -> tuple[BucketObject, ...]:
     return tuple(sorted((*stores, *files, *subdirectory_objects), key=lambda bucket_object: bucket_object.key))
 
 
+@cache
+def list_bucket_directories(prefix: str, depth: int) -> tuple[str, ...]:
+    directory_keys = tuple(key for key in _list_directory(prefix)[0] if not _is_zarr_store(key))
+    subdirectory_keys = (
+        chain.from_iterable(list_bucket_directories(key, depth - 1) for key in directory_keys) if depth > 1 else ()
+    )
+    return tuple(sorted((*directory_keys, *subdirectory_keys)))
+
+
 def _is_zarr_store(directory_key: str) -> bool:
     return directory_key.rstrip("/").endswith(ZARR_SUFFIX)
 
@@ -89,6 +98,7 @@ def _zarr_store(directory_key: str) -> BucketObject:
     )
 
 
+@cache
 def _list_directory(prefix: str) -> tuple[tuple[str, ...], tuple[BucketObject, ...]]:
     pages = tuple(_listing_pages(prefix))
     return (

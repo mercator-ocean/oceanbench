@@ -82,8 +82,19 @@ class DatasetMetadata:
     groups: tuple[str, ...]
 
 
+class TimeDecoding(Enum):
+    DECODED = "decoded"
+    RAW = "raw"
+
+
+class UnavailabilityCause(Enum):
+    UNREADABLE_FORMAT = "unreadable_format"
+    READ_FAILURE = "read_failure"
+
+
 @dataclass(frozen=True)
 class MetadataUnavailable:
+    cause: UnavailabilityCause
     reason: str
 
 
@@ -151,7 +162,9 @@ def _bucket_object_metadata(bucket_object: BucketObject) -> DatasetMetadata | Me
     try:
         return _opened_bucket_object_metadata(bucket_object)
     except Exception as error:
-        return MetadataUnavailable(f"{bucket_object.key}: {type(error).__name__}: {error}")
+        return MetadataUnavailable(
+            UnavailabilityCause.READ_FAILURE, f"{bucket_object.key}: {type(error).__name__}: {error}"
+        )
 
 
 def _opened_bucket_object_metadata(bucket_object: BucketObject) -> DatasetMetadata | MetadataUnavailable:
@@ -161,22 +174,37 @@ def _opened_bucket_object_metadata(bucket_object: BucketObject) -> DatasetMetada
         case BucketObject(key=key) if key.endswith(NETCDF_SUFFIX):
             return _netcdf_file_metadata(public_url(key))
         case _:
-            return MetadataUnavailable(f"{bucket_object.key}: format without readable metadata")
+            return MetadataUnavailable(
+                UnavailabilityCause.UNREADABLE_FORMAT, f"{bucket_object.key}: format without readable metadata"
+            )
 
 
 def _zarr_store_metadata(url: str) -> DatasetMetadata:
+    try:
+        return _decoded_zarr_store_metadata(url, TimeDecoding.DECODED)
+    except (ValueError, OverflowError):
+        return _decoded_zarr_store_metadata(url, TimeDecoding.RAW)
+
+
+def _decoded_zarr_store_metadata(url: str, time_decoding: TimeDecoding) -> DatasetMetadata:
+    decode_times = time_decoding == TimeDecoding.DECODED
     groups = tuple(sorted(zarr.open_consolidated(remote_zarr_store(url), mode="r").group_keys()))
     datasets = (
-        tuple(_without_duplicated_indexes(open_remote_zarr(url, group=group, chunks={})) for group in groups)
+        tuple(open_remote_zarr(url, group=group, chunks={}, decode_times=decode_times) for group in groups)
         if groups
-        else (open_remote_zarr(url, chunks={}),)
+        else (open_remote_zarr(url, chunks={}, decode_times=decode_times),)
     )
-    dataset = xarray.merge(datasets, compat="override", join="outer", combine_attrs="override")
-    return dataset_metadata(dataset, groups)
+    return replace(reduce(_combined_metadata, (dataset_metadata(dataset, ()) for dataset in datasets)), groups=groups)
 
 
-def _without_duplicated_indexes(dataset: xarray.Dataset) -> xarray.Dataset:
-    return dataset.drop_duplicates(dim=list(dataset.indexes), keep="first")
+def _combined_metadata(first: DatasetMetadata, second: DatasetMetadata) -> DatasetMetadata:
+    return DatasetMetadata(
+        spatial_extent=_merged_spatial_extent(first.spatial_extent, second.spatial_extent),
+        temporal_extent=_merged_temporal_extent(first.temporal_extent, second.temporal_extent),
+        dimensions=tuple({dimension.name: dimension for dimension in (*second.dimensions, *first.dimensions)}.values()),
+        variables=tuple({variable.name: variable for variable in (*first.variables, *second.variables)}.values()),
+        groups=(),
+    )
 
 
 def _netcdf_file_metadata(url: str) -> DatasetMetadata:
@@ -315,7 +343,9 @@ def copernicus_marine_datasets(
     try:
         return tuple(map(_copernicus_marine_dataset, dataset_identifiers))
     except Exception as error:
-        return MetadataUnavailable(f"{', '.join(dataset_identifiers)}: {type(error).__name__}: {error}")
+        return MetadataUnavailable(
+            UnavailabilityCause.READ_FAILURE, f"{', '.join(dataset_identifiers)}: {type(error).__name__}: {error}"
+        )
 
 
 def _copernicus_marine_dataset(dataset_identifier: str) -> CopernicusMarineDataset:

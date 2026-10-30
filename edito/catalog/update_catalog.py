@@ -15,20 +15,32 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from bucket import list_bucket_directories
+from catalog_health import (
+    CatalogHealth,
+    CollectionChanges,
+    UnreadableDataset,
+    collection_changes,
+    health_metadata,
+    unmapped_prefixes,
+    unreadable_datasets,
+)
 from dataset_metadata import MetadataUnavailable
 from dataset_resolution import BucketDataset, ResolvedDataset, resolved_datasets
-from datasets import DATASET_DESCRIPTIONS, CollectionKind
+from datasets import DATASET_DESCRIPTIONS, NOT_DATASET_PREFIXES, CollectionKind
 from edito_data_api import (
     delete_item,
+    ensure_project_catalog,
     item_identifiers,
     session_from_environment,
     upsert_collection_in_project_catalog,
     upsert_item,
     upsert_project_catalog,
 )
-from stac import CatalogEnvironment, stac_catalog, stac_collection, stac_item
+from stac import HEALTH_PROPERTY, CatalogEnvironment, item_identifier, stac_catalog, stac_collection, stac_item
 
 CATALOG_ENVIRONMENT_VARIABLE = "OCEANBENCH_CATALOG_ENVIRONMENT"
+UNMAPPED_PREFIX_SEARCH_DEPTH = 3
 LOGGER = logging.getLogger("oceanbench-catalog")
 
 
@@ -44,9 +56,23 @@ class CollectionTree:
 
 @dataclass(frozen=True)
 class CatalogTree:
-    catalog: dict
+    environment: CatalogEnvironment
     collections: tuple[CollectionTree, ...]
-    visibility: tuple[str, ...]
+    unreadable_datasets: tuple[UnreadableDataset, ...]
+    unmapped_prefixes: tuple[str, ...]
+    publication_datetime: datetime
+
+    def health(self, changes: tuple[CollectionChanges, ...]) -> CatalogHealth:
+        return CatalogHealth(
+            updated=self.publication_datetime,
+            item_count=sum(len(tree.items) for tree in self.collections),
+            changes=changes,
+            unreadable_datasets=self.unreadable_datasets,
+            unmapped_prefixes=self.unmapped_prefixes,
+        )
+
+    def catalog(self, changes: tuple[CollectionChanges, ...] | None = None) -> dict:
+        return stac_catalog(self.environment, health_metadata(self.health(changes or ())))
 
 
 def main() -> None:
@@ -90,9 +116,15 @@ def _catalog_tree(
     )
     _require_unique_item_identifiers(collections)
     return CatalogTree(
-        catalog=stac_catalog(environment),
+        environment=environment,
         collections=collections,
-        visibility=environment.visibility().value,
+        unreadable_datasets=unreadable_datasets(
+            datasets, tuple(item_identifier(dataset, environment) for dataset in datasets)
+        ),
+        unmapped_prefixes=unmapped_prefixes(
+            list_bucket_directories("", UNMAPPED_PREFIX_SEARCH_DEPTH), DATASET_DESCRIPTIONS, NOT_DATASET_PREFIXES
+        ),
+        publication_datetime=publication_datetime,
     )
 
 
@@ -124,36 +156,41 @@ def _require_unique_item_identifiers(collections: tuple[CollectionTree, ...]) ->
 
 def _publish(catalog_tree: CatalogTree) -> None:
     session = session_from_environment()
-    catalog_identifier = catalog_tree.catalog["id"]
-    upsert_project_catalog(session, catalog_tree.catalog, catalog_tree.visibility)
-    for tree in catalog_tree.collections:
-        _publish_collection(session, catalog_identifier, tree)
-    LOGGER.info("Published catalog %s", catalog_identifier)
+    catalog_identifier = catalog_tree.catalog()["id"]
+    ensure_project_catalog(session, stac_catalog(catalog_tree.environment))
+    changes = tuple(_publish_collection(session, catalog_identifier, tree) for tree in catalog_tree.collections)
+    catalog = catalog_tree.catalog(changes)
+    upsert_project_catalog(session, catalog, catalog_tree.environment.visibility().value)
+    LOGGER.info("Published catalog %s: %s", catalog_identifier, json.dumps(catalog[HEALTH_PROPERTY]))
 
 
-def _publish_collection(session, catalog_identifier: str, tree: CollectionTree) -> None:
+def _publish_collection(session, catalog_identifier: str, tree: CollectionTree) -> CollectionChanges:
     collection_identifier = tree.collection["id"]
     upsert_collection_in_project_catalog(session, catalog_identifier, tree.collection)
+    published_identifiers = item_identifiers(session, collection_identifier)
     for item in tree.items:
         upsert_item(session, collection_identifier, item)
         LOGGER.info("Published item %s", item["id"])
-    current_identifiers = {item["id"] for item in tree.items}
-    for stale_identifier in set(item_identifiers(session, collection_identifier)) - current_identifiers:
+    changes = collection_changes(collection_identifier, tuple(item["id"] for item in tree.items), published_identifiers)
+    for stale_identifier in changes.deleted_items:
         delete_item(session, collection_identifier, stale_identifier)
         LOGGER.info("Deleted stale item %s", stale_identifier)
+    for withheld_identifier in changes.withheld_deletions:
+        LOGGER.warning("Withheld deletion of stale item %s", withheld_identifier)
     LOGGER.info("Published collection %s with %d items", collection_identifier, len(tree.items))
+    return changes
 
 
 def _write(catalog_tree: CatalogTree, output_directory: Path) -> None:
     output_directory.mkdir(parents=True, exist_ok=True)
-    _write_json(output_directory / "catalog.json", catalog_tree.catalog)
+    _write_json(output_directory / "catalog.json", catalog_tree.catalog())
     for tree in catalog_tree.collections:
         collection_directory = output_directory / tree.collection["id"]
         collection_directory.mkdir(exist_ok=True)
         _write_json(collection_directory / "collection.json", tree.collection)
         for item in tree.items:
             _write_json(collection_directory / f"{item['id']}.json", item)
-    LOGGER.info("Wrote catalog %s in %s", catalog_tree.catalog["id"], output_directory)
+    LOGGER.info("Wrote catalog %s in %s", catalog_tree.catalog()["id"], output_directory)
 
 
 def _write_json(path: Path, content: dict) -> None:
