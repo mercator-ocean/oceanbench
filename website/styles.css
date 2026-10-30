@@ -1618,3 +1618,124 @@ a.external-link[href*="marine.copernicus.eu"]::after {
   cursor: help;
   text-decoration: underline dotted;
 }
+
+/* --- Export dialog --- */
+
+#export-dialog {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface-raised);
+  color: var(--bs-body-color, #333940);
+  box-shadow: var(--ob-soft-shadow);
+}
+
+#export-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+#export-dialog h3 {
+  margin: 0 0 0.15rem;
+  font-size: 1.15rem;
+}
+
+.export-dialog-context {
+  margin: 0 0 0.75rem;
+  color: var(--ob-muted);
+  font-size: 0.85rem;
+}
+
+.export-dialog-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.9rem;
+}
+
+.export-dialog-close button {
+  border: 0;
+  background: none;
+  color: var(--ob-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.export-action {
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-pill);
+  background: var(--ob-surface);
+  color: var(--bs-body-color, #333940);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.export-action:hover {
+  border-color: var(--ob-accent);
+  color: var(--ob-accent);
+}
+
+.export-action--primary {
+  background: var(--ob-accent);
+  border-color: var(--ob-accent);
+  color: var(--ob-accent-contrast);
+}
+
+.export-action--primary:hover {
+  color: var(--ob-accent-contrast);
+  opacity: 0.9;
+}
+
+.export-snippet {
+  margin-bottom: 0.75rem;
+}
+
+.export-snippet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ob-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.export-copy-button {
+  font-family: inherit;
+}
+
+.export-snippet-header .export-copy-button {
+  border: 0;
+  background: none;
+  color: var(--ob-accent);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.export-snippet pre {
+  margin: 0.25rem 0 0;
+  padding: 0.6rem 0.8rem;
+  overflow-x: auto;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface);
+  font-size: 0.8rem;
+}
+
+.export-dialog-footer {
+  margin: 0;
+  color: var(--ob-muted);
+  font-size: 0.82rem;
+}

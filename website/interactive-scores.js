@@ -631,6 +631,146 @@ function buildSelectorRow(labelText, chipsHtml, description, descriptionClass = 
   return markup;
 }
 
+const DATA_EXPLORER_URL = "https://datalab.dive.edito.eu/data-explorer";
+const EXPORT_FORMATS = ["csv", "parquet", "zarr"];
+const FLAT_DEPTH_KEY = "flat";
+
+const EXPORT_FORMAT_DESCRIPTIONS = {
+  csv: "One row per challenger, metric, depth, variable and lead day.",
+  parquet: "Same table as the CSV, smaller and faster to read.",
+  zarr: "Multi-dimensional dataset: <code>value</code> over the challenger, comparison, metric, depth, variable and lead_day dimensions, with the <code>unit</code> and <code>standard_name</code> of each variable.",
+};
+
+function scoresExportUrl(exportFormat) {
+  const relativePath = `${parsedData.scores_api_directory}/${encodeURIComponent(activeVersion)}/${encodeURIComponent(activeRegion)}/${activeTrack}.${exportFormat}`;
+  return new URL(relativePath, document.baseURI).href;
+}
+
+function dataExplorerUrl() {
+  return `${DATA_EXPLORER_URL}?source=${encodeURIComponent(scoresExportUrl("csv"))}`;
+}
+
+function buildExportChips() {
+  const chips = EXPORT_FORMATS.map(
+    (exportFormat) => `<button type="button" class="selector-chip" data-export-format="${exportFormat}" aria-haspopup="dialog">${exportFormat === "csv" ? "CSV" : titleCase(exportFormat)}</button>`,
+  ).join("");
+  return `<div class="selector-chips" role="group" aria-label="Export the displayed scores">${chips}</div>`;
+}
+
+function exampleScoreSelection() {
+  const challengers = getCurrentRegionData(parsedData)?.challengers || {};
+  const challengerName = Object.keys(challengers).find(
+    (name) => trackKeyForChallenger(name) === activeTrack && !isReferenceBaseline(name),
+  );
+  const candidates = SECTION_ORDER.map((comparison) => {
+    const metricKey = parsedData.sections?.[comparison]?.depth_metric;
+    const depths = challengers[challengerName]?.[metricKey]?.depths || {};
+    const [depth, depthScore] = Object.entries(depths)[0] || [];
+    const variable = Object.keys(depthScore?.variables || {})[0];
+    return variable === undefined
+      ? null
+      : {
+          challenger: challengerName,
+          comparison,
+          metric: parsedData.metric_titles[metricKey],
+          depth: depth === FLAT_DEPTH_KEY ? "" : depth,
+          variable,
+        };
+  });
+  return candidates.find((candidate) => candidate !== null) || null;
+}
+
+function pythonKeywordArguments(selection) {
+  return Object.entries(selection)
+    .map(([dimension, label]) => `    ${dimension}=${JSON.stringify(label)},`)
+    .join("\n");
+}
+
+function exportSnippets(exportFormat) {
+  const url = scoresExportUrl(exportFormat);
+  const fileName = `${activeRegion}_${activeTrack}.${exportFormat}`;
+  const selection = exampleScoreSelection();
+  const zarrSelection = selection
+    ? `scores["value"].sel(\n${pythonKeywordArguments(selection)}\n)`
+    : 'scores["value"]';
+  return {
+    csv: [
+      { title: "Python", code: `import pandas\n\nscores = pandas.read_csv("${url}")` },
+      { title: "Shell", code: `curl -o ${fileName} "${url}"` },
+    ],
+    parquet: [
+      { title: "Python", code: `import pandas\n\nscores = pandas.read_parquet("${url}")` },
+      { title: "Shell", code: `curl -o ${fileName} "${url}"` },
+    ],
+    zarr: [{ title: "Python", code: `import xarray\n\nscores = xarray.open_zarr("${url}", consolidated=True)\n${zarrSelection}` }],
+  }[exportFormat];
+}
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function buildSnippetHtml(snippet) {
+  return `<div class="export-snippet"><div class="export-snippet-header"><span>${snippet.title}</span><button type="button" class="export-copy-button" data-copy-text="${escapeHtml(snippet.code)}">Copy</button></div><pre><code>${escapeHtml(snippet.code)}</code></pre></div>`;
+}
+
+function buildExportPrimaryActionHtml(exportFormat) {
+  const url = scoresExportUrl(exportFormat);
+  return exportFormat === "zarr"
+    ? `<button type="button" class="export-action export-action--primary export-copy-button" data-copy-text="${url}">Copy the Zarr store URL</button>`
+    : `<a class="export-action export-action--primary" href="${url}" download>Download ${exportFormat === "csv" ? "CSV" : "Parquet"}</a>`;
+}
+
+function buildExportDataExplorerLinkHtml(exportFormat) {
+  return exportFormat === "csv"
+    ? `<a class="export-action" href="${dataExplorerUrl()}" target="_blank" rel="noopener">Open in EDITO Data Explorer</a>`
+    : "";
+}
+
+function buildExportDialogInnerHtml(exportFormat) {
+  const heading = `${exportFormat === "csv" ? "CSV" : titleCase(exportFormat)} export`;
+  const context = `${activeVersion} · ${regionLabels[activeRegion] || activeRegion} · ${TRACK_LABELS[activeTrack]}`;
+  return `
+    <form method="dialog" class="export-dialog-close"><button type="submit" aria-label="Close">&times;</button></form>
+    <h3>${heading}</h3>
+    <p class="export-dialog-context">${context}</p>
+    <p>${EXPORT_FORMAT_DESCRIPTIONS[exportFormat]}</p>
+    <div class="export-actions">${buildExportPrimaryActionHtml(exportFormat)}${buildExportDataExplorerLinkHtml(exportFormat)}</div>
+    ${exportSnippets(exportFormat).map(buildSnippetHtml).join("")}
+    <p class="export-dialog-footer">Also available through the <a href="documentation/scores-api/">Scores API</a>.</p>`;
+}
+
+function exportDialogElement() {
+  const existing = document.getElementById("export-dialog");
+  if (existing) return existing;
+  const dialog = document.createElement("dialog");
+  dialog.id = "export-dialog";
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  document.body.appendChild(dialog);
+  return dialog;
+}
+
+function copyText(button) {
+  const label = button.textContent;
+  navigator.clipboard.writeText(button.dataset.copyText).then(() => {
+    button.textContent = "Copied";
+    setTimeout(() => {
+      button.textContent = label;
+    }, 1500);
+  });
+}
+
+function openExportDialog(exportFormat) {
+  const dialog = exportDialogElement();
+  dialog.innerHTML = buildExportDialogInnerHtml(exportFormat);
+  dialog.querySelectorAll(".export-copy-button").forEach((button) => {
+    button.addEventListener("click", () => copyText(button));
+  });
+  dialog.showModal();
+}
+
 function buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks) {
   if (regionIds.length === 0) return "";
 
@@ -654,6 +794,7 @@ function buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks) {
     );
     controls += buildSelectorRow("Track", trackChips, TRACK_NOTES[activeTrack], "selector-description--track");
   }
+  controls += buildSelectorRow("Export", buildExportChips(), "");
 
   let markup = '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
   markup += `<div class="region-selector-controls">${controls}</div>`;
@@ -1207,6 +1348,9 @@ function setupScrollFade() {
 }
 
 function attachSelectorListeners() {
+  document.querySelectorAll("#region-selector [data-export-format]").forEach((button) => {
+    button.addEventListener("click", () => openExportDialog(button.dataset.exportFormat));
+  });
   document.querySelectorAll("#region-selector .selector-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
       const { region, track } = chip.dataset;

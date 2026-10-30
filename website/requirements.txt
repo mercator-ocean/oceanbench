@@ -4,6 +4,10 @@
 
 jupyter == 1.1.1
 pandas == 2.2.3
+pyarrow == 19.0.1
+xarray == 2025.1.2
+zarr == 2.18.3
+numcodecs == 0.13.1
 beautifulsoup4 == 4.13.3
 matplotlib == 3.10.1
 pydantic == 2.11.3

@@ -18,7 +18,7 @@ It is developed by [Mercator Ocean International](https://mercator-ocean.eu) wit
 ### 2. What does it add compared to evaluating my model on my own?
 
 Every system is scored with the same references, period, masks and metric definitions, so scores are comparable across physics-based, machine-learning and hybrid systems.
-Evaluations are executable notebooks, so any score can be reproduced.
+Scores are reproducible, and can be downloaded as CSV, Parquet or Zarr.
 
 ### 3. Who is it for?
 
@@ -56,7 +56,8 @@ See the [documentation](/documentation/one-degree-track/index.qmd).
 
 ### 9. How often are scores updated?
 
-All official challengers are re-evaluated with each new OceanBench version, and versioned reports are stored on [EDITO](https://datalab.dive.edito.eu/my-files/oceanbench-bucket/public/evaluation-reports/).
+All official challengers are re-evaluated with each new OceanBench version, and the scores of every version stay available on the Scores page.
+They can be exported as CSV, Parquet or Zarr with the Export buttons, opened in the [EDITO Data Explorer](https://datalab.dive.edito.eu/data-explorer), or fetched through the [Scores API](/documentation/scores-api/index.qmd).
 
 ## The science
 

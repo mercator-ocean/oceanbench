@@ -1,0 +1,74 @@
+<!--
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+title: "Scores API"
+---
+
+The scores of the [Scores page](../../index.qmd) are served as files, for every published version, region and track.
+On the page, use the **Export** row next to the **Region** and **Track** pickers to download the displayed scores, or to open them in the [EDITO Data Explorer](https://datalab.dive.edito.eu/data-explorer).
+
+## Endpoints
+
+Replace `<version>`, `<region>` and `<track>` with an OceanBench version (for example `0.6.2`), a region identifier (for example `global`) and a track (`high_resolution` or `one_degree`).
+
+| Endpoint | Content |
+|---|---|
+| `/api/scores/index.json` | The available versions, regions and tracks, with the path of each file |
+| `/api/scores/<version>/<region>/<track>.csv` | Scores as CSV |
+| `/api/scores/<version>/<region>/<track>.parquet` | Scores as Parquet |
+| `/api/scores/<version>/<region>/<track>.zarr` | Scores as a multi-dimensional Zarr store |
+
+Only the combinations listed in `index.json` exist.
+
+## Columns of the CSV and Parquet files
+
+Each row is the score of one challenger, for one metric, depth, variable and lead day.
+
+| Column | Description |
+|---|---|
+| `version` | OceanBench version |
+| `region` | Region identifier |
+| `track` | `high_resolution` or `one_degree` |
+| `challenger` | Challenger identifier |
+| `comparison` | `observations`, `reanalysis` or `analysis` |
+| `metric` | Metric title |
+| `depth` | Depth range, empty for metrics without depth |
+| `variable` | Variable name |
+| `standard_name` | CF standard name of the variable |
+| `unit` | Unit of the score |
+| `lead_day` | Forecast lead day |
+| `value` | Score, empty when unavailable |
+
+## Zarr structure
+
+The Zarr store is a dataset with the dimensions `challenger`, `comparison`, `metric`, `depth`, `variable` and `lead_day`.
+The `value` array holds the scores, empty where a combination does not exist.
+The `unit` and `standard_name` arrays give the unit and CF standard name of each `comparison`, `metric`, `depth` and `variable`.
+
+## Examples
+
+``` bash
+curl -O https://oceanbench.edito.eu/api/scores/index.json
+curl -O https://oceanbench.edito.eu/api/scores/<version>/global/high_resolution.csv
+```
+
+``` python
+import pandas
+import xarray
+
+scores = pandas.read_parquet("https://oceanbench.edito.eu/api/scores/<version>/global/high_resolution.parquet")
+dataset = xarray.open_zarr("https://oceanbench.edito.eu/api/scores/<version>/global/high_resolution.zarr", consolidated=True)
+glonet_scores = dataset["value"].sel(challenger="glonet", comparison="reanalysis", metric="Forecasted variables")
+```
+
+The Export popup on the Scores page shows these snippets for the displayed version, region and track.
+
+To open the scores in the EDITO Data Explorer, pass the CSV URL as the `source` parameter:
+
+```
+https://datalab.dive.edito.eu/data-explorer?source=<url-encoded CSV URL>
+```

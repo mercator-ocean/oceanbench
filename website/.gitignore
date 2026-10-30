@@ -10,5 +10,6 @@
 /documentation/api/
 /objects.json
 /scores/
+/api/
 
 **/*.quarto_ipynb
