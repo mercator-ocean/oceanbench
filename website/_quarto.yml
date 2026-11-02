@@ -8,6 +8,7 @@ project:
   pre-render:
     - python download_reports.py
     - python -m quartodoc build
+    - python add_api_page_titles.py
   post-render:
     - python generate_report_redirects.py
     - python publish_scores.py
