@@ -112,3 +112,16 @@ deploy-website-locally:
 
 deploy-website-on-edito:
 	./edito/deploy-website.sh
+
+NRT_WEBSITE_BRANCH := $(or $(NRT_WEBSITE_BRANCH),272-2-nrt-for-demo)
+NRT_WEBSITE_SERVICE_NAME := oceanbench-nrt-demo
+NRT_WEBSITE_MEMORY_LIMIT := 10Gi
+NRT_WEBSITE_HEALTH_CHECK_ATTEMPTS := 240
+
+deploy-nrt-website-on-edito:
+	BRANCH=$(NRT_WEBSITE_BRANCH) \
+	SERVICE_BRANCH=$${SERVICE_BRANCH:-$$(git branch --show-current)} \
+	MAIN_SERVICE_NAME=$(NRT_WEBSITE_SERVICE_NAME) \
+	MEMORY_LIMIT=$(NRT_WEBSITE_MEMORY_LIMIT) \
+	HEALTH_CHECK_ATTEMPTS=$(NRT_WEBSITE_HEALTH_CHECK_ATTEMPTS) \
+	$(MAKE) deploy-website-on-edito

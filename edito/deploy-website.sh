@@ -12,18 +12,19 @@ readonly PACKAGE_NAME="static-pages"
 readonly PACKAGE_VERSION="1.2.1"
 readonly BUILD_SCRIPT_PATH="website/build-website.sh"
 readonly MAIN_BRANCH="main"
-readonly MAIN_SERVICE_NAME="oceanbench"
+readonly MAIN_SERVICE_NAME="${MAIN_SERVICE_NAME:-oceanbench}"
 readonly ONYXIA_PROJECT="${ONYXIA_PROJECT:-project-oceanbench}"
 readonly ONYXIA_REGION="WAW3-1"
 readonly TOKEN_URL="https://auth.dive.edito.eu/auth/realms/datalab/protocol/openid-connect/token"
 readonly TOKEN_CLIENT_ID="edito"
 readonly UPDATE_TIMEOUT_SECONDS=30
 readonly CURL_TIMEOUT_EXIT_CODE=28
-readonly HEALTH_CHECK_ATTEMPTS=60
+readonly HEALTH_CHECK_ATTEMPTS="${HEALTH_CHECK_ATTEMPTS:-60}"
 readonly HEALTH_CHECK_INTERVAL_SECONDS=10
 readonly SERVICE_NAME_MAXIMUM_LENGTH=40
 
 readonly BRANCH="${BRANCH:-$(git branch --show-current)}"
+readonly SERVICE_BRANCH="${SERVICE_BRANCH:-${BRANCH}}"
 readonly GIT_REPOSITORY="${GIT_REPOSITORY:-https://github.com/mercator-ocean/oceanbench.git}"
 readonly GIT_TOKEN="${GIT_TOKEN:-}"
 readonly EDITO_ACCESS_TOKEN="${EDITO_ACCESS_TOKEN:-}"
@@ -35,7 +36,7 @@ readonly CPU_LIMIT="${CPU_LIMIT:-1000m}"
 readonly MEMORY_LIMIT="${MEMORY_LIMIT:-4Gi}"
 
 branch_service_name() {
-    echo "oceanbench-${BRANCH}" \
+    echo "${MAIN_SERVICE_NAME}-${SERVICE_BRANCH}" \
         | tr '[:upper:]' '[:lower:]' \
         | tr -c 'a-z0-9\n' '-' \
         | cut -c1-"${SERVICE_NAME_MAXIMUM_LENGTH}" \
@@ -43,7 +44,7 @@ branch_service_name() {
 }
 
 default_service_name() {
-    case "${BRANCH}" in
+    case "${SERVICE_BRANCH}" in
         "${MAIN_BRANCH}") echo "${MAIN_SERVICE_NAME}" ;;
         *) branch_service_name ;;
     esac
