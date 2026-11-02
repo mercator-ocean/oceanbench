@@ -10,6 +10,7 @@ jupyter: python3
 format:
   html:
     echo: false
+    page-layout: full
 ---
 
 ```{python}
