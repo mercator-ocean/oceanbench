@@ -34,15 +34,15 @@ from edito_data_api import (
     ensure_project_catalog,
     item_identifiers,
     session_from_environment,
-    update_project_properties,
     upsert_collection_in_project_catalog,
     upsert_item,
     upsert_project_catalog,
 )
 from stac import (
     HEALTH_PROPERTY,
+    CatalogAudience,
     CatalogEnvironment,
-    Visibility,
+    catalog_datasets,
     item_identifier,
     stac_catalog,
     stac_collection,
@@ -76,7 +76,6 @@ class CatalogTree:
         return CatalogHealth(
             updated=self.publication_datetime,
             item_count=sum(len(tree.items) for tree in self.collections),
-            public_item_count=sum(_is_public(item) for tree in self.collections for item in tree.items),
             changes=changes,
             unreadable_datasets=self.unreadable_datasets,
             unmapped_prefixes=self.unmapped_prefixes,
@@ -86,7 +85,7 @@ class CatalogTree:
         health = self.health(changes or ())
         shown_health = (
             public_health_metadata(health)
-            if self.environment.visibility() == Visibility.PUBLIC
+            if self.environment.audience == CatalogAudience.PUBLIC
             else health_metadata(health)
         )
         return stac_catalog(self.environment, shown_health)
@@ -94,19 +93,20 @@ class CatalogTree:
 
 def main() -> None:
     """
-    Resolve every OceanBench dataset, then publish the catalog on EDITO or write it in a local directory.
+    Resolve every OceanBench dataset, then publish the internal and the public catalogs on EDITO or write them in a
+    local directory.
     """
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     arguments = _parsed_arguments()
     environment = CatalogEnvironment(os.environ.get(CATALOG_ENVIRONMENT_VARIABLE) or None)
     datasets = resolved_datasets(DATASET_DESCRIPTIONS)
     _log_unavailable_metadata(datasets)
-    catalog_tree = _catalog_tree(datasets, environment, datetime.now(timezone.utc))
+    catalog_trees = _catalog_trees(datasets, environment, datetime.now(timezone.utc))
     match arguments.output_directory:
         case None:
-            _publish(catalog_tree)
+            tuple(map(_publish, catalog_trees))
         case output_directory:
-            _write(catalog_tree, Path(output_directory))
+            tuple(_write(catalog_tree, Path(output_directory)) for catalog_tree in catalog_trees)
 
 
 def _parsed_arguments() -> argparse.Namespace:
@@ -124,29 +124,48 @@ def _log_unavailable_metadata(datasets: tuple[ResolvedDataset, ...]) -> None:
             LOGGER.warning("Metadata unavailable for %s: %s", dataset.description.identifier, dataset.metadata.reason)
 
 
-def _catalog_tree(
+def _catalog_trees(
     datasets: tuple[ResolvedDataset, ...], environment: CatalogEnvironment, publication_datetime: datetime
+) -> tuple[CatalogTree, ...]:
+    internal_environment = environment.with_audience(CatalogAudience.INTERNAL)
+    unreadable = unreadable_datasets(
+        datasets, tuple(item_identifier(dataset, internal_environment) for dataset in datasets)
+    )
+    unmapped = unmapped_prefixes(
+        list_bucket_directories("", UNMAPPED_PREFIX_SEARCH_DEPTH), DATASET_DESCRIPTIONS, NOT_DATASET_PREFIXES
+    )
+    return tuple(
+        _catalog_tree(
+            catalog_datasets(datasets, audience_environment),
+            audience_environment,
+            unreadable,
+            unmapped,
+            publication_datetime,
+        )
+        for audience_environment in (internal_environment, environment.with_audience(CatalogAudience.PUBLIC))
+    )
+
+
+def _catalog_tree(
+    datasets: tuple[ResolvedDataset, ...],
+    environment: CatalogEnvironment,
+    unreadable: tuple[UnreadableDataset, ...],
+    unmapped: tuple[str, ...],
+    publication_datetime: datetime,
 ) -> CatalogTree:
     collections = tuple(
-        _collection_tree(kind, _datasets_of(kind, datasets), environment, publication_datetime)
+        _collection_tree(kind, kind_datasets, environment, publication_datetime)
         for kind in CollectionKind
+        if (kind_datasets := _datasets_of(kind, datasets))
     )
     _require_unique_item_identifiers(collections)
     return CatalogTree(
         environment=environment,
         collections=collections,
-        unreadable_datasets=unreadable_datasets(
-            datasets, tuple(item_identifier(dataset, environment) for dataset in datasets)
-        ),
-        unmapped_prefixes=unmapped_prefixes(
-            list_bucket_directories("", UNMAPPED_PREFIX_SEARCH_DEPTH), DATASET_DESCRIPTIONS, NOT_DATASET_PREFIXES
-        ),
+        unreadable_datasets=unreadable,
+        unmapped_prefixes=unmapped,
         publication_datetime=publication_datetime,
     )
-
-
-def _is_public(item: dict) -> bool:
-    return tuple(item["properties"]["visibility"]) == Visibility.PUBLIC.value
 
 
 def _datasets_of(kind: CollectionKind, datasets: tuple[ResolvedDataset, ...]) -> tuple[ResolvedDataset, ...]:
@@ -182,8 +201,6 @@ def _publish(catalog_tree: CatalogTree) -> None:
     changes = tuple(_publish_collection(session, catalog_identifier, tree) for tree in catalog_tree.collections)
     catalog = catalog_tree.catalog(changes)
     upsert_project_catalog(session, catalog, catalog_tree.environment.visibility().value)
-    if catalog_tree.environment.visibility() == Visibility.PUBLIC:
-        update_project_properties(session, {HEALTH_PROPERTY: health_metadata(catalog_tree.health(changes))})
     LOGGER.info("Published catalog %s: %s", catalog_identifier, json.dumps(catalog[HEALTH_PROPERTY]))
 
 
@@ -205,15 +222,17 @@ def _publish_collection(session, catalog_identifier: str, tree: CollectionTree) 
 
 
 def _write(catalog_tree: CatalogTree, output_directory: Path) -> None:
-    output_directory.mkdir(parents=True, exist_ok=True)
-    _write_json(output_directory / "catalog.json", catalog_tree.catalog())
+    catalog = catalog_tree.catalog()
+    catalog_directory = output_directory / catalog["id"]
+    catalog_directory.mkdir(parents=True, exist_ok=True)
+    _write_json(catalog_directory / "catalog.json", catalog)
     for tree in catalog_tree.collections:
-        collection_directory = output_directory / tree.collection["id"]
+        collection_directory = catalog_directory / tree.collection["id"]
         collection_directory.mkdir(exist_ok=True)
         _write_json(collection_directory / "collection.json", tree.collection)
         for item in tree.items:
             _write_json(collection_directory / f"{item['id']}.json", item)
-    LOGGER.info("Wrote catalog %s in %s", catalog_tree.catalog()["id"], output_directory)
+    LOGGER.info("Wrote catalog %s in %s", catalog["id"], catalog_directory)
 
 
 def _write_json(path: Path, content: dict) -> None:

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import sys
 
@@ -15,13 +16,27 @@ sys.path.insert(0, str(CATALOG_DIRECTORY))
 
 from bucket import BucketObject, ObjectKind  # noqa: E402
 from catalog_health import MAXIMUM_DELETIONS_PER_COLLECTION, collection_changes  # noqa: E402
-from dataset_metadata import dataset_metadata, merged_metadata  # noqa: E402
-from dataset_resolution import BucketDataset  # noqa: E402
-from datasets import BucketObjects, CollectionKind, DatasetDescription, LibraryUsage  # noqa: E402
-from stac import CatalogEnvironment, stac_collection, stac_item  # noqa: E402
+from dataset_metadata import CopernicusMarineDataset, dataset_metadata, merged_metadata  # noqa: E402
+from dataset_resolution import BucketDataset, CopernicusMarineCatalogDataset  # noqa: E402
+from datasets import (  # noqa: E402
+    BucketObjects,
+    CollectionKind,
+    CopernicusMarineDatasets,
+    DatasetDescription,
+    LibraryUsage,
+)
+from stac import (  # noqa: E402
+    CatalogAudience,
+    CatalogEnvironment,
+    catalog_datasets,
+    stac_catalog,
+    stac_collection,
+    stac_item,
+)
 
 LEAD_DAYS_COUNT = 7
 PRODUCTION = CatalogEnvironment(None)
+INTERNAL = CatalogEnvironment(None, CatalogAudience.INTERNAL)
 PUBLICATION_DATETIME = datetime(2026, 10, 30, tzinfo=timezone.utc)
 
 
@@ -112,28 +127,30 @@ def test_mass_disappearance_is_withheld_instead_of_deleted():
     assert changes.withheld_deletions == published[1:]
 
 
-def test_only_datasets_used_by_the_library_are_public():
+def test_public_catalog_only_holds_datasets_used_by_the_library():
     used = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
     unused = _bucket_dataset("unused", "2023-01-04", "2023-12-27", -90.0, 90.0)
+
+    assert catalog_datasets((used, unused), PRODUCTION) == (used,)
+    assert catalog_datasets((used, unused), INTERNAL) == (used, unused)
+
+
+def test_public_catalog_items_and_collections_are_public():
+    used = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
 
     assert stac_item(used, PRODUCTION, PUBLICATION_DATETIME)["properties"]["visibility"] == ["default", "oceanbench"]
-    assert stac_item(unused, PRODUCTION, PUBLICATION_DATETIME)["properties"]["visibility"] == ["oceanbench"]
+    assert stac_collection(CollectionKind.CHALLENGERS, (used,), PRODUCTION)["visibility"] == ["default", "oceanbench"]
 
 
-def test_public_collection_extent_ignores_private_datasets():
+def test_internal_catalog_is_private_and_has_its_own_identifiers():
     used = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
-    unused = _bucket_dataset("unused", "2023-01-04", "2023-12-27", -90.0, 90.0)
 
-    collection = stac_collection(CollectionKind.CHALLENGERS, (used, unused), PRODUCTION)
+    item = stac_item(used, INTERNAL, PUBLICATION_DATETIME)
 
-    assert collection["visibility"] == ["default", "oceanbench"]
-    assert collection["extent"]["temporal"]["interval"] == [["2024-01-03T00:00:00+00:00", "2024-12-31T00:00:00+00:00"]]
-
-
-def test_collection_without_used_dataset_stays_private():
-    unused = _bucket_dataset("unused", "2023-01-04", "2023-12-27", -90.0, 90.0)
-
-    assert stac_collection(CollectionKind.EVALUATIONS, (unused,), PRODUCTION)["visibility"] == ["oceanbench"]
+    assert item["properties"]["visibility"] == ["oceanbench"]
+    assert item["id"] == "oceanbench-used-internal"
+    assert stac_catalog(INTERNAL)["id"] == "oceanbench-catalog-internal"
+    assert stac_catalog(PRODUCTION)["id"] == "oceanbench-catalog"
 
 
 def test_test_catalog_keeps_every_dataset_private():
@@ -142,3 +159,55 @@ def test_test_catalog_keeps_every_dataset_private():
     item = stac_item(used, CatalogEnvironment("ai-160"), PUBLICATION_DATETIME)
 
     assert item["properties"]["visibility"] == ["oceanbench"]
+
+
+def test_public_item_hides_the_bucket_locations_and_storage_examples():
+    used = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
+
+    item = stac_item(used, PRODUCTION, PUBLICATION_DATETIME)
+
+    assert item["assets"] == {}
+    assert not any(link["rel"] == "example" for link in item["links"])
+    assert "oceanbench-bucket" not in json.dumps(item)
+    assert "s3://" not in json.dumps(item)
+
+
+def test_internal_item_keeps_the_bucket_locations_and_storage_examples_even_when_the_library_uses_it():
+    used = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
+
+    item = stac_item(used, INTERNAL, PUBLICATION_DATETIME)
+
+    assert item["assets"]["latest"]["href"].startswith("https://s3.waw3-1.cloudferro.com/oceanbench-bucket/")
+    assert any(link["rel"] == "example" for link in item["links"])
+
+
+def test_public_copernicus_marine_item_hides_the_store_url_and_keeps_the_toolbox_example():
+    description = DatasetDescription(
+        "glorys-twelfth-degree",
+        "GLORYS",
+        "Reanalysis",
+        CollectionKind.REFERENCES,
+        CopernicusMarineDatasets(("cmems_mod_glo_phy_my_0.083deg_P1D-m",)),
+        LibraryUsage.USED,
+    )
+    dataset = CopernicusMarineCatalogDataset(
+        description,
+        (
+            CopernicusMarineDataset(
+                "cmems_mod_glo_phy_my_0.083deg_P1D-m",
+                "GLOBAL_MULTIYEAR_PHY_001_030",
+                "Global Ocean Physics Reanalysis",
+                "Description",
+                "10.48670/moi-00021",
+                "https://example.org/thumbnail.jpg",
+                "https://example.org/arco/timeChunked.zarr",
+                dataset_metadata(_weekly_forecast("2024-01-03", [0.0, 1.0], [-10.0, 10.0]), ()),
+            ),
+        ),
+    )
+
+    item = stac_item(dataset, PRODUCTION, PUBLICATION_DATETIME)
+
+    assert list(item["assets"]) == ["thumbnail"]
+    assert "arco" not in json.dumps(item)
+    assert any(link["rel"] == "example" for link in item["links"])

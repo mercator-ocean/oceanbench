@@ -8,10 +8,10 @@ SPDX-License-Identifier: EUPL-1.2
 title: "Data catalog"
 ---
 
-The datasets that the `oceanbench` library uses are described in a public catalog that anyone can browse, without an account: the [OceanBench data catalog on EDITO](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench/oceanbench-catalog).
-It follows the [STAC](https://stacspec.org) specification and is updated every hour from the OceanBench bucket and Copernicus Marine.
+The datasets that the `oceanbench` library uses are described in the [OceanBench data catalog on EDITO](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench/oceanbench-catalog), that you can browse online.
+It follows the [STAC](https://stacspec.org) specification.
 
-For each dataset, the catalog tells you what it contains, where it is, and how to open it.
+For each dataset, the catalog tells you what it contains and how to open it.
 
 ## Collections
 
@@ -36,11 +36,8 @@ Training
 Each dataset is described by a STAC item with:
 
 - its spatial and temporal extent, dimensions and variables (with CF standard names and units),
-- links to its first and latest files in the OceanBench bucket,
-- Python examples to open it, with the [`oceanbench` datasets API](/documentation/api/index.qmd) when available, otherwise with `xarray` or the Copernicus Marine Toolbox,
+- Python examples to open it, with the [`oceanbench` datasets API](/documentation/api/index.qmd) or the Copernicus Marine Toolbox,
 - the `oceanbench:library_usage` property, telling whether the `oceanbench` library uses it.
-
-Other datasets of the OceanBench bucket, which the library does not use yet, are not public for now.
 
 ## Programmatic access
 

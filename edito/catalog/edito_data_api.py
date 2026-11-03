@@ -74,12 +74,6 @@ def ensure_project_catalog(session: EditoSession, catalog: dict) -> None:
     _raise_for_failure(_request(session, "POST", PROJECT_URL, json=catalog), f"Create {catalog_url}")
 
 
-def update_project_properties(session: EditoSession, properties: dict) -> None:
-    _raise_for_failure(
-        _request(session, "PUT", PROJECT_URL, json=properties), f"Update the properties of {PROJECT_URL}"
-    )
-
-
 def upsert_project_catalog(session: EditoSession, catalog: dict, visibility: tuple[str, ...]) -> None:
     catalog_url = f"{PROJECT_URL}/{catalog['id']}"
     _upsert(session, catalog_url, PROJECT_URL, catalog)
