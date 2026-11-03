@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from helpers.scores_export import SCORES_API_DIRECTORY
+
 SCORES_DIRECTORY = "scores"
 
 
@@ -34,6 +36,7 @@ def scores_payload(
                 "version_order": list(version_bundles),
                 "default_version": default_version,
                 "scores_directory": SCORES_DIRECTORY,
+                "scores_api_directory": SCORES_API_DIRECTORY,
                 "metric_titles": metric_titles,
                 "sections": sections,
             }

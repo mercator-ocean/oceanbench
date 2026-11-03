@@ -5,17 +5,23 @@
 import os
 import shutil
 
+from helpers.scores_export import SCORES_API_DIRECTORY
 from helpers.scores_payload import SCORES_DIRECTORY
 
 SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIRECTORY = os.path.abspath(os.environ["QUARTO_PROJECT_OUTPUT_DIR"])
 
 
-def main() -> None:
-    source_directory = os.path.join(SCRIPT_DIRECTORY, SCORES_DIRECTORY)
-    destination_directory = os.path.join(OUTPUT_DIRECTORY, SCORES_DIRECTORY)
+def _publish_directory(directory: str) -> None:
+    source_directory = os.path.join(SCRIPT_DIRECTORY, directory)
+    destination_directory = os.path.join(OUTPUT_DIRECTORY, directory)
     shutil.copytree(source_directory, destination_directory, dirs_exist_ok=True)
-    print(f"Published {len(os.listdir(source_directory))} version score files to {destination_directory}.")
+    print(f"Published {len(os.listdir(source_directory))} entries of {directory} to {destination_directory}.")
+
+
+def main() -> None:
+    _publish_directory(SCORES_DIRECTORY)
+    _publish_directory(SCORES_API_DIRECTORY)
 
 
 if __name__ == "__main__":

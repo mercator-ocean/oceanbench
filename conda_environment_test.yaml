@@ -10,5 +10,7 @@ dependencies:
   - pip:
       - beautifulsoup4==4.13.3
       - deepdiff==8.4.2
+      - pandas==2.2.3
+      - pyarrow==19.0.1
       - pydantic==2.11.3
       - pytest-xdist==3.8.0

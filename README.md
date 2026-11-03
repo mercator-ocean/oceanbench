@@ -35,6 +35,11 @@ OceanBench's scientific paper is published in [NeurIPS 2025](https://neurips.cc/
 ## Score table and system comparison
 
 The official score table is available on the [OceanBench website](https://oceanbench.edito.eu).
+Any version, region and track can be exported as CSV, Parquet or Zarr with the Export buttons next to the pickers, opened in the [EDITO Data Explorer](https://datalab.dive.edito.eu/data-explorer), or fetched through the [Scores API](https://oceanbench.edito.eu/documentation/scores-api/):
+
+```sh
+curl -O https://oceanbench.edito.eu/api/scores/index.json
+```
 
 ## Open GLORYS dataset to train your ocean forecasting system
 
