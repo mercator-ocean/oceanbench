@@ -22,6 +22,7 @@ from catalog_health import (
     UnreadableDataset,
     collection_changes,
     health_metadata,
+    public_health_metadata,
     unmapped_prefixes,
     unreadable_datasets,
 )
@@ -33,11 +34,20 @@ from edito_data_api import (
     ensure_project_catalog,
     item_identifiers,
     session_from_environment,
+    update_project_properties,
     upsert_collection_in_project_catalog,
     upsert_item,
     upsert_project_catalog,
 )
-from stac import HEALTH_PROPERTY, CatalogEnvironment, item_identifier, stac_catalog, stac_collection, stac_item
+from stac import (
+    HEALTH_PROPERTY,
+    CatalogEnvironment,
+    Visibility,
+    item_identifier,
+    stac_catalog,
+    stac_collection,
+    stac_item,
+)
 
 CATALOG_ENVIRONMENT_VARIABLE = "OCEANBENCH_CATALOG_ENVIRONMENT"
 UNMAPPED_PREFIX_SEARCH_DEPTH = 3
@@ -66,13 +76,20 @@ class CatalogTree:
         return CatalogHealth(
             updated=self.publication_datetime,
             item_count=sum(len(tree.items) for tree in self.collections),
+            public_item_count=sum(_is_public(item) for tree in self.collections for item in tree.items),
             changes=changes,
             unreadable_datasets=self.unreadable_datasets,
             unmapped_prefixes=self.unmapped_prefixes,
         )
 
     def catalog(self, changes: tuple[CollectionChanges, ...] | None = None) -> dict:
-        return stac_catalog(self.environment, health_metadata(self.health(changes or ())))
+        health = self.health(changes or ())
+        shown_health = (
+            public_health_metadata(health)
+            if self.environment.visibility() == Visibility.PUBLIC
+            else health_metadata(health)
+        )
+        return stac_catalog(self.environment, shown_health)
 
 
 def main() -> None:
@@ -128,6 +145,10 @@ def _catalog_tree(
     )
 
 
+def _is_public(item: dict) -> bool:
+    return tuple(item["properties"]["visibility"]) == Visibility.PUBLIC.value
+
+
 def _datasets_of(kind: CollectionKind, datasets: tuple[ResolvedDataset, ...]) -> tuple[ResolvedDataset, ...]:
     return tuple(dataset for dataset in datasets if dataset.description.collection == kind)
 
@@ -161,6 +182,8 @@ def _publish(catalog_tree: CatalogTree) -> None:
     changes = tuple(_publish_collection(session, catalog_identifier, tree) for tree in catalog_tree.collections)
     catalog = catalog_tree.catalog(changes)
     upsert_project_catalog(session, catalog, catalog_tree.environment.visibility().value)
+    if catalog_tree.environment.visibility() == Visibility.PUBLIC:
+        update_project_properties(session, {HEALTH_PROPERTY: health_metadata(catalog_tree.health(changes))})
     LOGGER.info("Published catalog %s: %s", catalog_identifier, json.dumps(catalog[HEALTH_PROPERTY]))
 
 

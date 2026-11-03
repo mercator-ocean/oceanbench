@@ -8,8 +8,10 @@ SPDX-License-Identifier: EUPL-1.2
 title: "Data catalog"
 ---
 
-Every dataset used or produced by OceanBench is described in the [OceanBench catalog on EDITO](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench).
-The catalog follows the [STAC](https://stacspec.org) specification and is updated every hour from the OceanBench bucket and Copernicus Marine.
+The datasets that the `oceanbench` library uses are described in a public catalog that anyone can browse, without an account: the [OceanBench data catalog on EDITO](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench/oceanbench-catalog).
+It follows the [STAC](https://stacspec.org) specification and is updated every hour from the OceanBench bucket and Copernicus Marine.
+
+For each dataset, the catalog tells you what it contains, where it is, and how to open it.
 
 ## Collections
 
@@ -29,10 +31,6 @@ Training
 
 :   Datasets to train ocean forecasting systems on, without overlapping the evaluation period.
 
-Evaluations
-
-:   Scores, matchups and evaluation artifacts.
-
 ## Datasets
 
 Each dataset is described by a STAC item with:
@@ -42,14 +40,18 @@ Each dataset is described by a STAC item with:
 - Python examples to open it, with the [`oceanbench` datasets API](/documentation/api/index.qmd) when available, otherwise with `xarray` or the Copernicus Marine Toolbox,
 - the `oceanbench:library_usage` property, telling whether the `oceanbench` library uses it.
 
+Other datasets of the OceanBench bucket, which the library does not use yet, are not public for now.
+
 ## Programmatic access
 
-The catalog is also served by the EDITO STAC API, for example with [`pystac`](https://pystac.readthedocs.io):
+The catalog is also served by the EDITO STAC API at `https://api.dive.edito.eu/data/catalogs/projects/oceanbench/oceanbench-catalog`, for example with [`pystac`](https://pystac.readthedocs.io):
 
 ```python
 import pystac
 
-catalog = pystac.Catalog.from_file("https://api.dive.edito.eu/data/catalogs/projects/oceanbench")
+catalog = pystac.Catalog.from_file(
+    "https://api.dive.edito.eu/data/catalogs/projects/oceanbench/oceanbench-catalog"
+)
 for collection in catalog.get_children():
     print(collection.id, collection.title)
 ```

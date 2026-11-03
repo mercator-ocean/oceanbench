@@ -11,6 +11,8 @@ import requests
 
 EDITO_DATA_API_URL = "https://api.dive.edito.eu/data"
 PROJECT_CATALOGS_URL = f"{EDITO_DATA_API_URL}/catalogs/projects"
+PROJECT_IDENTIFIER = "oceanbench"
+PROJECT_URL = f"{PROJECT_CATALOGS_URL}/{PROJECT_IDENTIFIER}"
 COLLECTIONS_URL = f"{EDITO_DATA_API_URL}/collections"
 TOKEN_URL = "https://auth.dive.edito.eu/auth/realms/datalab/protocol/openid-connect/token"
 TOKEN_CLIENT_IDENTIFIER = "edito"
@@ -55,7 +57,7 @@ def collection_url(collection_identifier: str) -> str:
 
 
 def upsert_collection_in_project_catalog(session: EditoSession, catalog_identifier: str, collection: dict) -> None:
-    _upsert(session, collection_url(collection["id"]), f"{PROJECT_CATALOGS_URL}/{catalog_identifier}", collection)
+    _upsert(session, collection_url(collection["id"]), f"{PROJECT_URL}/{catalog_identifier}", collection)
 
 
 def upsert_item(session: EditoSession, collection_identifier: str, item: dict) -> None:
@@ -66,15 +68,21 @@ def upsert_item(session: EditoSession, collection_identifier: str, item: dict) -
 
 
 def ensure_project_catalog(session: EditoSession, catalog: dict) -> None:
-    catalog_url = f"{PROJECT_CATALOGS_URL}/{catalog['id']}"
+    catalog_url = f"{PROJECT_URL}/{catalog['id']}"
     if _request(session, "GET", catalog_url).status_code != HTTPStatus.NOT_FOUND:
         return
-    _raise_for_failure(_request(session, "POST", PROJECT_CATALOGS_URL, json=catalog), f"Create {catalog_url}")
+    _raise_for_failure(_request(session, "POST", PROJECT_URL, json=catalog), f"Create {catalog_url}")
+
+
+def update_project_properties(session: EditoSession, properties: dict) -> None:
+    _raise_for_failure(
+        _request(session, "PUT", PROJECT_URL, json=properties), f"Update the properties of {PROJECT_URL}"
+    )
 
 
 def upsert_project_catalog(session: EditoSession, catalog: dict, visibility: tuple[str, ...]) -> None:
-    catalog_url = f"{PROJECT_CATALOGS_URL}/{catalog['id']}"
-    _upsert(session, catalog_url, PROJECT_CATALOGS_URL, catalog)
+    catalog_url = f"{PROJECT_URL}/{catalog['id']}"
+    _upsert(session, catalog_url, PROJECT_URL, catalog)
     _raise_for_failure(
         _request(session, "PUT", catalog_url, json={"visibility": list(visibility)}, params=FORCE_PARAMETERS),
         f"Set visibility of {catalog_url}",

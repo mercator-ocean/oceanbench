@@ -43,7 +43,14 @@ def _weekly_forecast(first_day: str, longitudes: list[float], latitudes: list[fl
     )
 
 
-def _bucket_dataset(identifier: str, first_day: str, last_day: str, west: float, east: float) -> BucketDataset:
+def _bucket_dataset(
+    identifier: str,
+    first_day: str,
+    last_day: str,
+    west: float,
+    east: float,
+    library_usage: LibraryUsage = LibraryUsage.UNUSED,
+) -> BucketDataset:
     first_store = _weekly_forecast(first_day, [west, 0.0], [-10.0, 10.0])
     last_store = _weekly_forecast(last_day, [0.0, east], [-10.0, 10.0])
     return BucketDataset(
@@ -53,7 +60,7 @@ def _bucket_dataset(identifier: str, first_day: str, last_day: str, west: float,
             "Forecasts",
             CollectionKind.CHALLENGERS,
             BucketObjects(f"public/{identifier}/", r"\d{8}\.zarr"),
-            LibraryUsage.UNUSED,
+            library_usage,
         ),
         objects=tuple(
             BucketObject(f"public/{identifier}/{day.replace('-', '')}.zarr", ObjectKind.ZARR_STORE, None, None)
@@ -103,3 +110,35 @@ def test_mass_disappearance_is_withheld_instead_of_deleted():
 
     assert changes.deleted_items == ()
     assert changes.withheld_deletions == published[1:]
+
+
+def test_only_datasets_used_by_the_library_are_public():
+    used = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
+    unused = _bucket_dataset("unused", "2023-01-04", "2023-12-27", -90.0, 90.0)
+
+    assert stac_item(used, PRODUCTION, PUBLICATION_DATETIME)["properties"]["visibility"] == ["default", "oceanbench"]
+    assert stac_item(unused, PRODUCTION, PUBLICATION_DATETIME)["properties"]["visibility"] == ["oceanbench"]
+
+
+def test_public_collection_extent_ignores_private_datasets():
+    used = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
+    unused = _bucket_dataset("unused", "2023-01-04", "2023-12-27", -90.0, 90.0)
+
+    collection = stac_collection(CollectionKind.CHALLENGERS, (used, unused), PRODUCTION)
+
+    assert collection["visibility"] == ["default", "oceanbench"]
+    assert collection["extent"]["temporal"]["interval"] == [["2024-01-03T00:00:00+00:00", "2024-12-31T00:00:00+00:00"]]
+
+
+def test_collection_without_used_dataset_stays_private():
+    unused = _bucket_dataset("unused", "2023-01-04", "2023-12-27", -90.0, 90.0)
+
+    assert stac_collection(CollectionKind.EVALUATIONS, (unused,), PRODUCTION)["visibility"] == ["oceanbench"]
+
+
+def test_test_catalog_keeps_every_dataset_private():
+    used = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
+
+    item = stac_item(used, CatalogEnvironment("ai-160"), PUBLICATION_DATETIME)
+
+    assert item["properties"]["visibility"] == ["oceanbench"]

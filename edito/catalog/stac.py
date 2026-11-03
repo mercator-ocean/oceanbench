@@ -25,6 +25,7 @@ from datasets import CollectionKind, LibraryUsage
 
 STAC_VERSION = "1.0.0"
 HEALTH_PROPERTY = "oceanbench:health"
+CATALOG_IDENTIFIER = "oceanbench-catalog"
 CATALOG_BASE_IDENTIFIER = "oceanbench"
 PROJECT_GROUP = "oceanbench"
 DEFAULT_GROUP = "default"
@@ -92,8 +93,9 @@ COLLECTION_DESCRIPTIONS = {
 }
 CATALOG_DESCRIPTION = (
     "OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis "
-    "datasets and observations. This catalog gathers every dataset of the OceanBench bucket and the Copernicus "
-    f"Marine datasets OceanBench relies on.\n\n- [Website]({WEBSITE_URL})\n- [Source code]({REPOSITORY_URL})"
+    "datasets and observations. This catalog gathers the datasets that the OceanBench library uses, in the "
+    "OceanBench bucket and in Copernicus Marine, and how to open them."
+    f"\n\n- [Website]({WEBSITE_URL})\n- [Source code]({REPOSITORY_URL})"
 )
 
 
@@ -117,7 +119,24 @@ class CatalogEnvironment:
 
 
 def catalog_identifier(environment: CatalogEnvironment) -> str:
-    return environment.identifier(CATALOG_BASE_IDENTIFIER)
+    return environment.identifier(CATALOG_IDENTIFIER)
+
+
+def item_visibility(dataset: ResolvedDataset, environment: CatalogEnvironment) -> Visibility:
+    is_used = dataset.description.library_usage == LibraryUsage.USED
+    return Visibility.PUBLIC if is_used and environment.visibility() == Visibility.PUBLIC else Visibility.PROJECT
+
+
+def collection_visibility(datasets: tuple[ResolvedDataset, ...], environment: CatalogEnvironment) -> Visibility:
+    has_public_item = any(item_visibility(dataset, environment) == Visibility.PUBLIC for dataset in datasets)
+    return Visibility.PUBLIC if has_public_item else Visibility.PROJECT
+
+
+def _datasets_shown_in_collection(
+    datasets: tuple[ResolvedDataset, ...], environment: CatalogEnvironment
+) -> tuple[ResolvedDataset, ...]:
+    visibility = collection_visibility(datasets, environment)
+    return tuple(dataset for dataset in datasets if item_visibility(dataset, environment) == visibility)
 
 
 def collection_identifier(kind: CollectionKind, environment: CatalogEnvironment) -> str:
@@ -145,9 +164,10 @@ def stac_collection(
     kind: CollectionKind, datasets: tuple[ResolvedDataset, ...], environment: CatalogEnvironment
 ) -> dict:
     title, description = COLLECTION_DESCRIPTIONS[kind]
-    metadata = tuple(map(_metadata, datasets))
+    shown_datasets = _datasets_shown_in_collection(datasets, environment)
+    metadata = tuple(map(_metadata, shown_datasets))
     spatial_extent = merged_spatial_extents(tuple(map(_spatial_extent, metadata))) or GLOBAL_BOUNDING_BOX
-    temporal_extent = merged_temporal_extents(tuple(map(_dataset_temporal_extent, datasets)))
+    temporal_extent = merged_temporal_extents(tuple(map(_dataset_temporal_extent, shown_datasets)))
     return {
         "id": collection_identifier(kind, environment),
         "type": "Collection",
@@ -162,7 +182,7 @@ def stac_collection(
             "temporal": {"interval": [_interval(temporal_extent)]},
         },
         "links": _project_links(),
-        "visibility": list(environment.visibility().value),
+        "visibility": list(collection_visibility(datasets, environment).value),
     }
 
 
@@ -187,7 +207,7 @@ def stac_item(dataset: ResolvedDataset, environment: CatalogEnvironment, publica
             **_library_function_property(dataset),
             **_source_properties(dataset),
             **_datacube_properties(metadata),
-            "visibility": list(environment.visibility().value),
+            "visibility": list(item_visibility(dataset, environment).value),
         },
         "assets": _assets(dataset),
         "links": [*_example_links(dataset, metadata), *_source_links(dataset), *_project_links()],

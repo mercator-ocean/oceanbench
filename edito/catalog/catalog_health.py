@@ -37,6 +37,7 @@ class UnreadableDataset:
 class CatalogHealth:
     updated: datetime
     item_count: int
+    public_item_count: int
     changes: tuple[CollectionChanges, ...]
     unreadable_datasets: tuple[UnreadableDataset, ...]
     unmapped_prefixes: tuple[str, ...]
@@ -105,11 +106,25 @@ def _is_covered(directory: str, source: BucketObjects) -> bool:
     return directory.startswith(source.prefix) and directory.removeprefix(source.prefix).count("/") <= source.depth
 
 
+def public_health_metadata(health: CatalogHealth) -> dict:
+    return {
+        "status": health.status().value,
+        "updated": health.updated.isoformat(),
+        "item_count": health.public_item_count,
+        "added_item_count": sum(len(change.added_items) for change in health.changes),
+        "deleted_item_count": sum(len(change.deleted_items) for change in health.changes),
+        "withheld_deletion_count": sum(len(change.withheld_deletions) for change in health.changes),
+        "unreadable_dataset_count": len(health.unreadable_datasets),
+        "unmapped_prefix_count": len(health.unmapped_prefixes),
+    }
+
+
 def health_metadata(health: CatalogHealth) -> dict:
     return {
         "status": health.status().value,
         "updated": health.updated.isoformat(),
         "item_count": health.item_count,
+        "public_item_count": health.public_item_count,
         "added_items": list(chain.from_iterable(change.added_items for change in health.changes)),
         "deleted_items": list(chain.from_iterable(change.deleted_items for change in health.changes)),
         "withheld_deletions": list(chain.from_iterable(change.withheld_deletions for change in health.changes)),

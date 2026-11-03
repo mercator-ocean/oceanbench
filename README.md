@@ -80,9 +80,9 @@ oceanbench.datasets.training.glorys_reanalysis_1_degree()
 
 ## Browse the OceanBench data catalog
 
-Every dataset used or produced by OceanBench (challenger forecasts, references, observations, inputs, training data and evaluation artifacts) is described in the [OceanBench catalog on EDITO](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench).
+The datasets that OceanBench uses (challenger forecasts, references, observations, inputs and training data) are described in a public [OceanBench catalog on EDITO](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench/oceanbench-catalog), that you can browse without an account.
 Each dataset comes with its spatial and temporal extent, its variables, links to its files, and Python examples to open it.
-The catalog is updated every hour from the OceanBench bucket and is also available as a [STAC API](https://api.dive.edito.eu/data/catalogs/projects/oceanbench).
+The catalog is updated every hour from the OceanBench bucket and is also available as a [STAC API](https://api.dive.edito.eu/data/catalogs/projects/oceanbench/oceanbench-catalog).
 More details in the [data catalog documentation](https://oceanbench.edito.eu/documentation/data-catalog/).
 
 ## Evaluate your system with OceanBench

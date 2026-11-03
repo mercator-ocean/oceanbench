@@ -104,34 +104,46 @@ Not catalogued, as they are not datasets: `public/evaluation-reports*/`, `public
 
 ## Catalog layout
 
-- Project catalog `oceanbench`
-  - Collections `oceanbench-challengers`, `oceanbench-references`, `oceanbench-inputs`, `oceanbench-training`, `oceanbench-evaluations`
-  - One item per dataset (not per store), declared in [`datasets.py`](datasets.py).
-    Assets point to the first and latest objects and the bucket listing; examples use the `example-links` extension (OceanBench library, xarray, pandas or Copernicus Marine toolbox).
+- Project catalog `oceanbench` (private, group `oceanbench`)
+  - Catalog [`oceanbench-catalog`](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench/oceanbench-catalog) (public)
+    - Collections `oceanbench-challengers`, `oceanbench-references`, `oceanbench-inputs`, `oceanbench-training`, `oceanbench-evaluations`
+    - One item per dataset (not per store), declared in [`datasets.py`](datasets.py).
+      Assets point to the first and latest objects and the bucket listing; examples use the `example-links` extension (OceanBench library, xarray, pandas or Copernicus Marine toolbox).
+
+Visibility:
+
+- An item is public when the library uses its dataset (`LibraryUsage.USED` in [`datasets.py`](datasets.py)), private (group `oceanbench`) otherwise.
+- A collection is public when it holds at least one public item, and its extent covers its public items only.
+  Today `oceanbench-evaluations` is entirely private.
+- The project catalog `oceanbench` stays private: anonymous visitors reach the catalog through its direct link, not through the project tree.
 
 Run `make update-edito-catalog CATALOG_OUTPUT_DIRECTORY=<directory>` to write the catalog locally,
 or `make update-edito-catalog` with `EDITO_OFFLINE_TOKEN` to publish it.
-`OCEANBENCH_CATALOG_ENVIRONMENT=<name>` publishes a private copy suffixed by `<name>`.
+`OCEANBENCH_CATALOG_ENVIRONMENT=<name>` publishes a private copy `oceanbench-catalog-<name>`, with every item private.
 The [Update EDITO catalog](../../.github/workflows/update-edito-catalog.yml) workflow launches it hourly as an EDITO generic process.
 
 ## Health monitoring
 
-Each publication ends by writing `oceanbench:health` at the root of the catalog (`https://api.dive.edito.eu/data/catalogs/projects/oceanbench`):
+Each publication ends by writing `oceanbench:health`, in two versions because the details name private datasets and bucket directories:
+
+- Public, at the root of the catalog (`https://api.dive.edito.eu/data/catalogs/projects/oceanbench/oceanbench-catalog`): `status`, `updated`, the number of public items and the counts of added, deleted and withheld items, unreadable datasets and unmapped prefixes.
+- Full, at the root of the private project catalog (`https://api.dive.edito.eu/data/catalogs/projects/oceanbench`, needs an account of the group `oceanbench`):
 
 | Field | Meaning |
 |---|---|
 | `status` | `healthy`, or `needs_attention` when one of the lists below is not empty |
 | `updated` | Time of the last successful publication |
-| `item_count` | Number of published items |
+| `item_count`, `public_item_count` | Number of published items, and of public ones |
 | `added_items`, `deleted_items` | Items added or deleted by the last publication |
 | `withheld_deletions` | Vanished items kept because more than `maximum_deletions_per_collection` vanished from one collection: check the bucket, then remove them by hand or raise the limit |
 | `unreadable_datasets` | Datasets whose metadata could not be read |
 | `unmapped_prefixes` | Bucket directories not covered by [`datasets.py`](datasets.py): add them to `DATASET_DESCRIPTIONS` or `NOT_DATASET_PREFIXES` |
 
-Uptime Kuma checks it with an *HTTP(s) - Json Query* monitor on that URL, every 10 minutes, with expected value `true` and the query:
+Uptime Kuma checks the public version anonymously with an *HTTP(s) - Json Query* monitor on the catalog URL, every 10 minutes, with expected value `true` and the query:
 
 ```
 `oceanbench:health`.status = "healthy" and $toMillis(`oceanbench:health`.updated) > $toMillis($now()) - 3 * 3600 * 1000
 ```
 
 A failed or stalled publication leaves `updated` behind and turns the monitor down too.
+When it is down, read the full version for the details, or the logs of the EDITO process.
