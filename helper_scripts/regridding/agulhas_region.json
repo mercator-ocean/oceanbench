@@ -1,0 +1,10 @@
+{
+  "id": "agulhas",
+  "display_name": "Agulhas (SEA-FORWARD test)",
+  "bounds": {
+    "minimum_latitude": -39.0,
+    "maximum_latitude": -33.0,
+    "minimum_longitude": 18.0,
+    "maximum_longitude": 29.0
+  }
+}

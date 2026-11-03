@@ -31,6 +31,9 @@ dependencies = [
 [project.scripts]
 oceanbench = "oceanbench.cli:main"
 
+[tool.poetry.group.regridding.dependencies]
+pyresample = ">=1.35.0,<2.0.0"
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
