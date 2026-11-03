@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import os
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -20,6 +21,9 @@ ACCESS_TOKEN_VARIABLE = "EDITO_ACCESS_TOKEN"
 OFFLINE_TOKEN_VARIABLE = "EDITO_OFFLINE_TOKEN"
 ITEMS_PAGE_SIZE = 500
 REQUEST_TIMEOUT_SECONDS = 120
+REQUEST_ATTEMPTS = 5
+REQUEST_RETRY_BACKOFF_SECONDS = 3
+CREATION_METHOD = "POST"
 FORCE_PARAMETERS = {"_force": "true"}
 
 
@@ -83,6 +87,14 @@ def upsert_project_catalog(session: EditoSession, catalog: dict, visibility: tup
     )
 
 
+def project_catalog(session: EditoSession, catalog_identifier: str) -> dict | None:
+    response = _request(session, "GET", f"{PROJECT_URL}/{catalog_identifier}")
+    if response.status_code == HTTPStatus.NOT_FOUND:
+        return None
+    _raise_for_failure(response, f"Get {PROJECT_URL}/{catalog_identifier}")
+    return response.json()
+
+
 def item_identifiers(session: EditoSession, collection_identifier: str) -> tuple[str, ...]:
     return tuple(
         feature["properties"]["productIdentifier"]
@@ -121,17 +133,36 @@ def _upsert(session: EditoSession, resource_url: str, creation_url: str, resourc
 
 
 def _request(session: EditoSession, method: str, url: str, **keyword_arguments) -> requests.Response:
-    return requests.request(
-        method,
-        url,
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {session.access_token}",
-        },
-        timeout=REQUEST_TIMEOUT_SECONDS,
-        **keyword_arguments,
+    return _attempted_request(session, method, url, 1, keyword_arguments)
+
+
+def _attempted_request(
+    session: EditoSession, method: str, url: str, attempt: int, keyword_arguments: dict
+) -> requests.Response:
+    try:
+        return requests.request(
+            method,
+            url,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {session.access_token}",
+            },
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            **keyword_arguments,
+        )
+    except requests.exceptions.ConnectionError as error:
+        if attempt >= REQUEST_ATTEMPTS or not _is_safe_to_retry(method, error):
+            raise
+        time.sleep(REQUEST_RETRY_BACKOFF_SECONDS * attempt)
+        return _attempted_request(session, method, url, attempt + 1, keyword_arguments)
+
+
+def _is_safe_to_retry(method: str, error: requests.exceptions.ConnectionError) -> bool:
+    is_connection_never_established = isinstance(
+        error, (requests.exceptions.SSLError, requests.exceptions.ConnectTimeout)
     )
+    return is_connection_never_established or method != CREATION_METHOD
 
 
 def _raise_for_failure(response: requests.Response, action: str) -> None:

@@ -3,15 +3,18 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from itertools import chain
 
 from dataset_metadata import MetadataUnavailable, UnavailabilityCause
 from dataset_resolution import BucketDataset, CopernicusMarineCatalogDataset, ResolvedDataset
 from datasets import BucketObjects, DatasetDescription
+from stac import HEALTH_PROPERTY
 
 MAXIMUM_DELETIONS_PER_COLLECTION = 3
+BUCKET_OBJECT_RECOUNT_INTERVAL = timedelta(days=7)
+BUCKET_OBJECT_COUNT_PROPERTY = "bucket_object_count"
 
 
 class HealthStatus(Enum):
@@ -34,9 +37,16 @@ class UnreadableDataset:
 
 
 @dataclass(frozen=True)
+class BucketObjectCount:
+    count: int
+    counted: datetime
+
+
+@dataclass(frozen=True)
 class CatalogHealth:
     updated: datetime
     item_count: int
+    bucket_object_count: BucketObjectCount | None
     changes: tuple[CollectionChanges, ...]
     unreadable_datasets: tuple[UnreadableDataset, ...]
     unmapped_prefixes: tuple[str, ...]
@@ -48,6 +58,16 @@ class CatalogHealth:
             or self.unmapped_prefixes
         )
         return HealthStatus.NEEDS_ATTENTION if needs_attention else HealthStatus.HEALTHY
+
+
+def stored_bucket_object_count(catalog: dict | None) -> BucketObjectCount | None:
+    stored = ((catalog or {}).get(HEALTH_PROPERTY) or {}).get(BUCKET_OBJECT_COUNT_PROPERTY)
+    return BucketObjectCount(stored["count"], datetime.fromisoformat(stored["counted"])) if stored else None
+
+
+def reusable_bucket_object_count(previous: BucketObjectCount | None, now: datetime) -> BucketObjectCount | None:
+    is_recent = previous is not None and now - previous.counted < BUCKET_OBJECT_RECOUNT_INTERVAL
+    return previous if is_recent else None
 
 
 def collection_changes(
@@ -108,7 +128,7 @@ def _is_covered(directory: str, source: BucketObjects) -> bool:
 def public_health_metadata(health: CatalogHealth) -> dict:
     return {
         "status": health.status().value,
-        "updated": health.updated.isoformat(),
+        "updated": health.updated.isoformat(timespec="milliseconds"),
         "item_count": health.item_count,
         "added_item_count": sum(len(change.added_items) for change in health.changes),
         "deleted_item_count": sum(len(change.deleted_items) for change in health.changes),
@@ -121,8 +141,18 @@ def public_health_metadata(health: CatalogHealth) -> dict:
 def health_metadata(health: CatalogHealth) -> dict:
     return {
         "status": health.status().value,
-        "updated": health.updated.isoformat(),
+        "updated": health.updated.isoformat(timespec="milliseconds"),
         "item_count": health.item_count,
+        **(
+            {
+                BUCKET_OBJECT_COUNT_PROPERTY: {
+                    "count": health.bucket_object_count.count,
+                    "counted": health.bucket_object_count.counted.isoformat(),
+                }
+            }
+            if health.bucket_object_count is not None
+            else {}
+        ),
         "added_items": list(chain.from_iterable(change.added_items for change in health.changes)),
         "deleted_items": list(chain.from_iterable(change.deleted_items for change in health.changes)),
         "withheld_deletions": list(chain.from_iterable(change.withheld_deletions for change in health.changes)),

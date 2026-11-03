@@ -15,14 +15,17 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from bucket import list_bucket_directories
+from bucket import count_bucket_objects, list_bucket_directories
 from catalog_health import (
+    BucketObjectCount,
     CatalogHealth,
     CollectionChanges,
     UnreadableDataset,
     collection_changes,
     health_metadata,
     public_health_metadata,
+    reusable_bucket_object_count,
+    stored_bucket_object_count,
     unmapped_prefixes,
     unreadable_datasets,
 )
@@ -30,9 +33,11 @@ from dataset_metadata import MetadataUnavailable
 from dataset_resolution import BucketDataset, ResolvedDataset, resolved_datasets
 from datasets import DATASET_DESCRIPTIONS, NOT_DATASET_PREFIXES, CollectionKind
 from edito_data_api import (
+    EditoSession,
     delete_item,
     ensure_project_catalog,
     item_identifiers,
+    project_catalog,
     session_from_environment,
     upsert_collection_in_project_catalog,
     upsert_item,
@@ -43,6 +48,7 @@ from stac import (
     CatalogAudience,
     CatalogEnvironment,
     catalog_datasets,
+    catalog_identifier,
     item_identifier,
     stac_catalog,
     stac_collection,
@@ -70,12 +76,14 @@ class CatalogTree:
     collections: tuple[CollectionTree, ...]
     unreadable_datasets: tuple[UnreadableDataset, ...]
     unmapped_prefixes: tuple[str, ...]
+    bucket_object_count: BucketObjectCount | None
     publication_datetime: datetime
 
     def health(self, changes: tuple[CollectionChanges, ...]) -> CatalogHealth:
         return CatalogHealth(
             updated=self.publication_datetime,
             item_count=sum(len(tree.items) for tree in self.collections),
+            bucket_object_count=self.bucket_object_count,
             changes=changes,
             unreadable_datasets=self.unreadable_datasets,
             unmapped_prefixes=self.unmapped_prefixes,
@@ -101,11 +109,15 @@ def main() -> None:
     environment = CatalogEnvironment(os.environ.get(CATALOG_ENVIRONMENT_VARIABLE) or None)
     datasets = resolved_datasets(DATASET_DESCRIPTIONS)
     _log_unavailable_metadata(datasets)
-    catalog_trees = _catalog_trees(datasets, environment, datetime.now(timezone.utc))
+    publication_datetime = datetime.now(timezone.utc)
     match arguments.output_directory:
         case None:
-            tuple(map(_publish, catalog_trees))
+            session = session_from_environment()
+            bucket_object_count = _bucket_object_count(session, environment, publication_datetime)
+            catalog_trees = _catalog_trees(datasets, environment, bucket_object_count, publication_datetime)
+            tuple(_publish(session, catalog_tree) for catalog_tree in catalog_trees)
         case output_directory:
+            catalog_trees = _catalog_trees(datasets, environment, None, publication_datetime)
             tuple(_write(catalog_tree, Path(output_directory)) for catalog_tree in catalog_trees)
 
 
@@ -124,8 +136,22 @@ def _log_unavailable_metadata(datasets: tuple[ResolvedDataset, ...]) -> None:
             LOGGER.warning("Metadata unavailable for %s: %s", dataset.description.identifier, dataset.metadata.reason)
 
 
+def _bucket_object_count(session: EditoSession, environment: CatalogEnvironment, now: datetime) -> BucketObjectCount:
+    internal_catalog = project_catalog(session, catalog_identifier(environment.with_audience(CatalogAudience.INTERNAL)))
+    reusable = reusable_bucket_object_count(stored_bucket_object_count(internal_catalog), now)
+    if reusable is not None:
+        LOGGER.info("Reusing the count of %d bucket objects made on %s", reusable.count, reusable.counted)
+        return reusable
+    count = BucketObjectCount(count_bucket_objects(), datetime.now(timezone.utc))
+    LOGGER.info("Counted %d bucket objects", count.count)
+    return count
+
+
 def _catalog_trees(
-    datasets: tuple[ResolvedDataset, ...], environment: CatalogEnvironment, publication_datetime: datetime
+    datasets: tuple[ResolvedDataset, ...],
+    environment: CatalogEnvironment,
+    bucket_object_count: BucketObjectCount | None,
+    publication_datetime: datetime,
 ) -> tuple[CatalogTree, ...]:
     internal_environment = environment.with_audience(CatalogAudience.INTERNAL)
     unreadable = unreadable_datasets(
@@ -140,6 +166,7 @@ def _catalog_trees(
             audience_environment,
             unreadable,
             unmapped,
+            bucket_object_count,
             publication_datetime,
         )
         for audience_environment in (internal_environment, environment.with_audience(CatalogAudience.PUBLIC))
@@ -151,6 +178,7 @@ def _catalog_tree(
     environment: CatalogEnvironment,
     unreadable: tuple[UnreadableDataset, ...],
     unmapped: tuple[str, ...],
+    bucket_object_count: BucketObjectCount | None,
     publication_datetime: datetime,
 ) -> CatalogTree:
     collections = tuple(
@@ -164,6 +192,7 @@ def _catalog_tree(
         collections=collections,
         unreadable_datasets=unreadable,
         unmapped_prefixes=unmapped,
+        bucket_object_count=bucket_object_count,
         publication_datetime=publication_datetime,
     )
 
@@ -194,8 +223,7 @@ def _require_unique_item_identifiers(collections: tuple[CollectionTree, ...]) ->
         raise DuplicateItemIdentifiersError(f"Duplicate item identifiers: {', '.join(duplicates)}")
 
 
-def _publish(catalog_tree: CatalogTree) -> None:
-    session = session_from_environment()
+def _publish(session: EditoSession, catalog_tree: CatalogTree) -> None:
     catalog_identifier = catalog_tree.catalog()["id"]
     ensure_project_catalog(session, stac_catalog(catalog_tree.environment))
     changes = tuple(_publish_collection(session, catalog_identifier, tree) for tree in catalog_tree.collections)

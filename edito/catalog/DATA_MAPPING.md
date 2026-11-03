@@ -138,6 +138,7 @@ Each publication ends by writing `oceanbench:health` at the root of both catalog
 | `status` | `healthy`, or `needs_attention` when one of the lists below is not empty |
 | `updated` | Time of the last successful publication |
 | `item_count` | Number of published items |
+| `bucket_object_count` | Number of objects of the whole bucket (Zarr chunks included), with the time it was counted. Internal catalog only. Counted again when older than 7 days, about 8 minutes; the other runs reuse it. No alert is tied to it yet |
 | `added_items`, `deleted_items` | Items added or deleted by the last publication |
 | `withheld_deletions` | Vanished items kept because more than `maximum_deletions_per_collection` vanished from one collection: check the bucket, then remove them by hand or raise the limit |
 | `unreadable_datasets` | Datasets whose metadata could not be read |

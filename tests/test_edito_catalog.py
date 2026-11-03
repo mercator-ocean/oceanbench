@@ -2,20 +2,31 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import sys
 
 import numpy
+import pytest
 import pandas
 import xarray
 
 CATALOG_DIRECTORY = Path(__file__).resolve().parents[1] / "edito" / "catalog"
 sys.path.insert(0, str(CATALOG_DIRECTORY))
 
+import edito_data_api  # noqa: E402
 from bucket import BucketObject, ObjectKind  # noqa: E402
-from catalog_health import MAXIMUM_DELETIONS_PER_COLLECTION, collection_changes  # noqa: E402
+from catalog_health import (  # noqa: E402
+    MAXIMUM_DELETIONS_PER_COLLECTION,
+    BucketObjectCount,
+    CatalogHealth,
+    collection_changes,
+    health_metadata,
+    public_health_metadata,
+    reusable_bucket_object_count,
+    stored_bucket_object_count,
+)
 from dataset_metadata import CopernicusMarineDataset, dataset_metadata, merged_metadata  # noqa: E402
 from dataset_resolution import BucketDataset, CopernicusMarineCatalogDataset  # noqa: E402
 from datasets import (  # noqa: E402
@@ -211,3 +222,83 @@ def test_public_copernicus_marine_item_hides_the_store_url_and_keeps_the_toolbox
     assert list(item["assets"]) == ["thumbnail"]
     assert "arco" not in json.dumps(item)
     assert any(link["rel"] == "example" for link in item["links"])
+
+
+def _health(bucket_object_count: BucketObjectCount | None) -> CatalogHealth:
+    return CatalogHealth(PUBLICATION_DATETIME, 22, bucket_object_count, (), (), ())
+
+
+def test_internal_health_holds_the_bucket_object_count_and_the_public_health_does_not():
+    count = BucketObjectCount(94_779_357, datetime(2026, 11, 3, tzinfo=timezone.utc))
+
+    assert health_metadata(_health(count))["bucket_object_count"] == {
+        "count": 94_779_357,
+        "counted": "2026-11-03T00:00:00+00:00",
+    }
+    assert "bucket_object_count" not in public_health_metadata(_health(count))
+
+
+def test_bucket_object_count_is_read_back_from_the_stored_health():
+    stored = health_metadata(_health(BucketObjectCount(5, PUBLICATION_DATETIME)))
+
+    assert stored_bucket_object_count({"oceanbench:health": stored}) == BucketObjectCount(5, PUBLICATION_DATETIME)
+    assert stored_bucket_object_count({"oceanbench:health": {"status": "healthy"}}) is None
+    assert stored_bucket_object_count(None) is None
+
+
+def test_bucket_object_count_is_reused_for_a_week_then_made_again():
+    count = BucketObjectCount(5, PUBLICATION_DATETIME)
+
+    assert reusable_bucket_object_count(count, PUBLICATION_DATETIME + timedelta(days=6, hours=23)) == count
+    assert reusable_bucket_object_count(count, PUBLICATION_DATETIME + timedelta(days=7)) is None
+    assert reusable_bucket_object_count(None, PUBLICATION_DATETIME) is None
+
+
+def test_health_update_time_has_milliseconds_for_uptime_kuma():
+    assert public_health_metadata(_health(None))["updated"] == "2026-10-30T00:00:00.000+00:00"
+    assert health_metadata(_health(None))["updated"] == "2026-10-30T00:00:00.000+00:00"
+
+
+class _FlakyRequests:
+    def __init__(self, failures: tuple[Exception, ...]):
+        self.failures = list(failures)
+        self.calls = 0
+
+    def request(self, method, url, **keyword_arguments):
+        self.calls += 1
+        if self.failures:
+            raise self.failures.pop(0)
+        return "response"
+
+
+def _requests_failing_with(monkeypatch, *failures: Exception) -> _FlakyRequests:
+    flaky = _FlakyRequests(failures)
+    monkeypatch.setattr(edito_data_api.requests, "request", flaky.request)
+    monkeypatch.setattr(edito_data_api.time, "sleep", lambda seconds: None)
+    return flaky
+
+
+def test_updates_are_retried_after_a_dropped_connection(monkeypatch):
+    dropped = edito_data_api.requests.exceptions.ConnectionError("dropped")
+    flaky = _requests_failing_with(monkeypatch, dropped, dropped)
+
+    response = edito_data_api._request(edito_data_api.EditoSession("token"), "PUT", "https://example.org")
+
+    assert (response, flaky.calls) == ("response", 3)
+
+
+def test_creations_are_not_retried_when_the_request_may_have_been_received(monkeypatch):
+    flaky = _requests_failing_with(monkeypatch, edito_data_api.requests.exceptions.ConnectionError("dropped"))
+
+    with pytest.raises(edito_data_api.requests.exceptions.ConnectionError):
+        edito_data_api._request(edito_data_api.EditoSession("token"), "POST", "https://example.org")
+
+    assert flaky.calls == 1
+
+
+def test_creations_are_retried_when_the_connection_was_never_established(monkeypatch):
+    flaky = _requests_failing_with(monkeypatch, edito_data_api.requests.exceptions.SSLError("handshake"))
+
+    edito_data_api._request(edito_data_api.EditoSession("token"), "POST", "https://example.org")
+
+    assert flaky.calls == 2
