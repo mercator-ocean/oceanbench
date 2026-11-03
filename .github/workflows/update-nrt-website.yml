@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Update NRT website
+on:
+  push:
+    paths:
+      - .github/workflows/update-nrt-website.yml
+      - edito/deploy-website.sh
+      - Makefile
+  workflow_dispatch:
+    inputs:
+      nrtBranch:
+        description: 'Branch the NRT website is built from.'
+        required: false
+        type: string
+concurrency:
+  group: update-nrt-website-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  update-nrt-website:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Deploy NRT website on EDITO
+        env:
+          NRT_WEBSITE_BRANCH: ${{ inputs.nrtBranch }}
+          SERVICE_BRANCH: ${{ github.ref_name }}
+          EDITO_ACCESS_TOKEN: ${{ secrets.EDITO_ACCESS_TOKEN }}
+          EDITO_OFFLINE_TOKEN: ${{ secrets.EDITO_OFFLINE_TOKEN }}
+        run: make deploy-nrt-website-on-edito
