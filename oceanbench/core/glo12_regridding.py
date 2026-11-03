@@ -2,8 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import sys
-
 import numpy
 import xarray
 from pyresample.bilinear import NumpyBilinearResampler
@@ -142,25 +140,6 @@ def _regridded_variable(
 
 
 def regrid_to_glo12_grid(dataset: xarray.Dataset) -> xarray.Dataset:
-    """
-    Regrid a curvilinear dataset onto the GLO12 1/12 degree latitude-longitude grid.
-
-    Bilinear weights come from pyresample on the sphere.
-    Source corners that are NaN (land, below the seabed or outside the domain) are dropped
-    and the remaining weights renormalised, so a target point is NaN only when all four corners are.
-    The target grid covers the GLO12 points inside the source latitude and longitude range.
-
-    Parameters
-    ----------
-    dataset : xarray.Dataset
-        Dataset whose variables end with the two horizontal dimensions,
-        with 2-D latitude and longitude coordinates on those dimensions.
-
-    Returns
-    -------
-    xarray.Dataset
-        The same variables on 1-D ascending latitude and longitude coordinates of the GLO12 grid.
-    """
     source_longitudes = dataset["longitude"].values
     source_latitudes = dataset["latitude"].values
     target_longitudes = _glo12_coordinates(
@@ -189,9 +168,3 @@ def regrid_to_glo12_grid(dataset: xarray.Dataset) -> xarray.Dataset:
             ),
         },
     )
-
-
-if __name__ == "__main__":
-    input_path, output_path = sys.argv[1], sys.argv[2]
-    with xarray.open_dataset(input_path) as dataset:
-        regrid_to_glo12_grid(dataset).to_netcdf(output_path)

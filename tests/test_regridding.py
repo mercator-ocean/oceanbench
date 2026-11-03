@@ -3,23 +3,20 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 from pathlib import Path
-import sys
 
 import numpy
 import pytest
 import xarray
 
-REGRIDDING_DIRECTORY = Path(__file__).resolve().parents[1] / "helper_scripts" / "regridding"
-sys.path.insert(0, str(REGRIDDING_DIRECTORY))
-
-from croco_to_standard import (  # noqa: E402
+from oceanbench.core.challenger_format import to_challenger_format
+from oceanbench.core.croco_conversion import (
     _eastward_and_northward_velocities,
     _interpolate_columns,
     _level_depths,
     _trapezoidal_daily_means,
 )
-from regrid_to_glo12_grid import _glo12_coordinates, regrid_to_glo12_grid  # noqa: E402
-from to_challenger_format import to_challenger_format  # noqa: E402
+from oceanbench.core.glo12_regridding import _glo12_coordinates, regrid_to_glo12_grid
+from oceanbench.helpers.challengers import croco_to_glo12_challenger
 
 
 def _source_grid_with_a_column_on_a_glo12_meridian() -> tuple[numpy.ndarray, numpy.ndarray]:
@@ -159,3 +156,45 @@ def test_challenger_format_rejects_times_that_are_not_consecutive_days() -> None
 
     with pytest.raises(ValueError, match="consecutive days"):
         to_challenger_format(dataset)
+
+
+def _write_uniform_croco_history_file(path: Path) -> None:
+    eta_size, xi_size, level_count = 20, 24, 3
+    rows, columns = numpy.meshgrid(numpy.arange(eta_size), numpy.arange(xi_size), indexing="ij")
+    snapshot_seconds = 9467 * 86400 + numpy.arange(3) * 43200
+    xarray.Dataset(
+        {
+            "hc": 10.0,
+            "h": (("eta_rho", "xi_rho"), numpy.full((eta_size, xi_size), 100.0)),
+            "angle": (("eta_rho", "xi_rho"), numpy.zeros((eta_size, xi_size))),
+            "mask_rho": (("eta_rho", "xi_rho"), numpy.ones((eta_size, xi_size))),
+            "lat_rho": (("eta_rho", "xi_rho"), -36.0 + rows * 0.08),
+            "lon_rho": (("eta_rho", "xi_rho"), 23.0 + columns * 0.08),
+            "s_rho": ("s_rho", [-0.8333, -0.5, -0.1667]),
+            "Cs_rho": ("s_rho", [-0.7, -0.3, -0.05]),
+            "zeta": (("time", "eta_rho", "xi_rho"), numpy.zeros((3, eta_size, xi_size), numpy.float32)),
+            "temp": (("time", "s_rho", "eta_rho", "xi_rho"), numpy.full((3, level_count, eta_size, xi_size), 15.0)),
+            "salt": (("time", "s_rho", "eta_rho", "xi_rho"), numpy.full((3, level_count, eta_size, xi_size), 35.0)),
+            "u": (("time", "s_rho", "eta_rho", "xi_u"), numpy.full((3, level_count, eta_size, xi_size - 1), 0.2)),
+            "v": (("time", "s_rho", "eta_v", "xi_rho"), numpy.full((3, level_count, eta_size - 1, xi_size), -0.1)),
+        },
+        coords={"time": ("time", snapshot_seconds.astype("float64"))},
+    ).to_netcdf(path)
+
+
+def test_croco_to_glo12_challenger_returns_a_loaded_challenger_on_the_glo12_grid(tmp_path: Path) -> None:
+    croco_path = tmp_path / "croco_his.nc"
+    _write_uniform_croco_history_file(croco_path)
+
+    challenger = croco_to_glo12_challenger(croco_path)
+    upper_ocean = challenger.isel(depth=slice(0, 20))
+
+    assert set(challenger.data_vars) == {"thetao", "so", "uo", "vo", "zos"}
+    assert challenger["thetao"].dims == ("first_day_datetime", "lead_day_index", "depth", "latitude", "longitude")
+    assert challenger["first_day_datetime"].values[0] == numpy.datetime64("2025-12-02")
+    assert challenger.sizes["lead_day_index"] == 1
+    assert challenger["latitude"].dtype == numpy.float32
+    numpy.testing.assert_allclose(upper_ocean["thetao"].values, 15.0, rtol=1e-6)
+    numpy.testing.assert_allclose(upper_ocean["uo"].values, 0.2, rtol=1e-6)
+    numpy.testing.assert_allclose(upper_ocean["vo"].values, -0.1, rtol=1e-6)
+    assert bool(challenger["thetao"].isel(depth=-1).isnull().all())

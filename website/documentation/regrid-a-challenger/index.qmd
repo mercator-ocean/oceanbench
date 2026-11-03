@@ -1,0 +1,99 @@
+<!--
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+title: "Regrid a challenger onto the GLO12 grid"
+---
+
+OceanBench scores challengers on regular latitude-longitude grids at 1, 1/4 or 1/12 degree.
+A model on another grid (curvilinear, rotated, or regular at another spacing) must first be brought onto one of them.
+The `oceanbench.helpers.challengers` module does this for CROCO output: one call turns a CROCO history file into a challenger dataset on the GLO12 1/12 degree grid and its 50 depth levels, ready to be scored against GLO12.
+
+## Installation
+
+The regridding needs [pyresample](https://pyresample.readthedocs.io), which is an optional dependency:
+
+``` bash
+pip install "oceanbench[regridding]"
+```
+
+## Usage
+
+``` python
+import oceanbench
+from oceanbench.helpers import challengers
+
+challenger = challengers.croco_to_glo12_challenger("croco_his.nc")
+challenger.to_netcdf("croco_challenger.nc")
+
+agulhas = oceanbench.regions.custom(
+    identifier="agulhas",
+    display_name="Agulhas",
+    minimum_latitude=-39.0,
+    maximum_latitude=-33.0,
+    minimum_longitude=18.0,
+    maximum_longitude=29.0,
+)
+oceanbench.metrics.rmsd_of_variables_compared_to_glo12_analysis(challenger, region=agulhas)
+```
+
+The region should leave out the sponge layer along the open boundaries of a regional model, where the damped small-scale variability would otherwise enter the scores.
+In the Agulhas example above, it leaves out about 10 grid points along each boundary.
+
+## What the conversion does
+
+The CROCO history file must use the Vtransform 2 s-coordinate, store time in seconds since 2000-01-01 (the CROCO default), and hold snapshots regularly spaced from 00:00 of the first day to 00:00 after the last day.
+
+### CROCO variables on the native grid
+
+- land (`mask_rho == 0`, stored as 0 by CROCO) is set to NaN
+- the depth of every s-level is computed from the Vtransform 2 equation, using the free surface of each snapshot
+- values are linearly interpolated onto the 50 GLO12 depths: the top value is copied above the shallowest level,
+  and values below the deepest level are NaN (no pit filling)
+- `u` and `v` are averaged from cell faces to cell centres, keeping the zero velocity of land faces,
+  then rotated by `angle` into eastward and northward components
+- daily means use the trapezoidal rule over snapshots from 00:00 to 00:00 of the next day
+- the outermost rows and columns are dropped
+- each output variable keeps the floating point precision of the CROCO variable it comes from
+
+### Horizontal regridding
+
+The method follows the operational Mercator Ocean International regridder: SCRIP bilinear weights (Jones, 1999),
+land corners dropped and the remaining weights renormalised.
+The target grid covers the GLO12 points inside the CROCO latitude-longitude range.
+
+- pyresample finds the four source points around each target point, on the sphere
+- the fractional position inside that quadrilateral is solved by Newton iteration;
+  the fractional distances of pyresample alone are off by up to one source cell when a target point lies
+  on a source cell edge, for example a source column on a GLO12 meridian
+- corners that are NaN (land, below the seabed, outside the domain) are dropped and the remaining weights
+  renormalised, so a target point is NaN only when all four corners are
+- target coordinates are computed in float32 as GLO12 stores them, `float32(first) + float32(k) * float32(1/12)`,
+  and are bit-identical to the GLO12 coordinates, which OceanBench matches within 1e-4 degree
+
+### Challenger format
+
+The daily `time` axis of the forecast becomes `lead_day_index` 0, 1, 2, and so on, and its first day becomes `first_day_datetime`.
+
+## Agulhas test case
+
+The method was developed on a 5-day CROCO forecast of the Agulhas region (SEA-FORWARD, from 2026-10-21):
+a curvilinear 159 by 99 grid of ca. 1/12 degree, rotated by up to 4 degrees, with 50 s-levels.
+
+- a linear field of latitude and longitude is reproduced to within float32 precision on every target cell
+- no regridded value leaves the range of the source values, and the domain-mean sea surface temperature changes
+  by 0.02 °C at most
+- no target point whose nearest CROCO point is ocean is left empty
+- the RMSD against GLO12 over the Agulhas region above runs with 0.4 percent of ocean cells missing at most
+
+The sponge layer width is estimated from the model output and still needs confirming against the model configuration.
+
+## Not covered yet
+
+- comparison against the operational regridder on the same input
+- conservative remapping, needed when a challenger grid is finer than 1/12 degree
+- filling coastal GLO12 ocean points that the challenger leaves empty (the drowning step of the operational regridder)
+- processing a global 1/12 degree file in depth chunks to bound memory

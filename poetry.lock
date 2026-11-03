@@ -430,7 +430,7 @@ version = "2025.1.31"
 description = "Python package for providing Mozilla's CA Bundle."
 optional = false
 python-versions = ">=3.6"
-groups = ["main", "regridding"]
+groups = ["main"]
 files = [
     {file = "certifi-2025.1.31-py3-none-any.whl", hash = "sha256:ca78db4565a652026a4db2bcdf68f2fb589ea80d0be70e03929ed730746b84fe"},
     {file = "certifi-2025.1.31.tar.gz", hash = "sha256:3d5da6925056f6f18f119200434a4780a94263f10d1c21d032a6f6b2baa20651"},
@@ -744,9 +744,10 @@ test = ["pytest"]
 name = "configobj"
 version = "5.0.9"
 description = "Config file reading, writing and validation."
-optional = false
+optional = true
 python-versions = ">=3.7"
-groups = ["regridding"]
+groups = ["main"]
+markers = "extra == \"regridding\""
 files = [
     {file = "configobj-5.0.9-py2.py3-none-any.whl", hash = "sha256:1ba10c5b6ee16229c79a05047aeda2b55eb4e80d7c7d8ecf17ec1ca600c79882"},
     {file = "configobj-5.0.9.tar.gz", hash = "sha256:03c881bbf23aa07bccf1b837005975993c4ab4427ba57f959afdd9d1a2386848"},
@@ -981,9 +982,10 @@ dev = ["PyTest", "PyTest-Cov", "bump2version (<1)", "setuptools", "tox"]
 name = "donfig"
 version = "0.8.1.post1"
 description = "Python package for configuring a python package"
-optional = false
+optional = true
 python-versions = ">=3.8"
-groups = ["regridding"]
+groups = ["main"]
+markers = "extra == \"regridding\""
 files = [
     {file = "donfig-0.8.1.post1-py3-none-any.whl", hash = "sha256:2a3175ce74a06109ff9307d90a230f81215cbac9a751f4d1c6194644b8204f9d"},
     {file = "donfig-0.8.1.post1.tar.gz", hash = "sha256:3bef3413a4c1c601b585e8d297256d0c1470ea012afa6e8461dc28bfb7c23f52"},
@@ -2732,7 +2734,7 @@ version = "2.2.3"
 description = "Fundamental package for array computing in Python"
 optional = false
 python-versions = ">=3.10"
-groups = ["main", "regridding"]
+groups = ["main"]
 files = [
     {file = "numpy-2.2.3-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:cbc6472e01952d3d1b2772b720428f8b90e2deea8344e854df22b0618e9cce71"},
     {file = "numpy-2.2.3-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:cdfe0c22692a30cd830c0755746473ae66c4a8f2e7bd508b35fb3b6a0813d787"},
@@ -3119,7 +3121,7 @@ version = "4.3.6"
 description = "A small Python package for determining appropriate platform-specific dirs, e.g. a `user data dir`."
 optional = false
 python-versions = ">=3.8"
-groups = ["main", "regridding"]
+groups = ["main"]
 files = [
     {file = "platformdirs-4.3.6-py3-none-any.whl", hash = "sha256:73e575e1408ab8103900836b97580d5307456908a03e92031bab39e4554cc3fb"},
     {file = "platformdirs-4.3.6.tar.gz", hash = "sha256:357fb2acbc885b0419afd3ce3ed34564c13c9b95c89360cd9563f73aa5e2b907"},
@@ -3501,9 +3503,10 @@ windows-terminal = ["colorama (>=0.4.6)"]
 name = "pykdtree"
 version = "1.4.3"
 description = "Fast kd-tree implementation with OpenMP-enabled queries"
-optional = false
+optional = true
 python-versions = ">=3.9"
-groups = ["regridding"]
+groups = ["main"]
+markers = "extra == \"regridding\""
 files = [
     {file = "pykdtree-1.4.3-cp310-cp310-macosx_13_0_x86_64.whl", hash = "sha256:1dcfbaebd3216dc909e482bfe93e0d8aafdd9df45fa2f554d701f6c2058996cf"},
     {file = "pykdtree-1.4.3-cp310-cp310-macosx_14_0_arm64.whl", hash = "sha256:ce70dd4c91424b7952be978be176a712332163b08c9fd209e391527c21115f31"},
@@ -3604,9 +3607,10 @@ diagrams = ["jinja2", "railroad-diagrams"]
 name = "pyproj"
 version = "3.8.0"
 description = "Python interface to PROJ (cartographic projections and coordinate transformations library)"
-optional = false
+optional = true
 python-versions = ">=3.12"
-groups = ["regridding"]
+groups = ["main"]
+markers = "extra == \"regridding\""
 files = [
     {file = "pyproj-3.8.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:8606ccbc110ce2e8cbe4c9ba6c3f24cd73f603795ac0fce1ceb8fc27a9bb786e"},
     {file = "pyproj-3.8.0-cp312-cp312-macosx_15_0_x86_64.whl", hash = "sha256:2d4c49e27d404a95d244196fdadb6b0b0ba3c3cbb43a8d2a357fc579a36b7835"},
@@ -3672,9 +3676,10 @@ certifi = "*"
 name = "pyresample"
 version = "1.35.0"
 description = "Geospatial image resampling in Python"
-optional = false
+optional = true
 python-versions = ">=3.11"
-groups = ["regridding"]
+groups = ["main"]
+markers = "extra == \"regridding\""
 files = [
     {file = "pyresample-1.35.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:11218a23a03cbafb5d336931b266a7737f55e19d53fdc36cee80308326742ad9"},
     {file = "pyresample-1.35.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:1d7b24f5113917aaaf9c60fce498bf59293436c442f903b5225750a88f27eb4c"},
@@ -3893,7 +3898,7 @@ version = "6.0.2"
 description = "YAML parser and emitter for Python"
 optional = false
 python-versions = ">=3.8"
-groups = ["main", "regridding"]
+groups = ["main"]
 files = [
     {file = "PyYAML-6.0.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:0a9a2848a5b7feac301353437eb7d5957887edbf81d56e903999a75a3d743086"},
     {file = "PyYAML-6.0.2-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:29717114e51c84ddfba879543fb232a6ed60086602313ca38cce623c1d62cfbf"},
@@ -4398,9 +4403,10 @@ type = ["importlib_metadata (>=7.0.2)", "jaraco.develop (>=7.21)", "mypy (==1.14
 name = "shapely"
 version = "2.2.0"
 description = "Manipulation and analysis of geometric objects"
-optional = false
+optional = true
 python-versions = ">=3.11"
-groups = ["regridding"]
+groups = ["main"]
+markers = "extra == \"regridding\""
 files = [
     {file = "shapely-2.2.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:596b7994ceafa526b6e0522ca29fbc41d19f86459161d6efe1f251d0acd49f3f"},
     {file = "shapely-2.2.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:7c0b262116bb75b86751440b42e19673911bc0a8f0d5ce723ce294c3d6e4d5c0"},
@@ -5039,7 +5045,10 @@ numpy = ">=1.24"
 docs = ["numcodecs[msgpack] (!=0.14.0,!=0.14.1)", "numpydoc", "pydata-sphinx-theme", "pytest-doctestplus", "sphinx", "sphinx-automodapi", "sphinx-copybutton", "sphinx-issues", "sphinx_design"]
 jupyter = ["ipytree (>=0.2.2)", "ipywidgets (>=8.0.0)", "notebook"]
 
+[extras]
+regridding = ["pyresample"]
+
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12.9"
-content-hash = "eacf0b053694b152e8d8251d797fe4f676be63f9face845947fe3531d8c77451"
+content-hash = "5eb221d554f3d524e8532126fd5be160fa132cefb3304bf327147afbe2369d63"

@@ -2,8 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-import sys
-
 import numpy
 import xarray
 
@@ -177,29 +175,6 @@ def _trapezoidal_daily_means(snapshots: xarray.Dataset) -> xarray.Dataset:
 
 
 def croco_to_standard_dataset(croco_dataset: xarray.Dataset) -> xarray.Dataset:
-    """
-    Convert a CROCO history dataset into daily means of OceanBench variables on the native CROCO grid.
-
-    The CROCO dataset must be opened with ``decode_times=False``, use the Vtransform 2 s-coordinate,
-    and hold snapshots regularly spaced from 00:00 of the first day to 00:00 after the last day.
-
-    Land points are set to NaN, s-levels are linearly interpolated to the GLO12 depths
-    (top value copied above the shallowest level, NaN below the deepest level),
-    velocities are moved to rho points and rotated to eastward and northward components,
-    and daily means use the trapezoidal rule over the snapshots.
-    The outermost rho rows and columns are dropped.
-
-    Parameters
-    ----------
-    croco_dataset : xarray.Dataset
-        CROCO history dataset with temp, salt, u, v and zeta.
-
-    Returns
-    -------
-    xarray.Dataset
-        Daily thetao, so, uo, vo (time, depth, eta_rho, xi_rho) and zos (time, eta_rho, xi_rho),
-        with 2-D latitude and longitude coordinates.
-    """
     water_mask = _water_mask(croco_dataset)
     level_depths = _level_depths(croco_dataset)
     eastward, northward = _eastward_and_northward_velocities(croco_dataset)
@@ -241,9 +216,3 @@ def croco_to_standard_dataset(croco_dataset: xarray.Dataset) -> xarray.Dataset:
             for name, attributes in STANDARD_VARIABLE_ATTRIBUTES.items()
         }
     )
-
-
-if __name__ == "__main__":
-    input_path, output_path = sys.argv[1], sys.argv[2]
-    with xarray.open_dataset(input_path, decode_times=False) as croco_dataset:
-        croco_to_standard_dataset(croco_dataset).to_netcdf(output_path)

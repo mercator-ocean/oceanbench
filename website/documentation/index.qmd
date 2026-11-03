@@ -19,6 +19,7 @@ This documentation describes how to prepare and evaluate a challenger with the P
 - [Units and time conventions of the input data](input-data-conventions/index.qmd)
 - [1 degree track](one-degree-track/index.qmd)
 - [Run OceanBench offline](run-offline/index.qmd)
+- [Regrid a challenger onto the GLO12 grid](regrid-a-challenger/index.qmd)
 
 ## API reference
 
@@ -28,3 +29,4 @@ The [API reference](api/index.qmd) documents the public Python API of the `ocean
 - [Metrics](api/metrics/index.qmd)
 - [Regions](api/regions/index.qmd)
 - Datasets: [challenger](api/datasets/challenger/index.qmd), [input](api/datasets/input/index.qmd), [reference](api/datasets/reference/index.qmd) and [training](api/datasets/training/index.qmd)
+- [Challenger helpers](api/helpers/challengers/index.qmd)
