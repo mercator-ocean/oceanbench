@@ -21,7 +21,7 @@ from dataset_metadata import (
     merged_temporal_extents,
 )
 from dataset_resolution import BucketDataset, CopernicusMarineCatalogDataset, ResolvedDataset
-from datasets import CollectionKind, LibraryUsage
+from datasets import CollectionKind, DatasetDescription, LibraryUsage
 
 
 class CatalogAudience(Enum):
@@ -220,7 +220,7 @@ def stac_item(dataset: ResolvedDataset, environment: CatalogEnvironment, publica
         "geometry": _polygon(spatial_extent) if spatial_extent else None,
         **({"bbox": _bounding_box(spatial_extent)} if spatial_extent else {}),
         "properties": {
-            "title": dataset.description.title,
+            "title": _item_title(dataset.description, environment),
             "description": _item_description(dataset, storage),
             **_datetime_properties(_dataset_temporal_extent(dataset), dataset, publication_datetime),
             "keywords": ["OceanBench", dataset.description.collection.value, *_standard_names(metadata)],
@@ -235,6 +235,16 @@ def stac_item(dataset: ResolvedDataset, environment: CatalogEnvironment, publica
         "assets": _assets(dataset, storage),
         "links": [*_example_links(dataset, metadata, storage), *_source_links(dataset), *_project_links()],
     }
+
+
+def _item_title(description: DatasetDescription, environment: CatalogEnvironment) -> str:
+    match (environment.audience, description.library_usage):
+        case (CatalogAudience.PUBLIC, _):
+            return description.title
+        case (CatalogAudience.INTERNAL, LibraryUsage.USED):
+            return f"{description.title} (used)"
+        case (CatalogAudience.INTERNAL, LibraryUsage.UNUSED):
+            return f"{description.title} (not used)"
 
 
 def _metadata(dataset: ResolvedDataset) -> DatasetMetadata | MetadataUnavailable:
@@ -520,7 +530,35 @@ def _example_links(
         else []
     )
     source_example = _source_snippet(dataset, metadata, storage)
-    return [*library_example, *([_example_link(*source_example)] if source_example else [])]
+    return [
+        *library_example,
+        *(_example_link(*example) for example in _internal_examples(dataset.description, storage)),
+        *([_example_link(*source_example)] if source_example else []),
+    ]
+
+
+def _internal_examples(description: DatasetDescription, storage: StorageDetails) -> tuple[tuple[str, str], ...]:
+    match storage:
+        case StorageDetails.HIDDEN:
+            return ()
+        case StorageDetails.SHOWN:
+            return (
+                *(
+                    (("Open with the OceanBench core API", description.library_example),)
+                    if description.library_example
+                    else ()
+                ),
+                *(
+                    (
+                        (
+                            "Open the source product with the Copernicus Marine toolbox",
+                            _copernicus_marine_snippet(description.copernicus_source),
+                        ),
+                    )
+                    if description.copernicus_source
+                    else ()
+                ),
+            )
 
 
 def _example_link(title: str, snippet: str) -> dict:

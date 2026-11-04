@@ -52,6 +52,8 @@ class DatasetDescription:
     library_usage: LibraryUsage
     library_function: str | None = None
     period: Period | None = None
+    library_example: str | None = None
+    copernicus_source: CopernicusMarineDatasets | None = None
 
 
 GLORYS_TWELFTH_DEGREE = CopernicusMarineDatasets(("cmems_mod_glo_phy_my_0.083deg_P1D-m",))
@@ -63,6 +65,29 @@ GLO12_TWELFTH_DEGREE = CopernicusMarineDatasets(
         "cmems_mod_glo_phy_anfc_0.083deg_P1D-m",
     )
 )
+
+OCEAN_MASK_STATIC_DATASETS = CopernicusMarineDatasets(
+    ("cmems_mod_glo_phy_anfc_0.083deg_static", "cmems_mod_glo_phy_my_0.083deg_static")
+)
+
+
+def _core_reference_example(module: str, function: str, challenger_function: str) -> str:
+    return (
+        "import oceanbench\n"
+        f"from oceanbench.core.references.{module} import {function}\n\n"
+        f"challenger_dataset = oceanbench.datasets.challenger.{challenger_function}()\n"
+        f"dataset = {function}(challenger_dataset)\n"
+    )
+
+
+def _core_mean_dynamic_topography_example(resolution: str) -> str:
+    return (
+        "from oceanbench.core.references.observations import load_mean_dynamic_topography\n\n"
+        f'dataset = load_mean_dynamic_topography("{resolution}")\n'
+    )
+
+
+OCEAN_MASK_EXAMPLE = "from oceanbench.core.ocean_mask import ocean_mask\n\ndataset = ocean_mask()\n"
 
 
 def _challenger(
@@ -85,9 +110,19 @@ def _reference(
     source: BucketObjects | CopernicusMarineDatasets,
     library_usage: LibraryUsage = LibraryUsage.UNUSED,
     library_function: str | None = None,
+    library_example: str | None = None,
+    copernicus_source: CopernicusMarineDatasets | None = None,
 ) -> DatasetDescription:
     return DatasetDescription(
-        identifier, title, description, CollectionKind.REFERENCES, source, library_usage, library_function
+        identifier,
+        title,
+        description,
+        CollectionKind.REFERENCES,
+        source,
+        library_usage,
+        library_function,
+        library_example=library_example,
+        copernicus_source=copernicus_source,
     )
 
 
@@ -255,6 +290,8 @@ REFERENCE_DATASETS = (
         "GLORYS12 reanalysis interpolated on the 1/4° benchmark grid, one Zarr store per forecast first day.",
         BucketObjects("public/glorys14_refull_2024/", DAILY_STORES),
         LibraryUsage.USED,
+        library_example=_core_reference_example("glorys", "glorys_reanalysis_dataset", "glo12"),
+        copernicus_source=GLORYS_TWELFTH_DEGREE,
     ),
     _reference(
         "glorys-one-degree-2024",
@@ -262,6 +299,8 @@ REFERENCE_DATASETS = (
         "GLORYS12 reanalysis interpolated on the 1° benchmark grid, one Zarr store per forecast first day.",
         BucketObjects("public/glorys_1degree_2024_V2/", DAILY_STORES),
         LibraryUsage.USED,
+        library_example=_core_reference_example("glorys", "glorys_reanalysis_dataset", "glo12_1_degree"),
+        copernicus_source=GLORYS_TWELFTH_DEGREE,
     ),
     _reference(
         "glorys-twelfth-degree",
@@ -277,6 +316,8 @@ REFERENCE_DATASETS = (
         "GLO12 analysis interpolated on the 1/4° benchmark grid, one Zarr store per forecast first day.",
         BucketObjects("public/glo14/", DAILY_STORES),
         LibraryUsage.USED,
+        library_example=_core_reference_example("glo12", "glo12_analysis_dataset", "glo12"),
+        copernicus_source=GLO12_TWELFTH_DEGREE,
     ),
     _reference(
         "glo12-analysis-one-degree-2024",
@@ -284,6 +325,8 @@ REFERENCE_DATASETS = (
         "GLO12 analysis interpolated on the 1° benchmark grid, one Zarr store per forecast first day.",
         BucketObjects("public/glo12_1degree_2024_V2/", DAILY_STORES),
         LibraryUsage.USED,
+        library_example=_core_reference_example("glo12", "glo12_analysis_dataset", "glo12_1_degree"),
+        copernicus_source=GLO12_TWELFTH_DEGREE,
     ),
     _reference(
         "glo12-analysis-twelfth-degree",
@@ -300,6 +343,7 @@ REFERENCE_DATASETS = (
         "evaluation, one Zarr store and manifest per day.",
         BucketObjects("public/observations2024-v2/", DAILY_STORES),
         LibraryUsage.USED,
+        library_example=_core_reference_example("observations", "observations", "glo12"),
     ),
     _reference(
         "mean-dynamic-topography-glo12",
@@ -307,6 +351,7 @@ REFERENCE_DATASETS = (
         "GLO12 mean dynamic topography at 1/12°, 1/4° and 1°, used to compare sea level anomalies.",
         BucketObjects("public/GLO12_MDT/", r"GLO-MFC_001_024_mdt.*\.zarr"),
         LibraryUsage.USED,
+        library_example=_core_mean_dynamic_topography_example("quarter_degree"),
     ),
     _reference(
         "ocean-mask-version-2",
@@ -315,6 +360,8 @@ REFERENCE_DATASETS = (
         "(cmems_mod_glo_phy_anfc_0.083deg_static, cmems_mod_glo_phy_my_0.083deg_static).",
         BucketObjects("public/ocean_mask/", r"oceanbench-ocean-mask-v2\.zarr"),
         LibraryUsage.USED,
+        library_example=OCEAN_MASK_EXAMPLE,
+        copernicus_source=OCEAN_MASK_STATIC_DATASETS,
     ),
     _reference(
         "reference-{variant}",

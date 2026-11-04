@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -190,6 +191,41 @@ def test_internal_item_keeps_the_bucket_locations_and_storage_examples_even_when
 
     assert item["assets"]["latest"]["href"].startswith("https://s3.waw3-1.cloudferro.com/oceanbench-bucket/")
     assert any(link["rel"] == "example" for link in item["links"])
+
+
+def _example_titles(item: dict) -> list[str]:
+    return [link["title"] for link in item["links"] if link["rel"] == "example"]
+
+
+def test_internal_item_titles_tell_whether_the_library_uses_the_dataset_and_public_titles_do_not():
+    used = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
+    unused = _bucket_dataset("unused", "2024-01-03", "2024-12-25", -180.0, 179.75)
+
+    titles = tuple(
+        stac_item(dataset, INTERNAL, PUBLICATION_DATETIME)["properties"]["title"] for dataset in (used, unused)
+    )
+
+    assert titles == ("used (used)", "unused (not used)")
+    assert stac_item(used, PRODUCTION, PUBLICATION_DATETIME)["properties"]["title"] == "used"
+
+
+def test_internal_item_of_a_used_dataset_has_the_oceanbench_and_copernicus_marine_examples():
+    dataset = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
+    described = replace(
+        dataset,
+        description=replace(
+            dataset.description,
+            library_example="from oceanbench.core.ocean_mask import ocean_mask\n",
+            copernicus_source=CopernicusMarineDatasets(("cmems_mod_glo_phy_my_0.083deg_P1D-m",)),
+        ),
+    )
+
+    assert _example_titles(stac_item(described, INTERNAL, PUBLICATION_DATETIME)) == [
+        "Open with the OceanBench core API",
+        "Open the source product with the Copernicus Marine toolbox",
+        "Open the latest store with xarray",
+    ]
+    assert _example_titles(stac_item(described, PRODUCTION, PUBLICATION_DATETIME)) == []
 
 
 def test_public_copernicus_marine_item_hides_the_store_url_and_keeps_the_toolbox_example():
