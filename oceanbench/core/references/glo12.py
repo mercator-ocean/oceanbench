@@ -5,6 +5,7 @@
 from datetime import datetime
 import numpy
 import pandas
+import weakref
 from xarray import Dataset, merge, concat
 import logging
 from oceanbench.core.dataset_utils import Dimension
@@ -21,7 +22,7 @@ from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset, prepare_ref
 logger = logging.getLogger("copernicusmarine")
 logger.setLevel(level=logging.WARNING)
 
-_GLO12_ANALYSIS_DATASET_CACHE: dict[int, Dataset] = {}
+_GLO12_ANALYSIS_DATASET_CACHE: dict[int, tuple[weakref.ref, Dataset]] = {}
 
 
 def _glo12_1_4_path(first_day_datetime: numpy.datetime64) -> str:
@@ -190,9 +191,9 @@ def _glo12_analysis_dataset_1_degree(challenger_dataset: Dataset) -> Dataset:
 
 def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
     cache_key = id(challenger_dataset)
-    cached_dataset = _GLO12_ANALYSIS_DATASET_CACHE.get(cache_key)
-    if cached_dataset is not None:
-        return cached_dataset
+    cached_entry = _GLO12_ANALYSIS_DATASET_CACHE.get(cache_key)
+    if cached_entry is not None and cached_entry[0]() is challenger_dataset:
+        return cached_entry[1]
 
     def open_dataset() -> Dataset:
         resolution = get_dataset_resolution(challenger_dataset)
@@ -207,7 +208,7 @@ def glo12_analysis_dataset(challenger_dataset: Dataset) -> Dataset:
             raise ValueError(f"Unsupported resolution: {resolution}")
 
     reference_dataset = open_dataset()
-    _GLO12_ANALYSIS_DATASET_CACHE[cache_key] = reference_dataset
+    _GLO12_ANALYSIS_DATASET_CACHE[cache_key] = weakref.ref(challenger_dataset), reference_dataset
     return reference_dataset
 
 

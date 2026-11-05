@@ -62,6 +62,13 @@ def _record_asset_openers(monkeypatch, module, opened_assets: set) -> None:
 
         monkeypatch.setattr(module, opener_name, record_reference)
     monkeypatch.setattr(module, "ocean_mask", lambda: opened_assets.add(("ocean_mask",)))
+    monkeypatch.setattr(
+        module,
+        "marine_heatwave_climatology_mean_and_percentile_90",
+        lambda challenger_dataset: opened_assets.add(
+            ("marine_heatwave_climatology", get_dataset_resolution(challenger_dataset))
+        ),
+    )
 
 
 def _forbid(*_args, **_kwargs):
@@ -95,12 +102,17 @@ def test_stage_command_stages_every_asset_and_computes_nothing(challenger_file, 
 
     first_day_datetimes = tuple(numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]").tolist())
     reference_key = (first_day_datetimes, 10, (0.494025, 47.37369), "quarter_degree")
+    history_first_day_datetimes = tuple(numpy.array(["2023-12-27", "2024-01-03"], dtype="datetime64[ns]").tolist())
+    history_key = (history_first_day_datetimes, 7, (0.494025, 47.37369), "quarter_degree")
     assert staged_assets == {
         ("glorys_reanalysis_dataset", *reference_key),
         ("glo12_analysis_dataset", *reference_key),
         ("observations", *reference_key),
         ("mean_dynamic_topography", "quarter_degree"),
         ("ocean_mask",),
+        ("marine_heatwave_climatology", "quarter_degree"),
+        ("glorys_reanalysis_dataset", *history_key),
+        ("glo12_analysis_dataset", *history_key),
     }
     assert current_runtime_configuration().resolved_stage_directory() == stage_directory
 
@@ -123,6 +135,7 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
         "compute_mixed_layer_depth",
         "compute_geostrophic_currents",
         "_lagrangian_particle_count",
+        "_marine_heatwave_diagnostics_against_reference",
     ):
         monkeypatch.setattr(core_metrics, computation, lambda *args, **kwargs: None)
     challenger_namespace: dict = {}
@@ -135,7 +148,7 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
     for metric_function in metric_functions:
         metric_function(challenger_namespace["challenger_dataset"])
 
-    assert len(metric_functions) == 9
+    assert len(metric_functions) == 11
     assert metric_assets == staged_assets
 
 
