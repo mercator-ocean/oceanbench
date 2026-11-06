@@ -139,9 +139,16 @@ oceanbench.datasets.input.ifs_forcings()
 GLORYS reanalysis is for training, GLO12 nowcasts and IFS forcings are the inputs for initial conditions and atmospheric forcing.
 The GLORYS training datasets cover 1993 to 2019 (included). Exclude the years covered by the benchmark, from any training data.
 
+### 18. Can I browse the datasets used by OceanBench?
+
+Yes, in the [OceanBench data catalog on EDITO](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench/oceanbench-catalog).
+It lists the challenger forecasts, references, observations, inputs and training datasets that OceanBench uses, with their extent, variables and Python examples to open them.
+It is also served as a [STAC API](https://api.dive.edito.eu/data/catalogs/projects/oceanbench/oceanbench-catalog).
+See the [documentation](/documentation/data-catalog/index.qmd).
+
 ## Run it yourself
 
-### 18. How do I install OceanBench and what do I need?
+### 19. How do I install OceanBench and what do I need?
 
 ```bash
 pip install oceanbench
@@ -150,7 +157,7 @@ pip install oceanbench
 Evaluating 1/12° systems requires a [Copernicus Marine Service](https://marine.copernicus.eu) account.
 For non-interactive runs, log in beforehand as described in the [Copernicus Marine Toolbox documentation](https://toolbox-docs.marine.copernicus.eu).
 
-### 19. How do I evaluate a model end-to-end from the command line?
+### 20. How do I evaluate a model end-to-end from the command line?
 
 Write a Python file that defines a `challenger_dataset` variable, for example [this sample](https://github.com/mercator-ocean/oceanbench/blob/main/assets/glonet_sample.py):
 
@@ -177,7 +184,7 @@ oceanbench evaluate challenger.py --region ibi
 
 The executed report is written as `challenger.global.report.ipynb` (or `challenger.ibi.report.ipynb`).
 
-### 20. How do I evaluate from Python, or compute a single metric?
+### 21. How do I evaluate from Python, or compute a single metric?
 
 ```python
 import oceanbench
