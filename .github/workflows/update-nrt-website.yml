@@ -5,10 +5,11 @@
 name: Update NRT website
 on:
   push:
+    branches:
+      - main
     paths:
-      - .github/workflows/update-nrt-website.yml
-      - edito/deploy-website.sh
-      - Makefile
+      - website/**
+      - oceanbench/**
   workflow_dispatch:
     inputs:
       nrtBranch:
@@ -28,7 +29,7 @@ jobs:
       - name: Deploy NRT website on EDITO
         env:
           NRT_WEBSITE_BRANCH: ${{ inputs.nrtBranch }}
-          SERVICE_BRANCH: ${{ github.ref_name }}
+          SERVICE_BRANCH: ${{ inputs.nrtBranch }}
           EDITO_ACCESS_TOKEN: ${{ secrets.EDITO_ACCESS_TOKEN }}
           EDITO_OFFLINE_TOKEN: ${{ secrets.EDITO_OFFLINE_TOKEN }}
         run: make deploy-nrt-website-on-edito
