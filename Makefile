@@ -46,7 +46,7 @@ reuse-annotate:
 
 SAMPLE_FILES := $(wildcard assets/*_sample.py)
 IBI_SAMPLE_FILE := assets/glonet_sample.py
-IBI_NOTEBOOK := glonet_sample.ibi.report.ipynb
+IBI_SCORES := glonet_sample.ibi.scores.json
 
 evaluate-challenger: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-challenger:
@@ -68,12 +68,12 @@ compare-sample: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-sample:
 	${ACTIVATE_ENVIRONMENT}
 	name=$$(basename $(SAMPLE) .py); \
-	python tests/compare_notebook.py assets/$$name.global.report.ipynb $$name.global.report.ipynb
+	python tests/compare_scores.py assets/$$name.global.scores.json $$name.global.scores.json
 
 compare-ibi: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-ibi:
 	${ACTIVATE_ENVIRONMENT}
-	python tests/compare_notebook.py assets/$(IBI_NOTEBOOK) $(IBI_NOTEBOOK)
+	python tests/compare_scores.py assets/$(IBI_SCORES) $(IBI_SCORES)
 
 doctest: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 doctest:

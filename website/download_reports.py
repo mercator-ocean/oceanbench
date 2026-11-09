@@ -12,7 +12,7 @@ from helpers.s3_discovery import (
     default_version,
     discover_downloaded_reports,
     discover_official_reports,
-    download_notebook,
+    download_report,
 )
 
 SCRIPT_DIRECTORY = os.path.dirname(__file__)
@@ -24,7 +24,7 @@ def _version_already_downloaded(version: str) -> bool:
     return any(discover_downloaded_reports(REPORTS_DIRECTORY, version).values())
 
 
-def _clear_version_report_notebooks(version_directory: str) -> None:
+def _clear_version_report_files(version_directory: str) -> None:
     shutil.rmtree(version_directory, ignore_errors=True)
 
 
@@ -32,24 +32,21 @@ def _download_version_reports(version: str) -> bool:
     version_directory = os.path.join(REPORTS_DIRECTORY, version)
     published_reports = discover_official_reports(version)
     print(f"[{version}] discovered reports: {published_reports}")
-    pending_reports = [
-        (challenger_name, region_id)
-        for region_id, challenger_names in published_reports.items()
-        for challenger_name in challenger_names
+    pending_file_names = [
+        file_name for region_file_names in published_reports.values() for file_name in region_file_names.values()
     ]
 
-    def download(report: tuple[str, str]) -> str | None:
-        challenger_name, region_id = report
-        return download_notebook(version, challenger_name, region_id, version_directory)
+    def download(file_name: str) -> str | None:
+        return download_report(version, file_name, version_directory)
 
     with ThreadPoolExecutor(max_workers=MAXIMUM_PARALLEL_REQUESTS) as pool:
-        downloaded_paths = list(pool.map(download, pending_reports))
+        downloaded_paths = list(pool.map(download, pending_file_names))
 
-    for (challenger_name, region_id), downloaded_path in zip(pending_reports, downloaded_paths):
+    for file_name, downloaded_path in zip(pending_file_names, downloaded_paths):
         if not downloaded_path:
-            raise RuntimeError(f"Failed to download notebook for {version}/{challenger_name}.{region_id}.")
-        print(f"Downloaded {version}/{challenger_name}.{region_id} -> {downloaded_path}")
-    return bool(pending_reports)
+            raise RuntimeError(f"Failed to download {version}/{file_name}.")
+        print(f"Downloaded {version}/{file_name} -> {downloaded_path}")
+    return bool(pending_file_names)
 
 
 def main() -> None:
@@ -63,7 +60,7 @@ def main() -> None:
             has_reports = True
             continue
         if version == active_version:
-            _clear_version_report_notebooks(os.path.join(REPORTS_DIRECTORY, version))
+            _clear_version_report_files(os.path.join(REPORTS_DIRECTORY, version))
         if _download_version_reports(version):
             has_reports = True
 

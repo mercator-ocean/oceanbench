@@ -8,13 +8,9 @@ from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_
 from oceanbench.core.dataset_source import get_dataset_source, with_dataset_source
 
 
-def interpolate_1_degree(data: xarray.Dataset) -> xarray.Dataset:
-    data = rename_dataset_with_standard_names(data)
-
+def one_degree_target_grid(data: xarray.Dataset) -> tuple[numpy.ndarray, numpy.ndarray]:
     latitude_dimension = StandardDimension.LATITUDE.value
     longitude_dimension = StandardDimension.LONGITUDE.value
-    time_dimension = StandardDimension.TIME.value
-    depth_dimension = StandardDimension.DEPTH.value
 
     latitude_minimum = data[latitude_dimension].min().values
     latitude_maximum = data[latitude_dimension].max().values
@@ -28,6 +24,18 @@ def interpolate_1_degree(data: xarray.Dataset) -> xarray.Dataset:
 
     new_latitude = numpy.arange(latitude_start, latitude_end + 1, 1.0)
     new_longitude = numpy.arange(longitude_start, longitude_end + 1, 1.0)
+    return new_latitude, new_longitude
+
+
+def apply_one_degree_interpolation(
+    data: xarray.Dataset,
+    new_latitude: numpy.ndarray,
+    new_longitude: numpy.ndarray,
+) -> xarray.Dataset:
+    latitude_dimension = StandardDimension.LATITUDE.value
+    longitude_dimension = StandardDimension.LONGITUDE.value
+    time_dimension = StandardDimension.TIME.value
+    depth_dimension = StandardDimension.DEPTH.value
 
     chunk_dimensions = {latitude_dimension: -1, longitude_dimension: -1}
     if time_dimension in data.dims:
@@ -36,7 +44,13 @@ def interpolate_1_degree(data: xarray.Dataset) -> xarray.Dataset:
         chunk_dimensions[depth_dimension] = 1
 
     data = data.chunk(chunk_dimensions)
-    interpolated = data.interp(**{latitude_dimension: new_latitude, longitude_dimension: new_longitude})
+    return data.interp(**{latitude_dimension: new_latitude, longitude_dimension: new_longitude})
+
+
+def interpolate_1_degree(data: xarray.Dataset) -> xarray.Dataset:
+    data = rename_dataset_with_standard_names(data)
+    new_latitude, new_longitude = one_degree_target_grid(data)
+    interpolated = apply_one_degree_interpolation(data, new_latitude, new_longitude)
 
     dataset_source = get_dataset_source(data)
     if dataset_source is None:

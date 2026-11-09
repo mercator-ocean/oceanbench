@@ -35,8 +35,8 @@ They capture key aspects of forecast quality, not the complete picture.
 
 ### 5. How is a system evaluated?
 
-OceanBench executes a Python notebook that opens the challenger dataset (the forecasts of the system) as an `xarray.Dataset` and runs every evaluation method on it.
-The executed notebook is the evaluation report, and its content fills the score table.
+OceanBench runs a Python file that opens the challenger dataset (the forecasts of the system) as an `xarray.Dataset`, then runs every evaluation method on it.
+The scores are printed and written to a [scores file](/documentation/scores-file/index.qmd), whose content fills the score table.
 
 ### 6. What forecasts must a challenger provide?
 
@@ -110,7 +110,7 @@ Open an issue on the [GitHub repository](https://github.com/mercator-ocean/ocean
 1. Access to the system output (Zarr, NetCDF).
 2. Access to the system code or container with run instructions, so that the maintainers can reproduce the output.
 
-Optionally, attach the executed notebook of an interactive or programmatic evaluation.
+Optionally, attach the challenger file and the scores file of an interactive or programmatic evaluation.
 
 Add the organization, reference paper, method (physics-based, ML-based, hybrid), type (deterministic, ensemble), initial conditions and approximate resolution.
 
@@ -175,7 +175,7 @@ oceanbench evaluate challenger.py
 oceanbench evaluate challenger.py --region ibi
 ```
 
-The executed report is written as `challenger.global.report.ipynb` (or `challenger.ibi.report.ipynb`).
+The scores are written as `challenger.global.scores.json` (or `challenger.ibi.scores.json`), see [The scores file](/documentation/scores-file/index.qmd).
 
 ### 20. How do I evaluate from Python, or compute a single metric?
 
@@ -193,4 +193,4 @@ oceanbench.metrics.rmsd_of_variables_compared_to_glorys_reanalysis(challenger_da
 ```
 
 Metrics return a `pandas.DataFrame`.
-You can also run the sample notebook without installing anything, in a Jupyter Lab on EDITO set up for evaluation: [Open in EDITO](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-notebook?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&advanced.init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&advanced.init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fglonet_sample.global.report.ipynb»)
+You can also run the sample notebook without installing anything, in a Jupyter Lab on EDITO set up for evaluation: [Open in EDITO](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-notebook?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&advanced.init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&advanced.init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fevaluate_challenger_example.ipynb»)

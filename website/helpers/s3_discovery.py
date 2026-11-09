@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
@@ -13,6 +14,12 @@ S3_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
 REPORTS_ROOT_PREFIX = "public/evaluation-reports"
 REPORT_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
 REPORT_NOTEBOOK_FILE_NAME = "index.ipynb"
+SCORES_FILE_SUFFIX = ".scores.json"
+NOTEBOOK_SUFFIX = ".report.ipynb"
+# Versions up to LAST_NOTEBOOK_VERSION publish a report notebook per challenger and region, newer versions
+# a scores file. A downloaded scores file is preferred when both exist.
+LAST_NOTEBOOK_VERSION = "0.6.0"
+REPORT_FILE_PATTERN = re.compile(r"^(?P<challenger>.+)\.(?P<region>[a-z0-9_-]+)(?:\.scores\.json|\.report\.ipynb)$")
 
 # The report discovery and download steps each issue one HTTP request per challenger and region.
 # Running them concurrently keeps the website rebuild well under the gateway timeout as the number
@@ -59,35 +66,51 @@ def challengers_for_version(version: str) -> list[str]:
     return _report_index().get("versions", {}).get(version, {}).get("challengers", [])
 
 
-def _notebook_url(version: str, challenger_name: str, region_id: str) -> str:
-    return f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{challenger_name}.{region_id}.report.ipynb"
+def report_url(version: str, file_name: str) -> str:
+    return f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{file_name}"
 
 
-def _report_exists(version: str, challenger_name: str, region_id: str) -> bool:
+def _report_exists(version: str, file_name: str) -> bool:
     try:
-        response = requests.head(_notebook_url(version, challenger_name, region_id), timeout=10)
+        response = requests.head(report_url(version, file_name), timeout=10)
         return response.status_code == 200
     except Exception:
         return False
 
 
-def discover_official_reports(version: str) -> dict[str, list[str]]:
+def _published_report_file_name(version: str, challenger_name: str, region_id: str) -> str | None:
+    if _version_sort_key(version) <= _version_sort_key(LAST_NOTEBOOK_VERSION):
+        suffix = NOTEBOOK_SUFFIX
+    else:
+        suffix = SCORES_FILE_SUFFIX
+    file_name = f"{challenger_name}.{region_id}{suffix}"
+    return file_name if _report_exists(version, file_name) else None
+
+
+def discover_official_reports(version: str) -> dict[str, dict[str, str]]:
+    """Published report file name of each challenger, by region."""
     challenger_names = challengers_for_version(version)
     probes = [
         (challenger_name, region_id) for region_id in published_region_ids() for challenger_name in challenger_names
     ]
 
-    def report_exists(probe: tuple[str, str]) -> bool:
+    def published_report_file_name(probe: tuple[str, str]) -> str | None:
         challenger_name, region_id = probe
-        return _report_exists(version, challenger_name, region_id)
+        return _published_report_file_name(version, challenger_name, region_id)
 
     with ThreadPoolExecutor(max_workers=MAXIMUM_PARALLEL_REQUESTS) as pool:
-        available_probes = {probe for probe, exists in zip(probes, pool.map(report_exists, probes)) if exists}
+        file_names = {
+            probe: file_name
+            for probe, file_name in zip(probes, pool.map(published_report_file_name, probes))
+            if file_name
+        }
 
     return {
-        region_id: [
-            challenger_name for challenger_name in challenger_names if (challenger_name, region_id) in available_probes
-        ]
+        region_id: {
+            challenger_name: file_names[(challenger_name, region_id)]
+            for challenger_name in challenger_names
+            if (challenger_name, region_id) in file_names
+        }
         for region_id in published_region_ids()
     }
 
@@ -97,21 +120,44 @@ def report_notebook_path(version_directory: str, challenger_name: str, region_id
 
 
 def discover_downloaded_reports(reports_directory: str, version: str) -> dict[str, list[str]]:
-    version_directory = os.path.join(reports_directory, version)
     return {
         region_id: [
             challenger_name
             for challenger_name in challengers_for_version(version)
-            if os.path.isfile(report_notebook_path(version_directory, challenger_name, region_id))
+            if downloaded_report_path(reports_directory, version, challenger_name, region_id)
         ]
         for region_id in published_region_ids()
     }
 
 
-def download_notebook(version: str, challenger_name: str, region_id: str, destination_directory: str) -> str | None:
-    destination_path = report_notebook_path(destination_directory, challenger_name, region_id)
+def downloaded_report_path(reports_directory: str, version: str, challenger_name: str, region_id: str) -> str | None:
+    version_directory = os.path.join(reports_directory, version)
+    candidate_paths = (
+        os.path.join(version_directory, f"{challenger_name}.{region_id}{SCORES_FILE_SUFFIX}"),
+        report_notebook_path(version_directory, challenger_name, region_id),
+    )
+    return next((path for path in candidate_paths if os.path.isfile(path)), None)
+
+
+def report_href(reports_directory: str, version: str, challenger_name: str, region_id: str) -> str:
+    """Link of a challenger report: its scores file in the bucket, or the report page rendered from its notebook."""
+    report_path = downloaded_report_path(reports_directory, version, challenger_name, region_id)
+    if report_path and report_path.endswith(SCORES_FILE_SUFFIX):
+        return report_url(version, os.path.basename(report_path))
+    return f"/reports/{version}/{challenger_name}.{region_id}/"
+
+
+def _downloaded_report_destination(destination_directory: str, file_name: str) -> str:
+    if file_name.endswith(SCORES_FILE_SUFFIX):
+        return os.path.join(destination_directory, file_name)
+    report_match = REPORT_FILE_PATTERN.match(file_name)
+    return report_notebook_path(destination_directory, report_match.group("challenger"), report_match.group("region"))
+
+
+def download_report(version: str, file_name: str, destination_directory: str) -> str | None:
+    destination_path = _downloaded_report_destination(destination_directory, file_name)
     os.makedirs(os.path.dirname(destination_path), exist_ok=True)
-    url = _notebook_url(version, challenger_name, region_id)
+    url = report_url(version, file_name)
 
     try:
         response = requests.get(url, timeout=30)
@@ -121,5 +167,5 @@ def download_notebook(version: str, challenger_name: str, region_id: str, destin
             file.write(response.content)
         return destination_path
     except Exception as error:
-        print(f"Failed to download {challenger_name}.{region_id} ({version}) from {url}: {error}")
+        print(f"Failed to download {file_name} ({version}) from {url}: {error}")
     return None

@@ -62,6 +62,7 @@ def _evaluate_one(
     output_prefix: str | None,
     runtime_configuration: RuntimeConfiguration,
     region: RegionLike,
+    viewer_artifacts_directory: str | None,
 ) -> EvaluationResult:
     try:
         from oceanbench.core.evaluate import evaluate_challenger
@@ -72,6 +73,7 @@ def _evaluate_one(
             output_prefix=output_prefix,
             runtime_configuration=runtime_configuration,
             region=region,
+            viewer_artifacts_directory=viewer_artifacts_directory,
         )
         return EvaluationResult(challenger=challenger)
     except Exception as exception:
@@ -91,8 +93,9 @@ def _evaluate_all(
     max_workers: int | None,
     runtime_configuration: RuntimeConfiguration,
     region: RegionLike,
+    viewer_artifacts_directory: str | None,
 ) -> list[EvaluationResult]:
-    # Notebook evaluations are heavy and can leave substantial state behind in a
+    # Evaluations are heavy and can leave substantial state behind in a
     # worker process. Recycle the worker after each challenger to avoid
     # cross-challenger memory growth during `oceanbench evaluate a.py b.py ...`.
     with ProcessPoolExecutor(max_workers=max_workers, max_tasks_per_child=1) as executor:
@@ -104,6 +107,7 @@ def _evaluate_all(
                 output_prefix,
                 runtime_configuration,
                 region,
+                viewer_artifacts_directory,
             ): challenger
             for challenger in challengers
         }
@@ -169,6 +173,7 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         args.max_workers,
         runtime_configuration,
         region,
+        args.viewer_artifacts_dir,
     )
     if (
         runtime_configuration.has_local_stage()
@@ -222,12 +227,17 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     evaluate_parser.add_argument(
         "--output-bucket",
         default=None,
-        help="S3 bucket for output notebooks",
+        help="S3 bucket to upload the scores files to",
     )
     evaluate_parser.add_argument(
         "--output-prefix",
         default=None,
-        help="S3 prefix for output notebooks",
+        help="S3 prefix for the uploaded scores files",
+    )
+    evaluate_parser.add_argument(
+        "--viewer-artifacts-dir",
+        default=None,
+        help="Local directory to also write the viewer data of each challenger to",
     )
     evaluate_parser.add_argument(
         "--max-workers",

@@ -1,0 +1,128 @@
+/*
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+
+/* Viewport and container queries, last in load order so they win over the base rules
+   in shell.css, map.css and rail.css wherever both match. */
+
+@media (max-height: 760px) {
+  .controls { padding: 0.7rem 0.7rem 1.2rem; gap: 0.6rem; }
+  .control-group { gap: 0.4rem; }
+  .drawer-right .drawer-body { padding: 0.7rem 0.7rem 1.2rem; }
+}
+
+@media (max-width: 1320px) {
+  .panel-head { gap: 0.25rem; }
+  .panel-head select { min-width: 4.8rem; max-width: 10.5rem; }
+  /* The mean is the one number the head reports, so it wraps onto a second line
+     rather than being dropped: a value that disappears as the window narrows is
+     worse than a head one line taller. The spacer only fills the line it is on, so
+     the badge and its method note travel together to the next one. */
+  .panel-head .spacer { flex: 1 0 0; }
+}
+
+/* Narrow viewports: the drawers stop taking grid tracks and float over the map, so
+   the map keeps a usable width instead of being squeezed between two sidebars. An
+   open drawer covers the map controls under it, which is what an overlay is for: it
+   is a transient sheet the user opens, sets and folds away again.
+   This block MUST come after the ≤1320px block above so its source order wins where
+   both queries match. */
+@media (max-width: 1100px) {
+  .workspace { grid-template-columns: var(--drawer-tab-width) minmax(0, 1fr) var(--drawer-tab-width); }
+  .drawer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 12;
+    box-shadow: 0 0 1.5rem rgba(15, 23, 42, 0.18);
+  }
+  .drawer-left { left: 0; width: var(--controls-open-width); }
+  .drawer-right { right: 0; width: var(--rail-open-width); }
+  .drawer.collapsed { width: var(--drawer-tab-width); box-shadow: none; }
+  .drawer-resizer { display: none; }
+  /* A folded drawer is a thin strip over the map; a chevron alone does not say what
+     opens, so the strip names it. */
+  .drawer.collapsed > .drawer-tab { align-content: center; gap: 0.5rem; }
+  .drawer.collapsed > .drawer-tab::after {
+    content: attr(data-label);
+    writing-mode: vertical-rl;
+    font-size: var(--text-caption);
+    letter-spacing: 0.04em;
+  }
+  .drawer-left.collapsed > .drawer-tab::after { transform: rotate(180deg); }
+}
+
+
+/* Two maps side by side on a phone are two slivers of a 2:1 world with empty space above
+   and below each; stacked, each keeps the full width. */
+@media (max-width: 800px) {
+  .panel-grid[data-layout="2"][data-display="side"] {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    column-gap: 0;
+    row-gap: 1px;
+  }
+  /* A head floating over a stacked phone map hid a third of it, and the fit centred the
+     world on the whole box, so the part left visible was the Southern Ocean. The head
+     becomes a compact strip above the map instead, so the fit measures only the map. */
+  .panel-head {
+    position: static;
+    gap: 0.15rem 0.3rem;
+    padding: 0.2rem 0.5rem;
+    min-height: 0;
+    background: var(--surface);
+    backdrop-filter: none;
+  }
+  .panel-head select {
+    height: 1.6rem;
+    min-width: 0;
+    padding: 0 0.25rem;
+    font-size: 0.75rem;
+  }
+  /* Both selects and the label share one line on a 390px phone; the badge takes the second. */
+  .panel-head .panel-dataset { max-width: 7.75rem; }
+  .panel-head .panel-variable { max-width: 10rem; }
+  .panel-forecast-label { font-size: 0.75rem; }
+  .panel-badge { font-size: 0.68rem; }
+  /* The first-visit note takes its own line above the maps, since at this width any
+     corner of the map it could sit in is part of a panel. */
+  .example-note {
+    position: static;
+    order: -1;
+    max-width: none;
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
+}
+
+/* The map column, not the window, decides how much the strip can ask for. As it
+   narrows the colour scale gives up width first, since it is a legend and the scrubber
+   beside it is a control. Narrower still, the status line stops painting, being the
+   only tertiary thing there; its track stays, since it is the half the scale is
+   centred against. */
+/* The whole scale cell narrows, not just the bar inside it: the cell is what the
+   scrubber's track is measured against, so if only its contents gave way the strip
+   would keep asking for the full 18rem. The legend follows the cell on its own. */
+@container (max-width: 700px) {
+  .dock-scale, .colorbar { width: 15rem; }
+  .dock-scale { --legend-height: 3.9rem; }
+}
+
+@container (max-width: 560px) {
+  .map-dock { gap: 0.6rem; }
+  .status { visibility: hidden; }
+  .dock-scale, .colorbar { width: 12rem; }
+  .dock-scale { --legend-height: 5.2rem; }
+}
+
+/* Below this the side tracks cannot pay for both a usable scrubber and the 12rem scale,
+   and the grid cells start painting over each other (390px phones). Stack the two lines
+   instead: the scrubber keeps its full width above the scale, and the hidden status
+   line stops reserving a row. */
+@container (max-width: 430px) {
+  .map-dock { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 0.45rem; }
+  .status { display: none; }
+  .lead-track { max-width: 14rem; }
+}
