@@ -6,15 +6,18 @@ import json
 from pathlib import Path
 import sys
 
+import jsonschema
 import numpy
 import pandas
+import pytest
 
 from oceanbench.core.classIV_support import format_class4_results
 from oceanbench.core.lagrangian_support import LAGRANGIAN_ROW_LABEL
 from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.metrics import MESSAGE_COLUMN
 from oceanbench.core.rmsd import MISSING_FRACTION_COLUMN, _variable_depth_label
-from oceanbench.core.scores import score_rows, write_scores_file
+from oceanbench.core.schema_validation import validate_against_schema
+from oceanbench.core.scores import SCORES_SCHEMA_VERSION, score_rows, write_scores_file
 
 WEBSITE_DIRECTORY = Path(__file__).resolve().parents[1] / "website"
 sys.path.insert(0, str(WEBSITE_DIRECTORY))
@@ -161,3 +164,18 @@ def test_write_scores_file_writes_missing_values_as_null(tmp_path):
     )
 
     assert [row["value"] for row in json.loads(path.read_text(encoding="utf-8"))["rows"]] == [11.027288, None]
+
+
+SAMPLE_SCORES_FILES = sorted(Path(__file__).parent.parent.joinpath("assets").glob("*.scores.json"))
+
+
+@pytest.mark.parametrize("path", SAMPLE_SCORES_FILES, ids=lambda path: path.name)
+def test_sample_scores_files_follow_the_scores_schema(path):
+    validate_against_schema(json.loads(path.read_text(encoding="utf-8")), f"scores-v{SCORES_SCHEMA_VERSION}")
+
+
+def test_scores_schema_rejects_an_unknown_schema_version():
+    document = json.loads(SAMPLE_SCORES_FILES[0].read_text(encoding="utf-8")) | {"schema_version": 2}
+
+    with pytest.raises(jsonschema.ValidationError):
+        validate_against_schema(document, f"scores-v{SCORES_SCHEMA_VERSION}")

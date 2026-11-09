@@ -20,6 +20,9 @@ Two scores files are comparable when they have the same `oceanbench_version`, th
 
 The file is a JSON object with these fields:
 
+`schema_version` (integer)
+:   The version of the file format, currently `1`. It is incremented on any change that breaks a reader of the previous version, and a reader must reject a version it does not know. See [Schema](#schema).
+
 `oceanbench_version` (string)
 :   The version of the `oceanbench` package that computed the scores, for example `"0.6.0"`.
 
@@ -92,12 +95,20 @@ A metric that could not be computed, for example Class IV scores for dates witho
 
 Rows follow the order of the metric functions in `timings`, then the order of the printed table rows, then the lead days. To find a score, match on `metric`, `reference`, `variable`, `depth` and `lead_day`: these five fields identify a row.
 
+## Schema
+
+The format is described by the JSON Schema [`scores-v1.schema.json`](/schemas/scores-v1.schema.json), published for each `schema_version` and never modified once released.
+`oceanbench evaluate` validates the file against it before writing it.
+Adding an optional field does not change the version.
+Removing or renaming a field, or changing its type or meaning, does.
+
 ## Example
 
 A shortened scores file of a GLONET sample:
 
 ``` json
 {
+  "schema_version": 1,
   "oceanbench_version": "0.6.0",
   "challenger": "glonet_sample",
   "region": {"id": "global", "display_name": "Global", "official": true, "bounds": null},

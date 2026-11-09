@@ -35,6 +35,7 @@ and the affected reports are re-published (never silently overwritten).
 ### Added
 
 - The `boto3`, `pyarrow`, `scikit-image` and `jsonschema` dependencies, now required by every install.
+- The scores file carries a `schema_version` (currently 1), and `oceanbench evaluate` validates it against the JSON Schema published at `https://oceanbench.edito.eu/schemas/scores-v1.schema.json`.
 - [Viewer](https://oceanbench.edito.eu/viewer.html) page on the website to explore forecast maps, water columns, Class IV match-ups and eddies, linked from the score tables.
 - [The scores file](https://oceanbench.edito.eu/documentation/scores-file/) and [Building the viewer data](https://oceanbench.edito.eu/documentation/viewer-data/) documentation pages.
 

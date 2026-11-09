@@ -24,8 +24,10 @@ from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.metrics import MESSAGE_COLUMN
 from oceanbench.core.regions import RegionSpec, region_to_dict
 from oceanbench.core.rmsd import MISSING_FRACTION_COLUMN
+from oceanbench.core.schema_validation import validate_against_schema
 from oceanbench.core.version import __version__
 
+SCORES_SCHEMA_VERSION = 1
 CLASS4_METRIC_FUNCTION_NAME = "rmsd_of_variables_compared_to_observations"
 METRIC_FUNCTION_NAMES = [
     "rmsd_of_variables_compared_to_glorys_reanalysis",
@@ -96,7 +98,8 @@ def scores_document(
     tables: dict[str, pandas.DataFrame],
     timings: dict[str, float],
 ) -> dict:
-    return {
+    document = {
+        "schema_version": SCORES_SCHEMA_VERSION,
         "oceanbench_version": __version__,
         "challenger": challenger_name,
         "region": region_to_dict(region),
@@ -112,6 +115,8 @@ def scores_document(
             row for metric_function_name, table in tables.items() for row in score_rows(metric_function_name, table)
         ],
     }
+    validate_against_schema(document, f"scores-v{SCORES_SCHEMA_VERSION}")
+    return document
 
 
 def write_scores_file(document: dict, path: str) -> None:

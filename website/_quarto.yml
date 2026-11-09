@@ -12,6 +12,7 @@ project:
   post-render:
     - python generate_report_redirects.py
     - python publish_scores.py
+    - python publish_schemas.py
     - python strip_index_from_links.py
   resources:
     - assets/land-110m.json
