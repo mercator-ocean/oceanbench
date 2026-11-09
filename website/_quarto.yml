@@ -32,6 +32,7 @@ project:
     - external-links.js
     - viewer/
     - "!viewer/qa/"
+    - news/posts/your-scores-on-the-website/BestModelEver.global.scores.json
 website:
   title: "OceanBench"
   description: "OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean datasets and observations."

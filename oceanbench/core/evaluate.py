@@ -29,6 +29,7 @@ from oceanbench.core.scores import (
     scores_file_name,
     write_scores_file,
 )
+from oceanbench.core.scores_page import scores_page_instructions, uploaded_scores_file_url
 
 
 def _parse_variable_environment(
@@ -229,6 +230,8 @@ def _evaluate_challenger(
     if output_bucket:
         _upload_scores_file(output_file_name, output_bucket, output_name)
     print(format_evaluation_timings(timings, output_name))
+    uploaded_url = uploaded_scores_file_url(output_bucket, output_name) if output_bucket else None
+    print(scores_page_instructions(output_file_name, uploaded_url))
     if viewer_artifacts_directory:
         # Imported here so that scoring alone does not load the viewer builder and its dependencies.
         from oceanbench.publish.viewer_data import build_viewer_data

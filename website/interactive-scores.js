@@ -205,17 +205,23 @@ function escapeAttribute(text) {
     .replace(/"/g, "&quot;");
 }
 
+const YOUR_SCORES_MARKER = "\u25C6";
+
+function noteMarker(name) {
+  return yourScores?.key === name ? YOUR_SCORES_MARKER : "*";
+}
+
 function displayNameHtml(name) {
   const note = challengerNote(name);
   if (!note) return displayName(name);
   return (
     `${displayName(name)}` +
-    `<span class="challenger-note-marker" title="${escapeAttribute(note)}">*</span>`
+    `<span class="challenger-note-marker" title="${escapeAttribute(note)}">${noteMarker(name)}</span>`
   );
 }
 
 function displayNameText(name) {
-  return challengerNote(name) ? `${displayName(name)} *` : displayName(name);
+  return challengerNote(name) ? `${displayName(name)} ${noteMarker(name)}` : displayName(name);
 }
 
 function buildChallengerNotesHtml(challengerNames) {
@@ -225,7 +231,7 @@ function buildChallengerNotesHtml(challengerNames) {
     const note = challengerNote(name);
     if (!note || seen.has(note)) continue;
     seen.add(note);
-    items += `<span class="challenger-note-entry">* ${note}</span>`;
+    items += `<span class="challenger-note-entry">${noteMarker(name)} ${note}</span>`;
   }
   if (!items) return "";
   return `<p class="challengers-table-note">${items}</p>`;
@@ -460,6 +466,11 @@ function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, bas
 }
 
 // A challenger published as a scores file links to that file, one published as a notebook to its report page.
+function modelNameLinkHtml(name, regionId) {
+  const href = reportHref(name, regionId);
+  return href ? `<a href="${href}">${displayNameHtml(name)}</a>` : displayNameHtml(name);
+}
+
 function reportHref(name, regionId) {
   return reportLinks[regionId][name];
 }
@@ -482,7 +493,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="${reportHref(name, regionId)}">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name, regionId)}</th>`;
+    rows += `<tr${rowClass}><th class="model-col">${modelNameLinkHtml(name, regionId)}${viewerModelLinkHtml(name, regionId)}</th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -538,7 +549,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="${reportHref(name, regionId)}">${displayNameHtml(name)}</a>${viewerModelLinkHtml(name, regionId)}</th>`;
+    rows += `<tr${rowClass}><th class="model-col">${modelNameLinkHtml(name, regionId)}${viewerModelLinkHtml(name, regionId)}</th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -932,6 +943,218 @@ function openExportDialog(exportFormat) {
   dialog.showModal();
 }
 
+const YOUR_SCORES_URL_PARAMETER = "scores";
+const YOUR_SCORES_MAXIMUM_BYTES = 20 * 1024 * 1024;
+const YOUR_SCORES_NOTE = "Computed locally and loaded in this page. It is not part of the published scores.";
+const YOUR_SCORES_CATEGORY = "model";
+
+let yourScores = null;
+let yourScoresUrl = null;
+let requestedYourScoresUrl = null;
+
+function yourScoresApi() {
+  return window.OceanBenchYourScores;
+}
+
+function publishedTables(regionData) {
+  return Object.values(regionData.challengers)
+    .flatMap((scores) => Object.entries(scores))
+    .reduce((tables, [metricKey, score]) => {
+      const depths = tables[metricKey] || {};
+      const merged = Object.fromEntries(
+        Object.entries(score.depths).map(([depth, depthScore]) => [
+          depth,
+          new Set([...(depths[depth] || []), ...Object.keys(depthScore.variables)]),
+        ]),
+      );
+      return { ...tables, [metricKey]: { ...depths, ...merged } };
+    }, {});
+}
+
+function keepPublishedTables(scores, tables) {
+  const keptVariables = (metricKey, depth, variables) =>
+    Object.fromEntries(
+      Object.entries(variables).filter(([variable]) => tables[metricKey]?.[depth]?.has(variable)),
+    );
+  return Object.fromEntries(
+    Object.entries(scores)
+      .map(([metricKey, score]) => [
+        metricKey,
+        {
+          ...score,
+          depths: Object.fromEntries(
+            Object.entries(score.depths)
+              .map(([depth, depthScore]) => [depth, { variables: keptVariables(metricKey, depth, depthScore.variables) }])
+              .filter(([, depthScore]) => Object.keys(depthScore.variables).length > 0),
+          ),
+        },
+      ])
+      .filter(([, score]) => Object.keys(score.depths).length > 0),
+  );
+}
+
+function removeYourScores() {
+  if (!yourScores) return;
+  const versionData = parsedData.versions[yourScores.version];
+  const regionData = versionData.regions[yourScores.region];
+  delete regionData.challengers[yourScores.key];
+  regionData.challenger_names = regionData.challenger_names.filter((name) => name !== yourScores.key);
+  delete versionData.challenger_labels[yourScores.key];
+  delete versionData.challenger_notes[yourScores.key];
+  delete versionData.challenger_categories[yourScores.key];
+  yourScores = null;
+  yourScoresUrl = null;
+}
+
+function describeYourScores(document) {
+  const dates = document.start_dates;
+  return (
+    `${document.challenger}: ${dates.length} forecast start date${dates.length > 1 ? "s" : ""}, ` +
+    `${dates[0]} to ${dates[dates.length - 1]}, ${document.lead_days_count} lead days. ` +
+    "The comparison is only meaningful when the published scores use the same start dates."
+  );
+}
+
+function injectYourScores(document, scores, versionData) {
+  const key = yourScoresApi().yourScoresKey(document.challenger);
+  const regionData = versionData.regions[document.region.id];
+  regionData.challengers[key] = scores;
+  regionData.challenger_names = [...regionData.challenger_names, key];
+  versionData.challenger_labels = { ...versionData.challenger_labels, [key]: escapeAttribute(document.challenger) };
+  versionData.challenger_notes = { ...versionData.challenger_notes, [key]: YOUR_SCORES_NOTE };
+  versionData.challenger_categories = { ...versionData.challenger_categories, [key]: YOUR_SCORES_CATEGORY };
+  return key;
+}
+
+function failure(text) {
+  return { ok: false, text };
+}
+
+async function showYourScores(document, sourceUrl) {
+  const errors = yourScoresApi().scoresFileErrors(document);
+  if (errors.length > 0) return failure(`Not a valid scores file: ${errors.join("; ")}.`);
+  const data = ensureParsedData();
+  const versions = getVersions(data);
+  if (!versions.includes(document.oceanbench_version)) {
+    return failure(
+      `No scores are published for OceanBench ${document.oceanbench_version} (published: ${versions.join(", ")}). ` +
+        "Evaluate with a published version to compare.",
+    );
+  }
+  const previousVersion = activeVersion;
+  activeVersion = document.oceanbench_version;
+  await ensureActiveVersionLoaded();
+  const versionData = getActiveVersionData(data);
+  const regionData = versionData.regions[document.region.id];
+  if (!regionData) {
+    activeVersion = previousVersion;
+    return failure(
+      `Region "${document.region.id}" has no published scores in version ${document.oceanbench_version} ` +
+        `(published: ${Object.keys(versionData.regions).join(", ")}).`,
+    );
+  }
+  removeYourScores();
+  const tables = publishedTables(regionData);
+  const scores = keepPublishedTables(yourScoresApi().scoresFileToModelScores(document, ""), tables);
+  const key = injectYourScores(document, scores, versionData);
+  yourScores = { key, version: document.oceanbench_version, region: document.region.id, message: describeYourScores(document) };
+  yourScoresUrl = sourceUrl;
+  activeRegion = document.region.id;
+  activeTrack = trackKeyForChallenger(key);
+  applyActiveVersion();
+  renderAllTables();
+  return { ok: true, text: yourScores.message };
+}
+
+function parseYourScoresText(text) {
+  try {
+    return { document: JSON.parse(text) };
+  } catch {
+    return { failureResult: failure("The file is not valid JSON.") };
+  }
+}
+
+async function loadYourScoresText(text, sourceUrl) {
+  const { document, failureResult } = parseYourScoresText(text);
+  if (failureResult) return failureResult;
+  try {
+    return await showYourScores(document, sourceUrl);
+  } catch (error) {
+    console.error(error);
+    return failure("The published scores of this version could not be loaded.");
+  }
+}
+
+async function loadYourScoresFile(file) {
+  if (file.size > YOUR_SCORES_MAXIMUM_BYTES) return failure("The file is larger than 20 MB.");
+  return loadYourScoresText(await file.text(), null);
+}
+
+async function loadYourScoresUrl(url) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return failure(`Could not download the file: HTTP ${response.status}.`);
+    return loadYourScoresText(await response.text(), url);
+  } catch {
+    return failure("Could not download the file. A file on S3 must be public and allow cross-origin reads (CORS).");
+  }
+}
+
+function yourScoresDialogElement() {
+  const existing = document.getElementById("your-scores-dialog");
+  if (existing) return existing;
+  const dialog = document.createElement("dialog");
+  dialog.id = "your-scores-dialog";
+  dialog.innerHTML = `
+    <form method="dialog" class="export-dialog-close"><button type="submit" aria-label="Close">&times;</button></form>
+    <h3>Add your scores</h3>
+    <p>Show the scores file written by <code>oceanbench evaluate</code> next to the published scores of the same OceanBench version and region.
+    The file is read in your browser and is not uploaded. See <a href="documentation/scores-file/">The scores file</a>.</p>
+    <label class="your-scores-field">Scores file
+      <input type="file" id="your-scores-file" accept=".json,application/json"></label>
+    <form id="your-scores-url-form" class="your-scores-field">
+      <label for="your-scores-url">or a public URL</label>
+      <input type="url" id="your-scores-url" placeholder="https://.../challenger.global.scores.json" required>
+      <button type="submit" class="export-action export-action--primary">Load</button>
+    </form>
+    <p id="your-scores-status" role="status" aria-live="polite"></p>`;
+  const status = dialog.querySelector("#your-scores-status");
+  const report = (result) => {
+    status.textContent = result.text;
+    status.dataset.level = result.ok ? "success" : "error";
+    if (result.ok) dialog.close();
+  };
+  dialog.querySelector("#your-scores-file").addEventListener("change", (event) => {
+    const [file] = event.target.files;
+    if (file) loadYourScoresFile(file).then(report);
+  });
+  dialog.querySelector("#your-scores-url-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    loadYourScoresUrl(dialog.querySelector("#your-scores-url").value.trim()).then(report);
+  });
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  document.body.appendChild(dialog);
+  return dialog;
+}
+
+function buildYourScoresChips() {
+  const open = '<button type="button" class="selector-chip" data-your-scores="open" aria-haspopup="dialog">Add a scores file</button>';
+  const remove = yourScores
+    ? `<button type="button" class="selector-chip active" data-your-scores="remove" title="Remove your scores">${displayName(yourScores.key)} &times;</button>`
+    : "";
+  return `<div class="selector-chips" role="group" aria-label="Your scores">${open}${remove}</div>`;
+}
+
+function loadYourScoresFromLocation() {
+  const url = requestedYourScoresUrl;
+  if (!url) return;
+  loadYourScoresUrl(url).then((result) => {
+    if (!result.ok) console.error(result.text);
+  });
+}
+
 function buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks) {
   if (regionIds.length === 0) return "";
 
@@ -956,6 +1179,7 @@ function buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks) {
     controls += buildSelectorRow("Track", trackChips, TRACK_NOTES[activeTrack], "selector-description--track");
   }
   controls += buildSelectorRow("Export", buildExportChips(), "");
+  controls += buildSelectorRow("Your scores", buildYourScoresChips(), escapeAttribute(yourScores?.message || ""));
 
   let markup = '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
   markup += `<div class="region-selector-controls">${controls}</div>`;
@@ -1512,7 +1736,18 @@ function attachSelectorListeners() {
   document.querySelectorAll("#region-selector [data-export-format]").forEach((button) => {
     button.addEventListener("click", () => openExportDialog(button.dataset.exportFormat));
   });
-  document.querySelectorAll("#region-selector .selector-chip").forEach((chip) => {
+  document.querySelectorAll("#region-selector [data-your-scores]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.yourScores === "open") {
+        yourScoresDialogElement().showModal();
+        return;
+      }
+      removeYourScores();
+      applyActiveVersion();
+      renderAllTables();
+    });
+  });
+  document.querySelectorAll("#region-selector .selector-chip[data-region], #region-selector .selector-chip[data-track]").forEach((chip) => {
     chip.addEventListener("click", () => {
       const { region, track } = chip.dataset;
       if (region && region !== activeRegion) {
@@ -1884,6 +2119,7 @@ function renderAllTables() {
 
 function applyUrlStateFromLocation() {
   const parameters = new URLSearchParams(window.location.search);
+  requestedYourScoresUrl = parameters.get(YOUR_SCORES_URL_PARAMETER);
 
   const versionParameter = parameters.get("version");
   if (versionParameter) activeVersion = versionParameter;
@@ -1946,6 +2182,9 @@ function writeUrlState() {
   }
   if (maxScale !== 80) {
     parameters.set("scale", `${maxScale}`);
+  }
+  if (yourScoresUrl) {
+    parameters.set(YOUR_SCORES_URL_PARAMETER, yourScoresUrl);
   }
 
   const queryString = parameters.toString();
@@ -2062,6 +2301,7 @@ function init() {
     .then(() => {
       applyActiveVersion();
       renderAllTables();
+      loadYourScoresFromLocation();
       if (initialSection) {
         navigateToSection(initialSection, { replaceHistory: true, updateHash: true });
       }

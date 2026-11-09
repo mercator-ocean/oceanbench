@@ -202,5 +202,6 @@ Implemented by [Mercator Ocean International](https://www.mercator-ocean.eu/).
 <script src="vendor/d3-geo.v3.min.js"></script>
 <script src="vendor/topojson-client.v3.min.js"></script>
 <script src="region-globe.js"></script>
+<script src="your-scores.js"></script>
 <script src="interactive-scores.js"></script>
 ```

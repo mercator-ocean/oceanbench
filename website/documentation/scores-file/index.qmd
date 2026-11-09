@@ -161,6 +161,28 @@ A shortened scores file of a GLONET sample:
 
 The scores files of the sample challengers are in the `assets` directory of the repository. They were converted from the 0.6.0 report notebooks, so their values keep 6 decimal places.
 
+## Show your scores on the Scores page
+
+On the [Scores page](/index.qmd), the **Your scores** row adds your scores file as a row of the score tables, next to the published scores.
+
+![The Your scores row of the Scores page.](your-scores-button.png)
+
+Choose a file on your computer, or give the public URL of a file, for example on S3 (the bucket must allow cross-origin reads).
+
+![The dialog to choose a scores file or give its URL.](your-scores-dialog.png)
+
+The file is read in your browser and is never uploaded.
+`oceanbench evaluate` prints these instructions when it finishes, with a ready-to-open link when the file was uploaded to a public bucket with `--output-bucket`.
+Your system is marked with ◆ in the tables.
+
+![A system added to the score tables.](your-scores-table.png)
+
+To share the view, open the Scores page with `?scores=<URL of the file>`.
+
+The page shows the published scores of the `oceanbench_version` and the `region` of your file, and ignores rows it has no table for.
+A scores file is only comparable with the published scores when it has the same forecast start dates: the page prints the start dates of your file under the row.
+It rejects a file with an unknown `schema_version`, or from an OceanBench version or region without published scores.
+
 ## Reading a scores file
 
 With pandas:
