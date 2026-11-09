@@ -602,7 +602,7 @@ def hclimrep(first_day_datetimes: list[datetime] | None = None) -> xarray.Datase
       * latitude            (latitude) float64 5kB -78.0 -77.75 -77.5 ... 89.5 89.75
       * longitude           (longitude) float64 12kB -180.0 -179.8 ... 179.5 179.8
       * lead_day_index      (lead_day_index) int64 80B 0 1 2 3 4 5 6 7 8 9
-      * first_day_datetime  (first_day_datetime) datetime64[us] 416B 2024-01-03 ....
+      * first_day_datetime  ...
     Data variables:
         so                  (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1, 672, 1440), meta=np.ndarray>
         thetao              (first_day_datetime, lead_day_index, depth, latitude, longitude) float32 18GB dask.array<chunksize=(1, 1, 1, 672, 1440), meta=np.ndarray>
@@ -643,7 +643,7 @@ def hclimrep_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarr
     Coordinates:
       * depth                            (depth) float64 72B 0.494 47.37 ... 541.1
       * lead_day_index                   (lead_day_index) int64 80B 0 1 2 ... 7 8 9
-      * first_day_datetime               (first_day_datetime) datetime64[us] 416B ...
+      * first_day_datetime               ...
       * latitude                         (latitude) float64 1kB -77.5 -76.5 ... 89.5
       * longitude                        (longitude) float64 3kB -179.5 ... 179.5
     Data variables:
