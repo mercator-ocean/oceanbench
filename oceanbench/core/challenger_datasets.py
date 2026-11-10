@@ -204,7 +204,7 @@ def hclimrep_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarr
 
 def _hclimrep_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
-    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/hclimrep/{start_datetime_string}.zarr"
+    return f"{_CLOUDFERRO_ML_FORECASTS_URL}/hclimrep/v2/{start_datetime_string}.zarr"
 
 
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:
