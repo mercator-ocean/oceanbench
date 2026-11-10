@@ -420,12 +420,12 @@ function fetchViewerJson(path) {
   });
 }
 
-// The data root comes from the viewer's own config, so both pages read one catalog. Its
-// optional viewer-config.json side-car is not read here: it sits beside viewer/index.html,
-// and the config module would look for it beside this page instead.
+// The data root comes from the viewer's own config, including its optional
+// viewer-config.json side-car, so both pages read one catalog.
 function loadViewerCatalog() {
   import("./viewer/config.js")
-    .then((config) => {
+    .then(async (config) => {
+      await config.initializeViewerConfig();
       resolveViewerUrl = config.resolveViewerDataUrl;
       return Promise.all([fetchViewerJson("./data/datasets.json"), fetchViewerJson("./data/insights.json")]);
     })

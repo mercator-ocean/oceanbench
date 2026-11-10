@@ -97,7 +97,9 @@ A minor release changes the scores, so every official challenger is evaluated ag
 `make launch-release-candidate RELEASE_VERSION=0.7.0rc1 GIT_REFERENCE=<branch or tag>` starts one EDITO process per challenger and region (`ONLY="glonet.global xihe.ibi"` selects some of them, `RUN_MODE=dry` checks the setup without evaluating).
 It needs `EDITO_OFFLINE_TOKEN` or `EDITO_ACCESS_TOKEN`, the `AWS_*` S3 variables and the Copernicus Marine credentials in the environment.
 Each process writes its scores file under `public/evaluation-reports/<version>/` and its viewer data under `viewer/data-<version>/` of the OceanBench bucket.
-When every process has finished, `make assemble-release-candidate RELEASE_VERSION=0.7.0rc1 GIT_REFERENCE=<branch or tag>` merges their viewer index files.
+When every process has finished, `make assemble-release-candidate RELEASE_VERSION=0.7.0rc1` merges their viewer index files, and `make publish-report-index-release-candidate RELEASE_VERSION=0.7.0rc1` writes a report index that lists the release candidate as the default version, next to the published one, which stays untouched.
+`make deploy-website-release-candidate RELEASE_VERSION=0.7.0rc1 GIT_REFERENCE=<branch or tag>` serves a website on EDITO built on that index and on the viewer data of the release candidate.
+The "Release candidate" GitHub workflow runs each of these steps with the repository secrets.
 
 ## Website life cycle
 

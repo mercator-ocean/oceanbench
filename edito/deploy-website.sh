@@ -30,6 +30,7 @@ readonly GIT_TOKEN="${GIT_TOKEN:-}"
 readonly EDITO_ACCESS_TOKEN="${EDITO_ACCESS_TOKEN:-}"
 readonly EDITO_OFFLINE_TOKEN="${EDITO_OFFLINE_TOKEN:-}"
 readonly EXPECTED_CONTENT="${EXPECTED_CONTENT:-OceanBench}"
+readonly BUILD_ARGUMENTS="${BUILD_ARGUMENTS:-}"
 readonly CPU_REQUEST="${CPU_REQUEST:-100m}"
 readonly MEMORY_REQUEST="${MEMORY_REQUEST:-1Gi}"
 readonly CPU_LIMIT="${CPU_LIMIT:-1000m}"
@@ -87,6 +88,7 @@ launch_request_body() {
     --arg token "${GIT_TOKEN}" \
     --arg hostname "${SERVICE_HOSTNAME}" \
     --arg buildScriptPath "${BUILD_SCRIPT_PATH}" \
+    --arg buildArguments "${BUILD_ARGUMENTS}" \
     --arg cpuRequest "${CPU_REQUEST}" \
     --arg memoryRequest "${MEMORY_REQUEST}" \
     --arg cpuLimit "${CPU_LIMIT}" \
@@ -105,7 +107,7 @@ launch_request_body() {
                 automated_update: {enabled: true},
                 ingress: {enabled: true, hostname: $hostname},
                 environment_variables: [],
-                build: {scriptPath: $buildScriptPath, args: ""},
+                build: {scriptPath: $buildScriptPath, args: $buildArguments},
                 catalogType: "Service"
             },
             dryRun: false

@@ -81,7 +81,7 @@ publishResolvedBase();
  */
 export async function initializeViewerConfig() {
   try {
-    const response = await fetch(new URL(VIEWER_CONFIG_FILE, window.location.href).href, { cache: "no-cache" });
+    const response = await fetch(new URL(VIEWER_CONFIG_FILE, import.meta.url).href, { cache: "no-cache" });
     if (!response.ok) return;
     const parsed = await response.json();
     if (!parsed || typeof parsed !== "object") return;

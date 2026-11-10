@@ -21,8 +21,10 @@ from release_candidate import (  # noqa: E402
     official_challengers,
     process_payload,
     release_jobs,
+    report_index_with_release,
     resource_class,
     viewer_file_destination,
+    website_build_arguments,
 )
 
 RELEASE = Release(version="0.7.0rc1", git_reference="release-candidate-pipeline")
@@ -93,6 +95,26 @@ def test_index_files_are_uploaded_as_fragments_of_their_job_and_other_files_in_p
         == f"{viewer_prefix}/insights/xihe/ibi/insights.json"
     )
     assert viewer_file_destination(viewer_prefix, job, Path("xihe.zarr/.zmetadata")) == f"{viewer_prefix}/xihe.zarr/.zmetadata"
+
+
+def test_the_release_candidate_becomes_the_default_version_of_its_own_report_index_only():
+    published_index = {"default": "0.6.0", "versions": {"0.6.0": {"challengers": ["glo12"]}}}
+
+    index = report_index_with_release(published_index, RELEASE, ["xihe", "glonet"])
+
+    assert index["default"] == "0.7.0rc1"
+    assert index["versions"]["0.7.0rc1"] == {"challengers": ["glonet", "xihe"]}
+    assert index["versions"]["0.6.0"] == {"challengers": ["glo12"]}
+    assert published_index["default"] == "0.6.0"
+    assert RELEASE.report_index_key() == "public/evaluation-reports/index-0.7.0rc1.json"
+
+
+def test_the_website_is_built_on_the_index_and_viewer_data_of_the_release_candidate():
+    arguments = website_build_arguments(RELEASE)
+
+    assert f"--report-index-url={RELEASE.report_index_url()}" in arguments
+    assert f"--viewer-data-url={RELEASE.viewer_data_url()}" in arguments
+    assert RELEASE.viewer_data_url().endswith("/viewer/data-0.7.0rc1/")
 
 
 class FakeBody:

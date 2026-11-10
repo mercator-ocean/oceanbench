@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Release candidate
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: 'launch starts the evaluations on EDITO, assemble merges the viewer index files once they have finished, publish-report-index lists the release candidate on its own report index, deploy-website serves it on EDITO.'
+        required: true
+        type: choice
+        options:
+          - launch
+          - assemble
+          - publish-report-index
+          - deploy-website
+      releaseVersion:
+        description: 'Release candidate version, for example 0.7.0rc1.'
+        required: true
+        type: string
+      gitReference:
+        description: 'Branch or tag the evaluations and the website are built from.'
+        required: true
+        default: main
+        type: string
+      only:
+        description: 'launch only: space-separated <challenger>.<region> jobs, for example "glonet_1_degree.global". Empty launches every job.'
+        required: false
+        default: ''
+        type: string
+      runMode:
+        description: 'launch only: full evaluates, dry only checks the EDITO setup.'
+        required: false
+        default: full
+        type: choice
+        options:
+          - full
+          - dry
+concurrency:
+  group: release-candidate-${{ inputs.releaseVersion }}-${{ inputs.step }}
+jobs:
+  release-candidate:
+    runs-on: self-hosted
+    timeout-minutes: 60
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.gitReference }}
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '1.5.6-0'
+          micromamba-binary-path: ${{ runner.temp }}/bin/micromamba
+          environment-file: conda_environment_test.yaml
+          environment-name: oceanbench_release_candidate_${{ github.run_id }}
+          condarc-file: .condarc
+          cache-environment: true
+          post-cleanup: 'all'
+      - name: Run the step
+        env:
+          COPERNICUSMARINE_SERVICE_USERNAME: ${{ secrets.COPERNICUSMARINE_SERVICE_USERNAME }}
+          COPERNICUSMARINE_SERVICE_PASSWORD: ${{ secrets.COPERNICUSMARINE_SERVICE_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.AWS_S3_ENDPOINT }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          EDITO_ACCESS_TOKEN: ${{ secrets.EDITO_ACCESS_TOKEN }}
+          EDITO_OFFLINE_TOKEN: ${{ secrets.EDITO_OFFLINE_TOKEN }}
+          TEST_ENVIRONMENT_NAME: oceanbench_release_candidate_${{ github.run_id }}
+          RELEASE_VERSION: ${{ inputs.releaseVersion }}
+          GIT_REFERENCE: ${{ inputs.gitReference }}
+          ONLY: ${{ inputs.only }}
+          RUN_MODE: ${{ inputs.runMode }}
+          STEP: ${{ inputs.step }}
+        run: make "${STEP}-release-candidate"
+        shell: micromamba-shell {0}

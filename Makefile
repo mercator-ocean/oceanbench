@@ -125,7 +125,22 @@ assemble-release-candidate: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 assemble-release-candidate:
 	${ACTIVATE_ENVIRONMENT}
 	pip install --editable .
-	python edito/release_candidate.py assemble --release-version ${RELEASE_VERSION} --git-reference ${GIT_REFERENCE}
+	python edito/release_candidate.py assemble --release-version ${RELEASE_VERSION}
+
+publish-report-index-release-candidate: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+publish-report-index-release-candidate:
+	${ACTIVATE_ENVIRONMENT}
+	pip install --editable .
+	python edito/release_candidate.py publish-report-index --release-version ${RELEASE_VERSION}
+
+deploy-website-release-candidate: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+deploy-website-release-candidate:
+	${ACTIVATE_ENVIRONMENT}
+	pip install --editable .
+	BRANCH=${GIT_REFERENCE} \
+	SERVICE_BRANCH=release-candidate-${RELEASE_VERSION} \
+	BUILD_ARGUMENTS="$$(python edito/release_candidate.py website-build-arguments --release-version ${RELEASE_VERSION})" \
+	./edito/deploy-website.sh
 
 NRT_WEBSITE_BRANCH := $(or $(NRT_WEBSITE_BRANCH),272-2-nrt-for-demo)
 NRT_WEBSITE_SERVICE_NAME := oceanbench-nrt-demo

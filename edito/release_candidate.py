@@ -39,6 +39,7 @@ CODE_SOURCE_SCRIPT = "My code is based on a Python or Shell script"
 EXECUTION_TARGET_EDITO = "My process should execute on EDITO Cloud"
 CHALLENGER_DIRECTORY = REPOSITORY_DIRECTORY / "challenger_datasets"
 OUTPUT_BUCKET = "oceanbench-bucket"
+PUBLIC_BUCKET_URL = f"https://s3.waw3-1.cloudferro.com/{OUTPUT_BUCKET}"
 REPORTS_ROOT_PREFIX = "public/evaluation-reports"
 VIEWER_ROOT_PREFIX = "viewer"
 FRAGMENTS_DIRECTORY = "fragments"
@@ -85,6 +86,15 @@ class Release:
 
     def viewer_prefix(self) -> str:
         return f"{VIEWER_ROOT_PREFIX}/data-{self.version}"
+
+    def report_index_key(self) -> str:
+        return f"{REPORTS_ROOT_PREFIX}/index-{self.version}.json"
+
+    def report_index_url(self) -> str:
+        return f"{PUBLIC_BUCKET_URL}/{self.report_index_key()}"
+
+    def viewer_data_url(self) -> str:
+        return f"{PUBLIC_BUCKET_URL}/{self.viewer_prefix()}/"
 
 
 def challenger_regions(challenger: str) -> tuple[str, ...]:
@@ -269,6 +279,36 @@ def assemble(client, bucket: str, viewer_prefix: str) -> dict[str, int]:
     return counts
 
 
+def report_index_with_release(index: dict, release: Release, challengers: list[str]) -> dict:
+    """The published report index, with the release candidate added and made the default version."""
+    return {
+        **index,
+        "default": release.version,
+        "versions": {**index["versions"], release.version: {"challengers": sorted(challengers)}},
+    }
+
+
+def current_report_index() -> dict:
+    response = requests.get(f"{PUBLIC_BUCKET_URL}/{REPORTS_ROOT_PREFIX}/index.json", timeout=HTTP_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    return response.json()
+
+
+def publish_report_index(client, bucket: str, release: Release, challengers: list[str]) -> str:
+    index = report_index_with_release(current_report_index(), release, challengers)
+    client.put_object(
+        Bucket=bucket,
+        Key=release.report_index_key(),
+        Body=json.dumps(index, indent=2).encode("utf-8"),
+        ContentType="application/json",
+    )
+    return release.report_index_url()
+
+
+def website_build_arguments(release: Release) -> str:
+    return f"--report-index-url={release.report_index_url()} --viewer-data-url={release.viewer_data_url()}"
+
+
 def release_from_arguments(arguments: argparse.Namespace) -> Release:
     return Release(version=arguments.release_version, git_reference=arguments.git_reference)
 
@@ -276,10 +316,10 @@ def release_from_arguments(arguments: argparse.Namespace) -> Release:
 def command_line_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subcommands = parser.add_subparsers(dest="command", required=True)
-    for name in ("launch", "assemble"):
+    for name in ("launch", "assemble", "publish-report-index", "website-build-arguments"):
         subcommand = subcommands.add_parser(name)
         subcommand.add_argument("--release-version", required=True)
-        subcommand.add_argument("--git-reference", required=True)
+        subcommand.add_argument("--git-reference", required=name == "launch", default="")
     launch_parser = subcommands.choices["launch"]
     launch_parser.add_argument("--only", nargs="*", default=[], help="Jobs as <challenger>.<region>")
     launch_parser.add_argument("--run-mode", type=RunMode, choices=list(RunMode), default=RunMode.FULL)
@@ -300,6 +340,10 @@ def run_command(arguments: argparse.Namespace) -> None:
             launch(release, arguments.only, arguments.run_mode, environment)
         case "assemble":
             print(assemble(s3_client(environment), OUTPUT_BUCKET, release.viewer_prefix()))
+        case "publish-report-index":
+            print(publish_report_index(s3_client(environment), OUTPUT_BUCKET, release, official_challengers()))
+        case "website-build-arguments":
+            print(website_build_arguments(release))
         case "upload-viewer-data":
             job = Job(arguments.challenger, arguments.region)
             upload_viewer_data(s3_client(environment), arguments.directory, OUTPUT_BUCKET, release.viewer_prefix(), job)

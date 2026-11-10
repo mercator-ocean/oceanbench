@@ -12,7 +12,8 @@ from helpers.published_regions import published_region_ids
 
 S3_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
 REPORTS_ROOT_PREFIX = "public/evaluation-reports"
-REPORT_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
+REPORT_INDEX_URL_VARIABLE = "OCEANBENCH_REPORT_INDEX_URL"
+REPORT_INDEX_URL = os.environ.get(REPORT_INDEX_URL_VARIABLE) or f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
 REPORT_NOTEBOOK_FILE_NAME = "index.ipynb"
 SCORES_FILE_SUFFIX = ".scores.json"
 NOTEBOOK_SUFFIX = ".report.ipynb"
