@@ -38,6 +38,7 @@ from oceanbench.publish.viewer_artifacts import (
     confidence_interval,
     write_viewer_artifacts,
 )
+from oceanbench.publish.viewer_index_merge import summary_sort_key
 
 DATASETS_FILENAME = "datasets.json"
 INSIGHTS_FILENAME = "insights.json"
@@ -162,20 +163,6 @@ def scores_summary_rows(
     return rows
 
 
-def _summary_sort_key(row: dict) -> tuple:
-    return (
-        row["challenger"],
-        row["year"],
-        row["region"],
-        row["metric"],
-        row["reference"],
-        row["variable"],
-        row["depth"] is None,
-        row["depth"] or "",
-        row["lead_day"],
-    )
-
-
 def _read_json(path: Path, default):
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
 
@@ -221,7 +208,7 @@ def update_viewer_indexes(
             for row in _read_json(summary_path, [])
             if (row["challenger"], row["region"]) != (dataset_slug, region.id)
         ]
-        summary_path.write_text(json.dumps(sorted(kept_rows + summary_rows, key=_summary_sort_key)), encoding="utf-8")
+        summary_path.write_text(json.dumps(sorted(kept_rows + summary_rows, key=summary_sort_key)), encoding="utf-8")
     finally:
         os.close(directory_descriptor)
 

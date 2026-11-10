@@ -91,6 +91,14 @@ make release-minor
 make release-patch
 ```
 
+### Release candidates
+
+A minor release changes the scores, so every official challenger is evaluated again, on a release candidate first (for example `0.7.0rc1`).
+`make launch-release-candidate RELEASE_VERSION=0.7.0rc1 GIT_REFERENCE=<branch or tag>` starts one EDITO process per challenger and region (`ONLY="glonet.global xihe.ibi"` selects some of them, `RUN_MODE=dry` checks the setup without evaluating).
+It needs `EDITO_OFFLINE_TOKEN` or `EDITO_ACCESS_TOKEN`, the `AWS_*` S3 variables and the Copernicus Marine credentials in the environment.
+Each process writes its scores file under `public/evaluation-reports/<version>/` and its viewer data under `viewer/data-<version>/` of the OceanBench bucket.
+When every process has finished, `make assemble-release-candidate RELEASE_VERSION=0.7.0rc1 GIT_REFERENCE=<branch or tag>` merges their viewer index files.
+
 ## Website life cycle
 
 The website source code is under the `website` directory.

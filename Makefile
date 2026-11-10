@@ -113,6 +113,20 @@ deploy-website-locally:
 deploy-website-on-edito:
 	./edito/deploy-website.sh
 
+RUN_MODE ?= full
+
+launch-release-candidate: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+launch-release-candidate:
+	${ACTIVATE_ENVIRONMENT}
+	pip install --editable .
+	python edito/release_candidate.py launch --release-version ${RELEASE_VERSION} --git-reference ${GIT_REFERENCE} --run-mode ${RUN_MODE} --only ${ONLY}
+
+assemble-release-candidate: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+assemble-release-candidate:
+	${ACTIVATE_ENVIRONMENT}
+	pip install --editable .
+	python edito/release_candidate.py assemble --release-version ${RELEASE_VERSION} --git-reference ${GIT_REFERENCE}
+
 NRT_WEBSITE_BRANCH := $(or $(NRT_WEBSITE_BRANCH),272-2-nrt-for-demo)
 NRT_WEBSITE_SERVICE_NAME := oceanbench-nrt-demo
 NRT_WEBSITE_MEMORY_LIMIT := 10Gi
