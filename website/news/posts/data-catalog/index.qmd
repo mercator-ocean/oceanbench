@@ -15,18 +15,14 @@ The datasets that the `oceanbench` library uses are now described in the [OceanB
 
 ## What you find
 
-The catalog follows the [STAC](https://stacspec.org) specification and groups the datasets in four collections:
-
-- **Challengers**: forecasts of the evaluated ocean forecasting systems, and baselines,
-- **References**: analyses, reanalyses, observations and static fields that challengers are compared against,
-- **Inputs**: initial states and forcings that challengers use to produce their forecasts,
-- **Training**: datasets to train ocean forecasting systems on, without overlapping the evaluation period.
+The catalog follows the [STAC](https://stacspec.org) specification and groups the datasets by origin: one collection per top-level directory of the OceanBench bucket, and one for Copernicus Marine.
+It is rebuilt automatically from the bucket content and from the `oceanbench` source code.
 
 Each dataset is described by an item with:
 
 - its spatial and temporal extent, dimensions and variables, with CF standard names and units,
 - Python examples to open it, with the [`oceanbench` datasets API](/documentation/api/index.qmd) or the Copernicus Marine Toolbox,
-- the `oceanbench:library_usage` property, telling whether the `oceanbench` library uses it.
+- the `oceanbench:library_usage` and `oceanbench:library_functions` properties, telling whether the `oceanbench` library uses it and which functions lead to it.
 
 ## Query it from Python
 

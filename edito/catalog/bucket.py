@@ -27,6 +27,9 @@ LISTING_RETRIES = 5
 LISTING_RETRY_BACKOFF_SECONDS = 1
 LISTING_RETRIED_STATUSES = (500, 502, 503, 504)
 OBJECT_COUNT_SPLIT_DEPTH = 4
+PARTITION_DIRECTORY_PATTERN = re.compile(r"\d{4}(\d{2}(\d{2})?)?")
+DATASET_DISCOVERY_DEPTH = 6
+DATA_FILE_SUFFIXES = (".nc", ".parquet", ".csv", ".jsonl", ".tar", ".dat", ".npy", ".npz")
 OBJECT_COUNT_PARALLEL_LISTINGS = 32
 _OBJECT_KEY_TAG = b"<Key>"
 _TRUNCATED_TAG = b"<IsTruncated>true</IsTruncated>"
@@ -106,13 +109,56 @@ def list_bucket_objects(prefix: str, depth: int) -> tuple[BucketObject, ...]:
     return tuple(sorted((*stores, *files, *subdirectory_objects), key=lambda bucket_object: bucket_object.key))
 
 
-@cache
-def list_bucket_directories(prefix: str, depth: int) -> tuple[str, ...]:
-    directory_keys = tuple(key for key in _list_directory(prefix)[0] if not _is_zarr_store(key))
-    subdirectory_keys = (
-        chain.from_iterable(list_bucket_directories(key, depth - 1) for key in directory_keys) if depth > 1 else ()
+def list_dataset_directories() -> tuple[str, ...]:
+    """
+    Find every bucket directory directly holding Zarr stores or data files, without opening them.
+    """
+    with ThreadPoolExecutor(max_workers=OBJECT_COUNT_PARALLEL_LISTINGS) as pool:
+        return tuple(sorted(set(map(_dataset_root, _dataset_directories(pool, ("",), DATASET_DISCOVERY_DEPTH)))))
+
+
+def list_dataset_objects(prefix: str) -> tuple[BucketObject, ...]:
+    directory_keys, files = _list_directory(prefix)
+    stores = tuple(_zarr_store(key) for key in directory_keys if _is_zarr_store(key))
+    partitions = tuple(key for key in directory_keys if _is_partition_directory(key))
+    return tuple(
+        sorted(
+            (
+                *(item for item in (*stores, *files) if _is_dataset_object(item)),
+                *chain.from_iterable(map(list_dataset_objects, partitions)),
+            ),
+            key=lambda bucket_object: bucket_object.key,
+        )
     )
-    return tuple(sorted((*directory_keys, *subdirectory_keys)))
+
+
+def _is_partition_directory(directory_key: str) -> bool:
+    return PARTITION_DIRECTORY_PATTERN.fullmatch(directory_key.rstrip("/").rsplit("/", 1)[-1]) is not None
+
+
+def _dataset_root(directory: str) -> str:
+    return (
+        _dataset_root(directory.rstrip("/").rsplit("/", 1)[0] + "/")
+        if _is_partition_directory(directory)
+        else directory
+    )
+
+
+def _dataset_directories(pool: ThreadPoolExecutor, prefixes: tuple[str, ...], remaining_depth: int) -> tuple[str, ...]:
+    if not prefixes or remaining_depth == 0:
+        return ()
+    listings = tuple(pool.map(_list_directory, prefixes))
+    holders = tuple(
+        prefix
+        for prefix, (directory_keys, files) in zip(prefixes, listings)
+        if any(map(_is_zarr_store, directory_keys)) or any(map(_is_dataset_object, files))
+    )
+    children = tuple(key for directory_keys, _ in listings for key in directory_keys if not _is_zarr_store(key))
+    return (*holders, *_dataset_directories(pool, children, remaining_depth - 1))
+
+
+def _is_dataset_object(bucket_object: BucketObject) -> bool:
+    return bucket_object.kind == ObjectKind.ZARR_STORE or bucket_object.key.endswith(DATA_FILE_SUFFIXES)
 
 
 def _is_zarr_store(directory_key: str) -> bool:

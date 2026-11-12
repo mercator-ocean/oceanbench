@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from bucket import count_bucket_objects, list_bucket_directories
+from bucket import count_bucket_objects, list_dataset_directories
 from catalog_health import (
     BucketObjectCount,
     CatalogHealth,
@@ -26,12 +26,12 @@ from catalog_health import (
     public_health_metadata,
     reusable_bucket_object_count,
     stored_bucket_object_count,
-    unmapped_prefixes,
     unreadable_datasets,
 )
 from dataset_metadata import MetadataUnavailable
 from dataset_resolution import BucketDataset, ResolvedDataset, resolved_datasets
-from datasets import DATASET_DESCRIPTIONS, NOT_DATASET_PREFIXES, CollectionKind
+from datasets import dataset_descriptions
+from library_usage import library_usage
 from edito_data_api import (
     EditoSession,
     delete_item,
@@ -56,7 +56,6 @@ from stac import (
 )
 
 CATALOG_ENVIRONMENT_VARIABLE = "OCEANBENCH_CATALOG_ENVIRONMENT"
-UNMAPPED_PREFIX_SEARCH_DEPTH = 3
 LOGGER = logging.getLogger("oceanbench-catalog")
 
 
@@ -75,7 +74,6 @@ class CatalogTree:
     environment: CatalogEnvironment
     collections: tuple[CollectionTree, ...]
     unreadable_datasets: tuple[UnreadableDataset, ...]
-    unmapped_prefixes: tuple[str, ...]
     bucket_object_count: BucketObjectCount | None
     publication_datetime: datetime
 
@@ -86,7 +84,6 @@ class CatalogTree:
             bucket_object_count=self.bucket_object_count,
             changes=changes,
             unreadable_datasets=self.unreadable_datasets,
-            unmapped_prefixes=self.unmapped_prefixes,
         )
 
     def catalog(self, changes: tuple[CollectionChanges, ...] | None = None) -> dict:
@@ -107,7 +104,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     arguments = _parsed_arguments()
     environment = CatalogEnvironment(os.environ.get(CATALOG_ENVIRONMENT_VARIABLE) or None)
-    datasets = resolved_datasets(DATASET_DESCRIPTIONS)
+    datasets = resolved_datasets(dataset_descriptions(list_dataset_directories(), library_usage()))
     _log_unavailable_metadata(datasets)
     publication_datetime = datetime.now(timezone.utc)
     match arguments.output_directory:
@@ -157,15 +154,11 @@ def _catalog_trees(
     unreadable = unreadable_datasets(
         datasets, tuple(item_identifier(dataset, internal_environment) for dataset in datasets)
     )
-    unmapped = unmapped_prefixes(
-        list_bucket_directories("", UNMAPPED_PREFIX_SEARCH_DEPTH), DATASET_DESCRIPTIONS, NOT_DATASET_PREFIXES
-    )
     return tuple(
         _catalog_tree(
             catalog_datasets(datasets, audience_environment),
             audience_environment,
             unreadable,
-            unmapped,
             bucket_object_count,
             publication_datetime,
         )
@@ -177,38 +170,36 @@ def _catalog_tree(
     datasets: tuple[ResolvedDataset, ...],
     environment: CatalogEnvironment,
     unreadable: tuple[UnreadableDataset, ...],
-    unmapped: tuple[str, ...],
     bucket_object_count: BucketObjectCount | None,
     publication_datetime: datetime,
 ) -> CatalogTree:
     collections = tuple(
-        _collection_tree(kind, kind_datasets, environment, publication_datetime)
-        for kind in CollectionKind
-        if (kind_datasets := _datasets_of(kind, datasets))
+        _collection_tree(collection, collection_datasets, environment, publication_datetime)
+        for collection in sorted({dataset.description.collection for dataset in datasets})
+        if (collection_datasets := _datasets_of(collection, datasets))
     )
     _require_unique_item_identifiers(collections)
     return CatalogTree(
         environment=environment,
         collections=collections,
         unreadable_datasets=unreadable,
-        unmapped_prefixes=unmapped,
         bucket_object_count=bucket_object_count,
         publication_datetime=publication_datetime,
     )
 
 
-def _datasets_of(kind: CollectionKind, datasets: tuple[ResolvedDataset, ...]) -> tuple[ResolvedDataset, ...]:
-    return tuple(dataset for dataset in datasets if dataset.description.collection == kind)
+def _datasets_of(collection: str, datasets: tuple[ResolvedDataset, ...]) -> tuple[ResolvedDataset, ...]:
+    return tuple(dataset for dataset in datasets if dataset.description.collection == collection)
 
 
 def _collection_tree(
-    kind: CollectionKind,
+    collection: str,
     datasets: tuple[ResolvedDataset, ...],
     environment: CatalogEnvironment,
     publication_datetime: datetime,
 ) -> CollectionTree:
     return CollectionTree(
-        collection=stac_collection(kind, datasets, environment),
+        collection=stac_collection(collection, datasets, environment),
         items=tuple(stac_item(dataset, environment, publication_datetime) for dataset in datasets),
     )
 

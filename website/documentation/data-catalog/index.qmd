@@ -15,21 +15,10 @@ For each dataset, the catalog tells you what it contains and how to open it.
 
 ## Collections
 
-Challengers
+The datasets are grouped by origin: one collection per top-level directory of the OceanBench bucket, and one for the Copernicus Marine datasets.
 
-:   Forecasts of the evaluated ocean forecasting systems, and baselines.
-
-References
-
-:   Analyses, reanalyses, observations and static fields that challengers are compared against.
-
-Inputs
-
-:   Initial states and forcings that challengers use to produce their forecasts, see [input datasets](/documentation/input-datasets-for-oceanbench-challenger-evaluation/index.qmd).
-
-Training
-
-:   Datasets to train ocean forecasting systems on, without overlapping the evaluation period.
+The catalog is not written by hand.
+Every hour, it is rebuilt from the bucket content and from the `oceanbench` source code, which tells which datasets the library opens.
 
 ## Datasets
 
@@ -37,7 +26,7 @@ Each dataset is described by a STAC item with:
 
 - its spatial and temporal extent, dimensions and variables (with CF standard names and units),
 - Python examples to open it, with the [`oceanbench` datasets API](/documentation/api/index.qmd) or the Copernicus Marine Toolbox,
-- the `oceanbench:library_usage` property, telling whether the `oceanbench` library uses it.
+- the `oceanbench:library_usage` and `oceanbench:library_functions` properties, telling whether the `oceanbench` library uses it and which functions lead to it.
 
 ## Programmatic access
 

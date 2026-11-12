@@ -4,7 +4,7 @@
 
 import base64
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from pathlib import PurePosixPath
 
@@ -21,7 +21,7 @@ from dataset_metadata import (
     merged_temporal_extents,
 )
 from dataset_resolution import BucketDataset, CopernicusMarineCatalogDataset, ResolvedDataset
-from datasets import CollectionKind, DatasetDescription, LibraryUsage
+from datasets import COPERNICUS_MARINE_COLLECTION, BucketObjects, DatasetDescription, LibraryUsage
 
 
 class CatalogAudience(Enum):
@@ -59,6 +59,7 @@ MEDIA_TYPES = {
 }
 DEFAULT_MEDIA_TYPE = "application/octet-stream"
 PYTHON_MEDIA_TYPE = "text/x-python"
+PUBLIC_API_PREFIX = "oceanbench.datasets."
 XML_MEDIA_TYPE = "application/xml"
 HTML_MEDIA_TYPE = "text/html"
 PROVIDERS = (
@@ -75,28 +76,6 @@ PROVIDERS = (
         "url": "https://dive.edito.eu",
     },
 )
-COLLECTION_DESCRIPTIONS = {
-    CollectionKind.CHALLENGERS: (
-        "Challengers",
-        "Forecasts of the ocean forecasting systems evaluated by OceanBench, and baselines.",
-    ),
-    CollectionKind.REFERENCES: (
-        "References",
-        "Analyses, reanalyses, observations and static fields that OceanBench compares challengers against.",
-    ),
-    CollectionKind.INPUTS: (
-        "Inputs",
-        "Initial states and forcings that challengers use to produce their forecasts.",
-    ),
-    CollectionKind.TRAINING: (
-        "Training",
-        "Datasets to train ocean forecasting systems on, without overlapping the evaluation period.",
-    ),
-    CollectionKind.EVALUATIONS: (
-        "Evaluations",
-        "Scores, matchups and evaluation artifacts produced while evaluating challengers.",
-    ),
-}
 CATALOG_DESCRIPTIONS = {
     CatalogAudience.PUBLIC: (
         "OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean analysis "
@@ -162,8 +141,8 @@ def catalog_datasets(
     return tuple(dataset for dataset in datasets if dataset.description.library_usage == LibraryUsage.USED)
 
 
-def collection_identifier(kind: CollectionKind, environment: CatalogEnvironment) -> str:
-    return environment.identifier(f"{CATALOG_BASE_IDENTIFIER}-{kind.value}")
+def collection_identifier(collection: str, environment: CatalogEnvironment) -> str:
+    return environment.identifier(f"{CATALOG_BASE_IDENTIFIER}-{collection}")
 
 
 def item_identifier(dataset: ResolvedDataset, environment: CatalogEnvironment) -> str:
@@ -183,21 +162,18 @@ def stac_catalog(environment: CatalogEnvironment, health: dict | None = None) ->
     }
 
 
-def stac_collection(
-    kind: CollectionKind, datasets: tuple[ResolvedDataset, ...], environment: CatalogEnvironment
-) -> dict:
-    title, description = COLLECTION_DESCRIPTIONS[kind]
+def stac_collection(collection: str, datasets: tuple[ResolvedDataset, ...], environment: CatalogEnvironment) -> dict:
     metadata = tuple(map(_metadata, datasets))
     spatial_extent = merged_spatial_extents(tuple(map(_spatial_extent, metadata))) or GLOBAL_BOUNDING_BOX
     temporal_extent = merged_temporal_extents(tuple(map(_dataset_temporal_extent, datasets)))
     return {
-        "id": collection_identifier(kind, environment),
+        "id": collection_identifier(collection, environment),
         "type": "Collection",
         "stac_version": STAC_VERSION,
-        "title": f"OceanBench {title.lower()}{environment.title_suffix()}",
-        "description": description,
+        "title": f"OceanBench {_collection_title(collection, environment)}{environment.title_suffix()}",
+        "description": _collection_description(collection, environment),
         "license": LICENSE,
-        "keywords": ["OceanBench", "Ocean", "Forecast", kind.value],
+        "keywords": ["OceanBench", "Ocean", "Forecast", collection],
         "providers": list(PROVIDERS),
         "extent": {
             "spatial": {"bbox": [_bounding_box(spatial_extent)]},
@@ -206,6 +182,24 @@ def stac_collection(
         "links": _project_links(),
         "visibility": list(environment.visibility().value),
     }
+
+
+def _collection_title(collection: str, environment: CatalogEnvironment) -> str:
+    match (collection, environment.audience):
+        case (name, _) if name == COPERNICUS_MARINE_COLLECTION:
+            return "Copernicus Marine datasets"
+        case _:
+            return f"{collection} bucket datasets"
+
+
+def _collection_description(collection: str, environment: CatalogEnvironment) -> str:
+    match (collection, environment.audience):
+        case (name, _) if name == COPERNICUS_MARINE_COLLECTION:
+            return "Copernicus Marine datasets that the OceanBench library opens."
+        case (_, CatalogAudience.PUBLIC):
+            return "Datasets that the OceanBench library opens from its bucket."
+        case _:
+            return f"Datasets found in the `{collection}` directory of the OceanBench bucket."
 
 
 def stac_item(dataset: ResolvedDataset, environment: CatalogEnvironment, publication_datetime: datetime) -> dict:
@@ -223,7 +217,7 @@ def stac_item(dataset: ResolvedDataset, environment: CatalogEnvironment, publica
             "title": _item_title(dataset.description, environment),
             "description": _item_description(dataset, storage),
             **_datetime_properties(_dataset_temporal_extent(dataset), dataset, publication_datetime),
-            "keywords": ["OceanBench", dataset.description.collection.value, *_standard_names(metadata)],
+            "keywords": ["OceanBench", dataset.description.collection, *_standard_names(metadata)],
             "license": LICENSE,
             "providers": list(PROVIDERS),
             "oceanbench:library_usage": dataset.description.library_usage.value,
@@ -240,11 +234,19 @@ def stac_item(dataset: ResolvedDataset, environment: CatalogEnvironment, publica
 def _item_title(description: DatasetDescription, environment: CatalogEnvironment) -> str:
     match (environment.audience, description.library_usage):
         case (CatalogAudience.PUBLIC, _):
-            return description.title
+            return _public_title(description)
         case (CatalogAudience.INTERNAL, LibraryUsage.USED):
             return f"{description.title} (used)"
         case (CatalogAudience.INTERNAL, LibraryUsage.UNUSED):
             return f"{description.title} (not used)"
+
+
+def _public_title(description: DatasetDescription) -> str:
+    match description.source:
+        case BucketObjects():
+            return description.title.split("/", 1)[-1]
+        case _:
+            return description.title
 
 
 def _metadata(dataset: ResolvedDataset) -> DatasetMetadata | MetadataUnavailable:
@@ -268,14 +270,7 @@ def _merged_copernicus_marine_metadata(metadata: tuple[DatasetMetadata, ...]) ->
 
 
 def _dataset_temporal_extent(dataset: ResolvedDataset) -> TemporalExtent | None:
-    extent = _temporal_extent(_metadata(dataset))
-    period = dataset.description.period
-    if extent is None or period is None:
-        return extent
-    return TemporalExtent(
-        start=max(extent.start, datetime.fromisoformat(period.first_day).replace(tzinfo=timezone.utc)),
-        end=min(extent.end, datetime.fromisoformat(period.last_day).replace(tzinfo=timezone.utc)),
-    )
+    return _temporal_extent(_metadata(dataset))
 
 
 def _spatial_extent(metadata: DatasetMetadata | MetadataUnavailable) -> SpatialExtent | None:
@@ -326,18 +321,25 @@ def _last_modified(dataset: ResolvedDataset) -> datetime | None:
 
 
 def _item_description(dataset: ResolvedDataset, storage: StorageDetails) -> str:
-    usage = (
-        "Used by the OceanBench library."
-        if dataset.description.library_usage == LibraryUsage.USED
-        else "Not used by the OceanBench library."
-    )
+    usage = _usage_description(dataset.description)
     unavailable = _metadata(dataset)
     metadata_note = (
         f"\n\nMetadata could not be read: {unavailable.reason}"
         if isinstance(unavailable, MetadataUnavailable) and storage == StorageDetails.SHOWN
         else ""
     )
-    return f"{dataset.description.description}\n\n{usage}{_source_description(dataset, storage)}{metadata_note}"
+    return f"{usage}{_source_description(dataset, storage)}{metadata_note}"
+
+
+def _usage_description(description: DatasetDescription) -> str:
+    match description.library_usage:
+        case LibraryUsage.UNUSED:
+            return "Not used by the OceanBench library."
+        case LibraryUsage.USED:
+            functions = "".join(f"\n- `{function}`" for function in description.library_functions)
+            return "Used by the OceanBench library." + (
+                f" Library functions leading to it:{functions}" if functions else ""
+            )
 
 
 def _source_description(dataset: ResolvedDataset, storage: StorageDetails) -> str:
@@ -376,8 +378,8 @@ def _name(bucket_object: BucketObject) -> str:
 
 
 def _library_function_property(dataset: ResolvedDataset) -> dict:
-    function = dataset.description.library_function
-    return {"oceanbench:library_function": f"oceanbench.datasets.{function}"} if function else {}
+    functions = dataset.description.library_functions
+    return {"oceanbench:library_functions": list(functions)} if functions else {}
 
 
 def _source_properties(dataset: ResolvedDataset, storage: StorageDetails) -> dict:
@@ -524,41 +526,38 @@ def _object_asset(bucket_object: BucketObject, position: str) -> dict:
 def _example_links(
     dataset: ResolvedDataset, metadata: DatasetMetadata | MetadataUnavailable, storage: StorageDetails
 ) -> list[dict]:
-    library_example = (
-        [_example_link("Open with the OceanBench library", _library_snippet(dataset.description.library_function))]
-        if dataset.description.library_function
-        else []
-    )
     source_example = _source_snippet(dataset, metadata, storage)
     return [
-        *library_example,
-        *(_example_link(*example) for example in _internal_examples(dataset.description, storage)),
+        *(
+            _example_link(title, snippet)
+            for title, snippet in map(_library_example, _shown_library_functions(dataset.description, storage))
+        ),
         *([_example_link(*source_example)] if source_example else []),
     ]
 
 
-def _internal_examples(description: DatasetDescription, storage: StorageDetails) -> tuple[tuple[str, str], ...]:
+def _shown_library_functions(description: DatasetDescription, storage: StorageDetails) -> tuple[str, ...]:
     match storage:
-        case StorageDetails.HIDDEN:
-            return ()
         case StorageDetails.SHOWN:
+            return description.library_functions
+        case StorageDetails.HIDDEN:
+            return tuple(function for function in description.library_functions if _is_public_api(function))
+
+
+def _is_public_api(function: str) -> bool:
+    return function.startswith(PUBLIC_API_PREFIX)
+
+
+def _library_example(function: str) -> tuple[str, str]:
+    module, _, name = function.rpartition(".")
+    match _is_public_api(function):
+        case True:
             return (
-                *(
-                    (("Open with the OceanBench core API", description.library_example),)
-                    if description.library_example
-                    else ()
-                ),
-                *(
-                    (
-                        (
-                            "Open the source product with the Copernicus Marine toolbox",
-                            _copernicus_marine_snippet(description.copernicus_source),
-                        ),
-                    )
-                    if description.copernicus_source
-                    else ()
-                ),
+                f"Open with oceanbench.datasets.{function.removeprefix(PUBLIC_API_PREFIX)}",
+                f"import oceanbench\n\ndataset = {function}()\n",
             )
+        case False:
+            return (f"Library function {function}", f"from {module} import {name}\n")
 
 
 def _example_link(title: str, snippet: str) -> dict:
@@ -570,10 +569,6 @@ def _example_link(title: str, snippet: str) -> dict:
         "example:language": "Python",
         "example:container": False,
     }
-
-
-def _library_snippet(function: str) -> str:
-    return f"import oceanbench\n\ndataset = oceanbench.datasets.{function}()\n"
 
 
 def _source_snippet(

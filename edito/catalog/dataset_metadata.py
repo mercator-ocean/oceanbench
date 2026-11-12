@@ -327,12 +327,17 @@ def _regular_step(values: numpy.ndarray) -> float | None:
     return float(steps[0]) if numpy.isfinite(steps).all() and numpy.allclose(steps, steps[0], rtol=1e-3) else None
 
 
+def _text_attribute(data_array: xarray.DataArray, name: str) -> str | None:
+    value = data_array.attrs.get(name)
+    return None if value is None else str(value)
+
+
 def _variable(name: str, data_array: xarray.DataArray) -> Variable:
     return Variable(
         name=str(name),
-        standard_name=data_array.attrs.get("standard_name"),
-        long_name=data_array.attrs.get("long_name"),
-        units=data_array.attrs.get("units"),
+        standard_name=_text_attribute(data_array, "standard_name"),
+        long_name=_text_attribute(data_array, "long_name"),
+        units=_text_attribute(data_array, "units"),
         dimensions=tuple(map(str, data_array.dims)),
     )
 

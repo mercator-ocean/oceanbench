@@ -9,7 +9,6 @@ from itertools import chain
 
 from dataset_metadata import MetadataUnavailable, UnavailabilityCause
 from dataset_resolution import BucketDataset, CopernicusMarineCatalogDataset, ResolvedDataset
-from datasets import BucketObjects, DatasetDescription
 from stac import HEALTH_PROPERTY
 
 MAXIMUM_DELETIONS_PER_COLLECTION = 3
@@ -49,14 +48,9 @@ class CatalogHealth:
     bucket_object_count: BucketObjectCount | None
     changes: tuple[CollectionChanges, ...]
     unreadable_datasets: tuple[UnreadableDataset, ...]
-    unmapped_prefixes: tuple[str, ...]
 
     def status(self) -> HealthStatus:
-        needs_attention = (
-            any(change.withheld_deletions for change in self.changes)
-            or self.unreadable_datasets
-            or self.unmapped_prefixes
-        )
+        needs_attention = any(change.withheld_deletions for change in self.changes) or self.unreadable_datasets
         return HealthStatus.NEEDS_ATTENTION if needs_attention else HealthStatus.HEALTHY
 
 
@@ -105,26 +99,6 @@ def _read_failure(dataset: ResolvedDataset) -> MetadataUnavailable | None:
             return None
 
 
-def unmapped_prefixes(
-    bucket_directories: tuple[str, ...],
-    descriptions: tuple[DatasetDescription, ...],
-    ignored_prefixes: tuple[str, ...],
-) -> tuple[str, ...]:
-    sources = tuple(description.source for description in descriptions if isinstance(description.source, BucketObjects))
-    return tuple(
-        directory
-        for directory in bucket_directories
-        if not any(_is_covered(directory, source) for source in sources)
-        and not any(directory.startswith(prefix) for prefix in ignored_prefixes)
-    )
-
-
-def _is_covered(directory: str, source: BucketObjects) -> bool:
-    if source.prefix.startswith(directory):
-        return True
-    return directory.startswith(source.prefix) and directory.removeprefix(source.prefix).count("/") <= source.depth
-
-
 def public_health_metadata(health: CatalogHealth) -> dict:
     return {
         "status": health.status().value,
@@ -134,7 +108,6 @@ def public_health_metadata(health: CatalogHealth) -> dict:
         "deleted_item_count": sum(len(change.deleted_items) for change in health.changes),
         "withheld_deletion_count": sum(len(change.withheld_deletions) for change in health.changes),
         "unreadable_dataset_count": len(health.unreadable_datasets),
-        "unmapped_prefix_count": len(health.unmapped_prefixes),
     }
 
 
@@ -160,5 +133,4 @@ def health_metadata(health: CatalogHealth) -> dict:
         "unreadable_datasets": [
             {"item": dataset.item_identifier, "reason": dataset.reason} for dataset in health.unreadable_datasets
         ],
-        "unmapped_prefixes": list(health.unmapped_prefixes),
     }

@@ -3,13 +3,12 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import logging
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, replace
-from itertools import chain, groupby
+from dataclasses import dataclass
+from itertools import chain
 
-from bucket import BucketObject, list_bucket_objects, with_last_modified
+from bucket import BucketObject, list_dataset_objects, with_last_modified
 from dataset_metadata import (
     CopernicusMarineDataset,
     DatasetMetadata,
@@ -17,7 +16,7 @@ from dataset_metadata import (
     bucket_objects_metadata,
     copernicus_marine_datasets,
 )
-from datasets import VARIANT_GROUP, BucketObjects, CopernicusMarineDatasets, DatasetDescription
+from datasets import BucketObjects, CopernicusMarineDatasets, DatasetDescription
 
 MAXIMUM_PARALLEL_METADATA_READS = 8
 LOGGER = logging.getLogger("oceanbench-catalog")
@@ -39,12 +38,6 @@ class CopernicusMarineCatalogDataset:
 ResolvedDataset = BucketDataset | CopernicusMarineCatalogDataset
 
 
-@dataclass(frozen=True)
-class _MatchedObjects:
-    description: DatasetDescription
-    objects: tuple[BucketObject, ...]
-
-
 def resolved_datasets(descriptions: tuple[DatasetDescription, ...]) -> tuple[ResolvedDataset, ...]:
     with ThreadPoolExecutor(max_workers=MAXIMUM_PARALLEL_METADATA_READS) as executor:
         return tuple(
@@ -63,48 +56,12 @@ def _resolved_description_datasets(description: DatasetDescription) -> tuple[Res
 
 def _resolved_source_datasets(description: DatasetDescription) -> tuple[ResolvedDataset, ...]:
     match description.source:
-        case BucketObjects():
-            return tuple(map(_bucket_dataset, _matched_bucket_objects(description)))
+        case BucketObjects(prefix=prefix):
+            return (_bucket_dataset(description, list_dataset_objects(prefix)),)
         case CopernicusMarineDatasets(dataset_identifiers=dataset_identifiers):
             return (CopernicusMarineCatalogDataset(description, copernicus_marine_datasets(dataset_identifiers)),)
 
 
-def _bucket_dataset(matched: _MatchedObjects) -> BucketDataset:
-    objects = (*matched.objects[:-1], with_last_modified(matched.objects[-1]))
-    return BucketDataset(matched.description, objects, bucket_objects_metadata(objects))
-
-
-def _matched_bucket_objects(description: DatasetDescription) -> tuple[_MatchedObjects, ...]:
-    source = description.source
-    pattern = re.compile(source.relative_key_pattern)
-    variant_and_objects = tuple(
-        (_variant(match), bucket_object)
-        for bucket_object in list_bucket_objects(source.prefix, source.depth)
-        if (match := pattern.fullmatch(bucket_object.key.removeprefix(source.prefix))) is not None
-    )
-    return tuple(
-        _MatchedObjects(_variant_description(description, variant), tuple(bucket_object for _, bucket_object in group))
-        for variant, group in groupby(sorted(variant_and_objects, key=_variant_key), key=_variant_key)
-    )
-
-
-def _variant(match: re.Match) -> str | None:
-    return match.groupdict().get(VARIANT_GROUP)
-
-
-def _variant_key(variant_and_object: tuple[str | None, BucketObject]) -> str:
-    return variant_and_object[0] or ""
-
-
-def _variant_description(description: DatasetDescription, variant: str | None) -> DatasetDescription:
-    if variant is None:
-        return description
-    return replace(
-        description,
-        identifier=description.identifier.format(variant=_identifier_part(variant)),
-        title=description.title.format(variant=variant),
-    )
-
-
-def _identifier_part(variant: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", variant.lower()).strip("-")
+def _bucket_dataset(description: DatasetDescription, dataset_objects: tuple[BucketObject, ...]) -> BucketDataset:
+    objects = (*dataset_objects[:-1], with_last_modified(dataset_objects[-1]))
+    return BucketDataset(description, objects, bucket_objects_metadata(objects))

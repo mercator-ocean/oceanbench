@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -30,13 +29,14 @@ from catalog_health import (  # noqa: E402
 )
 from dataset_metadata import CopernicusMarineDataset, dataset_metadata, merged_metadata  # noqa: E402
 from dataset_resolution import BucketDataset, CopernicusMarineCatalogDataset  # noqa: E402
-from datasets import (  # noqa: E402
+from datasets import (
     BucketObjects,
-    CollectionKind,
     CopernicusMarineDatasets,
     DatasetDescription,
     LibraryUsage,
-)
+    dataset_descriptions,
+)  # noqa: E402
+from library_usage import library_usage  # noqa: E402
 from stac import (  # noqa: E402
     CatalogAudience,
     CatalogEnvironment,
@@ -77,17 +77,18 @@ def _bucket_dataset(
     west: float,
     east: float,
     library_usage: LibraryUsage = LibraryUsage.UNUSED,
+    library_functions: tuple[str, ...] = (),
 ) -> BucketDataset:
     first_store = _weekly_forecast(first_day, [west, 0.0], [-10.0, 10.0])
     last_store = _weekly_forecast(last_day, [0.0, east], [-10.0, 10.0])
     return BucketDataset(
         description=DatasetDescription(
             identifier,
-            identifier,
-            "Forecasts",
-            CollectionKind.CHALLENGERS,
-            BucketObjects(f"public/{identifier}/", r"\d{8}\.zarr"),
+            f"public/{identifier}",
+            "public",
+            BucketObjects(f"public/{identifier}/"),
             library_usage,
+            library_functions,
         ),
         objects=tuple(
             BucketObject(f"public/{identifier}/{day.replace('-', '')}.zarr", ObjectKind.ZARR_STORE, None, None)
@@ -110,7 +111,7 @@ def test_forecast_item_spans_from_first_forecast_day_to_last_lead_day():
 
 def test_collection_extent_covers_all_its_items():
     collection = stac_collection(
-        CollectionKind.CHALLENGERS,
+        "public",
         (
             _bucket_dataset("forecasts-2023", "2023-01-04", "2023-12-27", -180.0, 0.0),
             _bucket_dataset("forecasts-2024", "2024-01-03", "2024-12-25", -90.0, 179.75),
@@ -151,7 +152,7 @@ def test_public_catalog_items_and_collections_are_public():
     used = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
 
     assert stac_item(used, PRODUCTION, PUBLICATION_DATETIME)["properties"]["visibility"] == ["default", "oceanbench"]
-    assert stac_collection(CollectionKind.CHALLENGERS, (used,), PRODUCTION)["visibility"] == ["default", "oceanbench"]
+    assert stac_collection("public", (used,), PRODUCTION)["visibility"] == ["default", "oceanbench"]
 
 
 def test_internal_catalog_is_private_and_has_its_own_identifiers():
@@ -205,37 +206,39 @@ def test_internal_item_titles_tell_whether_the_library_uses_the_dataset_and_publ
         stac_item(dataset, INTERNAL, PUBLICATION_DATETIME)["properties"]["title"] for dataset in (used, unused)
     )
 
-    assert titles == ("used (used)", "unused (not used)")
+    assert titles == ("public/used (used)", "public/unused (not used)")
     assert stac_item(used, PRODUCTION, PUBLICATION_DATETIME)["properties"]["title"] == "used"
 
 
-def test_internal_item_of_a_used_dataset_has_the_oceanbench_and_copernicus_marine_examples():
-    dataset = _bucket_dataset("used", "2024-01-03", "2024-12-25", -180.0, 179.75, LibraryUsage.USED)
-    described = replace(
-        dataset,
-        description=replace(
-            dataset.description,
-            library_example="from oceanbench.core.ocean_mask import ocean_mask\n",
-            copernicus_source=CopernicusMarineDatasets(("cmems_mod_glo_phy_my_0.083deg_P1D-m",)),
-        ),
+def test_library_examples_come_from_the_functions_found_in_the_library_and_only_public_ones_are_shown_publicly():
+    dataset = _bucket_dataset(
+        "used",
+        "2024-01-03",
+        "2024-12-25",
+        -180.0,
+        179.75,
+        LibraryUsage.USED,
+        ("oceanbench.datasets.challenger.glonet", "oceanbench.core.ocean_mask.ocean_mask"),
     )
 
-    assert _example_titles(stac_item(described, INTERNAL, PUBLICATION_DATETIME)) == [
-        "Open with the OceanBench core API",
-        "Open the source product with the Copernicus Marine toolbox",
+    assert _example_titles(stac_item(dataset, INTERNAL, PUBLICATION_DATETIME)) == [
+        "Open with oceanbench.datasets.challenger.glonet",
+        "Library function oceanbench.core.ocean_mask.ocean_mask",
         "Open the latest store with xarray",
     ]
-    assert _example_titles(stac_item(described, PRODUCTION, PUBLICATION_DATETIME)) == []
+    assert _example_titles(stac_item(dataset, PRODUCTION, PUBLICATION_DATETIME)) == [
+        "Open with oceanbench.datasets.challenger.glonet"
+    ]
 
 
 def test_public_copernicus_marine_item_hides_the_store_url_and_keeps_the_toolbox_example():
     description = DatasetDescription(
         "glorys-twelfth-degree",
         "GLORYS",
-        "Reanalysis",
-        CollectionKind.REFERENCES,
+        "copernicus-marine",
         CopernicusMarineDatasets(("cmems_mod_glo_phy_my_0.083deg_P1D-m",)),
         LibraryUsage.USED,
+        (),
     )
     dataset = CopernicusMarineCatalogDataset(
         description,
@@ -260,8 +263,64 @@ def test_public_copernicus_marine_item_hides_the_store_url_and_keeps_the_toolbox
     assert any(link["rel"] == "example" for link in item["links"])
 
 
+def _write_library(directory: Path) -> Path:
+    (directory / "core").mkdir(parents=True)
+    (directory / "datasets").mkdir()
+    (directory / "core" / "forecasts.py").write_text(
+        'BUCKET_URL = "https://s3.example.org/oceanbench-bucket/public/forecasts"\n'
+        "COPERNICUS_IDENTIFIER = 'cmems_mod_example_P1D-m'\n\n"
+        "def _store_path(day):\n"
+        '    return f"{BUCKET_URL}/{day}.zarr"\n\n'
+        "def open_forecasts(day):\n"
+        "    return _store_path(day), COPERNICUS_IDENTIFIER\n\n"
+        "def mask():\n"
+        '    return "https://s3.example.org/oceanbench-bucket/public/mask/mask.zarr"\n'
+    )
+    (directory / "datasets" / "challenger.py").write_text(
+        "from oceanbench.core import forecasts\n\n" "def example(day):\n" "    return forecasts.open_forecasts(day)\n"
+    )
+    return directory
+
+
+def test_library_usage_finds_bucket_paths_and_copernicus_marine_datasets_and_the_public_functions_leading_to_them(
+    tmp_path,
+):
+    usage = library_usage(_write_library(tmp_path / "oceanbench"))
+
+    assert [(item.path, item.public_functions) for item in usage.bucket] == [
+        ("public/forecasts/", ("oceanbench.datasets.challenger.example",)),
+        ("public/mask/mask.zarr", ("oceanbench.core.forecasts.mask",)),
+    ]
+    assert [(item.dataset_identifier, item.public_functions) for item in usage.copernicus_marine] == [
+        ("cmems_mod_example_P1D-m", ("oceanbench.datasets.challenger.example",))
+    ]
+
+
+def test_bucket_directories_are_used_when_the_library_opens_stores_in_them_and_unused_otherwise(tmp_path):
+    usage = library_usage(_write_library(tmp_path / "oceanbench"))
+
+    descriptions = {
+        description.identifier: description
+        for description in dataset_descriptions(
+            ("public/", "public/forecasts/", "public/mask/", "dev/forecasts/"), usage
+        )
+    }
+
+    assert descriptions["public"].library_usage == LibraryUsage.UNUSED
+    assert descriptions["public-forecasts"].library_usage == LibraryUsage.USED
+    assert descriptions["public-mask"].library_usage == LibraryUsage.USED
+    assert descriptions["dev-forecasts"].library_usage == LibraryUsage.UNUSED
+    assert descriptions["cmems-mod-example-p1d-m"].collection == "copernicus-marine"
+
+
+def test_the_bucket_datasets_used_by_the_real_library_are_found():
+    paths = {item.path for item in library_usage().bucket}
+
+    assert "public/ml-forecast-outputs/glonet/" in paths
+
+
 def _health(bucket_object_count: BucketObjectCount | None) -> CatalogHealth:
-    return CatalogHealth(PUBLICATION_DATETIME, 22, bucket_object_count, (), (), ())
+    return CatalogHealth(PUBLICATION_DATETIME, 22, bucket_object_count, (), ())
 
 
 def test_internal_health_holds_the_bucket_object_count_and_the_public_health_does_not():
