@@ -1,0 +1,43 @@
+<!--
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+title: "Data catalog"
+---
+
+The datasets that the `oceanbench` library uses are described in the [OceanBench data catalog on EDITO](https://datalab.dive.edito.eu/data-catalog/data/catalogs/projects/oceanbench/oceanbench-catalog), that you can browse online.
+It follows the [STAC](https://stacspec.org) specification.
+
+For each dataset, the catalog tells you what it contains and how to open it.
+
+## Collections
+
+The datasets are grouped by origin: one collection per top-level directory of the OceanBench bucket, and one for the Copernicus Marine datasets.
+
+The catalog is not written by hand.
+Every hour, it is rebuilt from the bucket content and from the `oceanbench` source code, which tells which datasets the library opens.
+
+## Datasets
+
+Each dataset is described by a STAC item with:
+
+- its spatial and temporal extent, dimensions and variables (with CF standard names and units),
+- Python examples to open it, with the [`oceanbench` datasets API](/documentation/api/index.qmd) or the Copernicus Marine Toolbox,
+- the `oceanbench:library_usage` and `oceanbench:library_functions` properties, telling whether the `oceanbench` library uses it and which functions lead to it.
+
+## Programmatic access
+
+The catalog is also served by the EDITO STAC API at `https://api.dive.edito.eu/data/catalogs/projects/oceanbench/oceanbench-catalog`, for example with [`pystac`](https://pystac.readthedocs.io):
+
+```python
+import pystac
+
+catalog = pystac.Catalog.from_file(
+    "https://api.dive.edito.eu/data/catalogs/projects/oceanbench/oceanbench-catalog"
+)
+for collection in catalog.get_children():
+    print(collection.id, collection.title)
+```

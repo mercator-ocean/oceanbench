@@ -125,3 +125,11 @@ deploy-nrt-website-on-edito:
 	MEMORY_LIMIT=$(NRT_WEBSITE_MEMORY_LIMIT) \
 	HEALTH_CHECK_ATTEMPTS=$(NRT_WEBSITE_HEALTH_CHECK_ATTEMPTS) \
 	$(MAKE) deploy-website-on-edito
+
+update-edito-catalog: SELECTED_ENVIRONMENT_NAME = ${ENVIRONMENT_NAME}
+update-edito-catalog:
+	${ACTIVATE_ENVIRONMENT}
+	python edito/catalog/update_catalog.py $(if ${CATALOG_OUTPUT_DIRECTORY},--output-directory ${CATALOG_OUTPUT_DIRECTORY},)
+
+launch-edito-catalog-update:
+	./edito/catalog/launch-catalog-update.sh

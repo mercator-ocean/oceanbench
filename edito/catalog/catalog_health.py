@@ -1,0 +1,136 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from itertools import chain
+
+from dataset_metadata import MetadataUnavailable, UnavailabilityCause
+from dataset_resolution import BucketDataset, CopernicusMarineCatalogDataset, ResolvedDataset
+from stac import HEALTH_PROPERTY
+
+MAXIMUM_DELETIONS_PER_COLLECTION = 3
+BUCKET_OBJECT_RECOUNT_INTERVAL = timedelta(days=7)
+BUCKET_OBJECT_COUNT_PROPERTY = "bucket_object_count"
+
+
+class HealthStatus(Enum):
+    HEALTHY = "healthy"
+    NEEDS_ATTENTION = "needs_attention"
+
+
+@dataclass(frozen=True)
+class CollectionChanges:
+    collection_identifier: str
+    added_items: tuple[str, ...]
+    deleted_items: tuple[str, ...]
+    withheld_deletions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UnreadableDataset:
+    item_identifier: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class BucketObjectCount:
+    count: int
+    counted: datetime
+
+
+@dataclass(frozen=True)
+class CatalogHealth:
+    updated: datetime
+    item_count: int
+    bucket_object_count: BucketObjectCount | None
+    changes: tuple[CollectionChanges, ...]
+    unreadable_datasets: tuple[UnreadableDataset, ...]
+
+    def status(self) -> HealthStatus:
+        needs_attention = any(change.withheld_deletions for change in self.changes) or self.unreadable_datasets
+        return HealthStatus.NEEDS_ATTENTION if needs_attention else HealthStatus.HEALTHY
+
+
+def stored_bucket_object_count(catalog: dict | None) -> BucketObjectCount | None:
+    stored = ((catalog or {}).get(HEALTH_PROPERTY) or {}).get(BUCKET_OBJECT_COUNT_PROPERTY)
+    return BucketObjectCount(stored["count"], datetime.fromisoformat(stored["counted"])) if stored else None
+
+
+def reusable_bucket_object_count(previous: BucketObjectCount | None, now: datetime) -> BucketObjectCount | None:
+    is_recent = previous is not None and now - previous.counted < BUCKET_OBJECT_RECOUNT_INTERVAL
+    return previous if is_recent else None
+
+
+def collection_changes(
+    collection_identifier: str, current_items: tuple[str, ...], published_items: tuple[str, ...]
+) -> CollectionChanges:
+    stale_items = tuple(sorted(set(published_items) - set(current_items)))
+    withheld = len(stale_items) > MAXIMUM_DELETIONS_PER_COLLECTION
+    return CollectionChanges(
+        collection_identifier=collection_identifier,
+        added_items=tuple(sorted(set(current_items) - set(published_items))),
+        deleted_items=() if withheld else stale_items,
+        withheld_deletions=stale_items if withheld else (),
+    )
+
+
+def unreadable_datasets(
+    datasets: tuple[ResolvedDataset, ...], item_identifiers: tuple[str, ...]
+) -> tuple[UnreadableDataset, ...]:
+    return tuple(
+        UnreadableDataset(item_identifier, unavailable.reason)
+        for dataset, item_identifier in zip(datasets, item_identifiers)
+        if (unavailable := _read_failure(dataset)) is not None
+    )
+
+
+def _read_failure(dataset: ResolvedDataset) -> MetadataUnavailable | None:
+    match dataset:
+        case BucketDataset(metadata=MetadataUnavailable(cause=UnavailabilityCause.READ_FAILURE) as unavailable):
+            return unavailable
+        case CopernicusMarineCatalogDataset(
+            datasets=MetadataUnavailable(cause=UnavailabilityCause.READ_FAILURE) as unavailable
+        ):
+            return unavailable
+        case _:
+            return None
+
+
+def public_health_metadata(health: CatalogHealth) -> dict:
+    return {
+        "status": health.status().value,
+        "updated": health.updated.isoformat(timespec="milliseconds"),
+        "item_count": health.item_count,
+        "added_item_count": sum(len(change.added_items) for change in health.changes),
+        "deleted_item_count": sum(len(change.deleted_items) for change in health.changes),
+        "withheld_deletion_count": sum(len(change.withheld_deletions) for change in health.changes),
+        "unreadable_dataset_count": len(health.unreadable_datasets),
+    }
+
+
+def health_metadata(health: CatalogHealth) -> dict:
+    return {
+        "status": health.status().value,
+        "updated": health.updated.isoformat(timespec="milliseconds"),
+        "item_count": health.item_count,
+        **(
+            {
+                BUCKET_OBJECT_COUNT_PROPERTY: {
+                    "count": health.bucket_object_count.count,
+                    "counted": health.bucket_object_count.counted.isoformat(),
+                }
+            }
+            if health.bucket_object_count is not None
+            else {}
+        ),
+        "added_items": list(chain.from_iterable(change.added_items for change in health.changes)),
+        "deleted_items": list(chain.from_iterable(change.deleted_items for change in health.changes)),
+        "withheld_deletions": list(chain.from_iterable(change.withheld_deletions for change in health.changes)),
+        "maximum_deletions_per_collection": MAXIMUM_DELETIONS_PER_COLLECTION,
+        "unreadable_datasets": [
+            {"item": dataset.item_identifier, "reason": dataset.reason} for dataset in health.unreadable_datasets
+        ],
+    }
