@@ -29,6 +29,7 @@ project:
     - assets/edito.png
     - assets/mercator-ocean.png
     - external-links.js
+    - edito-widget.js
 website:
   title: "OceanBench"
   description: "OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean datasets and observations."
@@ -157,4 +158,5 @@ format:
       dark: [darkly, theme-dark.scss]
     css: styles.css
     include-after-body:
-      text: <script src="/external-links.js"></script>
+      - text: <script src="/external-links.js"></script>
+      - text: <script src="/edito-widget.js"></script>
