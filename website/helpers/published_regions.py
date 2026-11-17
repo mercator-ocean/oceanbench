@@ -35,5 +35,5 @@ def published_region_metadata(region_id: str) -> dict:
     return dict(PUBLISHED_REGIONS[region_id])
 
 
-def published_region_ids_with_reports(published_reports: dict[str, list[str]]) -> list[str]:
-    return [region_id for region_id in published_region_ids() if published_reports.get(region_id)]
+def published_region_ids_with_scores_files(published_scores_files: dict[str, list[str]]) -> list[str]:
+    return [region_id for region_id in published_region_ids() if published_scores_files.get(region_id)]

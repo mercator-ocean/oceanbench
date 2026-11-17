@@ -26,6 +26,7 @@ def scores_payload(
     default_version: str,
     metric_titles: dict[str, str],
     sections: dict[str, dict],
+    compatible_versions: dict[str, str],
 ) -> ScoresPayload:
     """Split the scores into the page payload, holding only the default version, and one payload per other version."""
     embedded_versions = {version: bundle for version, bundle in version_bundles.items() if version == default_version}
@@ -35,6 +36,7 @@ def scores_payload(
                 "versions": embedded_versions,
                 "version_order": list(version_bundles),
                 "default_version": default_version,
+                "compatible_versions": compatible_versions,
                 "scores_directory": SCORES_DIRECTORY,
                 "scores_api_directory": SCORES_API_DIRECTORY,
                 "metric_titles": metric_titles,

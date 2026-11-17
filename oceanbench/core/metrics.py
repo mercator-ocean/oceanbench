@@ -21,6 +21,7 @@ from oceanbench.core.rmsd import rmsd
 
 GLOBAL_LAGRANGIAN_PARTICLE_COUNT = 10000
 MINIMUM_LAGRANGIAN_PARTICLE_COUNT = 2000
+MESSAGE_COLUMN = "Message"
 
 
 def _lagrangian_particle_count(
@@ -43,7 +44,7 @@ def rmsd_of_variables_compared_to_observations(
     try:
         observation_dataset = subset_dataset_to_region(observations(challenger_dataset), region)
     except ObservationDataUnavailableError as error:
-        return pandas.DataFrame({"Message": [str(error)]})
+        return pandas.DataFrame({MESSAGE_COLUMN: [str(error)]})
     return rmsd_class4_validation(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
