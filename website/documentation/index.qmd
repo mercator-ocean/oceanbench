@@ -14,6 +14,7 @@ This documentation describes how to prepare and evaluate a challenger with the P
 
 ## Guides
 
+- [Get started](get-started/index.ipynb)
 - [Shape of the challenger dataset](shape-of-the-challenger-dataset/index.qmd)
 - [Input datasets for OceanBench challenger evaluation](input-datasets-for-oceanbench-challenger-evaluation/index.qmd)
 - [Units and time conventions of the input data](input-data-conventions/index.qmd)
