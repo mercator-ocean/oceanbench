@@ -229,30 +229,15 @@ body.quarto-dark .challengers-table-wrap {
   cursor: help;
 }
 
-.region-report-badges {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.region-report-badge {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--ob-border);
-  border-radius: var(--ob-radius-pill);
-  padding: 0.16rem 0.55rem;
-  background: var(--ob-surface);
-  color: var(--bs-body-color, #333940);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.4;
-  text-decoration: none;
-}
-
-.region-report-badge:hover {
-  border-color: var(--ob-accent);
-  color: var(--ob-accent);
-  text-decoration: none;
+.your-scores-marker {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  margin-left: 0.3em;
+  border-radius: 50%;
+  background: var(--ob-accent);
+  vertical-align: baseline;
+  cursor: help;
 }
 
 /* --- Score tables --- */
@@ -470,6 +455,7 @@ body.quarto-dark #region-selector {
 }
 
 .region-selector-controls {
+  --selector-label-width: 5.75rem;
   position: relative;
   z-index: 2;
   pointer-events: none;
@@ -494,7 +480,8 @@ body.quarto-dark #region-selector {
 }
 
 .selector-label {
-  flex: 0 0 3.5rem;
+  flex: 0 0 var(--selector-label-width);
+  white-space: nowrap;
   color: var(--ob-muted);
   font-size: 0.8rem;
   font-weight: 700;
@@ -540,7 +527,7 @@ body.quarto-dark #region-selector {
 .selector-description {
   flex-basis: 100%;
   margin: 0;
-  padding-left: calc(3.5rem + 0.75rem);
+  padding-left: calc(var(--selector-label-width) + 0.75rem);
   color: var(--ob-muted);
   font-size: 0.82rem;
   line-height: 1.4;
@@ -1626,7 +1613,8 @@ a.external-link[href*="marine.copernicus.eu"]::after {
 
 /* --- Export dialog --- */
 
-#export-dialog {
+#export-dialog,
+#your-scores-dialog {
   width: min(42rem, calc(100vw - 2rem));
   max-height: calc(100vh - 4rem);
   padding: 1.25rem 1.5rem;
@@ -1637,11 +1625,13 @@ a.external-link[href*="marine.copernicus.eu"]::after {
   box-shadow: var(--ob-soft-shadow);
 }
 
-#export-dialog::backdrop {
+#export-dialog::backdrop,
+#your-scores-dialog::backdrop {
   background: rgba(0, 0, 0, 0.45);
 }
 
-#export-dialog h3 {
+#export-dialog h3,
+#your-scores-dialog h3 {
   margin: 0 0 0.15rem;
   font-size: 1.15rem;
 }
@@ -1743,4 +1733,25 @@ a.external-link[href*="marine.copernicus.eu"]::after {
   margin: 0;
   color: var(--ob-muted);
   font-size: 0.82rem;
+}
+
+.your-scores-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.your-scores-field input[type="url"] {
+  flex: 1 1 14rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface);
+  color: inherit;
+}
+
+#your-scores-status[data-level="error"] {
+  color: var(--bs-danger, #b02a37);
 }

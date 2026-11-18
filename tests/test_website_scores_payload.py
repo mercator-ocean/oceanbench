@@ -42,7 +42,7 @@ def _version_bundle(score: float) -> dict:
 
 
 def _payload(version_bundles: dict, default_version: str):
-    return scores_payload(version_bundles, default_version, METRIC_TITLES, SECTIONS)
+    return scores_payload(version_bundles, default_version, METRIC_TITLES, SECTIONS, {"0.6.1": "0.6.0"})
 
 
 def test_page_embeds_only_the_default_version_and_lists_all_versions():
@@ -55,6 +55,7 @@ def test_page_embeds_only_the_default_version_and_lists_all_versions():
     assert embedded["default_version"] == "0.6.0"
     assert embedded["metric_titles"] == METRIC_TITLES
     assert embedded["sections"] == SECTIONS
+    assert embedded["compatible_versions"] == {"0.6.1": "0.6.0"}
 
 
 def test_other_versions_are_published_separately():

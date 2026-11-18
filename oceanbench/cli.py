@@ -92,7 +92,7 @@ def _evaluate_all(
     runtime_configuration: RuntimeConfiguration,
     region: RegionLike,
 ) -> list[EvaluationResult]:
-    # Notebook evaluations are heavy and can leave substantial state behind in a
+    # Evaluations are heavy and can leave substantial state behind in a
     # worker process. Recycle the worker after each challenger to avoid
     # cross-challenger memory growth during `oceanbench evaluate a.py b.py ...`.
     with ProcessPoolExecutor(max_workers=max_workers, max_tasks_per_child=1) as executor:
@@ -222,12 +222,12 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     evaluate_parser.add_argument(
         "--output-bucket",
         default=None,
-        help="S3 bucket for output notebooks",
+        help="S3 bucket to upload the scores files to",
     )
     evaluate_parser.add_argument(
         "--output-prefix",
         default=None,
-        help="S3 prefix for output notebooks",
+        help="S3 prefix for the uploaded scores files",
     )
     evaluate_parser.add_argument(
         "--max-workers",

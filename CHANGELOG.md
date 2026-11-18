@@ -8,14 +8,36 @@ SPDX-License-Identifier: EUPL-1.2
 
 All notable changes to OceanBench are documented in this file.
 
-**How to read this file.** A **minor** version (0.x.0) means the scoring methodology changed:
-scores are **not comparable** with the previous version and every challenger is re-evaluated.
-A **patch** version (0.x.y) changes packaging, data paths or docs only: scores are identical.
-Each version begins with a one-line **Scores** summary stating whether and why scores moved.
+**How to read this file.** Versions follow [semantic versioning](https://semver.org/) of the software:
+a **major** version (X.0.0) makes incompatible changes, a **minor** version (0.X.0) adds functionality or,
+while the major version is 0, makes incompatible changes, and a **patch** version (0.0.X) fixes bugs only.
+Each version begins with a one-line **Scores** summary stating whether scores are comparable with the previous version.
+When they are not, every challenger is re-evaluated.
 
 A challenger added or a challenger's forecasts refreshed does not bump the version. It is
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
+
+## Unreleased
+
+**Scores:** unchanged vs 0.6.2. Incompatible change (next version 0.7.0): the evaluation output changes from a report notebook to a scores file.
+
+### Changed
+
+- **Incompatible:** `oceanbench evaluate` and `oceanbench.evaluate_challenger` no longer generate and execute a notebook. They run the challenger file in process, print each score table and step timing, and write `{challenger}.{region}.scores.json`, one row per score. `--output-bucket` uploads that file, not a notebook. The Python and command line signatures are unchanged.
+- The sample references in `assets/` are scores files converted from the 0.6.0 report notebooks. The example notebook is a tutorial on the GLONET 1 degree sample, which needs no credentials. It is also the website's [Get started evaluating your system](https://oceanbench.edito.eu/documentation/get-started/) page, rendered without executing it.
+- The website only reads scores files. The report notebooks of versions 0.1.0 to 0.6.0 are converted to scores files, published next to them (`make convert-report-notebooks`), and are no longer rendered as pages, so their scores are unchanged. Every challenger links to its scores file, not to a report notebook. The notebooks stay in the bucket. The `/reports/<challenger>.<region>/` redirect pages are removed.
+
+### Removed
+
+- **Incompatible:** the `jupyter` and `papermill` dependencies. Install `jupyter` yourself to run the example notebook.
+
+### Added
+
+- The `boto3` and `jsonschema` dependencies, now required by every install.
+- The scores file carries a `schema_version` (currently 1), and `oceanbench evaluate` validates it against a JSON Schema bundled with the library.
+- **Your scores** row on the Scores page, which shows a local or public scores file next to the published scores, in the browser only. A file of a version without published scores is compared with the latest published scores that the changelog states unchanged in it, or with the version chosen in **Compare with**.
+- **Lead days** selector on the Scores page: the key lead days, or all of them.
 
 ## 0.6.2 - 2026-10-29
 
