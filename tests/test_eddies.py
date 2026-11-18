@@ -1,0 +1,422 @@
+# SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+import numpy
+import pandas
+import pytest
+import xarray
+from scipy.ndimage import gaussian_filter
+from skimage.feature import peak_local_max
+
+from oceanbench.core import eddies
+from oceanbench.core.dataset_utils import Dimension, Variable
+
+
+def _global_boundary_eddy_dataset() -> xarray.Dataset:
+    latitudes = numpy.linspace(-10.0, 10.0, 41)
+    longitudes = numpy.arange(0.0, 360.0, 1.0)
+    longitude_distance = ((longitudes[None, :] - 359.0 + 180.0) % 360.0) - 180.0
+    latitude_distance = latitudes[:, None]
+    sea_surface_height = -numpy.exp(-((longitude_distance / 3.0) ** 2 + (latitude_distance / 2.5) ** 2))
+
+    return xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                (
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ),
+                sea_surface_height[None, None, :, :],
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-01"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+
+def test_mesoscale_eddy_contours_are_periodic_at_longitude_boundary() -> None:
+    dataset = _global_boundary_eddy_dataset()
+    detections = pandas.DataFrame(
+        [
+            {
+                eddies.LEAD_DAY_COLUMN: 0,
+                eddies.LATITUDE_COLUMN: 0.0,
+                eddies.LONGITUDE_COLUMN: 359.0,
+                eddies.POLARITY_COLUMN: eddies.CYCLONE,
+                eddies.AMPLITUDE_COLUMN: -1.0,
+                eddies.SEA_SURFACE_HEIGHT_COLUMN: -1.0,
+            }
+        ]
+    )
+
+    contours = eddies.mesoscale_eddy_contours_from_detections(
+        detections,
+        dataset,
+        background_sigma_km=12.0 * eddies.ONE_DEGREE_LATITUDE_KM,
+        detection_sigma_km=0.0,
+        amplitude_threshold_meters=0.2,
+        min_eddy_area_km2=0.0,
+        max_eddy_area_km2=1.0e9,
+        min_contour_convexity=0.0,
+        min_abs_latitude_degrees=0.0,
+    )
+
+    assert len(contours) == 1
+    contour_longitudes = numpy.asarray(contours.iloc[0][eddies.CONTOUR_LONGITUDES_COLUMN], dtype=float)
+    assert numpy.nanmin(contour_longitudes) < 358.0
+    assert numpy.nanmax(contour_longitudes) > 360.0
+    assert numpy.nanmax(contour_longitudes) - numpy.nanmin(contour_longitudes) < 20.0
+
+    accepted_detections = eddies.filter_mesoscale_eddy_detections_by_contours(detections, contours)
+    assert len(accepted_detections) == 1
+
+
+def test_literature_km_defaults_detect_planted_eddies_without_extra_smoothing() -> None:
+    # The literature-derived defaults (Chelton et al. 2011; META/py-eddy-tracker):
+    # 1 cm amplitude threshold, 100 km peak separation, and NO second anomaly-smoothing
+    # pass (detection_sigma_km defaults to None). A single-degree field carrying one
+    # strong anticyclone and one strong cyclone must therefore yield exactly those two
+    # detections with the correct polarity and near-exact centres. This replaces the
+    # old test that pinned the pre-c1f1099 grid-cell-count behaviour (extra 1.5-cell
+    # blur, 8-cell separation, 4 cm threshold), which is no longer the default.
+    assert eddies.DEFAULT_DETECTION_SIGMA_KM is None
+    # Gaussian half power sits near 7.5 sigma, so these sigmas are the ~1000 km meridional
+    # by ~2000 km zonal half-power block of Chelton et al. (2011), not a 130/265 km cutoff.
+    assert eddies.DEFAULT_BACKGROUND_SIGMA_KM == (130.0, 265.0)
+    assert eddies.DEFAULT_MAX_EDDY_AREA_KM2 == 300_000.0
+    assert eddies.DEFAULT_AMPLITUDE_THRESHOLD_METERS == 0.01
+    assert eddies.DEFAULT_MIN_PEAK_SEPARATION_KM == 100.0
+
+    latitudes = numpy.arange(-20.0, 21.0)
+    longitudes = numpy.arange(0.0, 80.0)
+    latitude_grid = latitudes[:, None]
+    longitude_grid = longitudes[None, :]
+    values = 0.5 * numpy.exp(
+        -(((latitude_grid + 5.0) / 2.0) ** 2 + ((longitude_grid - 20.0) / 2.0) ** 2)
+    ) - 0.6 * numpy.exp(-(((latitude_grid - 7.0) / 2.5) ** 2 + ((longitude_grid - 55.0) / 2.5) ** 2))
+    dataset = xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                (
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ),
+                values[None, None],
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-01"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+    detections = eddies.detect_mesoscale_eddies(dataset)
+
+    anticyclones = detections[detections[eddies.POLARITY_COLUMN] == eddies.ANTICYCLONE]
+    cyclones = detections[detections[eddies.POLARITY_COLUMN] == eddies.CYCLONE]
+    assert not anticyclones.empty
+    assert not cyclones.empty
+    # The strongest detection of each polarity must sit on the planted eddy centre.
+    anticyclone = anticyclones.loc[anticyclones[eddies.AMPLITUDE_COLUMN].idxmax()]
+    cyclone = cyclones.loc[cyclones[eddies.AMPLITUDE_COLUMN].idxmin()]
+    assert abs(anticyclone[eddies.LATITUDE_COLUMN] - (-5.0)) <= 2.0
+    assert abs(anticyclone[eddies.LONGITUDE_COLUMN] - 20.0) <= 2.0
+    assert abs(cyclone[eddies.LATITUDE_COLUMN] - 7.0) <= 2.0
+    assert abs(cyclone[eddies.LONGITUDE_COLUMN] - 55.0) <= 2.0
+
+
+def test_detection_sigma_parameter_reproduces_pre_change_smoothing() -> None:
+    # The detection_sigma_km parameter is retained for reproducing pre-change artifacts:
+    # passing the old 1.5-cell (at 1 degree) value must re-enable the second smoothing pass.
+    # The old isotropic 12-degree background sigma is passed explicitly as well, since the
+    # default background is now the anisotropic (265, 130) km pair.
+    latitudes = numpy.arange(-20.0, 21.0)
+    longitudes = numpy.arange(0.0, 80.0)
+    latitude_grid = latitudes[:, None]
+    longitude_grid = longitudes[None, :]
+    values = 0.5 * numpy.exp(-(((latitude_grid + 5.0) / 2.0) ** 2 + ((longitude_grid - 20.0) / 2.0) ** 2))
+    dataset = xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                (
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ),
+                values[None, None],
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-01"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+    legacy_background = gaussian_filter(values, sigma=12.0, mode=("nearest", "wrap"))
+    legacy_anomaly = gaussian_filter(values - legacy_background, sigma=1.5, mode=("nearest", "wrap"))
+    legacy_rows = sorted(
+        (eddies.ANTICYCLONE, float(latitudes[latitude_index]), float(longitudes[longitude_index]))
+        for latitude_index, longitude_index in peak_local_max(
+            legacy_anomaly, min_distance=8, threshold_abs=0.04, exclude_border=False
+        )
+    )
+
+    detections = eddies.detect_mesoscale_eddies(
+        dataset,
+        background_sigma_km=12.0 * eddies.ONE_DEGREE_LATITUDE_KM,
+        detection_sigma_km=1.5 * eddies.ONE_DEGREE_LATITUDE_KM,
+        min_peak_separation_km=8.0 * eddies.ONE_DEGREE_LATITUDE_KM,
+        amplitude_threshold_meters=0.04,
+    )
+    new_rows = sorted((row.polarity, row.latitude, row.longitude) for row in detections.itertuples(index=False))
+    assert new_rows == legacy_rows
+
+
+def test_amplitude_is_measured_above_the_outermost_closed_contour() -> None:
+    # Chelton amplitude: what a detection reports is the height of its peak above the level
+    # of the outermost closed contour that passed the area and solidity tests, not the raw
+    # peak anomaly. Every accepted eddy must satisfy that identity exactly, must clear the
+    # threshold on that contour-relative value.
+    latitudes = numpy.arange(-20.0, 20.0, 0.25)
+    longitudes = numpy.arange(0.0, 20.0, 0.25)
+    latitude_grid = latitudes[:, None]
+    longitude_grid = longitudes[None, :]
+    values = 0.30 * numpy.exp(-(((latitude_grid - 0.0) / 6.0) ** 2 + ((longitude_grid - 10.0) / 6.0) ** 2))
+    values = values + 0.20 * numpy.exp(-(((latitude_grid - 0.0) / 0.8) ** 2 + ((longitude_grid - 10.0) / 0.8) ** 2))
+    dataset = xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                (
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ),
+                values[None, None],
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-01"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+    raw_detections = eddies.detect_mesoscale_eddies(dataset, min_abs_latitude_degrees=0.0)
+    contours = eddies.mesoscale_eddy_contours_from_detections(raw_detections, dataset, min_abs_latitude_degrees=0.0)
+    accepted = eddies.filter_mesoscale_eddy_detections_by_contours(raw_detections, contours)
+    assert not accepted.empty
+
+    for detection_index, accepted_row in accepted.iterrows():
+        contour_row = contours.loc[contours["detection_index"] == detection_index].iloc[0]
+        raw_peak = abs(float(raw_detections.loc[detection_index, eddies.AMPLITUDE_COLUMN]))
+        reported = abs(float(accepted_row[eddies.AMPLITUDE_COLUMN]))
+        level = float(contour_row[eddies.CONTOUR_LEVEL_COLUMN])
+        assert abs(reported - (raw_peak - level)) < 1e-12
+        assert reported >= eddies.DEFAULT_AMPLITUDE_THRESHOLD_METERS
+        # Polarity sign is preserved, so cyclones stay negative.
+        expected_sign = 1.0 if accepted_row[eddies.POLARITY_COLUMN] == eddies.ANTICYCLONE else -1.0
+        assert numpy.sign(accepted_row[eddies.AMPLITUDE_COLUMN]) == expected_sign
+
+
+def test_regional_background_uses_global_degree_widths_without_wrapping() -> None:
+    # A regional crop (here 40 N, 20 degrees wide) must neither join its west and east edges
+    # nor widen the longitude sigma at its own mean latitude: it gets the global degree widths.
+    latitudes = numpy.arange(30.0, 50.0, 0.25)
+    longitudes = numpy.arange(-20.0, 0.0, 0.25)
+    values = numpy.zeros((latitudes.size, longitudes.size))
+    values[:, -8:] = 1.0  # a step along the east edge only
+    field = xarray.DataArray(
+        values,
+        dims=(eddies.LATITUDE_COLUMN, eddies.LONGITUDE_COLUMN),
+        coords={eddies.LATITUDE_COLUMN: latitudes, eddies.LONGITUDE_COLUMN: longitudes},
+    )
+    assert not eddies._longitude_is_periodic(field)
+    latitude_sigma, longitude_sigma = eddies._kilometres_to_grid_sigma(field, eddies.DEFAULT_BACKGROUND_SIGMA_KM)
+    reference = numpy.cos(numpy.deg2rad(eddies.BACKGROUND_REFERENCE_LATITUDE_DEGREES))
+    assert longitude_sigma * 0.25 == pytest.approx(265.0 / (eddies.ONE_DEGREE_LATITUDE_KM * reference))
+    assert latitude_sigma * 0.25 == pytest.approx(130.0 / eddies.ONE_DEGREE_LATITUDE_KM)
+
+    anomaly = eddies._ssh_anomaly(field, eddies.DEFAULT_BACKGROUND_SIGMA_KM, None)
+    wrapped = values - gaussian_filter(values, sigma=(latitude_sigma, longitude_sigma), mode=("nearest", "wrap"))
+    # The west edge sees none of the east-edge step; with wrapping it would.
+    assert numpy.abs(anomaly[:, 0]).max() < 1e-6
+    assert numpy.abs(wrapped[:, 0]).max() > 1e-3
+
+
+def test_global_grid_still_wraps_at_its_own_mean_latitude() -> None:
+    latitudes = numpy.arange(-80.0, 90.0, 1.0)
+    longitudes = numpy.arange(-180.0, 180.0, 1.0)
+    field = xarray.DataArray(
+        numpy.zeros((latitudes.size, longitudes.size)),
+        dims=(eddies.LATITUDE_COLUMN, eddies.LONGITUDE_COLUMN),
+        coords={eddies.LATITUDE_COLUMN: latitudes, eddies.LONGITUDE_COLUMN: longitudes},
+    )
+    assert eddies._longitude_is_periodic(field)
+    _, longitude_sigma = eddies._kilometres_to_grid_sigma(field, eddies.DEFAULT_BACKGROUND_SIGMA_KM)
+    own = numpy.cos(numpy.deg2rad(latitudes.mean()))
+    assert longitude_sigma == 265.0 / (eddies.ONE_DEGREE_LATITUDE_KM * own)
+
+
+def _regional_dataset(values: numpy.ndarray, latitudes: numpy.ndarray, longitudes: numpy.ndarray) -> xarray.Dataset:
+    return xarray.Dataset(
+        {
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key(): (
+                (
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ),
+                values[None, None],
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-01"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): [0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+
+def _gaussian_eddy(
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+    latitude: float,
+    longitude: float,
+    amplitude: float,
+    sigma_km: float,
+) -> numpy.ndarray:
+    kilometres_north = (latitudes[:, None] - latitude) * eddies.ONE_DEGREE_LATITUDE_KM
+    kilometres_east = (
+        (longitudes[None, :] - longitude) * eddies.ONE_DEGREE_LATITUDE_KM * numpy.cos(numpy.deg2rad(latitude))
+    )
+    return amplitude * numpy.exp(-(kilometres_north**2 + kilometres_east**2) / (2.0 * sigma_km**2))
+
+
+def _distance_km(
+    latitudes: numpy.ndarray, longitudes: numpy.ndarray, latitude: float, longitude: float
+) -> numpy.ndarray:
+    kilometres_north = (latitudes[:, None] - latitude) * eddies.ONE_DEGREE_LATITUDE_KM
+    kilometres_east = (
+        (longitudes[None, :] - longitude) * eddies.ONE_DEGREE_LATITUDE_KM * numpy.cos(numpy.deg2rad(latitude))
+    )
+    return numpy.hypot(kilometres_north, kilometres_east)
+
+
+_LATITUDES = numpy.arange(20.0, 40.0, 0.25)
+_LONGITUDES = numpy.arange(0.0, 30.0, 0.25)
+
+
+def _accepted(dataset: xarray.Dataset, **options) -> pandas.DataFrame:
+    detection_options = {
+        key: options[key] for key in ("min_abs_latitude_degrees", "max_abs_latitude_degrees") if key in options
+    }
+    detections = eddies.detect_mesoscale_eddies(dataset, **detection_options)
+    contours = eddies.mesoscale_eddy_contours_from_detections(detections, dataset, **options)
+    return contours
+
+
+def test_an_isolated_eddy_away_from_every_boundary_is_accepted() -> None:
+    values = _gaussian_eddy(_LATITUDES, _LONGITUDES, 30.0, 15.0, 0.15, 60.0)
+    contours = _accepted(_regional_dataset(values, _LATITUDES, _LONGITUDES))
+    assert len(contours) == 1
+    assert contours.iloc[0][eddies.CONTOUR_AREA_KM2_COLUMN] >= eddies.DEFAULT_MIN_EDDY_AREA_KM2
+
+
+def test_an_eddy_whose_contours_reach_land_is_rejected() -> None:
+    values = _gaussian_eddy(_LATITUDES, _LONGITUDES, 30.0, 15.0, 0.15, 60.0)
+    # Land starts two cells (about 50 km) east of the centre, inside every contour large enough
+    # to clear the radius floor.
+    values[:, _LONGITUDES >= 15.5] = numpy.nan
+    assert _accepted(_regional_dataset(values, _LATITUDES, _LONGITUDES)).empty
+
+
+def test_an_eddy_cut_by_the_domain_edge_is_rejected() -> None:
+    values = _gaussian_eddy(_LATITUDES, _LONGITUDES, 30.0, 0.0, 0.15, 60.0)
+    assert _accepted(_regional_dataset(values, _LATITUDES, _LONGITUDES)).empty
+
+
+def test_the_equatorial_band_is_excluded() -> None:
+    latitudes = numpy.arange(-10.0, 10.0, 0.25)
+    values = _gaussian_eddy(latitudes, _LONGITUDES, 2.0, 15.0, 0.15, 60.0)
+    dataset = _regional_dataset(values, latitudes, _LONGITUDES)
+    assert eddies.detect_mesoscale_eddies(dataset).empty
+    assert len(_accepted(dataset, min_abs_latitude_degrees=0.0)) == 1
+
+
+def test_an_eddy_below_the_radius_floor_is_rejected() -> None:
+    latitudes = numpy.arange(20.0, 40.0, 1.0 / 12.0)
+    longitudes = numpy.arange(0.0, 30.0, 1.0 / 12.0)
+    values = _gaussian_eddy(latitudes, longitudes, 30.0, 15.0, 0.15, 15.0)
+    # A lagoon: land from 40 km out keeps every closed contour under the 45 km radius floor.
+    values[_distance_km(latitudes, longitudes, 30.0, 15.0) > 40.0] = numpy.nan
+    dataset = _regional_dataset(values, latitudes, longitudes)
+    assert _accepted(dataset).empty
+    small = _accepted(dataset, min_eddy_area_km2=0.0)
+    assert len(small) == 1
+    assert small.iloc[0][eddies.CONTOUR_AREA_KM2_COLUMN] < eddies.DEFAULT_MIN_EDDY_AREA_KM2
+
+
+def test_an_eddy_below_the_pixel_floor_is_rejected() -> None:
+    latitudes = numpy.arange(10.0, 50.0, 1.0)
+    longitudes = numpy.arange(0.0, 40.0, 1.0)
+    values = _gaussian_eddy(latitudes, longitudes, 30.0, 20.0, 0.3, 60.0)
+    # A one-degree lagoon: land two cells out leaves a closed contour above the area floor
+    # but under eight pixels.
+    values[_distance_km(latitudes, longitudes, 30.0, 20.0) > 150.0] = numpy.nan
+    dataset = _regional_dataset(values, latitudes, longitudes)
+    small = _accepted(dataset, min_eddy_pixel_count=0)
+    assert len(small) == 1
+    assert small.iloc[0][eddies.CONTOUR_PIXEL_COUNT_COLUMN] < eddies.DEFAULT_MIN_EDDY_PIXEL_COUNT
+    assert _accepted(dataset).empty
+
+
+def test_a_blob_with_two_significant_extrema_is_not_one_eddy() -> None:
+    # Two 15 cm peaks 80 km apart: one centre survives the 100 km peak separation, and every
+    # contour wide enough to clear the radius floor encloses both summits.
+    values = _gaussian_eddy(_LATITUDES, _LONGITUDES, 30.0, 14.6, 0.15, 25.0) + _gaussian_eddy(
+        _LATITUDES, _LONGITUDES, 30.0, 15.4, 0.15, 25.0
+    )
+    dataset = _regional_dataset(values, _LATITUDES, _LONGITUDES)
+    assert len(_accepted(dataset, extremum_prominence_meters=None)) == 1
+    assert _accepted(dataset).empty
+
+
+def test_a_bump_below_the_extremum_prominence_does_not_split_an_eddy() -> None:
+    values = _gaussian_eddy(_LATITUDES, _LONGITUDES, 30.0, 15.0, 0.15, 60.0) + _gaussian_eddy(
+        _LATITUDES, _LONGITUDES, 30.0, 16.0, 0.004, 10.0
+    )
+    assert len(_accepted(_regional_dataset(values, _LATITUDES, _LONGITUDES))) == 1
+
+
+def test_the_contour_ladder_reaches_below_zero() -> None:
+    # An anticyclone sitting in a broader trough: its outermost closed contour lies below zero,
+    # which a ladder starting at +1 cm never reaches.
+    values = _gaussian_eddy(_LATITUDES, _LONGITUDES, 30.0, 15.0, -0.3, 120.0) + _gaussian_eddy(
+        _LATITUDES, _LONGITUDES, 30.0, 15.0, 0.25, 40.0
+    )
+    contours = _accepted(_regional_dataset(values, _LATITUDES, _LONGITUDES))
+    planted = contours.loc[
+        (contours[eddies.POLARITY_COLUMN] == eddies.ANTICYCLONE)
+        & (contours[eddies.LATITUDE_COLUMN] == 30.0)
+        & (contours[eddies.LONGITUDE_COLUMN] == 15.0)
+    ]
+    assert len(planted) == 1
+    assert planted.iloc[0][eddies.CONTOUR_LEVEL_COLUMN] < 0.0

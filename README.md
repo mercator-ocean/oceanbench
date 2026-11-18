@@ -193,6 +193,14 @@ To also upload the scores files to an S3 bucket:
 oceanbench evaluate path/to/challenger.py --output-bucket my-bucket --output-prefix results
 ```
 
+To also write the data shown by the [Viewer](https://oceanbench.edito.eu/viewer.html), pass a directory:
+
+```bash
+oceanbench evaluate path/to/challenger.py --viewer-artifacts-dir viewer-data
+```
+
+See [Building the viewer data](https://oceanbench.edito.eu/documentation/viewer-data/).
+
 To run OceanBench on an HPC compute node without internet access, see [Run OceanBench offline](https://oceanbench.edito.eu/documentation/run-offline/).
 
 #### Python

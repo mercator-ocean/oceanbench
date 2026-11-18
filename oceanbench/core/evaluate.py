@@ -15,6 +15,7 @@ import boto3
 import xarray
 
 from oceanbench import metrics
+from oceanbench.core import metrics as core_metrics
 from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.regions import RegionLike, RegionSpec, resolve_region
 from oceanbench.core.runtime_configuration import (
@@ -23,6 +24,7 @@ from oceanbench.core.runtime_configuration import (
     set_runtime_configuration,
 )
 from oceanbench.core.scores import (
+    CLASS4_METRIC_FUNCTION_NAME,
     METRIC_FUNCTION_NAMES,
     scores_document,
     scores_file_name,
@@ -108,6 +110,7 @@ def evaluate_challenger(
     output_prefix: str | None = None,
     runtime_configuration: RuntimeConfiguration | None = None,
     region: RegionLike = None,
+    viewer_artifacts_directory: str | None = None,
 ):
     """
     Compute all the benchmark scores for the given challenger dataset, by calling all functions of the `metrics` module.
@@ -130,6 +133,8 @@ def evaluate_challenger(
         Runtime settings applied to the evaluation, including staging and remote retry behavior.
     region : str, RegionSpec, or None, optional
         The OceanBench region to evaluate on. This can be an official region id such as ``global`` or ``ibi``, or a custom ``oceanbench.regions.RegionSpec`` value.
+    viewer_artifacts_directory : str, optional
+        A local directory to also write the viewer data of the challenger to, after the scores file. The directory mirrors the viewer data prefix and can hold several challengers and regions. Can also be configured with environment variable ``OCEANBENCH_VIEWER_ARTIFACTS_DIR``.
     """  # noqa
     resolved_challenger_python_code_uri_or_local_path = _parse_input_mandatory(
         challenger_python_code_uri_or_local_path,
@@ -144,6 +149,10 @@ def evaluate_challenger(
         output_prefix,
         OceanbenchEnvironmentVariable.OCEANBENCH_OUTPUT_PREFIX,
     )
+    resolved_viewer_artifacts_directory = _parse_input_non_manadatory(
+        viewer_artifacts_directory,
+        OceanbenchEnvironmentVariable.OCEANBENCH_VIEWER_ARTIFACTS_DIR,
+    )
     resolved_runtime_configuration = runtime_configuration or runtime_configuration_from_environment()
     _evaluate_challenger(
         resolved_challenger_python_code_uri_or_local_path,
@@ -151,6 +160,7 @@ def evaluate_challenger(
         resolved_output_prefix,
         resolved_runtime_configuration,
         resolved_region,
+        resolved_viewer_artifacts_directory,
     )
 
 
@@ -190,6 +200,7 @@ def _evaluate_challenger(
     output_prefix: str | None,
     runtime_configuration: RuntimeConfiguration,
     region: RegionSpec,
+    viewer_artifacts_directory: str | None = None,
 ):
     set_runtime_configuration(runtime_configuration)
     evaluation_start = perf_counter()
@@ -201,12 +212,20 @@ def _evaluate_challenger(
         lambda: open_challenger_dataset(challenger_python_code),
     )
     tables = {}
+    matchups = None
     for metric_function_name in METRIC_FUNCTION_NAMES:
-        tables[metric_function_name] = _timed_step(
-            timings,
-            metric_function_name,
-            lambda: getattr(metrics, metric_function_name)(challenger_dataset, region=region),
-        )
+        if viewer_artifacts_directory and metric_function_name == CLASS4_METRIC_FUNCTION_NAME:
+            tables[metric_function_name], matchups = _timed_step(
+                timings,
+                metric_function_name,
+                lambda: core_metrics.class4_rmsd_and_matchups_compared_to_observations(challenger_dataset, region),
+            )
+        else:
+            tables[metric_function_name] = _timed_step(
+                timings,
+                metric_function_name,
+                lambda: getattr(metrics, metric_function_name)(challenger_dataset, region=region),
+            )
         print(f"\n{metric_function_name}\n{tables[metric_function_name].to_string()}")
     timings["total"] = perf_counter() - evaluation_start
 
@@ -221,3 +240,12 @@ def _evaluate_challenger(
     print(format_evaluation_timings(timings, output_name))
     uploaded_url = uploaded_scores_file_url(output_bucket, output_name) if output_bucket else None
     print(scores_page_instructions(output_file_name, uploaded_url))
+    if viewer_artifacts_directory:
+        from oceanbench.publish.viewer_data import build_viewer_data
+
+        viewer_start = perf_counter()
+        build_viewer_data(
+            viewer_artifacts_directory, challenger_name, challenger_dataset, region, matchups, document["rows"]
+        )
+        viewer_duration = perf_counter() - viewer_start
+        print(f"Viewer data for {challenger_name} written to {viewer_artifacts_directory} in {viewer_duration:.1f} s")

@@ -18,6 +18,15 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
+## Unreleased
+
+**Scores:** unchanged vs 0.7.0.
+
+### Added
+
+- `oceanbench evaluate --viewer-artifacts-dir <directory>` also writes the viewer data of each challenger: maps, water column, Class IV match-ups, eddies and score summaries ([viewer data documentation](https://oceanbench.edito.eu/documentation/viewer-data/)). It needs the new `pyarrow` and `scikit-image` dependencies.
+- [Viewer](https://oceanbench.edito.eu/viewer.html) page on the website to explore forecast maps, water columns, Class IV match-ups and eddies, linked from the score tables.
+
 ## 0.7.0 - 2026-11-18
 
 **Scores:** unchanged vs 0.6.2. Incompatible change: the evaluation output changes from a report notebook to a scores file.
