@@ -18,9 +18,9 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
-## Unreleased
+## 0.7.0 - 2026-11-18
 
-**Scores:** unchanged vs 0.6.2. Incompatible change (next version 0.7.0): the evaluation output changes from a report notebook to a scores file.
+**Scores:** unchanged vs 0.6.2. Incompatible change: the evaluation output changes from a report notebook to a scores file.
 
 ### Changed
 
