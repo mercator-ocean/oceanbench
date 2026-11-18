@@ -25,7 +25,7 @@ and the affected reports are re-published (never silently overwritten).
 ### Changed
 
 - **Incompatible:** `oceanbench evaluate` and `oceanbench.evaluate_challenger` no longer generate and execute a notebook. They run the challenger file in process, print each score table and step timing, and write `{challenger}.{region}.scores.json`, one row per score. `--output-bucket` uploads that file, not a notebook. The Python and command line signatures are unchanged.
-- The sample references in `assets/` are scores files converted from the 0.6.0 report notebooks. The example notebook is a "Get started" tutorial on the GLONET 1 degree sample, which needs no credentials, and it is also the website's [Get started](https://oceanbench.edito.eu/documentation/get-started/) page, rendered without executing it. Its outputs are stored in the notebook, checked on every commit (`make check-example-notebook`) and refreshed with `make execute-example-notebook`.
+- The sample references in `assets/` are scores files converted from the 0.6.0 report notebooks. The example notebook is a tutorial on the GLONET 1 degree sample, which needs no credentials. It is also the website's [Get started evaluating your system](https://oceanbench.edito.eu/documentation/get-started/) page, rendered without executing it.
 - The website only reads scores files. The report notebooks of versions 0.1.0 to 0.6.0 are converted to scores files, published next to them (`make convert-report-notebooks`), and are no longer rendered as pages, so their scores are unchanged. Every challenger links to its scores file, not to a report notebook. The notebooks stay in the bucket. The `/reports/<challenger>.<region>/` redirect pages are removed.
 
 ### Removed

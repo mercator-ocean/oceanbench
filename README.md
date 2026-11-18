@@ -35,7 +35,7 @@ OceanBench's scientific paper is published in [NeurIPS 2025](https://neurips.cc/
 ## Score table and system comparison
 
 The official score table is available on the [OceanBench website](https://oceanbench.edito.eu).
-Any version, region and track can be exported as CSV, Parquet or Zarr with the Export buttons next to the pickers, opened in the [EDITO Data Explorer](https://datalab.dive.edito.eu/data-explorer), or fetched through the [Scores API](https://oceanbench.edito.eu/documentation/scores-api/):
+Any version, region and track can be exported as CSV, Parquet or Zarr with the Export buttons next to the pickers, or fetched through the [Scores API](https://oceanbench.edito.eu/documentation/scores-api/):
 
 ```sh
 curl -O https://oceanbench.edito.eu/api/scores/index.json
@@ -94,7 +94,7 @@ To officially submit your system to OceanBench, please open an issue on this rep
 1. A way to access the system output data in a standard format (e.g. Zarr or NetCDF).
 2. A way to execute the system code or container, so that the maintainers can reproduce the output, along with clear instructions for how to run it (e.g., input/output format, required dependencies, etc.).
 
-Optionally, attach the challenger file and the scores file resulting from a [programmatic](#programmatic-evaluation) evaluation.
+Optionally, attach the challenger file and the scores file resulting from an [evaluation](#evaluate-a-system).
 
 In addition, please provide the following metadata:
 - The organization that leads the construction or operation of the system.
@@ -104,12 +104,12 @@ In addition, please provide the following metadata:
 - The system initial conditions. For example, "GLO12/IFS".
 - The approximate horizontal resolution of the system. For example, "1/12°" or "1/4°".
 
-### Get started
+### Get started evaluating your system
 
-Follow the [Get started](https://oceanbench.edito.eu/documentation/get-started/) guide, or [this notebook](https://github.com/mercator-ocean/oceanbench/blob/main/assets/evaluate_challenger_example.ipynb) it is made from, to compute the OceanBench scores of a sample of the GLONET system, interpolated to 1 degree. It needs no credentials.
-The notebook opens the challenger dataset and computes each score table with the functions of `oceanbench.metrics`. Its outputs are stored in it and checked on every commit, so you can read it without executing it.
+Follow the [Get started evaluating your system](https://oceanbench.edito.eu/documentation/get-started/) guide, or [this notebook](https://github.com/mercator-ocean/oceanbench/blob/main/assets/evaluate_challenger_example.ipynb) it is made from, to compute the OceanBench scores of a sample of the GLONET system, interpolated to 1 degree. It needs no credentials.
+The notebook opens the challenger dataset and computes each score table with the functions of `oceanbench.metrics`.
 
-You can replace the cell that opens the challenger dataset with your code and execute the notebook. The official evaluation of a system is [`oceanbench evaluate`](#programmatic-evaluation).
+You can replace the cell that opens the challenger dataset with your code and execute the notebook. The official evaluation of a system is [`oceanbench evaluate`](#evaluate-a-system).
 
 #### Execute on your own resources
 
@@ -123,7 +123,7 @@ You will need to install OceanBench manually in your environment.
 pip install oceanbench
 ```
 
-The Get started notebook also needs Jupyter:
+The notebook also needs Jupyter:
 
 ```bash
 pip install jupyter
@@ -137,10 +137,10 @@ git clone git@github.com:mercator-ocean/oceanbench.git && cd oceanbench/ && pip 
 
 #### Execute on EDITO
 
-You can open and manually execute the Get started notebook in EDITO datalab by clicking here:
+You can open and manually execute the notebook in EDITO datalab by clicking here:
 [![Link to open resource in EDITO](https://dive.edito.eu/badges/Open-in-EDITO.svg)](https://datalab.dive.edito.eu/launcher/ocean-modelling/jupyter-notebook?name=jupyter-oceanbench&resources.requests.cpu=«4000m»&resources.requests.memory=«8Gi»&resources.limits.cpu=«7200m»&resources.limits.memory=«28Gi»&advanced.init.personalInit=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fedito%2Fopen-jupyter-notebook-url-edito.sh»&advanced.init.personalInitArgs=«https%3A%2F%2Fraw.githubusercontent.com%2Fmercator-ocean%2Foceanbench%2Frefs%2Fheads%2Fmain%2Fassets%2Fevaluate_challenger_example.ipynb»)
 
-### Programmatic evaluation
+### Evaluate a system
 
 Once [installed](#installation), you can evaluate your system from the command line or using python.
 
