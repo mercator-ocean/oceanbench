@@ -213,7 +213,7 @@ def _build_staged_observations_dataset(
         observations_dataset.close()
 
 
-def _forecast_observation_matches(
+def forecast_observation_matches(
     observation_datetimes: pandas.DatetimeIndex,
     first_day_timestamps: pandas.DatetimeIndex,
     lead_days_count: int,
@@ -274,7 +274,7 @@ def _selected_observations_dataset(
         {time_key: (observation_dimension_key, observation_datetimes)}
     )
 
-    selected_observation_indices, selected_run_indices = _forecast_observation_matches(
+    selected_observation_indices, selected_run_indices = forecast_observation_matches(
         observation_datetimes,
         first_day_timestamps,
         lead_days_count,

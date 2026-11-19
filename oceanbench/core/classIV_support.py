@@ -129,6 +129,10 @@ def _interpolate_observations_to_target_depth(
     return result[target_columns]
 
 
+def clear_class4_observations_cache() -> None:
+    _CLASS4_OBSERVATIONS_CACHE.clear()
+
+
 def _prepared_class4_observations(
     observations_dataset: xarray.Dataset,
     lead_days_count: int,

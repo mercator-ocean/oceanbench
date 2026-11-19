@@ -6,6 +6,7 @@ import pandas
 import xarray
 
 from oceanbench.core.classIV import rmsd_class4_validation
+from oceanbench.core.classIV_support import clear_class4_observations_cache
 from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.lagrangian_trajectory import (
@@ -16,12 +17,15 @@ from oceanbench.core.ocean_mask import ocean_mask
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
+from oceanbench.core.references.swot_observations import swot_observations
 from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, subset_dataset_to_region
 from oceanbench.core.rmsd import rmsd
 
 GLOBAL_LAGRANGIAN_PARTICLE_COUNT = 10000
 MINIMUM_LAGRANGIAN_PARTICLE_COUNT = 2000
 MESSAGE_COLUMN = "Message"
+CLASS4_SEA_LEVEL_ANOMALY_DISPLAY_NAME = "Sea level anomaly"
+SWOT_SEA_LEVEL_ANOMALY_DISPLAY_NAME = "High resolution sea level anomaly (SWOT)"
 
 
 def _lagrangian_particle_count(
@@ -36,6 +40,43 @@ def _lagrangian_particle_count(
     )
 
 
+def _class4_scores_releasing_cache(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    ocean_mask: xarray.DataArray,
+    variables: list[Variable],
+) -> pandas.DataFrame:
+    try:
+        return rmsd_class4_validation(
+            challenger_dataset=challenger_dataset,
+            reference_dataset=reference_dataset,
+            ocean_mask=ocean_mask,
+            variables=variables,
+        )
+    finally:
+        clear_class4_observations_cache()
+
+
+def _swot_score_label(class4_score_label: str) -> str:
+    return class4_score_label.replace(CLASS4_SEA_LEVEL_ANOMALY_DISPLAY_NAME, SWOT_SEA_LEVEL_ANOMALY_DISPLAY_NAME, 1)
+
+
+def _rmsd_of_sea_level_anomaly_compared_to_swot_observations(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike,
+) -> pandas.DataFrame:
+    try:
+        swot_observation_dataset = subset_dataset_to_region(swot_observations(challenger_dataset), region)
+    except ObservationDataUnavailableError:
+        return pandas.DataFrame()
+    return _class4_scores_releasing_cache(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=swot_observation_dataset,
+        ocean_mask=ocean_mask(),
+        variables=[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID],
+    ).rename(index=_swot_score_label)
+
+
 def rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
@@ -45,7 +86,7 @@ def rmsd_of_variables_compared_to_observations(
         observation_dataset = subset_dataset_to_region(observations(challenger_dataset), region)
     except ObservationDataUnavailableError as error:
         return pandas.DataFrame({MESSAGE_COLUMN: [str(error)]})
-    return rmsd_class4_validation(
+    observation_scores = _class4_scores_releasing_cache(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
         ocean_mask=ocean_mask(),
@@ -57,6 +98,15 @@ def rmsd_of_variables_compared_to_observations(
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
     )
+    scores = [
+        score_table
+        for score_table in (
+            observation_scores,
+            _rmsd_of_sea_level_anomaly_compared_to_swot_observations(challenger_dataset, region),
+        )
+        if not score_table.empty
+    ]
+    return pandas.concat(scores) if scores else pandas.DataFrame()
 
 
 def rmsd_of_variables_compared_to_glorys_reanalysis(

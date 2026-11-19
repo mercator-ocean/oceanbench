@@ -63,8 +63,12 @@ SECTIONS = {
             },
             {
                 "depths": ["Surface"],
-                "variables": ["temperature", "sea level anomaly"],
-                "variable_sensors": {"temperature": "drifter-buoy", "sea level anomaly": "satellite"},
+                "variables": ["temperature", "sea level anomaly", "high resolution sea level anomaly (swot)"],
+                "variable_sensors": {
+                    "temperature": "drifter-buoy",
+                    "sea level anomaly": "satellite",
+                    "high resolution sea level anomaly (swot)": "satellite",
+                },
                 "show_depth_label": True,
             },
             {

@@ -18,6 +18,7 @@ from oceanbench.core.references.observations import (
     load_mean_dynamic_topography,
     observations,
 )
+from oceanbench.core.references.swot_observations import swot_observations
 from oceanbench.core.regions import RegionLike, subset_dataset_to_region
 from oceanbench.core.resolution import get_dataset_resolution
 from oceanbench.core.runtime_configuration import RuntimeConfiguration, set_runtime_configuration
@@ -38,6 +39,7 @@ def stage_challenger_assets(
     glo12_analysis_dataset(challenger_dataset)
     try:
         observations(challenger_dataset)
+        swot_observations(challenger_dataset)
     except ObservationDataUnavailableError:
         pass
     load_mean_dynamic_topography(get_dataset_resolution(challenger_dataset))

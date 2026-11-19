@@ -8,6 +8,7 @@ import sys
 import textwrap
 
 import numpy
+import pandas
 import pytest
 
 import oceanbench.cli as cli
@@ -39,7 +40,7 @@ challenger_dataset = xarray.Dataset(
 )
 """
 
-REFERENCE_OPENER_NAMES = ["glorys_reanalysis_dataset", "glo12_analysis_dataset", "observations"]
+REFERENCE_OPENER_NAMES = ["glorys_reanalysis_dataset", "glo12_analysis_dataset", "observations", "swot_observations"]
 
 
 def _asset_key(opener_name: str, challenger_dataset) -> tuple:
@@ -99,6 +100,7 @@ def test_stage_command_stages_every_asset_and_computes_nothing(challenger_file, 
         ("glorys_reanalysis_dataset", *reference_key),
         ("glo12_analysis_dataset", *reference_key),
         ("observations", *reference_key),
+        ("swot_observations", *reference_key),
         ("mean_dynamic_topography", "quarter_degree"),
         ("ocean_mask",),
     }
@@ -118,13 +120,13 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
     _record_asset_openers(monkeypatch, core_metrics, metric_assets)
     for computation in (
         "rmsd",
-        "rmsd_class4_validation",
         "deviation_of_lagrangian_trajectories",
         "compute_mixed_layer_depth",
         "compute_geostrophic_currents",
         "_lagrangian_particle_count",
     ):
         monkeypatch.setattr(core_metrics, computation, lambda *args, **kwargs: None)
+    monkeypatch.setattr(core_metrics, "rmsd_class4_validation", lambda *args, **kwargs: pandas.DataFrame())
     challenger_namespace: dict = {}
     exec(CHALLENGER_CODE, challenger_namespace)
     metric_functions = [
