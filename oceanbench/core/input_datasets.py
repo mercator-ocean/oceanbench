@@ -19,6 +19,29 @@ from oceanbench.core.remote_http import open_remote_zarr, remote_zarr_store
 
 _ADDITIONAL_DATA_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/additionnal-data"
 
+_IFS_NOWCAST_DATASET_ROOT = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ifs-nowcast-corrected"
+
+_IFS_NOWCAST_ANALYSIS_VARIABLES = (
+    "sotemair",
+    "sotemhum",
+    "sohumspe",
+    "sowinu10",
+    "sowinv10",
+    "skt",
+    "somslpre",
+    "sp",
+)
+
+_IFS_NOWCAST_ACCUMULATED_VARIABLES = (
+    "sosudosw",
+    "sosudolw",
+    "sowaprec",
+    "cp",
+    "sosnowfa",
+    "ewss",
+    "nsss",
+)
+
 
 def _glo12_nowcast_datetimes() -> list[datetime]:
     return generate_dates("2023-01-04", "2025-12-31", 7)
@@ -26,6 +49,10 @@ def _glo12_nowcast_datetimes() -> list[datetime]:
 
 def _ifs_forcing_datetimes() -> list[datetime]:
     return generate_dates("2023-01-03", "2025-12-30", 7)
+
+
+def _ifs_nowcast_datetimes() -> list[datetime]:
+    return generate_dates("2024-01-02", "2024-12-24", 7)
 
 
 def glo12_nowcasts() -> xarray.Dataset:
@@ -52,6 +79,33 @@ def ifs_forcings() -> xarray.Dataset:
 def _ifs_forcing_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"{_ADDITIONAL_DATA_URL}/IFS/ifs_forcing_rg_forecasts_R{start_datetime_string}.zarr"
+
+
+def ifs_nowcasts() -> xarray.Dataset:
+    datasets = [_open_ifs_nowcast_dataset(_ifs_nowcast_dataset_path(dt)) for dt in _ifs_nowcast_datetimes()]
+    return xarray.concat(
+        datasets,
+        dim="time",
+        data_vars="minimal",
+        coords="minimal",
+        compat="equals",
+        join="exact",
+        combine_attrs="override",
+    ).sortby("time")
+
+
+def _ifs_nowcast_dataset_path(start_datetime: datetime) -> str:
+    start_datetime_string = start_datetime.strftime("%Y%m%d")
+    return f"{_IFS_NOWCAST_DATASET_ROOT}/{start_datetime_string}.zarr"
+
+
+def _open_ifs_nowcast_dataset(dataset_path: str) -> xarray.Dataset:
+    dataset = open_remote_zarr(
+        dataset_path,
+        consolidated=True,
+        chunks={},
+    )
+    return dataset
 
 
 def _open_weekly_zarr_datasets(

@@ -18,6 +18,13 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
+## Unreleased
+
+**Scores:** unchanged vs 0.7.0.
+
+### Added
+- Weekly IFS nowcasts for 2024 are exposed through `oceanbench.datasets.input.ifs_nowcasts()` from the CloudFerro public `ifs-nowcast-corrected` Zarr collection ([#323](https://github.com/mercator-ocean/oceanbench/issues/323), [#328](https://github.com/mercator-ocean/oceanbench/pull/328)).
+
 ## 0.7.0 - 2026-11-18
 
 **Scores:** unchanged vs 0.6.2. Incompatible change: the evaluation output changes from a report notebook to a scores file.

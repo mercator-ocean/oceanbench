@@ -177,6 +177,9 @@ cython_debug/
 # MacOS
 **/.DS_Store
 
+# Generated documentation
+docs/_build/
+
 # Data
 data/*
 scripts/*
