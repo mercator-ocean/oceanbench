@@ -18,6 +18,13 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
+## Unreleased
+
+**Scores:** unchanged vs 0.7.0.
+
+### Added
+- Weekly IFS nowcasts for 2024 are exposed through `oceanbench.datasets.input.ifs_nowcasts()` from the CloudFerro public `ifs-nowcast-corrected` Zarr collection ([#323](https://github.com/mercator-ocean/oceanbench/issues/323), [#328](https://github.com/mercator-ocean/oceanbench/pull/328)).
+
 ## 0.7.0 - 2026-11-18
 
 **Scores:** unchanged vs 0.6.2. Incompatible change: the evaluation output changes from a report notebook to a scores file.
@@ -72,7 +79,6 @@ and the affected reports are re-published (never silently overwritten).
 - `oceanbench.datasets.input.glo12_nowcasts()` and `ifs_forcings()` failed on a clean install because they needed s3fs. They now read the same stores over https ([#364](https://github.com/mercator-ocean/oceanbench/pull/364)).
 
 ### Added
-- Weekly IFS nowcasts for 2024 are exposed through `oceanbench.datasets.input.ifs_nowcasts()` from the CloudFerro public `ifs-nowcast-corrected` Zarr collection ([#323](https://github.com/mercator-ocean/oceanbench/issues/323), [#328](https://github.com/mercator-ocean/oceanbench/pull/328)).
 
 - `oceanbench stage` command, which downloads the data a challenger evaluation needs, ocean mask included, without computing any score. It runs the challenger file like `oceanbench evaluate`, as `__main__` with the current directory importable. For a local challenger file, a later `oceanbench evaluate` with the same stage directory then needs no network ([#355](https://github.com/mercator-ocean/oceanbench/pull/355), [#361](https://github.com/mercator-ocean/oceanbench/pull/361)).
 - [Run OceanBench offline](https://oceanbench.edito.eu/documentation/run-offline/) documentation page, for HPC compute nodes without internet access ([#355](https://github.com/mercator-ocean/oceanbench/pull/355)).

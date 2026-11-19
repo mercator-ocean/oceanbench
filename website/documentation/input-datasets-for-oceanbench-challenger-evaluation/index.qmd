@@ -16,13 +16,13 @@ OceanBench exposes the [input datasets](/documentation/api/datasets/input/index.
 
 :   Weekly GLO12 nowcasts from January 4, 2023 to December 31, 2025.
 
-    see more at: [ifs_nowcasts()](/documentation/api/datasets/input/index.qmd#oceanbench.datasets.input.ifs_nowcasts).
+    see more at: [glo12_nowcasts()](/documentation/api/datasets/input/index.qmd#oceanbench.datasets.input.glo12_nowcasts).
 
 `oceanbench.datasets.input.ifs_forcings()`
 
 :   Weekly IFS forcings from January 3, 2023 to December 30, 2025.
 
-    see more at: [ifs_nowcasts()](/documentation/api/datasets/input/index.qmd#oceanbench.datasets.input.ifs_nowcasts).
+    see more at: [ifs_forcings()](/documentation/api/datasets/input/index.qmd#oceanbench.datasets.input.ifs_forcings).
 
 `oceanbench.datasets.input.ifs_nowcasts()`
 

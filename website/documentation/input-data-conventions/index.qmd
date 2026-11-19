@@ -76,7 +76,7 @@ Dividing a valid hourly stress accumulation by 3600 gives a stress in N m-2. Thi
 https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ifs-nowcast-corrected/{YYYYMMDD}.zarr
 ```
 
-A package has dimensions `time` (4), `lat` (2560) and `lon` (5120) on the ECMWF F1280 regular Gaussian grid. The instantaneous variables are analyses at their valid time. `cp` is a precipitation rate in `kg m-2 s-1`; `ewss` and `nsss` are eastward and northward surface stresses in `N m-2`.
+A package has dimensions `time` (4), `lat` (2560) and `lon` (5120) on the ECMWF F1280 regular Gaussian grid. The data come from ECMWF IFS operational analyses at 00, 06, 12 and 18 UTC, with fluxes from the 6- and 12-hour steps of the 00 and 12 UTC forecasts. The instantaneous variables are analyses at their valid time. `sowaprec`, `cp`, `sosnowfa`, `sosudosw`, `sosudolw`, `ewss` and `nsss` are forecast accumulations de-accumulated to 6-hour means over the interval [t, t + 6 h) beginning at the time coordinate t: `sowaprec`, `cp` and `sosnowfa` are rates in `kg m-2 s-1`, `sosudosw` and `sosudolw` are fluxes in `W m-2`, and `ewss` and `nsss` are eastward and northward surface stresses in `N m-2`. "Corrected" means that `sowaprec`, `cp` and `sosnowfa` were multiplied by 1000 to fix their conversion to `kg m-2 s-1`, and that the coordinate fill values were fixed.
 
 ## GLO12 nowcast packages
 
