@@ -45,6 +45,7 @@ website:
         - documentation/one-degree-track/index.qmd
         - documentation/run-offline/index.qmd
         - documentation/scores-api/index.qmd
+        - documentation/regrid-a-challenger/index.qmd
         - section: API reference
           href: documentation/api/index.qmd
           contents:
@@ -55,6 +56,7 @@ website:
             - documentation/api/datasets/input/index.qmd
             - documentation/api/datasets/reference/index.qmd
             - documentation/api/datasets/training/index.qmd
+            - documentation/api/helpers/challengers/index.qmd
   navbar:
     logo: https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/logo/favicon-light.png
     logo-alt: "OceanBench logo."
@@ -147,6 +149,15 @@ quartodoc:
           contents:
             - name: datasets.training
               children: embedded
+        - kind: page
+          path: helpers/challengers/index
+          summary:
+            name: Challenger helpers
+          contents:
+            - name: helpers.challengers
+              children: embedded
+execute:
+  cache: false
 format:
   html:
     theme:
