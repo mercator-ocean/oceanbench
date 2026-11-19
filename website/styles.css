@@ -229,30 +229,15 @@ body.quarto-dark .challengers-table-wrap {
   cursor: help;
 }
 
-.region-report-badges {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.region-report-badge {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--ob-border);
-  border-radius: var(--ob-radius-pill);
-  padding: 0.16rem 0.55rem;
-  background: var(--ob-surface);
-  color: var(--bs-body-color, #333940);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.4;
-  text-decoration: none;
-}
-
-.region-report-badge:hover {
-  border-color: var(--ob-accent);
-  color: var(--ob-accent);
-  text-decoration: none;
+.your-scores-marker {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  margin-left: 0.3em;
+  border-radius: 50%;
+  background: var(--ob-accent);
+  vertical-align: baseline;
+  cursor: help;
 }
 
 /* --- Score tables --- */
@@ -470,6 +455,7 @@ body.quarto-dark #region-selector {
 }
 
 .region-selector-controls {
+  --selector-label-width: 5.75rem;
   position: relative;
   z-index: 2;
   pointer-events: none;
@@ -494,7 +480,8 @@ body.quarto-dark #region-selector {
 }
 
 .selector-label {
-  flex: 0 0 3.5rem;
+  flex: 0 0 var(--selector-label-width);
+  white-space: nowrap;
   color: var(--ob-muted);
   font-size: 0.8rem;
   font-weight: 700;
@@ -540,7 +527,7 @@ body.quarto-dark #region-selector {
 .selector-description {
   flex-basis: 100%;
   margin: 0;
-  padding-left: calc(3.5rem + 0.75rem);
+  padding-left: calc(var(--selector-label-width) + 0.75rem);
   color: var(--ob-muted);
   font-size: 0.82rem;
   line-height: 1.4;
@@ -1167,6 +1154,11 @@ body.quarto-dark #comparison-to-observations > h2 {
   min-height: 55px !important;
 }
 
+.navbar .navbar-nav .nav-item {
+  display: flex;
+  align-items: center;
+}
+
 /* --- EDITO credit --- */
 
 .edito-credit {
@@ -1617,4 +1609,149 @@ a.external-link[href*="marine.copernicus.eu"]::after {
 .score-table .standard-name[title] {
   cursor: help;
   text-decoration: underline dotted;
+}
+
+/* --- Export dialog --- */
+
+#export-dialog,
+#your-scores-dialog {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface-raised);
+  color: var(--bs-body-color, #333940);
+  box-shadow: var(--ob-soft-shadow);
+}
+
+#export-dialog::backdrop,
+#your-scores-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+#export-dialog h3,
+#your-scores-dialog h3 {
+  margin: 0 0 0.15rem;
+  font-size: 1.15rem;
+}
+
+.export-dialog-context {
+  margin: 0 0 0.75rem;
+  color: var(--ob-muted);
+  font-size: 0.85rem;
+}
+
+.export-dialog-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.9rem;
+}
+
+.export-dialog-close button {
+  border: 0;
+  background: none;
+  color: var(--ob-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.export-action {
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-pill);
+  background: var(--ob-surface);
+  color: var(--bs-body-color, #333940);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.export-action:hover {
+  border-color: var(--ob-accent);
+  color: var(--ob-accent);
+}
+
+.export-action--primary {
+  background: var(--ob-accent);
+  border-color: var(--ob-accent);
+  color: var(--ob-accent-contrast);
+}
+
+.export-action--primary:hover {
+  color: var(--ob-accent-contrast);
+  opacity: 0.9;
+}
+
+.export-snippet {
+  margin-bottom: 0.75rem;
+}
+
+.export-snippet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ob-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.export-copy-button {
+  font-family: inherit;
+}
+
+.export-snippet-header .export-copy-button {
+  border: 0;
+  background: none;
+  color: var(--ob-accent);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.export-snippet pre {
+  margin: 0.25rem 0 0;
+  padding: 0.6rem 0.8rem;
+  overflow-x: auto;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface);
+  font-size: 0.8rem;
+}
+
+.export-dialog-footer {
+  margin: 0;
+  color: var(--ob-muted);
+  font-size: 0.82rem;
+}
+
+.your-scores-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.your-scores-field input[type="url"] {
+  flex: 1 1 14rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--ob-border);
+  border-radius: var(--ob-radius-md);
+  background: var(--ob-surface);
+  color: inherit;
+}
+
+#your-scores-status[data-level="error"] {
+  color: var(--bs-danger, #b02a37);
 }

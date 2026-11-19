@@ -7,22 +7,14 @@ from pathlib import Path
 
 import dask.array
 import numpy
-import nbformat
 import pytest
 import xarray
 
 import oceanbench
-from oceanbench.core.python2jupyter import generate_evaluation_notebook_file
 from oceanbench.core.regions import region_from_dict, region_to_dict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WESTERN_MED_REGION_FILE = PROJECT_ROOT / "assets" / "western_med_region.json"
-
-
-def _region_cell(notebook: nbformat.NotebookNode) -> nbformat.NotebookNode:
-    region_cells = [cell for cell in notebook.cells if cell.source.startswith("region = ")]
-    assert len(region_cells) == 1
-    return region_cells[0]
 
 
 def test_custom_region_roundtrip_and_subset() -> None:
@@ -130,51 +122,12 @@ def test_load_region_file_reports_missing_path_cleanly(tmp_path) -> None:
         oceanbench.regions.load_region_file(missing_region_path)
 
 
-def test_example_custom_region_file_generates_custom_region_notebook(tmp_path) -> None:
-    challenger_path = tmp_path / "challenger.py"
-    challenger_path.write_text(
-        "import xarray\n\nchallenger_dataset = xarray.Dataset()\n",
-        encoding="utf-8",
-    )
-    output_path = tmp_path / "western_med.report.ipynb"
+def test_example_custom_region_file_loads_a_custom_region() -> None:
     custom_region = oceanbench.regions.load_region_file(WESTERN_MED_REGION_FILE)
 
-    generate_evaluation_notebook_file(
-        str(challenger_path),
-        str(output_path),
-        region=custom_region,
-    )
-
-    notebook = nbformat.read(output_path, as_version=4)
-    region_cell = _region_cell(notebook)
-
-    assert "region = oceanbench.regions.custom(" in region_cell.source
-    assert "identifier='western_med'" in region_cell.source
-    assert "display_name='Western Mediterranean'" in region_cell.source
-    assert notebook.metadata["oceanbench"]["region"]["id"] == "western_med"
-    assert notebook.metadata["oceanbench"]["region"]["display_name"] == "Western Mediterranean"
-    assert notebook.metadata["oceanbench"]["region"]["official"] is False
-
-
-def test_generate_evaluation_notebook_keeps_official_region_string(tmp_path) -> None:
-    challenger_path = tmp_path / "challenger.py"
-    challenger_path.write_text(
-        "import xarray\n\nchallenger_dataset = xarray.Dataset()\n",
-        encoding="utf-8",
-    )
-    output_path = tmp_path / "official.report.ipynb"
-
-    generate_evaluation_notebook_file(
-        str(challenger_path),
-        str(output_path),
-        region="ibi",
-    )
-
-    notebook = nbformat.read(output_path, as_version=4)
-
-    assert _region_cell(notebook).source == "region = 'ibi'"
-    assert notebook.metadata["oceanbench"]["region"]["id"] == "ibi"
-    assert notebook.metadata["oceanbench"]["region"]["official"] is True
+    assert region_to_dict(custom_region)["id"] == "western_med"
+    assert region_to_dict(custom_region)["display_name"] == "Western Mediterranean"
+    assert custom_region.official is False
 
 
 def _global_grid(longitudes: numpy.ndarray) -> xarray.Dataset:

@@ -1,0 +1,17 @@
+---
+title: "News"
+description: "Announcements about OceanBench: new versions, challengers and features."
+listing:
+  contents: posts
+  sort: "date desc"
+  type: default
+  categories: true
+---
+
+<!--
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+Follow the announcements with the [RSS feed](/index.xml).

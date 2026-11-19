@@ -4,12 +4,10 @@
 
 project:
   type: website
-  execute-dir: project
   pre-render:
-    - python download_reports.py
     - python -m quartodoc build
+    - python add_api_page_titles.py
   post-render:
-    - python generate_report_redirects.py
     - python publish_scores.py
     - python strip_index_from_links.py
   resources:
@@ -28,8 +26,11 @@ project:
     - assets/edito.png
     - assets/mercator-ocean.png
     - external-links.js
+    - news/posts/your-scores-on-the-website/BestModelEver.global.scores.json
 website:
   title: "OceanBench"
+  description: "OceanBench is a benchmarking tool to evaluate ocean forecasting systems against reference ocean datasets and observations."
+  site-url: https://oceanbench.edito.eu
   favicon: favicon-light.png
   open-graph: true
   sidebar:
@@ -37,11 +38,13 @@ website:
       title: Technical documentation
       contents:
         - documentation/index.qmd
+        - documentation/get-started/index.ipynb
         - documentation/shape-of-the-challenger-dataset/index.qmd
         - documentation/input-datasets-for-oceanbench-challenger-evaluation/index.qmd
         - documentation/input-data-conventions/index.qmd
         - documentation/one-degree-track/index.qmd
         - documentation/run-offline/index.qmd
+        - documentation/scores-api/index.qmd
         - section: API reference
           href: documentation/api/index.qmd
           contents:
@@ -59,6 +62,7 @@ website:
       - href: index.qmd
         text: Scores
       - challengers/index.qmd
+      - news/index.qmd
       - about/index.qmd
       - text: Documentation
         menu:
@@ -72,6 +76,9 @@ website:
       - href: https://github.com/mercator-ocean/oceanbench
         text: Source code
     right:
+      - icon: rss
+        href: index.xml
+        aria-label: "News RSS feed"
       - href: https://edito.eu
         text: |
           <span class="edito-credit"><span class="edito-credit-label">Powered by</span>
@@ -140,8 +147,6 @@ quartodoc:
           contents:
             - name: datasets.training
               children: embedded
-execute:
-  cache: false
 format:
   html:
     theme:

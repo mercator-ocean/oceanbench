@@ -11,107 +11,128 @@ from helpers.published_regions import published_region_ids
 
 S3_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
 REPORTS_ROOT_PREFIX = "public/evaluation-reports"
-REPORT_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
-REPORT_NOTEBOOK_FILE_NAME = "index.ipynb"
+EVALUATION_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
+SCORES_FILE_SUFFIX = ".scores.json"
+DOWNLOADED_SCORES_DIRECTORY = "downloaded-scores"
 
-# The report discovery and download steps each issue one HTTP request per challenger and region.
+# The scores file discovery and download steps each issue one HTTP request per challenger and region.
 # Running them concurrently keeps the website rebuild well under the gateway timeout as the number
 # of published versions grows.
 MAXIMUM_PARALLEL_REQUESTS = 16
 
 # index.json stored next to the reports is the single source of truth: editing it
 # (or uploading a new report) publishes a version or challenger without a library release.
-_report_index_cache = None
+_evaluation_index_cache = None
 
 
-def _fetch_report_index() -> dict:
-    response = requests.get(REPORT_INDEX_URL, timeout=10)
+def _fetch_evaluation_index() -> dict:
+    response = requests.get(EVALUATION_INDEX_URL, timeout=10)
     if response.status_code != 200:
-        raise RuntimeError(f"Could not read the report index at {REPORT_INDEX_URL} (HTTP {response.status_code}).")
+        raise RuntimeError(
+            f"Could not read the evaluation index at {EVALUATION_INDEX_URL} (HTTP {response.status_code})."
+        )
     return response.json()
 
 
-def _report_index() -> dict:
-    global _report_index_cache
-    if _report_index_cache is None:
-        _report_index_cache = _fetch_report_index()
-    return _report_index_cache
+def _evaluation_index() -> dict:
+    global _evaluation_index_cache
+    if _evaluation_index_cache is None:
+        _evaluation_index_cache = _fetch_evaluation_index()
+    return _evaluation_index_cache
 
 
-def _version_sort_key(version: str) -> list[int]:
+def version_sort_key(version: str) -> list[int]:
     return [int(component) if component.isdigit() else -1 for component in version.split(".")]
 
 
 def available_versions() -> list[str]:
-    versions = list(_report_index().get("versions", {}).keys())
-    return sorted(versions, key=_version_sort_key, reverse=True)
+    versions = list(_evaluation_index().get("versions", {}).keys())
+    return sorted(versions, key=version_sort_key, reverse=True)
 
 
 def default_version() -> str:
     versions = available_versions()
-    declared_default = _report_index().get("default")
+    declared_default = _evaluation_index().get("default")
     if declared_default in versions:
         return declared_default
     return versions[0] if versions else ""
 
 
 def challengers_for_version(version: str) -> list[str]:
-    return _report_index().get("versions", {}).get(version, {}).get("challengers", [])
+    return _evaluation_index().get("versions", {}).get(version, {}).get("challengers", [])
 
 
-def _notebook_url(version: str, challenger_name: str, region_id: str) -> str:
-    return f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{challenger_name}.{region_id}.report.ipynb"
+def published_file_url(version: str, file_name: str) -> str:
+    return f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/{version}/{file_name}"
 
 
-def _report_exists(version: str, challenger_name: str, region_id: str) -> bool:
+def _published_file_exists(version: str, file_name: str) -> bool:
     try:
-        response = requests.head(_notebook_url(version, challenger_name, region_id), timeout=10)
+        response = requests.head(published_file_url(version, file_name), timeout=10)
         return response.status_code == 200
     except Exception:
         return False
 
 
-def discover_official_reports(version: str) -> dict[str, list[str]]:
+def _scores_file_name(challenger_name: str, region_id: str) -> str:
+    return f"{challenger_name}.{region_id}{SCORES_FILE_SUFFIX}"
+
+
+def _published_scores_file_name(version: str, challenger_name: str, region_id: str) -> str | None:
+    file_name = _scores_file_name(challenger_name, region_id)
+    return file_name if _published_file_exists(version, file_name) else None
+
+
+def discover_published_scores_files(version: str) -> dict[str, dict[str, str]]:
+    """Published scores file name of each challenger, by region."""
     challenger_names = challengers_for_version(version)
     probes = [
         (challenger_name, region_id) for region_id in published_region_ids() for challenger_name in challenger_names
     ]
 
-    def report_exists(probe: tuple[str, str]) -> bool:
+    def published_scores_file_name(probe: tuple[str, str]) -> str | None:
         challenger_name, region_id = probe
-        return _report_exists(version, challenger_name, region_id)
+        return _published_scores_file_name(version, challenger_name, region_id)
 
     with ThreadPoolExecutor(max_workers=MAXIMUM_PARALLEL_REQUESTS) as pool:
-        available_probes = {probe for probe, exists in zip(probes, pool.map(report_exists, probes)) if exists}
+        file_names = {
+            probe: file_name
+            for probe, file_name in zip(probes, pool.map(published_scores_file_name, probes))
+            if file_name
+        }
 
     return {
-        region_id: [
-            challenger_name for challenger_name in challenger_names if (challenger_name, region_id) in available_probes
-        ]
+        region_id: {
+            challenger_name: file_names[(challenger_name, region_id)]
+            for challenger_name in challenger_names
+            if (challenger_name, region_id) in file_names
+        }
         for region_id in published_region_ids()
     }
 
 
-def report_notebook_path(version_directory: str, challenger_name: str, region_id: str) -> str:
-    return os.path.join(version_directory, f"{challenger_name}.{region_id}", REPORT_NOTEBOOK_FILE_NAME)
-
-
-def discover_downloaded_reports(reports_directory: str, version: str) -> dict[str, list[str]]:
-    version_directory = os.path.join(reports_directory, version)
+def discover_downloaded_scores_files(scores_directory: str, version: str) -> dict[str, list[str]]:
     return {
         region_id: [
             challenger_name
             for challenger_name in challengers_for_version(version)
-            if os.path.isfile(report_notebook_path(version_directory, challenger_name, region_id))
+            if downloaded_scores_file_path(scores_directory, version, challenger_name, region_id)
         ]
         for region_id in published_region_ids()
     }
 
 
-def download_notebook(version: str, challenger_name: str, region_id: str, destination_directory: str) -> str | None:
-    destination_path = report_notebook_path(destination_directory, challenger_name, region_id)
-    os.makedirs(os.path.dirname(destination_path), exist_ok=True)
-    url = _notebook_url(version, challenger_name, region_id)
+def downloaded_scores_file_path(
+    scores_directory: str, version: str, challenger_name: str, region_id: str
+) -> str | None:
+    scores_file_path = os.path.join(scores_directory, version, f"{challenger_name}.{region_id}{SCORES_FILE_SUFFIX}")
+    return scores_file_path if os.path.isfile(scores_file_path) else None
+
+
+def download_scores_file(version: str, file_name: str, destination_directory: str) -> str | None:
+    destination_path = os.path.join(destination_directory, file_name)
+    os.makedirs(destination_directory, exist_ok=True)
+    url = published_file_url(version, file_name)
 
     try:
         response = requests.get(url, timeout=30)
@@ -121,5 +142,5 @@ def download_notebook(version: str, challenger_name: str, region_id: str, destin
             file.write(response.content)
         return destination_path
     except Exception as error:
-        print(f"Failed to download {challenger_name}.{region_id} ({version}) from {url}: {error}")
+        print(f"Failed to download {file_name} ({version}) from {url}: {error}")
     return None

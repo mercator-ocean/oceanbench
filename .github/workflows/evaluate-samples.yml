@@ -90,18 +90,18 @@ jobs:
           OCEANBENCH_STAGE_MAX_WORKERS: '8'
         run: make evaluate-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
         shell: micromamba-shell {0}
-      - name: Compare generated notebook against reference
+      - name: Compare generated scores against reference
         run: make compare-sample SAMPLE=assets/${{ matrix.sample }}_sample.py
         shell: micromamba-shell {0}
-      - name: Archive generated notebooks
+      - name: Archive generated scores
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: generated-notebook-${{ matrix.sample }}
+          name: generated-scores-${{ matrix.sample }}
           path: |
-            ${{ matrix.sample }}_sample.*.report.ipynb
+            ${{ matrix.sample }}_sample.*.scores.json
   evaluate-extras:
-    name: evaluate ibi region, notebooks and doctests
+    name: evaluate ibi region and doctests
     # A dispatch that narrows the samples is debugging one of them, so the
     # unrelated extras are left out of that run. Any other event leaves the
     # input unset, which reads as empty here and keeps the extras in.
@@ -135,7 +135,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
         run: make evaluate-ibi-region
         shell: micromamba-shell {0}
-      - name: Compare IBI notebook against reference
+      - name: Compare IBI scores against reference
         run: make compare-ibi
         shell: micromamba-shell {0}
       - name: Run dataset doctests
@@ -148,10 +148,10 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
         run: make doctest
         shell: micromamba-shell {0}
-      - name: Archive generated notebooks
+      - name: Archive generated scores
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: generated-notebook-ibi
+          name: generated-scores-ibi
           path: |
-            *.ibi.report.ipynb
+            *.ibi.scores.json
