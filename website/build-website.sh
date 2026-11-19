@@ -14,9 +14,11 @@ if ! command -v quarto > /dev/null; then
     dpkg -i /tmp/quarto.deb
 fi
 
-rm -rf reports scores documentation/api _site
+rm -rf downloaded-scores scores api documentation/api _site
 
 pip install -r requirements.txt
+python download_scores.py
+python generate_pages.py
 quarto render --to html
 
 mkdir -p /app/repository

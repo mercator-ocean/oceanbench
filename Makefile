@@ -46,7 +46,7 @@ reuse-annotate:
 
 SAMPLE_FILES := $(wildcard assets/*_sample.py)
 IBI_SAMPLE_FILE := assets/glonet_sample.py
-IBI_NOTEBOOK := glonet_sample.ibi.report.ipynb
+IBI_SCORES := glonet_sample.ibi.scores.json
 
 evaluate-challenger: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 evaluate-challenger:
@@ -68,12 +68,12 @@ compare-sample: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-sample:
 	${ACTIVATE_ENVIRONMENT}
 	name=$$(basename $(SAMPLE) .py); \
-	python tests/compare_notebook.py assets/$$name.global.report.ipynb $$name.global.report.ipynb
+	python tests/compare_scores.py assets/$$name.global.scores.json $$name.global.scores.json
 
 compare-ibi: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 compare-ibi:
 	${ACTIVATE_ENVIRONMENT}
-	python tests/compare_notebook.py assets/$(IBI_NOTEBOOK) $(IBI_NOTEBOOK)
+	python tests/compare_scores.py assets/$(IBI_SCORES) $(IBI_SCORES)
 
 doctest: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 doctest:
@@ -107,8 +107,37 @@ release-minor: _release
 release-major: BUMP_TYPE = major
 release-major: _release
 
+convert-report-notebooks: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+convert-report-notebooks:
+	${ACTIVATE_ENVIRONMENT}
+	python helper_scripts/convert_report_notebooks.py --output-directory ${OUTPUT_DIRECTORY} ${CONVERT_ARGUMENTS}
+
+execute-example-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+execute-example-notebook:
+	${ACTIVATE_ENVIRONMENT}
+	python helper_scripts/execute_example_notebook.py refresh
+
+check-example-notebook: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
+check-example-notebook:
+	${ACTIVATE_ENVIRONMENT}
+	python helper_scripts/execute_example_notebook.py check
+
 deploy-website-locally:
+	cd website && python download_scores.py && python generate_pages.py
 	quarto preview website
 
 deploy-website-on-edito:
 	./edito/deploy-website.sh
+
+NRT_WEBSITE_BRANCH := $(or $(NRT_WEBSITE_BRANCH),272-2-nrt-for-demo)
+NRT_WEBSITE_SERVICE_NAME := oceanbench-nrt-demo
+NRT_WEBSITE_MEMORY_LIMIT := 10Gi
+NRT_WEBSITE_HEALTH_CHECK_ATTEMPTS := 240
+
+deploy-nrt-website-on-edito:
+	BRANCH=$(NRT_WEBSITE_BRANCH) \
+	SERVICE_BRANCH=$${SERVICE_BRANCH:-$$(git branch --show-current)} \
+	MAIN_SERVICE_NAME=$(NRT_WEBSITE_SERVICE_NAME) \
+	MEMORY_LIMIT=$(NRT_WEBSITE_MEMORY_LIMIT) \
+	HEALTH_CHECK_ATTEMPTS=$(NRT_WEBSITE_HEALTH_CHECK_ATTEMPTS) \
+	$(MAKE) deploy-website-on-edito

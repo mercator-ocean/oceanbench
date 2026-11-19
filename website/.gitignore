@@ -6,9 +6,13 @@
 /_site/
 # /_result_tables/
 /index_files/
-/reports/
+/downloaded-scores/
 /documentation/api/
+/_scores-data.html
+/challengers/_challengers-table.md
+/documentation/get-started/
 /objects.json
 /scores/
+/api/
 
 **/*.quarto_ipynb

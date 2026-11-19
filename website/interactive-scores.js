@@ -17,6 +17,9 @@ function buildBinEdges(maximumPercent) {
 const SCALE_SNAPS = [5, 10, 20, 40, 80, 100, 200, 500, 1000];
 let maxScale = 80;
 let colorScaleEdges = buildBinEdges(maxScale);
+const LEAD_DAYS_URL_PARAMETER = "lead_days";
+const ALL_LEAD_DAYS_VALUE = "all";
+let showAllLeadDays = false;
 const DISPLAY_LEAD_DAYS = [
   { preferred: "1", fallback: "2" },
   { preferred: "3" },
@@ -161,6 +164,7 @@ function getValue(scoreData, depth, variable, leadDay) {
 function getLeadDays(scoreData, depth) {
   const firstVariable = Object.keys(scoreData.depths[depth].variables)[0];
   const allDays = Object.keys(scoreData.depths[depth].variables[firstVariable].data);
+  if (showAllLeadDays) return [...allDays].sort((first, second) => Number(first) - Number(second));
   const resolvedDays = [];
   for (const entry of DISPLAY_LEAD_DAYS) {
     if (allDays.includes(entry.preferred)) {
@@ -204,17 +208,37 @@ function escapeAttribute(text) {
     .replace(/"/g, "&quot;");
 }
 
+function isYourScores(name) {
+  return yourScoresEntries.some((entry) => entry.key === name);
+}
+
+const YOUR_SCORES_TEXT_MARKER = "\u25CF";
+const YOUR_SCORES_MARKER_HTML = '<span class="your-scores-marker"></span>';
+
+function noteMarkerText(name) {
+  return isYourScores(name) ? YOUR_SCORES_TEXT_MARKER : "*";
+}
+
+function noteMarkerGlyphHtml(name) {
+  return isYourScores(name) ? YOUR_SCORES_MARKER_HTML : "*";
+}
+
+function noteMarkerHtml(name, note) {
+  return isYourScores(name)
+    ? `<span class="your-scores-marker" title="${escapeAttribute(note)}"></span>`
+    : `<span class="challenger-note-marker" title="${escapeAttribute(note)}">*</span>`;
+}
+
 function displayNameHtml(name) {
   const note = challengerNote(name);
   if (!note) return displayName(name);
   return (
-    `${displayName(name)}` +
-    `<span class="challenger-note-marker" title="${escapeAttribute(note)}">*</span>`
+    `${displayName(name)}` + noteMarkerHtml(name, note)
   );
 }
 
 function displayNameText(name) {
-  return challengerNote(name) ? `${displayName(name)} *` : displayName(name);
+  return challengerNote(name) ? `${displayName(name)} ${noteMarkerText(name)}` : displayName(name);
 }
 
 function buildChallengerNotesHtml(challengerNames) {
@@ -224,7 +248,7 @@ function buildChallengerNotesHtml(challengerNames) {
     const note = challengerNote(name);
     if (!note || seen.has(note)) continue;
     seen.add(note);
-    items += `<span class="challenger-note-entry">* ${note}</span>`;
+    items += `<span class="challenger-note-entry">${noteMarkerGlyphHtml(name)} ${note}</span>`;
   }
   if (!items) return "";
   return `<p class="challengers-table-note">${items}</p>`;
@@ -327,7 +351,7 @@ function buildDataRows(
     if (!score || !score.depths[depth]) continue;
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}/">${displayNameHtml(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col">${displayNameHtml(name)}</th>`;
     for (const variable of variables) {
       if (depthVariables && !depthVariables.has(variable)) {
         for (const day of leadDays) {
@@ -378,7 +402,7 @@ function buildCombinedDataRows(
   for (const name of orderedNames) {
     const isBaseline = name === baseline;
     const rowClass = isBaseline ? ' class="baseline-row"' : "";
-    rows += `<tr${rowClass}><th class="model-col"><a href="reports/${activeVersion}/${name}.${regionId}/">${displayNameHtml(name)}</a></th>`;
+    rows += `<tr${rowClass}><th class="model-col">${displayNameHtml(name)}</th>`;
     for (const { metricKey, variables, leadDays } of metricSpecs) {
       const score = challengers[name][metricKey];
       const baselineScore = challengers[baseline][metricKey];
@@ -631,6 +655,425 @@ function buildSelectorRow(labelText, chipsHtml, description, descriptionClass = 
   return markup;
 }
 
+const DATA_EXPLORER_URL = "https://datalab.dive.edito.eu/data-explorer";
+const EXPORT_FORMATS = ["csv", "parquet", "zarr"];
+const EXPLORABLE_EXPORT_FORMATS = ["csv", "parquet"];
+const FLAT_DEPTH_KEY = "flat";
+
+const EXPORT_FORMAT_DESCRIPTIONS = {
+  csv: "One row per challenger, metric, depth, variable and lead day.",
+  parquet: "Same table as the CSV, smaller and faster to read.",
+  zarr: "Multi-dimensional dataset: <code>value</code> over the challenger, comparison, metric, depth, variable and lead_day dimensions, with the <code>unit</code> and <code>standard_name</code> of each variable.",
+};
+
+function scoresExportUrl(exportFormat) {
+  const relativePath = `${parsedData.scores_api_directory}/${encodeURIComponent(activeVersion)}/${encodeURIComponent(activeRegion)}/${activeTrack}.${exportFormat}`;
+  return new URL(relativePath, document.baseURI).href;
+}
+
+function dataExplorerUrl(exportFormat) {
+  return `${DATA_EXPLORER_URL}?source=${encodeURIComponent(scoresExportUrl(exportFormat))}`;
+}
+
+function buildExportChips() {
+  const chips = EXPORT_FORMATS.map(
+    (exportFormat) => `<button type="button" class="selector-chip" data-export-format="${exportFormat}" aria-haspopup="dialog">${exportFormat === "csv" ? "CSV" : titleCase(exportFormat)}</button>`,
+  ).join("");
+  return `<div class="selector-chips" role="group" aria-label="Export the displayed scores">${chips}</div>`;
+}
+
+function buildLeadDaysChips() {
+  const chip = (label, isAll) =>
+    `<button type="button" class="selector-chip${showAllLeadDays === isAll ? " active" : ""}" data-all-lead-days="${isAll}">${label}</button>`;
+  return `<div class="selector-chips" role="group" aria-label="Lead days displayed">${chip("Key days", false)}${chip("All days", true)}</div>`;
+}
+
+function exampleScoreSelection() {
+  const challengers = getCurrentRegionData(parsedData)?.challengers || {};
+  const challengerName = Object.keys(challengers).find(
+    (name) => trackKeyForChallenger(name) === activeTrack && !isReferenceBaseline(name),
+  );
+  const candidates = SECTION_ORDER.map((comparison) => {
+    const metricKey = parsedData.sections?.[comparison]?.depth_metric;
+    const depths = challengers[challengerName]?.[metricKey]?.depths || {};
+    const [depth, depthScore] = Object.entries(depths)[0] || [];
+    const variable = Object.keys(depthScore?.variables || {})[0];
+    return variable === undefined
+      ? null
+      : {
+          challenger: challengerName,
+          comparison,
+          metric: parsedData.metric_titles[metricKey],
+          depth: depth === FLAT_DEPTH_KEY ? "" : depth,
+          variable,
+        };
+  });
+  return candidates.find((candidate) => candidate !== null) || null;
+}
+
+function pythonKeywordArguments(selection) {
+  return Object.entries(selection)
+    .map(([dimension, label]) => `    ${dimension}=${JSON.stringify(label)},`)
+    .join("\n");
+}
+
+function exportSnippets(exportFormat) {
+  const url = scoresExportUrl(exportFormat);
+  const fileName = `${activeRegion}_${activeTrack}.${exportFormat}`;
+  const selection = exampleScoreSelection();
+  const zarrSelection = selection
+    ? `scores["value"].sel(\n${pythonKeywordArguments(selection)}\n)`
+    : 'scores["value"]';
+  return {
+    csv: [
+      { title: "Python", code: `import pandas\n\nscores = pandas.read_csv(\n    "${url}",\n)` },
+      { title: "Shell", code: `curl -o ${fileName} "${url}"` },
+    ],
+    parquet: [
+      { title: "Python", code: `import pandas\n\nscores = pandas.read_parquet(\n    "${url}",\n)` },
+      { title: "Shell", code: `curl -o ${fileName} "${url}"` },
+    ],
+    zarr: [{ title: "Python", code: `import xarray\n\nscores = xarray.open_zarr(\n    "${url}",\n    consolidated=True,\n)\n${zarrSelection}` }],
+  }[exportFormat];
+}
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function buildSnippetHtml(snippet) {
+  return `<div class="export-snippet"><div class="export-snippet-header"><span>${snippet.title}</span><button type="button" class="export-copy-button" data-copy-text="${escapeHtml(snippet.code)}">Copy</button></div><pre><code>${escapeHtml(snippet.code)}</code></pre></div>`;
+}
+
+function buildExportPrimaryActionHtml(exportFormat) {
+  const url = scoresExportUrl(exportFormat);
+  return exportFormat === "zarr"
+    ? `<button type="button" class="export-action export-action--primary export-copy-button" data-copy-text="${url}">Copy the Zarr store URL</button>`
+    : `<a class="export-action export-action--primary" href="${url}" download>Download ${exportFormat === "csv" ? "CSV" : "Parquet"}</a>`;
+}
+
+function buildExportDataExplorerLinkHtml(exportFormat) {
+  return EXPLORABLE_EXPORT_FORMATS.includes(exportFormat)
+    ? `<a class="export-action" href="${dataExplorerUrl(exportFormat)}" target="_blank" rel="noopener">Open in EDITO Data Explorer</a>`
+    : "";
+}
+
+function buildExportDialogInnerHtml(exportFormat) {
+  const heading = `${exportFormat === "csv" ? "CSV" : titleCase(exportFormat)} export`;
+  const context = `${activeVersion} · ${regionLabels[activeRegion] || activeRegion} · ${TRACK_LABELS[activeTrack]}`;
+  return `
+    <form method="dialog" class="export-dialog-close"><button type="submit" aria-label="Close">&times;</button></form>
+    <h3>${heading}</h3>
+    <p class="export-dialog-context">${context}</p>
+    <p>${EXPORT_FORMAT_DESCRIPTIONS[exportFormat]}</p>
+    <div class="export-actions">${buildExportPrimaryActionHtml(exportFormat)}${buildExportDataExplorerLinkHtml(exportFormat)}</div>
+    ${exportSnippets(exportFormat).map(buildSnippetHtml).join("")}
+    <p class="export-dialog-footer">Also available through the <a href="documentation/scores-api/">Scores API</a>.</p>`;
+}
+
+function exportDialogElement() {
+  const existing = document.getElementById("export-dialog");
+  if (existing) return existing;
+  const dialog = document.createElement("dialog");
+  dialog.id = "export-dialog";
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  document.body.appendChild(dialog);
+  return dialog;
+}
+
+function copyText(button) {
+  const label = button.textContent;
+  navigator.clipboard.writeText(button.dataset.copyText).then(() => {
+    button.textContent = "Copied";
+    setTimeout(() => {
+      button.textContent = label;
+    }, 1500);
+  });
+}
+
+function openExportDialog(exportFormat) {
+  const dialog = exportDialogElement();
+  dialog.innerHTML = buildExportDialogInnerHtml(exportFormat);
+  dialog.querySelectorAll(".export-copy-button").forEach((button) => {
+    button.addEventListener("click", () => copyText(button));
+  });
+  dialog.showModal();
+}
+
+const YOUR_SCORES_URL_PARAMETER = "scores";
+const COMPARE_WITH_URL_PARAMETER = "compare_with";
+const AUTOMATIC_COMPARISON = "";
+const YOUR_SCORES_MAXIMUM_BYTES = 20 * 1024 * 1024;
+const YOUR_SCORES_MAXIMUM_COUNT = 5;
+const YOUR_SCORES_REMINDER = "The comparison is only meaningful when your scores use the same forecasts as the published scores.";
+const YOUR_SCORES_NOTE = "Computed locally and loaded in this page. It is not part of the published scores.";
+const YOUR_SCORES_CATEGORY = "model";
+
+let yourScoresEntries = [];
+let requestedYourScoresUrls = [];
+let compareWithVersion = AUTOMATIC_COMPARISON;
+
+function yourScoresApi() {
+  return window.OceanBenchYourScores;
+}
+
+function publishedTables(regionData) {
+  return Object.values(regionData.challengers)
+    .flatMap((scores) => Object.entries(scores))
+    .reduce((tables, [metricKey, score]) => {
+      const depths = tables[metricKey] || {};
+      const merged = Object.fromEntries(
+        Object.entries(score.depths).map(([depth, depthScore]) => [
+          depth,
+          new Set([...(depths[depth] || []), ...Object.keys(depthScore.variables)]),
+        ]),
+      );
+      return { ...tables, [metricKey]: { ...depths, ...merged } };
+    }, {});
+}
+
+function keepPublishedTables(scores, tables) {
+  const keptVariables = (metricKey, depth, variables) =>
+    Object.fromEntries(
+      Object.entries(variables).filter(([variable]) => tables[metricKey]?.[depth]?.has(variable)),
+    );
+  return Object.fromEntries(
+    Object.entries(scores)
+      .map(([metricKey, score]) => [
+        metricKey,
+        {
+          ...score,
+          depths: Object.fromEntries(
+            Object.entries(score.depths)
+              .map(([depth, depthScore]) => [depth, { variables: keptVariables(metricKey, depth, depthScore.variables) }])
+              .filter(([, depthScore]) => Object.keys(depthScore.variables).length > 0),
+          ),
+        },
+      ])
+      .filter(([, score]) => Object.keys(score.depths).length > 0),
+  );
+}
+
+function removeYourScores(entry) {
+  const versionData = parsedData.versions[entry.version];
+  const regionData = versionData.regions[entry.region];
+  delete regionData.challengers[entry.key];
+  regionData.challenger_names = regionData.challenger_names.filter((name) => name !== entry.key);
+  delete versionData.challenger_labels[entry.key];
+  delete versionData.challenger_notes[entry.key];
+  delete versionData.challenger_categories[entry.key];
+  yourScoresEntries = yourScoresEntries.filter((other) => other !== entry);
+}
+
+function describeVersionComparison(fileVersion, comparedVersion) {
+  if (fileVersion === comparedVersion) return "";
+  return compareWithVersion === AUTOMATIC_COMPARISON
+    ? ` Compared with the scores published for ${comparedVersion}, which are unchanged in ${fileVersion}.`
+    : ` Compared with the scores of ${comparedVersion} although the file comes from OceanBench ${fileVersion}: the metrics may differ.`;
+}
+
+function describeYourScores(document, comparedVersion) {
+  return (
+    `${document.challenger}: ${document.lead_days_count} lead days.` +
+    describeVersionComparison(document.oceanbench_version, comparedVersion)
+  );
+}
+
+function injectYourScores(document, scores, versionData) {
+  const key = yourScoresApi().yourScoresKey(document.challenger);
+  const regionData = versionData.regions[document.region.id];
+  regionData.challengers[key] = scores;
+  regionData.challenger_names = [...regionData.challenger_names, key];
+  versionData.challenger_labels = { ...versionData.challenger_labels, [key]: escapeAttribute(document.challenger) };
+  versionData.challenger_notes = { ...versionData.challenger_notes, [key]: YOUR_SCORES_NOTE };
+  versionData.challenger_categories = { ...versionData.challenger_categories, [key]: YOUR_SCORES_CATEGORY };
+  return key;
+}
+
+function failure(text) {
+  return { ok: false, text };
+}
+
+async function showYourScores(document, sourceUrl) {
+  const errors = yourScoresApi().scoresFileErrors(document);
+  if (errors.length > 0) return failure(`Not a valid scores file: ${errors.join("; ")}.`);
+  const data = ensureParsedData();
+  const versions = getVersions(data);
+  const comparedVersion = yourScoresApi().comparedVersion(
+    document.oceanbench_version,
+    versions,
+    data.compatible_versions || {},
+    compareWithVersion,
+  );
+  if (!comparedVersion) {
+    return failure(
+      `No scores are published for OceanBench ${document.oceanbench_version} (published: ${versions.join(", ")}), ` +
+        "and none are known to be unchanged in it. Choose a version in Compare with to compare anyway.",
+    );
+  }
+  const key = yourScoresApi().yourScoresKey(document.challenger);
+  const replacedEntry = yourScoresEntries.find((entry) => entry.key === key);
+  if (!replacedEntry && yourScoresEntries.length >= YOUR_SCORES_MAXIMUM_COUNT) {
+    return failure(`You can add up to ${YOUR_SCORES_MAXIMUM_COUNT} scores files. Remove one first.`);
+  }
+  const previousVersion = activeVersion;
+  activeVersion = comparedVersion;
+  await ensureActiveVersionLoaded();
+  const versionData = getActiveVersionData(data);
+  const regionData = versionData.regions[document.region.id];
+  if (!regionData) {
+    activeVersion = previousVersion;
+    return failure(
+      `Region "${document.region.id}" has no published scores in version ${comparedVersion} ` +
+        `(published: ${Object.keys(versionData.regions).join(", ")}).`,
+    );
+  }
+  if (replacedEntry) removeYourScores(replacedEntry);
+  const tables = publishedTables(regionData);
+  const scores = keepPublishedTables(yourScoresApi().scoresFileToModelScores(document, ""), tables);
+  injectYourScores(document, scores, versionData);
+  const entry = {
+    key,
+    version: comparedVersion,
+    region: document.region.id,
+    url: sourceUrl,
+    message: describeYourScores(document, comparedVersion),
+  };
+  yourScoresEntries = [...yourScoresEntries, entry];
+  activeRegion = document.region.id;
+  activeTrack = trackKeyForChallenger(key);
+  applyActiveVersion();
+  renderAllTables();
+  return { ok: true, text: `${entry.message} ${YOUR_SCORES_REMINDER}` };
+}
+
+function parseYourScoresText(text) {
+  try {
+    return { document: JSON.parse(text) };
+  } catch {
+    return { failureResult: failure("The file is not valid JSON.") };
+  }
+}
+
+async function loadYourScoresText(text, sourceUrl) {
+  const { document, failureResult } = parseYourScoresText(text);
+  if (failureResult) return failureResult;
+  try {
+    return await showYourScores(document, sourceUrl);
+  } catch (error) {
+    console.error(error);
+    return failure("The published scores of this version could not be loaded.");
+  }
+}
+
+async function loadYourScoresFile(file) {
+  if (file.size > YOUR_SCORES_MAXIMUM_BYTES) return failure("The file is larger than 20 MB.");
+  return loadYourScoresText(await file.text(), null);
+}
+
+async function loadYourScoresFiles(files) {
+  const results = [];
+  for (const file of files) results.push(await loadYourScoresFile(file));
+  return { ok: results.every((result) => result.ok), text: results.map((result) => result.text).join(" ") };
+}
+
+async function loadYourScoresUrl(url) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return failure(`Could not download the file: HTTP ${response.status}.`);
+    return loadYourScoresText(await response.text(), url);
+  } catch {
+    return failure("Could not download the file. A file on S3 must be public and allow cross-origin reads (CORS).");
+  }
+}
+
+function compareWithOptionsHtml() {
+  const options = [
+    { value: AUTOMATIC_COMPARISON, label: "Automatic, the published scores of the version of the file" },
+    ...getVersions(ensureParsedData()).map((version) => ({ value: version, label: version })),
+  ];
+  return options
+    .map(
+      ({ value, label }) =>
+        `<option value="${escapeAttribute(value)}"${value === compareWithVersion ? " selected" : ""}>${escapeAttribute(label)}</option>`,
+    )
+    .join("");
+}
+
+function yourScoresDialogElement() {
+  const existing = document.getElementById("your-scores-dialog");
+  if (existing) return existing;
+  const dialog = document.createElement("dialog");
+  dialog.id = "your-scores-dialog";
+  dialog.innerHTML = `
+    <form method="dialog" class="export-dialog-close"><button type="submit" aria-label="Close">&times;</button></form>
+    <h3>Add your scores</h3>
+    <p>Show up to ${YOUR_SCORES_MAXIMUM_COUNT} scores files written by <code>oceanbench evaluate</code> next to the published scores of the same OceanBench version and region.
+    The files are read in your browser and are not uploaded.</p>
+    <label class="your-scores-field">Compare with
+      <select id="your-scores-compare-with">${compareWithOptionsHtml()}</select></label>
+    <label class="your-scores-field">Scores files
+      <input type="file" id="your-scores-file" accept=".json,application/json" multiple></label>
+    <form id="your-scores-url-form" class="your-scores-field">
+      <label for="your-scores-url">or a public URL</label>
+      <input type="url" id="your-scores-url" placeholder="https://.../challenger.global.scores.json" required>
+      <button type="submit" class="export-action export-action--primary">Load</button>
+    </form>
+    <p id="your-scores-status" role="status" aria-live="polite"></p>`;
+  const status = dialog.querySelector("#your-scores-status");
+  const report = (result) => {
+    status.textContent = result.text;
+    status.dataset.level = result.ok ? "success" : "error";
+    if (result.ok) dialog.close();
+  };
+  dialog.querySelector("#your-scores-compare-with").addEventListener("change", (event) => {
+    compareWithVersion = event.target.value;
+  });
+  dialog.querySelector("#your-scores-file").addEventListener("change", (event) => {
+    const files = [...event.target.files];
+    if (files.length > 0) loadYourScoresFiles(files).then(report);
+  });
+  dialog.querySelector("#your-scores-url-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    loadYourScoresUrl(dialog.querySelector("#your-scores-url").value.trim()).then(report);
+  });
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+  document.body.appendChild(dialog);
+  return dialog;
+}
+
+function buildYourScoresChips() {
+  const full = yourScoresEntries.length >= YOUR_SCORES_MAXIMUM_COUNT;
+  const open =
+    `<button type="button" class="selector-chip" data-your-scores="open" aria-haspopup="dialog"` +
+    (full ? ` disabled title="Up to ${YOUR_SCORES_MAXIMUM_COUNT} scores files. Remove one to add another."` : "") +
+    ">Add a scores file</button>";
+  const removals = yourScoresEntries
+    .map(
+      (entry) =>
+        `<button type="button" class="selector-chip active" data-your-scores="remove" data-your-scores-key="${escapeAttribute(entry.key)}" title="Remove ${escapeAttribute(displayName(entry.key))}">${displayName(entry.key)} &times;</button>`,
+    )
+    .join("");
+  return `<div class="selector-chips" role="group" aria-label="Your scores">${open}${removals}</div>`;
+}
+
+function yourScoresDescription() {
+  return yourScoresEntries.length === 0
+    ? ""
+    : `${yourScoresEntries.map((entry) => entry.message).join(" ")} ${YOUR_SCORES_REMINDER}`;
+}
+
+async function loadYourScoresFromLocation() {
+  for (const url of requestedYourScoresUrls.slice(0, YOUR_SCORES_MAXIMUM_COUNT)) {
+    const result = await loadYourScoresUrl(url);
+    if (!result.ok) console.error(result.text);
+  }
+}
+
 function buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks) {
   if (regionIds.length === 0) return "";
 
@@ -654,6 +1097,9 @@ function buildRegionSelectorInnerHtml(regionIds, versionTracks, regionTracks) {
     );
     controls += buildSelectorRow("Track", trackChips, TRACK_NOTES[activeTrack], "selector-description--track");
   }
+  controls += buildSelectorRow("Lead days", buildLeadDaysChips(), "");
+  controls += buildSelectorRow("Export", buildExportChips(), "");
+  controls += buildSelectorRow("Your scores", buildYourScoresChips(), escapeAttribute(yourScoresDescription()));
 
   let markup = '<div id="region-globe" class="region-globe" aria-live="polite"></div>';
   markup += `<div class="region-selector-controls">${controls}</div>`;
@@ -1207,7 +1653,28 @@ function setupScrollFade() {
 }
 
 function attachSelectorListeners() {
-  document.querySelectorAll("#region-selector .selector-chip").forEach((chip) => {
+  document.querySelectorAll("#region-selector [data-all-lead-days]").forEach((button) => {
+    button.addEventListener("click", () => {
+      showAllLeadDays = button.dataset.allLeadDays === "true";
+      applyActiveVersion();
+      renderAllTables();
+    });
+  });
+  document.querySelectorAll("#region-selector [data-export-format]").forEach((button) => {
+    button.addEventListener("click", () => openExportDialog(button.dataset.exportFormat));
+  });
+  document.querySelectorAll("#region-selector [data-your-scores]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.yourScores === "open") {
+        yourScoresDialogElement().showModal();
+        return;
+      }
+      removeYourScores(yourScoresEntries.find((entry) => entry.key === button.dataset.yourScoresKey));
+      applyActiveVersion();
+      renderAllTables();
+    });
+  });
+  document.querySelectorAll("#region-selector .selector-chip[data-region], #region-selector .selector-chip[data-track]").forEach((chip) => {
     chip.addEventListener("click", () => {
       const { region, track } = chip.dataset;
       if (region && region !== activeRegion) {
@@ -1576,6 +2043,8 @@ function renderAllTables() {
 
 function applyUrlStateFromLocation() {
   const parameters = new URLSearchParams(window.location.search);
+  requestedYourScoresUrls = parameters.getAll(YOUR_SCORES_URL_PARAMETER);
+  compareWithVersion = parameters.get(COMPARE_WITH_URL_PARAMETER) || AUTOMATIC_COMPARISON;
 
   const versionParameter = parameters.get("version");
   if (versionParameter) activeVersion = versionParameter;
@@ -1602,6 +2071,8 @@ function applyUrlStateFromLocation() {
       selectedDepths = new Set(depthsParameter.split(",").filter((depth) => depth !== ""));
     }
   }
+
+  showAllLeadDays = parameters.get(LEAD_DAYS_URL_PARAMETER) === ALL_LEAD_DAYS_VALUE;
 
   const scaleParameter = parameters.get("scale");
   if (scaleParameter) {
@@ -1636,8 +2107,16 @@ function writeUrlState() {
     const orderedDepths = [...selectedDepths].sort((first, second) => Number(first) - Number(second));
     parameters.set("depths", orderedDepths.join(","));
   }
+  if (showAllLeadDays) {
+    parameters.set(LEAD_DAYS_URL_PARAMETER, ALL_LEAD_DAYS_VALUE);
+  }
   if (maxScale !== 80) {
     parameters.set("scale", `${maxScale}`);
+  }
+  const yourScoresUrls = yourScoresEntries.map((entry) => entry.url).filter((url) => url);
+  yourScoresUrls.forEach((url) => parameters.append(YOUR_SCORES_URL_PARAMETER, url));
+  if (yourScoresUrls.length > 0 && compareWithVersion !== AUTOMATIC_COMPARISON) {
+    parameters.set(COMPARE_WITH_URL_PARAMETER, compareWithVersion);
   }
 
   const queryString = parameters.toString();
@@ -1709,13 +2188,13 @@ function attachTapTooltipClicks() {
   tapTooltipClicksAttached = true;
   document.addEventListener("click", (event) => {
     const target = event.target.closest(
-      ".score-table td.score-value-cell, .challenger-note-marker, .score-table .standard-name[title]",
+      ".score-table td.score-value-cell, .challenger-note-marker, .your-scores-marker, .score-table .standard-name[title]",
     );
     if (!target) {
       closeTapTooltip();
       return;
     }
-    if (target.classList.contains("challenger-note-marker")) {
+    if (target.classList.contains("challenger-note-marker") || target.classList.contains("your-scores-marker")) {
       event.preventDefault();
     }
     const wasOpen = target.hasAttribute("data-tip-open");
@@ -1739,6 +2218,7 @@ function init() {
     .then(() => {
       applyActiveVersion();
       renderAllTables();
+      loadYourScoresFromLocation();
       if (initialSection) {
         navigateToSection(initialSection, { replaceHistory: true, updateHash: true });
       }
