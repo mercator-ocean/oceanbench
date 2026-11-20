@@ -19,7 +19,10 @@ from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
 from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, subset_dataset_to_region
 from oceanbench.core.rmsd import rmsd
-from oceanbench.core.smoothing_controlled_rmsd import smoothing_controlled_rmsd_class4_validation
+from oceanbench.core.smoothing_controlled_rmsd import (
+    GRID_SMOOTHING_METHOD,
+    smoothing_controlled_rmsd_class4_validation,
+)
 
 GLOBAL_LAGRANGIAN_PARTICLE_COUNT = 10000
 MINIMUM_LAGRANGIAN_PARTICLE_COUNT = 2000
@@ -65,6 +68,7 @@ def smoothing_controlled_rmsd_of_variables_compared_to_observations(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
     climatology_dataset: xarray.Dataset | None = None,
+    smoothing_method: str = GRID_SMOOTHING_METHOD,
 ) -> pandas.DataFrame:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     try:
@@ -85,6 +89,7 @@ def smoothing_controlled_rmsd_of_variables_compared_to_observations(
         climatology_dataset=(
             climatology_dataset if climatology_dataset is not None else glorys_monthly_climatology_dataset()
         ),
+        smoothing_method=smoothing_method,
     )
 
 

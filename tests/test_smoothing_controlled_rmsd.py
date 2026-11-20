@@ -19,7 +19,8 @@ from oceanbench.core.smoothing_controlled_rmsd import (
     KILOMETERS_PER_DEGREE,
     ROW_DIAGNOSTICS_ATTRIBUTE,
     SIGMAS_KILOMETERS,
-    gaussian_means_at_observations,
+    SMOOTHING_METHODS,
+    gaussian_means,
     prepare_climatology_variable,
     score_smoothing_controlled_rmsd,
     smoothing_controlled_rmsd_class4_validation,
@@ -366,28 +367,36 @@ def test_blur_with_white_noise_or_fake_eddies_is_worse_than_the_original(observa
     assert (_controlled_values(blurred + fake_eddies, observations) > original).all()
 
 
-def test_gaussian_means_of_one_field_on_quarter_and_twelfth_degree_grids_agree_from_30_km() -> None:
-    observation_group = pandas.DataFrame(
-        {
-            Dimension.LATITUDE.key(): numpy.linspace(23.0, 27.0, 40),
-            Dimension.LONGITUDE.key(): numpy.linspace(-47.0, -43.0, 40),
-            Dimension.DEPTH.key(): 0.0,
-        }
+_INTERIOR_OBSERVATIONS = pandas.DataFrame(
+    {
+        Dimension.LATITUDE.key(): numpy.linspace(23.0, 27.0, 40),
+        Dimension.LONGITUDE.key(): numpy.linspace(-47.0, -43.0, 40),
+        Dimension.DEPTH.key(): 0.0,
+    }
+)
+
+
+def _eddy_data_array(step: float, land_east_of: float | None = None) -> xarray.DataArray:
+    latitudes, longitudes = _grid(step)
+    latitude_grid, longitude_grid = numpy.meshgrid(latitudes, longitudes, indexing="ij")
+    values = _eddy_field(latitude_grid, longitude_grid, _eddies(3))[None]
+    if land_east_of is not None:
+        values[:, :, longitudes > land_east_of] = numpy.nan
+    return xarray.DataArray(
+        values,
+        dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
+        coords={
+            Dimension.DEPTH.key(): [0.0],
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
     )
 
+
+@pytest.mark.parametrize("smoothing_method", SMOOTHING_METHODS)
+def test_gaussian_means_of_one_field_on_quarter_and_twelfth_degree_grids_agree_from_30_km(smoothing_method) -> None:
     def means(step: float) -> numpy.ndarray:
-        latitudes, longitudes = _grid(step)
-        latitude_grid, longitude_grid = numpy.meshgrid(latitudes, longitudes, indexing="ij")
-        field = xarray.DataArray(
-            _eddy_field(latitude_grid, longitude_grid, _eddies(3))[None],
-            dims=[Dimension.DEPTH.key(), Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()],
-            coords={
-                Dimension.DEPTH.key(): [0.0],
-                Dimension.LATITUDE.key(): latitudes,
-                Dimension.LONGITUDE.key(): longitudes,
-            },
-        )
-        return gaussian_means_at_observations(field, observation_group, numpy.array([0.0]))
+        return gaussian_means(_eddy_data_array(step), _INTERIOR_OBSERVATIONS, numpy.array([0.0]), smoothing_method)
 
     quarter, twelfth = means(1 / 4), means(1 / 12)
     from_30_km = numpy.array(SIGMAS_KILOMETERS) >= 30
@@ -395,7 +404,37 @@ def test_gaussian_means_of_one_field_on_quarter_and_twelfth_degree_grids_agree_f
     assert numpy.abs(quarter[from_30_km] - twelfth[from_30_km]).max() < 0.03 * numpy.abs(twelfth).max()
 
 
-def test_gaussian_means_skip_land_and_renormalise() -> None:
+@pytest.mark.parametrize("step", [1 / 4, 1 / 12])
+def test_grid_and_stencil_gaussian_means_agree_within_five_hundredths(step) -> None:
+    field = _eddy_data_array(step)
+    grid = gaussian_means(field, _INTERIOR_OBSERVATIONS, numpy.array([0.0]), "grid")
+    stencil = gaussian_means(field, _INTERIOR_OBSERVATIONS, numpy.array([0.0]), "stencil")
+
+    assert numpy.abs(grid - stencil).max() < 0.05 * numpy.abs(field.values).max()
+
+
+def test_grid_and_stencil_controlled_rmsd_agree_within_one_percent(observations, displaced_anomalies) -> None:
+    challenger = _challenger(displaced_anomalies)
+    tables = {
+        smoothing_method: smoothing_controlled_rmsd_class4_validation(
+            challenger_dataset=challenger,
+            reference_dataset=observations,
+            ocean_mask=_ocean_mask(),
+            variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+            climatology_dataset=_climatology(),
+            smoothing_method=smoothing_method,
+        )
+        for smoothing_method in SMOOTHING_METHODS
+    }
+    lead_columns = _lead_columns(tables["grid"])
+
+    numpy.testing.assert_allclose(
+        tables["grid"][lead_columns].values, tables["stencil"][lead_columns].values, rtol=0.01
+    )
+
+
+@pytest.mark.parametrize("smoothing_method", SMOOTHING_METHODS)
+def test_gaussian_means_skip_land_and_renormalise(smoothing_method) -> None:
     latitudes, longitudes = _grid(1 / 12)
     values = numpy.full((1, len(latitudes), len(longitudes)), 2.0)
     values[:, :, longitudes > -45.0] = numpy.nan
@@ -412,7 +451,9 @@ def test_gaussian_means_skip_land_and_renormalise() -> None:
         {Dimension.LATITUDE.key(): [25.0], Dimension.LONGITUDE.key(): [-45.5], Dimension.DEPTH.key(): [0.0]}
     )
 
-    numpy.testing.assert_allclose(gaussian_means_at_observations(field, observation_group, numpy.array([0.0])), 2.0)
+    numpy.testing.assert_allclose(
+        gaussian_means(field, observation_group, numpy.array([0.0]), smoothing_method), 2.0, rtol=1e-9
+    )
 
 
 def _statistics_rows(first_days: list[str], sum_ya: list[float]) -> pandas.DataFrame:
