@@ -121,7 +121,8 @@ def test_unexpected_swot_subsample_factor_raises_with_found_factor(tmp_path, mon
     _write_swot_observation_day_store(tmp_path / "20240103.zarr", ["2024-01-03T12:00"], subsample_factor=1)
     _use_local_day_stores(monkeypatch, tmp_path)
 
-    with pytest.raises(swot_observations.ObservationBasisVersionError, match="found 'v2.1' and 1"):
+    expected_basis_version = swot_observations.EXPECTED_SWOT_OBSERVATIONS_BASIS_VERSION
+    with pytest.raises(swot_observations.ObservationBasisVersionError, match=f"found '{expected_basis_version}' and 1"):
         _selected_swot_observations(["2024-01-03"], ["2024-01-03"])
 
 

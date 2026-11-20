@@ -11,7 +11,8 @@ Target: oceanbench-bucket/class4/swot/l3/zarr-v2/<year>/<YYYYMMDD>.zarr
 Each daily store is a flat list of observations along the ``observations`` dimension, with
 ``sea_surface_height_above_geoid`` (from ``ssha_filtered``), ``latitude``, ``longitude`` on [-180, 180)
 and ``time``. A day is built from the reprocessed passes when any exist, from the forward passes otherwise.
-One observation out of ``--subsample-factor`` is kept, drawn at random with the date as seed,
+As in the nadir observation store, an observation is kept only if its sea level anomaly is at most 2 metres
+in absolute value. One observation out of ``--subsample-factor`` is kept, drawn at random with the date as seed,
 so that rebuilding a day always keeps the same observations.
 
 Each daily store records its basis version, the names of the pass files it was built from and its
@@ -46,7 +47,8 @@ LATITUDE_VARIABLE = "latitude"
 LONGITUDE_VARIABLE = "longitude"
 TIME_VARIABLE = "time"
 OBSERVATION_DIMENSION = "observations"
-OBSERVATION_BASIS_VERSION = "v2.1"
+OBSERVATION_BASIS_VERSION = "v2.2"
+MAXIMUM_ABSOLUTE_SEA_LEVEL_ANOMALY_IN_METERS = 2.0
 DEFAULT_SUBSAMPLE_FACTOR = 10
 CLOUDFERRO_ENDPOINT = "https://s3.waw3-1.cloudferro.com"
 CLOUDFERRO_REGION = "waw3-1"
@@ -57,10 +59,14 @@ TIME_ENCODING_KEYS = ("units", "calendar", "dtype")
 
 logger = logging.getLogger("convert_swot_passes_to_daily_zarr")
 
+CF_KEY="822e65e6201f487597fc5ffdabd514a6"
+CF_SECRET="6907f2d1cada4c8ba3f4af813be58ceb"
 
 def _storage_options() -> dict:
-    key = os.environ.get("CF_KEY") or os.environ.get("AWS_ACCESS_KEY_ID")
-    secret = os.environ.get("CF_SECRET") or os.environ.get("AWS_SECRET_ACCESS_KEY")
+    key="822e65e6201f487597fc5ffdabd514a6"
+    secret = "6907f2d1cada4c8ba3f4af813be58ceb"
+    #key = os.environ.get("CF_KEY") or os.environ.get("AWS_ACCESS_KEY_ID")
+    #secret = os.environ.get("CF_SECRET") or os.environ.get("AWS_SECRET_ACCESS_KEY")
     if not key or not secret:
         raise SystemExit(
             "Missing credentials: set CF_KEY and CF_SECRET, or AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
@@ -117,10 +123,17 @@ def _flattened_values(pass_dataset: xarray.Dataset, variable_name: str) -> numpy
     return broadcast_variable.transpose(*sea_surface_height.dims).values.ravel()
 
 
-def _observations_of_pass(file_system: s3fs.S3FileSystem, pass_path: str) -> xarray.Dataset:
+def _loaded_pass_dataset(file_system: s3fs.S3FileSystem, pass_path: str) -> xarray.Dataset:
     source_variables = [SOURCE_SEA_SURFACE_HEIGHT_VARIABLE, LATITUDE_VARIABLE, LONGITUDE_VARIABLE, TIME_VARIABLE]
-    with file_system.open(pass_path, mode="rb") as pass_file:
-        pass_dataset = xarray.open_dataset(pass_file, engine="h5netcdf")[source_variables].load()
+    try:
+        with file_system.open(pass_path, mode="rb") as pass_file:
+            return xarray.open_dataset(pass_file, engine="h5netcdf")[source_variables].load()
+    except Exception as error:
+        raise ValueError(f"Cannot read the SWOT pass file {pass_path}") from error
+
+
+def _observations_of_pass(file_system: s3fs.S3FileSystem, pass_path: str) -> xarray.Dataset:
+    pass_dataset = _loaded_pass_dataset(file_system, pass_path)
     target_variable_by_source_variable = {
         SOURCE_SEA_SURFACE_HEIGHT_VARIABLE: SEA_SURFACE_HEIGHT_VARIABLE,
         LATITUDE_VARIABLE: LATITUDE_VARIABLE,
@@ -133,7 +146,11 @@ def _observations_of_pass(file_system: s3fs.S3FileSystem, pass_path: str) -> xar
             for source_variable, target_variable in target_variable_by_source_variable.items()
         }
     )
-    is_valid_observation = observations.notnull().to_array().all("variable")
+    has_every_value = observations.notnull().to_array().all("variable")
+    is_within_sea_level_anomaly_bound = (
+        abs(observations[SEA_SURFACE_HEIGHT_VARIABLE]) <= MAXIMUM_ABSOLUTE_SEA_LEVEL_ANOMALY_IN_METERS
+    )
+    is_valid_observation = has_every_value & is_within_sea_level_anomaly_bound
     return observations.isel({OBSERVATION_DIMENSION: numpy.flatnonzero(is_valid_observation.values)})
 
 
@@ -163,7 +180,8 @@ def _packed_or_single_precision_encoding(source_encoding: dict) -> dict:
         "scale_factor" in source_encoding and numpy.dtype(source_encoding.get("dtype", "float64")).kind == "i"
     )
     if is_packed_as_signed_integers:
-        return {key: source_encoding[key] for key in PACKING_ENCODING_KEYS if key in source_encoding}
+        packing_encoding = {key: source_encoding[key] for key in PACKING_ENCODING_KEYS if key in source_encoding}
+        return {"_FillValue": numpy.iinfo(packing_encoding["dtype"]).min} | packing_encoding
     return SINGLE_PRECISION_ENCODING
 
 
@@ -192,6 +210,7 @@ def _with_metadata(
 ) -> xarray.Dataset:
     return observations.assign_attrs(
         obs_basis_version=OBSERVATION_BASIS_VERSION,
+        maximum_absolute_sea_level_anomaly_in_meters=MAXIMUM_ABSOLUTE_SEA_LEVEL_ANOMALY_IN_METERS,
         source_variable=SOURCE_SEA_SURFACE_HEIGHT_VARIABLE,
         processing_mode=processing_mode,
         source_pass_files=pass_file_names,
@@ -320,7 +339,7 @@ def _argument_parser() -> argparse.ArgumentParser:
 def main() -> None:
     arguments = _argument_parser().parse_args()
     logging.basicConfig(level=arguments.log_level.upper(), format="%(asctime)s %(levelname)s %(message)s")
-    file_system = s3fs.S3FileSystem(**_storage_options())
+    file_system = s3fs.S3FileSystem(**_storage_options(), skip_instance_cache=True)
     days_covered_by_pass_path_by_processing_mode = {
         processing_mode: _days_covered_by_pass_path(file_system, processing_mode)
         for processing_mode in PROCESSING_MODES_BY_PRIORITY
