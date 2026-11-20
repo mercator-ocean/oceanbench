@@ -75,10 +75,24 @@ let defaultVersionValue = null;
 let defaultRegionValue = null;
 let defaultBaselineValue = null;
 
-const SECTION_ORDER = ["observations", "reanalysis", "analysis"];
+const SECTION_ORDER = ["observations", "observations_controlled", "reanalysis", "analysis"];
+
+// Sections scored on the Class IV observations, laid out by observation depth groups without the depth toggle.
+// The diagnostic sections render under the smoothing-controlled RMSD and get no tab of their own.
+const OBSERVATION_SECTIONS = new Set([
+  "observations",
+  "observations_controlled",
+  "smoothing_width_observations",
+  "smoothing_slope_observations",
+]);
+
+const SECTION_LABELS = {
+  observations_controlled: "Smoothing-controlled",
+};
 
 const SECTION_ID_MAP = {
   observations: "comparison-to-observations",
+  observations_controlled: "smoothing-controlled-rmsd",
   reanalysis: "comparison-to-reanalysis",
   analysis: "comparison-to-analysis",
 };
@@ -316,7 +330,9 @@ function standardNameHtml(standardName) {
 
 function formatVariableHeader(variable, unit, standardName, metricKey, sensor) {
   const displayName = `${titleCase(variable)}${sensorIconHtml(sensor)}`;
-  const metricLabel = metricKey.startsWith("rmsd") ? `RMSD (${unit})` : `(${unit})`;
+  const metricLabel = metricKey.startsWith("rmsd") || metricKey.startsWith("smoothing_controlled_rmsd")
+    ? `RMSD (${unit})`
+    : `(${unit})`;
   let header = `${displayName}<br><span class="metric-label">${metricLabel}</span>`;
   if (standardName && standardName !== "unknown") {
     header += `<br>${standardNameHtml(standardName)}`;
@@ -471,7 +487,7 @@ function setActiveSection(sectionKey, options = {}) {
   activeSection = sectionKey;
   const depthToggle = document.getElementById("depth-toggle");
   if (depthToggle) {
-    if (activeSection === "observations") {
+    if (OBSERVATION_SECTIONS.has(activeSection)) {
       depthToggle.setAttribute("hidden", "");
       depthToggle.setAttribute("aria-hidden", "true");
     } else {
@@ -576,6 +592,7 @@ function sensorIconsHtml(sensors) {
 
 const SECTION_ICONS_HTML = {
   observations: sensorIconsHtml(OBSERVATION_SENSORS),
+  observations_controlled: sensorIconsHtml(OBSERVATION_SENSORS),
   reanalysis: sensorIconsHtml(MODEL_SENSORS),
   analysis: sensorIconsHtml(MODEL_SENSORS),
 };
@@ -584,7 +601,7 @@ function buildTabsInnerHtml(sections) {
   let markup = "";
   for (const sectionKey of orderedSectionKeys(sections)) {
     const isActive = sectionKey === activeSection;
-    markup += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${titleCase(sectionKey)}${SECTION_ICONS_HTML[sectionKey] || ""}</a>`;
+    markup += `<a class="score-tab score-track-link${isActive ? " active" : ""}" data-section="${sectionKey}" href="#${SECTION_ID_MAP[sectionKey]}"${isActive ? ' aria-current="page"' : ""}>${SECTION_LABELS[sectionKey] || titleCase(sectionKey)}${SECTION_ICONS_HTML[sectionKey] || ""}</a>`;
   }
   return markup;
 }
@@ -1958,7 +1975,7 @@ function renderTablesOnly() {
       activeRegion,
       baseline,
       metricTitles,
-      sectionKey !== "observations",
+      !OBSERVATION_SECTIONS.has(sectionKey),
       sectionConfig.depth_groups || null,
     );
   }
@@ -2003,7 +2020,7 @@ function renderAllTables() {
       activeRegion,
       baseline,
       metricTitles,
-      sectionKey !== "observations",
+      !OBSERVATION_SECTIONS.has(sectionKey),
       sectionConfig.depth_groups || null,
     );
   }

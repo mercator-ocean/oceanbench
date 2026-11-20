@@ -17,6 +17,11 @@ on:
         required: false
         default: ''
         type: string
+      reportsPrefix:
+        description: 'Bucket prefix the website reads its scores from. Empty reads the production scores.'
+        required: false
+        default: ''
+        type: string
 concurrency:
   group: update-website-${{ github.ref }}
   cancel-in-progress: false
@@ -31,6 +36,7 @@ jobs:
         env:
           BRANCH: ${{ github.ref_name }}
           EXPECTED_CONTENT: ${{ inputs.expectedContent }}
+          REPORTS_PREFIX: ${{ inputs.reportsPrefix }}
           EDITO_ACCESS_TOKEN: ${{ secrets.EDITO_ACCESS_TOKEN }}
           EDITO_OFFLINE_TOKEN: ${{ secrets.EDITO_OFFLINE_TOKEN }}
         run: make deploy-website-on-edito

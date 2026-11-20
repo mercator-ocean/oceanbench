@@ -9,8 +9,10 @@ import requests
 
 from helpers.published_regions import published_region_ids
 
-S3_BASE_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket"
-REPORTS_ROOT_PREFIX = "public/evaluation-reports"
+# A branch deployment can read its scores from another prefix (or another server, for a local build) without
+# changing main, which keeps the production defaults below.
+S3_BASE_URL = os.environ.get("OCEANBENCH_REPORTS_BASE_URL", "https://s3.waw3-1.cloudferro.com/oceanbench-bucket")
+REPORTS_ROOT_PREFIX = os.environ.get("OCEANBENCH_REPORTS_PREFIX", "public/evaluation-reports").strip("/")
 EVALUATION_INDEX_URL = f"{S3_BASE_URL}/{REPORTS_ROOT_PREFIX}/index.json"
 SCORES_FILE_SUFFIX = ".scores.json"
 DOWNLOADED_SCORES_DIRECTORY = "downloaded-scores"

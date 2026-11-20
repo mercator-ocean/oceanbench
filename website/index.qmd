@@ -55,6 +55,16 @@ Absolute RMSD scores against 2024 [Argo profiles and surface drifters](https://d
 
 <div id="observations-scores"></div>
 
+## Smoothing-controlled RMSD <span class="source-icons"><span class="source-icon argo-profiler" role="img" aria-label="Argo profiler" title="Argo profiler"></span><span class="source-icon drifter-buoy" role="img" aria-label="Surface drifter" title="Surface drifter"></span><span class="source-icon satellite" role="img" aria-label="Satellite altimetry" title="Satellite altimetry"></span></span> {#smoothing-controlled-rmsd}
+
+The RMSD against the same Class IV observations after the best Gaussian smoothing (0 to 90 km) and the best rescaling of the forecast departure from the GLORYS12 monthly climatology, fitted on every other forecast initialization day and scored on the others. Smoothing or damping a forecast cannot lower it, unlike the RMSD above, which stays the score of the forecast as issued. The fitted width and slope are shown below as diagnostics: a large width means the challenger is skillful only at large scales, a slope below 1 means its anomalies are too strong, above 1 too weak. See the [evaluation method](evaluation-methods/index.qmd#smoothing-controlled-rmsd-of-variables-compared-to-observations).
+
+<div id="observations_controlled-scores"></div>
+
+<div id="smoothing_width_observations-scores"></div>
+
+<div id="smoothing_slope_observations-scores"></div>
+
 ## Comparison to reanalysis <span class="source-icons"><span class="source-icon model-grid-globe" role="img" aria-label="Model" title="Model"></span></span> {#comparison-to-reanalysis}
 
 Absolute RMSD scores against 2024 [GLORYS reanalysis](https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030). These are the deterministic scores for the forecasted variables and physically consistent diagnostic variables. The colors denote % difference to the selected baseline. See the [evaluation method](evaluation-methods/index.qmd#evaluation-methods-reanalysis).

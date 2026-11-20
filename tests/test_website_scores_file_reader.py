@@ -31,3 +31,24 @@ def test_reader_gives_an_empty_score_for_a_metric_without_rows(tmp_path):
     scores = get_all_model_scores_from_scores_file(str(scores_file_path), "glonet_sample")
 
     assert scores["rmsd_variables_observations"].depths == {}
+
+
+def test_reader_gives_the_smoothing_controlled_rmsd_and_its_diagnostics(tmp_path):
+    scores_file = json.loads(SCORES_FILE_PATH.read_text(encoding="utf-8"))
+    observation_rows = [row for row in scores_file["rows"] if row["reference"] == "observations"]
+    scores_file["rows"] += [
+        row | {"metric": "smoothing_controlled_rmsd_of_variables", "smoothing_width_km": 30.0, "smoothing_slope": 0.8}
+        for row in observation_rows
+    ]
+    scores_file_path = tmp_path / "glonet_sample.global.scores.json"
+    scores_file_path.write_text(json.dumps(scores_file), encoding="utf-8")
+
+    scores = get_all_model_scores_from_scores_file(str(scores_file_path), "glonet_sample")
+
+    first_row = observation_rows[0]
+    depth, variable, lead_day = first_row["depth"].capitalize(), first_row["variable"], str(first_row["lead_day"])
+    controlled = scores["smoothing_controlled_rmsd_variables_observations"].depths[depth].variables[variable]
+    assert controlled.data[lead_day] == first_row["value"]
+    width = scores["smoothing_width_observations"].depths[depth].variables[variable]
+    assert (width.unit, width.data[lead_day]) == ("km", 30.0)
+    assert scores["smoothing_slope_observations"].depths[depth].variables[variable].data[lead_day] == 0.8

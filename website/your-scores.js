@@ -7,7 +7,12 @@
   const YOUR_SCORES_KEY_PREFIX = "your__";
   const UNSAFE_KEY_CHARACTERS = /[^a-z0-9_]+/g;
   const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-  const DEPTH_METRIC_KEYS = new Set(["rmsd_variables_glorys", "rmsd_variables_glo12", "rmsd_variables_observations"]);
+  const DEPTH_METRIC_KEYS = new Set([
+    "rmsd_variables_glorys",
+    "rmsd_variables_glo12",
+    "rmsd_variables_observations",
+    "smoothing_controlled_rmsd_variables_observations",
+  ]);
   const FLAT_DEPTH_KEY = "flat";
 
   const METRIC_KEYS = {
@@ -20,6 +25,7 @@
     "rmsd_of_geostrophic_currents:glo12_analysis": "rmsd_geostrophic_glo12",
     "deviation_of_lagrangian_trajectories:glo12_analysis": "lagrangian_glo12",
     "rmsd_of_variables:observations": "rmsd_variables_observations",
+    "smoothing_controlled_rmsd_of_variables:observations": "smoothing_controlled_rmsd_variables_observations",
   };
 
   const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);

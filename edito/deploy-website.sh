@@ -34,6 +34,8 @@ readonly CPU_REQUEST="${CPU_REQUEST:-1000m}"
 readonly MEMORY_REQUEST="${MEMORY_REQUEST:-1Gi}"
 readonly CPU_LIMIT="${CPU_LIMIT:-8000m}"
 readonly MEMORY_LIMIT="${MEMORY_LIMIT:-32Gi}"
+# Empty keeps the production scores prefix of website/helpers/s3_discovery.py.
+readonly REPORTS_PREFIX="${REPORTS_PREFIX:-}"
 
 branch_service_name() {
   echo "${MAIN_SERVICE_NAME}-${SERVICE_BRANCH}" |
@@ -91,6 +93,7 @@ launch_request_body() {
     --arg memoryRequest "${MEMORY_REQUEST}" \
     --arg cpuLimit "${CPU_LIMIT}" \
     --arg memoryLimit "${MEMORY_LIMIT}" \
+    --arg reportsPrefix "${REPORTS_PREFIX}" \
     '{
             catalogId: $catalogId,
             packageName: $packageName,
@@ -104,7 +107,7 @@ launch_request_body() {
                 website: {source: ""},
                 automated_update: {enabled: true},
                 ingress: {enabled: true, hostname: $hostname},
-                environment_variables: [],
+                environment_variables: (if $reportsPrefix == "" then [] else [{name: "OCEANBENCH_REPORTS_PREFIX", value: $reportsPrefix}] end),
                 build: {scriptPath: $buildScriptPath, args: ""},
                 catalogType: "Service"
             },
