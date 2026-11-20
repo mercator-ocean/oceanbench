@@ -89,4 +89,7 @@ def viewer_layers(dataset: xarray.Dataset) -> tuple[xarray.Dataset, dict[str, Va
             default_colormap=_DISPLAY_COLORMAP[variable_key],
         )
 
+    for layer_key, layer in layers.items():
+        # The zarr attributes spell the units like the manifest, not like the source (degrees_C, 1e-3).
+        layer.attrs["units"] = specs[layer_key].units
     return xarray.Dataset(layers), specs

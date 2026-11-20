@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import json
+from pathlib import Path
+import subprocess
+import sys
 
 import numpy
 import pandas
@@ -170,22 +173,89 @@ def test_year_rmsd_by_start_is_the_pooled_reduction_with_bracketing_intervals() 
         error = (start["model_value"] - start["observation_value"]).to_numpy()
         assert series["rmsd"][index] == pytest.approx(numpy.sqrt((error * error).mean()), abs=1e-6)
         assert series["bias"][index] == pytest.approx(error.mean(), abs=1e-6)
+        assert series["rmsd_centred"][index] == pytest.approx(
+            numpy.sqrt((error * error).mean() - error.mean() ** 2), abs=1e-6
+        )
         assert series["n"][index] == len(start)
         assert series["rmsd_ci_low"][index] <= series["rmsd"][index] <= series["rmsd_ci_high"][index]
         assert series["bias_ci_low"][index] <= series["bias"][index] <= series["bias_ci_high"][index]
     assert _year_rmsd_by_start(matchups) == by_start
 
 
-def test_binned_bootstrap_matches_the_analytic_interval_at_large_counts() -> None:
-    squared_error = numpy.random.default_rng(5).gamma(2.0, 0.01, size=50_000)
+def test_an_interval_does_not_change_when_another_start_date_is_added() -> None:
+    matchups = _year_matchups()
+    first_start = matchups[matchups["first_day"] == pandas.Timestamp("2024-01-10")]
+    alone = _year_rmsd_by_start(first_start)["variables"]["SSH"]["leads"]["1"]
+    together = _year_rmsd_by_start(matchups)["variables"]["SSH"]["leads"]["1"]
 
-    low, high = viewer_artifacts._bootstrap_rmsd_ci(squared_error, numpy.random.default_rng(1))
+    index = together["dates"].index("2024-01-10")
+    assert alone["dates"] == ["2024-01-10"]
+    for name in ("rmsd_ci_low", "rmsd_ci_high", "bias_ci_low", "bias_ci_high"):
+        assert alone[name] == [together[name][index]]
+        assert alone[name][0] is not None
 
+
+def _correlated_block_errors(generator, block_count: int, block_length: int) -> tuple[numpy.ndarray, numpy.ndarray]:
+    block = numpy.repeat(numpy.arange(block_count), block_length)
+    signed_error = numpy.repeat(generator.normal(0.0, 1.0, block_count), block_length) + generator.normal(
+        0.0, 0.3, block.size
+    )
+    return block, signed_error
+
+
+def test_block_bootstrap_covers_the_true_bias_where_the_independent_interval_is_too_narrow() -> None:
+    generator = numpy.random.default_rng(11)
+    block_covers, independent_covers = 0, 0
+    repetitions = 200
+    for _ in range(repetitions):
+        block, signed_error = _correlated_block_errors(generator, block_count=40, block_length=50)
+        _, (bias_low, bias_high) = viewer_artifacts._block_bootstrap_intervals(block, signed_error, generator)
+        half_width = 1.96 * signed_error.std() / numpy.sqrt(signed_error.size)
+        block_covers += bias_low <= 0.0 <= bias_high
+        independent_covers += abs(signed_error.mean()) <= half_width
+    assert 0.85 <= block_covers / repetitions <= 0.99
+    assert independent_covers / repetitions < 0.5
+
+
+def test_block_bootstrap_with_one_match_up_per_block_matches_the_analytic_interval() -> None:
+    signed_error = numpy.random.default_rng(5).normal(0.3, 1.0, size=5_000)
+    block = numpy.arange(signed_error.size)
+
+    rmsd_interval, bias_interval = viewer_artifacts._block_bootstrap_intervals(
+        block, signed_error, numpy.random.default_rng(1)
+    )
+
+    bias_half_width = 1.96 * signed_error.std() / numpy.sqrt(signed_error.size)
+    assert (bias_interval[1] - bias_interval[0]) / 2.0 == pytest.approx(bias_half_width, rel=0.10)
+    assert numpy.mean(bias_interval) == pytest.approx(signed_error.mean(), abs=0.2 * bias_half_width)
+    squared_error = signed_error * signed_error
     mean = squared_error.mean()
     standard_error = squared_error.std() / numpy.sqrt(squared_error.size)
-    analytic_half_width = (numpy.sqrt(mean + 1.96 * standard_error) - numpy.sqrt(mean - 1.96 * standard_error)) / 2.0
-    assert low < numpy.sqrt(mean) < high
-    assert (high - low) / 2.0 == pytest.approx(analytic_half_width, rel=0.10)
+    rmsd_half_width = (numpy.sqrt(mean + 1.96 * standard_error) - numpy.sqrt(mean - 1.96 * standard_error)) / 2.0
+    assert (rmsd_interval[1] - rmsd_interval[0]) / 2.0 == pytest.approx(rmsd_half_width, rel=0.10)
+
+
+def test_block_bootstrap_needs_ten_blocks_and_is_deterministic_with_the_seed() -> None:
+    block, signed_error = _correlated_block_errors(numpy.random.default_rng(2), block_count=9, block_length=100)
+    assert viewer_artifacts._block_bootstrap_intervals(block, signed_error, numpy.random.default_rng(0)) == (
+        None,
+        None,
+    )
+
+    block, signed_error = _correlated_block_errors(numpy.random.default_rng(2), block_count=10, block_length=100)
+    first = viewer_artifacts._block_bootstrap_intervals(block, signed_error, numpy.random.default_rng(3))
+    second = viewer_artifacts._block_bootstrap_intervals(block, signed_error, numpy.random.default_rng(3))
+    assert first == second
+    assert all(interval is not None for interval in first)
+
+
+def test_year_rmsd_by_start_blocks_follow_the_block_size_of_the_grid() -> None:
+    blocks = viewer_artifacts._bootstrap_blocks(
+        numpy.array([0.5, 4.5, 5.5, 0.5, 0.5]), numpy.array([0.5, 4.5, 0.5, 179.9, -180.1]), 5
+    )
+    assert blocks[0] == blocks[1] != blocks[2]
+    assert blocks[3] == blocks[4]
+    assert {grid["block_size_degrees"] for grid in viewer_artifacts.YEAR_GRIDS.values()} == {5, 2}
 
 
 def test_year_error_geography_shares_its_counts_with_the_bias_standard_error() -> None:
@@ -195,11 +265,28 @@ def test_year_error_geography_shares_its_counts_with_the_bias_standard_error() -
     grid = geography["grid"]
     assert len(sea_surface_height["n"]["1"]) == grid["nlat"] * grid["nlon"]
     assert sum(sea_surface_height["n"]["1"]) == 400
-    for count, bias, bias_standard_error in zip(
-        sea_surface_height["n"]["1"], sea_surface_height["bias"]["1"], sea_surface_height["bias_se"]["1"]
+    for count, start_count, bias in zip(
+        sea_surface_height["n"]["1"], sea_surface_height["n_starts"]["1"], sea_surface_height["bias"]["1"]
     ):
         assert (bias is None) == (count == 0)
-        assert (bias_standard_error is None) == (count < 2)
+        assert start_count <= min(count, 2)
+    assert set(sea_surface_height["bias_se"]["1"]) == {None}
+
+
+def test_year_error_geography_bias_standard_error_is_taken_across_starts() -> None:
+    start_dates = ["2024-01-03", "2024-01-10", "2024-01-17", "2024-01-24"]
+    matchups = _frame([(_SEA_SURFACE_HEIGHT_KEY, "surface")], start_dates, [0], 30, seed=13)
+    matchups = matchups.assign(latitude=10.5, longitude=20.5)
+
+    geography = viewer_artifacts.year_error_geography(matchups, viewer_artifacts.YEAR_GRIDS["global"], 1)
+
+    sea_surface_height = geography["variables"]["SSH"]
+    cell = sea_surface_height["n"]["1"].index(120)
+    error = matchups["model_value"] - matchups["observation_value"]
+    start_means = error.groupby(matchups["first_day"]).mean().to_numpy()
+    assert sea_surface_height["n_starts"]["1"][cell] == 4
+    assert sea_surface_height["bias_se"]["1"][cell] == pytest.approx(start_means.std(ddof=1) / 2.0, abs=1e-4)
+    assert sea_surface_height["bias"]["1"][cell] == pytest.approx(error.mean(), abs=1e-4)
 
 
 def test_rmsd_by_depth_pools_over_all_starts_and_skips_surface_only_variables() -> None:
@@ -232,16 +319,29 @@ def test_rmsd_by_depth_pools_over_all_starts_and_skips_surface_only_variables() 
     assert viewer_artifacts.rmsd_by_depth(_year_matchups()) == {}
 
 
-def _sea_surface_height_dataset(start_dates=("2024-01-03",)) -> xarray.Dataset:
-    # Centred at 30 N, clear of the equatorial band the detector excludes.
-    latitudes = numpy.linspace(20.0, 40.0, 41)
-    longitudes = numpy.linspace(-10.0, 10.0, 41)
-    grid_y, grid_x = numpy.meshgrid(latitudes - 30.0, longitudes, indexing="ij")
-    field = 0.3 * numpy.exp(-(grid_y**2 + grid_x**2) / 8.0)
-    values = numpy.broadcast_to(field[None, None, :, :], (len(start_dates), 2, *field.shape)).copy()
-    # Each start gets its own displaced eddy, so a census that ignored the start is detectable.
-    for start_index in range(len(start_dates)):
-        values[start_index] += 0.3 * numpy.exp(-((grid_y - start_index) ** 2 + (grid_x - 2 * start_index) ** 2) / 4.0)
+_KILOMETRES_PER_DEGREE = 111.195
+_PLANTED_RADIUS_KM = 60.0
+
+
+def _gaussian_eddy(grid_latitude, grid_longitude, latitude, longitude, amplitude) -> numpy.ndarray:
+    longitude_offset = (grid_longitude - longitude + 180.0) % 360.0 - 180.0
+    eastward_km = longitude_offset * _KILOMETRES_PER_DEGREE * numpy.cos(numpy.deg2rad(latitude))
+    northward_km = (grid_latitude - latitude) * _KILOMETRES_PER_DEGREE
+    return amplitude * numpy.exp(-(eastward_km**2 + northward_km**2) / (2 * _PLANTED_RADIUS_KM**2))
+
+
+def _sea_surface_height_dataset(start_dates=("2024-01-03",), cell_size_degrees: float = 0.25) -> xarray.Dataset:
+    latitudes = numpy.arange(20.0, 40.0 + cell_size_degrees / 2, cell_size_degrees)
+    longitudes = numpy.arange(-10.0, 10.0 + cell_size_degrees / 2, cell_size_degrees)
+    grid_latitude, grid_longitude = numpy.meshgrid(latitudes, longitudes, indexing="ij")
+    cyclone = _gaussian_eddy(grid_latitude, grid_longitude, 33.0, -5.0, -0.2)
+    # Each start gets its own displaced anticyclone, so a census that ignored the start is detectable.
+    values = numpy.stack(
+        [
+            numpy.stack([cyclone + _gaussian_eddy(grid_latitude, grid_longitude, 30.0, 2.0 * start_index, 0.2)] * 2)
+            for start_index in range(len(start_dates))
+        ]
+    )
     return xarray.Dataset(
         {
             _SEA_SURFACE_HEIGHT_KEY: (
@@ -263,7 +363,12 @@ def _sea_surface_height_dataset(start_dates=("2024-01-03",)) -> xarray.Dataset:
     )
 
 
-def test_eddy_census_writes_every_start_and_lead_day_with_distinct_frames(tmp_path) -> None:
+@pytest.fixture
+def py_eddy_tracker():
+    return pytest.importorskip("py_eddy_tracker")
+
+
+def test_eddy_census_writes_every_start_and_lead_day_with_distinct_frames(tmp_path, py_eddy_tracker) -> None:
     start_dates = ("2024-01-03", "2024-01-10", "2024-01-17")
     viewer_artifacts.write_eddy_census(
         _sea_surface_height_dataset(start_dates), tmp_path / "eddies.json", "your_model", None
@@ -271,6 +376,11 @@ def test_eddy_census_writes_every_start_and_lead_day_with_distinct_frames(tmp_pa
 
     index = json.loads((tmp_path / "eddies.json").read_text(encoding="utf-8"))
     assert index["kind"] == "eddy-census"
+    assert index["schema_version"] == "4"
+    assert index["method"] == "py-eddy-tracker"
+    assert index["parameters"]["contour_step_meters"] == 0.002
+    assert index["parameters"]["py_eddy_tracker_version"]
+    assert index["detection_grid"]["block_average_factor"] == [1, 1]
     assert index["dataset"] == "your_model"
     assert [entry["start_date"] for entry in index["starts"]] == list(start_dates)
     assert index["leads"] == index["starts"][0]["leads"]
@@ -280,39 +390,118 @@ def test_eddy_census_writes_every_start_and_lead_day_with_distinct_frames(tmp_pa
         for lead_entry in start_entry["leads"]:
             assert lead_entry["file"] == f"eddies-start-{start_entry['start_date']}-lead-{lead_entry['lead_day']}.json"
             payload = json.loads((tmp_path / lead_entry["file"]).read_text(encoding="utf-8"))
+            payload["frame"] = viewer_artifacts.decoded_eddy_frame(payload["frame"])
             assert (payload["start_date"], payload["frame"]["lead_day"]) == (
                 start_entry["start_date"],
                 lead_entry["lead_day"],
             )
+            assert sorted(eddy["polarity"] for eddy in payload["frame"]["detections"]) == ["anticyclone", "cyclone"]
             for eddy in payload["frame"]["detections"]:
                 assert len(eddy["contour_latitude"]) == len(eddy["contour_longitude"]) >= 3
-        first_frame = json.loads((tmp_path / start_entry["leads"][0]["file"]).read_text(encoding="utf-8"))["frame"]
+                assert eddy["amplitude"] == pytest.approx(0.2, rel=0.2)
+                assert eddy["speed_radius_km"] == pytest.approx(_PLANTED_RADIUS_KM, rel=0.15)
+                assert eddy["effective_radius_km"] > eddy["speed_radius_km"]
+        first_frame = viewer_artifacts.decoded_eddy_frame(
+            json.loads((tmp_path / start_entry["leads"][0]["file"]).read_text(encoding="utf-8"))["frame"]
+        )
         centres_by_start.add(tuple(sorted((eddy["latitude"], eddy["longitude"]) for eddy in first_frame["detections"])))
     assert len(centres_by_start) == len(start_dates)
 
 
-def test_regional_eddy_census_keeps_only_the_eddies_centred_in_the_region() -> None:
+def test_a_census_frame_round_trips_through_the_compact_encoding() -> None:
+    frame = {
+        "lead_day": 3,
+        "detections": [
+            {
+                "id": 0,
+                "latitude": -38.589,
+                "longitude": 179.9,
+                "polarity": "anticyclone",
+                "amplitude": 0.0755,
+                "effective_radius_km": 41.2,
+                "speed_radius_km": 30.5,
+                "contour_latitude": [-38.2, -38.9, -39.123],
+                "contour_longitude": [180.4, 179.5, 179.95],
+            },
+            {
+                "id": 1,
+                "latitude": 10.0,
+                "longitude": -0.001,
+                "polarity": "cyclone",
+                "amplitude": 0.0,
+                "effective_radius_km": 0.0,
+                "speed_radius_km": 0.0,
+                "contour_latitude": [10.5, 9.5, 10.0],
+                "contour_longitude": [-0.5, -0.5, 0.6],
+            },
+        ],
+    }
+    encoded = viewer_artifacts.encoded_eddy_frame(frame)
+    assert encoded["polarity"] == [1, 0]
+    assert all(isinstance(contour, str) for contour in encoded["contour"])
+    assert viewer_artifacts.decoded_eddy_frame(json.loads(json.dumps(encoded))) == frame
+
+
+def test_contour_simplification_stays_within_its_tolerance_and_vertex_bound() -> None:
+    angles = numpy.linspace(0.0, 2.0 * numpy.pi, 50)
+    wobble = 1.0 + 0.1 * numpy.sin(7.0 * angles)
+    latitudes = 45.0 + 0.4 * wobble * numpy.sin(angles)
+    longitudes = 10.0 + 0.4 * wobble * numpy.cos(angles) / numpy.cos(numpy.radians(45.0))
+    kept_latitudes, kept_longitudes = viewer_artifacts.simplified_ring(latitudes, longitudes)
+    assert 3 <= kept_latitudes.size <= viewer_artifacts._MAXIMUM_CONTOUR_POINT_COUNT < latitudes.size - 1
+    cosine = numpy.cos(numpy.radians(45.0))
+    ring = numpy.column_stack([kept_longitudes * cosine, kept_latitudes])
+    segments = numpy.stack([ring, numpy.roll(ring, -1, axis=0)], axis=1)
+    for point in numpy.column_stack([longitudes * cosine, latitudes]):
+        start, chord = segments[:, 0], segments[:, 1] - segments[:, 0]
+        fraction = numpy.clip(((point - start) * chord).sum(axis=1) / (chord**2).sum(axis=1), 0.0, 1.0)
+        distance = numpy.hypot(*(start + fraction[:, None] * chord - point).T).min()
+        assert distance <= viewer_artifacts.CONTOUR_SIMPLIFICATION_TOLERANCE_DEGREES + 1e-9
+
+
+def test_a_parallel_eddy_census_writes_the_files_of_the_serial_census(tmp_path, py_eddy_tracker) -> None:
+    dataset = _sea_surface_height_dataset(("2024-01-03", "2024-01-10", "2024-01-17"))
+    serial, parallel = tmp_path / "serial", tmp_path / "parallel"
+    serial.mkdir()
+    parallel.mkdir()
+    viewer_artifacts.write_eddy_census(dataset, serial / "eddies.json", "your_model", None, max_workers=1)
+    viewer_artifacts.write_eddy_census(dataset, parallel / "eddies.json", "your_model", None, max_workers=3)
+
+    serial_files = sorted(path.name for path in serial.iterdir())
+    assert len(serial_files) == 1 + 3 * 2
+    assert sorted(path.name for path in parallel.iterdir()) == serial_files
+    for name in serial_files:
+        assert (parallel / name).read_bytes() == (serial / name).read_bytes(), name
+
+
+def test_regional_eddy_census_keeps_only_the_eddies_centred_in_the_region(py_eddy_tracker) -> None:
     dataset = _sea_surface_height_dataset()
     everywhere = viewer_artifacts.eddy_census_frames(dataset, 0, None)[0]["detections"]
-    assert everywhere
+    assert len(everywhere) == 2
 
-    def centres(minimum_latitude: float, maximum_latitude: float) -> list:
+    def polarities(minimum_latitude: float, maximum_latitude: float) -> list:
         region = custom_region("band", "Band", minimum_latitude, maximum_latitude, -10.0, 10.0)
         padded = subset_dataset_to_region(dataset, padded_region(region, 10.0))
-        return viewer_artifacts.eddy_census_frames(padded, 0, region)[0]["detections"]
+        return sorted(
+            eddy["polarity"] for eddy in viewer_artifacts.eddy_census_frames(padded, 0, region)[0]["detections"]
+        )
 
-    assert centres(25.0, 35.0) == everywhere
-    assert centres(35.0, 40.0) == []
+    assert polarities(25.0, 35.0) == ["anticyclone", "cyclone"]
+    assert polarities(31.0, 35.0) == ["cyclone"]
+    assert polarities(35.0, 40.0) == []
 
 
-def test_viewer_artifacts_of_a_custom_region_have_no_year_files_and_no_maps(tmp_path) -> None:
+def _custom_region_artifacts(tmp_path, challenger_dataset: xarray.Dataset):
     region = custom_region("band", "Band", 22.0, 38.0, -8.0, 8.0)
     matchups = _frame([(_SEA_SURFACE_HEIGHT_KEY, "surface")], ["2024-01-03"], [0, 1], 20)
     rows_by_start = viewer_artifacts.class4_rmsd_rows_by_start(matchups)
-
-    artifacts = viewer_artifacts.write_viewer_artifacts(
-        tmp_path, "your_model", _sea_surface_height_dataset(), region, matchups, rows_by_start
+    return viewer_artifacts.write_viewer_artifacts(
+        tmp_path, "your_model", challenger_dataset, region, matchups, rows_by_start
     )
+
+
+def test_viewer_artifacts_of_a_custom_region_have_no_year_files_and_no_maps(tmp_path, py_eddy_tracker) -> None:
+    artifacts = _custom_region_artifacts(tmp_path, _sea_surface_height_dataset())
 
     assert artifacts.has_maps is False
     assert artifacts.insights == {
@@ -323,3 +512,130 @@ def test_viewer_artifacts_of_a_custom_region_have_no_year_files_and_no_maps(tmp_
         "year_rmsd_by_start": None,
     }
     assert sorted(path.name for path in tmp_path.iterdir()) == ["insights"]
+
+
+def test_no_eddy_census_is_written_on_a_grid_coarser_than_the_census_threshold(tmp_path) -> None:
+    artifacts = _custom_region_artifacts(tmp_path, _sea_surface_height_dataset(cell_size_degrees=0.5))
+
+    assert artifacts.insights["eddies"] is None
+    assert artifacts.insights["class4_matchups"] is not None
+    assert not list(tmp_path.rglob("eddies*.json"))
+
+
+# Runs in a fresh interpreter where py-eddy-tracker cannot be imported, as in an install without it.
+_WITHOUT_PY_EDDY_TRACKER_SCRIPT = """
+import importlib.abc
+import pathlib
+import sys
+import tempfile
+
+
+class BlockPyEddyTracker(importlib.abc.MetaPathFinder):
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] == "py_eddy_tracker":
+            raise ModuleNotFoundError(f"No module named {name!r}")
+        return None
+
+
+sys.meta_path.insert(0, BlockPyEddyTracker())
+
+from tests.test_viewer_artifacts import _custom_region_artifacts, _sea_surface_height_dataset
+
+# Longer than the stdout buffer of a pipe, so part of it is still buffered when the warning comes.
+print("x" * 10_000)
+directory = pathlib.Path(tempfile.mkdtemp())
+artifacts = _custom_region_artifacts(directory, _sea_surface_height_dataset())
+assert artifacts.insights["eddies"] is None, artifacts.insights
+assert artifacts.insights["class4_matchups"] is not None
+assert not list(directory.rglob("eddies*.json"))
+assert "py_eddy_tracker" not in sys.modules
+print("ok")
+"""
+
+
+def test_without_py_eddy_tracker_the_viewer_data_skips_the_eddies_with_one_warning() -> None:
+    completed = subprocess.run(
+        [sys.executable, "-c", _WITHOUT_PY_EDDY_TRACKER_SCRIPT],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.split() == ["x" * 10_000, "ok"]
+    warnings = [line for line in completed.stderr.splitlines() if "eddy census" in line]
+    assert len(warnings) == 1
+    assert "py-eddy-tracker" in warnings[0] and "documentation/viewer-data" in warnings[0]
+
+
+def test_the_eddy_census_skip_warning_starts_on_its_own_line_in_a_combined_log() -> None:
+    completed = subprocess.run(
+        [sys.executable, "-c", _WITHOUT_PY_EDDY_TRACKER_SCRIPT],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+    )
+    assert completed.returncode == 0, completed.stdout
+    lines = completed.stdout.splitlines()
+    assert "x" * 10_000 in lines
+    assert [line for line in lines if "eddy census" in line][0].startswith("Skipping the eddy census")
+
+
+def _global_sea_surface_height_dataset(first_longitude: float) -> xarray.Dataset:
+    latitudes = numpy.arange(-50.0, 50.01, 0.25)
+    longitudes = first_longitude + numpy.arange(1440) * 0.25
+    grid_latitude, grid_longitude = numpy.meshgrid(latitudes, longitudes, indexing="ij")
+    field = sum(
+        _gaussian_eddy(grid_latitude, grid_longitude, latitude, longitude, amplitude)
+        for latitude, longitude, amplitude in ((30.0, 180.0, 0.2), (-35.0, 60.0, -0.2), (25.0, -100.0, 0.2))
+    )
+    return xarray.Dataset(
+        {
+            _SEA_SURFACE_HEIGHT_KEY: (
+                [
+                    Dimension.FIRST_DAY_DATETIME.key(),
+                    Dimension.LEAD_DAY_INDEX.key(),
+                    Dimension.LATITUDE.key(),
+                    Dimension.LONGITUDE.key(),
+                ],
+                field[None, None, :, :],
+            )
+        },
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): numpy.arange(1),
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+
+def _census_centres(detections: list[dict]) -> list[tuple]:
+    return sorted((eddy["polarity"], round(eddy["latitude"], 2), round(eddy["longitude"], 2)) for eddy in detections)
+
+
+def test_eddy_census_on_a_0_to_360_grid_equals_the_census_on_a_minus_180_to_180_grid(py_eddy_tracker) -> None:
+    eastern = viewer_artifacts.eddy_census_frames(_global_sea_surface_height_dataset(0.0), 0, None)[0]["detections"]
+    centred = viewer_artifacts.eddy_census_frames(_global_sea_surface_height_dataset(-180.0), 0, None)[0]["detections"]
+
+    assert len(eastern) == 3
+    assert _census_centres(eastern) == _census_centres(centred)
+    assert all(-180.0 <= eddy["longitude"] < 180.0 for eddy in eastern)
+    assert -100.0 in [round(eddy["longitude"]) for eddy in eastern]
+
+
+def test_an_eddy_straddling_the_dateline_keeps_a_closed_contour_around_its_centre(py_eddy_tracker) -> None:
+    for first_longitude in (0.0, -180.0):
+        detections = viewer_artifacts.eddy_census_frames(_global_sea_surface_height_dataset(first_longitude), 0, None)
+        dateline_eddy = next(
+            eddy
+            for eddy in detections[0]["detections"]
+            if eddy["polarity"] == "anticyclone" and round(eddy["latitude"]) == 30
+        )
+        contour_longitudes = numpy.array(dateline_eddy["contour_longitude"])
+        assert len(contour_longitudes) >= 3
+        assert numpy.abs(numpy.diff(contour_longitudes)).max() < 5.0
+        assert abs(abs(dateline_eddy["longitude"]) - 180.0) < 0.01
+        assert contour_longitudes.min() < dateline_eddy["longitude"] < contour_longitudes.max()
+        assert numpy.abs(contour_longitudes - dateline_eddy["longitude"]).max() < 5.0
+        assert numpy.abs(numpy.array(dateline_eddy["contour_latitude"]) - 30.0).max() < 5.0

@@ -136,7 +136,10 @@ function eddyLeadFrame(eddies, entries, leadDay) {
     eddyLeadFrameCache.set(
       key,
       fetchJSON(sidecarUrl)
-        .then((payload) => (payload && payload.frame ? payload.frame : null))
+        // Decoded once here, so every caller shares the same detection objects.
+        .then((payload) =>
+          payload && payload.frame ? { lead_day: payload.frame.lead_day, detections: frameDetections(payload.frame) } : null,
+        )
         .catch(() => null),
     );
   }
@@ -354,6 +357,60 @@ function nearestLeadFrame(frames, leadDay) {
   return best;
 }
 
+// Encoded polyline (zig-zag sign, 5-bit groups, offset 63) to integers.
+function decodedIntegers(text) {
+  const values = [];
+  let accumulated = 0;
+  let shift = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const chunk = text.charCodeAt(i) - 63;
+    accumulated |= (chunk & 0x1f) << shift;
+    shift += 5;
+    if (chunk < 0x20) {
+      values.push(accumulated & 1 ? ~(accumulated >> 1) : accumulated >> 1);
+      accumulated = 0;
+      shift = 0;
+    }
+  }
+  return values;
+}
+
+/**
+ * Detections of a census frame: `frame.detections` as published (schema 3 and earlier), or the
+ * eddy objects rebuilt from a columnar schema 4 frame, whose contours are encoded polylines of
+ * (latitude, longitude) steps in thousandths of a degree, the first step from the centre.
+ */
+export function frameDetections(frame) {
+  if (Array.isArray(frame.detections)) return frame.detections;
+  if (!Array.isArray(frame.contour)) return [];
+  const detections = [];
+  for (let index = 0; index < frame.contour.length; index += 1) {
+    let latitudeUnits = Math.round(frame.latitude[index] * 1000);
+    let longitudeUnits = Math.round(frame.longitude[index] * 1000);
+    const steps = decodedIntegers(frame.contour[index]);
+    const contourLatitude = [];
+    const contourLongitude = [];
+    for (let step = 0; step + 1 < steps.length; step += 2) {
+      latitudeUnits += steps[step];
+      longitudeUnits += steps[step + 1];
+      contourLatitude.push(latitudeUnits / 1000);
+      contourLongitude.push(longitudeUnits / 1000);
+    }
+    detections.push({
+      id: index,
+      latitude: frame.latitude[index],
+      longitude: frame.longitude[index],
+      polarity: frame.polarities[frame.polarity[index]],
+      amplitude: frame.amplitude[index],
+      effective_radius_km: frame.effective_radius_km[index],
+      speed_radius_km: frame.speed_radius_km[index],
+      contour_latitude: contourLatitude,
+      contour_longitude: contourLongitude,
+    });
+  }
+  return detections;
+}
+
 /**
  * Census of a dataset's OWN eddy detections ("eddy-census" artifact: frame.detections
  * directly) for one forecast start, at the available lead nearest `leadDay`. Returns
@@ -369,7 +426,7 @@ export async function eddyCensus(eddies, leadDay, startDate) {
   const frame = entries ? await eddyLeadFrame(eddies, entries, leadDay) : nearestLeadFrame(eddies.frames, leadDay);
   if (!frame) return null;
   return {
-    detections: Array.isArray(frame.detections) ? frame.detections : [],
+    detections: frameDetections(frame),
     leadDay: frame.lead_day,
     parameters: eddies.parameters || null,
   };

@@ -5,6 +5,7 @@
 from datetime import datetime, timedelta
 from functools import partial
 import uuid
+import dask
 import numpy
 import pandas
 import shutil
@@ -71,8 +72,24 @@ def deviation_of_lagrangian_trajectories(
 ) -> pandas.DataFrame:
     return _deviation_of_lagrangian_trajectories(
         _harmonise_dataset(challenger_dataset),
-        _harmonise_dataset(reference_dataset),
+        _culled_surface_currents(_harmonise_dataset(reference_dataset)),
         particle_count,
+    )
+
+
+def _culled_surface_currents(dataset: xarray.Dataset) -> xarray.Dataset:
+    # copernicusmarine references are lazy subsets of the whole archive, with millions of dask tasks per variable.
+    # Cull the graph once here, so that each later compute does not walk the whole archive again.
+    current_dataset = dataset[[Variable.EASTWARD_SEA_WATER_VELOCITY.key(), Variable.NORTHWARD_SEA_WATER_VELOCITY.key()]]
+    if Dimension.DEPTH.key() in current_dataset.dims:
+        current_dataset = current_dataset.isel({Dimension.DEPTH.key(): 0}, drop=True)
+    return current_dataset.map(
+        lambda data_array: (
+            data_array.copy(data=dask.optimize(data_array.data)[0])
+            if dask.is_dask_collection(data_array.data)
+            else data_array
+        ),
+        keep_attrs=True,
     )
 
 

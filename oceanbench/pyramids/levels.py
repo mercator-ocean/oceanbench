@@ -57,9 +57,29 @@ def plan_levels(dataset: xarray.Dataset) -> list[LevelPlan]:
     return plans
 
 
+def _regular_coarse_coordinate(fine_coordinate: numpy.ndarray, coarse_size: int) -> numpy.ndarray:
+    if fine_coordinate.size < 2:
+        raise ValueError(f"A pyramid level needs at least 2 points along each axis, not {fine_coordinate.size}.")
+    fine_step = float(fine_coordinate[1] - fine_coordinate[0])
+    if not numpy.allclose(numpy.diff(fine_coordinate), fine_step, rtol=1e-3, atol=0.0):
+        raise ValueError("A pyramid level needs a regular grid: the coordinate steps are not constant.")
+    return float(fine_coordinate[0]) + fine_step / 2.0 + 2.0 * fine_step * numpy.arange(coarse_size)
+
+
 def coarsen_by_two(layers: xarray.Dataset) -> xarray.Dataset:
-    """2x2 block mean that ignores land (NaN), padding odd edges with NaN."""
-    return layers.coarsen(
+    """
+    2x2 block mean that ignores land (NaN), padding odd edges with NaN.
+
+    The viewer places a level from its first coordinate and a constant step, so every coarse coordinate,
+    including a padded edge block's, is the centre of its 2x2 block on the regular coarse grid.
+    """
+    coarse = layers.coarsen(
         {Dimension.LATITUDE.key(): 2, Dimension.LONGITUDE.key(): 2},
         boundary="pad",
     ).mean(skipna=True)
+    return coarse.assign_coords(
+        {
+            name: _regular_coarse_coordinate(layers[name].values, coarse.sizes[name])
+            for name in (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key())
+        }
+    )

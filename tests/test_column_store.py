@@ -255,3 +255,13 @@ def test_store_is_browser_flavour_consolidated_and_plain_zarr_readable(tmp_path)
     # Plain xarray open (no special codecs) decodes the quantized values back to float.
     store = xarray.open_zarr(result.zarr_path, consolidated=True)
     assert store[_TEMPERATURE].dtype.kind == "f"
+
+
+def test_column_units_are_spelled_like_the_viewer_manifest(tmp_path):
+    dataset = _synthetic_challenger(starts=1, leads=2, depths=3, latitude_size=20, longitude_size=30)
+    dataset[_TEMPERATURE].attrs["units"] = "degrees_C"
+    dataset[_SALINITY].attrs["units"] = "1e-3"
+    result = build_column_store(dataset, output_path=str(tmp_path / f"synthetic{COLUMN_STORE_SUFFIX}"))
+    group = zarr.open_group(result.zarr_path, mode="r")
+    assert group[_TEMPERATURE].attrs["units"] == "°C"
+    assert group[_SALINITY].attrs["units"] == "PSU"

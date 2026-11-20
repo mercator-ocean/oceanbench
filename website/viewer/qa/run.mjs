@@ -280,11 +280,16 @@ async function pressAndSettle(page, slider, key) {
   throw new Error(`slider did not respond to ${key} press (stuck at ${before})`);
 }
 
+// The slider debounces its fetches, so a scrub that moves on as soon as the value changes
+// skips the tiles of the leads it passes and the back-scrub then loads them for the first
+// time. Wait at each lead until every visible panel has its tiles cached, so the back-scrub
+// really is warm.
 async function scrubToLeadTen(page, slider) {
   await slider.focus();
   let value = Number(await slider.inputValue());
   while (value < 10) {
     value = await pressAndSettle(page, slider, "ArrowRight");
+    await page.waitForFunction((lead) => window.oceanbenchViewerQaProbe.leadCached(lead), value, { timeout: 60000 });
   }
 }
 

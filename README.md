@@ -193,7 +193,7 @@ To also upload the scores files to an S3 bucket:
 oceanbench evaluate path/to/challenger.py --output-bucket my-bucket --output-prefix results
 ```
 
-To also write the data shown by the [Viewer](https://oceanbench.edito.eu/viewer.html), pass a directory:
+To also write the data shown by the [Viewer](https://oceanbench.edito.eu/viewer.html), install the `viewer` extra (`pip install "oceanbench[viewer]"`) and pass a directory:
 
 ```bash
 oceanbench evaluate path/to/challenger.py --viewer-artifacts-dir viewer-data

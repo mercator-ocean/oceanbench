@@ -21,6 +21,19 @@
       "description": "Optional evaluation year of the dataset.",
       "type": "integer"
     },
+    "kind": {
+      "description": "Optional kind of dataset: a forecast model, a baseline (such as climatology or persistence) or a reference (such as a reanalysis that assimilates observations). Absent means model.",
+      "type": "string",
+      "enum": [
+        "model",
+        "baseline",
+        "reference"
+      ]
+    },
+    "description": {
+      "description": "Optional short description of the dataset, shown for baselines and references.",
+      "type": "string"
+    },
     "has_columns": {
       "description": "Whether this dataset publishes a water-column store (<slug>.columns.zarr) beside its pyramid.",
       "type": "boolean"
@@ -150,6 +163,11 @@
           "description": "uint16 decode offset (see scale_factor).",
           "type": "number"
         },
+        "quantization_step": {
+          "description": "Decoded value difference between two consecutive uint16 levels (equal to scale_factor); the round-trip error is at most half of it.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
         "fill_value": {
           "description": "Stored sentinel marking land / missing cells (_FillValue).",
           "type": [
@@ -162,7 +180,16 @@
           "type": "string"
         },
         "default_range": {
-          "description": "Default [minimum, maximum] display range in decoded units.",
+          "description": "Default [minimum, maximum] display range in decoded units: the declared range of the layer, otherwise the 2nd and 98th percentiles of a regular subsample of its level-0 values.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number"
+          }
+        },
+        "data_range": {
+          "description": "True [minimum, maximum] of the layer over all starts and lead days, in decoded units; the quantization spans it.",
           "type": "array",
           "minItems": 2,
           "maxItems": 2,

@@ -13,7 +13,9 @@ from oceanbench.core.classIV_support import (
     create_class4_observations_dataframe,
     format_class4_results,
     interpolate_class4_model_to_observations,
+    REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
     prepare_class4_model_variable,
+    sea_surface_height_shift,
     reset_class4_observations_cache,
 )
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
@@ -62,8 +64,9 @@ def _compute_rmsd_table(
 def _convert_forecast_ssh_to_sla(
     model_variable: xarray.DataArray,
     variable_key: str,
+    mean_sea_surface_height_shift: float = REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
 ) -> xarray.DataArray:
-    return prepare_class4_model_variable(model_variable, variable_key)
+    return prepare_class4_model_variable(model_variable, variable_key, mean_sea_surface_height_shift)
 
 
 def class4_rmsd_and_matchups(
@@ -112,6 +115,7 @@ def class4_rmsd_and_matchups(
         model_variable = _convert_forecast_ssh_to_sla(
             challenger[challenger_variable_key],
             standard_variable_key,
+            sea_surface_height_shift(challenger_dataset),
         )
         observations_dataframe["model_value"] = _interpolate_model_to_observations(
             model_variable,

@@ -78,7 +78,8 @@ def rmsd_of_variables_compared_to_observations(
 def rmsd_of_variables_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
-) -> pandas.DataFrame:
+    keep_start_tables: bool = False,
+) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
         challenger_dataset=challenger_dataset,
@@ -91,13 +92,15 @@ def rmsd_of_variables_compared_to_glorys_reanalysis(
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
         ocean_mask=ocean_mask(),
+        keep_start_tables=keep_start_tables,
     )
 
 
 def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
-) -> pandas.DataFrame:
+    keep_start_tables: bool = False,
+) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
         challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
@@ -108,13 +111,15 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
             Variable.MIXED_LAYER_DEPTH,
         ],
         ocean_mask=ocean_mask(),
+        keep_start_tables=keep_start_tables,
     )
 
 
 def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
-) -> pandas.DataFrame:
+    keep_start_tables: bool = False,
+) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
         challenger_dataset=compute_geostrophic_currents(challenger_dataset),
@@ -126,6 +131,7 @@ def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
             Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
         ],
         ocean_mask=ocean_mask(),
+        keep_start_tables=keep_start_tables,
     )
 
 
@@ -144,7 +150,8 @@ def deviation_of_lagrangian_trajectories_compared_to_glorys_reanalysis(
 def rmsd_of_variables_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
-) -> pandas.DataFrame:
+    keep_start_tables: bool = False,
+) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
         challenger_dataset=challenger_dataset,
@@ -157,13 +164,15 @@ def rmsd_of_variables_compared_to_glo12_analysis(
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
         ocean_mask=ocean_mask(),
+        keep_start_tables=keep_start_tables,
     )
 
 
 def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
-) -> pandas.DataFrame:
+    keep_start_tables: bool = False,
+) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
         challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
@@ -174,13 +183,15 @@ def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
             Variable.MIXED_LAYER_DEPTH,
         ],
         ocean_mask=ocean_mask(),
+        keep_start_tables=keep_start_tables,
     )
 
 
 def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
-) -> pandas.DataFrame:
+    keep_start_tables: bool = False,
+) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
         challenger_dataset=compute_geostrophic_currents(challenger_dataset),
@@ -192,6 +203,7 @@ def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
             Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
         ],
         ocean_mask=ocean_mask(),
+        keep_start_tables=keep_start_tables,
     )
 
 

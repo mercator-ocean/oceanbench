@@ -207,6 +207,7 @@ def test_indexes_merge_the_challenger_and_region_with_what_the_directory_holds(t
         {
             "slug": "your_model",
             "label": "Your model",
+            "kind": "model",
             "store": "./data/your_model.zarr",
             "manifest": "./data/your_model.viewer-manifest.json",
             "columns": "./data/your_model.columns.zarr",
@@ -246,11 +247,18 @@ def test_evaluate_builds_the_viewer_data_from_the_class4_matchups_of_the_scores(
 
     scores = json.loads((tmp_path / "challenger.ibi.scores.json").read_text())
     assert scores["rows"] == scores_without_viewer_data["rows"]
-    ((directory, challenger_name, _, region, built_matchups, document_rows),) = builds
+    ((directory, challenger_name, _, region, built_matchups, document_rows, start_tables),) = builds
     assert (directory, challenger_name, region.id) == (str(tmp_path / "viewer"), "challenger", "ibi")
     assert built_matchups is matchups
     assert document_rows == scores["rows"]
     assert len(evaluated_metrics) == 2 * len(METRIC_FUNCTION_NAMES)
+    assert sorted(start_tables) == sorted(viewer_data.GRIDDED_METRIC_FUNCTION_NAMES)
+    numpy.testing.assert_array_equal(
+        viewer_data.gridded_scores_from_start_tables(start_tables)[
+            ("rmsd_of_variables", "glorys_reanalysis", "sea_water_salinity", "surface", 2)
+        ],
+        [0.25, 0.5],
+    )
 
 
 def test_evaluate_reads_the_viewer_data_directory_from_the_environment(
@@ -288,3 +296,195 @@ def test_the_evaluate_command_passes_the_viewer_data_directory(monkeypatch, argu
 
     assert cli._run_evaluate(args) == 0
     assert calls == [expected]
+
+
+def _stub_viewer_build(monkeypatch) -> tuple[list, list, pandas.DataFrame]:
+    matchups = pandas.DataFrame({"variable": ["sea_water_salinity"]})
+    class4_calls = []
+    builds = []
+
+    def class4_rmsd_and_matchups(challenger_dataset, region):
+        class4_calls.append(region.id)
+        return None, matchups
+
+    monkeypatch.setattr(
+        evaluate.core_metrics, "class4_rmsd_and_matchups_compared_to_observations", class4_rmsd_and_matchups
+    )
+    monkeypatch.setattr(viewer_data, "build_viewer_data", lambda *arguments: builds.append(arguments))
+    return class4_calls, builds, matchups
+
+
+def test_viewer_only_takes_the_rows_of_the_scores_file_and_recomputes_only_the_class4_matchups(
+    evaluated_metrics, tmp_path, monkeypatch  # noqa: F811
+) -> None:
+    oceanbench.evaluate_challenger("challenger.py", region="ibi")
+    scores_path = tmp_path / "challenger.ibi.scores.json"
+    scores_text = scores_path.read_text()
+    evaluated_metrics.clear()
+    class4_calls, builds, matchups = _stub_viewer_build(monkeypatch)
+
+    oceanbench.evaluate_challenger(
+        "challenger.py", region="ibi", viewer_artifacts_directory=str(tmp_path / "viewer"), viewer_only=True
+    )
+
+    assert evaluated_metrics == []
+    assert class4_calls == ["ibi"]
+    ((directory, challenger_name, _, region, built_matchups, document_rows, start_tables),) = builds
+    assert start_tables is None
+    assert (directory, challenger_name, region.id) == (str(tmp_path / "viewer"), "challenger", "ibi")
+    assert built_matchups is matchups
+    assert document_rows == json.loads(scores_text)["rows"]
+    assert scores_path.read_text() == scores_text
+
+
+def test_viewer_only_reads_an_explicit_scores_file_and_writes_no_scores_file(
+    evaluated_metrics, tmp_path, monkeypatch  # noqa: F811
+) -> None:
+    oceanbench.evaluate_challenger("challenger.py", region="ibi")
+    (tmp_path / "challenger.ibi.scores.json").rename(tmp_path / "previous.json")
+    _, builds, _ = _stub_viewer_build(monkeypatch)
+
+    oceanbench.evaluate_challenger(
+        "challenger.py",
+        region="ibi",
+        viewer_artifacts_directory=str(tmp_path / "viewer"),
+        viewer_only=True,
+        scores_file=str(tmp_path / "previous.json"),
+    )
+
+    assert len(builds) == 1
+    assert not list(tmp_path.glob("*.scores.json"))
+
+
+@pytest.mark.parametrize(
+    "field, value, message",
+    [
+        ("challenger", "other", "challenger is 'other'"),
+        ("oceanbench_version", "0.0.1", "oceanbench_version is '0.0.1'"),
+        ("schema_version", 99, "not a valid scores file"),
+    ],
+)
+def test_viewer_only_rejects_a_scores_file_of_another_evaluation(
+    evaluated_metrics, tmp_path, monkeypatch, field, value, message  # noqa: F811
+) -> None:
+    oceanbench.evaluate_challenger("challenger.py", region="ibi")
+    scores_path = tmp_path / "challenger.ibi.scores.json"
+    document = json.loads(scores_path.read_text())
+    scores_path.write_text(json.dumps(document | {field: value}))
+    class4_calls, builds, _ = _stub_viewer_build(monkeypatch)
+
+    with pytest.raises(ValueError, match=message):
+        oceanbench.evaluate_challenger(
+            "challenger.py", region="ibi", viewer_artifacts_directory=str(tmp_path / "viewer"), viewer_only=True
+        )
+    assert (class4_calls, builds) == ([], [])
+
+
+def test_viewer_only_rejects_a_scores_file_of_another_region(
+    evaluated_metrics, tmp_path, monkeypatch  # noqa: F811
+) -> None:
+    oceanbench.evaluate_challenger("challenger.py", region="ibi")
+    _stub_viewer_build(monkeypatch)
+
+    with pytest.raises(ValueError, match="region is"):
+        oceanbench.evaluate_challenger(
+            "challenger.py",
+            region="global",
+            viewer_artifacts_directory=str(tmp_path / "viewer"),
+            viewer_only=True,
+            scores_file="challenger.ibi.scores.json",
+        )
+
+
+def test_viewer_only_needs_a_scores_file_and_a_viewer_directory(
+    evaluated_metrics, tmp_path, monkeypatch  # noqa: F811
+) -> None:
+    _stub_viewer_build(monkeypatch)
+    monkeypatch.delenv("OCEANBENCH_VIEWER_ARTIFACTS_DIR", raising=False)
+
+    with pytest.raises(ValueError, match="No scores file at challenger.ibi.scores.json"):
+        oceanbench.evaluate_challenger(
+            "challenger.py", region="ibi", viewer_artifacts_directory=str(tmp_path / "viewer"), viewer_only=True
+        )
+    with pytest.raises(ValueError, match="viewer artifacts directory"):
+        oceanbench.evaluate_challenger("challenger.py", region="ibi", viewer_only=True)
+    assert evaluated_metrics == []
+
+
+@pytest.mark.parametrize(
+    "arguments, error",
+    [
+        (["--viewer-only"], "--viewer-only needs --viewer-artifacts-dir"),
+        (["--scores-file", "a.json", "--viewer-artifacts-dir", "viewer"], "only used with --viewer-only"),
+        (["other.py", "--viewer-only", "--viewer-artifacts-dir", "v", "--scores-file", "a.json"], "exactly one"),
+    ],
+)
+def test_the_evaluate_command_validates_the_viewer_only_options(monkeypatch, capsys, arguments, error) -> None:
+    from oceanbench import cli
+
+    monkeypatch.delenv("OCEANBENCH_VIEWER_ARTIFACTS_DIR", raising=False)
+    monkeypatch.setattr(cli, "_evaluate_all", lambda *arguments: pytest.fail("evaluated"))
+    args = cli._build_parser()[0].parse_args(["evaluate", "challenger.py", *arguments])
+
+    assert cli._run_evaluate(args) == 1
+    assert error in capsys.readouterr().err
+
+
+def test_the_evaluate_command_passes_the_viewer_only_options(monkeypatch) -> None:
+    from oceanbench import cli
+
+    calls = []
+    monkeypatch.setattr(
+        cli,
+        "_evaluate_all",
+        lambda challengers, *other_arguments: calls.append(other_arguments[-3:])
+        or [cli.EvaluationResult(challenger=challenger) for challenger in challengers],
+    )
+    args = cli._build_parser()[0].parse_args(
+        ["evaluate", "challenger.py", "--viewer-only", "--viewer-artifacts-dir", "v", "--scores-file", "a.json"]
+    )
+
+    assert cli._run_evaluate(args) == 0
+    assert calls == [("v", True, "a.json")]
+
+
+def test_rebuild_eddy_census_rewrites_only_the_eddy_entry_of_an_existing_build(tmp_path, monkeypatch) -> None:
+    insights = {
+        "datasets": {"your_model": {"global": {"eddies": None, "class4_matchups": "./data/insights/m.parquet"}}},
+        "regions": {"global": None},
+    }
+    (tmp_path / "insights.json").write_text(json.dumps(insights), encoding="utf-8")
+    calls = []
+
+    def write_census(insights_directory, slug, dataset, region):
+        calls.append((insights_directory, slug, region.id))
+        return "eddies.json"
+
+    monkeypatch.setattr(viewer_data, "write_region_eddy_census", write_census)
+    viewer_data.rebuild_eddy_census(str(tmp_path), "your_model", None, GLOBAL)
+
+    assert calls == [(tmp_path / "insights" / "your_model" / "global", "your_model", "global")]
+    rewritten = json.loads((tmp_path / "insights.json").read_text(encoding="utf-8"))
+    insights["datasets"]["your_model"]["global"]["eddies"] = "./data/insights/your_model/global/eddies.json"
+    assert rewritten == insights
+    with pytest.raises(ValueError, match="No viewer data of other"):
+        viewer_data.rebuild_eddy_census(str(tmp_path), "other", None, GLOBAL)
+
+
+def test_the_scores_of_a_bucket_are_read_with_only_the_boto3_endpoint(monkeypatch) -> None:
+    clients = []
+
+    class _Client:
+        def get_object(self, Bucket, Key):
+            raise FileNotFoundError(Key)
+
+    def _client(service, endpoint_url):
+        clients.append(endpoint_url)
+        return _Client()
+
+    monkeypatch.delenv("AWS_S3_ENDPOINT", raising=False)
+    monkeypatch.setenv("BOTO3_ENDPOINT_URL", "https://s3.example.org")
+    monkeypatch.setattr(evaluate.boto3, "client", _client)
+    with pytest.raises(ValueError, match="No scores file"):
+        evaluate._read_scores_document("challenger", GLOBAL, "bucket", "prefix", None)
+    assert clients == ["https://s3.example.org"]

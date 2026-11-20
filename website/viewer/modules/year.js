@@ -264,7 +264,8 @@ export function yearRmsdSeries(rmsd, shortName, leadDay) {
   };
 }
 
-// Per-cell standard error of the bias (std(model − obs)/sqrt(n)) for a short variable at a lead,
+// Per-cell standard error of the bias across forecast starts (std of the per-start means /
+// sqrt(n_starts), null under 3 starts) for a short variable at a lead,
 // or null when the artifact predates the bias_se array. Parallel to buildYearObservationCounts so
 // the hover readout can annotate a bias cell with "± SE".
 export function buildYearBiasStandardError(geography, shortName, leadDay) {

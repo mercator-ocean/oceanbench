@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import numpy
+import pandas
 import pytest
 import xarray
 
@@ -365,6 +366,28 @@ def test_rmsd_scores_only_the_mask_wet_cells_and_reports_the_missing_ones() -> N
     )
     assert table.loc[FIFTY_METERS_TEMPERATURE_LABEL, "Lead day 1"] == 1.0
     assert table.loc[FIFTY_METERS_TEMPERATURE_LABEL, MISSING_FRACTION_COLUMN] == 0.0
+
+
+def test_rmsd_keeps_the_table_of_each_start_date_from_the_same_computation() -> None:
+    first_start = _temperature_dataset(surface_values=[numpy.nan, 4.0, 100.0], deep_value=1.0)
+    second_start = _temperature_dataset(surface_values=[2.0, 6.0, 100.0], deep_value=3.0).assign_coords(
+        {Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-10"], dtype="datetime64[ns]")}
+    )
+    challenger_dataset = xarray.concat([first_start, second_start], dim=Dimension.FIRST_DAY_DATETIME.key())
+    arguments = {
+        "reference_dataset": xarray.zeros_like(challenger_dataset),
+        "variables": [Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+        "ocean_mask": _surface_mask(dry_latitudes=[60.0]),
+    }
+
+    table, start_tables = rmsd(challenger_dataset=challenger_dataset, keep_start_tables=True, **arguments)
+
+    pandas.testing.assert_frame_equal(table, rmsd(challenger_dataset=challenger_dataset, **arguments))
+    for start_table, start_dataset in zip(start_tables, [first_start, second_start], strict=True):
+        single_start_arguments = arguments | {"reference_dataset": xarray.zeros_like(start_dataset)}
+        pandas.testing.assert_series_equal(
+            start_table["Lead day 1"], rmsd(challenger_dataset=start_dataset, **single_start_arguments)["Lead day 1"]
+        )
 
 
 def test_rmsd_excludes_a_mask_dry_cell_even_when_both_sides_are_finite() -> None:

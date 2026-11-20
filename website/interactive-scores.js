@@ -255,7 +255,8 @@ function buildChallengerNotesHtml(challengerNames) {
 }
 
 function isReferenceBaseline(name) {
-  return challengerCategories[name] === "baseline";
+  // Baselines (climatology, persistence) and references (GLORYS reanalysis) are not forecasts.
+  return challengerCategories[name] === "baseline" || challengerCategories[name] === "reference";
 }
 
 // Reference baselines sit after the models in the Baseline select, and their

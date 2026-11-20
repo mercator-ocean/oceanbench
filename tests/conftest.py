@@ -14,6 +14,12 @@ from fsspec.implementations.http import HTTPFileSystem
 FAILING_CHUNK_KEY = "zos/2.0"
 
 
+@pytest.fixture(autouse=True)
+def serial_eddy_census(monkeypatch):
+    # Tests run the census in-process unless they pass max_workers; spawning a pool per test is slow.
+    monkeypatch.setenv("OCEANBENCH_EDDY_CENSUS_MAX_WORKERS", "1")
+
+
 class _SilentRequestHandler(SimpleHTTPRequestHandler):
     def log_message(self, *arguments) -> None:
         pass

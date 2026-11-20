@@ -59,8 +59,9 @@ export const METHOD_NOTES = {
     title: "RMSE / bias by start date",
     body:
       "Class IV RMSE per start date, pooled over its match-ups (official method). Bias mode: " +
-      "pooled mean of model minus obs. Band: 95% per start (bootstrap for RMSE, mean ± 1.96 " +
-      "sd/√n for bias); obs are spatially correlated, so read it as a lower bound. Click a " +
+      "pooled mean of model minus obs. Band: 95% per start from a block bootstrap that " +
+      "resamples 5° boxes of obs (2° for IBI), so correlation along a track or down a " +
+      "profile is kept; boxes are assumed independent. No band under 10 boxes. Click a " +
       "point to open that date.",
   },
 
@@ -70,7 +71,8 @@ export const METHOD_NOTES = {
     body:
       "Mean |obs − model| per cell over the 52 starts (model − obs in bias mode), on a 2° grid " +
       "(0.25° for IBI). Same obs and interpolation as the Class IV scores; SSH as sea level " +
-      "anomaly (shift −0.1148 m, climatology −0.1329 m); no outlier rejection.",
+      "anomaly (shift −0.1148 m, climatology −0.1329 m); no outlier rejection. Bias hover: " +
+      "± one standard error across start dates (from 3 starts with data in the cell).",
   },
 
   // Eddies overlay legend. {params} is rendered as a live parameter list from the census
@@ -78,13 +80,15 @@ export const METHOD_NOTES = {
   "eddies-legend": {
     title: "Eddy detection",
     body:
-      "{params}Eddy = outermost closed contour (1 cm steps) of full SSH after a Gaussian " +
-      "high-pass (Chelton et al. 2011), clear of land, the domain edge and the 70° cap. Kept " +
-      "with at least 8 pixels, radius ≥ 45 km, amplitude ≥ 1 cm and a single extremum; none " +
-      "within 5° of the Equator; IBI detected on a 10° padded crop. With two forecasts, " +
-      "same-polarity centres within the larger eddy radius (at least 50 km) are paired nearest first. " +
-      "Chance = the same pairing with F2 shifted 5° east and west, averaged. Agreement, " +
-      "not accuracy. No census for 1° products: their eddies span a few grid cells.",
+      "{params}Same method and parameters as the AVISO META3.2exp NRT eddy atlas: py-eddy-tracker " +
+      "on sea surface height high-passed at 700 km, contours every 0.2 cm, amplitude at least " +
+      "0.4 cm, shape error at most 70%, one extremum, 5 to 1000 pixels. Eddies centred within 5° of the equator are left out " +
+      "(geostrophy does not hold there). Detected on a 1/4° grid " +
+      "(finer models are block-averaged to it); IBI detected on a 10° padded crop. The contour " +
+      "drawn is the effective (outermost) one, simplified to within about 1 km. With two forecasts, same-polarity centres within " +
+      "the larger effective radius (at least 50 km) are paired nearest first. Chance = the same " +
+      "pairing with F2 shifted 5° east and west, averaged. Agreement, not accuracy. No eddies " +
+      "for models coarser than 0.3°: their eddies span a few grid cells.",
   },
 
   // Live power spectrum (rail-psd, live FFT over the map rectangle).
@@ -149,33 +153,18 @@ export const METHOD_NOTES = {
 // Order in which the eddy-census parameters render, with human labels and a formatter.
 // Keys are the exact snake_case fields of the census json's `parameters` block.
 const EDDY_PARAMETER_ROWS = [
-  ["amplitude_threshold_meters", "amplitude above outermost closed contour", (v) => `\u2265 ${v} m`],
-  ["min_eddy_area_km2", "min area", (v) => `${Number(v).toLocaleString("en-US")} km²`],
-  ["max_eddy_area_km2", "max area", (v) => `${Number(v).toLocaleString("en-US")} km²`],
-  ["min_peak_separation_km", "min peak separation", (v) => `${v} km`],
-  // Background sigma is a (latitude, longitude) pair of Gaussian sigmas in km, applied in
-  // degrees: converted at 5° N (the global grids' mean latitude) on every domain, IBI included.
-  // The high-pass 1 - exp(-k²σ²/2) reaches half power at kσ = 1.567, a wavelength of 4.01σ.
-  ["background_sigma_km", "background sigma", backgroundSigmaLabel],
-  ["contour_level_step_meters", "contour step", (v) => `${v} m`],
-  ["min_contour_convexity", "min convexity", (v) => `${v}`],
-  ["max_abs_latitude_degrees", "max abs latitude", (v) => `${v}°`],
-  ["apply_contour_filtering", "contour filtering", (v) => (v ? "on" : "off")],
+  ["method", "method", (v) => `${v}`],
+  ["py_eddy_tracker_version", "py-eddy-tracker version", (v) => `${v}`],
+  ["high_pass_wavelength_km", "high-pass wavelength", (v) => `${v} km`],
+  ["contour_step_meters", "contour step", (v) => `${v} m`],
+  ["minimum_amplitude_meters", "min amplitude", (v) => `${v} m`],
+  ["shape_error_percent", "max shape error", (v) => `${v}%`],
+  ["maximum_local_extremum_count", "max extrema", (v) => `${v}`],
+  ["pixel_limit", "pixels", (v) => (Array.isArray(v) ? `${v[0]} to ${v[1]}` : `${v}`)],
+  ["detection_grid_cell_degrees", "detection grid", (v) => `${v}°`],
+  ["minimum_absolute_centre_latitude_degrees", "min |centre latitude|", (v) => `${v}°`],
   ["oceanbench_version", "oceanbench version", (v) => `${v}`],
 ];
-
-const HIGH_PASS_HALF_POWER_SIGMAS = 4.01;
-
-function backgroundSigmaLabel(value) {
-  const [latitudeKm, longitudeKm] = Array.isArray(value) ? value : [value, value];
-  const degreeKm = (Math.PI * 6371) / 180;
-  const latitude = Number(latitudeKm) / degreeKm;
-  const longitude = Number(longitudeKm) / (degreeKm * Math.cos((5 * Math.PI) / 180));
-  return (
-    `sigma ${latitude.toFixed(2)}° × ${longitude.toFixed(2)}°, high-pass half power ` +
-    `~${(HIGH_PASS_HALF_POWER_SIGMAS * latitude).toFixed(2)}° × ${(HIGH_PASS_HALF_POWER_SIGMAS * longitude).toFixed(2)}°`
-  );
-}
 
 // Render the live eddy census `parameters` block into an HTML fragment (a small
 // definition list) to substitute for the {params} token. Returns "" if absent.

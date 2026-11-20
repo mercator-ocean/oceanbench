@@ -8,10 +8,11 @@ import pandas
 import pytest
 
 import oceanbench
+import oceanbench.core.metrics as core_metrics
 import oceanbench.core.runtime_configuration as runtime_configuration
 from oceanbench.core.lead_day_utils import lead_day_labels
 from oceanbench.core.runtime_configuration import current_runtime_configuration
-from oceanbench.core.scores import METRIC_FUNCTION_NAMES
+from oceanbench.core.scores import GRIDDED_METRIC_FUNCTION_NAMES, METRIC_FUNCTION_NAMES
 
 CHALLENGER_CODE = """
 import numpy
@@ -44,4 +45,11 @@ def evaluated_metrics(tmp_path, monkeypatch) -> list:
             )
 
         monkeypatch.setattr(oceanbench.metrics, metric_function_name, metric)
+        if metric_function_name in GRIDDED_METRIC_FUNCTION_NAMES:
+            # With a viewer, the scoring run keeps the table of each of the two start dates.
+            def metric_with_start_tables(challenger_dataset, region, keep_start_tables, metric=metric):
+                table = metric(challenger_dataset, region)
+                return table, [table * start_number for start_number in (1, 2)]
+
+            monkeypatch.setattr(core_metrics, metric_function_name, metric_with_start_tables)
     return calls

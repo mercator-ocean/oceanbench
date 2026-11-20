@@ -10,9 +10,9 @@ Besides the viewer files of the challenger, the index files ``datasets.json``, `
 challengers into the same directory gives a complete viewer data tree.
 
 The scores summary reports the official score as its mean. Its 95% interval is a seeded bootstrap
-over the start dates of per-start scores: gridded metrics are recomputed one start date at a time
-with the ``oceanbench.metrics`` functions, and Class IV per-start scores are pooled from the match-ups
-of each start with ``compute_class4_rmsd_table``.
+over the start dates of per-start scores. Gridded per-start scores are the ones the scoring run kept,
+or else are recomputed one start date at a time with the ``oceanbench.metrics`` functions. Class IV
+per-start scores are pooled from the match-ups of each start with ``compute_class4_rmsd_table``.
 """
 
 import fcntl
@@ -25,9 +25,10 @@ import pandas
 import xarray
 
 from oceanbench import metrics
+from oceanbench.core.dataset_source import DEFAULT_CHALLENGER_KIND, get_challenger_kind
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.regions import RegionSpec, region_to_dict
-from oceanbench.core.scores import CLASS4_METRIC_FUNCTION_NAME, METRIC_FUNCTION_NAMES, score_rows
+from oceanbench.core.scores import CLASS4_METRIC_FUNCTION_NAME, GRIDDED_METRIC_FUNCTION_NAMES, score_rows
 from oceanbench.publish.column_store import COLUMN_STORE_SUFFIX
 from oceanbench.publish.viewer_artifacts import (
     BOOTSTRAP_SEED,
@@ -36,6 +37,7 @@ from oceanbench.publish.viewer_artifacts import (
     ViewerArtifacts,
     class4_rmsd_rows_by_start,
     confidence_interval,
+    write_region_eddy_census,
     write_viewer_artifacts,
 )
 
@@ -43,9 +45,6 @@ DATASETS_FILENAME = "datasets.json"
 INSIGHTS_FILENAME = "insights.json"
 SCORES_SUMMARY_FILENAME = "scores-summary.json"
 
-GRIDDED_METRIC_FUNCTION_NAMES = [
-    name for name in METRIC_FUNCTION_NAMES if name.startswith("rmsd_of_") and name != CLASS4_METRIC_FUNCTION_NAME
-]
 _SUMMARY_REFERENCES = {"glorys_reanalysis": "glorys", "glo12_analysis": "glo12", "observations": "observations"}
 _DEPTHLESS_METRICS = {"rmsd_of_mixed_layer_depth", "rmsd_of_geostrophic_currents"}
 SUMMARY_BOOTSTRAP_DRAWS = 1000
@@ -56,19 +55,32 @@ def _score_key(metric: str, reference: str, standard_name: str, depth: str, lead
     return (metric, reference, standard_name, depth, lead_day)
 
 
-def gridded_scores_by_start(challenger_dataset: xarray.Dataset, region: RegionSpec) -> dict[tuple, numpy.ndarray]:
-    """The gridded scores of each start date, from the ``oceanbench.metrics`` functions run on that start alone."""
-    start_count = challenger_dataset.sizes[Dimension.FIRST_DAY_DATETIME.key()]
+def gridded_scores_from_start_tables(start_tables: dict[str, list[pandas.DataFrame]]) -> dict[tuple, numpy.ndarray]:
+    """The gridded scores of each start date, from the score table of each start date of each metric."""
     scores: dict[tuple, numpy.ndarray] = {}
-    for start_index in range(start_count):
-        start_dataset = challenger_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): [start_index]})
-        for metric_function_name in GRIDDED_METRIC_FUNCTION_NAMES:
-            table = getattr(metrics, metric_function_name)(start_dataset, region=region)
+    for metric_function_name, tables in start_tables.items():
+        for start_index, table in enumerate(tables):
             for row in score_rows(metric_function_name, table):
                 key = _score_key(row["metric"], row["reference"], row["standard_name"], row["depth"], row["lead_day"])
                 value = numpy.nan if row["value"] is None else row["value"]
-                scores.setdefault(key, numpy.full(start_count, numpy.nan))[start_index] = value
+                scores.setdefault(key, numpy.full(len(tables), numpy.nan))[start_index] = value
     return scores
+
+
+def gridded_scores_by_start(challenger_dataset: xarray.Dataset, region: RegionSpec) -> dict[tuple, numpy.ndarray]:
+    """The gridded scores of each start date, from the ``oceanbench.metrics`` functions run on that start alone."""
+    start_count = challenger_dataset.sizes[Dimension.FIRST_DAY_DATETIME.key()]
+    return gridded_scores_from_start_tables(
+        {
+            metric_function_name: [
+                getattr(metrics, metric_function_name)(
+                    challenger_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): [start_index]}), region=region
+                )
+                for start_index in range(start_count)
+            ]
+            for metric_function_name in GRIDDED_METRIC_FUNCTION_NAMES
+        }
+    )
 
 
 def class4_scores_by_start(
@@ -190,6 +202,7 @@ def update_viewer_indexes(
     region: RegionSpec,
     artifacts: ViewerArtifacts,
     summary_rows: list[dict],
+    kind: str = DEFAULT_CHALLENGER_KIND,
 ) -> None:
     """Merge the entries of one challenger and region into the index files, replacing its previous entries."""
     # Several challengers can be evaluated in parallel processes into the same directory.
@@ -202,6 +215,7 @@ def update_viewer_indexes(
             entries[dataset_slug] = {
                 "slug": dataset_slug,
                 "label": entries.get(dataset_slug, {}).get("label", dataset_slug),
+                "kind": kind,
                 "store": f"./data/{dataset_slug}{PYRAMID_SUFFIX}",
                 "manifest": f"./data/{dataset_slug}{PYRAMID_MANIFEST_SUFFIX}",
                 "columns": f"./data/{dataset_slug}{COLUMN_STORE_SUFFIX}",
@@ -233,12 +247,15 @@ def build_viewer_data(
     region: RegionSpec,
     matchups: pandas.DataFrame | None,
     document_rows: list[dict],
+    start_tables: dict[str, list[pandas.DataFrame]] | None = None,
 ) -> None:
     """
     Write the viewer data of one evaluated challenger and region into ``directory``.
 
     ``matchups`` are the Class IV match-ups the scores were computed from, ``None`` when the
     observations are unavailable, and ``document_rows`` the rows of the scores file.
+    ``start_tables`` are the gridded score tables of each start date kept by the scoring run, by metric
+    function name. Without them, the gridded metrics are computed again one start date at a time.
     """
     output_directory = Path(directory)
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -255,7 +272,48 @@ def build_viewer_data(
         region,
         document_rows,
         start_dates,
-        gridded_scores_by_start(challenger_dataset, region),
+        (
+            gridded_scores_from_start_tables(start_tables)
+            if start_tables
+            else gridded_scores_by_start(challenger_dataset, region)
+        ),
         class4_scores_by_start(rows_by_start, start_dates) if has_matchups else {},
     )
-    update_viewer_indexes(output_directory, challenger_name, region, artifacts, summary_rows)
+    if get_challenger_kind(challenger_dataset) == "reference":
+        # The GLORYS reference scored against its own gridded reanalysis is zero by construction.
+        summary_rows = [row for row in summary_rows if row["reference"] != _SUMMARY_REFERENCES["glorys_reanalysis"]]
+    update_viewer_indexes(
+        output_directory, challenger_name, region, artifacts, summary_rows, get_challenger_kind(challenger_dataset)
+    )
+
+
+def rebuild_eddy_census(
+    directory: str, challenger_name: str, challenger_dataset: xarray.Dataset, region: RegionSpec
+) -> None:
+    """
+    Rewrite only the eddy census of a challenger and region already in the viewer data ``directory``.
+
+    Maps, water columns, match-ups and year files are left as they are; only the eddy files and the
+    ``eddies`` entry of ``insights.json`` change. Useful after an eddy census format change, e.g.::
+
+        from oceanbench.core.evaluate import open_challenger_dataset, resolve_evaluation_region
+        dataset = open_challenger_dataset(open("glonet.py").read())
+        rebuild_eddy_census("viewer", "glonet", dataset, resolve_evaluation_region("global"))
+    """
+    output_directory = Path(directory)
+    insights_path = output_directory / INSIGHTS_FILENAME
+    entries = _read_json(insights_path, {"datasets": {}})["datasets"]
+    if region.id not in entries.get(challenger_name, {}):
+        raise ValueError(f"No viewer data of {challenger_name} for region {region.id} in {directory}")
+    insights_directory = output_directory / "insights" / challenger_name / region.id
+    file_name = write_region_eddy_census(insights_directory, challenger_name, challenger_dataset, region)
+    directory_descriptor = os.open(output_directory, os.O_RDONLY)
+    try:
+        fcntl.flock(directory_descriptor, fcntl.LOCK_EX)
+        insights = _read_json(insights_path, {"datasets": {}})
+        insights["datasets"][challenger_name][region.id]["eddies"] = (
+            None if file_name is None else f"./data/insights/{challenger_name}/{region.id}/{file_name}"
+        )
+        _write_index(insights, insights_path)
+    finally:
+        os.close(directory_descriptor)

@@ -3027,7 +3027,7 @@ function fieldReadoutValue(panel, value, count, standardError) {
     // and method note, not RMSE. Label it "|error|" so the hover does not misname it.
     const metric = biasMode ? "bias" : "|error|";
     const sign = biasMode && value > 0 ? "+" : "";
-    // Bias cells carry a ±1 standard error (std(model − obs)/sqrt(n)); absent on old artifacts.
+    // Bias cells carry a ±1 standard error across start dates; absent on old artifacts.
     const errorText = biasMode && Number.isFinite(standardError) ? ` ± ${formatFixed(standardError, 3)}` : "";
     const countText = Number.isFinite(count) && count > 0 ? ` · n = ${count.toLocaleString("en-US")}` : "";
     return `${metric} ${sign}${formatFixed(value, 3)}${errorText} ${panel.units}${countText}`;
@@ -3410,8 +3410,8 @@ function regionDisplayName() {
   return option ? option.textContent : shared.region;
 }
 
-function legendSwatch(color, label, count) {
-  const countText = count == null ? "" : ` · <strong>${formatCount(count)}</strong>`;
+function legendSwatch(color, label, count, unit = "") {
+  const countText = count == null ? "" : ` · <strong>${formatCount(count)}</strong>${unit ? ` ${escapeHtml(unit)}` : ""}`;
   return `<span class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escapeHtml(label)}${countText}</span>`;
 }
 
@@ -3451,6 +3451,9 @@ function class4PanelCountText(panel) {
     : `<strong>${formatCount(panel.class4Matched || 0)} obs</strong>`;
 }
 
+// Eddy counts are per-day detections, not tracked eddies.
+const EDDY_COUNT_UNIT = "single-day detections";
+
 // Eddies mode: categorical swatch row faithful to what is drawn, matched pairs (the
 // intercomparison neutral colour) and each forecast's only-eddies, or a single census.
 function renderEddyLegend(legend) {
@@ -3465,9 +3468,9 @@ function renderEddyLegend(legend) {
     const lead = (censuses.find(Boolean) || {}).leadDay;
     const percent = (share) => (Number.isFinite(share) ? `${Math.round(share * 100)}%` : "n/a");
     swatches =
-      legendSwatch(EDDY_MATCHED_COLOR, "Matched pairs", match.matched.length) +
-      legendSwatch(forecastColor(0), `Only in ${forecast1}`, match.onlyA.length) +
-      legendSwatch(forecastColor(1), `Only in ${forecast2}`, match.onlyB.length);
+      legendSwatch(EDDY_MATCHED_COLOR, "Matched pairs", match.matched.length, EDDY_COUNT_UNIT) +
+      legendSwatch(forecastColor(0), `Only in ${forecast1}`, match.onlyA.length, EDDY_COUNT_UNIT) +
+      legendSwatch(forecastColor(1), `Only in ${forecast2}`, match.onlyB.length, EDDY_COUNT_UNIT);
     // The chance rate is the same rule against the other census shifted 5° in longitude:
     // matched share minus chance is what the two forecasts actually agree on.
     caption = `${percent(match.matchedShare)} of F1 matched, chance ${percent(match.chanceShare)} (F2 shifted ±5° lon) · lead ${lead ?? "n/a"}`;
@@ -3477,14 +3480,14 @@ function renderEddyLegend(legend) {
     const forecast1 = labelFor(panels[0].state.dataset);
     const forecast2 = labelFor(panels[1].state.dataset);
     swatches =
-      legendSwatch(forecastColor(0), `${forecast1} eddies · lead ${censuses[0].leadDay ?? "n/a"}`, censuses[0].detections.length) +
-      legendSwatch(forecastColor(1), `${forecast2} eddies · lead ${censuses[1].leadDay ?? "n/a"}`, censuses[1].detections.length);
+      legendSwatch(forecastColor(0), `${forecast1} eddies · lead ${censuses[0].leadDay ?? "n/a"}`, censuses[0].detections.length, EDDY_COUNT_UNIT) +
+      legendSwatch(forecastColor(1), `${forecast2} eddies · lead ${censuses[1].leadDay ?? "n/a"}`, censuses[1].detections.length, EDDY_COUNT_UNIT);
     caption = "no shared lead: not matched";
   } else if (censuses.some(Boolean)) {
     // One census on screen, from whichever panel has it (panel 1 may be the one without).
     const index = censuses.findIndex(Boolean);
     const census = censuses[index];
-    swatches = legendSwatch(forecastColor(index), `${labelFor(panels[index].state.dataset)} eddies`, census.detections.length);
+    swatches = legendSwatch(forecastColor(index), `${labelFor(panels[index].state.dataset)} eddies`, census.detections.length, EDDY_COUNT_UNIT);
     caption = `census · lead ${census.leadDay ?? "n/a"}`;
   } else {
     const unpublished = (overlayData.eddiesUnpublished || []).slice(0, shared.layout);
@@ -3674,9 +3677,26 @@ async function renderRailDepthProfile(shown, comparison) {
     typeScale: chartTypeScale(slot),
   });
   if (note) {
-    note.textContent = `Lead ${lead ?? shared.leadDay}, all 2024 match-ups.`;
+    note.textContent = `Lead ${lead ?? shared.leadDay}, ${matchupPopulation(shown)}.`;
   }
   wireCursorTooltip(slot);
+}
+
+// The match-ups pooled in the depth profile: every start date the dataset was evaluated on,
+// as listed by its manifest (e.g. "match-ups of the 52 start dates of 2024").
+function matchupPopulation(shown) {
+  const descriptions = new Set();
+  for (const panel of shown) {
+    const manifest = manifestFor(panel.state.dataset);
+    const dates = manifest && Array.isArray(manifest.start_dates) ? manifest.start_dates : [];
+    if (!dates.length) continue;
+    const years = [...new Set(dates.map((date) => String(date).slice(0, 4)))];
+    const period = years.length === 1 ? years[0] : `${years[0]}-${years[years.length - 1]}`;
+    descriptions.add(
+      dates.length === 1 ? `match-ups of the start date ${dates[0]}` : `match-ups of the ${dates.length} start dates of ${period}`,
+    );
+  }
+  return descriptions.size ? [...descriptions].join("; ") : "all match-ups";
 }
 
 // RMSE by start date, one line per visible forecast at the selected lead day. Clicking
@@ -5323,8 +5343,8 @@ function wirePlaybackControls() {
 
 // The eddy note describes the census actually loaded, so every path that reloads the
 // overlay (mode switch, start date, region) writes it from the same place. A start with
-// no published census says so instead of leaving the previous start's sentence up. The
-// 1-degree products publish no census (their eddies are a few grid cells), so no grid
+// no published census says so instead of leaving the previous start's sentence up. Models
+// coarser than 0.3 degree publish no census (their eddies are a few grid cells), so no grid
 // caveat is needed here.
 function writeEddyOverlayNote() {
   const note = elements["overlay-note"];
@@ -6030,6 +6050,8 @@ if (new URLSearchParams(location.search).has("qa")) {
   window.oceanbenchViewerQaProbe = {
     colorRanges: () => panels.slice(0, shared.layout).map((panel) => (panel && panel.range ? [...panel.range] : null)),
     selectionSignature,
+    // Whether every visible panel could draw this lead from the chunk cache.
+    leadCached: (leadDay) => leadFramesCached(leadDay),
   };
 }
 

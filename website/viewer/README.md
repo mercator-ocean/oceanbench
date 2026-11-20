@@ -24,23 +24,26 @@ scores: it only displays files prepared in advance.
 - Files on CloudFerro, under `dev/benchmark/rebuild-preview/viewer/data/` (262 GB).
 - Made with OceanBench 0.5.0, not 0.6.0, so some numbers differ from the score tables.
   Example: GLONET 15 m zonal current at lead 1 is 0.12 in the table and 0.204 here.
+- Its eddies come from the detector of 0.5.0, not from py-eddy-tracker, so the eddy
+  method note describes them only once the data is rebuilt.
 - Only the year 2024.
 - To rebuild with the release that merges this branch.
 
 ## Adding a model
 
-Run `oceanbench evaluate <challenger>.py --viewer-artifacts-dir <directory>` for each
+With the `viewer` extra installed (`pip install "oceanbench[viewer]"`), run
+`oceanbench evaluate <challenger>.py --viewer-artifacts-dir <directory>` for each
 region, see [Building the viewer data](https://oceanbench.edito.eu/documentation/viewer-data/). The index files (`datasets.json`, `insights.json`,
-`scores-summary.json`) are merged automatically, and the confidence bands come from a
-bootstrap over the start dates. Cost for one year (52 start dates) on one node with
-120-180 GB of RAM:
+`scores-summary.json`) are merged automatically. The bands of the lead-day chart come
+from a bootstrap over the start dates, those of the start-date chart from a block bootstrap
+over 5 degree boxes of observations (2 degree for IBI).
 
-| Model grid  | Time                                          | Storage      |
-| ----------- | --------------------------------------------- | ------------ |
-| 1/12 degree | about 3 h, about 20 h in practice (downloads) | 60-70 GB     |
-| 1/4 degree  | about 3 h                                     |              |
-| 1 degree    | 2 to 10 h                                     | about 6.5 GB |
-| IBI         | 20 min to 2 h                                 |              |
+Cost, measured on GLONET (1/4 degree, global) with two start dates on 16 cores: about
+5 min of scores, 11 min of viewer data and 0.6 GB of files. A year of 52 start dates is
+about 15 GB for GLONET; a 1/12 degree model has nine times as many map cells. The eddy
+census needs py-eddy-tracker (see the documentation) and takes about 35 s of CPU per start
+date and lead day, run in 8 processes by default. Details under "Costs" in the
+documentation.
 
 A new year means rerunning every model and adding a year selector (the page assumes 2024).
 

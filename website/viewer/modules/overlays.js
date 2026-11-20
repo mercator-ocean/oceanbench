@@ -79,12 +79,13 @@ function haversineDistanceKm(a, b) {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-// Equivalent radius of an eddy, sqrt(contour area / pi), from its published outline in a
-// local equirectangular projection at the eddy's latitude (longitudes unwrapped across
-// the dateline). Cached per detection object.
+// Equivalent radius of an eddy: the published effective radius (census schema 3 and later), else
+// sqrt(contour area / pi) from its published outline in a local equirectangular projection
+// at the eddy's latitude (longitudes unwrapped across the dateline). Cached per detection.
 const eddyRadii = new WeakMap();
 
 export function eddyRadiusKm(eddy) {
+  if (Number.isFinite(eddy.effective_radius_km)) return eddy.effective_radius_km;
   if (eddyRadii.has(eddy)) return eddyRadii.get(eddy);
   const longitudes = eddy.contour_longitude || [];
   const latitudes = eddy.contour_latitude || [];
@@ -211,6 +212,15 @@ export function matchCensuses(detectionsA, detectionsB) {
   return { matched, onlyA, onlyB, matchedShare, chanceShare };
 }
 
+// Contours are continuous around a centre wrapped into [-180, 180), so one straddling the
+// dateline overhangs the map edge; it is drawn again one turn over so both halves show.
+export function contourCopies(longitudes) {
+  const copies = [longitudes];
+  if (longitudes.some((longitude) => longitude >= 180)) copies.push(longitudes.map((longitude) => longitude - 360));
+  if (longitudes.some((longitude) => longitude < -180)) copies.push(longitudes.map((longitude) => longitude + 360));
+  return copies;
+}
+
 /** Draw a set of eddy contours + centre dots in a single colour. */
 export function drawEddyDetections(drawing, project, detections, color, options = {}) {
   const ratio = options.devicePixelRatio || 1;
@@ -220,8 +230,10 @@ export function drawEddyDetections(drawing, project, detections, color, options 
   drawing.setLineDash([]);
   drawing.strokeStyle = color;
   for (const eddy of detections || []) {
-    tracePolygon(drawing, project, eddy.contour_longitude, eddy.contour_latitude);
-    drawing.stroke();
+    for (const longitudes of contourCopies(eddy.contour_longitude || [])) {
+      tracePolygon(drawing, project, longitudes, eddy.contour_latitude);
+      drawing.stroke();
+    }
     centerDot(drawing, project, eddy, color, dotRadius);
   }
 }

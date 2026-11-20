@@ -12,7 +12,7 @@ import zarr
 
 from oceanbench.core.attribution import copernicus_marine_attribution_attrs
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
-from oceanbench.core.dataset_utils import Dimension, Variable
+from oceanbench.core.dataset_utils import VARIABLE_METADATA, Dimension, Variable
 from oceanbench.core.interpolate import apply_one_degree_interpolation, one_degree_target_grid
 from oceanbench.pyramids.builder import LEAD_DAY_DIMENSION, START_DATE_DIMENSION, deflate_compressor
 from oceanbench.pyramids.quantization import Quantization, quantization_for_range, zarr_encoding
@@ -67,6 +67,9 @@ def _column_variables(dataset: xarray.Dataset) -> xarray.Dataset:
         if DEPTH_DIMENSION not in standardised[name].dims:
             raise ValueError(f"column-store variable {name!r} has no depth axis; got dims {standardised[name].dims}")
     selected = _on_one_degree_grid(standardised[present])
+    for name in present:
+        # The units of the viewer manifest, not the source spelling (degrees_C, 1e-3).
+        selected[name].attrs["units"] = VARIABLE_METADATA[name][1]
     lead_days = selected[Dimension.LEAD_DAY_INDEX.key()].values + 1
     return (
         selected.rename(

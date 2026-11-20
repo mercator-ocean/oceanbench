@@ -390,7 +390,9 @@ export function classifyRequest(url) {
   if (url.startsWith("data:") || url.startsWith("blob:")) return null;
   if (url.includes(".parquet")) return "matchupParquet";
   if (/\.zmetadata|\.zarray|\.zattrs|viewer-manifest\.json/.test(url)) return "manifest";
-  if (/\/(c\/|chunks?\/|\d+\.\d+\.\d+)(\?|$)/.test(url) || /\/\d+\.\d+\.\d+$/.test(url)) return "fieldChunk";
+  // Zarr v2 chunk keys have one index per dimension: three for older stores, four for the
+  // (start, lead, latitude, longitude) pyramid levels and five for the water columns.
+  if (/\/(c\/|chunks?\/)/.test(url) || /\/\d+(\.\d+){2,}(\?|$)/.test(url)) return "fieldChunk";
   if (url.endsWith(".json")) return "insightJson";
   return "other";
 }

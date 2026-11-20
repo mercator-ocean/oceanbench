@@ -5,6 +5,8 @@
 from dataclasses import dataclass
 import datetime
 import json
+import logging
+import math
 from pathlib import Path
 
 import dask
@@ -26,6 +28,16 @@ LEAD_DAY_DIMENSION = "lead_day"
 # and the coarse levels collapse to a single tile. The pyramid is zarr v2 since zarr 2 cannot write shards.
 DEFAULT_TILE_SIZE = 1024
 _DEFLATE_COMPRESSION_LEVEL = 6
+# A layer with a display range must resolve it in at least this many quantization steps, so a single
+# spurious extreme value that stretches the uint16 range fails the build instead of blurring the map.
+MINIMUM_QUANTIZATION_STEPS_PER_DISPLAY_RANGE = 2000
+# A layer without a declared display range gets the 2nd-98th percentile of its level-0 values, so a few
+# outliers do not stretch the colour scale. The percentiles are taken on a regular subsample (every k-th
+# cell in latitude and longitude, all starts and lead days) of at most ROBUST_RANGE_SAMPLE_SIZE values.
+ROBUST_RANGE_PERCENTILES = (2.0, 98.0)
+ROBUST_RANGE_SAMPLE_SIZE = 4_000_000
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -56,9 +68,35 @@ def _tile_chunks(latitude_size: int, longitude_size: int, tile_size: int) -> dic
     }
 
 
-def _variable_data_ranges(layers: xarray.Dataset) -> dict[str, tuple[float, float]]:
-    minimums, maximums = dask.compute(layers.min(skipna=True), layers.max(skipna=True))
-    return {name: (float(minimums[name].values), float(maximums[name].values)) for name in layers.data_vars}
+def robust_range_stride(layers: xarray.Dataset) -> int:
+    """Latitude and longitude stride of the subsample the robust display ranges are computed on."""
+    value_count = math.prod(int(size) for size in layers.sizes.values())
+    return max(1, math.ceil(math.sqrt(value_count / ROBUST_RANGE_SAMPLE_SIZE)))
+
+
+def _robust_range(sample: numpy.ndarray, data_range: tuple[float, float]) -> tuple[float, float]:
+    finite = sample[numpy.isfinite(sample)]
+    if finite.size == 0:
+        return data_range
+    low, high = (float(value) for value in numpy.percentile(finite, ROBUST_RANGE_PERCENTILES))
+    return (low, high) if high > low else data_range
+
+
+def _variable_ranges(
+    layers: xarray.Dataset,
+) -> tuple[dict[str, tuple[float, float]], dict[str, tuple[float, float]]]:
+    """True minimum and maximum, and robust display range, of each layer, in one pass over the data."""
+    stride = robust_range_stride(layers)
+    subsample = layers.isel(
+        {Dimension.LATITUDE.key(): slice(None, None, stride), Dimension.LONGITUDE.key(): slice(None, None, stride)}
+    )
+    minimums, maximums, samples = dask.compute(layers.min(skipna=True), layers.max(skipna=True), subsample)
+    data_ranges = {name: (float(minimums[name].values), float(maximums[name].values)) for name in layers.data_vars}
+    robust_ranges = {
+        name: _robust_range(numpy.asarray(samples[name].values, dtype="float64"), data_ranges[name])
+        for name in layers.data_vars
+    }
+    return data_ranges, robust_ranges
 
 
 def deflate_compressor() -> numcodecs.abc.Codec:
@@ -98,18 +136,56 @@ def _write_level(
     )
 
 
-def _variable_manifest_entry(spec: VariableSpec, quantization: Quantization, data_range: tuple[float, float]) -> dict:
-    default_range = list(spec.default_range) if spec.default_range is not None else [data_range[0], data_range[1]]
+def _display_range(spec: VariableSpec, robust_range: tuple[float, float]) -> tuple[float, float]:
+    return spec.default_range if spec.default_range is not None else robust_range
+
+
+def _variable_manifest_entry(
+    spec: VariableSpec,
+    quantization: Quantization,
+    data_range: tuple[float, float],
+    robust_range: tuple[float, float],
+) -> dict:
+    default_range = _display_range(spec, robust_range)
     return {
         "standard_name": spec.standard_name,
         "depth": spec.depth,
         "units": spec.units,
         "scale_factor": quantization.scale_factor,
         "add_offset": quantization.add_offset,
+        "quantization_step": quantization.quantization_step,
         "fill_value": quantization.fill_value,
         "default_colormap": spec.default_colormap,
         "default_range": [float(default_range[0]), float(default_range[1])],
+        "data_range": [float(data_range[0]), float(data_range[1])],
     }
+
+
+def _check_quantization_resolves_the_display_range(
+    name: str,
+    spec: VariableSpec,
+    quantization: Quantization,
+    data_range: tuple[float, float],
+    robust_range: tuple[float, float],
+) -> None:
+    """
+    Fail when the quantization step exceeds 1/MINIMUM_QUANTIZATION_STEPS_PER_DISPLAY_RANGE of a declared display
+    range; only warn for a robust range derived from the data, since the data then define both spans.
+    """
+    display_range = _display_range(spec, robust_range)
+    display_span = abs(display_range[1] - display_range[0])
+    maximum_step = display_span / MINIMUM_QUANTIZATION_STEPS_PER_DISPLAY_RANGE
+    if quantization.quantization_step <= maximum_step:
+        return
+    message = (
+        f"Variable {name!r} spans [{data_range[0]:.6g}, {data_range[1]:.6g}], so its uint16 quantization step "
+        f"{quantization.quantization_step:.6g} exceeds 1/{MINIMUM_QUANTIZATION_STEPS_PER_DISPLAY_RANGE} of its "
+        f"display range [{display_range[0]:.6g}, {display_range[1]:.6g}] ({maximum_step:.6g}); "
+        "check the data for spurious values."
+    )
+    if spec.default_range is not None:
+        raise ValueError(message)
+    _logger.warning(message)
 
 
 def _bounds(layers: xarray.Dataset) -> dict:
@@ -136,12 +212,15 @@ def _manifest(
     specs: dict[str, VariableSpec],
     quantizations: dict[str, Quantization],
     data_ranges: dict[str, tuple[float, float]],
+    robust_ranges: dict[str, tuple[float, float]],
     level_plans: list[level_planning.LevelPlan],
     *,
     dataset_slug: str | None,
     year: int | None,
     tile_size: int,
     has_columns: bool,
+    kind: str | None = None,
+    description: str | None = None,
 ) -> dict:
     start_dates = [numpy.datetime_as_string(value, unit="D") for value in layers[START_DATE_DIMENSION].values]
     lead_days = [int(value) for value in layers[LEAD_DAY_DIMENSION].values]
@@ -158,7 +237,7 @@ def _manifest(
         "tile_size": tile_size,
         "bounds": _bounds(layers),
         "variables": {
-            name: _variable_manifest_entry(specs[name], quantizations[name], data_ranges[name])
+            name: _variable_manifest_entry(specs[name], quantizations[name], data_ranges[name], robust_ranges[name])
             for name in layers.data_vars
         },
         "start_dates": start_dates,
@@ -170,6 +249,10 @@ def _manifest(
         manifest["dataset"] = dataset_slug
     if year is not None:
         manifest["year"] = year
+    if kind is not None:
+        manifest["kind"] = kind
+    if description is not None:
+        manifest["description"] = description
     return manifest
 
 
@@ -192,6 +275,8 @@ def build_pyramid(
     year: int | None = None,
     tile_size: int = DEFAULT_TILE_SIZE,
     has_columns: bool = False,
+    kind: str | None = None,
+    description: str | None = None,
 ) -> PyramidResult:
     """
     Build the pyramid zarr and its ``<slug>.viewer-manifest.json`` beside it.
@@ -199,6 +284,7 @@ def build_pyramid(
     ``layers`` has dims ``(start_date, lead_day, latitude, longitude)`` and one float variable per
     viewer layer, stored as quantized uint16 tiles in groups ``level/<k>`` from the native grid up to
     about one degree. ``has_columns`` tells the viewer whether a water-column store sits beside it.
+    ``kind`` (``model``, ``baseline`` or ``reference``) and ``description`` say what the dataset is.
     """
     missing_specs = set(layers.data_vars) - set(specs)
     if missing_specs:
@@ -206,10 +292,14 @@ def build_pyramid(
     store_path = Path(output_path)
     manifest_path = store_path.with_name(store_path.name.replace(".zarr", "") + ".viewer-manifest.json")
 
-    data_ranges = _variable_data_ranges(layers)
+    data_ranges, robust_ranges = _variable_ranges(layers)
     quantizations = {
         name: quantization_for_range(data_ranges[name][0], data_ranges[name][1]) for name in layers.data_vars
     }
+    for name in layers.data_vars:
+        _check_quantization_resolves_the_display_range(
+            name, specs[name], quantizations[name], data_ranges[name], robust_ranges[name]
+        )
 
     level_plans = level_planning.plan_levels(layers)
     current_layers = layers
@@ -233,11 +323,14 @@ def build_pyramid(
         specs,
         quantizations,
         data_ranges,
+        robust_ranges,
         level_plans,
         dataset_slug=dataset_slug,
         year=year,
         tile_size=tile_size,
         has_columns=has_columns,
+        kind=kind,
+        description=description,
     )
     validate_against_schema(manifest, "viewer-manifest")
     manifest_path.write_text(json.dumps(manifest, sort_keys=True, indent=2), encoding="utf-8")
