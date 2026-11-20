@@ -141,18 +141,23 @@ def _gaussian_means_of_chunk(
 ) -> numpy.ndarray:
     stencil_latitudes, stencil_longitudes = stencil_positions(latitudes, longitudes)
     points_count = stencil_latitudes.shape[1]
-    samples = _horizontally_interpolated_profiles(
-        time_slice,
-        pandas.DataFrame(
-            {
-                Dimension.LATITUDE.key(): stencil_latitudes.ravel(),
-                Dimension.LONGITUDE.key(): stencil_longitudes.ravel(),
-            }
-        ),
-    ).reshape(-1, len(latitudes), points_count)
-    is_finite = numpy.isfinite(samples)
-    weighted_sums = numpy.einsum("sk,dnk->sdn", weights, numpy.where(is_finite, samples, 0.0))
-    total_weights = numpy.einsum("sk,dnk->sdn", weights, is_finite.astype(float))
+    stencil_points = pandas.DataFrame(
+        {
+            Dimension.LATITUDE.key(): stencil_latitudes.ravel(),
+            Dimension.LONGITUDE.key(): stencil_longitudes.ravel(),
+        }
+    )
+    # Land cells get zero weight, as on the grid path: the field with land set to zero and the ocean fraction are
+    # both interpolated, so a sample next to the coast keeps its ocean part instead of being dropped.
+    is_ocean = numpy.isfinite(time_slice)
+    samples, ocean_fractions = (
+        _horizontally_interpolated_profiles(data, stencil_points).reshape(-1, len(latitudes), points_count)
+        for data in (time_slice.where(is_ocean, 0.0), is_ocean.astype(float))
+    )
+    ocean_fractions = numpy.where(numpy.isfinite(ocean_fractions), ocean_fractions, 0.0)
+    samples = numpy.where(numpy.isfinite(samples), samples, 0.0)
+    weighted_sums = numpy.einsum("sk,dnk->sdn", weights, samples)
+    total_weights = numpy.einsum("sk,dnk->sdn", weights, ocean_fractions)
     return numpy.where(
         total_weights > _MINIMUM_RENORMALISATION_WEIGHT,
         weighted_sums / numpy.maximum(total_weights, _MINIMUM_RENORMALISATION_WEIGHT),
@@ -168,8 +173,9 @@ def gaussian_means_at_observations(
     """
     Gaussian weighted means of a model field around each observation, one row per sigma.
 
-    The field is sampled by the Class IV bilinear interpolation at the stencil points, land samples are
-    skipped and the weights renormalised, on each model level, then interpolated vertically like the point value.
+    The field is sampled by the Class IV bilinear interpolation at the stencil points, land cells get zero weight
+    and the weights are renormalised as on the grid path, on each model level, then interpolated vertically like
+    the point value.
     """
     weights = stencil_weights()
     latitudes = observation_group[Dimension.LATITUDE.key()].values
