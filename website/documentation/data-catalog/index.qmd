@@ -15,10 +15,10 @@ For each dataset, the catalog tells you what it contains and how to open it.
 
 ## Collections
 
-The datasets are grouped by origin: one collection per top-level directory of the OceanBench bucket, and one for the Copernicus Marine datasets.
+The datasets are grouped by role: inputs, challengers, references, training and auxiliary.
 
-The catalog is not written by hand.
-Every hour, it is rebuilt from the bucket content and from the `oceanbench` source code, which tells which datasets the library opens.
+Maintainers publish it with `make update-edito-catalog`, with `EDITO_OFFLINE_TOKEN` or `EDITO_ACCESS_TOKEN` set.
+Set `CATALOG_OUTPUT_DIRECTORY` to write the STAC files locally instead.
 
 ## Datasets
 
@@ -26,7 +26,7 @@ Each dataset is described by a STAC item with:
 
 - its spatial and temporal extent, dimensions and variables (with CF standard names and units),
 - Python examples to open it, with the [`oceanbench` datasets API](/documentation/api/index.qmd) or the Copernicus Marine Toolbox,
-- the `oceanbench:library_usage` and `oceanbench:library_functions` properties, telling whether the `oceanbench` library uses it and which functions lead to it.
+- the `oceanbench:library_functions` property, listing the `oceanbench` functions that open it.
 
 ## Programmatic access
 

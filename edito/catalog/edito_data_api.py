@@ -71,13 +71,6 @@ def upsert_item(session: EditoSession, collection_identifier: str, item: dict) -
         raise EditoDataApiError(f"Create item {item['id']} failed: {creation_response.json().get('errors')}")
 
 
-def ensure_project_catalog(session: EditoSession, catalog: dict) -> None:
-    catalog_url = f"{PROJECT_URL}/{catalog['id']}"
-    if _request(session, "GET", catalog_url).status_code != HTTPStatus.NOT_FOUND:
-        return
-    _raise_for_failure(_request(session, "POST", PROJECT_URL, json=catalog), f"Create {catalog_url}")
-
-
 def upsert_project_catalog(session: EditoSession, catalog: dict, visibility: tuple[str, ...]) -> None:
     catalog_url = f"{PROJECT_URL}/{catalog['id']}"
     _upsert(session, catalog_url, PROJECT_URL, catalog)
@@ -85,14 +78,6 @@ def upsert_project_catalog(session: EditoSession, catalog: dict, visibility: tup
         _request(session, "PUT", catalog_url, json={"visibility": list(visibility)}, params=FORCE_PARAMETERS),
         f"Set visibility of {catalog_url}",
     )
-
-
-def project_catalog(session: EditoSession, catalog_identifier: str) -> dict | None:
-    response = _request(session, "GET", f"{PROJECT_URL}/{catalog_identifier}")
-    if response.status_code == HTTPStatus.NOT_FOUND:
-        return None
-    _raise_for_failure(response, f"Get {PROJECT_URL}/{catalog_identifier}")
-    return response.json()
 
 
 def item_identifiers(session: EditoSession, collection_identifier: str) -> tuple[str, ...]:
@@ -124,10 +109,12 @@ def _upsert(session: EditoSession, resource_url: str, creation_url: str, resourc
     update_response = _request(session, "PUT", resource_url, json=resource, params=FORCE_PARAMETERS)
     if update_response.ok:
         return None
+    if update_response.status_code != HTTPStatus.NOT_FOUND:
+        _raise_for_failure(update_response, f"Update {resource_url}")
     creation_response = _request(session, "POST", creation_url, json=resource)
     _raise_for_failure(
         creation_response,
-        f"Update {resource_url} ({update_response.status_code}: {update_response.text[:500]}) then create it",
+        f"Create {resource_url}",
     )
     return creation_response
 
