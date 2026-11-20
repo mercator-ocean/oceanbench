@@ -48,8 +48,19 @@ def _grid(step: float) -> tuple[numpy.ndarray, numpy.ndarray]:
     return FIRST_LATITUDE + step * numpy.arange(count), FIRST_LONGITUDE + step * numpy.arange(count)
 
 
+def _climatology_values(latitudes: numpy.ndarray, longitudes: numpy.ndarray) -> numpy.ndarray:
+    """A climatology with fronts of a few degrees, so its Gaussian means differ from its point values."""
+    return (
+        20.0
+        - 0.3 * (latitudes - FIRST_LATITUDE)
+        + 1.5
+        * numpy.sin(numpy.deg2rad(120.0 * (latitudes - FIRST_LATITUDE)))
+        * numpy.cos(numpy.deg2rad(90.0 * (longitudes - FIRST_LONGITUDE)))
+    )
+
+
 def _climatology_field(latitudes: numpy.ndarray, longitudes: numpy.ndarray) -> numpy.ndarray:
-    return 20.0 - 0.3 * (latitudes[:, None] - FIRST_LATITUDE) + 0.0 * longitudes[None, :]
+    return _climatology_values(latitudes[:, None], longitudes[None, :])
 
 
 def _eddies(seed: int) -> tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]:
@@ -152,9 +163,8 @@ def _observations() -> xarray.Dataset:
             longitudes = generator.uniform(
                 FIRST_LONGITUDE + 2, FIRST_LONGITUDE + DOMAIN_DEGREES - 2, OBSERVATIONS_PER_DAY
             )
-            truth = (
-                _eddy_field(latitudes, longitudes, _eddies(10 * start + lead))
-                + _climatology_field(latitudes, numpy.zeros(1)).ravel()
+            truth = _eddy_field(latitudes, longitudes, _eddies(10 * start + lead)) + _climatology_values(
+                latitudes, longitudes
             )
             records.append(
                 pandas.DataFrame(

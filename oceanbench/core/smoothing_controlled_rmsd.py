@@ -201,8 +201,10 @@ def climatology_at_observations(
     observations_dataframe: pandas.DataFrame,
 ) -> numpy.ndarray:
     """
-    Monthly climatology at each observation, with the Class IV interpolation, linear in time between mid months.
+    Monthly climatology at each observation, linear in time between mid months, one row per smoothing width.
 
+    The first row is the Class IV point value, the next rows are the Gaussian means of SIGMAS_KILOMETERS with the
+    same stencil as the forecast, so the smoothing applies to the forecast departure from climatology.
     The climatology has one time step per calendar month.
     """
     time_key = Dimension.TIME.key()
@@ -210,21 +212,28 @@ def climatology_at_observations(
     month_order = numpy.argsort(pandas.DatetimeIndex(climatology_variable[time_key].values).month.values)
     climatology_variable = climatology_variable.isel({time_key: month_order})
     climatology_depths = climatology_variable[Dimension.DEPTH.key()].values
-    observation_depths = observations_dataframe[Dimension.DEPTH.key()].values
     lower_months, upper_months, upper_weights = _monthly_interpolation(observations_dataframe[time_key].values)
-    values = numpy.full(len(observations_dataframe), numpy.nan)
-    for start, stop in _chunk_bounds(len(observations_dataframe)):
-        profiles = _horizontally_interpolated_profiles(climatology_variable, observations_dataframe.iloc[start:stop])
-        monthly_values = numpy.stack(
+    values = numpy.full((len(SMOOTHING_WIDTHS_KILOMETERS), len(observations_dataframe)), numpy.nan)
+    lower_values = numpy.full_like(values, numpy.nan)
+    upper_values = numpy.full_like(values, numpy.nan)
+    for month in numpy.unique(numpy.concatenate([lower_months, upper_months])):
+        is_needed = (lower_months == month) | (upper_months == month)
+        month_slice = climatology_variable.isel({time_key: int(month)}).compute()
+        month_observations = observations_dataframe.iloc[numpy.flatnonzero(is_needed)]
+        month_values = numpy.vstack(
             [
-                _interpolate_vertically_bracket(month_profiles, climatology_depths, observation_depths[start:stop])
-                for month_profiles in profiles
+                _interpolated_model_values_for_observation_group(month_slice, month_observations, climatology_depths)[
+                    None, :
+                ],
+                gaussian_means_at_observations(month_slice, month_observations, climatology_depths),
             ]
         )
-        observation_indices = numpy.arange(stop - start)
-        lower_values = monthly_values[lower_months[start:stop], observation_indices]
-        upper_values = monthly_values[upper_months[start:stop], observation_indices]
-        values[start:stop] = lower_values + upper_weights[start:stop] * (upper_values - lower_values)
+        needed_indices = numpy.flatnonzero(is_needed)
+        is_lower = lower_months[needed_indices] == month
+        is_upper = upper_months[needed_indices] == month
+        lower_values[:, needed_indices[is_lower]] = month_values[:, is_lower]
+        upper_values[:, needed_indices[is_upper]] = month_values[:, is_upper]
+    values[:] = lower_values + upper_weights[None, :] * (upper_values - lower_values)
     return values
 
 
@@ -249,12 +258,19 @@ def _sufficient_statistics_of_group(
     gaussian_means: numpy.ndarray,
     climatology_values: numpy.ndarray,
 ) -> dict[str, numpy.ndarray]:
+    """
+    ``climatology_values`` has one row per smoothing width, the point value first, like the forecast rows.
+
+    The forecast anomaly at width s is G_s f - G_s c. Where either Gaussian mean is missing (no ocean sample),
+    the point anomaly is used.
+    """
     forecasts = numpy.vstack([point_values[None, :], gaussian_means])
-    is_scored = numpy.isfinite(point_values) & numpy.isfinite(climatology_values)
-    observation_anomalies = (observations - climatology_values)[is_scored]
-    forecast_anomalies = numpy.where(
-        numpy.isfinite(forecasts[:, is_scored]), forecasts[:, is_scored], point_values[is_scored]
-    ) - (climatology_values[is_scored])
+    point_climatology = climatology_values[0]
+    is_scored = numpy.isfinite(point_values) & numpy.isfinite(point_climatology)
+    observation_anomalies = (observations - point_climatology)[is_scored]
+    point_anomalies = (point_values - point_climatology)[is_scored]
+    smoothed_anomalies = forecasts[:, is_scored] - climatology_values[:, is_scored]
+    forecast_anomalies = numpy.where(numpy.isfinite(smoothed_anomalies), smoothed_anomalies, point_anomalies)
     return {
         "count": numpy.full(len(SMOOTHING_WIDTHS_KILOMETERS), is_scored.sum()),
         "sum_yy": numpy.full(len(SMOOTHING_WIDTHS_KILOMETERS), numpy.sum(observation_anomalies**2)),
@@ -273,20 +289,21 @@ def sufficient_statistics_for_first_day(
     """
     Per depth bin, lead day and smoothing width sufficient statistics of one forecast initialization day.
 
-    ``climatology_values`` is aligned with ``first_day_group``. Observations whose point value or climatology
+    ``climatology_values`` has one row per smoothing width and one column per row of ``first_day_group``.
+    Observations whose point value or climatology
     is missing are not counted, as the plain RMSD leaves out observations without a point value.
     """
     model_depths = model_data[Dimension.DEPTH.key()].values
     first_day_block = model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index}).compute()
     records = []
-    group_climatology = pandas.Series(climatology_values, index=first_day_group.index)
+    group_positions = pandas.Series(numpy.arange(len(first_day_group)), index=first_day_group.index)
     for (lead_day, depth_bin), observation_group in first_day_group.groupby(["lead_day", "depth_bin"], sort=False):
         time_slice = first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
         statistics = _sufficient_statistics_of_group(
             observation_group["observation_value"].values,
             _interpolated_model_values_for_observation_group(time_slice, observation_group, model_depths),
             gaussian_means_at_observations(time_slice, observation_group, model_depths),
-            group_climatology.loc[observation_group.index].values,
+            climatology_values[:, group_positions.loc[observation_group.index].values],
         )
         records.append(
             pandas.DataFrame(
