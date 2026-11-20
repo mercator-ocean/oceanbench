@@ -40,6 +40,42 @@ def rmsd_of_variables_compared_to_observations(
     )
 
 
+def smoothing_controlled_rmsd_of_variables_compared_to_observations(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = "global",
+    climatology_dataset: xarray.Dataset | None = None,
+) -> DataFrame:
+    """
+    Compute the smoothing-controlled Root Mean Square Deviation (RMSD) of variables compared to observations.
+
+    The RMSD a challenger reaches after the best Gaussian smoothing (width 0, 15, 30, 45, 60 or 90 km) and the best
+    rescaling of its anomaly against a monthly climatology, on the Class IV observations. The width and the slope are
+    fitted on every other forecast initialization day and scored on the others (Murphy, 1988, potential skill made
+    scale aware). Smoothing or damping a forecast cannot lower this score, unlike the RMSD.
+
+    Parameters
+    ----------
+    challenger_dataset : xarray.Dataset
+        The challenger dataset.
+    region : str, optional
+        The OceanBench region to evaluate on.
+    climatology_dataset : xarray.Dataset, optional
+        A monthly climatology with one time step per calendar month. Defaults to the GLORYS12 monthly climatology.
+
+    Returns
+    -------
+    DataFrame
+        The DataFrame containing the scores, shaped like the RMSD compared to observations. The fitted smoothing
+        width (km) and slope of each score are in ``attrs["row_diagnostics"]``.
+    """
+
+    return metrics.smoothing_controlled_rmsd_of_variables_compared_to_observations(
+        challenger_dataset=challenger_dataset,
+        region=region,
+        climatology_dataset=climatology_dataset,
+    )
+
+
 def rmsd_of_variables_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = "global",

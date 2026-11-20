@@ -24,6 +24,7 @@ from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.metrics import MESSAGE_COLUMN
 from oceanbench.core.regions import RegionSpec, region_to_dict
 from oceanbench.core.rmsd import MISSING_FRACTION_COLUMN
+from oceanbench.core.smoothing_controlled_rmsd import ROW_DIAGNOSTICS_ATTRIBUTE
 from oceanbench.core.schema_validation import validate_against_schema
 from oceanbench.core.version import __version__
 
@@ -39,6 +40,7 @@ METRIC_FUNCTION_NAMES = [
     "rmsd_of_mixed_layer_depth_compared_to_glo12_analysis",
     "rmsd_of_geostrophic_currents_compared_to_glo12_analysis",
     "deviation_of_lagrangian_trajectories_compared_to_glo12_analysis",
+    "smoothing_controlled_rmsd_of_variables_compared_to_observations",
 ]
 
 _LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]*)\) \[([^\]]*)\]\{([^}]+)\}$")
@@ -56,6 +58,13 @@ def scores_file_name(challenger_name: str, region: RegionSpec) -> str:
 
 def _json_number(value, number_type: type) -> float | int | None:
     return None if math.isnan(value) else number_type(value)
+
+
+def _row_diagnostics(table: pandas.DataFrame, label: str, column: str) -> dict:
+    return {
+        field: _json_number(diagnostic_table.at[label, column], float)
+        for field, diagnostic_table in table.attrs.get(ROW_DIAGNOSTICS_ATTRIBUTE, {}).items()
+    }
 
 
 def score_rows(metric_function_name: str, table: pandas.DataFrame) -> list[dict]:
@@ -85,6 +94,7 @@ def score_rows(metric_function_name: str, table: pandas.DataFrame) -> list[dict]
                 "value": _json_number(table.at[label, column], float),
             }
             | row_fields
+            | _row_diagnostics(table, label, column)
             for column, lead_day in lead_day_columns.items()
         ]
     return rows

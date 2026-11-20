@@ -121,7 +121,8 @@
             "rmsd_of_variables",
             "rmsd_of_mixed_layer_depth",
             "rmsd_of_geostrophic_currents",
-            "deviation_of_lagrangian_trajectories"
+            "deviation_of_lagrangian_trajectories",
+            "smoothing_controlled_rmsd_of_variables"
           ]
         },
         "reference": {
@@ -173,6 +174,20 @@
         "missing": {
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "smoothing_width_km": {
+          "description": "Gaussian smoothing width fitted on all forecast initialization days, smoothing-controlled RMSD only.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "smoothing_slope": {
+          "description": "Anomaly slope fitted on all forecast initialization days, smoothing-controlled RMSD only.",
+          "type": [
+            "number",
             "null"
           ]
         }

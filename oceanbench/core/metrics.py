@@ -14,10 +14,12 @@ from oceanbench.core.lagrangian_trajectory import (
 )
 from oceanbench.core.ocean_mask import ocean_mask
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
+from oceanbench.core.references.climatology import glorys_monthly_climatology_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
 from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, subset_dataset_to_region
 from oceanbench.core.rmsd import rmsd
+from oceanbench.core.smoothing_controlled_rmsd import smoothing_controlled_rmsd_class4_validation
 
 GLOBAL_LAGRANGIAN_PARTICLE_COUNT = 10000
 MINIMUM_LAGRANGIAN_PARTICLE_COUNT = 2000
@@ -56,6 +58,33 @@ def rmsd_of_variables_compared_to_observations(
             Variable.NORTHWARD_SEA_WATER_VELOCITY,
             Variable.EASTWARD_SEA_WATER_VELOCITY,
         ],
+    )
+
+
+def smoothing_controlled_rmsd_of_variables_compared_to_observations(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = GLOBAL_REGION_NAME,
+    climatology_dataset: xarray.Dataset | None = None,
+) -> pandas.DataFrame:
+    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
+    try:
+        observation_dataset = subset_dataset_to_region(observations(challenger_dataset), region)
+    except ObservationDataUnavailableError as error:
+        return pandas.DataFrame({MESSAGE_COLUMN: [str(error)]})
+    return smoothing_controlled_rmsd_class4_validation(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=observation_dataset,
+        ocean_mask=ocean_mask(),
+        variables=[
+            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+            Variable.SEA_WATER_SALINITY,
+            Variable.NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.EASTWARD_SEA_WATER_VELOCITY,
+        ],
+        climatology_dataset=(
+            climatology_dataset if climatology_dataset is not None else glorys_monthly_climatology_dataset()
+        ),
     )
 
 
