@@ -590,3 +590,20 @@ def test_regional_scores_count_the_observations_of_the_class4_rmsd(
 
     assert (controlled.iloc[:, -1] > 0).all()  # observations between the box edge and the grid are missing
     pandas.testing.assert_frame_equal(controlled.iloc[:, -2:], plain.iloc[:, -2:])
+
+
+def test_climatology_month_cache_keeps_only_the_months_in_use() -> None:
+    climatology = _climatology()[TEMPERATURE]
+    month_cache: dict = {}
+    for first_day in ("2024-01-03", "2024-03-06", "2024-07-17"):
+        observation_group = pandas.DataFrame(
+            {
+                Dimension.TIME.key(): [numpy.datetime64(first_day)],
+                Dimension.LATITUDE.key(): [25.0],
+                Dimension.LONGITUDE.key(): [-45.0],
+                Dimension.DEPTH.key(): [0.0],
+            }
+        )
+        smoothing_controlled_rmsd.climatology_at_observations(climatology, observation_group, month_cache=month_cache)
+
+    assert sorted(month_cache) == [6, 7]  # July and August, zero based

@@ -451,7 +451,8 @@ def climatology_at_observations(
     The first row is the Class IV point value, the next rows are the Gaussian means of SIGMAS_KILOMETERS with the
     same method as the forecast, so the smoothing applies to the forecast departure from climatology.
     The climatology has one time step per calendar month. ``month_cache`` keeps each month's fields (and its grid
-    Gaussian means) across calls on the same climatology variable.
+    Gaussian means) across calls on the same climatology variable; months these observations do not need are dropped
+    from it, so with initialization days in order it holds two or three months at most.
     """
     time_key = Dimension.TIME.key()
     month_cache = {} if month_cache is None else month_cache
@@ -462,7 +463,10 @@ def climatology_at_observations(
     lower_months, upper_months, upper_weights = _monthly_interpolation(observations_dataframe[time_key].values)
     lower_values = numpy.full((len(SMOOTHING_WIDTHS_KILOMETERS), len(observations_dataframe)), numpy.nan)
     upper_values = numpy.full_like(lower_values, numpy.nan)
-    for month in numpy.unique(numpy.concatenate([lower_months, upper_months])):
+    needed_months = numpy.unique(numpy.concatenate([lower_months, upper_months]))
+    for cached_month in [cached_month for cached_month in month_cache if cached_month not in needed_months]:
+        del month_cache[cached_month]
+    for month in needed_months:
         if month not in month_cache:
             month_slice = climatology_variable.isel({time_key: int(month)}).compute()
             month_cache[month] = (
