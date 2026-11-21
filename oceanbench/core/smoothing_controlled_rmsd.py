@@ -30,6 +30,7 @@ from oceanbench.core.classIV_support import (
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import Dimension, Variable, is_global_longitude_grid
 from oceanbench.core.references.observations import load_mean_dynamic_topography
+from oceanbench.core.regions import GLOBAL_REGION_NAME, BoundingBox, RegionLike, RegionSpec, resolve_region
 from oceanbench.core.resolution import get_dataset_resolution
 
 SIGMAS_KILOMETERS = (15.0, 30.0, 45.0, 60.0, 90.0)
@@ -40,6 +41,7 @@ GLORYS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.0646
 SMOOTHING_WIDTH_ROW_FIELD = "smoothing_width_km"
 SMOOTHING_SLOPE_ROW_FIELD = "smoothing_slope"
 ROW_DIAGNOSTICS_ATTRIBUTE = "row_diagnostics"
+SUFFICIENT_STATISTICS_ATTRIBUTE = "sufficient_statistics"
 _OBSERVATION_CHUNK_SIZE = 2000
 _MINIMUM_RENORMALISATION_WEIGHT = 1e-6
 
@@ -84,6 +86,58 @@ _PADDING_SIGMAS = 4.0
 # Climatology margin around the observations, in degrees, when it is cut before smoothing.
 _CLIMATOLOGY_MARGIN_DEGREES = 6.0
 _LEVEL_CHUNK_SIZE = 8
+# Margin kept around a regional box, so the Gaussian means near its edges see the challenger outside it.
+SMOOTHING_MARGIN_KILOMETERS = _PADDING_SIGMAS * max(SIGMAS_KILOMETERS)
+_SMOOTHING_MARGIN_REGION_IDENTIFIER = "smoothing-margin"
+
+
+def region_with_smoothing_margin(region: RegionLike) -> RegionLike:
+    """
+    The region grown by SMOOTHING_MARGIN_KILOMETERS on every side, the whole globe when it would wrap around.
+
+    The challenger is cut to this region before smoothing, so the Gaussian mean at an observation near the edge of a
+    regional box is the one of the challenger field as it is, the same as in a global evaluation.
+    """
+    bounds = resolve_region(region).bounds
+    if bounds is None:
+        return GLOBAL_REGION_NAME
+    latitude_margin = SMOOTHING_MARGIN_KILOMETERS / KILOMETERS_PER_DEGREE
+    minimum_latitude = max(bounds.minimum_latitude - latitude_margin, -90.0)
+    maximum_latitude = min(bounds.maximum_latitude + latitude_margin, 90.0)
+    smallest_cosine = numpy.cos(numpy.deg2rad(max(abs(minimum_latitude), abs(maximum_latitude))))
+    longitude_margin = SMOOTHING_MARGIN_KILOMETERS / (KILOMETERS_PER_DEGREE * max(smallest_cosine, 1e-6))
+    longitude_span = (bounds.maximum_longitude - bounds.minimum_longitude) % 360.0
+    if longitude_span + 2 * longitude_margin >= 360.0:
+        return GLOBAL_REGION_NAME
+    return RegionSpec(
+        id=_SMOOTHING_MARGIN_REGION_IDENTIFIER,
+        display_name="Smoothing margin",
+        bounds=BoundingBox(
+            minimum_latitude=minimum_latitude,
+            maximum_latitude=maximum_latitude,
+            minimum_longitude=max(bounds.minimum_longitude - longitude_margin, -360.0),
+            maximum_longitude=min(bounds.maximum_longitude + longitude_margin, 360.0),
+        ),
+    )
+
+
+def grid_extent(dataset: xarray.Dataset) -> tuple[float, float, float, float]:
+    """Minimum and maximum latitude and longitude of the grid of a dataset with standard dimension names."""
+    latitudes = dataset[Dimension.LATITUDE.key()].values
+    longitudes = dataset[Dimension.LONGITUDE.key()].values
+    return float(latitudes.min()), float(latitudes.max()), float(longitudes.min()), float(longitudes.max())
+
+
+def _is_within_extent(observation_group: pandas.DataFrame, extent: tuple[float, float, float, float]) -> numpy.ndarray:
+    minimum_latitude, maximum_latitude, minimum_longitude, maximum_longitude = extent
+    latitudes = observation_group[Dimension.LATITUDE.key()].values
+    longitudes = observation_group[Dimension.LONGITUDE.key()].values
+    return (
+        (latitudes >= minimum_latitude)
+        & (latitudes <= maximum_latitude)
+        & (longitudes >= minimum_longitude)
+        & (longitudes <= maximum_longitude)
+    )
 
 
 def stencil_offsets_kilometers() -> numpy.ndarray:
@@ -371,8 +425,14 @@ def _climatology_near_observations(
         grid_latitudes <= latitudes.max() + _CLIMATOLOGY_MARGIN_DEGREES
     )
     climatology_variable = climatology_variable.isel({latitude_key: numpy.flatnonzero(is_kept_latitude)})
-    first_longitude = longitudes.min() - _CLIMATOLOGY_MARGIN_DEGREES
-    last_longitude = longitudes.max() + _CLIMATOLOGY_MARGIN_DEGREES
+    highest_latitude = min(float(numpy.abs(latitudes).max()) + _CLIMATOLOGY_MARGIN_DEGREES, 90.0)
+    longitude_margin = max(
+        _CLIMATOLOGY_MARGIN_DEGREES,
+        SMOOTHING_MARGIN_KILOMETERS
+        / (KILOMETERS_PER_DEGREE * max(numpy.cos(numpy.deg2rad(highest_latitude)), _MINIMUM_LATITUDE_COSINE)),
+    )
+    first_longitude = longitudes.min() - longitude_margin
+    last_longitude = longitudes.max() + longitude_margin
     if first_longitude > grid_longitudes.min() and last_longitude < grid_longitudes.max():
         is_kept_longitude = (grid_longitudes >= first_longitude) & (grid_longitudes <= last_longitude)
         climatology_variable = climatology_variable.isel({longitude_key: numpy.flatnonzero(is_kept_longitude)})
@@ -476,6 +536,7 @@ def sufficient_statistics_for_first_day(
     first_day_index: int,
     lead_day_to_index: dict[object, int],
     smoothing_method: str = GRID_SMOOTHING_METHOD,
+    point_value_extent: tuple[float, float, float, float] | None = None,
 ) -> pandas.DataFrame:
     """
     Per depth bin, lead day and smoothing width sufficient statistics of one forecast initialization day.
@@ -483,6 +544,8 @@ def sufficient_statistics_for_first_day(
     ``climatology_values`` has one row per smoothing width and one column per row of ``first_day_group``.
     Observations whose point value or climatology
     is missing are not counted, as the plain RMSD leaves out observations without a point value.
+    With ``point_value_extent`` (minimum and maximum latitude and longitude), observations outside it have no point
+    value, as on a challenger cut to that extent.
     """
     model_depths = model_data[Dimension.DEPTH.key()].values
     first_day_block = model_data.isel({Dimension.FIRST_DAY_DATETIME.key(): first_day_index}).compute()
@@ -496,9 +559,14 @@ def sufficient_statistics_for_first_day(
             smoothed_by_lead_day[lead_day] = grid_smoothed_fields(
                 time_slice, first_day_group[Dimension.DEPTH.key()].values
             )
+        point_values = _interpolated_model_values_for_observation_group(time_slice, observation_group, model_depths)
+        if point_value_extent is not None:
+            point_values = numpy.where(
+                _is_within_extent(observation_group, point_value_extent), point_values, numpy.nan
+            )
         statistics = _sufficient_statistics_of_group(
             observation_group["observation_value"].values,
-            _interpolated_model_values_for_observation_group(time_slice, observation_group, model_depths),
+            point_values,
             gaussian_means(
                 time_slice, observation_group, model_depths, smoothing_method, smoothed_by_lead_day.get(lead_day)
             ),
@@ -580,6 +648,7 @@ def _variable_sufficient_statistics(
     climatology_variable: xarray.DataArray,
     observations_dataframe: pandas.DataFrame,
     smoothing_method: str = GRID_SMOOTHING_METHOD,
+    point_value_extent: tuple[float, float, float, float] | None = None,
 ) -> pandas.DataFrame:
     observations_dataframe = observations_dataframe.reset_index(drop=True)
     climatology_variable = _levels_bracketing(
@@ -602,6 +671,7 @@ def _variable_sufficient_statistics(
                 first_day_to_index[pandas.Timestamp(first_day)],
                 lead_day_to_index,
                 smoothing_method,
+                point_value_extent,
             ).assign(first_day=pandas.Timestamp(first_day))
             for first_day, first_day_group in observations_dataframe.groupby("first_day", sort=True)
         ],
@@ -640,13 +710,18 @@ def smoothing_controlled_rmsd_class4_validation(
     variables: list[Variable],
     climatology_dataset: xarray.Dataset,
     smoothing_method: str = GRID_SMOOTHING_METHOD,
+    point_value_extent: tuple[float, float, float, float] | None = None,
 ) -> pandas.DataFrame:
     """
     Smoothing-controlled RMSD table, shaped like the Class IV RMSD table.
 
     ``smoothing_method`` is "grid" (default, each field smoothed once on its grid) or "stencil" (reference path).
+    ``point_value_extent`` (minimum and maximum latitude and longitude): when the challenger extends beyond the
+    evaluated region so that it can be smoothed there, observations outside the extent of the challenger cut to the
+    region have no point value, so the observations scored are those of the Class IV RMSD.
 
-    The fitted width and slope of each cell are in ``table.attrs["row_diagnostics"]``, two tables of the same shape.
+    The fitted width and slope of each cell are in ``table.attrs["row_diagnostics"]``, two tables of the same shape,
+    and the per initialization day sufficient statistics of each variable in ``table.attrs["sufficient_statistics"]``.
     """
     if smoothing_method not in SMOOTHING_METHODS:
         raise ValueError(f"smoothing_method must be one of {SMOOTHING_METHODS}, not {smoothing_method!r}.")
@@ -655,6 +730,7 @@ def smoothing_controlled_rmsd_class4_validation(
     lead_days_count = challenger.sizes[Dimension.LEAD_DAY_INDEX.key()]
     population_layers = class4_population_layers(ocean_mask)
     tables = {"rmsd": [], "width_km": [], "slope": []}
+    all_statistics = {}
     for variable in variables:
         variable_key = variable.key()
         observations_dataframe = create_class4_observations_dataframe(
@@ -673,7 +749,9 @@ def smoothing_controlled_rmsd_class4_validation(
             prepare_climatology_variable(climatology[variable_key], variable_key),
             observations_dataframe,
             smoothing_method,
+            point_value_extent,
         )
+        all_statistics[variable_key] = statistics
         scores = score_smoothing_controlled_rmsd(statistics)
         for value_column, table in tables.items():
             table.append(_class4_table_from_scores(scores, statistics, value_column, variable_key))
@@ -688,4 +766,5 @@ def smoothing_controlled_rmsd_class4_validation(
         SMOOTHING_WIDTH_ROW_FIELD: formatted["width_km"].drop(columns=result.columns[-2:]),
         SMOOTHING_SLOPE_ROW_FIELD: formatted["slope"].drop(columns=result.columns[-2:]),
     }
+    result.attrs[SUFFICIENT_STATISTICS_ATTRIBUTE] = all_statistics
     return result

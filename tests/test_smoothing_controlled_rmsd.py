@@ -8,20 +8,23 @@ import pytest
 import xarray
 from scipy.ndimage import gaussian_filter
 
+import oceanbench.core.metrics as core_metrics
 import oceanbench.core.smoothing_controlled_rmsd as smoothing_controlled_rmsd
 from oceanbench.core.classIV import rmsd_class4_validation
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.ocean_mask import OCEAN_MASK_DEPTHS
 from oceanbench.core.scores import score_rows, scores_document
-from oceanbench.core.regions import resolve_region
+from oceanbench.core.regions import custom_region, resolve_region, subset_dataset_to_region
 from oceanbench.core.smoothing_controlled_rmsd import (
     GLORYS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
     KILOMETERS_PER_DEGREE,
     ROW_DIAGNOSTICS_ATTRIBUTE,
     SIGMAS_KILOMETERS,
+    SMOOTHING_MARGIN_KILOMETERS,
     SMOOTHING_METHODS,
     gaussian_means,
     prepare_climatology_variable,
+    region_with_smoothing_margin,
     score_smoothing_controlled_rmsd,
     smoothing_controlled_rmsd_class4_validation,
     stencil_offsets_kilometers,
@@ -526,3 +529,64 @@ def test_climatology_sea_level_uses_the_glorys_shift(monkeypatch) -> None:
     sea_level_anomaly = prepare_climatology_variable(sea_surface_height, Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key())
 
     numpy.testing.assert_allclose(sea_level_anomaly.values, 0.5 - 0.2 - GLORYS_MEAN_SEA_SURFACE_HEIGHT_SHIFT)
+
+
+def test_smoothing_margin_grows_a_regional_box_and_keeps_the_globe() -> None:
+    margin_region = region_with_smoothing_margin("ibi")
+    ibi_bounds = resolve_region("ibi").bounds
+
+    assert region_with_smoothing_margin("global") == "global"
+    assert margin_region.bounds.minimum_latitude == pytest.approx(
+        ibi_bounds.minimum_latitude - SMOOTHING_MARGIN_KILOMETERS / KILOMETERS_PER_DEGREE
+    )
+    assert margin_region.bounds.minimum_longitude < ibi_bounds.minimum_longitude - SMOOTHING_MARGIN_KILOMETERS / (
+        KILOMETERS_PER_DEGREE
+    )
+
+
+def _temperature_only(function):
+    return lambda **arguments: function(**(arguments | {"variables": [Variable.SEA_WATER_POTENTIAL_TEMPERATURE]}))
+
+
+def _regional_controlled(monkeypatch, challenger, observations, region) -> pandas.DataFrame:
+    monkeypatch.setattr(core_metrics, "observations", lambda dataset: observations)
+    monkeypatch.setattr(core_metrics, "ocean_mask", _ocean_mask)
+    for name in ("smoothing_controlled_rmsd_class4_validation", "rmsd_class4_validation"):
+        monkeypatch.setattr(core_metrics, name, _temperature_only(getattr(core_metrics, name)))
+    return core_metrics.smoothing_controlled_rmsd_of_variables_compared_to_observations(
+        challenger, region=region, climatology_dataset=_climatology()
+    )
+
+
+def test_regional_box_edges_are_smoothed_with_the_challenger_outside_the_box(
+    monkeypatch, observations, displaced_anomalies
+) -> None:
+    challenger = _challenger(displaced_anomalies)
+    box = custom_region("box", "Box", FIRST_LATITUDE + 2, FIRST_LATITUDE + 8, FIRST_LONGITUDE + 2, FIRST_LONGITUDE + 8)
+    whole_domain = _controlled(challenger, observations)
+
+    regional = _regional_controlled(monkeypatch, challenger, observations, box)
+    box_only = smoothing_controlled_rmsd_class4_validation(
+        challenger_dataset=subset_dataset_to_region(challenger, box),
+        reference_dataset=observations,
+        ocean_mask=_ocean_mask(),
+        variables=[Variable.SEA_WATER_POTENTIAL_TEMPERATURE],
+        climatology_dataset=_climatology(),
+    )
+
+    pandas.testing.assert_frame_equal(regional, whole_domain.loc[regional.index])
+    assert not numpy.allclose(box_only[_lead_columns(box_only)].values, regional[_lead_columns(regional)].values)
+
+
+def test_regional_scores_count_the_observations_of_the_class4_rmsd(
+    monkeypatch, observations, displaced_anomalies
+) -> None:
+    challenger = _challenger(displaced_anomalies)
+    box = custom_region(
+        "box", "Box", FIRST_LATITUDE + 2.05, FIRST_LATITUDE + 7.95, FIRST_LONGITUDE + 2.05, FIRST_LONGITUDE + 7.95
+    )
+    controlled = _regional_controlled(monkeypatch, challenger, observations, box)
+    plain = core_metrics.rmsd_of_variables_compared_to_observations(challenger, region=box)
+
+    assert (controlled.iloc[:, -1] > 0).all()  # observations between the box edge and the grid are missing
+    pandas.testing.assert_frame_equal(controlled.iloc[:, -2:], plain.iloc[:, -2:])
