@@ -8,6 +8,7 @@ import xarray
 
 from oceanbench.core.dataset_utils import Dimension, Variable
 from oceanbench.core.lagrangian_trajectory import (
+    _culled_surface_currents,
     _get_all_particles_positions,
     _get_random_ocean_points_from_file,
     deviation_of_lagrangian_trajectories,
@@ -205,3 +206,18 @@ def test_lagrangian_deviation_labels_each_separation_by_its_forecast_day() -> No
 
     assert deviations.columns.tolist() == ["Lead day 2", "Lead day 3", "Lead day 4", "Lead day 5"]
     assert deviations.values[0] == pytest.approx([111.0, 222.0, 333.0, 444.0], rel=1e-3)
+
+
+def test_lagrangian_deviation_is_the_same_with_a_lazy_reference() -> None:
+    one_degree_a_day = 1852 * 60 / 86400
+    challenger_dataset = _forecast_dataset(one_degree_a_day, lead_days_count=5)
+    reference_dataset = _forecast_dataset(0.0, lead_days_count=5)
+    lazy_reference_dataset = reference_dataset.chunk({Dimension.LEAD_DAY_INDEX.key(): 1})
+
+    culled = _culled_surface_currents(lazy_reference_dataset)
+    assert sorted(culled.data_vars) == sorted(
+        [Variable.EASTWARD_SEA_WATER_VELOCITY.key(), Variable.NORTHWARD_SEA_WATER_VELOCITY.key()]
+    )
+    assert deviation_of_lagrangian_trajectories(challenger_dataset, lazy_reference_dataset, particle_count=1).equals(
+        deviation_of_lagrangian_trajectories(challenger_dataset, reference_dataset, particle_count=1)
+    )

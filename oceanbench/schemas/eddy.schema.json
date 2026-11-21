@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OceanBench eddy census frame",
+  "description": "The eddies of one forecast start and lead day (eddy census schema version 4), detected by py-eddy-tracker with the settings of the AVISO META3.2exp NRT atlas. Columnar: element i of every array describes eddy i, whose id is i.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "lead_day",
+    "count",
+    "polarities",
+    "latitude",
+    "longitude",
+    "polarity",
+    "amplitude",
+    "effective_radius_km",
+    "speed_radius_km",
+    "contour"
+  ],
+  "properties": {
+    "lead_day": {
+      "description": "Lead day of the frame, from 1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "count": {
+      "description": "Number of eddies, the length of every array below.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "polarities": {
+      "description": "Names of the polarity codes: anticyclone for a sea level high, cyclone for a sea level low, in both hemispheres.",
+      "const": [
+        "cyclone",
+        "anticyclone"
+      ]
+    },
+    "latitude": {
+      "description": "Eddy-centre latitudes in degrees north, rounded to 3 decimals. Eddies centred less than 5 degrees from the equator are not in the census (parameter minimum_absolute_centre_latitude_degrees of the census metadata).",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": -90,
+        "maximum": 90
+      }
+    },
+    "longitude": {
+      "description": "Eddy-centre longitudes in degrees east, wrapped into [-180, 180) and rounded to 3 decimals.",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": -180,
+        "exclusiveMaximum": 180
+      }
+    },
+    "polarity": {
+      "description": "Polarity codes, indices into polarities.",
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "amplitude": {
+      "description": "Amplitudes in metres: sea level difference between the extremum and the effective contour, on the high-passed field (4 decimals), computed by py-eddy-tracker on the full contour.",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "effective_radius_km": {
+      "description": "Radius in km of the circle with the area of the full effective (outermost) contour (1 decimal).",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "speed_radius_km": {
+      "description": "Radius in km of the circle with the area of the contour of maximum mean geostrophic speed (1 decimal).",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "contour": {
+      "description": "Effective contour of each eddy, simplified (Douglas-Peucker, 0.01 degree tolerance, at most 32 vertices) and without the closing vertex, as an encoded polyline string (the Google polyline algorithm on integers in thousandths of a degree): the successive (latitude, longitude) steps, the first step from the centre. Longitudes are continuous around the centre rather than wrapped, so a contour straddling the dateline overhangs [-180, 180) (e.g. 180.4 next to a centre at 179.8).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

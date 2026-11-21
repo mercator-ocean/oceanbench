@@ -660,3 +660,105 @@ def hclimrep_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarr
     """
 
     return challenger_datasets.hclimrep_1_degree(first_day_datetimes)
+
+
+def climatology(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    """
+    Open the climatology baseline as a challenger dataset.
+
+    A baseline, not a forecast: the GLORYS 1993-2019 day-of-year climatology, each lead day
+    holding the climatology of its valid date. Its Class IV SSH-to-SLA conversion uses the same
+    mean sea surface height shift as every other challenger.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+
+    Returns
+    -------
+    Dataset
+        The Dataset, shaped like a challenger (``first_day_datetime``, ``lead_day_index``).
+
+    Examples
+    --------
+    >>> climatology() # doctest: +SKIP
+    """
+
+    return challenger_datasets.climatology(first_day_datetimes)
+
+
+def climatology_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    """
+    Open the climatology baseline as a challenger dataset interpolated to 1 degree.
+
+    A baseline, not a forecast: the GLORYS 1993-2019 day-of-year climatology, each lead day
+    holding the climatology of its valid date. Its Class IV SSH-to-SLA conversion uses the same
+    mean sea surface height shift as every other challenger.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+
+    Returns
+    -------
+    Dataset
+        The Dataset, shaped like a challenger (``first_day_datetime``, ``lead_day_index``).
+
+    Examples
+    --------
+    >>> climatology_1_degree() # doctest: +SKIP
+    """
+
+    return challenger_datasets.climatology_1_degree(first_day_datetimes)
+
+
+def glorys(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    """
+    Open the GLORYS 1/4 degree reanalysis as a reference challenger dataset.
+
+    A reference, not a forecast: the GLORYS reanalysis on the valid date of each lead day. It
+    assimilates observations, so its Class IV scores bound what a forecast can reach.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+
+    Returns
+    -------
+    Dataset
+        The Dataset, shaped like a challenger (``first_day_datetime``, ``lead_day_index``).
+
+    Examples
+    --------
+    >>> glorys() # doctest: +SKIP
+    """
+
+    return challenger_datasets.glorys(first_day_datetimes)
+
+
+def glorys_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    """
+    Open the GLORYS 1 degree reanalysis as a reference challenger dataset.
+
+    A reference, not a forecast: the GLORYS reanalysis on the valid date of each lead day. It
+    assimilates observations, so its Class IV scores bound what a forecast can reach.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+
+    Returns
+    -------
+    Dataset
+        The Dataset, shaped like a challenger (``first_day_datetime``, ``lead_day_index``).
+
+    Examples
+    --------
+    >>> glorys_1_degree() # doctest: +SKIP
+    """
+
+    return challenger_datasets.glorys_1_degree(first_day_datetimes)

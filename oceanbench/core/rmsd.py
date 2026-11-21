@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import dask
 import numpy
 import xarray
 import pandas
@@ -194,7 +195,7 @@ def _missing_fractions(
     )
 
 
-def _rmsd(
+def _rmsd_by_start(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     ocean_mask: xarray.DataArray,
@@ -205,7 +206,19 @@ def _rmsd(
     area_weighted_mean_squared_error = squared_error.weighted(_spatial_area_weights(squared_error)).mean(
         dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
     )
-    return numpy.sqrt(area_weighted_mean_squared_error).mean(dim=Dimension.FIRST_DAY_DATETIME.key())
+    return numpy.sqrt(area_weighted_mean_squared_error)
+
+
+def _mean_over_starts(rmsd_by_start_dataset: xarray.Dataset) -> xarray.Dataset:
+    return rmsd_by_start_dataset.mean(dim=Dimension.FIRST_DAY_DATETIME.key())
+
+
+def _rmsd(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    ocean_mask: xarray.DataArray,
+) -> xarray.Dataset:
+    return _mean_over_starts(_rmsd_by_start(challenger_dataset, reference_dataset, ocean_mask))
 
 
 def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
@@ -287,7 +300,8 @@ def rmsd(
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
     ocean_mask: xarray.DataArray,
-) -> pandas.DataFrame:
+    keep_start_tables: bool = False,
+) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
     """
     Area-weighted gridded RMSD over the ocean cells of the OceanBench ocean mask.
 
@@ -295,6 +309,10 @@ def rmsd(
     is ocean and both the challenger and the reference have a value. Ocean cells where the reference
     has a value and the challenger has none are not scored: the Missing fraction column reports their
     area-weighted share.
+
+    The score is the mean over start dates of the RMSD of each start date. With ``keep_start_tables``,
+    the table of each start date is also returned, in start date order, from the same computation.
+    Their Missing fraction column is the one of all start dates.
     """
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
     prepared_reference_dataset = _snap_reference_spatial_coordinates_to_challenger(
@@ -304,7 +322,24 @@ def rmsd(
     missing_fraction_dataset = _missing_fractions(
         prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
     ).compute()
-    computed_rmsd_dataset = _rmsd(
+    if not keep_start_tables:
+        computed_rmsd_dataset = _rmsd(
+            prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
+        ).compute()
+        return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_fraction_dataset)
+    rmsd_by_start_dataset = _rmsd_by_start(
         prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
-    ).compute()
-    return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_fraction_dataset)
+    )
+    # One computation for both, with the same graph for the mean as without start tables.
+    computed_rmsd_dataset, computed_rmsd_by_start_dataset = dask.compute(
+        _mean_over_starts(rmsd_by_start_dataset), rmsd_by_start_dataset
+    )
+    start_tables = [
+        _to_pretty_dataframe(
+            computed_rmsd_by_start_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): start_index}),
+            variables,
+            missing_fraction_dataset,
+        )
+        for start_index in range(computed_rmsd_by_start_dataset.sizes[Dimension.FIRST_DAY_DATETIME.key()])
+    ]
+    return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_fraction_dataset), start_tables

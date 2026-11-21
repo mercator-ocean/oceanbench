@@ -1,0 +1,97 @@
+<!--
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+---
+title: "Building the viewer data"
+---
+
+The OceanBench viewer shows the forecast maps, the water column, the Class IV match-ups, the eddies and the score summaries of every challenger. ![The viewer showing a GLONET temperature forecast.](/news/posts/explore-forecasts-in-the-viewer/viewer-single.png)
+
+The [Viewer](/viewer.html) compares two systems side by side, with a swipe or as a difference, and shows the whole year against the observations:
+
+![The viewer showing the difference between a GLONET and a GLORYS forecast.](/news/posts/explore-forecasts-in-the-viewer/viewer-diff.png)
+
+`oceanbench evaluate` builds these files when it is given a local directory. It needs the optional `viewer` extra, which adds `pyarrow`:
+
+``` bash
+pip install "oceanbench[viewer]"
+```
+
+Then:
+
+``` bash
+oceanbench evaluate glonet.py --viewer-artifacts-dir viewer-data
+oceanbench evaluate glonet.py --region ibi --viewer-artifacts-dir viewer-data
+```
+
+The directory can also be set with the `OCEANBENCH_VIEWER_ARTIFACTS_DIR` environment variable, or with the `viewer_artifacts_directory` argument of `oceanbench.evaluate_challenger`. The viewer data is built after the scores file is written, in the same process and from the same opened challenger dataset, and the scores file is the same with or without it. The Class IV files are written from the match-ups the Class IV scores are computed from.
+
+A challenger that was already scored can get its viewer data without being scored again:
+
+```bash
+oceanbench evaluate glonet.py --viewer-only --viewer-artifacts-dir viewer-data
+```
+
+`--viewer-only` reads the score rows from the `glonet.global.scores.json` of the previous evaluation (in the current directory, in `--output-bucket`/`--output-prefix` when a bucket is given, or at `--scores-file`), checks that its challenger, region and OceanBench version match, recomputes only the Class IV match-ups and skips the other metrics. It writes no scores file.
+
+## Eddies
+
+The eddy layer is computed with [py-eddy-tracker](https://github.com/AntSimi/py-eddy-tracker), the software behind the AVISO eddy atlas, with the same method and parameters as the AVISO META3.2exp NRT atlas ([handbook](https://www.aviso.altimetry.fr/fileadmin/documents/data/tools/hdbk_eddytrajectory_META3.2exp_NRT.pdf)): sea surface height high-passed at 700 km, contours every 0.2 cm, an amplitude of at least 0.4 cm, a shape error of at most 70%, a single extremum and 5 to 1000 pixels. Eddies centred less than 5 degrees from the equator are left out, because geostrophy, and so the speed radius, is undefined there; the census records this as `minimum_absolute_centre_latitude_degrees`. The model sea surface height stands in for the absolute dynamic topography of the atlas; the high-pass removes the large-scale offset between them. Each eddy has its centre, polarity (anticyclones are sea level highs), amplitude, effective radius, speed radius and effective contour.
+
+Eddies are detected on a 1/4 degree grid so that the censuses of different models are comparable with each other and with the atlas. A grid of 0.2 to 0.3 degree is used as is; a finer grid is averaged over blocks of whole cells (3 × 3 for 1/12 degree), weighted by cell area, a block being land when less than half of it is ocean. Eddies of models coarser than 0.3 degree are not shown: they span only a few grid cells.
+
+The viewer shows the eddies of each day on their own, while the atlas keeps only the eddies tracked for at least 10 days, so the viewer shows more eddies than the atlas: on two Mercator Ocean global sea surface height fields (1/12 and 1/4 degree), about 10% more per day. On the altimetry maps the atlas itself is built from, the census has about 3% more eddies than the atlas: it finds about 91% of the atlas eddies, and about 12% of its eddies are not in the atlas, most likely short-lived ones.
+
+The census files keep the amplitude and radii of py-eddy-tracker as computed on the full effective contour. The contour itself is stored simplified, to within 0.01 degree (about 1 km) of py-eddy-tracker's, with at most 32 vertices (the tolerance is doubled for the rare contours that need more; on GLONET the largest displacement is about 4 km, against 25 km grid cells), and with coordinates rounded to 0.001 degree. A frame of a global 1/4 degree model takes about 0.7 MB (7.6 MB before the census schema 4).
+
+After a change of the census, the census of a challenger whose viewer data is already built can be rewritten alone, without the maps, water columns and match-ups:
+
+```python
+from oceanbench.core.evaluate import open_challenger_dataset, resolve_evaluation_region
+from oceanbench.publish.viewer_data import rebuild_eddy_census
+
+dataset = open_challenger_dataset(open("glonet.py").read())
+rebuild_eddy_census("viewer-data", "glonet", dataset, resolve_evaluation_region("global"))
+```
+
+py-eddy-tracker is distributed under the GPL-3.0 licence and is not installed with OceanBench, not even with the `viewer` extra. Its last release does not install alongside the OceanBench dependencies, so for now it has to be installed by hand from a version adapted to them, whose location is still to be decided:
+
+``` bash
+pip install numba opencv-python pint polygon3 pyyaml
+pip install --no-deps "<adapted py-eddy-tracker, location to be announced>"
+```
+
+`polygon3` has no wheel for recent Python versions and is built from source, which needs a C compiler and the Python headers. Without py-eddy-tracker, `oceanbench evaluate` writes the rest of the viewer data, logs one warning, and the viewer shows no eddies for that challenger.
+
+The census detects the fields of all start dates and lead days in parallel worker processes, one thread each; they never import the calling script, so a script needs no `if __name__ == "__main__"` guard. Their number is `OCEANBENCH_EDDY_CENSUS_MAX_WORKERS`, by default 8 or the number of CPUs available to the process if smaller. Each process needs about 1.5 GB of memory for a global 1/4 degree field, so lower it on a machine with little memory. The census files are the same whatever the number of processes.
+
+## Layout
+
+The directory mirrors the viewer data prefix and can hold several challengers and regions. Evaluating a challenger and region again replaces its files and its entries in the index files.
+
+`datasets.json`, `insights.json`, `scores-summary.json`
+:   The index files, merged with what the directory already holds. `datasets.json` lists the challengers with maps, each with its `kind` (`model`, `baseline` such as climatology or persistence, or `reference` such as the GLORYS reanalysis), `insights.json` the insight files of every challenger and region, and `scores-summary.json` one row per gridded RMSD and Class IV score. A summary row reports the score of the scores file as `mean` and a 95% interval from a seeded bootstrap over the forecast start dates.
+
+`<challenger>.zarr`, `<challenger>.viewer-manifest.json`
+:   The map pyramid of the challenger and its manifest, global region only. The manifest gives, for each layer, its units, its uint16 quantization, its true minimum and maximum (`data_range`) and a default colour range (`default_range`) from the 2nd to the 98th percentile of its values, so that a few outliers do not stretch it. It also gives the `kind` of the challenger and, for a baseline or a reference, a short `description`. The percentiles are taken on a regular subsample of the native grid (every k-th cell in latitude and longitude, all start dates and lead days, at most 4 million values per layer).
+
+`<challenger>.columns.zarr`
+:   The water-column store, temperature and salinity on the 1 degree grid at every depth, global region only.
+
+`insights/<challenger>/<region>/`
+:   `class4-matchups.parquet` (every Class IV match-up), `eddies.json` and one `eddies-start-<date>-lead-<N>.json` per start date and lead day (the detected mesoscale eddies, see [Eddies](#eddies)), `rmsd-by-depth.json` (Class IV RMSD per depth bin, for variables observed at several depths), `year-error-geography.json` and `year-rmsd-by-start.json` (the yearly error map and the RMSD of every start date, official regions only).
+
+SLA is model SSH minus the GLO12 MDT plus a constant datum offset; because a model's global-mean SSH level is arbitrary and differs between systems (GLORYS sits about 5 cm above GLO12 in 2024), challengers use the leaderboard's GLO12-tuned constant (-0.1148 m), while the GLORYS reference and the GLORYS-based climatology use a GLORYS-specific constant derived from the 2024 global-mean SSH difference between the two systems, so a uniform SLA bias of a few centimetres indicates datum, not skill, and the climatology's bias of about -6 cm is sea-level rise since its 1993-2019 base period. `year-rmsd-by-start.json` also gives, per start date and lead day, `rmsd_centred`: the RMSD with that start and lead's pooled bias removed, sqrt(MSE - bias²), which for SLA discards the datum offset.
+
+## Publishing
+
+The viewer data is not uploaded by `oceanbench evaluate`. To publish it, upload the content of the directory to `dev/benchmark/rebuild-preview/viewer/data/`, keeping its layout. Upload the index files last, so the viewer never lists files that are not there yet.
+
+## Costs
+
+The viewer data adds to the evaluation time and memory. Measured on GLONET (1/4 degree, global) with two start dates, on 16 cores of a shared machine: the scores took about 5 minutes and the viewer data 11 minutes more, of which about 8 minutes for the eddy census in 8 processes (3 minutes without it). The viewer files took 0.6 GB: 224 MB of maps, 45 MB of water column, 164 MB of match-ups, 152 MB of eddies and 20 MB of yearly files. Every part grows with the number of start dates except the yearly files, so a year of 52 start dates is about 15 GB for GLONET (about 6 GB of maps, 1.2 GB of water column, 4.3 GB of match-ups and 4 GB of eddies).
+
+The eddy census takes about 35 seconds of one CPU per start date and lead day, so 520 fields for a year: about 5 hours in one process, about 40 minutes in 8. A 1/12 degree challenger has nine times as many map cells as a 1/4 degree one, so expect roughly nine times the map size; its eddies are detected on the same 1/4 degree grid and cost the same. The scores summary recomputes the gridded scores one start date at a time, on top of the scores themselves. The match-ups are held in memory while the Class IV files are written: GLONET has about 6 million match-ups per start date, so about 330 million for a year, which takes tens of GB. Plan that memory per challenger when evaluating several challengers in parallel with `--max-workers`.

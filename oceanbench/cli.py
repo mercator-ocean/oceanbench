@@ -5,6 +5,7 @@
 import argparse
 import json
 import sys
+from os import environ
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.request import Request, urlopen
@@ -62,6 +63,9 @@ def _evaluate_one(
     output_prefix: str | None,
     runtime_configuration: RuntimeConfiguration,
     region: RegionLike,
+    viewer_artifacts_directory: str | None,
+    viewer_only: bool = False,
+    scores_file: str | None = None,
 ) -> EvaluationResult:
     try:
         from oceanbench.core.evaluate import evaluate_challenger
@@ -72,6 +76,9 @@ def _evaluate_one(
             output_prefix=output_prefix,
             runtime_configuration=runtime_configuration,
             region=region,
+            viewer_artifacts_directory=viewer_artifacts_directory,
+            viewer_only=viewer_only,
+            scores_file=scores_file,
         )
         return EvaluationResult(challenger=challenger)
     except Exception as exception:
@@ -91,6 +98,9 @@ def _evaluate_all(
     max_workers: int | None,
     runtime_configuration: RuntimeConfiguration,
     region: RegionLike,
+    viewer_artifacts_directory: str | None,
+    viewer_only: bool = False,
+    scores_file: str | None = None,
 ) -> list[EvaluationResult]:
     # Evaluations are heavy and can leave substantial state behind in a
     # worker process. Recycle the worker after each challenger to avoid
@@ -104,6 +114,9 @@ def _evaluate_all(
                 output_prefix,
                 runtime_configuration,
                 region,
+                viewer_artifacts_directory,
+                viewer_only,
+                scores_file,
             ): challenger
             for challenger in challengers
         }
@@ -141,6 +154,16 @@ def _runtime_configuration_from_args(args: argparse.Namespace) -> RuntimeConfigu
     )
 
 
+def _viewer_only_argument_error(args: argparse.Namespace, challengers: list[str]) -> str | None:
+    if args.viewer_only and not (args.viewer_artifacts_dir or environ.get("OCEANBENCH_VIEWER_ARTIFACTS_DIR")):
+        return "--viewer-only needs --viewer-artifacts-dir"
+    if args.scores_file and not args.viewer_only:
+        return "--scores-file is only used with --viewer-only"
+    if args.scores_file and len(challengers) != 1:
+        return "--scores-file needs exactly one challenger"
+    return None
+
+
 def _run_evaluate(args: argparse.Namespace) -> int:
     challengers = _resolve_challengers(args)
 
@@ -155,12 +178,26 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         print("Error: --max-workers must be >= 1", file=sys.stderr)
         return 1
 
+    viewer_error = _viewer_only_argument_error(args, challengers)
+    if viewer_error:
+        print(f"Error: {viewer_error}", file=sys.stderr)
+        return 1
+
     try:
         runtime_configuration = _runtime_configuration_from_args(args)
         region = _resolve_region_argument(args)
     except ValueError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
+
+    if args.viewer_artifacts_dir:
+        from oceanbench.core.evaluate import require_viewer_extra
+
+        try:
+            require_viewer_extra()
+        except ImportError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 1
 
     results = _evaluate_all(
         challengers,
@@ -169,6 +206,8 @@ def _run_evaluate(args: argparse.Namespace) -> int:
         args.max_workers,
         runtime_configuration,
         region,
+        args.viewer_artifacts_dir,
+        *((args.viewer_only, args.scores_file) if args.viewer_only else ()),
     )
     if (
         runtime_configuration.has_local_stage()
@@ -228,6 +267,28 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--output-prefix",
         default=None,
         help="S3 prefix for the uploaded scores files",
+    )
+    evaluate_parser.add_argument(
+        "--viewer-artifacts-dir",
+        default=None,
+        help="Local directory to also write the viewer data of each challenger to (needs the viewer extra)",
+    )
+    evaluate_parser.add_argument(
+        "--viewer-only",
+        action="store_true",
+        help=(
+            "Build only the map viewer data of challengers already scored: read the score rows from the scores file"
+            " of a previous evaluate, recompute only the Class IV match-ups and write no scores file."
+            " Needs --viewer-artifacts-dir"
+        ),
+    )
+    evaluate_parser.add_argument(
+        "--scores-file",
+        default=None,
+        help=(
+            "With --viewer-only, the local scores file to read. Defaults to {challenger}.{region}.scores.json in"
+            " --output-bucket/--output-prefix if a bucket is given, else in the current directory"
+        ),
     )
     evaluate_parser.add_argument(
         "--max-workers",
