@@ -3005,4 +3005,4 @@ viewer = ["pyarrow"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12.9"
-content-hash = "7abe1bb71cb9f0a1d593ea9fce75b5a280c6cf05d4d6444867defa6f4c7a2ed2"
+content-hash = "f9b8bc9a53c9539a1300cd09f1d14731066f507627dd8e1bb05b4d3f0ccfa0b5"
