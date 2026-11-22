@@ -193,12 +193,13 @@ def evaluate_challenger(
 
 # Gridded metrics against the two references, computed in one pass so that the challenger is read once for both,
 # and its mixed layer depth and geostrophic currents computed once for both.
+# Not the variables: their two passes together keep the 1/12 degree challenger in memory (12 GB for one start).
 GRIDDED_METRICS_COMPUTED_TOGETHER = [
     [
         f"rmsd_of_{quantity}_compared_to_glorys_reanalysis",
         f"rmsd_of_{quantity}_compared_to_glo12_analysis",
     ]
-    for quantity in ("variables", "mixed_layer_depth", "geostrophic_currents")
+    for quantity in ("mixed_layer_depth", "geostrophic_currents")
 ]
 
 

@@ -197,6 +197,14 @@ def _missing_fractions(
     )
 
 
+def _missing_fractions_computed_first_when_depth_resolved(missing_fraction_dataset: xarray.Dataset) -> xarray.Dataset:
+    has_depth_resolved_variable = any(
+        Dimension.DEPTH.key() in missing_fraction_dataset[variable_name].dims
+        for variable_name in missing_fraction_dataset.data_vars
+    )
+    return missing_fraction_dataset.compute() if has_depth_resolved_variable else missing_fraction_dataset
+
+
 def _rmsd_by_start(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
@@ -310,8 +318,8 @@ def _lazy_rmsd(
         prepared_challenger_dataset, _select_variables(_harmonise_dataset(reference_dataset), variables)
     )
     challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
-    missing_fraction_dataset = _missing_fractions(
-        prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
+    missing_fraction_dataset = _missing_fractions_computed_first_when_depth_resolved(
+        _missing_fractions(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask)
     )
     if not keep_start_tables:
 
@@ -379,9 +387,11 @@ def rmsd(
 
 def rmsd_together(rmsd_arguments: list[dict]) -> list:
     """
-    ``rmsd(**arguments)`` of each item, computed in one pass: the missing fractions and the RMSD of all items
-    are computed together, so that what they share (the challenger, or a quantity derived from it such as the
-    mixed layer depth) is read and computed once instead of once per item and per table.
+    ``rmsd(**arguments)`` of each item, computed in one pass: the RMSD of all items, and the missing fractions
+    of surface quantities, are computed together, so that what they share (the challenger, or a quantity derived
+    from it such as the mixed layer depth) is read and computed once instead of once per item and per table.
+    The missing fractions of depth-resolved variables are cheap and computed before, on their own: computed
+    together with the RMSD at 1/12 degree, they keep every challenger chunk in memory until the end of the pass.
     """
     lazy_results = [_lazy_rmsd(**arguments) for arguments in rmsd_arguments]
     computed = dask.compute(*[lazy_datasets for lazy_datasets, _ in lazy_results])
