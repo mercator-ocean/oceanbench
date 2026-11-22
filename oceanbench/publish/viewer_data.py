@@ -25,6 +25,7 @@ import pandas
 import xarray
 
 from oceanbench import metrics
+from oceanbench.core.classIV_matchups import Class4Matchups
 from oceanbench.core.dataset_source import DEFAULT_CHALLENGER_KIND, get_challenger_kind
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.regions import RegionSpec, region_to_dict
@@ -245,7 +246,7 @@ def build_viewer_data(
     challenger_name: str,
     challenger_dataset: xarray.Dataset,
     region: RegionSpec,
-    matchups: pandas.DataFrame | None,
+    matchups: pandas.DataFrame | Class4Matchups | None,
     document_rows: list[dict],
     start_tables: dict[str, list[pandas.DataFrame]] | None = None,
 ) -> None:

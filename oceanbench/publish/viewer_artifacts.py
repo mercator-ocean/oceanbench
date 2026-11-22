@@ -27,6 +27,7 @@ import xarray
 
 from oceanbench.core import eddy_census
 from oceanbench.core.classIV_support import compute_class4_rmsd_table
+from oceanbench.core.classIV_matchups import Class4Matchups, class4_matchups
 from oceanbench.core.dataset_source import get_challenger_description, get_challenger_kind
 from oceanbench.core.dataset_utils import DEPTH_BIN_DISPLAY_ORDER, Dimension, Variable
 from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionSpec, padded_region, subset_dataset_to_region
@@ -132,12 +133,10 @@ def class4_rmsd_rows(matchups: pandas.DataFrame) -> pandas.DataFrame:
     )
 
 
-def class4_rmsd_rows_by_start(matchups: pandas.DataFrame) -> pandas.DataFrame:
+def class4_rmsd_rows_by_start(matchups: pandas.DataFrame | Class4Matchups) -> pandas.DataFrame:
+    parts = class4_matchups(matchups)
     return pandas.concat(
-        [
-            class4_rmsd_rows(start_matchups).assign(first_day=first_day)
-            for first_day, start_matchups in matchups.groupby("first_day", sort=True)
-        ],
+        [class4_rmsd_rows(parts.start(first_day)).assign(first_day=first_day) for first_day in parts.first_days()],
         ignore_index=True,
     )
 
@@ -209,8 +208,9 @@ def _packed_row_group_spans(table: pyarrow.Table) -> list[tuple[int, int]]:
     return spans
 
 
-def write_matchup_parquet(matchups: pandas.DataFrame, output_path: Path) -> None:
+def write_matchup_parquet(matchups: pandas.DataFrame | Class4Matchups, output_path: Path) -> None:
     """Write the match-ups in the viewer serving layout, one forecast start at a time."""
+    parts = class4_matchups(matchups)
     with pyarrow.parquet.ParquetWriter(
         output_path,
         MATCHUP_SCHEMA,
@@ -218,8 +218,8 @@ def write_matchup_parquet(matchups: pandas.DataFrame, output_path: Path) -> None
         compression_level=3,
         write_statistics=_MATCHUP_GROUP_COLUMNS,
     ) as writer:
-        for _, start_matchups in matchups.groupby("first_day", sort=True):
-            table = _serving_matchups(start_matchups)
+        for first_day in parts.first_days():
+            table = _serving_matchups(parts.start(first_day))
             for offset, length in _packed_row_group_spans(table):
                 writer.write_table(table.slice(offset, length))
     verify_matchup_parquet(output_path)
@@ -245,11 +245,23 @@ def verify_matchup_parquet(output_path: Path) -> None:
         previous_key = key
 
 
-def rmsd_by_depth(matchups: pandas.DataFrame) -> dict:
+def _lead_day_parts(parts: Class4Matchups):
+    for variable in parts.variables():
+        for lead_day in parts.lead_days(variable):
+            yield parts.part(variable, lead_day)
+
+
+def rmsd_by_depth(matchups: pandas.DataFrame | Class4Matchups) -> dict:
     """Pooled RMSD, bias and scored count per depth bin and lead day, for variables with several depth bins."""
-    rows = class4_rmsd_rows(matchups).set_index(["variable", "depth_bin", "lead_day"])
-    scored = _scored(matchups)
-    bias = scored.groupby(["variable", "depth_bin", "lead_day"])["signed_error"].mean()
+    parts = class4_matchups(matchups)
+    # A group of a variable, depth bin and lead day lies in one part, with its rows in table order.
+    part_rows, part_biases = [], []
+    for part in _lead_day_parts(parts):
+        if len(part):
+            part_rows.append(class4_rmsd_rows(part))
+            part_biases.append(_scored(part).groupby(["variable", "depth_bin", "lead_day"])["signed_error"].mean())
+    rows = pandas.concat(part_rows, ignore_index=True).set_index(["variable", "depth_bin", "lead_day"])
+    bias = pandas.concat(part_biases)
     variables = {}
     for variable in rows.index.get_level_values("variable").unique():
         variable_rows = rows.loc[variable]
@@ -308,17 +320,21 @@ def _per_start_bias_standard_error(
     return numpy.where(starts_with_data >= _MINIMUM_CELL_STARTS, standard_error, numpy.nan), starts_with_data
 
 
-def year_error_geography(matchups: pandas.DataFrame, grid: dict, lead_days_count: int) -> dict:
+def _scored_target(parts: Class4Matchups, variable: str, depth_bin: str, lead_day: int) -> pandas.DataFrame:
+    scored = _scored(parts.part(variable, lead_day))
+    return scored[scored["depth_bin"] == depth_bin]
+
+
+def year_error_geography(matchups: pandas.DataFrame | Class4Matchups, grid: dict, lead_days_count: int) -> dict:
     """Mean |error|, bias, count, start count and bias standard error per grid cell, over the whole year."""
     cell_count = grid["nlat"] * grid["nlon"]
-    scored = _scored(matchups)
-    start_codes, start_dates = pandas.factorize(scored["first_day"], sort=True)
-    scored = scored.assign(start_code=start_codes)
+    parts = class4_matchups(matchups)
+    start_dates = numpy.array(parts.scored_first_days(), dtype="datetime64[ns]")
     geography = {
         "grid": grid,
         "variables": {},
         "meta": {
-            "n_starts": int(matchups["first_day"].nunique()),
+            "n_starts": len(parts.first_days()),
             "generated_from": MATCHUP_PARQUET_FILENAME,
             "depth_bin": {short: depth_bin for _, depth_bin, short in _YEAR_TARGETS},
             "aggregation": "time-mean of |obs-model| per cell",
@@ -333,17 +349,16 @@ def year_error_geography(matchups: pandas.DataFrame, grid: dict, lead_days_count
     }
     for variable, depth_bin, short in _YEAR_TARGETS:
         decimals = _YEAR_GEOGRAPHY_DECIMALS[short]
-        target = scored[(scored["variable"] == variable) & (scored["depth_bin"] == depth_bin)]
         leads, bias_leads, count_leads, start_count_leads, bias_se_leads = {}, {}, {}, {}, {}
         for lead_day in range(lead_days_count):
-            lead_target = target[target["lead_day"] == lead_day]
+            lead_target = _scored_target(parts, variable, depth_bin, lead_day)
             cell, valid = _grid_cells(
                 lead_target[Dimension.LATITUDE.key()].to_numpy(),
                 lead_target[Dimension.LONGITUDE.key()].to_numpy(),
                 grid,
             )
             signed_error = lead_target["signed_error"].to_numpy()[valid]
-            start = lead_target["start_code"].to_numpy()[valid]
+            start = numpy.searchsorted(start_dates, lead_target["first_day"].to_numpy(dtype="datetime64[ns]"))[valid]
             cell = cell[valid]
             count = numpy.bincount(cell, minlength=cell_count)
             absolute_sum = numpy.bincount(cell, numpy.abs(signed_error), cell_count)
@@ -413,24 +428,28 @@ def _bootstrap_generator(variable: str, depth_bin: str, lead_day: int, first_day
     return numpy.random.default_rng(numpy.random.SeedSequence([BOOTSTRAP_SEED, *digest.tolist()]))
 
 
+def _blocks_and_errors_by_start(
+    parts: Class4Matchups, variable: str, depth_bin: str, lead_day: int, block_size_degrees: float
+) -> dict:
+    target = _scored_target(parts, variable, depth_bin, lead_day)
+    blocks = _bootstrap_blocks(
+        target[Dimension.LATITUDE.key()].to_numpy(dtype=float),
+        target[Dimension.LONGITUDE.key()].to_numpy(dtype=float),
+        block_size_degrees,
+    )
+    return {
+        pandas.Timestamp(first_day): (blocks[indices], target["signed_error"].to_numpy()[indices])
+        for first_day, indices in target.reset_index(drop=True).groupby("first_day", sort=False).indices.items()
+    }
+
+
 def year_rmsd_by_start(
-    matchups: pandas.DataFrame, rows_by_start: pandas.DataFrame, grid: dict, lead_days_count: int
+    matchups: pandas.DataFrame | Class4Matchups, rows_by_start: pandas.DataFrame, grid: dict, lead_days_count: int
 ) -> dict:
     """Pooled RMSD, bias and their block-bootstrap intervals per start date, for the year chart."""
-    scored = _scored(matchups)
-    scored = scored.assign(
-        block=_bootstrap_blocks(
-            scored[Dimension.LATITUDE.key()].to_numpy(dtype=float),
-            scored[Dimension.LONGITUDE.key()].to_numpy(dtype=float),
-            grid["block_size_degrees"],
-        )
-    )
-    groups = {
-        key: (group["block"].to_numpy(), group["signed_error"].to_numpy())
-        for key, group in scored.groupby(["variable", "depth_bin", "lead_day", "first_day"], sort=False)
-    }
+    parts = class4_matchups(matchups)
     rows = rows_by_start.set_index(["variable", "depth_bin", "lead_day", "first_day"])
-    start_dates = sorted({key[3] for key in groups})
+    start_dates = parts.scored_first_days()
     payload = {
         "variables": {},
         "meta": {
@@ -459,6 +478,7 @@ def year_rmsd_by_start(
     for variable, depth_bin, short in _YEAR_TARGETS:
         leads = {}
         for lead_day in range(lead_days_count):
+            groups = _blocks_and_errors_by_start(parts, variable, depth_bin, lead_day, grid["block_size_degrees"])
             series = {
                 name: []
                 for name in [
@@ -474,7 +494,7 @@ def year_rmsd_by_start(
                 ]
             }
             for first_day in start_dates:
-                group = groups.get((variable, depth_bin, lead_day, first_day))
+                group = groups.get(first_day)
                 if group is None:
                     continue
                 block, signed_error = group
@@ -820,7 +840,7 @@ def write_viewer_artifacts(
     dataset_slug: str,
     challenger_dataset: xarray.Dataset,
     region: RegionSpec,
-    matchups: pandas.DataFrame | None,
+    matchups: pandas.DataFrame | Class4Matchups | None,
     rows_by_start: pandas.DataFrame | None,
 ) -> ViewerArtifacts:
     """

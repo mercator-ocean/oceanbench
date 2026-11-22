@@ -54,7 +54,7 @@ def _class4_table() -> pandas.DataFrame:
 
 
 def _matchups() -> pandas.DataFrame:
-    return class4_rmsd_and_matchups(*_class4_arguments(), keep_matchups=True)[1]
+    return class4_rmsd_and_matchups(*_class4_arguments(), keep_matchups=True)[1].to_dataframe()
 
 
 def test_class4_scores_are_the_scores_of_main() -> None:
