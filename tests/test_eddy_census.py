@@ -379,10 +379,39 @@ def test_py_eddy_tracker_census_of_equatorial_eddies_only_is_empty() -> None:
 
 def test_census_workers_default_to_eight_capped_by_the_cpus(monkeypatch) -> None:
     monkeypatch.delenv("OCEANBENCH_EDDY_CENSUS_MAX_WORKERS", raising=False)
+    monkeypatch.setattr(eddy_census, "_available_memory_bytes", lambda: None)
     monkeypatch.setattr(eddy_census, "_available_cpu_count", lambda: 3)
     assert eddy_census.census_max_workers() == 3
     monkeypatch.setattr(eddy_census, "_available_cpu_count", lambda: 64)
     assert eddy_census.census_max_workers() == eddy_census.DEFAULT_MAXIMUM_CENSUS_WORKERS == 8
+
+
+def test_census_workers_default_is_capped_by_the_available_memory(monkeypatch) -> None:
+    monkeypatch.delenv("OCEANBENCH_EDDY_CENSUS_MAX_WORKERS", raising=False)
+    monkeypatch.setattr(eddy_census, "_available_cpu_count", lambda: 64)
+    monkeypatch.setattr(eddy_census, "_available_memory_bytes", lambda: 6.2e9)
+    assert eddy_census.census_max_workers() == 4
+    monkeypatch.setattr(eddy_census, "_available_memory_bytes", lambda: 0.5e9)
+    assert eddy_census.census_max_workers() == 1
+    monkeypatch.setattr(eddy_census, "_available_memory_bytes", lambda: 64e9)
+    assert eddy_census.census_max_workers() == 8
+
+
+def test_census_workers_memory_reads_the_cgroup_limit(monkeypatch, tmp_path) -> None:
+    (tmp_path / "memory.max").write_text("32000000000\n")
+    (tmp_path / "memory.current").write_text("26000000000\n")
+    monkeypatch.setattr(
+        eddy_census, "_cgroup_memory_files", lambda: [(tmp_path / "memory.max", tmp_path / "memory.current")]
+    )
+    assert eddy_census._cgroup_memory_headroom_bytes() == 6e9
+    (tmp_path / "memory.max").write_text("max\n")
+    assert eddy_census._cgroup_memory_headroom_bytes() is None
+
+
+def test_census_workers_explicit_setting_ignores_the_memory(monkeypatch) -> None:
+    monkeypatch.setattr(eddy_census, "_available_memory_bytes", lambda: 0.5e9)
+    monkeypatch.setenv("OCEANBENCH_EDDY_CENSUS_MAX_WORKERS", "5")
+    assert eddy_census.census_max_workers() == 5
 
 
 def test_census_workers_follow_the_environment(monkeypatch) -> None:

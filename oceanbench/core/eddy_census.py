@@ -85,8 +85,10 @@ PY_EDDY_TRACKER_INSTALL_HINT = (
 )
 
 # Fields are detected in a pool of processes, each limited to one thread. A worker peaks at about 1.5 GB
-# on a global 1/4 degree field, so the default stays at 8 workers (about 12 GB).
+# on a global 1/4 degree field (a 1/12 degree field is detected on its 1/4 degree block average), so the
+# default stays at 8 workers (about 12 GB), fewer when the memory left to this process is short.
 DEFAULT_MAXIMUM_CENSUS_WORKERS = 8
+CENSUS_WORKER_MEMORY_BYTES = 1.5e9
 _SINGLE_THREAD_ENVIRONMENT_VARIABLES = (
     "OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS",
@@ -313,14 +315,80 @@ def _available_cpu_count() -> int:
     return os.cpu_count() or 1
 
 
+_CGROUP_V2_ROOT = Path("/sys/fs/cgroup")
+_CGROUP_V1_MEMORY_ROOT = Path("/sys/fs/cgroup/memory")
+
+
+def _cgroup_memory_files() -> list[tuple[Path, Path]]:
+    """(limit, usage) files of the memory cgroup of this process, its own directory first, then the mount root."""
+    files = []
+    try:
+        with open("/proc/self/cgroup", encoding="utf-8") as cgroup_file:
+            lines = cgroup_file.read().splitlines()
+    except OSError:
+        return files
+    for line in lines:
+        parts = line.split(":", 2)
+        if len(parts) != 3:
+            continue
+        _, controllers, path = parts
+        relative_path = path.lstrip("/")
+        if controllers == "":
+            # In a container the cgroup of the process is the mount root.
+            for directory in (_CGROUP_V2_ROOT / relative_path, _CGROUP_V2_ROOT):
+                files.append((directory / "memory.max", directory / "memory.current"))
+        elif "memory" in controllers.split(","):
+            for directory in (_CGROUP_V1_MEMORY_ROOT / relative_path, _CGROUP_V1_MEMORY_ROOT):
+                files.append((directory / "memory.limit_in_bytes", directory / "memory.usage_in_bytes"))
+    return files
+
+
+def _cgroup_memory_headroom_bytes() -> float | None:
+    """Memory limit minus usage of the cgroup of this process, None without a limit."""
+    for limit_file, usage_file in _cgroup_memory_files():
+        try:
+            limit = limit_file.read_text().strip()
+            usage = float(usage_file.read_text().strip())
+        except (OSError, ValueError):
+            continue
+        if limit == "max" or float(limit) >= 2**60:
+            return None
+        return float(limit) - usage
+    return None
+
+
+def _system_available_memory_bytes() -> float | None:
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as meminfo:
+            for line in meminfo:
+                if line.startswith("MemAvailable:"):
+                    return float(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def _available_memory_bytes() -> float | None:
+    """Memory this process can still use: the least of its cgroup headroom and the system available memory."""
+    values = [
+        value for value in (_cgroup_memory_headroom_bytes(), _system_available_memory_bytes()) if value is not None
+    ]
+    return min(values) if values else None
+
+
 def census_max_workers() -> int:
     """
     Number of processes of the census: ``OCEANBENCH_EDDY_CENSUS_MAX_WORKERS`` if set, otherwise
-    ``DEFAULT_MAXIMUM_CENSUS_WORKERS`` capped at the CPUs available to this process.
+    ``DEFAULT_MAXIMUM_CENSUS_WORKERS`` capped at the CPUs available to this process and at the number of
+    ``CENSUS_WORKER_MEMORY_BYTES`` workers that fit in the memory it can still use (cgroup limit or system).
     """
     raw_value = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_EDDY_CENSUS_MAX_WORKERS.value)
     if raw_value is None or raw_value.strip() == "":
-        return max(1, min(DEFAULT_MAXIMUM_CENSUS_WORKERS, _available_cpu_count()))
+        workers = min(DEFAULT_MAXIMUM_CENSUS_WORKERS, _available_cpu_count())
+        available_memory = _available_memory_bytes()
+        if available_memory is not None:
+            workers = min(workers, int(available_memory // CENSUS_WORKER_MEMORY_BYTES))
+        return max(1, workers)
     max_workers = int(raw_value)
     if max_workers < 1:
         raise ValueError(
