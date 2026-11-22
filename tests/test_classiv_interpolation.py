@@ -235,3 +235,68 @@ def test_class4_interpolation_leaves_a_regional_grid_unwrapped() -> None:
     )
 
     numpy.testing.assert_allclose(model_values, [-10.25, numpy.nan, numpy.nan])
+
+
+def _layered_model_data(depths: numpy.ndarray) -> xarray.DataArray:
+    latitudes = numpy.array([0.0, 1.0])
+    longitudes = numpy.array([10.0, 11.0])
+    rng = numpy.random.default_rng(0)
+    values = rng.normal(size=(1, 1, len(depths), len(latitudes), len(longitudes)))
+    return xarray.DataArray(
+        dask.array.from_array(values, chunks=(1, 1, 1, 2, 2)),
+        dims=[
+            Dimension.FIRST_DAY_DATETIME.key(),
+            Dimension.LEAD_DAY_INDEX.key(),
+            Dimension.DEPTH.key(),
+            Dimension.LATITUDE.key(),
+            Dimension.LONGITUDE.key(),
+        ],
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): numpy.array(["2024-01-03"], dtype="datetime64[ns]"),
+            Dimension.LEAD_DAY_INDEX.key(): numpy.array([0]),
+            Dimension.DEPTH.key(): depths,
+            Dimension.LATITUDE.key(): latitudes,
+            Dimension.LONGITUDE.key(): longitudes,
+        },
+    )
+
+
+def _observations_at_depths(depths: list[float]) -> pandas.DataFrame:
+    count = len(depths)
+    return pandas.DataFrame(
+        {
+            Dimension.TIME.key(): pandas.to_datetime(["2024-01-03"] * count),
+            Dimension.LATITUDE.key(): numpy.linspace(0.1, 0.9, count),
+            Dimension.LONGITUDE.key(): numpy.linspace(10.2, 10.8, count),
+            "first_day": pandas.to_datetime(["2024-01-03"] * count),
+            Dimension.DEPTH.key(): depths,
+            "lead_day": [0] * count,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "observation_depths",
+    [[0.2], [0.5, 3.0], [1.0, 7.5, 2.0], [15.0, 40.0], [40.0, 120.0], [numpy.nan, 1.0]],
+)
+def test_class4_interpolation_reads_only_the_levels_down_to_the_deepest_observation(observation_depths) -> None:
+    depths = numpy.array([0.5, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0])
+    model_data = _layered_model_data(depths)
+    observations = _observations_at_depths(observation_depths)
+    expected = interpolate_class4_model_to_observations(model_data.compute(), observations)
+
+    # Levels below the bracket of the deepest observation fail when read.
+    deepest = numpy.max(observation_depths)
+    needed = len(depths) if not deepest <= depths[-1] else max(int(numpy.searchsorted(depths, deepest)), 1) + 1
+
+    def unreadable(block):
+        raise AssertionError("a level below the deepest observation was read")
+
+    data = model_data.data
+    if needed < len(depths):
+        data = dask.array.concatenate(
+            [data[:, :, :needed], data[:, :, needed:].map_blocks(unreadable, dtype=data.dtype)], axis=2
+        )
+    numpy.testing.assert_array_equal(
+        interpolate_class4_model_to_observations(model_data.copy(data=data), observations), expected
+    )
