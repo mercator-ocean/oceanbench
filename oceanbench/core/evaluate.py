@@ -191,6 +191,27 @@ def evaluate_challenger(
     )
 
 
+# Gridded metrics against the two references, computed in one pass so that the challenger is read once for both,
+# and its mixed layer depth and geostrophic currents computed once for both.
+GRIDDED_METRICS_COMPUTED_TOGETHER = [
+    [
+        f"rmsd_of_{quantity}_compared_to_glorys_reanalysis",
+        f"rmsd_of_{quantity}_compared_to_glo12_analysis",
+    ]
+    for quantity in ("variables", "mixed_layer_depth", "geostrophic_currents")
+]
+
+
+def _metrics_computed_together(metric_function_name: str) -> list[str] | None:
+    """The group of the metric, in the order of ``METRIC_FUNCTION_NAMES``, if it is the first of its group."""
+    for group in GRIDDED_METRICS_COMPUTED_TOGETHER:
+        if all(name in METRIC_FUNCTION_NAMES for name in group) and metric_function_name == min(
+            group, key=METRIC_FUNCTION_NAMES.index
+        ):
+            return sorted(group, key=METRIC_FUNCTION_NAMES.index)
+    return None
+
+
 def _timed_step(timings: dict[str, float], step: str, function: Callable):
     step_start = perf_counter()
     result = function()
@@ -243,8 +264,33 @@ def _evaluate_challenger(
     tables = {}
     start_tables = {}
     matchups = None
+    together_results = {}
     for metric_function_name in METRIC_FUNCTION_NAMES:
-        if viewer_artifacts_directory and metric_function_name == CLASS4_METRIC_FUNCTION_NAME:
+        together = _metrics_computed_together(metric_function_name)
+        if metric_function_name in together_results:
+            # Computed with the first metric of its group, which carries the time of the group.
+            timings[metric_function_name] = 0.0
+            result = together_results.pop(metric_function_name)
+            if viewer_artifacts_directory:
+                tables[metric_function_name], start_tables[metric_function_name] = result
+            else:
+                tables[metric_function_name] = result
+        elif together:
+            together_results.update(
+                _timed_step(
+                    timings,
+                    metric_function_name,
+                    lambda: core_metrics._gridded_rmsd_metrics_together(
+                        together, challenger_dataset, region=region, keep_start_tables=bool(viewer_artifacts_directory)
+                    ),
+                )
+            )
+            result = together_results.pop(metric_function_name)
+            if viewer_artifacts_directory:
+                tables[metric_function_name], start_tables[metric_function_name] = result
+            else:
+                tables[metric_function_name] = result
+        elif viewer_artifacts_directory and metric_function_name == CLASS4_METRIC_FUNCTION_NAME:
             tables[metric_function_name], matchups = _timed_step(
                 timings,
                 metric_function_name,

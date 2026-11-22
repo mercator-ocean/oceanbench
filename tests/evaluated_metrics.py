@@ -52,4 +52,17 @@ def evaluated_metrics(tmp_path, monkeypatch) -> list:
                 return table, [table * start_number for start_number in (1, 2)]
 
             monkeypatch.setattr(core_metrics, metric_function_name, metric_with_start_tables)
+
+    def _gridded_rmsd_metrics_together(metric_function_names, challenger_dataset, region, keep_start_tables=False):
+        # The stubs above, as evaluate computes some gridded metrics together.
+        return {
+            name: (
+                getattr(core_metrics, name)(challenger_dataset, region, keep_start_tables=True)
+                if keep_start_tables
+                else getattr(oceanbench.metrics, name)(challenger_dataset, region)
+            )
+            for name in metric_function_names
+        }
+
+    monkeypatch.setattr(core_metrics, "_gridded_rmsd_metrics_together", _gridded_rmsd_metrics_together)
     return calls

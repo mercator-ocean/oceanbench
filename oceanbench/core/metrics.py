@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from collections.abc import Callable
+
 import pandas
 import xarray
 
@@ -17,7 +19,7 @@ from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
 from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, subset_dataset_to_region
-from oceanbench.core.rmsd import rmsd
+from oceanbench.core.rmsd import rmsd, rmsd_together
 
 GLOBAL_LAGRANGIAN_PARTICLE_COUNT = 10000
 MINIMUM_LAGRANGIAN_PARTICLE_COUNT = 2000
@@ -80,18 +82,8 @@ def rmsd_of_variables_compared_to_glorys_reanalysis(
     region: RegionLike = GLOBAL_REGION_NAME,
     keep_start_tables: bool = False,
 ) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
-    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
-        challenger_dataset=challenger_dataset,
-        reference_dataset=subset_dataset_to_region(glorys_reanalysis_dataset(challenger_dataset), region),
-        variables=[
-            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
-            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
-            Variable.SEA_WATER_SALINITY,
-            Variable.NORTHWARD_SEA_WATER_VELOCITY,
-            Variable.EASTWARD_SEA_WATER_VELOCITY,
-        ],
-        ocean_mask=ocean_mask(),
+        **_variables_rmsd_arguments(challenger_dataset, region, glorys_reanalysis_dataset),
         keep_start_tables=keep_start_tables,
     )
 
@@ -101,16 +93,8 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     region: RegionLike = GLOBAL_REGION_NAME,
     keep_start_tables: bool = False,
 ) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
-    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
-        challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
-        reference_dataset=compute_mixed_layer_depth(
-            subset_dataset_to_region(glorys_reanalysis_dataset(challenger_dataset), region)
-        ),
-        variables=[
-            Variable.MIXED_LAYER_DEPTH,
-        ],
-        ocean_mask=ocean_mask(),
+        **_mld_rmsd_arguments(challenger_dataset, region, glorys_reanalysis_dataset),
         keep_start_tables=keep_start_tables,
     )
 
@@ -120,17 +104,8 @@ def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
     region: RegionLike = GLOBAL_REGION_NAME,
     keep_start_tables: bool = False,
 ) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
-    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
-        challenger_dataset=compute_geostrophic_currents(challenger_dataset),
-        reference_dataset=compute_geostrophic_currents(
-            subset_dataset_to_region(glorys_reanalysis_dataset(challenger_dataset), region)
-        ),
-        variables=[
-            Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
-            Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
-        ],
-        ocean_mask=ocean_mask(),
+        **_geo_rmsd_arguments(challenger_dataset, region, glorys_reanalysis_dataset),
         keep_start_tables=keep_start_tables,
     )
 
@@ -152,18 +127,8 @@ def rmsd_of_variables_compared_to_glo12_analysis(
     region: RegionLike = GLOBAL_REGION_NAME,
     keep_start_tables: bool = False,
 ) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
-    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
-        challenger_dataset=challenger_dataset,
-        reference_dataset=subset_dataset_to_region(glo12_analysis_dataset(challenger_dataset), region),
-        variables=[
-            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
-            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
-            Variable.SEA_WATER_SALINITY,
-            Variable.NORTHWARD_SEA_WATER_VELOCITY,
-            Variable.EASTWARD_SEA_WATER_VELOCITY,
-        ],
-        ocean_mask=ocean_mask(),
+        **_variables_rmsd_arguments(challenger_dataset, region, glo12_analysis_dataset),
         keep_start_tables=keep_start_tables,
     )
 
@@ -173,17 +138,8 @@ def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     region: RegionLike = GLOBAL_REGION_NAME,
     keep_start_tables: bool = False,
 ) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
-    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
-        challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
-        reference_dataset=compute_mixed_layer_depth(
-            subset_dataset_to_region(glo12_analysis_dataset(challenger_dataset), region)
-        ),
-        variables=[
-            Variable.MIXED_LAYER_DEPTH,
-        ],
-        ocean_mask=ocean_mask(),
-        keep_start_tables=keep_start_tables,
+        **_mld_rmsd_arguments(challenger_dataset, region, glo12_analysis_dataset), keep_start_tables=keep_start_tables
     )
 
 
@@ -192,18 +148,8 @@ def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
     region: RegionLike = GLOBAL_REGION_NAME,
     keep_start_tables: bool = False,
 ) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
-    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
     return rmsd(
-        challenger_dataset=compute_geostrophic_currents(challenger_dataset),
-        reference_dataset=compute_geostrophic_currents(
-            subset_dataset_to_region(glo12_analysis_dataset(challenger_dataset), region)
-        ),
-        variables=[
-            Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
-            Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
-        ],
-        ocean_mask=ocean_mask(),
-        keep_start_tables=keep_start_tables,
+        **_geo_rmsd_arguments(challenger_dataset, region, glo12_analysis_dataset), keep_start_tables=keep_start_tables
     )
 
 
@@ -217,3 +163,94 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
         reference_dataset=subset_dataset_to_region(glo12_analysis_dataset(regional_challenger_dataset), region),
         particle_count=_lagrangian_particle_count(challenger_dataset, regional_challenger_dataset),
     )
+
+
+_VARIABLES_COMPARED_TO_GRIDDED_REFERENCES = [
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+    Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+    Variable.SEA_WATER_SALINITY,
+    Variable.NORTHWARD_SEA_WATER_VELOCITY,
+    Variable.EASTWARD_SEA_WATER_VELOCITY,
+]
+
+
+def _variables_rmsd_arguments(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike,
+    reference_dataset_of: Callable[[xarray.Dataset], xarray.Dataset],
+) -> dict:
+    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
+    return dict(
+        challenger_dataset=challenger_dataset,
+        reference_dataset=subset_dataset_to_region(reference_dataset_of(challenger_dataset), region),
+        variables=_VARIABLES_COMPARED_TO_GRIDDED_REFERENCES,
+        ocean_mask=ocean_mask(),
+    )
+
+
+def _mld_rmsd_arguments(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike,
+    reference_dataset_of: Callable[[xarray.Dataset], xarray.Dataset],
+) -> dict:
+    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
+    return dict(
+        challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
+        reference_dataset=compute_mixed_layer_depth(
+            subset_dataset_to_region(reference_dataset_of(challenger_dataset), region)
+        ),
+        variables=[Variable.MIXED_LAYER_DEPTH],
+        ocean_mask=ocean_mask(),
+    )
+
+
+def _geo_rmsd_arguments(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike,
+    reference_dataset_of: Callable[[xarray.Dataset], xarray.Dataset],
+) -> dict:
+    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
+    return dict(
+        challenger_dataset=compute_geostrophic_currents(challenger_dataset),
+        reference_dataset=compute_geostrophic_currents(
+            subset_dataset_to_region(reference_dataset_of(challenger_dataset), region)
+        ),
+        variables=[
+            Variable.GEOSTROPHIC_NORTHWARD_SEA_WATER_VELOCITY,
+            Variable.GEOSTROPHIC_EASTWARD_SEA_WATER_VELOCITY,
+        ],
+        ocean_mask=ocean_mask(),
+    )
+
+
+_GRIDDED_RMSD_ARGUMENTS = {
+    "rmsd_of_variables_compared_to_glorys_reanalysis": (_variables_rmsd_arguments, glorys_reanalysis_dataset),
+    "rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis": (_mld_rmsd_arguments, glorys_reanalysis_dataset),
+    "rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis": (_geo_rmsd_arguments, glorys_reanalysis_dataset),
+    "rmsd_of_variables_compared_to_glo12_analysis": (_variables_rmsd_arguments, glo12_analysis_dataset),
+    "rmsd_of_mixed_layer_depth_compared_to_glo12_analysis": (_mld_rmsd_arguments, glo12_analysis_dataset),
+    "rmsd_of_geostrophic_currents_compared_to_glo12_analysis": (_geo_rmsd_arguments, glo12_analysis_dataset),
+}
+
+
+def _gridded_rmsd_metrics_together(
+    metric_function_names: list[str],
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike = GLOBAL_REGION_NAME,
+    keep_start_tables: bool = False,
+) -> dict[str, pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]]:
+    """
+    The result of each of these gridded RMSD metric functions, computed in one pass so that the challenger,
+    and what is derived from it such as its mixed layer depth, is read and computed once for all of them.
+    Each result is the one of the metric function called alone.
+    """
+    results = rmsd_together(
+        [
+            {
+                **_GRIDDED_RMSD_ARGUMENTS[name][0](challenger_dataset, region, _GRIDDED_RMSD_ARGUMENTS[name][1]),
+                "keep_start_tables": keep_start_tables,
+            }
+            for name in metric_function_names
+        ]
+    )
+    return dict(zip(metric_function_names, results))
