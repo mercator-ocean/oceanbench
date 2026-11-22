@@ -321,18 +321,21 @@ def rmsd(
     challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
     missing_fraction_dataset = _missing_fractions(
         prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
-    ).compute()
+    )
+    # One computation for the missing fractions and the RMSD, so that the challenger and the reference are
+    # read, and derived quantities such as the mixed layer depth computed, once instead of twice.
     if not keep_start_tables:
-        computed_rmsd_dataset = _rmsd(
-            prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
-        ).compute()
+        missing_fraction_dataset, computed_rmsd_dataset = dask.compute(
+            missing_fraction_dataset,
+            _rmsd(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask),
+        )
         return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_fraction_dataset)
     rmsd_by_start_dataset = _rmsd_by_start(
         prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
     )
-    # One computation for both, with the same graph for the mean as without start tables.
-    computed_rmsd_dataset, computed_rmsd_by_start_dataset = dask.compute(
-        _mean_over_starts(rmsd_by_start_dataset), rmsd_by_start_dataset
+    # The same graph for the mean as without start tables.
+    missing_fraction_dataset, computed_rmsd_dataset, computed_rmsd_by_start_dataset = dask.compute(
+        missing_fraction_dataset, _mean_over_starts(rmsd_by_start_dataset), rmsd_by_start_dataset
     )
     start_tables = [
         _to_pretty_dataframe(
