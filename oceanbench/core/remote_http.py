@@ -8,17 +8,27 @@ from http import HTTPStatus
 from typing import Any, TypeVar
 import asyncio
 import logging
+import os
 
 import aiohttp
 import xarray
 import zarr
 from fsspec.implementations.http import HTTPFileSystem
 
+from oceanbench.core.environment_variables import OceanbenchEnvironmentVariable
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
 FIRST_RETRY_BACKOFF_SECONDS = 4
 MAXIMUM_RETRY_BACKOFF_SECONDS = 32
-RETRIABLE_REQUEST_ERRORS = (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError, TimeoutError, ConnectionError)
+DEFAULT_HTTP_SOCK_CONNECT_TIMEOUT_SECONDS = 30.0
+DEFAULT_HTTP_SOCK_READ_TIMEOUT_SECONDS = 120.0
+RETRIABLE_REQUEST_ERRORS = (
+    aiohttp.ClientConnectionError,
+    aiohttp.ClientPayloadError,
+    asyncio.TimeoutError,
+    TimeoutError,
+    ConnectionError,
+)
 
 # FSStore reads these as an absent chunk (fill value); fsspec raises KeyError for absent keys,
 # so download failures (OSError subclasses) propagate instead of being staged as fill values.
@@ -32,6 +42,33 @@ DATASET = TypeVar("DATASET")
 
 class IncompleteRemoteDatasetError(RuntimeError):
     pass
+
+
+def _timeout_seconds_from_environment(environment_variable: OceanbenchEnvironmentVariable, default: float) -> float:
+    seconds = float(os.environ.get(environment_variable.value, default))
+    if seconds <= 0:
+        raise ValueError(f"{environment_variable.value} must be greater than 0.")
+    return seconds
+
+
+def remote_http_client_timeout() -> aiohttp.ClientTimeout:
+    # No total limit, so large chunks may stream slowly, but a socket that stays silent
+    # (request never answered, peer gone) raises and goes through the retries below.
+    return aiohttp.ClientTimeout(
+        total=None,
+        sock_connect=_timeout_seconds_from_environment(
+            OceanbenchEnvironmentVariable.OCEANBENCH_HTTP_SOCK_CONNECT_TIMEOUT,
+            DEFAULT_HTTP_SOCK_CONNECT_TIMEOUT_SECONDS,
+        ),
+        sock_read=_timeout_seconds_from_environment(
+            OceanbenchEnvironmentVariable.OCEANBENCH_HTTP_SOCK_READ_TIMEOUT,
+            DEFAULT_HTTP_SOCK_READ_TIMEOUT_SECONDS,
+        ),
+    )
+
+
+def _client_kwargs_with_timeout(client_kwargs: dict[str, Any] | None) -> dict[str, Any]:
+    return {"timeout": remote_http_client_timeout(), **(client_kwargs or {})}
 
 
 def _is_retriable_request_error(error: BaseException) -> bool:
@@ -66,6 +103,9 @@ async def _request_with_retries(url: str, request: Callable[[], Awaitable[CALLBA
 
 
 class RetryingHTTPFileSystem(HTTPFileSystem):
+    def __init__(self, *args, client_kwargs: dict[str, Any] | None = None, **kwargs):
+        super().__init__(*args, client_kwargs=_client_kwargs_with_timeout(client_kwargs), **kwargs)
+
     async def _cat_file(self, url, start=None, end=None, **kwargs):
         return await _request_with_retries(url, partial(super()._cat_file, url, start=start, end=end, **kwargs))
 
@@ -86,7 +126,10 @@ def require_remote_dataset_dimensions(
 
 def _file_system_arguments(url: str, storage_options: dict[str, Any] | None) -> dict[str, Any]:
     if url.startswith(("http://", "https://")):
-        return {"fs": RetryingHTTPFileSystem(**(storage_options or {}))}
+        # The timeout is passed explicitly so it is part of the fsspec instance cache token.
+        file_system_options = dict(storage_options or {})
+        file_system_options["client_kwargs"] = _client_kwargs_with_timeout(file_system_options.get("client_kwargs"))
+        return {"fs": RetryingHTTPFileSystem(**file_system_options)}
     return storage_options or {}
 
 
