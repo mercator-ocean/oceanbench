@@ -15,8 +15,10 @@ from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
 from oceanbench.core.references.observations import (
     ObservationDataUnavailableError,
+    has_increasing_start_dates,
     load_mean_dynamic_topography,
     observations,
+    observations_by_start,
 )
 from oceanbench.core.regions import RegionLike, subset_dataset_to_region
 from oceanbench.core.resolution import get_dataset_resolution
@@ -37,8 +39,16 @@ def stage_challenger_assets(
     glorys_reanalysis_dataset(challenger_dataset)
     glo12_analysis_dataset(challenger_dataset)
     try:
-        observations(challenger_dataset)
+        _stage_observations(challenger_dataset)
     except ObservationDataUnavailableError:
         pass
     load_mean_dynamic_topography(get_dataset_resolution(challenger_dataset))
     ocean_mask()
+
+
+def _stage_observations(challenger_dataset) -> None:
+    if has_increasing_start_dates(challenger_dataset):
+        for _ in observations_by_start(challenger_dataset):
+            pass
+    else:
+        observations(challenger_dataset)

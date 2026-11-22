@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from collections.abc import Iterable, Iterator
+
 import numpy
 import pandas
 import xarray
@@ -138,18 +140,15 @@ def _rmsd_table_from_parts(matchups: Class4Matchups, variable_key: str) -> panda
 
 
 def _class4_by_start(
-    observations: xarray.Dataset,
-    start_slices: list[slice],
+    start_observations_datasets: Iterable[xarray.Dataset],
     variable_keys: list[str],
     lead_days_count: int,
     population_layers,
     model_variables: dict,
 ) -> tuple[list[pandas.DataFrame], Class4Matchups]:
     matchups = Class4Matchups.on_disk(variable_keys)
-    observation_dimension = observations[Dimension.TIME.key()].dims[0]
-    for start_slice in start_slices:
+    for start_observations in start_observations_datasets:
         reset_class4_observations_cache()
-        start_observations = observations.isel({observation_dimension: start_slice})
         for variable_key in variable_keys:
             observations_dataframe = _matched_observations(
                 start_observations, variable_key, lead_days_count, population_layers, model_variables[variable_key]
@@ -160,6 +159,11 @@ def _class4_by_start(
     reset_class4_observations_cache()
     tables = [_rmsd_table_from_parts(matchups, variable_key) for variable_key in matchups.variables()]
     return [table for table in tables if not table.empty], matchups
+
+
+def _start_slices_observations(observations: xarray.Dataset, start_slices: list[slice]) -> Iterator[xarray.Dataset]:
+    observation_dimension = observations[Dimension.TIME.key()].dims[0]
+    return (observations.isel({observation_dimension: start_slice}) for start_slice in start_slices)
 
 
 def _class4_by_variable(
@@ -214,7 +218,11 @@ def class4_rmsd_and_matchups(
     start_slices = _start_observation_slices(reference_dataset) if keep_matchups else None
     if start_slices is not None:
         all_results, matchups = _class4_by_start(
-            reference_dataset, start_slices, variable_keys, lead_days_count, population_layers, model_variables
+            _start_slices_observations(reference_dataset, start_slices),
+            variable_keys,
+            lead_days_count,
+            population_layers,
+            model_variables,
         )
     else:
         all_results, matchups = _class4_by_variable(
@@ -224,6 +232,34 @@ def class4_rmsd_and_matchups(
         return pandas.DataFrame(), matchups
     final_dataframe = pandas.concat(all_results, ignore_index=True)
     return format_class4_results(final_dataframe, lead_days_count), matchups
+
+
+def class4_rmsd_and_matchups_by_start(
+    challenger_dataset: xarray.Dataset,
+    start_reference_datasets: Iterable[xarray.Dataset],
+    ocean_mask: xarray.DataArray,
+    variables: list[Variable],
+    keep_matchups: bool,
+) -> tuple[pandas.DataFrame, Class4Matchups | None]:
+    """
+    ``class4_rmsd_and_matchups`` with the observations given one start date at a time, in increasing start date
+    order, each opened only when it is used, so that the observations of every start date are never held at once.
+    The table and match-ups are those of ``class4_rmsd_and_matchups`` on the observations of all the start dates.
+    """
+    reset_class4_observations_cache()
+    lead_days_count = rename_dataset_with_standard_names(challenger_dataset).sizes[Dimension.LEAD_DAY_INDEX.key()]
+    variable_keys = [variable.key() for variable in variables]
+    all_results, matchups = _class4_by_start(
+        start_reference_datasets,
+        variable_keys,
+        lead_days_count,
+        class4_population_layers(ocean_mask),
+        _model_variables(challenger_dataset, variable_keys),
+    )
+    kept_matchups = matchups if keep_matchups else None
+    if not all_results:
+        return pandas.DataFrame(), kept_matchups
+    return format_class4_results(pandas.concat(all_results, ignore_index=True), lead_days_count), kept_matchups
 
 
 def rmsd_class4_validation(

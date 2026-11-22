@@ -9,7 +9,11 @@ import pandas
 import pytest
 
 from oceanbench.core import classIV
-from oceanbench.core.classIV import class4_rmsd_and_matchups, rmsd_class4_validation
+from oceanbench.core.classIV import (
+    class4_rmsd_and_matchups,
+    class4_rmsd_and_matchups_by_start,
+    rmsd_class4_validation,
+)
 from oceanbench.core.classIV_matchups import Class4Matchups
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.publish import viewer_artifacts
@@ -116,6 +120,22 @@ def test_class4_one_start_at_a_time_gives_the_table_and_matchups_of_all_starts_a
     pandas.testing.assert_frame_equal(
         matchups_by_start.to_dataframe(), matchups_by_variable.to_dataframe(), check_exact=True
     )
+
+
+def test_class4_given_the_observations_one_start_at_a_time_gives_the_table_and_matchups_of_all_starts() -> None:
+    challenger, observations, mask, variables = _class4_arguments_sorted_by_start()
+    start_observations = (
+        observations.isel({observations[Dimension.TIME.key()].dims[0]: start_slice})
+        for start_slice in classIV._start_observation_slices(observations)
+    )
+    table, matchups = class4_rmsd_and_matchups(challenger, observations, mask, variables, keep_matchups=True)
+    table_by_start, matchups_by_start = class4_rmsd_and_matchups_by_start(
+        challenger, start_observations, mask, variables, keep_matchups=True
+    )
+
+    pandas.testing.assert_frame_equal(table_by_start, table, check_exact=True)
+    pandas.testing.assert_frame_equal(matchups_by_start.to_dataframe(), matchups.to_dataframe(), check_exact=True)
+    assert class4_rmsd_and_matchups_by_start(challenger, iter([]), mask, variables, keep_matchups=False)[1] is None
 
 
 def test_matchups_added_out_of_start_date_order_after_parts_on_disk_are_refused() -> None:

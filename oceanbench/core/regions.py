@@ -273,6 +273,10 @@ def load_region_file(path: str | Path) -> RegionSpec:
     return region_from_dict(region_data)
 
 
+class RegionDoesNotOverlapError(ValueError):
+    pass
+
+
 def subset_dataset_to_region(
     dataset: xarray.Dataset,
     region: RegionLike,
@@ -374,4 +378,6 @@ def _validated_mask(
     computed_mask = mask.compute()
     if bool(computed_mask.any().item()):
         return computed_mask
-    raise ValueError(f"Region {region.display_name} does not overlap dataset {dimension_name} coordinates.")
+    raise RegionDoesNotOverlapError(
+        f"Region {region.display_name} does not overlap dataset {dimension_name} coordinates."
+    )

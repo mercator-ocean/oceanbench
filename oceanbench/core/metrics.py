@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 import pandas
 import xarray
 
-from oceanbench.core.classIV import class4_rmsd_and_matchups
+from oceanbench.core.classIV import class4_rmsd_and_matchups, class4_rmsd_and_matchups_by_start
 from oceanbench.core.dataset_utils import Variable
 from oceanbench.core.derived_quantities import compute_geostrophic_currents, compute_mixed_layer_depth
 from oceanbench.core.lagrangian_trajectory import (
@@ -17,8 +17,13 @@ from oceanbench.core.lagrangian_trajectory import (
 from oceanbench.core.ocean_mask import ocean_mask
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
-from oceanbench.core.references.observations import ObservationDataUnavailableError, observations
-from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionLike, subset_dataset_to_region
+from oceanbench.core.references.observations import (
+    ObservationDataUnavailableError,
+    has_increasing_start_dates,
+    observations,
+    observations_by_start,
+)
+from oceanbench.core.regions import GLOBAL_REGION_NAME, RegionDoesNotOverlapError, RegionLike, subset_dataset_to_region
 from oceanbench.core.rmsd import rmsd, rmsd_together
 
 GLOBAL_LAGRANGIAN_PARTICLE_COUNT = 10000
@@ -38,27 +43,62 @@ def _lagrangian_particle_count(
     )
 
 
+CLASS4_VARIABLES = [
+    Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
+    Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
+    Variable.SEA_WATER_SALINITY,
+    Variable.NORTHWARD_SEA_WATER_VELOCITY,
+    Variable.EASTWARD_SEA_WATER_VELOCITY,
+]
+
+
+def _start_observations_in_region(
+    start_observations_datasets: Iterator[xarray.Dataset],
+    region: RegionLike,
+) -> Iterator[xarray.Dataset]:
+    overlap_error = None
+    overlaps = False
+    for start_observations in start_observations_datasets:
+        try:
+            start_observations_in_region = subset_dataset_to_region(start_observations, region)
+        except RegionDoesNotOverlapError as error:
+            overlap_error = error
+            continue
+        overlaps = True
+        yield start_observations_in_region
+    if not overlaps and overlap_error is not None:
+        raise overlap_error
+
+
 def _class4_compared_to_observations(
     challenger_dataset: xarray.Dataset,
     region: RegionLike,
     keep_matchups: bool,
 ) -> tuple[pandas.DataFrame, pandas.DataFrame | None]:
     challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
+    by_start = has_increasing_start_dates(challenger_dataset)
     try:
-        observation_dataset = subset_dataset_to_region(observations(challenger_dataset), region)
+        if by_start:
+            start_observations_datasets = _start_observations_in_region(
+                observations_by_start(challenger_dataset), region
+            )
+        else:
+            observation_dataset = subset_dataset_to_region(observations(challenger_dataset), region)
     except ObservationDataUnavailableError as error:
         return pandas.DataFrame({MESSAGE_COLUMN: [str(error)]}), None
+    if by_start:
+        return class4_rmsd_and_matchups_by_start(
+            challenger_dataset=challenger_dataset,
+            start_reference_datasets=start_observations_datasets,
+            ocean_mask=ocean_mask(),
+            variables=CLASS4_VARIABLES,
+            keep_matchups=keep_matchups,
+        )
     return class4_rmsd_and_matchups(
         challenger_dataset=challenger_dataset,
         reference_dataset=observation_dataset,
         ocean_mask=ocean_mask(),
-        variables=[
-            Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID,
-            Variable.SEA_WATER_POTENTIAL_TEMPERATURE,
-            Variable.SEA_WATER_SALINITY,
-            Variable.NORTHWARD_SEA_WATER_VELOCITY,
-            Variable.EASTWARD_SEA_WATER_VELOCITY,
-        ],
+        variables=CLASS4_VARIABLES,
         keep_matchups=keep_matchups,
     )
 
