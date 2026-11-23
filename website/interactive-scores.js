@@ -328,7 +328,7 @@ function formatVariableHeader(variable, unit, standardName, metricKey, sensor) {
 // --- Links to the map viewer (viewer.html) ---
 
 // The viewer's own dataset catalog decides which rows link there, so a model gets a link
-// exactly when the viewer can open it. Challengers whose viewer dataset has another name:
+// exactly when the viewer can open it. Older viewer data named some datasets differently:
 const VIEWER_DATASET_NAMES = {
   glo12_persistence: "persistence",
   glo12_persistence_1_degree: "persistence_1_degree",
@@ -357,8 +357,7 @@ let resolveViewerUrl = null;
 // version (the default one) links there.
 function viewerDatasetFor(name) {
   if (isYourScores(name) || activeVersion !== resolveDefaultVersion(parsedData)) return null;
-  const slug = VIEWER_DATASET_NAMES[name] || name;
-  return viewerCatalog?.datasets.has(slug) ? slug : null;
+  return [name, VIEWER_DATASET_NAMES[name]].find((slug) => slug && viewerCatalog?.datasets.has(slug)) || null;
 }
 
 function viewerHref(parameters) {
@@ -385,10 +384,11 @@ const VIEWER_GRIDDED_VARIABLES = {
 
 const ONE_DEGREE_SUFFIX = "_1_degree";
 
-// The viewer dataset of each gridded reference, for the 1/4 and the 1 degree tracks.
+// The viewer dataset of each gridded reference, for the 1/4 and the 1 degree tracks (the
+// first one the catalog holds; older viewer data named the 1 degree GLORYS glorys_one_degree).
 const VIEWER_GRIDDED_REFERENCES = {
-  rmsd_variables_glorys: { skillReference: "glorys", dataset: "glorys", oneDegreeDataset: "glorys_one_degree" },
-  rmsd_variables_glo12: { skillReference: "glo12", dataset: "glo12", oneDegreeDataset: "glo12_1_degree" },
+  rmsd_variables_glorys: { skillReference: "glorys", dataset: "glorys", oneDegreeDatasets: ["glorys_1_degree", "glorys_one_degree"] },
+  rmsd_variables_glo12: { skillReference: "glo12", dataset: "glo12", oneDegreeDatasets: ["glo12_1_degree"] },
 };
 
 // The viewer view closest to what a score cell measures: that model, variable, lead day and
@@ -408,7 +408,9 @@ function viewerCellView(metricKey, depth, variable, slug, baselineSlug) {
   const reference = VIEWER_GRIDDED_REFERENCES[metricKey];
   const variableKey = VIEWER_GRIDDED_VARIABLES[depth]?.[variable];
   if (!reference || !variableKey) return null;
-  const comparisonSlug = slug.endsWith(ONE_DEGREE_SUFFIX) ? reference.oneDegreeDataset : reference.dataset;
+  const comparisonSlug = slug.endsWith(ONE_DEGREE_SUFFIX)
+    ? reference.oneDegreeDatasets.find((candidate) => viewerCatalog.datasets.has(candidate)) || reference.oneDegreeDatasets[0]
+    : reference.dataset;
   return { variableKey, parameters: { dm: "diff", sref: reference.skillReference }, requiresMatchups: false, comparisonSlug };
 }
 
