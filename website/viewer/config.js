@@ -8,7 +8,7 @@
 // website/viewer/ because that directory is also published on its own.
 
 const DEFAULT_REMOTE_DATA_BASE_URL =
-  "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/benchmark/rebuild-preview/viewer/data/";
+  "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/dev/benchmark/rebuild-preview/viewer/data-0.7.0/";
 
 // Optional side-car file, fetched once at startup and 404-tolerated, so a static deployment
 // can pin a data root without editing this file: drop it beside index.html. Query parameters
