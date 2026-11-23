@@ -197,6 +197,23 @@ def _write_index(document, path: Path) -> None:
     path.write_text(json.dumps(document, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
+def _resolution_label(cell_size_degrees: float) -> str:
+    cells_per_degree = round(1 / cell_size_degrees)
+    if cells_per_degree >= 1 and abs(cells_per_degree * cell_size_degrees - 1) < 0.01:
+        return "1°" if cells_per_degree == 1 else f"1/{cells_per_degree}°"
+    return f"{cell_size_degrees:g}°"
+
+
+def default_dataset_label(directory: Path, dataset_slug: str) -> str:
+    """Catalog label "MODEL (resolution)", e.g. "GLONET (1/4°)", the resolution read from the maps manifest."""
+    name = dataset_slug.removesuffix("_1_degree").replace("_", " ").upper()
+    manifest = _read_json(directory / f"{dataset_slug}{PYRAMID_MANIFEST_SUFFIX}", {})
+    cell_sizes = [level["cell_size_deg"] for level in manifest.get("levels", []) if level.get("cell_size_deg")]
+    if cell_sizes:
+        return f"{name} ({_resolution_label(min(cell_sizes))})"
+    return f"{name} (1°)" if dataset_slug.endswith("_1_degree") else name
+
+
 def update_viewer_indexes(
     directory: Path,
     dataset_slug: str,
@@ -213,9 +230,10 @@ def update_viewer_indexes(
         if artifacts.has_maps:
             datasets_path = directory / DATASETS_FILENAME
             entries = {entry["slug"]: entry for entry in _read_json(datasets_path, {"datasets": []})["datasets"]}
+            label = entries.get(dataset_slug, {}).get("label")
             entries[dataset_slug] = {
                 "slug": dataset_slug,
-                "label": entries.get(dataset_slug, {}).get("label", dataset_slug),
+                "label": label if label and label != dataset_slug else default_dataset_label(directory, dataset_slug),
                 "kind": kind,
                 "store": f"./data/{dataset_slug}{PYRAMID_SUFFIX}",
                 "manifest": f"./data/{dataset_slug}{PYRAMID_MANIFEST_SUFFIX}",

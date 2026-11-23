@@ -227,6 +227,27 @@ def test_indexes_merge_the_challenger_and_region_with_what_the_directory_holds(t
     ]
 
 
+@pytest.mark.parametrize(
+    "slug, cell_sizes, label",
+    [
+        ("glonet", [0.25, 0.5, 1.0], "GLONET (1/4°)"),
+        ("glo12_persistence", [1 / 12, 1 / 6], "GLO12 PERSISTENCE (1/12°)"),
+        ("glo12_persistence_1_degree", [1.0], "GLO12 PERSISTENCE (1°)"),
+        ("xihe_1_degree", None, "XIHE (1°)"),
+        ("your_model", None, "YOUR MODEL"),
+    ],
+)
+def test_indexes_label_a_new_dataset_with_its_name_and_resolution(tmp_path, slug, cell_sizes, label) -> None:
+    (tmp_path / "datasets.json").write_text(json.dumps({"datasets": [{"slug": slug, "label": slug}]}))
+    if cell_sizes:
+        levels = [{"level": level, "cell_size_deg": size} for level, size in enumerate(cell_sizes)]
+        (tmp_path / f"{slug}.viewer-manifest.json").write_text(json.dumps({"levels": levels}))
+
+    viewer_data.update_viewer_indexes(tmp_path, slug, GLOBAL, ViewerArtifacts({}, True), [])
+
+    assert json.loads((tmp_path / "datasets.json").read_text())["datasets"][0]["label"] == label
+
+
 def test_evaluate_builds_the_viewer_data_from_the_class4_matchups_of_the_scores(
     evaluated_metrics, tmp_path, monkeypatch  # noqa: F811
 ) -> None:
