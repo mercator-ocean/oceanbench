@@ -98,13 +98,13 @@ export const METHOD_NOTES = {
       "How much variation the box holds at each size. Curve height is the energy at that " +
       "size; a forecast below the reference is smoothing that size away. A curve stops at " +
       "its own grid limit. " +
-      "With GLORYS in one panel and a forecast in the other, the dashed curve is their " +
-      "difference and the vertical line is the scale of disagreement with GLORYS: the size " +
-      "at which the difference reaches half the GLORYS spectrum (the ratio of Ballarotta " +
-      "et al. 2019, taken against a reanalysis instead of altimetry). It is measured on the " +
-      "GLORYS grid, a finer field being block-averaged onto a coarser one. GLORYS is not " +
-      "independent: the ML models are trained on it and forecasts start from analyses close " +
-      "to it, so at short leads this mostly measures the initial state, not the model's " +
+      "With a reference (GLORYS or the GLO12 analysis) in one panel and a forecast in the " +
+      "other, the dashed curve is their difference and the vertical line is the scale of " +
+      "disagreement with the reference: the size at which the difference reaches half the " +
+      "reference spectrum (the ratio of Ballarotta et al. 2019, taken against a reanalysis " +
+      "or analysis instead of altimetry). It is measured on the reference grid, a finer field " +
+      "being block-averaged onto a coarser one. The reference is not independent: the ML " +
+      "models are trained on GLORYS and forecasts start from analyses close to it, so at short leads this mostly measures the initial state, not the model's " +
       "resolution. The chart below the spectrum shows it against lead (open-ocean boxes only). " +
       "Computed in the browser on each model's native cells, exploratory: Hann window, land " +
       "filled with the box mean (warned from 2% land), zero-padded, isotropic density " +

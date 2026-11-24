@@ -267,6 +267,14 @@ function shortLabelFor(slug) {
   return labelFor(slug).replace(/\s*\([^)]*\)\s*$/, "");
 }
 
+// "A − B" for a difference title: short labels, or full labels (with resolution) when
+// the short ones are equal, e.g. "GLO12 (1/12°) − GLO12 (1°)" instead of "GLO12 − GLO12".
+function differenceLabelFor(slugA, slugB) {
+  const same = shortLabelFor(slugA) === shortLabelFor(slugB);
+  const name = same ? labelFor : shortLabelFor;
+  return `${name(slugA)} − ${name(slugB)}`;
+}
+
 function scoreProductKey(slug) {
   if (slug === "glorys_one_degree") return "glorys";
   return slug;
@@ -420,8 +428,8 @@ function buildPanel(index) {
 }
 
 function refreshPanelControls(panel) {
-  // The reference reanalysis is listed apart from the forecasts; GLO12, climatology and
-  // persistence are all forecasts here.
+  // References (GLORYS, GLO12 analysis) are listed apart from the forecasts; the GLO12
+  // forecasts, climatology and persistence are all forecasts here.
   const datasetOption = (entry) => ({
     value: entry.slug,
     label: entry.label,
@@ -896,7 +904,7 @@ async function renderDifferencePanel(panel, token, manifest, level, start, leadI
   const range = [-bound, bound];
   applyPanelField(panel, { field: difference, latitudes: primary.latitudes, longitudes: primary.longitudes,
     colormap: DIFFERENCE_COLORMAP, range, units: entry.units,
-    label: `${shortLabelFor(panel.state.dataset)} − ${shortLabelFor(compareSlug)} · ${prettyName(entry.standard_name)}`,
+    label: `${differenceLabelFor(panel.state.dataset, compareSlug)} · ${prettyName(entry.standard_name)}`,
     statistics: { mean: statistics.mean, cellSize: statisticsCellSize(panel.state.dataset) } });
   stopParticles(panel);
   prefetchNeighbours(panel, level, start, leadIndex);
@@ -936,7 +944,7 @@ async function renderCurrentsDifferencePanel(panel, token, manifest, level, star
   applyPanelField(panel, { field: difference, latitudes: uPrimary.latitudes, longitudes: uPrimary.longitudes,
     colormap: DIFFERENCE_COLORMAP, range,
     units: "m/s",
-    label: `${shortLabelFor(panel.state.dataset)} − ${shortLabelFor(compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})${currentsLevelSuffix(manifest, level)}`,
+    label: `${differenceLabelFor(panel.state.dataset, compareSlug)} · currents (${currentsDepthLabel(panel.state.variable)})${currentsLevelSuffix(manifest, level)}`,
     statistics: { mean: statistics.mean, cellSize: statisticsCellSize(panel.state.dataset) },
   });
   stopParticles(panel);
@@ -4386,10 +4394,14 @@ function panelSpectrum(source, viewport) {
   );
 }
 
-// The reanalysis the offline gridded scores are computed against. The disagreement scale
-// needs it in the other panel; two forecasts alone have no reference between them. The
-// GLO12 stores are forecasts (their lead 1 is the nowcast), so they do not count.
+// A reference (reanalysis or analysis) the offline gridded scores are computed against.
+// The disagreement scale needs it in the other panel; two forecasts alone have no
+// reference between them. The GLO12 forecast stores (lead 1 is the nowcast) do not count.
+// The catalog's "kind" decides ("reference" for GLORYS and the GLO12 analysis); entries
+// without one fall back to the slug.
 function isReferenceDataset(slug) {
+  const entry = datasetCatalog.find((candidate) => candidate.slug === slug);
+  if (entry && entry.kind) return entry.kind === "reference";
   return String(slug || "").startsWith("glorys");
 }
 
@@ -4769,7 +4781,7 @@ function wireChartCursorTooltip(svg) {
   });
 }
 
-// Why a reference panel draws no Class-4 points: it is not missing data, the reanalysis
+// Why a reference panel draws no Class-4 points: it is not missing data, the reference
 // assimilates the same observations, so scoring it against them would not be independent.
 const CLASS4_REFERENCE_NOTE = "it assimilates these obs";
 
