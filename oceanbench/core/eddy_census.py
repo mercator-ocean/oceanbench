@@ -84,11 +84,14 @@ PY_EDDY_TRACKER_INSTALL_HINT = (
     "documentation (https://oceanbench.edito.eu/documentation/viewer-data/) for how to install it."
 )
 
-# Fields are detected in a pool of processes, each limited to one thread. A worker peaks at about 1.5 GB
-# on a global 1/4 degree field (a 1/12 degree field is detected on its 1/4 degree block average), so the
-# default stays at 8 workers (about 12 GB), fewer when the memory left to this process is short.
+# Fields are detected in a pool of processes, each limited to one thread. A worker peaks at about 1.4 GB
+# on a global 1/4 degree field (a 1/12 degree field is detected on its 1/4 degree block average), most of
+# it in py-eddy-tracker's identification, and gives that memory back after each field (see
+# eddy_census_worker). The default is 8 workers, fewer when they would take this process (its anonymous
+# memory, not the page cache) above CENSUS_MEMORY_FRACTION of its cgroup memory limit.
 DEFAULT_MAXIMUM_CENSUS_WORKERS = 8
 CENSUS_WORKER_MEMORY_BYTES = 1.5e9
+CENSUS_MEMORY_FRACTION = 0.6
 _SINGLE_THREAD_ENVIRONMENT_VARIABLES = (
     "OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS",
@@ -343,8 +346,27 @@ def _cgroup_memory_files() -> list[tuple[Path, Path]]:
     return files
 
 
+def _cgroup_anonymous_memory_bytes(directory: Path) -> float | None:
+    """Anonymous memory of a cgroup (``anon`` in v2, ``total_rss`` or ``rss`` in v1), None if not exposed."""
+    try:
+        with open(directory / "memory.stat", encoding="utf-8") as stat_file:
+            values = dict(line.split()[:2] for line in stat_file if len(line.split()) >= 2)
+    except OSError:
+        return None
+    for key in ("anon", "total_rss", "rss"):
+        if key in values:
+            try:
+                return float(values[key])
+            except ValueError:
+                return None
+    return None
+
+
 def _cgroup_memory_headroom_bytes() -> float | None:
-    """Memory limit minus usage of the cgroup of this process, None without a limit."""
+    """
+    ``CENSUS_MEMORY_FRACTION`` of the memory limit of the cgroup of this process minus its anonymous memory
+    (its whole usage, page cache included, when the anonymous memory is not exposed), None without a limit.
+    """
     for limit_file, usage_file in _cgroup_memory_files():
         try:
             limit = limit_file.read_text().strip()
@@ -353,7 +375,8 @@ def _cgroup_memory_headroom_bytes() -> float | None:
             continue
         if limit == "max" or float(limit) >= 2**60:
             return None
-        return float(limit) - usage
+        anonymous = _cgroup_anonymous_memory_bytes(limit_file.parent)
+        return CENSUS_MEMORY_FRACTION * float(limit) - (usage if anonymous is None else anonymous)
     return None
 
 
@@ -380,7 +403,8 @@ def census_max_workers() -> int:
     """
     Number of processes of the census: ``OCEANBENCH_EDDY_CENSUS_MAX_WORKERS`` if set, otherwise
     ``DEFAULT_MAXIMUM_CENSUS_WORKERS`` capped at the CPUs available to this process and at the number of
-    ``CENSUS_WORKER_MEMORY_BYTES`` workers that fit in the memory it can still use (cgroup limit or system).
+    ``CENSUS_WORKER_MEMORY_BYTES`` workers that fit in the memory it can still use: the least of the system
+    available memory and ``CENSUS_MEMORY_FRACTION`` of its cgroup limit minus its anonymous memory.
     """
     raw_value = os.environ.get(OceanbenchEnvironmentVariable.OCEANBENCH_EDDY_CENSUS_MAX_WORKERS.value)
     if raw_value is None or raw_value.strip() == "":

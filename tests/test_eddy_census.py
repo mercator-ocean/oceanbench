@@ -403,9 +403,29 @@ def test_census_workers_memory_reads_the_cgroup_limit(monkeypatch, tmp_path) -> 
     monkeypatch.setattr(
         eddy_census, "_cgroup_memory_files", lambda: [(tmp_path / "memory.max", tmp_path / "memory.current")]
     )
-    assert eddy_census._cgroup_memory_headroom_bytes() == 6e9
+    fraction = eddy_census.CENSUS_MEMORY_FRACTION
+    assert eddy_census._cgroup_memory_headroom_bytes() == pytest.approx(fraction * 32e9 - 26e9)
     (tmp_path / "memory.max").write_text("max\n")
     assert eddy_census._cgroup_memory_headroom_bytes() is None
+
+
+def test_census_workers_memory_counts_the_anonymous_memory_not_the_page_cache(monkeypatch, tmp_path) -> None:
+    (tmp_path / "memory.max").write_text("30000000000\n")
+    (tmp_path / "memory.current").write_text("26000000000\n")
+    (tmp_path / "memory.stat").write_text("anon 5000000000\nfile 21000000000\n")
+    monkeypatch.setattr(
+        eddy_census, "_cgroup_memory_files", lambda: [(tmp_path / "memory.max", tmp_path / "memory.current")]
+    )
+    fraction = eddy_census.CENSUS_MEMORY_FRACTION
+    assert eddy_census._cgroup_memory_headroom_bytes() == pytest.approx(fraction * 30e9 - 5e9)
+    (tmp_path / "memory.stat").write_text("cache 21000000000\ntotal_rss 6000000000\n")
+    assert eddy_census._cgroup_memory_headroom_bytes() == pytest.approx(fraction * 30e9 - 6e9)
+
+
+def test_a_census_worker_releases_memory_between_fields() -> None:
+    from oceanbench.core import eddy_census_worker
+
+    eddy_census_worker.release_memory()
 
 
 def test_census_workers_explicit_setting_ignores_the_memory(monkeypatch) -> None:
