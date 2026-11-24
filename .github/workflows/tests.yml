@@ -24,7 +24,7 @@ jobs:
           cache-environment: true
           post-cleanup: 'all'
       - name: Install package
-        run: pip install --editable .
+        run: pip install --editable ".[regridding]"
         shell: micromamba-shell {0}
       - name: Run unit tests
         run: poetry run pytest tests -n 8

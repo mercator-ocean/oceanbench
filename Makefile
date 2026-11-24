@@ -83,7 +83,7 @@ doctest:
 run-tests: SELECTED_ENVIRONMENT_NAME = ${TEST_ENVIRONMENT_NAME}
 run-tests:
 	${ACTIVATE_ENVIRONMENT}
-	pip install --editable .
+	pip install --editable ".[regridding]"
 	for sample in $(SAMPLE_FILES); do
 		$(MAKE) evaluate-sample SAMPLE=$$sample
 		$(MAKE) compare-sample SAMPLE=$$sample
