@@ -167,6 +167,18 @@ def test_global_viewer_data_holds_the_maps_the_insights_and_the_indexes(tmp_path
         assert (tmp_path / path.removeprefix("./data/")).is_file()
     summary = json.loads((tmp_path / "scores-summary.json").read_text())
     assert [(row["lead_day"], row["mean"], row["n_starts"]) for row in summary] == [(1, 1.0, 2), (2, 2.0, 2)]
+    by_start = json.loads((tmp_path / insights["scores_by_start"].removeprefix("./data/")).read_text())
+    assert by_start["dates"] == start_dates
+    assert by_start["gridded"]["available"] and by_start["class4"]["available"]
+    salinity = [
+        series
+        for series in by_start["gridded"]["series"]
+        if (series["function"], series["reference"]) == ("rmsd_of_variables", "glorys")
+    ][0]
+    assert salinity["rmsd"][:2] == [[1.0, 1.0], [2.0, 2.0]]
+    ssh = by_start["class4"]["series"][0]
+    assert ssh["variable"] == "sea_surface_height_above_geoid"
+    assert len(ssh["rmsd"][0]) == len(ssh["bias"][0]) == len(ssh["n"][0]) == 2
 
 
 def _summary_row(challenger: str, region: str) -> dict:
@@ -509,3 +521,45 @@ def test_the_scores_of_a_bucket_are_read_with_only_the_boto3_endpoint(monkeypatc
     with pytest.raises(ValueError, match="No scores file"):
         evaluate._read_scores_document("challenger", GLOBAL, "bucket", "prefix", None)
     assert clients == ["https://s3.example.org"]
+
+
+def test_scores_by_start_recombine_to_the_year_class4_scores_and_bias() -> None:
+    matchups = _matchups()
+    class4_by_start = viewer_data.class4_scores_by_start(class4_rmsd_rows_by_start(matchups), _START_DATES)
+    bias = viewer_data.class4_bias_arrays(viewer_data.class4_bias_by_start(matchups), _START_DATES)
+    document = viewer_data.scores_by_start_document(
+        "your_model", "global", _START_DATES, None, class4_by_start, bias, gridded_unavailable_reason="not kept"
+    )
+    json.dumps(document)
+    assert document["gridded"] == {
+        "available": False,
+        "aggregation": "arithmetic mean over present starts of the per-start RMSD",
+        "series": [],
+        "reason": "not kept",
+    }
+    scored = matchups.dropna(subset=["observation_value", "model_value"])
+    lead_days = document["lead_days"]
+    for row in score_rows(CLASS4_METRIC_FUNCTION_NAME, _class4_table()):
+        if row["value"] is None:
+            continue
+        series = [
+            series
+            for series in document["class4"]["series"]
+            if (series["variable"], series["depth"]) == (row["standard_name"], row["depth"])
+        ][0]
+        lead_index = lead_days.index(row["lead_day"])
+        rmsd = numpy.array([numpy.nan if v is None else v for v in series["rmsd"][lead_index]])
+        bias_values = numpy.array([numpy.nan if v is None else v for v in series["bias"][lead_index]])
+        counts = numpy.array(series["n"][lead_index], dtype=float)
+        present = counts > 0
+        pooled = numpy.sqrt((rmsd[present] ** 2 * counts[present]).sum() / counts[present].sum())
+        numpy.testing.assert_allclose(pooled, row["value"], rtol=1e-12)
+        group = scored[
+            (scored["variable"] == row["standard_name"])
+            & (scored["depth_bin"] == row["depth"])
+            & (scored["lead_day"] == row["lead_day"] - 1)
+        ]
+        pooled_bias = (bias_values[present] * counts[present]).sum() / counts[present].sum()
+        numpy.testing.assert_allclose(
+            pooled_bias, (group["model_value"] - group["observation_value"]).mean(), rtol=1e-12
+        )

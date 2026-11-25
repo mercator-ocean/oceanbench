@@ -25,7 +25,7 @@ import pandas
 import xarray
 
 from oceanbench import metrics
-from oceanbench.core.classIV_matchups import Class4Matchups
+from oceanbench.core.classIV_matchups import Class4Matchups, class4_matchups
 from oceanbench.core.dataset_source import DEFAULT_CHALLENGER_KIND, get_challenger_kind
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.regions import RegionSpec, region_to_dict
@@ -45,6 +45,7 @@ from oceanbench.publish.viewer_artifacts import (
 DATASETS_FILENAME = "datasets.json"
 INSIGHTS_FILENAME = "insights.json"
 SCORES_SUMMARY_FILENAME = "scores-summary.json"
+SCORES_BY_START_FILENAME = "scores-by-start.json"
 
 _SUMMARY_REFERENCES = {"glorys_reanalysis": "glorys", "glo12_analysis": "glo12", "observations": "observations"}
 _DEPTHLESS_METRICS = {"rmsd_of_mixed_layer_depth", "rmsd_of_geostrophic_currents"}
@@ -99,6 +100,131 @@ def class4_scores_by_start(
         counts[start_positions] = (group["count"] - group["missing"]).to_numpy(dtype=float)
         scores[_score_key(metric, reference, variable, depth_bin, int(lead_day) + 1)] = (values, counts)
     return scores
+
+
+def class4_bias_by_start(matchups: pandas.DataFrame | Class4Matchups) -> pandas.Series:
+    """Pooled mean of model minus observation per start date, variable, depth bin and lead day (0-based)."""
+    parts = class4_matchups(matchups)
+    biases = []
+    for first_day in parts.first_days():
+        part = parts.start(first_day)
+        scored = part.dropna(subset=["observation_value", "model_value"])
+        bias = (
+            (scored["model_value"] - scored["observation_value"])
+            .groupby([scored["variable"], scored["depth_bin"], scored["lead_day"]])
+            .mean()
+        )
+        biases.append(pandas.concat({pandas.Timestamp(first_day): bias}, names=["first_day"]))
+    return pandas.concat(biases) if biases else pandas.Series(dtype=float)
+
+
+def _per_lead(values_by_lead: dict[int, numpy.ndarray], lead_days: list[int], start_count: int) -> list[list]:
+    return [
+        [_json_value(value) for value in values_by_lead.get(lead_day, numpy.full(start_count, numpy.nan))]
+        for lead_day in lead_days
+    ]
+
+
+def scores_by_start_document(
+    challenger_name: str,
+    region_id: str,
+    start_dates: list[pandas.Timestamp],
+    gridded_by_start: dict[tuple, numpy.ndarray] | None,
+    class4_by_start: dict[tuple, tuple[numpy.ndarray, numpy.ndarray]] | None,
+    class4_bias: dict[tuple, numpy.ndarray] | None,
+    drop_glorys_reference: bool = False,
+    gridded_unavailable_reason: str | None = None,
+) -> dict:
+    """
+    Per-start scores for period-restricted curves, as arrays over ``dates`` (one array per lead day).
+
+    ``gridded`` series hold the RMSD of each start (the year score is their mean over present starts).
+    ``class4`` series hold the pooled RMSD, bias and scored count ``n`` of each start (the year score is
+    ``sqrt(sum n rmsd^2 / sum n)``). Values are unrounded; ``null`` marks a missing start.
+    """
+    start_count = len(start_dates)
+    lead_days = sorted(
+        {key[4] for key in (gridded_by_start or {})} | {key[4] for key in (class4_by_start or {})}
+    ) or list(range(1, 11))
+    document: dict = {
+        "schema_version": 1,
+        "challenger": challenger_name,
+        "region": region_id,
+        "dates": [start_date.strftime("%Y-%m-%d") for start_date in start_dates],
+        "lead_days": lead_days,
+        "layout": "values[lead_index][start_index]",
+        "gridded": {
+            "available": gridded_by_start is not None,
+            "aggregation": "arithmetic mean over present starts of the per-start RMSD",
+            "series": [],
+        },
+        "class4": {
+            "available": class4_by_start is not None,
+            "aggregation": "rmsd: sqrt(sum n rmsd^2 / sum n); bias: sum n bias / sum n",
+            "series": [],
+        },
+    }
+    if gridded_by_start is None:
+        document["gridded"]["reason"] = gridded_unavailable_reason or "per-start gridded scores unavailable"
+    else:
+        grouped: dict[tuple, dict[int, numpy.ndarray]] = {}
+        for (metric, reference, variable, depth, lead_day), values in gridded_by_start.items():
+            if reference == "observations":
+                continue
+            reference_label = _SUMMARY_REFERENCES[reference]
+            if drop_glorys_reference and reference_label == "glorys":
+                continue
+            grouped.setdefault((metric, reference_label, variable, depth), {})[lead_day] = values
+        for (metric, reference, variable, depth), by_lead in sorted(grouped.items(), key=lambda item: str(item[0])):
+            document["gridded"]["series"].append(
+                {
+                    "metric": "rmsd",
+                    "function": metric,
+                    "reference": reference,
+                    "variable": variable,
+                    "depth": None if metric in _DEPTHLESS_METRICS else depth,
+                    "rmsd": _per_lead(by_lead, lead_days, start_count),
+                }
+            )
+    if class4_by_start is not None:
+        grouped4: dict[tuple, dict[int, tuple]] = {}
+        for (metric, reference, variable, depth_bin, lead_day), (values, counts) in class4_by_start.items():
+            bias = (class4_bias or {}).get((variable, depth_bin, lead_day), numpy.full(start_count, numpy.nan))
+            grouped4.setdefault((variable, depth_bin), {})[lead_day] = (values, counts, bias)
+        for (variable, depth_bin), by_lead in sorted(grouped4.items()):
+            document["class4"]["series"].append(
+                {
+                    "metric": "class4_rmsd",
+                    "reference": "observations",
+                    "variable": variable,
+                    "depth": depth_bin,
+                    "rmsd": _per_lead({k: v[0] for k, v in by_lead.items()}, lead_days, start_count),
+                    "bias": _per_lead({k: v[2] for k, v in by_lead.items()}, lead_days, start_count),
+                    "n": [
+                        [int(count) for count in by_lead[lead_day][1]] if lead_day in by_lead else [0] * start_count
+                        for lead_day in lead_days
+                    ],
+                }
+            )
+    return document
+
+
+def class4_bias_arrays(bias: pandas.Series, start_dates: list[pandas.Timestamp]) -> dict[tuple, numpy.ndarray]:
+    """Per-start bias arrays keyed (variable, depth_bin, lead_day 1-based), aligned on ``start_dates``."""
+    positions = {start_date: index for index, start_date in enumerate(start_dates)}
+    arrays: dict[tuple, numpy.ndarray] = {}
+    for (first_day, variable, depth_bin, lead_day), value in bias.items():
+        key = (variable, depth_bin, int(lead_day) + 1)
+        arrays.setdefault(key, numpy.full(len(start_dates), numpy.nan))[positions[pandas.Timestamp(first_day)]] = value
+    return arrays
+
+
+def write_scores_by_start(directory: Path, document: dict) -> str:
+    """Write ``insights/<slug>/<region>/scores-by-start.json`` and return its viewer path."""
+    insights_directory = directory / "insights" / document["challenger"] / document["region"]
+    insights_directory.mkdir(parents=True, exist_ok=True)
+    (insights_directory / SCORES_BY_START_FILENAME).write_text(json.dumps(document), encoding="utf-8")
+    return f"./data/insights/{document['challenger']}/{document['region']}/{SCORES_BY_START_FILENAME}"
 
 
 def _mean_over_present_starts(values: numpy.ndarray) -> numpy.ndarray:
@@ -286,19 +412,29 @@ def build_viewer_data(
     start_dates = [
         pandas.Timestamp(start_date) for start_date in challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
     ]
-    summary_rows = scores_summary_rows(
-        challenger_name,
-        region,
-        document_rows,
-        start_dates,
-        (
-            gridded_scores_from_start_tables(start_tables)
-            if start_tables
-            else gridded_scores_by_start(challenger_dataset, region)
-        ),
-        class4_scores_by_start(rows_by_start, start_dates) if has_matchups else {},
+    gridded_by_start = (
+        gridded_scores_from_start_tables(start_tables)
+        if start_tables
+        else gridded_scores_by_start(challenger_dataset, region)
     )
-    if get_challenger_kind(challenger_dataset) == "reference":
+    class4_by_start = class4_scores_by_start(rows_by_start, start_dates) if has_matchups else {}
+    summary_rows = scores_summary_rows(
+        challenger_name, region, document_rows, start_dates, gridded_by_start, class4_by_start
+    )
+    is_reference = get_challenger_kind(challenger_dataset) == "reference"
+    artifacts.insights["scores_by_start"] = write_scores_by_start(
+        output_directory,
+        scores_by_start_document(
+            challenger_name,
+            region.id,
+            start_dates,
+            gridded_by_start,
+            class4_by_start if has_matchups else None,
+            class4_bias_arrays(class4_bias_by_start(matchups), start_dates) if has_matchups else None,
+            drop_glorys_reference=is_reference,
+        ),
+    )
+    if is_reference:
         # The GLORYS reference scored against its own gridded reanalysis is zero by construction.
         summary_rows = [row for row in summary_rows if row["reference"] != _SUMMARY_REFERENCES["glorys_reanalysis"]]
     update_viewer_indexes(
