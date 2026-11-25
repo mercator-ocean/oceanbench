@@ -377,10 +377,21 @@ function controlledScore(plainScore, controlled, width, slope) {
   return { name: layout.name, depths, fits: { width, slope } };
 }
 
+// A section takes the switch only when one of the shown challengers has smoothing-controlled RMSD rows for it.
+function hasControlledRows(challengers, challengerNames, sectionConfig) {
+  const metricKey = sectionConfig.controlled_metrics?.value;
+  if (!metricKey) return false;
+  return challengerNames.some((name) => Object.keys(challengers[name]?.[metricKey]?.depths || {}).length > 0);
+}
+
+function isSectionControlled(challengers, challengerNames, sectionConfig) {
+  return showControlled && hasControlledRows(challengers, challengerNames, sectionConfig);
+}
+
 // The challengers with the depth metric of a section switched to its smoothing-controlled RMSD when the switch is on.
-function sectionChallengers(challengers, sectionConfig) {
+function sectionChallengers(challengers, challengerNames, sectionConfig) {
   const controlledMetrics = sectionConfig.controlled_metrics;
-  if (!showControlled || !controlledMetrics) return challengers;
+  if (!isSectionControlled(challengers, challengerNames, sectionConfig)) return challengers;
   const depthMetric = sectionConfig.depth_metric;
   return Object.fromEntries(
     Object.entries(challengers).map(([name, metrics]) => [
@@ -672,7 +683,7 @@ function attachTabListeners() {
   });
 }
 
-function buildControlsInnerHtml(challengerNames, baseline, depths) {
+function buildControlsInnerHtml(challengerNames, baseline, depths, hasControlled = false) {
   let markup = "";
 
   markup += '<label>Baseline: <select id="baseline-select">';
@@ -696,10 +707,12 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   markup += `<button class="display-toggle-btn${showPercentDiff ? " active" : ""}" data-display="percent-diff">% diff</button>`;
   markup += '</span>';
 
-  markup += '<span class="display-toggle rmsd-toggle">';
-  markup += `<button class="display-toggle-btn${!showControlled ? " active" : ""}" data-rmsd="as-issued">RMSD</button>`;
-  markup += `<button class="display-toggle-btn${showControlled ? " active" : ""}" data-rmsd="controlled" title="RMSD after the best smoothing and rescaling of each challenger">Smoothing-controlled RMSD</button>`;
-  markup += '</span>';
+  if (hasControlled) {
+    markup += '<span class="display-toggle rmsd-toggle">';
+    markup += `<button class="display-toggle-btn${!showControlled ? " active" : ""}" data-rmsd="as-issued">RMSD</button>`;
+    markup += `<button class="display-toggle-btn${showControlled ? " active" : ""}" data-rmsd="controlled" title="RMSD after the best smoothing and rescaling of each challenger">Smoothing-controlled RMSD</button>`;
+    markup += '</span>';
+  }
 
   markup += '<div id="color-legend" class="color-legend"></div>';
 
@@ -2039,14 +2052,14 @@ function renderTablesOnly() {
       `${sectionKey}-scores`,
       sectionConfig.depth_metric,
       sectionConfig.flat_metrics,
-      sectionChallengers(challengers, sectionConfig),
+      sectionChallengers(challengers, visibleChallengerNames, sectionConfig),
       visibleChallengerNames,
       activeRegion,
       baseline,
       metricTitles,
       !OBSERVATION_SECTIONS.has(sectionKey),
       sectionConfig.depth_groups || null,
-      showControlled && Boolean(sectionConfig.controlled_metrics),
+      isSectionControlled(challengers, visibleChallengerNames, sectionConfig),
     );
   }
 
@@ -2085,14 +2098,14 @@ function renderAllTables() {
       `${sectionKey}-scores`,
       sectionConfig.depth_metric,
       sectionConfig.flat_metrics,
-      sectionChallengers(challengers, sectionConfig),
+      sectionChallengers(challengers, visibleChallengerNames, sectionConfig),
       visibleChallengerNames,
       activeRegion,
       baseline,
       metricTitles,
       !OBSERVATION_SECTIONS.has(sectionKey),
       sectionConfig.depth_groups || null,
-      showControlled && Boolean(sectionConfig.controlled_metrics),
+      isSectionControlled(challengers, visibleChallengerNames, sectionConfig),
     );
   }
 
@@ -2101,7 +2114,10 @@ function renderAllTables() {
   const versionTracks = getVersionTracks(getActiveVersionData(data));
 
   const controlsElement = ensureHeaderElement();
-  controlsElement.innerHTML = buildControlsInnerHtml(trackChallengerNames, baseline, availableDepths);
+  const hasControlled = Object.values(sections).some((sectionConfig) =>
+    hasControlledRows(challengers, visibleChallengerNames, sectionConfig),
+  );
+  controlsElement.innerHTML = buildControlsInnerHtml(trackChallengerNames, baseline, availableDepths, hasControlled);
   renderRegionSelector(regionIds, versionTracks, availableTracks);
   renderVersionSelector(getVersions(data));
 
