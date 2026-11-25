@@ -307,6 +307,7 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 /* Entire-year scope hides single-forecast-only controls; the lead slider and the
    Region view control stay. The standalone Overlay field and its dependent
    eddy-reference/note are hidden. */
+:root:not([data-scope="year"]) .period-field { display: none !important; }
 :root[data-scope="year"] .start-date-field,
 :root[data-scope="year"] #currents-group,
 :root[data-scope="year"] .controls label:has(#overlay-mode),

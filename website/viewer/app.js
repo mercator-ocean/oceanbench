@@ -3853,7 +3853,15 @@ async function drillDownToStartDate(date) {
   const index = nearestStartIndex(sharedStartDates(), date);
   if (index < 0) return;
   elements["start-date"].value = String(index);
-  if (setSharedScope(SCOPE_SINGLE_DATE)) applyScope();
+  if (setSharedScope(SCOPE_SINGLE_DATE)) {
+    applyScope();
+    // One date has no period: the full start list, and the clicked date wins over the one
+    // left when entering All dates.
+    singleScopeStartDate = null;
+    shared.startIndex = index;
+    updateSharedTimeControls();
+    syncPeriodControl();
+  }
   await selectStartDate(index);
   await refitAfterScopeChange();
   updateCurrentsControlVisibility();
@@ -4892,8 +4900,11 @@ function periodYear() {
 }
 
 // The range of the chosen period, or null for the whole year and for a range that holds
-// no start on screen (which then reads as the whole year, and the control says so).
+// no start on screen (which then reads as the whole year, and the control says so). The
+// period belongs to the All dates scope only: in One date it is kept (and stays in the
+// link) but has no effect, so the start list and the rail are whole-year there.
 function activePeriodRange() {
+  if (shared.scope !== SCOPE_WHOLE_YEAR) return null;
   const range = periodRange(shared.period, periodYear());
   if (!range || range.from > range.to) return null;
   return sharedStartDates().some((date) => startInRange(date, range)) ? range : null;
@@ -5286,8 +5297,22 @@ function applyScope() {
   markScopeButtons();
 }
 
+// The start on screen when One date was left. All dates hides the start picker but moves the
+// start into the period, so coming back to One date returns to the date that was left.
+let singleScopeStartDate = null;
+
 function setScope(scope) {
+  const previousDate = sharedStartDate();
   if (!setSharedScope(scope)) return;
+  if (scope === SCOPE_WHOLE_YEAR) {
+    singleScopeStartDate = previousDate;
+  } else if (singleScopeStartDate) {
+    const index = sharedStartDates().indexOf(singleScopeStartDate);
+    if (index >= 0) shared.startIndex = index;
+    singleScopeStartDate = null;
+  }
+  updateSharedTimeControls();
+  syncPeriodControl();
   // The year raster is a per-forecast view; the difference comparison has no meaning
   // there, so entering year scope while in difference falls back to side-by-side.
   if (scope === SCOPE_WHOLE_YEAR && isDiffView()) {
