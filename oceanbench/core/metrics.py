@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from collections.abc import Callable
 import pandas
 import xarray
 
@@ -12,6 +13,7 @@ from oceanbench.core.lagrangian_trajectory import (
     deviation_of_lagrangian_trajectories,
     lagrangian_particle_count_for_region,
 )
+from oceanbench.core import mld_reuse
 from oceanbench.core.ocean_mask import ocean_mask
 from oceanbench.core.references.glo12 import glo12_analysis_dataset
 from oceanbench.core.references.glorys import glorys_reanalysis_dataset
@@ -103,17 +105,7 @@ def rmsd_of_mixed_layer_depth_compared_to_glorys_reanalysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
-    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
-    return rmsd(
-        challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
-        reference_dataset=compute_mixed_layer_depth(
-            subset_dataset_to_region(glorys_reanalysis_dataset(challenger_dataset), region)
-        ),
-        variables=[
-            Variable.MIXED_LAYER_DEPTH,
-        ],
-        ocean_mask=ocean_mask(),
-    )
+    return _rmsd_of_mixed_layer_depth(challenger_dataset, region, glorys_reanalysis_dataset)
 
 
 def rmsd_of_geostrophic_currents_compared_to_glorys_reanalysis(
@@ -169,17 +161,7 @@ def rmsd_of_mixed_layer_depth_compared_to_glo12_analysis(
     challenger_dataset: xarray.Dataset,
     region: RegionLike = GLOBAL_REGION_NAME,
 ) -> pandas.DataFrame:
-    challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
-    return rmsd(
-        challenger_dataset=compute_mixed_layer_depth(challenger_dataset),
-        reference_dataset=compute_mixed_layer_depth(
-            subset_dataset_to_region(glo12_analysis_dataset(challenger_dataset), region)
-        ),
-        variables=[
-            Variable.MIXED_LAYER_DEPTH,
-        ],
-        ocean_mask=ocean_mask(),
-    )
+    return _rmsd_of_mixed_layer_depth(challenger_dataset, region, glo12_analysis_dataset)
 
 
 def rmsd_of_geostrophic_currents_compared_to_glo12_analysis(
@@ -209,4 +191,26 @@ def deviation_of_lagrangian_trajectories_compared_to_glo12_analysis(
         challenger_dataset=regional_challenger_dataset,
         reference_dataset=subset_dataset_to_region(glo12_analysis_dataset(regional_challenger_dataset), region),
         particle_count=_lagrangian_particle_count(challenger_dataset, regional_challenger_dataset),
+    )
+
+
+def _rmsd_of_mixed_layer_depth(
+    challenger_dataset: xarray.Dataset,
+    region: RegionLike,
+    reference_dataset_of: Callable[[xarray.Dataset], xarray.Dataset],
+) -> pandas.DataFrame:
+    run_key = (id(challenger_dataset), repr(region))
+    regional_challenger_dataset = subset_dataset_to_region(challenger_dataset, region)
+    return rmsd(
+        challenger_dataset=mld_reuse.challenger_mixed_layer_depth(
+            run_key, regional_challenger_dataset, compute_mixed_layer_depth
+        ),
+        reference_dataset=mld_reuse.reference_mixed_layer_depth(
+            run_key + (reference_dataset_of.__name__,),
+            subset_dataset_to_region(reference_dataset_of(regional_challenger_dataset), region),
+            compute_mixed_layer_depth,
+            keep=challenger_dataset,
+        ),
+        variables=[Variable.MIXED_LAYER_DEPTH],
+        ocean_mask=ocean_mask(),
     )
