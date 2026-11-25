@@ -2,6 +2,9 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import os
+
+import dask
 import numpy
 import xarray
 import pandas
@@ -296,6 +299,11 @@ def rmsd(
     has a value and the challenger has none are not scored: the Missing fraction column reports their
     area-weighted share.
     """
+    with dask.config.set(_gridded_dask_configuration()):
+        return _rmsd_with_configured_dask(challenger_dataset, reference_dataset, variables, ocean_mask)
+
+
+def _rmsd_with_configured_dask(challenger_dataset, reference_dataset, variables, ocean_mask) -> pandas.DataFrame:
     prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
     prepared_reference_dataset = _snap_reference_spatial_coordinates_to_challenger(
         prepared_challenger_dataset, _select_variables(_harmonise_dataset(reference_dataset), variables)
@@ -308,3 +316,13 @@ def rmsd(
         prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
     ).compute()
     return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_fraction_dataset)
+
+
+def _gridded_dask_configuration() -> dict:
+    """
+    More dask threads for the gridded RMSD pass, which waits on many small reads of the references
+    (OCEANBENCH_GRIDDED_DASK_WORKERS; unset keeps the global setting).
+    """
+    workers = os.environ.get("OCEANBENCH_GRIDDED_DASK_WORKERS")
+    return {"num_workers": int(workers)} if workers else {}
+

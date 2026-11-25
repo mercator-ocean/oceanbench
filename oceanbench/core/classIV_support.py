@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+from concurrent.futures import ThreadPoolExecutor
+import os
 from typing import NamedTuple
 
 import numpy
@@ -409,6 +411,11 @@ def _interpolated_model_values_for_observation_group(
     )
 
 
+def _class4_prefetch_depth() -> int:
+    """Number of challenger time slices read ahead of the interpolation (OCEANBENCH_CLASS4_PREFETCH, default 2)."""
+    return max(1, int(os.environ.get("OCEANBENCH_CLASS4_PREFETCH", "2")))
+
+
 def _assign_model_values_for_first_day(
     model_values: numpy.ndarray,
     model_data: xarray.DataArray,
@@ -422,22 +429,33 @@ def _assign_model_values_for_first_day(
         if current_runtime_configuration().class4_fast_interpolation
         else None
     )
-    for lead_day, observation_group in first_day_group.groupby("lead_day", sort=False):
-        time_slice = (
-            first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
-            if first_day_block is not None
-            else model_data.isel(
-                {
-                    Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
-                    Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
-                }
-            ).compute()
-        )
-        model_values[observation_group.index.values] = _interpolated_model_values_for_observation_group(
-            time_slice,
-            observation_group,
-            model_depths,
-        )
+    lead_day_groups = list(first_day_group.groupby("lead_day", sort=False))
+
+    def time_slice_of(lead_day) -> xarray.DataArray:
+        if first_day_block is not None:
+            return first_day_block.isel({Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day]})
+        return model_data.isel(
+            {
+                Dimension.FIRST_DAY_DATETIME.key(): first_day_index,
+                Dimension.LEAD_DAY_INDEX.key(): lead_day_to_index[lead_day],
+            }
+        ).compute()
+
+    # The next lead days are read while the observations of this one are interpolated: at most
+    # CLASS4_PREFETCH_DEPTH + 1 time slices are held, and CLASS4_PREFETCH_DEPTH reads run at a time.
+    prefetch_depth = _class4_prefetch_depth()
+    with ThreadPoolExecutor(max_workers=prefetch_depth) as reader:
+        pending = [reader.submit(time_slice_of, lead_day) for lead_day, _ in lead_day_groups[:prefetch_depth]]
+        for group_index, (_, observation_group) in enumerate(lead_day_groups):
+            time_slice = pending.pop(0).result()
+            if group_index + prefetch_depth < len(lead_day_groups):
+                pending.append(reader.submit(time_slice_of, lead_day_groups[group_index + prefetch_depth][0]))
+            model_values[observation_group.index.values] = _interpolated_model_values_for_observation_group(
+                time_slice,
+                observation_group,
+                model_depths,
+            )
+            del time_slice
 
 
 def _interpolate_model_to_observations(
