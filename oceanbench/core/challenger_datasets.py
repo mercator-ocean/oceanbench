@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from collections.abc import Callable
 
 from oceanbench.core.datetime_utils import generate_dates
-from oceanbench.core.dataset_utils import LEAD_DAYS_COUNT
+from oceanbench.core.dataset_utils import FIELD_CHUNKS, LEAD_DAYS_COUNT
 from oceanbench.core.remote_http import (
     open_remote_multizarr,
     open_remote_zarr,
@@ -62,7 +62,9 @@ def _open_glo12_forecast_week(first_day_datetime: datetime) -> xarray.Dataset:
     forecast_url = _glo12_dataset_path(first_day_datetime)
     forecast_week_dataset = xarray.merge(
         [
-            xarray.open_zarr(remote_zarr_store(forecast_url), group=variable_name, consolidated=True)[[variable_name]]
+            xarray.open_zarr(
+                remote_zarr_store(forecast_url), group=variable_name, consolidated=True, chunks=FIELD_CHUNKS
+            )[[variable_name]]
             for variable_name in _GLO12_FORECAST_VARIABLE_NAMES
         ]
     ).isel(time=slice(0, LEAD_DAYS_COUNT))
