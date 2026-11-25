@@ -90,6 +90,7 @@ import {
   yearRmsdSeriesMax,
 } from "./modules/year.js";
 import { attachMethodNote, attachEddyMethodNote } from "./modules/method-popover.js";
+import { periodLeadRows, periodClass4Bin } from "./modules/period-scores.js";
 import { PERIOD_CUSTOM, PERIOD_WHOLE_YEAR, customPeriodValue, periodRange, startInRange } from "./modules/period-range.js";
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
 import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
@@ -3572,6 +3573,7 @@ async function updateContextRail() {
     : `${shown[0].label} · ${regionDisplayName()}`;
 
   updateCurrentDepthGateNote(shown);
+  await loadScoresByStartFor(shown);
   renderRailSkill(shown, comparison);
   await renderRailDepthProfile(shown, comparison);
   const yearSection = elements["rail-year-rmsd-section"];
@@ -3659,13 +3661,21 @@ async function renderRailDepthProfile(shown, comparison) {
   // artifacts): the profile axis stays fixed while the lead slider scrubs, so the
   // profile visibly grows within a constant frame instead of being renormalised.
   let xBound = 0;
+  const period = activePeriodRange();
+  let notApplied = 0;
+  let periodStarts = 0;
   for (const panel of shown) {
     const entry = variableEntry(manifestFor(panel.state.dataset), panel.state.variable);
     if (!entry || isVelocityFamilyVariable(panel.state.variable)) continue;
     const url = insightsFor(insightIndex, panel.state.dataset, shared.region).rmsd_by_depth;
     const data = url ? await loadRmsdByDepth(url) : null;
-    const profile = data ? rmsdDepthProfile(data, entry.standard_name, shared.leadDay) : null;
-    if (!profile) continue;
+    const yearProfile = data ? rmsdDepthProfile(data, entry.standard_name, shared.leadDay) : null;
+    if (!yearProfile) continue;
+    const profile = periodDepthProfile(panel, entry.standard_name, yearProfile);
+    if (period) {
+      if (profile.periodStarts == null) notApplied += 1;
+      else periodStarts = Math.max(periodStarts, profile.periodStarts);
+    }
     xBound = Math.max(xBound, rmsdDepthProfileMax(data, entry.standard_name));
     lead = lead == null ? profile.lead : lead;
     unit = unit || entry.units || "";
@@ -3693,7 +3703,10 @@ async function renderRailDepthProfile(shown, comparison) {
     typeScale: chartTypeScale(slot),
   });
   if (note) {
-    note.textContent = `Lead ${lead ?? shared.leadDay}, ${matchupPopulation(shown)}.${periodNotAppliedSuffix()}`;
+    note.textContent =
+      period && !notApplied
+        ? `Lead ${lead ?? shared.leadDay}, match-ups of the ${periodStarts} start dates in ${period.label}.`
+        : `Lead ${lead ?? shared.leadDay}, ${matchupPopulation(shown)}.${periodNotAppliedSuffix()}`;
   }
   wireCursorTooltip(slot);
 }
@@ -3938,7 +3951,26 @@ function skillSeries(panel) {
   }
   for (const rows of rowsByVariable.values()) for (const row of rows) starts = Math.max(starts, Number(row.n_starts) || 0);
   if (![...rowsByVariable.values()].some((rows) => rows.length)) return null;
-  return { rowsByVariable, unit, n: starts, binLabel: observations ? depthBinLabel(entry, depthKeys[0]) : "" };
+  const binLabel = observations ? depthBinLabel(entry, depthKeys[0]) : "";
+  const period = activePeriodRange();
+  if (!period) return { rowsByVariable, unit, n: starts, binLabel, periodApplied: false };
+  const byStart = scoresByStartFor(panel);
+  const periodRows = new Map();
+  let periodStarts = 0;
+  for (const [variable, rows] of rowsByVariable) {
+    if (!rows.length) {
+      periodRows.set(variable, rows);
+      continue;
+    }
+    const row = rows[0];
+    const recomputed = byStart
+      ? periodLeadRows(byStart, { metric: row.metric, reference: row.reference, variable, depth: row.depth }, period)
+      : null;
+    if (!recomputed) return { rowsByVariable, unit, n: starts, binLabel, periodApplied: false };
+    periodRows.set(variable, recomputed);
+    for (const periodRow of recomputed) periodStarts = Math.max(periodStarts, periodRow.n_starts);
+  }
+  return { rowsByVariable: periodRows, unit, n: periodStarts, binLabel, periodApplied: true };
 }
 
 function renderRailSkill(shown, comparison) {
@@ -3997,7 +4029,9 @@ function renderRailSkill(shown, comparison) {
       // n_starts is available from the summary, so report the real number of start dates
       // behind the aggregate (item 5). TODO(pipeline): expose per-lead matchup counts too.
       notes.push(
-        `${labelFor(panel.state.dataset)}: n = ${skill.n} starts${skill.n < 10 ? " (low, weak statistic)" : ""}`,
+        `${labelFor(panel.state.dataset)}: n = ${skill.n} starts${skill.n < 10 ? " (low, weak statistic)" : ""}${
+          activePeriodRange() ? (skill.periodApplied ? ` in ${activePeriodRange().label}` : `, ${PERIOD_NOT_APPLIED}`) : ""
+        }`,
       );
       if (isCurrentsVariable(panel.state.variable)) notes.push("Map: speed from paired u/v. Curves: u and v RMSE.");
     }
@@ -4020,7 +4054,6 @@ function renderRailSkill(shown, comparison) {
         emptyMessage: `no ${referenceLabel} score for this variable/product`,
       })
     : "";
-  if (activePeriodRange()) notes.push(PERIOD_NOT_APPLIED);
   elements["rail-skill-note"].textContent = notes.join(" · ");
   wireCursorTooltip(elements["rail-lead-curve"]);
 }
@@ -4846,8 +4879,9 @@ function visibleManifests() {
 // ---- period -----------------------------------------------------------------
 
 // The Period control narrows the start-date list and the "RMSE by start date" chart to the
-// forecasts started inside a range. The lead-day and depth charts and the year map are
-// published for the whole year only, so they stay whole-year and say so.
+// forecasts started inside a range. The lead-day and depth charts are re-aggregated over the
+// period's starts from the per-start file where it has the scores, and stay whole-year (and say
+// so) where it does not. The year map is published for the whole year only.
 
 const PERIOD_NOT_APPLIED = "Whole year (period not applied)";
 
@@ -4863,6 +4897,59 @@ function activePeriodRange() {
   const range = periodRange(shared.period, periodYear());
   if (!range || range.from > range.to) return null;
   return sharedStartDates().some((date) => startInRange(date, range)) ? range : null;
+}
+
+// Per-start scores (insights/<slug>/<region>/scores-by-start.json), fetched on the first
+// period selection; not listed in insights.json, so a missing file (404) reads as absent.
+const scoresByStartCache = new Map();
+
+function scoresByStartUrl(panel) {
+  return resolveViewerDataUrl(`insights/${panel.state.dataset}/${shared.region || "global"}/scores-by-start.json`);
+}
+
+async function loadScoresByStartFor(shown) {
+  if (!activePeriodRange()) return;
+  await Promise.all(
+    shown.map((panel) => {
+      const url = scoresByStartUrl(panel);
+      if (!scoresByStartCache.has(url)) {
+        const entry = { data: null };
+        entry.promise = fetch(url)
+          .then((response) => (response.ok ? response.json() : null))
+          .catch(() => null)
+          .then((data) => {
+            entry.data = data;
+          });
+        scoresByStartCache.set(url, entry);
+      }
+      return scoresByStartCache.get(url).promise;
+    }),
+  );
+}
+
+function scoresByStartFor(panel) {
+  return scoresByStartCache.get(scoresByStartUrl(panel))?.data || null;
+}
+
+// The depth profile over the period's starts, bin by bin, or the year profile unchanged
+// (periodStarts undefined) when the period is the whole year or a bin has no per-start data.
+function periodDepthProfile(panel, variableName, yearProfile) {
+  const period = activePeriodRange();
+  const byStart = period ? scoresByStartFor(panel) : null;
+  if (!byStart) return yearProfile;
+  let periodStarts = 0;
+  const bins = [];
+  for (const bin of yearProfile.bins) {
+    if (!Number.isFinite(bin.rmsd)) {
+      bins.push(bin);
+      continue;
+    }
+    const value = periodClass4Bin(byStart, variableName, bin.label, yearProfile.lead, period);
+    if (!value) return yearProfile;
+    periodStarts = Math.max(periodStarts, value.starts);
+    bins.push({ label: bin.label, rmsd: value.rmsd, bias: value.bias, n: value.n });
+  }
+  return { bins, lead: yearProfile.lead, periodStarts };
 }
 
 function periodNotAppliedSuffix() {
