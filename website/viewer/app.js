@@ -295,6 +295,28 @@ function datasetIdentity(entry) {
   return { model, resolution: model === entry.slug ? "native" : "1°" };
 }
 
+// Grid spacing in degrees from a resolution label ("1/12°" -> 0.083, "1°" -> 1); NaN if unreadable.
+function resolutionDegrees(resolution) {
+  const match = /^(\d+)(?:\/(\d+))?\s*°?$/.exec(resolution);
+  return match ? Number(match[1]) / Number(match[2] || 1) : Number.NaN;
+}
+
+// A link to a retired 1-degree entry (e.g. glorys_1_degree) goes to the finest entry of the
+// same model still in the catalog (GLORYS 1/12°), instead of silently opening the first entry.
+// Known slugs pass through; an unknown slug with no such twin returns null.
+function resolveDatasetSlug(slug) {
+  if (!slug) return null;
+  if (datasetCatalog.some((entry) => entry.slug === slug)) return slug;
+  if (!/_(one|1)_degree$/.test(slug)) return null;
+  const normalise = (model) => model.replace(/[^a-z0-9]+/g, "_");
+  const model = normalise(datasetIdentity({ slug }).model);
+  const finest = datasetCatalog
+    .filter((entry) => normalise(datasetIdentity(entry).model) === model)
+    .map((entry) => ({ slug: entry.slug, degrees: resolutionDegrees(datasetIdentity(entry).resolution) }))
+    .sort((a, b) => (Number.isNaN(a.degrees) ? Infinity : a.degrees) - (Number.isNaN(b.degrees) ? Infinity : b.degrees));
+  return finest[0]?.slug || null;
+}
+
 // Default partner for a forecast panel. Prefer a DIFFERENT model at the SAME resolution:
 // the same model's 1-degree twin compares a model with itself, and the mixed resolutions
 // make the shared PSD box degenerate ("Resolutions too different"). Fall back to any
@@ -6194,11 +6216,12 @@ function applyPanelHash(parameters) {
     // as "field") except the old "currents" mode, which migrates to the currents
     // variable. A trailing fourth token (old difference dataset) is simply dropped.
     const migratedCurrents = mode === "currents";
-    // An unknown dataset (a retired challenger, a typo) keeps the panel's default, and the
-    // hash written right after names that default instead of the dataset that failed.
-    const known = datasetCatalog.some((entry) => entry.slug === dataset);
+    // A retired 1-degree slug maps to the same model's native entry. Any other unknown
+    // dataset (a retired challenger, a typo) keeps the panel's default; either way the hash
+    // written right after names the dataset shown instead of the one that failed.
+    const resolved = resolveDatasetSlug(dataset);
     Object.assign(panels[i].state, {
-      dataset: known ? dataset : panels[i].state.dataset,
+      dataset: resolved || panels[i].state.dataset,
       variable: migratedCurrents ? CURRENTS_VARIABLE_SURFACE : variable || panels[i].state.variable,
     });
   }
