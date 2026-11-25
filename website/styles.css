@@ -868,6 +868,15 @@ body.quarto-dark .display-toggle-btn.active {
   margin-left: auto;
 }
 
+.display-toggle.rmsd-toggle {
+  margin-left: 0;
+}
+
+.controlled-rmsd-note {
+  font-size: 0.85rem;
+  margin: 0.5rem 0 1rem;
+}
+
 .display-toggle-btn {
   padding: 0.2rem 0.5rem;
   border: 1px solid var(--ob-border);

@@ -53,7 +53,11 @@ def _comparison_by_metric(sections: dict[str, dict]) -> dict[str, str]:
     return {
         metric_key: comparison
         for comparison, section in sections.items()
-        for metric_key in [section["depth_metric"], *section["flat_metrics"]]
+        for metric_key in [
+            section["depth_metric"],
+            *section["flat_metrics"],
+            *section.get("controlled_metrics", {}).values(),
+        ]
     }
 
 

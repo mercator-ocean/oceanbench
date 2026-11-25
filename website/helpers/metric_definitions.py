@@ -30,37 +30,68 @@ _REFERENCES = [
 ]
 
 _OBSERVATIONS_METRIC_KEY = "rmsd_variables_observations"
-_CONTROLLED_METRIC_KEY = "smoothing_controlled_rmsd_variables_observations"
-_CONTROLLED_FUNCTION = "oceanbench.metrics.smoothing_controlled_rmsd_of_variables_compared_to_observations"
+_CONTROLLED_FUNCTION_PREFIX = "oceanbench.metrics.smoothing_controlled_rmsd_of_variables"
 
-# Row diagnostics of the smoothing-controlled RMSD, read from the fields of its scores file rows.
-# Each is shown as a table shaped like the score: (metric key, row field, title, unit).
-DIAGNOSTIC_METRICS = [
-    ("smoothing_width_observations", "smoothing_width_km", "Fitted smoothing width", "km"),
-    ("smoothing_slope_observations", "smoothing_slope", "Fitted anomaly slope", "1"),
+# The smoothing-controlled RMSD of each reference, shown in place of the RMSD of variables by a switch on its table,
+# with the fitted width and slope read from the fields of its scores file rows: (reference suffix, function suffix).
+_CONTROLLED_REFERENCES = [(reference["suffix"], reference["function_suffix"]) for reference in _REFERENCES] + [
+    ("observations", "compared_to_observations")
 ]
 
-METRIC_PATTERNS = {
-    f"{metric['key']}_{reference['suffix']}": f"oceanbench.metrics.{metric['function']}_{reference['function_suffix']}"
-    for metric in _METRICS
-    for reference in _REFERENCES
-} | {
-    _OBSERVATIONS_METRIC_KEY: "oceanbench.metrics.rmsd_of_variables_compared_to_observations",
-    _CONTROLLED_METRIC_KEY: _CONTROLLED_FUNCTION,
+
+def _controlled_metrics(suffix: str) -> dict[str, str]:
+    return {
+        "value": f"smoothing_controlled_rmsd_variables_{suffix}",
+        "width": f"smoothing_width_{suffix}",
+        "slope": f"smoothing_slope_{suffix}",
+    }
+
+
+CONTROLLED_METRICS = {suffix: _controlled_metrics(suffix) for suffix, _ in _CONTROLLED_REFERENCES}
+
+# Row fields of the smoothing-controlled RMSD: (key in its controlled metrics, row field, title, unit).
+DIAGNOSTIC_FIELDS = [
+    ("width", "smoothing_width_km", "Fitted smoothing width", "km"),
+    ("slope", "smoothing_slope", "Fitted anomaly slope", "1"),
+]
+
+# Each controlled metric key with its diagnostic metric keys by row field.
+DIAGNOSTIC_METRICS = {
+    metrics["value"]: [(metrics[name], field, unit) for name, field, _, unit in DIAGNOSTIC_FIELDS]
+    for metrics in CONTROLLED_METRICS.values()
 }
 
-DEPTH_VARIABLE_METRICS = {
-    f"{metric['key']}_{reference['suffix']}" for metric in _METRICS for reference in _REFERENCES if metric["has_depths"]
-} | {_OBSERVATIONS_METRIC_KEY, _CONTROLLED_METRIC_KEY}
-DEPTH_VARIABLE_METRICS |= {metric_key for metric_key, _, _, _ in DIAGNOSTIC_METRICS}
+METRIC_PATTERNS = (
+    {
+        f"{metric['key']}_{reference['suffix']}": f"oceanbench.metrics.{metric['function']}_{reference['function_suffix']}"
+        for metric in _METRICS
+        for reference in _REFERENCES
+    }
+    | {
+        _OBSERVATIONS_METRIC_KEY: "oceanbench.metrics.rmsd_of_variables_compared_to_observations",
+    }
+    | {
+        CONTROLLED_METRICS[suffix]["value"]: f"{_CONTROLLED_FUNCTION_PREFIX}_{function_suffix}"
+        for suffix, function_suffix in _CONTROLLED_REFERENCES
+    }
+)
+
+DEPTH_VARIABLE_METRICS = (
+    {
+        f"{metric['key']}_{reference['suffix']}"
+        for metric in _METRICS
+        for reference in _REFERENCES
+        if metric["has_depths"]
+    }
+    | {_OBSERVATIONS_METRIC_KEY}
+    | {metric_key for metrics in CONTROLLED_METRICS.values() for metric_key in metrics.values()}
+)
 
 METRIC_TITLES = (
     {f"{metric['key']}_{reference['suffix']}": metric["title"] for metric in _METRICS for reference in _REFERENCES}
-    | {
-        _OBSERVATIONS_METRIC_KEY: "Forecasted variables",
-        _CONTROLLED_METRIC_KEY: "Smoothing-controlled RMSD",
-    }
-    | {metric_key: title for metric_key, _, title, _ in DIAGNOSTIC_METRICS}
+    | {_OBSERVATIONS_METRIC_KEY: "Forecasted variables"}
+    | {metrics["value"]: "Smoothing-controlled RMSD" for metrics in CONTROLLED_METRICS.values()}
+    | {metrics[name]: title for metrics in CONTROLLED_METRICS.values() for name, _, title, _ in DIAGNOSTIC_FIELDS}
 )
 
 _OBSERVATION_DEPTH_GROUPS = [
@@ -87,13 +118,14 @@ SECTIONS = {
     reference["key"]: {
         "depth_metric": next(f"{metric['key']}_{reference['suffix']}" for metric in _METRICS if metric["has_depths"]),
         "flat_metrics": [f"{metric['key']}_{reference['suffix']}" for metric in _METRICS if not metric["has_depths"]],
+        "controlled_metrics": CONTROLLED_METRICS[reference["suffix"]],
     }
     for reference in _REFERENCES
 } | {
-    observation_section: {"depth_metric": metric_key, "flat_metrics": [], "depth_groups": _OBSERVATION_DEPTH_GROUPS}
-    for observation_section, metric_key in [
-        ("observations", _OBSERVATIONS_METRIC_KEY),
-        ("observations_controlled", _CONTROLLED_METRIC_KEY),
-    ]
-    + [(metric_key, metric_key) for metric_key, _, _, _ in DIAGNOSTIC_METRICS]
+    "observations": {
+        "depth_metric": _OBSERVATIONS_METRIC_KEY,
+        "flat_metrics": [],
+        "depth_groups": _OBSERVATION_DEPTH_GROUPS,
+        "controlled_metrics": CONTROLLED_METRICS["observations"],
+    }
 }

@@ -58,6 +58,8 @@ function getPaletteColors() {
 let selectedDepths = new Set();
 let showAllMode = true;
 let showPercentDiff = false;
+// The RMSD tables show the smoothing-controlled RMSD in place of the RMSD as issued.
+let showControlled = false;
 let parsedData = null;
 let challengerLabels = {};
 let challengerNotes = {};
@@ -75,24 +77,15 @@ let defaultVersionValue = null;
 let defaultRegionValue = null;
 let defaultBaselineValue = null;
 
-const SECTION_ORDER = ["observations", "observations_controlled", "reanalysis", "analysis"];
+const SECTION_ORDER = ["observations", "reanalysis", "analysis"];
 
 // Sections scored on the Class IV observations, laid out by observation depth groups without the depth toggle.
-// The diagnostic sections render under the smoothing-controlled RMSD and get no tab of their own.
-const OBSERVATION_SECTIONS = new Set([
-  "observations",
-  "observations_controlled",
-  "smoothing_width_observations",
-  "smoothing_slope_observations",
-]);
+const OBSERVATION_SECTIONS = new Set(["observations"]);
 
-const SECTION_LABELS = {
-  observations_controlled: "Smoothing-controlled",
-};
+const SECTION_LABELS = {};
 
 const SECTION_ID_MAP = {
   observations: "comparison-to-observations",
-  observations_controlled: "smoothing-controlled-rmsd",
   reanalysis: "comparison-to-reanalysis",
   analysis: "comparison-to-analysis",
 };
@@ -340,13 +333,74 @@ function formatVariableHeader(variable, unit, standardName, metricKey, sensor) {
   return header;
 }
 
-function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName) {
+function cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baselineName, fit = null) {
   const unitSuffix = unit ? ` ${unit}` : "";
   let tooltip = `${titleCase(variable)}, lead day ${day}\nValue: ${value.toFixed(2)}${unitSuffix}`;
   if (!isBaseline && referenceValue !== null) {
     tooltip += `\nvs ${displayName(baselineName)}: ${formatPercentDiff(referenceValue, value)}`;
   }
+  if (fit) tooltip += `\n${formatFit(fit)}`;
   return tooltip;
+}
+
+function formatFit({ width, slope }) {
+  const parts = [];
+  if (width !== null) parts.push(`fitted width ${Math.round(width)} km`);
+  if (slope !== null) parts.push(`slope ${slope.toFixed(2)}`);
+  return parts.join(", ");
+}
+
+// The fitted smoothing width and anomaly slope of a cell of the smoothing-controlled RMSD, or null.
+function getFit(score, depth, variable, day) {
+  if (!score?.fits) return null;
+  const width = score.fits.width ? getValue(score.fits.width, depth, variable, day) : null;
+  const slope = score.fits.slope ? getValue(score.fits.slope, depth, variable, day) : null;
+  return width === null && slope === null ? null : { width, slope };
+}
+
+// The smoothing-controlled RMSD laid out like the RMSD as issued, empty where a challenger has no controlled rows.
+function controlledScore(plainScore, controlled, width, slope) {
+  const layout = plainScore || controlled;
+  if (!layout) return undefined;
+  const depths = {};
+  for (const [depth, depthScore] of Object.entries(layout.depths)) {
+    const variables = {};
+    for (const [variable, variableScore] of Object.entries(depthScore.variables)) {
+      const data = {};
+      for (const day of Object.keys(variableScore.data)) {
+        data[day] = controlled ? getValue(controlled, depth, variable, day) : null;
+      }
+      variables[variable] = { ...variableScore, data };
+    }
+    depths[depth] = { variables };
+  }
+  return { name: layout.name, depths, fits: { width, slope } };
+}
+
+// The challengers with the depth metric of a section switched to its smoothing-controlled RMSD when the switch is on.
+function sectionChallengers(challengers, sectionConfig) {
+  const controlledMetrics = sectionConfig.controlled_metrics;
+  if (!showControlled || !controlledMetrics) return challengers;
+  const depthMetric = sectionConfig.depth_metric;
+  return Object.fromEntries(
+    Object.entries(challengers).map(([name, metrics]) => [
+      name,
+      {
+        ...metrics,
+        [depthMetric]: controlledScore(
+          metrics[depthMetric],
+          metrics[controlledMetrics.value],
+          metrics[controlledMetrics.width],
+          metrics[controlledMetrics.slope],
+        ),
+      },
+    ]),
+  );
+}
+
+function controlledNoteHtml() {
+  const template = document.getElementById("controlled-rmsd-note");
+  return template ? `<div class="controlled-rmsd-note">${template.innerHTML}</div>` : "";
 }
 
 function buildDataRows(
@@ -396,7 +450,9 @@ function buildDataRows(
           }
         }
         const title = value !== null
-          ? cellTooltip(variable, unit, day, value, referenceValue, isBaseline, baseline)
+          ? cellTooltip(
+            variable, unit, day, value, referenceValue, isBaseline, baseline, getFit(score, depth, variable, day),
+          )
           : "";
         const emptyClass = value === null ? " no-value-cell" : "";
         rows += `<td class="score-value-cell${emptyClass}" style="${style}" title="${title}">${display}</td>`;
@@ -592,7 +648,6 @@ function sensorIconsHtml(sensors) {
 
 const SECTION_ICONS_HTML = {
   observations: sensorIconsHtml(OBSERVATION_SENSORS),
-  observations_controlled: sensorIconsHtml(OBSERVATION_SENSORS),
   reanalysis: sensorIconsHtml(MODEL_SENSORS),
   analysis: sensorIconsHtml(MODEL_SENSORS),
 };
@@ -639,6 +694,11 @@ function buildControlsInnerHtml(challengerNames, baseline, depths) {
   markup += '<span class="display-toggle">';
   markup += `<button class="display-toggle-btn${!showPercentDiff ? " active" : ""}" data-display="values">Values</button>`;
   markup += `<button class="display-toggle-btn${showPercentDiff ? " active" : ""}" data-display="percent-diff">% diff</button>`;
+  markup += '</span>';
+
+  markup += '<span class="display-toggle rmsd-toggle">';
+  markup += `<button class="display-toggle-btn${!showControlled ? " active" : ""}" data-rmsd="as-issued">RMSD</button>`;
+  markup += `<button class="display-toggle-btn${showControlled ? " active" : ""}" data-rmsd="controlled" title="RMSD after the best smoothing and rescaling of each challenger">Smoothing-controlled RMSD</button>`;
   markup += '</span>';
 
   markup += '<div id="color-legend" class="color-legend"></div>';
@@ -1444,6 +1504,7 @@ function renderMetricSection(
   metricTitles,
   unifyVariables,
   depthGroups,
+  controlled = false,
 ) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -1451,7 +1512,8 @@ function renderMetricSection(
   let markup = "";
 
   markup += '<div class="depth-section">';
-  markup += `<h3>${metricTitles[depthMetric]}</h3>`;
+  if (controlled) markup += controlledNoteHtml();
+  markup += `<h3>${controlled ? "Smoothing-controlled RMSD" : metricTitles[depthMetric]}</h3>`;
   markup += renderDepthMetric(
     challengers,
     challengerNames,
@@ -1732,9 +1794,16 @@ function attachControlListeners() {
     baselineSelect.addEventListener("change", renderAllTables);
   }
 
-  document.querySelectorAll(".display-toggle-btn").forEach((button) => {
+  document.querySelectorAll(".display-toggle-btn[data-display]").forEach((button) => {
     button.addEventListener("click", () => {
       showPercentDiff = button.dataset.display === "percent-diff";
+      renderAllTables();
+    });
+  });
+
+  document.querySelectorAll(".display-toggle-btn[data-rmsd]").forEach((button) => {
+    button.addEventListener("click", () => {
+      showControlled = button.dataset.rmsd === "controlled";
       renderAllTables();
     });
   });
@@ -1970,13 +2039,14 @@ function renderTablesOnly() {
       `${sectionKey}-scores`,
       sectionConfig.depth_metric,
       sectionConfig.flat_metrics,
-      challengers,
+      sectionChallengers(challengers, sectionConfig),
       visibleChallengerNames,
       activeRegion,
       baseline,
       metricTitles,
       !OBSERVATION_SECTIONS.has(sectionKey),
       sectionConfig.depth_groups || null,
+      showControlled && Boolean(sectionConfig.controlled_metrics),
     );
   }
 
@@ -2015,13 +2085,14 @@ function renderAllTables() {
       `${sectionKey}-scores`,
       sectionConfig.depth_metric,
       sectionConfig.flat_metrics,
-      challengers,
+      sectionChallengers(challengers, sectionConfig),
       visibleChallengerNames,
       activeRegion,
       baseline,
       metricTitles,
       !OBSERVATION_SECTIONS.has(sectionKey),
       sectionConfig.depth_groups || null,
+      showControlled && Boolean(sectionConfig.controlled_metrics),
     );
   }
 
@@ -2078,6 +2149,8 @@ function applyUrlStateFromLocation() {
   const displayParameter = parameters.get("display");
   if (displayParameter) showPercentDiff = displayParameter === "percent";
 
+  showControlled = parameters.get("rmsd") === "controlled";
+
   const depthsParameter = parameters.get("depths");
   if (depthsParameter) {
     if (depthsParameter === "all") {
@@ -2119,6 +2192,9 @@ function writeUrlState() {
   }
   if (showPercentDiff) {
     parameters.set("display", "percent");
+  }
+  if (showControlled) {
+    parameters.set("rmsd", "controlled");
   }
   if (!showAllMode && selectedDepths.size > 0) {
     const orderedDepths = [...selectedDepths].sort((first, second) => Number(first) - Number(second));

@@ -41,7 +41,7 @@ def get_all_model_scores_from_scores_file(scores_file_path: str, challenger_name
         if metric_key is None:
             continue
         _add_value(depths_by_metric, metric_key, row, row["unit"], row["value"])
-        for diagnostic_key, field, _, unit in DIAGNOSTIC_METRICS:
+        for diagnostic_key, field, unit in DIAGNOSTIC_METRICS.get(metric_key, []):
             if field in row:
                 _add_value(depths_by_metric, diagnostic_key, row, unit, row[field])
     return {
