@@ -193,3 +193,25 @@ def test_observation_basis_version_is_required_on_every_day_store(tmp_path, monk
             first_day_datetimes=first_day_datetimes,
             lead_days_count=10,
         )
+
+
+def test_observations_by_start_are_the_parts_of_the_observations_of_all_starts(monkeypatch) -> None:
+    monkeypatch.setattr(observations, "open_remote_multizarr", lambda *_args, **_kwargs: _observation_source())
+    monkeypatch.setattr(observations, "_should_stage_observations_locally", lambda: False)
+    first_day_datetimes = numpy.array(["2024-01-03", "2024-01-10"], dtype="datetime64[ns]")
+    challenger_dataset = xarray.Dataset(
+        coords={
+            Dimension.FIRST_DAY_DATETIME.key(): first_day_datetimes,
+            Dimension.LEAD_DAY_INDEX.key(): numpy.arange(10),
+        }
+    )
+
+    every_start = observations.observations(challenger_dataset).load()
+    by_start = [start.load() for start in observations.observations_by_start(challenger_dataset)]
+
+    assert observations.has_increasing_start_dates(challenger_dataset)
+    assert len(by_start) == len(first_day_datetimes)
+    for first_day, start in zip(first_day_datetimes, by_start):
+        part = every_start.isel(observations=every_start[Dimension.FIRST_DAY_DATETIME.key()].values == first_day)
+        xarray.testing.assert_identical(start, part)
+
