@@ -225,6 +225,5 @@ def build(challenger_python_code: str, starts_per_batch: int = 13) -> None:
                 raise RuntimeError("reference mixed layer depth was not split by valid date, nothing stored")
             mld_reuse.clear()
             last = first + batch.sizes[Dimension.FIRST_DAY_DATETIME.key()] - 1
-            print(
-                f"[mld-store] build {reference_dataset_of.__name__} starts {first}..{last} in {perf_counter() - start:.1f} s"
-            )
+            name = reference_dataset_of.__name__
+            print(f"[mld-store] build {name} starts {first}..{last} in {perf_counter() - start:.1f} s")
