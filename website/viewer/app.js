@@ -1382,20 +1382,25 @@ function drawRasterBorder(context, edges, projection) {
   context.restore();
 }
 
-// One date's mean comes from the fixed statistics level (see STATISTICS_CELL_DEG), so it
-// does not move with the zoom. The year raster is one fixed grid already.
+// The mean badge is shown only on the difference map (Forecast 1 minus Forecast 2), where
+// it is the mean bias between the two forecasts. A plain field's mean says little, so it
+// is hidden there, in year scope and on the other panel. The mean comes from the fixed
+// statistics level (see STATISTICS_CELL_DEG), so it does not move with the zoom.
 function updatePanelBadge(panel) {
-  const statistics = shared.scope === SCOPE_WHOLE_YEAR ? null : panel.statistics;
-  const mean = statistics ? statistics.mean : panel.field ? areaWeightedMean(panel.field, panel.latitudes) : NaN;
-  // Coarse levels block-average u and v before the browser takes the speed, so a currents
-  // mean is the speed of the averaged flow, lower than the mean native speed.
-  const currents = Boolean(statistics) && isCurrentsVariable(panel.state.variable);
-  panel.els.badge.textContent = `${currents ? "mean-flow speed" : "mean"} ${formatFixed(mean, 3)} ${panel.units}`;
-  panel.els.badge.title = statistics
-    ? currents
-      ? `Area-weighted speed of the block-averaged u, v on the ${Number(statistics.cellSize.toFixed(2))}° level (zoom-independent); below the mean native speed.`
-      : `Area-weighted mean of the whole field, from the ${Number(statistics.cellSize.toFixed(2))}° level (zoom-independent).`
-    : "";
+  const statistics = shared.scope === SCOPE_WHOLE_YEAR || !isDiffHost(panel) ? null : panel.statistics;
+  const mean = statistics ? statistics.mean : NaN;
+  panel.els.badge.hidden = !Number.isFinite(mean);
+  if (panel.els.badge.hidden) {
+    panel.els.badge.textContent = "";
+    panel.els.badge.title = "";
+    return;
+  }
+  // Currents differences are of speeds taken from block-averaged u, v on that level.
+  const currents = isCurrentsVariable(panel.state.variable);
+  panel.els.badge.textContent = `mean diff ${formatFixed(mean, 3)} ${panel.units}`;
+  panel.els.badge.title = currents
+    ? `Area-weighted mean of the speed difference (Forecast 1 minus Forecast 2), speeds from the block-averaged u, v on the ${Number(statistics.cellSize.toFixed(2))}° level (zoom-independent).`
+    : `Area-weighted mean of Forecast 1 minus Forecast 2 (mean bias), from the ${Number(statistics.cellSize.toFixed(2))}° level (zoom-independent).`;
 }
 
 // ---- overlays ---------------------------------------------------------------
