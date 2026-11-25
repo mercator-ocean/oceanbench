@@ -4,6 +4,7 @@
 
 from datetime import datetime, timedelta
 from functools import partial
+import gc
 import uuid
 import numpy
 import pandas
@@ -171,19 +172,32 @@ def _all_deviation_of_lagrangian_trajectories(
     )
 
 
+def _particle_positions_releasing_field_set(
+    dataset: xarray.Dataset,
+    latitudes: numpy.ndarray,
+    longitudes: numpy.ndarray,
+) -> xarray.Dataset:
+    positions = _get_all_particles_positions(dataset=dataset, latitudes=latitudes, longitudes=longitudes)
+    # The parcels field set and particle set are kept alive by reference cycles: without a collection here, the
+    # velocity fields of every simulation stay in memory until Python runs a full collection, which in a long
+    # evaluation can be several starts later (about 1.4 GB per start at 1/12 degree).
+    gc.collect()
+    return positions
+
+
 def _one_deviation_of_lagrangian_trajectories(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     latitudes: numpy.ndarray,
     longitudes: numpy.ndarray,
 ):
-    challenger_trajectories = _get_all_particles_positions(
+    challenger_trajectories = _particle_positions_releasing_field_set(
         dataset=surface_current_dataset(challenger_dataset),
         latitudes=latitudes,
         longitudes=longitudes,
     )
 
-    reference_trajectories = _get_all_particles_positions(
+    reference_trajectories = _particle_positions_releasing_field_set(
         dataset=surface_current_dataset(reference_dataset),
         latitudes=latitudes,
         longitudes=longitudes,
