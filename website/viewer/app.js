@@ -90,6 +90,7 @@ import {
   yearRmsdSeriesMax,
 } from "./modules/year.js";
 import { attachMethodNote, attachEddyMethodNote } from "./modules/method-popover.js";
+import { PERIOD_CUSTOM, PERIOD_WHOLE_YEAR, customPeriodValue, periodRange, startInRange } from "./modules/period-range.js";
 import { boxPowerSpectrum, differenceBoxSpectrum } from "./modules/psd.js";
 import { TRAJECTORY_COLORS, trajectorySeparationSVG } from "./modules/trajectories.js";
 import { forecastColor } from "./modules/forecast-colors.js";
@@ -148,6 +149,7 @@ import {
   setSharedDisplayMode,
   setSharedEddyReference,
   setSharedOverlayMode,
+  setSharedPeriod,
   setSharedRegion,
   setSharedScope,
   setSharedSkillReference,
@@ -3278,7 +3280,8 @@ function updateYearLegend(visible) {
   if (!visible) return;
   legend.innerHTML =
     `<span class="item"><span class="swatch" style="background:${rgbCss(landColor(shared.theme))}"></span>land</span>` +
-    `<span class="item"><span class="swatch" style="background:${rgbCss(noObsColor(shared.theme))}"></span>ocean, no observations</span>`;
+    `<span class="item"><span class="swatch" style="background:${rgbCss(noObsColor(shared.theme))}"></span>ocean, no observations</span>` +
+    (activePeriodRange() ? `<span class="item">${PERIOD_NOT_APPLIED}</span>` : "");
   // Colorbar-adjacent method note for the year raster (the colorbar itself is a canvas).
   attachMethodNote(legend, "year-geography");
 }
@@ -3690,7 +3693,7 @@ async function renderRailDepthProfile(shown, comparison) {
     typeScale: chartTypeScale(slot),
   });
   if (note) {
-    note.textContent = `Lead ${lead ?? shared.leadDay}, ${matchupPopulation(shown)}.`;
+    note.textContent = `Lead ${lead ?? shared.leadDay}, ${matchupPopulation(shown)}.${periodNotAppliedSuffix()}`;
   }
   wireCursorTooltip(slot);
 }
@@ -3718,6 +3721,7 @@ async function renderRailYearRmsd(shown) {
   const slot = elements["rail-year-rmsd"];
   const note = elements["rail-year-rmsd-note"];
   const biasMode = shared.yearMetric === YEAR_METRIC_BIAS;
+  const period = activePeriodRange();
   // Keep the section title in step with the metric (the "?" button is a later child,
   // so only the leading text node is retitled).
   const yearHeading = elements["rail-year-rmsd-section"].querySelector("h3");
@@ -3738,7 +3742,8 @@ async function renderRailYearRmsd(shown) {
     const url = insightsFor(insightIndex, panel.state.dataset, shared.region).year_rmsd_by_start;
     const mapping = url ? yearVariableMapping(panel.state.variable) : null;
     const rmsd = url ? await loadYearRmsd(url) : null;
-    const entry = rmsd && mapping ? yearRmsdSeries(rmsd, mapping.short, shared.leadDay) : null;
+    const yearEntry = rmsd && mapping ? yearRmsdSeries(rmsd, mapping.short, shared.leadDay) : null;
+    const entry = yearEntry && period ? seriesInPeriod(yearEntry, period) : yearEntry;
     // In bias mode a series without a parallel bias array degrades gracefully (skipped,
     // counted as missing), the |error| path is unaffected.
     if (!entry || (biasMode && !entry.bias)) {
@@ -3774,7 +3779,7 @@ async function renderRailYearRmsd(shown) {
       ? "Band: 95%, mean ± 1.96 sd/√n, a lower bound (obs are correlated). "
       : "Band: 95%, a lower bound (obs are correlated). ";
   note.textContent = lines.length
-    ? `${bandNote}Click a point to open that date.`
+    ? `${period ? `${period.label}. ` : ""}${bandNote}Click a point to open that date.`
     : biasMode
       ? "Bias by start not available for this dataset/region."
       : "RMSE by start not available for this dataset/region.";
@@ -4015,6 +4020,7 @@ function renderRailSkill(shown, comparison) {
         emptyMessage: `no ${referenceLabel} score for this variable/product`,
       })
     : "";
+  if (activePeriodRange()) notes.push(PERIOD_NOT_APPLIED);
   elements["rail-skill-note"].textContent = notes.join(" · ");
   wireCursorTooltip(elements["rail-lead-curve"]);
 }
@@ -4837,6 +4843,94 @@ function visibleManifests() {
     .filter(({ manifest }) => manifest && Array.isArray(manifest.start_dates) && Array.isArray(manifest.lead_days));
 }
 
+// ---- period -----------------------------------------------------------------
+
+// The Period control narrows the start-date list and the "RMSE by start date" chart to the
+// forecasts started inside a range. The lead-day and depth charts and the year map are
+// published for the whole year only, so they stay whole-year and say so.
+
+const PERIOD_NOT_APPLIED = "Whole year (period not applied)";
+
+// The evaluation year, read from the start dates on screen.
+function periodYear() {
+  const dates = sharedStartDates();
+  return dates.length ? String(dates[0]).slice(0, 4) : null;
+}
+
+// The range of the chosen period, or null for the whole year and for a range that holds
+// no start on screen (which then reads as the whole year, and the control says so).
+function activePeriodRange() {
+  const range = periodRange(shared.period, periodYear());
+  if (!range || range.from > range.to) return null;
+  return sharedStartDates().some((date) => startInRange(date, range)) ? range : null;
+}
+
+function periodNotAppliedSuffix() {
+  return activePeriodRange() ? ` ${PERIOD_NOT_APPLIED}.` : "";
+}
+
+// A year-rmsd-by-start series cut to the starts inside a range, parallel arrays and all.
+function seriesInPeriod(entry, range) {
+  const keep = entry.dates.map((date) => startInRange(date, range));
+  const cut = (values) => (Array.isArray(values) ? values.filter((_, index) => keep[index]) : values);
+  return {
+    ...entry,
+    dates: cut(entry.dates),
+    rmsd: cut(entry.rmsd),
+    bias: cut(entry.bias),
+    counts: cut(entry.counts),
+    ciLow: cut(entry.ciLow),
+    ciHigh: cut(entry.ciHigh),
+    biasCiLow: cut(entry.biasCiLow),
+    biasCiHigh: cut(entry.biasCiHigh),
+  };
+}
+
+function periodNote() {
+  if (shared.period === PERIOD_WHOLE_YEAR) return "";
+  const range = periodRange(shared.period, periodYear());
+  if (!range) return "";
+  if (range.from > range.to) return "Start is after end; showing the whole year.";
+  const count = sharedStartDates().filter((date) => startInRange(date, range)).length;
+  if (!count) return "No starts in this range; showing the whole year.";
+  return `${count} start${count === 1 ? "" : "s"}`;
+}
+
+function syncPeriodControl() {
+  const year = periodYear();
+  const range = periodRange(shared.period, year);
+  const custom = Boolean(range && range.custom);
+  elements["period-select"].value = custom ? PERIOD_CUSTOM : shared.period;
+  elements["period-range"].hidden = !custom;
+  for (const id of ["period-from", "period-to"]) {
+    elements[id].min = year ? `${year}-01-01` : "";
+    elements[id].max = year ? `${year}-12-31` : "";
+  }
+  if (custom) {
+    elements["period-from"].value = range.from;
+    elements["period-to"].value = range.to;
+  }
+  const note = periodNote();
+  elements["period-note"].textContent = note;
+  elements["period-note"].hidden = !note;
+}
+
+// A new period: the start list follows it (the start on screen moves to the nearest start
+// inside when it falls outside), then the rail and the year legend caption.
+async function selectPeriod(value) {
+  if (!setSharedPeriod(value)) return;
+  syncPeriodControl();
+  const previousDate = sharedStartDate();
+  updateSharedTimeControls();
+  updateSharedColorbar();
+  if (sharedStartDate() !== previousDate) {
+    await selectStartDate(shared.startIndex);
+    return;
+  }
+  await updateContextRail();
+  writeHash();
+}
+
 // Start dates every visible forecast has, matched by date; shared.startIndex indexes this list.
 function sharedStartDates() {
   const visible = visibleManifests();
@@ -4887,7 +4981,17 @@ function updateSharedTimeControls() {
   const previousDate = sharedStartDate();
   const previousLead = shared.leadDay;
   shared.startIndex = Math.min(shared.startIndex, dates.length - 1);
-  const startChoices = dates.map((date, index) => ({ value: index, label: date }));
+  let startChoices = dates.map((date, index) => ({ value: index, label: date }));
+  // A period lists only its own starts (values stay indices into the full list) and moves a
+  // start outside it to the nearest start inside.
+  const period = activePeriodRange();
+  if (period) {
+    startChoices = startChoices.filter((choice) => startInRange(choice.label, period));
+    if (!startChoices.some((choice) => choice.value === shared.startIndex)) {
+      const nearest = nearestStartIndex(startChoices.map((choice) => choice.label), String(dates[shared.startIndex]).slice(0, 10));
+      shared.startIndex = startChoices[nearest].value;
+    }
+  }
   populateSelect(elements["start-date"], startChoices, shared.startIndex);
   const range = sharedLeadRange();
   if (!range) return sharedStartDate() !== previousDate;
@@ -5425,6 +5529,24 @@ function wireGlobalControls() {
     });
   }
   elements["start-date"].addEventListener("change", (event) => selectStartDate(Number(event.target.value)));
+  elements["period-select"].addEventListener("change", (event) => {
+    const value = event.target.value;
+    if (value !== PERIOD_CUSTOM) {
+      selectPeriod(value);
+      return;
+    }
+    // Custom opens on the range on screen, or the whole year, ready to be narrowed.
+    const year = periodYear();
+    const current = periodRange(shared.period, year);
+    selectPeriod(current ? customPeriodValue(current.from, current.to) : customPeriodValue(`${year}-01-01`, `${year}-12-31`));
+  });
+  for (const id of ["period-from", "period-to"]) {
+    elements[id].addEventListener("change", () => {
+      const from = elements["period-from"].value;
+      const to = elements["period-to"].value;
+      if (from && to) selectPeriod(customPeriodValue(from, to));
+    });
+  }
   elements["lead-day"].addEventListener("input", (event) => {
     // A programmatic step sets `.value` without firing `input`, so reaching here means
     // the user took the slider; the pause-on-interaction listener has already stopped
@@ -5845,6 +5967,7 @@ function writeHash() {
   parameters.set("theme", shared.theme);
   if (shared.scope !== SCOPE_SINGLE_DATE) parameters.set("scope", shared.scope);
   if (shared.yearMetric !== YEAR_METRIC_ABSOLUTE_ERROR) parameters.set("metric", shared.yearMetric);
+  if (shared.period !== PERIOD_WHOLE_YEAR) parameters.set("period", shared.period);
   if (shared.psdEnabled) {
     parameters.set("psdOn", "1");
   }
@@ -5918,6 +6041,7 @@ function readHash() {
   if (parameters.has("theme")) setSharedTheme(parameters.get("theme"));
   if (parameters.get("scope") === SCOPE_WHOLE_YEAR) setSharedScope(SCOPE_WHOLE_YEAR);
   if (parameters.get("metric") === YEAR_METRIC_BIAS) setSharedYearMetric(YEAR_METRIC_BIAS);
+  if (parameters.has("period")) setSharedPeriod(parameters.get("period"));
   shared.psdEnabled = parameters.get("psdOn") === "1";
   if (parameters.has("psd")) {
     const [lon, lat, w, h] = parameters.get("psd").split(",").map(Number);
@@ -5991,6 +6115,11 @@ function setPanelError(panel, message) {
 function selectElements() {
   for (const id of [
     "start-date",
+    "period-select",
+    "period-range",
+    "period-from",
+    "period-to",
+    "period-note",
     "lead-day",
     "lead-ticks",
     "example-note",
@@ -6154,6 +6283,7 @@ async function main() {
     pendingStartDate = null;
   }
   updateSharedTimeControls();
+  syncPeriodControl();
 
   markLayoutButtons();
   syncPanelGrid();
