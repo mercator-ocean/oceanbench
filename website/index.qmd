@@ -47,12 +47,6 @@ For the 1 degree track, the interpolation method used for challengers, the corre
 
 {{< include _scores-data.html >}}
 
-```{=html}
-<template id="controlled-rmsd-note">
-<p>Smoothing-controlled RMSD: the RMSD after the best Gaussian smoothing (0 to 90 km) and the best rescaling of the forecast departure from the GLORYS12 monthly climatology, fitted on every other forecast initialization day and scored on the others, so that smoothing or damping a forecast cannot lower it. Hover a cell for its fitted width and slope. Compare two challengers in a row only when they differ by at least 1.5 percent (2 percent for salinity, 2.5 percent for salinity at 0-5 m and 100-300 m) with a 90 percent bootstrap interval over initialization days that excludes zero; this floor is per comparison, and with this many rows a few differences will pass it by chance. See the <a href="evaluation-methods/index.html#smoothing-controlled-rmsd-of-variables-compared-to-observations">evaluation method</a>.</p>
-</template>
-```
-
 ::: {#all-scores}
 
 ## Comparison to observations <span class="source-icons"><span class="source-icon argo-profiler" role="img" aria-label="Argo profiler" title="Argo profiler"></span><span class="source-icon drifter-buoy" role="img" aria-label="Surface drifter" title="Surface drifter"></span><span class="source-icon satellite" role="img" aria-label="Satellite altimetry" title="Satellite altimetry"></span></span> {#comparison-to-observations}

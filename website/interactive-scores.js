@@ -409,11 +409,6 @@ function sectionChallengers(challengers, challengerNames, sectionConfig) {
   );
 }
 
-function controlledNoteHtml() {
-  const template = document.getElementById("controlled-rmsd-note");
-  return template ? `<div class="controlled-rmsd-note">${template.innerHTML}</div>` : "";
-}
-
 function buildDataRows(
   orderedNames,
   challengers,
@@ -1525,7 +1520,6 @@ function renderMetricSection(
   let markup = "";
 
   markup += '<div class="depth-section">';
-  if (controlled) markup += controlledNoteHtml();
   markup += `<h3>${controlled ? "Smoothing-controlled RMSD" : metricTitles[depthMetric]}</h3>`;
   markup += renderDepthMetric(
     challengers,
