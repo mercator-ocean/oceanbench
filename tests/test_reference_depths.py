@@ -29,7 +29,8 @@ def _native_dataset(variables: list[str]) -> xarray.Dataset:
     )
 
 
-def _fake_open_dataset(*, dataset_id, variables, start_datetime, end_datetime) -> xarray.Dataset:
+def _fake_open_dataset(*, dataset_id, variables, start_datetime, end_datetime, chunk_size_limit) -> xarray.Dataset:
+    assert chunk_size_limit == 0, "the archive is opened without dask, only the week is chunked"
     return _native_dataset(variables)
 
 

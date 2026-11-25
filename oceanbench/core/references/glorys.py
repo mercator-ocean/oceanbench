@@ -9,7 +9,7 @@ from xarray import Dataset, concat
 import logging
 import copernicusmarine
 from oceanbench.core.resolution import get_dataset_resolution
-from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.dataset_utils import Dimension, chunked_by_field
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
 from oceanbench.core.reference_depths import (
     reference_depth_grid_stage_variant,
@@ -80,11 +80,12 @@ def _glorys_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.
         ],
         start_datetime=first_day.strftime("%Y-%m-%dT00:00:00"),
         end_datetime=(first_day + pandas.Timedelta(days=days_count - 1)).strftime("%Y-%m-%dT00:00:00"),
+        # Opened without dask: with dask chunks, the toolbox builds the graph of the whole archive (3.7 million
+        # tasks per variable) for every week opened. The week selected below is chunked alone.
+        chunk_size_limit=0,
     )
 
-    dataset = dataset.sel(depth=target_depths, method="nearest")
-
-    return dataset
+    return chunked_by_field(dataset.sel(depth=target_depths, method="nearest"))
 
 
 def _prepare_glorys_1_12_week_dataset(

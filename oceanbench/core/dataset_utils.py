@@ -82,6 +82,15 @@ DEPTH_LABELS: dict[DepthLevel, str] = {
 
 LEAD_DAYS_COUNT = 10
 
+# One dask chunk per horizontal field (one day, one depth) for the 1/12 degree datasets read remotely: their native
+# zarr tiles (512 x 2048 for the references, 640 x 1280 for the GLO12 forecasts) give 30 times more dask tasks per
+# start date, and the two tilings do not align, so every comparison rechunks.
+FIELD_CHUNKS = {"time": 1, "depth": 1, "latitude": -1, "longitude": -1}
+
+
+def chunked_by_field(dataset):
+    return dataset.chunk({name: size for name, size in FIELD_CHUNKS.items() if name in dataset.dims})
+
 # For class IV validation :
 
 DEPTH_BINS_DEFAULT: dict[str, tuple[float, float]] = {

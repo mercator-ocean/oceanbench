@@ -7,7 +7,7 @@ import numpy
 import pandas
 from xarray import Dataset, merge, concat
 import logging
-from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.dataset_utils import Dimension, chunked_by_field
 from oceanbench.core.resolution import get_dataset_resolution
 import copernicusmarine
 from oceanbench.core.climate_forecast_standard_names import StandardVariable
@@ -70,13 +70,16 @@ def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.n
     start_datetime = first_day.strftime("%Y-%m-%dT00:00:00")
     end_datetime = (first_day + pandas.Timedelta(days=days_count - 1)).strftime("%Y-%m-%dT00:00:00")
 
-    # Load each variable separately as the dataset_ids are different
+    # Load each variable separately as the dataset_ids are different. Opened without dask (chunk_size_limit=0):
+    # with dask chunks, the toolbox builds the graph of the whole archive for every week opened. The week selected
+    # below is chunked alone.
 
     dataset_temperature = copernicusmarine.open_dataset(
         dataset_id="cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m",
         variables=[StandardVariable.SEA_WATER_POTENTIAL_TEMPERATURE.value],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
+        chunk_size_limit=0,
     )
 
     dataset_salinity = copernicusmarine.open_dataset(
@@ -84,6 +87,7 @@ def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.n
         variables=[StandardVariable.SEA_WATER_SALINITY.value],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
+        chunk_size_limit=0,
     )
 
     dataset_current = copernicusmarine.open_dataset(
@@ -94,6 +98,7 @@ def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.n
         ],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
+        chunk_size_limit=0,
     )
 
     dataset_sea_surface_height = copernicusmarine.open_dataset(
@@ -101,6 +106,7 @@ def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.n
         variables=[StandardVariable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.value],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
+        chunk_size_limit=0,
     )
 
     dataset_temperature = dataset_temperature.sel(depth=target_depths, method="nearest")
@@ -109,7 +115,7 @@ def _glo12_1_12_path(first_day_datetime, days_count: int, target_depths: numpy.n
 
     dataset = merge([dataset_temperature, dataset_salinity, dataset_current, dataset_sea_surface_height])
 
-    return dataset
+    return chunked_by_field(dataset)
 
 
 def _prepare_glo12_1_12_week_dataset(
