@@ -111,6 +111,8 @@ def _with_mld_data(mld_dataset: xarray.Dataset, data: dask.array.Array) -> xarra
 
 
 def _spillable(mld_dataset: xarray.Dataset) -> bool:
+    if not isinstance(mld_dataset, xarray.Dataset):
+        return False
     data = _mld_variable(mld_dataset).data
     return isinstance(data, dask.array.Array) and _uniform_chunks(data) and _spill_directory() is not None
 
