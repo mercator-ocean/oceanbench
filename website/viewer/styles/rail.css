@@ -20,10 +20,12 @@ SPDX-License-Identifier: EUPL-1.2
   color: var(--text);
   margin: 0 0 var(--s2);
 }
-.rail-subtitle { font-size: var(--text-sm); color: var(--muted); margin: 0 0 var(--s5); line-height: var(--ob-line-body); }
-#rail-subtitle { min-height: 2lh; }
+.rail-subtitle { font-size: var(--text-sm); color: var(--muted); margin: 0 0 var(--s2); line-height: var(--ob-line-body); }
+#rail-subtitle:empty { display: none; }
 .rail-caption:empty { display: none; }
 .chart-title-unit { font-weight: var(--w-strong); }
+.chart-title-n { font-weight: var(--w-regular); font-size: var(--text-sm); color: var(--muted); margin-left: var(--s1); }
+.chart-title-n:empty { display: none; }
 #rail-provenance { min-height: calc(2lh + var(--s3)); }
 .rail-current-depth-note {
   margin: 0 0 var(--group-gap);

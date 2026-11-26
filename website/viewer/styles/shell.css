@@ -48,7 +48,7 @@ h1, h2, h3, h4 { font-size: inherit; font-weight: var(--w-strong); margin: 0; }
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: var(--s2) var(--s4);
+  gap: var(--s2);
   padding: var(--s2) var(--pad);
   border-bottom: var(--hairline) solid var(--border);
   background: var(--surface);
@@ -217,7 +217,7 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--s2) var(--s4);
+  gap: var(--s2);
   padding: var(--s2) var(--pad);
   border-bottom: var(--hairline) solid var(--border);
   background: var(--surface);
@@ -231,8 +231,13 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 .control-bar:has(.layout-switch [data-layout="1"].active) #bar-forecast-1,
 .control-bar:has(.layout-switch [data-layout="1"].active) .panel-variable[data-index="1"],
 .map-area:has(.panel-grid[data-display="diff"]) .panel-variable[data-index="1"] { display: none; }
-.control-bar select { max-width: var(--ob-viewer-select-max); }
+.control-bar select { max-width: var(--ob-viewer-select-max); field-sizing: content; }
+.control-bar .segmented .ghost-button { padding: 0 var(--s2); }
+
 .control-bar .panel-forecast-label { font-size: var(--text-sm); }
+.bar-label { font-size: var(--text-sm); color: var(--muted); }
+.bar-forecasts .layout-switch .ghost-button { min-width: var(--control-height); padding: 0 var(--s2); }
+.bar-forecasts > .bar-variable { display: contents; }
 .bar-more { margin-left: auto; position: relative; }
 .bar-more > summary { list-style: none; display: inline-flex; align-items: center; }
 .bar-more > summary::-webkit-details-marker { display: none; }

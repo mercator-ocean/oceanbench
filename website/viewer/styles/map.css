@@ -210,7 +210,7 @@ SPDX-License-Identifier: EUPL-1.2
    play and speed | lead slider and readout | colour bar | legend and status */
 .map-dock {
   display: grid;
-  grid-template-columns: auto minmax(var(--ob-viewer-lead-track-min), 2fr) auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(var(--ob-viewer-lead-track-min), auto) auto minmax(0, 1fr);
   align-items: center;
   gap: var(--s2) var(--s5);
   padding: var(--s2) var(--pad);
@@ -241,7 +241,7 @@ SPDX-License-Identifier: EUPL-1.2
   position: relative;
   display: flex;
   align-items: center;
-  flex: 1 1 auto;
+  flex: 0 1 var(--ob-viewer-lead-track-max);
   min-width: var(--ob-viewer-lead-track-min);
   max-width: var(--ob-viewer-lead-track-max);
   --lead-thumb: var(--ob-viewer-thumb-size);

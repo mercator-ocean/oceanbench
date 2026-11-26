@@ -1393,6 +1393,8 @@ function updatePanelMethodNote(panel) {
   const head = panel.container.querySelector(".panel-head");
   if (!head) return;
   head.querySelectorAll(".method-note-btn").forEach((button) => button.remove());
+  // One "?" for the map area: the first shown panel carries it.
+  if (panel.index > 0) return;
   if (shared.scope === SCOPE_WHOLE_YEAR) {
     if (!panel.yearMissing) attachMethodNote(head, "year-geography");
   } else if (isDiffHost(panel)) {
@@ -3329,7 +3331,6 @@ function updateYearLegend(visible) {
     `<span class="item"><span class="swatch" style="background:${rgbCss(noObsColor(shared.theme))}"></span>ocean, no observations</span>` +
     (activePeriodRange() ? `<span class="item">${PERIOD_NOT_APPLIED}</span>` : "");
   // Colorbar-adjacent method note for the year raster (the colorbar itself is a canvas).
-  attachMethodNote(legend, "year-geography");
 }
 
 // The single bottom legend strip always describes the PRIMARY layer actually drawn:
@@ -3500,7 +3501,7 @@ function renderClass4Legend(legend, scales) {
   legend.hidden = false;
   legend.innerHTML =
     `<span class="legend-note">${countText} · scale ${scales.map(({ scale, units }) => `${scale ? scale.toFixed(3) : "n/a"} ${escapeHtml(units)}`).join(" / ")}${weak}${legendHelpAnchor()}</span>`;
-  attachMethodNote(legend.querySelector(".legend-help"), "class4-legend");
+
 }
 
 function class4PanelCountText(panel) {
@@ -3564,7 +3565,7 @@ function renderEddyLegend(legend) {
     `<span class="legend-row">${swatches}</span>` +
     `<span class="legend-note dim">${escapeHtml(caption)}${legendHelpAnchor()}</span>`;
   const census = censuses.find(Boolean);
-  attachEddyMethodNote(legend.querySelector(".legend-help"), census && census.parameters);
+
 }
 
 // Trajectories mode: the two forecast colours the fans are drawn in, plus the seed note.
@@ -3581,7 +3582,7 @@ function renderTrajectoryLegend(legend) {
   legend.innerHTML =
     `<span class="legend-row">${swatches}</span>` +
     `<span class="legend-note dim">${escapeHtml(caption)}${legendHelpAnchor()}</span>`;
-  attachMethodNote(legend.querySelector(".legend-help"), "trajectories");
+
 }
 
 // ---- context rail -----------------------------------------------------------
@@ -3685,7 +3686,6 @@ function renderRailProvenance(shown) {
     element.appendChild(span);
   });
   element.hidden = false;
-  attachMethodNote(element, "data-provenance");
 }
 
 // RMSE vertical profile (RMSE vs depth) for the shown forecast(s) at the selected lead
@@ -3725,7 +3725,7 @@ async function renderRailDepthProfile(shown, comparison) {
     lead = lead == null ? profile.lead : lead;
     unit = unit || entry.units || "";
     lines.push({
-      label: comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}` : "RMSE vs depth",
+      label: comparison ? labelFor(panel.state.dataset).replace(/\s*\(.*\)\s*$/, "") : "RMSE vs depth",
       color: forecastColor(panel.index),
       // Temperature's "0-5m" bin holds obs from 1 to 5 m (its own "surface" bin takes the top metre).
       bins:
@@ -4036,6 +4036,12 @@ function renderRailSkill(shown, comparison) {
   let unit = "";
   const notes = [];
   const binLabels = new Set();
+  const startCounts = new Set();
+  // Chart lines carry the bare dataset name ("GLONET"); F1/F2 is added only when both
+  // forecasts show the same dataset, so the legend stays on one row.
+  const datasetName = (panel) => labelFor(panel.state.dataset).replace(/\s*\(.*\)\s*$/, "");
+  const sameNames = new Set(shown.map(datasetName)).size < shown.length;
+  const shortLeadLabel = (panel) => (sameNames ? `F${panel.index + 1} ${datasetName(panel)}` : datasetName(panel));
   try {
     for (const panel of shown) {
       const skill = skillSeries(panel);
@@ -4071,21 +4077,19 @@ function renderRailSkill(shown, comparison) {
         labels.set(
           seriesKey,
           isCurrentsVariable(panel.state.variable)
-            ? `${comparison ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)} · ` : ""}${
-                component === "eastward" ? "u (eastward)" : "v (northward)"
-              }`
+            ? `${comparison ? `${shortLeadLabel(panel)} ` : ""}${component === "eastward" ? "u" : "v"}`
             : comparison
-              ? `Forecast ${panel.index + 1} · ${labelFor(panel.state.dataset)}`
+              ? shortLeadLabel(panel)
               : `RMSE vs ${referenceLabel}`,
         );
       }
       // n_starts is available from the summary, so report the real number of start dates
       // behind the aggregate (item 5). TODO(pipeline): expose per-lead matchup counts too.
-      notes.push(
-        `${labelFor(panel.state.dataset)}: n = ${skill.n} starts${skill.n < 10 ? " (low, weak statistic)" : ""}${
-          activePeriodRange() ? (skill.periodApplied ? ` in ${activePeriodRange().label}` : `, ${PERIOD_NOT_APPLIED}`) : ""
-        }`,
-      );
+      startCounts.add(skill.n);
+      if (skill.n < 10) notes.push(`${labelFor(panel.state.dataset)}: few starts, weak statistic`);
+      if (activePeriodRange()) {
+        notes.push(skill.periodApplied ? `In ${activePeriodRange().label}` : PERIOD_NOT_APPLIED);
+      }
       if (isCurrentsVariable(panel.state.variable)) notes.push("Map: speed from paired u/v. Curves: u and v RMSE.");
     }
   } catch (error) {
@@ -4107,7 +4111,9 @@ function renderRailSkill(shown, comparison) {
         emptyMessage: `no ${referenceLabel} score for this variable/product`,
       })
     : "";
-  elements["rail-skill-note"].textContent = notes.join(" · ");
+  elements["rail-skill-note"].textContent = [...new Set(notes)].join(" · ");
+  const skillCount = document.getElementById("rail-skill-n");
+  if (skillCount) skillCount.textContent = startCounts.size ? `n = ${[...startCounts].join(" / ")} starts` : "";
   wireCursorTooltip(elements["rail-lead-curve"]);
 }
 
@@ -5401,15 +5407,15 @@ function wireStaticMethodNotes() {
   const skillHeading = elements["rail-lead-curve"] && elements["rail-lead-curve"].closest(".rail-section")?.querySelector("h3");
   if (skillHeading) attachMethodNote(skillHeading, "lead-curve");
   const depthHeading = elements["rail-depth-profile-section"] && elements["rail-depth-profile-section"].querySelector("h3");
-  if (depthHeading) attachMethodNote(depthHeading, "depth-profile");
+
   const yearHeading = elements["rail-year-rmsd-section"] && elements["rail-year-rmsd-section"].querySelector("h3");
-  if (yearHeading) attachMethodNote(yearHeading, "year-rmsd");
+
   const psdHeading = document.getElementById("rail-spectra-section")?.querySelector("h3");
-  if (psdHeading) attachMethodNote(psdHeading, "psd");
+
   const trajectoryHeading = elements["rail-trajectory-section"] && elements["rail-trajectory-section"].querySelector("h3");
-  if (trajectoryHeading) attachMethodNote(trajectoryHeading, "trajectories");
+
   const currentsLegend = elements["currents-group"] && elements["currents-group"].querySelector("legend");
-  if (currentsLegend) attachMethodNote(currentsLegend, "currents");
+
 }
 
 // Switch the year-scope map + rail between |error| and signed bias. Re-renders the
@@ -5952,7 +5958,7 @@ function watchChartTitleUnits(slots) {
     if (!span) {
       span = document.createElement("span");
       span.className = "chart-title-unit";
-      title.insertBefore(span, title.querySelector(".method-note-btn"));
+      title.insertBefore(span, title.querySelector(".chart-title-n, .method-note-btn"));
     }
     const unit = chart.dataset.titleUnit;
     span.textContent = unit ? ` (${unit})` : "";

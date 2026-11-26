@@ -19,7 +19,7 @@
       "name": "leadSliderWidth",
       "selector": "#lead-day",
       "property": "width",
-      "expected": 292.66,
+      "expected": 129,
       "tolerancePx": 8
     },
     {

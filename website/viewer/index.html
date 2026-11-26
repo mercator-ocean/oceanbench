@@ -75,19 +75,20 @@ SPDX-License-Identifier: EUPL-1.2
         <!-- One bar that reads left to right: forecasts, compare mode, variable, dates, region, More. -->
         <div class="control-bar" role="toolbar" aria-label="View controls">
           <div class="bar-group bar-forecasts">
+            <span class="bar-label" aria-hidden="true">Forecasts</span>
             <div class="layout-switch segmented" role="group" aria-label="Number of forecasts">
-              <button type="button" data-layout="1" class="ghost-button">1 forecast</button>
-              <button type="button" data-layout="2" class="ghost-button">2 forecasts</button>
+              <button type="button" data-layout="1" class="ghost-button" aria-label="1 forecast" title="1 forecast">1</button>
+              <button type="button" data-layout="2" class="ghost-button" aria-label="2 forecasts" title="2 forecasts">2</button>
             </div>
             <span id="bar-forecast-0" class="bar-forecast"></span>
             <span id="bar-forecast-1" class="bar-forecast"></span>
+            <div id="bar-variable" class="bar-group bar-variable"></div>
           </div>
           <div class="display-switch segmented" role="group" aria-label="Two-forecast display" hidden>
-            <button type="button" data-display="side" class="ghost-button">Side by side</button>
+            <button type="button" data-display="side" class="ghost-button" title="Side by side">Side</button>
             <button type="button" data-display="swipe" class="ghost-button">Swipe</button>
-            <button type="button" data-display="diff" class="ghost-button">Difference</button>
+            <button type="button" data-display="diff" class="ghost-button" title="Difference">Diff</button>
           </div>
-          <div id="bar-variable" class="bar-group bar-variable"></div>
           <div class="bar-group bar-dates">
             <div class="scope-switch segmented" role="group" aria-label="Dates">
               <button type="button" data-scope="single" class="ghost-button">One date</button>
@@ -206,8 +207,8 @@ SPDX-License-Identifier: EUPL-1.2
             <button type="button" data-forecast="0" class="ghost-button">F1</button>
             <button type="button" data-forecast="1" class="ghost-button">F2</button>
           </div>
-          <section class="rail-section">
-            <h3>RMSE vs lead day</h3>
+          <section class="rail-section rail-section-lead">
+            <h3>RMSE vs lead day <span id="rail-skill-n" class="chart-title-n"></span></h3>
             <div id="rail-skill-reference" class="rail-skill-reference segmented" role="group" aria-label="Scored against">
               <button type="button" data-skill-reference="observations" class="ghost-button">Obs</button>
               <button type="button" data-skill-reference="glorys" class="ghost-button">GLORYS</button>
@@ -257,7 +258,7 @@ SPDX-License-Identifier: EUPL-1.2
           <p id="rail-provenance" class="rail-provenance" hidden></p>
         </div>
         <div id="map-rail-splitter" class="drawer-resizer" role="separator" aria-orientation="vertical" aria-label="Resize context rail"></div>
-        <button id="rail-collapse" type="button" class="drawer-tab" data-label="Context" aria-expanded="true" aria-label="Collapse context rail" title="Collapse / expand rail"></button>
+        <button id="rail-collapse" type="button" class="drawer-tab" data-label="" aria-expanded="true" aria-label="Collapse context rail" title="Collapse / expand rail"></button>
       </aside>
     </div>
 
