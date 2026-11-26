@@ -18,6 +18,7 @@ from oceanbench.core.classIV_support import (
     format_class4_results,
     interpolate_class4_model_to_observations,
     prepare_class4_model_variable,
+    reset_class4_observations_cache,
 )
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
 from oceanbench.core.dataset_utils import Dimension, Variable
@@ -146,6 +147,8 @@ def rmsd_class4_validation_by_start(
         part_paths: dict[str, dict[int, list[Path]]] = {variable_key: {} for variable_key in variable_keys}
         part_count = 0
         for start_observations in start_reference_datasets:
+            # Without this, the prepared observations of every start date would stay in the cache.
+            reset_class4_observations_cache()
             for variable_key in variable_keys:
                 observations_dataframe = _matched_observations(
                     challenger, start_observations, variable_key, lead_days_count, population_layers
@@ -159,6 +162,7 @@ def rmsd_class4_validation_by_start(
                     part.reset_index(drop=True).to_pickle(path)
                     part_paths[variable_key].setdefault(int(lead_day), []).append(path)
                 del observations_dataframe, matchups
+        reset_class4_observations_cache()
 
         all_results = []
         for variable_key in variable_keys:

@@ -47,3 +47,14 @@ def xarray_concat(parts):
     import xarray
 
     return xarray.concat(parts, dim="observation")
+
+
+def test_class4_rmsd_by_start_keeps_no_prepared_observations() -> None:
+    from oceanbench.core import classIV_support
+
+    by_start = _observations_by_start(synthetic_class4.observations_dataset())
+    rmsd_class4_validation_by_start(
+        synthetic_class4.challenger_dataset(), iter(by_start), synthetic_class4.ocean_mask(), synthetic_class4.VARIABLES
+    )
+
+    assert classIV_support._CLASS4_OBSERVATIONS_CACHE == {}
