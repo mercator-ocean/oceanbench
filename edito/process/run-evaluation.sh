@@ -240,7 +240,8 @@ check_inputs() {
             ;;
         mld-store) [ -n "${OCEANBENCH_MLD_STORE:-}" ] || fail "MODE=mld-store needs OCEANBENCH_MLD_STORE" ;;
         mld-ab) ;;
-        *) fail "MODE is evaluate, shard, merge, mld-store or mld-ab, not $MODE" ;;
+        code-ab) [ -n "${CODE_AB_BASE:-}" ] || fail "MODE=code-ab needs CODE_AB_BASE" ;;
+        *) fail "MODE is evaluate, shard, merge, mld-store, mld-ab or code-ab, not $MODE" ;;
     esac
     if is_true "$VIEWER_ONLY" && ! is_true "$VIEWER"; then
         fail "VIEWER_ONLY=true needs VIEWER=true"
@@ -361,6 +362,23 @@ run_mld_ab() {
     begin_stage "mixed layer depth A/B ${MLD_AB_RUNS:-A,B,A,B}"
     (cd "$RUN_DIRECTORY" && with_timestamps env PYTHONUNBUFFERED=1 python3 "$PROCESS_DIRECTORY/mld_ab.py" \
         "$CHALLENGER_FILE" "$output_directory" "${MLD_AB_RUNS:-A,B,A,B}" "${MLD_AB_PROFILED_RUN:-3}")
+    end_stage
+    [ -z "$OUTPUT_BUCKET" ] || python3 "$JOB_HELPER" upload "$OUTPUT_BUCKET" "$OUTPUT_PREFIX" "$output_directory"
+}
+
+run_code_ab() {
+    local output_directory="$RUN_DIRECTORY/code-ab" base_directory="$WORK_DIRECTORY/code-ab-base"
+    begin_stage "fetch base code $CODE_AB_BASE"
+    mkdir -p "$base_directory"
+    python3 -c 'import io, sys, tarfile, urllib.request
+data = urllib.request.urlopen("https://codeload.github.com/mercator-ocean/oceanbench/tar.gz/" + sys.argv[1]).read()
+tarfile.open(fileobj=io.BytesIO(data)).extractall(sys.argv[2])' "$CODE_AB_BASE" "$base_directory"
+    base_directory="$(dirname "$(find "$base_directory" -maxdepth 2 -name oceanbench -type d | head -1)")"
+    log "base code in $base_directory"
+    end_stage
+    begin_stage "code A/B ${CODE_AB_RUNS:-A,B}"
+    (cd "$RUN_DIRECTORY" && with_timestamps env PYTHONUNBUFFERED=1 python3 "$PROCESS_DIRECTORY/code_ab.py" \
+        "$CHALLENGER_FILE" "$output_directory" "${CODE_AB_RUNS:-A,B}" "$base_directory")
     end_stage
     [ -z "$OUTPUT_BUCKET" ] || python3 "$JOB_HELPER" upload "$OUTPUT_BUCKET" "$OUTPUT_PREFIX" "$output_directory"
 }
@@ -500,6 +518,7 @@ main() {
         merge) run_merge ;;
         mld-store) run_mld_store ;;
         mld-ab) run_mld_ab ;;
+        code-ab) run_code_ab ;;
         *) run_evaluation ;;
     esac
     upload_results
