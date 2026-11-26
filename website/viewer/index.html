@@ -40,7 +40,7 @@ SPDX-License-Identifier: EUPL-1.2
         <div class="header-utility">
           <a class="ghost-button site-link" href="../index.html" target="_top">Scores</a>
           <button id="theme-toggle" type="button" class="ghost-button">Light theme</button>
-          <button id="about-toggle" type="button" class="ghost-button" aria-label="About and credits" title="About and credits">ⓘ About</button>
+          <button id="about-toggle" type="button" class="ghost-button" aria-label="About and credits" title="About and credits">About</button>
         </div>
       </div>
     </header>
@@ -75,6 +75,7 @@ SPDX-License-Identifier: EUPL-1.2
     <div class="workspace">
       <aside id="left-drawer" class="drawer drawer-left" aria-label="Shared view controls">
         <div class="controls drawer-body">
+          <h2 class="section-label">View</h2>
           <div class="field">
             <span class="field-label">Compare</span>
             <div class="scope-switch segmented" role="group" aria-label="View scope">
@@ -89,6 +90,7 @@ SPDX-License-Identifier: EUPL-1.2
             <button type="button" data-metric="bias" class="ghost-button">bias</button>
           </div>
 
+          <h2 class="section-label">Data</h2>
           <div class="field period-field">
             <label>Period
               <select id="period-select">
@@ -120,6 +122,7 @@ SPDX-License-Identifier: EUPL-1.2
             </select>
           </label>
 
+          <h2 class="section-label overlay-section-label">Overlay</h2>
           <label>Map overlay
             <select id="overlay-mode">
               <option value="none">None</option>
@@ -170,20 +173,8 @@ SPDX-License-Identifier: EUPL-1.2
              bar and the drawers. Equal side tracks put the colour scale on the centre
              of the map column without any arithmetic. -->
         <div class="map-dock">
-          <!-- The readout names the control, so a separate label beside it would be
-               the same two words twice. -->
-          <!-- The scrubber row keeps its exact width: playback sits on its own line
-               underneath, in the height the scale cell already reserves, so adding it
-               takes nothing from the track and nothing from the map. -->
-          <div class="dock-lead-stack">
-            <div class="dock-lead">
-              <span class="lead-track">
-                <input type="range" id="lead-day" min="1" max="10" step="1" value="1" aria-label="Lead day" />
-                <span id="lead-ticks" class="lead-ticks" aria-hidden="true"></span>
-              </span>
-              <span id="lead-value" class="lead-value">Lead day 1</span>
-            </div>
-            <div class="dock-playback">
+          <!-- One row: playback | lead scrubber | colour scale | legend and status. -->
+          <div class="dock-playback">
               <button id="lead-play" type="button" class="ghost-button playback-play" aria-pressed="false"
                       aria-label="Play lead days" title="Play leads (any other control pauses)">▶</button>
               <div id="playback-speed" class="playback-speed segmented" role="group" aria-label="Playback speed">
@@ -192,14 +183,22 @@ SPDX-License-Identifier: EUPL-1.2
                 <button type="button" data-speed="2" class="ghost-button" title="Double speed">2×</button>
               </div>
             </div>
-          </div>
+          <div class="dock-lead">
+              <span class="lead-track">
+                <input type="range" id="lead-day" min="1" max="10" step="1" value="1" aria-label="Lead day" />
+                <span id="lead-ticks" class="lead-ticks" aria-hidden="true"></span>
+              </span>
+              <span id="lead-value" class="lead-value">Lead day 1</span>
+            </div>
           <div class="dock-scale">
             <canvas id="colorbar" class="colorbar"></canvas>
             <canvas id="colorbar-2" class="colorbar" hidden></canvas>
+          </div>
+          <div class="dock-legend">
             <div id="map-legend" class="map-legend" hidden></div>
             <div id="year-legend" class="year-legend" hidden></div>
+            <p id="status" class="status" role="status">Loading…</p>
           </div>
-          <p id="status" class="status" role="status">Loading…</p>
         </div>
       </main>
 

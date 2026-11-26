@@ -16,7 +16,8 @@ const VIEW_HEIGHT = 220;
 // overlapped.
 const PAD_LEFT = 50;
 const PAD_RIGHT = 12;
-const PAD_TOP = 14;
+// The top pad holds one legend row above the plot, so a legend never sits on an axis.
+const PAD_TOP = 28;
 const PAD_BOTTOM = 30;
 
 // Left gutter for a y axis whose tick labels are wider than the shared PAD_LEFT allows.
@@ -126,7 +127,7 @@ function renderLegend(area, entries, layout = null) {
   return entries
     .map((entry, index) => {
       const x = area.x0 + (layout ? layout.positions[index].dx : 0);
-      const y = 2 + (layout ? layout.positions[index].row : index) * LEGEND_ROW;
+      const y = 4 + (layout ? layout.positions[index].row : index) * LEGEND_ROW;
       const swatch = entry.dashed
         ? `<line x1="${x}" y1="${y + 4.5}" x2="${x + 9}" y2="${y + 4.5}" stroke="${entry.color}" stroke-width="2" stroke-dasharray="${DASH_PATTERN_SHORT}"/>`
         : `<rect x="${x}" y="${y}" width="9" height="9" rx="2" fill="${entry.color}"/>`;

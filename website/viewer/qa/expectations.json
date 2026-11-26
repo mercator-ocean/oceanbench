@@ -19,14 +19,14 @@
       "name": "leadSliderWidth",
       "selector": "#lead-day",
       "property": "width",
-      "expected": 148.02,
+      "expected": 122,
       "tolerancePx": 8
     },
     {
       "name": "playbackDockHeight",
       "selector": ".dock-playback",
       "property": "height",
-      "expected": 21.59,
+      "expected": 32,
       "tolerancePx": 8
     },
     {

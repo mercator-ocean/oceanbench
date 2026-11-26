@@ -17,7 +17,7 @@ import { lookupTable } from "../vendor/cmocean/colormaps.js";
 // The live values come from the shared design tokens (tokens.css, --ob-viewer-land and
 // --ob-viewer-no-obs, themed by data-theme on <html>); the per-theme literals below are
 // the fallback kept in sync with that file.
-const LAND_LIGHT = [190, 184, 174];
+const LAND_LIGHT = [201, 201, 197];
 const LAND_DARK = [132, 130, 126];
 export const NO_OBS_LIGHT = [222, 231, 243];
 export const NO_OBS_DARK = [42, 54, 72];
@@ -402,7 +402,7 @@ export function drawColorbar(canvas, colormapName, range, { label = "", units = 
   context.putImageData(gradient, 0, barTopDevice);
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.fillStyle = textColor;
-  context.font = "11px system-ui, sans-serif";
+  context.font = `${getComputedStyle(canvas).getPropertyValue("--ob-text-xs").trim() || "11px"} ${getComputedStyle(canvas).fontFamily || "sans-serif"}`;
   context.textBaseline = "top";
   if (label) {
     // Left-align and ellipsize on the right so the leading, most meaningful part of
