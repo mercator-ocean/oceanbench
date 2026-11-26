@@ -189,3 +189,42 @@ def upload(fields: dict[str, tuple[str, xarray.DataArray]], depth_levels: numpy.
     with ThreadPoolExecutor(8) as pool:
         list(pool.map(one, fields.items()))
     print(f"[mld-store] uploaded {len(fields)} dates")
+
+
+def build(challenger_python_code: str, starts_per_batch: int = 13) -> None:
+    """
+    Compute and upload the reference mixed layer depths of every valid date of the challenger start dates, for the
+    GLORYS reanalysis and the GLO12 analysis, in batches of start dates (dates already in the store are skipped).
+    """
+    from time import perf_counter
+
+    from oceanbench.core import mld_reuse
+    from oceanbench.core.dataset_utils import Dimension
+    from oceanbench.core.derived_quantities import compute_mixed_layer_depth
+    from oceanbench.core.evaluate import open_challenger_dataset
+    from oceanbench.core.references.glo12 import glo12_analysis_dataset
+    from oceanbench.core.references.glorys import glorys_reanalysis_dataset
+    from oceanbench.core.regions import GLOBAL_REGION_NAME, subset_dataset_to_region
+
+    os.environ["OCEANBENCH_MLD_STORE_WRITE"] = "1"
+    challenger_dataset = subset_dataset_to_region(open_challenger_dataset(challenger_python_code), GLOBAL_REGION_NAME)
+    start_count = challenger_dataset.sizes[Dimension.FIRST_DAY_DATETIME.key()]
+    for reference_dataset_of in (glorys_reanalysis_dataset, glo12_analysis_dataset):
+        for first in range(0, start_count, starts_per_batch):
+            start = perf_counter()
+            batch = challenger_dataset.isel(
+                {Dimension.FIRST_DAY_DATETIME.key(): slice(first, first + starts_per_batch)}
+            )
+            key = ("build", first, reference_dataset_of.__name__)
+            mld_reuse.reference_mixed_layer_depth(
+                key,
+                subset_dataset_to_region(reference_dataset_of(batch), GLOBAL_REGION_NAME),
+                compute_mixed_layer_depth,
+            )
+            if ("reference",) + key not in mld_reuse._state["entries"]:
+                raise RuntimeError("reference mixed layer depth was not split by valid date, nothing stored")
+            mld_reuse.clear()
+            last = first + batch.sizes[Dimension.FIRST_DAY_DATETIME.key()] - 1
+            print(
+                f"[mld-store] build {reference_dataset_of.__name__} starts {first}..{last} in {perf_counter() - start:.1f} s"
+            )
