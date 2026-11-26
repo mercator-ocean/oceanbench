@@ -79,3 +79,54 @@ SPDX-License-Identifier: EUPL-1.2
   .dock-playback { justify-content: space-between; }
   .dock-scale { width: 100%; }
 }
+
+/* Phone: forecasts on the first rows, then Variable and Filters; the rest opens in
+   place under Filters, and the scores open as a bottom sheet from Scores. */
+@media (max-width: 50em) {
+  .control-bar { flex-wrap: wrap; row-gap: var(--s2); column-gap: var(--s2); padding: var(--s2) var(--s4); }
+  .bar-forecasts { flex: 1 0 100%; flex-wrap: wrap; }
+  .bar-forecasts .display-switch { order: 4; }
+  .bar-variable { flex: 1 1 0; }
+  .bar-variable select { width: 100%; max-width: none; }
+  .bar-filters, .bar-scores { display: inline-flex; align-items: center; }
+  .bar-dates, .bar-end > :not(.bar-scores) { display: none; }
+  .bar-end { margin-left: 0; }
+  .control-bar.filters-open .bar-dates { display: flex; flex: 1 0 100%; flex-wrap: wrap; order: 10; }
+  .control-bar.filters-open .bar-end > .bar-more,
+  .control-bar.filters-open .bar-end > .bar-chip:not([hidden]),
+  .control-bar.filters-open .bar-end > #about-toggle { display: inline-flex; }
+  .control-bar.filters-open .bar-end { flex: 1 0 100%; order: 11; flex-wrap: wrap; }
+  .control-bar.filters-open .bar-end > .bar-scores { display: none; }
+  .app-bar { flex-wrap: nowrap; padding: var(--s1) var(--s4); }
+  .app-bar .title { display: none; }
+  .header-utility .ghost-button { padding: 0 var(--s2); }
+  .bar-more-menu { left: 0; right: auto; }
+  .map-key { max-width: calc(100% - var(--s4)); }
+  .map-key .dock-scale { width: var(--ob-viewer-colorbar-width-sm); }
+  .map-dock { grid-template-columns: auto minmax(0, 1fr); }
+  .dock-lead { flex-wrap: nowrap; }
+  .dock-lead .lead-value { min-width: 0; }
+  .drawer-right {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: 70vh;
+    border-left: 0;
+    border-top: var(--hairline) solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .drawer-right.collapsed { display: none; }
+  .workspace { grid-template-columns: 0 minmax(0, 1fr) 0; }
+  .drawer-right .drawer-tab {
+    top: var(--s2);
+    right: var(--s2);
+    left: auto;
+    transform: none;
+    border: var(--hairline) solid var(--border);
+    border-radius: var(--radius);
+  }
+  .drawer-right .drawer-tab::before { content: "\2715"; }
+}

@@ -64,6 +64,7 @@ SPDX-License-Identifier: EUPL-1.2
     </dialog>
 
     <div class="workspace">
+
       <!-- The view controls moved to the bar above the map. The drawer stays as an empty,
            hidden column so the layout code and the URL hash keep their shape. -->
       <aside id="left-drawer" class="drawer drawer-left" aria-hidden="true" hidden>
@@ -71,24 +72,25 @@ SPDX-License-Identifier: EUPL-1.2
         <button id="left-collapse" type="button" class="drawer-tab" hidden tabindex="-1"></button>
       </aside>
 
-      <main class="map-area">
-        <!-- One bar that reads left to right: forecasts, compare mode, variable, dates, region, More. -->
+        <!-- One row, in a fixed order: forecasts, compare, variable, dates, then More.
+             Everything a visitor changes less often lives in More. -->
         <div class="control-bar" role="toolbar" aria-label="View controls">
           <div class="bar-group bar-forecasts">
-            <span class="bar-label" aria-hidden="true">Forecasts</span>
             <div class="layout-switch segmented" role="group" aria-label="Number of forecasts">
+              <span class="bar-label segmented-label" aria-hidden="true">Forecasts</span>
               <button type="button" data-layout="1" class="ghost-button" aria-label="1 forecast" title="1 forecast">1</button>
               <button type="button" data-layout="2" class="ghost-button" aria-label="2 forecasts" title="2 forecasts">2</button>
             </div>
             <span id="bar-forecast-0" class="bar-forecast"></span>
             <span id="bar-forecast-1" class="bar-forecast"></span>
-            <div id="bar-variable" class="bar-group bar-variable"></div>
+            <div class="display-switch segmented" role="group" aria-label="Two-forecast display" hidden>
+              <button type="button" data-display="side" class="ghost-button" title="Side by side">Side</button>
+              <button type="button" data-display="swipe" class="ghost-button">Swipe</button>
+              <button type="button" data-display="diff" class="ghost-button" title="Difference">Diff</button>
+            </div>
           </div>
-          <div class="display-switch segmented" role="group" aria-label="Two-forecast display" hidden>
-            <button type="button" data-display="side" class="ghost-button" title="Side by side">Side</button>
-            <button type="button" data-display="swipe" class="ghost-button">Swipe</button>
-            <button type="button" data-display="diff" class="ghost-button" title="Difference">Diff</button>
-          </div>
+          <div id="bar-variable" class="bar-group bar-variable"></div>
+          <button id="filters-toggle" type="button" class="ghost-button bar-filters" aria-expanded="false">Filters</button>
           <div class="bar-group bar-dates">
             <div class="scope-switch segmented" role="group" aria-label="Dates">
               <button type="button" data-scope="single" class="ghost-button">One date</button>
@@ -115,62 +117,85 @@ SPDX-License-Identifier: EUPL-1.2
                 <input type="date" id="period-to">
               </div>
             </div>
-            <div class="metric-switch segmented" id="metric-switch" role="group" aria-label="Year metric">
-              <button type="button" data-metric="error" class="ghost-button">Absolute error</button>
-              <button type="button" data-metric="bias" class="ghost-button">Bias</button>
-            </div>
           </div>
-          <label class="bar-region"><span class="visually-hidden">Region</span>
-            <select id="overlay-region" title="Region">
-              <option value="global">Global</option>
-              <option value="ibi">IBI</option>
-            </select>
-          </label>
-          <details class="bar-more">
-            <summary class="ghost-button">More</summary>
-            <div class="bar-more-menu controls">
-              <label class="overlay-field">Map overlay
-                <select id="overlay-mode">
-                  <option value="none">None</option>
-                  <option value="eddies">Eddies</option>
-                  <option value="class4">Observation errors</option>
-                  <option value="trajectories">Trajectories</option>
-                  <option value="column" hidden disabled>Water column</option>
-                </select>
-              </label>
-              <label id="eddy-reference-field" hidden>Eddy reference
-                <select id="eddy-reference">
-                  <option value="glorys">GLORYS</option>
-                  <option value="glo12">GLO12</option>
-                </select>
-              </label>
-              <fieldset class="control-group" id="currents-group" hidden>
-                <legend>Currents</legend>
-                <label class="toggle"><input type="checkbox" id="particles-play" checked /> Show particles</label>
-                <label>Particle speed <span id="speed-value" class="lead-value">1.0×</span>
-                  <input type="range" id="particle-speed" min="0.2" max="3" step="0.1" value="1" />
+          <div class="bar-group bar-end">
+            <span id="bar-state-chip" class="bar-chip" hidden></span>
+            <details class="bar-more">
+              <summary class="ghost-button">More</summary>
+              <div class="bar-more-menu controls">
+                <label class="toggle"><input type="checkbox" id="separate-variable" /> Use a different variable for F2</label>
+                <label class="bar-region">Region
+                  <select id="overlay-region">
+                    <option value="global">Global</option>
+                    <option value="ibi">IBI</option>
+                  </select>
                 </label>
-              </fieldset>
-              <button id="reset-view" type="button" class="ghost-button">Reset view</button>
-              <p class="hint">Map: scroll to zoom, drag to pan; panels move together. Hover for values. In swipe, drag the divider.</p>
-            </div>
-          </details>
+                <div class="field metric-field">
+                  <span class="field-label">Metric</span>
+                  <div class="metric-switch segmented" id="metric-switch" role="group" aria-label="Year metric">
+                    <button type="button" data-metric="error" class="ghost-button">Absolute error</button>
+                    <button type="button" data-metric="bias" class="ghost-button">Bias</button>
+                  </div>
+                </div>
+                <label class="overlay-field">Map overlay
+                  <select id="overlay-mode">
+                    <option value="none">None</option>
+                    <option value="eddies">Eddies</option>
+                    <option value="class4">Observation errors</option>
+                    <option value="trajectories">Trajectories</option>
+                    <option value="column" hidden disabled>Water column</option>
+                  </select>
+                </label>
+                <label id="eddy-reference-field" hidden>Eddy reference
+                  <select id="eddy-reference">
+                    <option value="glorys">GLORYS</option>
+                    <option value="glo12">GLO12</option>
+                  </select>
+                </label>
+                <fieldset class="control-group" id="currents-group" hidden>
+                  <legend>Currents</legend>
+                  <label class="toggle"><input type="checkbox" id="particles-play" checked /> Show particles</label>
+                  <label>Particle speed <span id="speed-value" class="lead-value">1.0×</span>
+                    <input type="range" id="particle-speed" min="0.2" max="3" step="0.1" value="1" />
+                  </label>
+                </fieldset>
+                <button id="reset-view" type="button" class="ghost-button">Reset view</button>
+                <details class="hint-details nav-tips">
+                  <summary>Navigation tips</summary>
+                  <p class="hint">Scroll to zoom, drag to pan; panels move together. Hover for values. Double-click resets the view. In swipe, drag the divider.</p>
+                </details>
+              </div>
+            </details>
+            <button id="scores-toggle" type="button" class="ghost-button bar-scores">Scores</button>
+          </div>
           <p id="overlay-note" class="hint bar-note"></p>
           <p id="period-note" class="hint bar-note" hidden></p>
         </div>
+      <main class="map-area">
         <div class="map-content">
           <div id="panel-grid" class="panel-grid" data-layout="1"></div>
           <!-- The zoom reading describes the view itself, so it stays on the view,
                in the corner, out of the way of both the map and the strip. -->
           <p id="layer-info" class="layer-info"></p>
           <p id="example-note" class="example-note" hidden></p>
+          <div class="map-key">
+            <div class="dock-scale">
+              <canvas id="colorbar" class="colorbar"></canvas>
+              <canvas id="colorbar-2" class="colorbar" hidden></canvas>
+            </div>
+            <div class="dock-legend">
+              <div id="map-legend" class="map-legend" hidden></div>
+              <div id="year-legend" class="year-legend" hidden></div>
+              <p id="status" class="status" role="status">Loading…</p>
+            </div>
+          </div>
         </div>
         <!-- The map's controls sit under the map on the shell's own terms: the same
              16px inset, the same 32px control height and the same tokens as the app
              bar and the drawers. Equal side tracks put the colour scale on the centre
              of the map column without any arithmetic. -->
         <div class="map-dock">
-          <!-- One row: playback | lead scrubber | colour scale | legend and status. -->
+          <!-- One full-width timeline: play, speed, the lead scrubber, the lead readout. -->
           <div class="dock-playback">
               <button id="lead-play" type="button" class="ghost-button playback-play" aria-pressed="false"
                       aria-label="Play lead days" title="Play leads (any other control pauses)">▶</button>
@@ -187,21 +212,12 @@ SPDX-License-Identifier: EUPL-1.2
               </span>
               <span id="lead-value" class="lead-value">Lead day 1</span>
             </div>
-          <div class="dock-scale">
-            <canvas id="colorbar" class="colorbar"></canvas>
-            <canvas id="colorbar-2" class="colorbar" hidden></canvas>
-          </div>
-          <div class="dock-legend">
-            <div id="map-legend" class="map-legend" hidden></div>
-            <div id="year-legend" class="year-legend" hidden></div>
-            <p id="status" class="status" role="status">Loading…</p>
-          </div>
         </div>
       </main>
 
       <aside id="context-rail" class="drawer drawer-right" aria-label="Context">
         <div class="drawer-body">
-                    <p id="rail-subtitle" class="rail-subtitle"></p>
+                    <p id="rail-subtitle" class="rail-subtitle" hidden></p>
           <div id="rail-current-depth-note" class="rail-current-depth-note" hidden></div>
           <div id="rail-forecast-toggle" class="rail-forecast-toggle segmented" role="group" aria-label="Forecast to inspect" hidden>
             <button type="button" data-forecast="0" class="ghost-button">F1</button>
@@ -209,10 +225,13 @@ SPDX-License-Identifier: EUPL-1.2
           </div>
           <section class="rail-section rail-section-lead">
             <h3>RMSE vs lead day <span id="rail-skill-n" class="chart-title-n"></span></h3>
+            <div class="rail-reference-row">
+              <span class="bar-label">Scored against</span>
             <div id="rail-skill-reference" class="rail-skill-reference segmented" role="group" aria-label="Scored against">
               <button type="button" data-skill-reference="observations" class="ghost-button">Obs</button>
               <button type="button" data-skill-reference="glorys" class="ghost-button">GLORYS</button>
               <button type="button" data-skill-reference="glo12" class="ghost-button">GLO12</button>
+            </div>
             </div>
             <p id="rail-skill-reference-note" class="rail-caption" hidden>Official whole-region score, not from this map.</p>
             <div id="rail-lead-curve" class="rail-chart-slot"></div>
@@ -238,10 +257,9 @@ SPDX-License-Identifier: EUPL-1.2
             <p id="rail-year-rmsd-note" class="rail-caption"></p>
           </section>
           <section class="rail-section" id="rail-spectra-section">
-            <div class="rail-card-heading psd-card-heading">
-              <h3>Live power spectrum</h3>
-              <button id="psd-toggle" type="button" class="ghost-button psd-toggle" aria-label="Show live power spectrum" title="Show live power spectrum" aria-pressed="false">Show</button>
-            </div>
+            <h3 class="psd-card-heading">
+              <button id="psd-toggle" type="button" class="psd-toggle" aria-label="Show live power spectrum" title="Show live power spectrum" aria-pressed="false">Live power spectrum</button>
+            </h3>
             <div id="rail-spectra" class="rail-chart-slot"></div>
             <p id="rail-psd-note" class="rail-caption"></p>
             <div id="rail-psd-lead" class="rail-chart-slot"></div>

@@ -9,7 +9,8 @@ SPDX-License-Identifier: EUPL-1.2
    Every value comes from tokens.css. */
 
 .context-rail[hidden] { display: none; }
-.drawer-right .drawer-body { padding: var(--pad); }
+.drawer-right .drawer-body { padding: var(--pad) var(--pad) var(--s5); }
+#rail-subtitle { display: none; }
 
 /* Rail title matches the left panel's section labels; chart titles are the one
    larger step, so the hierarchy reads label, title, caption. */
@@ -44,8 +45,23 @@ SPDX-License-Identifier: EUPL-1.2
 .rail-card-heading h3 { margin-bottom: 0; }
 .rail-section.psd-disabled .rail-chart-slot,
 .rail-section.psd-disabled .rail-caption { display: none; }
-.psd-card-heading { justify-content: flex-start; }
-.psd-toggle { text-align: center; }
+.psd-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.psd-toggle::before { content: "\203A"; display: inline-block; color: var(--muted); transition: transform 0.15s; }
+.psd-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+.rail-reference-row { display: flex; align-items: center; gap: var(--s2); margin: 0 0 var(--s2); }
+.rail-reference-row .rail-skill-reference { margin: 0; }
 .trajectory-card { padding-left: var(--s3); box-shadow: inset var(--ob-viewer-accent-rule) 0 0 var(--forecast-color, var(--muted)); }
 .trajectory-label { margin: var(--s1) 0 var(--s2); color: var(--text); font-size: var(--text-md); font-weight: var(--w-strong); }
 .trajectory-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: var(--text-md); padding: 0 var(--s1); }

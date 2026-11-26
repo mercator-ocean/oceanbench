@@ -416,13 +416,16 @@ function buildPanel(index) {
       <span class="panel-forecast-label">Forecast ${index + 1}</span>
       <select class="panel-dataset" aria-label="Panel dataset"></select>
       <select class="panel-variable" aria-label="Panel variable"></select>
-      <span class="spacer"></span>
-      <span class="panel-badge"></span>
     </div>
     <div class="panel-canvas-wrap">
       <canvas class="panel-field"></canvas>
       <canvas class="panel-particles"></canvas>
       <canvas class="panel-overlay"></canvas>
+      <div class="panel-chips">
+        <span class="panel-name map-chip"><span class="panel-name-text"></span></span>
+        <span class="panel-badge map-chip"></span>
+        <span class="panel-name panel-name-b map-chip" hidden><span class="panel-name-text"></span></span>
+      </div>
       <div class="panel-readout" role="status"></div>
       <div class="panel-ghost-cursor" aria-hidden="true" hidden></div>
       <div class="panel-loading" hidden>Loading dataset…</div>
@@ -495,7 +498,7 @@ function refreshPanelControls(panel) {
   // The difference map is Forecast 1 − Forecast 2 on Forecast 1's variable; panel 2's
   // own picker is mirrored and locked so it can never suggest a cross-variable
   // difference that is not what is computed (p1 read "temperature − salinity" off it).
-  const diffLocked = isDiffView() && panel.index === 1;
+  const diffLocked = panel.index === 1 && (isDiffView() || !shared.separateVariable);
   if (diffLocked && panels[0]) panel.state.variable = panels[0].state.variable;
   if (manifest) {
     if (!diffLocked && !variableExists(manifest, panel.state.variable)) panel.state.variable = fallbackVariable(manifest);
@@ -503,7 +506,7 @@ function refreshPanelControls(panel) {
     populateSelect(panel.els.variable, options.concat(currentsVariableOptions(manifest)), panel.state.variable);
   }
   panel.els.variable.disabled = diffLocked;
-  panel.els.variable.title = diffLocked ? "In difference mode both forecasts show Forecast 1's variable" : "";
+  panel.els.variable.title = isDiffView() && panel.index === 1 ? "In difference mode both forecasts show Forecast 1's variable" : "";
 }
 
 function wirePanel(panel) {
@@ -561,9 +564,12 @@ function wirePanel(panel) {
     panel.state.variable = event.target.value;
     setActivePanel(panel.index);
     refreshPanelControls(panel);
-    // Panel 2's locked picker mirrors this panel's variable in difference mode.
-    if (isDiffView() && panel.index === 0 && panels[1]) refreshPanelControls(panels[1]);
+    // Panel 2's locked picker mirrors this panel's variable in difference mode and
+    // whenever the two forecasts share one variable.
+    const followed = panel.index === 0 && panels[1] && shared.layout === 2 && (isDiffView() || !shared.separateVariable);
+    if (panel.index === 0 && panels[1] && (isDiffView() || !shared.separateVariable)) refreshPanelControls(panels[1]);
     await renderPanel(panel);
+    if (followed && !isDiffView()) await renderPanel(panels[1]);
     if (isDiffView() && panel.index === 1) await renderPanel(panels[0]);
     await updateContextRail();
     updateCurrentsControlVisibility();
@@ -1357,7 +1363,7 @@ function drawPanel(panel) {
     drawImageWorld(context, panel.offscreenB, panel.edgesB, projection);
     context.restore();
     context.filter = "none";
-    const dividerColor = themeToken("--ob-viewer-swipe-divider", shared.theme === THEME_LIGHT ? "#1f6feb" : "#38bdf8");
+    const dividerColor = themeToken("--accent", shared.theme === THEME_LIGHT ? "#1f6feb" : "#38bdf8");
     context.strokeStyle = dividerColor;
     context.lineWidth = 2 * (window.devicePixelRatio || 1);
     context.beginPath();
@@ -1389,18 +1395,23 @@ function drawPanel(panel) {
 // Attach the right "?" method note to a panel's header: the difference-view note on the
 // diff host, the year error-geography note in year scope, otherwise the field-map note
 // (with the panel's dataset label). Cleared and re-attached each draw so it tracks state.
+// The map carries no "?": its help lives under More as Navigation tips. What each panel
+// keeps is a name chip: the series swatch and the dataset, both names either side of the
+// divider in swipe, and "F1 − F2" on the difference map.
 function updatePanelMethodNote(panel) {
-  const head = panel.container.querySelector(".panel-head");
-  if (!head) return;
-  head.querySelectorAll(".method-note-btn").forEach((button) => button.remove());
-  // One "?" for the map area: the first shown panel carries it.
-  if (panel.index > 0) return;
-  if (shared.scope === SCOPE_WHOLE_YEAR) {
-    if (!panel.yearMissing) attachMethodNote(head, "year-geography");
-  } else if (isDiffHost(panel)) {
-    attachMethodNote(head, "diff-view");
-  } else {
-    attachMethodNote(head, "field-map", { dataset: labelFor(panel.state.dataset) });
+  const chips = panel.container.querySelectorAll(".panel-name");
+  if (!chips.length) return;
+  const [first, second] = chips;
+  const name = labelFor(panel.state.dataset);
+  const swipe = isSwipeHost(panel) && panels[1];
+  first.querySelector(".panel-name-text").textContent = isDiffHost(panel) && panels[1]
+    ? `${name} \u2212 ${labelFor(panels[1].state.dataset)}`
+    : name;
+  first.classList.toggle("diff-name", isDiffHost(panel));
+  second.hidden = !swipe;
+  if (swipe) {
+    second.style.setProperty("--forecast-color", forecastColor(1));
+    second.querySelector(".panel-name-text").textContent = labelFor(panels[1].state.dataset);
   }
 }
 
@@ -4786,7 +4797,7 @@ function updatePsdToggle() {
   button.setAttribute("aria-pressed", enabled ? "true" : "false");
   button.setAttribute("aria-label", enabled ? "Hide live power spectrum" : "Show live power spectrum");
   button.title = enabled ? "Hide live power spectrum" : "Show live power spectrum";
-  button.textContent = enabled ? "Hide" : "Show";
+  button.setAttribute("aria-expanded", enabled ? "true" : "false");
 }
 
 function setPsdEnabled(enabled) {
@@ -5167,7 +5178,17 @@ function updateSharedTimeControls() {
 function fillLeadTicks(minimumLead, maximumLead) {
   const ticks = elements["lead-ticks"];
   if (!ticks) return;
-  ticks.style.setProperty("--lead-steps", String(Math.max(1, maximumLead - minimumLead)));
+  const steps = Math.max(1, maximumLead - minimumLead);
+  ticks.style.setProperty("--lead-steps", String(steps));
+  const labels = [];
+  for (let lead = minimumLead; lead <= maximumLead; lead += 1) {
+    const label = document.createElement("span");
+    label.className = "lead-tick-label";
+    label.style.left = `${((lead - minimumLead) / steps) * 100}%`;
+    label.textContent = String(lead);
+    labels.push(label);
+  }
+  ticks.replaceChildren(...labels);
 }
 
 async function applyOverlayMode() {
@@ -5332,6 +5353,56 @@ function wireEmbeddedTheme() {
     if (data && data.type === "oceanbench-theme") setViewerTheme(data.theme);
   });
   if (window.parent !== window) window.parent.postMessage({ type: "oceanbench-viewer-ready" }, "*");
+}
+
+// The muted chip beside More says which of its settings are off their defaults.
+function updateStateChip() {
+  const chip = document.getElementById("bar-state-chip");
+  if (!chip) return;
+  const parts = [];
+  if (shared.region !== REGION_GLOBAL) parts.push(String(shared.region).toUpperCase());
+  if (shared.yearMetric === YEAR_METRIC_BIAS) parts.push("Bias");
+  chip.textContent = parts.join(" \u00b7 ");
+  chip.hidden = parts.length === 0;
+}
+
+// Bar controls added by the one-row layout: the F2 variable toggle, the phone Filters
+// and Scores buttons, and, when embedded, the About button moved off the hidden logo row.
+function wireBarExtras() {
+  const bar = document.querySelector(".control-bar");
+  const separate = document.getElementById("separate-variable");
+  const syncSeparate = () => {
+    separate.checked = Boolean(shared.separateVariable);
+    bar.classList.toggle("separate-variable", Boolean(shared.separateVariable));
+  };
+  syncSeparate();
+  separate.addEventListener("change", async () => {
+    shared.separateVariable = separate.checked;
+    syncSeparate();
+    if (!shared.separateVariable && panels[1] && panels[1].state.variable !== panels[0].state.variable) {
+      panels[1].state.variable = panels[0].state.variable;
+      refreshPanelControls(panels[1]);
+      if (shared.layout === 2) {
+        await renderAllPanels();
+        await updateContextRail();
+      }
+    } else if (panels[1]) {
+      refreshPanelControls(panels[1]);
+    }
+    writeHash();
+  });
+  const filters = document.getElementById("filters-toggle");
+  filters.addEventListener("click", () => {
+    const open = !bar.classList.contains("filters-open");
+    bar.classList.toggle("filters-open", open);
+    filters.setAttribute("aria-expanded", String(open));
+  });
+  document.getElementById("scores-toggle").addEventListener("click", () => elements["rail-collapse"].click());
+  if (VIEWER_EMBEDDED) {
+    const about = elements["about-toggle"] || document.getElementById("about-toggle");
+    if (about) bar.querySelector(".bar-end").append(about);
+  }
+  updateStateChip();
 }
 
 function markScopeButtons() {
@@ -6148,6 +6219,7 @@ function encodePanel(panel) {
 }
 
 function writeHash() {
+  updateStateChip();
   const parameters = new URLSearchParams();
   parameters.set("layout", String(shared.layout));
   const startDate = sharedStartDate();
@@ -6459,6 +6531,8 @@ async function main() {
     elements["example-note"].textContent = EXAMPLE_VIEW.note;
   }
   applyPanelHash(parameters);
+  // A link with two different variables opens with "Use a different variable for F2" on.
+  shared.separateVariable = Boolean(panels[1] && panels[1].state.variable !== panels[0].state.variable);
   clampView();
   writeHash();
 
@@ -6484,6 +6558,7 @@ async function main() {
   wirePlaybackControls();
   wireStaticMethodNotes();
   wireEmbeddedTheme();
+  wireBarExtras();
 
   clampView();
   // A link that names no zoom opens covered: contain-fit leaves vertical dead bands

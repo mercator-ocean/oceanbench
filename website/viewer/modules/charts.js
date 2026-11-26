@@ -18,7 +18,7 @@ const PAD_LEFT = 38;
 const PAD_RIGHT = 12;
 // Gap above the plot (and below any legend rows), so the top tick never touches the edge.
 const PAD_TOP = 8;
-const PAD_BOTTOM = 30;
+const PAD_BOTTOM = 18;
 
 // Left gutter for a y axis whose tick labels are wider than the shared PAD_LEFT allows.
 // Tick type is pinned in px, so in view units it grows by typeScale as the slot narrows:
@@ -82,7 +82,7 @@ function axes(area, xLabel) {
   return (
     `<line x1="${area.x0}" y1="${area.y1}" x2="${area.x1}" y2="${area.y1}" class="axis"/>` +
     `<line x1="${area.x0}" y1="${area.y0}" x2="${area.x0}" y2="${area.y1}" class="axis"/>` +
-    `<text x="${(area.x0 + area.x1) / 2}" y="${VIEW_HEIGHT - 6}" class="axis-label" text-anchor="middle">${escapeText(xLabel)}</text>`
+    `<title>${escapeText(xLabel)}</title>`
   );
 }
 
@@ -111,69 +111,25 @@ function isDashedSeries(key) {
 const LEGEND_ROW = 15;
 const LEGEND_CHAR = 7.2;
 
-// Left-to-right flow for legend entries, wrapping to a new row when the next label would
-// run past the plot's right edge. Returns each entry's { dx, row } and the row count.
-function flowLegend(entries, width) {
-  let dx = 0;
-  let row = 0;
-  const positions = entries.map((entry) => {
-    const entryWidth = 12 + String(entry.label).length * LEGEND_CHAR + 10;
-    if (dx > 0 && dx + entryWidth > width) {
-      row += 1;
-      dx = 0;
-    }
-    const position = { dx, row };
-    dx += entryWidth;
-    return position;
-  });
-  return { positions, rows: row + 1 };
+// Line-end names in a right gutter, for every multi-series chart: the gutter is sized on
+// the longest name, and names that would overlap are pushed apart by one legend row.
+function gutterWidth(entries) {
+  return entries.length > 1 ? 18 + Math.max(...entries.map((entry) => String(entry.label).length)) * LEGEND_CHAR : 0;
 }
 
-// Names at the right end of each line: the gutter is sized on the longest name, and the
-// names are kept only if no two of them sit closer than one legend row.
-function lineEndLabels(series, entries, yMax, headingRows) {
-  const width = 6 + Math.max(...entries.map((entry) => entry.label.length)) * LEGEND_CHAR;
-  if (width > VIEW_WIDTH / 3) return null;
-  const area = plotArea(headingRows, width);
-  const ends = [...series.values()].map((rows, index) => {
-    const last = [...rows].sort((a, b) => a.lead_day - b.lead_day).at(-1);
-    return { ...entries[index], value: last ? last.mean : 0 };
-  });
-  const ys = ends.map((end) => area.y1 - (end.value / yMax) * area.height).sort((a, b) => a - b);
-  for (let i = 1; i < ys.length; i += 1) if (ys[i] - ys[i - 1] < LEGEND_ROW - 3) return null;
-  return { width, ends };
-}
-
-function renderEndLabels(area, endLabels, yMax) {
-  return endLabels.ends
-    .map((end) => {
-      const y = area.y1 - (end.value / yMax) * area.height;
-      return `<text x="${area.x1 + 6}" y="${(y + 4).toFixed(1)}" class="legend">${escapeText(end.label)}</text>`;
-    })
-    .join("");
-}
-
-// One horizontal row (wrapping only when it must) for two or more series; a single series
-// is already named by the chart title, so it gets no legend.
-function legendLayout(entries, x0 = PAD_LEFT) {
-  return entries.length > 1 ? flowLegend(entries, VIEW_WIDTH - PAD_RIGHT - x0) : null;
-}
-
-function legendRowCount(layout) {
-  return layout ? layout.rows : 0;
-}
-
-// Entries placed by a legendLayout() layout, starting at the plot's left edge.
-function renderLegend(area, entries, layout) {
-  if (!layout) return "";
-  return entries
-    .map((entry, index) => {
-      const x = area.x0 + layout.positions[index].dx;
-      const y = layout.positions[index].row * LEGEND_ROW;
-      const swatch = entry.dashed
-        ? `<line x1="${x}" y1="${y + 4.5}" x2="${x + 9}" y2="${y + 4.5}" stroke="${entry.color}" stroke-width="2" stroke-dasharray="${DASH_PATTERN_SHORT}"/>`
-        : `<rect x="${x}" y="${y}" width="9" height="9" rx="2" fill="${entry.color}"/>`;
-      return swatch + `<text x="${x + 12}" y="${y + 9}" class="legend">${escapeText(entry.label)}</text>`;
+function renderGutterLabels(area, items) {
+  const placed = items.filter((item) => Number.isFinite(item.y)).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < placed.length; i += 1) placed[i].y = Math.max(placed[i].y, placed[i - 1].y + LEGEND_ROW - 2);
+  const overflow = placed.length ? placed.at(-1).y - (area.y1 + 4) : 0;
+  if (overflow > 0) for (const item of placed) item.y -= overflow;
+  return placed
+    .map((item) => {
+      const x = area.x1 + 4;
+      const dash = item.dashed ? ` stroke-dasharray="${DASH_PATTERN_SHORT}"` : "";
+      return (
+        `<line x1="${x}" y1="${item.y.toFixed(1)}" x2="${x + 8}" y2="${item.y.toFixed(1)}" stroke="${item.color}" stroke-width="2"${dash}/>` +
+        `<text x="${x + 11}" y="${(item.y + 4).toFixed(1)}" class="legend">${escapeText(item.label)}</text>`
+      );
     })
     .join("");
 }
@@ -225,9 +181,8 @@ export function leadCurveSVG(
   const yMax = niceMax(maxValue);
   // Two or more lines are named at their right end; when two names would collide the
   // chart falls back to one legend row above the plot.
-  const endLabels = legend && references.length > 1 ? lineEndLabels(series, legendEntries, yMax, headingRows) : null;
-  const layout = legend && !endLabels ? legendLayout(legendEntries) : null;
-  const area = plotArea(legendRowCount(layout) + headingRows, endLabels ? endLabels.width : 0);
+  const named = legend && references.length > 1;
+  const area = plotArea(headingRows, named ? gutterWidth(legendEntries) : 0);
   const xOf = (lead) => area.x0 + (maxLead <= 1 ? 0.5 : (lead - 1) / (maxLead - 1)) * area.width;
   const yOf = (value) => area.y1 - (value / yMax) * area.height;
 
@@ -263,7 +218,15 @@ export function leadCurveSVG(
     }
   }
 
-  const legendMarkup = endLabels ? renderEndLabels(area, endLabels, yMax) : renderLegend(area, legendEntries, layout);
+  const legendMarkup = named
+    ? renderGutterLabels(
+        area,
+        references.map((reference, index) => {
+          const last = [...series.get(reference)].sort((a, b) => a.lead_day - b.lead_day).at(-1);
+          return { ...legendEntries[index], y: last ? yOf(last.mean) : NaN };
+        }),
+      )
+    : "";
   // A chart that shares its section with another one names itself in one horizontal row
   // above the plot instead of in the section title.
   const headingMarkup = heading ? `<text x="${area.x0}" y="9" class="legend">${escapeText(heading)}</text>` : "";
@@ -287,9 +250,9 @@ export function psdSpectraSVG(
   { title = "Live power spectrum", xBounds = null, yBounds = null, yLabel = "power", marker = null } = {},
 ) {
   const usable = (curves || []).filter((curve) => curve && curve.wavelength && curve.wavelength.length);
-  const layout = legendLayout(usable);
-  const area = plotArea(legendRowCount(layout));
+  const area = plotArea(0, gutterWidth(usable));
   if (!usable.length) return emptyChart(title, "no field in view for a spectrum");
+  const ends = [];
 
   const positive = (list, pick) => {
     const out = [];
@@ -335,6 +298,11 @@ export function psdSpectraSVG(
       if (!(wavelength > 0) || !(power > 0)) continue;
       path.push(`${path.length === 0 ? "M" : "L"}${xOf(wavelength).toFixed(1)} ${yOf(power).toFixed(1)}`);
     }
+    let endIndex = -1;
+    for (let i = 0; i < curve.wavelength.length; i += 1) {
+      if (curve.wavelength[i] > 0 && curve.power[i] > 0 && (endIndex < 0 || curve.wavelength[i] < curve.wavelength[endIndex])) endIndex = i;
+    }
+    if (endIndex >= 0) ends.push({ label: curve.label, color: curve.color, dashed: curve.dashed, y: yOf(curve.power[endIndex]) });
     body += `<path d="${path.join(" ")}" fill="none" stroke="${curve.color}" stroke-width="1.6" ${
       curve.dashed ? 'stroke-dasharray="4 3"' : ""
     }/>`;
@@ -362,7 +330,7 @@ export function psdSpectraSVG(
     }
   }
 
-  const legend = renderLegend(area, usable, layout);
+  const legend = usable.length > 1 ? renderGutterLabels(area, ends) : "";
 
   return svgOpen(title, unitInParentheses(yLabel)) + axes(area, "wavelength (km)") + body + legend + interactionLayer() + "</svg>";
 }
@@ -382,8 +350,8 @@ export function psdSpectraSVG(
 export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = "", signed = false, yBound = 0, typeScale = 1 } = {}) {
   const usable = (series || []).filter((line) => line && line.dates && line.dates.length);
   if (!usable.length) return emptyChart(title, "no RMSE by start for this variable");
-  const layout = legendLayout(usable);
-  const area = plotArea(legendRowCount(layout));
+  const area = plotArea(0, gutterWidth(usable));
+  const ends = [];
 
   const allDates = [...new Set(usable.flatMap((line) => line.dates))].sort();
   const indexOfDate = new Map(allDates.map((date, index) => [date, index]));
@@ -457,6 +425,7 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
       .map((date, index) => ({ date, value: line.rmsd[index] }))
       .filter((point) => Number.isFinite(point.value));
     const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${xOf(point.date).toFixed(1)} ${yOf(point.value).toFixed(1)}`);
+    if (points.length) ends.push({ label: line.label, color: line.color, y: yOf(points.at(-1).value) });
     body += `<path d="${path.join(" ")}" fill="none" stroke="${line.color}" stroke-width="1.6"/>`;
     for (const point of points) {
       const x = xOf(point.date).toFixed(1);
@@ -469,7 +438,7 @@ export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = ""
     }
   }
 
-  const legend = renderLegend(area, usable, layout);
+  const legend = usable.length > 1 ? renderGutterLabels(area, ends) : "";
 
   return svgOpen(title, unit) + axes(area, "start date") + body + legend + interactionLayer() + "</svg>";
 }
@@ -495,9 +464,9 @@ export function rmsdByDepthSVG(
   // Depth-bin labels ("1500-3000 m") are wider than the numeric ticks the other charts use,
   // so this profile gets a gutter sized to its longest label at the rendered type size.
   const DEPTH_PAD_LEFT = labelGutter(depthLabels, typeScale, 44);
-  const layout = legendLayout(usable, DEPTH_PAD_LEFT);
-  const base = plotArea(legendRowCount(layout));
+  const base = plotArea(0, gutterWidth(usable));
   const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
+  const ends = [];
 
   const rowOfLabel = new Map(depthLabels.map((label, index) => [label, index]));
   const lastRow = Math.max(1, depthLabels.length - 1);
@@ -540,6 +509,7 @@ export function rmsdByDepthSVG(
       .map((bin) => ({ ...bin, row: rowOfLabel.get(bin.label) }))
       .sort((a, b) => a.row - b.row);
     const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${xOf(point.rmsd).toFixed(1)} ${yOf(point.row).toFixed(1)}`);
+    if (points.length) ends.push({ label: line.label, color: line.color, y: yOf(points.at(-1).row) });
     body += `<path d="${path.join(" ")}" fill="none" stroke="${line.color}" stroke-width="1.8"/>`;
     for (const point of points) {
       const x = xOf(point.rmsd).toFixed(1);
@@ -553,7 +523,7 @@ export function rmsdByDepthSVG(
     }
   }
 
-  const legend = renderLegend(area, usable, layout);
+  const legend = usable.length > 1 ? renderGutterLabels(area, ends) : "";
 
   // Depth axis reads downward; the tooltip's crosshair (a vertical line) is not meaningful
   // for a profile, so only the point readout is used (interactionLayer supplies the tooltip).
@@ -600,9 +570,9 @@ export function columnProfileSVG(
   if (Number.isFinite(depthBound)) depthMax = Math.max(depthMax, depthBound);
   const depthTicks = [0, 1, 2, 3, 4].map((t) => Math.round((depthMax * t) / 4).toLocaleString("en-US"));
   const DEPTH_PAD_LEFT = labelGutter(depthTicks, typeScale, 36);
-  const layout = legendLayout(usable, DEPTH_PAD_LEFT);
-  const base = plotArea(legendRowCount(layout));
+  const base = plotArea(0, gutterWidth(usable));
   const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
+  const ends = [];
   if (!(valueMax > valueMin)) valueMax = valueMin + 1;
   const padding = (valueMax - valueMin) * 0.06 || 1;
   const xLo = valueMin - padding;
@@ -633,6 +603,7 @@ export function columnProfileSVG(
       .slice()
       .sort((a, b) => a.depth - b.depth);
     const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${xOf(point.value).toFixed(1)} ${yOf(point.depth).toFixed(1)}`);
+    if (points.length) ends.push({ label: line.label, color: line.color, y: yOf(points.at(-1).depth) });
     body += `<path d="${path.join(" ")}" fill="none" stroke="${line.color}" stroke-width="1.8"/>`;
     for (const point of points) {
       const x = xOf(point.value).toFixed(1);
@@ -645,7 +616,7 @@ export function columnProfileSVG(
     }
   }
 
-  const legend = renderLegend(area, usable, layout);
+  const legend = usable.length > 1 ? renderGutterLabels(area, ends) : "";
 
   return svgOpen(title, "depth in m") + axes(area, unit ? `${xLabel} (${unit})` : xLabel) + body + legend + interactionLayer() + "</svg>";
 }
