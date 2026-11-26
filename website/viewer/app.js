@@ -129,6 +129,7 @@ import {
   isVelocityFamilyVariable,
   matching15mCurrentVariable,
   prettyName,
+  obsPrettyName,
   variableEntry,
   variableExists,
   variableLabel,
@@ -1156,7 +1157,7 @@ async function renderYearPanel(panel, token, manifest) {
   panel.yearMeta = { nStarts: geography.meta && geography.meta.n_starts, component: mapping.component };
   const entry = variableEntry(manifest, panel.state.variable);
   // The currents choice maps onto the eastward component only: name that, not a speed.
-  const varLabel = mapping.component || (entry ? prettyName(entry.standard_name) : panel.state.variable);
+  const varLabel = mapping.component || (entry ? obsPrettyName(entry.standard_name) : panel.state.variable);
   panel.label = `${shortLabelFor(panel.state.dataset)} · ${biasMode ? "bias" : "mean |obs − model|"} · ${varLabel}`;
 }
 
@@ -3950,7 +3951,8 @@ function prettyVariable(panel) {
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && variableEntry(manifest, panel.state.variable);
   if (isCurrentsVariable(panel.state.variable)) return `currents (${currentsDepthLabel(panel.state.variable)})`;
-  return entry ? `${prettyName(entry.standard_name)} · ${depthLabel(entry.depth)}` : panel.state.variable;
+  const name = panel.yearMeta ? obsPrettyName : prettyName;
+  return entry ? `${name(entry.standard_name)} · ${depthLabel(entry.depth)}` : panel.state.variable;
 }
 
 // Display names of the rail's score references.
@@ -4891,7 +4893,7 @@ function class4SelectionNote() {
   if (!panel) return "No Class IV match-ups for this selection.";
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && variableEntry(manifest, panel.state.variable);
-  const variable = entry ? prettyName(entry.standard_name) : panel.state.variable;
+  const variable = entry ? obsPrettyName(entry.standard_name) : panel.state.variable;
   return `No ${variable} match-ups at ${class4DepthLabel(entry, class4DepthBin(entry))} for this start/lead.`;
 }
 
