@@ -461,12 +461,40 @@ def _assign_model_values_for_first_day(
             del time_slice
 
 
+def _model_data_down_to_observed_depths(
+    model_data: xarray.DataArray,
+    observation_depths: numpy.ndarray,
+) -> xarray.DataArray:
+    """
+    The model levels down to the one that brackets the deepest observation, the only ones the vertical
+    interpolation reads, so that the levels below are never loaded (e.g. 50 levels for surface drifters).
+    """
+    model_depths = model_data[Dimension.DEPTH.key()].values
+    if len(model_depths) <= 2 or len(observation_depths) == 0:
+        return model_data
+    deepest_observation = numpy.max(observation_depths)
+    sort_order = numpy.argsort(model_depths)
+    sorted_depths = model_depths[sort_order]
+    if not deepest_observation <= sorted_depths[-1]:
+        # Below the deepest level, or a missing depth: the brackets use the deepest level.
+        return model_data
+    # Every bracket index is at most the insertion index of the deepest observation; at least two levels are kept
+    # so that the interpolation takes the same path.
+    deepest_needed_index = max(int(numpy.searchsorted(sorted_depths, deepest_observation)), 1)
+    if deepest_needed_index >= len(sorted_depths) - 1:
+        return model_data
+    kept_levels = numpy.sort(sort_order[: deepest_needed_index + 1])
+    return model_data.isel({Dimension.DEPTH.key(): kept_levels})
+
+
 def _interpolate_model_to_observations(
     model_data: xarray.DataArray,
     observations_dataframe: pandas.DataFrame,
 ) -> numpy.ndarray:
     observations_dataframe = observations_dataframe.reset_index(drop=True)
-    model_data = _model_data_with_depth_dimension(model_data)
+    model_data = _model_data_down_to_observed_depths(
+        _model_data_with_depth_dimension(model_data), observations_dataframe[Dimension.DEPTH.key()].values
+    )
     model_depths = model_data[Dimension.DEPTH.key()].values
     first_days = model_data[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days = model_data[Dimension.LEAD_DAY_INDEX.key()].values
