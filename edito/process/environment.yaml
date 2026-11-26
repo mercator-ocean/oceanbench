@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Environment of the EDITO process job. OceanBench itself is installed by run-evaluation.sh from the cloned checkout.
+# gcc: the Lagrangian metric compiles Parcels JIT kernels. git: pip installs from git URLs.
+name: process-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - gcc
+  - git
