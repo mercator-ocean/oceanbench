@@ -4669,7 +4669,11 @@ async function renderRailPsd(shown, comparison) {
     landFraction >= PSD_LAND_WARNING_FRACTION
       ? `⚠ ${Math.round(landFraction * 100)}% land: damped by fill; use an open-ocean box. `
       : "";
-  const scaleText = Number.isFinite(scaleKm) ? ` · scale of disagreement with ${referenceLabel}: ${scaleKm} km` : "";
+  const scaleText = Number.isFinite(scaleKm)
+    ? ` · scale of disagreement with ${referenceLabel}: ${scaleKm} km`
+    : referenceLabel
+      ? ` · scale of disagreement with ${referenceLabel}: no crossing in this box`
+      : "";
   elements["rail-psd-note"].textContent = curves.length
     ? `${landWarning}Box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}°${oceanLabel} · ${gridLabels.join(" & ")} grid${scaleText}`
     : "Move the box over ocean to compute a spectrum (boxed area is mostly land).";
@@ -4743,7 +4747,12 @@ async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, bo
     const rows = [...values.entries()]
       .filter(([, metres]) => Number.isFinite(metres))
       .map(([leadDay, metres]) => ({ lead_day: leadDay, mean: metres / 1000 }));
-    elements["rail-psd-lead"].innerHTML = rows.length
+    // Leads whose ratio never crosses one half are said so, not silently dropped.
+    const noCrossing = [...values.entries()].filter(([, metres]) => !Number.isFinite(metres)).map(([leadDay]) => leadDay);
+    const noCrossingNote = noCrossing.length
+      ? `<p class="rail-caption">${rows.length ? `Lead ${noCrossing.join(", ")}: ` : `Disagreement with ${escapeHtml(referenceLabel)}: `}no crossing in this box.</p>`
+      : "";
+    elements["rail-psd-lead"].innerHTML = (rows.length
       ? leadCurveSVG(new Map([["reference", rows]]), {
           title: `Disagreement with ${referenceLabel} vs lead`,
           unit: "km",
@@ -4751,7 +4760,7 @@ async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, bo
           labels: new Map([["reference", `vs ${referenceLabel}`]]),
           legend: false,
         })
-      : "";
+      : "") + noCrossingNote;
     if (rows.length) wireCursorTooltip(elements["rail-psd-lead"]);
   };
   draw();
