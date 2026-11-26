@@ -407,3 +407,49 @@ export function checkRequestBudget(counts, budget, label, failures) {
     }
   }
 }
+
+// P7: an open More menu sits above the rail's resize and collapse handles, and a click
+// inside it never reaches them. Clicking where each handle is must leave the rail as it was.
+export async function probeMenuAboveHandles(context, baseUrl, viewerUrlPath, failures) {
+  const page = await context.newPage();
+  try {
+    await page.goto(`${baseUrl}${viewerUrlPath}`);
+    await page.waitForSelector(".bar-more > summary");
+    await page.click(".bar-more > summary");
+    const railState = () =>
+      page.evaluate(() => {
+        const rail = document.querySelector("#context-rail");
+        return `${rail.classList.contains("collapsed")}:${Math.round(rail.getBoundingClientRect().width)}`;
+      });
+    const before = await railState();
+    const menu = await page.locator(".bar-more-menu").boundingBox();
+    let overlapping = 0;
+    for (const selector of ["#context-rail > .drawer-tab", "#context-rail > .drawer-resizer"]) {
+      const handle = await page.locator(selector).boundingBox();
+      if (!handle || !menu) continue;
+      const x = handle.x + handle.width / 2;
+      const top = Math.max(handle.y, menu.y + 4);
+      const bottom = Math.min(handle.y + handle.height, menu.y + menu.height - 4);
+      const y = (top + bottom) / 2;
+      if (bottom <= top || x < menu.x || x > menu.x + menu.width) continue;
+      overlapping += 1;
+      const topmost = await page.evaluate(([px, py]) => {
+        const element = document.elementFromPoint(px, py);
+        return Boolean(element?.closest(".bar-more-menu"));
+      }, [x, y]);
+      if (!topmost) failures.push(`menu stacking: ${selector} is above the open More menu`);
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x - 60, y);
+      await page.mouse.up();
+      if (!(await page.locator(".bar-more").getAttribute("open") === "")) await page.click(".bar-more > summary");
+    }
+    if (overlapping === 0) failures.push("menu stacking: no rail handle lies under the open More menu, probe is vacuous");
+    const after = await railState();
+    if (after !== before) failures.push(`menu stacking: rail changed under the open More menu (${before} -> ${after})`);
+  } catch (error) {
+    failures.push(`menu stacking: ${error.message}`);
+  } finally {
+    await page.close();
+  }
+}

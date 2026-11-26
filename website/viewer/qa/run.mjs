@@ -19,6 +19,7 @@ import {
   probeColorRangeMonotonicity,
   probeFastScrubRace,
   probeParticleLiveness,
+  probeMenuAboveHandles,
   probeRenderFingerprints,
   probeRenderedEmDashes,
   probeSoftwareInflateEquivalence,
@@ -324,6 +325,7 @@ async function runBehaviouralPass(playwright, baseUrl, { seed }) {
       await probeFastScrubRace(context, baseUrl, viewerUrlPath, baseline, failures);
       await probeColorRangeMonotonicity(context, baseUrl, viewerUrlPath, failures);
       await probeParticleLiveness(context, baseUrl, viewerUrlPath, failures);
+      await probeMenuAboveHandles(context, baseUrl, viewerUrlPath, failures);
       await context.close();
       await probeSoftwareInflateEquivalence(browser, baseUrl, viewerUrlPath, baseline, failures);
     } else {

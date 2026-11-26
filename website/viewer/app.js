@@ -386,7 +386,7 @@ function defaultPanelState(index) {
 }
 
 // The dataset and variable selectors live in the control bar above the map, not on the
-// panel: Forecast N's swatch and dataset sit in the forecasts group, its variable in the
+// panel: Forecast N's label and dataset (underlined in its series colour) sit in the forecasts group, its variable in the
 // variable group. The elements keep their classes, so the panel code still finds them.
 function placePanelSelectorsInBar(container, index) {
   const forecastSlot = document.getElementById(`bar-forecast-${index}`);
@@ -400,7 +400,7 @@ function placePanelSelectorsInBar(container, index) {
   dataset.setAttribute("aria-label", `Forecast ${index + 1} dataset`);
   variable.setAttribute("aria-label", `Forecast ${index + 1} variable`);
   variable.dataset.index = String(index);
-  label.style.setProperty("--forecast-color", forecastColor(index));
+  dataset.style.setProperty("--forecast-color", forecastColor(index));
   forecastSlot.replaceChildren(label, dataset);
   variableSlot.append(variable);
   return { label, dataset, variable };
@@ -1396,8 +1396,8 @@ function drawPanel(panel) {
 // diff host, the year error-geography note in year scope, otherwise the field-map note
 // (with the panel's dataset label). Cleared and re-attached each draw so it tracks state.
 // The map carries no "?": its help lives under More as Navigation tips. What each panel
-// keeps is a name chip: the series swatch and the dataset, both names either side of the
-// divider in swipe, and "F1 − F2" on the difference map.
+// keeps is a name strip: a series-coloured top edge and the dataset, split at the divider
+// in swipe, and "F1 − F2" with a two-colour edge on the difference map.
 function updatePanelMethodNote(panel) {
   const chips = panel.container.querySelectorAll(".panel-name");
   if (!chips.length) return;
@@ -1405,9 +1405,15 @@ function updatePanelMethodNote(panel) {
   const name = labelFor(panel.state.dataset);
   const swipe = isSwipeHost(panel) && panels[1];
   first.querySelector(".panel-name-text").textContent = isDiffHost(panel) && panels[1]
-    ? `${name} \u2212 ${labelFor(panels[1].state.dataset)}`
+    ? `${shortLabelFor(panel.state.dataset)} \u2212 ${shortLabelFor(panels[1].state.dataset)}`
     : name;
   first.classList.toggle("diff-name", isDiffHost(panel));
+  const strip = first.parentElement;
+  const split = swipe ? `${panel.swipeX * 100}%` : isDiffHost(panel) && panels[1] ? "50%" : "100%";
+  strip.style.setProperty("--strip-split", split);
+  strip.style.setProperty("--strip-edge-a", forecastColor(swipe || isDiffHost(panel) ? 0 : panel.index));
+  strip.style.setProperty("--strip-edge-b", panels[1] ? forecastColor(1) : forecastColor(0));
+  strip.classList.toggle("is-split", Boolean(swipe));
   second.hidden = !swipe;
   if (swipe) {
     second.style.setProperty("--forecast-color", forecastColor(1));
@@ -4572,6 +4578,7 @@ async function renderRailPsd(shown, comparison) {
     elements["rail-spectra"].innerHTML = "";
     elements["rail-psd-note"].textContent = "";
     elements["rail-psd-lead"].innerHTML = "";
+    elements["rail-psd-readout"].hidden = true;
     return;
   }
   const box = ensurePsdBox(shown);
@@ -4581,6 +4588,7 @@ async function renderRailPsd(shown, comparison) {
     scheduleRedrawAllPanels(); // drop the now-hidden box from the map (psdBoxVisible is false)
     elements["rail-spectra"].innerHTML = "";
     elements["rail-psd-lead"].innerHTML = "";
+    elements["rail-psd-readout"].hidden = true;
     const pair = psdBoxLimits.resolutionLabels.join(" vs ");
     elements["rail-psd-note"].textContent =
       `Resolutions too different to share a box${pair ? ` (${pair})` : ""}. ` +
@@ -4622,6 +4630,7 @@ async function renderRailPsd(shown, comparison) {
   }
   let disagreementScale = NaN;
   let referenceLabel = "";
+  let forecastLabel = "";
   const pair = comparison && sources.length === 2 ? pairSpectra(sources, boxViewport, box.lat) : null;
   if (pair) {
     if (pair.errorSpectrum) {
@@ -4630,6 +4639,7 @@ async function renderRailPsd(shown, comparison) {
     if (pair.hasReference) {
       disagreementScale = disagreementScaleMetres(pair.errorSpectrum, pair.referenceSpectrum);
       referenceLabel = shortLabelFor(sources[pair.referenceIndex].panel.state.dataset);
+      forecastLabel = shortLabelFor(sources[1 - pair.referenceIndex].panel.state.dataset);
     }
   }
   if (token !== psdRenderToken) return;
@@ -4681,15 +4691,19 @@ async function renderRailPsd(shown, comparison) {
     landFraction >= PSD_LAND_WARNING_FRACTION
       ? `⚠ ${Math.round(landFraction * 100)}% land: damped by fill; use an open-ocean box. `
       : "";
-  const scaleText = Number.isFinite(scaleKm) ? ` · scale of disagreement with ${referenceLabel}: ${scaleKm} km` : "";
+  const readout = elements["rail-psd-readout"];
+  readout.hidden = !Number.isFinite(scaleKm);
+  readout.textContent = Number.isFinite(scaleKm)
+    ? `${forecastLabel} matches ${referenceLabel} for features larger than ${scaleKm} km at lead ${shared.leadDay}.`
+    : "";
   elements["rail-psd-note"].textContent = curves.length
-    ? `${landWarning}Box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}°${oceanLabel} · ${gridLabels.join(" & ")} grid${scaleText}`
+    ? `${landWarning}Box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}°${oceanLabel} · ${gridLabels.join(" & ")} grid`
     : "Move the box over ocean to compute a spectrum (boxed area is mostly land).";
   wireCursorTooltip(elements["rail-spectra"]);
   // Over a land-filled box the fill steps move the crossing from lead to lead, so the
   // lead chart is only drawn for boxes under the land warning threshold.
   if (pair && pair.hasReference && landFraction < PSD_LAND_WARNING_FRACTION) {
-    renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, boxKey, referenceLabel);
+    renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, boxKey, referenceLabel, forecastLabel);
   } else {
     elements["rail-psd-lead"].innerHTML = "";
   }
@@ -4737,7 +4751,7 @@ function pairSpectra(sources, boxViewport, centreLatitude) {
 // the spectrum is on screen, and the chart fills in as they arrive.
 const psdLeadSweepCache = new Map();
 
-async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, boxKey, referenceLabel) {
+async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, boxKey, referenceLabel, forecastLabel) {
   const range = sharedLeadRange();
   if (!range) return;
   const panelsInPair = sources.map((entry) => entry.panel);
@@ -4757,13 +4771,14 @@ async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, bo
       .map(([leadDay, metres]) => ({ lead_day: leadDay, mean: metres / 1000 }));
     elements["rail-psd-lead"].innerHTML = rows.length
       ? leadCurveSVG(new Map([["reference", rows]]), {
-          title: `Disagreement with ${referenceLabel} vs lead`,
+          title: `Smallest scale in agreement with ${referenceLabel} by lead day`,
           unit: "km",
           yLabel: `disagreement scale (km)`,
-          heading: "Disagreement scale vs lead day (km)",
+          heading: `Scale down to which ${forecastLabel} matches ${referenceLabel} (km)`,
+          headingSuffix: "by lead day",
           labels: new Map([["reference", `vs ${referenceLabel}`]]),
           legend: false,
-        })
+        }) + `<p class="rail-caption">Smaller means the forecast keeps finer detail in common with ${referenceLabel}.</p>`
       : "";
     if (rows.length) wireCursorTooltip(elements["rail-psd-lead"]);
   };
@@ -4790,14 +4805,13 @@ async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, bo
 
 function updatePsdToggle() {
   const section = document.getElementById("rail-spectra-section");
-  const button = elements["psd-toggle"];
-  if (!section || !button) return;
+  const hide = elements["psd-toggle"];
+  const compute = elements["psd-compute"];
+  if (!section || !hide || !compute) return;
   const enabled = shared.psdEnabled && shared.scope !== SCOPE_WHOLE_YEAR;
   section.classList.toggle("psd-disabled", !enabled);
-  button.setAttribute("aria-pressed", enabled ? "true" : "false");
-  button.setAttribute("aria-label", enabled ? "Hide live power spectrum" : "Show live power spectrum");
-  button.title = enabled ? "Hide live power spectrum" : "Show live power spectrum";
-  button.setAttribute("aria-expanded", enabled ? "true" : "false");
+  hide.hidden = !enabled;
+  compute.hidden = enabled;
 }
 
 function setPsdEnabled(enabled) {
@@ -5400,7 +5414,11 @@ function wireBarExtras() {
   document.getElementById("scores-toggle").addEventListener("click", () => elements["rail-collapse"].click());
   if (VIEWER_EMBEDDED) {
     const about = elements["about-toggle"] || document.getElementById("about-toggle");
-    if (about) bar.querySelector(".bar-end").append(about);
+    if (about) {
+      about.classList.add("bar-more-about");
+      bar.querySelector(".bar-more-menu").append(about);
+      about.addEventListener("click", () => about.closest("details")?.removeAttribute("open"));
+    }
   }
   updateStateChip();
 }
@@ -5830,9 +5848,8 @@ function wireGlobalControls() {
   elements["theme-toggle"].addEventListener("click", () => {
     setViewerTheme(shared.theme === THEME_LIGHT ? THEME_DARK : THEME_LIGHT);
   });
-  elements["psd-toggle"].addEventListener("click", () => {
-    setPsdEnabled(!shared.psdEnabled);
-  });
+  elements["psd-toggle"].addEventListener("click", () => setPsdEnabled(false));
+  elements["psd-compute"].addEventListener("click", () => setPsdEnabled(true));
   elements["about-toggle"].addEventListener("click", () => {
     const dialog = elements["about-dialog"];
     if (typeof dialog.showModal === "function") dialog.showModal();
@@ -6429,8 +6446,10 @@ function selectElements() {
     "rail-depth-profile",
     "rail-depth-profile-note",
     "psd-toggle",
+    "psd-compute",
     "rail-spectra",
     "rail-psd-note",
+    "rail-psd-readout",
     "rail-psd-lead",
     "rail-year-rmsd-section",
     "rail-year-rmsd",

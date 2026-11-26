@@ -113,8 +113,11 @@ const LEGEND_CHAR = 7.2;
 
 // Line-end names in a right gutter, for every multi-series chart: the gutter is sized on
 // the longest name, and names that would overlap are pushed apart by one legend row.
-function gutterWidth(entries) {
-  return entries.length > 1 ? 18 + Math.max(...entries.map((entry) => String(entry.label).length)) * LEGEND_CHAR : 0;
+// Every rail chart reserves the same right gutter, named lines or not, so the plots
+// share one width and their x axes line up.
+const END_LABEL_GUTTER = 18 + 7 * LEGEND_CHAR;
+function gutterWidth() {
+  return END_LABEL_GUTTER;
 }
 
 function renderGutterLabels(area, items) {
@@ -153,6 +156,7 @@ export function leadCurveSVG(
     emptyMessage = "no score rows for this variable/depth",
     yLabel = unit ? `RMSE (${unit})` : "RMSE",
     heading = "",
+    headingSuffix = "",
   } = {},
 ) {
   const references = [...series.keys()];
@@ -182,7 +186,7 @@ export function leadCurveSVG(
   // Two or more lines are named at their right end; when two names would collide the
   // chart falls back to one legend row above the plot.
   const named = legend && references.length > 1;
-  const area = plotArea(headingRows, named ? gutterWidth(legendEntries) : 0);
+  const area = plotArea(headingRows, gutterWidth());
   const xOf = (lead) => area.x0 + (maxLead <= 1 ? 0.5 : (lead - 1) / (maxLead - 1)) * area.width;
   const yOf = (value) => area.y1 - (value / yMax) * area.height;
 
@@ -229,7 +233,8 @@ export function leadCurveSVG(
     : "";
   // A chart that shares its section with another one names itself in one horizontal row
   // above the plot instead of in the section title.
-  const headingMarkup = heading ? `<text x="${area.x0}" y="9" class="legend">${escapeText(heading)}</text>` : "";
+  const suffixMarkup = headingSuffix ? ` <tspan class="heading-suffix">${escapeText(headingSuffix)}</tspan>` : "";
+  const headingMarkup = heading ? `<text x="${area.x0}" y="9" class="legend">${escapeText(heading)}${suffixMarkup}</text>` : "";
 
   return (
     svgOpen(title, heading ? "" : unitInParentheses(yLabel) || unit) +
@@ -250,7 +255,7 @@ export function psdSpectraSVG(
   { title = "Live power spectrum", xBounds = null, yBounds = null, yLabel = "power", marker = null } = {},
 ) {
   const usable = (curves || []).filter((curve) => curve && curve.wavelength && curve.wavelength.length);
-  const area = plotArea(0, gutterWidth(usable));
+  const area = plotArea(0, gutterWidth());
   if (!usable.length) return emptyChart(title, "no field in view for a spectrum");
   const ends = [];
 
@@ -350,7 +355,7 @@ export function psdSpectraSVG(
 export function rmsdByStartSVG(series, { title = "RMSE by start date", unit = "", signed = false, yBound = 0, typeScale = 1 } = {}) {
   const usable = (series || []).filter((line) => line && line.dates && line.dates.length);
   if (!usable.length) return emptyChart(title, "no RMSE by start for this variable");
-  const area = plotArea(0, gutterWidth(usable));
+  const area = plotArea(0, gutterWidth());
   const ends = [];
 
   const allDates = [...new Set(usable.flatMap((line) => line.dates))].sort();
@@ -464,7 +469,7 @@ export function rmsdByDepthSVG(
   // Depth-bin labels ("1500-3000 m") are wider than the numeric ticks the other charts use,
   // so this profile gets a gutter sized to its longest label at the rendered type size.
   const DEPTH_PAD_LEFT = labelGutter(depthLabels, typeScale, 44);
-  const base = plotArea(0, gutterWidth(usable));
+  const base = plotArea(0, gutterWidth());
   const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
   const ends = [];
 
@@ -570,7 +575,7 @@ export function columnProfileSVG(
   if (Number.isFinite(depthBound)) depthMax = Math.max(depthMax, depthBound);
   const depthTicks = [0, 1, 2, 3, 4].map((t) => Math.round((depthMax * t) / 4).toLocaleString("en-US"));
   const DEPTH_PAD_LEFT = labelGutter(depthTicks, typeScale, 36);
-  const base = plotArea(0, gutterWidth(usable));
+  const base = plotArea(0, gutterWidth());
   const area = { ...base, x0: DEPTH_PAD_LEFT, width: base.x1 - DEPTH_PAD_LEFT };
   const ends = [];
   if (!(valueMax > valueMin)) valueMax = valueMin + 1;

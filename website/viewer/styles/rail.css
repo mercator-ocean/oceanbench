@@ -16,7 +16,7 @@ SPDX-License-Identifier: EUPL-1.2
    larger step, so the hierarchy reads label, title, caption. */
 .rail-title { display: none; }
 .rail-section h3 {
-  font-size: var(--text-md);
+  font-size: var(--text-lg);
   font-weight: var(--w-strong);
   color: var(--text);
   margin: 0 0 var(--s2);
@@ -36,8 +36,8 @@ SPDX-License-Identifier: EUPL-1.2
 }
 .rail-current-depth-note p { margin: 0 0 var(--s2); font-size: var(--text-sm); line-height: var(--ob-line-body); color: var(--muted); }
 
-/* One large step (space-5) between charts. */
-.rail-section { margin-bottom: var(--s5); display: flex; flex-direction: column; gap: var(--s2); }
+/* 32 px (space-6) between chart blocks. */
+.rail-section { margin-bottom: var(--s6); display: flex; flex-direction: column; gap: var(--s2); }
 .rail-section > * { margin-top: 0; margin-bottom: 0; }
 .rail-section > [hidden] { display: none; }
 .rail-section h3 { margin: 0; }
@@ -45,21 +45,39 @@ SPDX-License-Identifier: EUPL-1.2
 .rail-card-heading h3 { margin-bottom: 0; }
 .rail-section.psd-disabled .rail-chart-slot,
 .rail-section.psd-disabled .rail-caption { display: none; }
-.psd-toggle {
+.rail-psd-readout { font-size: var(--text-md); color: var(--text); }
+.rail-psd-readout[hidden] { display: none; }
+.psd-hide { border: 0; background: transparent; padding: 0; font: inherit; font-size: var(--text-sm); color: var(--muted); cursor: pointer; }
+.psd-hide:hover { color: var(--text); text-decoration: underline; }
+.psd-placeholder {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--s2);
+  justify-content: center;
+  gap: var(--s3);
   width: 100%;
-  padding: 0;
+  aspect-ratio: 360 / 220;
+  padding: var(--s4);
   font: inherit;
-  color: inherit;
-  text-align: left;
-  background: none;
-  border: 0;
+  color: var(--muted);
+  background: transparent;
+  border: var(--hairline) dashed var(--border);
+  border-radius: var(--radius);
   cursor: pointer;
 }
-.psd-toggle::before { content: "\203A"; display: inline-block; color: var(--muted); transition: transform 0.15s; }
-.psd-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+.psd-placeholder[hidden] { display: none; }
+.psd-placeholder:hover { border-color: var(--accent); }
+.psd-placeholder-note { font-size: var(--text-sm); text-align: center; }
+.psd-placeholder-action {
+  padding: var(--s1) var(--s3);
+  font-size: var(--text-md);
+  font-weight: var(--w-strong);
+  color: var(--text);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.psd-placeholder:hover .psd-placeholder-action { border-color: var(--accent); color: var(--accent); }
 .rail-reference-row { display: flex; align-items: center; gap: var(--s2); margin: 0 0 var(--s2); }
 .rail-reference-row .rail-skill-reference { margin: 0; }
 .trajectory-card { padding-left: var(--s3); box-shadow: inset var(--ob-viewer-accent-rule) 0 0 var(--forecast-color, var(--muted)); }
@@ -101,6 +119,7 @@ SPDX-License-Identifier: EUPL-1.2
 .rail-chart .chart-lead-readout text { fill: var(--muted); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
 .rail-chart .legend { fill: var(--text); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
 .rail-chart .chart-tooltip text { fill: var(--text); }
+.rail-chart .heading-suffix { fill: var(--muted); }
 .rail-chart .chart-lead-readout text { fill: var(--text); }
 .rail-chart .chart-point { fill: transparent; stroke: none; pointer-events: all; cursor: crosshair; }
 .rail-chart .chart-crosshair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
@@ -134,3 +153,6 @@ SPDX-License-Identifier: EUPL-1.2
 .about-glossary { margin: var(--s3) 0 0; font-size: var(--text-md); }
 .about-glossary dt { font-weight: var(--w-strong); margin-top: var(--s2); }
 .about-glossary dd { margin: var(--s1) 0 0; color: var(--muted); }
+
+.rail-example-note { margin: 0 0 var(--s3); font-size: var(--text-sm); color: var(--muted); line-height: var(--ob-line-body); }
+.rail-example-note[hidden] { display: none; }

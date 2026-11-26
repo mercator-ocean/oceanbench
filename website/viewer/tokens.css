@@ -135,6 +135,16 @@ body.quarto-dark {
   --ob-viewer-panel-pad: var(--ob-space-4);
   --ob-viewer-overlay-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
   --ob-viewer-sheet-shadow: 0 0 24px rgba(15, 23, 42, 0.18);
+  --ob-viewer-strip-height: 24px;
+  --ob-viewer-series-rule: 2px;
+  --ob-viewer-strip-edge: 3px;
+  /* One stacking scale: base < map overlays < handles < popover < sheet < modal. */
+  --ob-z-base: 1;
+  --ob-z-map-overlay: 10;
+  --ob-z-handle: 20;
+  --ob-z-popover: 30;
+  --ob-z-sheet: 40;
+  --ob-z-modal: 50;
 }
 
 /* ---- viewer palette: light -------------------------------------------------- */

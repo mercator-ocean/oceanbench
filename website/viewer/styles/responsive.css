@@ -25,7 +25,7 @@ SPDX-License-Identifier: EUPL-1.2
     position: absolute;
     top: 0;
     bottom: 0;
-    z-index: 12;
+    z-index: var(--ob-z-sheet);
     box-shadow: var(--sheet-shadow);
   }
   .drawer-left { left: 0; width: var(--controls-open-width); }
@@ -48,13 +48,6 @@ SPDX-License-Identifier: EUPL-1.2
     grid-template-rows: 1fr 1fr;
     column-gap: 0;
     row-gap: var(--hairline);
-  }
-  .example-note {
-    position: static;
-    order: -1;
-    max-width: none;
-    border-radius: 0;
-    box-shadow: none;
   }
   .header-actions { gap: var(--s2); }
   .control-bar { gap: var(--s2); }

@@ -177,7 +177,6 @@ SPDX-License-Identifier: EUPL-1.2
           <!-- The zoom reading describes the view itself, so it stays on the view,
                in the corner, out of the way of both the map and the strip. -->
           <p id="layer-info" class="layer-info"></p>
-          <p id="example-note" class="example-note" hidden></p>
           <div class="map-key">
             <div class="dock-scale">
               <canvas id="colorbar" class="colorbar"></canvas>
@@ -218,6 +217,7 @@ SPDX-License-Identifier: EUPL-1.2
       <aside id="context-rail" class="drawer drawer-right" aria-label="Context">
         <div class="drawer-body">
                     <p id="rail-subtitle" class="rail-subtitle" hidden></p>
+          <p id="example-note" class="rail-example-note" hidden></p>
           <div id="rail-current-depth-note" class="rail-current-depth-note" hidden></div>
           <div id="rail-forecast-toggle" class="rail-forecast-toggle segmented" role="group" aria-label="Forecast to inspect" hidden>
             <button type="button" data-forecast="0" class="ghost-button">F1</button>
@@ -257,9 +257,15 @@ SPDX-License-Identifier: EUPL-1.2
             <p id="rail-year-rmsd-note" class="rail-caption"></p>
           </section>
           <section class="rail-section" id="rail-spectra-section">
-            <h3 class="psd-card-heading">
-              <button id="psd-toggle" type="button" class="psd-toggle" aria-label="Show live power spectrum" title="Show live power spectrum" aria-pressed="false">Live power spectrum</button>
-            </h3>
+            <div class="rail-card-heading">
+              <h3>Power spectrum</h3>
+              <button id="psd-toggle" type="button" class="psd-hide" hidden>Hide</button>
+            </div>
+            <button id="psd-compute" type="button" class="psd-placeholder">
+              <span class="psd-placeholder-note">Computed in your browser from the current map view</span>
+              <span class="psd-placeholder-action">Compute spectrum</span>
+            </button>
+            <p id="rail-psd-readout" class="rail-psd-readout" hidden></p>
             <div id="rail-spectra" class="rail-chart-slot"></div>
             <p id="rail-psd-note" class="rail-caption"></p>
             <div id="rail-psd-lead" class="rail-chart-slot"></div>

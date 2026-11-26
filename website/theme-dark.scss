@@ -21,7 +21,7 @@
 $ob-page-bg: #1c2128;
 $ob-surface: #22272e;
 $ob-surface-raised: #2d333b;
-$ob-navbar-bg: #1a2740;
+$ob-navbar-bg: #161b22;
 $ob-border: #444c56;
 $ob-grid-border: rgba(240, 246, 252, 0.06);
 $ob-text: #adbac7;
@@ -69,7 +69,7 @@ $table-hover-color: $ob-text;
 $navbar-bg: $ob-navbar-bg;
 $navbar-dark-bg: $ob-navbar-bg;
 $navbar-fg: $ob-text;
-$navbar-hl: $ob-heading;
+$navbar-hl: $ob-accent;
 
 $footer-bg: $ob-page-bg;
 $footer-fg: $ob-muted;
@@ -80,7 +80,12 @@ $box-shadow-sm: 0 3px 10px rgba(1, 4, 9, 0.5);
 /*-- scss:rules --*/
 
 .navbar {
-  border-bottom: 1px solid #2a3d5e;
+  border-bottom: 1px solid $ob-border;
+}
+
+.navbar .navbar-nav .nav-link:hover,
+.navbar .navbar-nav .nav-link:focus {
+  color: $ob-accent;
 }
 
 .nav-footer {
