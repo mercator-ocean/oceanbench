@@ -116,19 +116,58 @@ def _interpolate_observations_to_target_depth(
         "lead_day",
     ]
 
-    records = [
-        record
-        for record in (
-            _interpolated_observation_record_at_target_depth(group_key, group, group_keys, depth_key, target_depth)
-            for group_key, group in filtered_observations_dataframe.groupby(group_keys, sort=False)
-        )
-        if record is not None
-    ]
-
-    if not records:
+    if os.environ.get("OCEANBENCH_CLASS4_DEPTH_LOOP") == "1":
+        records = [
+            record
+            for record in (
+                _interpolated_observation_record_at_target_depth(group_key, group, group_keys, depth_key, target_depth)
+                for group_key, group in filtered_observations_dataframe.groupby(group_keys, sort=False)
+            )
+            if record is not None
+        ]
+        if not records:
+            return pandas.DataFrame(columns=target_columns)
+        return pandas.DataFrame.from_records(records)[target_columns]
+    group_numbers = filtered_observations_dataframe.groupby(group_keys, sort=False).ngroup().to_numpy()
+    in_group = group_numbers >= 0
+    rows = filtered_observations_dataframe.loc[in_group]
+    group_numbers = group_numbers[in_group].astype(numpy.int64)
+    if rows.empty:
         return pandas.DataFrame(columns=target_columns)
-    result = pandas.DataFrame.from_records(records)
+    groups_count = int(group_numbers.max()) + 1
+    depths = rows[depth_key].to_numpy(dtype=float)
+    values = rows["observation_value"].to_numpy(dtype=float)
+    below_depth = numpy.full(groups_count, -numpy.inf)
+    numpy.maximum.at(below_depth, group_numbers[depths <= target_depth], depths[depths <= target_depth])
+    above_depth = numpy.full(groups_count, numpy.inf)
+    numpy.minimum.at(above_depth, group_numbers[depths >= target_depth], depths[depths >= target_depth])
+    bracketed = numpy.isfinite(below_depth) & numpy.isfinite(above_depth)
+    below_value = _group_mean_at_depth(group_numbers, depths, values, below_depth, groups_count)
+    above_value = _group_mean_at_depth(group_numbers, depths, values, above_depth, groups_count)
+    with numpy.errstate(divide="ignore", invalid="ignore"):
+        interpolated_value = numpy.where(
+            numpy.isclose(below_depth, above_depth),
+            below_value,
+            below_value + ((target_depth - below_depth) / (above_depth - below_depth)) * (above_value - below_value),
+        )
+    first_rows = numpy.unique(group_numbers, return_index=True)[1]
+    kept_groups = numpy.flatnonzero(bracketed)
+    if kept_groups.size == 0:
+        return pandas.DataFrame(columns=target_columns)
+    result = rows.iloc[first_rows[kept_groups]][group_keys].reset_index(drop=True)
+    result["observation_value"] = interpolated_value[kept_groups]
+    result[depth_key] = target_depth
     return result[target_columns]
+
+
+def _group_mean_at_depth(group_numbers, depths, values, group_depths, groups_count) -> numpy.ndarray:
+    """Per group, the mean of the values at the depth ``group_depths`` of the group, summed in row order."""
+    at_depth = depths == group_depths[group_numbers]
+    sums = numpy.zeros(groups_count)
+    numpy.add.at(sums, group_numbers[at_depth], values[at_depth])
+    counts = numpy.bincount(group_numbers[at_depth], minlength=groups_count)
+    with numpy.errstate(divide="ignore", invalid="ignore"):
+        return sums / counts
 
 
 def reset_class4_observations_cache() -> None:
