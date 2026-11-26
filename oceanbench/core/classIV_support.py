@@ -347,12 +347,18 @@ def _linearly_interpolated_profiles(
     latitudes: numpy.ndarray,
     longitudes: numpy.ndarray,
 ) -> numpy.ndarray:
+    # interp sorts the grid by its coordinates first, a copy of the whole field; an increasing grid is already sorted.
+    is_sorted = all(
+        data.indexes[coordinate_name].is_monotonic_increasing
+        for coordinate_name in (Dimension.LATITUDE.key(), Dimension.LONGITUDE.key())
+    )
     interpolated_profiles = data.interp(
         {
             Dimension.LATITUDE.key(): xarray.DataArray(latitudes, dims="observation"),
             Dimension.LONGITUDE.key(): xarray.DataArray(longitudes, dims="observation"),
         },
         method="linear",
+        assume_sorted=is_sorted,
     )
     return interpolated_profiles.compute().values
 
