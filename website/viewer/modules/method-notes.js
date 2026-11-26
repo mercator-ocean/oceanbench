@@ -69,7 +69,9 @@ export const METHOD_NOTES = {
   "year-geography": {
     title: "Year error geography",
     body:
-      "Mean |obs − model| per cell over the 52 starts (model − obs in bias mode), on a 2° grid " +
+      "Mean |obs − model| per cell (model − obs in bias mode), pooled over all match-ups of the " +
+      "52 starts, so a start weighs by its number of match-ups. Cells with fewer than 3 " +
+      "match-ups are drawn like unobserved ocean. 2° grid " +
       "(0.25° for IBI). Same obs and interpolation as the Class IV scores; SSH as sea level " +
       "anomaly (shift −0.1148 m, climatology −0.1329 m); no outlier rejection. Bias hover: " +
       "± one standard error across start dates (from 3 starts with data in the cell).",

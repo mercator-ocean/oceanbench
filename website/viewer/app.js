@@ -165,6 +165,8 @@ import {
 const DATASETS_PATH = "./data/datasets.json";
 const DIFFERENCE_COLORMAP = "balance";
 const YEAR_ERROR_COLORMAP = "dense"; // sequential map for time-mean |obs − model|
+// All-dates cells built from fewer match-ups than this are drawn as unobserved ocean.
+const YEAR_MINIMUM_CELL_COUNT = 3;
 const REGION_BOUNDS = {
   ibi: { west: -19.08, east: 5.08, south: 26.17, north: 56.08 },
 };
@@ -1128,6 +1130,14 @@ async function renderYearPanel(panel, token, manifest) {
   if (token !== panel.renderToken) return;
   panel.field = built.field;
   panel.yearCounts = buildYearObservationCounts(geography, mapping.short, shared.leadDay, { bias: biasMode });
+  // A cell with one or two match-ups is not a mean worth colouring: draw it like
+  // unobserved ocean (the legend says so) and keep its count for the hover readout.
+  if (panel.yearCounts && panel.yearCounts.data.length === built.field.data.length) {
+    const counts = panel.yearCounts.data;
+    for (let i = 0; i < counts.length; i += 1) {
+      if (counts[i] < YEAR_MINIMUM_CELL_COUNT) built.field.data[i] = NaN;
+    }
+  }
   // Per-cell bias standard error for the hover readout (bias mode only; null on old artifacts).
   panel.yearBiasSE = biasMode ? buildYearBiasStandardError(geography, mapping.short, shared.leadDay) : null;
   panel.latitudes = built.latitudes;
@@ -3059,6 +3069,9 @@ function updatePanelReadout(panel, lat, lon, suffix = "", source = panel, prefix
 
 function fieldReadoutValue(panel, value, count, standardError) {
   if (shared.scope === SCOPE_WHOLE_YEAR) {
+    if (Number.isFinite(count) && count > 0 && count < YEAR_MINIMUM_CELL_COUNT) {
+      return `fewer than ${YEAR_MINIMUM_CELL_COUNT} observations · n = ${count}`;
+    }
     if (!Number.isFinite(value) || count === 0) return "no observations";
     const biasMode = panel.yearMetric === YEAR_METRIC_BIAS;
     // Non-bias year cells are the time-mean |obs − model| (MAE), matching the panel title
@@ -3303,7 +3316,7 @@ function updateYearLegend(visible) {
   if (!visible) return;
   legend.innerHTML =
     `<span class="item"><span class="swatch" style="background:${rgbCss(landColor(shared.theme))}"></span>land</span>` +
-    `<span class="item"><span class="swatch" style="background:${rgbCss(noObsColor(shared.theme))}"></span>ocean, no observations</span>` +
+    `<span class="item"><span class="swatch" style="background:${rgbCss(noObsColor(shared.theme))}"></span>ocean, fewer than ${YEAR_MINIMUM_CELL_COUNT} observations</span>` +
     (activePeriodRange() ? `<span class="item">${PERIOD_NOT_APPLIED}</span>` : "");
   // Colorbar-adjacent method note for the year raster (the colorbar itself is a canvas).
   attachMethodNote(legend, "year-geography");
@@ -3343,11 +3356,10 @@ function updateSharedColorbar() {
     scalePanels.forEach((candidate, index) => {
       if (!candidate.colormap || !candidate.range) return;
       const nStarts = candidate.yearMeta && candidate.yearMeta.nStarts;
-      const biasMode = candidate.yearMetric === YEAR_METRIC_BIAS;
       canvases[index].hidden = false;
       drawColorbar(canvases[index], candidate.colormap, candidate.range, {
         // Dataset and variable are in the panel head; the bar says only what is averaged.
-        label: `${prefixFor(candidate)}${biasMode ? "model − obs" : "|obs − model|"}, mean of ${nStarts || "?"} starts`,
+        label: `${prefixFor(candidate)}Pooled over all match-ups of ${nStarts || "?"} starts`,
         units: candidate.units,
         textColor,
       });
