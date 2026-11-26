@@ -92,9 +92,10 @@ h1, h2, h3, h4 { font-size: inherit; font-weight: var(--w-strong); margin: 0; }
 .ghost-button:hover { background: var(--surface-strong); }
 .ghost-button.active,
 .ghost-button[aria-pressed="true"] {
-  color: var(--accent-contrast);
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--text);
+  font-weight: var(--w-strong);
+  background: var(--active-bg);
+  border-color: var(--active-border);
 }
 /* Quiet button: no border or fill until hovered. Used for the bar utilities and
    tertiary actions. */
@@ -124,7 +125,7 @@ h1, h2, h3, h4 { font-size: inherit; font-weight: var(--w-strong); margin: 0; }
   --drawer-tab-width: var(--ob-viewer-drawer-tab-width);
   position: relative;
   display: grid;
-  grid-template-columns: var(--controls-width) minmax(0, 1fr) var(--rail-width);
+  grid-template-columns: 0 minmax(0, 1fr) var(--rail-width);
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -202,7 +203,71 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 .drawer-left.collapsed .drawer-tab::before { content: "\203A"; }
 .drawer-right.collapsed .drawer-tab::before { content: "\2039"; }
 
-/* ---- left panel: section labels, one label gap, one group gap -------------- */
+/* ---- control bar above the map: one row that reads like a sentence --------- */
+.drawer-left[hidden] { display: none; }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s4);
+  padding: var(--s2) var(--pad);
+  border-bottom: var(--hairline) solid var(--border);
+  background: var(--surface);
+  position: relative;
+  z-index: 8;
+}
+.bar-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); min-width: 0; }
+.bar-group label, .bar-region { display: flex; align-items: center; }
+.bar-forecast { display: inline-flex; align-items: center; gap: var(--s2); }
+.bar-forecast:empty { display: none; }
+.control-bar:has(.layout-switch [data-layout="1"].active) #bar-forecast-1,
+.control-bar:has(.layout-switch [data-layout="1"].active) .panel-variable[data-index="1"],
+.map-area:has(.panel-grid[data-display="diff"]) .panel-variable[data-index="1"] { display: none; }
+.control-bar select { max-width: var(--ob-viewer-select-max); }
+.control-bar .panel-forecast-label { font-size: var(--text-sm); }
+.bar-more { margin-left: auto; position: relative; }
+.bar-more > summary { list-style: none; display: inline-flex; align-items: center; }
+.bar-more > summary::-webkit-details-marker { display: none; }
+.bar-more[open] > summary { font-weight: var(--w-strong); background: var(--active-bg); border-color: var(--active-border); }
+.bar-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--s1));
+  width: var(--ob-viewer-rail-width);
+  max-width: calc(100vw - var(--s5));
+  background: var(--surface);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--overlay-shadow);
+}
+.bar-more-menu #reset-view { align-self: flex-start; }
+.bar-note { flex: 1 0 100%; margin: 0; }
+.bar-note:empty, .bar-note[hidden] { display: none; }
+.control-bar .period-field { display: flex; align-items: center; gap: var(--s2); }
+.control-bar .period-range { display: flex; align-items: center; gap: var(--s2); font-size: var(--text-sm); color: var(--muted); }
+.control-bar .period-range[hidden] { display: none; }
+.control-bar .period-range input[type="date"] {
+  font: inherit;
+  font-size: var(--text-md);
+  height: var(--control-height);
+  padding: 0 var(--s2);
+  color: var(--text);
+  background: var(--surface);
+  border: var(--hairline) solid var(--control-border);
+  border-radius: var(--radius);
+}
+:root[data-theme="dark"] .control-bar .period-range input[type="date"] { color-scheme: dark; }
+.panel.head-only { display: none; }
+
+/* ---- More menu body: section labels, one label gap, one group gap ---------- */
 .controls {
   display: flex;
   flex-direction: column;
@@ -223,8 +288,7 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
   color: var(--muted);
   margin: 0;
 }
-.scope-switch { display: flex; }
-.scope-switch .ghost-button { flex: 1; padding: 0 var(--s2); }
+.scope-switch .ghost-button { padding: 0 var(--s3); }
 
 #overlay-note { min-height: 2lh; position: relative; }
 #overlay-note:empty { min-height: 0; }
@@ -258,7 +322,8 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 :root:not([data-scope="year"]) .period-field { display: none !important; }
 :root[data-scope="year"] .start-date-field,
 :root[data-scope="year"] #currents-group,
-:root[data-scope="year"] .controls label:has(#overlay-mode),
+:root[data-scope="year"] .overlay-field,
+:root:not([data-scope="year"]) #period-note,
 :root[data-scope="year"] #eddy-reference-field,
 :root[data-scope="year"] #overlay-note,
 :root[data-scope="year"] .overlay-section-label,
@@ -277,6 +342,7 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 
 /* ---- select ---------------------------------------------------------------- */
 .controls select,
+.control-bar select,
 .panel-head select {
   appearance: none;
   -webkit-appearance: none;
@@ -296,8 +362,10 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
   cursor: pointer;
 }
 :root[data-theme="dark"] .controls select,
+:root[data-theme="dark"] .control-bar select,
 :root[data-theme="dark"] .panel-head select { color-scheme: dark; }
 .controls select:hover,
+.control-bar select:hover,
 .panel-head select:hover { background-color: var(--surface-strong); }
 
 .controls-footer {
@@ -346,8 +414,8 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 kbd { font-family: inherit; font-size: var(--text-xs); background: var(--surface-strong); border-radius: var(--radius); padding: 0 var(--s1); }
 
 /* ---- year metric switch ---------------------------------------------------- */
-.metric-switch { display: none; align-items: center; }
-:root[data-scope="year"] .metric-switch { display: flex; }
+.metric-switch { display: none !important; align-items: center; }
+:root[data-scope="year"] .metric-switch { display: inline-flex !important; }
 .metric-switch-label {
   font-size: var(--text-sm);
   color: var(--muted);
@@ -378,9 +446,9 @@ kbd { font-family: inherit; font-size: var(--text-xs); background: var(--surface
 }
 .method-note-btn:hover,
 .method-note-btn[aria-expanded="true"] {
-  color: var(--accent-contrast);
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--text);
+  background: var(--active-bg);
+  border-color: var(--active-border);
 }
 
 .method-popover {

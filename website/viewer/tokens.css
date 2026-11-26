@@ -92,7 +92,7 @@ body.quarto-dark {
 
 /* ---- viewer metrics (theme independent) ------------------------------------ */
 :root {
-  --ob-viewer-controls-width: 256px;
+  --ob-viewer-controls-width: 0px;
   --ob-viewer-rail-width: 352px;
   --ob-viewer-drawer-tab-width: 24px;
   --ob-viewer-handle-width: 12px;
@@ -153,6 +153,9 @@ body.quarto-dark {
   --ob-viewer-accent: #262b31;
   --ob-viewer-accent-contrast: #ffffff;
   --ob-viewer-accent-glow: rgba(38, 43, 49, 0.2);
+  /* Active choice: a light neutral fill and a 1px border one step darker than a control's. */
+  --ob-viewer-active-bg: #e7eaee;
+  --ob-viewer-active-border: #7d858e;
   --ob-viewer-error: #b3261e;
   --ob-viewer-readout-bg: rgba(255, 255, 255, 0.92);
   --ob-viewer-grid-line: rgba(95, 102, 110, 0.14);
@@ -185,6 +188,8 @@ body.quarto-dark {
   --ob-viewer-accent: #e6edf3;
   --ob-viewer-accent-contrast: #10151f;
   --ob-viewer-accent-glow: rgba(230, 237, 243, 0.3);
+  --ob-viewer-active-bg: #2a3342;
+  --ob-viewer-active-border: #8794a3;
   --ob-viewer-error: #ff8a80;
   --ob-viewer-readout-bg: rgba(16, 21, 31, 0.9);
   --ob-viewer-grid-line: rgba(149, 161, 176, 0.16);
@@ -225,6 +230,8 @@ body.quarto-dark {
   --accent: var(--ob-viewer-accent);
   --accent-contrast: var(--ob-viewer-accent-contrast);
   --accent-glow: var(--ob-viewer-accent-glow);
+  --active-bg: var(--ob-viewer-active-bg);
+  --active-border: var(--ob-viewer-active-border);
   --error: var(--ob-viewer-error);
   --readout-bg: var(--ob-viewer-readout-bg);
   --grid-line: var(--ob-viewer-grid-line);

@@ -385,6 +385,27 @@ function defaultPanelState(index) {
   };
 }
 
+// The dataset and variable selectors live in the control bar above the map, not on the
+// panel: Forecast N's swatch and dataset sit in the forecasts group, its variable in the
+// variable group. The elements keep their classes, so the panel code still finds them.
+function placePanelSelectorsInBar(container, index) {
+  const forecastSlot = document.getElementById(`bar-forecast-${index}`);
+  const variableSlot = document.getElementById("bar-variable");
+  const label = container.querySelector(".panel-forecast-label");
+  const dataset = container.querySelector(".panel-dataset");
+  const variable = container.querySelector(".panel-variable");
+  if (!forecastSlot || !variableSlot) return { label, dataset, variable };
+  label.textContent = `F${index + 1}`;
+  label.title = `Forecast ${index + 1}`;
+  dataset.setAttribute("aria-label", `Forecast ${index + 1} dataset`);
+  variable.setAttribute("aria-label", `Forecast ${index + 1} variable`);
+  variable.dataset.index = String(index);
+  label.style.setProperty("--forecast-color", forecastColor(index));
+  forecastSlot.replaceChildren(label, dataset);
+  variableSlot.append(variable);
+  return { label, dataset, variable };
+}
+
 function buildPanel(index) {
   const container = document.createElement("div");
   container.className = "panel";
@@ -408,13 +429,15 @@ function buildPanel(index) {
       <div class="panel-swipe-hint" hidden></div>
       <div class="panel-swipe-handle" aria-hidden="true" hidden>↔</div>
     </div>`;
+  const selectors = placePanelSelectorsInBar(container, index);
   const panel = {
     index,
     container,
     state: defaultPanelState(index),
     els: {
-      dataset: container.querySelector(".panel-dataset"),
-      variable: container.querySelector(".panel-variable"),
+      dataset: selectors.dataset,
+      variable: selectors.variable,
+      forecastLabel: selectors.label,
       badge: container.querySelector(".panel-badge"),
       wrap: container.querySelector(".panel-canvas-wrap"),
       field: container.querySelector(".panel-field"),
@@ -3174,10 +3197,10 @@ function syncPanelGrid() {
     panels[i].container.classList.toggle("head-only", single && i === 1);
     // The shared map paints Forecast 1 − Forecast 2 in difference mode, so keeping the
     // "Forecast 1" head label over it misreads as a plain field (p8).
-    const headLabel = panels[i].container.querySelector(".panel-forecast-label");
+    const headLabel = panels[i].els.forecastLabel;
     if (headLabel) {
       headLabel.textContent =
-        shared.displayMode === DISPLAY_DIFFERENCE && shared.layout === 2 && i === 0 ? "Difference · Forecast 1" : `Forecast ${i + 1}`;
+        `F${i + 1}`;
     }
     grid.appendChild(panels[i].container);
     refreshPanelControls(panels[i]);
@@ -4720,6 +4743,7 @@ async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, bo
           title: `Disagreement with ${referenceLabel} vs lead`,
           unit: "km",
           yLabel: `disagreement scale (km)`,
+          heading: "Disagreement scale vs lead day (km)",
           labels: new Map([["reference", `vs ${referenceLabel}`]]),
           legend: false,
         })
@@ -5912,6 +5936,34 @@ function watchChartSlots() {
   for (const slot of slots) {
     publish(slot);
     observer.observe(slot);
+  }
+  watchChartTitleUnits(slots);
+}
+
+// Charts draw no rotated y-axis title; the unit they expose is shown after the section title.
+function watchChartTitleUnits(slots) {
+  const sectionTitle = (slot) => slot.closest("section, .rail-card")?.querySelector("h3");
+  const update = (slot) => {
+    const title = sectionTitle(slot);
+    if (!title) return;
+    const chart = slot.querySelector("svg[data-title-unit]");
+    if (!chart) return;
+    let span = title.querySelector(".chart-title-unit");
+    if (!span) {
+      span = document.createElement("span");
+      span.className = "chart-title-unit";
+      title.insertBefore(span, title.querySelector(".method-note-btn"));
+    }
+    const unit = chart.dataset.titleUnit;
+    span.textContent = unit ? ` (${unit})` : "";
+  };
+  const observer = new MutationObserver((records) => {
+    for (const record of records) update(record.target.closest?.(".rail-chart-slot") || record.target);
+  });
+  for (const slot of slots) {
+    if (slot !== sectionTitle(slot)?.closest("section, .rail-card")?.querySelector(".rail-chart-slot")) continue;
+    update(slot);
+    observer.observe(slot, { childList: true });
   }
 }
 

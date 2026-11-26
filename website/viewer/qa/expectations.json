@@ -19,7 +19,7 @@
       "name": "leadSliderWidth",
       "selector": "#lead-day",
       "property": "width",
-      "expected": 122,
+      "expected": 292.66,
       "tolerancePx": 8
     },
     {
@@ -33,7 +33,7 @@
       "name": "panelCanvasWidth",
       "selector": ".panel-field",
       "property": "width",
-      "expected": 832,
+      "expected": 1088,
       "tolerancePx": 10
     }
   ],

@@ -13,15 +13,17 @@ SPDX-License-Identifier: EUPL-1.2
 
 /* Rail title matches the left panel's section labels; chart titles are the one
    larger step, so the hierarchy reads label, title, caption. */
-.rail-title { margin: 0 0 var(--label-gap); }
+.rail-title { display: none; }
 .rail-section h3 {
   font-size: var(--text-md);
   font-weight: var(--w-strong);
   color: var(--text);
   margin: 0 0 var(--s2);
 }
-.rail-subtitle { font-size: var(--text-sm); color: var(--muted); margin: 0 0 var(--group-gap); }
-#rail-subtitle, #rail-skill-note { min-height: 2lh; }
+.rail-subtitle { font-size: var(--text-sm); color: var(--muted); margin: 0 0 var(--s5); line-height: var(--ob-line-body); }
+#rail-subtitle { min-height: 2lh; }
+.rail-caption:empty { display: none; }
+.chart-title-unit { font-weight: var(--w-strong); }
 #rail-provenance { min-height: calc(2lh + var(--s3)); }
 .rail-current-depth-note {
   margin: 0 0 var(--group-gap);
@@ -29,10 +31,13 @@ SPDX-License-Identifier: EUPL-1.2
   border-radius: var(--radius);
   background: var(--surface-strong);
 }
-.rail-current-depth-note p { margin: 0 0 var(--s2); font-size: var(--text-md); line-height: var(--ob-line-body); color: var(--text); }
+.rail-current-depth-note p { margin: 0 0 var(--s2); font-size: var(--text-sm); line-height: var(--ob-line-body); color: var(--muted); }
 
 /* One large step (space-5) between charts. */
-.rail-section { margin-bottom: var(--s5); }
+.rail-section { margin-bottom: var(--s5); display: flex; flex-direction: column; gap: var(--s2); }
+.rail-section > * { margin-top: 0; margin-bottom: 0; }
+.rail-section > [hidden] { display: none; }
+.rail-section h3 { margin: 0; }
 .rail-card-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-bottom: var(--s2); }
 .rail-card-heading h3 { margin-bottom: 0; }
 .rail-section.psd-disabled .rail-chart-slot,
@@ -48,7 +53,7 @@ SPDX-License-Identifier: EUPL-1.2
 .rail-skill-reference { margin: 0 0 var(--s2); }
 #rail-skill-reference-note { margin: 0 0 var(--s1); }
 
-.rail-caption { font-size: var(--text-sm); color: var(--muted); margin: var(--s2) 0 0; line-height: var(--ob-line-body); }
+.rail-caption { font-size: var(--text-sm); color: var(--muted); margin: 0; line-height: var(--ob-line-body); }
 .rail-provenance { font-size: var(--text-sm); color: var(--muted); margin: var(--group-gap) 0 0; padding-top: var(--s3); border-top: var(--hairline) solid var(--border); line-height: var(--ob-line-body); }
 .rail-provenance .method-note-btn { vertical-align: baseline; }
 
@@ -111,4 +116,3 @@ SPDX-License-Identifier: EUPL-1.2
 .about-glossary { margin: var(--s3) 0 0; font-size: var(--text-md); }
 .about-glossary dt { font-weight: var(--w-strong); margin-top: var(--s2); }
 .about-glossary dd { margin: var(--s1) 0 0; color: var(--muted); }
-#rail-psd-lead:not(:empty) { margin-top: var(--s2); }

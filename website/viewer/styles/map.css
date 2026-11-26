@@ -14,7 +14,7 @@ SPDX-License-Identifier: EUPL-1.2
   position: relative;
   container-type: inline-size;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -63,17 +63,21 @@ SPDX-License-Identifier: EUPL-1.2
 .panel-head {
   position: absolute;
   top: 0;
-  left: 0;
   right: 0;
   z-index: 4;
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
   gap: var(--s2);
-  padding: var(--s1) var(--pad);
-  background: var(--readout-bg);
-  backdrop-filter: blur(var(--ob-viewer-blur));
+  padding: var(--s1) var(--s2);
+  background: var(--surface);
+  border: var(--hairline) solid var(--border);
+  border-width: 0 0 var(--hairline) var(--hairline);
+  border-radius: 0 0 0 var(--radius);
 }
+.panel-head:not(:has(.method-note-btn, .panel-badge:not(:empty))) { display: none; }
+.panel-head .panel-forecast-label,
+.panel-head .spacer { display: none; }
 .panel.head-only .panel-head {
   position: static;
   background: var(--surface);
@@ -305,6 +309,8 @@ SPDX-License-Identifier: EUPL-1.2
 .dock-scale {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  align-self: center;
   gap: var(--s1);
   width: var(--ob-viewer-colorbar-width);
 }
@@ -319,6 +325,7 @@ SPDX-License-Identifier: EUPL-1.2
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-self: center;
   gap: var(--s1);
   min-width: 0;
 }
@@ -355,7 +362,8 @@ SPDX-License-Identifier: EUPL-1.2
 /* Legends in the dock: plain text on the dock surface, no chip, no border. */
 .year-legend {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
   gap: var(--s1) var(--s3);
   font-size: var(--text-sm);
   color: var(--muted);

@@ -20,7 +20,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 /* Narrow viewports: the drawers float over the map as sheets. */
 @media (max-width: 68.75em) {
-  .workspace { grid-template-columns: var(--drawer-tab-width) minmax(0, 1fr) var(--drawer-tab-width); }
+  .workspace { grid-template-columns: 0 minmax(0, 1fr) var(--drawer-tab-width); }
   .drawer {
     position: absolute;
     top: 0;
@@ -49,17 +49,6 @@ SPDX-License-Identifier: EUPL-1.2
     column-gap: 0;
     row-gap: var(--hairline);
   }
-  .panel-head {
-    position: static;
-    gap: var(--s1) var(--s2);
-    padding: var(--s1) var(--s2);
-    background: var(--surface);
-    backdrop-filter: none;
-  }
-  .panel-head { flex-wrap: wrap; }
-  .panel-head select { min-width: 0; }
-  .panel-head .panel-dataset { max-width: var(--ob-viewer-phone-select-dataset); }
-  .panel-head .panel-variable { max-width: var(--ob-viewer-phone-select-variable); }
   .example-note {
     position: static;
     order: -1;
@@ -68,6 +57,10 @@ SPDX-License-Identifier: EUPL-1.2
     box-shadow: none;
   }
   .header-actions { gap: var(--s2); }
+  .control-bar { gap: var(--s2); }
+  .control-bar select { max-width: var(--ob-viewer-phone-select-dataset); }
+  .bar-forecasts .layout-switch .ghost-button,
+  .control-bar .display-switch .ghost-button { padding: 0 var(--s2); }
 }
 
 /* The map column decides the dock layout. Medium: colour bar narrows. */

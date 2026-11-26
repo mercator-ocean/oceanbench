@@ -313,6 +313,7 @@ export async function probeParticleLiveness(context, baseUrl, viewerUrlPath, fai
     if (first === "empty" || first === second) {
       failures.push(`particle liveness: playing frames did not change (${first} then ${second})`);
     }
+    await page.evaluate(() => document.querySelector(".bar-more")?.setAttribute("open", ""));
     await page.locator("#particles-play").uncheck();
     await page.waitForTimeout(1200);
     const paused = await digestParticles();
