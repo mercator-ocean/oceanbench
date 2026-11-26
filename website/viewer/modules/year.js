@@ -43,7 +43,7 @@ export async function loadYearRmsd(url) {
 
 // Map a viewer variable key (a manifest standard_name, or a derived currents key)
 // onto the short name used in the year artifacts (SSH, T, S, u, v). Derived current
-// speed maps to the eastward component, captioned honestly by the caller.
+// speed maps to the eastward component u only, labelled "Eastward current (u)".
 const VARIABLE_TO_YEAR = {
   sea_surface_height_above_geoid: { short: "SSH", unit: "m" },
   sea_water_potential_temperature: { short: "T", unit: "°C" },
@@ -56,7 +56,7 @@ const VARIABLE_TO_YEAR = {
 
 export function yearVariableMapping(variableKey) {
   if (variableKey === "current_speed" || variableKey === "current_speed_15m") {
-    return { short: "u", unit: "m/s", component: "eastward velocity (u)" };
+    return { short: "u", unit: "m/s", component: "Eastward current (u)" };
   }
   const entry = VARIABLE_TO_YEAR[variableKey];
   if (!entry) return null;

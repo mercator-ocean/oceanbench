@@ -1155,10 +1155,9 @@ async function renderYearPanel(panel, token, manifest) {
   panel.yearMetric = shared.yearMetric;
   panel.yearMeta = { nStarts: geography.meta && geography.meta.n_starts, component: mapping.component };
   const entry = variableEntry(manifest, panel.state.variable);
-  const varLabel = entry ? prettyName(entry.standard_name) : panel.state.variable;
-  panel.label =
-    `${shortLabelFor(panel.state.dataset)} · ${biasMode ? "bias" : "mean |obs − model|"} · ${varLabel}` +
-    (mapping.component ? ` (${mapping.component})` : "");
+  // The currents choice maps onto the eastward component only: name that, not a speed.
+  const varLabel = mapping.component || (entry ? prettyName(entry.standard_name) : panel.state.variable);
+  panel.label = `${shortLabelFor(panel.state.dataset)} · ${biasMode ? "bias" : "mean |obs − model|"} · ${varLabel}`;
 }
 
 const yearLandMaskCache = new Map();
@@ -3359,7 +3358,7 @@ function updateSharedColorbar() {
       canvases[index].hidden = false;
       drawColorbar(canvases[index], candidate.colormap, candidate.range, {
         // Dataset and variable are in the panel head; the bar says only what is averaged.
-        label: `${prefixFor(candidate)}Pooled over all match-ups of ${nStarts || "?"} starts`,
+        label: `${prefixFor(candidate)}${candidate.yearMeta && candidate.yearMeta.component ? `${candidate.yearMeta.component}, pooled` : "Pooled"} over all match-ups of ${nStarts || "?"} starts`,
         units: candidate.units,
         textColor,
       });
@@ -3803,7 +3802,7 @@ async function renderRailYearRmsd(shown) {
     const yearBin = depthBinLabel(yearManifest && variableEntry(yearManifest, panel.state.variable), entry.depthBin);
     if (yearBin) yearBins.add(yearBin);
     lines.push({
-      label: `${labelFor(panel.state.dataset)}${mapping.component ? " · u" : ""}`,
+      label: `${labelFor(panel.state.dataset)}${mapping.component ? ` · ${mapping.component}` : ""}`,
       color: forecastColor(panel.index),
       panelIndex: panel.index,
       dates: entry.dates,
