@@ -23,8 +23,8 @@
     "two-panel-difference-lead1": "p0[field=832x687:1dbc217f,overlay=832x687:8a11b9c5] p1[field=1x1:805d75c7,overlay=1x1:4b95f515]",
     "overlay-class4-lead1": "p0[field=832x730:4d213066,overlay=832x730:8ef62a0c]",
     "overlay-eddies-lead1": "p0[field=832x730:4d213066,overlay=832x730:c1cdf8e8]",
-    "year-scope-error": "p0[field=832x730:d260a587,overlay=832x730:85ce45c5]",
-    "year-scope-bias": "p0[field=832x730:3f380c06,overlay=832x730:85ce45c5]",
+    "year-scope-error": "p0[field=832x717:18de0324,overlay=832x717:7e4ef1c5]",
+    "year-scope-bias": "p0[field=832x717:3c583bf7,overlay=832x717:7e4ef1c5]",
     "region-ibi-zoomed": "p0[field=832x730:638e68c2,overlay=832x730:85ce45c5]"
   }
 }
