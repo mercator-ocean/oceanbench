@@ -2,8 +2,10 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+import os
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy
@@ -61,14 +63,13 @@ def _convert_forecast_ssh_to_sla(
     return prepare_class4_model_variable(model_variable, variable_key)
 
 
-def _matched_observations(
-    challenger: xarray.Dataset,
+def _observations_in_shared_population(
     observations: xarray.Dataset,
     variable_key: str,
     lead_days_count: int,
     population_layers,
 ) -> pandas.DataFrame | None:
-    """The observations of the shared population with the challenger value at them, ``None`` without any."""
+    """The observations of the shared population, ``None`` without any."""
     observations_dataframe = _create_observations_dataframe(
         observations,
         variable_key,
@@ -84,7 +85,16 @@ def _matched_observations(
     )
     if observations_dataframe.empty:
         return None
+    return observations_dataframe
 
+
+def _with_model_values(
+    challenger: xarray.Dataset,
+    observations_dataframe: pandas.DataFrame | None,
+    variable_key: str,
+) -> pandas.DataFrame | None:
+    if observations_dataframe is None:
+        return None
     model_variable = _convert_forecast_ssh_to_sla(
         challenger[variable_key],
         variable_key,
@@ -94,6 +104,57 @@ def _matched_observations(
         observations_dataframe,
     )
     return observations_dataframe
+
+
+def _matched_observations(
+    challenger: xarray.Dataset,
+    observations: xarray.Dataset,
+    variable_key: str,
+    lead_days_count: int,
+    population_layers,
+) -> pandas.DataFrame | None:
+    """The observations of the shared population with the challenger value at them, ``None`` without any."""
+    return _with_model_values(
+        challenger,
+        _observations_in_shared_population(observations, variable_key, lead_days_count, population_layers),
+        variable_key,
+    )
+
+
+def _class4_observations_ahead() -> int:
+    """Number of observation tables prepared ahead of the interpolation (OCEANBENCH_CLASS4_OBSERVATIONS_AHEAD, default 1)."""
+    return max(0, int(os.environ.get("OCEANBENCH_CLASS4_OBSERVATIONS_AHEAD", "1")))
+
+
+def _observations_by_start_and_variable(
+    start_reference_datasets: Iterable[xarray.Dataset],
+    variable_keys: list[str],
+    lead_days_count: int,
+    population_layers,
+) -> Iterator[tuple[str, pandas.DataFrame | None]]:
+    for start_observations in start_reference_datasets:
+        # Without this, the prepared observations of every start date would stay in the cache.
+        reset_class4_observations_cache()
+        for variable_key in variable_keys:
+            yield variable_key, _observations_in_shared_population(
+                start_observations, variable_key, lead_days_count, population_layers
+            )
+
+
+def _read_ahead(items: Iterator, ahead_count: int) -> Iterator:
+    """The items in order, the next ``ahead_count`` ones produced by one background thread meanwhile."""
+    if ahead_count == 0:
+        yield from items
+        return
+    end_of_items = object()
+    with ThreadPoolExecutor(max_workers=1) as producer:
+        pending = [producer.submit(next, items, end_of_items) for _ in range(ahead_count)]
+        while True:
+            item = pending.pop(0).result()
+            if item is end_of_items:
+                return
+            pending.append(producer.submit(next, items, end_of_items))
+            yield item
 
 
 def rmsd_class4_validation(
@@ -146,22 +207,22 @@ def rmsd_class4_validation_by_start(
     with tempfile.TemporaryDirectory(prefix="oceanbench-class4-matchups-") as directory:
         part_paths: dict[str, dict[int, list[Path]]] = {variable_key: {} for variable_key in variable_keys}
         part_count = 0
-        for start_observations in start_reference_datasets:
-            # Without this, the prepared observations of every start date would stay in the cache.
-            reset_class4_observations_cache()
-            for variable_key in variable_keys:
-                observations_dataframe = _matched_observations(
-                    challenger, start_observations, variable_key, lead_days_count, population_layers
-                )
-                if observations_dataframe is None:
-                    continue
-                matchups = observations_dataframe[CLASS4_RMSD_COLUMNS]
-                for lead_day, part in matchups.groupby("lead_day", sort=False):
-                    path = Path(directory) / f"{part_count}.pickle"
-                    part_count += 1
-                    part.reset_index(drop=True).to_pickle(path)
-                    part_paths[variable_key].setdefault(int(lead_day), []).append(path)
-                del observations_dataframe, matchups
+        # The observation table of the next variable (or start date) is prepared while the challenger is
+        # interpolated at the current one.
+        prepared_observations = _observations_by_start_and_variable(
+            start_reference_datasets, variable_keys, lead_days_count, population_layers
+        )
+        for variable_key, observations_dataframe in _read_ahead(prepared_observations, _class4_observations_ahead()):
+            observations_dataframe = _with_model_values(challenger, observations_dataframe, variable_key)
+            if observations_dataframe is None:
+                continue
+            matchups = observations_dataframe[CLASS4_RMSD_COLUMNS]
+            for lead_day, part in matchups.groupby("lead_day", sort=False):
+                path = Path(directory) / f"{part_count}.pickle"
+                part_count += 1
+                part.reset_index(drop=True).to_pickle(path)
+                part_paths[variable_key].setdefault(int(lead_day), []).append(path)
+            del observations_dataframe, matchups
         reset_class4_observations_cache()
 
         all_results = []
