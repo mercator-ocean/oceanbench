@@ -47,7 +47,7 @@ export async function loadYearRmsd(url) {
 const VARIABLE_TO_YEAR = {
   sea_surface_height_above_geoid: { short: "SSH", unit: "m" },
   sea_water_potential_temperature: { short: "T", unit: "°C" },
-  sea_water_salinity: { short: "S", unit: "PSU" },
+  sea_water_salinity: { short: "S", unit: "" }, // practical salinity, unitless
   eastward_sea_water_velocity: { short: "u", unit: "m/s" },
   eastward_sea_water_velocity_15m: { short: "u", unit: "m/s" },
   northward_sea_water_velocity: { short: "v", unit: "m/s" },

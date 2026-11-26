@@ -130,6 +130,7 @@ import {
   matching15mCurrentVariable,
   prettyName,
   obsPrettyName,
+  displayUnits,
   variableEntry,
   variableExists,
   variableLabel,
@@ -219,6 +220,7 @@ async function ensureStore(slug) {
   const manifest = await loadManifest(resolveViewerDataUrl(descriptor.manifest));
   const store = await loadStore(resolveViewerDataUrl(descriptor.store), storeVersion(manifest));
   stores.set(slug, store);
+  for (const entry of Object.values(manifest.variables || {})) entry.units = displayUnits(entry.units);
   manifests.set(slug, manifest);
   return store;
 }
@@ -2215,9 +2217,9 @@ async function updateColumnModeAvailability() {
 function columnVariableFor(panel) {
   const entry = variableEntry(manifestFor(panel.state.dataset), panel.state.variable);
   const standardName = entry && entry.standard_name;
-  if (standardName === "sea_water_salinity") return { name: standardName, unit: entry.units || "", label: "Salinity" };
-  if (standardName === "sea_water_potential_temperature") return { name: standardName, unit: entry.units || "°C", label: "Temperature" };
-  return { name: "sea_water_potential_temperature", unit: "°C", label: "Temperature" };
+  if (standardName === "sea_water_salinity") return { name: standardName, unit: entry.units || "", label: "Practical salinity" };
+  if (standardName === "sea_water_potential_temperature") return { name: standardName, unit: entry.units || "°C", label: "Potential temperature" };
+  return { name: "sea_water_potential_temperature", unit: "°C", label: "Potential temperature" };
 }
 
 function clearColumnProfile() {
@@ -4004,7 +4006,7 @@ function skillSeries(panel) {
     if (depthKeys.length && !depthKeys.includes(row.depth)) continue;
     if (row.challenger !== challenger) continue;
     if (shared.region && row.region && row.region !== shared.region) continue;
-    unit = row.unit || unit;
+    unit = displayUnits(row.unit || unit);
     rowsByVariable.get(row.variable).push(row);
   }
   for (const rows of rowsByVariable.values()) for (const row of rows) starts = Math.max(starts, Number(row.n_starts) || 0);
@@ -4062,7 +4064,7 @@ function renderRailSkill(shown, comparison) {
         );
         continue;
       }
-      unit = skill.unit || unit;
+      unit = displayUnits(skill.unit || unit);
       if (skill.binLabel) binLabels.add(skill.binLabel);
       for (const [variable, rows] of skill.rowsByVariable) {
         if (!rows.length) continue;
